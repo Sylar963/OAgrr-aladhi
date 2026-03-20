@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { useAppStore } from "@stores/app-store";
 import { useChainQuery, useExpiries } from "./queries";
+import { useChainWs } from "@hooks/useChainWs";
 import { useOpenPalette } from "@components/layout";
 
 import ExpiryBar    from "./ExpiryBar";
@@ -22,6 +23,8 @@ export default function ChainView() {
 
   const { data: expiries = [] } = useExpiries(underlying);
   const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
+
+  useChainWs({ underlying, expiry, venues: activeVenues });
 
   useEffect(() => {
     if (expiries.length > 0 && !expiry) {

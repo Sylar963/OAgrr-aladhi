@@ -6,11 +6,11 @@ import { underlyingsRoute } from './underlyings.js';
 import { expiriesRoute } from './expiries.js';
 import { chainsRoute } from './chains.js';
 import { surfaceRoute } from './surface.js';
+import { wsChainRoute } from './ws-chain.js';
 
 export function registerRoutes(app: FastifyInstance) {
-  // Return 503 while adapters are still bootstrapping
   app.addHook('onRequest', async (_req, reply) => {
-    if (!isReady() && _req.url !== '/api/health') {
+    if (!isReady() && _req.url !== '/api/health' && !_req.url.startsWith('/ws/')) {
       return reply.status(503).send({ error: 'initializing', message: 'Server is loading market data' });
     }
   });
@@ -21,4 +21,5 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(expiriesRoute, { prefix: '/api' });
   app.register(chainsRoute, { prefix: '/api' });
   app.register(surfaceRoute, { prefix: '/api' });
+  app.register(wsChainRoute);
 }

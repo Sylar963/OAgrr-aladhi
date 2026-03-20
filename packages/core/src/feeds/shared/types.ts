@@ -44,6 +44,9 @@ export interface OptionVenueAdapter {
     handlers: StreamHandlers,
   ): Promise<() => Promise<void>>;
 
+  /** Remove a delta handler without tearing down venue WS connections. */
+  removeDeltaHandler?(handlers: StreamHandlers): void;
+
   /** Cleanup connections */
   dispose?(): Promise<void>;
 }

@@ -158,6 +158,11 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     };
   }
 
+  /** Remove a handler without tearing down venue WS connections. */
+  removeDeltaHandler(handlers: StreamHandlers): void {
+    this.deltaHandlers.delete(handlers);
+  }
+
   async dispose(): Promise<void> {
     await this.unsubscribeAll();
   }

@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,700&display=swap');
+
+:root {
+  --bg-base:      #0A0A0A;
+  --bg-surface:   #111111;
+  --bg-elevated:  #1A1A1A;
+  --bg-hover:     #222222;
+  --bg-active:    #2C2C2C;
+  --bg-input:     #181818;
+  --bg-panel:     #111111;
+
+  --text-primary:   #F6FEFD;
+  --text-secondary: #BEBFC0;
+  --text-tertiary:  #878C8F;
+  --text-dim:       #555B5E;
+  --text-disabled:  #3A3F42;
+
+  --border-subtle:  #1F2937;
+  --border-default: #2C3338;
+  --border-strong:  #3A4248;
+  --border-focus:   #F8F8FC;
+
+  --accent-primary:     #50D2C1;
+  --accent-primary-bg:  #0E3333;
+  --accent-primary-dim: rgba(80, 210, 193, 0.12);
+
+  --color-profit:  #00E997;
+  --color-loss:    #CB3855;
+  --color-warning: #FEF9A0;
+  --color-info:    #88B6FF;
+  --color-iv:      #AE9FF9;
+
+  --venue-deribit: #0052FF;
+  --venue-okx:     #F6FEFD;
+  --venue-binance: #F0B90B;
+  --venue-bybit:   #F7A600;
+  --venue-derive:  #25FAAF;
+
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --text-2xs:  12px;
+  --text-xs:   13px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-md:   17px;
+  --text-lg:   19px;
+  --text-xl:   24px;
+  --text-2xl:  28px;
+  --text-3xl:  36px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-none: 0px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease-out;
+}

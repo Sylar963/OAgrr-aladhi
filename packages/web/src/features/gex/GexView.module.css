@@ -1,0 +1,262 @@
+.view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--space-6);
+  gap: var(--space-4);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  color: var(--text-dim);
+  text-align: center;
+  padding: var(--space-10);
+}
+
+.emptyIcon {
+  font-size: 40px;
+  opacity: 0.3;
+}
+
+.emptyTitle {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.emptyDesc {
+  font-size: var(--text-sm);
+  max-width: 420px;
+  line-height: 1.7;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.spotBadge {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── Explain callout ──────────────────────────────────────────────────────── */
+
+.explain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.explainItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.explainDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.explainDot[data-type="positive"] {
+  background: var(--color-profit);
+}
+
+.explainDot[data-type="negative"] {
+  background: var(--color-loss);
+}
+
+/* ── Chart ───────────────────────────────────────────────────────────────── */
+
+.chart {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.axis {
+  display: grid;
+  grid-template-columns: 1fr 32px 1fr;
+  margin-bottom: var(--space-3);
+  flex-shrink: 0;
+}
+
+.axisLeft {
+  text-align: right;
+}
+
+.axisCenter {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.axisRight {
+  text-align: left;
+}
+
+.axisLabel {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.bars {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 60px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 3px 0;
+  transition: background var(--transition-fast);
+  border-radius: var(--radius-sm);
+}
+
+.barRow:hover {
+  background: var(--bg-hover);
+}
+
+.barRow[data-near-spot="true"] {
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+}
+
+.strikeLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.strikeLabel[data-near-spot="true"] {
+  color: var(--accent-primary);
+}
+
+.spotMarker {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  color: var(--accent-primary);
+  letter-spacing: 0.06em;
+}
+
+.barTrack {
+  display: grid;
+  grid-template-columns: 1fr 2px 1fr;
+  align-items: center;
+  height: 20px;
+}
+
+.leftHalf {
+  display: flex;
+  justify-content: flex-end;
+  height: 100%;
+  align-items: center;
+}
+
+.rightHalf {
+  display: flex;
+  justify-content: flex-start;
+  height: 100%;
+  align-items: center;
+}
+
+.spine {
+  background: var(--border-default);
+  height: 100%;
+  width: 2px;
+  flex-shrink: 0;
+}
+
+.bar {
+  height: 14px;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  max-width: 100%;
+}
+
+.bar[data-type="positive"] {
+  background: var(--color-profit);
+  opacity: 0.75;
+}
+
+.bar[data-type="negative"] {
+  background: var(--color-loss);
+  opacity: 0.75;
+}
+
+.barRow:hover .bar {
+  opacity: 1;
+}
+
+.valueLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  white-space: nowrap;
+}

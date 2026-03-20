@@ -27,7 +27,8 @@ export const useAppStore = create<AppState>((set) => ({
   activeVenues: [...VENUE_IDS],
   myIv:         "",
 
-  setUnderlying: (underlying) => set({ underlying }),
+  // Changing underlying invalidates the current expiry — force re-selection
+  setUnderlying: (underlying) => set({ underlying, expiry: "" }),
   setExpiry:     (expiry)     => set({ expiry }),
   setActiveTab:  (activeTab)  => set({ activeTab }),
   toggleVenue: (venueId) =>

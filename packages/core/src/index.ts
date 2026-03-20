@@ -16,11 +16,13 @@ export type {
   VenueDelta,
   VenueConnectionState,
   VenueStatus,
-  GetChainResponse,
+  WsSubscriptionRequest,
+  SnapshotMeta,
   ServerWsMessage,
   ClientWsMessage,
 } from './core/types.js';
 export { EMPTY_GREEKS } from './core/types.js';
+export { ClientWsMessageSchema } from './core/ws-schemas.js';
 
 export { buildComparisonChain } from './core/aggregator.js';
 export { registerAdapter, getAdapter, getAllAdapters, getRegisteredVenues } from './core/registry.js';

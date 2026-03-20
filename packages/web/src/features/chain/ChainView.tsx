@@ -23,8 +23,7 @@ export default function ChainView() {
 
   const { data: expiries = [] } = useExpiries(underlying);
   const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
-
-  useChainWs({ underlying, expiry, venues: activeVenues });
+  const { connectionState } = useChainWs({ underlying, expiry, venues: activeVenues });
 
   useEffect(() => {
     if (expiries.length > 0 && !expiry) {
@@ -57,6 +56,7 @@ export default function ChainView() {
             stats={chain.stats}
             underlying={chain.underlying}
             dte={chain.dte}
+            connectionState={connectionState}
           />
         )}
 

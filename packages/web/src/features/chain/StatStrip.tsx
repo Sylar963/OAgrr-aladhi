@@ -1,12 +1,13 @@
-import type { ChainStats } from "@shared/enriched";
+import type { ChainStats, WsConnectionState } from "@shared/enriched";
 
 import { fmtUsd, fmtUsdCompact, fmtIv, fmtPct, fmtNum } from "@lib/format";
 import styles from "./StatStrip.module.css";
 
 interface StatStripProps {
-  stats:      ChainStats;
-  underlying: string;
-  dte:        number;
+  stats:            ChainStats;
+  underlying:       string;
+  dte:              number;
+  connectionState?: WsConnectionState;
 }
 
 interface StatCellProps {
@@ -33,7 +34,16 @@ function StatCell({ label, value, sub, accent, positive }: StatCellProps) {
   );
 }
 
-export default function StatStrip({ stats, underlying, dte }: StatStripProps) {
+const CONNECTION_LABELS: Record<WsConnectionState, { text: string; color: string }> = {
+  live:         { text: "● LIVE",         color: "var(--color-profit)" },
+  connecting:   { text: "◌ Connecting",   color: "var(--text-dim)" },
+  reconnecting: { text: "◌ Reconnecting", color: "var(--color-warning, orange)" },
+  stale:        { text: "◌ Stale",        color: "var(--color-warning, orange)" },
+  error:        { text: "● Error",        color: "var(--color-loss)" },
+  closed:       { text: "○ Offline",      color: "var(--text-dim)" },
+};
+
+export default function StatStrip({ stats, underlying, dte, connectionState }: StatStripProps) {
   const forwardSub = stats.forwardBasisPct != null
     ? fmtPct(stats.forwardBasisPct, 3)
     : undefined;
@@ -74,6 +84,17 @@ export default function StatStrip({ stats, underlying, dte }: StatStripProps) {
         value={fmtUsdCompact(stats.totalOiUsd)}
         sub={forwardSub ? `Basis ${forwardSub}` : undefined}
       />
+      {connectionState && (
+        <>
+          <div className={styles.divider} />
+          <div className={styles.cell}>
+            <span className={styles.label}>Feed</span>
+            <span className={styles.value} style={{ color: CONNECTION_LABELS[connectionState].color, fontSize: "11px" }}>
+              {CONNECTION_LABELS[connectionState].text}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

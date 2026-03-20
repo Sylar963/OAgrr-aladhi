@@ -16,10 +16,13 @@ export type {
   VenueDelta,
   VenueConnectionState,
   VenueStatus,
-  GetChainResponse,
+  WsSubscriptionRequest,
+  SnapshotMeta,
   ServerWsMessage,
   ClientWsMessage,
 } from './types.js';
+
+export { ClientWsMessageSchema } from './ws-schemas.js';
 
 export { EMPTY_GREEKS } from './types.js';
 

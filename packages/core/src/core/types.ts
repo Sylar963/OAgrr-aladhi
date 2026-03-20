@@ -120,19 +120,26 @@ export interface VenueStatus {
   message?: string;
 }
 
-// ── API response types ────────────────────────────────────────────
+// ── WS protocol types ─────────────────────────────────────────────
 
-export interface GetChainResponse {
-  request: ChainRequest;
-  venues: VenueOptionChain[];
-  comparison: ComparisonChain;
+export interface WsSubscriptionRequest {
+  underlying: string;
+  expiry: string;
+  venues: VenueId[];
 }
 
-export type ServerWsMessage =
-  | { type: 'snapshot'; data: GetChainResponse }
-  | { type: 'delta'; data: VenueDelta[] }
-  | { type: 'status'; data: VenueStatus[] };
+export interface SnapshotMeta {
+  generatedAt: number;
+  maxQuoteTs: number;
+  staleMs: number;
+}
 
 export type ClientWsMessage =
-  | { type: 'subscribe'; underlying: string; expiry: string; venues?: string[] }
+  | { type: 'subscribe'; subscriptionId: string; request: WsSubscriptionRequest }
   | { type: 'unsubscribe' };
+
+export type ServerWsMessage =
+  | { type: 'subscribed'; subscriptionId: string; request: WsSubscriptionRequest; serverTime: number }
+  | { type: 'snapshot'; subscriptionId: string; seq: number; request: WsSubscriptionRequest; meta: SnapshotMeta; data: unknown }
+  | { type: 'status'; subscriptionId: string; venue: VenueId; state: VenueConnectionState; ts: number; message?: string }
+  | { type: 'error'; subscriptionId: string | null; code: string; message: string; retryable: boolean };

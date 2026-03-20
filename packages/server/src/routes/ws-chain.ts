@@ -4,21 +4,34 @@ import {
   getAdapter,
   buildComparisonChain,
   buildEnrichedChain,
+  ClientWsMessageSchema,
   type VenueId,
   type VenueDelta,
   type VenueStatus,
   type StreamHandlers,
-  VENUE_IDS,
+  type WsSubscriptionRequest,
+  type ServerWsMessage,
+  type SnapshotMeta,
 } from '@oggregator/core';
 import { isReady } from '../app.js';
 
-// Venue feeds fire hundreds of deltas/sec. Browser doesn't need sub-200ms
-// granularity for an options chain — throttle to 5 pushes/sec max.
+// Venue feeds fire hundreds of deltas/sec. Browser needs at most 5 enriched pushes/sec.
 const PUSH_INTERVAL_MS = 200;
 
-function parseVenues(raw: unknown): VenueId[] {
-  if (!Array.isArray(raw)) return getAllAdapters().map((a) => a.venue);
-  return raw.filter((v): v is VenueId => typeof v === 'string' && VENUE_IDS.includes(v as VenueId));
+interface SubscriptionContext {
+  subscriptionId: string;
+  request: WsSubscriptionRequest;
+  handlers: StreamHandlers;
+  pushTimer: ReturnType<typeof setInterval> | null;
+  dirty: boolean;
+  seq: number;
+  disposed: boolean;
+}
+
+function send(socket: { readyState: number; send: (data: string) => void }, msg: ServerWsMessage) {
+  if (socket.readyState === 1) {
+    socket.send(JSON.stringify(msg));
+  }
 }
 
 export async function wsChainRoute(app: FastifyInstance) {
@@ -26,135 +39,166 @@ export async function wsChainRoute(app: FastifyInstance) {
     const log = req.log.child({ route: 'ws-chain' });
 
     if (!isReady()) {
-      socket.send(JSON.stringify({ type: 'error', message: 'Server bootstrapping' }));
+      send(socket, {
+        type: 'error', subscriptionId: null, code: 'NOT_READY',
+        message: 'Server bootstrapping', retryable: true,
+      });
       socket.close(1013, 'Try again later');
       return;
     }
 
-    let underlying = '';
-    let expiry = '';
-    let venues: VenueId[] = [];
-    let pushTimer: ReturnType<typeof setInterval> | null = null;
-    let dirty = false;
-    // Track handlers so we can remove them on disconnect without killing venue subscriptions.
-    // Venue WS connections are shared — other clients and REST endpoints use them too.
-    const activeHandlers = new Set<StreamHandlers>();
+    let ctx: SubscriptionContext | null = null;
 
-    function buildAndPush() {
-      if (!underlying || !expiry || socket.readyState !== 1) return;
+    function buildAndPush(c: SubscriptionContext) {
+      if (c.disposed || socket.readyState !== 1) return;
 
-      try {
-        const chainPromises = venues.map((venueId) => {
-          try { return getAdapter(venueId).fetchOptionChain({ underlying, expiry, venues }); }
-          catch { return null; }
-        });
+      const { request } = c;
 
-        // fetchOptionChain resolves synchronously from in-memory QuoteStore
-        Promise.all(chainPromises).then((results) => {
-          const chains = results.filter((r) => r != null);
-          const comparison = buildComparisonChain(underlying, expiry, chains);
-          const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+      const chainPromises = request.venues.map((venueId) => {
+        try { return getAdapter(venueId).fetchOptionChain(request); }
+        catch { return null; }
+      });
 
-          if (socket.readyState === 1) {
-            socket.send(JSON.stringify({ type: 'snapshot', data: enriched }));
+      Promise.all(chainPromises).then((results) => {
+        // Stale guard: context may have been replaced while promises resolved
+        if (c.disposed) return;
+
+        const chains = results.filter((r) => r != null);
+        const comparison = buildComparisonChain(request.underlying, request.expiry, chains);
+        const enriched = buildEnrichedChain(request.underlying, request.expiry, comparison.rows, chains);
+
+        let maxQuoteTs = 0;
+        for (const chain of chains) {
+          for (const contract of Object.values(chain.contracts)) {
+            const ts = contract.quote.timestamp ?? 0;
+            if (ts > maxQuoteTs) maxQuoteTs = ts;
           }
-        }).catch((err: unknown) => {
-          log.warn({ err: String(err) }, 'chain build failed');
+        }
+
+        const now = Date.now();
+        c.seq++;
+
+        const meta: SnapshotMeta = {
+          generatedAt: now,
+          maxQuoteTs,
+          staleMs: maxQuoteTs > 0 ? now - maxQuoteTs : 0,
+        };
+
+        send(socket, {
+          type: 'snapshot',
+          subscriptionId: c.subscriptionId,
+          seq: c.seq,
+          request: c.request,
+          meta,
+          data: enriched,
         });
-      } catch (err: unknown) {
+      }).catch((err: unknown) => {
         log.warn({ err: String(err) }, 'chain build failed');
+      });
+    }
+
+    function disposeContext(c: SubscriptionContext) {
+      c.disposed = true;
+      if (c.pushTimer) { clearInterval(c.pushTimer); c.pushTimer = null; }
+      for (const adapter of getAllAdapters()) {
+        adapter.removeDeltaHandler?.(c.handlers);
       }
     }
 
-    function startPushLoop() {
-      if (pushTimer) return;
-      pushTimer = setInterval(() => {
-        if (dirty) {
-          dirty = false;
-          buildAndPush();
-        }
-      }, PUSH_INTERVAL_MS);
-    }
+    async function handleSubscribe(subscriptionId: string, request: WsSubscriptionRequest) {
+      if (ctx) disposeContext(ctx);
 
-    function stopPushLoop() {
-      if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
-    }
-
-    async function doSubscribe(u: string, e: string, v: VenueId[]) {
-      doCleanup();
-
-      underlying = u;
-      expiry = e;
-      venues = v.length > 0 ? v : getAllAdapters().map((a) => a.venue);
-
-      const handlers: StreamHandlers = {
-        onDelta: (_deltas: VenueDelta[]) => { dirty = true; },
-        onStatus: (status: VenueStatus) => {
-          if (socket.readyState === 1) {
-            socket.send(JSON.stringify({ type: 'status', data: status }));
-          }
+      const newCtx: SubscriptionContext = {
+        subscriptionId,
+        request,
+        handlers: {
+          onDelta: (_deltas: VenueDelta[]) => { newCtx.dirty = true; },
+          onStatus: (status: VenueStatus) => {
+            if (newCtx.disposed) return;
+            const statusMsg: ServerWsMessage = {
+              type: 'status',
+              subscriptionId: newCtx.subscriptionId,
+              venue: status.venue,
+              state: status.state,
+              ts: status.ts,
+            };
+            if (status.message != null) statusMsg.message = status.message;
+            send(socket, statusMsg);
+          },
         },
+        pushTimer: null,
+        dirty: false,
+        seq: 0,
+        disposed: false,
       };
-      activeHandlers.add(handlers);
 
-      for (const venueId of venues) {
+      ctx = newCtx;
+
+      // Async venue subscriptions — check disposed after each in case a new subscribe arrived
+      for (const venueId of request.venues) {
+        if (newCtx.disposed) return;
         try {
           const adapter = getAdapter(venueId);
           if (!adapter.subscribe) continue;
-          // Don't store unsub — venue connections are shared across clients
-          await adapter.subscribe({ underlying, expiry }, handlers);
+          await adapter.subscribe({ underlying: request.underlying, expiry: request.expiry }, newCtx.handlers);
         } catch (err: unknown) {
           log.warn({ venue: venueId, err: String(err) }, 'venue subscribe failed');
         }
       }
 
-      buildAndPush();
-      startPushLoop();
-      log.info({ underlying, expiry, venues: venues.length }, 'client subscribed');
-    }
+      if (newCtx.disposed) return;
 
-    function doCleanup() {
-      stopPushLoop();
-      for (const handlers of activeHandlers) {
-        for (const adapter of getAllAdapters()) {
-          adapter.removeDeltaHandler?.(handlers);
+      send(socket, {
+        type: 'subscribed',
+        subscriptionId,
+        request,
+        serverTime: Date.now(),
+      });
+
+      buildAndPush(newCtx);
+
+      newCtx.pushTimer = setInterval(() => {
+        if (newCtx.dirty && !newCtx.disposed) {
+          newCtx.dirty = false;
+          buildAndPush(newCtx);
         }
-      }
-      activeHandlers.clear();
+      }, PUSH_INTERVAL_MS);
+
+      log.info({ subscriptionId, underlying: request.underlying, expiry: request.expiry, venues: request.venues.length }, 'subscribed');
     }
 
     // ── Client messages ───────────────────────────────────────────
 
     socket.on('message', (raw) => {
-      try {
-        const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+      let json: unknown;
+      try { json = JSON.parse(raw.toString()); }
+      catch { log.debug('malformed JSON from client'); return; }
 
-        if (msg['type'] === 'subscribe') {
-          const u = typeof msg['underlying'] === 'string' ? msg['underlying'] : '';
-          const e = typeof msg['expiry'] === 'string' ? msg['expiry'] : '';
-          const v = parseVenues(msg['venues']);
+      const parsed = ClientWsMessageSchema.safeParse(json);
+      if (!parsed.success) {
+        send(socket, {
+          type: 'error', subscriptionId: null, code: 'INVALID_MESSAGE',
+          message: parsed.error.message, retryable: false,
+        });
+        return;
+      }
 
-          if (!u || !e) {
-            socket.send(JSON.stringify({ type: 'error', message: 'underlying and expiry required' }));
-            return;
-          }
+      const msg = parsed.data;
 
-          doSubscribe(u, e, v).catch((err: unknown) => {
-            log.error({ err: String(err) }, 'subscribe failed');
-          });
-          return;
-        }
+      if (msg.type === 'subscribe') {
+        handleSubscribe(msg.subscriptionId, msg.request).catch((err: unknown) => {
+          log.error({ err: String(err) }, 'subscribe failed');
+        });
+        return;
+      }
 
-        if (msg['type'] === 'unsubscribe') {
-          doCleanup();
-        }
-      } catch {
-        log.debug('malformed ws message from client');
+      if (msg.type === 'unsubscribe') {
+        if (ctx) { disposeContext(ctx); ctx = null; }
       }
     });
 
     socket.on('close', () => {
-      doCleanup();
+      if (ctx) { disposeContext(ctx); ctx = null; }
       log.info('client disconnected');
     });
   });

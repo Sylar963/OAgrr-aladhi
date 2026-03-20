@@ -12,12 +12,12 @@ import {
 
 const activeSubscriptions = new Map<string, () => Promise<void>>();
 
-function subKey(venue: VenueId, underlying: string) {
-  return `${venue}:${underlying}`;
+function subKey(venue: VenueId, underlying: string, expiry: string) {
+  return `${venue}:${underlying}:${expiry}`;
 }
 
 async function ensureSubscribed(venueId: VenueId, underlying: string, expiry: string, log: FastifyInstance['log']) {
-  const key = subKey(venueId, underlying);
+  const key = subKey(venueId, underlying, expiry);
   if (activeSubscriptions.has(key)) return;
 
   const adapter = getAdapter(venueId);

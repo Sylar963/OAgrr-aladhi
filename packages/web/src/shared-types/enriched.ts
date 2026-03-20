@@ -82,3 +82,25 @@ export interface IvSurfaceResponse {
   surface:       IvSurfaceRow[];
   termStructure: TermStructure;
 }
+
+// ── WS protocol types ─────────────────────────────────────────────
+
+export interface WsSubscriptionRequest {
+  underlying: string;
+  expiry:     string;
+  venues:     VenueId[];
+}
+
+export interface SnapshotMeta {
+  generatedAt: number;
+  maxQuoteTs:  number;
+  staleMs:     number;
+}
+
+export type WsConnectionState = "connecting" | "live" | "reconnecting" | "stale" | "error" | "closed";
+
+export type ServerWsMessage =
+  | { type: "subscribed"; subscriptionId: string; request: WsSubscriptionRequest; serverTime: number }
+  | { type: "snapshot";   subscriptionId: string; seq: number; request: WsSubscriptionRequest; meta: SnapshotMeta; data: EnrichedChainResponse }
+  | { type: "status";     subscriptionId: string; venue: VenueId; state: string; ts: number; message?: string }
+  | { type: "error";      subscriptionId: string | null; code: string; message: string; retryable: boolean };

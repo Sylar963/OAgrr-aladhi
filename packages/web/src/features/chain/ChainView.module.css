@@ -1,0 +1,46 @@
+.view {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Sidebar spans the full height of the chain view */
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.tableArea {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tableControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-1) var(--space-4);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.status {
+  padding: var(--space-10);
+  text-align: center;
+  color: var(--text-dim);
+  font-size: var(--text-base);
+}
+
+.error {
+  padding: var(--space-10);
+  text-align: center;
+  color: var(--color-loss);
+  font-size: var(--text-base);
+}

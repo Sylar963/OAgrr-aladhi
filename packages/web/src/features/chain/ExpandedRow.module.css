@@ -1,0 +1,192 @@
+.expanded {
+  background: var(--bg-base);
+  border-top: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  display: flex;
+  flex-direction: column;
+  animation: slideDown 120ms ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Side panels (call / put) ────────────────────────────────────────────── */
+
+.side {
+  overflow-x: auto;
+}
+
+.sideHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 4px var(--space-4);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sideLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.side[data-type="call"] .sideLabel {
+  color: var(--color-profit);
+}
+
+.side[data-type="put"] .sideLabel {
+  color: var(--color-loss);
+}
+
+.sideStrike {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-default);
+  flex-shrink: 0;
+}
+
+/* ── Compact venue table ─────────────────────────────────────────────────── */
+
+.venueTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.thead {
+  background: var(--bg-elevated);
+}
+
+.th,
+.thVenue {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.thVenue {
+  text-align: left;
+  min-width: 90px;
+}
+
+/* ── Venue rows ──────────────────────────────────────────────────────────── */
+
+.venueRow {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+
+.venueRow:last-child {
+  border-bottom: none;
+}
+
+.venueRow:hover {
+  background: var(--bg-hover);
+}
+
+.venueRow[data-best="true"] {
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+}
+
+.venueRow[data-best="true"]:hover {
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+/* ── Table cells ─────────────────────────────────────────────────────────── */
+
+.tdVenue {
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.tdNum {
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tdNum[data-accent="true"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tdNum[data-negative="true"] {
+  color: var(--color-loss);
+}
+
+.tdNum[data-edge="positive"] {
+  color: var(--color-profit);
+}
+
+.tdNum[data-edge="negative"] {
+  color: var(--color-loss);
+}
+
+.tdChip {
+  padding: 4px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Venue name cell ─────────────────────────────────────────────────────── */
+
+.venueCell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.venueLogo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.venueLabel {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.bestBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
+.noQuotes {
+  padding: var(--space-3) var(--space-4);
+  font-size: 12px;
+  color: var(--text-dim);
+}

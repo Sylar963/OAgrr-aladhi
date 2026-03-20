@@ -1,0 +1,93 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: var(--space-2) var(--space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  flex-shrink: 0;
+}
+
+.strip::-webkit-scrollbar { display: none; }
+
+/* ── Asset picker — compact ────────────────────────────────────────── */
+
+.assetPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.assetPicker:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.assetIcon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.assetLabel {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.assetChevron {
+  font-size: var(--text-2xs);
+  color: var(--text-dim);
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-default);
+  margin: 0 var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ── Expiry tabs ───────────────────────────────────────────────────── */
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tab:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.tab[data-active="true"] {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+
+.dteBadge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}

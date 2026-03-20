@@ -1,0 +1,555 @@
+/* ── Wrapper — centered with max-width ───────────────────────────────────── */
+.wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.empty {
+  padding: var(--space-10);
+  text-align: center;
+  color: var(--text-dim);
+  font-size: var(--text-xl);
+}
+
+/* ── Controls bar ────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.sideToggle {
+  display: flex;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.toggleBtn {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.toggleBtn[data-active="true"] {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
+
+.toggleBtn:hover:not([data-active="true"]) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* ── Qty input ───────────────────────────────────────────────────────────── */
+.qtyChip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 7px var(--space-4);
+}
+
+.qtyLabel {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.qtyInput {
+  width: 52px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+
+.qtyInput::-webkit-inner-spin-button,
+.qtyInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qtyInput:focus {
+  color: var(--accent-primary);
+}
+
+.qtySuffix {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+/* ── Expand all ──────────────────────────────────────────────────────────── */
+.expandAllBtn {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 7px 16px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.expandAllBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+/* ── Column headers ──────────────────────────────────────────────────────── */
+.listHeader {
+  display: grid;
+  grid-template-columns: 110px 220px 170px 1fr 40px;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* ── List container ──────────────────────────────────────────────────────── */
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ── ATM marker — Deribit-style dotted line + pill badge ─────────────────── */
+.atmMarker {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--space-3) 0;
+  position: relative;
+}
+
+.atmLine {
+  flex: 1;
+  height: 0;
+  border-top: 2px dotted var(--accent-primary);
+  opacity: 0.5;
+}
+
+.atmPill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 16px;
+  background: var(--accent-primary);
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow:
+    0 0 12px rgba(80, 210, 193, 0.3),
+    0 0 24px rgba(80, 210, 193, 0.12);
+}
+
+.atmPillAsset {
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--bg-base);
+}
+
+.atmPillPrice {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--bg-base);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Row wrapper ─────────────────────────────────────────────────────────── */
+.rowWrap {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rowWrap:last-child {
+  border-bottom: none;
+}
+
+.rowWrap[data-expanded="true"] > .row {
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-default);
+}
+
+/* ── Collapsed row ───────────────────────────────────────────────────────── */
+.row {
+  display: grid;
+  grid-template-columns: 110px 220px 170px 1fr 40px;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-6);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  outline: none;
+  min-height: 52px;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.row[data-atm="true"] {
+  background: color-mix(in srgb, var(--accent-primary) 3%, transparent);
+}
+
+.row[data-atm="true"]:hover {
+  background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+}
+
+.row[data-empty="true"] {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* ── Strike ───────────────────────────────────────────────────────────────── */
+.strike {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.emptyMsg {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  grid-column: 2 / -1;
+}
+
+/* ── Best price cell ─────────────────────────────────────────────────────── */
+.bestPriceCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.bestPrice {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.bestPrice[data-side="call"] {
+  color: var(--color-profit);
+}
+
+.bestPrice[data-side="put"] {
+  color: var(--color-loss);
+}
+
+.winnerLogo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.winnerLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.06em;
+}
+
+/* ── Savings cell ────────────────────────────────────────────────────────── */
+.savingsCell {
+  display: flex;
+  align-items: center;
+}
+
+.savingsBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-profit);
+  background: color-mix(in srgb, var(--color-profit) 10%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.savingsPct {
+  opacity: 0.7;
+}
+
+.savingsNone {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+/* ── Venue heatmap dots ──────────────────────────────────────────────────── */
+.dotsCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.venueDot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 56px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: filter var(--transition-fast);
+  cursor: default;
+}
+
+.venueDot:hover {
+  filter: brightness(1.25);
+}
+
+.dotLogo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.dotLabel {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+/* ── Chevron ─────────────────────────────────────────────────────────────── */
+.chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.chevron:hover {
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.chevronIcon {
+  transition: transform var(--transition-base);
+}
+
+.chevronIcon[data-expanded="true"] {
+  transform: rotate(180deg);
+}
+
+/* ── Expanded panel ──────────────────────────────────────────────────────── */
+.expandedPanel {
+  background: var(--bg-base);
+  animation: slideDown 160ms ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.exHeader {
+  display: grid;
+  grid-template-columns: 90px 130px 100px 80px 100px 1fr 64px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6) var(--space-3) calc(var(--space-6) + 3px);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.exRow {
+  display: grid;
+  grid-template-columns: 90px 130px 100px 80px 100px 1fr 64px;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--row-border, transparent);
+  transition: filter var(--transition-fast);
+}
+
+.exRow:last-child {
+  border-bottom: none;
+}
+
+.exRow[data-best="true"] {
+  border-left-color: var(--accent-primary);
+}
+
+.exRow:hover {
+  filter: brightness(1.12);
+}
+
+.exRow[data-clickable="true"] {
+  cursor: pointer;
+}
+
+.exRow[data-clickable="true"]:hover {
+  filter: brightness(1.2);
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+}
+
+.exVenue {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.exLogo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.exLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+
+.exPrice {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.exVsBest {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.exVsBest[data-rank="best"] {
+  color: var(--accent-primary);
+}
+
+.exVsBest[data-rank="worse"] {
+  color: var(--color-loss);
+}
+
+.exIv {
+  font-size: var(--text-sm);
+  color: var(--color-iv);
+  font-variant-numeric: tabular-nums;
+}
+
+.exSpread {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.exLiqCell {
+  display: flex;
+  align-items: center;
+}
+
+.exFee {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Liquidity bar ───────────────────────────────────────────────────────── */
+.liqTrack {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.liqFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.liqFill[data-level="high"] {
+  background: var(--color-profit);
+}
+
+.liqFill[data-level="mid"] {
+  background: var(--color-warning);
+}
+
+.liqFill[data-level="low"] {
+  background: var(--text-dim);
+}

@@ -130,6 +130,7 @@
 .row {
   display: grid;
   grid-template-columns: 1fr 110px 1fr;
+  align-items: center;
   height: 44px;
   cursor: pointer;
   transition: background var(--transition-fast);

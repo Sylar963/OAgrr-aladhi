@@ -70,6 +70,7 @@ export default function ChainView() {
         <ExpiryBar
           underlying={underlying}
           spotPrice={chain?.stats.spotIndexUsd}
+          spotChange={marketStats?.spot?.change24hPct}
           expiries={expiries}
           selected={expiry}
           onSelect={setExpiry}

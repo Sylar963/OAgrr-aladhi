@@ -14,10 +14,15 @@ export function isFlowReady(): boolean { return serviceHealth.flow; }
 export async function bootstrapServices(log: FastifyBaseLogger) {
   const start = Date.now();
 
+  // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
+  // Flow and spot cover every asset that has options on at least one venue.
   const [dvol, spot, flow] = await Promise.allSettled([
     dvolService.start(['BTC', 'ETH']),
-    spotService.start(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']),
-    flowService.start(['BTC', 'ETH']),
+    spotService.start([
+      'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT',
+      'BNBUSDT', 'AVAXUSDT', 'TRXUSDT', 'HYPEUSDT',
+    ]),
+    flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB']),
   ]);
 
   if (dvol.status === 'fulfilled') { serviceHealth.dvol = true; log.info('DVOL service started'); }

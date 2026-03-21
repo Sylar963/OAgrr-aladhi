@@ -8,6 +8,7 @@ import { chainsRoute } from './chains.js';
 import { surfaceRoute } from './surface.js';
 import { statsRoute } from './stats.js';
 import { flowRoute } from './flow.js';
+import { dvolHistoryRoute } from './dvol-history.js';
 import { wsChainRoute } from './ws-chain.js';
 
 export function registerRoutes(app: FastifyInstance) {
@@ -25,5 +26,6 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });
+  app.register(dvolHistoryRoute, { prefix: '/api' });
   app.register(wsChainRoute);
 }

@@ -41,8 +41,17 @@ const DvolPushSchema = z.object({
  * Fetches Deribit DVOL (30-day ATM IV index) history and subscribes to
  * live updates. Computes IVR and 1-day IV change from the candle data.
  */
+export interface DvolCandle {
+  timestamp: number;
+  open:  number;
+  high:  number;
+  low:   number;
+  close: number;
+}
+
 export class DvolService {
   private snapshots = new Map<string, DvolSnapshot>();
+  private candleHistory = new Map<string, DvolCandle[]>();
   private rpc: JsonRpcWsClient | null = null;
   private currencies: string[] = [];
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,6 +86,11 @@ export class DvolService {
     return [...this.snapshots.values()];
   }
 
+  /** Daily DVOL candles (percentage values, e.g. 52.1 = 52.1% IV). */
+  getHistory(currency: string): DvolCandle[] {
+    return this.candleHistory.get(currency) ?? [];
+  }
+
   // ── History fetch ─────────────────────────────────────────────
 
   private async fetchHistory(currency: string): Promise<void> {
@@ -96,6 +110,11 @@ export class DvolService {
     }
 
     const candles = parsed.data.data;
+
+    this.candleHistory.set(currency, candles.map(([ts, o, h, l, c]) => ({
+      timestamp: ts, open: o, high: h, low: l, close: c,
+    })));
+
     let high52w = -Infinity;
     let low52w = Infinity;
     for (const [, , h, l] of candles) {

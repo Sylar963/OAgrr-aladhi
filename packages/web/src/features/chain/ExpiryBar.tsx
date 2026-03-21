@@ -6,6 +6,7 @@ import styles from "./ExpiryBar.module.css";
 interface ExpiryBarProps {
   underlying:    string;
   spotPrice?:    number | null;
+  spotChange?:   number | null;
   expiries:      string[];
   selected:      string;
   onSelect:      (expiry: string) => void;
@@ -15,6 +16,7 @@ interface ExpiryBarProps {
 export default function ExpiryBar({
   underlying,
   spotPrice,
+  spotChange,
   expiries,
   selected,
   onSelect,
@@ -29,7 +31,14 @@ export default function ExpiryBar({
         <div className={styles.assetText}>
           <span className={styles.assetLabel}>{underlying}</span>
           {spotPrice != null && (
-            <span className={styles.assetPrice}>{fmtUsdCompact(spotPrice)}</span>
+            <span className={styles.assetPrice}>
+              {fmtUsdCompact(spotPrice)}
+              {spotChange != null && (
+                <span className={styles.spotChange} data-positive={spotChange >= 0}>
+                  {spotChange >= 0 ? "▲" : "▼"}{Math.abs(spotChange * 100).toFixed(1)}%
+                </span>
+              )}
+            </span>
           )}
         </div>
         <span className={styles.assetChevron}>▾</span>

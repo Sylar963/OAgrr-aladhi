@@ -55,7 +55,7 @@ export type { OptionVenueAdapter, VenueCapabilities, StreamHandlers } from './fe
 export { BaseAdapter } from './feeds/shared/base.js';
 
 // services
-export { DvolService, type DvolSnapshot } from './services/dvol.js';
+export { DvolService, type DvolSnapshot, type DvolCandle } from './services/dvol.js';
 export { SpotService, type SpotSnapshot } from './services/spot.js';
 export { FlowService, type TradeEvent } from './services/flow.js';
 

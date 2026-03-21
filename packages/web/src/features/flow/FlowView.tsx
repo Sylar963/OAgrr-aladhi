@@ -7,7 +7,7 @@ import { useFlow } from "./queries";
 import type { TradeEvent } from "./queries";
 import styles from "./FlowView.module.css";
 
-const FLOW_ASSETS = ["BTC", "ETH"] as const;
+const FLOW_ASSETS = ["BTC", "ETH", "SOL", "DOGE", "XRP", "BNB"] as const;
 
 // Notional thresholds for visual treatment
 const WHALE_THRESHOLD   = 100_000; // $100k+ notional

@@ -53,6 +53,15 @@
   color: var(--color-profit);
 }
 
+.spotChange {
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.spotChange[data-positive="true"]  { color: var(--color-profit); }
+.spotChange[data-positive="false"] { color: var(--color-loss); }
+
 .assetChevron {
   font-size: 10px;
   color: var(--text-dim);

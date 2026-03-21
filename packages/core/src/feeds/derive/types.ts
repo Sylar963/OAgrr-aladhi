@@ -7,14 +7,14 @@ const numStr = z.string().nullable().optional();
 // Derive abbreviated ticker format — values are STRINGS, not numbers.
 // Verified against live WS + REST data 2026-03-20.
 export const DeriveTickerSchema = z.object({
-  B: numStr,                    // best_bid_price
-  best_bid_price: numStr,
-  b: numStr,                    // best_bid_amount
+  B: numStr,                    // best_bid_amount (size)
   best_bid_amount: numStr,
-  A: numStr,                    // best_ask_price
-  best_ask_price: numStr,
-  a: numStr,                    // best_ask_amount
+  b: numStr,                    // best_bid_price
+  best_bid_price: numStr,
+  A: numStr,                    // best_ask_amount (size)
   best_ask_amount: numStr,
+  a: numStr,                    // best_ask_price
+  best_ask_price: numStr,
   M: numStr,                    // mark_price
   mark_price: numStr,
   I: numStr,                    // index_price

@@ -277,7 +277,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
 
   /**
    * Parse Derive's abbreviated ticker format.
-   * Keys: B=best_bid_price, A=best_ask_price, I=index_price, M=mark_price, t=timestamp
+   * Keys: B=best_bid_amount, b=best_bid_price, A=best_ask_amount, a=best_ask_price, I=index_price, M=mark_price
    * option_pricing: d=delta, g=gamma, t=theta, v=vega, i=iv, r=rho, f=forward, m=mark, bi=bid_iv, ai=ask_iv
    * stats: oi=open_interest, v=volume, c=24h_change
    */
@@ -286,10 +286,11 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     const stats = t.stats;
 
     return {
-      bidPrice: this.safeNum(t.B ?? t.best_bid_price),
-      askPrice: this.safeNum(t.A ?? t.best_ask_price),
-      bidSize: this.safeNum(t.b ?? t.best_bid_amount),
-      askSize: this.safeNum(t.a ?? t.best_ask_amount),
+      // Derive abbreviated keys: B=best_bid_amount (size), b=best_bid_price
+      bidPrice: this.safeNum(t.b ?? t.best_bid_price),
+      askPrice: this.safeNum(t.a ?? t.best_ask_price),
+      bidSize: this.safeNum(t.B ?? t.best_bid_amount),
+      askSize: this.safeNum(t.A ?? t.best_ask_amount),
       markPrice: this.safeNum(op?.m ?? t.M ?? t.mark_price),
       lastPrice: null,
       underlyingPrice: this.safeNum(t.I ?? t.index_price),

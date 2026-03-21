@@ -3,11 +3,10 @@ import { useRef, useEffect, useState } from "react";
 import { Spinner, EmptyState } from "@components/ui";
 import { VENUES } from "@lib/venue-meta";
 import { fmtIv } from "@lib/format";
+import { useUnderlyings } from "@features/chain/queries";
 import { useFlow } from "./queries";
 import type { TradeEvent } from "./queries";
 import styles from "./FlowView.module.css";
-
-const FLOW_ASSETS = ["BTC", "ETH", "SOL", "DOGE", "XRP", "BNB"] as const;
 
 // Notional thresholds for visual treatment
 const WHALE_THRESHOLD   = 100_000; // $100k+ notional
@@ -107,6 +106,12 @@ function TradeRow({ trade, isNew }: TradeRowProps) {
 }
 
 export default function FlowView() {
+  const { data: underlyingsData } = useUnderlyings();
+  // Deduplicate base assets (BTC and BTC_USDC both → BTC)
+  const flowAssets = [...new Set(
+    (underlyingsData?.underlyings ?? []).map((u) => u.split('_')[0]!),
+  )];
+
   const [asset, setAsset] = useState<string>("BTC");
   const { data, isLoading, error } = useFlow(asset);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
@@ -161,7 +166,7 @@ export default function FlowView() {
           <div className={styles.titleRow}>
             <span className={styles.title}>Live Options Flow</span>
             <div className={styles.assetPicker}>
-              {FLOW_ASSETS.map((a) => (
+              {flowAssets.map((a) => (
                 <button
                   key={a}
                   className={styles.assetBtn}

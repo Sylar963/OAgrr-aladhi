@@ -22,7 +22,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
       'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'XRPUSDT',
       'BNBUSDT', 'AVAXUSDT', 'TRXUSDT', 'HYPEUSDT',
     ]),
-    flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB']),
+    flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE']),
   ]);
 
   if (dvol.status === 'fulfilled') { serviceHealth.dvol = true; log.info('DVOL service started'); }

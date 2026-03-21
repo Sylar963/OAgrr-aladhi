@@ -92,10 +92,11 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
   // Prefer computed mid from live bid/ask; fall back to exchange mark price.
   const mid = bid !== null && ask !== null ? (bid + ask) / 2 : markMid;
 
-  const spreadPct =
-    bid !== null && ask !== null && mid !== null && mid > 0
-      ? ((ask - bid) / mid) * 100
-      : null;
+  // One-sided markets (bid=0 or ask=0) and Derive's inverted quotes (bid > ask)
+  // both produce ±200% or negative spread via the formula — return null so the
+  // UI renders '–' rather than a misleading red percentage.
+  const validSpread = bid !== null && ask !== null && bid > 0 && ask > 0 && ask >= bid && mid !== null && mid > 0;
+  const spreadPct = validSpread ? ((ask - bid) / mid) * 100 : null;
 
   // Cost to enter: mid + half-spread (you pay ask) + taker fee.
   const fees = contract.quote.estimatedFees;
@@ -125,8 +126,11 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
 
 /**
  * Builds an EnrichedSide from the per-venue contracts at one strike/right.
- * bestIv is the lowest non-null markIv — lower IV = cheaper premium, better
- * entry for a buyer and the most liquid / tightest market maker quote.
+ * bestIv is the lowest non-null markIv across venues with an active market —
+ * lower IV = cheaper premium, so it identifies the best entry price for a buyer.
+ * Venues with zero bid and ask are excluded: they list instruments but have no
+ * real quotes (e.g. Derive SOL), and letting them win bestVenue would propagate
+ * their placeholder prices as the authoritative mid.
  */
 function buildEnrichedSide(
   contracts: Partial<Record<VenueId, NormalizedOptionContract>>,
@@ -142,8 +146,9 @@ function buildEnrichedSide(
     const quote = contractToVenueQuote(contract);
     venues[venueKey] = quote;
 
+    const hasMarket = (quote.bid !== null && quote.bid > 0) || (quote.ask !== null && quote.ask > 0);
     const iv = quote.markIv;
-    if (iv !== null && (bestIv === null || iv < bestIv)) {
+    if (iv !== null && hasMarket && (bestIv === null || iv < bestIv)) {
       bestIv = iv;
       bestVenue = venueKey;
     }

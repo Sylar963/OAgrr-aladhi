@@ -281,6 +281,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       return;
     }
 
+    if (json == null || typeof json !== 'object') return;
     const obj = json as Record<string, unknown>;
     if (obj['event'] === 'subscribe' || obj['event'] === 'unsubscribe' || obj['event'] === 'error') return;
 

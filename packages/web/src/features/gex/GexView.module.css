@@ -71,6 +71,63 @@
   color: var(--text-tertiary);
 }
 
+/* ── Expiry picker ───────────────────────────────────── */
+
+.expiryPicker {
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: fit-content;
+}
+
+.expiryPicker::-webkit-scrollbar { display: none; }
+
+.expiryBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.expiryBtn:hover { color: var(--text-secondary); }
+
+.expiryBtn[data-active="true"] {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dteBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+}
+
+.dteBadge[data-urgent="true"] {
+  background: color-mix(in srgb, var(--color-loss) 18%, transparent);
+  color: var(--color-loss);
+}
+
 .spotBadge {
   font-family: var(--font-mono);
   font-size: var(--text-sm);

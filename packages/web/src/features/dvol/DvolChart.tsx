@@ -74,6 +74,8 @@ export default function DvolChart() {
       lineStyle: 2, // dashed
       priceFormat: { type: "custom", formatter: (p: number) => `${p.toFixed(1)}%` },
       crosshairMarkerVisible: false,
+      lastValueVisible: false,       // no horizontal price line
+      priceLineVisible: false,       // no dashed price line across chart
     });
 
     chartApiRef.current = chart;

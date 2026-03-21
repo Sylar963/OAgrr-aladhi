@@ -3,6 +3,7 @@ import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared
 import type { VenueId } from '../../types/common.js';
 import { EMPTY_GREEKS, type OptionGreeks } from '../../core/types.js';
 import { feedLogger } from '../../utils/logger.js';
+import { backoffDelay } from '../../utils/reconnect.js';
 import {
   OkxRestResponseSchema,
   OkxInstrumentSchema,
@@ -209,6 +210,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
       this.ws.on('open', () => {
         log.info('ws connected');
+        this.reconnectAttempt = 0;
         this.emitStatus('connected');
         this.startPing();
         resolve();
@@ -246,9 +248,11 @@ export class OkxWsAdapter extends SdkBaseAdapter {
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
   }
 
+  private reconnectAttempt = 0;
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
-    const delay = Math.min(3000 + Math.random() * 500, 30_000);
+    const delay = backoffDelay(this.reconnectAttempt++);
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {

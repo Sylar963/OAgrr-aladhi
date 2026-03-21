@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
+import { backoffDelay } from '../../utils/reconnect.js';
 import {
   BybitInstrumentsResponseSchema,
   BybitTickersResponseSchema,
@@ -208,6 +209,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
       this.ws.on('open', () => {
         log.info('ws connected');
+        this.reconnectAttempt = 0;
         this.emitStatus('connected');
         this.startPing();
         resolve();
@@ -244,10 +246,12 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
   }
 
+  private reconnectAttempt = 0;
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
-    // Jitter prevents thundering-herd when multiple feeds reconnect simultaneously
-    const delay = Math.min(3000 + Math.random() * 500, 30_000);
+    const delay = backoffDelay(this.reconnectAttempt++);
+
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {

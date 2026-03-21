@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import pino from 'pino';
 import { logger } from '../../utils/logger.js';
+import { backoffDelay, WS_SUBSCRIBE_BATCH_SIZE, WS_SUBSCRIBE_BATCH_DELAY_MS } from '../../utils/reconnect.js';
 
 /**
  * Shared JSON-RPC 2.0 over WebSocket base for Deribit and Derive.
@@ -204,24 +205,36 @@ export class JsonRpcWsClient {
       return;
     }
 
-    const baseDelay = this.options.reconnectDelayMs ?? 1000;
-    const delay = Math.min(baseDelay * Math.pow(2, this.reconnectAttempts), 30_000);
+    const delay = backoffDelay(this.reconnectAttempts, this.options.reconnectDelayMs ?? 1000);
     this.reconnectAttempts++;
 
     this.log.info({ delayMs: delay, attempt: this.reconnectAttempts }, 'reconnecting');
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();
-        if (this.subscribedChannels.length > 0) {
-          const method = this.options.subscribeMethod ?? 'public/subscribe';
-          this.log.info({ count: this.subscribedChannels.length }, 're-subscribing to channels');
-          await this.call(method, { channels: [...this.subscribedChannels] });
-        }
+        await this.resubscribe();
       } catch (e: unknown) {
         this.log.warn({ err: String(e) }, 'reconnect failed');
         if (this.shouldReconnect) this.scheduleReconnect();
       }
     }, delay);
+  }
+
+  /** Re-subscribe in batches to stay within exchange rate limits on reconnect. */
+  private async resubscribe(): Promise<void> {
+    if (this.subscribedChannels.length === 0) return;
+
+    const method = this.options.subscribeMethod ?? 'public/subscribe';
+    const channels = [...this.subscribedChannels];
+    this.log.info({ count: channels.length }, 're-subscribing to channels');
+
+    for (let i = 0; i < channels.length; i += WS_SUBSCRIBE_BATCH_SIZE) {
+      const batch = channels.slice(i, i + WS_SUBSCRIBE_BATCH_SIZE);
+      await this.call(method, { channels: batch });
+      if (i + WS_SUBSCRIBE_BATCH_SIZE < channels.length) {
+        await new Promise(r => setTimeout(r, WS_SUBSCRIBE_BATCH_DELAY_MS));
+      }
+    }
   }
 
   private cleanup(): void {

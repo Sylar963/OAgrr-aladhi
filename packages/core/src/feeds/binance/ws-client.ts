@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
+import { backoffDelay } from '../../utils/reconnect.js';
 import {
   BinanceCombinedStreamSchema,
   BinanceInstrumentSchema,
@@ -203,12 +204,16 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     log.info({ count: streams.length, streams }, 'subscribed to streams');
   }
 
+  private reconnectAttempt = 0;
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
+    const delay = backoffDelay(this.reconnectAttempt++);
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {
         await this.connectWs();
+        this.reconnectAttempt = 0;
         if (this.subscribedStreams.size > 0) {
           this.sendSubscribe([...this.subscribedStreams]);
         }
@@ -216,7 +221,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
         log.warn({ err: String(e) }, 'reconnect failed');
         this.scheduleReconnect();
       }
-    }, 3000);
+    }, delay);
   }
 
   // ── subscriptions ─────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { z } from 'zod';
 import { feedLogger } from '../utils/logger.js';
+import { backoffDelay } from '../utils/reconnect.js';
 import type { VenueId } from '../types/common.js';
 
 const log = feedLogger('flow');
@@ -116,7 +117,7 @@ export class FlowService {
 
       if (this.shouldReconnect) {
         const nextAttempt = didOpen ? 0 : attempt + 1;
-        const delay = Math.min(1000 * 2 ** nextAttempt + Math.random() * 500, 30_000);
+        const delay = backoffDelay(nextAttempt);
         const timer = setTimeout(() => {
           this.reconnectTimers.delete(key);
           this.connectStream(stream, underlying, nextAttempt);

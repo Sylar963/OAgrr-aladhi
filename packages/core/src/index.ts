@@ -54,6 +54,11 @@ export type {
 export type { OptionVenueAdapter, VenueCapabilities, StreamHandlers } from './feeds/shared/types.js';
 export { BaseAdapter } from './feeds/shared/base.js';
 
+// services
+export { DvolService, type DvolSnapshot } from './services/dvol.js';
+export { SpotService, type SpotSnapshot } from './services/spot.js';
+export { FlowService, type TradeEvent } from './services/flow.js';
+
 // feeds — venue adapters
 export { DeribitWsAdapter } from './feeds/deribit/index.js';
 export { OkxWsAdapter } from './feeds/okx/index.js';

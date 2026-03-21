@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { registerRoutes } from './routes/index.js';
 import { bootstrapAdapters } from './adapters.js';
+import { bootstrapServices } from './services.js';
 
 let ready = false;
 
@@ -32,10 +33,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerRoutes(app);
 
-  // Fire-and-forget: server starts accepting requests immediately (returning 503
-  // via isReady() guard) while adapters load in the background (~5-15s).
+  // Fire-and-forget: server accepts requests immediately (503 via isReady() guard)
+  // while adapters + services load in the background (~5-15s).
   bootstrapAdapters(app.log).then(() => {
     ready = true;
+    bootstrapServices(app.log).catch((err: unknown) => {
+      app.log.warn({ err: String(err) }, 'services bootstrap failed');
+    });
   });
 
   return app;

@@ -16,6 +16,14 @@ interface TopBarProps {
 export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
   const activeTab    = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeVenues = useAppStore((s) => s.activeVenues);
+  const feedStatus   = useAppStore((s) => s.feedStatus);
+
+  const { connectionState, failedVenueCount, staleMs } = feedStatus;
+  const activeFeeds = activeVenues.length - failedVenueCount;
+  const latency     = staleMs != null ? `${staleMs}ms` : "–";
+  const isLive      = connectionState === "live";
+  const isWarning   = connectionState === "reconnecting" || connectionState === "stale";
 
   return (
     <header className={styles.bar}>
@@ -39,8 +47,13 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
 
       <div className={styles.right}>
         <div className={styles.status}>
-          <span className={styles.statusDot} />
-          <span>5 feeds · 24ms</span>
+          <span
+            className={styles.statusDot}
+            data-state={connectionState}
+            data-warning={isWarning}
+            data-live={isLive}
+          />
+          <span>{activeFeeds} feeds · {latency}</span>
         </div>
         <button className={styles.cmdk} onClick={onOpenPalette}>
           ⌘K

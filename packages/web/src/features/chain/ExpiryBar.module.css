@@ -70,6 +70,11 @@
   align-items: stretch;
   overflow-x: auto;
   scrollbar-width: none;
+  /* Take up remaining space and allow inner content to scroll rather than
+     overflowing the strip. Without min-width: 0 the flex item can grow past
+     its container and the overflow-x has nothing to clip against. */
+  flex: 1;
+  min-width: 0;
 }
 
 .tabs::-webkit-scrollbar { display: none; }

@@ -1,6 +1,14 @@
 import { create } from "zustand";
 
+import type { WsConnectionState } from "@oggregator/protocol";
 import { VENUE_IDS } from "@lib/venue-meta";
+
+export interface FeedStatus {
+  connectionState:  WsConnectionState;
+  failedVenueCount: number;
+  /** Age of the most recent snapshot in ms — proxy for data freshness. */
+  staleMs:          number | null;
+}
 
 interface AppState {
   // Asset / expiry selection
@@ -12,6 +20,7 @@ interface AppState {
   activeVenues:  string[];
   // User's custom IV for edge column
   myIv:          string; // string so input is controlled cleanly; parse to float on use
+  feedStatus:    FeedStatus;
 
   setUnderlying:   (u: string) => void;
   setExpiry:       (e: string) => void;
@@ -19,6 +28,7 @@ interface AppState {
   toggleVenue:     (venueId: string) => void;
   setActiveVenues:  (venues: string[]) => void;
   setMyIv:         (iv: string) => void;
+  setFeedStatus:   (s: Partial<FeedStatus>) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -27,6 +37,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeTab:    "chain",
   activeVenues: [...VENUE_IDS],
   myIv:         "",
+  feedStatus:   { connectionState: "closed", failedVenueCount: 0, staleMs: null },
 
   // Changing underlying invalidates the current expiry — force re-selection
   setUnderlying: (underlying) => set({ underlying, expiry: "" }),
@@ -42,4 +53,5 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   setActiveVenues: (venues) => set({ activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
   setMyIv: (myIv) => set({ myIv }),
+  setFeedStatus: (s) => set((prev) => ({ feedStatus: { ...prev.feedStatus, ...s } })),
 }));

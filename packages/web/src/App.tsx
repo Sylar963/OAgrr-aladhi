@@ -30,10 +30,10 @@ function GexPanel() {
 }
 
 export default function App() {
-  const { data: underlyings = [] } = useUnderlyings();
+  const { data: underlyingsData } = useUnderlyings();
+  const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
 
-  // Ensure underlying is in the list once loaded.
   const underlying    = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   useEffect(() => {

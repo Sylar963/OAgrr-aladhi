@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 import { getTokenLogo } from "@lib/token-meta";
 import { VENUE_LIST } from "@lib/venue-meta";
+import { useUnderlyings } from "@features/chain/queries";
 
 import styles from "./CommandPalette.module.css";
 
@@ -18,9 +19,32 @@ export default function CommandPalette({ underlyings, selected, onSelect, onClos
   const [venueFilter, setVenueFilter] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = underlyings.filter((u) =>
-    u.toLowerCase().includes(search.toLowerCase()),
-  );
+  const { data: underlyingsData } = useUnderlyings();
+  const byVenue = underlyingsData?.byVenue;
+
+  const venuesByUnderlying = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    if (!byVenue) return map;
+    for (const { venue, underlyings: venueUnderlyings } of byVenue) {
+      for (const u of venueUnderlyings) {
+        if (!map.has(u)) map.set(u, new Set());
+        map.get(u)!.add(venue);
+      }
+    }
+    return map;
+  }, [byVenue]);
+
+  const venueUnderlyings = useMemo(() => {
+    if (!venueFilter || !byVenue) return null;
+    const entry = byVenue.find((v) => v.venue === venueFilter);
+    return entry ? new Set(entry.underlyings) : null;
+  }, [venueFilter, byVenue]);
+
+  const filtered = underlyings.filter((u) => {
+    if (!u.toLowerCase().includes(search.toLowerCase())) return false;
+    if (venueUnderlyings && !venueUnderlyings.has(u)) return false;
+    return true;
+  });
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setActiveIndex(0); }, [search, venueFilter]);
@@ -94,6 +118,7 @@ export default function CommandPalette({ underlyings, selected, onSelect, onClos
         <div className={styles.list}>
           {filtered.map((u, i) => {
             const logo = getTokenLogo(u);
+            const supportedVenues = venuesByUnderlying.get(u);
             return (
               <button
                 key={u}
@@ -117,6 +142,9 @@ export default function CommandPalette({ underlyings, selected, onSelect, onClos
                       src={v.logo}
                       alt={v.shortLabel}
                       className={styles.assetVenueLogo}
+                      style={{
+                        opacity: supportedVenues?.has(v.id) ? 0.7 : 0.15,
+                      }}
                     />
                   ))}
                 </div>

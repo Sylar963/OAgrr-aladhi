@@ -12,8 +12,6 @@
   font-size: var(--text-xl);
 }
 
-/* ── Sticky column headers ──────────────────────────────────────────────── */
-
 .header {
   display: grid;
   grid-template-columns: 1fr 110px 1fr;
@@ -27,7 +25,6 @@
 
 .headerSide {
   display: grid;
-  /* MID | IV | Δ | SPD | VENUES */
   grid-template-columns: 90px 62px 50px 56px 1fr;
   align-items: center;
   padding: 0 var(--space-3);
@@ -35,7 +32,6 @@
 }
 
 .headerSide[data-side="put"] {
-  /* mirror: VENUES | SPD | Δ | IV | MID */
   grid-template-columns: 1fr 56px 50px 62px 90px;
 }
 
@@ -74,14 +70,10 @@
   border-right: 1px solid var(--border-subtle);
 }
 
-/* ── Scrollable list ──────────────────────────────────────────────────────── */
-
 .list {
   flex: 1;
   overflow-y: auto;
 }
-
-/* ── ATM marker ─────────────────────────────────────────────────────────── */
 
 .atmMarker {
   display: flex;
@@ -115,8 +107,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Row wrapper ─────────────────────────────────────────────────────────── */
-
 .rowWrap {
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -124,8 +114,6 @@
 .rowWrap:last-child {
   border-bottom: none;
 }
-
-/* ── Strike row ──────────────────────────────────────────────────────────── */
 
 .row {
   display: grid;
@@ -154,13 +142,6 @@
   background: rgba(96, 165, 250, 0.09);
 }
 
-/* ── Side cell — single line layout ─────────────────────────────────────── */
-
-/*
-  Call layout (LTR):  MID  IV  Δ  SPREAD  VENUES
-  Put layout  (RTL):  VENUES  SPREAD  Δ  IV  MID
-*/
-
 .cell {
   display: grid;
   grid-template-columns: 90px 62px 50px 56px 1fr;
@@ -182,13 +163,11 @@
   background: rgba(248, 113, 113, 0.03);
 }
 
-/* Put side: reverse column order + left border */
 .cell[data-type="put"] {
   grid-template-columns: 1fr 56px 50px 62px 90px;
   border-left: 1px solid var(--border-subtle);
 }
 
-/* Call side right border (includes empty call cells) */
 .cell[data-type="call"] {
   border-right: 1px solid var(--border-subtle);
 }
@@ -204,7 +183,6 @@
   text-overflow: ellipsis;
 }
 
-/* On put side, midPrice is in the last column — right-align it */
 .cell[data-type="put"] .midPrice {
   text-align: right;
 }
@@ -232,8 +210,6 @@
   gap: 3px;
   justify-content: flex-end;
 }
-
-/* ── Strike center column ────────────────────────────────────────────────── */
 
 .strikeCenter {
   display: flex;

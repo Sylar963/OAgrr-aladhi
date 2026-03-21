@@ -24,7 +24,8 @@ export default function DebugChain() {
   const activeVenues = useAppStore((s) => s.activeVenues);
   const openPalette  = useOpenPalette();
 
-  const { data: expiries = [] } = useExpiries(underlying);
+  const { data: expiriesData } = useExpiries(underlying);
+  const expiries = expiriesData?.expiries ?? [];
   const { data, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
 
   useEffect(() => {

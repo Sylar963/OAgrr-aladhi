@@ -73,8 +73,6 @@ function SideCell({ side, type, isItm, activeVenues }: SideCellProps) {
     </div>
   );
 
-  // Call DOM order: MID | IV | Δ | SPREAD | VENUES
-  // Put DOM order:  VENUES | SPREAD | Δ | IV | MID  (mirrors grid columns)
   const children = type === "call"
     ? [midEl, ivEl, deltaEl, spreadEl, dotsEl]
     : [dotsEl, spreadEl, deltaEl, ivEl, midEl];
@@ -124,7 +122,6 @@ function StrikeRowItem({
           }
         }}
       >
-        {/* Call side */}
         <SideCell
           side={strike.call}
           type="call"
@@ -132,13 +129,11 @@ function StrikeRowItem({
           activeVenues={activeVenues}
         />
 
-        {/* Center strike */}
         <div className={styles.strikeCenter} data-atm={isAtm}>
           {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
         </div>
 
-        {/* Put side */}
         <SideCell
           side={strike.put}
           type="put"
@@ -170,7 +165,6 @@ export default function NewChainTable({
   const atmRef  = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Scroll ATM into view whenever strikes change (new expiry loaded)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (atmRef.current && listRef.current) {
@@ -198,7 +192,6 @@ export default function NewChainTable({
 
   return (
     <div className={styles.wrapper}>
-      {/* Column headers */}
       <div className={styles.header}>
         <div className={styles.headerSide} data-side="call">
           <span>MID</span>

@@ -2,7 +2,7 @@ import type { EnrichedChainResponse } from "@shared/enriched";
 
 import { useAppStore } from "@stores/app-store";
 import { AssetPickerButton, Spinner } from "@components/ui";
-import { fmtUsdCompact, fmtNum, formatExpiry } from "@lib/format";
+import { fmtUsdCompact, formatExpiry } from "@lib/format";
 import { VENUES } from "@lib/venue-meta";
 import { DvolChart } from "@features/dvol";
 import { useAllExpiriesChain } from "./queries";
@@ -48,6 +48,7 @@ function aggregateVenueVolume(chains: EnrichedChainResponse[]): VenueVolume[] {
 
   return [...map.entries()]
     .map(([venue, d]) => ({ venue, volume: d.volume, oi: d.oi }))
+    .filter((d) => d.oi > 0 || d.volume > 0)
     .sort((a, b) => b.oi - a.oi);
 }
 
@@ -96,12 +97,28 @@ function aggregateExpiryPcr(chains: EnrichedChainResponse[]): ExpiryPcr[] {
 
 // ── Sub-components ──────────────────────────────────────────────
 
+function fmtContracts(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+  if (v === 0)        return "–";
+  return v.toFixed(0);
+}
+
 function VenueVolumeChart({ data }: { data: VenueVolume[] }) {
   const maxOi = Math.max(...data.map((d) => d.oi), 1);
 
+  if (data.length === 0) return null;
+
   return (
     <div className={styles.card}>
-      <div className={styles.cardTitle}>Volume & OI by Venue</div>
+      <div className={styles.cardTitle}>Open Interest & Volume by Venue</div>
+      <div className={styles.cardSubtitle}>Contracts · aggregated across all expiries</div>
+      <div className={styles.venueHeader}>
+        <span />
+        <span />
+        <span className={styles.colLabel}>OI</span>
+        <span className={styles.colLabel}>24h Vol</span>
+      </div>
       <div className={styles.venueList}>
         {data.map((d) => {
           const meta = VENUES[d.venue];
@@ -115,10 +132,8 @@ function VenueVolumeChart({ data }: { data: VenueVolume[] }) {
               <div className={styles.barTrack}>
                 <div className={styles.bar} style={{ width: `${pct}%` }} />
               </div>
-              <div className={styles.venueStats}>
-                <span className={styles.statPrimary}>{fmtUsdCompact(d.oi)} OI</span>
-                <span className={styles.statDim}>{fmtNum(d.volume, 0)} vol</span>
-              </div>
+              <span className={styles.statPrimary}>{fmtContracts(d.oi)}</span>
+              <span className={styles.statDim}>{fmtContracts(d.volume)}</span>
             </div>
           );
         })}

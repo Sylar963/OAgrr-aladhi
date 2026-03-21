@@ -46,23 +46,23 @@ function SideCell({ side, type, isItm, activeVenues }: SideCellProps) {
   const delta     = bestQuote?.delta ?? null;
 
   const midEl = (
-    <span className={styles.midPrice}>{fmtUsd(mid)}</span>
+    <span key="mid" className={styles.midPrice}>{fmtUsd(mid)}</span>
   );
   const ivEl = (
-    <div className={styles.ivChipWrap}>
+    <div key="iv" className={styles.ivChipWrap}>
       <IvChip iv={bestIv} size="sm" />
     </div>
   );
   const deltaEl = (
-    <span className={styles.delta}>{fmtDelta(delta)}</span>
+    <span key="delta" className={styles.delta}>{fmtDelta(delta)}</span>
   );
   const spreadEl = (
-    <div className={styles.spreadWrap}>
+    <div key="spread" className={styles.spreadWrap}>
       <SpreadPill spreadPct={spread} />
     </div>
   );
   const dotsEl = (
-    <div className={styles.venueDots}>
+    <div key="dots" className={styles.venueDots}>
       {venueEntries.map(([venueId]) => (
         <VenueDot
           key={venueId}

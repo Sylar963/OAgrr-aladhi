@@ -72,9 +72,33 @@
 
 .venueList { display: flex; flex-direction: column; gap: var(--space-2); }
 
+.cardSubtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: -6px;
+}
+
+.venueHeader {
+  display: grid;
+  grid-template-columns: 80px 1fr 60px 60px;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.colLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-align: right;
+}
+
 .venueRow {
   display: grid;
-  grid-template-columns: 80px 1fr 140px;
+  grid-template-columns: 80px 1fr 60px 60px;
   align-items: center;
   gap: var(--space-3);
 }
@@ -106,15 +130,20 @@
   transition: width 0.3s ease;
 }
 
-.venueStats {
-  display: flex;
-  gap: var(--space-3);
+.statPrimary {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: right;
 }
 
-.statPrimary { color: var(--text-secondary); font-weight: 600; }
-.statDim     { color: var(--text-dim); }
+.statDim {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  text-align: right;
+}
 
 /* ── Put/Call Ratio ────────────────────────────────── */
 

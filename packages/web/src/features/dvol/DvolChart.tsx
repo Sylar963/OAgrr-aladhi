@@ -24,7 +24,6 @@ export default function DvolChart() {
   const ivSeriesRef  = useRef<ISeriesApi<"Area"> | null>(null);
   const hvSeriesRef  = useRef<ISeriesApi<"Line"> | null>(null);
 
-  // Create chart once, update data when it changes
   useEffect(() => {
     const container = chartRef.current;
     if (!container) return;

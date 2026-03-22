@@ -339,17 +339,11 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     }
 
     const baseAssets = new Set(instruments.map((i) => i.base));
-    log.info({ bases: [...baseAssets], expiries: [...expiries] }, 'fetching OI for bases × expiries');
-
     for (const base of baseAssets) {
       for (const expiry of expiries) {
         try {
-          const url = `/eapi/v1/openInterest?underlyingAsset=${base}&expiration=${expiry}`;
-          const raw = await this.fetchEapi(url);
-          if (!Array.isArray(raw)) {
-            log.warn({ base, expiry, raw: JSON.stringify(raw).slice(0, 100) }, 'OI not an array');
-            continue;
-          }
+          const raw = await this.fetchEapi(`/eapi/v1/openInterest?underlyingAsset=${base}&expiration=${expiry}`);
+          if (!Array.isArray(raw)) continue;
 
           let merged = 0;
           for (const item of raw) {

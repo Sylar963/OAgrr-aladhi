@@ -229,10 +229,8 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     await this.fetchNotionalVolume();
   }
 
-  /**
-   * Calls public/statistics per currency and distributes daily_notional_volume
-   * across instruments weighted by their premium volume (stats.v).
-   */
+  // Distributes daily_notional_volume from public/statistics across instruments
+  // weighted by premium volume, so per-instrument volume24hUsd is notional.
   private async fetchNotionalVolume(): Promise<void> {
     for (const currency of CURRENCIES) {
       try {

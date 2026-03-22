@@ -151,7 +151,6 @@ export class DvolService {
     }, 'DVOL history loaded');
   }
 
-  /** Deribit's get_historical_volatility returns hourly realized vol snapshots. */
   private async fetchHv(currency: string): Promise<void> {
     try {
       const raw = await this.rpc!.call('public/get_historical_volatility', { currency });

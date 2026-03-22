@@ -354,9 +354,17 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
   private handleWsTicker(item: OkxTicker): void {
     const id = item.instId;
-    if (!this.instrumentMap.has(id)) return;
+    const inst = this.instrumentMap.get(id);
+    if (!inst) return;
 
     const prev = this.quoteStore.get(id);
+    const vol = this.safeNum(item.vol24h) ?? prev?.volume24h ?? null;
+    const underlying = prev?.underlyingPrice ?? null;
+    // OKX vol24h is contracts — multiply by contractSize (0.01 BTC) × underlying for USD
+    const volUsd = vol != null && underlying != null && inst.contractSize != null
+      ? vol * inst.contractSize * underlying
+      : prev?.volume24hUsd ?? null;
+
     const quote: LiveQuote = {
       bidPrice: this.safeNum(item.bidPx),
       askPrice: this.safeNum(item.askPx),
@@ -366,10 +374,10 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       lastPrice: this.safeNum(item.last),
       underlyingPrice: prev?.underlyingPrice ?? null,
       indexPrice: null,
-      volume24h: this.safeNum(item.vol24h) ?? prev?.volume24h ?? null,
+      volume24h: vol,
       openInterest: prev?.openInterest ?? null,
       openInterestUsd: prev?.openInterestUsd ?? null,
-      volume24hUsd: prev?.volume24hUsd ?? null,
+      volume24hUsd: volUsd,
       greeks: prev?.greeks ?? { ...EMPTY_GREEKS },
       timestamp: Number(item.ts) || Date.now(),
     };

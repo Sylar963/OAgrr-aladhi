@@ -8,7 +8,7 @@ import { Spinner, EmptyState } from "@components/ui";
 
 import ExpiryBar    from "./ExpiryBar";
 import StatStrip    from "./StatStrip";
-import NewChainTable from "./NewChainTable";
+import ChainTable from "./ChainTable";
 import VenueSidebar from "./VenueSidebar";
 import MyIvInput    from "./MyIvInput";
 import styles       from "./ChainView.module.css";
@@ -110,7 +110,7 @@ export default function ChainView() {
             />
           )}
           {chain && chain.strikes.length > 0 && (
-            <NewChainTable
+            <ChainTable
               strikes={chain.strikes}
               atmStrike={chain.stats.atmStrike}
               forwardPrice={chain.stats.forwardPriceUsd}

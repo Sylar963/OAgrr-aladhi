@@ -11,11 +11,11 @@ import { useAppStore }               from "@stores/app-store";
 import styles from "./App.module.css";
 
 const TABS = [
-  { id: "chain",     label: "Chain" },
-  { id: "surface",   label: "Surface" },
-  { id: "flow",      label: "Flow", badge: "LIVE" },
-  { id: "analytics", label: "Analytics" },
-  { id: "gex",       label: "GEX", badge: "PRO" },
+  { id: "chain",      label: "Chain" },
+  { id: "surface",    label: "Surface" },
+  { id: "flow",       label: "Flow", badge: "LIVE" },
+  { id: "analytics",  label: "Analytics" },
+  { id: "gex",        label: "GEX", badge: "PRO" },
 ] as const;
 
 export default function App() {

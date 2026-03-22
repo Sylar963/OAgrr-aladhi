@@ -1,169 +1,109 @@
-import { useState, useEffect, useRef } from "react";
-import type { CSSProperties } from "react";
+import { useState, useRef, useEffect } from "react";
+
+import type { EnrichedStrike, EnrichedSide } from "@shared/enriched";
 
 import { VENUES } from "@lib/venue-meta";
-import type { Comparison, ComparisonRow, NormalizedOptionContract } from "@shared/common";
-
-import { fmtUsd, fmtIv, getSortedByAsk, getLiquidityLevel, findAtmStrike } from "./format";
+import { venueColor } from "@lib/colors";
+import { IvChip, SpreadPill, EmptyState } from "@components/ui";
+import { fmtUsd, fmtDelta } from "@lib/format";
+import ExpandedRow from "./ExpandedRow";
 import styles from "./ChainTable.module.css";
 
-type Side = "call" | "put";
-
-interface BuilderTarget {
-  strike: number;
-  side: Side;
+interface NewChainTableProps {
+  strikes:      EnrichedStrike[];
+  atmStrike:    number | null;
+  forwardPrice: number | null;
+  activeVenues: string[];
+  myIv:         number | null;
 }
 
-interface ChainTableProps {
-  comparison: Comparison;
-  underlyingPrice: number;
-  onOpenBuilder?: (target: BuilderTarget) => void;
+function fmtGamma(v: number | null): string {
+  if (v == null) return "–";
+  return `${Math.round(v * 1e6)}`;
 }
 
-// Heatmap: rank 0 = best (teal), higher = worse (red)
-function heatColor(rank: number): string {
-  switch (rank) {
-    case 0:  return "rgba(80, 210, 193, 0.25)";
-    case 1:  return "rgba(80, 210, 193, 0.12)";
-    case 2:  return "rgba(255, 255, 255, 0.05)";
-    case 3:  return "rgba(203, 56, 85, 0.10)";
-    default: return "rgba(203, 56, 85, 0.18)";
-  }
+function fmtVega(v: number | null): string {
+  if (v == null) return "–";
+  return `${Math.round(v)}`;
 }
 
-function heatBorderColor(rank: number): string {
-  return rank === 0 ? "var(--accent-primary)" : "transparent";
+// ── Venue column ──────────────────────────────────────────────────────────────
+
+interface VenueColumnProps {
+  side:         EnrichedSide;
+  align:        "left" | "right";
+  activeVenues: string[];
 }
 
-// ── Liquidity bar ────────────────────────────────────────────────────────────
+function VenueColumn({ side, align, activeVenues }: VenueColumnProps) {
+  const entries = Object.entries(side.venues).filter(
+    ([v]) => activeVenues.includes(v),
+  );
 
-interface LiqBarProps {
-  askSize: number | null;
-  maxSize: number;
-}
-
-function LiqBar({ askSize, maxSize }: LiqBarProps) {
-  const level = getLiquidityLevel(askSize);
-  const pct = maxSize > 0 ? Math.min(100, ((askSize ?? 0) / maxSize) * 100) : 0;
   return (
-    <div className={styles.liqTrack} title={`Ask size: ${askSize ?? "–"}`}>
-      <div className={styles.liqFill} data-level={level} style={{ width: `${pct}%` }} />
+    <div className={styles.venueCol} data-align={align}>
+      {entries.map(([venueId]) => {
+        const meta   = VENUES[venueId];
+        const isBest = venueId === side.bestVenue;
+        return (
+          <div
+            key={venueId}
+            className={styles.logoItem}
+            data-best={isBest}
+            title={`${meta?.label ?? venueId}${isBest ? " — best" : ""}`}
+          >
+            {meta?.logo ? (
+              <img
+                src={meta.logo}
+                alt={meta?.shortLabel ?? venueId}
+                className={styles.logo}
+                style={{ opacity: isBest ? 1 : 0.35 }}
+              />
+            ) : (
+              <span
+                className={styles.logoFallback}
+                style={{ color: isBest ? venueColor(venueId) : undefined }}
+              >
+                {meta?.shortLabel ?? venueId.slice(0, 3).toUpperCase()}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Venue dot (collapsed row) ────────────────────────────────────────────────
-
-interface VenueDotProps {
-  venueId: string;
-  rank: number;
-}
-
-function VenueDot({ venueId, rank }: VenueDotProps) {
-  const meta = VENUES[venueId];
-  return (
-    <div
-      className={styles.venueDot}
-      style={{ background: heatColor(rank) }}
-      title={`${meta?.label ?? venueId} — rank ${rank + 1}`}
-    >
-      <img src={meta?.logo} alt="" className={styles.dotLogo} />
-      <span className={styles.dotLabel}>{meta?.shortLabel ?? venueId}</span>
-    </div>
-  );
-}
-
-// ── Expanded venue row ───────────────────────────────────────────────────────
-
-interface VenueRowProps {
-  venueId: string;
-  contract: NormalizedOptionContract;
-  rank: number;
-  bestUnitPrice: number;
-  qty: number;
-  maxAskSize: number;
-  onClick?: () => void;
-}
-
-function VenueRow({ venueId, contract, rank, bestUnitPrice, qty, maxAskSize, onClick }: VenueRowProps) {
-  const meta = VENUES[venueId];
-  const ask = contract.quote.ask.usd != null ? contract.quote.ask.usd * qty : null;
-  const unitAsk = contract.quote.ask.usd;
-  const bid = contract.quote.bid.usd;
-  const spread = unitAsk != null && bid != null ? (unitAsk - bid) * qty : null;
-  const iv = contract.greeks.markIv;
-  const fee = contract.takerFee;
-  const vsBest = unitAsk != null ? (unitAsk - bestUnitPrice) * qty : null;
-
-  return (
-    <div
-      className={styles.exRow}
-      style={{ background: heatColor(rank), "--row-border": heatBorderColor(rank) } as CSSProperties}
-      data-best={rank === 0}
-      data-clickable={onClick != null}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-    >
-      <div className={styles.exVenue}>
-        <img src={meta?.logo} alt="" className={styles.exLogo} />
-        <span className={styles.exLabel}>{meta?.shortLabel ?? venueId}</span>
-      </div>
-      <span className={styles.exPrice}>{fmtUsd(ask)}</span>
-      <span className={styles.exVsBest} data-rank={rank === 0 ? "best" : "worse"}>
-        {rank === 0 ? "best" : vsBest != null ? `+${fmtUsd(vsBest)}` : "–"}
-      </span>
-      <span className={styles.exIv}>{fmtIv(iv)}</span>
-      <span className={styles.exSpread}>{spread != null ? fmtUsd(spread) : "–"}</span>
-      <div className={styles.exLiqCell}>
-        <LiqBar askSize={contract.quote.askSize} maxSize={maxAskSize} />
-      </div>
-      <span className={styles.exFee}>{fee != null ? `${(fee * 100).toFixed(2)}%` : "–"}</span>
-    </div>
-  );
-}
-
-// ── Strike row ───────────────────────────────────────────────────────────────
+// ── Strike row ────────────────────────────────────────────────────────────────
 
 interface StrikeRowProps {
-  row: ComparisonRow;
-  side: Side;
-  qty: number;
-  isAtm: boolean;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onOpenBuilder?: () => void;
+  strike:       EnrichedStrike;
+  isAtm:        boolean;
+  isExpanded:   boolean;
+  forwardPrice: number | null;
+  onToggle:     () => void;
+  activeVenues: string[];
+  myIv:         number | null;
 }
 
-function StrikeRow({ row, side, qty, isAtm, isExpanded, onToggle, onOpenBuilder }: StrikeRowProps) {
-  const sideData = side === "call" ? row.call : row.put;
-  const sorted = getSortedByAsk(sideData);
+function StrikeRowItem({
+  strike,
+  isAtm,
+  isExpanded,
+  forwardPrice,
+  onToggle,
+  activeVenues,
+  myIv,
+}: StrikeRowProps) {
+  const callItm = forwardPrice != null && strike.strike < forwardPrice;
+  const putItm  = forwardPrice != null && strike.strike > forwardPrice;
 
-  if (sorted.length === 0) {
-    return (
-      <div className={styles.rowWrap}>
-        <div className={styles.row} data-atm={isAtm} data-empty="true">
-          <span className={styles.strike}>{row.strike.toLocaleString()}</span>
-          <span className={styles.emptyMsg}>No data</span>
-        </div>
-      </div>
-    );
-  }
-
-  const best = sorted[0]!;
-  const second = sorted[1];
-  const bestUnitPrice = best.contract.quote.ask.usd!;
-  const bestPrice = bestUnitPrice * qty;
-  const unitSavings =
-    second?.contract.quote.ask.usd != null
-      ? second.contract.quote.ask.usd - bestUnitPrice
-      : null;
-  const savings = unitSavings != null ? unitSavings * qty : null;
-  const savingsPct =
-    unitSavings != null && bestUnitPrice > 0
-      ? (unitSavings / second!.contract.quote.ask.usd!) * 100
-      : null;
-  const bestMeta = VENUES[best.venue];
-  const maxAskSize = Math.max(...sorted.map((s) => s.contract.quote.askSize ?? 0), 1);
+  const callQ = strike.call.bestVenue != null
+    ? strike.call.venues[strike.call.bestVenue] ?? null
+    : null;
+  const putQ = strike.put.bestVenue != null
+    ? strike.put.venues[strike.put.bestVenue] ?? null
+    : null;
 
   return (
     <div className={styles.rowWrap} data-expanded={isExpanded}>
@@ -172,8 +112,8 @@ function StrikeRow({ row, side, qty, isAtm, isExpanded, onToggle, onOpenBuilder 
         data-atm={isAtm}
         onClick={onToggle}
         role="button"
-        aria-expanded={isExpanded}
         tabIndex={0}
+        aria-expanded={isExpanded}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -181,189 +121,154 @@ function StrikeRow({ row, side, qty, isAtm, isExpanded, onToggle, onOpenBuilder 
           }
         }}
       >
-        <span className={styles.strike}>{row.strike.toLocaleString()}</span>
+        {/* CALL side: VENUES | γ | ν | Δ | IV | SPREAD | MID */}
+        <VenueColumn side={strike.call} align="left" activeVenues={activeVenues} />
+        <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ""}`}>
+          {fmtGamma(callQ?.gamma ?? null)}
+        </span>
+        <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ""}`}>
+          {fmtVega(callQ?.vega ?? null)}
+        </span>
+        <span className={`${styles.deltaCell} ${callItm ? styles.itmCall : ""}`}>
+          {fmtDelta(callQ?.delta ?? null)}
+        </span>
+        <div className={`${styles.ivCell} ${callItm ? styles.itmCall : ""}`}>
+          <IvChip iv={strike.call.bestIv} size="sm" />
+        </div>
+        <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ""}`}>
+          <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
+        </div>
+        <span className={`${styles.midCell} ${styles.alignRight} ${callItm ? styles.itmCall : ""}`}>
+          {fmtUsd(callQ?.mid ?? null)}
+        </span>
 
-        <div className={styles.bestPriceCell}>
-          <span className={styles.bestPrice} data-side={side}>{fmtUsd(bestPrice)}</span>
-          <img src={bestMeta?.logo} alt="" className={styles.winnerLogo} />
-          <span className={styles.winnerLabel}>{bestMeta?.shortLabel ?? best.venue}</span>
+        {/* STRIKE center */}
+        <div className={styles.strikeCenter} data-atm={isAtm}>
+          {isAtm && <span className={styles.atmBadge}>ATM</span>}
+          <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
         </div>
 
-        <div className={styles.savingsCell}>
-          {savings != null && savings > 0.5 ? (
-            <span className={styles.savingsBadge}>
-              save {fmtUsd(savings)}
-              {savingsPct != null && savingsPct >= 1 && (
-                <span className={styles.savingsPct}> · {savingsPct.toFixed(1)}%</span>
-              )}
-            </span>
-          ) : (
-            <span className={styles.savingsNone}>–</span>
-          )}
+        {/* PUT side: MID | SPREAD | IV | Δ | ν | γ | VENUES */}
+        <span className={`${styles.midCell} ${putItm ? styles.itmPut : ""}`}>
+          {fmtUsd(putQ?.mid ?? null)}
+        </span>
+        <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ""}`}>
+          <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
         </div>
-
-        <div className={styles.dotsCell}>
-          {sorted.map(({ venue }, rank) => (
-            <VenueDot key={venue} venueId={venue} rank={rank} />
-          ))}
+        <div className={`${styles.ivCell} ${putItm ? styles.itmPut : ""}`}>
+          <IvChip iv={strike.put.bestIv} size="sm" />
         </div>
-
-        <button
-          className={styles.chevron}
-          aria-label={isExpanded ? "Collapse row" : "Expand row"}
-          onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          tabIndex={-1}
-        >
-          <svg
-            width="10" height="6" viewBox="0 0 10 6" fill="none"
-            className={styles.chevronIcon} data-expanded={isExpanded}
-          >
-            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <span className={`${styles.deltaCell} ${styles.alignRight} ${putItm ? styles.itmPut : ""}`}>
+          {fmtDelta(putQ?.delta ?? null)}
+        </span>
+        <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ""}`}>
+          {fmtVega(putQ?.vega ?? null)}
+        </span>
+        <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ""}`}>
+          {fmtGamma(putQ?.gamma ?? null)}
+        </span>
+        <VenueColumn side={strike.put} align="right" activeVenues={activeVenues} />
       </div>
 
       {isExpanded && (
-        <div className={styles.expandedPanel}>
-          <div className={styles.exHeader}>
-            <span>VENUE</span>
-            <span>PRICE</span>
-            <span>VS BEST</span>
-            <span>IV</span>
-            <span>SPREAD</span>
-            <span>LIQUIDITY</span>
-            <span>FEE</span>
-          </div>
-          {sorted.map(({ venue, contract }, rank) => (
-            <VenueRow
-              key={venue}
-              venueId={venue}
-              contract={contract}
-              rank={rank}
-              bestUnitPrice={bestUnitPrice}
-              qty={qty}
-              maxAskSize={maxAskSize}
-              onClick={onOpenBuilder}
-            />
-          ))}
-        </div>
+        <ExpandedRow
+          strike={strike.strike}
+          callSide={strike.call}
+          putSide={strike.put}
+          myIv={myIv}
+        />
       )}
     </div>
   );
 }
 
-// ── Root component ───────────────────────────────────────────────────────────
+// ── Root ─────────────────────────────────────────────────────────────────────
 
-export default function ChainTable({ comparison, underlyingPrice, onOpenBuilder }: ChainTableProps) {
-  const [side, setSide] = useState<Side>("call");
+export default function NewChainTable({
+  strikes,
+  atmStrike,
+  forwardPrice,
+  activeVenues,
+  myIv,
+}: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [qty, setQty] = useState(1);
-  const atmRef = useRef<HTMLDivElement>(null);
+  const atmRef  = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (atmRef.current && listRef.current) {
         const listRect = listRef.current.getBoundingClientRect();
-        const atmRect = atmRef.current.getBoundingClientRect();
-        // Scroll so ATM is roughly 1/3 from top of the list
-        const offset = atmRect.top - listRect.top - listRect.height / 3;
+        const atmRect  = atmRef.current.getBoundingClientRect();
+        const offset   = atmRect.top - listRect.top - listRect.height / 3;
         listRef.current.scrollTop += offset;
       }
-    }, 50);
+    }, 60);
     return () => clearTimeout(timer);
-  }, [comparison.expiry]);
+  }, [atmStrike]);
 
-  if (comparison.rows.length === 0) {
-    return <div className={styles.empty}>No options found for this expiry.</div>;
+  if (strikes.length === 0) {
+    return (
+      <EmptyState
+        icon="∅"
+        title="No options data for this expiry"
+      />
+    );
   }
 
-  const atmStrike = findAtmStrike(comparison.rows.map((r) => r.strike), underlyingPrice);
-  const allStrikes = comparison.rows.map((r) => r.strike);
-  const allExpanded = allStrikes.every((s) => expanded.has(s));
-
-  function toggleRow(strike: number) {
+  function toggleRow(s: number) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(strike)) next.delete(strike);
-      else next.add(strike);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
       return next;
     });
   }
 
-  function toggleAll() {
-    setExpanded(allExpanded ? new Set() : new Set(allStrikes));
-  }
-
-  // Find the index of the ATM strike so we can insert the marker before it
-  const atmIndex = comparison.rows.findIndex((r) => r.strike === atmStrike);
-
   return (
     <div className={styles.wrapper}>
-      <div className={styles.controls}>
-        <div className={styles.sideToggle}>
-          <button className={styles.toggleBtn} data-active={side === "call"} onClick={() => setSide("call")}>
-            CALL
-          </button>
-          <button className={styles.toggleBtn} data-active={side === "put"} onClick={() => setSide("put")}>
-            PUT
-          </button>
-        </div>
-
-        <div className={styles.qtyChip}>
-          <span className={styles.qtyLabel}>QTY</span>
-          <input
-            type="number"
-            min={1}
-            max={9999}
-            value={qty}
-            onChange={(e) => {
-              const v = parseInt(e.target.value, 10);
-              if (!isNaN(v) && v >= 1) setQty(v);
-            }}
-            className={styles.qtyInput}
-          />
-          <span className={styles.qtySuffix}>{qty === 1 ? "contract" : "contracts"}</span>
-        </div>
-
-        <button className={styles.expandAllBtn} onClick={toggleAll}>
-          {allExpanded ? "Collapse All" : "Expand All"}
-        </button>
-      </div>
-
-      <div className={styles.listHeader}>
-        <span>STRIKE</span>
-        <span>BEST PRICE</span>
-        <span>SAVINGS</span>
-        <span>VENUES</span>
-        <span />
+      <div className={styles.header}>
+        <span className={styles.hdrLabel}>VENUES</span>
+        <span className={styles.hdrLabel}>γ</span>
+        <span className={styles.hdrLabel}>ν</span>
+        <span className={styles.hdrLabel}>Δ</span>
+        <span className={styles.hdrLabel}>IV</span>
+        <span className={styles.hdrLabel}>SPREAD</span>
+        <span className={styles.hdrLabel} data-align="right">MID</span>
+        <span className={styles.hdrLabel} data-align="center">STRIKE</span>
+        <span className={styles.hdrLabel}>MID</span>
+        <span className={styles.hdrLabel}>SPREAD</span>
+        <span className={styles.hdrLabel}>IV</span>
+        <span className={styles.hdrLabel} data-align="right">Δ</span>
+        <span className={styles.hdrLabel} data-align="right">ν</span>
+        <span className={styles.hdrLabel} data-align="right">γ</span>
+        <span className={styles.hdrLabel} data-align="right">VENUES</span>
       </div>
 
       <div className={styles.list} ref={listRef}>
-        {comparison.rows.map((row, i) => {
-          const isAtm = row.strike === atmStrike;
-          const showAtmMarker = i === atmIndex;
-
+        {strikes.map((s) => {
+          const isAtm = s.strike === atmStrike;
           return (
-            <div key={row.strike}>
-              {showAtmMarker && (
-                <div className={styles.atmMarker} ref={atmRef}>
+            <div key={s.strike} ref={isAtm ? atmRef : undefined}>
+              {isAtm && forwardPrice != null && (
+                <div className={styles.atmMarker}>
                   <div className={styles.atmLine} />
                   <div className={styles.atmPill}>
-                    <span className={styles.atmPillAsset}>{comparison.underlying}</span>
-                    <span className={styles.atmPillPrice}>{fmtUsd(underlyingPrice)}</span>
+                    <span className={styles.atmPillText}>
+                      Fwd {fmtUsd(forwardPrice)}
+                    </span>
                   </div>
                   <div className={styles.atmLine} />
                 </div>
               )}
-              <StrikeRow
-                row={row}
-                side={side}
-                qty={qty}
+              <StrikeRowItem
+                strike={s}
                 isAtm={isAtm}
-                isExpanded={expanded.has(row.strike)}
-                onToggle={() => toggleRow(row.strike)}
-                onOpenBuilder={onOpenBuilder ? () => onOpenBuilder({ strike: row.strike, side }) : undefined}
+                isExpanded={expanded.has(s.strike)}
+                forwardPrice={forwardPrice}
+                onToggle={() => toggleRow(s.strike)}
+                activeVenues={activeVenues}
+                myIv={myIv}
               />
             </div>
           );

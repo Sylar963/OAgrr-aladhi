@@ -51,6 +51,8 @@ function extractSmile(
   };
 }
 
+const ALL_VENUES = ["deribit", "okx", "bybit", "binance", "derive"];
+
 export default function VolSmile() {
   const underlying   = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
@@ -58,12 +60,13 @@ export default function VolSmile() {
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
 
-  // Use the globally selected expiry, fallback to 2nd expiry (more OI)
   const smileExpiry = expiry && expiries.includes(expiry)
     ? expiry
     : (expiries.length > 1 ? expiries[1]! : expiries[0] ?? "");
 
-  const { data: chain } = useChainQuery(underlying, smileExpiry, activeVenues);
+  // Always fetch all venues so toggling doesn't kill the chart.
+  // Client-side averageIv filters to activeVenues.
+  const { data: chain } = useChainQuery(underlying, smileExpiry, ALL_VENUES);
 
   const chartRef    = useRef<HTMLDivElement>(null);
   const chartApi    = useRef<IChartApi | null>(null);

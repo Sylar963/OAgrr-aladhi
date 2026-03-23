@@ -1,8 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 import { VENUE_LIST } from "@lib/venue-meta";
 import { useAppStore } from "@stores/app-store";
 import styles from "./VenuePickerButton.module.css";
+
+// Open state lives outside React render cycle so parent re-renders (from
+// query-key changes when venues toggle) don't reset the popover.
+let _open = false;
+const _listeners = new Set<() => void>();
+function subscribe(cb: () => void) { _listeners.add(cb); return () => _listeners.delete(cb); }
+function getSnapshot() { return _open; }
+function setOpen(next: boolean | ((prev: boolean) => boolean)) {
+  const value = typeof next === "function" ? next(_open) : next;
+  if (value === _open) return;
+  _open = value;
+  for (const cb of _listeners) cb();
+}
 
 interface VenuePickerButtonProps {
   compact?: boolean;
@@ -12,16 +25,15 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
   const activeVenues = useAppStore((s) => s.activeVenues);
   const toggleVenue  = useAppStore((s) => s.toggleVenue);
   const allActive    = activeVenues.length === VENUE_LIST.length;
-  const [open, setOpen] = useState(false);
+  const open = useSyncExternalStore(subscribe, getSnapshot);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
-
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
@@ -34,6 +46,8 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
     };
   }, []);
 
+  const handleToggle = useCallback(() => setOpen((v) => !v), []);
+
   return (
     <div className={styles.picker} data-open={open || undefined} ref={rootRef}>
       <button
@@ -41,9 +55,8 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
         className={styles.trigger}
         data-compact={compact || undefined}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={handleToggle}
       >
-        <span className={styles.label}>Venues</span>
         <span className={styles.logos}>
           {VENUE_LIST.map((venue) => (
             <img
@@ -56,16 +69,12 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
             />
           ))}
         </span>
-        <span className={styles.count}>{allActive ? "All" : `${activeVenues.length}/${VENUE_LIST.length}`}</span>
+        <span className={styles.count}>{allActive ? "All" : activeVenues.length.toString()}</span>
+        <span className={styles.chevron} data-open={open || undefined}>▾</span>
       </button>
 
       {open ? (
         <div className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <span className={styles.panelTitle}>Venue filter</span>
-            <span className={styles.panelMeta}>Applies across Chain, Surface, Flow, Analytics, and GEX</span>
-          </div>
-
           <div className={styles.grid}>
             {VENUE_LIST.map((venue) => {
               const active = activeVenues.includes(venue.id);
@@ -79,7 +88,6 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
                 >
                   <img src={venue.logo} alt="" className={styles.optionLogo} />
                   <span className={styles.optionName}>{venue.label}</span>
-                  <span className={styles.optionShort}>{venue.shortLabel}</span>
                 </button>
               );
             })}

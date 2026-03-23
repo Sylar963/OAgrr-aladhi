@@ -82,6 +82,31 @@
   color: var(--text-tertiary);
 }
 
+/* ── Body — matrix + smile side by side ──────────────────────────────────── */
+
+.body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  flex: 1;
+  min-height: 0;
+}
+
+.matrixCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.smileCol {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  min-height: 320px;
+}
+
 /* ── Table ───────────────────────────────────────────────────────────────── */
 
 .tableWrap {
@@ -200,16 +225,6 @@
   color: rgb(248, 113, 113);
 }
 
-/* ── Vol smile ──────────────────────────────────────── */
-
-.smileWrap {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  min-height: 350px;
-}
-
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -263,8 +278,12 @@
   .legendBar { width: 80px; flex-shrink: 0; }
   .legendMin, .legendMax { white-space: nowrap; font-size: 10px; }
 
-  .smileWrap {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .smileCol {
     padding: var(--space-3);
-    min-height: 280px;
+    min-height: 260px;
   }
 }

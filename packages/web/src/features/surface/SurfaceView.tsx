@@ -127,47 +127,51 @@ export default function SurfaceView() {
         </div>
       </div>
 
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.thExpiry}>Expiry</th>
-              <th className={styles.thDte}>DTE</th>
-              {DELTA_COLS.map((col) => (
-                <th key={col.key} className={styles.th} title={col.title}>
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.surface.map((row) => {
-              const dte = dteDays(row.expiry);
-              return (
-                <tr key={row.expiry} className={styles.row}>
-                  <td className={styles.tdExpiry}>{formatExpiry(row.expiry)}</td>
-                  <td className={styles.tdDte} data-urgent={dte <= 1}>
-                    {dte}d
-                  </td>
+      <div className={styles.body}>
+        <div className={styles.matrixCol}>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.thExpiry}>Expiry</th>
+                  <th className={styles.thDte}>DTE</th>
                   {DELTA_COLS.map((col) => (
-                    <HeatCell key={col.key} iv={row[col.key]} minIv={minIv} maxIv={maxIv} />
+                    <th key={col.key} className={styles.th} title={col.title}>
+                      {col.label}
+                    </th>
                   ))}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {data.surface.map((row) => {
+                  const dte = dteDays(row.expiry);
+                  return (
+                    <tr key={row.expiry} className={styles.row}>
+                      <td className={styles.tdExpiry}>{formatExpiry(row.expiry)}</td>
+                      <td className={styles.tdDte} data-urgent={dte <= 1}>
+                        {dte}d
+                      </td>
+                      {DELTA_COLS.map((col) => (
+                        <HeatCell key={col.key} iv={row[col.key]} minIv={minIv} maxIv={maxIv} />
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      <div className={styles.legend}>
-        <span className={styles.legendLabel}>IV Scale:</span>
-        <div className={styles.legendBar} />
-        <span className={styles.legendMin}>{fmtIv(minIv)} low</span>
-        <span className={styles.legendMax}>high {fmtIv(maxIv)}</span>
-      </div>
+          <div className={styles.legend}>
+            <span className={styles.legendLabel}>IV Scale:</span>
+            <div className={styles.legendBar} />
+            <span className={styles.legendMin}>{fmtIv(minIv)} low</span>
+            <span className={styles.legendMax}>high {fmtIv(maxIv)}</span>
+          </div>
+        </div>
 
-      <div className={styles.smileWrap}>
-        <VolSmile />
+        <div className={styles.smileCol}>
+          <VolSmile />
+        </div>
       </div>
     </div>
   );

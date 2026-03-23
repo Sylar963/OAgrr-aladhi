@@ -113,7 +113,7 @@ export default function VolSmile() {
       },
       crosshair: {
         horzLine: { color: "#50D2C1", labelBackgroundColor: "#0E3333" },
-        vertLine: { color: "#50D2C1", labelBackgroundColor: "#0E3333" },
+        vertLine: { color: "#50D2C1", labelBackgroundColor: "#0E3333", labelVisible: false },
       },
       handleScale: { mouseWheel: true, pinch: true },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },

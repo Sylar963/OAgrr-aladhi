@@ -74,7 +74,7 @@ export function useChainQuery(underlying: string, expiry: string, venues: string
         `/chains?underlying=${underlying}&expiry=${expiry}${venueParam}`,
       ),
     enabled: Boolean(underlying && expiry),
-    // No polling — useChainWs pushes live updates into this cache via server WS
+    placeholderData: (prev: EnrichedChainResponse | undefined) => prev,
   });
 }
 

@@ -16,5 +16,6 @@ export function useSurface(underlying: string, venues: string[]) {
     enabled:  Boolean(underlying),
     staleTime: 10_000,
     refetchInterval: 15_000,
+    placeholderData: (prev: IvSurfaceResponse | undefined) => prev,
   });
 }

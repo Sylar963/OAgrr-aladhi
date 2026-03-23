@@ -29,5 +29,6 @@ export function useAllExpiriesChain(underlying: string, venues: string[]) {
     enabled: Boolean(underlying && expiries.length > 0),
     staleTime: 30_000,
     refetchInterval: 60_000,
+    placeholderData: (prev: EnrichedChainResponse[] | undefined) => prev,
   });
 }

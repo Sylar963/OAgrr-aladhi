@@ -1,11 +1,18 @@
 # oggregator — Agent Quick Reference
 
 ```bash
-pnpm dev            # server + web
+pnpm dev            # server + web (prebuilds core + protocol)
 pnpm typecheck      # all packages
 pnpm test           # all tests
 pnpm precommit      # typecheck + test (gate)
 ```
+
+**After changing `packages/core/src/`:** the server imports from `core/dist/`, not `src/`. You must rebuild and restart or changes won't take effect:
+```bash
+pnpm --filter @oggregator/core build   # tsc → dist/
+# then restart pnpm dev
+```
+`pnpm dev` prebuilds core at startup, but a running server won't pick up source changes without a rebuild + restart.
 
 ```
 packages/core/      Feeds + types + enrichment (see its CLAUDE.md)

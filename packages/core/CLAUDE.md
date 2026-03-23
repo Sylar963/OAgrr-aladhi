@@ -50,6 +50,17 @@ src/
 - Fee estimation: `feeds/shared/sdk-base.ts` → `estimateFees()`
 - Official API docs: `../../references/protocol-docs/{venue}/`
 
+## Critical: server runs from dist/, not src/
+
+`packages/server` imports `@oggregator/core` via `dist/index.js`. Source changes in `src/` are invisible to the running server until you rebuild:
+
+```bash
+pnpm --filter @oggregator/core build   # tsc → dist/
+# then restart the server
+```
+
+`pnpm dev` prebuilds at startup. But if the server is already running and you change core source, you must rebuild + restart. `pnpm typecheck` and `pnpm test` check source directly and will pass even when dist is stale — they won't catch this.
+
 ## Known gotchas
 
 - **Deribit IV is percentage**: 50.18 means 50.18%. All others send 0.5018. `ivToFraction()` handles this.
@@ -60,3 +71,5 @@ src/
 - **Derive slow bootstrap**: ~13s to load all instruments + tickers across currencies/expiries.
 - **Binance two WS paths**: `/market` for mark price, `/public` for trades. Cannot combine on one connection.
 - **OKX markPx missing**: `opt-summary` has no `markPx` field. Mark price stays null. Bid/ask/IV/greeks all work.
+- **OKX oiUsd is not notional**: `/public/open-interest` returns `oiUsd = oi × $1` (contract count in dollars), not `oiCcy × spot`. Do not use it. Enrichment computes notional from `oiCcy × underlyingPrice`.
+- **OKX vol24h is contracts, not base currency**: Multiply by `ctMult` (0.01 for BTC) to get base currency before storing as `volume24h`. Enrichment then multiplies by `underlyingPrice` for USD.

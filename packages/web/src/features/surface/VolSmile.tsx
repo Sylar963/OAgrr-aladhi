@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { createChart, LineSeries, LineStyle, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
 
 import { useAppStore } from "@stores/app-store";
@@ -68,9 +68,16 @@ export default function VolSmile() {
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
 
-  const smileExpiry = expiry && expiries.includes(expiry)
+  const defaultExpiry = expiry && expiries.includes(expiry)
     ? expiry
     : (expiries.length > 1 ? expiries[1]! : expiries[0] ?? "");
+
+  const [localExpiry, setLocalExpiry] = useState("");
+  const smileExpiry = localExpiry && expiries.includes(localExpiry) ? localExpiry : defaultExpiry;
+
+  const handleExpiryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setLocalExpiry(e.target.value);
+  }, []);
 
   const { data: chain } = useChainQuery(underlying, smileExpiry, ALL_VENUES);
   const [mode, setMode] = useState<SmileMode>("both");
@@ -173,16 +180,27 @@ export default function VolSmile() {
     );
   }
 
-  const dte = smileExpiry ? dteDays(smileExpiry) : null;
-
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>Volatility Smile</span>
-        <span className={styles.meta}>
-          {smileExpiry && formatExpiry(smileExpiry)}
-          {dte != null && <span className={styles.dte}>{dte}d</span>}
-        </span>
+        <span className={styles.title}>Vol Smile</span>
+
+        <div className={styles.expirySelect}>
+          <select
+            className={styles.expiryDropdown}
+            value={smileExpiry}
+            onChange={handleExpiryChange}
+          >
+            {expiries.map((e) => {
+              const d = dteDays(e);
+              return (
+                <option key={e} value={e}>{formatExpiry(e)} ({d}d)</option>
+              );
+            })}
+          </select>
+          <span className={styles.expiryChevron}>▾</span>
+        </div>
+
         <div className={styles.modePicker}>
           {(["both", "call", "put"] as const).map((m) => (
             <button

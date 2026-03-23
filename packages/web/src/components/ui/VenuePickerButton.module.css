@@ -10,11 +10,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  padding: 5px 12px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: transparent;
+  background: var(--bg-base);
   cursor: pointer;
   user-select: none;
   transition: all var(--transition-fast);
@@ -23,13 +22,7 @@
 .trigger:hover,
 .picker[data-open] .trigger {
   border-color: var(--border-default);
-  background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
-}
-
-.trigger[data-compact="true"] {
-  height: 28px;
-  padding: 0 8px;
-  gap: 4px;
+  background: var(--bg-hover);
 }
 
 .logos {

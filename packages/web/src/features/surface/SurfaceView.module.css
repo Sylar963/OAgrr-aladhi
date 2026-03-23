@@ -82,11 +82,11 @@
   color: var(--text-tertiary);
 }
 
-/* ── Body — matrix + smile side by side ──────────────────────────────────── */
+/* ── Body — matrix above, smile below ───────────────────────────────────── */
 
 .body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-5);
   flex: 1;
   min-height: 0;
@@ -96,7 +96,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  min-height: 0;
 }
 
 .smileCol {
@@ -104,7 +103,8 @@
   border-radius: var(--radius-md);
   padding: var(--space-4);
   background: var(--bg-surface);
-  min-height: 320px;
+  height: 400px;
+  max-width: 900px;
 }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -278,12 +278,9 @@
   .legendBar { width: 80px; flex-shrink: 0; }
   .legendMin, .legendMax { white-space: nowrap; font-size: 10px; }
 
-  .body {
-    grid-template-columns: 1fr;
-  }
-
   .smileCol {
     padding: var(--space-3);
-    min-height: 260px;
+    height: 300px;
+    max-width: none;
   }
 }

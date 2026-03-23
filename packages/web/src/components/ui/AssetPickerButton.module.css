@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 10px;
+  padding: 5px 12px;
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -16,14 +16,14 @@
 }
 
 .logo {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
 
 .label {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.04em;

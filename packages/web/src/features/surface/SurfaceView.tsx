@@ -112,7 +112,7 @@ export default function SurfaceView() {
           <div className={styles.titleRow}>
             <span className={styles.title}>IV Surface</span>
             <AssetPickerButton />
-            <VenuePickerButton compact />
+            <VenuePickerButton />
           </div>
           <span className={styles.subtitle}>
             Average mark IV across selected venues per delta level and expiry

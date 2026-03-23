@@ -105,17 +105,19 @@ export default function VolSmile() {
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     });
 
-    const cs = chart.addSeries(LineSeries, {
-      color: "#00E997",
-      lineWidth: 2,
-      title: "Call IV",
-      priceFormat: { type: "custom", formatter: (p: number) => `${p.toFixed(1)}%` },
-    });
-
+    // Put series first so call line draws on top when values overlap
     const ps = chart.addSeries(LineSeries, {
       color: "#CB3855",
       lineWidth: 2,
       title: "Put IV",
+      priceFormat: { type: "custom", formatter: (p: number) => `${p.toFixed(1)}%` },
+    });
+
+    const cs = chart.addSeries(LineSeries, {
+      color: "#00E997",
+      lineWidth: 2,
+      title: "Call IV",
+      lastValueVisible: true,
       priceFormat: { type: "custom", formatter: (p: number) => `${p.toFixed(1)}%` },
     });
 

@@ -226,7 +226,7 @@ export default function FlowView() {
                 ))}
               </div>
             )}
-            <VenuePickerButton compact />
+            <VenuePickerButton />
           </div>
           <span className={styles.subtitle}>
             {mode === "all"

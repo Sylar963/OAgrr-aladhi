@@ -48,7 +48,7 @@ export default function GexView() {
           <div className={styles.titleRow}>
             <span className={styles.title}>Gamma Exposure (GEX)</span>
             <AssetPickerButton />
-            <VenuePickerButton compact />
+            <VenuePickerButton />
           </div>
           <span className={styles.subtitle}>
             Dealer hedging pressure per strike in $M

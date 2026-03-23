@@ -17,11 +17,7 @@ function setOpen(next: boolean | ((prev: boolean) => boolean)) {
   for (const cb of _listeners) cb();
 }
 
-interface VenuePickerButtonProps {
-  compact?: boolean;
-}
-
-export default function VenuePickerButton({ compact = false }: VenuePickerButtonProps) {
+export default function VenuePickerButton() {
   const activeVenues = useAppStore((s) => s.activeVenues);
   const toggleVenue  = useAppStore((s) => s.toggleVenue);
   const allActive    = activeVenues.length === VENUE_LIST.length;
@@ -53,7 +49,7 @@ export default function VenuePickerButton({ compact = false }: VenuePickerButton
       <button
         type="button"
         className={styles.trigger}
-        data-compact={compact || undefined}
+       
         aria-expanded={open}
         onClick={handleToggle}
       >

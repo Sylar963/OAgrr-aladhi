@@ -28,20 +28,18 @@ export default function GexView() {
   const { data: chain, isLoading } = useChainQuery(underlying, expiry, activeVenues);
   const gex       = chain?.gex ?? [];
   const spotPrice = chain?.stats.spotIndexUsd ?? null;
-
-  if (isLoading && gex.length === 0) {
-    return (
-      <div className={styles.view}>
-        <Spinner size="lg" label="Loading GEX data…" />
-      </div>
-    );
-  }
+  const barsRef = useRef<HTMLDivElement | null>(null);
+  const spotRowRef = useRef<HTMLDivElement | null>(null);
 
   const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1);
   const sorted = [...gex].sort((a, b) => b.strike - a.strike);
   const nonzero = gex.filter((g) => Math.abs(g.gexUsdMillions) > 0.001);
-  const barsRef = useRef<HTMLDivElement | null>(null);
-  const spotRowRef = useRef<HTMLDivElement | null>(null);
+  const spotStrike = spotPrice != null
+    ? nonzero.reduce<number | null>((best, row) => {
+        if (best == null) return row.strike;
+        return Math.abs(row.strike - spotPrice) < Math.abs(best - spotPrice) ? row.strike : best;
+      }, null)
+    : null;
 
   useEffect(() => {
     if (!barsRef.current || !spotRowRef.current) return;
@@ -50,7 +48,15 @@ export default function GexView() {
     const row = spotRowRef.current;
     const offset = row.offsetTop - list.offsetTop - list.clientHeight / 2 + row.clientHeight / 2;
     list.scrollTop = Math.max(0, offset);
-  }, [expiry, nonzero.length, spotPrice]);
+  }, [expiry, nonzero.length, spotStrike]);
+
+  if (isLoading && gex.length === 0) {
+    return (
+      <div className={styles.view}>
+        <Spinner size="lg" label="Loading GEX data…" />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.view}>
@@ -138,7 +144,7 @@ export default function GexView() {
               {sorted.map((g) => {
                 const pct      = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
                 const positive = g.gexUsdMillions >= 0;
-                const isNearSpot = spotPrice != null && Math.abs(g.strike - spotPrice) / spotPrice < 0.005;
+                const isNearSpot = g.strike === spotStrike;
 
                 return (
                   <div

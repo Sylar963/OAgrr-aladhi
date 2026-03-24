@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 
 import { useAppStore } from "@stores/app-store";
 import { AssetPickerButton, VenuePickerButton, EmptyState } from "@components/ui";
@@ -49,6 +49,7 @@ export default function ArchitectView() {
   const legs      = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
   const removeLeg = useStrategyStore((s) => s.removeLeg);
+  const updateLeg = useStrategyStore((s) => s.updateLeg);
   const strategyUnderlying = useStrategyStore((s) => s.underlying);
 
   // Clear legs when underlying changes
@@ -58,6 +59,50 @@ export default function ArchitectView() {
   const [showVenues, setShowVenues] = useState(false);
 
   const spotPrice = chain?.stats.spotIndexUsd ?? chain?.stats.forwardPriceUsd ?? 0;
+  const availableStrikes = useMemo(() => chain?.strikes.map((s) => s.strike) ?? [], [chain]);
+
+  const handleLegStrikeDrag = useCallback((legId: string, newStrike: number) => {
+    if (!chain) return;
+    const leg = legs.find((l) => l.id === legId);
+    if (!leg) return;
+
+    const s = chain.strikes.find((x) => x.strike === newStrike);
+    const side = leg.type === "call" ? s?.call : s?.put;
+
+    // Find best price at new strike
+    let bestPrice: number | null = null;
+    let bestVenueId = leg.venue;
+    let bestQ: { delta: number | null; gamma: number | null; theta: number | null; vega: number | null; markIv: number | null } | null = null;
+
+    if (side) {
+      for (const [vid, vq] of Object.entries(side.venues)) {
+        if (!vq || !activeVenues.includes(vid)) continue;
+        const p = leg.direction === "buy" ? vq.ask : vq.bid;
+        if (p == null || p <= 0) continue;
+        if (bestPrice == null
+          || (leg.direction === "buy" && p < bestPrice)
+          || (leg.direction === "sell" && p > bestPrice)
+        ) {
+          bestPrice = p;
+          bestVenueId = vid;
+          bestQ = vq;
+        }
+      }
+    }
+
+    if (bestPrice == null) return;
+
+    updateLeg(legId, {
+      strike: newStrike,
+      entryPrice: bestPrice,
+      venue: bestVenueId,
+      delta: bestQ?.delta ?? null,
+      gamma: bestQ?.gamma ?? null,
+      theta: bestQ?.theta ?? null,
+      vega: bestQ?.vega ?? null,
+      iv: bestQ?.markIv ?? null,
+    });
+  }, [chain, legs, activeVenues, updateLeg]);
 
   const payoffPoints = useMemo(() => computePayoff(legs, spotPrice), [legs, spotPrice]);
   const metrics = useMemo(() => legs.length > 0 ? computeMetrics(legs, spotPrice) : null, [legs, spotPrice]);
@@ -166,6 +211,8 @@ export default function ArchitectView() {
                     legs={legs}
                     maxProfit={metrics?.maxProfit ?? null}
                     maxLoss={metrics?.maxLoss ?? null}
+                    strikes={availableStrikes}
+                    onLegStrikeDrag={handleLegStrikeDrag}
                   />
                 </>
               )}

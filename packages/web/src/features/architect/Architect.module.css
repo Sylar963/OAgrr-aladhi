@@ -1,13 +1,19 @@
 .view {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: var(--space-6);
-  gap: var(--space-5);
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  overflow: hidden;
 }
 
-/* ── Header ──────────────────────────────────────────── */
+/* ── Main area (left) ────────────────────────────────── */
+
+.mainArea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  overflow-y: auto;
+}
 
 .header { flex-shrink: 0; }
 
@@ -24,241 +30,246 @@
   color: var(--text-primary);
 }
 
-.subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  margin-top: 2px;
-}
+/* ── Template strip ──────────────────────────────────── */
 
-/* ── Body layout ─────────────────────────────────────── */
-
-.body {
+.templateStrip {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
 }
 
-/* ── Legs panel ──────────────────────────────────────── */
+.templateStrip::-webkit-scrollbar { display: none; }
 
-.legsPanel {
+.templatePill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.templatePill:hover {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.templatePill[data-sentiment="bullish"]:hover { border-color: var(--color-profit); }
+.templatePill[data-sentiment="bearish"]:hover { border-color: var(--color-loss); }
+.templatePill[data-sentiment="neutral"]:hover { border-color: var(--color-warning, #f59e0b); }
+.templatePill[data-sentiment="volatile"]:hover { border-color: var(--color-iv); }
+
+.templatePillIcon { font-size: 14px; }
+
+.templatePillName {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ── Leg input ───────────────────────────────────────── */
+
+.legInput {
+  flex-shrink: 0;
+}
+
+.legInputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.legInputToggle {
+  display: flex;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.toggleBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggleBtn[data-active="true"][data-type="buy"]  { background: var(--color-profit); color: #000; }
+.toggleBtn[data-active="true"][data-type="sell"] { background: var(--color-loss); color: #fff; }
+.toggleBtn[data-active="true"][data-type="call"] { background: color-mix(in srgb, var(--color-profit) 20%, transparent); color: var(--color-profit); }
+.toggleBtn[data-active="true"][data-type="put"]  { background: color-mix(in srgb, var(--color-loss) 20%, transparent); color: var(--color-loss); }
+
+.legInputField {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.legInputField:focus {
+  border-color: var(--accent-primary);
+}
+
+.legInputField::placeholder {
+  color: var(--text-dim);
+}
+
+.addLegBtn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.addLegBtn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+}
+
+/* ── Legs section ────────────────────────────────────── */
+
+.legsSection {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: var(--space-4);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
-.legsPanelHeader {
+.legsSectionHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.sectionTitle {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.clearBtn {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 3px 10px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.clearBtn:hover {
-  color: var(--color-loss);
-  border-color: var(--color-loss);
-}
-
-/* ── Leg row ─────────────────────────────────────────── */
-
-.legRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  transition: background var(--transition-fast);
-}
-
-.legRow[data-direction="buy"] {
-  border-left: 3px solid var(--color-profit);
-  background: color-mix(in srgb, var(--color-profit) 5%, transparent);
-}
-
-.legRow[data-direction="sell"] {
-  border-left: 3px solid var(--color-loss);
-  background: color-mix(in srgb, var(--color-loss) 5%, transparent);
-}
-
-.legDirection {
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  min-width: 32px;
-}
-
-.legDirection[data-direction="buy"]  { color: var(--color-profit); }
-.legDirection[data-direction="sell"] { color: var(--color-loss); }
-
-.legQty {
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.legStrike {
-  font-weight: 700;
-  color: var(--text-primary);
-  min-width: 60px;
-}
-
-.legType {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 2px;
-  letter-spacing: 0.04em;
-}
-
-.legType[data-type="call"] {
-  color: var(--color-profit);
-  background: color-mix(in srgb, var(--color-profit) 12%, transparent);
-}
-
-.legType[data-type="put"] {
-  color: var(--color-loss);
-  background: color-mix(in srgb, var(--color-loss) 12%, transparent);
-}
-
-.legExpiry {
-  color: var(--text-dim);
-}
-
-.legPrice {
-  color: var(--text-secondary);
-  font-weight: 600;
-  margin-left: auto;
-}
-
-.legVenue {
-  font-size: 10px;
-  color: var(--text-dim);
-  font-weight: 700;
-}
-
-.legRemove {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 14px;
-  transition: all var(--transition-fast);
-}
-
-.legRemove:hover {
-  background: color-mix(in srgb, var(--color-loss) 20%, transparent);
-  color: var(--color-loss);
-}
-
-/* ── Strategy name + Metrics ─────────────────────────── */
-
-.metrics {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
 .strategyName {
   font-family: var(--font-mono);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--accent-primary);
 }
 
-.metricsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3);
+.clearBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
 }
 
-.metricItem {
+.clearBtn:hover { color: var(--color-loss); border-color: var(--color-loss); }
+
+.legsList {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.metricLabel {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.metricValue {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.metricValue[data-positive="true"] { color: var(--color-profit); }
-.metricValue[data-negative="true"] { color: var(--color-loss); }
-
-.greeksRow {
+.legRow {
   display: flex;
-  gap: var(--space-5);
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
+  font-size: 11px;
 }
 
-.greekItem {
+.legRow[data-direction="buy"]  { border-left: 2px solid var(--color-profit); }
+.legRow[data-direction="sell"] { border-left: 2px solid var(--color-loss); }
+
+.legDirection { font-weight: 700; min-width: 28px; font-size: 10px; }
+.legDirection[data-direction="buy"]  { color: var(--color-profit); }
+.legDirection[data-direction="sell"] { color: var(--color-loss); }
+
+.legQty { color: var(--text-secondary); }
+.legStrike { font-weight: 700; color: var(--text-primary); }
+.legType { font-size: 10px; font-weight: 700; padding: 0 3px; border-radius: 2px; }
+.legType[data-type="call"] { color: var(--color-profit); background: color-mix(in srgb, var(--color-profit) 10%, transparent); }
+.legType[data-type="put"]  { color: var(--color-loss); background: color-mix(in srgb, var(--color-loss) 10%, transparent); }
+.legExpiry { color: var(--text-dim); }
+.legPrice { color: var(--text-secondary); font-weight: 600; margin-left: auto; }
+.legRemove {
+  width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent; color: var(--text-dim);
+  cursor: pointer; font-size: 13px;
+}
+.legRemove:hover { background: color-mix(in srgb, var(--color-loss) 20%, transparent); color: var(--color-loss); }
+
+/* ── Metrics row ─────────────────────────────────────── */
+
+.metricsRow {
   display: flex;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex-wrap: wrap;
 }
 
-.greekLabel {
-  color: var(--text-dim);
-  font-weight: 700;
-}
+.metric { display: flex; gap: 4px; align-items: center; }
+.metricLabel { color: var(--text-dim); font-size: 10px; font-weight: 700; }
+.metricVal { font-weight: 700; color: var(--text-primary); }
+.metricVal[data-positive="true"] { color: var(--color-profit); }
+.metricVal[data-negative="true"] { color: var(--color-loss); }
+.greeks { color: var(--text-dim); margin-left: auto; font-size: 10px; }
 
 /* ── Chart panel ─────────────────────────────────────── */
 
 .chartPanel {
+  flex: 1;
+  min-height: 250px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: var(--space-4);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+}
+
+.chartTitle {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: var(--space-2);
 }
 
 .payoffChartArea {
   flex: 1;
-  min-height: 300px;
+  min-height: 0;
   position: relative;
 }
 
@@ -269,120 +280,142 @@
   overflow: hidden;
 }
 
-/* ── Venue comparison ────────────────────────────────── */
+/* ── Right sidebar ───────────────────────────────────── */
 
-.venueComparison {
+.sidebar {
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  overflow-y: auto;
 }
 
-.venueGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--space-3);
+.sidebarTitle {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
-.venueCard {
-  background: var(--bg-surface);
+.sidebarEmpty {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.sidebarVenue {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: var(--space-4);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   transition: all var(--transition-fast);
 }
 
-.venueCard[data-best] {
-  border-color: color-mix(in srgb, var(--accent-primary) 50%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+.sidebarVenue[data-best] {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-primary) 4%, transparent);
 }
 
-.venueCard[data-unavailable] {
-  opacity: 0.4;
-}
+.sidebarVenue[data-unavailable] { opacity: 0.35; }
 
-.venueCardHeader {
+.sidebarVenueHeader {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-.venueCardLogo {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-}
+.sidebarVenueLogo { width: 16px; height: 16px; object-fit: contain; }
+.sidebarVenueName { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; color: var(--text-secondary); }
 
-.venueCardName {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-.bestBadge {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 1px 5px;
-  border-radius: 2px;
+.sidebarBestTag {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 1px 4px; border-radius: 2px;
   background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
   color: var(--accent-primary);
-  margin-left: auto;
 }
 
-.venueCardCost {
+.sidebarVenueTotal {
+  margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.venueCardCost [data-positive="true"] { color: var(--color-profit); }
+.sidebarVenueTotal[data-positive="true"] { color: var(--color-profit); }
 
-.venueCardLabel {
-  font-size: var(--text-xs);
+.sidebarLegDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebarLegRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--text-dim);
 }
 
-.unavailable {
+.sidebarLegDir { font-weight: 700; min-width: 10px; }
+.sidebarLegDir[data-direction="buy"]  { color: var(--color-profit); }
+.sidebarLegDir[data-direction="sell"] { color: var(--color-loss); }
+.sidebarLegStrike { color: var(--text-secondary); font-weight: 600; }
+.sidebarLegType { font-weight: 700; }
+.sidebarLegType[data-type="call"] { color: var(--color-profit); }
+.sidebarLegType[data-type="put"]  { color: var(--color-loss); }
+.sidebarLegPrice { margin-left: auto; color: var(--text-primary); font-weight: 600; }
+.sidebarLegSpread { color: var(--text-dim); }
+.sidebarLegIv { color: var(--color-iv); }
+
+.sidebarVenueLabel {
+  font-size: 10px;
   color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sidebarSavings {
+  color: var(--color-profit);
+  font-weight: 600;
 }
 
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {
   .view {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .mainArea {
     padding: var(--space-3);
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
 
   .title { font-size: var(--text-base); }
   .titleRow > :nth-child(2) { display: none; }
 
-  .legRow {
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-2);
+  .templateStrip { gap: var(--space-1); }
+  .templatePill { padding: 4px 8px; }
+  .templatePillName { font-size: 10px; }
+
+  .legInputRow { gap: var(--space-1); }
+
+  .sidebar {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    max-height: 250px;
   }
 
-  .legPrice { margin-left: 0; }
-
-  .metricsGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .greeksRow {
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-
-  .venueGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .payoffChartArea {
-    min-height: 250px;
-  }
+  .chartPanel { min-height: 200px; }
 }

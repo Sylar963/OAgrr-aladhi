@@ -214,6 +214,13 @@
   background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 45;
+}
+
 .ivCell {
   display: flex;
   align-items: center;

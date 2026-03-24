@@ -7,10 +7,9 @@ import { venueColor } from "@lib/colors";
 import { IvChip, SpreadPill, EmptyState } from "@components/ui";
 import { fmtUsd, fmtDelta } from "@lib/format";
 import { useIsMobile } from "@hooks/useIsMobile";
-import { useStrategyStore } from "@features/architect/strategy-store";
-import { useAppStore } from "@stores/app-store";
 import ExpandedRow from "./ExpandedRow";
 import MobileStrikeCard from "./MobileStrikeCard";
+import QuickTrade from "./QuickTrade";
 import styles from "./ChainTable.module.css";
 
 interface NewChainTableProps {
@@ -92,6 +91,13 @@ function bestBidAsk(side: EnrichedSide, activeVenues: string[]): { bid: number |
 
 // ── Strike row ────────────────────────────────────────────────────────────────
 
+interface QuickTradeInfo {
+  strike:    number;
+  type:      "call" | "put";
+  direction: "buy" | "sell";
+  side:      EnrichedSide;
+}
+
 interface StrikeRowProps {
   strike:       EnrichedStrike;
   isAtm:        boolean;
@@ -100,6 +106,7 @@ interface StrikeRowProps {
   onToggle:     () => void;
   activeVenues: string[];
   myIv:         number | null;
+  onQuickTrade: (info: QuickTradeInfo) => void;
 }
 
 function StrikeRowItem({
@@ -110,36 +117,10 @@ function StrikeRowItem({
   onToggle,
   activeVenues,
   myIv,
+  onQuickTrade,
 }: StrikeRowProps) {
   const callItm = forwardPrice != null && strike.strike < forwardPrice;
   const putItm  = forwardPrice != null && strike.strike > forwardPrice;
-  const addLeg  = useStrategyStore((s) => s.addLeg);
-  const expiry  = useAppStore((s) => s.expiry);
-
-  function handleAddLeg(
-    type: "call" | "put",
-    direction: "buy" | "sell",
-    price: number | null,
-    side: EnrichedSide,
-  ) {
-    if (price == null || price <= 0) return;
-    const bestVenue = side.bestVenue ?? "deribit";
-    const bestQ = bestVenue ? side.venues[bestVenue] : null;
-    addLeg({
-      type,
-      direction,
-      strike: strike.strike,
-      expiry,
-      quantity: 1,
-      entryPrice: price,
-      venue: bestVenue,
-      delta: bestQ?.delta ?? null,
-      gamma: bestQ?.gamma ?? null,
-      theta: bestQ?.theta ?? null,
-      vega: bestQ?.vega ?? null,
-      iv: bestQ?.markIv ?? null,
-    });
-  }
 
   const callQ = strike.call.bestVenue != null
     ? strike.call.venues[strike.call.bestVenue] ?? null
@@ -185,7 +166,7 @@ function StrikeRowItem({
         </div>
         <span
           className={`${styles.bidCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ""}`}
-          onClick={(e) => { e.stopPropagation(); handleAddLeg("call", "sell", callBba.bid, strike.call); }}
+          onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "call", direction: "sell", side: strike.call }); }}
           role="button"
           title="Sell call at bid"
         >
@@ -193,7 +174,7 @@ function StrikeRowItem({
         </span>
         <span
           className={`${styles.askCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ""}`}
-          onClick={(e) => { e.stopPropagation(); handleAddLeg("call", "buy", callBba.ask, strike.call); }}
+          onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "call", direction: "buy", side: strike.call }); }}
           role="button"
           title="Buy call at ask"
         >
@@ -209,7 +190,7 @@ function StrikeRowItem({
         {/* PUT side: BID | ASK | SPREAD | IV | Δ | ν | γ | VENUES */}
         <span
           className={`${styles.bidCell} ${styles.clickable} ${putItm ? styles.itmPut : ""}`}
-          onClick={(e) => { e.stopPropagation(); handleAddLeg("put", "sell", putBba.bid, strike.put); }}
+          onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "put", direction: "sell", side: strike.put }); }}
           role="button"
           title="Sell put at bid"
         >
@@ -217,7 +198,7 @@ function StrikeRowItem({
         </span>
         <span
           className={`${styles.askCell} ${styles.clickable} ${putItm ? styles.itmPut : ""}`}
-          onClick={(e) => { e.stopPropagation(); handleAddLeg("put", "buy", putBba.ask, strike.put); }}
+          onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "put", direction: "buy", side: strike.put }); }}
           role="button"
           title="Buy put at ask"
         >
@@ -263,6 +244,7 @@ export default function NewChainTable({
   myIv,
 }: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
   const atmRef  = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
@@ -389,11 +371,25 @@ export default function NewChainTable({
                 onToggle={() => toggleRow(s.strike)}
                 activeVenues={activeVenues}
                 myIv={myIv}
+                onQuickTrade={setQuickTrade}
               />
             </div>
           );
         })}
       </div>
+
+      {quickTrade && (
+        <>
+          <div className={styles.backdrop} onClick={() => setQuickTrade(null)} />
+          <QuickTrade
+            strike={quickTrade.strike}
+            type={quickTrade.type}
+            direction={quickTrade.direction}
+            side={quickTrade.side}
+            onClose={() => setQuickTrade(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

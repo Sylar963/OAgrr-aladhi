@@ -104,11 +104,16 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
   const maxPnl = Math.max(...pnls);
   const minPnl = Math.min(...pnls);
 
-  // Check if max profit / loss is bounded
+  // Check if profit/loss is unbounded by comparing edge values.
+  // If P&L keeps growing/falling at the extremes, it's unlimited.
   const firstPnl = pnls[0] ?? 0;
   const lastPnl = pnls[pnls.length - 1] ?? 0;
-  const maxProfit = (maxPnl === firstPnl || maxPnl === lastPnl) ? null : maxPnl;
-  const maxLoss = (minPnl === firstPnl || minPnl === lastPnl) ? null : minPnl;
+  const edgeMax = Math.max(firstPnl, lastPnl);
+  const edgeMin = Math.min(firstPnl, lastPnl);
+  const profitUnbounded = Math.abs(edgeMax - maxPnl) < 1;
+  const lossUnbounded = Math.abs(edgeMin - minPnl) < 1;
+  const maxProfit = profitUnbounded ? null : maxPnl;
+  const maxLoss = lossUnbounded ? null : minPnl;
 
   const netDebit = legs.reduce((sum, leg) => {
     const sign = leg.direction === "buy" ? -1 : 1;
@@ -145,7 +150,8 @@ export function detectStrategy(legs: Leg[]): string {
   if (legs.length === 0) return "Empty";
   if (legs.length === 1) {
     const l = legs[0]!;
-    return `Long ${l.type === "call" ? "Call" : "Put"}`;
+    const side = l.direction === "buy" ? "Long" : "Short";
+    return `${side} ${l.type === "call" ? "Call" : "Put"}`;
   }
 
   const sorted = [...legs].sort((a, b) => a.strike - b.strike);

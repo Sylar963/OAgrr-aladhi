@@ -61,9 +61,29 @@ export default function LegInput() {
     );
     const s = chain.strikes.find((x) => x.strike === strike);
     const side = type === "call" ? s?.call : s?.put;
-    const bestVenue = side?.bestVenue ?? "deribit";
-    const q = bestVenue ? side?.venues[bestVenue] : null;
-    const price = direction === "buy" ? (q?.ask ?? 0) : (q?.bid ?? 0);
+
+    // Find best executable venue: lowest ask for buys, highest bid for sells
+    let bestPrice: number | null = null;
+    let bestVenueId = "";
+    let bestQ: { delta: number | null; gamma: number | null; theta: number | null; vega: number | null; markIv: number | null } | null = null;
+
+    if (side) {
+      for (const [vid, vq] of Object.entries(side.venues)) {
+        if (!vq || !activeVenues.includes(vid)) continue;
+        const p = direction === "buy" ? vq.ask : vq.bid;
+        if (p == null || p <= 0) continue;
+        if (bestPrice == null
+          || (direction === "buy" && p < bestPrice)
+          || (direction === "sell" && p > bestPrice)
+        ) {
+          bestPrice = p;
+          bestVenueId = vid;
+          bestQ = vq;
+        }
+      }
+    }
+
+    if (bestPrice == null || bestPrice <= 0) return;
 
     addLeg({
       type,
@@ -71,14 +91,14 @@ export default function LegInput() {
       strike,
       expiry,
       quantity: Math.max(1, parseInt(qty, 10) || 1),
-      entryPrice: price,
-      venue: bestVenue,
-      delta: q?.delta ?? null,
-      gamma: q?.gamma ?? null,
-      theta: q?.theta ?? null,
-      vega: q?.vega ?? null,
-      iv: q?.markIv ?? null,
-    });
+      entryPrice: bestPrice,
+      venue: bestVenueId,
+      delta: bestQ?.delta ?? null,
+      gamma: bestQ?.gamma ?? null,
+      theta: bestQ?.theta ?? null,
+      vega: bestQ?.vega ?? null,
+      iv: bestQ?.markIv ?? null,
+    }, underlying);
 
     setStrikeInput("");
   }

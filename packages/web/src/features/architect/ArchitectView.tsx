@@ -36,11 +36,17 @@ export default function ArchitectView() {
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: expiriesData } = useExpiries(underlying);
   const defaultExpiry = expiry || expiriesData?.expiries?.[1] || expiriesData?.expiries?.[0] || "";
-  const { data: chain } = useChainQuery(underlying, defaultExpiry, activeVenues);
+  const { data: chain } = useChainQuery(underlying, defaultExpiry, activeVenues, { refetchInterval: 10_000 });
 
   const legs      = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
   const removeLeg = useStrategyStore((s) => s.removeLeg);
+  const strategyUnderlying = useStrategyStore((s) => s.underlying);
+
+  // Clear legs when underlying changes
+  if (strategyUnderlying && strategyUnderlying !== underlying && legs.length > 0) {
+    clearLegs();
+  }
   const [showVenues, setShowVenues] = useState(false);
 
   const spotPrice = chain?.stats.spotIndexUsd ?? chain?.stats.forwardPriceUsd ?? 0;
@@ -62,7 +68,7 @@ export default function ArchitectView() {
         </div>
 
         {/* Template strip */}
-        <StrategyTemplates chain={chain ?? null} expiry={defaultExpiry} />
+        <StrategyTemplates chain={chain ?? null} expiry={defaultExpiry} underlying={underlying} />
 
         {/* Leg input */}
         <LegInput />

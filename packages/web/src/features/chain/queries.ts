@@ -65,7 +65,7 @@ export function useExpiries(underlying: string) {
   });
 }
 
-export function useChainQuery(underlying: string, expiry: string, venues: string[]) {
+export function useChainQuery(underlying: string, expiry: string, venues: string[], options?: { refetchInterval?: number }) {
   const venueParam = venues.length > 0 ? `&venues=${venues.join(",")}` : "";
   return useQuery({
     queryKey: chainKeys.chain(underlying, expiry, venues),
@@ -75,6 +75,7 @@ export function useChainQuery(underlying: string, expiry: string, venues: string
       ),
     enabled: Boolean(underlying && expiry),
     placeholderData: (prev: EnrichedChainResponse | undefined) => prev,
+    refetchInterval: options?.refetchInterval,
   });
 }
 

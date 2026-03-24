@@ -16,6 +16,7 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
   const addLeg = useStrategyStore((s) => s.addLeg);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
+  const underlying = useAppStore((s) => s.underlying);
   const expiry = useAppStore((s) => s.expiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
 
@@ -51,7 +52,7 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
       type, direction, strike, expiry, quantity: 1,
       entryPrice: v.price, venue: v.venueId,
       delta: v.delta, gamma: v.gamma, theta: v.theta, vega: v.vega, iv: v.iv,
-    });
+    }, underlying);
     if (!isOnArchitect) setActiveTab("architect");
     onClose();
   }

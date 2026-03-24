@@ -21,16 +21,32 @@ function findAtmStrike(chain: EnrichedChainResponse): number {
   return best;
 }
 
+/** Find the best executable venue: lowest ask for buys, highest bid for sells. */
 function getPrice(chain: EnrichedChainResponse, strike: number, type: "call" | "put", direction: "buy" | "sell") {
   const s = chain.strikes.find((x) => x.strike === strike);
   if (!s) return null;
   const side = type === "call" ? s.call : s.put;
-  const bestVenue = side.bestVenue ?? "deribit";
-  const q = side.venues[bestVenue];
-  if (!q) return null;
-  const price = direction === "buy" ? q.ask : q.bid;
-  if (price == null || price <= 0) return null;
-  return { price, venue: bestVenue, delta: q.delta, gamma: q.gamma, theta: q.theta, vega: q.vega, iv: q.markIv };
+
+  let bestPrice: number | null = null;
+  let bestVenueId = "";
+  let bestQ: { delta: number | null; gamma: number | null; theta: number | null; vega: number | null; markIv: number | null } | null = null;
+
+  for (const [vid, vq] of Object.entries(side.venues)) {
+    if (!vq) continue;
+    const p = direction === "buy" ? vq.ask : vq.bid;
+    if (p == null || p <= 0) continue;
+    if (bestPrice == null
+      || (direction === "buy" && p < bestPrice)
+      || (direction === "sell" && p > bestPrice)
+    ) {
+      bestPrice = p;
+      bestVenueId = vid;
+      bestQ = vq;
+    }
+  }
+
+  if (bestPrice == null || !bestQ) return null;
+  return { price: bestPrice, venue: bestVenueId, delta: bestQ.delta, gamma: bestQ.gamma, theta: bestQ.theta, vega: bestQ.vega, iv: bestQ.markIv };
 }
 
 function findStrikeOffset(chain: EnrichedChainResponse, atm: number, offset: number): number {
@@ -136,9 +152,10 @@ const TEMPLATES: StrategyTemplate[] = [
 interface Props {
   chain: EnrichedChainResponse | null;
   expiry: string;
+  underlying: string;
 }
 
-export default function StrategyTemplates({ chain, expiry }: Props) {
+export default function StrategyTemplates({ chain, expiry, underlying }: Props) {
   const addLeg = useStrategyStore((s) => s.addLeg);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
 
@@ -147,7 +164,7 @@ export default function StrategyTemplates({ chain, expiry }: Props) {
   function handleApply(template: StrategyTemplate) {
     if (!chain) return;
     clearLegs();
-    for (const leg of template.build(chain, expiry)) addLeg(leg);
+    for (const leg of template.build(chain, expiry)) addLeg(leg, underlying);
   }
 
   return (

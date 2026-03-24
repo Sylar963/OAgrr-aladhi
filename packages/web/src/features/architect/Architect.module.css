@@ -339,115 +339,6 @@
   height: 100%;
 }
 
-/* ── Right sidebar ───────────────────────────────────── */
-
-.sidebar {
-  border-left: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  overflow-y: auto;
-}
-
-.sidebarTitle {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.sidebarEmpty {
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-
-.sidebarVenue {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  transition: all var(--transition-fast);
-}
-
-.sidebarVenue[data-best] {
-  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary) 4%, transparent);
-}
-
-.sidebarVenue[data-unavailable] { opacity: 0.35; }
-
-.sidebarVenueHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.sidebarVenueLogo { width: 16px; height: 16px; object-fit: contain; }
-.sidebarVenueName { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; color: var(--text-secondary); }
-
-.sidebarBestTag {
-  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
-  padding: 1px 4px; border-radius: 2px;
-  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
-  color: var(--accent-primary);
-}
-
-.sidebarVenueTotal {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.sidebarVenueTotal[data-positive="true"] { color: var(--color-profit); }
-
-.sidebarLegDetails {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.sidebarLegRow {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-dim);
-}
-
-.sidebarLegDir { font-weight: 700; min-width: 10px; }
-.sidebarLegDir[data-direction="buy"]  { color: var(--color-profit); }
-.sidebarLegDir[data-direction="sell"] { color: var(--color-loss); }
-.sidebarLegStrike { color: var(--text-secondary); font-weight: 600; }
-.sidebarLegType { font-weight: 700; }
-.sidebarLegType[data-type="call"] { color: var(--color-profit); }
-.sidebarLegType[data-type="put"]  { color: var(--color-loss); }
-.sidebarLegPrice { margin-left: auto; color: var(--text-primary); font-weight: 600; }
-.sidebarLegSpread { color: var(--text-dim); }
-.sidebarLegIv { color: var(--color-iv); }
-
-.sidebarVenueLabel {
-  font-size: 10px;
-  color: var(--text-dim);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.sidebarSavings {
-  color: var(--color-profit);
-  font-weight: 600;
-}
-
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -469,12 +360,6 @@
   .templatePillName { font-size: 10px; }
 
   .legInputRow { gap: var(--space-1); }
-
-  .sidebar {
-    border-left: none;
-    border-top: 1px solid var(--border-subtle);
-    max-height: 250px;
-  }
 
   .chartPanel { min-height: 200px; }
 }

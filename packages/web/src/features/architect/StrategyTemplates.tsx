@@ -116,12 +116,25 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
 
   const filtered = sentiment === "all" ? TEMPLATES : TEMPLATES.filter((t) => t.sentiment === sentiment);
 
+  // Expected leg counts for validation
+  const EXPECTED_LEGS: Record<string, number> = {
+    "Long Call": 1, "Long Put": 1, "Short Call": 1, "Short Put": 1,
+    "Bull Call Spread": 2, "Bear Put Spread": 2,
+    "Long Straddle": 2, "Long Strangle": 2,
+    "Iron Condor": 4, "Call Butterfly": 3,
+  };
+
   function handleApply(template: StrategyTemplate) {
     if (!chain) return;
     setError(null);
     const newLegs = template.build(chain, expiry);
+    const expected = EXPECTED_LEGS[template.name] ?? 1;
     if (newLegs.length === 0) {
       setError(`No quotes available for ${template.name} on this expiry. Try a later date.`);
+      return;
+    }
+    if (newLegs.length < expected) {
+      setError(`${template.name} needs ${expected} legs but only ${newLegs.length} had quotes. Some strikes may be illiquid — try a later expiry.`);
       return;
     }
     clearLegs();

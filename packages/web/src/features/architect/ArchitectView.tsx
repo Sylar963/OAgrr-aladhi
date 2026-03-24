@@ -73,18 +73,10 @@ export default function ArchitectView() {
         {/* Leg input */}
         <LegInput />
 
-        {legs.length === 0 ? (
-          <div className={styles.chartPanel}>
-            <EmptyState
-              icon="⚙"
-              title="Build a strategy"
-              detail="Pick a template above, add custom legs, or click BID/ASK on the Chain tab."
-            />
-          </div>
-        ) : (
-          /* Split layout: controls left, chart right */
-          <div className={styles.splitBody}>
-            <div className={styles.controlsCol}>
+        {/* Always split: controls left, chart right */}
+        <div className={styles.splitBody}>
+          <div className={styles.controlsCol}>
+            {legs.length > 0 && (
               <div className={styles.legsSection}>
                 <div className={styles.legsSectionHeader}>
                   <span className={styles.strategyName}>{strategyName}</span>
@@ -137,27 +129,41 @@ export default function ArchitectView() {
                   </div>
                 )}
               </div>
+            )}
 
+            {legs.length > 0 && (
               <button className={styles.compareBtn} onClick={() => setShowVenues(true)}>
                 Compare Venues
               </button>
-            </div>
+            )}
 
-            <div className={styles.chartCol}>
-              <div className={styles.chartPanel}>
-                <div className={styles.chartTitle}>P&L at Expiry</div>
-                <PayoffChart
-                  points={payoffPoints}
-                  breakevens={metrics?.breakevens ?? []}
-                  spotPrice={spotPrice}
-                  legs={legs}
-                  maxProfit={metrics?.maxProfit ?? null}
-                  maxLoss={metrics?.maxLoss ?? null}
-                />
+            {legs.length === 0 && (
+              <div className={styles.emptyLegs}>
+                Pick a template, add custom legs, or click BID/ASK on the Chain tab.
               </div>
+            )}
+          </div>
+
+          <div className={styles.chartCol}>
+            <div className={styles.chartPanel}>
+              {legs.length === 0 ? (
+                <EmptyState icon="📊" title="P&L chart" detail="Your payoff diagram will appear here" />
+              ) : (
+                <>
+                  <div className={styles.chartTitle}>P&L at Expiry</div>
+                  <PayoffChart
+                    points={payoffPoints}
+                    breakevens={metrics?.breakevens ?? []}
+                    spotPrice={spotPrice}
+                    legs={legs}
+                    maxProfit={metrics?.maxProfit ?? null}
+                    maxLoss={metrics?.maxLoss ?? null}
+                  />
+                </>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {showVenues && (

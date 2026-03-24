@@ -417,6 +417,14 @@
 .greekItem { display: flex; gap: 3px; }
 .greekLabel { color: var(--text-dim); font-weight: 700; }
 
+.emptyLegs {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  line-height: 1.6;
+  padding: var(--space-4);
+}
+
 /* ── Chart panel ─────────────────────────────────────── */
 
 .chartPanel {

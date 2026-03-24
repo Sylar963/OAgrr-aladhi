@@ -38,7 +38,7 @@ export default function VenueCard({ venueId, total, totalLabel, isBest, availabl
         <span className={styles.name}>{meta?.label ?? venueId}</span>
         {isBest && <span className={styles.bestTag}>BEST</span>}
         <span className={styles.total} data-positive={total != null && total > 0}>
-          {available && total != null ? `${total > 0 ? "+" : ""}${fmtUsd(total)}` : "N/A"}
+          {available && total != null && Number.isFinite(total) ? `${total > 0 ? "+" : ""}${fmtUsd(total)}` : "N/A"}
         </span>
       </div>
 

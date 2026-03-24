@@ -1,12 +1,17 @@
+import { useState } from "react";
+
 import type { EnrichedChainResponse } from "@shared/enriched";
 import { useStrategyStore } from "./strategy-store";
 import type { Leg } from "./payoff";
+import MiniPayoff, { STRATEGY_SHAPES } from "./MiniPayoff";
 import styles from "./Architect.module.css";
+
+type Sentiment = "all" | "bullish" | "bearish" | "volatile" | "neutral";
 
 interface StrategyTemplate {
   name: string;
-  icon: string;
-  sentiment: "bullish" | "bearish" | "neutral" | "volatile";
+  sentiment: "bullish" | "bearish" | "volatile" | "neutral";
+  description: string;
   build: (chain: EnrichedChainResponse, expiry: string) => Omit<Leg, "id">[];
 }
 
@@ -21,12 +26,10 @@ function findAtmStrike(chain: EnrichedChainResponse): number {
   return best;
 }
 
-/** Find the best executable venue: lowest ask for buys, highest bid for sells. */
-function getPrice(chain: EnrichedChainResponse, strike: number, type: "call" | "put", direction: "buy" | "sell") {
+function getBestPrice(chain: EnrichedChainResponse, strike: number, type: "call" | "put", direction: "buy" | "sell") {
   const s = chain.strikes.find((x) => x.strike === strike);
   if (!s) return null;
   const side = type === "call" ? s.call : s.put;
-
   let bestPrice: number | null = null;
   let bestVenueId = "";
   let bestQ: { delta: number | null; gamma: number | null; theta: number | null; vega: number | null; markIv: number | null } | null = null;
@@ -35,118 +38,66 @@ function getPrice(chain: EnrichedChainResponse, strike: number, type: "call" | "
     if (!vq) continue;
     const p = direction === "buy" ? vq.ask : vq.bid;
     if (p == null || p <= 0) continue;
-    if (bestPrice == null
-      || (direction === "buy" && p < bestPrice)
-      || (direction === "sell" && p > bestPrice)
-    ) {
-      bestPrice = p;
-      bestVenueId = vid;
-      bestQ = vq;
+    if (bestPrice == null || (direction === "buy" && p < bestPrice) || (direction === "sell" && p > bestPrice)) {
+      bestPrice = p; bestVenueId = vid; bestQ = vq;
     }
   }
-
   if (bestPrice == null || !bestQ) return null;
   return { price: bestPrice, venue: bestVenueId, delta: bestQ.delta, gamma: bestQ.gamma, theta: bestQ.theta, vega: bestQ.vega, iv: bestQ.markIv };
 }
 
-function findStrikeOffset(chain: EnrichedChainResponse, atm: number, offset: number): number {
-  const sorted = chain.strikes.map((s) => s.strike).sort((a, b) => a - b);
-  const atmIdx = sorted.indexOf(atm);
-  if (atmIdx < 0) return atm;
-  return sorted[Math.max(0, Math.min(sorted.length - 1, atmIdx + offset))]!;
-}
-
-function makeLeg(p: NonNullable<ReturnType<typeof getPrice>>, base: Omit<Leg, "id" | "entryPrice" | "venue" | "delta" | "gamma" | "theta" | "vega" | "iv">): Omit<Leg, "id"> {
+function ml(p: NonNullable<ReturnType<typeof getBestPrice>>, base: Omit<Leg, "id" | "entryPrice" | "venue" | "delta" | "gamma" | "theta" | "vega" | "iv">): Omit<Leg, "id"> {
   return { ...base, entryPrice: p.price, venue: p.venue, delta: p.delta, gamma: p.gamma, theta: p.theta, vega: p.vega, iv: p.iv };
 }
 
+function off(chain: EnrichedChainResponse, atm: number, n: number): number {
+  const sorted = chain.strikes.map((s) => s.strike).sort((a, b) => a - b);
+  const idx = sorted.indexOf(atm);
+  if (idx < 0) return atm;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, idx + n))]!;
+}
+
 const TEMPLATES: StrategyTemplate[] = [
-  {
-    name: "Long Call",
-    icon: "📈",
-    sentiment: "bullish",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const p = getPrice(chain, atm, "call", "buy");
-      return p ? [makeLeg(p, { type: "call", direction: "buy", strike: atm, expiry, quantity: 1 })] : [];
-    },
-  },
-  {
-    name: "Long Put",
-    icon: "📉",
-    sentiment: "bearish",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const p = getPrice(chain, atm, "put", "buy");
-      return p ? [makeLeg(p, { type: "put", direction: "buy", strike: atm, expiry, quantity: 1 })] : [];
-    },
-  },
-  {
-    name: "Bull Call Spread",
-    icon: "↗",
-    sentiment: "bullish",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const otm = findStrikeOffset(chain, atm, 3);
+  { name: "Long Call", sentiment: "bullish", description: "Unlimited upside, limited risk",
+    build: (c, e) => { const a = findAtmStrike(c); const p = getBestPrice(c, a, "call", "buy"); return p ? [ml(p, { type: "call", direction: "buy", strike: a, expiry: e, quantity: 1 })] : []; } },
+  { name: "Long Put", sentiment: "bearish", description: "Profit from price drops",
+    build: (c, e) => { const a = findAtmStrike(c); const p = getBestPrice(c, a, "put", "buy"); return p ? [ml(p, { type: "put", direction: "buy", strike: a, expiry: e, quantity: 1 })] : []; } },
+  { name: "Short Call", sentiment: "bearish", description: "Collect premium, bearish bias",
+    build: (c, e) => { const a = findAtmStrike(c); const p = getBestPrice(c, a, "call", "sell"); return p ? [ml(p, { type: "call", direction: "sell", strike: a, expiry: e, quantity: 1 })] : []; } },
+  { name: "Short Put", sentiment: "bullish", description: "Collect premium, bullish bias",
+    build: (c, e) => { const a = findAtmStrike(c); const p = getBestPrice(c, a, "put", "sell"); return p ? [ml(p, { type: "put", direction: "sell", strike: a, expiry: e, quantity: 1 })] : []; } },
+  { name: "Bull Call Spread", sentiment: "bullish", description: "Defined risk bullish",
+    build: (c, e) => { const a = findAtmStrike(c); const o = off(c, a, 3); const b = getBestPrice(c, a, "call", "buy"); const s = getBestPrice(c, o, "call", "sell");
+      const legs: Omit<Leg, "id">[] = []; if (b) legs.push(ml(b, { type: "call", direction: "buy", strike: a, expiry: e, quantity: 1 })); if (s) legs.push(ml(s, { type: "call", direction: "sell", strike: o, expiry: e, quantity: 1 })); return legs; } },
+  { name: "Bear Put Spread", sentiment: "bearish", description: "Defined risk bearish",
+    build: (c, e) => { const a = findAtmStrike(c); const o = off(c, a, -3); const b = getBestPrice(c, a, "put", "buy"); const s = getBestPrice(c, o, "put", "sell");
+      const legs: Omit<Leg, "id">[] = []; if (b) legs.push(ml(b, { type: "put", direction: "buy", strike: a, expiry: e, quantity: 1 })); if (s) legs.push(ml(s, { type: "put", direction: "sell", strike: o, expiry: e, quantity: 1 })); return legs; } },
+  { name: "Long Straddle", sentiment: "volatile", description: "Profit from big moves",
+    build: (c, e) => { const a = findAtmStrike(c); const legs: Omit<Leg, "id">[] = []; const ca = getBestPrice(c, a, "call", "buy"); const pu = getBestPrice(c, a, "put", "buy");
+      if (ca) legs.push(ml(ca, { type: "call", direction: "buy", strike: a, expiry: e, quantity: 1 })); if (pu) legs.push(ml(pu, { type: "put", direction: "buy", strike: a, expiry: e, quantity: 1 })); return legs; } },
+  { name: "Long Strangle", sentiment: "volatile", description: "Cheaper than straddle",
+    build: (c, e) => { const a = findAtmStrike(c); const oc = off(c, a, 3); const op = off(c, a, -3); const legs: Omit<Leg, "id">[] = [];
+      const ca = getBestPrice(c, oc, "call", "buy"); const pu = getBestPrice(c, op, "put", "buy");
+      if (ca) legs.push(ml(ca, { type: "call", direction: "buy", strike: oc, expiry: e, quantity: 1 })); if (pu) legs.push(ml(pu, { type: "put", direction: "buy", strike: op, expiry: e, quantity: 1 })); return legs; } },
+  { name: "Iron Condor", sentiment: "neutral", description: "Profit from low volatility",
+    build: (c, e) => { const a = findAtmStrike(c); const sp = off(c, a, -2); const bp = off(c, a, -4); const sc = off(c, a, 2); const bc = off(c, a, 4);
       const legs: Omit<Leg, "id">[] = [];
-      const buy = getPrice(chain, atm, "call", "buy");
-      const sell = getPrice(chain, otm, "call", "sell");
-      if (buy) legs.push(makeLeg(buy, { type: "call", direction: "buy", strike: atm, expiry, quantity: 1 }));
-      if (sell) legs.push(makeLeg(sell, { type: "call", direction: "sell", strike: otm, expiry, quantity: 1 }));
-      return legs;
-    },
-  },
-  {
-    name: "Bear Put Spread",
-    icon: "↘",
-    sentiment: "bearish",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const otm = findStrikeOffset(chain, atm, -3);
-      const legs: Omit<Leg, "id">[] = [];
-      const buy = getPrice(chain, atm, "put", "buy");
-      const sell = getPrice(chain, otm, "put", "sell");
-      if (buy) legs.push(makeLeg(buy, { type: "put", direction: "buy", strike: atm, expiry, quantity: 1 }));
-      if (sell) legs.push(makeLeg(sell, { type: "put", direction: "sell", strike: otm, expiry, quantity: 1 }));
-      return legs;
-    },
-  },
-  {
-    name: "Long Straddle",
-    icon: "⟺",
-    sentiment: "volatile",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const legs: Omit<Leg, "id">[] = [];
-      const call = getPrice(chain, atm, "call", "buy");
-      const put = getPrice(chain, atm, "put", "buy");
-      if (call) legs.push(makeLeg(call, { type: "call", direction: "buy", strike: atm, expiry, quantity: 1 }));
-      if (put) legs.push(makeLeg(put, { type: "put", direction: "buy", strike: atm, expiry, quantity: 1 }));
-      return legs;
-    },
-  },
-  {
-    name: "Iron Condor",
-    icon: "◇",
-    sentiment: "neutral",
-    build: (chain, expiry) => {
-      const atm = findAtmStrike(chain);
-      const sp = findStrikeOffset(chain, atm, -2);
-      const bp = findStrikeOffset(chain, atm, -4);
-      const sc = findStrikeOffset(chain, atm, 2);
-      const bc = findStrikeOffset(chain, atm, 4);
-      const legs: Omit<Leg, "id">[] = [];
-      const _bp = getPrice(chain, bp, "put", "buy");
-      const _sp = getPrice(chain, sp, "put", "sell");
-      const _sc = getPrice(chain, sc, "call", "sell");
-      const _bc = getPrice(chain, bc, "call", "buy");
-      if (_bp) legs.push(makeLeg(_bp, { type: "put", direction: "buy", strike: bp, expiry, quantity: 1 }));
-      if (_sp) legs.push(makeLeg(_sp, { type: "put", direction: "sell", strike: sp, expiry, quantity: 1 }));
-      if (_sc) legs.push(makeLeg(_sc, { type: "call", direction: "sell", strike: sc, expiry, quantity: 1 }));
-      if (_bc) legs.push(makeLeg(_bc, { type: "call", direction: "buy", strike: bc, expiry, quantity: 1 }));
-      return legs;
-    },
-  },
+      const _bp = getBestPrice(c, bp, "put", "buy"); const _sp = getBestPrice(c, sp, "put", "sell"); const _sc = getBestPrice(c, sc, "call", "sell"); const _bc = getBestPrice(c, bc, "call", "buy");
+      if (_bp) legs.push(ml(_bp, { type: "put", direction: "buy", strike: bp, expiry: e, quantity: 1 })); if (_sp) legs.push(ml(_sp, { type: "put", direction: "sell", strike: sp, expiry: e, quantity: 1 }));
+      if (_sc) legs.push(ml(_sc, { type: "call", direction: "sell", strike: sc, expiry: e, quantity: 1 })); if (_bc) legs.push(ml(_bc, { type: "call", direction: "buy", strike: bc, expiry: e, quantity: 1 })); return legs; } },
+  { name: "Call Butterfly", sentiment: "neutral", description: "Profit near ATM strike",
+    build: (c, e) => { const a = findAtmStrike(c); const lo = off(c, a, -2); const up = off(c, a, 2);
+      const legs: Omit<Leg, "id">[] = []; const bl = getBestPrice(c, lo, "call", "buy"); const sm = getBestPrice(c, a, "call", "sell"); const bu = getBestPrice(c, up, "call", "buy");
+      if (bl) legs.push(ml(bl, { type: "call", direction: "buy", strike: lo, expiry: e, quantity: 1 })); if (sm) legs.push(ml(sm, { type: "call", direction: "sell", strike: a, expiry: e, quantity: 2 }));
+      if (bu) legs.push(ml(bu, { type: "call", direction: "buy", strike: up, expiry: e, quantity: 1 })); return legs; } },
+];
+
+const SENTIMENTS: Array<{ id: Sentiment; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "bullish", label: "Bullish" },
+  { id: "bearish", label: "Bearish" },
+  { id: "volatile", label: "Volatile" },
+  { id: "neutral", label: "Neutral" },
 ];
 
 interface Props {
@@ -158,8 +109,11 @@ interface Props {
 export default function StrategyTemplates({ chain, expiry, underlying }: Props) {
   const addLeg = useStrategyStore((s) => s.addLeg);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
+  const [sentiment, setSentiment] = useState<Sentiment>("all");
 
   if (!chain) return null;
+
+  const filtered = sentiment === "all" ? TEMPLATES : TEMPLATES.filter((t) => t.sentiment === sentiment);
 
   function handleApply(template: StrategyTemplate) {
     if (!chain) return;
@@ -168,19 +122,30 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
   }
 
   return (
-    <div className={styles.templateStrip}>
-      {TEMPLATES.map((t) => (
-        <button
-          key={t.name}
-          className={styles.templatePill}
-          data-sentiment={t.sentiment}
-          onClick={() => handleApply(t)}
-          title={t.name}
-        >
-          <span className={styles.templatePillIcon}>{t.icon}</span>
-          <span className={styles.templatePillName}>{t.name}</span>
-        </button>
-      ))}
+    <div className={styles.templatesSection}>
+      <div className={styles.sentimentBar}>
+        {SENTIMENTS.map((s) => (
+          <button
+            key={s.id}
+            className={styles.sentimentBtn}
+            data-active={s.id === sentiment}
+            data-sentiment={s.id}
+            onClick={() => setSentiment(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.templateGrid}>
+        {filtered.map((t) => (
+          <button key={t.name} className={styles.templateCard} data-sentiment={t.sentiment} onClick={() => handleApply(t)}>
+            <MiniPayoff shape={STRATEGY_SHAPES[t.name] ?? [[0, 0], [1, 0]]} width={140} height={56} />
+            <span className={styles.templateCardName}>{t.name}</span>
+            <span className={styles.templateCardDesc}>{t.description}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

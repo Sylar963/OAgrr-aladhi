@@ -30,48 +30,99 @@
   color: var(--text-primary);
 }
 
-/* ── Template strip ──────────────────────────────────── */
+/* ── Strategy templates ───────────────────────────────── */
 
-.templateStrip {
+.templatesSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.sentimentBar {
+  display: flex;
+  gap: 1px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: fit-content;
+  height: 30px;
+}
+
+.sentimentBtn {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0 12px;
+  height: 100%;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sentimentBtn:hover { color: var(--text-secondary); }
+
+.sentimentBtn[data-active="true"] {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sentimentBtn[data-active="true"][data-sentiment="bullish"] { color: var(--color-profit); }
+.sentimentBtn[data-active="true"][data-sentiment="bearish"] { color: var(--color-loss); }
+.sentimentBtn[data-active="true"][data-sentiment="volatile"] { color: var(--color-iv); }
+.sentimentBtn[data-active="true"][data-sentiment="neutral"] { color: var(--color-warning, #f59e0b); }
+
+.templateGrid {
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
-  flex-shrink: 0;
+  padding-bottom: 2px;
 }
 
-.templateStrip::-webkit-scrollbar { display: none; }
+.templateGrid::-webkit-scrollbar { display: none; }
 
-.templatePill {
+.templateCard {
+  flex-shrink: 0;
+  width: 160px;
   display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-base);
   cursor: pointer;
-  white-space: nowrap;
+  text-align: left;
   transition: all var(--transition-fast);
 }
 
-.templatePill:hover {
-  border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+.templateCard:hover {
+  border-color: var(--border-default);
+  background: var(--bg-hover);
 }
 
-.templatePill[data-sentiment="bullish"]:hover { border-color: var(--color-profit); }
-.templatePill[data-sentiment="bearish"]:hover { border-color: var(--color-loss); }
-.templatePill[data-sentiment="neutral"]:hover { border-color: var(--color-warning, #f59e0b); }
-.templatePill[data-sentiment="volatile"]:hover { border-color: var(--color-iv); }
+.templateCard[data-sentiment="bullish"]:hover { border-color: color-mix(in srgb, var(--color-profit) 50%, var(--border-default)); }
+.templateCard[data-sentiment="bearish"]:hover { border-color: color-mix(in srgb, var(--color-loss) 50%, var(--border-default)); }
+.templateCard[data-sentiment="volatile"]:hover { border-color: color-mix(in srgb, var(--color-iv) 50%, var(--border-default)); }
+.templateCard[data-sentiment="neutral"]:hover { border-color: color-mix(in srgb, var(--color-warning, #f59e0b) 50%, var(--border-default)); }
 
-.templatePillIcon { font-size: 14px; }
-
-.templatePillName {
+.templateCardName {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.templateCardDesc {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 /* ── Leg input ───────────────────────────────────────── */
@@ -309,7 +360,8 @@
 
 .chartPanel {
   flex: 1;
-  min-height: 250px;
+  min-height: 280px;
+  max-height: 420px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -389,5 +441,11 @@
 
   .legInputRow { gap: var(--space-1); }
 
-  .chartPanel { min-height: 200px; }
+  .chartPanel { min-height: 200px; max-height: 300px; }
+
+  .templateCard { width: 130px; padding: var(--space-2); }
+  .templateCardName { font-size: 10px; }
+
+  .sentimentBar { height: 28px; }
+  .sentimentBtn { padding: 0 8px; font-size: 10px; }
 }

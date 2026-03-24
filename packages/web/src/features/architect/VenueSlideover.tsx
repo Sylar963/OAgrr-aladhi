@@ -40,8 +40,8 @@ function buildVenueExecution(
     contractSize: 1, // Already USD-normalized by core
     tickSize: 0.01,
     minQty: 0.01,
-    makerFee: q.estimatedFees ? q.estimatedFees.maker / (q.mid ?? 1) : 0.0003,
-    takerFee: q.estimatedFees ? q.estimatedFees.taker / (q.mid ?? 1) : 0.0005,
+    makerFee: q.estimatedFees && q.mid ? q.estimatedFees.maker / q.mid : 0.0003,
+    takerFee: q.estimatedFees && q.mid ? q.estimatedFees.taker / q.mid : 0.0005,
     settleCurrency: "USD",
     inverse: false,
     underlyingPrice: chain.stats.spotIndexUsd ?? chain.stats.forwardPriceUsd ?? 0,

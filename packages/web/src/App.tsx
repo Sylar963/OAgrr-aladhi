@@ -27,11 +27,19 @@ export default function App() {
 
   const underlying    = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
+  const setActiveTab  = useAppStore((s) => s.setActiveTab);
   useEffect(() => {
     if (underlyings.length > 0 && !underlyings.includes(underlying)) {
       setUnderlying(underlyings[0]!);
     }
   }, [underlyings, underlying, setUnderlying]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("strategy")) {
+      setActiveTab("architect");
+    }
+  }, [setActiveTab]);
 
   return (
     <AppShell underlyings={underlyings} tabs={TABS}>

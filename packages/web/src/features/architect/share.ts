@@ -47,7 +47,8 @@ export function decodeStrategy(encoded: string): { underlying: string; legs: Omi
 export function buildShareUrl(legs: Leg[], underlying: string): string {
   const encoded = encodeStrategy(legs, underlying);
   if (!encoded) return window.location.href;
-  const url = new URL(window.location.href);
+
+  const url = new URL(window.location.origin);
   url.searchParams.set("strategy", encoded);
   return url.toString();
 }

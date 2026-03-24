@@ -61,8 +61,8 @@ export type TermStructure = 'contango' | 'flat' | 'backwardation';
 
 export interface ChainStats {
   spotIndexUsd: number | null;
-  forwardPriceUsd: number | null;
-  forwardBasisPct: number | null;
+  indexPriceUsd: number | null;
+  basisPct: number | null;
   atmStrike: number | null;
   atmIv: number | null;
   putCallOiRatio: number | null;
@@ -195,42 +195,42 @@ export function enrichComparisonRow(row: ComparisonRow): EnrichedStrike {
 /**
  * Aggregates reference prices across venue chains.
  *
- * For multi-venue views, a simple average across venue-level spot/forward values
+ * For multi-venue views, a simple average across venue-level spot/index values
  * is less venue-biased than "first chain wins" and keeps summary stats aligned
  * with the selected venue set.
  */
 function extractPrices(
   venueChains: VenueOptionChain[],
-): { spotIndexUsd: number | null; forwardPriceUsd: number | null } {
+): { spotIndexUsd: number | null; indexPriceUsd: number | null } {
   const spots: number[] = [];
-  const forwards: number[] = [];
+  const indices: number[] = [];
 
   for (const vc of venueChains) {
     let venueSpot: number | null = null;
-    let venueForward: number | null = null;
+    let venueIndex: number | null = null;
 
     for (const contract of Object.values(vc.contracts)) {
       if (venueSpot === null && contract.quote.indexPriceUsd !== null) {
         venueSpot = contract.quote.indexPriceUsd;
       }
-      if (venueForward === null && contract.quote.underlyingPriceUsd !== null) {
-        venueForward = contract.quote.underlyingPriceUsd;
+      if (venueIndex === null && contract.quote.underlyingPriceUsd !== null) {
+        venueIndex = contract.quote.underlyingPriceUsd;
       }
-      if (venueSpot !== null && venueForward !== null) break;
+      if (venueSpot !== null && venueIndex !== null) break;
     }
 
     if (venueSpot !== null) spots.push(venueSpot);
-    if (venueForward !== null) forwards.push(venueForward);
+    if (venueIndex !== null) indices.push(venueIndex);
   }
 
   const spotIndexUsd = spots.length > 0
     ? spots.reduce((sum, value) => sum + value, 0) / spots.length
     : null;
-  const forwardPriceUsd = forwards.length > 0
-    ? forwards.reduce((sum, value) => sum + value, 0) / forwards.length
+  const indexPriceUsd = indices.length > 0
+    ? indices.reduce((sum, value) => sum + value, 0) / indices.length
     : null;
 
-  return { spotIndexUsd, forwardPriceUsd };
+  return { spotIndexUsd, indexPriceUsd };
 }
 
 /**
@@ -312,21 +312,21 @@ function sumOiByRight(strikes: EnrichedStrike[]): {
 
 /**
  * Derives chain-level summary statistics from enriched strikes and raw venue
- * chains. ATM is anchored to the forward price so basis/carry is captured.
+ * chains. ATM is anchored to the index price so basis/carry is captured.
  */
 export function computeChainStats(
   strikes: EnrichedStrike[],
   venueChains: VenueOptionChain[],
 ): ChainStats {
-  const { spotIndexUsd, forwardPriceUsd } = extractPrices(venueChains);
+  const { spotIndexUsd, indexPriceUsd } = extractPrices(venueChains);
 
-  const forwardBasisPct =
-    forwardPriceUsd !== null && spotIndexUsd !== null
-      ? ((forwardPriceUsd - spotIndexUsd) / spotIndexUsd) * 100
+  const basisPct =
+    indexPriceUsd !== null && spotIndexUsd !== null
+      ? ((indexPriceUsd - spotIndexUsd) / spotIndexUsd) * 100
       : null;
 
-  // ATM anchored to forward; fall back to spot when forward is unavailable.
-  const refPrice = forwardPriceUsd ?? spotIndexUsd;
+  // ATM anchored to index price; fall back to spot when unavailable.
+  const refPrice = indexPriceUsd ?? spotIndexUsd;
   let atmStrike: number | null = null;
   let atmIv: number | null = null;
 
@@ -347,7 +347,7 @@ export function computeChainStats(
   const { putOi, callOi } = sumOiByRight(strikes);
   const putCallOiRatio = callOi > 0 ? putOi / callOi : null;
 
-  const priceForOi = forwardPriceUsd ?? spotIndexUsd ?? 0;
+  const priceForOi = indexPriceUsd ?? spotIndexUsd ?? 0;
   const totalOiUsd = (putOi + callOi) * priceForOi;
 
   // 25Δ skew: put25 IV − call25 IV. Positive = put skew (downside fear).
@@ -362,8 +362,8 @@ export function computeChainStats(
 
   return {
     spotIndexUsd,
-    forwardPriceUsd,
-    forwardBasisPct,
+    indexPriceUsd,
+    basisPct,
     atmStrike,
     atmIv,
     putCallOiRatio,
@@ -510,8 +510,7 @@ export function buildEnrichedChain(
   const stats = computeChainStats(strikes, venueChains);
   const dte = computeDte(expiry);
 
-  // Prefer forward price for GEX anchor (it's what market makers hedge against).
-  const spotPrice = stats.spotIndexUsd ?? stats.forwardPriceUsd ?? 0;
+  const spotPrice = stats.spotIndexUsd ?? stats.indexPriceUsd ?? 0;
   const gex = computeGexFromRows(rows, strikes, spotPrice);
 
   return {

@@ -47,7 +47,7 @@ const C = {
 interface OurVenueQuote { bid: number | null; ask: number | null; markIv: number | null; delta: number | null; [k: string]: unknown }
 interface OurSide { venues: Record<string, OurVenueQuote>; bestIv: number | null; bestVenue: string | null }
 interface OurStrike { strike: number; call: OurSide; put: OurSide }
-interface OurChain { underlying: string; expiry: string; stats: { spotIndexUsd: number | null; forwardPriceUsd: number | null }; strikes: OurStrike[] }
+interface OurChain { underlying: string; expiry: string; stats: { spotIndexUsd: number | null; indexPriceUsd: number | null }; strikes: OurStrike[] }
 interface HealthBody { status: string }
 interface ExpiriesBody { expiries: string[] }
 

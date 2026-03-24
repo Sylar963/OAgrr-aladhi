@@ -101,14 +101,6 @@
   background: var(--bg-hover);
 }
 
-.venueRow[data-best="true"] {
-  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
-}
-
-.venueRow[data-best="true"]:hover {
-  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
-}
-
 /* ── Table cells ─────────────────────────────────────────────────────────── */
 
 .tdVenue {
@@ -169,17 +161,6 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.bestBadge {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 1px 4px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
-  color: var(--accent-primary);
   white-space: nowrap;
 }
 

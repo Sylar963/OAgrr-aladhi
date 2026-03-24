@@ -58,6 +58,11 @@
   color: var(--accent-primary);
 }
 
+.bestTag[data-tag="BEST IV"] {
+  background: color-mix(in srgb, var(--color-iv) 15%, transparent);
+  color: var(--color-iv);
+}
+
 .total {
   font-family: var(--font-mono);
   font-size: var(--text-xl);

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type MouseEvent } from "react";
 
 import type { EnrichedStrike, EnrichedSide } from "@shared/enriched";
 
@@ -15,7 +15,7 @@ import styles from "./ChainTable.module.css";
 interface NewChainTableProps {
   strikes:      EnrichedStrike[];
   atmStrike:    number | null;
-  forwardPrice: number | null;
+  indexPrice: number | null;
   activeVenues: string[];
   myIv:         number | null;
 }
@@ -40,33 +40,23 @@ interface VenueColumnProps {
 
 function VenueColumn({ side, align, activeVenues }: VenueColumnProps) {
   const entries = Object.entries(side.venues).filter(
-    ([v]) => activeVenues.includes(v),
+    ([venueId]) => activeVenues.includes(venueId),
   );
 
   return (
     <div className={styles.venueCol} data-align={align}>
       {entries.map(([venueId]) => {
-        const meta   = VENUES[venueId];
-        const isBest = venueId === side.bestVenue;
+        const meta = VENUES[venueId];
         return (
-          <div
-            key={venueId}
-            className={styles.logoItem}
-            data-best={isBest}
-            title={`${meta?.label ?? venueId}${isBest ? " — best" : ""}`}
-          >
+          <div key={venueId} className={styles.logoItem} title={meta?.label ?? venueId}>
             {meta?.logo ? (
               <img
                 src={meta.logo}
                 alt={meta?.shortLabel ?? venueId}
                 className={styles.logo}
-                style={{ opacity: isBest ? 1 : 0.35 }}
               />
             ) : (
-              <span
-                className={styles.logoFallback}
-                style={{ color: isBest ? venueColor(venueId) : undefined }}
-              >
+              <span className={styles.logoFallback} style={{ color: venueColor(venueId) }}>
                 {meta?.shortLabel ?? venueId.slice(0, 3).toUpperCase()}
               </span>
             )}
@@ -77,16 +67,34 @@ function VenueColumn({ side, align, activeVenues }: VenueColumnProps) {
   );
 }
 
-// Best bid = highest bid across venues, best ask = lowest ask across venues
-function bestBidAsk(side: EnrichedSide, activeVenues: string[]): { bid: number | null; ask: number | null } {
+interface BestBidAskResult {
+  bid: number | null;
+  ask: number | null;
+  bidVenue: string | null;
+  askVenue: string | null;
+}
+
+function bestBidAsk(side: EnrichedSide, activeVenues: string[]): BestBidAskResult {
   let bestBid: number | null = null;
   let bestAsk: number | null = null;
-  for (const [v, q] of Object.entries(side.venues)) {
-    if (!activeVenues.includes(v) || !q) continue;
-    if (q.bid != null && (bestBid == null || q.bid > bestBid)) bestBid = q.bid;
-    if (q.ask != null && (bestAsk == null || q.ask < bestAsk)) bestAsk = q.ask;
+  let bestBidVenue: string | null = null;
+  let bestAskVenue: string | null = null;
+
+  for (const [venueId, quote] of Object.entries(side.venues)) {
+    if (!activeVenues.includes(venueId) || !quote) continue;
+
+    if (quote.bid != null && (bestBid == null || quote.bid > bestBid)) {
+      bestBid = quote.bid;
+      bestBidVenue = venueId;
+    }
+
+    if (quote.ask != null && (bestAsk == null || quote.ask < bestAsk)) {
+      bestAsk = quote.ask;
+      bestAskVenue = venueId;
+    }
   }
-  return { bid: bestBid, ask: bestAsk };
+
+  return { bid: bestBid, ask: bestAsk, bidVenue: bestBidVenue, askVenue: bestAskVenue };
 }
 
 // ── Strike row ────────────────────────────────────────────────────────────────
@@ -98,11 +106,34 @@ interface QuickTradeInfo {
   side:      EnrichedSide;
 }
 
+function PriceCell({
+  value,
+  venueId,
+  className,
+  title,
+  onClick,
+}: {
+  value: number | null;
+  venueId: string | null;
+  className: string;
+  title: string;
+  onClick: (event: MouseEvent<HTMLSpanElement>) => void;
+}) {
+  const meta = venueId ? VENUES[venueId] : null;
+
+  return (
+    <span className={className} onClick={onClick} role="button" title={title}>
+      <span>{fmtUsd(value)}</span>
+      {meta?.logo ? <img src={meta.logo} alt="" className={styles.priceVenueLogo} /> : null}
+    </span>
+  );
+}
+
 interface StrikeRowProps {
   strike:       EnrichedStrike;
   isAtm:        boolean;
   isExpanded:   boolean;
-  forwardPrice: number | null;
+  indexPrice: number | null;
   onToggle:     () => void;
   activeVenues: string[];
   myIv:         number | null;
@@ -113,14 +144,14 @@ function StrikeRowItem({
   strike,
   isAtm,
   isExpanded,
-  forwardPrice,
+  indexPrice,
   onToggle,
   activeVenues,
   myIv,
   onQuickTrade,
 }: StrikeRowProps) {
-  const callItm = forwardPrice != null && strike.strike < forwardPrice;
-  const putItm  = forwardPrice != null && strike.strike > forwardPrice;
+  const callItm = indexPrice != null && strike.strike < indexPrice;
+  const putItm  = indexPrice != null && strike.strike > indexPrice;
 
   const callQ = strike.call.bestVenue != null
     ? strike.call.venues[strike.call.bestVenue] ?? null
@@ -147,7 +178,6 @@ function StrikeRowItem({
           }
         }}
       >
-        {/* CALL side: VENUES | γ | ν | Δ | IV | SPREAD | BID | ASK */}
         <VenueColumn side={strike.call} align="left" activeVenues={activeVenues} />
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ""}`}>
           {fmtGamma(callQ?.gamma ?? null)}
@@ -164,46 +194,40 @@ function StrikeRowItem({
         <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ""}`}>
           <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
         </div>
-        <span
+        <PriceCell
+          value={callBba.bid}
+          venueId={callBba.bidVenue}
           className={`${styles.bidCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ""}`}
           onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "call", direction: "sell", side: strike.call }); }}
-          role="button"
-          title="Sell call at bid"
-        >
-          {fmtUsd(callBba.bid)}
-        </span>
-        <span
+          title="Sell call at best bid"
+        />
+        <PriceCell
+          value={callBba.ask}
+          venueId={callBba.askVenue}
           className={`${styles.askCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ""}`}
           onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "call", direction: "buy", side: strike.call }); }}
-          role="button"
-          title="Buy call at ask"
-        >
-          {fmtUsd(callBba.ask)}
-        </span>
+          title="Buy call at best ask"
+        />
 
-        {/* STRIKE center */}
         <div className={styles.strikeCenter} data-atm={isAtm}>
           {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
         </div>
 
-        {/* PUT side: BID | ASK | SPREAD | IV | Δ | ν | γ | VENUES */}
-        <span
+        <PriceCell
+          value={putBba.bid}
+          venueId={putBba.bidVenue}
           className={`${styles.bidCell} ${styles.clickable} ${putItm ? styles.itmPut : ""}`}
           onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "put", direction: "sell", side: strike.put }); }}
-          role="button"
-          title="Sell put at bid"
-        >
-          {fmtUsd(putBba.bid)}
-        </span>
-        <span
+          title="Sell put at best bid"
+        />
+        <PriceCell
+          value={putBba.ask}
+          venueId={putBba.askVenue}
           className={`${styles.askCell} ${styles.clickable} ${putItm ? styles.itmPut : ""}`}
           onClick={(e) => { e.stopPropagation(); onQuickTrade({ strike: strike.strike, type: "put", direction: "buy", side: strike.put }); }}
-          role="button"
-          title="Buy put at ask"
-        >
-          {fmtUsd(putBba.ask)}
-        </span>
+          title="Buy put at best ask"
+        />
         <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ""}`}>
           <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
         </div>
@@ -239,7 +263,7 @@ function StrikeRowItem({
 export default function NewChainTable({
   strikes,
   atmStrike,
-  forwardPrice,
+  indexPrice,
   activeVenues,
   myIv,
 }: NewChainTableProps) {
@@ -298,12 +322,12 @@ export default function NewChainTable({
             const isAtm = s.strike === atmStrike;
             return (
               <div key={s.strike} ref={isAtm ? atmRef : undefined}>
-                {isAtm && forwardPrice != null && (
+                {isAtm && indexPrice != null && (
                   <div className={styles.atmMarker}>
                     <div className={styles.atmLine} />
                     <div className={styles.atmPill}>
                       <span className={styles.atmPillText}>
-                        Fwd {fmtUsd(forwardPrice)}
+                        Index {fmtUsd(indexPrice)}
                       </span>
                     </div>
                     <div className={styles.atmLine} />
@@ -312,7 +336,7 @@ export default function NewChainTable({
                 <MobileStrikeCard
                   strike={s}
                   isAtm={isAtm}
-                  forwardPrice={forwardPrice}
+                  indexPrice={indexPrice}
                   activeVenues={activeVenues}
                   isExpanded={expanded.has(s.strike)}
                   onToggle={() => toggleRow(s.strike)}
@@ -352,12 +376,12 @@ export default function NewChainTable({
           const isAtm = s.strike === atmStrike;
           return (
             <div key={s.strike} ref={isAtm ? atmRef : undefined}>
-              {isAtm && forwardPrice != null && (
+              {isAtm && indexPrice != null && (
                 <div className={styles.atmMarker}>
                   <div className={styles.atmLine} />
                   <div className={styles.atmPill}>
                     <span className={styles.atmPillText}>
-                      Fwd {fmtUsd(forwardPrice)}
+                      Index {fmtUsd(indexPrice)}
                     </span>
                   </div>
                   <div className={styles.atmLine} />
@@ -367,7 +391,7 @@ export default function NewChainTable({
                 strike={s}
                 isAtm={isAtm}
                 isExpanded={expanded.has(s.strike)}
-                forwardPrice={forwardPrice}
+                indexPrice={indexPrice}
                 onToggle={() => toggleRow(s.strike)}
                 activeVenues={activeVenues}
                 myIv={myIv}

@@ -224,13 +224,6 @@
   border-bottom: none;
 }
 
-.venueDetailRow[data-best="true"] {
-  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
-  margin: 0 calc(-1 * var(--space-3));
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-}
-
 .venueDetailName {
   display: flex;
   align-items: center;
@@ -244,16 +237,6 @@
   width: 12px;
   height: 12px;
   object-fit: contain;
-}
-
-.bestTag {
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 1px 3px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
-  color: var(--accent-primary);
 }
 
 .venueDetailGrid {

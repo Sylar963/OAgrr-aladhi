@@ -161,12 +161,6 @@
   flex-shrink: 0;
 }
 
-.logoItem[data-best="true"] {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 1px var(--accent-primary), 0 0 5px rgba(80, 210, 193, 0.28);
-  background: rgba(80, 210, 193, 0.06);
-}
-
 .logo {
   width: 17px;
   height: 17px;
@@ -205,6 +199,10 @@
 }
 
 .clickable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   cursor: pointer;
   border-radius: 3px;
   transition: background var(--transition-fast);
@@ -212,6 +210,14 @@
 
 .clickable:hover {
   background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+
+.priceVenueLogo {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .backdrop {

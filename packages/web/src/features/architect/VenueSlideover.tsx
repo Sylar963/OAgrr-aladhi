@@ -60,7 +60,7 @@ function buildVenueExecution(
     takerFee: q.estimatedFees && q.mid ? q.estimatedFees.taker / q.mid : 0.0005,
     settleCurrency: "USD",
     inverse: false,
-    underlyingPrice: chain.stats.spotIndexUsd ?? chain.stats.forwardPriceUsd ?? 0,
+    underlyingPrice: chain.stats.spotIndexUsd ?? chain.stats.indexPriceUsd ?? 0,
   };
 }
 

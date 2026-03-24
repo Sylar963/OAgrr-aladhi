@@ -23,10 +23,12 @@ interface VenueCardProps {
   details:   VenueCardDetail[];
   action?:   { label: string; onClick: () => void };
   savings?:  string;
+  tags?:     string[];
 }
 
-export default function VenueCard({ venueId, total, totalLabel, isBest, available, details, action, savings }: VenueCardProps) {
+export default function VenueCard({ venueId, total, totalLabel, isBest, available, details, action, savings, tags }: VenueCardProps) {
   const meta = VENUES[venueId];
+  const allTags = tags ?? (isBest ? ["BEST"] : []);
 
   return (
     <div className={styles.card} data-best={isBest || undefined} data-unavailable={!available || undefined}>
@@ -35,7 +37,9 @@ export default function VenueCard({ venueId, total, totalLabel, isBest, availabl
         <div className={styles.venueId}>
           {meta?.logo && <img src={meta.logo} className={styles.logo} alt="" />}
           <span className={styles.name}>{meta?.label ?? venueId}</span>
-          {isBest && <span className={styles.bestTag}>BEST</span>}
+          {allTags.map((tag) => (
+            <span key={tag} className={styles.bestTag} data-tag={tag}>{tag}</span>
+          ))}
         </div>
         <span className={styles.total} data-positive={total != null && total > 0}>
           {available && total != null && Number.isFinite(total) ? `${total > 0 ? "+" : ""}${fmtUsd(total)}` : "N/A"}

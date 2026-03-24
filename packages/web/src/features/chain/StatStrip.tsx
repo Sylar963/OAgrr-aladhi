@@ -47,8 +47,8 @@ const CONN_DISPLAY: Record<WsConnectionState, { dot: string; label: string }> = 
 };
 
 export default function StatStrip({ stats, underlying, dte, connectionState, marketStats }: StatStripProps) {
-  const forwardSub = stats.forwardBasisPct != null
-    ? fmtPct(stats.forwardBasisPct, 3)
+  const basisSub = stats.basisPct != null
+    ? fmtPct(stats.basisPct, 3)
     : undefined;
 
   const skewPositive = stats.skew25d != null
@@ -60,7 +60,7 @@ export default function StatStrip({ stats, underlying, dte, connectionState, mar
       <StatCell
         label={`${underlying} Spot`}
         value={fmtUsd(stats.spotIndexUsd)}
-        sub={stats.forwardPriceUsd != null ? `Fwd ${fmtUsd(stats.forwardPriceUsd)}` : undefined}
+        sub={stats.indexPriceUsd != null ? `Index ${fmtUsd(stats.indexPriceUsd)}` : undefined}
       />
       <div className={styles.divider} />
       <StatCell
@@ -85,7 +85,7 @@ export default function StatStrip({ stats, underlying, dte, connectionState, mar
       <StatCell
         label="Total OI"
         value={fmtUsdCompact(stats.totalOiUsd)}
-        sub={forwardSub ? `Basis ${forwardSub}` : undefined}
+        sub={basisSub ? `Basis ${basisSub}` : undefined}
       />
       {marketStats?.dvol && (
         <>

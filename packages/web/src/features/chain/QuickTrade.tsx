@@ -36,6 +36,7 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
     })
     .filter(Boolean)
     .filter((v) => v!.price != null && v!.price > 0)
+    .filter((v) => v!.size == null || v!.size > 0)
     .sort((a, b) => {
       if (direction === "buy") return (a!.price ?? Infinity) - (b!.price ?? Infinity);
       return (b!.price ?? 0) - (a!.price ?? 0);
@@ -44,6 +45,13 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
       iv: number | null; delta: number | null; gamma: number | null;
       theta: number | null; vega: number | null; spreadPct: number | null;
     }>;
+
+  const bestPriceVenue = venues[0]?.venueId ?? null;
+  const bestIvVenue = venues.reduce<{ id: string; iv: number } | null>((best, v) => {
+    if (v.iv == null) return best;
+    if (best == null || v.iv < best.iv) return { id: v.venueId, iv: v.iv };
+    return best;
+  }, null)?.id ?? null;
 
   const isOnArchitect = activeTab === "architect";
 
@@ -71,7 +79,7 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
       </div>
 
       <div className={styles.venueList}>
-        {venues.map((v, i) => {
+        {venues.map((v) => {
           const detail: VenueCardDetail = {
             label: `${strike}`,
             strike,
@@ -84,14 +92,19 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
             spreadCost: v.spreadCost,
           };
 
+          const tags: string[] = [];
+          if (v.venueId === bestPriceVenue) tags.push("BEST PRICE");
+          if (v.venueId === bestIvVenue) tags.push("BEST IV");
+
           return (
             <VenueCard
               key={v.venueId}
               venueId={v.venueId}
               total={v.price}
-              isBest={i === 0}
+              isBest={v.venueId === bestPriceVenue}
               available
               details={[detail]}
+              tags={tags}
               action={{
                 label: isOnArchitect ? "+ Add Leg" : "+ Builder",
                 onClick: () => handleAdd(v),

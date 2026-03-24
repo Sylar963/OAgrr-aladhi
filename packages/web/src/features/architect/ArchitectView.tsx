@@ -139,7 +139,7 @@ export default function ArchitectView() {
     window.history.replaceState({}, "", clean ? `?${clean}` : window.location.pathname);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const spotPrice = chain?.stats.spotIndexUsd ?? chain?.stats.forwardPriceUsd ?? 0;
+  const spotPrice = chain?.stats.spotIndexUsd ?? chain?.stats.indexPriceUsd ?? 0;
   const availableStrikes = useMemo(() => chain?.strikes.map((s) => s.strike) ?? [], [chain]);
 
   const repriceStrategyLeg = useCallback((leg: Leg, patch: Partial<Leg> = {}, exactStrike = false) => {

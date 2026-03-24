@@ -8,7 +8,7 @@ import styles from "./MobileStrikeCard.module.css";
 interface MobileStrikeCardProps {
   strike:       EnrichedStrike;
   isAtm:        boolean;
-  forwardPrice: number | null;
+  indexPrice: number | null;
   activeVenues: string[];
   isExpanded:   boolean;
   onToggle:     () => void;
@@ -43,16 +43,14 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
       <div className={styles.sideHeader}>
         <span className={styles.sideLabel}>{type === "call" ? "C" : "P"}</span>
         <div className={styles.sideVenues}>
-          {venues.map((v) => {
-            const meta = VENUES[v];
-            const isBest = v === side.bestVenue;
+          {venues.map((venueId) => {
+            const meta = VENUES[venueId];
             return meta?.logo ? (
               <img
-                key={v}
+                key={venueId}
                 src={meta.logo}
-                alt={meta.shortLabel ?? v}
+                alt={meta.shortLabel ?? venueId}
                 className={styles.venueLogo}
-                style={{ opacity: isBest ? 1 : 0.3 }}
               />
             ) : null;
           })}
@@ -88,13 +86,11 @@ function ExpandedVenueDetail({ side, type, venues }: { side: EnrichedSide; type:
       <div className={styles.venueDetailLabel}>{type === "call" ? "CALLS" : "PUTS"}</div>
       {entries.map(([venueId, q]) => {
         const meta = VENUES[venueId];
-        const isBest = venueId === side.bestVenue;
         return (
-          <div key={venueId} className={styles.venueDetailRow} data-best={isBest}>
+          <div key={venueId} className={styles.venueDetailRow}>
             <div className={styles.venueDetailName}>
               {meta?.logo && <img src={meta.logo} className={styles.venueDetailLogo} alt="" />}
               <span>{meta?.shortLabel ?? venueId}</span>
-              {isBest && <span className={styles.bestTag}>BEST</span>}
             </div>
             <div className={styles.venueDetailGrid}>
               <span className={styles.vdCell}>
@@ -132,13 +128,13 @@ function ExpandedVenueDetail({ side, type, venues }: { side: EnrichedSide; type:
 export default function MobileStrikeCard({
   strike,
   isAtm,
-  forwardPrice,
+  indexPrice,
   activeVenues,
   isExpanded,
   onToggle,
 }: MobileStrikeCardProps) {
-  const callItm = forwardPrice != null && strike.strike < forwardPrice;
-  const putItm  = forwardPrice != null && strike.strike > forwardPrice;
+  const callItm = indexPrice != null && strike.strike < indexPrice;
+  const putItm  = indexPrice != null && strike.strike > indexPrice;
   const venues  = Object.keys(strike.call.venues).filter((v) => activeVenues.includes(v));
 
   return (

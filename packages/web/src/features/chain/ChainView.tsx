@@ -112,7 +112,7 @@ export default function ChainView() {
               <ChainTable
                 strikes={chain.strikes}
                 atmStrike={chain.stats.atmStrike}
-                forwardPrice={chain.stats.forwardPriceUsd}
+                indexPrice={chain.stats.indexPriceUsd}
                 activeVenues={activeVenues}
                 myIv={myIvValid ? myIvFloat : null}
               />
@@ -178,7 +178,7 @@ export default function ChainView() {
             <ChainTable
               strikes={chain.strikes}
               atmStrike={chain.stats.atmStrike}
-              forwardPrice={chain.stats.forwardPriceUsd}
+              indexPrice={chain.stats.indexPriceUsd}
               activeVenues={activeVenues}
               myIv={myIvValid ? myIvFloat : null}
             />

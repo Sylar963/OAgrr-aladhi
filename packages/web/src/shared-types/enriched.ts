@@ -62,8 +62,8 @@ export type TermStructure = "contango" | "flat" | "backwardation";
 
 export interface ChainStats {
   spotIndexUsd:    number | null;
-  forwardPriceUsd: number | null;
-  forwardBasisPct: number | null;
+  indexPriceUsd: number | null;
+  basisPct: number | null;
   atmStrike:       number | null;
   atmIv:           number | null;
   putCallOiRatio:  number | null;

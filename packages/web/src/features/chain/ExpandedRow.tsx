@@ -15,13 +15,12 @@ interface ExpandedRowProps {
 interface VenueRowProps {
   venueId: string;
   quote:   VenueQuote;
-  isBest:  boolean;
   myIv:    number | null;
   type:    "call" | "put";
   strike:  number;
 }
 
-function VenueRow({ venueId, quote, isBest, myIv, type, strike }: VenueRowProps) {
+function VenueRow({ venueId, quote, myIv, type, strike }: VenueRowProps) {
   const meta      = VENUES[venueId];
   const mid       = quote.mid;
   const breakeven = mid != null
@@ -32,45 +31,28 @@ function VenueRow({ venueId, quote, isBest, myIv, type, strike }: VenueRowProps)
     : null;
 
   return (
-    <tr className={styles.venueRow} data-best={isBest}>
-      {/* Venue name */}
+    <tr className={styles.venueRow}>
       <td className={styles.tdVenue}>
         <div className={styles.venueCell}>
           {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
           <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
-          {isBest && <span className={styles.bestBadge}>BEST</span>}
         </div>
       </td>
 
-      {/* Bid */}
       <td className={styles.tdNum}>{fmtUsd(quote.bid)}</td>
-
-      {/* Ask */}
       <td className={styles.tdNum}>{fmtUsd(quote.ask)}</td>
-
-      {/* Mid */}
       <td className={styles.tdNum} data-accent="true">{fmtUsd(quote.mid)}</td>
-
-      {/* Bid IV */}
       <td className={styles.tdNum}>{fmtIv(quote.bidIv)}</td>
-
-      {/* Mark IV */}
       <td className={styles.tdChip}>
         <IvChip iv={quote.markIv} size="sm" />
       </td>
 
-      {/* Ask IV */}
       <td className={styles.tdNum}>{fmtIv(quote.askIv)}</td>
-
-      {/* Spread */}
       <td className={styles.tdChip}>
         <SpreadPill spreadPct={quote.spreadPct} />
       </td>
 
-      {/* Delta */}
       <td className={styles.tdNum}>{fmtDelta(quote.delta)}</td>
-
-      {/* Theta */}
       <td
         className={styles.tdNum}
         data-negative={quote.theta != null && quote.theta < 0 ? "true" : undefined}
@@ -78,18 +60,11 @@ function VenueRow({ venueId, quote, isBest, myIv, type, strike }: VenueRowProps)
         {quote.theta != null ? fmtUsd(quote.theta) : "–"}
       </td>
 
-      {/* OI */}
       <td className={styles.tdNum}>
         {quote.openInterest != null ? fmtNum(quote.openInterest, 0) : "–"}
       </td>
-
-      {/* Breakeven */}
       <td className={styles.tdNum}>{fmtUsd(breakeven)}</td>
-
-      {/* Total cost */}
       <td className={styles.tdNum}>{fmtUsd(quote.totalCost)}</td>
-
-      {/* Edge (my IV) */}
       <td
         className={styles.tdNum}
         data-edge={edge != null ? (edge > 0 ? "positive" : "negative") : undefined}
@@ -142,7 +117,6 @@ function SideTable({ side, type, strike, myIv }: SideTableProps) {
             key={venueId}
             venueId={venueId}
             quote={quote}
-            isBest={venueId === side.bestVenue}
             myIv={myIv}
             type={type}
             strike={strike}

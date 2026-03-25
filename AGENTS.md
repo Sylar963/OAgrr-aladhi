@@ -21,4 +21,6 @@ packages/web/       React dashboard (see its CLAUDE.md)
 references/         Official API docs per venue
 ```
 
+When touching venue adapters or adding a new venue, read `packages/core/CLAUDE.md` first. It contains the venue-onboarding checklist and exchange-specific gotchas that used to live in `agent_docs/`.
+
 Zod at I/O boundaries. No `any`. No vendor SDKs. Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.

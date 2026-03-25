@@ -23,6 +23,13 @@ interface LegRowProps {
   onUpdate: (id: string, patch: Partial<Leg>) => void;
 }
 
+function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): string {
+  if (preferredExpiry && expiries.includes(preferredExpiry)) return preferredExpiry;
+
+  const viableExpiry = expiries.find((entry) => dteDays(entry) >= 3);
+  return viableExpiry ?? expiries[1] ?? expiries[0] ?? "";
+}
+
 function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
   const [editing, setEditing] = useState(false);
 
@@ -93,17 +100,20 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
 
 export default function ArchitectView() {
   const underlying   = useAppStore((s) => s.underlying);
-  const expiry       = useAppStore((s) => s.expiry);
+  const globalExpiry = useAppStore((s) => s.expiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: expiriesData } = useExpiries(underlying);
   const allExpiries = expiriesData?.expiries ?? [];
+  const [builderExpiry, setBuilderExpiry] = useState("");
 
-  const defaultExpiry = (() => {
-    if (expiry && allExpiries.includes(expiry) && dteDays(expiry) >= 2) return expiry;
-    const viable = allExpiries.find((e) => dteDays(e) >= 3);
-    return viable ?? allExpiries[1] ?? allExpiries[0] ?? "";
-  })();
-  const { data: chain } = useChainQuery(underlying, defaultExpiry, activeVenues, { refetchInterval: 10_000 });
+  useEffect(() => {
+    const nextExpiry = resolveBuilderExpiry(builderExpiry || globalExpiry, allExpiries);
+    if (nextExpiry && nextExpiry !== builderExpiry) {
+      setBuilderExpiry(nextExpiry);
+    }
+  }, [allExpiries, builderExpiry, globalExpiry, underlying]);
+
+  const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, { refetchInterval: 10_000 });
 
   const legs        = useStrategyStore((s) => s.legs);
   const clearLegs   = useStrategyStore((s) => s.clearLegs);
@@ -113,9 +123,11 @@ export default function ArchitectView() {
   const addLeg      = useStrategyStore((s) => s.addLeg);
   const strategyUnderlying = useStrategyStore((s) => s.underlying);
 
-  if (strategyUnderlying && strategyUnderlying !== underlying && legs.length > 0) {
-    clearLegs();
-  }
+  useEffect(() => {
+    if (strategyUnderlying && strategyUnderlying !== underlying && legs.length > 0) {
+      clearLegs();
+    }
+  }, [clearLegs, legs.length, strategyUnderlying, underlying]);
 
   const [showVenues, setShowVenues] = useState(false);
   const [ivShift, setIvShift] = useState(0);
@@ -133,6 +145,7 @@ export default function ArchitectView() {
 
     clearLegs();
     for (const leg of decoded.legs) addLeg(leg, decoded.underlying);
+    setBuilderExpiry(decoded.legs[0]?.expiry ?? "");
 
     params.delete("strategy");
     const clean = params.toString();
@@ -143,16 +156,16 @@ export default function ArchitectView() {
   const availableStrikes = useMemo(() => chain?.strikes.map((s) => s.strike) ?? [], [chain]);
 
   const repriceStrategyLeg = useCallback((leg: Leg, patch: Partial<Leg> = {}, exactStrike = false) => {
-    if (!chain) return null;
+    if (!chain || !builderExpiry) return null;
 
     return repriceLeg(chain, activeVenues, {
       type: patch.type ?? leg.type,
       direction: patch.direction ?? leg.direction,
       strike: patch.strike ?? leg.strike,
-      expiry: defaultExpiry,
+      expiry: builderExpiry,
       quantity: patch.quantity ?? leg.quantity,
     }, { exactStrike });
-  }, [chain, activeVenues, defaultExpiry]);
+  }, [activeVenues, builderExpiry, chain]);
 
   const handleLegUpdate = useCallback((legId: string, patch: Partial<Leg>) => {
     const leg = legs.find((entry) => entry.id === legId);
@@ -228,9 +241,9 @@ export default function ArchitectView() {
     if (!chain) return;
 
     const dragged = findTemplateVariant(e.dataTransfer.getData("text/plain"));
-    if (!dragged) return;
+    if (!dragged || !builderExpiry) return;
 
-    const newLegs = dragged.variant.build(chain, defaultExpiry);
+    const newLegs = dragged.variant.build(chain, builderExpiry);
     if (newLegs.length < dragged.template.legs) return;
 
     clearLegs();
@@ -248,11 +261,11 @@ export default function ArchitectView() {
           </div>
         </div>
 
-        <StrategyTemplates chain={chain ?? null} expiry={defaultExpiry} underlying={underlying} />
+        <StrategyTemplates chain={chain ?? null} expiry={builderExpiry} underlying={underlying} />
 
         <div className={styles.splitBody}>
           <div className={styles.controlsCol}>
-            <LegInput />
+            <LegInput expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
 
             {legs.length > 0 && (
               <div className={styles.legsSection}>

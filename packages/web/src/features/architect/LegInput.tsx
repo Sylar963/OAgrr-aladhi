@@ -8,25 +8,23 @@ import { useStrategyStore } from "./strategy-store";
 import { repriceLeg } from "./reprice";
 import styles from "./Architect.module.css";
 
-export default function LegInput() {
+interface LegInputProps {
+  expiry: string;
+  onExpiryChange: (expiry: string) => void;
+}
+
+export default function LegInput({ expiry, onExpiryChange }: LegInputProps) {
   const underlying   = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
-  const globalExpiry = useAppStore((s) => s.expiry);
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
   const addLeg = useStrategyStore((s) => s.addLeg);
-
-  const [expiry, setExpiry] = useState(globalExpiry || expiries[1] || expiries[0] || "");
   const [type, setType] = useState<"call" | "put">("call");
   const [direction, setDirection] = useState<"buy" | "sell">("buy");
   const [strikeInput, setStrikeInput] = useState("");
   const [qty, setQty] = useState("1");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const strikeRef = useRef<HTMLDivElement>(null);
-
-  if (!expiry && expiries.length > 0) {
-    setExpiry(expiries.length > 1 ? expiries[1]! : expiries[0]!);
-  }
 
   const { data: chain } = useChainQuery(underlying, expiry, activeVenues);
   const strikes = chain?.strikes.map((s) => s.strike) ?? [];
@@ -35,11 +33,6 @@ export default function LegInput() {
   const filtered = strikeInput
     ? strikes.filter((s) => s.toString().includes(strikeInput))
     : strikes;
-
-  useEffect(() => {
-    if (!globalExpiry) return;
-    setExpiry(globalExpiry);
-  }, [globalExpiry]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -127,7 +120,7 @@ export default function LegInput() {
         <DropdownPicker
           size="sm"
           value={expiry}
-          onChange={setExpiry}
+          onChange={onExpiryChange}
           options={expiries.map((e) => ({ value: e, label: formatExpiry(e), meta: `${dteDays(e)}d` }))}
         />
 

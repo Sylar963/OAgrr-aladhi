@@ -11,16 +11,18 @@ export interface BlockTradeLeg {
 }
 
 export interface BlockTradeEvent {
-  venue:        string;
-  tradeId:      string;
-  timestamp:    number;
-  underlying:   string;
-  direction:    "buy" | "sell";
-  strategy:     string | null;
-  legs:         BlockTradeLeg[];
-  totalSize:    number;
-  notionalUsd:  number;
-  indexPrice:   number | null;
+  venue:             string;
+  tradeId:           string;
+  timestamp:         number;
+  underlying:        string;
+  direction:         "buy" | "sell";
+  strategy:          string | null;
+  legs:              BlockTradeLeg[];
+  totalSize:         number;
+  premiumUsd:        number | null;
+  notionalUsd:       number;
+  referencePriceUsd: number | null;
+  indexPrice:        number | null;
 }
 
 interface BlockFlowResponse {

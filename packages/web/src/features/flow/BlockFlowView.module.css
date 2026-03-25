@@ -140,6 +140,13 @@
   color: var(--accent-primary);
 }
 
+.notionalMeta {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .tradeMeta {
   display: flex;
   align-items: center;

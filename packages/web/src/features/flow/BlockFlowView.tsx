@@ -21,7 +21,8 @@ function formatDate(ts: number): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-function fmtNotional(n: number): string {
+function fmtUsdCompact(n: number | null): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1_000_000) {
     const m = n / 1_000_000;
     return `$${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)}M`;
@@ -31,7 +32,7 @@ function fmtNotional(n: number): string {
     return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}K`;
   }
   if (n >= 1) return `$${n.toFixed(0)}`;
-  return "—";
+  return "<$1";
 }
 
 function numDateToHuman(raw: string): string {
@@ -73,8 +74,9 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
   const isMultiLeg = trade.legs.length > 1;
   const firstLeg = trade.legs[0];
   const legInfo = firstLeg ? parseLegInfo(firstLeg.instrument) : null;
-  const hasNotional = trade.notionalUsd > 0;
-  const isWhale = hasNotional && trade.notionalUsd >= 100_000;
+  const premiumUsd = trade.premiumUsd;
+  const notionalUsd = trade.notionalUsd > 0 ? trade.notionalUsd : null;
+  const isWhale = (notionalUsd ?? premiumUsd ?? 0) >= 100_000;
 
   return (
     <div className={styles.tradeWrap}>
@@ -112,7 +114,10 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
 
           <div className={styles.tradeRight}>
             <span className={styles.notional} data-whale={isWhale || undefined}>
-              {hasNotional ? fmtNotional(trade.notionalUsd) : `${trade.totalSize} contracts`}
+              {fmtUsdCompact(notionalUsd ?? premiumUsd)}
+            </span>
+            <span className={styles.notionalMeta}>
+              Premium {fmtUsdCompact(premiumUsd)}
             </span>
             <div className={styles.tradeMeta}>
               <span className={styles.venue}>
@@ -139,14 +144,14 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
                   {leg.direction === "buy" ? "BUY" : "SELL"}
                 </span>
                 <span className={styles.legSize}>
-                  {leg.size}{leg.ratio > 1 ? ` (${leg.ratio}x)` : ""}
+                  {leg.size} ct{leg.ratio > 1 ? ` · ratio ${leg.ratio}` : ""}
                 </span>
                 <span className={styles.legExpiry}>{info.expiry}</span>
                 <span className={styles.legStrike}>{info.strike}</span>
                 <span className={styles.legType} data-type={info.type}>{info.type}</span>
                 {leg.price > 0 && (
                   <span className={styles.legPrices}>
-                    <span className={styles.legPerContract}>{fmtUsd(leg.price)}/ct</span>
+                    <span className={styles.legPerContract}>{fmtUsd(leg.price)} per contract</span>
                     <span className={styles.legTotal}>{fmtUsd(leg.price * leg.size * leg.ratio)}</span>
                   </span>
                 )}

@@ -283,21 +283,34 @@
   font-variant-numeric: tabular-nums;
 }
 
-.notional {
+.moneyCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   text-align: right;
+}
+
+.moneyPrimary {
   font-weight: 700;
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
-.notional[data-size="whale"] {
+.moneyPrimary[data-size="whale"] {
   color: var(--accent-primary);
   font-weight: 700;
 }
 
-.notional[data-size="shark"] {
+.moneyPrimary[data-size="shark"] {
   color: var(--text-primary);
   font-weight: 700;
+}
+
+.moneySecondary {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .iv {
@@ -387,7 +400,8 @@
   .venue { order: 2; }
   .side { order: 3; }
   .instrument { order: 4; flex-basis: 100%; }
-  .notional { order: 5; font-size: var(--text-base); }
+  .moneyCell { order: 5; align-items: flex-start; }
+  .moneyPrimary { font-size: var(--text-base); }
   .size { order: 6; text-align: left; }
   .iv { order: 7; text-align: left; }
   .tagCell { order: 8; justify-content: flex-start; }

@@ -2,6 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import type { BlockTradeEvent } from '@oggregator/core';
 import { blockFlowService, isBlockFlowReady, spotService } from '../services.js';
 
+interface EnrichedBlockTradeEvent extends BlockTradeEvent {
+  premiumUsd: number | null;
+  referencePriceUsd: number | null;
+}
+
 export async function blockFlowRoute(app: FastifyInstance) {
   app.get<{
     Querystring: { underlying?: string; limit?: string };
@@ -18,10 +23,7 @@ export async function blockFlowRoute(app: FastifyInstance) {
     );
 
     const trades = blockFlowService.getTrades(underlying);
-
-    // OKX and Deribit use BTC-denominated prices (fractions like 0.0577).
-    // Multiply by spot to get USD values for consistent display.
-    const enriched = trades.slice(0, limit).map((t) => enrichWithSpot(t));
+    const enriched = trades.slice(0, limit).map((trade) => enrichTrade(trade));
 
     return {
       count: trades.length,
@@ -30,34 +32,41 @@ export async function blockFlowRoute(app: FastifyInstance) {
   });
 }
 
-function enrichWithSpot(t: BlockTradeEvent): BlockTradeEvent {
-  if (t.notionalUsd > 0 && t.indexPrice != null) return t;
+function enrichTrade(trade: BlockTradeEvent): EnrichedBlockTradeEvent {
+  const referencePriceUsd = trade.indexPrice ?? getSpotPriceUsd(trade.underlying);
+  const contractMultiplier = getContractMultiplier(trade.venue, trade.underlying);
 
-  const spot = spotService.getSnapshot(t.underlying);
-  if (!spot) return t;
-  const spotPrice = spot.lastPrice;
+  const premiumUsd = trade.legs.reduce<number | null>((sum, leg) => {
+    const isInversePrice = leg.price > 0 && leg.price < 1;
+    if (isInversePrice && (referencePriceUsd == null || referencePriceUsd <= 0)) return null;
+    const legPriceUsd = isInversePrice ? leg.price * referencePriceUsd! : leg.price;
+    return (sum ?? 0) + legPriceUsd * leg.size * leg.ratio * contractMultiplier;
+  }, 0);
 
-  const avgLegPrice = t.legs.length > 0
-    ? t.legs.reduce((sum, l) => sum + l.price, 0) / t.legs.length
+  const notionalUsd = referencePriceUsd != null && referencePriceUsd > 0
+    ? trade.legs.reduce(
+      (sum, leg) => sum + (leg.size * leg.ratio * contractMultiplier * referencePriceUsd),
+      0,
+    )
     : 0;
 
-  // Prices < 1 indicate BTC-denominated fractions (Deribit, OKX)
-  const isFraction = avgLegPrice > 0 && avgLegPrice < 1;
-  if (!isFraction && t.notionalUsd > 0) return t;
-
-  const convertedLegs = isFraction
-    ? t.legs.map((l) => ({ ...l, price: Math.round(l.price * spotPrice) }))
-    : t.legs;
-
-  // Sum premium per leg: price × size × ratio, converted to USD
-  const notionalUsd = isFraction
-    ? t.legs.reduce((sum, l) => sum + l.price * l.size * l.ratio * spotPrice, 0)
-    : t.notionalUsd;
-
   return {
-    ...t,
-    legs: convertedLegs,
+    ...trade,
+    premiumUsd,
     notionalUsd,
-    indexPrice: t.indexPrice ?? spotPrice,
+    referencePriceUsd: referencePriceUsd ?? null,
   };
+}
+
+function getSpotPriceUsd(underlying: string): number | null {
+  const snapshot = spotService.getSnapshot(underlying.toUpperCase());
+  return snapshot?.lastPrice ?? null;
+}
+
+function getContractMultiplier(venue: BlockTradeEvent['venue'], underlying: string): number {
+  if (venue !== 'okx') return 1;
+  const upper = underlying.toUpperCase();
+  if (upper === 'BTC') return 0.01;
+  if (upper === 'ETH') return 0.1;
+  return 1;
 }

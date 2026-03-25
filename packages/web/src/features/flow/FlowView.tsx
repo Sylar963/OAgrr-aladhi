@@ -61,20 +61,13 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function notional(t: TradeEvent): number {
-  // For inverse venues (Deribit, OKX), price is in BTC — use indexPrice for USD
-  if (t.indexPrice && t.price < 1) {
-    return t.price * t.indexPrice * t.size;
-  }
-  return t.price * t.size;
-}
-
-function fmtNotional(n: number): string {
+function fmtUsdCompact(n: number | null): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 100_000)   return `$${(n / 1_000).toFixed(0)}K`;
-  if (n >= 10_000)    return `$${(n / 1_000).toFixed(1)}K`;
-  if (n >= 1)         return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  return '<$1';
+  if (n >= 100_000) return `$${(n / 1_000).toFixed(0)}K`;
+  if (n >= 10_000) return `$${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  return "<$1";
 }
 
 interface TradeRowProps {
@@ -98,8 +91,10 @@ function TradeRow({ trade, isNew }: TradeRowProps) {
   const meta = VENUES[trade.venue];
   const { strike, type } = parseStrikeAndType(trade.instrument);
   const expiry = parseExpiry(trade.instrument);
-  const not = notional(trade);
-  const tier = getTradeTier(not);
+  const premiumUsd = trade.premiumUsd;
+  const notionalUsd = trade.notionalUsd;
+  const tierBase = notionalUsd ?? premiumUsd ?? 0;
+  const tier = getTradeTier(tierBase);
 
   return (
     <div
@@ -129,8 +124,13 @@ function TradeRow({ trade, isNew }: TradeRowProps) {
 
       <span className={styles.size}>{trade.size}</span>
 
-      <span className={styles.notional} data-size={tier}>
-        {fmtNotional(not)}
+      <span className={styles.moneyCell}>
+        <span className={styles.moneyPrimary} data-size={tier}>
+          {fmtUsdCompact(notionalUsd ?? premiumUsd)}
+        </span>
+        <span className={styles.moneySecondary}>
+          Premium {fmtUsdCompact(premiumUsd)}
+        </span>
       </span>
 
       <span className={styles.iv}>
@@ -228,7 +228,7 @@ export default function FlowView() {
           <div className={styles.legend}>
             <span className={styles.legendItem}><span className={styles.legendDot} data-side="buy" /> Buys</span>
             <span className={styles.legendItem}><span className={styles.legendDot} data-side="sell" /> Sells</span>
-            <span className={styles.legendItem}>🐋 $100K+</span>
+            <span className={styles.legendItem}>🐋 $100K+ notional</span>
           </div>
         )}
       </div>

@@ -3,17 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchJson } from "@lib/http";
 
 export interface TradeEvent {
-  venue:       string;
-  instrument:  string;
-  underlying:  string;
-  side:        "buy" | "sell";
-  price:       number;
-  size:        number;
-  iv:          number | null;
-  markPrice:   number | null;
-  indexPrice:  number | null;
-  isBlock:     boolean;
-  timestamp:   number;
+  venue:             string;
+  instrument:        string;
+  underlying:        string;
+  side:              "buy" | "sell";
+  price:             number;
+  size:              number;
+  iv:                number | null;
+  markPrice:         number | null;
+  indexPrice:        number | null;
+  premiumUsd:        number | null;
+  notionalUsd:       number | null;
+  referencePriceUsd: number | null;
+  isBlock:           boolean;
+  timestamp:         number;
 }
 
 interface FlowResponse {

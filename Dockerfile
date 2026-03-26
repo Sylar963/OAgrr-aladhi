@@ -10,20 +10,24 @@ FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json
-COPY packages/ingest/package.json packages/ingest/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile
 COPY packages ./packages
-RUN pnpm build
+RUN pnpm -r \
+    --filter @oggregator/core \
+    --filter @oggregator/db \
+    --filter @oggregator/protocol \
+    --filter @oggregator/server \
+    --filter @oggregator/web \
+    build
 
 FROM base AS production-deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json
-COPY packages/ingest/package.json packages/ingest/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
@@ -44,7 +48,6 @@ COPY --from=production-deps /app/packages ./packages
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/migrations ./packages/db/migrations
-COPY --from=build /app/packages/ingest/dist ./packages/ingest/dist
 COPY --from=build /app/packages/protocol/dist ./packages/protocol/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/web/dist ./packages/web/dist

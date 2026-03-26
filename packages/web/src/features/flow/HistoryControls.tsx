@@ -48,6 +48,13 @@ export function HistoryControls({
 
   return (
     <div className={styles.wrap}>
+      <div className={styles.notice} role="note">
+        <span className={styles.noticeDot} />
+        <span className={styles.noticeText}>
+          Experimental history. Counts and venue coverage are not guaranteed yet.
+        </span>
+      </div>
+
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
           <div className={styles.presetRow}>
@@ -62,13 +69,6 @@ export function HistoryControls({
               </button>
             ))}
           </div>
-
-          <span
-            className={styles.experimentalBadge}
-            title="History is experimental. Counts and venue coverage depend on exchange APIs, polling windows, and current ingest support, so accuracy is not guaranteed."
-          >
-            Experimental history
-          </span>
         </div>
 
         {preset === "custom" ? (

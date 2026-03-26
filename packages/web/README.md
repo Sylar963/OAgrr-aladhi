@@ -30,11 +30,19 @@ pnpm typecheck    # tsc --noEmit
 pnpm test:run     # vitest
 ```
 
+## Chain transport
+
+- `useChainWs` is the primary path for the chain view
+- Browser subscribes to `WS /ws/chain` with `{ underlying, expiry, venues }`
+- Server coalesces venue deltas into enriched snapshots every 200ms before pushing them to the browser
+- Incoming snapshots are written into the TanStack Query cache via `queryClient.setQueryData(...)`
+- `useChainQuery` still exists as the REST bootstrap / fallback path while the socket is connecting
+
 ## Stack
 
 | Concern | Library |
 |---------|---------|
-| Build | Vite 8 + SWC |
+| Build | Vite 6 + SWC |
 | UI | React 19 |
 | Server state | TanStack Query v5 |
 | Client state | Zustand v5 |

@@ -1,6 +1,6 @@
 # @oggregator/protocol
 
-Shared Zod schemas and TypeScript types for the WebSocket protocol between server and web client.
+Shared Zod schemas and TypeScript types for the chain WebSocket protocol between server and web client.
 
 ## What's in here
 

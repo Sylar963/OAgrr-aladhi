@@ -13,6 +13,7 @@ src/
   feeds/{venue}/    ws-client, Zod schemas, normalizer, adapter
   feeds/shared/     BaseAdapter, JSON-RPC client, SDK helpers
   core/             canonical types, aggregator, enrichment, registry
+  services/         flow, block-flow, dvol, spot, shared trade persistence helpers
   types/common.ts   VenueId, OptionRight, UnixMs (branded types)
   utils/logger.ts   pino structured logging
 ```
@@ -31,3 +32,8 @@ pnpm typecheck    # tsc --noEmit
 pnpm build        # tsc → dist/
 pnpm test:run     # vitest (240 tests)
 ```
+
+## Runtime notes
+
+- `FlowService` and `BlockFlowService` expose live trade subscriptions for downstream consumers like the ingest worker
+- `services/trade-persistence.ts` centralizes instrument parsing and venue-specific premium/notional math shared by server routes and persistence code

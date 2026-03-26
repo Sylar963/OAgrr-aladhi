@@ -48,7 +48,7 @@ Open [localhost:5173](http://localhost:5173). Data starts flowing within ~10 sec
 
 ```bash
 pnpm typecheck    # tsc --noEmit across all packages
-pnpm test         # 293 contract tests
+pnpm test         # 293 tests across all workspaces
 pnpm precommit    # typecheck + test (run before every commit)
 pnpm build        # production build (server + web)
 ```
@@ -59,11 +59,15 @@ pnpm build        # production build (server + web)
 packages/
   protocol/   Shared Zod schemas for WS protocol between server and web
   core/       Venue adapters, canonical types, normalization, enrichment
-  server/     Fastify REST + WS API, serves enriched chain data
+  server/     Fastify REST + WS API, readiness, SPA serving
   web/        React 19 + Vite dashboard (mobile-first responsive)
+  db/         Optional Postgres trade store + SQL migrations
+  ingest/     Optional worker that records live + institutional trades into Postgres
 ```
 
-Data flows: **Exchange WS → Core Adapter → Normalizer → Enrichment → Server API → Web Dashboard**
+Live data path: **Exchange WS/REST → Core Adapter → Normalizer → Enrichment → Server → Web Dashboard**
+
+Chain transport path: **Exchange deltas → server quote store → coalesced `WS /ws/chain` snapshots → browser query cache**
 
 ## API
 
@@ -77,8 +81,10 @@ Data flows: **Exchange WS → Core Adapter → Normalizer → Enrichment → Ser
 | `GET /api/surface?underlying=BTC` | IV surface (expiry × delta grid) |
 | `GET /api/stats?underlying=BTC` | DVOL, spot, IVR, 24h changes |
 | `GET /api/dvol-history?currency=BTC` | Historical DVOL candles |
-| `GET /api/flow?asset=BTC` | Recent options trades across venues |
-| `WS /ws/chain` | Real-time chain updates via WebSocket |
+| `GET /api/ready` | Readiness for deploy health checks |
+| `GET /api/flow?underlying=BTC` | Recent options trades across venues |
+| `GET /api/block-flow?underlying=BTC` | Institutional RFQ / block trades |
+| `WS /ws/chain` | Real-time chain snapshot push to the browser |
 
 ## Dashboard
 
@@ -95,12 +101,29 @@ Mobile responsive with bottom navigation, shared toolbar, and full-screen settin
 
 ## Deploy
 
-Single-service deploy. The server serves the SPA in production:
+Main app is a single service. The server serves the SPA in production:
 
 ```bash
 pnpm build
 pnpm start        # NODE_ENV=production, serves API + static SPA
 ```
+
+Optional durable flow storage uses a separate worker + Postgres:
+
+```bash
+pnpm db:migrate   # run once with DATABASE_URL set
+pnpm dev:ingest   # local worker
+```
+
+Production shape:
+- main app: `Dockerfile`
+- ingest worker: `Dockerfile.ingest`
+- Postgres: private/internal only
+
+**Coolify**:
+- main app → `Dockerfile`
+- ingest worker → `Dockerfile.ingest`
+- run `pnpm db:migrate` once before starting ingest
 
 **Railway**: Build command `pnpm install && pnpm build`, start command `pnpm start`.
 

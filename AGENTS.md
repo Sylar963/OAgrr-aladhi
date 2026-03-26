@@ -16,8 +16,10 @@ pnpm --filter @oggregator/core build   # tsc → dist/
 
 ```
 packages/core/      Feeds + types + enrichment (see its CLAUDE.md)
-packages/server/    Fastify REST API (see its CLAUDE.md)
+packages/server/    Fastify REST + WS API, readiness, SPA serving (see its CLAUDE.md)
 packages/web/       React dashboard (see its CLAUDE.md)
+packages/db/        Optional Postgres trade store + migrations
+packages/ingest/    Optional persistence worker that records live + institutional trades
 references/         Official API docs per venue
 ```
 

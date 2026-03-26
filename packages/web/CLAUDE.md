@@ -1,6 +1,6 @@
 # @oggregator/web
 
-Vite 8 + React 19 + TypeScript SPA. Multi-venue crypto options dashboard.
+Vite 6 + React 19 + TypeScript SPA. Multi-venue crypto options dashboard.
 
 ## Commands
 
@@ -18,11 +18,11 @@ src/
     chain/          Main view: cross-venue option chain with stats, expiry tabs
     surface/        IV surface heatmap (expiry × delta grid)
     gex/            Gamma exposure bar chart per strike
-    builder/        Execution cost calculator (not yet wired into app)
-    debug/          Raw JSON view for development (not mounted)
+    architect/      Builder view: templates, custom legs, payoff chart, venue comparison
+    flow/           Live flow + institutions mode
   components/
     ui/             IvChip, SpreadPill, VenueDot, CommandPalette, Tabs
-    layout/         AppShell, TopBar
+    layout/         AppShell, TopBar, MobileNav, MobileToolbar
   lib/              query-client, http, format, colors, venue-meta, token-meta
   stores/           Zustand (UI state only: underlying, expiry, activeTab, venues, myIv)
   shared-types/     Types mirroring core enrichment output (kept in sync manually)
@@ -34,7 +34,7 @@ src/
 
 - **State split**: TanStack Query v5 = server state (chain data, surface data). Zustand v5 = UI state (selected underlying, active tab, venue filter). Never mix these.
 
-- **3s polling via `refetchInterval`**: Frontend polls `/api/chains` every 3 seconds. Backend has real-time WS data — the polling is the latency bottleneck. Server→browser WS push is planned to eliminate this.
+- **Chain transport is already WS-first**: `hooks/useChainWs.ts` is the primary path for the chain view. Browser subscribes to `WS /ws/chain`, the server coalesces venue deltas into enriched snapshots every 200ms, and the hook writes those snapshots into the TanStack Query cache via `setQueryData(...)`. `useChainQuery()` remains as bootstrap / fallback while the socket is not live.
 
 - **Shared types are manually synced**: `shared-types/enriched.ts` mirrors `core/enrichment.ts`. No package dependency between web and core — the types are duplicated intentionally to keep the web package independent.
 

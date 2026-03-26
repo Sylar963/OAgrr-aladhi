@@ -1,0 +1,298 @@
+.root {
+  position: relative;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  max-width: min(100%, 460px);
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.triggerIcon,
+.triggerChevron {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(100vw - 32px, 372px);
+  border: 1px solid color-mix(in srgb, var(--border-default) 92%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-surface) 97%, black 3%);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.36);
+  overflow: hidden;
+}
+
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.inputsRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+}
+
+.inputWrap,
+.timeWrap {
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-base) 92%, transparent);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.inputWrap:focus-within,
+.timeWrap:focus-within {
+  border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--border-default));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.inputWrap[data-invalid],
+.timeWrap[data-invalid] {
+  border-color: color-mix(in srgb, #ff6b6b 72%, var(--border-default));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #ff6b6b 14%, transparent);
+}
+
+.input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.input::placeholder {
+  color: var(--text-disabled);
+}
+
+.input:focus {
+  outline: none;
+}
+
+.errorText {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #ff8d8d;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.timezoneBadge,
+.fullRangeBtn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.timezoneBadge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-subtle));
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.fullRangeBtn {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.calendarHeader {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.monthLabel {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.navBtn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.navBtn:disabled {
+  opacity: 0.38;
+}
+
+.weekdays,
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.weekdays span {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.dayCell {
+  height: 31px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dayCell:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.dayCell[data-outside] {
+  color: var(--text-disabled);
+}
+
+.dayCell[data-selected="start"],
+.dayCell[data-selected="end"] {
+  background: var(--accent-primary);
+  color: #041613;
+}
+
+.dayCell[data-selected="in-range"] {
+  background: color-mix(in srgb, var(--accent-primary) 13%, transparent);
+  color: var(--text-primary);
+}
+
+.dayCell[data-disabled] {
+  opacity: 0.32;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.applyBtn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 35%, var(--border-default));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.applyBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .trigger {
+    width: 100%;
+    justify-content: space-between;
+    max-width: none;
+  }
+
+  .fieldRow {
+    grid-template-columns: 1fr;
+  }
+
+  .topRow,
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .applyBtn,
+  .fullRangeBtn {
+    width: 100%;
+  }
+}

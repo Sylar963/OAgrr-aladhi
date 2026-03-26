@@ -43,6 +43,7 @@ COPY --from=production-deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=production-deps /app/packages ./packages
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/db/dist ./packages/db/dist
+COPY --from=build /app/packages/db/migrations ./packages/db/migrations
 COPY --from=build /app/packages/ingest/dist ./packages/ingest/dist
 COPY --from=build /app/packages/protocol/dist ./packages/protocol/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist

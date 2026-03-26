@@ -331,34 +331,35 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     }
 
     // OI endpoint: /eapi/v1/openInterest?underlyingAsset=BTC&expiration=YYMMDD
-    const expiries = new Set<string>();
+    // Only query exact base/expiry pairs that exist in exchangeInfo.
+    const oiPairs = new Set<string>();
     for (const inst of instruments) {
-      const m = inst.exchangeSymbol.match(/-(\d{6})-/);
-      if (m) expiries.add(m[1]!);
+      const match = inst.exchangeSymbol.match(/-(\d{6})-/);
+      if (match) oiPairs.add(`${inst.base}:${match[1]}`);
     }
 
-    const baseAssets = new Set(instruments.map((i) => i.base));
-    for (const base of baseAssets) {
-      for (const expiry of expiries) {
-        try {
-          const raw = await this.fetchEapi(`/eapi/v1/openInterest?underlyingAsset=${base}&expiration=${expiry}`);
-          if (!Array.isArray(raw)) continue;
+    for (const pair of oiPairs) {
+      const [base, expiry] = pair.split(':');
+      if (!base || !expiry) continue;
 
-          let merged = 0;
-          for (const item of raw) {
-            const t = item as { symbol?: string; sumOpenInterest?: string; sumOpenInterestUsd?: string };
-            if (typeof t.symbol !== 'string') continue;
-            const prev = this.quoteStore.get(t.symbol);
-            if (prev) {
-              prev.openInterest = this.safeNum(t.sumOpenInterest);
-              prev.openInterestUsd = this.safeNum(t.sumOpenInterestUsd);
-              merged++;
-            }
+      try {
+        const raw = await this.fetchEapi(`/eapi/v1/openInterest?underlyingAsset=${base}&expiration=${expiry}`);
+        if (!Array.isArray(raw)) continue;
+
+        let merged = 0;
+        for (const item of raw) {
+          const t = item as { symbol?: string; sumOpenInterest?: string; sumOpenInterestUsd?: string };
+          if (typeof t.symbol !== 'string') continue;
+          const prev = this.quoteStore.get(t.symbol);
+          if (prev) {
+            prev.openInterest = this.safeNum(t.sumOpenInterest);
+            prev.openInterestUsd = this.safeNum(t.sumOpenInterestUsd);
+            merged++;
           }
-          if (merged > 0) log.info({ base, expiry, count: merged }, 'merged OI from REST');
-        } catch (err: unknown) {
-          log.warn({ base, expiry, err: String(err) }, 'OI fetch failed');
         }
+        if (merged > 0) log.info({ base, expiry, count: merged }, 'merged OI from REST');
+      } catch (err: unknown) {
+        log.warn({ base, expiry, err: String(err) }, 'OI fetch failed');
       }
     }
   }

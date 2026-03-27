@@ -5,6 +5,7 @@ export const OKX_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public';
 export const OKX_REST_BASE_URL = 'https://www.okx.com';
 
 export const BYBIT_WS_URL = 'wss://stream.bybit.com/v5/public/option';
+export const BYBIT_RFQ_WS_URL = 'wss://stream.bybit.com/v5/public/rfq';
 export const BYBIT_REST_BASE_URL = 'https://api.bybit.com';
 
 export const BINANCE_OPTIONS_WS_URL = 'wss://fstream.binance.com/public/stream';

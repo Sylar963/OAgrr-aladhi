@@ -10,7 +10,7 @@ import { repriceLeg } from "./reprice";
 import { buildShareUrl, decodeStrategy } from "./share";
 import PayoffChart from "./PayoffChart";
 import VenueSlideover from "./VenueSlideover";
-import StrategyTemplates, { findTemplateVariant } from "./StrategyTemplates";
+import StrategyTemplates, { buildTemplateVariant, clearActiveTemplateDrag, findTemplateVariant } from "./StrategyTemplates";
 import LegInput from "./LegInput";
 import styles from "./Architect.module.css";
 
@@ -134,6 +134,11 @@ export default function ArchitectView() {
   const [dteShift, setDteShift] = useState(0);
   const [copied, setCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [builderError, setBuilderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBuilderError(null);
+  }, [activeVenues, builderExpiry, underlying]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -238,16 +243,22 @@ export default function ArchitectView() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    if (!chain) return;
 
-    const dragged = findTemplateVariant(e.dataTransfer.getData("text/plain"));
-    if (!dragged || !builderExpiry) return;
+    const dragged = findTemplateVariant(
+      e.dataTransfer.getData("application/x-oggregator-strategy") || e.dataTransfer.getData("text/plain"),
+    );
+    clearActiveTemplateDrag();
+    if (!dragged) return;
 
-    const newLegs = dragged.variant.build(chain, builderExpiry);
-    if (newLegs.length < dragged.template.legs) return;
+    const result = buildTemplateVariant(chain ?? null, builderExpiry, dragged.template, dragged.variant);
+    if (!result.ok) {
+      setBuilderError(result.error.message);
+      return;
+    }
 
+    setBuilderError(null);
     clearLegs();
-    for (const leg of newLegs) addLeg(leg, underlying);
+    for (const leg of result.legs) addLeg(leg, underlying);
   }
 
   return (
@@ -261,7 +272,13 @@ export default function ArchitectView() {
           </div>
         </div>
 
-        <StrategyTemplates chain={chain ?? null} expiry={builderExpiry} underlying={underlying} />
+        <StrategyTemplates
+          chain={chain ?? null}
+          expiry={builderExpiry}
+          underlying={underlying}
+          errorMessage={builderError}
+          onErrorMessageChange={setBuilderError}
+        />
 
         <div className={styles.splitBody}>
           <div className={styles.controlsCol}>

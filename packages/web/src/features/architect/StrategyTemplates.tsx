@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { formatExpiry } from "@lib/format";
 import type { EnrichedChainResponse } from "@shared/enriched";
 import type { Leg } from "./payoff";
 import MiniPayoff, { STRATEGY_SHAPES } from "./MiniPayoff";
@@ -28,6 +29,14 @@ interface StrategyTemplate {
   legs: number;
   variants: readonly [StrategyVariant, StrategyVariant];
 }
+
+export interface TemplateBuildFailure {
+  message: string;
+}
+
+export type TemplateBuildResult =
+  | { ok: true; legs: BuiltLeg[] }
+  | { ok: false; error: TemplateBuildFailure };
 
 function findAtmStrike(chain: EnrichedChainResponse): number {
   const ref = chain.stats.indexPriceUsd ?? chain.stats.spotIndexUsd ?? 70000;
@@ -291,6 +300,64 @@ function buildButterfly(chain: EnrichedChainResponse, expiry: string, direction:
   return legs;
 }
 
+function hasStrikeOffset(chain: EnrichedChainResponse, offset: number): boolean {
+  const sorted = chain.strikes.map((entry) => entry.strike).sort((a, b) => a - b);
+  if (sorted.length === 0) return false;
+
+  const atm = findAtmStrike(chain);
+  const index = sorted.indexOf(atm);
+  if (index < 0) return false;
+
+  return sorted[index + offset] != null;
+}
+
+function formatTemplateBuildError(template: StrategyTemplate, expiry: string, builtLegCount: number): string {
+  const formattedExpiry = expiry ? formatExpiry(expiry) : "this expiry";
+
+  if (template.legs === 1) {
+    return `${template.name} could not be built on ${formattedExpiry} because no live bid/ask is available for that leg.`;
+  }
+
+  if (builtLegCount === 0) {
+    return `${template.name} could not be built on ${formattedExpiry} because the required legs do not have live quotes.`;
+  }
+
+  return `${template.name} needs ${template.legs} legs, but only ${builtLegCount} have live quotes on ${formattedExpiry}.`;
+}
+
+function getStrikeCoverageError(template: StrategyTemplate, expiry: string, chain: EnrichedChainResponse): string | null {
+  if (chain.strikes.length === 0) {
+    return `No strikes are available for ${formatExpiry(expiry)} yet.`;
+  }
+
+  const formattedExpiry = expiry ? formatExpiry(expiry) : "this expiry";
+
+  switch (template.id) {
+    case "call-spread":
+      return hasStrikeOffset(chain, 3)
+        ? null
+        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+    case "put-spread":
+      return hasStrikeOffset(chain, -3)
+        ? null
+        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+    case "strangle":
+      return hasStrikeOffset(chain, 3) && hasStrikeOffset(chain, -3)
+        ? null
+        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+    case "butterfly":
+      return hasStrikeOffset(chain, 2) && hasStrikeOffset(chain, -2)
+        ? null
+        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+    case "iron-condor":
+      return hasStrikeOffset(chain, 4) && hasStrikeOffset(chain, -4) && hasStrikeOffset(chain, 2) && hasStrikeOffset(chain, -2)
+        ? null
+        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+    default:
+      return null;
+  }
+}
+
 export const TEMPLATE_CARDS: StrategyTemplate[] = [
   {
     id: "call",
@@ -392,12 +459,19 @@ const DEFAULT_VARIANTS: Record<string, VariantId> = {
   butterfly: "buy",
 };
 
+let activeDragId = "";
+
 function makeDragId(templateId: string, variantId: VariantId): string {
   return `${templateId}:${variantId}`;
 }
 
+export function clearActiveTemplateDrag(): void {
+  activeDragId = "";
+}
+
 export function findTemplateVariant(dragId: string) {
-  const [templateId, variantId] = dragId.split(":") as [string | undefined, VariantId | undefined];
+  const resolvedDragId = dragId || activeDragId;
+  const [templateId, variantId] = resolvedDragId.split(":") as [string | undefined, VariantId | undefined];
   if (!templateId || !variantId) return null;
 
   const template = TEMPLATE_CARDS.find((entry) => entry.id === templateId);
@@ -409,17 +483,48 @@ export function findTemplateVariant(dragId: string) {
   return { template, variant };
 }
 
+export function buildTemplateVariant(
+  chain: EnrichedChainResponse | null,
+  expiry: string,
+  template: StrategyTemplate,
+  variant: StrategyVariant,
+): TemplateBuildResult {
+  if (!chain) {
+    return { ok: false, error: { message: "Builder is still loading the option chain. Try again in a moment." } };
+  }
+
+  if (!expiry) {
+    return { ok: false, error: { message: "Pick an expiry before applying a strategy." } };
+  }
+
+  const strikeCoverageError = getStrikeCoverageError(template, expiry, chain);
+  if (strikeCoverageError) {
+    return { ok: false, error: { message: strikeCoverageError } };
+  }
+
+  const legs = variant.build(chain, expiry);
+  if (legs.length < template.legs) {
+    return {
+      ok: false,
+      error: { message: formatTemplateBuildError(template, expiry, legs.length) },
+    };
+  }
+
+  return { ok: true, legs };
+}
+
 interface Props {
   chain: EnrichedChainResponse | null;
   expiry: string;
   underlying: string;
+  errorMessage: string | null;
+  onErrorMessageChange: (message: string | null) => void;
 }
 
-export default function StrategyTemplates({ chain, expiry, underlying }: Props) {
+export default function StrategyTemplates({ chain, expiry, underlying, errorMessage, onErrorMessageChange }: Props) {
   const addLeg = useStrategyStore((state) => state.addLeg);
   const clearLegs = useStrategyStore((state) => state.clearLegs);
   const [category, setCategory] = useState<Category>("all");
-  const [error, setError] = useState<string | null>(null);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, VariantId>>(DEFAULT_VARIANTS);
 
   const filtered = useMemo(
@@ -428,22 +533,17 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
   );
 
   if (!chain) return null;
-  const chainData = chain;
 
   function applyVariant(template: StrategyTemplate, variant: StrategyVariant) {
-    setError(null);
-    const newLegs = variant.build(chainData, expiry);
-    if (newLegs.length === 0) {
-      setError(`No quotes for ${variant.helper}. Try a later expiry.`);
-      return;
-    }
-    if (newLegs.length < template.legs) {
-      setError(`${variant.helper} needs ${template.legs} legs but only ${newLegs.length} had quotes — try a later expiry.`);
+    const result = buildTemplateVariant(chain, expiry, template, variant);
+    if (!result.ok) {
+      onErrorMessageChange(result.error.message);
       return;
     }
 
+    onErrorMessageChange(null);
     clearLegs();
-    for (const leg of newLegs) addLeg(leg, underlying);
+    for (const leg of result.legs) addLeg(leg, underlying);
   }
 
   return (
@@ -473,10 +573,14 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
               className={styles.templateCard}
               data-sentiment={selectedVariant.sentiment}
               draggable
+              onClick={() => applyVariant(template, selectedVariant)}
               onDragStart={(event) => {
+                activeDragId = dragId;
                 event.dataTransfer.setData("text/plain", dragId);
+                event.dataTransfer.setData("application/x-oggregator-strategy", dragId);
                 event.dataTransfer.effectAllowed = "copy";
               }}
+              onDragEnd={() => clearActiveTemplateDrag()}
             >
               <MiniPayoff shape={STRATEGY_SHAPES[selectedVariant.shape] ?? [[0, 0], [1, 0]]} width={120} height={48} />
 
@@ -492,7 +596,8 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
                     key={variant.id}
                     className={styles.templateVariantBtn}
                     data-active={variant.id === selectedVariant.id}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       setSelectedVariants((prev) => ({ ...prev, [template.id]: variant.id }));
                       applyVariant(template, variant);
                     }}
@@ -506,10 +611,10 @@ export default function StrategyTemplates({ chain, expiry, underlying }: Props) 
         })}
       </div>
 
-      {error && (
+      {errorMessage && (
         <div className={styles.templateError}>
-          {error}
-          <button className={styles.templateErrorClose} onClick={() => setError(null)}>✕</button>
+          {errorMessage}
+          <button className={styles.templateErrorClose} onClick={() => onErrorMessageChange(null)}>✕</button>
         </div>
       )}
     </div>

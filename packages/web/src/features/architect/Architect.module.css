@@ -131,11 +131,18 @@
   border-radius: var(--radius-md);
   text-align: left;
   transition: all var(--transition-fast);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .templateCard:hover {
   border-color: var(--border-default);
   background: var(--bg-hover);
+}
+
+.templateCard:active {
+  cursor: grabbing;
 }
 
 .templateCard[data-sentiment="bullish"]:hover { border-color: color-mix(in srgb, var(--color-profit) 40%, var(--border-default)); }

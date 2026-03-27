@@ -38,8 +38,30 @@ interface VenueStream {
   connect: (ws: WebSocket, underlying: string) => void;
   parse: (msg: unknown, underlying: string) => TradeEvent[];
   seed?: (underlying: string) => Promise<TradeEvent[]>;
-  /** Interval keepalive — some venues drop idle connections without application-level pings */
   startKeepalive?: (ws: WebSocket) => ReturnType<typeof setInterval>;
+}
+
+export interface FlowStreamHealth {
+  venue: VenueId;
+  underlying: string;
+  connected: boolean;
+  lastMessageAt: number | null;
+  lastTradeAt: number | null;
+  lastStatusAt: number | null;
+  reconnects: number;
+  errors: number;
+  seedTrades: number;
+  bufferedTrades: number;
+}
+
+interface FlowStreamState {
+  connected: boolean;
+  lastMessageAt: number | null;
+  lastTradeAt: number | null;
+  lastStatusAt: number | null;
+  reconnects: number;
+  errors: number;
+  seedTrades: number;
 }
 
 const BUFFER_SIZE = 500;
@@ -54,20 +76,28 @@ export class FlowService {
   private keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private listeners = new Set<(trade: TradeEvent) => void>();
+  private streamState = new Map<string, FlowStreamState>();
   private shouldReconnect = true;
 
   async start(underlyings: string[] = ['BTC', 'ETH']): Promise<void> {
-    // Open live WS connections and return immediately — callers can flip the
-    // readiness flag and start serving /flow without waiting for REST seeds.
+    // Open live WS connections first so callers can serve /flow without waiting for REST seeds.
     for (const underlying of underlyings) {
       this.buffers.set(underlying, []);
       for (const stream of VENUE_STREAMS) {
+        this.streamState.set(this.streamKey(stream.venue, underlying), {
+          connected: false,
+          lastMessageAt: null,
+          lastTradeAt: null,
+          lastStatusAt: null,
+          reconnects: 0,
+          errors: 0,
+          seedTrades: 0,
+        });
         this.connectStream(stream, underlying);
       }
     }
 
-    // Seed historical trades in the background. Fire-and-forget: a slow or
-    // failing REST endpoint must never delay live-stream availability.
+    // Seed recent trades in the background. Slow REST venues must not delay live flow availability.
     void Promise.allSettled(underlyings.map(u => this.seedFromRest(u)));
   }
 
@@ -88,6 +118,10 @@ export class FlowService {
       }
 
       const count = result.value.length;
+      this.updateStreamState(stream.venue, underlying, {
+        seedTrades: count,
+        lastStatusAt: Date.now(),
+      });
       log.info({ venue: stream.venue, underlying, count }, 'trade seed completed');
 
       if (count === 0) continue;
@@ -114,19 +148,39 @@ export class FlowService {
     };
   }
 
+  getHealth(): FlowStreamHealth[] {
+    return VENUE_STREAMS.flatMap((stream) =>
+      Array.from(this.buffers.keys()).map((underlying) => {
+        const currentState = this.streamState.get(this.streamKey(stream.venue, underlying));
+        return {
+          venue: stream.venue,
+          underlying,
+          connected: currentState?.connected ?? false,
+          lastMessageAt: currentState?.lastMessageAt ?? null,
+          lastTradeAt: currentState?.lastTradeAt ?? null,
+          lastStatusAt: currentState?.lastStatusAt ?? null,
+          reconnects: currentState?.reconnects ?? 0,
+          errors: currentState?.errors ?? 0,
+          seedTrades: currentState?.seedTrades ?? 0,
+          bufferedTrades: this.buffers.get(underlying)?.filter((trade) => trade.venue === stream.venue).length ?? 0,
+        } satisfies FlowStreamHealth;
+      }),
+    );
+  }
+
   private connectStream(stream: VenueStream, underlying: string, attempt = 0): void {
     if (!this.shouldReconnect) return;
 
-    const key = `${stream.venue}:${underlying}`;
+    const key = this.streamKey(stream.venue, underlying);
     const ws = new WebSocket(stream.url);
-
-    // Track whether this connection ever opened so we can reset backoff after a
-    // healthy session. Without this, a few early failures permanently inflate the
-    // delay even after hours of stable operation.
     let didOpen = false;
 
     ws.on('open', () => {
       didOpen = true;
+      this.updateStreamState(stream.venue, underlying, {
+        connected: true,
+        lastStatusAt: Date.now(),
+      });
       log.info({ venue: stream.venue, underlying }, 'trade stream connected');
       stream.connect(ws, underlying);
 
@@ -140,17 +194,36 @@ export class FlowService {
       try {
         const msg = JSON.parse(raw.toString());
         const trades = stream.parse(msg, underlying);
-        if (trades.length > 0) this.pushTrades(underlying, trades);
-      } catch { /* malformed frame */ }
+        const now = Date.now();
+        this.updateStreamState(stream.venue, underlying, { lastMessageAt: now });
+        if (trades.length > 0) {
+          this.updateStreamState(stream.venue, underlying, {
+            lastTradeAt: Math.max(...trades.map((trade) => trade.timestamp)),
+          });
+          this.pushTrades(underlying, trades);
+        }
+      } catch {
+        // Ignore malformed upstream frames.
+      }
     });
 
     ws.on('close', () => {
       this.connections.delete(key);
+      this.updateStreamState(stream.venue, underlying, {
+        connected: false,
+        lastStatusAt: Date.now(),
+      });
       const ka = this.keepaliveTimers.get(key);
-      if (ka) { clearInterval(ka); this.keepaliveTimers.delete(key); }
+      if (ka) {
+        clearInterval(ka);
+        this.keepaliveTimers.delete(key);
+      }
 
       if (this.shouldReconnect) {
         const nextAttempt = didOpen ? 0 : attempt + 1;
+        this.updateStreamState(stream.venue, underlying, {
+          reconnects: (this.streamState.get(key)?.reconnects ?? 0) + 1,
+        });
         const delay = backoffDelay(nextAttempt);
         const timer = setTimeout(() => {
           this.reconnectTimers.delete(key);
@@ -161,10 +234,25 @@ export class FlowService {
     });
 
     ws.on('error', (err) => {
+      this.updateStreamState(stream.venue, underlying, {
+        errors: (this.streamState.get(key)?.errors ?? 0) + 1,
+        lastStatusAt: Date.now(),
+      });
       log.warn({ venue: stream.venue, underlying, err: err.message }, 'trade stream error');
     });
 
     this.connections.set(key, ws);
+  }
+
+  private streamKey(venue: VenueId, underlying: string): string {
+    return `${venue}:${underlying}`;
+  }
+
+  private updateStreamState(venue: VenueId, underlying: string, patch: Partial<FlowStreamState>): void {
+    const key = this.streamKey(venue, underlying);
+    const current = this.streamState.get(key);
+    if (!current) return;
+    this.streamState.set(key, { ...current, ...patch });
   }
 
   private pushTrades(underlying: string, trades: TradeEvent[]): void {

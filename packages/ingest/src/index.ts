@@ -34,6 +34,7 @@ const FLUSH_INTERVAL_MS = 250;
 const FLUSH_BATCH_SIZE = 250;
 const MAX_PENDING_RECORDS = 10_000;
 const MAX_FLUSH_BACKOFF_MS = 30_000;
+const OPS_LOG_INTERVAL_MS = 60_000;
 
 async function main(): Promise<void> {
   const databaseUrl = process.env['DATABASE_URL'];
@@ -49,12 +50,15 @@ async function main(): Promise<void> {
   const flowService = new FlowService();
   const blockFlowService = new BlockFlowService();
   const writer = new BufferedTradeWriter(tradeStore);
+  const ops = new IngestOpsTracker();
 
   flowService.subscribe((trade: TradeEvent) => {
+    ops.recordTrade('live', trade.venue, trade.timestamp);
     writer.push(mapLiveTrade(trade, spotService));
   });
 
   blockFlowService.subscribe((trade: BlockTradeEvent) => {
+    ops.recordTrade('institutional', trade.venue, trade.timestamp);
     writer.push(mapInstitutionalTrade(trade, spotService));
   });
 
@@ -64,8 +68,19 @@ async function main(): Promise<void> {
     blockFlowService.start(),
   ]);
 
+  const opsTimer = setInterval(() => {
+    log.info({
+      memory: getProcessMemorySnapshot(),
+      writer: writer.getStats(),
+      flow: flowService.getHealth(),
+      blockFlow: blockFlowService.getHealth(),
+      ingest: ops.snapshot(),
+    }, 'ingest ops snapshot');
+  }, OPS_LOG_INTERVAL_MS);
+
   const shutdown = async () => {
     log.info('shutting down ingest worker');
+    clearInterval(opsTimer);
     writer.dispose();
     await writer.flush();
     flowService.dispose();
@@ -87,6 +102,10 @@ class BufferedTradeWriter {
   private flushing = false;
   private consecutiveFailures = 0;
   private nextFlushAt = 0;
+  private lastFlushAt: number | null = null;
+  private lastFlushCount = 0;
+  private lastFlushError: string | null = null;
+  private totalWritten = 0;
 
   constructor(private readonly tradeStore: TradeStore) {
     this.flushTimer = setInterval(() => {
@@ -117,20 +136,78 @@ class BufferedTradeWriter {
       await this.tradeStore.writeMany(batch);
       this.consecutiveFailures = 0;
       this.nextFlushAt = 0;
+      this.lastFlushAt = Date.now();
+      this.lastFlushCount = batch.length;
+      this.lastFlushError = null;
+      this.totalWritten += batch.length;
     } catch (error) {
       this.consecutiveFailures += 1;
       this.queue.unshift(...batch);
       const backoffMs = Math.min(1_000 * 2 ** (this.consecutiveFailures - 1), MAX_FLUSH_BACKOFF_MS);
       this.nextFlushAt = Date.now() + backoffMs;
+      this.lastFlushError = String(error);
       log.warn({ err: String(error), count: batch.length, queued: this.queue.length, backoffMs }, 'trade batch write failed');
     } finally {
       this.flushing = false;
     }
   }
 
+  getStats() {
+    return {
+      queued: this.queue.length,
+      flushing: this.flushing,
+      consecutiveFailures: this.consecutiveFailures,
+      nextFlushAt: this.nextFlushAt || null,
+      lastFlushAt: this.lastFlushAt,
+      lastFlushCount: this.lastFlushCount,
+      lastFlushError: this.lastFlushError,
+      totalWritten: this.totalWritten,
+    };
+  }
+
   dispose(): void {
     clearInterval(this.flushTimer);
   }
+}
+
+class IngestOpsTracker {
+  private tradeCounts = new Map<string, number>();
+  private lastTradeAt = new Map<string, number>();
+
+  recordTrade(mode: 'live' | 'institutional', venue: string, timestamp: number): void {
+    const key = `${mode}:${venue}`;
+    this.tradeCounts.set(key, (this.tradeCounts.get(key) ?? 0) + 1);
+    const current = this.lastTradeAt.get(key);
+    if (current == null || timestamp > current) {
+      this.lastTradeAt.set(key, timestamp);
+    }
+  }
+
+  snapshot() {
+    const tradeCounts = Array.from(this.tradeCounts.entries()).map(([key, count]) => {
+      const [mode, venue] = key.split(':');
+      return {
+        mode,
+        venue,
+        count,
+        lastTradeAt: this.lastTradeAt.get(key) ?? null,
+      };
+    });
+
+    return { tradeCounts };
+  }
+}
+
+function getProcessMemorySnapshot() {
+  const memory = process.memoryUsage();
+  return {
+    rssMb: Math.round(memory.rss / 1024 / 1024),
+    heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+    heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+    externalMb: Math.round(memory.external / 1024 / 1024),
+    arrayBuffersMb: Math.round(memory.arrayBuffers / 1024 / 1024),
+    uptimeSec: Math.round(process.uptime()),
+  };
 }
 
 function mapLiveTrade(trade: TradeEvent, spotService: SpotService): PersistedTradeRecord {

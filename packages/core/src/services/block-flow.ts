@@ -40,16 +40,53 @@ export interface BlockTradeEvent {
 
 // ── Venue stream interface ────────────────────────────────────
 
+interface BlockVenueStreamHandlers {
+  onTrades: (trades: BlockTradeEvent[]) => void;
+  onConnected: () => void;
+  onDisconnected: () => void;
+  onError: () => void;
+  onReconnect: () => void;
+}
+
 interface BlockVenueStream {
   venue: VenueId;
-  connect: (onTrades: (trades: BlockTradeEvent[]) => void) => void;
+  connect: (handlers: BlockVenueStreamHandlers) => void;
   dispose: () => void;
 }
 
 interface BlockVenuePoller {
   venue: VenueId;
   intervalMs: number;
+  limit?: number;
   poll: () => Promise<BlockTradeEvent[]>;
+}
+
+export interface BlockVenueHealth {
+  venue: VenueId;
+  transport: 'ws' | 'poll';
+  connected: boolean;
+  lastSuccessAt: number | null;
+  lastTradeAt: number | null;
+  lastStatusAt: number | null;
+  lastPollCount: number | null;
+  pollLimit: number | null;
+  hitLimitCount: number;
+  reconnects: number;
+  errors: number;
+  bufferedTrades: number;
+}
+
+interface BlockVenueState {
+  transport: 'ws' | 'poll';
+  connected: boolean;
+  lastSuccessAt: number | null;
+  lastTradeAt: number | null;
+  lastStatusAt: number | null;
+  lastPollCount: number | null;
+  pollLimit: number | null;
+  hitLimitCount: number;
+  reconnects: number;
+  errors: number;
 }
 
 const BUFFER_SIZE = 300;
@@ -69,24 +106,68 @@ export class BlockFlowService {
   private streams: BlockVenueStream[] = [];
   private pollTimers: ReturnType<typeof setInterval>[] = [];
   private listeners = new Set<(trade: BlockTradeEvent) => void>();
+  private venueState = new Map<VenueId, BlockVenueState>();
 
   async start(): Promise<void> {
     const wsStreams = [deribitBlockStream(), bybitBlockStream()];
-    const pollers  = [okxBlockPoller(), binanceBlockPoller(), deriveBlockPoller()];
+    const pollers = [okxBlockPoller(), binanceBlockPoller(), deriveBlockPoller()];
 
     for (const stream of wsStreams) {
-      stream.connect((trades) => this.pushTrades(trades));
+      this.venueState.set(stream.venue, {
+        transport: 'ws',
+        connected: false,
+        lastSuccessAt: null,
+        lastTradeAt: null,
+        lastStatusAt: null,
+        lastPollCount: null,
+        pollLimit: null,
+        hitLimitCount: 0,
+        reconnects: 0,
+        errors: 0,
+      });
+      stream.connect({
+        onTrades: (trades) => {
+          this.recordPollResult(stream.venue, trades.length, null);
+          this.pushTrades(trades);
+        },
+        onConnected: () => {
+          this.updateVenueState(stream.venue, { connected: true, lastStatusAt: Date.now() });
+        },
+        onDisconnected: () => {
+          this.updateVenueState(stream.venue, { connected: false, lastStatusAt: Date.now() });
+        },
+        onError: () => {
+          this.updateVenueState(stream.venue, {
+            errors: (this.venueState.get(stream.venue)?.errors ?? 0) + 1,
+            lastStatusAt: Date.now(),
+          });
+        },
+        onReconnect: () => {
+          this.updateVenueState(stream.venue, {
+            reconnects: (this.venueState.get(stream.venue)?.reconnects ?? 0) + 1,
+            lastStatusAt: Date.now(),
+          });
+        },
+      });
       this.streams.push(stream);
     }
 
     for (const poller of pollers) {
-      void poller.poll().then((trades) => this.pushTrades(trades)).catch((err) => {
-        log.warn({ venue: poller.venue, err: String(err) }, 'initial block trade poll failed');
+      this.venueState.set(poller.venue, {
+        transport: 'poll',
+        connected: true,
+        lastSuccessAt: null,
+        lastTradeAt: null,
+        lastStatusAt: null,
+        lastPollCount: null,
+        pollLimit: poller.limit ?? null,
+        hitLimitCount: 0,
+        reconnects: 0,
+        errors: 0,
       });
+      void this.runPoller(poller, true);
       const timer = setInterval(() => {
-        void poller.poll().then((trades) => this.pushTrades(trades)).catch((err) => {
-          log.warn({ venue: poller.venue, err: String(err) }, 'block trade poll failed');
-        });
+        void this.runPoller(poller, false);
       }, poller.intervalMs);
       this.pollTimers.push(timer);
     }
@@ -107,6 +188,61 @@ export class BlockFlowService {
     };
   }
 
+  getHealth(): BlockVenueHealth[] {
+    return Array.from(this.venueState.entries()).map(([venue, state]) => ({
+      venue,
+      transport: state.transport,
+      connected: state.connected,
+      lastSuccessAt: state.lastSuccessAt,
+      lastTradeAt: state.lastTradeAt,
+      lastStatusAt: state.lastStatusAt,
+      lastPollCount: state.lastPollCount,
+      pollLimit: state.pollLimit,
+      hitLimitCount: state.hitLimitCount,
+      reconnects: state.reconnects,
+      errors: state.errors,
+      bufferedTrades: this.buffer.filter((trade) => trade.venue === venue).length,
+    }));
+  }
+
+  private async runPoller(poller: BlockVenuePoller, initial: boolean): Promise<void> {
+    try {
+      const trades = await poller.poll();
+      this.recordPollResult(poller.venue, trades.length, poller.limit ?? null);
+      this.pushTrades(trades);
+    } catch (err) {
+      this.updateVenueState(poller.venue, {
+        errors: (this.venueState.get(poller.venue)?.errors ?? 0) + 1,
+        lastStatusAt: Date.now(),
+      });
+      log.warn({ venue: poller.venue, err: String(err) }, initial ? 'initial block trade poll failed' : 'block trade poll failed');
+    }
+  }
+
+  private updateVenueState(venue: VenueId, patch: Partial<BlockVenueState>): void {
+    const current = this.venueState.get(venue);
+    if (!current) return;
+    this.venueState.set(venue, { ...current, ...patch });
+  }
+
+  private recordPollResult(venue: VenueId, tradeCount: number, limit: number | null): void {
+    const now = Date.now();
+    const state = this.venueState.get(venue);
+
+    this.updateVenueState(venue, {
+      connected: true,
+      lastSuccessAt: now,
+      lastStatusAt: now,
+      lastPollCount: tradeCount,
+      pollLimit: limit,
+      hitLimitCount: limit != null && tradeCount >= limit ? (state?.hitLimitCount ?? 0) + 1 : state?.hitLimitCount ?? 0,
+    });
+
+    if (limit != null && tradeCount >= limit) {
+      log.warn({ venue, count: tradeCount, limit }, 'block trade poll hit limit');
+    }
+  }
+
   private pushTrades(trades: BlockTradeEvent[]): void {
     const inserted: BlockTradeEvent[] = [];
 
@@ -123,6 +259,17 @@ export class BlockFlowService {
       this.buffer.splice(BUFFER_SIZE);
     }
     this.pruneSeenTrades();
+
+    const latestByVenue = new Map<VenueId, number>();
+    for (const trade of inserted) {
+      const latest = latestByVenue.get(trade.venue);
+      if (latest == null || trade.timestamp > latest) {
+        latestByVenue.set(trade.venue, trade.timestamp);
+      }
+    }
+    for (const [venue, timestamp] of latestByVenue) {
+      this.updateVenueState(venue, { lastTradeAt: timestamp });
+    }
 
     for (const trade of inserted) {
       for (const listener of this.listeners) {
@@ -271,7 +418,7 @@ async function fetchDeribitSeedTrades(): Promise<BlockTradeEvent[]> {
 function deribitBlockStream(): BlockVenueStream {
   let ws: WebSocket | null = null;
   let shouldReconnect = true;
-  let onTradesFn: ((trades: BlockTradeEvent[]) => void) | null = null;
+  let handlers: BlockVenueStreamHandlers | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   function connect(attempt = 0): void {
@@ -281,6 +428,7 @@ function deribitBlockStream(): BlockVenueStream {
 
     ws.on('open', () => {
       didOpen = true;
+      handlers?.onConnected();
       log.info({ venue: 'deribit' }, 'block trade WS connected');
       ws!.send(JSON.stringify({
         jsonrpc: '2.0', id: 1,
@@ -306,18 +454,23 @@ function deribitBlockStream(): BlockVenueStream {
           if (!trade) continue;
           trades.push(trade);
         }
-        if (trades.length > 0) onTradesFn?.(trades);
-      } catch (err) { log.debug({ err: String(err) }, 'malformed WS frame'); }
+        if (trades.length > 0) handlers?.onTrades(trades);
+      } catch (err) {
+        log.debug({ err: String(err) }, 'malformed WS frame');
+      }
     });
 
     ws.on('close', () => {
+      handlers?.onDisconnected();
       if (shouldReconnect) {
+        handlers?.onReconnect();
         const delay = backoffDelay(didOpen ? 0 : attempt + 1);
         reconnectTimer = setTimeout(() => connect(didOpen ? 0 : attempt + 1), delay);
       }
     });
 
     ws.on('error', (err) => {
+      handlers?.onError();
       log.warn({ venue: 'deribit', err: err.message }, 'block trade WS error');
     });
   }
@@ -333,10 +486,14 @@ function deribitBlockStream(): BlockVenueStream {
 
   return {
     venue: 'deribit',
-    connect(onTrades) {
-      onTradesFn = onTrades;
+    connect(streamHandlers) {
+      handlers = streamHandlers;
       connect();
-      void seed().then((t) => { if (t.length > 0) onTrades(t); });
+      void seed().then((trades) => {
+        if (trades.length > 0) {
+          streamHandlers.onTrades(trades);
+        }
+      });
     },
     dispose() {
       shouldReconnect = false;
@@ -412,7 +569,7 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
 function bybitBlockStream(): BlockVenueStream {
   let ws: WebSocket | null = null;
   let shouldReconnect = true;
-  let onTradesFn: ((trades: BlockTradeEvent[]) => void) | null = null;
+  let handlers: BlockVenueStreamHandlers | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -423,6 +580,7 @@ function bybitBlockStream(): BlockVenueStream {
 
     ws.on('open', () => {
       didOpen = true;
+      handlers?.onConnected();
       log.info({ venue: 'bybit' }, 'block trade WS connected');
       ws!.send(JSON.stringify({ op: 'subscribe', args: ['rfq.open.public.trades'] }));
       keepaliveTimer = setInterval(() => {
@@ -444,27 +602,35 @@ function bybitBlockStream(): BlockVenueStream {
           if (!trade) continue;
           trades.push(trade);
         }
-        if (trades.length > 0) onTradesFn?.(trades);
-      } catch (err) { log.debug({ err: String(err) }, 'malformed WS frame'); }
+        if (trades.length > 0) handlers?.onTrades(trades);
+      } catch (err) {
+        log.debug({ err: String(err) }, 'malformed WS frame');
+      }
     });
 
     ws.on('close', () => {
-      if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+      handlers?.onDisconnected();
+      if (keepaliveTimer) {
+        clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
       if (shouldReconnect) {
+        handlers?.onReconnect();
         const delay = backoffDelay(didOpen ? 0 : attempt + 1);
         reconnectTimer = setTimeout(() => connect(didOpen ? 0 : attempt + 1), delay);
       }
     });
 
     ws.on('error', (err) => {
+      handlers?.onError();
       log.warn({ venue: 'bybit', err: err.message }, 'block trade WS error');
     });
   }
 
   return {
     venue: 'bybit',
-    connect(onTrades) {
-      onTradesFn = onTrades;
+    connect(streamHandlers) {
+      handlers = streamHandlers;
       connect();
     },
     dispose() {
@@ -494,6 +660,7 @@ function okxBlockPoller(): BlockVenuePoller {
   return {
     venue: 'okx',
     intervalMs: 90_000,
+    limit: 100,
     async poll() {
       try {
         const res = await fetch(`${OKX_REST_BASE_URL}/api/v5/rfq/public-trades?limit=100`, {
@@ -560,6 +727,7 @@ function binanceBlockPoller(): BlockVenuePoller {
   return {
     venue: 'binance',
     intervalMs: 120_000,
+    limit: 100,
     async poll() {
       try {
         const res = await fetch(`${BINANCE_REST_BASE_URL}/eapi/v1/blockTrades?limit=100`, {

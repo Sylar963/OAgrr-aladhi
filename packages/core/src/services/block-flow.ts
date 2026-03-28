@@ -306,15 +306,18 @@ function extractUnderlying(instrument: string): string {
 
 function isOptionInstrument(instrument: string): boolean {
   const parts = instrument.split('-');
-  const type = parts.at(-1);
-  const strike = parts.at(-2);
-  const expiry = parts.at(-3);
-
-  const hasOptionType = type === 'C' || type === 'P';
+  // Bybit appended a currency suffix in 2026: BTC-28MAR26-60000-C-USDT.
+  // Find C/P from the end so both old and new formats work.
+  let typeIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i] === 'C' || parts[i] === 'P') { typeIdx = i; break; }
+  }
+  if (typeIdx < 0) return false;
+  const strike = parts[typeIdx - 1];
+  const expiry = parts[typeIdx - 2];
   const hasStrike = strike != null && /^[0-9]+(?:\.[0-9]+)?$/.test(strike);
   const hasExpiry = expiry != null && (/^\d{1,2}[A-Z]{3}\d{2}$/.test(expiry) || /^\d{6,8}$/.test(expiry));
-
-  return hasOptionType && hasStrike && hasExpiry;
+  return hasStrike && hasExpiry;
 }
 
 function areOptionLegs(instruments: string[]): boolean {
@@ -561,7 +564,9 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
       ratio: 1,
     })),
     totalSize,
-    notionalUsd: 0,
+    // markPrice per leg is the option's mark price at execution time (USDT ≈ USD).
+    // Fall back to execution price if markPrice is absent.
+    notionalUsd: optionLegs.reduce((sum, leg) => sum + Number(leg.markPrice ?? leg.price) * Number(leg.qty), 0),
     indexPrice: null,
   };
 }

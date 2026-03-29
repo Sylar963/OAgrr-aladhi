@@ -88,6 +88,17 @@ describe('ClientWsMessageSchema', () => {
 });
 
 describe('ServerWsMessageSchema', () => {
+  const stats = {
+    spotIndexUsd: 70_000,
+    indexPriceUsd: 70_000,
+    basisPct: 0,
+    atmStrike: 70_000,
+    atmIv: 0.5,
+    putCallOiRatio: 1,
+    totalOiUsd: 1_000_000,
+    skew25d: 0,
+  };
+
   it('accepts valid snapshot', () => {
     const result = ServerWsMessageSchema.safeParse({
       type: 'snapshot',
@@ -95,7 +106,7 @@ describe('ServerWsMessageSchema', () => {
       seq: 5,
       request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
       meta: { generatedAt: 1000, maxQuoteTs: 999, staleMs: 1 },
-      data: { strikes: [] },
+      data: { underlying: 'BTC', expiry: '2026-03-27', dte: 7, stats, strikes: [], gex: [] },
     });
     expect(result.success).toBe(true);
   });
@@ -109,6 +120,31 @@ describe('ServerWsMessageSchema', () => {
       failedVenues: [{ venue: 'binance', reason: 'geo-blocked' }],
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts valid delta', () => {
+    const result = ServerWsMessageSchema.safeParse({
+      type: 'delta',
+      subscriptionId: 'sub-1',
+      seq: 6,
+      request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+      meta: { generatedAt: 1001, maxQuoteTs: 1000, staleMs: 1 },
+      deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: 1000 }],
+      patch: { stats, strikes: [], gex: [] },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects corrupt snapshot payloads', () => {
+    const result = ServerWsMessageSchema.safeParse({
+      type: 'snapshot',
+      subscriptionId: 'sub-1',
+      seq: 5,
+      request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+      meta: { generatedAt: 1000, maxQuoteTs: 999, staleMs: 1 },
+      data: { underlying: 'BTC', expiry: '2026-03-27', dte: 7, stats: {}, strikes: [], gex: [] },
+    });
+    expect(result.success).toBe(false);
   });
 
   it('accepts valid status', () => {

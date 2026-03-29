@@ -1,4 +1,5 @@
 import type { DataSource, OptionRight, VenueId } from '../types/common.js';
+import type { VenueConnectionState as ProtocolVenueConnectionState } from '@oggregator/protocol';
 
 // ── Greeks ────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export interface VenueDelta {
   greeks?: Partial<OptionGreeks>;
 }
 
-export type VenueConnectionState = 'connected' | 'polling' | 'reconnecting' | 'degraded' | 'down';
+export type VenueConnectionState = ProtocolVenueConnectionState;
 
 export interface VenueStatus {
   venue: VenueId;

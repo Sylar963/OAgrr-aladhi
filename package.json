@@ -13,8 +13,8 @@
     "db:seed:sample": "pnpm --filter @oggregator/db build && pnpm --filter @oggregator/db seed:sample",
     "start": "NODE_ENV=production node packages/server/dist/index.js",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test:run",
+    "typecheck": "pnpm -r --filter @oggregator/protocol build && pnpm -r typecheck",
+    "test": "pnpm -r --filter @oggregator/core --filter @oggregator/protocol build && pnpm -r test:run",
     "precommit": "pnpm typecheck && pnpm test"
   },
   "engines": {

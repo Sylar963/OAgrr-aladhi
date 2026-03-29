@@ -7,6 +7,7 @@ import {
   computeIvSurface,
   computeTermStructure,
   computeDte,
+  computeChainStats,
   type VenueId,
   type ChainRequest,
   type IvSurfaceRow,
@@ -60,7 +61,13 @@ export async function surfaceRoute(app: FastifyInstance) {
 
       const comparison = buildComparisonChain(underlying, expiry, chains);
       const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
-      const row = computeIvSurface(expiry, computeDte(expiry), enriched.strikes);
+      const stats = computeChainStats(enriched.strikes, chains);
+      const row = computeIvSurface(
+        expiry,
+        computeDte(expiry),
+        enriched.strikes,
+        stats.indexPriceUsd ?? stats.spotIndexUsd,
+      );
       surface.push(row);
     }
 

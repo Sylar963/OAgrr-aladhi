@@ -6,6 +6,9 @@ import type {
   EstimatedFees,
 } from './types.js';
 
+// 2 vol points — avoids noise-driven flips on nearly-flat surfaces
+const TERM_STRUCTURE_THRESHOLD = 0.02;
+
 // ── Enriched response types ───────────────────────────────────────
 
 export interface VenueQuote {
@@ -125,15 +128,9 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
     estimatedFees: fees,
     openInterest: contract.quote.openInterest,
     volume24h: contract.quote.volume24h,
-    // Use venue-provided USD values when available; otherwise compute from
-    // raw values × underlyingPrice (correct for inverse venues like Deribit).
-    // Prefer venue-native USD when available; fall back to raw × underlyingPrice.
-    // Deribit/Derive report OI/volume in base currency → multiply by spot.
-    // OKX/Binance provide oiUsd/sumOpenInterestUsd natively.
-    openInterestUsd: contract.quote.openInterestUsd
-      ?? (contract.quote.openInterest != null && contract.quote.underlyingPriceUsd != null
-        ? contract.quote.openInterest * contract.quote.underlyingPriceUsd
-        : null),
+    // Prefer normalized USD OI from the feed layer. Do not reconstruct it here
+    // from raw OI, because venues do not agree on OI units.
+    openInterestUsd: contract.quote.openInterestUsd,
     volume24hUsd: contract.quote.volume24hUsd
       ?? (contract.quote.volume24h != null && contract.quote.underlyingPriceUsd != null
         ? contract.quote.volume24h * contract.quote.underlyingPriceUsd
@@ -210,11 +207,11 @@ function extractPrices(
     let venueIndex: number | null = null;
 
     for (const contract of Object.values(vc.contracts)) {
-      if (venueSpot === null && contract.quote.indexPriceUsd !== null) {
-        venueSpot = contract.quote.indexPriceUsd;
+      if (venueSpot === null && contract.quote.underlyingPriceUsd !== null) {
+        venueSpot = contract.quote.underlyingPriceUsd;
       }
-      if (venueIndex === null && contract.quote.underlyingPriceUsd !== null) {
-        venueIndex = contract.quote.underlyingPriceUsd;
+      if (venueIndex === null && contract.quote.indexPriceUsd !== null) {
+        venueIndex = contract.quote.indexPriceUsd;
       }
       if (venueSpot !== null && venueIndex !== null) break;
     }
@@ -264,6 +261,8 @@ function averageSideIv(side: EnrichedSide): number | null {
   return averageMetric(side.venues, (quote) => quote.markIv);
 }
 
+const MAX_TARGET_DELTA_DISTANCE = 0.15;
+
 function closestDeltaStrike(
   strikes: EnrichedStrike[],
   targetDelta: number,
@@ -284,6 +283,30 @@ function closestDeltaStrike(
     }
   }
 
+  if (best == null || bestDist > MAX_TARGET_DELTA_DISTANCE) {
+    return null;
+  }
+
+  return best;
+}
+
+function closestStrikeToPrice(
+  strikes: EnrichedStrike[],
+  referencePrice: number | null,
+): EnrichedStrike | null {
+  if (referencePrice === null || strikes.length === 0) return null;
+
+  let best: EnrichedStrike | null = null;
+  let bestDist = Infinity;
+
+  for (const strike of strikes) {
+    const dist = Math.abs(strike.strike - referencePrice);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = strike;
+    }
+  }
+
   return best;
 }
 
@@ -291,23 +314,23 @@ function closestDeltaStrike(
  * Computes aggregate open-interest totals. Splits by put/call so the
  * put/call OI ratio can be derived from the same pass.
  */
-function sumOiByRight(strikes: EnrichedStrike[]): {
-  putOi: number;
-  callOi: number;
+function sumOiUsdByRight(strikes: EnrichedStrike[]): {
+  putOiUsd: number;
+  callOiUsd: number;
 } {
-  let putOi = 0;
-  let callOi = 0;
+  let putOiUsd = 0;
+  let callOiUsd = 0;
 
   for (const s of strikes) {
     for (const vq of Object.values(s.call.venues)) {
-      callOi += vq?.openInterest ?? 0;
+      callOiUsd += vq?.openInterestUsd ?? 0;
     }
     for (const vq of Object.values(s.put.venues)) {
-      putOi += vq?.openInterest ?? 0;
+      putOiUsd += vq?.openInterestUsd ?? 0;
     }
   }
 
-  return { putOi, callOi };
+  return { putOiUsd, callOiUsd };
 }
 
 /**
@@ -330,25 +353,18 @@ export function computeChainStats(
   let atmStrike: number | null = null;
   let atmIv: number | null = null;
 
-  if (refPrice !== null && strikes.length > 0) {
-    let minDist = Infinity;
-    for (const s of strikes) {
-      const dist = Math.abs(s.strike - refPrice);
-      if (dist < minDist) {
-        minDist = dist;
-        atmStrike = s.strike;
-        // Call IV is convention for ATM vol; average selected venues to match
-        // the current venue filter rather than inheriting one venue's mark.
-        atmIv = averageSideIv(s.call);
-      }
-    }
+  const atm = closestStrikeToPrice(strikes, refPrice);
+  if (atm != null) {
+    atmStrike = atm.strike;
+    // Call IV is convention for ATM vol; average selected venues to match
+    // the current venue filter rather than inheriting one venue's mark.
+    atmIv = averageSideIv(atm.call);
   }
 
-  const { putOi, callOi } = sumOiByRight(strikes);
-  const putCallOiRatio = callOi > 0 ? putOi / callOi : null;
+  const { putOiUsd, callOiUsd } = sumOiUsdByRight(strikes);
+  const putCallOiRatio = callOiUsd > 0 ? putOiUsd / callOiUsd : null;
 
-  const priceForOi = indexPriceUsd ?? spotIndexUsd ?? 0;
-  const totalOiUsd = (putOi + callOi) * priceForOi;
+  const totalOiUsd = putOiUsd + callOiUsd;
 
   // 25Δ skew: put25 IV − call25 IV. Positive = put skew (downside fear).
   const put25Strike = closestDeltaStrike(strikes, -0.25, 'put');
@@ -381,7 +397,7 @@ export function computeChainStats(
  * available. This avoids anchoring multi-venue GEX to whichever venue happened
  * to arrive first.
  */
-function computeGexFromRows(
+export function computeGex(
   rows: ComparisonRow[],
   strikes: EnrichedStrike[],
   fallbackSpotPrice: number,
@@ -454,8 +470,9 @@ export function computeIvSurface(
   expiry: string,
   dte: number,
   strikes: EnrichedStrike[],
+  referencePrice: number | null = null,
 ): IvSurfaceRow {
-  const atm = closestDeltaStrike(strikes, 0.5, 'call');
+  const atm = closestStrikeToPrice(strikes, referencePrice) ?? closestDeltaStrike(strikes, 0.5, 'call');
   const d25c = closestDeltaStrike(strikes, 0.25, 'call');
   const d10c = closestDeltaStrike(strikes, 0.1, 'call');
   const d25p = closestDeltaStrike(strikes, -0.25, 'put');
@@ -475,7 +492,7 @@ export function computeIvSurface(
 /**
  * Classifies the vol term structure from nearest to furthest expiry.
  *
- * 2% threshold avoids noise-driven flips on nearly-flat surfaces; contango
+ * 2 vol points avoids noise-driven flips on nearly-flat surfaces; contango
  * (far vol > near vol) is the normal state in equity/crypto options.
  */
 export function computeTermStructure(surfaces: IvSurfaceRow[]): TermStructure {
@@ -489,8 +506,8 @@ export function computeTermStructure(surfaces: IvSurfaceRow[]): TermStructure {
   if (nearAtm === null || nearAtm === undefined) return 'flat';
   if (farAtm === null || farAtm === undefined) return 'flat';
 
-  if (farAtm > nearAtm + 2) return 'contango';
-  if (nearAtm > farAtm + 2) return 'backwardation';
+  if (farAtm > nearAtm + TERM_STRUCTURE_THRESHOLD) return 'contango';
+  if (nearAtm > farAtm + TERM_STRUCTURE_THRESHOLD) return 'backwardation';
   return 'flat';
 }
 
@@ -511,7 +528,7 @@ export function buildEnrichedChain(
   const dte = computeDte(expiry);
 
   const spotPrice = stats.spotIndexUsd ?? stats.indexPriceUsd ?? 0;
-  const gex = computeGexFromRows(rows, strikes, spotPrice);
+  const gex = computeGex(rows, strikes, spotPrice);
 
   return {
     underlying,

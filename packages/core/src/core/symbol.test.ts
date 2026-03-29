@@ -89,6 +89,15 @@ describe('parseOptionSymbol', () => {
     expect(result?.strike).toBe(70000);
   });
 
+  it('parses decimal strikes so parse and format stay inverse-compatible', () => {
+    const symbol = 'SOL/USD:USDC-260328-420.5-C';
+
+    const result = parseOptionSymbol(symbol);
+
+    expect(result).not.toBeNull();
+    expect(result?.strike).toBe(420.5);
+  });
+
   it('correctly computes expiry for a December expiry', () => {
     // Arrange — expiryCode 251225 = December 25 2025
     const symbol = 'BTC/USD:BTC-251225-80000-C';

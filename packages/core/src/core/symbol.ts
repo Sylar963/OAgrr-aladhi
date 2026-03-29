@@ -14,7 +14,7 @@ export interface CanonicalOption {
 export function parseOptionSymbol(symbol: string): CanonicalOption | null {
   // BTC/USD:BTC-250628-60000-C
   const match = symbol.match(
-    /^(\w+)\/(\w+):(\w+)-(\d{6})-(\d+)-([CP])$/
+    /^(\w+)\/(\w+):(\w+)-(\d{6})-(\d+(?:\.\d+)?)-([CP])$/
   );
   if (!match) return null;
 

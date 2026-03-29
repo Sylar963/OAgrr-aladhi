@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { EnrichedChainResponse } from "@shared/enriched";
+import type { EnrichedChainResponse, EnrichedStrike } from "@shared/enriched";
 import type { WsConnectionState, VenueFailure } from "@oggregator/protocol";
 import { ServerWsMessageSchema } from "@oggregator/protocol";
 import { chainKeys } from "@features/chain/queries";
@@ -27,6 +27,19 @@ function nextSubId(): string {
 
 function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 15_000);
+}
+
+function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): EnrichedStrike[] {
+  const byStrike = new Map<number, EnrichedStrike>();
+
+  for (const strike of existing) {
+    byStrike.set(strike.strike, strike);
+  }
+  for (const strike of incoming) {
+    byStrike.set(strike.strike, strike);
+  }
+
+  return [...byStrike.values()].sort((left, right) => left.strike - right.strike);
 }
 
 /**
@@ -87,7 +100,24 @@ export function useChainWs({
         setLastSeq(msg.seq);
         // Key from server's response, not local mutable params
         const key = chainKeys.chain(msg.request.underlying, msg.request.expiry, msg.request.venues);
-        qc.setQueryData(key, msg.data as EnrichedChainResponse);
+        qc.setQueryData(key, msg.data);
+        break;
+      }
+
+      case "delta": {
+        setConnectionState("live");
+        setStaleMs(msg.meta.staleMs);
+        setLastSeq(msg.seq);
+        const key = chainKeys.chain(msg.request.underlying, msg.request.expiry, msg.request.venues);
+        qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
+          if (current == null) return current;
+          return {
+            ...current,
+            stats: msg.patch.stats,
+            strikes: mergeStrikes(current.strikes, msg.patch.strikes),
+            gex: msg.patch.gex,
+          };
+        });
         break;
       }
 

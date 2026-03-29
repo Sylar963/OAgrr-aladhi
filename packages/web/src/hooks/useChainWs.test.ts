@@ -77,7 +77,23 @@ function snapshot(subId: string, seq: number, underlying = 'BTC'): ServerWsMessa
     type: 'snapshot', subscriptionId: subId, seq,
     request: { underlying, expiry: '2026-03-27', venues: ['deribit'] },
     meta: { generatedAt: Date.now(), maxQuoteTs: Date.now() - 50, staleMs: 50 },
-    data: { underlying, expiry: '2026-03-27', dte: 7, stats: {}, strikes: [], gex: [] },
+    data: {
+      underlying,
+      expiry: '2026-03-27',
+      dte: 7,
+      stats: {
+        spotIndexUsd: 70_500,
+        indexPriceUsd: 70_500,
+        basisPct: 0,
+        atmStrike: 70_000,
+        atmIv: 0.5,
+        putCallOiRatio: 1,
+        totalOiUsd: 1,
+        skew25d: 0,
+      },
+      strikes: [],
+      gex: [],
+    },
   };
 }
 
@@ -86,6 +102,22 @@ function subscribedMsg(subId: string, failed?: Array<{ venue: 'binance'; reason:
     type: 'subscribed', subscriptionId: subId,
     request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
     serverTime: Date.now(), failedVenues: failed,
+  };
+}
+
+function deltaMsg(subId: string, seq: number): ServerWsMessage {
+  return {
+    type: 'delta',
+    subscriptionId: subId,
+    seq,
+    request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+    meta: { generatedAt: Date.now(), maxQuoteTs: Date.now() - 25, staleMs: 25 },
+    deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: Date.now() }],
+    patch: {
+      stats: { spotIndexUsd: 70500, indexPriceUsd: 70500, basisPct: 0, atmStrike: 70000, atmIv: 0.51, putCallOiRatio: 1, totalOiUsd: 1, skew25d: 0 },
+      strikes: [{ strike: 70000, call: { venues: {}, bestIv: 0.51, bestVenue: 'deribit' }, put: { venues: {}, bestIv: null, bestVenue: null } }],
+      gex: [{ strike: 70000, gexUsdMillions: 12 }],
+    },
   };
 }
 
@@ -177,6 +209,19 @@ describe('useChainWs', () => {
     expect(hookResult.result.current.connectionState).toBe('live');
   });
 
+  it('merges delta patches into the cached chain', async () => {
+    const { hookResult, ws, subId } = await renderAndConnect();
+
+    await act(() => { ws.pushMessage(snapshot(subId, 1)); });
+    await act(() => { ws.pushMessage(deltaMsg(subId, 2)); });
+
+    const key = chainKeys.chain('BTC', '2026-03-27', ['deribit']);
+    const cached = queryClient.getQueryData(key) as Record<string, unknown> | undefined;
+    expect(cached).toBeDefined();
+    expect((cached?.['gex'] as Array<Record<string, unknown>>)[0]?.['gexUsdMillions']).toBe(12);
+    expect(hookResult.result.current.lastSeq).toBe(2);
+  });
+
   it('captures failedVenues from subscribed message', async () => {
     const { hookResult, ws, subId } = await renderAndConnect();
     await act(() => {
@@ -185,6 +230,24 @@ describe('useChainWs', () => {
 
     expect(hookResult.result.current.failedVenues).toHaveLength(1);
     expect(hookResult.result.current.failedVenues[0]!.venue).toBe('binance');
+  });
+
+  it('ignores invalid snapshot payloads that fail protocol validation', async () => {
+    const { hookResult, ws, subId } = await renderAndConnect();
+    await act(() => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          type: 'snapshot',
+          subscriptionId: subId,
+          seq: 1,
+          request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+          meta: { generatedAt: Date.now(), maxQuoteTs: Date.now(), staleMs: 0 },
+          data: { underlying: 'BTC', expiry: '2026-03-27', dte: 7, stats: {}, strikes: [], gex: [] },
+        }),
+      });
+    });
+
+    expect(hookResult.result.current.lastSeq).toBe(0);
   });
 
   it('does not connect when disabled', async () => {

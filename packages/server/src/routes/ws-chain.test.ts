@@ -19,6 +19,7 @@ class FakeAdapter implements OptionVenueAdapter {
   readonly venue: VenueId;
   readonly capabilities: VenueCapabilities = { optionChain: true, greeks: true, websocket: true };
   private handlers = new Set<StreamHandlers>();
+  fetchCalls = 0;
 
   constructor(venue: VenueId) { this.venue = venue; }
 
@@ -27,6 +28,7 @@ class FakeAdapter implements OptionVenueAdapter {
   async listExpiries() { return ['2026-03-27']; }
 
   async fetchOptionChain(req: ChainRequest): Promise<VenueOptionChain> {
+    this.fetchCalls += 1;
     return {
       venue: this.venue, underlying: req.underlying, expiry: req.expiry,
       asOf: Date.now(),
@@ -190,7 +192,7 @@ describe('WS /ws/chain route (injectWS)', () => {
     ws.terminate();
   });
 
-  it('pushes new snapshots when adapter fires deltas', async () => {
+  it('pushes delta patches when adapter fires deltas', async () => {
     const ws = await app.injectWS('/ws/chain');
 
     subscribe(ws, 'delta-test');
@@ -202,10 +204,29 @@ describe('WS /ws/chain route (injectWS)', () => {
     fakeAdapter.fireDelta();
     const followUp = await collectMessages(ws, 1, 500);
 
-    const snapshot2 = followUp.find(m => m['type'] === 'snapshot');
-    expect(snapshot2).toBeDefined();
-    expect((snapshot2!['seq'] as number)).toBeGreaterThan(1);
+    const delta = followUp.find(m => m['type'] === 'delta');
+    expect(delta).toBeDefined();
+    expect((delta!['seq'] as number)).toBeGreaterThan(1);
 
     ws.terminate();
+  });
+
+  it('reuses one shared chain engine across clients watching the same chain', async () => {
+    const before = fakeAdapter.fetchCalls;
+
+    const first = await app.injectWS('/ws/chain');
+    subscribe(first, 'shared-1');
+    await collectMessages(first, 2, 1000);
+
+    const fetchCallsAfterFirstClient = fakeAdapter.fetchCalls;
+    const second = await app.injectWS('/ws/chain');
+    subscribe(second, 'shared-2');
+    await collectMessages(second, 2, 1000);
+
+    expect(fetchCallsAfterFirstClient).toBeGreaterThanOrEqual(before);
+    expect(fakeAdapter.fetchCalls).toBe(fetchCallsAfterFirstClient);
+
+    first.terminate();
+    second.terminate();
   });
 });

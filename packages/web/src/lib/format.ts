@@ -11,12 +11,16 @@ export function fmtUsd(v: number | null | undefined): string {
   return `${sign}$${abs.toFixed(2)}`;
 }
 
+function compactNum(v: number): string {
+  if (Math.abs(v) >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
+}
+
 export function fmtUsdCompact(v: number | null | undefined): string {
   if (v == null) return '–';
-  if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B`;
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${v.toFixed(0)}`;
+  return `$${compactNum(v)}`;
 }
 
 export function fmtIv(v: number | null | undefined): string {
@@ -41,6 +45,11 @@ export function fmtNum(v: number | null | undefined, decimals = 2): string {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+}
+
+export function fmtCompact(v: number | null | undefined): string {
+  if (v == null) return '–';
+  return compactNum(v);
 }
 
 export function dteDays(expiry: string): number {

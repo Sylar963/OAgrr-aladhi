@@ -27,8 +27,15 @@ export interface IvSurfaceRow {
 
 export type TermStructure = 'contango' | 'flat' | 'backwardation';
 
+export interface VenueAtmPoint {
+  expiry: string;
+  dte: number;
+  atm: number | null;
+}
+
 export interface IvSurfaceResponse {
   underlying: string;
   surface: IvSurfaceRow[];
   termStructure: TermStructure;
+  venueAtm: Record<string, VenueAtmPoint[]>;
 }

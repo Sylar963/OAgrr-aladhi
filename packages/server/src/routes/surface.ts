@@ -42,6 +42,10 @@ export async function surfaceRoute(app: FastifyInstance) {
 
     const sortedExpiries = [...allExpiries].sort();
     const surface: IvSurfaceRow[] = [];
+    const venueAtm: Record<string, Array<{ expiry: string; dte: number; atm: number | null }>> = {};
+    for (const venueId of requestedVenues) {
+      venueAtm[venueId] = [];
+    }
 
     for (const expiry of sortedExpiries) {
       const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
@@ -69,13 +73,30 @@ export async function surfaceRoute(app: FastifyInstance) {
       const comparison = buildComparisonChain(underlying, expiry, chains);
       const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
       const stats = computeChainStats(enriched.strikes, chains);
-      const row = computeIvSurface(
-        expiry,
-        computeDte(expiry),
-        enriched.strikes,
-        stats.indexPriceUsd ?? stats.spotIndexUsd,
-      );
+      const refPrice = stats.indexPriceUsd ?? stats.spotIndexUsd;
+      const dte = computeDte(expiry);
+      const row = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
       surface.push(row);
+
+      // Per-venue ATM IV: find ATM strike, read each venue's markIv
+      let atmStrike: (typeof enriched.strikes)[number] | null = null;
+      if (refPrice != null && enriched.strikes.length > 0) {
+        let bestDist = Infinity;
+        for (const s of enriched.strikes) {
+          const dist = Math.abs(s.strike - refPrice);
+          if (dist < bestDist) {
+            bestDist = dist;
+            atmStrike = s;
+          }
+        }
+      }
+      for (const venueId of requestedVenues) {
+        const callIv = atmStrike?.call.venues[venueId]?.markIv ?? null;
+        const putIv = atmStrike?.put.venues[venueId]?.markIv ?? null;
+        const iv = callIv != null && putIv != null ? (callIv + putIv) / 2
+          : callIv ?? putIv;
+        venueAtm[venueId]!.push({ expiry, dte, atm: iv });
+      }
     }
 
     const termStructure: TermStructure = computeTermStructure(surface);
@@ -84,6 +105,7 @@ export async function surfaceRoute(app: FastifyInstance) {
       underlying,
       surface,
       termStructure,
+      venueAtm,
     };
   });
 }

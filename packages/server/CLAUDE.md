@@ -27,7 +27,7 @@ src/
     ws-chain.ts      WS /ws/chain
     flow.ts          GET /api/flow?underlying=BTC
     block-flow.ts    GET /api/block-flow?underlying=BTC
-    surface.ts       GET /api/surface?underlying=BTC
+    surface.ts       GET /api/surface?underlying=BTC (returns surface grid + termStructure + venueAtm)
 ```
 
 ## Non-obvious decisions

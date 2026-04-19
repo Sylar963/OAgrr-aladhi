@@ -1,0 +1,29 @@
+{
+  "name": "@oggregator/trading",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@oggregator/core": "workspace:^",
+    "@oggregator/db": "workspace:^",
+    "@oggregator/protocol": "workspace:^",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
+  }
+}

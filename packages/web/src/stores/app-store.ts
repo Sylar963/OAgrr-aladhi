@@ -15,7 +15,7 @@ interface AppState {
   underlying: string;
   expiry: string;
   // Active tab
-  activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect';
+  activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading';
   // Venue filter
   activeVenues: string[];
   // User's custom IV for edge column
@@ -24,7 +24,7 @@ interface AppState {
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
-  setActiveTab: (t: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect') => void;
+  setActiveTab: (t: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading') => void;
   toggleVenue: (venueId: string) => void;
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;

@@ -1,0 +1,89 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.headerLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+.headerValue {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.positive {
+  color: var(--color-profit, #22c55e);
+}
+
+.negative {
+  color: var(--color-loss, #ef4444);
+}
+
+.section {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.sectionHeader {
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 8px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.empty {
+  padding: 24px 14px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 13px;
+}
+
+.rightAlign {
+  text-align: right;
+}

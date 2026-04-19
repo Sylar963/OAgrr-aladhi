@@ -1,4 +1,16 @@
 export {
+  PaperOrderLegSchema,
+  PlaceOrderRequestSchema,
+  type PaperOrderLeg,
+  type PlaceOrderRequest,
+  type PaperOrderDto,
+  type PaperFillDto,
+  type PaperPositionDto,
+  type PaperPnlDto,
+  type PaperWsServerMessage,
+} from './paper.js';
+
+export {
   VenueIdSchema,
   VENUE_IDS,
   VenueConnectionStateSchema,

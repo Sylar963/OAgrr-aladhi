@@ -7,6 +7,7 @@ import { GexView } from '@features/gex';
 import { FlowView } from '@features/flow';
 import { AnalyticsView } from '@features/analytics';
 import { ArchitectView } from '@features/architect';
+import { TradingView } from '@features/trading';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './App.module.css';
@@ -14,6 +15,7 @@ import styles from './App.module.css';
 const TABS = [
   { id: 'chain', label: 'Chain' },
   { id: 'architect', label: 'Builder' },
+  { id: 'trading', label: 'Paper' },
   { id: 'surface', label: 'Volatility' },
   { id: 'flow', label: 'Flow', badge: 'LIVE' },
   { id: 'analytics', label: 'Analytics' },
@@ -46,6 +48,7 @@ export default function App() {
       <div className={styles.panel}>
         {activeTab === 'chain' && <ChainView />}
         {activeTab === 'architect' && <ArchitectView />}
+        {activeTab === 'trading' && <TradingView />}
         {activeTab === 'surface' && <SurfaceView />}
         {activeTab === 'flow' && <FlowView />}
         {activeTab === 'analytics' && <AnalyticsView />}

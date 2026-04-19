@@ -16,6 +16,8 @@ import { repriceLeg } from './reprice';
 import { buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import VenueSlideover from './VenueSlideover';
+import { legsToOrderRequest, usePlaceOrder } from '@features/trading';
+import { useAppStore as _useAppStoreForTabSwitch } from '@stores/app-store';
 import StrategyTemplates, {
   buildTemplateVariant,
   clearActiveTemplateDrag,
@@ -165,6 +167,23 @@ export default function ArchitectView() {
   const [copied, setCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [builderError, setBuilderError] = useState<string | null>(null);
+  const [paperStatus, setPaperStatus] = useState<string | null>(null);
+
+  const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
+  const placeOrder = usePlaceOrder();
+
+  async function handleSendToPaper() {
+    if (legs.length === 0) return;
+    setPaperStatus(null);
+    try {
+      const req = legsToOrderRequest(legs, underlying, activeVenues);
+      await placeOrder.mutateAsync(req);
+      setPaperStatus('Filled — switching to Paper tab');
+      setTimeout(() => setActiveTab('trading'), 400);
+    } catch (err) {
+      setPaperStatus(err instanceof Error ? err.message : 'Paper order failed');
+    }
+  }
 
   useEffect(() => {
     setBuilderError(null);
@@ -365,6 +384,23 @@ export default function ArchitectView() {
               <button className={styles.compareBtn} onClick={() => setShowVenues(true)}>
                 Compare Venues
               </button>
+            )}
+
+            {legs.length > 0 && (
+              <button
+                className={styles.compareBtn}
+                onClick={handleSendToPaper}
+                disabled={placeOrder.isPending}
+                style={{ marginTop: 8 }}
+              >
+                {placeOrder.isPending ? 'Sending…' : 'Send to paper'}
+              </button>
+            )}
+
+            {paperStatus && (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+                {paperStatus}
+              </div>
             )}
 
             {legs.length === 0 && (

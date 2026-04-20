@@ -57,6 +57,12 @@ export const ReducePaperTradeRequestSchema = z.object({
 
 export type ReducePaperTradeRequest = z.infer<typeof ReducePaperTradeRequestSchema>;
 
+export const InitPaperAccountRequestSchema = z.object({
+  initialCashUsd: z.number().int().min(1_000).max(100_000).multipleOf(1_000),
+});
+
+export type InitPaperAccountRequest = z.infer<typeof InitPaperAccountRequestSchema>;
+
 export interface PaperOrderDto {
   id: string;
   clientOrderId: string;
@@ -109,6 +115,14 @@ export interface PaperPnlDto {
   unrealizedUsd: number;
   equityUsd: number;
   generatedAt: string;
+}
+
+export interface PaperAccountDto {
+  id: string;
+  label: string;
+  initialCashUsd: number;
+  createdAt: string | null;
+  isInitialized: boolean;
 }
 
 export interface PaperRiskDto {

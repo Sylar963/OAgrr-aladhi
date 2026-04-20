@@ -1,8 +1,23 @@
 import { z } from 'zod';
 
+// ── REST: GET /time ────────────────────────────────────────────
+// Envelope is { code, msg, i18nArgs, data }. ws-client.ts unwraps
+// to `data`, so the schemas below model the unwrapped payload.
+
+export const CoincallTimeSchema = z.object({
+  serverTime: z.number(),
+});
+export type CoincallTime = z.infer<typeof CoincallTimeSchema>;
+
+// ── REST: GET /open/option/getInstruments/{base} ───────────────
+// Native symbol field is `symbolName` (not `symbol`). Expiry arrives
+// as a unix ms timestamp in `expirationTimestamp`. baseCurrency is
+// the bare asset ("BTC"), while optionConfig keys are pair names
+// ("BTCUSD"). See state.ts for the join.
+
 export const CoincallInstrumentSchema = z.object({
-  symbol: z.string(),
   baseCurrency: z.string(),
+  startTimestamp: z.number(),
   expirationTimestamp: z.number(),
   strike: z.number(),
   symbolName: z.string(),
@@ -12,121 +27,128 @@ export const CoincallInstrumentSchema = z.object({
 });
 export type CoincallInstrument = z.infer<typeof CoincallInstrumentSchema>;
 
-export const CoincallMarkPriceSchema = z.object({
-  symbol: z.string(),
-  markPrice: z.string(),
-  indexPrice: z.string(),
-  bidPrice: z.string().optional(),
-  askPrice: z.string().optional(),
-  bidSize: z.string().optional(),
-  askSize: z.string().optional(),
-  bidIv: z.string().optional(),
-  askIv: z.string().optional(),
-  delta: z.string().optional(),
-  gamma: z.string().optional(),
-  theta: z.string().optional(),
-  vega: z.string().optional(),
-  rho: z.string().optional(),
-  time: z.number().optional(),
-});
-export type CoincallMarkPrice = z.infer<typeof CoincallMarkPriceSchema>;
+export const CoincallInstrumentsResponseSchema = z.array(CoincallInstrumentSchema);
+export type CoincallInstrumentsResponse = z.infer<typeof CoincallInstrumentsResponseSchema>;
 
-export const CoincallOptionChainSchema = z.object({
-  strike: z.number(),
-  callOption: z
-    .object({
-      symbol: z.string(),
-      bidPrice: z.string(),
-      askPrice: z.string(),
-      bidSize: z.string(),
-      askSize: z.string(),
-      markPrice: z.string(),
-      indexPrice: z.string(),
-      bidIv: z.string().optional(),
-      askIv: z.string().optional(),
-      delta: z.string().optional(),
-      gamma: z.string().optional(),
-      theta: z.string().optional(),
-      vega: z.string().optional(),
-    })
-    .optional(),
-  putOption: z
-    .object({
-      symbol: z.string(),
-      bidPrice: z.string(),
-      askPrice: z.string(),
-      bidSize: z.string(),
-      askSize: z.string(),
-      markPrice: z.string(),
-      indexPrice: z.string(),
-      bidIv: z.string().optional(),
-      askIv: z.string().optional(),
-      delta: z.string().optional(),
-      gamma: z.string().optional(),
-      theta: z.string().optional(),
-      vega: z.string().optional(),
-    })
-    .optional(),
-});
-export type CoincallOptionChain = z.infer<typeof CoincallOptionChainSchema>;
+// ── REST: GET /open/public/config/v1 ───────────────────────────
+// Config fields arrive as numbers or numeric strings depending on the
+// asset (spotConfig has string fees on some pairs). optionConfig is
+// numeric-only in observed captures, but z.union guards against future
+// drift.
 
-export const CoincallIndexPriceSchema = z.object({
-  symbol: z.string(),
-  indexPrice: z.string(),
-  time: z.number(),
-});
-export type CoincallIndexPrice = z.infer<typeof CoincallIndexPriceSchema>;
+const NumericLike = z.union([z.number(), z.string().transform((s) => Number(s))]);
 
-export const CoincallTickerSchema = z.object({
+export const CoincallOptionConfigEntrySchema = z.object({
   symbol: z.string(),
-  lastPrice: z.string().optional(),
-  volume24h: z.string().optional(),
-  turnover24h: z.string().optional(),
-  markPrice: z.string().optional(),
-  indexPrice: z.string().optional(),
+  base: z.string(),
+  settle: z.string(),
+  takerFee: NumericLike,
+  makerFee: NumericLike,
+  multiplier: NumericLike,
+  tickSize: NumericLike,
+  priceDecimal: z.number(),
+  qtyDecimal: z.number(),
+  greeksDecimal: z.number().optional(),
+  minQty: z.number().optional(),
+  maxOrderNumber: z.number().optional(),
+  maxPositionQty: z.number().optional(),
+  marketMaxQty: z.number().optional(),
+  limitMaxQty: z.number().optional(),
 });
-export type CoincallTicker = z.infer<typeof CoincallTickerSchema>;
+export type CoincallOptionConfigEntry = z.infer<typeof CoincallOptionConfigEntrySchema>;
 
 export const CoincallPublicConfigSchema = z.object({
-  optionConfig: z.record(z.string(), z.object({
-    symbol: z.string(),
-    takerFee: z.number(),
-    maxOrderNumber: z.number(),
-    multiplier: z.number(),
-    settle: z.string(),
-    priceDecimal: z.number(),
-    limitMaxQty: z.number(),
-    tickDecimal: z.number(),
-    tickSize: z.number(),
-    greeksDecimal: z.number(),
-    makerFee: z.number(),
-    marketMaxQty: z.number(),
-    qtyDecimal: z.number(),
-    maxPositionQty: z.number(),
-    base: z.string(),
-  })),
+  optionConfig: z.record(z.string(), CoincallOptionConfigEntrySchema),
 });
 export type CoincallPublicConfig = z.infer<typeof CoincallPublicConfigSchema>;
 
-export const CoincallTimeSchema = z.object({
-  serverTime: z.number(),
-});
-export type CoincallTime = z.infer<typeof CoincallTimeSchema>;
+// ── WS: bsInfo push (pricing info per instrument) ──────────────
+// Fixture: references/options-docs/coincall/option_ws_en.md (## Pricing Information)
+// Envelope: { dt: 3, c: 20, d: { ... fields below ... } }
+// bsInfo does NOT include bid/ask — that lives in tOption.
 
-export const CoincallWsMessageSchema = z.object({
-  type: z.string(),
-  channel: z.string().optional(),
-  data: z.unknown().optional(),
+export const CoincallBsInfoDataSchema = z.object({
+  s: z.string(),
+  mp: z.number().optional(),
+  lp: z.number().optional(),
+  ip: z.number().optional(),
+  iv: z.number().optional(),
+  delta: z.number().optional(),
+  gamma: z.number().optional(),
+  theta: z.number().optional(),
+  vega: z.number().optional(),
+  up: z.number().optional(),
+  oi: z.number().optional(),
+  v: z.number().optional(),
+  v24: z.number().optional(),
+  uv: z.number().optional(),
+  uv24: z.number().optional(),
+  h: z.number().optional(),
+  l: z.number().optional(),
+  cp: z.number().optional(),
+  cr: z.number().optional(),
+  pr0: z.number().optional(),
+  rt: z.number().optional(),
+  ts: z.number(),
 });
-export type CoincallWsMessage = z.infer<typeof CoincallWsMessageSchema>;
+export type CoincallBsInfoData = z.infer<typeof CoincallBsInfoDataSchema>;
 
-export const CoincallWsResponseSchema = z.object({
-  type: z.string(),
-  code: z.number().optional(),
-  msg: z.string().optional(),
-  channel: z.string().optional(),
-  data: z.unknown().optional(),
-  result: z.unknown().optional(),
-  id: z.number().optional(),
+export const CoincallBsInfoMessageSchema = z.object({
+  dt: z.literal(3),
+  c: z.number(),
+  d: CoincallBsInfoDataSchema,
 });
-export type CoincallWsResponse = z.infer<typeof CoincallWsResponseSchema>;
+export type CoincallBsInfoMessage = z.infer<typeof CoincallBsInfoMessageSchema>;
+
+// ── WS: tOption push (option chain bid/ask for a whole expiry) ─
+// Fixture: references/options-docs/coincall/option_ws_en.md (## Option Chain Data)
+// Envelope: { dt: 4, c: 20, d: [ { ...per-contract snapshot... } ] }
+// tOption provides bid/ask/biv/aiv/bs/as — no markIv.
+
+export const CoincallTOptionEntrySchema = z.object({
+  s: z.string(),
+  mp: z.number().optional(),
+  lp: z.number().optional(),
+  bid: z.number().optional(),
+  ask: z.number().optional(),
+  bs: z.number().optional(),
+  as: z.number().optional(),
+  biv: z.number().optional(),
+  aiv: z.number().optional(),
+  delta: z.number().optional(),
+  gamma: z.number().optional(),
+  theta: z.number().optional(),
+  vega: z.number().optional(),
+  up: z.number().optional(),
+  upv: z.number().optional(),
+  oi: z.number().optional(),
+  v: z.number().optional(),
+  v24: z.number().optional(),
+  cp: z.number().optional(),
+  cr: z.number().optional(),
+  ts: z.number(),
+});
+export type CoincallTOptionEntry = z.infer<typeof CoincallTOptionEntrySchema>;
+
+export const CoincallTOptionMessageSchema = z.object({
+  dt: z.literal(4),
+  c: z.number(),
+  d: z.array(CoincallTOptionEntrySchema),
+});
+export type CoincallTOptionMessage = z.infer<typeof CoincallTOptionMessageSchema>;
+
+// ── WS: heartbeat ack ──────────────────────────────────────────
+// Fixture: option_ws_en.md (## HeartBeat) — response is { c: 11, rc: 1 }
+
+export const CoincallHeartbeatAckSchema = z.object({
+  c: z.literal(11),
+  rc: z.number(),
+});
+export type CoincallHeartbeatAck = z.infer<typeof CoincallHeartbeatAckSchema>;
+
+// ── Native symbol regex ────────────────────────────────────────
+// Coincall options symbols: {base}USD-{DDMMMYY}-{strike}-{C|P}
+// Examples: BTCUSD-14SEP23-22500-C, ETHUSD-27JUN25-3000-P
+// Strike may be integer or decimal (small-cap assets).
+export const COINCALL_OPTION_SYMBOL_RE =
+  /^([A-Z]+)USD-(\d{1,2}[A-Z]{3}\d{2})-([\d.]+)-([CP])$/;

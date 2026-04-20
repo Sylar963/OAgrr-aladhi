@@ -1,6 +1,7 @@
 import {
   NoopPaperTradingStore,
   PostgresPaperTradingStore,
+  type PaperAccountRow,
   type PaperTradingStore,
 } from '@oggregator/db';
 import {
@@ -52,6 +53,23 @@ export async function ensureDefaultAccount(): Promise<void> {
     DEFAULT_INITIAL_CASH_USD,
   );
   ensured = true;
+}
+
+export async function getDefaultAccount(): Promise<PaperAccountRow | null> {
+  if (!paperTradingStore.enabled) return null;
+  return paperTradingStore.getAccount(DEFAULT_ACCOUNT_ID);
+}
+
+export async function resetDefaultAccount(initialCashUsd: number): Promise<PaperAccountRow> {
+  const row: PaperAccountRow = {
+    id: DEFAULT_ACCOUNT_ID,
+    label: DEFAULT_ACCOUNT_LABEL,
+    initialCashUsd,
+    createdAt: new Date(),
+  };
+  await paperTradingStore.resetAccount(row);
+  ensured = true;
+  return row;
 }
 
 export { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';

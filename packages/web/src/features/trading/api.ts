@@ -1,6 +1,8 @@
 import type {
   CreatePaperTradeNoteRequest,
   CreatePaperTradeRequest,
+  InitPaperAccountRequest,
+  PaperAccountDto,
   PaperFillDto,
   PaperOverviewDto,
   PaperOrderDto,
@@ -57,6 +59,14 @@ export function closeTrade(tradeId: string): Promise<PaperTradeDetailDto> {
 
 export function reduceTrade(tradeId: string, fraction: number): Promise<PaperTradeDetailDto> {
   return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/actions/reduce`, { fraction });
+}
+
+export function getPaperAccount(): Promise<PaperAccountDto> {
+  return fetchJson('/paper/account');
+}
+
+export function initPaperAccount(req: InitPaperAccountRequest): Promise<PaperAccountDto> {
+  return postJson<PaperAccountDto>('/paper/account/init', req);
 }
 
 export function getPositions(): Promise<{ positions: PaperPositionDto[] }> {

@@ -1,332 +1,383 @@
+import { createHmac } from 'node:crypto';
+import type WebSocket from 'ws';
 import {
+  COINCALL_CONFIG,
+  COINCALL_INSTRUMENTS,
   COINCALL_MARKET_WS_URL,
   COINCALL_REST_BASE_URL,
-  COINCALL_INSTRUMENTS,
-  COINCALL_OPTION_CHAIN,
-  COINCALL_CONFIG,
   COINCALL_TIME,
 } from '../shared/endpoints.js';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import { TopicWsClient } from '../shared/topic-ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
-  parseCoincallInstrument,
-  parseCoincallMarkPrice,
-  parseCoincallOptionChain,
+  parseCoincallBsInfoMessage,
+  parseCoincallInstruments,
   parseCoincallPublicConfig,
+  parseCoincallTOptionMessage,
   parseCoincallTime,
-  isCoincallWsSuccess,
 } from './codec.js';
 import { deriveCoincallHealth } from './health.js';
 import {
-  buildCoincallInitialChannels,
-  buildCoincallPricingChannel,
-  confirmCoincallSubscribedChannels,
+  buildBsInfoSubscribeMessage,
+  buildBsInfoUnsubscribeMessage,
+  buildCoincallNewBsInfoSymbols,
+  buildCoincallRemovedBsInfoSymbols,
+  buildTOptionSubscribeMessage,
+  buildTOptionUnsubscribeMessage,
+  COINCALL_MAX_SUBS_PER_BATCH,
   createCoincallSubscriptionState,
-  removeCoincallTrackedChannels,
+  ensureCoincallTOptionSub,
+  pairRootFor,
+  removeCoincallTOptionSub,
   resetCoincallSubscriptionState,
-  rollbackCoincallPendingChannels,
-  trackCoincallChannels,
 } from './planner.js';
 import {
   buildCoincallInstrument,
-  buildCoincallMarkPriceQuote,
-  mergeCoincallTicker,
-  COINCALL_DEFAULT_MAKER_FEE,
-  COINCALL_DEFAULT_TAKER_FEE,
+  mergeCoincallBsInfo,
+  mergeCoincallTOption,
 } from './state.js';
+import type { CoincallOptionConfigEntry } from './types.js';
 
 const log = feedLogger('coincall');
 
+// Coincall closes idle connections after 30s — heartbeat well within.
+const COINCALL_PING_INTERVAL_MS = 15_000;
+const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 
+// Only subscribe options for underlyings that the app cares about. optionConfig
+// lists 21 pairs but most are long-tail; chain UI focuses on these.
+const SUPPORTED_UNDERLYINGS = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'] as const;
+
+interface CoincallEnvelope {
+  code?: number;
+  msg?: string | null;
+  i18nArgs?: unknown;
+  data?: unknown;
+}
+
+/**
+ * Coincall options adapter.
+ *
+ * REST:
+ *   GET /time
+ *   GET /open/public/config/v1     — fee/multiplier/settle per pair
+ *   GET /open/option/getInstruments/{base}
+ *
+ * WebSocket (wss://ws.coincall.com/options):
+ *   Public market channels (bsInfo, tOption, orderBook, kline, lastTrade)
+ *   all share one authenticated endpoint. Signing is required even for
+ *   market data — see buildSignedWsUrl().
+ *
+ *   We use two complementary subscriptions per chain:
+ *     - bsInfo per instrument (markPrice, iv, delta/gamma/theta/vega, oi, up)
+ *     - tOption per base+expiry (bid/ask/bs/as/biv/aiv across the chain)
+ *   state.ts merges both into a single LiveQuote per exchangeSymbol.
+ *
+ * Heartbeat: send {"action":"heartbeat"} every 15s, ack is {"c":11,"rc":1}.
+ *
+ * If COINCALL_API_KEY / COINCALL_API_SECRET are not present in the
+ * environment, fetchInstruments throws before registerAdapter is called,
+ * and the adapter is skipped for this process. Other venues keep working.
+ */
 export class CoincallWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'coincall';
 
-  protected override eagerExpiryCount = 3;
+  private wsClient: TopicWsClient | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
 
-  private wsClient: WebSocket | null = null;
-  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
-  private msgId = 0;
-  private hasConnectedOnce = false;
   private readonly subscriptions = createCoincallSubscriptionState();
-  private readonly pendingSubscribeById = new Map<number, string[]>();
-  private optionConfig: Record<string, { settle: string; contractSize: number }> = {};
+  private optionConfig: Record<string, CoincallOptionConfigEntry> = {};
+  // pairRoot (e.g. "BTCUSD") + expiry (YYYY-MM-DD) → expirationTimestamp ms.
+  // Populated when building instruments so tOption subs know the `end` param.
+  private readonly expiryTsIndex = new Map<string, number>();
+  private connectPromise: Promise<void> | null = null;
 
   protected initClients(): void {}
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
-    const instruments: CachedInstrument[] = [];
+    const apiKey = process.env['COINCALL_API_KEY'];
+    const apiSecret = process.env['COINCALL_API_SECRET'];
+    if (!apiKey || !apiSecret) {
+      throw new Error(
+        'COINCALL_API_KEY/COINCALL_API_SECRET missing — Coincall public WS requires signed auth',
+      );
+    }
 
     const configRaw = await this.fetchApi(COINCALL_CONFIG);
     const config = parseCoincallPublicConfig(configRaw);
-
-    if (config?.optionConfig) {
-      for (const [symbol, cfg] of Object.entries(config.optionConfig)) {
-        this.optionConfig[symbol] = {
-          settle: cfg.settle,
-          contractSize: cfg.multiplier,
-        };
-      }
+    if (config == null) {
+      throw new Error('coincall /open/public/config/v1 returned unparseable payload');
     }
+    this.optionConfig = config.optionConfig;
 
-    const underlyings = ['BTC', 'ETH'];
-    for (const underlying of underlyings) {
+    const instruments: CachedInstrument[] = [];
+    for (const base of SUPPORTED_UNDERLYINGS) {
+      if (!this.optionConfig[`${base}USD`]) continue;
       try {
-        const response = await this.fetchApi(`${COINCALL_INSTRUMENTS}/${underlying}`);
-        if (Array.isArray(response)) {
-          for (const item of response) {
-            const parsed = parseCoincallInstrument(item);
-            if (!parsed) continue;
-
-            const cfg = this.optionConfig[parsed.baseCurrency];
-            const inst = buildCoincallInstrument(
-              {
-                symbolName: parsed.symbolName,
-                baseCurrency: parsed.baseCurrency,
-                strike: parsed.strike,
-                expirationTimestamp: parsed.expirationTimestamp,
-                isActive: parsed.isActive,
-                minQty: parsed.minQty,
-                tickSize: parsed.tickSize,
-              },
-              cfg ?? null,
-              (base, settle, expiry, strike, right) =>
-                this.buildCanonicalSymbol(base, settle, expiry, strike, right),
-            );
-            if (inst) instruments.push(inst);
-          }
+        const raw = await this.fetchApi(`${COINCALL_INSTRUMENTS}/${base}`);
+        const parsed = parseCoincallInstruments(raw);
+        if (parsed == null) {
+          log.warn({ base }, 'instruments validation failed');
+          continue;
         }
-      } catch (err) {
-        log.warn({ underlying, err: String(err) }, 'failed to load instruments');
+        for (const item of parsed) {
+          const inst = buildCoincallInstrument(item, this.optionConfig, {
+            buildCanonicalSymbol: (b, s, e, k, r) => this.buildCanonicalSymbol(b, s, e, k, r),
+            parseExpiry: (raw) => this.parseExpiry(raw),
+          });
+          if (inst == null) continue;
+          instruments.push(inst);
+          this.expiryTsIndex.set(this.expiryKey(inst.base, inst.expiry), item.expirationTimestamp);
+        }
+      } catch (err: unknown) {
+        log.warn({ base, err: String(err) }, 'failed to load instruments');
       }
     }
 
     log.info({ count: instruments.length }, 'loaded option instruments');
 
-    await this.connectAndSubscribe(instruments);
-    await this.waitForFirstData();
-
-    this.healthCheckTimer = setInterval(() => {
-      void this.runHealthCheck();
+    this.refreshTimer = setInterval(() => {
+      void this.refreshInstruments();
+    }, INSTRUMENT_REFRESH_INTERVAL_MS);
+    this.healthTimer = setInterval(() => {
+      void this.refreshHealth();
     }, HEALTH_CHECK_INTERVAL_MS);
-    void this.runHealthCheck();
+    void this.refreshHealth();
 
     return instruments;
   }
 
-  private waitForFirstData(): Promise<void> {
-    const target = new Set(
-      [...this.subscriptions.subscribedChannels, ...this.subscriptions.pendingSubscribeChannels]
-        .filter((ch) => ch.startsWith('pricing.'))
-        .map((ch) => ch.split('.')[1]!),
-    ).size;
-    const seen = new Set<string>();
+  private async refreshInstruments(): Promise<void> {
+    const activeSymbols = new Set<string>();
+    const newInstruments: CachedInstrument[] = [];
 
-    return new Promise((resolve) => {
-      const check = setInterval(() => {
-        for (const key of this.quoteStore.keys()) {
-          seen.add(key.split('-')[0]!.toUpperCase());
+    for (const base of SUPPORTED_UNDERLYINGS) {
+      if (!this.optionConfig[`${base}USD`]) continue;
+      try {
+        const raw = await this.fetchApi(`${COINCALL_INSTRUMENTS}/${base}`);
+        const parsed = parseCoincallInstruments(raw);
+        if (parsed == null) continue;
+        for (const item of parsed) {
+          if (item.isActive) activeSymbols.add(item.symbolName);
+          if (this.instrumentMap.has(item.symbolName)) continue;
+          if (!item.isActive) continue;
+          const inst = buildCoincallInstrument(item, this.optionConfig, {
+            buildCanonicalSymbol: (b, s, e, k, r) => this.buildCanonicalSymbol(b, s, e, k, r),
+            parseExpiry: (raw) => this.parseExpiry(raw),
+          });
+          if (inst == null) continue;
+          newInstruments.push(inst);
+          this.expiryTsIndex.set(this.expiryKey(inst.base, inst.expiry), item.expirationTimestamp);
         }
-        if (seen.size >= target) {
-          clearInterval(check);
-          log.info(
-            { quotes: this.quoteStore.size, underlyings: seen.size },
-            'initial data received',
-          );
-          resolve();
+      } catch (err: unknown) {
+        log.warn({ base, err: String(err) }, 'instrument refresh failed');
+        for (const inst of this.instruments) {
+          if (inst.base === base) activeSymbols.add(inst.exchangeSymbol);
         }
-      }, 200);
-      setTimeout(() => {
-        clearInterval(check);
-        resolve();
-      }, 10_000);
-    });
-  }
-
-  private async connectAndSubscribe(instruments: CachedInstrument[]): Promise<void> {
-    const channels = buildCoincallInitialChannels(instruments);
-    await this.connectWs();
-    const newChannels = trackCoincallChannels(this.subscriptions, channels);
-    this.sendSubscribe(newChannels);
-  }
-
-  private connectWs(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.wsClient != null) {
-        resolve();
-        return;
-      }
-
-      this.wsClient = new WebSocket(COINCALL_MARKET_WS_URL);
-
-      this.wsClient.onopen = () => {
-        log.info('websocket connected');
-        if (this.hasConnectedOnce) {
-          void this.refreshInstruments();
-        }
-        this.hasConnectedOnce = true;
-        resolve();
-      };
-
-      this.wsClient.onmessage = (event) => {
-        try {
-          this.handleWsMessage(JSON.parse(event.data));
-        } catch (error: unknown) {
-          log.debug({ err: String(error) }, 'malformed WS frame');
-        }
-      };
-
-      this.wsClient.onclose = () => {
-        log.info('websocket disconnected');
-        this.emitStatus('reconnecting');
-        setTimeout(() => {
-          if (this.wsClient?.readyState === WebSocket.CLOSED) {
-            this.wsClient = null;
-            void this.connectWs();
-          }
-        }, 1000);
-      };
-
-      this.wsClient.onerror = (error) => {
-        log.error({ err: String(error) }, 'websocket error');
-        reject(error);
-      };
-    });
-  }
-
-  private sendSubscribe(channels: string[]): void {
-    if (channels.length === 0 || !this.wsClient) return;
-
-    const id = ++this.msgId;
-    this.pendingSubscribeById.set(id, channels);
-    this.wsClient.send(
-      JSON.stringify({
-        type: 'subscribe',
-        channels,
-        id,
-      }),
-    );
-    log.info({ count: channels.length, id }, 'requested channel subscribe');
-  }
-
-  private handleWsMessage(msg: unknown): void {
-    const id = typeof (msg as { id?: number })['id'] === 'number' ? (msg as { id: number })['id'] : null;
-
-    if (id != null) {
-      const pending = this.pendingSubscribeById.get(id);
-      if (pending && isCoincallWsSuccess(msg)) {
-        confirmCoincallSubscribedChannels(this.subscriptions, pending);
-        this.pendingSubscribeById.delete(id);
-      } else if (pending) {
-        rollbackCoincallPendingChannels(this.subscriptions, pending);
-        this.pendingSubscribeById.delete(id);
-        log.warn({ id, msg }, 'subscribe rejected');
-      }
-      return;
-    }
-
-    const channel = (msg as { channel?: string })['channel'];
-    const data = (msg as { data?: unknown })['data'];
-
-    if (!channel || !data) return;
-
-    if (channel.startsWith('pricing.')) {
-      const underlying = channel.split('.')[1]!;
-      this.handlePricingUpdate(underlying, data);
-    }
-  }
-
-  private handlePricingUpdate(underlying: string, data: unknown): void {
-    const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
-
-    if (Array.isArray(data)) {
-      for (const item of data) {
-        const parsed = parseCoincallMarkPrice(item);
-        if (!parsed) continue;
-
-        const exchangeSymbol = parsed.symbol;
-        const previous = this.quoteStore.get(exchangeSymbol);
-        const quote = buildCoincallMarkPriceQuote(
-          parsed,
-          previous,
-          (val) => this.positiveOrNull(val),
-          (val) => this.safeNum(val),
-        );
-
-        if (!this.instrumentMap.has(exchangeSymbol)) {
-          this.quoteStore.set(exchangeSymbol, quote);
-          continue;
-        }
-
-        updates.push({ exchangeSymbol, quote });
       }
     }
 
-    if (updates.length > 0) {
-      this.emitQuoteUpdates(updates);
+    const expired = this.instruments.filter((i) => !activeSymbols.has(i.exchangeSymbol));
+    if (expired.length > 0) {
+      const expiredSymbols = expired.map((i) => i.exchangeSymbol);
+      const removed = buildCoincallRemovedBsInfoSymbols(this.subscriptions, expiredSymbols);
+      if (this.wsClient?.isConnected) {
+        for (const sym of removed) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+      }
+      this.removeCachedInstruments((i) => !activeSymbols.has(i.exchangeSymbol));
+      log.info({ count: expired.length }, 'removed expired instruments');
+    }
+
+    if (newInstruments.length > 0) {
+      for (const inst of newInstruments) {
+        this.instruments.push(inst);
+        this.instrumentMap.set(inst.exchangeSymbol, inst);
+        this.symbolIndex.set(inst.symbol, inst.exchangeSymbol);
+      }
+      log.info({ count: newInstruments.length }, 'added new instruments');
     }
   }
+
+  // ── subscribe / unsubscribe ──────────────────────────────────
 
   protected async subscribeChain(
     underlying: string,
-    _expiry: string,
-    _instruments: CachedInstrument[],
+    expiry: string,
+    instruments: CachedInstrument[],
   ): Promise<void> {
-    const channel = buildCoincallPricingChannel(underlying);
-    const newChannels = trackCoincallChannels(this.subscriptions, [channel]);
+    if (instruments.length === 0) return;
+    await this.ensureConnected();
 
-    if (newChannels.length > 0) {
-      this.sendSubscribe(newChannels);
+    const newBsInfoSymbols = buildCoincallNewBsInfoSymbols(this.subscriptions, instruments);
+    for (const batchStart of indexBatches(newBsInfoSymbols.length, COINCALL_MAX_SUBS_PER_BATCH)) {
+      for (let i = batchStart.start; i < batchStart.end; i++) {
+        this.wsClient?.send(buildBsInfoSubscribeMessage(newBsInfoSymbols[i]!));
+      }
     }
+
+    const pairRoot = pairRootFor(underlying);
+    const expiryTs = this.expiryTsIndex.get(this.expiryKey(underlying, expiry));
+    if (expiryTs != null && ensureCoincallTOptionSub(this.subscriptions, pairRoot, expiryTs)) {
+      this.wsClient?.send(buildTOptionSubscribeMessage(pairRoot, expiryTs));
+    }
+
+    log.info(
+      { underlying, expiry, bsInfo: newBsInfoSymbols.length, tOption: expiryTs != null ? 1 : 0 },
+      'subscribed to chain',
+    );
   }
 
   protected override async unsubscribeChain(
     underlying: string,
-    _expiry: string,
-    _instruments: CachedInstrument[],
+    expiry: string,
+    instruments: CachedInstrument[],
   ): Promise<void> {
-    if (!this.wsClient || this.wsClient.readyState !== WebSocket.OPEN) return;
+    if (!this.wsClient?.isConnected) return;
+    if (this.activeRequestsForUnderlying(underlying) > 0) return;
 
-    const channel = buildCoincallPricingChannel(underlying);
-    if (this.activeRequestsForUnderlying(underlying) === 0) {
-      this.wsClient.send(
-        JSON.stringify({
-          type: 'unsubscribe',
-          channels: [channel],
-          id: ++this.msgId,
-        }),
-      );
-      removeCoincallTrackedChannels(this.subscriptions, [channel]);
+    const removed = buildCoincallRemovedBsInfoSymbols(
+      this.subscriptions,
+      instruments.map((i) => i.exchangeSymbol),
+    );
+    for (const sym of removed) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+
+    const pairRoot = pairRootFor(underlying);
+    const expiryTs = this.expiryTsIndex.get(this.expiryKey(underlying, expiry));
+    if (expiryTs != null && removeCoincallTOptionSub(this.subscriptions, pairRoot, expiryTs)) {
+      this.wsClient.send(buildTOptionUnsubscribeMessage(pairRoot, expiryTs));
     }
   }
 
   protected async unsubscribeAll(): Promise<void> {
-    const channels = [...this.subscriptions.subscribedChannels];
-    if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN && channels.length > 0) {
-      this.wsClient.send(
-        JSON.stringify({
-          type: 'unsubscribe',
-          channels,
-          id: ++this.msgId,
-        }),
-      );
+    if (!this.wsClient?.isConnected) {
+      resetCoincallSubscriptionState(this.subscriptions);
+      return;
     }
-    this.pendingSubscribeById.clear();
+    for (const sym of this.subscriptions.bsInfoSymbols) {
+      this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+    }
+    for (const key of this.subscriptions.tOptionKeys) {
+      const [pairRoot, tsRaw] = key.split(':');
+      const ts = Number(tsRaw);
+      if (pairRoot && Number.isFinite(ts)) {
+        this.wsClient.send(buildTOptionUnsubscribeMessage(pairRoot, ts));
+      }
+    }
     resetCoincallSubscriptionState(this.subscriptions);
   }
 
-  private async refreshInstruments(): Promise<void> {
-    this.sweepExpiredState();
+  // ── WS connection ────────────────────────────────────────────
+
+  private ensureConnected(): Promise<void> {
+    if (this.wsClient?.isConnected) return Promise.resolve();
+    if (this.connectPromise != null) return this.connectPromise;
+    this.connectPromise = this.connectWs().finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
   }
 
-  private async runHealthCheck(): Promise<void> {
+  private async connectWs(): Promise<void> {
+    const url = buildSignedWsUrl();
+    if (this.wsClient == null) {
+      this.wsClient = new TopicWsClient(url, 'coincall-ws', {
+        pingIntervalMs: COINCALL_PING_INTERVAL_MS,
+        pingMessage: { action: 'heartbeat' },
+        onStatusChange: (state) => {
+          this.emitStatus(
+            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
+          );
+        },
+        getReplayMessages: () => {
+          const messages: Array<Record<string, unknown>> = [];
+          for (const sym of this.subscriptions.bsInfoSymbols) {
+            messages.push(buildBsInfoSubscribeMessage(sym));
+          }
+          for (const key of this.subscriptions.tOptionKeys) {
+            const [pairRoot, tsRaw] = key.split(':');
+            const ts = Number(tsRaw);
+            if (pairRoot && Number.isFinite(ts)) {
+              messages.push(buildTOptionSubscribeMessage(pairRoot, ts));
+            }
+          }
+          return messages;
+        },
+        onMessage: (raw) => {
+          this.handleRawMessage(raw);
+        },
+      });
+    }
+    await this.wsClient.connect();
+  }
+
+  // ── WS message handling ──────────────────────────────────────
+
+  private handleRawMessage(raw: WebSocket.RawData): void {
+    let json: unknown;
+    try {
+      json = JSON.parse(raw.toString());
+    } catch (err: unknown) {
+      log.debug({ err: String(err) }, 'malformed WS frame');
+      return;
+    }
+    if (json == null || typeof json !== 'object') return;
+
+    const envelope = json as Record<string, unknown>;
+    const dt = envelope['dt'];
+
+    if (dt === 3) {
+      const msg = parseCoincallBsInfoMessage(json);
+      if (msg == null) return;
+      const inst = this.instrumentMap.get(msg.d.s);
+      if (inst == null) return;
+      const previous = this.quoteStore.get(msg.d.s);
+      const quote = mergeCoincallBsInfo(msg.d, previous, this.emptyQuote());
+      this.emitQuoteUpdate(msg.d.s, quote);
+      return;
+    }
+
+    if (dt === 4) {
+      const msg = parseCoincallTOptionMessage(json);
+      if (msg == null) return;
+      const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
+      for (const entry of msg.d) {
+        const inst = this.instrumentMap.get(entry.s);
+        if (inst == null) continue;
+        const previous = this.quoteStore.get(entry.s);
+        const quote = mergeCoincallTOption(entry, previous, this.emptyQuote());
+        updates.push({ exchangeSymbol: entry.s, quote });
+      }
+      if (updates.length > 0) this.emitQuoteUpdates(updates);
+      return;
+    }
+
+    // Heartbeat ack ({c:11, rc:1}) and subscribe acks ({c:20 shape variants})
+    // are ignored intentionally — TopicWsClient handles reconnect, and we
+    // trust our local subscription state as the source of truth.
+  }
+
+  // ── REST helpers ─────────────────────────────────────────────
+
+  private async fetchApi(path: string): Promise<unknown> {
+    const res = await fetch(`${COINCALL_REST_BASE_URL}${path}`);
+    if (!res.ok) throw new Error(`coincall ${path} returned ${res.status}`);
+    const body = (await res.json()) as CoincallEnvelope;
+    if (body.code !== 0) {
+      throw new Error(`coincall ${path} code=${body.code} msg=${body.msg ?? ''}`);
+    }
+    return body.data;
+  }
+
+  private async refreshHealth(): Promise<void> {
     try {
       const [timeRaw, configRaw] = await Promise.all([
         this.fetchApi(COINCALL_TIME),
         this.fetchApi(COINCALL_CONFIG),
       ]);
-
       const health = deriveCoincallHealth(
         parseCoincallTime(timeRaw),
         parseCoincallPublicConfig(configRaw),
@@ -338,37 +389,55 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     }
   }
 
-  private async fetchApi(path: string): Promise<unknown> {
-    const res = await fetch(`${COINCALL_REST_BASE_URL}${path}`);
-    if (!res.ok) throw new Error(`${path} returned ${res.status}`);
-    const data = await res.json() as { code?: number; msg?: string; data?: unknown };
-    if (data.code !== 0 && data.code !== undefined) {
-      throw new Error(data.msg ?? 'API error');
-    }
-    return data.data ?? data;
-  }
-
-  private sweepExpiredState(): void {
-    const removed = this.sweepExpiredInstruments();
-    if (removed.length === 0) return;
-
-    removeCoincallTrackedChannels(
-      this.subscriptions,
-      buildCoincallInitialChannels(removed),
-    );
-    log.info({ count: removed.length }, 'removed expired instruments');
+  private expiryKey(base: string, expiry: string): string {
+    return `${base.toUpperCase()}:${expiry}`;
   }
 
   override async dispose(): Promise<void> {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer);
+      this.healthTimer = null;
     }
     await this.unsubscribeAll();
-    if (this.wsClient) {
-      this.wsClient.close();
-      this.wsClient = null;
-    }
-    this.hasConnectedOnce = false;
+    await this.wsClient?.disconnect();
+    this.wsClient = null;
+  }
+}
+
+// ── module-private helpers ────────────────────────────────────
+
+/**
+ * Coincall WS signing (from official Python SDK & cc-docs):
+ *   sign = HMAC-SHA256(secret, "GET/users/self/verify?uuid={apiKey}&ts={ms}"), uppercase hex
+ *   url  = wss://ws.coincall.com/options
+ *          ?code=10&uuid={apiKey}&ts={ms}&sign={sign}&apiKey={apiKey}
+ * Built fresh every connect — `ts` becomes stale otherwise.
+ */
+export function buildSignedWsUrl(now: () => number = Date.now): string {
+  const apiKey = process.env['COINCALL_API_KEY'];
+  const apiSecret = process.env['COINCALL_API_SECRET'];
+  if (!apiKey || !apiSecret) {
+    throw new Error('COINCALL_API_KEY/COINCALL_API_SECRET required for Coincall WS');
+  }
+  const ts = now();
+  const payload = `GET/users/self/verify?uuid=${apiKey}&ts=${ts}`;
+  const sign = createHmac('sha256', apiSecret).update(payload).digest('hex').toUpperCase();
+  const qs = new URLSearchParams({
+    code: '10',
+    uuid: apiKey,
+    ts: String(ts),
+    sign,
+    apiKey,
+  });
+  return `${COINCALL_MARKET_WS_URL}?${qs.toString()}`;
+}
+
+function* indexBatches(total: number, size: number): Generator<{ start: number; end: number }> {
+  for (let start = 0; start < total; start += size) {
+    yield { start, end: Math.min(start + size, total) };
   }
 }

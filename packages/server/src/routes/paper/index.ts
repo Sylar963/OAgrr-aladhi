@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { paperAccountRoute } from './account.js';
 import { paperActivityRoute } from './activity.js';
 import { paperFillsRoute } from './fills.js';
 import { paperOrdersRoute } from './orders.js';
@@ -8,6 +9,7 @@ import { paperTradesRoute } from './trades.js';
 import { paperWsRoute } from './ws.js';
 
 export async function paperRoutes(app: FastifyInstance) {
+  await paperAccountRoute(app);
   await paperOrdersRoute(app);
   await paperPositionsRoute(app);
   await paperPnlRoute(app);

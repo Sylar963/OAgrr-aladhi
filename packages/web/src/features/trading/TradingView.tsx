@@ -18,7 +18,9 @@ import {
   useActivity,
   useAddTradeNote,
   useCloseTrade,
+  useInitPaperAccount,
   useOverview,
+  usePaperAccount,
   useReduceTrade,
   useTrade,
   useTrades,
@@ -27,6 +29,7 @@ import { usePaperWs } from './hooks/usePaperWs';
 import styles from './TradingView.module.css';
 
 export default function TradingView() {
+  const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
   const { data: openTradesData } = useTrades('open', 100);
   const { data: closedTradesData } = useTrades('closed', 100);
@@ -37,12 +40,14 @@ export default function TradingView() {
   const [noteKind, setNoteKind] = useState<'thesis' | 'invalidation' | 'review' | 'note'>('note');
   const [noteContent, setNoteContent] = useState('');
   const [noteTags, setNoteTags] = useState('');
+  const [capitalInput, setCapitalInput] = useState('100000');
   const [ivShift, setIvShift] = useState(0);
   const [dteShift, setDteShift] = useState(0);
   const wsState = usePaperWs();
   const { data: selectedTrade } = useTrade(selectedTradeId);
   const addNote = useAddTradeNote();
   const closeTrade = useCloseTrade();
+  const initPaperAccount = useInitPaperAccount();
   const reduceTrade = useReduceTrade();
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
@@ -61,8 +66,16 @@ export default function TradingView() {
     setDteShift(0);
   }, [selectedTradeId]);
 
+  useEffect(() => {
+    if (paperAccount) {
+      setCapitalInput(String(Math.round(paperAccount.initialCashUsd)));
+    }
+  }, [paperAccount]);
+
   const liveTrade = selectedTrade ?? null;
   const scenario = liveTrade ? buildScenario(liveTrade, ivShift, dteShift) : null;
+  const selectedCapital = parseCapital(capitalInput);
+  const isConfigured = paperAccount?.isInitialized ?? false;
 
   return (
     <div className={styles.view}>
@@ -85,6 +98,62 @@ export default function TradingView() {
         <HeaderStat label="Vega" value={fmtUsd(overview?.risk.vega ?? null)} />
         <HeaderStat label="Sync" value={wsLabel(wsState)} tone={wsState === 'live' ? 'positive' : 'neutral'} />
       </div>
+
+      <section className={styles.accountBar}>
+        <div className={styles.accountCopy}>
+          <div className={styles.accountTitle}>Paper capital</div>
+          <div className={styles.accountText}>
+            {isConfigured
+              ? `${paperAccount?.label ?? 'Paper'} seeded with ${fmtUsd(paperAccount?.initialCashUsd ?? null)}.`
+              : 'Initialize the paper account before you start a new balance run.'}
+          </div>
+          <div className={styles.accountHint}>
+            Resetting starts a fresh account and clears paper trades, fills, notes, and account PnL history.
+          </div>
+        </div>
+        <div className={styles.accountControls}>
+          <label className={styles.capitalField}>
+            <span>Capital</span>
+            <input
+              className={styles.capitalInput}
+              type="number"
+              min={1000}
+              max={100000}
+              step={1000}
+              inputMode="numeric"
+              value={capitalInput}
+              onChange={(event) => setCapitalInput(event.target.value)}
+            />
+          </label>
+          <button
+            className={styles.primaryButton}
+            disabled={initPaperAccount.isPending || selectedCapital == null}
+            onClick={() => {
+              if (selectedCapital == null) return;
+              if (
+                isConfigured &&
+                !window.confirm(
+                  `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
+                )
+              ) {
+                return;
+              }
+              initPaperAccount.mutate(
+                { initialCashUsd: selectedCapital },
+                {
+                  onSuccess: () => {
+                    setSelectedTradeId(null);
+                    setNoteContent('');
+                    setNoteTags('');
+                  },
+                },
+              );
+            }}
+          >
+            {isConfigured ? 'Reset account' : 'Initialize account'}
+          </button>
+        </div>
+      </section>
 
       <div className={styles.workspace}>
         <section className={styles.sidebar}>
@@ -609,4 +678,12 @@ function toneClassName(toneValue: 'positive' | 'negative' | 'neutral' | undefine
   if (toneValue === 'positive') return styles.positive ?? '';
   if (toneValue === 'negative') return styles.negative ?? '';
   return '';
+}
+
+function parseCapital(value: string): number | null {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  if (amount < 1_000 || amount > 100_000) return null;
+  if (amount % 1_000 !== 0) return null;
+  return amount;
 }

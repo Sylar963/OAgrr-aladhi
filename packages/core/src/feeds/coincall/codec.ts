@@ -1,46 +1,19 @@
 import {
-  CoincallInstrumentSchema,
-  CoincallMarkPriceSchema,
-  CoincallOptionChainSchema,
-  CoincallIndexPriceSchema,
-  CoincallTickerSchema,
+  CoincallBsInfoMessageSchema,
+  CoincallHeartbeatAckSchema,
+  CoincallInstrumentsResponseSchema,
   CoincallPublicConfigSchema,
+  CoincallTOptionMessageSchema,
   CoincallTimeSchema,
-  CoincallWsMessageSchema,
-  CoincallWsResponseSchema,
-  type CoincallInstrument,
-  type CoincallMarkPrice,
-  type CoincallOptionChain,
-  type CoincallIndexPrice,
-  type CoincallTicker,
+  type CoincallBsInfoMessage,
+  type CoincallHeartbeatAck,
+  type CoincallInstrumentsResponse,
   type CoincallPublicConfig,
-  type CoincallTime,
-  type CoincallWsMessage,
-  type CoincallWsResponse,
+  type CoincallTOptionMessage,
 } from './types.js';
 
-export function parseCoincallInstrument(input: unknown): CoincallInstrument | null {
-  const parsed = CoincallInstrumentSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
-}
-
-export function parseCoincallMarkPrice(input: unknown): CoincallMarkPrice | null {
-  const parsed = CoincallMarkPriceSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
-}
-
-export function parseCoincallOptionChain(input: unknown): CoincallOptionChain | null {
-  const parsed = CoincallOptionChainSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
-}
-
-export function parseCoincallIndexPrice(input: unknown): CoincallIndexPrice | null {
-  const parsed = CoincallIndexPriceSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
-}
-
-export function parseCoincallTicker(input: unknown): CoincallTicker | null {
-  const parsed = CoincallTickerSchema.safeParse(input);
+export function parseCoincallInstruments(input: unknown): CoincallInstrumentsResponse | null {
+  const parsed = CoincallInstrumentsResponseSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }
 
@@ -54,17 +27,17 @@ export function parseCoincallTime(input: unknown): number | null {
   return parsed.success ? parsed.data.serverTime : null;
 }
 
-export function parseCoincallWsMessage(input: unknown): CoincallWsMessage | null {
-  const parsed = CoincallWsMessageSchema.safeParse(input);
+export function parseCoincallBsInfoMessage(input: unknown): CoincallBsInfoMessage | null {
+  const parsed = CoincallBsInfoMessageSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }
 
-export function parseCoincallWsResponse(input: unknown): CoincallWsResponse | null {
-  const parsed = CoincallWsResponseSchema.safeParse(input);
+export function parseCoincallTOptionMessage(input: unknown): CoincallTOptionMessage | null {
+  const parsed = CoincallTOptionMessageSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }
 
-export function isCoincallWsSuccess(input: unknown): boolean {
-  const response = parseCoincallWsResponse(input);
-  return response != null && (response.code === 0 || response.result !== undefined);
+export function parseCoincallHeartbeatAck(input: unknown): CoincallHeartbeatAck | null {
+  const parsed = CoincallHeartbeatAckSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
 }

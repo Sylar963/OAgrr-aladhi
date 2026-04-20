@@ -38,9 +38,11 @@ export const DERIVE_REST_BASE_URL = 'https://api.lyra.finance';
 export const DERIVE_GET_TRADE_HISTORY = '/public/get_trade_history';
 
 // ── Coincall ────────────────────────────────────────────────────────
-export const COINCALL_MARKET_WS_URL = 'wss://api.coincall.com/ws/market';
+// Public WS still requires signed query params (code, uuid, ts, sign, apiKey) —
+// every Coincall market channel (bsInfo, tOption, orderBook, kline, lastTrade)
+// shares the same authenticated endpoint. See ws-client.ts for signing.
+export const COINCALL_MARKET_WS_URL = 'wss://ws.coincall.com/options';
 export const COINCALL_REST_BASE_URL = 'https://api.coincall.com';
 export const COINCALL_INSTRUMENTS = '/open/option/getInstruments';
-export const COINCALL_OPTION_CHAIN = '/open/option/getCoincallOptionChain';
 export const COINCALL_CONFIG = '/open/public/config/v1';
 export const COINCALL_TIME = '/time';

@@ -1,6 +1,8 @@
+import type { CoincallPublicConfig } from './types.js';
+
 export function deriveCoincallHealth(
   serverTime: number | null,
-  config: { optionConfig?: Record<string, unknown> } | null,
+  config: CoincallPublicConfig | null,
   error?: unknown,
 ): { status: 'connected' | 'degraded'; message: string } {
   if (error != null) {
@@ -10,17 +12,22 @@ export function deriveCoincallHealth(
     };
   }
 
-  const hasConfig = config != null && config.optionConfig != null;
-
-  if (serverTime != null && hasConfig) {
+  if (serverTime == null) {
     return {
-      status: 'connected',
-      message: 'rest health ok',
+      status: 'degraded',
+      message: 'server time probe failed',
+    };
+  }
+
+  if (config == null || Object.keys(config.optionConfig).length === 0) {
+    return {
+      status: 'degraded',
+      message: 'option config missing',
     };
   }
 
   return {
-    status: 'degraded',
-    message: 'rest health incomplete',
+    status: 'connected',
+    message: 'rest health ok',
   };
 }

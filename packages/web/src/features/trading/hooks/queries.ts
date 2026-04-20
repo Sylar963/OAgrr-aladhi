@@ -6,16 +6,19 @@ import {
   getActivity,
   getFills,
   getOrders,
+  getPaperAccount,
   getOverview,
   getPnl,
   getPositions,
   getTrade,
   getTrades,
+  initPaperAccount,
   placeOrder,
   reduceTrade,
 } from '../api';
 
 export const QKEY = {
+  account: ['paper', 'account'] as const,
   positions: ['paper', 'positions'] as const,
   pnl: ['paper', 'pnl'] as const,
   orders: ['paper', 'orders'] as const,
@@ -35,6 +38,13 @@ export function usePositions() {
     queryKey: QKEY.positions,
     queryFn: getPositions,
     refetchInterval: 5_000,
+  });
+}
+
+export function usePaperAccount() {
+  return useQuery({
+    queryKey: QKEY.account,
+    queryFn: getPaperAccount,
   });
 }
 
@@ -146,6 +156,17 @@ export function useReduceTrade() {
       reduceTrade(tradeId, fraction),
     onSuccess: (trade) => {
       qc.setQueryData([...QKEY.trade, trade.id], trade);
+      invalidatePaper(qc);
+    },
+  });
+}
+
+export function useInitPaperAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: initPaperAccount,
+    onSuccess: (account) => {
+      qc.setQueryData(QKEY.account, account);
       invalidatePaper(qc);
     },
   });

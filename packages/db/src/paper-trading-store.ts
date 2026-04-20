@@ -118,6 +118,7 @@ export interface PaperCashLedgerRow {
 export interface PaperTradingStore {
   readonly enabled: boolean;
   ensureAccount(row: PaperAccountRow): Promise<void>;
+  resetAccount(row: PaperAccountRow): Promise<void>;
   getAccount(id: string): Promise<PaperAccountRow | null>;
 
   insertOrder(row: PaperOrderRow): Promise<void>;
@@ -161,6 +162,7 @@ export interface PaperTradingStore {
 export class NoopPaperTradingStore implements PaperTradingStore {
   readonly enabled = false;
   async ensureAccount(): Promise<void> {}
+  async resetAccount(): Promise<void> {}
   async getAccount(): Promise<PaperAccountRow | null> {
     return null;
   }
@@ -241,6 +243,59 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
          VALUES ($1, $2, 'init', NULL, $3)`,
         [row.id, row.initialCashUsd, row.createdAt],
       );
+    }
+  }
+
+  async resetAccount(row: PaperAccountRow): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO paper_accounts (id, label, initial_cash_usd, created_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE
+         SET label = EXCLUDED.label,
+             initial_cash_usd = EXCLUDED.initial_cash_usd,
+             created_at = EXCLUDED.created_at`,
+        [row.id, row.label, row.initialCashUsd, row.createdAt],
+      );
+      await client.query(`DELETE FROM paper_trade_activity WHERE account_id = $1`, [row.id]);
+      await client.query(
+        `DELETE FROM paper_trade_notes
+         WHERE trade_id IN (SELECT id FROM paper_trades WHERE account_id = $1)`,
+        [row.id],
+      );
+      await client.query(
+        `DELETE FROM paper_trade_positions
+         WHERE trade_id IN (SELECT id FROM paper_trades WHERE account_id = $1)`,
+        [row.id],
+      );
+      await client.query(
+        `DELETE FROM paper_trade_orders
+         WHERE trade_id IN (SELECT id FROM paper_trades WHERE account_id = $1)
+            OR order_id IN (SELECT id FROM paper_orders WHERE account_id = $1)`,
+        [row.id],
+      );
+      await client.query(
+        `DELETE FROM paper_fills
+         WHERE order_id IN (SELECT id FROM paper_orders WHERE account_id = $1)`,
+        [row.id],
+      );
+      await client.query(`DELETE FROM paper_trades WHERE account_id = $1`, [row.id]);
+      await client.query(`DELETE FROM paper_orders WHERE account_id = $1`, [row.id]);
+      await client.query(`DELETE FROM paper_positions WHERE account_id = $1`, [row.id]);
+      await client.query(`DELETE FROM paper_cash_ledger WHERE account_id = $1`, [row.id]);
+      await client.query(
+        `INSERT INTO paper_cash_ledger (account_id, delta_usd, reason, ref_id, ts)
+         VALUES ($1, $2, 'init', NULL, $3)`,
+        [row.id, row.initialCashUsd, row.createdAt],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   }
 

@@ -1,109 +1,147 @@
 import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
-import type { CoincallMarkPrice, CoincallTicker } from './types.js';
+import type { OptionRight } from '../../types/common.js';
+import {
+  COINCALL_OPTION_SYMBOL_RE,
+  type CoincallBsInfoData,
+  type CoincallInstrument,
+  type CoincallOptionConfigEntry,
+  type CoincallTOptionEntry,
+} from './types.js';
 
-export const COINCALL_DEFAULT_MAKER_FEE = 0.0003;
-export const COINCALL_DEFAULT_TAKER_FEE = 0.0004;
+function mergeNumber(next: number | undefined | null, previous: number | null): number | null {
+  return next ?? previous;
+}
 
-export function buildCoincallMarkPriceQuote(
-  item: CoincallMarkPrice,
+/**
+ * bsInfo delivers markPrice / iv / greeks / oi / underlyingPrice.
+ * No bid/ask fields — those come from tOption (see mergeCoincallTOption).
+ */
+export function mergeCoincallBsInfo(
+  data: CoincallBsInfoData,
   previous: LiveQuote | undefined,
-  positiveOrNull: (value: string | undefined) => number | null,
-  safeNum: (value: unknown) => number | null,
+  empty: LiveQuote,
 ): LiveQuote {
-  const bidPrice = positiveOrNull(item.bidPrice);
-  const askPrice = positiveOrNull(item.askPrice);
-  const bidIv = positiveOrNull(item.bidIv);
-  const askIv = positiveOrNull(item.askIv);
-
+  const base = previous ?? empty;
   return {
-    bidPrice,
-    askPrice,
-    bidSize: bidPrice != null ? safeNum(item.bidSize) : null,
-    askSize: askPrice != null ? safeNum(item.askSize) : null,
-    markPrice: safeNum(item.markPrice),
-    lastPrice: previous?.lastPrice ?? null,
-    underlyingPrice: safeNum(item.indexPrice),
-    indexPrice: safeNum(item.indexPrice),
-    volume24h: previous?.volume24h ?? null,
-    openInterest: previous?.openInterest ?? null,
-    openInterestUsd: previous?.openInterestUsd ?? null,
-    volume24hUsd: previous?.volume24hUsd ?? null,
+    bidPrice: base.bidPrice,
+    askPrice: base.askPrice,
+    bidSize: base.bidSize,
+    askSize: base.askSize,
+    markPrice: mergeNumber(data.mp, base.markPrice),
+    lastPrice: mergeNumber(data.lp, base.lastPrice),
+    underlyingPrice: mergeNumber(data.up, base.underlyingPrice),
+    indexPrice: mergeNumber(data.ip, base.indexPrice),
+    volume24h: mergeNumber(data.v24, base.volume24h),
+    openInterest: mergeNumber(data.oi, base.openInterest),
+    openInterestUsd: base.openInterestUsd,
+    volume24hUsd: mergeNumber(data.uv24, base.volume24hUsd),
     greeks: {
-      delta: safeNum(item.delta),
-      gamma: safeNum(item.gamma),
-      theta: safeNum(item.theta),
-      vega: safeNum(item.vega),
-      rho: safeNum(item.rho),
-      markIv: previous?.greeks.markIv ?? null,
-      bidIv,
-      askIv,
+      delta: mergeNumber(data.delta, base.greeks.delta),
+      gamma: mergeNumber(data.gamma, base.greeks.gamma),
+      theta: mergeNumber(data.theta, base.greeks.theta),
+      vega: mergeNumber(data.vega, base.greeks.vega),
+      rho: base.greeks.rho,
+      markIv: mergeNumber(data.iv, base.greeks.markIv),
+      bidIv: base.greeks.bidIv,
+      askIv: base.greeks.askIv,
     },
-    timestamp: item.time ?? Date.now(),
+    timestamp: data.ts,
   };
 }
 
-export function mergeCoincallTicker(
-  previous: LiveQuote,
-  ticker: CoincallTicker,
-  safeNum: (value: unknown) => number | null,
+/**
+ * tOption delivers per-contract bid/ask/bs/as/biv/aiv plus greeks.
+ * Overlays previous quote so markIv (set by bsInfo) survives.
+ */
+export function mergeCoincallTOption(
+  entry: CoincallTOptionEntry,
+  previous: LiveQuote | undefined,
+  empty: LiveQuote,
 ): LiveQuote {
+  const base = previous ?? empty;
   return {
-    ...previous,
-    volume24h: ticker.volume24h != null ? safeNum(ticker.volume24h) : previous.volume24h,
-    lastPrice: ticker.lastPrice != null ? safeNum(ticker.lastPrice) : previous.lastPrice,
-    markPrice: ticker.markPrice != null ? safeNum(ticker.markPrice) : previous.markPrice,
-    indexPrice: ticker.indexPrice != null ? safeNum(ticker.indexPrice) : previous.indexPrice,
-    timestamp: Date.now(),
+    bidPrice: mergeNumber(entry.bid, base.bidPrice),
+    askPrice: mergeNumber(entry.ask, base.askPrice),
+    bidSize: mergeNumber(entry.bs, base.bidSize),
+    askSize: mergeNumber(entry.as, base.askSize),
+    markPrice: mergeNumber(entry.mp, base.markPrice),
+    lastPrice: mergeNumber(entry.lp, base.lastPrice),
+    underlyingPrice: mergeNumber(entry.up, base.underlyingPrice),
+    indexPrice: base.indexPrice,
+    volume24h: mergeNumber(entry.v24, base.volume24h),
+    openInterest: mergeNumber(entry.oi, base.openInterest),
+    openInterestUsd: base.openInterestUsd,
+    volume24hUsd: base.volume24hUsd,
+    greeks: {
+      delta: mergeNumber(entry.delta, base.greeks.delta),
+      gamma: mergeNumber(entry.gamma, base.greeks.gamma),
+      theta: mergeNumber(entry.theta, base.greeks.theta),
+      vega: mergeNumber(entry.vega, base.greeks.vega),
+      rho: base.greeks.rho,
+      markIv: base.greeks.markIv,
+      bidIv: mergeNumber(entry.biv, base.greeks.bidIv),
+      askIv: mergeNumber(entry.aiv, base.greeks.askIv),
+    },
+    timestamp: entry.ts,
   };
 }
 
-export function buildCoincallInstrument(
-  item: {
-    symbolName: string;
-    baseCurrency: string;
-    strike: number;
-    expirationTimestamp: number;
-    isActive: boolean;
-    minQty: number;
-    tickSize: number;
-  },
-  config: {
-    settle: string;
-    contractSize: number | null;
-  } | null,
+export interface CoincallInstrumentDeps {
   buildCanonicalSymbol: (
     base: string,
     settle: string,
     expiry: string,
     strike: number,
-    right: 'call' | 'put',
-  ) => string,
+    right: OptionRight,
+  ) => string;
+  parseExpiry: (raw: string) => string;
+}
+
+export function buildCoincallInstrument(
+  item: CoincallInstrument,
+  optionConfig: Record<string, CoincallOptionConfigEntry>,
+  deps: CoincallInstrumentDeps,
 ): CachedInstrument | null {
   if (!item.isActive) return null;
 
-  const parts = item.symbolName.match(/^(\w+)-(\d{8})-(\d+)-([CP])$/);
-  if (!parts) return null;
+  const match = COINCALL_OPTION_SYMBOL_RE.exec(item.symbolName);
+  if (!match) return null;
 
-  const base = parts[1]!;
-  const expiry = new Date(item.expirationTimestamp).toISOString().slice(0, 10);
-  const right = parts[4] === 'C' ? ('call' as const) : ('put' as const);
-  const strike = item.strike;
+  const base = match[1]!;
+  const expiryToken = match[2]!;
+  const strike = Number(match[3]!);
+  const right: OptionRight = match[4] === 'C' ? 'call' : 'put';
+  if (!Number.isFinite(strike)) return null;
+
+  // Coincall gives two sources of truth for expiry: the DDMMMYY token in the
+  // native symbol and `expirationTimestamp` (ms). Prefer the symbol token
+  // because that's how the venue keys every downstream subscription;
+  // timestamp is a fallback when the token isn't parseable (shouldn't happen
+  // given the regex guard).
+  const expiry = deps.parseExpiry(expiryToken);
+
+  // optionConfig is keyed by pair (BTCUSD), not by base (BTC).
+  const cfg = optionConfig[`${base}USD`] ?? null;
+  const settle = cfg?.settle ?? 'USD';
+  const multiplier = cfg?.multiplier ?? 1;
+  const canonical = deps.buildCanonicalSymbol(base, settle, expiry, strike, right);
 
   return {
-    symbol: buildCanonicalSymbol(base, config?.settle ?? 'USD', expiry, strike, right),
+    symbol: canonical,
     exchangeSymbol: item.symbolName,
     base,
-    quote: config?.settle ?? 'USD',
-    settle: config?.settle ?? 'USD',
+    quote: 'USD',
+    settle,
     expiry,
     strike,
     right,
     inverse: false,
-    contractSize: config?.contractSize ?? 1,
-    contractValueCurrency: base,
-    tickSize: item.tickSize,
-    minQty: item.minQty,
-    makerFee: COINCALL_DEFAULT_MAKER_FEE,
-    takerFee: COINCALL_DEFAULT_TAKER_FEE,
+    contractSize: multiplier,
+    contractValueCurrency: 'USD',
+    tickSize: cfg?.tickSize ?? item.tickSize,
+    minQty: cfg?.minQty ?? item.minQty,
+    makerFee: cfg?.makerFee ?? null,
+    takerFee: cfg?.takerFee ?? null,
   };
 }
+

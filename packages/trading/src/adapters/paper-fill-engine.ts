@@ -13,7 +13,16 @@ export class PaperFillEngine implements FillEngine {
   ) {}
 
   async executeOrder(order: Order, venueFilter: VenueId[]): Promise<Fill[]> {
-    const plans: Array<{ leg: OrderLeg; venue: VenueId; priceUsd: number; feesUsd: number }> = [];
+    const plans: Array<{
+      leg: OrderLeg;
+      venue: VenueId;
+      priceUsd: number;
+      feesUsd: number;
+      benchmarkBidUsd: number | null;
+      benchmarkAskUsd: number | null;
+      benchmarkMidUsd: number | null;
+      underlyingSpotUsd: number | null;
+    }> = [];
 
     for (const leg of order.legs) {
       const venues = leg.preferredVenues ?? venueFilter;
@@ -44,6 +53,10 @@ export class PaperFillEngine implements FillEngine {
         venue: chosen.book.venue,
         priceUsd,
         feesUsd,
+        benchmarkBidUsd: chosen.book.bidUsd,
+        benchmarkAskUsd: chosen.book.askUsd,
+        benchmarkMidUsd: chosen.book.markUsd,
+        underlyingSpotUsd: chosen.book.underlyingPriceUsd,
       });
     }
 
@@ -62,6 +75,10 @@ export class PaperFillEngine implements FillEngine {
         quantity: p.leg.quantity,
         priceUsd: p.priceUsd,
         feesUsd: p.feesUsd,
+        benchmarkBidUsd: p.benchmarkBidUsd,
+        benchmarkAskUsd: p.benchmarkAskUsd,
+        benchmarkMidUsd: p.benchmarkMidUsd,
+        underlyingSpotUsd: p.underlyingSpotUsd,
         source: 'paper',
         filledAt: now,
       }),

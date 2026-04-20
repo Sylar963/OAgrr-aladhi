@@ -22,6 +22,7 @@ const FEE_CAP: Record<VenueId, number> = {
   bybit: 0.125, // 12.5% of option price
   binance: 0.1, // 10% of option price
   derive: 0.125, // 12.5% of option premium
+  coincall: 0.125, // 12.5% of option premium
 };
 
 export interface CachedInstrument {

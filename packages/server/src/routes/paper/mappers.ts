@@ -1,9 +1,12 @@
 import type {
+  PaperActivityDto,
   PaperFillDto,
   PaperOrderDto,
   PaperPnlDto,
   PaperPositionDto,
+  PaperTradeNoteDto,
 } from '@oggregator/protocol';
+import type { PaperTradeActivityRow, PaperTradeNoteRow } from '@oggregator/db';
 import type { Fill, Order, PnlSnapshot, Position } from '@oggregator/trading';
 
 export function orderToDto(order: Order): PaperOrderDto {
@@ -34,6 +37,10 @@ export function fillToDto(fill: Fill): PaperFillDto {
     quantity: fill.quantity,
     priceUsd: fill.priceUsd,
     feesUsd: fill.feesUsd,
+    benchmarkBidUsd: fill.benchmarkBidUsd,
+    benchmarkAskUsd: fill.benchmarkAskUsd,
+    benchmarkMidUsd: fill.benchmarkMidUsd,
+    underlyingSpotUsd: fill.underlyingSpotUsd,
     filledAt: fill.filledAt.toISOString(),
   };
 }
@@ -68,5 +75,27 @@ export function pnlToDto(snap: PnlSnapshot): PaperPnlDto {
     unrealizedUsd: snap.unrealizedUsd,
     equityUsd: snap.equityUsd,
     generatedAt: snap.generatedAt.toISOString(),
+  };
+}
+
+export function tradeNoteToDto(note: PaperTradeNoteRow): PaperTradeNoteDto {
+  return {
+    id: note.id,
+    tradeId: note.tradeId,
+    kind: note.kind,
+    content: note.content,
+    tags: note.tags,
+    createdAt: note.createdAt.toISOString(),
+  };
+}
+
+export function activityToDto(activity: PaperTradeActivityRow): PaperActivityDto {
+  return {
+    id: activity.id,
+    tradeId: activity.tradeId,
+    kind: activity.kind,
+    summary: activity.summary,
+    payload: activity.payload,
+    ts: activity.ts.toISOString(),
   };
 }

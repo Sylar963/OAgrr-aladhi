@@ -82,6 +82,10 @@ function toFillRow(fill: Fill): PaperFillRow {
     quantity: fill.quantity,
     priceUsd: fill.priceUsd,
     feesUsd: fill.feesUsd,
+    benchmarkBidUsd: fill.benchmarkBidUsd,
+    benchmarkAskUsd: fill.benchmarkAskUsd,
+    benchmarkMidUsd: fill.benchmarkMidUsd,
+    underlyingSpotUsd: fill.underlyingSpotUsd,
     source: fill.source,
     filledAt: fill.filledAt,
   };
@@ -101,6 +105,10 @@ function fromFillRow(row: PaperFillRow): Fill {
     quantity: row.quantity,
     priceUsd: row.priceUsd,
     feesUsd: row.feesUsd,
+    benchmarkBidUsd: row.benchmarkBidUsd,
+    benchmarkAskUsd: row.benchmarkAskUsd,
+    benchmarkMidUsd: row.benchmarkMidUsd,
+    underlyingSpotUsd: row.underlyingSpotUsd,
     source: row.source,
     filledAt: row.filledAt,
   };

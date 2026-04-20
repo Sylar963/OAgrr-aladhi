@@ -16,7 +16,7 @@ import { repriceLeg } from './reprice';
 import { buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import VenueSlideover from './VenueSlideover';
-import { legsToOrderRequest, usePlaceOrder } from '@features/trading';
+import { legsToOrderRequest, useCreateTrade } from '@features/trading';
 import { useAppStore as _useAppStoreForTabSwitch } from '@stores/app-store';
 import StrategyTemplates, {
   buildTemplateVariant,
@@ -170,14 +170,19 @@ export default function ArchitectView() {
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
 
   const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
-  const placeOrder = usePlaceOrder();
+  const createTrade = useCreateTrade();
 
   async function handleSendToPaper() {
     if (legs.length === 0) return;
     setPaperStatus(null);
     try {
       const req = legsToOrderRequest(legs, underlying, activeVenues);
-      await placeOrder.mutateAsync(req);
+      const strategyName = detectStrategy(legs);
+      await createTrade.mutateAsync({
+        label: strategyName,
+        strategyName,
+        order: req,
+      });
       setPaperStatus('Filled — switching to Paper tab');
       setTimeout(() => setActiveTab('trading'), 400);
     } catch (err) {
@@ -390,10 +395,10 @@ export default function ArchitectView() {
               <button
                 className={styles.compareBtn}
                 onClick={handleSendToPaper}
-                disabled={placeOrder.isPending}
+                disabled={createTrade.isPending}
                 style={{ marginTop: 8 }}
               >
-                {placeOrder.isPending ? 'Sending…' : 'Send to paper'}
+                {createTrade.isPending ? 'Sending…' : 'Send to paper'}
               </button>
             )}
 

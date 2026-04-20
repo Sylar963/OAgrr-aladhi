@@ -18,6 +18,10 @@ export interface Fill {
   quantity: number;
   priceUsd: UsdAmount;
   feesUsd: UsdAmount;
+  benchmarkBidUsd: UsdAmount | null;
+  benchmarkAskUsd: UsdAmount | null;
+  benchmarkMidUsd: UsdAmount | null;
+  underlyingSpotUsd: UsdAmount | null;
   source: FillSource;
   filledAt: Date;
 }

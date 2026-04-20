@@ -129,3 +129,4 @@ export { OkxWsAdapter } from './feeds/okx/index.js';
 export { BinanceWsAdapter } from './feeds/binance/index.js';
 export { BybitWsAdapter } from './feeds/bybit/index.js';
 export { DeriveWsAdapter } from './feeds/derive/index.js';
+export { CoincallWsAdapter } from './feeds/coincall/index.js';

@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --env-file-if-exists=../../.env dist/index.js",
     "lint": "biome lint .",
     "typecheck": "pnpm --filter @oggregator/core build && pnpm --filter @oggregator/db build && tsc --noEmit"
   },

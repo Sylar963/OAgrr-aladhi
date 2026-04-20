@@ -36,3 +36,11 @@ export const BINANCE_BLOCK_TRADES = '/eapi/v1/blockTrades';
 export const DERIVE_WS_URL = 'wss://api.lyra.finance/ws';
 export const DERIVE_REST_BASE_URL = 'https://api.lyra.finance';
 export const DERIVE_GET_TRADE_HISTORY = '/public/get_trade_history';
+
+// ── Coincall ────────────────────────────────────────────────────────
+export const COINCALL_MARKET_WS_URL = 'wss://api.coincall.com/ws/market';
+export const COINCALL_REST_BASE_URL = 'https://api.coincall.com';
+export const COINCALL_INSTRUMENTS = '/open/option/getInstruments';
+export const COINCALL_OPTION_CHAIN = '/open/option/getCoincallOptionChain';
+export const COINCALL_CONFIG = '/open/public/config/v1';
+export const COINCALL_TIME = '/time';

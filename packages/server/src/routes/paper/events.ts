@@ -1,4 +1,10 @@
-import type { PaperFillDto, PaperOrderDto, PaperWsServerMessage } from '@oggregator/protocol';
+import type {
+  PaperActivityDto,
+  PaperFillDto,
+  PaperOrderDto,
+  PaperTradeDetailDto,
+  PaperWsServerMessage,
+} from '@oggregator/protocol';
 
 export type PaperEventListener = (msg: PaperWsServerMessage) => void;
 
@@ -14,6 +20,14 @@ class PaperEventBus {
 
   emitOrder(order: PaperOrderDto, fills: PaperFillDto[]): void {
     this.broadcast({ type: 'order', order, fills });
+  }
+
+  emitTrade(trade: PaperTradeDetailDto): void {
+    this.broadcast({ type: 'trade', trade });
+  }
+
+  emitActivity(activity: PaperActivityDto): void {
+    this.broadcast({ type: 'activity', activity });
   }
 
   private broadcast(msg: PaperWsServerMessage): void {

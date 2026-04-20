@@ -9,6 +9,11 @@ export type {
   PaperFillRow,
   PaperPositionRow,
   PaperCashLedgerRow,
+  PaperTradeRow,
+  PaperTradeOrderRow,
+  PaperTradePositionRow,
+  PaperTradeNoteRow,
+  PaperTradeActivityRow,
   PaperTradingStore,
 } from './paper-trading-store.js';
 export { NoopPaperTradingStore, PostgresPaperTradingStore } from './paper-trading-store.js';

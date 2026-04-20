@@ -46,3 +46,13 @@ export const COINCALL_REST_BASE_URL = 'https://api.coincall.com';
 export const COINCALL_INSTRUMENTS = '/open/option/getInstruments';
 export const COINCALL_CONFIG = '/open/public/config/v1';
 export const COINCALL_TIME = '/time';
+
+// ── Thalex ──────────────────────────────────────────────────────────
+// Public market data requires no auth. Only private/* channels need a
+// JWT signed with the account's RSA key. See:
+//   https://thalex.com/docs/info.md  (section: Authentication)
+// Testnet swap is https://testnet.thalex.com + wss://testnet.thalex.com.
+export const THALEX_MARKET_WS_URL = 'wss://thalex.com/ws/api/v2';
+export const THALEX_REST_URL = 'https://thalex.com/api/v2';
+export const THALEX_INSTRUMENTS = '/public/instruments';
+export const THALEX_SYSTEM_INFO = '/public/system_info';

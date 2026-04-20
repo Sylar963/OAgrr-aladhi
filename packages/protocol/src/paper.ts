@@ -9,7 +9,7 @@ export const PaperOrderLegSchema = z.object({
   strike: z.number().positive(),
   quantity: z.number().positive(),
   preferredVenues: z
-    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall']))
+    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex']))
     .nullable(),
 });
 
@@ -23,7 +23,7 @@ export const PlaceOrderRequestSchema = z.object({
     }),
   ).min(1),
   venueFilter: z
-    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall']))
+    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex']))
     .default([]),
 });
 

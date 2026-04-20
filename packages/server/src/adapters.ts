@@ -7,6 +7,7 @@ import {
   BybitWsAdapter,
   DeriveWsAdapter,
   CoincallWsAdapter,
+  ThalexWsAdapter,
 } from '@oggregator/core';
 
 const adapters = [
@@ -16,6 +17,7 @@ const adapters = [
   new BybitWsAdapter(),
   new DeriveWsAdapter(),
   new CoincallWsAdapter(),
+  new ThalexWsAdapter(),
 ];
 
 export async function bootstrapAdapters(log: FastifyBaseLogger) {

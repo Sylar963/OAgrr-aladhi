@@ -5,12 +5,15 @@ import {
   BYBIT_RECENT_TRADE,
   BYBIT_REST_BASE_URL,
   BYBIT_WS_URL,
+  COINCALL_INSTRUMENTS,
+  COINCALL_REST_BASE_URL,
   DERIBIT_WS_URL,
   DERIVE_WS_URL,
   OKX_INSTRUMENT_FAMILY_TRADES,
   OKX_REST_BASE_URL,
   OKX_WS_URL,
 } from '../../feeds/shared/endpoints.js';
+import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { startEventLoopLagMonitor } from '../../utils/event-loop-lag.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -28,7 +31,7 @@ const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
 
 /**
- * Subscribes to bulk option trade streams across all 5 venues.
+ * Subscribes to bulk option trade streams across all 6 venues.
  * Maintains a ring buffer of the last N trades per underlying.
  */
 export class TradeRuntime {
@@ -51,6 +54,9 @@ export class TradeRuntime {
         this.streamState.set(this.streamKey(stream.venue, underlying), createTradeStreamState());
 
         if (stream.venue === 'deribit' && getDeribitTradeCurrency(underlying) == null) {
+          continue;
+        }
+        if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) {
           continue;
         }
 
@@ -184,7 +190,8 @@ export class TradeRuntime {
     if (this.connections.has(key) || this.reconnectTimers.has(key)) return;
 
     const subscribedUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-    const ws = new WebSocket(stream.url);
+    const url = typeof stream.url === 'function' ? stream.url() : stream.url;
+    const ws = new WebSocket(url);
     let didOpen = false;
     let openedAt = 0;
 
@@ -464,6 +471,58 @@ const DeriveTradeSchema = z.object({
 
 const DERIBIT_INVERSE_OPTION_CURRENCIES = new Set(['BTC', 'ETH']);
 const DERIBIT_USDC_OPTION_BASES = new Set(['AVAX', 'SOL', 'TRX', 'XRP']);
+
+// Matches SUPPORTED_UNDERLYINGS in feeds/coincall/ws-client.ts.
+const COINCALL_TRADE_UNDERLYINGS = new Set(['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP']);
+
+// lastTrade payload (dt:6): { q, sd, pr, s, ts }. `sd` is tradeSide: 1=buy, 2=sell.
+const CoincallTradeEntrySchema = z.object({
+  s: z.string(),
+  sd: z.number(),
+  pr: numStr,
+  q: numStr,
+  ts: z.number(),
+});
+
+const CoincallInstrumentEntrySchema = z.object({
+  symbolName: z.string(),
+  isActive: z.boolean(),
+});
+
+function isCoincallTradeUnderlyingSupported(underlying: string): boolean {
+  if (!process.env['COINCALL_API_KEY'] || !process.env['COINCALL_API_SECRET']) return false;
+  return COINCALL_TRADE_UNDERLYINGS.has(normalizeTradeUnderlying(underlying));
+}
+
+// Coincall `lastTrade` is per-instrument — no bulk underlying channel. Fetch the
+// active instrument list once per base and cache the promise across reconnects.
+const coincallInstrumentCache = new Map<string, Promise<string[]>>();
+
+function fetchCoincallInstrumentsForBase(base: string): Promise<string[]> {
+  const cached = coincallInstrumentCache.get(base);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    try {
+      const res = await fetch(`${COINCALL_REST_BASE_URL}${COINCALL_INSTRUMENTS}/${base}`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      const body = (await res.json()) as { code?: number; data?: unknown };
+      if (body.code !== 0 || !Array.isArray(body.data)) return [];
+      const active: string[] = [];
+      for (const item of body.data) {
+        const parsed = CoincallInstrumentEntrySchema.safeParse(item);
+        if (parsed.success && parsed.data.isActive) active.push(parsed.data.symbolName);
+      }
+      return active;
+    } catch {
+      return [];
+    }
+  })();
+
+  coincallInstrumentCache.set(base, promise);
+  return promise;
+}
 
 export function normalizeTradeUnderlying(underlying: string): string {
   return underlying.toUpperCase().split('_')[0] ?? underlying.toUpperCase();
@@ -968,6 +1027,62 @@ const VENUE_STREAMS: VenueStream[] = [
         ws.on('error', () => finish([]));
         setTimeout(() => finish([]), 10_000);
       });
+    },
+  },
+  {
+    venue: 'coincall',
+    // Coincall's public WS requires HMAC-signed query params — the signature
+    // includes a timestamp that goes stale, so re-sign on every reconnect.
+    url: () => buildSignedWsUrl(),
+    // Coincall closes idle sockets after ~30s; heartbeat every 15s is well within.
+    startKeepalive(ws) {
+      return setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'heartbeat' }));
+      }, 15_000);
+    },
+    connect(ws, underlying) {
+      const base = normalizeTradeUnderlying(underlying);
+      // lastTrade is per-symbol on Coincall — fetch the active instrument list
+      // and fan out one subscribe per contract. Fire-and-forget; if the WS
+      // closes before the fetch resolves, the readyState guard drops the sends.
+      void fetchCoincallInstrumentsForBase(base).then((symbols) => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        for (const symbol of symbols) {
+          ws.send(
+            JSON.stringify({
+              action: 'subscribe',
+              dataType: 'lastTrade',
+              payload: { symbol },
+            }),
+          );
+        }
+      });
+    },
+    parse(msg, underlying) {
+      const m = msg as Record<string, unknown>;
+      if (m['dt'] !== 6 || !Array.isArray(m['d'])) return [];
+      const trades: TradeEvent[] = [];
+      for (const item of m['d'] as unknown[]) {
+        const parsed = CoincallTradeEntrySchema.safeParse(item);
+        if (!parsed.success) continue;
+        trades.push({
+          venue: 'coincall',
+          // Coincall's public trades payload omits a stable trade id — synthesize
+          // one from symbol+ts so the tradeStore dedupe key remains unique.
+          tradeId: `${parsed.data.s}:${parsed.data.ts}`,
+          instrument: parsed.data.s,
+          underlying: normalizeTradeUnderlying(underlying),
+          side: parsed.data.sd === 1 ? 'buy' : 'sell',
+          price: parsed.data.pr,
+          size: parsed.data.q,
+          iv: null,
+          markPrice: null,
+          indexPrice: null,
+          isBlock: false,
+          timestamp: parsed.data.ts,
+        });
+      }
+      return trades;
     },
   },
 ];

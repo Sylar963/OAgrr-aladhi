@@ -41,7 +41,9 @@ export interface TradeStreamState {
 
 export interface VenueStream {
   venue: VenueId;
-  url: string;
+  // Some venues (Coincall) require a freshly-signed URL per connect — a bare
+  // string is stale after the first timestamped signature. Allow a thunk.
+  url: string | (() => string);
   connect: (ws: WebSocket, underlying: string) => void;
   parse: (msg: unknown, underlying: string) => TradeEvent[];
   seed?: (underlying: string) => Promise<TradeEvent[]>;

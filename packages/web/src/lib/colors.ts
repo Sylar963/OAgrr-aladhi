@@ -56,6 +56,7 @@ export const VENUE_COLORS: Record<string, string> = {
   binance: '#F0B90B',
   bybit: '#F7A600',
   derive: '#25FAAF',
+  coincall: '#1FE086',
 };
 
 export function venueColor(venueId: string): string {

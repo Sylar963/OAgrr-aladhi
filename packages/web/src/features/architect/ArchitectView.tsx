@@ -1,9 +1,10 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { AssetPickerButton, VenuePickerButton } from '@components/ui';
+import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
+import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useStrategyStore } from './strategy-store';
 import {
   computePayoff,
@@ -34,6 +35,8 @@ interface LegRowProps {
   onRemove: () => void;
   onUpdate: (id: string, patch: Partial<Leg>) => void;
 }
+
+const ACTIVE_PAPER_VENUES_VALUE = '__active-venues__';
 
 function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): string {
   if (preferredExpiry && expiries.includes(preferredExpiry)) return preferredExpiry;
@@ -168,22 +171,55 @@ export default function ArchitectView() {
   const [dragOver, setDragOver] = useState(false);
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
+  const [paperVenue, setPaperVenue] = useState(ACTIVE_PAPER_VENUES_VALUE);
 
   const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
   const createTrade = useCreateTrade();
+
+  useEffect(() => {
+    if (paperVenue !== ACTIVE_PAPER_VENUES_VALUE && !activeVenues.includes(paperVenue)) {
+      setPaperVenue(ACTIVE_PAPER_VENUES_VALUE);
+    }
+  }, [activeVenues, paperVenue]);
+
+  const paperVenueOptions = useMemo(
+    () => [
+      {
+        value: ACTIVE_PAPER_VENUES_VALUE,
+        label: 'Active venues',
+        meta:
+          activeVenues.length === 1
+            ? VENUES[activeVenues[0] ?? '']?.label ?? '1 venue'
+            : `${activeVenues.length} venues`,
+      },
+      ...VENUE_LIST.filter((venue) => activeVenues.includes(venue.id)).map((venue) => ({
+        value: venue.id,
+        label: venue.label,
+        meta: 'Only',
+      })),
+    ],
+    [activeVenues],
+  );
 
   async function handleSendToPaper() {
     if (legs.length === 0) return;
     setPaperStatus(null);
     try {
-      const req = legsToOrderRequest(legs, underlying, activeVenues);
+      const venueFilter =
+        paperVenue === ACTIVE_PAPER_VENUES_VALUE ? activeVenues : [paperVenue];
+      const req = legsToOrderRequest(legs, underlying, venueFilter);
       const strategyName = detectStrategy(legs);
-      await createTrade.mutateAsync({
+      const result = await createTrade.mutateAsync({
         label: strategyName,
         strategyName,
         order: req,
       });
-      setPaperStatus('Filled — switching to Paper tab');
+      const filledVenues = Array.from(new Set(result.fills.map((fill) => fill.venue)));
+      const fillSummary =
+        filledVenues.length === 1
+          ? VENUES[filledVenues[0] ?? '']?.label ?? filledVenues[0]
+          : `${filledVenues.length} venues`;
+      setPaperStatus(`Filled on ${fillSummary} - switching to Paper tab`);
       setTimeout(() => setActiveTab('trading'), 400);
     } catch (err) {
       setPaperStatus(err instanceof Error ? err.message : 'Paper order failed');
@@ -389,6 +425,17 @@ export default function ArchitectView() {
               <button className={styles.compareBtn} onClick={() => setShowVenues(true)}>
                 Compare Venues
               </button>
+            )}
+
+            {legs.length > 0 && (
+              <div className={styles.paperTradeControls}>
+                <span className={styles.paperTradeLabel}>Paper venue</span>
+                <DropdownPicker
+                  options={paperVenueOptions}
+                  value={paperVenue}
+                  onChange={setPaperVenue}
+                />
+              </div>
             )}
 
             {legs.length > 0 && (

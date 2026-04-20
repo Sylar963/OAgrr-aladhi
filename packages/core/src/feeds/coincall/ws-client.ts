@@ -426,14 +426,17 @@ export function buildSignedWsUrl(now: () => number = Date.now): string {
   const ts = now();
   const payload = `GET/users/self/verify?uuid=${apiKey}&ts=${ts}`;
   const sign = createHmac('sha256', apiSecret).update(payload).digest('hex').toUpperCase();
-  const qs = new URLSearchParams({
-    code: '10',
-    uuid: apiKey,
-    ts: String(ts),
-    sign,
-    apiKey,
-  });
-  return `${COINCALL_MARKET_WS_URL}?${qs.toString()}`;
+  // Concatenate raw (unencoded) — server verifies signature against the raw
+  // query string. URLSearchParams would percent-encode the trailing `=` in
+  // base64-shaped apiKey/uuid values, breaking the signature → 403.
+  return (
+    `${COINCALL_MARKET_WS_URL}` +
+    `?code=10` +
+    `&uuid=${apiKey}` +
+    `&ts=${ts}` +
+    `&sign=${sign}` +
+    `&apiKey=${apiKey}`
+  );
 }
 
 function* indexBatches(total: number, size: number): Generator<{ start: number; end: number }> {

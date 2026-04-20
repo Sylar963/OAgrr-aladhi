@@ -3,6 +3,7 @@ import okxLogo from '@/assets/venues/okx.png';
 import binanceLogo from '@/assets/venues/binance.svg';
 import bybitLogo from '@/assets/venues/bybit.svg';
 import deriveLogo from '@/assets/venues/derive.png';
+import coincallLogo from '@/assets/venues/coincall.png';
 
 export interface VenueMeta {
   id: string;
@@ -30,6 +31,13 @@ export const VENUES: Record<string, VenueMeta> = {
   },
   bybit: { id: 'bybit', label: 'Bybit', shortLabel: 'BYB', logo: bybitLogo, color: '#F7A600' },
   derive: { id: 'derive', label: 'Derive', shortLabel: 'DRV', logo: deriveLogo, color: '#25FAAF' },
+  coincall: {
+    id: 'coincall',
+    label: 'Coincall',
+    shortLabel: 'CCL',
+    logo: coincallLogo,
+    color: '#1FE086',
+  },
 };
 
 export const VENUE_LIST = Object.values(VENUES);

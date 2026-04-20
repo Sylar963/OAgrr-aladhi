@@ -671,6 +671,22 @@
   background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
 }
 
+.paperTradeControls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.paperTradeLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .backdrop {
   position: fixed;
   inset: 0;

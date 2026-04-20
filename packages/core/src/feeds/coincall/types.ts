@@ -44,7 +44,7 @@ export const CoincallOptionConfigEntrySchema = z.object({
   settle: z.string(),
   takerFee: NumericLike,
   makerFee: NumericLike,
-  multiplier: NumericLike,
+  multiplier: NumericLike.optional(),
   tickSize: NumericLike,
   priceDecimal: z.number(),
   qtyDecimal: z.number(),

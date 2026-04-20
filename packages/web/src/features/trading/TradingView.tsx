@@ -99,62 +99,6 @@ export default function TradingView() {
         <HeaderStat label="Sync" value={wsLabel(wsState)} tone={wsState === 'live' ? 'positive' : 'neutral'} />
       </div>
 
-      <section className={styles.accountBar}>
-        <div className={styles.accountCopy}>
-          <div className={styles.accountTitle}>Paper capital</div>
-          <div className={styles.accountText}>
-            {isConfigured
-              ? `${paperAccount?.label ?? 'Paper'} seeded with ${fmtUsd(paperAccount?.initialCashUsd ?? null)}.`
-              : 'Initialize the paper account before you start a new balance run.'}
-          </div>
-          <div className={styles.accountHint}>
-            Resetting starts a fresh account and clears paper trades, fills, notes, and account PnL history.
-          </div>
-        </div>
-        <div className={styles.accountControls}>
-          <label className={styles.capitalField}>
-            <span>Capital</span>
-            <input
-              className={styles.capitalInput}
-              type="number"
-              min={1000}
-              max={100000}
-              step={1000}
-              inputMode="numeric"
-              value={capitalInput}
-              onChange={(event) => setCapitalInput(event.target.value)}
-            />
-          </label>
-          <button
-            className={styles.primaryButton}
-            disabled={initPaperAccount.isPending || selectedCapital == null}
-            onClick={() => {
-              if (selectedCapital == null) return;
-              if (
-                isConfigured &&
-                !window.confirm(
-                  `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
-                )
-              ) {
-                return;
-              }
-              initPaperAccount.mutate(
-                { initialCashUsd: selectedCapital },
-                {
-                  onSuccess: () => {
-                    setSelectedTradeId(null);
-                    setNoteContent('');
-                    setNoteTags('');
-                  },
-                },
-              );
-            }}
-          >
-            {isConfigured ? 'Reset account' : 'Initialize account'}
-          </button>
-        </div>
-      </section>
-
       <div className={styles.workspace}>
         <section className={styles.sidebar}>
           <div className={styles.section}>
@@ -177,7 +121,9 @@ export default function TradingView() {
                       <div>
                         <div className={styles.tradeLabel}>{trade.label}</div>
                         <div className={styles.tradeMetaLine}>
-                          {trade.strategyName} · {trade.openLegs} legs
+                          <span>{trade.strategyName}</span>
+                          <PremiumFlowBadge netPremiumUsd={trade.netPremiumUsd} />
+                          <span>&middot; {trade.openLegs} legs</span>
                         </div>
                       </div>
                       <div className={tone(trade.totalPnlUsd) === 'positive' ? styles.positive : tone(trade.totalPnlUsd) === 'negative' ? styles.negative : ''}>
@@ -510,6 +456,53 @@ export default function TradingView() {
           </div>
         </section>
       </div>
+
+      <footer className={styles.accountFooter}>
+        <span className={styles.accountFooterLabel}>
+          {isConfigured
+            ? `${paperAccount?.label ?? 'Paper'} · ${fmtUsd(paperAccount?.initialCashUsd ?? null)}`
+            : 'Paper account not initialized'}
+        </span>
+        <span className={styles.accountFooterSep}>·</span>
+        <input
+          className={styles.accountFooterInput}
+          type="number"
+          min={1000}
+          max={100000}
+          step={1000}
+          inputMode="numeric"
+          value={capitalInput}
+          onChange={(event) => setCapitalInput(event.target.value)}
+          aria-label="Capital"
+        />
+        <button
+          className={styles.accountFooterButton}
+          disabled={initPaperAccount.isPending || selectedCapital == null}
+          onClick={() => {
+            if (selectedCapital == null) return;
+            if (
+              isConfigured &&
+              !window.confirm(
+                `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
+              )
+            ) {
+              return;
+            }
+            initPaperAccount.mutate(
+              { initialCashUsd: selectedCapital },
+              {
+                onSuccess: () => {
+                  setSelectedTradeId(null);
+                  setNoteContent('');
+                  setNoteTags('');
+                },
+              },
+            );
+          }}
+        >
+          {isConfigured ? 'Reset' : 'Initialize'}
+        </button>
+      </footer>
     </div>
   );
 }
@@ -564,6 +557,23 @@ function RiskPill({ label, value }: { label: string; value: string }) {
       <span>{value}</span>
     </div>
   );
+}
+
+function PremiumFlowBadge({ netPremiumUsd }: { netPremiumUsd: number }) {
+  const kind = premiumFlowKind(netPremiumUsd);
+  if (kind == null) return null;
+  return (
+    <span className={styles.premiumFlowBadge} data-kind={kind}>
+      <span className={styles.premiumFlowLabel}>{kind === 'debit' ? 'Debit' : 'Credit'}</span>
+      <span className={styles.premiumFlowValue}>{fmtUsd(Math.abs(netPremiumUsd))}</span>
+    </span>
+  );
+}
+
+function premiumFlowKind(netPremiumUsd: number): 'debit' | 'credit' | null {
+  if (netPremiumUsd > 0) return 'debit';
+  if (netPremiumUsd < 0) return 'credit';
+  return null;
 }
 
 function buildScenario(trade: PaperTradeDetailDto, ivShift: number, dteShift: number) {

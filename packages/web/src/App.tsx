@@ -1,16 +1,25 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { AppShell } from '@components/layout';
 import { ChainView, useUnderlyings } from '@features/chain';
-import { SurfaceView } from '@features/surface';
-import { GexView } from '@features/gex';
-import { FlowView } from '@features/flow';
-import { AnalyticsView } from '@features/analytics';
-import { ArchitectView } from '@features/architect';
-import { TradingView } from '@features/trading';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './App.module.css';
+
+const SurfaceView = lazy(() =>
+  import('@features/surface').then((m) => ({ default: m.SurfaceView })),
+);
+const GexView = lazy(() => import('@features/gex').then((m) => ({ default: m.GexView })));
+const FlowView = lazy(() => import('@features/flow').then((m) => ({ default: m.FlowView })));
+const AnalyticsView = lazy(() =>
+  import('@features/analytics').then((m) => ({ default: m.AnalyticsView })),
+);
+const ArchitectView = lazy(() =>
+  import('@features/architect').then((m) => ({ default: m.ArchitectView })),
+);
+const TradingView = lazy(() =>
+  import('@features/trading').then((m) => ({ default: m.TradingView })),
+);
 
 const TABS = [
   { id: 'chain', label: 'Chain' },
@@ -47,12 +56,14 @@ export default function App() {
     <AppShell underlyings={underlyings} tabs={TABS}>
       <div className={styles.panel}>
         {activeTab === 'chain' && <ChainView />}
-        {activeTab === 'architect' && <ArchitectView />}
-        {activeTab === 'trading' && <TradingView />}
-        {activeTab === 'surface' && <SurfaceView />}
-        {activeTab === 'flow' && <FlowView />}
-        {activeTab === 'analytics' && <AnalyticsView />}
-        {activeTab === 'gex' && <GexView />}
+        <Suspense fallback={null}>
+          {activeTab === 'architect' && <ArchitectView />}
+          {activeTab === 'trading' && <TradingView />}
+          {activeTab === 'surface' && <SurfaceView />}
+          {activeTab === 'flow' && <FlowView />}
+          {activeTab === 'analytics' && <AnalyticsView />}
+          {activeTab === 'gex' && <GexView />}
+        </Suspense>
       </div>
     </AppShell>
   );

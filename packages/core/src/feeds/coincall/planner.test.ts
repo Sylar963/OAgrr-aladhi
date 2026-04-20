@@ -4,7 +4,11 @@ import {
   buildBsInfoSubscribeMessage,
   buildBsInfoUnsubscribeMessage,
   buildCoincallNewBsInfoSymbols,
+  buildCoincallNewOrderBookSymbols,
   buildCoincallRemovedBsInfoSymbols,
+  buildCoincallRemovedOrderBookSymbols,
+  buildOrderBookSubscribeMessage,
+  buildOrderBookUnsubscribeMessage,
   buildTOptionSubscribeMessage,
   createCoincallSubscriptionState,
   ensureCoincallTOptionSub,
@@ -45,6 +49,18 @@ describe('Coincall planner', () => {
     expect(buildBsInfoUnsubscribeMessage('BTCUSD-28MAR26-70000-C').action).toBe('unsubscribe');
   });
 
+  it('builds an orderBook subscribe message per instrument', () => {
+    expect(buildOrderBookSubscribeMessage('BTCUSD-28MAR26-70000-C')).toEqual({
+      action: 'subscribe',
+      dataType: 'orderBook',
+      payload: { symbol: 'BTCUSD-28MAR26-70000-C' },
+    });
+  });
+
+  it('builds an orderBook unsubscribe with action:unsubscribe', () => {
+    expect(buildOrderBookUnsubscribeMessage('BTCUSD-28MAR26-70000-C').action).toBe('unsubscribe');
+  });
+
   it('builds a tOption subscribe with pair root and ms cutoff', () => {
     expect(buildTOptionSubscribeMessage('BTCUSD', 1776758400000)).toEqual({
       action: 'subscribe',
@@ -68,6 +84,21 @@ describe('Coincall planner', () => {
     expect(state.bsInfoSymbols.size).toBe(0);
   });
 
+  it('tracks new orderBook symbols independently from bsInfo', () => {
+    const state = createCoincallSubscriptionState();
+    const first = buildCoincallNewOrderBookSymbols(state, [instrument('A-C'), instrument('B-C')]);
+    expect(first).toEqual(['A-C', 'B-C']);
+    const again = buildCoincallNewOrderBookSymbols(state, [instrument('A-C'), instrument('C-C')]);
+    expect(again).toEqual(['C-C']);
+  });
+
+  it('removes tracked orderBook symbols only if present', () => {
+    const state = createCoincallSubscriptionState();
+    buildCoincallNewOrderBookSymbols(state, [instrument('A-C')]);
+    expect(buildCoincallRemovedOrderBookSymbols(state, ['A-C', 'B-C'])).toEqual(['A-C']);
+    expect(state.orderBookSymbols.size).toBe(0);
+  });
+
   it('tracks tOption subs uniquely by (pairRoot, expiryMs)', () => {
     const state = createCoincallSubscriptionState();
     expect(ensureCoincallTOptionSub(state, 'BTCUSD', 100)).toBe(true);
@@ -87,9 +118,11 @@ describe('Coincall planner', () => {
   it('resets both subscription sets', () => {
     const state = createCoincallSubscriptionState();
     buildCoincallNewBsInfoSymbols(state, [instrument('A-C')]);
+    buildCoincallNewOrderBookSymbols(state, [instrument('A-C')]);
     ensureCoincallTOptionSub(state, 'BTCUSD', 100);
     resetCoincallSubscriptionState(state);
     expect(state.bsInfoSymbols.size).toBe(0);
+    expect(state.orderBookSymbols.size).toBe(0);
     expect(state.tOptionKeys.size).toBe(0);
   });
 

@@ -2,12 +2,14 @@ import {
   CoincallBsInfoMessageSchema,
   CoincallHeartbeatAckSchema,
   CoincallInstrumentsResponseSchema,
+  CoincallOrderBookMessageSchema,
   CoincallPublicConfigSchema,
   CoincallTOptionMessageSchema,
   CoincallTimeSchema,
   type CoincallBsInfoMessage,
   type CoincallHeartbeatAck,
   type CoincallInstrumentsResponse,
+  type CoincallOrderBookMessage,
   type CoincallPublicConfig,
   type CoincallTOptionMessage,
 } from './types.js';
@@ -34,6 +36,11 @@ export function parseCoincallBsInfoMessage(input: unknown): CoincallBsInfoMessag
 
 export function parseCoincallTOptionMessage(input: unknown): CoincallTOptionMessage | null {
   const parsed = CoincallTOptionMessageSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseCoincallOrderBookMessage(input: unknown): CoincallOrderBookMessage | null {
+  const parsed = CoincallOrderBookMessageSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }
 

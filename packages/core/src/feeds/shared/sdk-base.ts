@@ -32,6 +32,7 @@ export interface CachedInstrument {
   quote: string;
   settle: string;
   expiry: string;
+  expirationTimestamp?: number | null;
   strike: number;
   right: OptionRight;
   inverse: boolean;

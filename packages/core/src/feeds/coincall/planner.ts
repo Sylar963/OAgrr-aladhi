@@ -16,6 +16,8 @@ export const COINCALL_MAX_SUBS_PER_BATCH = 100;
 export interface CoincallSubscriptionState {
   // Full native symbols subscribed to bsInfo (pricing).
   bsInfoSymbols: Set<string>;
+  // Full native symbols subscribed to orderBook (top-of-book fallback).
+  orderBookSymbols: Set<string>;
   // Base+expiryMs keys subscribed to tOption (chain book).
   tOptionKeys: Set<string>;
 }
@@ -23,6 +25,7 @@ export interface CoincallSubscriptionState {
 export function createCoincallSubscriptionState(): CoincallSubscriptionState {
   return {
     bsInfoSymbols: new Set<string>(),
+    orderBookSymbols: new Set<string>(),
     tOptionKeys: new Set<string>(),
   };
 }
@@ -51,6 +54,26 @@ export function buildBsInfoUnsubscribeMessage(
   return {
     action: 'unsubscribe',
     dataType: 'bsInfo',
+    payload: { symbol },
+  };
+}
+
+export function buildOrderBookSubscribeMessage(
+  symbol: string,
+): Record<string, unknown> {
+  return {
+    action: 'subscribe',
+    dataType: 'orderBook',
+    payload: { symbol },
+  };
+}
+
+export function buildOrderBookUnsubscribeMessage(
+  symbol: string,
+): Record<string, unknown> {
+  return {
+    action: 'unsubscribe',
+    dataType: 'orderBook',
     payload: { symbol },
   };
 }
@@ -107,6 +130,32 @@ export function buildCoincallRemovedBsInfoSymbols(
   return removed;
 }
 
+export function buildCoincallNewOrderBookSymbols(
+  state: CoincallSubscriptionState,
+  instruments: CachedInstrument[],
+): string[] {
+  const fresh: string[] = [];
+  for (const inst of instruments) {
+    if (state.orderBookSymbols.has(inst.exchangeSymbol)) continue;
+    state.orderBookSymbols.add(inst.exchangeSymbol);
+    fresh.push(inst.exchangeSymbol);
+  }
+  return fresh;
+}
+
+export function buildCoincallRemovedOrderBookSymbols(
+  state: CoincallSubscriptionState,
+  symbols: string[],
+): string[] {
+  const removed: string[] = [];
+  for (const sym of symbols) {
+    if (!state.orderBookSymbols.has(sym)) continue;
+    state.orderBookSymbols.delete(sym);
+    removed.push(sym);
+  }
+  return removed;
+}
+
 export function ensureCoincallTOptionSub(
   state: CoincallSubscriptionState,
   pairRoot: string,
@@ -131,5 +180,6 @@ export function removeCoincallTOptionSub(
 
 export function resetCoincallSubscriptionState(state: CoincallSubscriptionState): void {
   state.bsInfoSymbols.clear();
+  state.orderBookSymbols.clear();
   state.tOptionKeys.clear();
 }

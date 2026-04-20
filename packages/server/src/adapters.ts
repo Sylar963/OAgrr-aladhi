@@ -41,3 +41,19 @@ export async function bootstrapAdapters(log: FastifyBaseLogger) {
 
   log.info('all venues bootstrapped');
 }
+
+export async function disposeAdapters(log: FastifyBaseLogger) {
+  log.info('disposing venue adapters');
+
+  await Promise.allSettled(
+    adapters.map(async (adapter) => {
+      if (adapter.dispose == null) return;
+      try {
+        await adapter.dispose();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.warn({ venue: adapter.venue, err: message }, 'venue dispose failed');
+      }
+    }),
+  );
+}

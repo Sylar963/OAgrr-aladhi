@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_GREEKS } from '../../core/types.js';
-import type { LiveQuote } from '../shared/sdk-base.js';
-import { buildCoincallInstrument, mergeCoincallBsInfo, mergeCoincallTOption } from './state.js';
+import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
+import {
+  buildCoincallInstrument,
+  mergeCoincallBsInfo,
+  mergeCoincallOrderBook,
+  mergeCoincallTOption,
+} from './state.js';
 import type { CoincallInstrument, CoincallOptionConfigEntry } from './types.js';
 
 function emptyQuote(): LiveQuote {
@@ -21,6 +26,52 @@ function emptyQuote(): LiveQuote {
     greeks: { ...EMPTY_GREEKS },
     timestamp: 0,
   };
+}
+
+function testInstrument(overrides: Partial<CachedInstrument> = {}): CachedInstrument {
+  return {
+    symbol: 'BTC/USD:USD-991231-30000-C',
+    exchangeSymbol: 'BTCUSD-31DEC99-30000-C',
+    base: 'BTC',
+    quote: 'USD',
+    settle: 'USD',
+    expiry: '2099-12-31',
+    expirationTimestamp: Date.parse('2099-12-31T08:00:00.000Z'),
+    strike: 30000,
+    right: 'call' as const,
+    inverse: false,
+    contractSize: 0.01,
+    tickSize: 0.1,
+    minQty: 0.01,
+    makerFee: 0.0003,
+    takerFee: 0.0004,
+    ...overrides,
+  };
+}
+
+function erf(x: number): number {
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const t = 1 / (1 + p * Math.abs(x));
+  const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+
+function normalCdf(x: number): number {
+  return 0.5 * (1 + erf(x / Math.SQRT2));
+}
+
+function blackScholesCall(spot: number, strike: number, timeYears: number, volatility: number): number {
+  const sqrtT = Math.sqrt(timeYears);
+  const sigmaSqrtT = volatility * sqrtT;
+  const d1 = (Math.log(spot / strike) + 0.5 * volatility * volatility * timeYears) / sigmaSqrtT;
+  const d2 = d1 - sigmaSqrtT;
+  return spot * normalCdf(d1) - strike * normalCdf(d2);
 }
 
 const BTC_CONFIG: Record<string, CoincallOptionConfigEntry> = {
@@ -136,6 +187,7 @@ describe('buildCoincallInstrument', () => {
 
 describe('mergeCoincallBsInfo', () => {
   it('fills markPrice, markIv, greeks, underlyingPrice from a bsInfo push', () => {
+    const inst = testInstrument();
     const q = mergeCoincallBsInfo(
       {
         s: 'BTCUSD-28JUL23-33000-C',
@@ -149,6 +201,7 @@ describe('mergeCoincallBsInfo', () => {
         up: 31248.97,
         ts: 1688449285840,
       },
+      inst,
       undefined,
       emptyQuote(),
     );
@@ -164,6 +217,7 @@ describe('mergeCoincallBsInfo', () => {
   });
 
   it('preserves previous bid/ask fields on a bsInfo-only update', () => {
+    const inst = testInstrument();
     const prev = emptyQuote();
     prev.bidPrice = 1;
     prev.askPrice = 2;
@@ -172,6 +226,7 @@ describe('mergeCoincallBsInfo', () => {
     prev.greeks = { ...prev.greeks, bidIv: 0.4, askIv: 0.5 };
     const q = mergeCoincallBsInfo(
       { s: 'X', mp: 3, ts: 1 },
+      inst,
       prev,
       emptyQuote(),
     );
@@ -187,6 +242,7 @@ describe('mergeCoincallBsInfo', () => {
 
 describe('mergeCoincallTOption', () => {
   it('fills bid/ask/bs/as/biv/aiv from a tOption entry', () => {
+    const inst = testInstrument();
     const q = mergeCoincallTOption(
       {
         s: 'BTCUSD-4JUL23-27000-C',
@@ -207,6 +263,7 @@ describe('mergeCoincallTOption', () => {
         up: 31038.58,
         ts: 1688452774463,
       },
+      inst,
       undefined,
       emptyQuote(),
     );
@@ -224,10 +281,12 @@ describe('mergeCoincallTOption', () => {
   });
 
   it('preserves markIv across a tOption update', () => {
+    const inst = testInstrument();
     const prev = emptyQuote();
     prev.greeks = { ...prev.greeks, markIv: 0.5, delta: 0.5 };
     const q = mergeCoincallTOption(
       { s: 'X', bid: 1, ask: 2, ts: 5 },
+      inst,
       prev,
       emptyQuote(),
     );
@@ -235,5 +294,36 @@ describe('mergeCoincallTOption', () => {
     // delta is overwritten only when the push provides it; here it stays.
     expect(q.greeks.delta).toBe(0.5);
     expect(q.bidPrice).toBe(1);
+  });
+
+  it('derives missing side IVs from best bid/ask prices on orderBook fallback', () => {
+    const inst = testInstrument();
+    const bidSigma = 0.55;
+    const askSigma = 0.6;
+    const timestamp = Date.parse('2099-06-01T00:00:00.000Z');
+    const timeYears = (inst.expirationTimestamp! - timestamp) / (365 * 24 * 60 * 60 * 1000);
+    const bid = blackScholesCall(30000, inst.strike, timeYears, bidSigma);
+    const ask = blackScholesCall(30000, inst.strike, timeYears, askSigma);
+
+    const prev = emptyQuote();
+    prev.underlyingPrice = 30000;
+    prev.greeks = { ...prev.greeks, markIv: 0.5 };
+
+    const q = mergeCoincallOrderBook(
+      {
+        s: inst.exchangeSymbol,
+        bids: [{ pr: bid, sz: 1 }],
+        asks: [{ pr: ask, sz: 1 }],
+        ts: timestamp,
+      },
+      inst,
+      prev,
+      emptyQuote(),
+    );
+
+    expect(q.bidPrice).toBeCloseTo(bid, 6);
+    expect(q.askPrice).toBeCloseTo(ask, 6);
+    expect(q.greeks.bidIv).toBeCloseTo(bidSigma, 3);
+    expect(q.greeks.askIv).toBeCloseTo(askSigma, 3);
   });
 });

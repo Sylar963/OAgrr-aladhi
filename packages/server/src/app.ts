@@ -7,7 +7,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { registerRoutes } from './routes/index.js';
-import { bootstrapAdapters } from './adapters.js';
+import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import { bootstrapServices, tradeStore } from './services.js';
 import { paperTradingStore } from './trading-services.js';
 
@@ -53,6 +53,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerRoutes(app);
 
   app.addHook('onClose', async () => {
+    await disposeAdapters(app.log);
     await tradeStore.dispose();
     await paperTradingStore.dispose();
   });

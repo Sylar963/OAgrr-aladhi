@@ -14,6 +14,7 @@ import { feedLogger } from '../../utils/logger.js';
 import {
   parseCoincallBsInfoMessage,
   parseCoincallInstruments,
+  parseCoincallOrderBookMessage,
   parseCoincallPublicConfig,
   parseCoincallTOptionMessage,
   parseCoincallTime,
@@ -23,7 +24,11 @@ import {
   buildBsInfoSubscribeMessage,
   buildBsInfoUnsubscribeMessage,
   buildCoincallNewBsInfoSymbols,
+  buildCoincallNewOrderBookSymbols,
   buildCoincallRemovedBsInfoSymbols,
+  buildCoincallRemovedOrderBookSymbols,
+  buildOrderBookSubscribeMessage,
+  buildOrderBookUnsubscribeMessage,
   buildTOptionSubscribeMessage,
   buildTOptionUnsubscribeMessage,
   COINCALL_MAX_SUBS_PER_BATCH,
@@ -36,6 +41,7 @@ import {
 import {
   buildCoincallInstrument,
   mergeCoincallBsInfo,
+  mergeCoincallOrderBook,
   mergeCoincallTOption,
 } from './state.js';
 import type { CoincallOptionConfigEntry } from './types.js';
@@ -50,6 +56,22 @@ const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 // Only subscribe options for underlyings that the app cares about. optionConfig
 // lists 21 pairs but most are long-tail; chain UI focuses on these.
 const SUPPORTED_UNDERLYINGS = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'] as const;
+
+function payloadShape(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return {
+      kind: 'array',
+      length: value.length,
+      firstKeys:
+        first != null && typeof first === 'object' ? Object.keys(first as Record<string, unknown>) : [],
+    };
+  }
+  if (value != null && typeof value === 'object') {
+    return { kind: 'object', keys: Object.keys(value as Record<string, unknown>) };
+  }
+  return { kind: typeof value };
+}
 
 interface CoincallEnvelope {
   code?: number;
@@ -71,10 +93,11 @@ interface CoincallEnvelope {
  *   all share one authenticated endpoint. Signing is required even for
  *   market data — see buildSignedWsUrl().
  *
- *   We use two complementary subscriptions per chain:
+ *   We use three complementary subscriptions per active chain:
  *     - bsInfo per instrument (markPrice, iv, delta/gamma/theta/vega, oi, up)
  *     - tOption per base+expiry (bid/ask/bs/as/biv/aiv across the chain)
- *   state.ts merges both into a single LiveQuote per exchangeSymbol.
+ *     - orderBook per instrument as a fallback when tOption is incomplete
+ *   state.ts merges them into a single LiveQuote per exchangeSymbol.
  *
  * Heartbeat: send {"action":"heartbeat"} every 15s, ack is {"c":11,"rc":1}.
  *
@@ -184,9 +207,11 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     const expired = this.instruments.filter((i) => !activeSymbols.has(i.exchangeSymbol));
     if (expired.length > 0) {
       const expiredSymbols = expired.map((i) => i.exchangeSymbol);
-      const removed = buildCoincallRemovedBsInfoSymbols(this.subscriptions, expiredSymbols);
+      const removedBsInfo = buildCoincallRemovedBsInfoSymbols(this.subscriptions, expiredSymbols);
+      const removedOrderBook = buildCoincallRemovedOrderBookSymbols(this.subscriptions, expiredSymbols);
       if (this.wsClient?.isConnected) {
-        for (const sym of removed) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+        for (const sym of removedBsInfo) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+        for (const sym of removedOrderBook) this.wsClient.send(buildOrderBookUnsubscribeMessage(sym));
       }
       this.removeCachedInstruments((i) => !activeSymbols.has(i.exchangeSymbol));
       log.info({ count: expired.length }, 'removed expired instruments');
@@ -212,21 +237,46 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (instruments.length === 0) return;
     await this.ensureConnected();
 
-    const newBsInfoSymbols = buildCoincallNewBsInfoSymbols(this.subscriptions, instruments);
-    for (const batchStart of indexBatches(newBsInfoSymbols.length, COINCALL_MAX_SUBS_PER_BATCH)) {
-      for (let i = batchStart.start; i < batchStart.end; i++) {
-        this.wsClient?.send(buildBsInfoSubscribeMessage(newBsInfoSymbols[i]!));
-      }
-    }
-
+    // tOption first: it carries bid/ask/biv/aiv for the whole chain. Sending it
+    // ahead of the bsInfo flood means the snapshot lands before per-instrument
+    // greeks start triggering emits with null bidIv/askIv.
     const pairRoot = pairRootFor(underlying);
     const expiryTs = this.expiryTsIndex.get(this.expiryKey(underlying, expiry));
+    if (expiryTs == null) {
+      log.warn({ underlying, expiry }, 'missing tOption expiry timestamp for Coincall chain');
+    }
     if (expiryTs != null && ensureCoincallTOptionSub(this.subscriptions, pairRoot, expiryTs)) {
       this.wsClient?.send(buildTOptionSubscribeMessage(pairRoot, expiryTs));
     }
 
+    const newBsInfoSymbols = buildCoincallNewBsInfoSymbols(this.subscriptions, instruments);
+    const requestKey = `${underlying}:${expiry}`;
+    const shouldUseOrderBook = (this.requestRefCounts.get(requestKey) ?? 0) > 0;
+    const newOrderBookSymbols = shouldUseOrderBook
+      ? buildCoincallNewOrderBookSymbols(this.subscriptions, instruments)
+      : [];
+
+    for (const batchStart of indexBatches(newBsInfoSymbols.length, COINCALL_MAX_SUBS_PER_BATCH)) {
+      for (let i = batchStart.start; i < batchStart.end; i++) {
+        const symbol = newBsInfoSymbols[i]!;
+        this.wsClient?.send(buildBsInfoSubscribeMessage(symbol));
+      }
+    }
+    for (const batchStart of indexBatches(newOrderBookSymbols.length, COINCALL_MAX_SUBS_PER_BATCH)) {
+      for (let i = batchStart.start; i < batchStart.end; i++) {
+        const symbol = newOrderBookSymbols[i]!;
+        this.wsClient?.send(buildOrderBookSubscribeMessage(symbol));
+      }
+    }
+
     log.info(
-      { underlying, expiry, bsInfo: newBsInfoSymbols.length, tOption: expiryTs != null ? 1 : 0 },
+      {
+        underlying,
+        expiry,
+        bsInfo: newBsInfoSymbols.length,
+        orderBook: newOrderBookSymbols.length,
+        tOption: expiryTs != null ? 1 : 0,
+      },
       'subscribed to chain',
     );
   }
@@ -243,7 +293,17 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
       this.subscriptions,
       instruments.map((i) => i.exchangeSymbol),
     );
-    for (const sym of removed) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+    for (const sym of removed) {
+      this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+    }
+
+    const removedOrderBook = buildCoincallRemovedOrderBookSymbols(
+      this.subscriptions,
+      instruments.map((i) => i.exchangeSymbol),
+    );
+    for (const sym of removedOrderBook) {
+      this.wsClient.send(buildOrderBookUnsubscribeMessage(sym));
+    }
 
     const pairRoot = pairRootFor(underlying);
     const expiryTs = this.expiryTsIndex.get(this.expiryKey(underlying, expiry));
@@ -259,6 +319,9 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     }
     for (const sym of this.subscriptions.bsInfoSymbols) {
       this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+    }
+    for (const sym of this.subscriptions.orderBookSymbols) {
+      this.wsClient.send(buildOrderBookUnsubscribeMessage(sym));
     }
     for (const key of this.subscriptions.tOptionKeys) {
       const [pairRoot, tsRaw] = key.split(':');
@@ -293,16 +356,21 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
           );
         },
         getReplayMessages: () => {
+          // Replay tOption first so chain-level bid/ask/biv/aiv snapshots land
+          // before bsInfo emits start overwriting quotes with null IV spreads.
           const messages: Array<Record<string, unknown>> = [];
-          for (const sym of this.subscriptions.bsInfoSymbols) {
-            messages.push(buildBsInfoSubscribeMessage(sym));
-          }
           for (const key of this.subscriptions.tOptionKeys) {
             const [pairRoot, tsRaw] = key.split(':');
             const ts = Number(tsRaw);
             if (pairRoot && Number.isFinite(ts)) {
               messages.push(buildTOptionSubscribeMessage(pairRoot, ts));
             }
+          }
+          for (const sym of this.subscriptions.bsInfoSymbols) {
+            messages.push(buildBsInfoSubscribeMessage(sym));
+          }
+          for (const sym of this.subscriptions.orderBookSymbols) {
+            messages.push(buildOrderBookSubscribeMessage(sym));
           }
           return messages;
         },
@@ -318,8 +386,9 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
 
   private handleRawMessage(raw: WebSocket.RawData): void {
     let json: unknown;
+    const rawText = raw.toString();
     try {
-      json = JSON.parse(raw.toString());
+      json = JSON.parse(rawText);
     } catch (err: unknown) {
       log.debug({ err: String(err) }, 'malformed WS frame');
       return;
@@ -328,30 +397,72 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
 
     const envelope = json as Record<string, unknown>;
     const dt = envelope['dt'];
+    const rc = envelope['rc'];
+    const debugWs = process.env['COINCALL_DEBUG_WS'] === '1';
+
+    if (debugWs && (dt === 4 || envelope['c'] === 20)) {
+      log.debug({ dt, c: envelope['c'], rc, shape: payloadShape(envelope['d']), raw: rawText }, 'Coincall WS frame');
+    }
+
+    if (typeof rc === 'number' && rc !== 1) {
+      log.warn(
+        { rc, c: envelope['c'], dt, shape: payloadShape(envelope['d']) },
+        'Coincall WS request returned non-success rc',
+      );
+    }
 
     if (dt === 3) {
       const msg = parseCoincallBsInfoMessage(json);
-      if (msg == null) return;
+      if (msg == null) {
+        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
+        return;
+      }
       const inst = this.instrumentMap.get(msg.d.s);
       if (inst == null) return;
       const previous = this.quoteStore.get(msg.d.s);
-      const quote = mergeCoincallBsInfo(msg.d, previous, this.emptyQuote());
+      const quote = mergeCoincallBsInfo(msg.d, inst, previous, this.emptyQuote());
       this.emitQuoteUpdate(msg.d.s, quote);
       return;
     }
 
     if (dt === 4) {
       const msg = parseCoincallTOptionMessage(json);
-      if (msg == null) return;
+      if (msg == null) {
+        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
+        return;
+      }
       const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
       for (const entry of msg.d) {
         const inst = this.instrumentMap.get(entry.s);
         if (inst == null) continue;
         const previous = this.quoteStore.get(entry.s);
-        const quote = mergeCoincallTOption(entry, previous, this.emptyQuote());
+        const quote = mergeCoincallTOption(entry, inst, previous, this.emptyQuote());
         updates.push({ exchangeSymbol: entry.s, quote });
       }
+      if (updates.length === 0 && msg.d.length > 0) {
+        log.debug(
+          {
+            firstSymbol: msg.d[0]?.s,
+            shape: payloadShape(msg.d),
+          },
+          'Coincall tOption entries did not match known instruments',
+        );
+      }
       if (updates.length > 0) this.emitQuoteUpdates(updates);
+      return;
+    }
+
+    if (dt === 5) {
+      const msg = parseCoincallOrderBookMessage(json);
+      if (msg == null) {
+        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall orderBook validation failed');
+        return;
+      }
+      const inst = this.instrumentMap.get(msg.d.s);
+      if (inst == null) return;
+      const previous = this.quoteStore.get(msg.d.s);
+      const quote = mergeCoincallOrderBook(msg.d, inst, previous, this.emptyQuote());
+      this.emitQuoteUpdate(msg.d.s, quote);
       return;
     }
 

@@ -16,6 +16,7 @@ import {
   CoincallHeartbeatAckSchema,
   CoincallInstrumentSchema,
   CoincallInstrumentsResponseSchema,
+  CoincallOrderBookMessageSchema,
   CoincallPublicConfigSchema,
   CoincallTOptionMessageSchema,
   CoincallTimeSchema,
@@ -125,6 +126,19 @@ const TOPTION_FIXTURE = {
 // Source: _option_ws_en.md, "HeartBeat" section.
 const HEARTBEAT_ACK_FIXTURE = { c: 11, rc: 1 };
 
+// ── WS: orderBook push ─────────────────────────────────────────
+// Source: _option_ws_en.md, "OrderBook" section.
+const ORDERBOOK_FIXTURE = {
+  dt: 5,
+  c: 20,
+  d: {
+    s: 'BTCUSD-4JUL23-27000-C',
+    asks: [{ pr: '4038.58', sz: '1' }],
+    bids: [{ pr: '1', sz: '0.2' }],
+    ts: 1688453641701,
+  },
+};
+
 describe('Coincall types', () => {
   it('accepts /time payload', () => {
     expect(CoincallTimeSchema.safeParse(TIME_FIXTURE).success).toBe(true);
@@ -191,6 +205,15 @@ describe('Coincall types', () => {
   it('accepts a heartbeat ack', () => {
     const result = CoincallHeartbeatAckSchema.safeParse(HEARTBEAT_ACK_FIXTURE);
     expect(result.success).toBe(true);
+  });
+
+  it('accepts an orderBook push and coerces top levels to numbers', () => {
+    const result = CoincallOrderBookMessageSchema.safeParse(ORDERBOOK_FIXTURE);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.d.bids[0]?.pr).toBe(1);
+      expect(result.data.d.asks[0]?.sz).toBe(1);
+    }
   });
 
   it('rejects a bsInfo push with wrong dt', () => {

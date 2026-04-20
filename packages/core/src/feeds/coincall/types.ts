@@ -137,6 +137,31 @@ export const CoincallTOptionMessageSchema = z.object({
 });
 export type CoincallTOptionMessage = z.infer<typeof CoincallTOptionMessageSchema>;
 
+// ── WS: orderBook push (top-of-book per instrument) ─────────────
+// Fixture: references/options-docs/coincall/option_ws_en.md (## OrderBook)
+// Envelope: { dt: 5, c: 20, d: { s, asks, bids, ts } }
+
+export const CoincallOrderBookLevelSchema = z.object({
+  pr: z.coerce.number(),
+  sz: z.coerce.number(),
+});
+export type CoincallOrderBookLevel = z.infer<typeof CoincallOrderBookLevelSchema>;
+
+export const CoincallOrderBookDataSchema = z.object({
+  s: z.string(),
+  asks: z.array(CoincallOrderBookLevelSchema),
+  bids: z.array(CoincallOrderBookLevelSchema),
+  ts: z.number(),
+});
+export type CoincallOrderBookData = z.infer<typeof CoincallOrderBookDataSchema>;
+
+export const CoincallOrderBookMessageSchema = z.object({
+  dt: z.literal(5),
+  c: z.number(),
+  d: CoincallOrderBookDataSchema,
+});
+export type CoincallOrderBookMessage = z.infer<typeof CoincallOrderBookMessageSchema>;
+
 // ── WS: heartbeat ack ──────────────────────────────────────────
 // Fixture: option_ws_en.md (## HeartBeat) — response is { c: 11, rc: 1 }
 

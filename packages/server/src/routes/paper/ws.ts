@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { PaperWsServerMessage } from '@oggregator/protocol';
+import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import {
-  DEFAULT_ACCOUNT_ID,
   pnlService,
   positionRepository,
   quoteProvider,
+  paperTradingStore,
 } from '../../trading-services.js';
 import { pnlToDto, positionToDto } from './mappers.js';
 import { paperEvents } from './events.js';
@@ -22,12 +23,21 @@ function send(
 }
 
 export async function paperWsRoute(app: FastifyInstance) {
-  app.get('/ws/paper', { websocket: true }, (socket) => {
+  app.get('/ws/paper', { websocket: true }, async (socket, req) => {
     let disposed = false;
+    let accountId = DEFAULT_ACCOUNT_ID;
+
+    const apiKey = new URL(req.url, 'http://localhost').searchParams.get('apiKey');
+    if (apiKey && paperTradingStore.enabled) {
+      const user = await paperTradingStore.getUserByApiKey(apiKey);
+      if (user) {
+        accountId = user.accountId;
+      }
+    }
 
     send(socket, {
       type: 'hello',
-      accountId: DEFAULT_ACCOUNT_ID,
+      accountId,
       serverTime: Date.now(),
     });
 
@@ -47,7 +57,7 @@ export async function paperWsRoute(app: FastifyInstance) {
 
     async function pushSnapshot(): Promise<void> {
       try {
-        const positions = await positionRepository.listPositions(DEFAULT_ACCOUNT_ID);
+        const positions = await positionRepository.listPositions(accountId);
         const open = positions.filter((p) => p.netQuantity !== 0);
         const marks = await Promise.all(
           open.map(async (p) =>
@@ -63,7 +73,7 @@ export async function paperWsRoute(app: FastifyInstance) {
           type: 'positions',
           positions: open.map((pos, i) => positionToDto(pos, marks[i] ?? null)),
         });
-        const pnl = await pnlService.snapshot(DEFAULT_ACCOUNT_ID);
+        const pnl = await pnlService.snapshot(accountId);
         send(socket, { type: 'pnl', pnl: pnlToDto(pnl) });
       } catch {}
     }

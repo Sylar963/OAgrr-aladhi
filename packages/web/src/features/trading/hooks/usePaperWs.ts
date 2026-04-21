@@ -22,8 +22,11 @@ export function usePaperWs(enabled = true): PaperConnectionState {
 
     const connect = () => {
       if (disposed) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/paper`);
+      const envWsBase = import.meta.env.VITE_WS_URL;
+      const wsUrl = envWsBase
+        ? `${envWsBase.replace(/\/$/, '')}/ws/paper`
+        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/paper`;
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       setState('connecting');
 

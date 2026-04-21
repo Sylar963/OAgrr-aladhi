@@ -9,7 +9,7 @@ dist/
 .env
 .env.*
 !.env.example
-ops/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -39,3 +39,7 @@ references/
 agent_docs/
 .vercel
 .env*.local
+
+
+/home/aladhi/aladhi/OAgrr-aladhi/.pi/skills/deploy-workflow
+ops/

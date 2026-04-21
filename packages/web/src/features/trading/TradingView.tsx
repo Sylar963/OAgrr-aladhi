@@ -52,6 +52,13 @@ export default function TradingView() {
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setUnderlying = useAppStore((state) => state.setUnderlying);
+  const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
+
+  useEffect(() => {
+    if (wsState === 'error') {
+      setShowRefreshPrompt(true);
+    }
+  }, [wsState]);
 
   useEffect(() => {
     const candidate = openTrades[0]?.id ?? closedTrades[0]?.id ?? null;
@@ -79,6 +86,19 @@ export default function TradingView() {
 
   return (
     <div className={styles.view}>
+      {showRefreshPrompt && (
+        <div className={styles.refreshBanner}>
+          <span>Server restarted. Please refresh to sync.</span>
+          <button
+            className={styles.primaryButton}
+            onClick={() => {
+              window.location.reload();
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      )}
       <div className={styles.header}>
         <HeaderStat label="Equity" value={fmtUsd(overview?.pnl.equityUsd ?? null)} />
         <HeaderStat label="Cash" value={fmtUsd(overview?.pnl.cashUsd ?? null)} />

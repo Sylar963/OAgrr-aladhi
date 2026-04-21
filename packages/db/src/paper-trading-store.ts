@@ -1,5 +1,13 @@
 import { Pool } from 'pg';
 
+export interface PaperUserRow {
+  id: string;
+  apiKey: string;
+  accountId: string;
+  label: string;
+  createdAt: Date;
+}
+
 export interface PaperAccountRow {
   id: string;
   label: string;
@@ -156,6 +164,10 @@ export interface PaperTradingStore {
     tradeId?: string,
   ): Promise<PaperTradeActivityRow[]>;
 
+  createUser(row: PaperUserRow): Promise<void>;
+  getUserByApiKey(apiKey: string): Promise<PaperUserRow | null>;
+  getUser(id: string): Promise<PaperUserRow | null>;
+
   dispose(): Promise<void>;
 }
 
@@ -213,6 +225,13 @@ export class NoopPaperTradingStore implements PaperTradingStore {
   }
   async listTradeActivities(): Promise<PaperTradeActivityRow[]> {
     return [];
+  }
+  async createUser(): Promise<void> {}
+  async getUserByApiKey(): Promise<PaperUserRow | null> {
+    return null;
+  }
+  async getUser(): Promise<PaperUserRow | null> {
+    return null;
   }
   async dispose(): Promise<void> {}
 }
@@ -636,6 +655,58 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       [accountId, tradeId ?? null, limit],
     );
     return res.rows.map(mapTradeActivityRow);
+  }
+
+  async createUser(row: PaperUserRow): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO paper_users (id, api_key, account_id, label, created_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [row.id, row.apiKey, row.accountId, row.label, row.createdAt],
+    );
+  }
+
+  async getUserByApiKey(apiKey: string): Promise<PaperUserRow | null> {
+    const res = await this.pool.query<{
+      id: string;
+      api_key: string;
+      account_id: string;
+      label: string;
+      created_at: Date;
+    }>(
+      `SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE api_key = $1`,
+      [apiKey],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      apiKey: row.api_key,
+      accountId: row.account_id,
+      label: row.label,
+      createdAt: row.created_at,
+    };
+  }
+
+  async getUser(id: string): Promise<PaperUserRow | null> {
+    const res = await this.pool.query<{
+      id: string;
+      api_key: string;
+      account_id: string;
+      label: string;
+      created_at: Date;
+    }>(
+      `SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE id = $1`,
+      [id],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      apiKey: row.api_key,
+      accountId: row.account_id,
+      label: row.label,
+      createdAt: row.created_at,
+    };
   }
 
   async dispose(): Promise<void> {

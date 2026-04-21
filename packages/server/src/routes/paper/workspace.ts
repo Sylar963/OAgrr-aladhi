@@ -32,10 +32,15 @@ import {
   pnlService,
 } from '../../trading-services.js';
 import { activityToDto, fillToDto, orderToDto, tradeNoteToDto } from './mappers.js';
+import type { AuthenticatedUser } from '../../user-service.js';
 
 type TradeIntent = 'open' | 'add' | 'reduce' | 'close' | 'roll';
 
 const DEFAULT_LIMIT = 100;
+
+function getAccountId(user?: AuthenticatedUser): string {
+  return user?.accountId ?? DEFAULT_ACCOUNT_ID;
+}
 
 interface CreateTradeResult {
   trade: PaperTradeDetailDto;
@@ -61,9 +66,10 @@ interface LegMarketData {
   marketSourceLabel: string;
 }
 
-export async function createTrade(input: CreatePaperTradeRequest): Promise<CreateTradeResult> {
+export async function createTrade(input: CreatePaperTradeRequest, accountId?: string): Promise<CreateTradeResult> {
+  const account = accountId ?? DEFAULT_ACCOUNT_ID;
   await ensureDefaultAccount();
-  const result = await placePaperOrder(input.order);
+  const result = await placePaperOrder(input.order, account);
   const now = result.order.filledAt ?? result.order.submittedAt;
   const underlying = input.order.legs[0]?.underlying ?? 'UNKNOWN';
   const strategyName = input.strategyName?.trim() || `Custom (${input.order.legs.length} legs)`;
@@ -71,7 +77,7 @@ export async function createTrade(input: CreatePaperTradeRequest): Promise<Creat
   const tradeId = newEntityId('trd');
   const tradeRow: PaperTradeRow = {
     id: tradeId,
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId: account,
     underlying,
     label,
     strategyName,
@@ -133,28 +139,35 @@ export async function createTrade(input: CreatePaperTradeRequest): Promise<Creat
 export async function listTradeSummaries(
   status: 'open' | 'closed' | 'all',
   limit = DEFAULT_LIMIT,
+  accountId?: string,
 ): Promise<PaperTradeSummaryDto[]> {
-  const trades = await paperTradingStore.listTrades(DEFAULT_ACCOUNT_ID, status, limit);
+  const account = accountId ?? DEFAULT_ACCOUNT_ID;
+  const trades = await paperTradingStore.listTrades(account, status, limit);
   const cache = new Map<string, EnrichedChainResponse | null>();
   const summaries = await Promise.all(trades.map((trade) => buildTradeSummary(trade, cache)));
   return summaries;
 }
 
-export async function getTradeDetailOrThrow(tradeId: string): Promise<PaperTradeDetailDto> {
+export async function getTradeDetailOrThrow(tradeId: string, accountId?: string): Promise<PaperTradeDetailDto> {
   const trade = await paperTradingStore.getTrade(tradeId);
   if (!trade) {
+    throw new Error('Trade not found');
+  }
+  if (accountId && trade.accountId !== accountId) {
     throw new Error('Trade not found');
   }
   return buildTradeDetail(trade, new Map<string, EnrichedChainResponse | null>());
 }
 
-export async function listTradeActivities(limit = DEFAULT_LIMIT, tradeId?: string) {
-  const rows = await paperTradingStore.listTradeActivities(DEFAULT_ACCOUNT_ID, limit, tradeId);
+export async function listTradeActivities(limit = DEFAULT_LIMIT, tradeId?: string, accountId?: string) {
+  const account = accountId ?? DEFAULT_ACCOUNT_ID;
+  const rows = await paperTradingStore.listTradeActivities(account, limit, tradeId);
   return rows.map(activityToDto);
 }
 
-export async function listTradeFills(limit = DEFAULT_LIMIT, tradeId?: string): Promise<PaperFillDto[]> {
-  const fills = await orderRepository.listFills(DEFAULT_ACCOUNT_ID, Math.max(limit, 500));
+export async function listTradeFills(limit = DEFAULT_LIMIT, tradeId?: string, accountId?: string): Promise<PaperFillDto[]> {
+  const account = accountId ?? DEFAULT_ACCOUNT_ID;
+  const fills = await orderRepository.listFills(account, Math.max(limit, 500));
   if (!tradeId) {
     return fills.slice(0, limit).map(fillToDto);
   }
@@ -169,31 +182,37 @@ export async function listTradeFills(limit = DEFAULT_LIMIT, tradeId?: string): P
 export async function addTradeNote(
   tradeId: string,
   request: CreatePaperTradeNoteRequest,
+  accountId?: string,
 ): Promise<PaperTradeDetailDto> {
   const trade = await paperTradingStore.getTrade(tradeId);
   if (!trade) {
     throw new Error('Trade not found');
   }
+  if (accountId && trade.accountId !== accountId) {
+    throw new Error('Trade not found');
+  }
   await appendTradeNote(tradeId, request, new Date());
-  return getTradeDetailOrThrow(tradeId);
+  return getTradeDetailOrThrow(tradeId, accountId);
 }
 
-export async function closeTrade(tradeId: string): Promise<ExecuteTradeActionResult> {
-  return executeTradeAction(tradeId, 'close', 1);
+export async function closeTrade(tradeId: string, accountId?: string): Promise<ExecuteTradeActionResult> {
+  return executeTradeAction(tradeId, 'close', 1, accountId ?? DEFAULT_ACCOUNT_ID);
 }
 
 export async function reduceTrade(
   tradeId: string,
   fraction: number,
+  accountId?: string,
 ): Promise<ExecuteTradeActionResult> {
-  return executeTradeAction(tradeId, 'reduce', fraction);
+  return executeTradeAction(tradeId, 'reduce', fraction, accountId ?? DEFAULT_ACCOUNT_ID);
 }
 
-export async function getPaperOverview(): Promise<PaperOverviewDto> {
-  const pnl = await pnlService.snapshot(DEFAULT_ACCOUNT_ID);
+export async function getPaperOverview(accountId?: string): Promise<PaperOverviewDto> {
+  const account = accountId ?? DEFAULT_ACCOUNT_ID;
+  const pnl = await pnlService.snapshot(account);
   const [openTrades, closedTrades] = await Promise.all([
-    paperTradingStore.listTrades(DEFAULT_ACCOUNT_ID, 'open', 500),
-    paperTradingStore.listTrades(DEFAULT_ACCOUNT_ID, 'closed', 500),
+    paperTradingStore.listTrades(account, 'open', 500),
+    paperTradingStore.listTrades(account, 'closed', 500),
   ]);
   const cache = new Map<string, EnrichedChainResponse | null>();
   const openSummaries = await Promise.all(openTrades.map((trade) => buildTradeSummary(trade, cache)));
@@ -215,10 +234,14 @@ async function executeTradeAction(
   tradeId: string,
   intent: 'close' | 'reduce',
   fraction: number,
+  accountId: string,
 ): Promise<ExecuteTradeActionResult> {
   await ensureDefaultAccount();
   const trade = await paperTradingStore.getTrade(tradeId);
   if (!trade) {
+    throw new Error('Trade not found');
+  }
+  if (trade.accountId !== accountId) {
     throw new Error('Trade not found');
   }
   const tradePositions = await paperTradingStore.listTradePositions(tradeId);
@@ -242,7 +265,7 @@ async function executeTradeAction(
     throw new Error('Nothing to trade');
   }
 
-  const result = await placePaperOrder({ legs: nonZeroLegs, venueFilter: [] });
+  const result = await placePaperOrder({ legs: nonZeroLegs, venueFilter: [] }, accountId);
   const now = result.order.filledAt ?? result.order.submittedAt;
   await paperTradingStore.insertTradeOrder({
     tradeId,
@@ -253,7 +276,7 @@ async function executeTradeAction(
   await applyFillsToTrade(tradeId, result.fills);
   const closed = await syncTradeLifecycle(tradeId);
   await recordActivity({
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId,
     tradeId,
     kind: intent === 'close' ? 'trade_closed_order' : 'trade_reduced',
     summary:
@@ -265,7 +288,7 @@ async function executeTradeAction(
   });
   if (closed) {
     await recordActivity({
-      accountId: DEFAULT_ACCOUNT_ID,
+      accountId,
       tradeId,
       kind: 'trade_closed',
       summary: `${trade.label} is fully closed`,
@@ -275,7 +298,7 @@ async function executeTradeAction(
   }
 
   return {
-    trade: await getTradeDetailOrThrow(tradeId),
+    trade: await getTradeDetailOrThrow(tradeId, accountId),
     order: result.order,
     fills: result.fills,
   };
@@ -629,7 +652,7 @@ async function recordActivity(input: {
   return paperTradingStore.insertTradeActivity(input);
 }
 
-async function placePaperOrder(request: PlaceOrderRequest) {
+async function placePaperOrder(request: PlaceOrderRequest, accountId: string): Promise<Awaited<ReturnType<typeof orderPlacementService.place>>> {
   const legs: Array<Omit<OrderLeg, 'index'>> = request.legs.map((leg) => ({
     side: leg.side,
     optionRight: leg.optionRight,
@@ -640,7 +663,7 @@ async function placePaperOrder(request: PlaceOrderRequest) {
     preferredVenues: leg.preferredVenues ?? null,
   }));
   return orderPlacementService.place({
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId,
     legs,
     venueFilter: request.venueFilter,
     ...(request.clientOrderId ? { clientOrderId: request.clientOrderId } : {}),

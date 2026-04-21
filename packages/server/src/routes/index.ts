@@ -12,6 +12,7 @@ import { blockFlowRoute } from './block-flow.js';
 import { dvolHistoryRoute } from './dvol-history.js';
 import { wsChainRoute } from './ws-chain.js';
 import { paperRoutes, paperWsRoute } from './paper/index.js';
+import { paperAuthRoute } from './paper/auth.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (_req, reply) => {
@@ -38,6 +39,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(blockFlowRoute, { prefix: '/api' });
   app.register(dvolHistoryRoute, { prefix: '/api' });
   app.register(paperRoutes, { prefix: '/api' });
+  app.register(paperAuthRoute, { prefix: '/api' });
   app.register(wsChainRoute);
   app.register(paperWsRoute);
 }

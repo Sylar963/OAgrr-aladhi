@@ -1,9 +1,10 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CreatePaperTradeNoteRequestSchema,
   CreatePaperTradeRequestSchema,
   ReducePaperTradeRequestSchema,
 } from '@oggregator/protocol';
+import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import { paperTradingStore } from '../../trading-services.js';
 import { paperEvents } from './events.js';
 import { fillToDto, orderToDto } from './mappers.js';
@@ -16,6 +17,10 @@ import {
   listTradeSummaries,
   reduceTrade,
 } from './workspace.js';
+
+function getAccountId(request: FastifyRequest): string {
+  return request.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+}
 
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
@@ -33,7 +38,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
         ? req.query.status
         : 'all';
     const limit = Math.min(Number(req.query.limit ?? '100') || 100, 500);
-    return { trades: await listTradeSummaries(status, limit) };
+    const accountId = getAccountId(req);
+    return { trades: await listTradeSummaries(status, limit, accountId) };
   });
 
   app.get<{
@@ -42,8 +48,9 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
+    const accountId = getAccountId(req);
     try {
-      return await getTradeDetailOrThrow(req.params.tradeId);
+      return await getTradeDetailOrThrow(req.params.tradeId, accountId);
     } catch (err) {
       if (err instanceof Error && err.message === 'Trade not found') {
         return reply.status(404).send({ error: 'not_found', message: err.message });
@@ -56,7 +63,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    return getPaperOverview();
+    const accountId = getAccountId(req);
+    return getPaperOverview(accountId);
   });
 
   app.post('/paper/trades', async (req, reply) => {
@@ -67,7 +75,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const result = await createTrade(parsed.data);
+    const accountId = getAccountId(req);
+    const result = await createTrade(parsed.data, accountId);
     paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
     paperEvents.emitTrade(result.trade);
     if (result.trade.activity[0]) {
@@ -90,8 +99,9 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
+    const accountId = getAccountId(req);
     try {
-      const trade = await addTradeNote(req.params.tradeId, parsed.data);
+      const trade = await addTradeNote(req.params.tradeId, parsed.data, accountId);
       paperEvents.emitTrade(trade);
       if (trade.activity[0]) {
         paperEvents.emitActivity(trade.activity[0]);
@@ -111,8 +121,9 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
+    const accountId = getAccountId(req);
     try {
-      const result = await closeTrade(req.params.tradeId);
+      const result = await closeTrade(req.params.tradeId, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
       paperEvents.emitTrade(result.trade);
       if (result.trade.activity[0]) {
@@ -137,8 +148,9 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
+    const accountId = getAccountId(req);
     try {
-      const result = await reduceTrade(req.params.tradeId, parsed.data.fraction);
+      const result = await reduceTrade(req.params.tradeId, parsed.data.fraction, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
       paperEvents.emitTrade(result.trade);
       if (result.trade.activity[0]) {

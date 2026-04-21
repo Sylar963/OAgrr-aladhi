@@ -4,6 +4,7 @@ export { NoopTradeStore } from './noop-trade-store.js';
 export { PostgresTradeStore } from './postgres-trade-store.js';
 
 export type {
+  PaperUserRow,
   PaperAccountRow,
   PaperOrderRow,
   PaperFillRow,

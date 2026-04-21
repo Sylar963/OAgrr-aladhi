@@ -1,9 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { PlaceOrderRequestSchema } from '@oggregator/protocol';
+import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import type { OrderLeg } from '@oggregator/trading';
 import { InvalidOrderError, NoLiquidityError, TradingError } from '@oggregator/trading';
 import {
-  DEFAULT_ACCOUNT_ID,
   ensureDefaultAccount,
   orderPlacementService,
   orderRepository,
@@ -11,6 +11,10 @@ import {
 } from '../../trading-services.js';
 import { fillToDto, orderToDto } from './mappers.js';
 import { paperEvents } from './events.js';
+
+function getAccountId(req: FastifyRequest): string {
+  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+}
 
 export async function paperOrdersRoute(app: FastifyInstance) {
   app.post('/paper/orders', async (req, reply) => {
@@ -25,6 +29,7 @@ export async function paperOrdersRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
+    const accountId = getAccountId(req);
     await ensureDefaultAccount();
 
     try {
@@ -38,7 +43,7 @@ export async function paperOrdersRoute(app: FastifyInstance) {
         preferredVenues: leg.preferredVenues ?? null,
       }));
       const result = await orderPlacementService.place({
-        accountId: DEFAULT_ACCOUNT_ID,
+        accountId,
         legs,
         venueFilter: parsed.data.venueFilter,
         ...(parsed.data.clientOrderId ? { clientOrderId: parsed.data.clientOrderId } : {}),
@@ -70,8 +75,9 @@ export async function paperOrdersRoute(app: FastifyInstance) {
   app.get<{
     Querystring: { limit?: string };
   }>('/paper/orders', async (req) => {
+    const accountId = getAccountId(req);
     const limit = Math.min(Number(req.query.limit ?? '50') || 50, 500);
-    const orders = await orderRepository.listOrders(DEFAULT_ACCOUNT_ID, limit);
+    const orders = await orderRepository.listOrders(accountId, limit);
     return { orders: orders.map(orderToDto) };
   });
 }

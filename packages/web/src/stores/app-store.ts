@@ -6,21 +6,19 @@ import { VENUE_IDS } from '@lib/venue-meta';
 export interface FeedStatus {
   connectionState: WsConnectionState;
   failedVenueCount: number;
-  /** Age of the most recent snapshot in ms — proxy for data freshness. */
   staleMs: number | null;
 }
 
 interface AppState {
-  // Asset / expiry selection
   underlying: string;
   expiry: string;
-  // Active tab
   activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading';
-  // Venue filter
   activeVenues: string[];
-  // User's custom IV for edge column
-  myIv: string; // string so input is controlled cleanly; parse to float on use
+  myIv: string;
   feedStatus: FeedStatus;
+  apiKey: string | null;
+  userId: string | null;
+  accountId: string | null;
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
@@ -29,6 +27,8 @@ interface AppState {
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;
   setFeedStatus: (s: Partial<FeedStatus>) => void;
+  setAuth: (apiKey: string, userId: string, accountId: string) => void;
+  clearAuth: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -38,8 +38,10 @@ export const useAppStore = create<AppState>((set) => ({
   activeVenues: [...VENUE_IDS],
   myIv: '',
   feedStatus: { connectionState: 'closed', failedVenueCount: 0, staleMs: null },
+  apiKey: localStorage.getItem('paperApiKey'),
+  userId: localStorage.getItem('paperUserId'),
+  accountId: localStorage.getItem('paperAccountId'),
 
-  // Changing underlying invalidates the current expiry — force re-selection
   setUnderlying: (underlying) => set({ underlying, expiry: '' }),
   setExpiry: (expiry) => set({ expiry }),
   setActiveTab: (activeTab) => set({ activeTab }),
@@ -48,11 +50,22 @@ export const useAppStore = create<AppState>((set) => ({
       const active = s.activeVenues.includes(venueId)
         ? s.activeVenues.filter((v) => v !== venueId)
         : [...s.activeVenues, venueId];
-      // Always keep at least one venue active
       return { activeVenues: active.length > 0 ? active : s.activeVenues };
     }),
   setActiveVenues: (venues) =>
     set({ activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
   setMyIv: (myIv) => set({ myIv }),
   setFeedStatus: (s) => set((prev) => ({ feedStatus: { ...prev.feedStatus, ...s } })),
+  setAuth: (apiKey, userId, accountId) => {
+    localStorage.setItem('paperApiKey', apiKey);
+    localStorage.setItem('paperUserId', userId);
+    localStorage.setItem('paperAccountId', accountId);
+    set({ apiKey, userId, accountId });
+  },
+  clearAuth: () => {
+    localStorage.removeItem('paperApiKey');
+    localStorage.removeItem('paperUserId');
+    localStorage.removeItem('paperAccountId');
+    set({ apiKey: null, userId: null, accountId: null });
+  },
 }));

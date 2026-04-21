@@ -14,6 +14,7 @@ import {
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import { useAppStore } from '@stores/app-store';
+import { registerUser } from './api';
 import {
   useActivity,
   useAddTradeNote,
@@ -29,6 +30,9 @@ import { usePaperWs } from './hooks/usePaperWs';
 import styles from './TradingView.module.css';
 
 export default function TradingView() {
+  const apiKey = useAppStore((state) => state.apiKey);
+  const setAuth = useAppStore((state) => state.setAuth);
+  const clearAuth = useAppStore((state) => state.clearAuth);
   const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
   const { data: openTradesData } = useTrades('open', 100);
@@ -53,6 +57,9 @@ export default function TradingView() {
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setUnderlying = useAppStore((state) => state.setUnderlying);
   const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
+  const [loginLabel, setLoginLabel] = useState('Trader');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     if (wsState === 'error') {

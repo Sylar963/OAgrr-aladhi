@@ -22,10 +22,12 @@ export function usePaperWs(enabled = true): PaperConnectionState {
 
     const connect = () => {
       if (disposed) return;
+      const apiKey = localStorage.getItem('paperApiKey');
+      const apiKeyParam = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : '';
       const envWsBase = import.meta.env.VITE_WS_URL;
       const wsUrl = envWsBase
-        ? `${envWsBase.replace(/\/$/, '')}/ws/paper`
-        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/paper`;
+        ? `${envWsBase.replace(/\/$/, '')}/ws/paper${apiKeyParam}`
+        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/paper${apiKeyParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       setState('connecting');

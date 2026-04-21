@@ -25,10 +25,19 @@ export interface CreateTradeResponse extends PlaceOrderResponse {
   trade: PaperTradeDetailDto;
 }
 
+function getHeaders(): HeadersInit {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  const apiKey = localStorage.getItem('paperApiKey');
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+  return headers;
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -104,4 +113,35 @@ export function getActivity(limit = 100, tradeId?: string): Promise<{ activity: 
 export function getFills(limit = 100, tradeId?: string): Promise<{ fills: PaperFillDto[] }> {
   const suffix = tradeId ? `&tradeId=${encodeURIComponent(tradeId)}` : '';
   return fetchJson(`/paper/fills?limit=${limit}${suffix}`);
+}
+
+export interface RegisterResponse {
+  userId: string;
+  apiKey: string;
+  accountId: string;
+  label: string;
+  account: {
+    id: string;
+    label: string;
+    initialCashUsd: number;
+    createdAt: string;
+  };
+}
+
+export async function registerUser(label: string): Promise<RegisterResponse> {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  const apiKey = localStorage.getItem('paperApiKey');
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+  const res = await fetch(`${API_BASE}/paper/auth/register`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new Error(payload.message ?? payload.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<RegisterResponse>;
 }

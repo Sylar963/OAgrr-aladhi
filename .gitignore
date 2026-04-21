@@ -40,6 +40,6 @@ agent_docs/
 .vercel
 .env*.local
 
-
-/home/aladhi/aladhi/OAgrr-aladhi/.pi/skills/deploy-workflow
+# Local only
+.pi/skills/deploy-workflow/
 ops/

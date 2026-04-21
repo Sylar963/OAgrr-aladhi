@@ -221,7 +221,9 @@ describe('TradeRuntime — start() resolves before seeding finishes', () => {
       resolved = true;
     });
 
-    expect(order.filter((entry) => entry === 'connect').length).toBe(10);
+    // 6 venues (deribit/okx/bybit/binance/derive/thalex) × 2 underlyings.
+    // Coincall is skipped because COINCALL_API_KEY is not set in the test env.
+    expect(order.filter((entry) => entry === 'connect').length).toBe(12);
 
     await Promise.resolve();
     await promise;

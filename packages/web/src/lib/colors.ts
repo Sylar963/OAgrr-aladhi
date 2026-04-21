@@ -57,6 +57,7 @@ export const VENUE_COLORS: Record<string, string> = {
   bybit: '#F7A600',
   derive: '#25FAAF',
   coincall: '#1FE086',
+  thalex: '#00E5A8',
 };
 
 export function venueColor(venueId: string): string {

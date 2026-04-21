@@ -71,6 +71,10 @@ describe('buildThalexInstrument', () => {
       right: 'put',
       inverse: false,
       contractSize: 1,
+      // 1 contract = 1 BTC of underlying exposure; stablecoin settlement is
+      // about premium currency, not contract sizing. Must match `base` so
+      // normalizeOpenInterestUsd multiplies by underlyingPrice.
+      contractValueCurrency: 'BTC',
       tickSize: 5,
       minQty: 0.01,
       makerFee: null,

@@ -291,7 +291,8 @@ function toVenueId(value: string): TradeEvent['venue'] | null {
     value === 'bybit' ||
     value === 'binance' ||
     value === 'derive' ||
-    value === 'coincall'
+    value === 'coincall' ||
+    value === 'thalex'
   ) {
     return value;
   }

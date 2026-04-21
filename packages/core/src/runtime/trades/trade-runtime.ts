@@ -12,6 +12,7 @@ import {
   OKX_INSTRUMENT_FAMILY_TRADES,
   OKX_REST_BASE_URL,
   OKX_WS_URL,
+  THALEX_MARKET_WS_URL,
 } from '../../feeds/shared/endpoints.js';
 import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
 import type { VenueId } from '../../types/common.js';
@@ -31,7 +32,7 @@ const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
 
 /**
- * Subscribes to bulk option trade streams across all 6 venues.
+ * Subscribes to bulk option trade streams across all 7 venues.
  * Maintains a ring buffer of the last N trades per underlying.
  */
 export class TradeRuntime {
@@ -57,6 +58,9 @@ export class TradeRuntime {
           continue;
         }
         if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) {
+          continue;
+        }
+        if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) {
           continue;
         }
 
@@ -474,6 +478,24 @@ const DERIBIT_USDC_OPTION_BASES = new Set(['AVAX', 'SOL', 'TRX', 'XRP']);
 
 // Matches SUPPORTED_UNDERLYINGS in feeds/coincall/ws-client.ts.
 const COINCALL_TRADE_UNDERLYINGS = new Set(['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP']);
+
+// Thalex lists only BTC + ETH options. Matches feeds/thalex/ws-client.ts.
+const THALEX_TRADE_UNDERLYINGS = new Set(['BTC', 'ETH']);
+
+// recent_trades.<UNDERLYING>.options payload: each trade is a tuple
+// [price, size, side, timestamp_seconds, instrument_name, implied_taker].
+const ThalexTradeTupleSchema = z.tuple([
+  z.number(),
+  z.number(),
+  z.enum(['buy', 'sell']),
+  z.number(),
+  z.string(),
+  z.boolean(),
+]);
+
+function isThalexTradeUnderlyingSupported(underlying: string): boolean {
+  return THALEX_TRADE_UNDERLYINGS.has(normalizeTradeUnderlying(underlying));
+}
 
 // lastTrade payload (dt:6): { q, sd, pr, s, ts }. `sd` is tradeSide: 1=buy, 2=sell.
 const CoincallTradeEntrySchema = z.object({
@@ -1080,6 +1102,56 @@ const VENUE_STREAMS: VenueStream[] = [
           indexPrice: null,
           isBlock: false,
           timestamp: parsed.data.ts,
+        });
+      }
+      return trades;
+    },
+  },
+  {
+    venue: 'thalex',
+    url: THALEX_MARKET_WS_URL,
+    // Thalex server pings natively — the `ws` client auto-pongs, so no app-level
+    // heartbeat is required (confirmed by feeds/thalex/ws-client.ts).
+    connect(ws, underlying) {
+      const base = normalizeTradeUnderlying(underlying);
+      // Channel expects the pair (BTCUSD/ETHUSD), not the bare base. The initial
+      // notification is a snapshot of recent trades, which also serves as the seed.
+      ws.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'public/subscribe',
+          params: { channels: [`recent_trades.${base}USD.options`] },
+        }),
+      );
+    },
+    parse(msg, underlying) {
+      const m = msg as Record<string, unknown>;
+      const channelName = m['channel_name'];
+      if (typeof channelName !== 'string' || !channelName.startsWith('recent_trades.')) return [];
+      const notification = m['notification'];
+      if (!Array.isArray(notification)) return [];
+
+      const trades: TradeEvent[] = [];
+      for (const item of notification) {
+        const parsed = ThalexTradeTupleSchema.safeParse(item);
+        if (!parsed.success) continue;
+        const [price, size, side, tsSeconds, instrument] = parsed.data;
+        trades.push({
+          venue: 'thalex',
+          // Thalex trade tuples have no stable id — synthesize from symbol+ts.
+          tradeId: `${instrument}:${tsSeconds}`,
+          instrument,
+          underlying: normalizeTradeUnderlying(underlying),
+          side,
+          price,
+          size,
+          iv: null,
+          markPrice: null,
+          indexPrice: null,
+          isBlock: false,
+          // Thalex timestamps are float seconds — convert to the internal ms convention.
+          timestamp: Math.round(tsSeconds * 1000),
         });
       }
       return trades;

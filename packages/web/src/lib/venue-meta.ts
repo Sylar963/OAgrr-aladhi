@@ -4,6 +4,7 @@ import binanceLogo from '@/assets/venues/binance.svg';
 import bybitLogo from '@/assets/venues/bybit.svg';
 import deriveLogo from '@/assets/venues/derive.png';
 import coincallLogo from '@/assets/venues/coincall.png';
+import thalexLogo from '@/assets/venues/Thalex.png';
 
 export interface VenueMeta {
   id: string;
@@ -37,6 +38,13 @@ export const VENUES: Record<string, VenueMeta> = {
     shortLabel: 'CCL',
     logo: coincallLogo,
     color: '#1FE086',
+  },
+  thalex: {
+    id: 'thalex',
+    label: 'Thalex',
+    shortLabel: 'THX',
+    logo: thalexLogo,
+    color: '#00E5A8',
   },
 };
 

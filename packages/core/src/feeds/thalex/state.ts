@@ -118,7 +118,13 @@ export function buildThalexInstrument(
     right,
     inverse: false,
     contractSize: 1,
-    contractValueCurrency: 'USD',
+    // Thalex BTC/ETH options: 1 contract = 1 unit of base (BTC or ETH), same
+    // shape as Deribit. Premium settles in stablecoin (linear), but the
+    // contract itself is sized in base currency — so openInterest / volume24h
+    // are base-currency counts and must be multiplied by underlyingPrice to
+    // get USD. Setting 'USD' here routed OI through the wrong branch of
+    // normalizeOpenInterestUsd and produced e.g. "$13" instead of "$13K".
+    contractValueCurrency: base,
     tickSize: item.tick_size ?? null,
     minQty: item.min_order_amount ?? item.volume_tick_size ?? null,
     // Thalex fees are tiered per account — FEE_CAP is the safety net.

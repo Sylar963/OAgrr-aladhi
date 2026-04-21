@@ -5,11 +5,15 @@ import { QKEY } from './queries';
 
 type PaperConnectionState = 'connecting' | 'live' | 'closed' | 'error';
 
+const BASE_DELAY = 1_500;
+const MAX_RETRIES = 5;
+
 export function usePaperWs(enabled = true): PaperConnectionState {
   const qc = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTradeRefreshRef = useRef(0);
+  const retryCountRef = useRef(0);
   const [state, setState] = useState<PaperConnectionState>('closed');
 
   useEffect(() => {
@@ -24,6 +28,7 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       setState('connecting');
 
       ws.onopen = () => {
+        retryCountRef.current = 0;
         setState('live');
       };
 
@@ -79,8 +84,14 @@ export function usePaperWs(enabled = true): PaperConnectionState {
           setState('closed');
           return;
         }
+        retryCountRef.current++;
+        if (retryCountRef.current > MAX_RETRIES) {
+          setState('error');
+          return;
+        }
+        const delay = Math.min(BASE_DELAY * Math.pow(2, retryCountRef.current - 1), 30_000);
         setState('connecting');
-        reconnectRef.current = setTimeout(connect, 1_500);
+        reconnectRef.current = setTimeout(connect, delay);
       };
 
       ws.onerror = () => {
@@ -92,6 +103,7 @@ export function usePaperWs(enabled = true): PaperConnectionState {
 
     return () => {
       disposed = true;
+      retryCountRef.current = 0;
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current);
         reconnectRef.current = null;

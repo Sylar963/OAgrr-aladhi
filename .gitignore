@@ -9,7 +9,7 @@ dist/
 .env
 .env.*
 !.env.example
-
+ops/
 # OS
 .DS_Store
 Thumbs.db

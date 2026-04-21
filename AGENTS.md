@@ -28,3 +28,10 @@ When touching venue adapters or adding a new venue, read `packages/core/CLAUDE.m
 Structural changes to core/server/ingest should preserve the runtime-first architecture: `@oggregator/core` owns reusable live-data runtimes, while server, ingest, bots, and external apps are consumers.
 
 Zod at I/O boundaries. No `any`. No vendor SDKs. Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.
+
+# We are in a server now 
+ ogg-backend.service is running as a user service. That's the one to restart.
+Found it. Restart the user service:
+systemctl --user restart ogg-backend.service
+Then check status:
+systemctl --user status ogg-backend.service

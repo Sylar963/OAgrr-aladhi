@@ -265,8 +265,10 @@ export function useChainWs({
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/chain`;
+    const envWsBase = import.meta.env.VITE_WS_URL;
+    const wsUrl = envWsBase
+      ? `${envWsBase.replace(/\/$/, '')}/ws/chain`
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chain`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

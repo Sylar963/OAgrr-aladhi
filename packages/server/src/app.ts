@@ -54,7 +54,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       : true,
   });
 
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: isDev
+      ? true
+      : [
+          'http://localhost:5173',
+          'https://oggregator.xyz',
+          'https://www.oggregator.xyz',
+          /\.vercel\.app$/,
+        ],
+    credentials: false,
+  });
   await app.register(websocket);
 
   registerRoutes(app);

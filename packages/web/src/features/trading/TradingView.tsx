@@ -97,6 +97,13 @@ export default function TradingView() {
         <HeaderStat label="Theta" value={fmtUsd(overview?.risk.theta ?? null)} />
         <HeaderStat label="Vega" value={fmtUsd(overview?.risk.vega ?? null)} />
         <HeaderStat label="Sync" value={wsLabel(wsState)} tone={wsState === 'live' ? 'positive' : 'neutral'} />
+        <button
+          className={styles.secondaryButton}
+          onClick={() => window.location.reload()}
+          style={{ padding: '4px 12px', fontSize: '12px' }}
+        >
+          Refresh
+        </button>
       </div>
 
       <div className={styles.workspace}>

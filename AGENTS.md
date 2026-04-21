@@ -35,3 +35,6 @@ Found it. Restart the user service:
 systemctl --user restart ogg-backend.service
 Then check status:
 systemctl --user status ogg-backend.service
+
+To deploy:
+cd /home/aladhi/aladhi/OAgrr-aladhi && pnpm --filter @oggregator/web build

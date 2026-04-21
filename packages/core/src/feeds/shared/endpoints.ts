@@ -44,6 +44,9 @@ export const DERIVE_GET_TRADE_HISTORY = '/public/get_trade_history';
 export const COINCALL_MARKET_WS_URL = 'wss://ws.coincall.com/options';
 export const COINCALL_REST_BASE_URL = 'https://api.coincall.com';
 export const COINCALL_INSTRUMENTS = '/open/option/getInstruments';
+// Per-symbol "most recent trade" endpoint. The docs label it SIGNED but the
+// endpoint is accessible unauthenticated — used only for bulk seeding.
+export const COINCALL_LAST_TRADE = '/open/option/trade/lasttrade/v1';
 export const COINCALL_CONFIG = '/open/public/config/v1';
 export const COINCALL_TIME = '/time';
 

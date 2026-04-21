@@ -37,3 +37,5 @@ ROADMAP.md
 # Reference docs — local only, not shipped
 references/
 agent_docs/
+.vercel
+.env*.local

@@ -6,6 +6,7 @@ import {
   BYBIT_REST_BASE_URL,
   BYBIT_WS_URL,
   COINCALL_INSTRUMENTS,
+  COINCALL_LAST_TRADE,
   COINCALL_REST_BASE_URL,
   DERIBIT_WS_URL,
   DERIVE_WS_URL,
@@ -504,6 +505,16 @@ const CoincallTradeEntrySchema = z.object({
   pr: numStr,
   q: numStr,
   ts: z.number(),
+});
+
+// REST /open/option/trade/lasttrade/v1/{symbol} entry — `symbol` here is the
+// base pair ("BTCUSD"), not the full instrument, so the instrument name must
+// come from the request URL. `price`/`qty` arrive as numbers despite the docs.
+const CoincallLastTradeRestSchema = z.object({
+  price: numStr,
+  qty: numStr,
+  time: z.number(),
+  tradeSide: z.number(),
 });
 
 const CoincallInstrumentEntrySchema = z.object({
@@ -1104,6 +1115,59 @@ const VENUE_STREAMS: VenueStream[] = [
           timestamp: parsed.data.ts,
         });
       }
+      return trades;
+    },
+    // Coincall has no bulk trade-history endpoint — the public `lastTrade` WS
+    // channel fires only when a fresh trade hits a subscribed symbol, and
+    // Coincall's options volume is sparse enough that most underlyings see no
+    // pushes within a typical observation window. Seed per-symbol via the
+    // `/open/option/trade/lasttrade/v1/{symbol}` REST endpoint so the ring
+    // buffer reflects the most recent Coincall trade for every active contract.
+    async seed(underlying) {
+      if (!isCoincallTradeUnderlyingSupported(underlying)) return [];
+      const base = normalizeTradeUnderlying(underlying);
+      const symbols = await fetchCoincallInstrumentsForBase(base);
+      if (symbols.length === 0) return [];
+
+      const trades: TradeEvent[] = [];
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < symbols.length) {
+          const symbol = symbols[cursor++];
+          if (!symbol) continue;
+          try {
+            const res = await fetch(
+              `${COINCALL_REST_BASE_URL}${COINCALL_LAST_TRADE}/${symbol}`,
+              { signal: AbortSignal.timeout(5_000) },
+            );
+            const body = (await res.json()) as { code?: number; data?: unknown };
+            if (body.code !== 0 || !Array.isArray(body.data)) continue;
+            for (const item of body.data) {
+              const parsed = CoincallLastTradeRestSchema.safeParse(item);
+              if (!parsed.success) continue;
+              trades.push({
+                venue: 'coincall',
+                tradeId: `${symbol}:${parsed.data.time}`,
+                instrument: symbol,
+                underlying: base,
+                side: parsed.data.tradeSide === 1 ? 'buy' : 'sell',
+                price: parsed.data.price,
+                size: parsed.data.qty,
+                iv: null,
+                markPrice: null,
+                indexPrice: null,
+                isBlock: false,
+                timestamp: parsed.data.time,
+              });
+            }
+          } catch {
+            // Per-symbol failures are expected (timeouts, sparse data) — skip.
+          }
+        }
+      };
+
+      const concurrency = Math.min(10, symbols.length);
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
       return trades;
     },
   },

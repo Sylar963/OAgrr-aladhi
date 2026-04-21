@@ -132,7 +132,10 @@ describe('mergeThalexTicker', () => {
     expect(q.greeks.markIv).toBeCloseTo(0.3692, 3);
     expect(q.greeks.delta).toBeCloseTo(-0.1063, 3);
     expect(q.volume24h).toBe(0.28);
-    expect(q.volume24hUsd).toBe(121.5);
+    // Thalex `value_24h` is premium-notional; intentionally dropped so the
+    // enrichment layer computes underlying-notional via volume24h × spot
+    // (matches OKX/Binance/Coincall/Deribit).
+    expect(q.volume24hUsd).toBeNull();
     expect(q.openInterest).toBe(0.18);
     expect(q.timestamp).toBe(Math.round(1776715497.7188172 * 1000));
   });

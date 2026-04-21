@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
@@ -18,6 +18,45 @@ interface UseChainWsResult {
   staleMs: number | null;
   lastSeq: number;
   failedVenues: VenueFailure[];
+}
+
+type StatusSnapshot = UseChainWsResult;
+
+const INITIAL_SNAPSHOT: StatusSnapshot = {
+  connectionState: 'closed',
+  staleMs: null,
+  lastSeq: 0,
+  failedVenues: [],
+};
+
+/**
+ * Minimal ref-backed store consumed via useSyncExternalStore so only components
+ * that read a changed slice re-render on WS updates.
+ */
+function createStatusStore() {
+  let snap: StatusSnapshot = INITIAL_SNAPSHOT;
+  const listeners = new Set<() => void>();
+
+  return {
+    get: () => snap,
+    set(next: Partial<StatusSnapshot>) {
+      const merged: StatusSnapshot = { ...snap, ...next };
+      if (
+        merged.connectionState === snap.connectionState &&
+        merged.staleMs === snap.staleMs &&
+        merged.lastSeq === snap.lastSeq &&
+        merged.failedVenues === snap.failedVenues
+      ) {
+        return;
+      }
+      snap = merged;
+      for (const l of listeners) l();
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
 }
 
 let subIdCounter = 0;
@@ -42,10 +81,24 @@ function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): E
   return [...byStrike.values()].sort((left, right) => left.strike - right.strike);
 }
 
+type DeltaMsg = Extract<
+  ReturnType<typeof ServerWsMessageSchema.parse>,
+  { type: 'delta' }
+>;
+
+interface PendingDelta {
+  key: ReturnType<typeof chainKeys.chain>;
+  patch: DeltaMsg['patch'];
+  seq: number;
+  staleMs: number;
+}
+
 /**
  * Subscribes to real-time chain updates via server WebSocket.
  * Validates incoming messages with Zod, gates on subscriptionId,
- * and pushes snapshots into TanStack Query cache.
+ * and pushes snapshots into TanStack Query cache. Delta applications
+ * are coalesced per animation frame so a burst of patches results in
+ * a single cache write + re-render.
  */
 export function useChainWs({
   underlying,
@@ -59,13 +112,60 @@ export function useChainWs({
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSubIdRef = useRef<string | null>(null);
 
-  const [connectionState, setConnectionState] = useState<WsConnectionState>('closed');
-  const [staleMs, setStaleMs] = useState<number | null>(null);
-  const [lastSeq, setLastSeq] = useState(0);
-  const [failedVenues, setFailedVenues] = useState<VenueFailure[]>([]);
+  const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
+  storeRef.current ??= createStatusStore();
+  const store = storeRef.current;
+
+  const pendingRef = useRef<PendingDelta[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   const paramsRef = useRef({ underlying, expiry, venues });
   paramsRef.current = { underlying, expiry, venues };
+
+  const flushDeltas = useCallback(() => {
+    rafRef.current = null;
+    const queue = pendingRef.current;
+    if (queue.length === 0) return;
+    pendingRef.current = [];
+
+    // Group by cache key so bursts against the same chain coalesce to one write.
+    const byKey = new Map<string, PendingDelta[]>();
+    for (const p of queue) {
+      const k = JSON.stringify(p.key);
+      const list = byKey.get(k);
+      if (list) list.push(p);
+      else byKey.set(k, [p]);
+    }
+
+    for (const patches of byKey.values()) {
+      const last = patches[patches.length - 1]!;
+      qc.setQueryData(last.key, (current: EnrichedChainResponse | undefined) => {
+        if (current == null) return current;
+        let strikes = current.strikes;
+        for (const p of patches) {
+          strikes = mergeStrikes(strikes, p.patch.strikes);
+        }
+        return {
+          ...current,
+          stats: last.patch.stats,
+          strikes,
+          gex: last.patch.gex,
+        };
+      });
+    }
+
+    const last = queue[queue.length - 1]!;
+    store.set({ connectionState: 'live', staleMs: last.staleMs, lastSeq: last.seq });
+  }, [qc, store]);
+
+  const scheduleFlush = useCallback(() => {
+    if (rafRef.current != null) return;
+    if (typeof requestAnimationFrame === 'function') {
+      rafRef.current = requestAnimationFrame(flushDeltas);
+    } else {
+      rafRef.current = setTimeout(flushDeltas, 16) as unknown as number;
+    }
+  }, [flushDeltas]);
 
   const sendSubscribe = useCallback((ws: WebSocket) => {
     const { underlying: u, expiry: e, venues: v } = paramsRef.current;
@@ -101,69 +201,60 @@ export function useChainWs({
 
       switch (msg.type) {
         case 'snapshot': {
-          setConnectionState('live');
-          setStaleMs(msg.meta.staleMs);
-          setLastSeq(msg.seq);
-          // Key from server's response, not local mutable params
           const key = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
           qc.setQueryData(key, msg.data);
+          store.set({ connectionState: 'live', staleMs: msg.meta.staleMs, lastSeq: msg.seq });
           break;
         }
 
         case 'delta': {
-          setConnectionState('live');
-          setStaleMs(msg.meta.staleMs);
-          setLastSeq(msg.seq);
           const key = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
-          qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
-            if (current == null) return current;
-            return {
-              ...current,
-              stats: msg.patch.stats,
-              strikes: mergeStrikes(current.strikes, msg.patch.strikes),
-              gex: msg.patch.gex,
-            };
+          pendingRef.current.push({
+            key,
+            patch: msg.patch,
+            seq: msg.seq,
+            staleMs: msg.meta.staleMs,
           });
+          scheduleFlush();
           break;
         }
 
         case 'subscribed':
-          setConnectionState('live');
-          setFailedVenues(msg.failedVenues ?? []);
+          store.set({ connectionState: 'live', failedVenues: msg.failedVenues ?? [] });
           break;
 
         case 'status':
           switch (msg.state) {
             case 'connected':
-              setConnectionState('live');
+              store.set({ connectionState: 'live' });
               break;
             case 'reconnecting':
             case 'polling':
-              setConnectionState('reconnecting');
+              store.set({ connectionState: 'reconnecting' });
               break;
             case 'degraded':
-              setConnectionState('stale');
+              store.set({ connectionState: 'stale' });
               break;
             case 'down':
-              setConnectionState('error');
+              store.set({ connectionState: 'error' });
               break;
           }
           break;
 
         case 'error':
-          if (!msg.retryable) setConnectionState('error');
+          if (!msg.retryable) store.set({ connectionState: 'error' });
           break;
       }
     },
-    [qc],
+    [qc, store, scheduleFlush],
   );
 
   const connect = useCallback(() => {
@@ -179,7 +270,7 @@ export function useChainWs({
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
-    setConnectionState('connecting');
+    store.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
       attemptRef.current = 0;
@@ -190,14 +281,14 @@ export function useChainWs({
 
     ws.onclose = () => {
       wsRef.current = null;
-      setConnectionState('reconnecting');
+      store.set({ connectionState: 'reconnecting' });
       scheduleReconnect();
     };
 
     ws.onerror = () => {
-      setConnectionState('error');
+      store.set({ connectionState: 'error' });
     };
-  }, [sendSubscribe, handleMessage]);
+  }, [sendSubscribe, handleMessage, store]);
 
   const scheduleReconnect = useCallback(() => {
     if (reconnectRef.current) return;
@@ -214,6 +305,15 @@ export function useChainWs({
       clearTimeout(reconnectRef.current);
       reconnectRef.current = null;
     }
+    if (rafRef.current != null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafRef.current);
+      } else {
+        clearTimeout(rafRef.current as unknown as ReturnType<typeof setTimeout>);
+      }
+      rafRef.current = null;
+    }
+    pendingRef.current = [];
     attemptRef.current = 0;
     activeSubIdRef.current = null;
     if (wsRef.current) {
@@ -221,8 +321,8 @@ export function useChainWs({
       wsRef.current.close(1000, 'unmount');
       wsRef.current = null;
     }
-    setConnectionState('closed');
-  }, []);
+    store.set({ connectionState: 'closed' });
+  }, [store]);
 
   useEffect(() => {
     if (!enabled || !underlying || !expiry) {
@@ -240,5 +340,15 @@ export function useChainWs({
     sendSubscribe(ws);
   }, [underlying, expiry, venues, sendSubscribe]);
 
-  return { connectionState, staleMs, lastSeq, failedVenues };
+  const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get);
+
+  return useMemo(
+    () => ({
+      connectionState: snapshot.connectionState,
+      staleMs: snapshot.staleMs,
+      lastSeq: snapshot.lastSeq,
+      failedVenues: snapshot.failedVenues,
+    }),
+    [snapshot],
+  );
 }

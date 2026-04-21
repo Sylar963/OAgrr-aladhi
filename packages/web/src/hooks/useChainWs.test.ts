@@ -258,6 +258,8 @@ describe('useChainWs', () => {
     await act(() => {
       ws.pushMessage(deltaMsg(subId, 2));
     });
+    // Deltas are coalesced per animation frame — advance past the rAF fallback timer.
+    await act(() => vi.advanceTimersByTimeAsync(30));
 
     const key = chainKeys.chain('BTC', '2026-03-27', ['deribit']);
     const cached = queryClient.getQueryData(key) as Record<string, unknown> | undefined;

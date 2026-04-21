@@ -44,7 +44,12 @@ export function mergeThalexTicker(
     volume24h: mergeNumber(ticker.volume_24h, base.volume24h),
     openInterest: mergeNumber(ticker.open_interest, base.openInterest),
     openInterestUsd: base.openInterestUsd,
-    volume24hUsd: mergeNumber(ticker.value_24h, base.volume24hUsd),
+    // `value_24h` is premium-notional USD (sum of premium paid in USD), while
+    // every other venue in the aggregator reports underlying-notional USD
+    // (volume × spot). Leaving this null lets enrichment.ts compute
+    // `volume_24h × underlyingPrice`, matching OKX/Binance/Coincall/Deribit
+    // so the analytics "volume by venue" chart compares like-for-like.
+    volume24hUsd: base.volume24hUsd,
     greeks: {
       delta: mergeNumber(ticker.delta, base.greeks.delta),
       gamma: base.greeks.gamma,

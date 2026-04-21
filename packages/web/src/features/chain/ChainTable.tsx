@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type MouseEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
 
@@ -127,46 +128,46 @@ interface StrikeRowProps {
   strike: EnrichedStrike;
   isAtm: boolean;
   isExpanded: boolean;
-  indexPrice: number | null;
-  onToggle: () => void;
+  callItm: boolean;
+  putItm: boolean;
+  onToggle: (strike: number) => void;
   activeVenues: string[];
   myIv: number | null;
   onQuickTrade: (info: QuickTradeInfo) => void;
 }
 
-function StrikeRowItem({
+const StrikeRowItem = memo(function StrikeRowItem({
   strike,
   isAtm,
   isExpanded,
-  indexPrice,
+  callItm,
+  putItm,
   onToggle,
   activeVenues,
   myIv,
   onQuickTrade,
 }: StrikeRowProps) {
-  const callItm = indexPrice != null && strike.strike < indexPrice;
-  const putItm = indexPrice != null && strike.strike > indexPrice;
-
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
   const putQ =
     strike.put.bestVenue != null ? (strike.put.venues[strike.put.bestVenue] ?? null) : null;
-  const callBba = bestBidAsk(strike.call, activeVenues);
-  const putBba = bestBidAsk(strike.put, activeVenues);
+  const callBba = useMemo(() => bestBidAsk(strike.call, activeVenues), [strike.call, activeVenues]);
+  const putBba = useMemo(() => bestBidAsk(strike.put, activeVenues), [strike.put, activeVenues]);
+  const handleToggle = useCallback(() => onToggle(strike.strike), [onToggle, strike.strike]);
 
   return (
     <div className={styles.rowWrap} data-expanded={isExpanded}>
       <div
         className={styles.row}
         data-atm={isAtm}
-        onClick={onToggle}
+        onClick={handleToggle}
         role="button"
         tabIndex={0}
         aria-expanded={isExpanded}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onToggle();
+            handleToggle();
           }
         }}
       >
@@ -280,7 +281,7 @@ function StrikeRowItem({
       )}
     </div>
   );
-}
+});
 
 // ── Root ─────────────────────────────────────────────────────────────────────
 
@@ -298,6 +299,28 @@ export default function NewChainTable({
   const hasScrolledRef = useRef(false);
   const isMobile = useIsMobile();
 
+  const toggleRow = useCallback((s: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }, []);
+
+  const atmIndex = useMemo(
+    () => (atmStrike != null ? strikes.findIndex((s) => s.strike === atmStrike) : -1),
+    [strikes, atmStrike],
+  );
+
+  const rowVirtualizer = useVirtualizer({
+    count: strikes.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: (i) => (i === atmIndex ? 72 : 48),
+    overscan: 6,
+    getItemKey: (i) => strikes[i]?.strike ?? i,
+  });
+
   // Reset scroll flag when the strike set changes (expiry switch)
   const strikeCount = strikes.length;
   const firstStrike = strikes[0]?.strike;
@@ -309,6 +332,11 @@ export default function NewChainTable({
   useEffect(() => {
     if (hasScrolledRef.current) return;
     const timer = setTimeout(() => {
+      if (!isMobile && atmIndex >= 0) {
+        rowVirtualizer.scrollToIndex(atmIndex, { align: 'center' });
+        hasScrolledRef.current = true;
+        return;
+      }
       if (atmRef.current && listRef.current) {
         const listRect = listRef.current.getBoundingClientRect();
         const atmRect = atmRef.current.getBoundingClientRect();
@@ -318,19 +346,10 @@ export default function NewChainTable({
       }
     }, 60);
     return () => clearTimeout(timer);
-  }, [atmStrike]);
+  }, [atmIndex, isMobile, rowVirtualizer]);
 
   if (strikes.length === 0) {
     return <EmptyState icon="∅" title="No options data for this expiry" />;
-  }
-
-  function toggleRow(s: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
   }
 
   if (isMobile) {
@@ -403,32 +422,53 @@ export default function NewChainTable({
       </div>
 
       <div className={styles.list} ref={listRef}>
-        {strikes.map((s) => {
-          const isAtm = s.strike === atmStrike;
-          return (
-            <div key={s.strike} ref={isAtm ? atmRef : undefined}>
-              {isAtm && indexPrice != null && (
-                <div className={styles.atmMarker}>
-                  <div className={styles.atmLine} />
-                  <div className={styles.atmPill}>
-                    <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((vItem) => {
+            const s = strikes[vItem.index]!;
+            const isAtm = s.strike === atmStrike;
+            return (
+              <div
+                key={vItem.key}
+                data-index={vItem.index}
+                ref={rowVirtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${vItem.start}px)`,
+                }}
+              >
+                {isAtm && indexPrice != null && (
+                  <div className={styles.atmMarker}>
+                    <div className={styles.atmLine} />
+                    <div className={styles.atmPill}>
+                      <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
+                    </div>
+                    <div className={styles.atmLine} />
                   </div>
-                  <div className={styles.atmLine} />
-                </div>
-              )}
-              <StrikeRowItem
-                strike={s}
-                isAtm={isAtm}
-                isExpanded={expanded.has(s.strike)}
-                indexPrice={indexPrice}
-                onToggle={() => toggleRow(s.strike)}
-                activeVenues={activeVenues}
-                myIv={myIv}
-                onQuickTrade={setQuickTrade}
-              />
-            </div>
-          );
-        })}
+                )}
+                <StrikeRowItem
+                  strike={s}
+                  isAtm={isAtm}
+                  isExpanded={expanded.has(s.strike)}
+                  callItm={indexPrice != null && s.strike < indexPrice}
+                  putItm={indexPrice != null && s.strike > indexPrice}
+                  onToggle={toggleRow}
+                  activeVenues={activeVenues}
+                  myIv={myIv}
+                  onQuickTrade={setQuickTrade}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {quickTrade && (

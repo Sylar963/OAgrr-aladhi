@@ -15,11 +15,12 @@
   "dependencies": {
     "@oggregator/protocol": "workspace:^",
     "@tanstack/react-query": "^5.91.2",
+    "@tanstack/react-virtual": "^3.13.24",
     "lightweight-charts": "^5.1.0",
     "plotly.js-gl3d-dist-min": "^3.1.0",
-    "react-plotly.js": "^2.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-plotly.js": "^2.6.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },

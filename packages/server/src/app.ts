@@ -8,7 +8,14 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { registerRoutes } from './routes/index.js';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
-import { bootstrapServices, tradeStore } from './services.js';
+import {
+  blockFlowService,
+  bootstrapServices,
+  dvolService,
+  flowService,
+  spotService,
+  tradeStore,
+} from './services.js';
 import { paperTradingStore } from './trading-services.js';
 
 let ready = false;
@@ -52,7 +59,22 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerRoutes(app);
 
+  // Tracked so onClose can await any in-flight bootstrap before disposing —
+  // otherwise SIGTERM arriving mid-bootstrap would start runtimes that nobody
+  // shuts down, leaving WS reconnect loops alive until forceExitTimer fires.
+  let bootstrap: Promise<void> = Promise.resolve();
+
   app.addHook('onClose', async () => {
+    // Wait for bootstrap to finish (or fail) so all runtimes that will ever
+    // exist are visible before we dispose them.
+    await bootstrap.catch(() => {});
+    // Stop runtimes first: dispose() flips shouldReconnect=false, clears
+    // timers, and closes sockets. If we did this after disposeAdapters(),
+    // the runtimes' ws.on('close') handlers would reschedule reconnects.
+    flowService.dispose();
+    blockFlowService.dispose();
+    spotService.dispose();
+    dvolService.dispose();
     await disposeAdapters(app.log);
     await tradeStore.dispose();
     await paperTradingStore.dispose();
@@ -68,12 +90,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
   }
 
-  bootstrapAdapters(app.log).then(() => {
+  bootstrap = bootstrapAdapters(app.log).then(async () => {
     if (shuttingDown) return;
     ready = true;
-    bootstrapServices(app.log).catch((err: unknown) => {
+    try {
+      await bootstrapServices(app.log);
+    } catch (err: unknown) {
       app.log.warn({ err: String(err) }, 'services bootstrap failed');
-    });
+    }
   });
 
   return app;

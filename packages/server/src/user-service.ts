@@ -69,6 +69,9 @@ export async function authenticateUser(
 
 export function requireUser() {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (request.url.startsWith('/api/paper/auth/')) {
+      return;
+    }
     const user = await authenticateUser(request, reply);
     if (!user) {
       reply.status(401).send({ error: 'unauthorized', message: 'Invalid or missing X-API-Key' });

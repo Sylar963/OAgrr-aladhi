@@ -7,6 +7,7 @@ import {
   quoteProvider,
   paperTradingStore,
 } from '../../trading-services.js';
+import { getUserByApiKey } from '../../user-service.js';
 import { pnlToDto, positionToDto } from './mappers.js';
 import { paperEvents } from './events.js';
 
@@ -29,7 +30,7 @@ export async function paperWsRoute(app: FastifyInstance) {
 
     const apiKey = new URL(req.url, 'http://localhost').searchParams.get('apiKey');
     if (apiKey && paperTradingStore.enabled) {
-      const user = await paperTradingStore.getUserByApiKey(apiKey);
+      const user = await getUserByApiKey(apiKey);
       if (user) {
         accountId = user.accountId;
       }

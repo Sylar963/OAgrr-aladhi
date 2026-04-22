@@ -43,6 +43,7 @@ export type { CanonicalOption } from './core/symbol.js';
 export {
   buildEnrichedChain,
   computeIvSurface,
+  computeSmile,
   computeTermStructure,
   computeDte,
   enrichComparisonRow,
@@ -56,6 +57,8 @@ export type {
   EnrichedSide,
   VenueQuote,
   IvSurfaceRow,
+  SmilePoint,
+  SmileCurve,
   GexStrike,
   ChainStats,
   TermStructure,

@@ -21,9 +21,13 @@ const ArchitectView = lazy(() =>
 const TradingView = lazy(() =>
   import('@features/trading').then((m) => ({ default: m.TradingView })),
 );
+const AlphaView = lazy(() =>
+  import('@features/alpha').then((m) => ({ default: m.AlphaView })),
+);
 
 const TABS = [
   { id: 'chain', label: 'Chain' },
+  { id: 'alpha', label: 'Alpha', badge: 'NEW' },
   { id: 'architect', label: 'Builder' },
   { id: 'trading', label: 'Paper' },
   { id: 'surface', label: 'Volatility' },
@@ -61,6 +65,7 @@ export default function App() {
         <ErrorBoundary key={activeTab} label={activeLabel}>
           {activeTab === 'chain' && <ChainView />}
           <Suspense fallback={<Spinner size="lg" label={`Loading ${activeLabel}…`} />}>
+            {activeTab === 'alpha' && <AlphaView />}
             {activeTab === 'architect' && <ArchitectView />}
             {activeTab === 'trading' && <TradingView />}
             {activeTab === 'surface' && <SurfaceView />}

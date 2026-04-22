@@ -55,6 +55,24 @@ export interface IvSurfaceRow {
   delta10c: number | null;
 }
 
+// Per-strike smile point — the strike-indexed view of the surface used by
+// consumers that need continuous IV data (e.g. spread analyzers, smile
+// visualizations) rather than the 5-delta summary above.
+export interface SmilePoint {
+  strike: number;
+  moneyness: number;
+  callIv: number | null;
+  putIv: number | null;
+  blendedIv: number | null;
+}
+
+export interface SmileCurve {
+  spot: number;
+  points: SmilePoint[];
+  atmIv: number | null;
+  skew: number | null;
+}
+
 export interface GexStrike {
   strike: number;
   gexUsdMillions: number;
@@ -484,6 +502,67 @@ export function computeIvSurface(
     delta25c: d25c ? averageSideIv(d25c.call) : null,
     delta10c: d10c ? averageSideIv(d10c.call) : null,
   };
+}
+
+/**
+ * Linear-interpolate a per-strike value between the two nearest points.
+ * Falls back to the nearest endpoint for strikes outside the observed range.
+ */
+function interpAtStrike(points: SmilePoint[], targetStrike: number): number | null {
+  if (points.length === 0) return null;
+  const sorted = [...points].sort((a, b) => a.strike - b.strike);
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  if (targetStrike <= first.strike) return first.blendedIv;
+  if (targetStrike >= last.strike) return last.blendedIv;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]!;
+    const cur = sorted[i]!;
+    if (targetStrike <= cur.strike) {
+      if (prev.blendedIv == null || cur.blendedIv == null)
+        return cur.blendedIv ?? prev.blendedIv;
+      const span = cur.strike - prev.strike;
+      if (span === 0) return cur.blendedIv;
+      const t = (targetStrike - prev.strike) / span;
+      return prev.blendedIv + t * (cur.blendedIv - prev.blendedIv);
+    }
+  }
+  return null;
+}
+
+/**
+ * Extracts the strike-indexed smile curve for a single expiry.
+ *
+ * Complements computeIvSurface (which summarizes the smile at 5 fixed delta
+ * targets) by exposing every observed strike. Analyzers and chart surfaces
+ * that need continuous smile data read from this; consumers that only need
+ * a term-structure snapshot keep reading IvSurfaceRow.
+ *
+ * Uses OTM IV per strike as the blended value — calls above spot, puts below.
+ */
+export function computeSmile(strikes: EnrichedStrike[], spot: number): SmileCurve {
+  const points: SmilePoint[] = strikes.map((s) => {
+    const callIv = averageSideIv(s.call);
+    const putIv = averageSideIv(s.put);
+    const blended = s.strike < spot ? (putIv ?? callIv) : (callIv ?? putIv);
+    return {
+      strike: s.strike,
+      moneyness: spot > 0 ? s.strike / spot : 0,
+      callIv,
+      putIv,
+      blendedIv: blended,
+    };
+  });
+
+  const atmIv = interpAtStrike(points, spot);
+  const lowWing = interpAtStrike(points, spot * 0.9);
+  const highWing = interpAtStrike(points, spot * 1.1);
+  const skew =
+    atmIv != null && atmIv > 0 && lowWing != null && highWing != null
+      ? (lowWing - highWing) / atmIv
+      : null;
+
+  return { spot, points, atmIv, skew };
 }
 
 /**

@@ -25,6 +25,23 @@ export interface IvSurfaceRow {
   delta10c: number | null;
 }
 
+// Per-strike smile point — mirrors core/enrichment.ts SmilePoint.
+// Used by the Alpha analyzer and any surface-curve visualization.
+export interface SmilePoint {
+  strike: number;
+  moneyness: number;
+  callIv: number | null;
+  putIv: number | null;
+  blendedIv: number | null;
+}
+
+export interface SmileCurve {
+  spot: number;
+  points: SmilePoint[];
+  atmIv: number | null;
+  skew: number | null;
+}
+
 export type TermStructure = 'contango' | 'flat' | 'backwardation';
 
 export interface VenueAtmPoint {

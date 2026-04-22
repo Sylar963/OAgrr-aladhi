@@ -4,6 +4,7 @@ import {
   computeDte,
   computeGex,
   computeIvSurface,
+  computeSmile,
   computeTermStructure,
   type EnrichedStrike,
   type VenueQuote,
@@ -670,5 +671,25 @@ describe('enrichment', () => {
     expect(stats.putCallOiRatio).toBeCloseTo(1.4, 6);
     expect(stats.totalOiUsd).toBe(1_680_000);
     expect(stats.skew25d).toBeCloseTo(0.15, 6);
+  });
+
+  it('computeSmile emits per-strike OTM-blended IV with interpolated ATM + skew', () => {
+    const side = (iv: number | null) => ({
+      bestIv: iv,
+      bestVenue: 'deribit' as const,
+      venues: { deribit: createVenueQuote({ markIv: iv }) },
+    });
+    const strikes: EnrichedStrike[] = [
+      { strike: 90, call: side(0.8), put: side(0.75) },
+      { strike: 100, call: side(0.65), put: side(0.65) },
+      { strike: 110, call: side(0.7), put: side(0.85) },
+    ];
+
+    const smile = computeSmile(strikes, 100);
+
+    expect(smile.points.map((p) => p.blendedIv)).toEqual([0.75, 0.65, 0.7]);
+    expect(smile.points.map((p) => p.moneyness)).toEqual([0.9, 1.0, 1.1]);
+    expect(smile.atmIv).toBe(0.65);
+    expect(smile.skew!).toBeCloseTo((0.75 - 0.7) / 0.65, 10);
   });
 });

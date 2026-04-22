@@ -16,7 +16,7 @@ export interface FeedStatus {
 interface AppState {
   underlying: string;
   expiry: string;
-  activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading';
+  activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading' | 'alpha';
   activeVenues: string[];
   myIv: string;
   feedStatus: FeedStatus;
@@ -26,7 +26,7 @@ interface AppState {
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
-  setActiveTab: (t: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading') => void;
+  setActiveTab: (t: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading' | 'alpha') => void;
   toggleVenue: (venueId: string) => void;
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;

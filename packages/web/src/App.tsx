@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 
 import { AppShell } from '@components/layout';
 import { ChainView, useUnderlyings } from '@features/chain';
+import { ErrorBoundary, Spinner } from '@components/ui';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './App.module.css';
@@ -52,18 +53,22 @@ export default function App() {
     }
   }, [setActiveTab]);
 
+  const activeLabel = TABS.find((t) => t.id === activeTab)?.label ?? activeTab;
+
   return (
     <AppShell underlyings={underlyings} tabs={TABS}>
       <div className={styles.panel}>
-        {activeTab === 'chain' && <ChainView />}
-        <Suspense fallback={null}>
-          {activeTab === 'architect' && <ArchitectView />}
-          {activeTab === 'trading' && <TradingView />}
-          {activeTab === 'surface' && <SurfaceView />}
-          {activeTab === 'flow' && <FlowView />}
-          {activeTab === 'analytics' && <AnalyticsView />}
-          {activeTab === 'gex' && <GexView />}
-        </Suspense>
+        <ErrorBoundary key={activeTab} label={activeLabel}>
+          {activeTab === 'chain' && <ChainView />}
+          <Suspense fallback={<Spinner size="lg" label={`Loading ${activeLabel}…`} />}>
+            {activeTab === 'architect' && <ArchitectView />}
+            {activeTab === 'trading' && <TradingView />}
+            {activeTab === 'surface' && <SurfaceView />}
+            {activeTab === 'flow' && <FlowView />}
+            {activeTab === 'analytics' && <AnalyticsView />}
+            {activeTab === 'gex' && <GexView />}
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </AppShell>
   );

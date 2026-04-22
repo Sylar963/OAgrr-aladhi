@@ -39,8 +39,15 @@ export default function ChainView() {
   });
 
   useEffect(() => {
-    setFeedStatus({ connectionState, failedVenueCount: failedVenues.length, staleMs });
-  }, [connectionState, failedVenues.length, staleMs, setFeedStatus]);
+    const failedVenueIds = failedVenues.map((f) => f.venue);
+    setFeedStatus({
+      connectionState,
+      failedVenueCount: failedVenues.length,
+      failedVenueIds,
+      staleMs,
+      lastUpdateMs: connectionState === 'live' && staleMs != null ? Date.now() - staleMs : null,
+    });
+  }, [connectionState, failedVenues, staleMs, setFeedStatus]);
 
   useEffect(() => {
     if (expiries.length > 0 && !expiry) {

@@ -6,7 +6,11 @@ import { VENUE_IDS } from '@lib/venue-meta';
 export interface FeedStatus {
   connectionState: WsConnectionState;
   failedVenueCount: number;
+  failedVenueIds: string[];
+  /** Age of the most recent snapshot in ms — proxy for data freshness. */
   staleMs: number | null;
+  /** Epoch ms when the last live snapshot/delta arrived. */
+  lastUpdateMs: number | null;
 }
 
 interface AppState {
@@ -37,7 +41,13 @@ export const useAppStore = create<AppState>((set) => ({
   activeTab: 'chain',
   activeVenues: [...VENUE_IDS],
   myIv: '',
-  feedStatus: { connectionState: 'closed', failedVenueCount: 0, staleMs: null },
+  feedStatus: {
+    connectionState: 'closed',
+    failedVenueCount: 0,
+    failedVenueIds: [],
+    staleMs: null,
+    lastUpdateMs: null,
+  },
   apiKey: localStorage.getItem('paperApiKey'),
   userId: localStorage.getItem('paperUserId'),
   accountId: localStorage.getItem('paperAccountId'),

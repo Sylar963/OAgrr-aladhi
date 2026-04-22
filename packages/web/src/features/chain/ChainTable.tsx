@@ -218,7 +218,13 @@ const StrikeRowItem = memo(function StrikeRowItem({
           title="Buy call at best ask"
         />
 
-        <div className={styles.strikeCenter} data-atm={isAtm}>
+        <div
+          className={styles.strikeCenter}
+          data-atm={isAtm}
+          data-moneyness={
+            isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'
+          }
+        >
           {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
         </div>

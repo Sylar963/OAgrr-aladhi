@@ -266,14 +266,28 @@
   text-align: right;
 }
 
-/* ── ITM tinting ──────────────────────────────────────────────────────────── */
+/* ── Moneyness tinting ────────────────────────────────────────────────────── */
+/* ATM (teal): pill + row tint handled above via [data-atm="true"].
+   ITM calls: left-side cells tinted green — strike below spot.
+   ITM puts:  right-side cells tinted red — strike above spot.
+   OTM: default (no tint) — the neutral baseline makes ITM pop by contrast. */
 
 .itmCall {
-  background: rgba(0, 233, 151, 0.025);
+  background: rgba(0, 233, 151, 0.07);
+  box-shadow: inset 2px 0 0 rgba(0, 233, 151, 0.35);
 }
 
 .itmPut {
-  background: rgba(203, 56, 85, 0.025);
+  background: rgba(203, 56, 85, 0.07);
+  box-shadow: inset -2px 0 0 rgba(203, 56, 85, 0.35);
+}
+
+.row:hover .itmCall {
+  background: rgba(0, 233, 151, 0.11);
+}
+
+.row:hover .itmPut {
+  background: rgba(203, 56, 85, 0.11);
 }
 
 /* ── Strike center ────────────────────────────────────────────────────────── */
@@ -310,4 +324,13 @@
 
 .strikeCenter[data-atm="true"] .strikeNum {
   color: var(--accent-primary);
+}
+
+/* Strike number inherits the moneyness color — mirrors the ATM treatment. */
+.strikeCenter[data-moneyness="itm-call"] .strikeNum {
+  color: color-mix(in srgb, var(--color-profit) 75%, var(--text-secondary));
+}
+
+.strikeCenter[data-moneyness="itm-put"] .strikeNum {
+  color: color-mix(in srgb, var(--color-loss) 75%, var(--text-secondary));
 }

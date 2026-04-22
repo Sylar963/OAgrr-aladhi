@@ -1,7 +1,7 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 
-import { CommandPalette } from '@components/ui';
+import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useAppStore } from '@stores/app-store';
 
 import { useIsMobile } from '@hooks/useIsMobile';
@@ -10,6 +10,25 @@ import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import styles from './AppShell.module.css';
+
+type TabId = 'chain' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
+
+// Second key of a `g <x>` chord maps to a tab.
+const GOTO_MAP: Record<string, TabId> = {
+  c: 'chain',
+  b: 'architect',
+  p: 'trading',
+  v: 'surface',
+  f: 'flow',
+  a: 'analytics',
+  x: 'gex',
+};
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+}
 
 interface Tab {
   id: string;
@@ -31,20 +50,67 @@ export function useOpenPalette() {
 
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const isMobile = useIsMobile();
 
+  const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
+    function clearPending() {
+      if (pendingGotoRef.current) {
+        clearTimeout(pendingGotoRef.current);
+        pendingGotoRef.current = null;
       }
     }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+
+      // Second key of a pending `g` chord
+      if (pendingGotoRef.current) {
+        clearPending();
+        const target = GOTO_MAP[e.key.toLowerCase()];
+        if (target) {
+          e.preventDefault();
+          setActiveTab(target);
+        }
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+
+      if (e.key === '/') {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+
+      if (e.key === 'g') {
+        e.preventDefault();
+        pendingGotoRef.current = setTimeout(clearPending, 1500);
+      }
+    }
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+    return () => {
+      clearPending();
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [setActiveTab]);
 
   return (
     <PaletteContext.Provider value={() => setPaletteOpen(true)}>
@@ -62,6 +128,8 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
             onClose={() => setPaletteOpen(false)}
           />
         )}
+
+        {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
       </div>
     </PaletteContext.Provider>
   );

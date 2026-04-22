@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import type { SmileCurve } from '@lib/analytics/smile';
 
@@ -17,7 +17,7 @@ const PAD_R = 12;
 const PAD_T = 16;
 const PAD_B = 28;
 
-export default function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
+function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
   const layout = useMemo(() => {
     if (!smile || smile.points.length === 0) return null;
     const pts = smile.points.filter((p) => p.blendedIv != null);
@@ -152,3 +152,5 @@ function findPoint(pts: { strike: number; blendedIv: number | null }[], strike: 
   if (strike == null) return null;
   return pts.find((p) => p.strike === strike && p.blendedIv != null) ?? null;
 }
+
+export default memo(VolSmileInset);

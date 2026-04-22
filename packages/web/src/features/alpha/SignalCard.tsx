@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import { fmtUsd } from '@lib/format';
 import type { SpreadSignal } from '@lib/analytics/verticalSpread';
 
@@ -8,7 +10,7 @@ interface Props {
   label?: string;
 }
 
-export default function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
+function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
   if (!signal) {
     return (
       <div className={styles.card} data-empty="true">
@@ -70,3 +72,5 @@ export default function SignalCard({ signal, label = 'Executable (best routing)'
     </div>
   );
 }
+
+export default memo(SignalCard);

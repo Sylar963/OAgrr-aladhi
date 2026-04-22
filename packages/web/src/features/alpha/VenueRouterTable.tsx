@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import { VenueDot } from '@components/ui';
 import { fmtIv, fmtUsd, fmtCompact } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
@@ -13,7 +15,7 @@ interface Props {
   executableNetCredit: number | null;
 }
 
-export default function VenueRouterTable({
+function VenueRouterTable({
   shortLeg,
   longLeg,
   shortStrike,
@@ -49,6 +51,8 @@ export default function VenueRouterTable({
     </div>
   );
 }
+
+export default memo(VenueRouterTable);
 
 interface LegTableProps {
   legKind: 'short' | 'long';

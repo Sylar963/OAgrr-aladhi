@@ -43,36 +43,45 @@ export function useVerticalSpreadAnalysis({
     return m;
   }, [chain?.strikes]);
 
-  return useMemo(() => {
-    if (!chain) return { spot: null, smile: null, analysis: null, T: null, r: DEFAULT_RISK_FREE_RATE };
+  const spot = chain?.stats.indexPriceUsd ?? chain?.stats.spotIndexUsd ?? null;
+  const T = computeTFromDte(chain?.dte);
 
-    const spot = chain.stats.indexPriceUsd ?? chain.stats.spotIndexUsd ?? null;
-    const T = computeTFromDte(chain.dte);
+  // Smile only depends on strikes + spot. Lifting it out of the main memo
+  // keeps the SVG inset stable when the user only changes strikes/kind.
+  const smile = useMemo(
+    () => (spot != null && spot > 0 ? extractSmile(chain?.strikes ?? [], spot) : null),
+    [chain?.strikes, spot],
+  );
 
-    const smile = spot != null && spot > 0 ? extractSmile(chain.strikes, spot) : null;
+  // Stringify the venues filter so an inline-array prop from the caller
+  // doesn't invalidate the analysis memo on every parent render.
+  const venuesKey = venues ? venues.join(',') : '';
 
-    let analysis: RoutedSpreadAnalysis | null = null;
+  const analysis = useMemo(() => {
     if (
-      spot != null &&
-      spot > 0 &&
-      T != null &&
-      shortStrike != null &&
-      longStrike != null &&
-      shortStrike !== longStrike
+      !chain ||
+      spot == null ||
+      spot <= 0 ||
+      T == null ||
+      shortStrike == null ||
+      longStrike == null ||
+      shortStrike === longStrike
     ) {
-      analysis = routeVerticalSpread({
-        kind,
-        shortStrike,
-        longStrike,
-        strikes: chain.strikes,
-        strikeByKey,
-        spot,
-        T,
-        r: DEFAULT_RISK_FREE_RATE,
-        venues: venues as readonly import('@shared/enriched').VenueId[] | undefined,
-      });
+      return null;
     }
+    return routeVerticalSpread({
+      kind,
+      shortStrike,
+      longStrike,
+      strikes: chain.strikes,
+      strikeByKey,
+      spot,
+      T,
+      r: DEFAULT_RISK_FREE_RATE,
+      venues: venues as readonly import('@shared/enriched').VenueId[] | undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey]);
 
-    return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
-  }, [chain, kind, shortStrike, longStrike, venues, strikeByKey]);
+  return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
 }

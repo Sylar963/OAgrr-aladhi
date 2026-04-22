@@ -10,6 +10,15 @@
   max-width: 320px;
 }
 
+@media (max-width: 768px) {
+  .panel {
+    min-width: 0;
+    max-width: none;
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+}
+
 .block {
   display: flex;
   flex-direction: column;

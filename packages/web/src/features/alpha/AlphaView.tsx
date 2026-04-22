@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { ExpiryBar, useChainQuery, useExpiries } from '@features/chain';
 import { useChainWs } from '@hooks/useChainWs';
 import { useOpenPalette } from '@components/layout';
+import { useIsMobile } from '@hooks/useIsMobile';
 import { Spinner, EmptyState } from '@components/ui';
-import ExpiryBar from '@features/chain/ExpiryBar';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 
 import SpreadBuilderPanel from './SpreadBuilderPanel';
@@ -47,6 +47,7 @@ export default function AlphaView() {
     if (expiries.length > 0 && !expiry) setExpiry(expiries[0]!);
   }, [expiries, expiry, setExpiry]);
 
+  const isMobile = useIsMobile();
   const [kind, setKind] = useState<SpreadKind>('call-credit');
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
@@ -113,16 +114,56 @@ export default function AlphaView() {
     );
   }
 
+  const builder = chain && (
+    <SpreadBuilderPanel
+      kind={kind}
+      onKindChange={(k) => {
+        setKind(k);
+        setShortStrike(null);
+        setLongStrike(null);
+      }}
+      strikes={chain.strikes}
+      atmStrike={atmStrike}
+      shortStrike={shortStrike}
+      longStrike={longStrike}
+      onShortChange={setShortStrike}
+      onLongChange={setLongStrike}
+      riskFreeRate={analysis.r}
+      T={analysis.T}
+    />
+  );
+
+  const signalStack = (
+    <>
+      <SignalCard signal={analysis.analysis?.combinedSignal ?? null} />
+      <VenueRouterTable
+        shortLeg={analysis.analysis?.short ?? null}
+        longLeg={analysis.analysis?.long ?? null}
+        shortStrike={shortStrike}
+        longStrike={longStrike}
+        executableNetCredit={executableNet}
+      />
+      <VolSmileInset
+        smile={analysis.smile}
+        shortStrike={shortStrike}
+        longStrike={longStrike}
+      />
+    </>
+  );
+
   return (
     <div className={styles.view}>
-      <ExpiryBar
-        underlying={underlying}
-        spotPrice={chain?.stats.spotIndexUsd}
-        expiries={expiries}
-        selected={expiry}
-        onSelect={setExpiry}
-        onChangeAsset={openPalette}
-      />
+      {/* MobileToolbar already exposes the expiry picker on mobile — don't double up. */}
+      {!isMobile && (
+        <ExpiryBar
+          underlying={underlying}
+          spotPrice={chain?.stats.spotIndexUsd}
+          expiries={expiries}
+          selected={expiry}
+          onSelect={setExpiry}
+          onChangeAsset={openPalette}
+        />
+      )}
 
       {chain && chain.strikes.length === 0 && (
         <EmptyState
@@ -133,42 +174,19 @@ export default function AlphaView() {
       )}
 
       {chain && chain.strikes.length > 0 && (
-        <div className={styles.grid}>
-          <SpreadBuilderPanel
-            kind={kind}
-            onKindChange={(k) => {
-              setKind(k);
-              setShortStrike(null);
-              setLongStrike(null);
-            }}
-            strikes={chain.strikes}
-            atmStrike={atmStrike}
-            shortStrike={shortStrike}
-            longStrike={longStrike}
-            onShortChange={setShortStrike}
-            onLongChange={setLongStrike}
-            riskFreeRate={analysis.r}
-            T={analysis.T}
-          />
-
-          <div className={styles.rightColumn}>
-            <SignalCard signal={analysis.analysis?.combinedSignal ?? null} />
-
-            <VenueRouterTable
-              shortLeg={analysis.analysis?.short ?? null}
-              longLeg={analysis.analysis?.long ?? null}
-              shortStrike={shortStrike}
-              longStrike={longStrike}
-              executableNetCredit={executableNet}
-            />
-
-            <VolSmileInset
-              smile={analysis.smile}
-              shortStrike={shortStrike}
-              longStrike={longStrike}
-            />
+        isMobile ? (
+          // On mobile: signal first (what users come for), then router + smile,
+          // then the strike builder at the bottom (less central on small screens).
+          <div className={styles.mobileStack}>
+            {signalStack}
+            {builder}
           </div>
-        </div>
+        ) : (
+          <div className={styles.grid}>
+            {builder}
+            <div className={styles.rightColumn}>{signalStack}</div>
+          </div>
+        )
       )}
     </div>
   );

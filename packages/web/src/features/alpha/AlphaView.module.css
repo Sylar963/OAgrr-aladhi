@@ -22,6 +22,16 @@
   min-width: 0;
 }
 
+.mobileStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow-y: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;

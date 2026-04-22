@@ -175,3 +175,63 @@
 .sumValue[data-kind="credit"] {
   color: var(--color-profit);
 }
+
+/* ── Mobile: collapse the 6-col grid into a 2-line card per venue ──── */
+@media (max-width: 600px) {
+  .wrap {
+    padding: var(--space-3);
+    gap: var(--space-3);
+  }
+
+  .thead {
+    display: none;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px var(--space-2);
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .row:last-child {
+    border-bottom: none;
+  }
+
+  .row > .venueCell {
+    flex: 1 1 60%;
+    min-width: 0;
+  }
+
+  /* Final cell is the "net after fees" — keep it large and aligned right. */
+  .row > .cell:nth-child(6) {
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  /* IV · exec price · size · fee collapse into a dim caption line. */
+  .row > .cell:nth-child(2),
+  .row > .cell:nth-child(3),
+  .row > .cell:nth-child(4),
+  .row > .cell:nth-child(5) {
+    flex: 1 1 auto;
+    text-align: left;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* Prefix the caption cells with their label so users still know what each is. */
+  .row > .cell:nth-child(2)::before { content: 'IV '; opacity: 0.6; }
+  .row > .cell:nth-child(3)::before { content: 'px '; opacity: 0.6; }
+  .row > .cell:nth-child(4)::before { content: 'sz '; opacity: 0.6; }
+  .row > .cell:nth-child(5)::before { content: 'fee '; opacity: 0.6; }
+
+  .leg {
+    padding: var(--space-2);
+  }
+}

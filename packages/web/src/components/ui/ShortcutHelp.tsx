@@ -13,11 +13,12 @@ interface Row {
 
 const NAVIGATION: Row[] = [
   { label: 'Chain', keys: ['g', 'c'] },
+  { label: 'Alpha', keys: ['g', 'a'] },
   { label: 'Builder', keys: ['g', 'b'] },
   { label: 'Paper', keys: ['g', 'p'] },
   { label: 'Volatility', keys: ['g', 'v'] },
   { label: 'Flow', keys: ['g', 'f'] },
-  { label: 'Analytics', keys: ['g', 'a'] },
+  { label: 'Analytics', keys: ['g', 'y'] },
   { label: 'GEX', keys: ['g', 'x'] },
 ];
 

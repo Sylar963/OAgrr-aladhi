@@ -11,16 +11,17 @@ import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import styles from './AppShell.module.css';
 
-type TabId = 'chain' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
+type TabId = 'chain' | 'alpha' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
 
 // Second key of a `g <x>` chord maps to a tab.
 const GOTO_MAP: Record<string, TabId> = {
   c: 'chain',
+  a: 'alpha',
   b: 'architect',
   p: 'trading',
   v: 'surface',
   f: 'flow',
-  a: 'analytics',
+  y: 'analytics',
   x: 'gex',
 };
 

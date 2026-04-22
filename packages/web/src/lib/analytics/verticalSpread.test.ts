@@ -296,6 +296,95 @@ describe('routeVerticalSpread — IV inference fallback', () => {
   });
 });
 
+describe('routeVerticalSpread — strikeByKey parity', () => {
+  const spot = 100;
+  const T = 0.25;
+  const r = 0.05;
+
+  const strikes: EnrichedStrike[] = [
+    {
+      strike: 95,
+      call: {
+        bestIv: 0.55,
+        bestVenue: 'deribit',
+        venues: {
+          deribit: quote({
+            bid: blackScholesCall(spot, 95, T, r, 0.55),
+            ask: blackScholesCall(spot, 95, T, r, 0.56),
+            bidIv: 0.55,
+            askIv: 0.56,
+            markIv: 0.555,
+            estimatedFees: { maker: 0, taker: 0.1 },
+          }),
+        },
+      },
+      put: { bestIv: null, bestVenue: null, venues: {} },
+    },
+    {
+      strike: 105,
+      call: {
+        bestIv: 0.6,
+        bestVenue: 'deribit',
+        venues: {
+          deribit: quote({
+            bid: blackScholesCall(spot, 105, T, r, 0.58),
+            ask: blackScholesCall(spot, 105, T, r, 0.6),
+            bidIv: 0.58,
+            askIv: 0.6,
+            markIv: 0.59,
+            estimatedFees: { maker: 0, taker: 0.1 },
+          }),
+        },
+      },
+      put: { bestIv: null, bestVenue: null, venues: {} },
+    },
+  ];
+
+  it('produces identical results with and without precomputed strike map', () => {
+    const baseline = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 95,
+      longStrike: 105,
+      strikes,
+      spot,
+      T,
+      r,
+    });
+    const byKey = new Map(strikes.map((s) => [s.strike, s]));
+    const indexed = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 95,
+      longStrike: 105,
+      strikes,
+      strikeByKey: byKey,
+      spot,
+      T,
+      r,
+    });
+
+    expect(indexed.combinedSignal?.netCredit).toBe(baseline.combinedSignal?.netCredit);
+    expect(indexed.combinedSignal?.signal).toBe(baseline.combinedSignal?.signal);
+    expect(indexed.short.best?.venue).toBe(baseline.short.best?.venue);
+    expect(indexed.long.best?.venue).toBe(baseline.long.best?.venue);
+  });
+
+  it('returns empty candidates when a requested strike is absent from the map', () => {
+    const byKey = new Map(strikes.map((s) => [s.strike, s]));
+    const result = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 123, // not in the map
+      longStrike: 105,
+      strikes,
+      strikeByKey: byKey,
+      spot,
+      T,
+      r,
+    });
+    expect(result.short.candidates).toHaveLength(0);
+    expect(result.short.best).toBeNull();
+  });
+});
+
 describe('routeVerticalSpread — HOLD and signal gate', () => {
   const spot = 100;
   const T = 0.25;

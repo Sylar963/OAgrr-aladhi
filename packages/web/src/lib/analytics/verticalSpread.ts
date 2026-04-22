@@ -15,6 +15,11 @@ export interface SpreadInput {
   r: number;
   // When empty, considers every venue present in the chain.
   venues?: readonly VenueId[];
+  // Optional O(1) strike lookup. When omitted, falls back to linear scan on
+  // `strikes`. Callers that run on every WS tick (≈5Hz) should precompute this
+  // once per snapshot and pass it in; otherwise the pricer does O(n) on the
+  // strike list twice per invocation.
+  strikeByKey?: ReadonlyMap<number, EnrichedStrike>;
 }
 
 export interface VenueLegCandidate {
@@ -65,7 +70,9 @@ export interface RoutedSpreadAnalysis {
 function findStrike(
   strikes: readonly EnrichedStrike[],
   targetStrike: number,
+  byKey?: ReadonlyMap<number, EnrichedStrike>,
 ): EnrichedStrike | null {
+  if (byKey) return byKey.get(targetStrike) ?? null;
   return strikes.find((s) => s.strike === targetStrike) ?? null;
 }
 
@@ -321,10 +328,10 @@ function computeSurfaceSignal(
 // ── Public API ─────────────────────────────────────────────────────
 
 export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
-  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues } = input;
+  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues, strikeByKey } = input;
   const right = rightForKind(kind);
-  const shortRow = findStrike(strikes, shortStrike);
-  const longRow = findStrike(strikes, longStrike);
+  const shortRow = findStrike(strikes, shortStrike, strikeByKey);
+  const longRow = findStrike(strikes, longStrike, strikeByKey);
   const venueList = venueSet(shortRow, longRow, kind, venues);
 
   const shortCandidates = buildLegCandidates(shortRow, shortStrike, 'sell', kind, spot, T, r, venueList);

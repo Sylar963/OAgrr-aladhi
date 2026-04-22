@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import type { EnrichedChainResponse } from '@shared/enriched';
+import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
 import { routeVerticalSpread, type SpreadKind, type RoutedSpreadAnalysis } from '@lib/analytics/verticalSpread';
 import { extractSmile, type SmileCurve } from '@lib/analytics/smile';
 
@@ -34,6 +34,15 @@ export function useVerticalSpreadAnalysis({
   longStrike,
   venues,
 }: AnalysisInput): AnalysisOutput {
+  // Pre-index strikes by key so the router's lookups are O(1) per WS tick.
+  // Separated from the analysis memo so the map only rebuilds when the
+  // strikes array identity changes, not on every kind/strike selection.
+  const strikeByKey = useMemo(() => {
+    const m = new Map<number, EnrichedStrike>();
+    for (const s of chain?.strikes ?? []) m.set(s.strike, s);
+    return m;
+  }, [chain?.strikes]);
+
   return useMemo(() => {
     if (!chain) return { spot: null, smile: null, analysis: null, T: null, r: DEFAULT_RISK_FREE_RATE };
 
@@ -56,6 +65,7 @@ export function useVerticalSpreadAnalysis({
         shortStrike,
         longStrike,
         strikes: chain.strikes,
+        strikeByKey,
         spot,
         T,
         r: DEFAULT_RISK_FREE_RATE,
@@ -64,5 +74,5 @@ export function useVerticalSpreadAnalysis({
     }
 
     return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
-  }, [chain, kind, shortStrike, longStrike, venues]);
+  }, [chain, kind, shortStrike, longStrike, venues, strikeByKey]);
 }

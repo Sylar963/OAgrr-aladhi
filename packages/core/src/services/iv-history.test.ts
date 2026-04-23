@@ -149,6 +149,47 @@ describe('IvHistoryService', () => {
     svc.dispose();
   });
 
+  it('returns null rank/percentile when the window has < 2 samples', async () => {
+    const surfaces = [makeRow('e', 30, 0.5, 0.02, 0.01)];
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve(surfaces),
+        dvol: mockDvol(),
+      },
+      { underlyings: ['BTC'] },
+    );
+    await svc.snapshotOnce(Date.now());
+    const res = svc.query('BTC', 30);
+    const t30 = res.tenors['30d'];
+    expect(t30.current.atmIv).toBeCloseTo(0.5, 6);
+    expect(t30.atmRank).toBeNull();
+    expect(t30.atmPercentile).toBeNull();
+    expect(t30.rrRank).toBeNull();
+    expect(t30.rrPercentile).toBeNull();
+    svc.dispose();
+  });
+
+  it('returns null rank/percentile when all samples in the window are identical', async () => {
+    const surfaces = [makeRow('e', 30, 0.5, 0.02, 0.01)];
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve(surfaces),
+        dvol: mockDvol(),
+      },
+      { underlyings: ['BTC'] },
+    );
+    const now = Date.now();
+    for (let i = 0; i < 5; i++) {
+      await svc.snapshotOnce(now - (4 - i) * 60_000);
+    }
+    const res = svc.query('BTC', 30);
+    const t30 = res.tenors['30d'];
+    expect(t30.series.length).toBe(5);
+    expect(t30.atmRank).toBeNull();
+    expect(t30.atmPercentile).toBeNull();
+    svc.dispose();
+  });
+
   it('computes RR and butterfly from per-tenor snapshots', async () => {
     // skew = +0.04 → RR at 30d should be +0.04; fly = +0.01.
     const surfaces = [makeRow('e', 30, 0.5, 0.04, 0.01)];

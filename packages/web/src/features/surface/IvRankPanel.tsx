@@ -59,28 +59,27 @@ function sampleEvenly<T>(arr: T[], targetCount: number): T[] {
   return out;
 }
 
+const SAMPLES_TIP =
+  'SAMPLES — how many valid ATM IV readings are in this window.\n\n' +
+  '• 30d BTC/ETH seeds from ~1 year of Deribit DVOL candles on startup.\n' +
+  '• Other tenors accumulate one new point every 5 min from the live surface.\n' +
+  '• Rank/percentile need ≥ 2 distinct samples — they show “–” until the window has variation.';
+
 function Chip({ tenor, result }: { tenor: IvTenor; result: IvHistoryTenorResult | undefined }) {
-  if (!result || result.series.length === 0) {
-    return (
-      <div className={styles.chip}>
-        <div className={styles.chipTenor}>{tenor.toUpperCase()}</div>
-        <div className={styles.chipIv}>–</div>
-        <svg className={styles.spark} viewBox="0 0 100 22" preserveAspectRatio="none" />
-        <div className={styles.emptyNote}>accumulating…</div>
-      </div>
-    );
-  }
-  const sampled = sampleEvenly(result.series, SPARK_POINTS);
+  const series = result?.series ?? [];
+  const n = series.filter((p) => p.atmIv != null).length;
+  const currentIv = result?.current.atmIv ?? null;
+  const sampled = sampleEvenly(series, SPARK_POINTS);
   const path = sparkPath(
     sampled.map((p) => p.atmIv),
     100,
     22,
   );
-  const level = rankLevel(result.atmRank);
+  const level = rankLevel(result?.atmRank ?? null);
   return (
     <div className={styles.chip}>
       <div className={styles.chipTenor}>{tenor.toUpperCase()}</div>
-      <div className={styles.chipIv}>{fmtIv(result.current.atmIv)}</div>
+      <div className={styles.chipIv}>{fmtIv(currentIv)}</div>
       <svg className={styles.spark} viewBox="0 0 100 22" preserveAspectRatio="none">
         {path && (
           <path d={path} fill="none" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -90,14 +89,17 @@ function Chip({ tenor, result }: { tenor: IvTenor; result: IvHistoryTenorResult 
         <span className={styles.badge} title={RANK_TIP}>
           rank{' '}
           <span className={styles.rankValue} data-level={level}>
-            {result.atmRank != null ? result.atmRank.toFixed(0) : '–'}
+            {result?.atmRank != null ? result.atmRank.toFixed(0) : '–'}
           </span>
         </span>
         <span className={styles.badge} title={PCT_TIP}>
           pct{' '}
           <span className={styles.rankValue} data-level={level}>
-            {result.atmPercentile != null ? `${result.atmPercentile.toFixed(0)}%` : '–'}
+            {result?.atmPercentile != null ? `${result.atmPercentile.toFixed(0)}%` : '–'}
           </span>
+        </span>
+        <span className={styles.badge} title={SAMPLES_TIP}>
+          n <span className={styles.rankValue} data-level="none">{n}</span>
         </span>
       </div>
     </div>

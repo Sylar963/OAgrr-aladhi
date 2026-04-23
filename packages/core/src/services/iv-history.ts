@@ -36,7 +36,11 @@ function rankAndPercentile(
 ): RankPct {
   if (current == null || !Number.isFinite(current)) return { rank: null, percentile: null };
   const xs = values.filter((v): v is number => v != null && Number.isFinite(v));
-  if (xs.length === 0) return { rank: null, percentile: null };
+  // Need at least two samples AND a non-zero range for rank/percentile to be
+  // meaningful. With one sample or a flat window the formulas trivially
+  // produce 0/100, which misleads more than it informs — prefer null so the
+  // UI renders "–" (insufficient data) instead.
+  if (xs.length < 2) return { rank: null, percentile: null };
   let min = Infinity;
   let max = -Infinity;
   let leq = 0;
@@ -45,7 +49,8 @@ function rankAndPercentile(
     if (x > max) max = x;
     if (x <= current) leq += 1;
   }
-  const rank = max > min ? ((current - min) / (max - min)) * 100 : 0;
+  if (max <= min) return { rank: null, percentile: null };
+  const rank = ((current - min) / (max - min)) * 100;
   const percentile = (leq / xs.length) * 100;
   return { rank, percentile };
 }
@@ -168,7 +173,13 @@ export class IvHistoryService {
     for (const underlying of this.underlyings) {
       if (underlying !== 'BTC' && underlying !== 'ETH') continue;
       const candles = this.deps.dvol.getHistory(underlying);
-      if (candles.length === 0) continue;
+      if (candles.length === 0) {
+        log.warn(
+          { underlying },
+          'DVOL history empty at seed time — 30d IV rank will require accumulation',
+        );
+        continue;
+      }
       // DVOL candles are percentage (52.1 = 52.1%); internal convention is fraction.
       // DVOL is 30d ATM-only — skew & wing come from snapshot loop.
       const seed: IvHistoryPoint[] = candles.map((c) => ({
@@ -178,7 +189,19 @@ export class IvHistoryService {
         bfly25d: null,
       }));
       this.buffers.set(bufferKey(underlying, '30d'), seed.slice(-this.capacity));
-      log.info({ underlying, count: seed.length }, 'seeded 30d ATM from DVOL');
+      const first = seed[0]!;
+      const last = seed[seed.length - 1]!;
+      log.info(
+        {
+          underlying,
+          count: seed.length,
+          firstTs: new Date(first.ts).toISOString(),
+          lastTs: new Date(last.ts).toISOString(),
+          firstIv: first.atmIv,
+          lastIv: last.atmIv,
+        },
+        'seeded 30d ATM from DVOL',
+      );
     }
   }
 

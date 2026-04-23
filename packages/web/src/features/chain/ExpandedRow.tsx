@@ -128,8 +128,28 @@ function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: Sid
           <th className={styles.th}>OI</th>
           <th className={styles.th}>BREAK</th>
           <th className={styles.th}>COST</th>
-          <th className={styles.th}>Δ CONS</th>
-          <th className={styles.th}>EDGE</th>
+          <th
+            className={styles.th}
+            title={
+              'Δ VS CONSENSUS — how far this venue’s implied forward is from the cross-venue median.\n\n' +
+              '• Near zero (green): clean forward. Any price difference here reflects real MM skew — potentially tradeable edge.\n' +
+              '• Moderate (amber): some forward drift. Interpret price differences with caution.\n' +
+              '• Large (red): forward drift dominates. Cheap/expensive prices on this venue are mostly just forward, not edge.'
+            }
+          >
+            Δ CONS
+          </th>
+          <th
+            className={styles.th}
+            title={
+              'EDGE — the gap between your IV view (“MY IV” input above the chain) and this venue’s mark IV.\n\n' +
+              '• Positive (green): the venue is pricing vol lower than you think — a buyer’s edge (you’d buy premium here).\n' +
+              '• Negative (red): the venue is pricing vol higher than you think — a seller’s edge (you’d sell premium here).\n' +
+              '• Blank: enter a value in MY IV to see your edge against each venue.'
+            }
+          >
+            EDGE
+          </th>
         </tr>
       </thead>
       <tbody>

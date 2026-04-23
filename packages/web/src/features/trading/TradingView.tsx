@@ -15,6 +15,7 @@ import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import { useAppStore } from '@stores/app-store';
 import { registerUser } from './api';
+import PaperHelpPopover from './PaperHelpPopover';
 import {
   useActivity,
   useAddTradeNote,
@@ -243,6 +244,8 @@ export default function TradingView() {
               ))}
             </div>
           </div>
+
+          <PaperHelpPopover />
         </section>
 
         <section className={styles.main}>

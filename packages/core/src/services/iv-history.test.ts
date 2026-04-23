@@ -19,7 +19,12 @@ function makeRow(expiry: string, dte: number, atm: number, skew: number, fly: nu
   };
 }
 
-function mockDvol(history: { BTC?: Array<[number, number]>; ETH?: Array<[number, number]> } = {}) {
+function mockDvol(opts: {
+  history?: { BTC?: Array<[number, number]>; ETH?: Array<[number, number]> };
+  liveBtc?: number | null;
+  liveEth?: number | null;
+} = {}) {
+  const history = opts.history ?? {};
   const getHistory = (currency: string) => {
     const rows = history[currency as 'BTC' | 'ETH'] ?? [];
     return rows.map(([timestamp, close]) => ({
@@ -30,7 +35,12 @@ function mockDvol(history: { BTC?: Array<[number, number]>; ETH?: Array<[number,
       close,
     }));
   };
-  return { getHistory } as unknown as DvolService;
+  const getSnapshot = (currency: string) => {
+    if (currency === 'BTC' && opts.liveBtc != null) return { current: opts.liveBtc };
+    if (currency === 'ETH' && opts.liveEth != null) return { current: opts.liveEth };
+    return null;
+  };
+  return { getHistory, getSnapshot } as unknown as DvolService;
 }
 
 describe('interpTenor', () => {
@@ -125,11 +135,13 @@ describe('IvHistoryService', () => {
       {
         getSurfaceGrid: () => Promise.resolve([]), // no live surface → snapshotOnce is a no-op
         dvol: mockDvol({
-          BTC: [
-            [now - 2 * 24 * 3600 * 1000, 50],
-            [now - 24 * 3600 * 1000, 55],
-            [now, 60],
-          ],
+          history: {
+            BTC: [
+              [now - 2 * 24 * 3600 * 1000, 50],
+              [now - 24 * 3600 * 1000, 55],
+              [now, 60],
+            ],
+          },
         }),
       },
       { underlyings: ['BTC', 'ETH'], intervalMs: 60_000 },
@@ -187,6 +199,39 @@ describe('IvHistoryService', () => {
     expect(t30.series.length).toBe(5);
     expect(t30.atmRank).toBeNull();
     expect(t30.atmPercentile).toBeNull();
+    svc.dispose();
+  });
+
+  it('overrides 30d ATM with DVOL live value for BTC/ETH (methodology alignment)', async () => {
+    // Our surface interp would give 0.42; DVOL live says 0.44. The 30d buffer
+    // should store 0.44 (matching the DVOL seed); 7d/60d/90d still use interp.
+    const surfaces = [makeRow('e', 30, 0.42, 0.02, 0.01)];
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve(surfaces),
+        dvol: mockDvol({ liveBtc: 0.44 }),
+      },
+      { underlyings: ['BTC'] },
+    );
+    await svc.snapshotOnce(Date.now());
+    expect(svc.getBuffer('BTC', '30d')[0]!.atmIv).toBeCloseTo(0.44, 6);
+    expect(svc.getBuffer('BTC', '7d')[0]!.atmIv).toBeCloseTo(0.42, 6);
+    expect(svc.getBuffer('BTC', '60d')[0]!.atmIv).toBeCloseTo(0.42, 6);
+    expect(svc.getBuffer('BTC', '90d')[0]!.atmIv).toBeCloseTo(0.42, 6);
+    svc.dispose();
+  });
+
+  it('falls back to interp for 30d ATM when DVOL snapshot is unavailable', async () => {
+    const surfaces = [makeRow('e', 30, 0.42, 0, 0)];
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve(surfaces),
+        dvol: mockDvol(), // no live snapshot
+      },
+      { underlyings: ['BTC'] },
+    );
+    await svc.snapshotOnce(Date.now());
+    expect(svc.getBuffer('BTC', '30d')[0]!.atmIv).toBeCloseTo(0.42, 6);
     svc.dispose();
   });
 

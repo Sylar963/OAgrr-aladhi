@@ -56,3 +56,40 @@ export interface IvSurfaceResponse {
   termStructure: TermStructure;
   venueAtm: Record<string, VenueAtmPoint[]>;
 }
+
+// IV history — constant-maturity ATM IV, 25Δ RR, 25Δ butterfly.
+// Mirrors core/enrichment.ts IvHistory* types.
+
+export type IvTenor = '7d' | '30d' | '60d' | '90d';
+
+export interface IvHistoryPoint {
+  ts: number;
+  atmIv: number | null;
+  rr25d: number | null;
+  bfly25d: number | null;
+}
+
+export interface IvHistoryExtrema {
+  atmIv: number | null;
+  rr25d: number | null;
+  bfly25d: number | null;
+}
+
+export interface IvHistoryTenorResult {
+  current: IvHistoryPoint;
+  atmRank: number | null;
+  atmPercentile: number | null;
+  rrRank: number | null;
+  rrPercentile: number | null;
+  flyRank: number | null;
+  flyPercentile: number | null;
+  min: IvHistoryExtrema;
+  max: IvHistoryExtrema;
+  series: IvHistoryPoint[];
+}
+
+export interface IvHistoryResponse {
+  underlying: string;
+  windowDays: 30 | 90;
+  tenors: Record<IvTenor, IvHistoryTenorResult>;
+}

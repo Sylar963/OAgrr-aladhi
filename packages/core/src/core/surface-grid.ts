@@ -1,0 +1,90 @@
+import type { VenueId } from '../types/common.js';
+import { getAdapter, getAllAdapters } from './registry.js';
+import { buildComparisonChain } from './aggregator.js';
+import {
+  buildEnrichedChain,
+  computeChainStats,
+  computeDte,
+  computeIvSurface,
+  type EnrichedStrike,
+  type IvSurfaceRow,
+} from './enrichment.js';
+import type { ChainRequest, VenueOptionChain } from './types.js';
+
+export interface SurfaceGridEntry {
+  expiry: string;
+  dte: number;
+  surfaceRow: IvSurfaceRow;
+  atmStrike: EnrichedStrike | null;
+  strikes: EnrichedStrike[];
+}
+
+export interface BuildSurfaceGridOptions {
+  underlying: string;
+  venues?: VenueId[];
+}
+
+/**
+ * Builds an IV surface grid (one row per listed expiry) by fetching chains
+ * from each requested venue and running shared enrichment.
+ *
+ * Extracted from the /api/surface route so the same code path feeds the
+ * REST response and the IvHistoryService snapshot loop.
+ */
+export async function buildIvSurfaceGrid({
+  underlying,
+  venues,
+}: BuildSurfaceGridOptions): Promise<SurfaceGridEntry[]> {
+  const requestedVenues: VenueId[] = venues ?? getAllAdapters().map((a) => a.venue);
+
+  const allExpiries = new Set<string>();
+  for (const venueId of requestedVenues) {
+    try {
+      const adapter = getAdapter(venueId);
+      const expiries = await adapter.listExpiries(underlying);
+      for (const e of expiries) allExpiries.add(e);
+    } catch {
+      // Not every venue lists every underlying.
+    }
+  }
+
+  const sortedExpiries = [...allExpiries].sort();
+  const entries: SurfaceGridEntry[] = [];
+
+  for (const expiry of sortedExpiries) {
+    const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
+
+    const settled = await Promise.allSettled(
+      requestedVenues.map((venueId) => getAdapter(venueId).fetchOptionChain(request)),
+    );
+
+    const chains: VenueOptionChain[] = settled
+      .filter((r): r is PromiseFulfilledResult<VenueOptionChain> => r.status === 'fulfilled')
+      .map((r) => r.value);
+
+    if (chains.length === 0) continue;
+
+    const comparison = buildComparisonChain(underlying, expiry, chains);
+    const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+    const stats = computeChainStats(enriched.strikes, chains);
+    const refPrice = stats.indexPriceUsd ?? stats.spotIndexUsd;
+    const dte = computeDte(expiry);
+    const surfaceRow = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
+
+    let atmStrike: EnrichedStrike | null = null;
+    if (refPrice != null && enriched.strikes.length > 0) {
+      let bestDist = Infinity;
+      for (const s of enriched.strikes) {
+        const dist = Math.abs(s.strike - refPrice);
+        if (dist < bestDist) {
+          bestDist = dist;
+          atmStrike = s;
+        }
+      }
+    }
+
+    entries.push({ expiry, dte, surfaceRow, atmStrike, strikes: enriched.strikes });
+  }
+
+  return entries;
+}

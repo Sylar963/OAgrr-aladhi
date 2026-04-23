@@ -1,16 +1,36 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { DvolService, SpotRuntime, TradeRuntime, BlockTradeRuntime } from '@oggregator/core';
+import {
+  BlockTradeRuntime,
+  DvolService,
+  IvHistoryService,
+  SpotRuntime,
+  TradeRuntime,
+  buildIvSurfaceGrid,
+} from '@oggregator/core';
 import { NoopTradeStore, PostgresTradeStore, type TradeStore } from '@oggregator/db';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
+export const ivHistoryService = new IvHistoryService({
+  dvol: dvolService,
+  getSurfaceGrid: async (underlying: string) => {
+    const entries = await buildIvSurfaceGrid({ underlying });
+    return entries.map((e) => e.surfaceRow);
+  },
+});
 export const tradeStore: TradeStore = process.env['DATABASE_URL']
   ? PostgresTradeStore.fromConnectionString(process.env['DATABASE_URL'])
   : new NoopTradeStore();
 
-const serviceHealth = { dvol: false, spot: false, flow: false, blockFlow: false };
+const serviceHealth = {
+  dvol: false,
+  spot: false,
+  flow: false,
+  blockFlow: false,
+  ivHistory: false,
+};
 
 export function isDvolReady(): boolean {
   return serviceHealth.dvol;
@@ -23,6 +43,9 @@ export function isFlowReady(): boolean {
 }
 export function isBlockFlowReady(): boolean {
   return serviceHealth.blockFlow;
+}
+export function isIvHistoryReady(): boolean {
+  return serviceHealth.ivHistory;
 }
 
 export async function bootstrapServices(log: FastifyBaseLogger) {
@@ -66,6 +89,16 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     serviceHealth.blockFlow = true;
     log.info('block flow service started');
   } else log.warn({ err: String(blockFlow.reason) }, 'block flow service failed');
+
+  // IvHistoryService must start AFTER DVOL so seedFromDvol sees candles, and
+  // AFTER adapters so the first snapshot's surface grid has chains to read.
+  try {
+    await ivHistoryService.start();
+    serviceHealth.ivHistory = true;
+    log.info('IV history service started');
+  } catch (err: unknown) {
+    log.warn({ err: String(err) }, 'IV history service failed');
+  }
 
   log.info({ ms: Date.now() - start, health: serviceHealth }, 'services bootstrapped');
 }

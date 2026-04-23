@@ -93,6 +93,7 @@ describe('ServerWsMessageSchema', () => {
     putCallOiRatio: 1,
     totalOiUsd: 1_000_000,
     skew25d: 0,
+    bfly25d: 0,
   };
 
   it('accepts valid snapshot', () => {

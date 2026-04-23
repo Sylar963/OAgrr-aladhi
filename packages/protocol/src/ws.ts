@@ -128,6 +128,7 @@ export interface ChainStats {
   putCallOiRatio: number | null;
   totalOiUsd: number | null;
   skew25d: number | null;
+  bfly25d: number | null;
 }
 
 export interface EnrichedChainResponse {
@@ -225,6 +226,7 @@ const ChainStatsSchema = z.object({
   putCallOiRatio: NullableNumberSchema,
   totalOiUsd: NullableNumberSchema,
   skew25d: NullableNumberSchema,
+  bfly25d: NullableNumberSchema,
 });
 
 export const EnrichedChainResponseSchema = z.object({

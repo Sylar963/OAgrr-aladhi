@@ -13,6 +13,7 @@ import {
   bootstrapServices,
   dvolService,
   flowService,
+  ivHistoryService,
   spotService,
   tradeStore,
 } from './services.js';
@@ -85,6 +86,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     blockFlowService.dispose();
     spotService.dispose();
     dvolService.dispose();
+    ivHistoryService.dispose();
     await disposeAdapters(app.log);
     await tradeStore.dispose();
     await paperTradingStore.dispose();

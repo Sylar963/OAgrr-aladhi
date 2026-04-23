@@ -80,6 +80,42 @@ export interface GexStrike {
 
 export type TermStructure = 'contango' | 'flat' | 'backwardation';
 
+// ── IV history (constant-maturity) ────────────────────────────────
+
+export type IvTenor = '7d' | '30d' | '60d' | '90d';
+
+export interface IvHistoryPoint {
+  ts: number;
+  atmIv: number | null;
+  rr25d: number | null;
+  bfly25d: number | null;
+}
+
+export interface IvHistoryExtrema {
+  atmIv: number | null;
+  rr25d: number | null;
+  bfly25d: number | null;
+}
+
+export interface IvHistoryTenorResult {
+  current: IvHistoryPoint;
+  atmRank: number | null;
+  atmPercentile: number | null;
+  rrRank: number | null;
+  rrPercentile: number | null;
+  flyRank: number | null;
+  flyPercentile: number | null;
+  min: IvHistoryExtrema;
+  max: IvHistoryExtrema;
+  series: IvHistoryPoint[];
+}
+
+export interface IvHistoryResponse {
+  underlying: string;
+  windowDays: 30 | 90;
+  tenors: Record<IvTenor, IvHistoryTenorResult>;
+}
+
 export interface ChainStats {
   spotIndexUsd: number | null;
   indexPriceUsd: number | null;
@@ -89,6 +125,7 @@ export interface ChainStats {
   putCallOiRatio: number | null;
   totalOiUsd: number | null;
   skew25d: number | null;
+  bfly25d: number | null;
 }
 
 export interface EnrichedChainResponse {
@@ -387,13 +424,20 @@ export function computeChainStats(
   const totalOiUsd = putOiUsd + callOiUsd;
 
   // 25Δ skew: put25 IV − call25 IV. Positive = put skew (downside fear).
+  // 25Δ butterfly: (call25 + put25) / 2 − ATM. Positive = wing-rich smile.
   const put25Strike = closestDeltaStrike(strikes, -0.25, 'put');
   const call25Strike = closestDeltaStrike(strikes, 0.25, 'call');
   let skew25d: number | null = null;
+  let bfly25d: number | null = null;
   if (put25Strike !== null && call25Strike !== null) {
     const putIv = averageSideIv(put25Strike.put);
     const callIv = averageSideIv(call25Strike.call);
-    skew25d = putIv !== null && callIv !== null ? putIv - callIv : null;
+    if (putIv !== null && callIv !== null) {
+      skew25d = putIv - callIv;
+      if (atmIv !== null) {
+        bfly25d = (callIv + putIv) / 2 - atmIv;
+      }
+    }
   }
 
   return {
@@ -405,6 +449,7 @@ export function computeChainStats(
     putCallOiRatio,
     totalOiUsd,
     skew25d,
+    bfly25d,
   };
 }
 
@@ -563,6 +608,42 @@ export function computeSmile(strikes: EnrichedStrike[], spot: number): SmileCurv
       : null;
 
   return { spot, points, atmIv, skew };
+}
+
+/**
+ * Interpolates a surface field to a constant-maturity tenor in days.
+ *
+ * Uses variance-time interpolation (σ² × t linear across DTE), the VIX/DVOL
+ * convention — keeps forward variance additive across adjacent tenors.
+ * Outside the observed DTE range, clamps to the nearest endpoint.
+ */
+export function interpTenor(
+  surfaces: IvSurfaceRow[],
+  targetDays: number,
+  field: 'atm' | 'delta25c' | 'delta25p' | 'delta10c' | 'delta10p',
+): number | null {
+  const pts = surfaces
+    .map((s) => ({ dte: s.dte, v: s[field] }))
+    .filter((p): p is { dte: number; v: number } => p.v != null && p.dte > 0)
+    .sort((a, b) => a.dte - b.dte);
+  if (pts.length === 0) return null;
+  if (pts.length === 1 || targetDays <= pts[0]!.dte) return pts[0]!.v;
+  if (targetDays >= pts[pts.length - 1]!.dte) return pts[pts.length - 1]!.v;
+  for (let i = 1; i < pts.length; i++) {
+    const lo = pts[i - 1]!;
+    const hi = pts[i]!;
+    if (targetDays <= hi.dte) {
+      const vLo = lo.v * lo.v * lo.dte;
+      const vHi = hi.v * hi.v * hi.dte;
+      const span = hi.dte - lo.dte;
+      if (span === 0) return hi.v;
+      const t = (targetDays - lo.dte) / span;
+      const interp = vLo + t * (vHi - vLo);
+      if (!(interp > 0)) return null;
+      return Math.sqrt(interp / targetDays);
+    }
+  }
+  return null;
 }
 
 /**

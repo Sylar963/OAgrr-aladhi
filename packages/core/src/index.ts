@@ -49,7 +49,11 @@ export {
   enrichComparisonRow,
   computeChainStats,
   computeGex,
+  interpTenor,
 } from './core/enrichment.js';
+
+export { buildIvSurfaceGrid } from './core/surface-grid.js';
+export type { SurfaceGridEntry, BuildSurfaceGridOptions } from './core/surface-grid.js';
 
 export type {
   EnrichedChainResponse,
@@ -62,6 +66,11 @@ export type {
   GexStrike,
   ChainStats,
   TermStructure,
+  IvTenor,
+  IvHistoryPoint,
+  IvHistoryExtrema,
+  IvHistoryTenorResult,
+  IvHistoryResponse,
 } from './core/enrichment.js';
 
 // feeds/shared — adapter interfaces
@@ -100,6 +109,11 @@ export {
 
 // services
 export { DvolService, type DvolSnapshot, type DvolCandle, type HvPoint } from './services/dvol.js';
+export {
+  IvHistoryService,
+  type IvHistoryDeps,
+  type IvHistoryOptions,
+} from './services/iv-history.js';
 export {
   TradeRuntime,
   getDeribitTradeCurrency,

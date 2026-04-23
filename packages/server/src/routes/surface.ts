@@ -1,17 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  getAllAdapters,
-  getAdapter,
-  buildComparisonChain,
-  buildEnrichedChain,
-  computeIvSurface,
+  buildIvSurfaceGrid,
   computeTermStructure,
-  computeDte,
-  computeChainStats,
-  type VenueId,
-  type ChainRequest,
+  getAllAdapters,
   type IvSurfaceRow,
   type TermStructure,
+  type VenueId,
   VENUE_IDS,
 } from '@oggregator/core';
 
@@ -29,73 +23,21 @@ export async function surfaceRoute(app: FastifyInstance) {
       ? (venuesParam.split(',').filter((v) => VENUE_IDS.includes(v as VenueId)) as VenueId[])
       : getAllAdapters().map((a) => a.venue);
 
-    const allExpiries = new Set<string>();
-    for (const venueId of requestedVenues) {
-      try {
-        const adapter = getAdapter(venueId);
-        const expiries = await adapter.listExpiries(underlying);
-        for (const e of expiries) allExpiries.add(e);
-      } catch {
-        // Not all venues list every underlying
-      }
-    }
+    const entries = await buildIvSurfaceGrid({ underlying, venues: requestedVenues });
 
-    const sortedExpiries = [...allExpiries].sort();
-    const surface: IvSurfaceRow[] = [];
+    const surface: IvSurfaceRow[] = entries.map((e) => e.surfaceRow);
     const venueAtm: Record<string, Array<{ expiry: string; dte: number; atm: number | null }>> = {};
     for (const venueId of requestedVenues) {
       venueAtm[venueId] = [];
     }
 
-    for (const expiry of sortedExpiries) {
-      const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
-
-      const venueChains = await Promise.allSettled(
-        requestedVenues.map(async (venueId) => {
-          const adapter = getAdapter(venueId);
-          return adapter.fetchOptionChain(request);
-        }),
-      );
-
-      const chains = venueChains
-        .filter((r) => r.status === 'fulfilled')
-        .map(
-          (r) =>
-            (
-              r as PromiseFulfilledResult<
-                Awaited<ReturnType<ReturnType<typeof getAdapter>['fetchOptionChain']>>
-              >
-            ).value,
-        );
-
-      if (chains.length === 0) continue;
-
-      const comparison = buildComparisonChain(underlying, expiry, chains);
-      const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
-      const stats = computeChainStats(enriched.strikes, chains);
-      const refPrice = stats.indexPriceUsd ?? stats.spotIndexUsd;
-      const dte = computeDte(expiry);
-      const row = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
-      surface.push(row);
-
-      // Per-venue ATM IV: find ATM strike, read each venue's markIv
-      let atmStrike: (typeof enriched.strikes)[number] | null = null;
-      if (refPrice != null && enriched.strikes.length > 0) {
-        let bestDist = Infinity;
-        for (const s of enriched.strikes) {
-          const dist = Math.abs(s.strike - refPrice);
-          if (dist < bestDist) {
-            bestDist = dist;
-            atmStrike = s;
-          }
-        }
-      }
+    for (const entry of entries) {
       for (const venueId of requestedVenues) {
-        const callIv = atmStrike?.call.venues[venueId]?.markIv ?? null;
-        const putIv = atmStrike?.put.venues[venueId]?.markIv ?? null;
-        const iv = callIv != null && putIv != null ? (callIv + putIv) / 2
-          : callIv ?? putIv;
-        venueAtm[venueId]!.push({ expiry, dte, atm: iv });
+        const callIv = entry.atmStrike?.call.venues[venueId]?.markIv ?? null;
+        const putIv = entry.atmStrike?.put.venues[venueId]?.markIv ?? null;
+        const iv =
+          callIv != null && putIv != null ? (callIv + putIv) / 2 : (callIv ?? putIv);
+        venueAtm[venueId]!.push({ expiry: entry.expiry, dte: entry.dte, atm: iv });
       }
     }
 

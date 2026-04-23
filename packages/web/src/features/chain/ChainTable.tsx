@@ -14,6 +14,24 @@ import QuickTrade from './QuickTrade';
 import { computeAtmConsensus } from './forward-analysis';
 import styles from './ChainTable.module.css';
 
+const GAMMA_TIP =
+  'Γ GAMMA — rate of change of Δ per $1 move in spot.\n\n' +
+  '• Highest at-the-money and near expiry; near-zero deep OTM.\n' +
+  '• Long options are long gamma — Δ moves in your favor as spot moves.\n' +
+  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.';
+
+const VEGA_TIP =
+  'ν VEGA — option price change in USD per 1 vol-point move in IV (0.01 of IV).\n\n' +
+  '• Long options are long vega (gain when IV rises); short options are short vega.\n' +
+  '• Largest on long-dated ATM options; tiny on short-dated deep OTM.\n' +
+  '• Your exposure to IV re-pricing, independent of spot moves.';
+
+const DELTA_TIP =
+  'Δ DELTA — price sensitivity of the option to the underlying.\n\n' +
+  '• Option moves ~Δ dollars per $1 move in spot. 0.50 Δ → option moves $0.50.\n' +
+  '• Sign: calls positive, puts negative. Long call / short put = long delta; long put / short call = short delta.\n' +
+  '• Rough moneyness proxy: |Δ| ≈ probability of finishing in-the-money.';
+
 interface NewChainTableProps {
   strikes: EnrichedStrike[];
   atmStrike: number | null;
@@ -408,9 +426,9 @@ export default function NewChainTable({
     <div className={styles.wrapper}>
       <div className={styles.header}>
         <span className={styles.hdrLabel}>VENUES</span>
-        <span className={styles.hdrLabel}>γ</span>
-        <span className={styles.hdrLabel}>ν</span>
-        <span className={styles.hdrLabel}>Δ</span>
+        <span className={styles.hdrLabel} title={GAMMA_TIP}>γ</span>
+        <span className={styles.hdrLabel} title={VEGA_TIP}>ν</span>
+        <span className={styles.hdrLabel} title={DELTA_TIP}>Δ</span>
         <span className={styles.hdrLabel}>IV</span>
         <span className={styles.hdrLabel}>SPREAD</span>
         <span className={styles.hdrLabel} data-align="right">
@@ -426,13 +444,13 @@ export default function NewChainTable({
         <span className={styles.hdrLabel}>ASK</span>
         <span className={styles.hdrLabel}>SPREAD</span>
         <span className={styles.hdrLabel}>IV</span>
-        <span className={styles.hdrLabel} data-align="right">
+        <span className={styles.hdrLabel} data-align="right" title={DELTA_TIP}>
           Δ
         </span>
-        <span className={styles.hdrLabel} data-align="right">
+        <span className={styles.hdrLabel} data-align="right" title={VEGA_TIP}>
           ν
         </span>
-        <span className={styles.hdrLabel} data-align="right">
+        <span className={styles.hdrLabel} data-align="right" title={GAMMA_TIP}>
           γ
         </span>
         <span className={styles.hdrLabel} data-align="right">

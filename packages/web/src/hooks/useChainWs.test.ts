@@ -98,6 +98,7 @@ function snapshot(subId: string, seq: number, underlying = 'BTC'): ServerWsMessa
         putCallOiRatio: 1,
         totalOiUsd: 1,
         skew25d: 0,
+        bfly25d: 0,
       },
       strikes: [],
       gex: [],
@@ -136,6 +137,7 @@ function deltaMsg(subId: string, seq: number): ServerWsMessage {
         putCallOiRatio: 1,
         totalOiUsd: 1,
         skew25d: 0,
+        bfly25d: 0,
       },
       strikes: [
         {

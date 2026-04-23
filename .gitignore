@@ -43,3 +43,4 @@ agent_docs/
 # Local only
 .pi/skills/deploy-workflow/
 ops/
+docs/superpowers/specs/2026-04-22-forward-analysis-design.md

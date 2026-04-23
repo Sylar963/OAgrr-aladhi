@@ -20,6 +20,7 @@ import type { Fill, Order, Position } from '@oggregator/trading';
 import {
   DEFAULT_ACCOUNT_ID,
   applyFillToPosition,
+  fillCashDelta,
   type OrderLeg,
   type OrderSide,
 } from '@oggregator/trading';
@@ -348,10 +349,7 @@ async function buildTradeDetail(
   const realizedPnlUsd = tradePositions.reduce((sum, leg) => sum + leg.realizedPnlUsd, 0);
   const unrealizedPnlUsd = legs.reduce((sum, leg) => sum + (leg.unrealizedPnlUsd ?? 0), 0);
   const totalPnlUsd = realizedPnlUsd + unrealizedPnlUsd;
-  const netPremiumUsd = orders.reduce((sum, linkedOrder) => {
-    if (!linkedOrder?.order.totalDebitUsd) return sum;
-    return sum + linkedOrder.order.totalDebitUsd;
-  }, 0);
+  const netPremiumUsd = computeNetPremiumUsd(tradeFills);
   const currentSpotUsd = avg(
     legs
       .filter((leg) => leg.netQuantity !== 0)
@@ -503,6 +501,13 @@ async function getSnapshot(
     cache.set(key, null);
     return null;
   }
+}
+
+// Derived from fills (source of truth) rather than the persisted
+// `orders.total_debit_usd`, which was poisoned by a pre-50d3733 fee-units bug
+// and is not retroactively healed. Sign: positive = debit, negative = credit.
+export function computeNetPremiumUsd(fills: Fill[]): number {
+  return fills.reduce((sum, fill) => sum - fillCashDelta(fill), 0);
 }
 
 function latestFillVenueByContract(fills: Fill[]): Map<string, VenueId> {

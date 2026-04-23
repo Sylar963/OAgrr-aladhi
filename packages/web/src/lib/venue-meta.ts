@@ -4,7 +4,7 @@ import binanceLogo from '@/assets/venues/binance.svg';
 import bybitLogo from '@/assets/venues/bybit.svg';
 import deriveLogo from '@/assets/venues/derive.png';
 import coincallLogo from '@/assets/venues/coincall.png';
-import thalexLogo from '@/assets/venues/Thalex.png';
+import thalexLogo from '@/assets/venues/Thalex.svg';
 
 export interface VenueMeta {
   id: string;

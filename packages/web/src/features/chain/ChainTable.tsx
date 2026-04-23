@@ -11,6 +11,7 @@ import { useIsMobile } from '@hooks/useIsMobile';
 import ExpandedRow from './ExpandedRow';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
+import { computeAtmConsensus } from './forward-analysis';
 import styles from './ChainTable.module.css';
 
 interface NewChainTableProps {
@@ -134,6 +135,8 @@ interface StrikeRowProps {
   activeVenues: string[];
   myIv: number | null;
   onQuickTrade: (info: QuickTradeInfo) => void;
+  atmStrike: number | null;
+  atmConsensusForward: number | null;
 }
 
 const StrikeRowItem = memo(function StrikeRowItem({
@@ -146,6 +149,8 @@ const StrikeRowItem = memo(function StrikeRowItem({
   activeVenues,
   myIv,
   onQuickTrade,
+  atmStrike,
+  atmConsensusForward,
 }: StrikeRowProps) {
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
@@ -283,6 +288,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
           callSide={strike.call}
           putSide={strike.put}
           myIv={myIv}
+          activeVenues={activeVenues}
+          atmStrike={atmStrike}
+          atmConsensusForward={atmConsensusForward}
         />
       )}
     </div>
@@ -317,6 +325,11 @@ export default function NewChainTable({
   const atmIndex = useMemo(
     () => (atmStrike != null ? strikes.findIndex((s) => s.strike === atmStrike) : -1),
     [strikes, atmStrike],
+  );
+
+  const atmConsensusForward = useMemo(
+    () => computeAtmConsensus(strikes, atmStrike, activeVenues),
+    [strikes, atmStrike, activeVenues],
   );
 
   const rowVirtualizer = useVirtualizer({
@@ -470,6 +483,8 @@ export default function NewChainTable({
                   activeVenues={activeVenues}
                   myIv={myIv}
                   onQuickTrade={setQuickTrade}
+                  atmStrike={atmStrike}
+                  atmConsensusForward={atmConsensusForward}
                 />
               </div>
             );

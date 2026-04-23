@@ -3,6 +3,7 @@ import type { EnrichedSide, VenueQuote, VenueId } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
+import { computeForwardRows } from './forward-analysis';
 import styles from './ExpandedRow.module.css';
 
 interface ExpandedRowProps {
@@ -10,6 +11,9 @@ interface ExpandedRowProps {
   callSide: EnrichedSide;
   putSide: EnrichedSide;
   myIv: number | null;
+  activeVenues: string[];
+  atmStrike: number | null;
+  atmConsensusForward: number | null;
 }
 
 interface VenueRowProps {
@@ -123,7 +127,65 @@ function SideTable({ side, type, strike, myIv }: SideTableProps) {
   );
 }
 
-export default function ExpandedRow({ strike, callSide, putSide, myIv }: ExpandedRowProps) {
+interface ForwardTableProps {
+  callSide: EnrichedSide;
+  putSide: EnrichedSide;
+  strike: number;
+  activeVenues: string[];
+  consensus: number | null;
+}
+
+function ForwardTable({ callSide, putSide, strike, activeVenues, consensus }: ForwardTableProps) {
+  const rows = computeForwardRows(callSide, putSide, strike, activeVenues, consensus);
+
+  if (rows.length === 0) {
+    return <div className={styles.noQuotes}>No quotes</div>;
+  }
+
+  return (
+    <table className={styles.venueTable}>
+      <thead>
+        <tr className={styles.thead}>
+          <th className={styles.thVenue}>VENUE</th>
+          <th className={styles.th}>F_IMPLIED</th>
+          <th className={styles.th}>Δ VS CONSENSUS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ venueId, fImplied, delta }) => {
+          const meta = VENUES[venueId];
+          const edge = delta != null ? (delta > 0 ? 'positive' : delta < 0 ? 'negative' : undefined) : undefined;
+          return (
+            <tr key={venueId} className={styles.venueRow}>
+              <td className={styles.tdVenue}>
+                <div className={styles.venueCell}>
+                  {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
+                  <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
+                </div>
+              </td>
+              <td className={styles.tdNum} data-accent="true">
+                {fmtUsd(fImplied)}
+              </td>
+              <td className={styles.tdNum} data-edge={edge}>
+                {delta != null ? fmtDelta(delta) : '–'}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+export default function ExpandedRow({
+  strike,
+  callSide,
+  putSide,
+  myIv,
+  activeVenues,
+  atmStrike,
+  atmConsensusForward,
+}: ExpandedRowProps) {
   return (
     <div className={styles.expanded}>
       <div className={styles.side} data-type="call">
@@ -141,6 +203,24 @@ export default function ExpandedRow({ strike, callSide, putSide, myIv }: Expande
           <span className={styles.sideLabel}>PUTS</span>
         </div>
         <SideTable side={putSide} type="put" strike={strike} myIv={myIv} />
+      </div>
+
+      <div className={styles.divider} />
+
+      <div className={styles.side} data-type="forward">
+        <div className={styles.sideHeader}>
+          <span className={styles.sideLabel}>FORWARD</span>
+          {atmStrike != null && (
+            <span className={styles.sideStrike}>vs ATM {atmStrike.toLocaleString()}</span>
+          )}
+        </div>
+        <ForwardTable
+          callSide={callSide}
+          putSide={putSide}
+          strike={strike}
+          activeVenues={activeVenues}
+          consensus={atmConsensusForward}
+        />
       </div>
     </div>
   );

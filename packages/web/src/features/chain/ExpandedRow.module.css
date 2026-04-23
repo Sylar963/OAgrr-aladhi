@@ -48,6 +48,10 @@
   color: var(--color-loss);
 }
 
+.side[data-type="forward"] .sideLabel {
+  color: var(--accent-primary);
+}
+
 .sideStrike {
   font-family: var(--font-mono);
   font-size: 11px;

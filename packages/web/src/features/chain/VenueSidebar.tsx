@@ -80,6 +80,7 @@ export default function VenueSidebar({
             <span>Bybit · USDC</span>
             <span>Derive · USDC</span>
             <span>Coincall · USDT</span>
+            <span>Thalex · USDT</span>
           </div>
         </div>
       </div>

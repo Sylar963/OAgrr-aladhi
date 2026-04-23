@@ -5,6 +5,7 @@ import {
   type ThalexInstrument,
   type ThalexTicker,
 } from './types.js';
+import { solveIv, thetaPerDay, yearsToExpiry } from './bs-solver.js';
 
 function mergeNumber(next: number | undefined | null, previous: number | null): number | null {
   return next ?? previous;
@@ -18,23 +19,51 @@ function mergeNumber(next: number | undefined | null, previous: number | null): 
  *   best_ask_price / best_ask_amount → askPrice / askSize
  *   mark_price / last_price          → markPrice / lastPrice
  *   index                            → underlyingPrice
+ *   forward                          → (used as BS forward)
  *   volume_24h / open_interest       → volume24h / openInterest
  *   iv   → greeks.markIv             (native fraction; no ivToFraction)
  *   delta → greeks.delta
  *   mark_timestamp (seconds, float)  → timestamp (ms)
  *
- * Thalex never sends gamma/theta/vega/rho/bidIv/askIv. Those are preserved
- * from the previous quote (which is usually `null` for Thalex contracts).
+ * Thalex never sends bidIv / askIv / theta — we invert Black-76 (r=0) from
+ * the bid and ask premiums using ticker.forward and the instrument's
+ * expirationTimestamp, with markIv as the Newton-Raphson seed. When any
+ * input is missing we fall back to the previous quote's value.
  */
 export function mergeThalexTicker(
   ticker: ThalexTicker,
   previous: LiveQuote | undefined,
   empty: LiveQuote,
+  instrument?: CachedInstrument,
+  nowMs: number = Date.now(),
 ): LiveQuote {
   const base = previous ?? empty;
+  const markIv = mergeNumber(ticker.iv, base.greeks.markIv);
+  const bidPrice = mergeNumber(ticker.best_bid_price, base.bidPrice);
+  const askPrice = mergeNumber(ticker.best_ask_price, base.askPrice);
+
+  let bidIv = base.greeks.bidIv;
+  let askIv = base.greeks.askIv;
+  let theta = base.greeks.theta;
+
+  if (instrument != null) {
+    const forward = ticker.forward ?? ticker.index ?? base.underlyingPrice;
+    const tYears = yearsToExpiry(instrument.expirationTimestamp, nowMs);
+    const common = {
+      forward,
+      strike: instrument.strike,
+      tYears,
+      right: instrument.right,
+      seed: markIv,
+    };
+    bidIv = solveIv({ ...common, price: bidPrice }) ?? bidIv;
+    askIv = solveIv({ ...common, price: askPrice }) ?? askIv;
+    theta = thetaPerDay(forward, instrument.strike, markIv, tYears) ?? theta;
+  }
+
   return {
-    bidPrice: mergeNumber(ticker.best_bid_price, base.bidPrice),
-    askPrice: mergeNumber(ticker.best_ask_price, base.askPrice),
+    bidPrice,
+    askPrice,
     bidSize: mergeNumber(ticker.best_bid_amount, base.bidSize),
     askSize: mergeNumber(ticker.best_ask_amount, base.askSize),
     markPrice: mergeNumber(ticker.mark_price, base.markPrice),
@@ -53,12 +82,12 @@ export function mergeThalexTicker(
     greeks: {
       delta: mergeNumber(ticker.delta, base.greeks.delta),
       gamma: base.greeks.gamma,
-      theta: base.greeks.theta,
+      theta,
       vega: base.greeks.vega,
       rho: base.greeks.rho,
-      markIv: mergeNumber(ticker.iv, base.greeks.markIv),
-      bidIv: base.greeks.bidIv,
-      askIv: base.greeks.askIv,
+      markIv,
+      bidIv,
+      askIv,
     },
     timestamp: Math.round(ticker.mark_timestamp * 1000),
   };

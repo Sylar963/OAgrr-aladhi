@@ -285,7 +285,7 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
         const inst = this.instrumentMap.get(exchangeSymbol);
         if (inst == null) return;
         const previous = this.quoteStore.get(exchangeSymbol);
-        const quote = mergeThalexTicker(notification, previous, this.emptyQuote());
+        const quote = mergeThalexTicker(notification, previous, this.emptyQuote(), inst);
         this.emitQuoteUpdate(exchangeSymbol, quote);
         return;
       }

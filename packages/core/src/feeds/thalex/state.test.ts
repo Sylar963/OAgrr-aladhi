@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_GREEKS } from '../../core/types.js';
-import type { LiveQuote } from '../shared/sdk-base.js';
+import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
 import { buildThalexInstrument, mergeThalexTicker } from './state.js';
 import type { ThalexInstrument, ThalexTicker } from './types.js';
 
@@ -152,6 +152,64 @@ describe('mergeThalexTicker', () => {
     expect(q.greeks.theta).toBe(-12.5);
     expect(q.greeks.vega).toBe(42);
     expect(q.greeks.markIv).toBe(0.5);
+  });
+
+  it('inverts bidIv/askIv and derives theta from forward + bid/ask when instrument is supplied', () => {
+    // Fixture values close to an ATM BTC weekly: F≈76_276, K=76_000, ~7d out,
+    // markIv≈0.55. Newton from markIv seed should converge quickly.
+    const now = 1_776_715_497_000;
+    const instrument: CachedInstrument = {
+      symbol: 'BTC/USD:USD-260428-76000-C',
+      exchangeSymbol: 'BTC-28APR26-76000-C',
+      base: 'BTC',
+      quote: 'USD',
+      settle: 'USD',
+      expiry: '2026-04-28',
+      expirationTimestamp: now + 7 * 24 * 3600 * 1000,
+      strike: 76_000,
+      right: 'call',
+      inverse: false,
+      contractSize: 1,
+      contractValueCurrency: 'BTC',
+      tickSize: 5,
+      minQty: 0.01,
+      makerFee: null,
+      takerFee: null,
+    };
+    const t: ThalexTicker = {
+      mark_price: 1_500,
+      mark_timestamp: now / 1000,
+      best_bid_price: 1_450,
+      best_ask_price: 1_550,
+      iv: 0.55,
+      index: 76_283,
+      forward: 76_276,
+    };
+    const q = mergeThalexTicker(t, undefined, emptyQuote(), instrument, now);
+
+    expect(q.greeks.markIv).toBeCloseTo(0.55, 4);
+    // Solved IVs must bracket the mark (bid cheaper → lower IV; ask richer → higher IV).
+    expect(q.greeks.bidIv).not.toBeNull();
+    expect(q.greeks.askIv).not.toBeNull();
+    expect(q.greeks.bidIv!).toBeLessThan(q.greeks.askIv!);
+    expect(q.greeks.bidIv!).toBeGreaterThan(0);
+    expect(q.greeks.bidIv!).toBeLessThan(2);
+    // Theta must be negative (USD/day decay).
+    expect(q.greeks.theta).not.toBeNull();
+    expect(q.greeks.theta!).toBeLessThan(0);
+  });
+
+  it('preserves bidIv/askIv/theta when instrument is omitted (back-compat)', () => {
+    const prev = emptyQuote();
+    prev.greeks = { ...prev.greeks, bidIv: 0.4, askIv: 0.5, theta: -12.5 };
+    const q = mergeThalexTicker(
+      { mark_timestamp: 1, iv: 0.45, best_bid_price: 10, best_ask_price: 12 },
+      prev,
+      emptyQuote(),
+    );
+    expect(q.greeks.bidIv).toBe(0.4);
+    expect(q.greeks.askIv).toBe(0.5);
+    expect(q.greeks.theta).toBe(-12.5);
   });
 
   it('preserves bid/ask on a partial update that omits them', () => {

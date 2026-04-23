@@ -90,6 +90,19 @@
   flex-shrink: 0;
 }
 
+.coverage {
+  margin-top: calc(var(--space-1) * -1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.coverage[data-short='true'] {
+  color: var(--color-warning);
+}
+
 .chartArea {
   flex: 1;
   min-height: 220px;

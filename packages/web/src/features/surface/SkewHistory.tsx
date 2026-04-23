@@ -3,6 +3,7 @@ import { ColorType, LineSeries, createChart, type IChartApi } from 'lightweight-
 
 import { getTokenLogo } from '@lib/token-meta';
 import type { IvHistoryPoint, IvTenor } from '@shared/enriched';
+import { getHistoryCoverage } from './history-coverage';
 import { useIvHistory, type IvHistoryWindow } from './queries';
 import styles from './SkewHistory.module.css';
 
@@ -54,6 +55,7 @@ export default function SkewHistory({ underlying }: Props) {
   const rrData = toLineData(series, 'rr25d');
   const flyData = toLineData(series, 'bfly25d');
   const hasAnyPoints = rrData.length > 0 || flyData.length > 0;
+  const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -168,6 +170,9 @@ export default function SkewHistory({ underlying }: Props) {
           <span className={styles.legendSwatch} style={{ background: FLY_COLOR }} />
           25Δ Fly (wing − ATM)
         </span>
+      </div>
+      <div className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
+        {coverage.label}
       </div>
 
       <div className={styles.chartArea}>

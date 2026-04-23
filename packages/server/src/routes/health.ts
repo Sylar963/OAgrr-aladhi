@@ -1,20 +1,32 @@
 import type { FastifyInstance } from 'fastify';
 import { getRegisteredVenues } from '@oggregator/core';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
-import { isBlockFlowReady, isDvolReady, isFlowReady, isSpotReady } from '../services.js';
+import {
+  getIvHistoryStorageStats,
+  isBlockFlowReady,
+  isDvolReady,
+  isFlowReady,
+  isIvHistoryReady,
+  isSpotReady,
+} from '../services.js';
 
 export async function healthRoute(app: FastifyInstance) {
-  app.get('/health', async () => ({
-    status: currentReadinessStatus(),
-    venues: getRegisteredVenues(),
-    services: {
-      flow: isFlowReady(),
-      dvol: isDvolReady(),
-      spot: isSpotReady(),
-      blockFlow: isBlockFlowReady(),
-    },
-    ts: Date.now(),
-  }));
+  app.get('/health', async () => {
+    const ivHistoryStorage = await getIvHistoryStorageStats();
+    return {
+      status: currentReadinessStatus(),
+      venues: getRegisteredVenues(),
+      services: {
+        flow: isFlowReady(),
+        dvol: isDvolReady(),
+        spot: isSpotReady(),
+        blockFlow: isBlockFlowReady(),
+        ivHistory: isIvHistoryReady(),
+        ivHistoryStorage,
+      },
+      ts: Date.now(),
+    };
+  });
 
   app.get('/ready', async (_req, reply) => {
     if (!isTrafficReady()) {

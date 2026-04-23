@@ -113,6 +113,9 @@ export {
   IvHistoryService,
   type IvHistoryDeps,
   type IvHistoryOptions,
+  type IvHistoryPersistence,
+  type IvHistoryPointSource,
+  type PersistedIvHistoryPoint,
 } from './services/iv-history.js';
 export {
   TradeRuntime,

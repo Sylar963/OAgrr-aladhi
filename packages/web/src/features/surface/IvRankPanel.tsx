@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { getTokenLogo } from '@lib/token-meta';
 import { fmtIv } from '@lib/format';
 import type { IvHistoryTenorResult, IvTenor } from '@shared/enriched';
+import { getHistoryCoverage, type HistoryCoverage } from './history-coverage';
 import { useIvHistory, type IvHistoryWindow } from './queries';
 import styles from './IvRankPanel.module.css';
 
@@ -110,10 +111,19 @@ interface Props {
   underlying: string;
 }
 
+function shortestCoverage(results: Array<IvHistoryTenorResult | undefined>, window: IvHistoryWindow): HistoryCoverage {
+  const coverages = results.map((result) => getHistoryCoverage(result?.series ?? [], window, ['atmIv']));
+  return coverages.reduce((min, item) => (item.coverageMs < min.coverageMs ? item : min));
+}
+
 export default function IvRankPanel({ underlying }: Props) {
   const [window, setWindow] = useState<IvHistoryWindow>('30d');
   const { data } = useIvHistory(underlying, window);
   const logo = getTokenLogo(underlying);
+  const coverage = shortestCoverage(
+    TENORS.map((t) => data?.tenors[t]),
+    window,
+  );
 
   return (
     <div className={styles.wrap}>
@@ -140,6 +150,9 @@ export default function IvRankPanel({ underlying }: Props) {
             90d
           </button>
         </div>
+      </div>
+      <div className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
+        {coverage.label}
       </div>
 
       <div className={styles.grid}>

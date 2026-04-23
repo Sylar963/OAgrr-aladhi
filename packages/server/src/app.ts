@@ -11,9 +11,11 @@ import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import {
   blockFlowService,
   bootstrapServices,
+  disposeServiceStores,
   dvolService,
   flowService,
   ivHistoryService,
+  ivHistoryStore,
   spotService,
   tradeStore,
 } from './services.js';
@@ -87,7 +89,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     spotService.dispose();
     dvolService.dispose();
     ivHistoryService.dispose();
+    disposeServiceStores();
     await disposeAdapters(app.log);
+    await ivHistoryStore.dispose();
     await tradeStore.dispose();
     await paperTradingStore.dispose();
   });

@@ -12,10 +12,19 @@ import type { DvolService } from './dvol.js';
 
 const log = feedLogger('iv-history');
 
+type IvTenorDays = 7 | 30 | 60 | 90;
+
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
-const TENOR_DAYS: Record<IvTenor, number> = { '7d': 7, '30d': 30, '60d': 60, '90d': 90 };
+const TENOR_DAYS: Record<IvTenor, IvTenorDays> = { '7d': 7, '30d': 30, '60d': 60, '90d': 90 };
+const TENOR_BY_DAYS: Record<number, IvTenor | undefined> = {
+  7: '7d',
+  30: '30d',
+  60: '60d',
+  90: '90d',
+};
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const HISTORY_LOAD_DAYS = 90;
 
 function emptyExtrema(): IvHistoryExtrema {
   return { atmIv: null, rr25d: null, bfly25d: null };
@@ -60,12 +69,32 @@ export interface IvHistoryDeps {
   getSurfaceGrid: (underlying: string) => Promise<IvSurfaceRow[]>;
   /** Source of the DVOL 30d seed. Only BTC/ETH are seeded. */
   dvol: DvolService;
+  /** Optional persistence layer. Core stays storage-agnostic; server wires DB in. */
+  store?: IvHistoryPersistence;
 }
 
 export interface IvHistoryOptions {
   underlyings?: string[];
   intervalMs?: number;
   capacity?: number;
+}
+
+export type IvHistoryPointSource = 'live_surface' | 'deribit_dvol';
+
+export interface PersistedIvHistoryPoint {
+  underlying: string;
+  tenorDays: IvTenorDays;
+  ts: Date;
+  atmIv: number | null;
+  rr25d: number | null;
+  bfly25d: number | null;
+  source: IvHistoryPointSource;
+}
+
+export interface IvHistoryPersistence {
+  readonly enabled: boolean;
+  writeMany(points: PersistedIvHistoryPoint[]): Promise<void>;
+  loadSince(query: { underlyings: string[]; since: Date }): Promise<PersistedIvHistoryPoint[]>;
 }
 
 /**
@@ -96,7 +125,8 @@ export class IvHistoryService {
   }
 
   async start(): Promise<void> {
-    this.seedFromDvol();
+    await this.loadPersistedHistory();
+    await this.seedFromDvol();
     try {
       await this.snapshotOnce();
     } catch (err: unknown) {
@@ -136,6 +166,7 @@ export class IvHistoryService {
 
   /** Exposed for tests. */
   async snapshotOnce(now: number = Date.now()): Promise<void> {
+    const persisted: PersistedIvHistoryPoint[] = [];
     for (const underlying of this.underlyings) {
       let surfaces: IvSurfaceRow[];
       try {
@@ -167,8 +198,18 @@ export class IvHistoryService {
             ? (c25 + p25) / 2 - interpAtm
             : null;
         this.appendPoint(underlying, tenor, { ts: now, atmIv: atm, rr25d: rr, bfly25d: fly });
+        persisted.push({
+          underlying,
+          tenorDays: days,
+          ts: new Date(now),
+          atmIv: atm,
+          rr25d: rr,
+          bfly25d: fly,
+          source: 'live_surface',
+        });
       }
     }
+    await this.persistPoints(persisted);
   }
 
   // ── internals ────────────────────────────────────────────────────
@@ -183,9 +224,38 @@ export class IvHistoryService {
     this.buffers.set(key, buf);
   }
 
-  private seedFromDvol(): void {
+  private async loadPersistedHistory(): Promise<void> {
+    const store = this.deps.store;
+    if (!store?.enabled) return;
+
+    const since = new Date(Date.now() - HISTORY_LOAD_DAYS * MS_PER_DAY);
+    let points: PersistedIvHistoryPoint[];
+    try {
+      points = await store.loadSince({ underlyings: this.underlyings, since });
+    } catch (err: unknown) {
+      log.warn({ err: String(err) }, 'failed to load persisted IV history');
+      return;
+    }
+
+    for (const point of points) {
+      const tenor = TENOR_BY_DAYS[point.tenorDays];
+      if (!tenor) continue;
+      this.appendPoint(point.underlying, tenor, {
+        ts: point.ts.getTime(),
+        atmIv: point.atmIv,
+        rr25d: point.rr25d,
+        bfly25d: point.bfly25d,
+      });
+    }
+
+    log.info({ count: points.length, since: since.toISOString() }, 'loaded persisted IV history');
+  }
+
+  private async seedFromDvol(): Promise<void> {
+    const persisted: PersistedIvHistoryPoint[] = [];
     for (const underlying of this.underlyings) {
       if (underlying !== 'BTC' && underlying !== 'ETH') continue;
+      if (this.getBuffer(underlying, '30d').length > 0) continue;
       const candles = this.deps.dvol.getHistory(underlying);
       if (candles.length === 0) {
         log.warn(
@@ -203,6 +273,17 @@ export class IvHistoryService {
         bfly25d: null,
       }));
       this.buffers.set(bufferKey(underlying, '30d'), seed.slice(-this.capacity));
+      persisted.push(
+        ...seed.slice(-this.capacity).map((point) => ({
+          underlying,
+          tenorDays: 30 as const,
+          ts: new Date(point.ts),
+          atmIv: point.atmIv,
+          rr25d: null,
+          bfly25d: null,
+          source: 'deribit_dvol' as const,
+        })),
+      );
       const first = seed[0]!;
       const last = seed[seed.length - 1]!;
       log.info(
@@ -216,6 +297,17 @@ export class IvHistoryService {
         },
         'seeded 30d ATM from DVOL',
       );
+    }
+    await this.persistPoints(persisted);
+  }
+
+  private async persistPoints(points: PersistedIvHistoryPoint[]): Promise<void> {
+    const store = this.deps.store;
+    if (!store?.enabled || points.length === 0) return;
+    try {
+      await store.writeMany(points);
+    } catch (err: unknown) {
+      log.warn({ err: String(err), count: points.length }, 'failed to persist IV history');
     }
   }
 

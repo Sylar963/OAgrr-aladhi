@@ -52,6 +52,18 @@
   color: #0a0a0a;
 }
 
+.coverage {
+  margin-top: calc(var(--space-2) * -1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.coverage[data-short='true'] {
+  color: var(--color-warning);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

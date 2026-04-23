@@ -7,22 +7,41 @@ import {
   TradeRuntime,
   buildIvSurfaceGrid,
 } from '@oggregator/core';
-import { NoopTradeStore, PostgresTradeStore, type TradeStore } from '@oggregator/db';
+import {
+  DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
+  NoopIvHistoryStore,
+  NoopTradeStore,
+  PostgresIvHistoryStore,
+  PostgresTradeStore,
+  type IvHistoryStorageStats,
+  type IvHistoryStore,
+  type TradeStore,
+} from '@oggregator/db';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
+const databaseUrl = process.env['DATABASE_URL'];
+const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(
+  process.env['IV_HISTORY_SIZE_WARN_BYTES'],
+);
+export const ivHistoryStore: IvHistoryStore = databaseUrl
+  ? PostgresIvHistoryStore.fromConnectionString(databaseUrl, ivHistorySizeWarnBytes)
+  : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
 export const ivHistoryService = new IvHistoryService({
   dvol: dvolService,
+  store: ivHistoryStore,
   getSurfaceGrid: async (underlying: string) => {
     const entries = await buildIvSurfaceGrid({ underlying });
     return entries.map((e) => e.surfaceRow);
   },
 });
-export const tradeStore: TradeStore = process.env['DATABASE_URL']
-  ? PostgresTradeStore.fromConnectionString(process.env['DATABASE_URL'])
+export const tradeStore: TradeStore = databaseUrl
+  ? PostgresTradeStore.fromConnectionString(databaseUrl)
   : new NoopTradeStore();
+
+let ivHistoryStorageAlarmTimer: ReturnType<typeof setInterval> | null = null;
 
 const serviceHealth = {
   dvol: false,
@@ -46,6 +65,19 @@ export function isBlockFlowReady(): boolean {
 }
 export function isIvHistoryReady(): boolean {
   return serviceHealth.ivHistory;
+}
+
+export async function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
+  try {
+    return await ivHistoryStore.getStorageStats();
+  } catch {
+    return {
+      enabled: ivHistoryStore.enabled,
+      bytes: null,
+      thresholdBytes: ivHistorySizeWarnBytes,
+      warning: false,
+    };
+  }
 }
 
 export async function bootstrapServices(log: FastifyBaseLogger) {
@@ -100,5 +132,43 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     log.warn({ err: String(err) }, 'IV history service failed');
   }
 
+  startIvHistoryStorageAlarm(log);
+
   log.info({ ms: Date.now() - start, health: serviceHealth }, 'services bootstrapped');
+}
+
+export function disposeServiceStores(): void {
+  if (ivHistoryStorageAlarmTimer) {
+    clearInterval(ivHistoryStorageAlarmTimer);
+    ivHistoryStorageAlarmTimer = null;
+  }
+}
+
+function parseIvHistoryWarnBytes(value: string | undefined): number {
+  if (!value) return DEFAULT_IV_HISTORY_SIZE_WARN_BYTES;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_IV_HISTORY_SIZE_WARN_BYTES;
+}
+
+function startIvHistoryStorageAlarm(log: FastifyBaseLogger): void {
+  if (ivHistoryStorageAlarmTimer || !ivHistoryStore.enabled) return;
+
+  const check = async () => {
+    try {
+      const stats = await ivHistoryStore.getStorageStats();
+      if (!stats.warning || stats.bytes == null) return;
+      log.warn(
+        { bytes: stats.bytes, thresholdBytes: stats.thresholdBytes },
+        'IV history storage size warning',
+      );
+    } catch (err: unknown) {
+      log.warn({ err: String(err) }, 'IV history storage size check failed');
+    }
+  };
+
+  void check();
+  ivHistoryStorageAlarmTimer = setInterval(() => {
+    void check();
+  }, 5 * 60 * 1000);
+  ivHistoryStorageAlarmTimer.unref?.();
 }

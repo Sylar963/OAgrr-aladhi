@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { interpTenor, type IvSurfaceRow } from '../core/enrichment.js';
-import { IvHistoryService } from './iv-history.js';
+import {
+  IvHistoryService,
+  type IvHistoryPersistence,
+  type PersistedIvHistoryPoint,
+} from './iv-history.js';
 import type { DvolService } from './dvol.js';
 
 function makeRow(expiry: string, dte: number, atm: number, skew: number, fly: number): IvSurfaceRow {
@@ -41,6 +45,23 @@ function mockDvol(opts: {
     return null;
   };
   return { getHistory, getSnapshot } as unknown as DvolService;
+}
+
+function mockStore(opts: {
+  load?: PersistedIvHistoryPoint[];
+  writeRejects?: boolean;
+} = {}) {
+  const written: PersistedIvHistoryPoint[] = [];
+  const store: IvHistoryPersistence = {
+    enabled: true,
+    loadSince: vi.fn(() => Promise.resolve(opts.load ?? [])),
+    writeMany: vi.fn((points: PersistedIvHistoryPoint[]) => {
+      if (opts.writeRejects) return Promise.reject(new Error('store boom'));
+      written.push(...points);
+      return Promise.resolve();
+    }),
+  };
+  return { store, written };
 }
 
 describe('interpTenor', () => {
@@ -161,6 +182,75 @@ describe('IvHistoryService', () => {
     svc.dispose();
   });
 
+  it('loads persisted history before querying and before DVOL fallback', async () => {
+    const now = Date.now();
+    const { store } = mockStore({
+      load: [
+        {
+          underlying: 'BTC',
+          tenorDays: 30,
+          ts: new Date(now - 60_000),
+          atmIv: 0.41,
+          rr25d: -0.03,
+          bfly25d: 0.01,
+          source: 'live_surface',
+        },
+      ],
+    });
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve([]),
+        dvol: mockDvol({
+          history: {
+            BTC: [[now - 2 * 60_000, 55]],
+          },
+        }),
+        store,
+      },
+      { underlyings: ['BTC'], intervalMs: 60_000 },
+    );
+
+    await svc.start();
+
+    expect(store.loadSince).toHaveBeenCalledWith({
+      underlyings: ['BTC'],
+      since: expect.any(Date),
+    });
+    const btc30 = svc.getBuffer('BTC', '30d');
+    expect(btc30).toHaveLength(1);
+    expect(btc30[0]!.atmIv).toBeCloseTo(0.41, 6);
+    expect(btc30[0]!.rr25d).toBeCloseTo(-0.03, 6);
+    svc.dispose();
+  });
+
+  it('persists DVOL seed when persisted BTC 30d history is absent', async () => {
+    const now = Date.now();
+    const { store, written } = mockStore();
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve([]),
+        dvol: mockDvol({
+          history: {
+            BTC: [
+              [now - 60_000, 50],
+              [now, 51],
+            ],
+          },
+        }),
+        store,
+      },
+      { underlyings: ['BTC'], intervalMs: 60_000 },
+    );
+
+    await svc.start();
+
+    expect(written).toHaveLength(2);
+    expect(written.every((p) => p.source === 'deribit_dvol')).toBe(true);
+    expect(written.every((p) => p.tenorDays === 30)).toBe(true);
+    expect(written[0]!.atmIv).toBeCloseTo(0.5, 6);
+    svc.dispose();
+  });
+
   it('returns null rank/percentile when the window has < 2 samples', async () => {
     const surfaces = [makeRow('e', 30, 0.5, 0.02, 0.01)];
     const svc = new IvHistoryService(
@@ -250,6 +340,36 @@ describe('IvHistoryService', () => {
     expect(buf).toHaveLength(1);
     expect(buf[0]!.rr25d).toBeCloseTo(0.04, 6);
     expect(buf[0]!.bfly25d).toBeCloseTo(0.01, 6);
+    svc.dispose();
+  });
+
+  it('persists live surface snapshots without blocking in-memory history on write failure', async () => {
+    const surfaces = [makeRow('e', 30, 0.5, 0.04, 0.01)];
+    const { store } = mockStore({ writeRejects: true });
+    const svc = new IvHistoryService(
+      {
+        getSurfaceGrid: () => Promise.resolve(surfaces),
+        dvol: mockDvol(),
+        store,
+      },
+      { underlyings: ['BTC'] },
+    );
+
+    await expect(svc.snapshotOnce(Date.now())).resolves.toBeUndefined();
+
+    expect(store.writeMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          underlying: 'BTC',
+          tenorDays: 30,
+          atmIv: 0.5,
+          rr25d: expect.closeTo(0.04, 6),
+          bfly25d: expect.closeTo(0.01, 6),
+          source: 'live_surface',
+        }),
+      ]),
+    );
+    expect(svc.getBuffer('BTC', '30d')[0]!.rr25d).toBeCloseTo(0.04, 6);
     svc.dispose();
   });
 });

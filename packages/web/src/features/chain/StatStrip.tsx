@@ -97,7 +97,7 @@ export default function StatStrip({
           <div className={styles.divider} />
           <StatCell
             label="IV Δ1d"
-            value={fmtPct(marketStats.dvol.ivChange1d * 100, 1)}
+            value={fmtPct(marketStats.dvol.ivChange1d * 100, 2)}
             positive={
               marketStats.dvol.ivChange1d > 0
                 ? true

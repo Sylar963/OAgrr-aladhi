@@ -16,6 +16,8 @@
     "@oggregator/protocol": "workspace:^",
     "@tanstack/react-query": "^5.91.2",
     "@tanstack/react-virtual": "^3.13.24",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "lightweight-charts": "^5.1.0",
     "plotly.js-gl3d-dist-min": "^3.1.0",
     "react": "^19.0.0",

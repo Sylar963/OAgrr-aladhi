@@ -123,8 +123,28 @@ function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: Sid
           <th className={styles.th}>IV MARK</th>
           <th className={styles.th}>IV ASK</th>
           <th className={styles.th}>SPREAD</th>
-          <th className={styles.th}>Δ</th>
-          <th className={styles.th}>THETA</th>
+          <th
+            className={styles.th}
+            title={
+              'Δ DELTA — price sensitivity of this option to the underlying.\n\n' +
+              '• Magnitude: option moves ~Δ dollars for each $1 move in spot. 0.50 Δ → option moves $0.50 per $1 move.\n' +
+              '• Sign: calls positive, puts negative. Long calls / short puts = long delta; long puts / short calls = short delta.\n' +
+              '• Proxy for moneyness: |Δ| ≈ probability of finishing in-the-money. 0.25 Δ → ~25% ITM odds.'
+            }
+          >
+            Δ
+          </th>
+          <th
+            className={styles.th}
+            title={
+              'Θ THETA — daily time decay, in USD.\n\n' +
+              '• What it costs: if spot and vol do not move, the option loses this many dollars per day.\n' +
+              '• Sign: long options pay theta (negative for you); short options collect theta (positive for you).\n' +
+              '• Accelerates near expiry: ATM theta is small far out, steep into the last week.'
+            }
+          >
+            THETA
+          </th>
           <th className={styles.th}>OI</th>
           <th className={styles.th}>BREAK</th>
           <th className={styles.th}>COST</th>

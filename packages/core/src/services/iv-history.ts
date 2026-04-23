@@ -145,13 +145,27 @@ export class IvHistoryService {
         continue;
       }
       if (surfaces.length === 0) continue;
+      // For 30d BTC/ETH we align the live "current" with the DVOL-seeded
+      // history. DVOL uses Deribit's own variance methodology across multiple
+      // strikes; our interpTenor uses cross-venue ATM averages. Mixing them
+      // introduces a systematic 1–3 vol-point gap that pins rank at 0.
+      const dvolAtm =
+        underlying === 'BTC' || underlying === 'ETH'
+          ? (this.deps.dvol.getSnapshot?.(underlying)?.current ?? null)
+          : null;
       for (const tenor of TENORS) {
         const days = TENOR_DAYS[tenor];
-        const atm = interpTenor(surfaces, days, 'atm');
+        const interpAtm = interpTenor(surfaces, days, 'atm');
+        const atm = tenor === '30d' && dvolAtm != null ? dvolAtm : interpAtm;
         const c25 = interpTenor(surfaces, days, 'delta25c');
         const p25 = interpTenor(surfaces, days, 'delta25p');
         const rr = c25 != null && p25 != null ? c25 - p25 : null;
-        const fly = c25 != null && p25 != null && atm != null ? (c25 + p25) / 2 - atm : null;
+        // Butterfly uses the SAME ATM reference as the wings: interpolated, not
+        // DVOL, so fly = (c25+p25)/2 − interpAtm stays internally consistent.
+        const fly =
+          c25 != null && p25 != null && interpAtm != null
+            ? (c25 + p25) / 2 - interpAtm
+            : null;
         this.appendPoint(underlying, tenor, { ts: now, atmIv: atm, rr25d: rr, bfly25d: fly });
       }
     }

@@ -103,7 +103,7 @@ describe('ServerWsMessageSchema', () => {
       seq: 5,
       request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
       meta: { generatedAt: 1000, maxQuoteTs: 999, staleMs: 1 },
-      data: { underlying: 'BTC', expiry: '2026-03-27', dte: 7, stats, strikes: [], gex: [] },
+      data: { underlying: 'BTC', expiry: '2026-03-27', expiryTs: null, dte: 7, stats, strikes: [], gex: [] },
     });
     expect(result.success).toBe(true);
   });

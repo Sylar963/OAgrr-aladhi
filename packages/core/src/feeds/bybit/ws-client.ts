@@ -240,6 +240,8 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     // item.settleCoin is authoritative — regex suffix is fallback for edge cases
     const settle = item.settleCoin || match[5] || 'USDT';
 
+    const deliveryMs = item.deliveryTime != null ? Number(item.deliveryTime) : null;
+
     return {
       symbol: this.buildCanonicalSymbol(base, settle, expiry, Number(strikeStr), right),
       exchangeSymbol: item.symbol,
@@ -247,6 +249,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       quote: item.quoteCoin,
       settle,
       expiry,
+      expirationTimestamp: Number.isFinite(deliveryMs) ? deliveryMs : null,
       strike: Number(strikeStr),
       right,
       inverse: false,

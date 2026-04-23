@@ -131,6 +131,9 @@ export interface ChainStats {
 export interface EnrichedChainResponse {
   underlying: string;
   expiry: string;
+  // Exact expiry in ms UTC, min across reporting venues. null when no venue
+  // surfaces a timestamp — callers fall back to the 08:00 UTC convention.
+  expiryTs: number | null;
   dte: number;
   stats: ChainStats;
   strikes: EnrichedStrike[];
@@ -511,11 +514,31 @@ export function computeGex(
 }
 
 /**
- * Days to expiry — options at most venues expire at 08:00 UTC.
- * Math.ceil so that the expiry day itself counts as 1 DTE, not 0.
+ * Days to expiry. Prefers an exact ms timestamp when the caller has one
+ * (all 7 adapters now surface one), falls back to the 08:00 UTC convention
+ * on the date string. Math.ceil so the expiry day itself counts as 1 DTE.
  */
-export function computeDte(expiry: string): number {
-  return Math.ceil((new Date(expiry + 'T08:00:00Z').getTime() - Date.now()) / 86_400_000);
+export function computeDte(expiry: string, expiryTs?: number | null): number {
+  const ms = expiryTs ?? new Date(expiry + 'T08:00:00Z').getTime();
+  return Math.ceil((ms - Date.now()) / 86_400_000);
+}
+
+/**
+ * Picks the earliest expiryTs reported by any venue on a given chain.
+ * Venues for the same YYMMDD typically agree within seconds; taking the min
+ * makes the countdown conservative.
+ */
+export function pickExpiryTs(venueChains: VenueOptionChain[]): number | null {
+  let min: number | null = null;
+  for (const chain of venueChains) {
+    for (const contract of Object.values(chain.contracts)) {
+      const ts = contract.expiryTs;
+      if (ts != null && Number.isFinite(ts) && (min == null || ts < min)) {
+        min = ts;
+      }
+    }
+  }
+  return min;
 }
 
 /**
@@ -682,7 +705,8 @@ export function buildEnrichedChain(
 ): EnrichedChainResponse {
   const strikes = rows.map(enrichComparisonRow);
   const stats = computeChainStats(strikes, venueChains);
-  const dte = computeDte(expiry);
+  const expiryTs = pickExpiryTs(venueChains);
+  const dte = computeDte(expiry, expiryTs);
 
   const spotPrice = stats.spotIndexUsd ?? stats.indexPriceUsd ?? 0;
   const gex = computeGex(rows, strikes, spotPrice);
@@ -690,6 +714,7 @@ export function buildEnrichedChain(
   return {
     underlying,
     expiry,
+    expiryTs,
     dte,
     stats,
     strikes,

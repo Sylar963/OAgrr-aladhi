@@ -10,10 +10,16 @@ interface UnderlyingsResponse {
   byVenue: Array<{ venue: string; underlyings: string[] }>;
 }
 
+export interface ExpiryTimestamp {
+  expiry: string;
+  expiryTs: number | null;
+}
+
 interface ExpiriesResponse {
   underlying: string;
   expiries: string[];
-  byVenue: Array<{ venue: string; expiries: string[] }>;
+  timestamps?: ExpiryTimestamp[];
+  byVenue: Array<{ venue: string; expiries: string[]; timestamps?: ExpiryTimestamp[] }>;
 }
 
 // ── Query key factories ───────────────────────────────────────────────────
@@ -53,6 +59,7 @@ export function useUnderlyings() {
 
 interface ExpiriesResult {
   expiries: string[];
+  timestamps: ExpiryTimestamp[];
   byVenue: Array<{ venue: string; expiries: string[] }>;
 }
 
@@ -62,7 +69,11 @@ export function useExpiries(underlying: string) {
     queryFn: () => fetchJson<ExpiriesResponse>(`/expiries?underlying=${underlying}`),
     enabled: Boolean(underlying),
     staleTime: 30_000,
-    select: (data): ExpiriesResult => ({ expiries: data.expiries, byVenue: data.byVenue }),
+    select: (data): ExpiriesResult => ({
+      expiries: data.expiries,
+      timestamps: data.timestamps ?? data.expiries.map((expiry) => ({ expiry, expiryTs: null })),
+      byVenue: data.byVenue,
+    }),
   });
 }
 

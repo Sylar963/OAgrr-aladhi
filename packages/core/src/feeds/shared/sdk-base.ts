@@ -144,6 +144,25 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return [...expiries].sort();
   }
 
+  async listExpiryTimestamps(
+    underlying: string,
+  ): Promise<Array<{ expiry: string; expiryTs: number | null }>> {
+    const byExpiry = new Map<string, number | null>();
+    for (const inst of this.instruments) {
+      if (inst.base !== underlying) continue;
+      const ts = inst.expirationTimestamp ?? null;
+      const prev = byExpiry.get(inst.expiry);
+      if (prev === undefined) {
+        byExpiry.set(inst.expiry, ts);
+      } else if (ts != null && (prev == null || ts < prev)) {
+        byExpiry.set(inst.expiry, ts);
+      }
+    }
+    return [...byExpiry.entries()]
+      .map(([expiry, expiryTs]) => ({ expiry, expiryTs }))
+      .sort((a, b) => a.expiry.localeCompare(b.expiry));
+  }
+
   override fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
     const matching = this.instruments.filter(
       (i) => i.base === request.underlying && i.expiry === request.expiry,
@@ -311,6 +330,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       base: inst.base,
       settle: inst.settle,
       expiry: inst.expiry,
+      expiryTs: inst.expirationTimestamp ?? null,
       strike: inst.strike,
       right: inst.right,
       inverse: inst.inverse,

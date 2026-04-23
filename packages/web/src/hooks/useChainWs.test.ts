@@ -88,6 +88,7 @@ function snapshot(subId: string, seq: number, underlying = 'BTC'): ServerWsMessa
     data: {
       underlying,
       expiry: '2026-03-27',
+      expiryTs: null,
       dte: 7,
       stats: {
         spotIndexUsd: 70_500,

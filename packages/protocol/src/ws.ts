@@ -134,6 +134,7 @@ export interface ChainStats {
 export interface EnrichedChainResponse {
   underlying: string;
   expiry: string;
+  expiryTs: number | null;
   dte: number;
   stats: ChainStats;
   strikes: EnrichedStrike[];
@@ -232,6 +233,7 @@ const ChainStatsSchema = z.object({
 export const EnrichedChainResponseSchema = z.object({
   underlying: z.string(),
   expiry: z.string(),
+  expiryTs: z.number().nullable(),
   dte: z.number(),
   stats: ChainStatsSchema,
   strikes: z.array(EnrichedStrikeSchema),

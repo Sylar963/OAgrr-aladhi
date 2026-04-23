@@ -1,5 +1,6 @@
 import { useAppStore } from '@stores/app-store';
 
+import ExpiryCountdown from '@components/ui/ExpiryCountdown';
 import FreshnessLabel from './FreshnessLabel';
 import VenueStatusRow from './VenueStatusRow';
 import styles from './TopBar.module.css';
@@ -43,6 +44,7 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
       </div>
 
       <div className={styles.right}>
+        <ExpiryCountdown />
         <div className={styles.status} data-state={connectionState}>
           <VenueStatusRow />
           <span className={styles.freshness}>

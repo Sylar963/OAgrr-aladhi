@@ -2,7 +2,7 @@ import type { VenueId } from '@oggregator/core';
 import { ChainRuntimeRegistry, VENUE_IDS } from '@oggregator/core';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
 
-const DEFAULT_FEES_TAKER_RATE = 0.0003;
+const DEFAULT_FEES_TAKER_USD = 0;
 
 export class RuntimeQuoteProvider implements QuoteProvider {
   constructor(private readonly registry: ChainRuntimeRegistry) {}
@@ -30,7 +30,7 @@ export class RuntimeQuoteProvider implements QuoteProvider {
           askUsd: quote.ask,
           markUsd: quote.mid,
           underlyingPriceUsd: snapshot.stats.spotIndexUsd ?? snapshot.stats.indexPriceUsd,
-          feesTakerRate: quote.estimatedFees?.taker ?? DEFAULT_FEES_TAKER_RATE,
+          feesTakerUsd: quote.estimatedFees?.taker ?? DEFAULT_FEES_TAKER_USD,
         });
       }
       return books;

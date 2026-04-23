@@ -45,8 +45,7 @@ export class PaperFillEngine implements FillEngine {
       }
 
       const priceUsd = leg.side === 'buy' ? chosen.book.askUsd! : chosen.book.bidUsd!;
-      const notionalUsd = priceUsd * leg.quantity;
-      const feesUsd = notionalUsd * chosen.book.feesTakerRate;
+      const feesUsd = chosen.book.feesTakerUsd * leg.quantity;
 
       plans.push({
         leg,

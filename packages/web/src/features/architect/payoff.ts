@@ -101,14 +101,15 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
   const maxPnl = Math.max(...pnls);
   const minPnl = Math.min(...pnls);
 
-  // Check if profit/loss is unbounded by comparing edge values.
-  // If P&L keeps growing/falling at the extremes, it's unlimited.
-  const firstPnl = pnls[0] ?? 0;
-  const lastPnl = pnls[pnls.length - 1] ?? 0;
-  const edgeMax = Math.max(firstPnl, lastPnl);
-  const edgeMin = Math.min(firstPnl, lastPnl);
-  const profitUnbounded = Math.abs(edgeMax - maxPnl) < 1;
-  const lossUnbounded = Math.abs(edgeMin - minPnl) < 1;
+  // Detect unbounded P&L by slope at the range edges: if the curve is still
+  // changing at the boundary, extrapolating further keeps growing / falling.
+  // Bounded strategies plateau before the edge so both slopes go to ~0.
+  const n = pnls.length;
+  const highSlope = (pnls[n - 1] ?? 0) - (pnls[n - 2] ?? 0);
+  const lowSlope = (pnls[1] ?? 0) - (pnls[0] ?? 0);
+  const FLAT_EPS = 1;
+  const profitUnbounded = highSlope > FLAT_EPS || lowSlope < -FLAT_EPS;
+  const lossUnbounded = highSlope < -FLAT_EPS || lowSlope > FLAT_EPS;
   const maxProfit = profitUnbounded ? null : maxPnl;
   const maxLoss = lossUnbounded ? null : minPnl;
 
@@ -131,8 +132,8 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
   };
 
   return {
-    maxProfit: maxProfit != null ? maxPnl : null,
-    maxLoss: maxLoss != null ? minPnl : null,
+    maxProfit,
+    maxLoss,
     breakevens: findBreakevens(payoff),
     netDebit,
     netDelta: sumGreek((l) => l.delta),

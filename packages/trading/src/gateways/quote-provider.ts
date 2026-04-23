@@ -6,7 +6,8 @@ export interface QuoteBook {
   askUsd: number | null;
   markUsd: number | null;
   underlyingPriceUsd: number | null;
-  feesTakerRate: number;
+  /** Absolute USD taker fee per contract (not a rate). */
+  feesTakerUsd: number;
 }
 
 export interface QuoteKey {

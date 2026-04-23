@@ -594,15 +594,21 @@ export default function ArchitectView() {
               <span className={styles.rightSectionTitle}>Metrics</span>
               <div className={styles.metricsGrid}>
                 <div className={styles.metricCard}>
-                  <span className={styles.metricCardLabel}>Net</span>
+                  <span className={styles.metricCardLabel}>
+                    {metrics
+                      ? metrics.netDebit < 0
+                        ? 'Debit'
+                        : metrics.netDebit > 0
+                          ? 'Credit'
+                          : 'Net'
+                      : 'Net'}
+                  </span>
                   <span
                     className={styles.metricCardVal}
                     data-positive={metrics ? metrics.netDebit > 0 : undefined}
                     data-negative={metrics ? metrics.netDebit < 0 : undefined}
                   >
-                    {metrics
-                      ? `${metrics.netDebit > 0 ? '+' : ''}${fmtUsd(metrics.netDebit)}`
-                      : '–'}
+                    {metrics ? fmtUsd(Math.abs(metrics.netDebit)) : '–'}
                   </span>
                 </div>
                 <div className={styles.metricCard}>

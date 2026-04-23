@@ -56,19 +56,35 @@ export async function ensureDefaultAccount(): Promise<void> {
 }
 
 export async function getDefaultAccount(): Promise<PaperAccountRow | null> {
+  return getAccount(DEFAULT_ACCOUNT_ID);
+}
+
+export async function getAccount(accountId: string): Promise<PaperAccountRow | null> {
   if (!paperTradingStore.enabled) return null;
-  return paperTradingStore.getAccount(DEFAULT_ACCOUNT_ID);
+  return paperTradingStore.getAccount(accountId);
 }
 
 export async function resetDefaultAccount(initialCashUsd: number): Promise<PaperAccountRow> {
+  return resetAccount(DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_LABEL, initialCashUsd);
+}
+
+// Reset the specified account: wipes trades/orders/fills/positions/cash-ledger and
+// re-seeds cash with `initialCashUsd`. Used by the per-user `/paper/account/init`
+// endpoint so a logged-in user's Reset button actually clears *their* history,
+// not the shared default account.
+export async function resetAccount(
+  accountId: string,
+  label: string,
+  initialCashUsd: number,
+): Promise<PaperAccountRow> {
   const row: PaperAccountRow = {
-    id: DEFAULT_ACCOUNT_ID,
-    label: DEFAULT_ACCOUNT_LABEL,
+    id: accountId,
+    label,
     initialCashUsd,
     createdAt: new Date(),
   };
   await paperTradingStore.resetAccount(row);
-  ensured = true;
+  if (accountId === DEFAULT_ACCOUNT_ID) ensured = true;
   return row;
 }
 

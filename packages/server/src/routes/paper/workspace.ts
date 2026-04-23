@@ -99,7 +99,7 @@ export async function createTrade(input: CreatePaperTradeRequest, accountId?: st
   await applyFillsToTrade(tradeId, result.fills);
 
   await recordActivity({
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId: account,
     tradeId,
     kind: 'trade_opened',
     summary: `Opened ${label}`,
@@ -107,7 +107,7 @@ export async function createTrade(input: CreatePaperTradeRequest, accountId?: st
     ts: now,
   });
   await recordActivity({
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId: account,
     tradeId,
     kind: 'order_filled',
     summary: formatOrderSummary(result.order.legs),
@@ -116,14 +116,14 @@ export async function createTrade(input: CreatePaperTradeRequest, accountId?: st
   });
 
   if (input.thesis?.trim()) {
-    await appendTradeNote(tradeId, {
+    await appendTradeNote(account, tradeId, {
       kind: 'thesis',
       content: input.thesis.trim(),
       tags: [],
     }, now);
   }
   if (input.invalidation?.trim()) {
-    await appendTradeNote(tradeId, {
+    await appendTradeNote(account, tradeId, {
       kind: 'invalidation',
       content: input.invalidation.trim(),
       tags: [],
@@ -131,7 +131,7 @@ export async function createTrade(input: CreatePaperTradeRequest, accountId?: st
   }
 
   return {
-    trade: await getTradeDetailOrThrow(tradeId),
+    trade: await getTradeDetailOrThrow(tradeId, account),
     order: result.order,
     fills: result.fills,
   };
@@ -192,7 +192,7 @@ export async function addTradeNote(
   if (accountId && trade.accountId !== accountId) {
     throw new Error('Trade not found');
   }
-  await appendTradeNote(tradeId, request, new Date());
+  await appendTradeNote(trade.accountId, tradeId, request, new Date());
   return getTradeDetailOrThrow(tradeId, accountId);
 }
 
@@ -330,9 +330,9 @@ async function buildTradeDetail(
     paperTradingStore.listTradeOrders(trade.id),
     includeNotes ? paperTradingStore.listTradeNotes(trade.id) : Promise.resolve([]),
     includeActivity
-      ? paperTradingStore.listTradeActivities(DEFAULT_ACCOUNT_ID, 50, trade.id)
+      ? paperTradingStore.listTradeActivities(trade.accountId, 50, trade.id)
       : Promise.resolve([]),
-    orderRepository.listFills(DEFAULT_ACCOUNT_ID, 2_000),
+    orderRepository.listFills(trade.accountId, 2_000),
   ]);
   const orderIds = linkedOrders.map((row) => row.orderId);
   const orders = await Promise.all(
@@ -585,6 +585,7 @@ function formatMarketSourceLabel(value: VenueId): string {
 }
 
 async function appendTradeNote(
+  accountId: string,
   tradeId: string,
   request: CreatePaperTradeNoteRequest,
   createdAt: Date,
@@ -598,7 +599,7 @@ async function appendTradeNote(
     createdAt,
   });
   await recordActivity({
-    accountId: DEFAULT_ACCOUNT_ID,
+    accountId,
     tradeId,
     kind: 'note_added',
     summary: `${capitalize(request.kind)} note added`,

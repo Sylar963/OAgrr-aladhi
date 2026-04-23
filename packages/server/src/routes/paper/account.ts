@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   InitPaperAccountRequestSchema,
   type PaperAccountDto,
@@ -9,22 +9,32 @@ import {
   DEFAULT_INITIAL_CASH_USD,
 } from '@oggregator/trading';
 import {
-  getDefaultAccount,
+  getAccount,
   paperTradingStore,
-  resetDefaultAccount,
+  resetAccount,
 } from '../../trading-services.js';
 
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
 }
 
+// Every authenticated user has their own `acct_<uuid>` row (see createUser in
+// user-service.ts). Anonymous requests fall back to the shared default account.
+function accountScope(req: FastifyRequest): { id: string; label: string } {
+  if (req.user) {
+    return { id: req.user.accountId, label: `${req.user.label}'s Account` };
+  }
+  return { id: DEFAULT_ACCOUNT_ID, label: DEFAULT_ACCOUNT_LABEL };
+}
+
 export async function paperAccountRoute(app: FastifyInstance) {
-  app.get('/paper/account', async (_req, reply) => {
+  app.get('/paper/account', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const account = await getDefaultAccount();
-    return toDto(account);
+    const { id, label } = accountScope(req);
+    const account = await getAccount(id);
+    return toDto(account, id, label);
   });
 
   app.post('/paper/account/init', async (req, reply) => {
@@ -35,16 +45,21 @@ export async function paperAccountRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const account = await resetDefaultAccount(parsed.data.initialCashUsd);
-    return toDto(account);
+    const { id, label } = accountScope(req);
+    const account = await resetAccount(id, label, parsed.data.initialCashUsd);
+    return toDto(account, id, label);
   });
 }
 
-function toDto(account: Awaited<ReturnType<typeof getDefaultAccount>>): PaperAccountDto {
+function toDto(
+  account: Awaited<ReturnType<typeof getAccount>>,
+  fallbackId: string,
+  fallbackLabel: string,
+): PaperAccountDto {
   if (!account) {
     return {
-      id: DEFAULT_ACCOUNT_ID,
-      label: DEFAULT_ACCOUNT_LABEL,
+      id: fallbackId,
+      label: fallbackLabel,
       initialCashUsd: DEFAULT_INITIAL_CASH_USD,
       createdAt: null,
       isInitialized: false,

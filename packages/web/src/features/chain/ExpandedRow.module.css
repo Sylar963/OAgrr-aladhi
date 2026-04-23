@@ -48,8 +48,15 @@
   color: var(--color-loss);
 }
 
-.side[data-type="forward"] .sideLabel {
-  color: var(--accent-primary);
+.consensusLine {
+  padding: 4px var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .sideStrike {

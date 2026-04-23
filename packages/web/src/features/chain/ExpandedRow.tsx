@@ -1,10 +1,16 @@
+import { useMemo } from 'react';
 import type { EnrichedSide, VenueQuote, VenueId } from '@shared/enriched';
 
 import { VENUES } from '@lib/venue-meta';
-import { IvChip, SpreadPill } from '@components/ui';
+import { IvChip, SpreadPill, ForwardDeltaPill } from '@components/ui';
 import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
-import { computeForwardRows } from './forward-analysis';
+import { computeImpliedForward } from './forward-analysis';
 import styles from './ExpandedRow.module.css';
+
+interface ForwardCell {
+  fImplied: number | null;
+  delta: number | null;
+}
 
 interface ExpandedRowProps {
   strike: number;
@@ -22,9 +28,11 @@ interface VenueRowProps {
   myIv: number | null;
   type: 'call' | 'put';
   strike: number;
+  forwardCell: ForwardCell | undefined;
+  atmStrike: number | null;
 }
 
-function VenueRow({ venueId, quote, myIv, type, strike }: VenueRowProps) {
+function VenueRow({ venueId, quote, myIv, type, strike, forwardCell, atmStrike }: VenueRowProps) {
   const meta = VENUES[venueId];
   const mid = quote.mid;
   const breakeven = mid != null ? (type === 'call' ? strike + mid : strike - mid) : null;
@@ -37,6 +45,10 @@ function VenueRow({ venueId, quote, myIv, type, strike }: VenueRowProps) {
           {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
           <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
         </div>
+      </td>
+
+      <td className={styles.tdNum} data-accent="true">
+        {fmtUsd(forwardCell?.fImplied ?? null)}
       </td>
 
       <td className={styles.tdNum}>{fmtUsd(quote.bid)}</td>
@@ -67,6 +79,11 @@ function VenueRow({ venueId, quote, myIv, type, strike }: VenueRowProps) {
       </td>
       <td className={styles.tdNum}>{fmtUsd(breakeven)}</td>
       <td className={styles.tdNum}>{fmtUsd(quote.totalCost)}</td>
+
+      <td className={styles.tdChip}>
+        <ForwardDeltaPill delta={forwardCell?.delta ?? null} atmStrike={atmStrike} />
+      </td>
+
       <td
         className={styles.tdNum}
         data-edge={edge != null ? (edge > 0 ? 'positive' : 'negative') : undefined}
@@ -82,9 +99,11 @@ interface SideTableProps {
   type: 'call' | 'put';
   strike: number;
   myIv: number | null;
+  forwardsByVenue: Map<VenueId, ForwardCell>;
+  atmStrike: number | null;
 }
 
-function SideTable({ side, type, strike, myIv }: SideTableProps) {
+function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: SideTableProps) {
   const entries = Object.entries(side.venues) as [VenueId, VenueQuote][];
 
   if (entries.length === 0) {
@@ -96,6 +115,7 @@ function SideTable({ side, type, strike, myIv }: SideTableProps) {
       <thead>
         <tr className={styles.thead}>
           <th className={styles.thVenue}>VENUE</th>
+          <th className={styles.th}>F_IMPLIED</th>
           <th className={styles.th}>BID</th>
           <th className={styles.th}>ASK</th>
           <th className={styles.th}>MID</th>
@@ -108,6 +128,7 @@ function SideTable({ side, type, strike, myIv }: SideTableProps) {
           <th className={styles.th}>OI</th>
           <th className={styles.th}>BREAK</th>
           <th className={styles.th}>COST</th>
+          <th className={styles.th}>Δ CONS</th>
           <th className={styles.th}>EDGE</th>
         </tr>
       </thead>
@@ -120,58 +141,10 @@ function SideTable({ side, type, strike, myIv }: SideTableProps) {
             myIv={myIv}
             type={type}
             strike={strike}
+            forwardCell={forwardsByVenue.get(venueId)}
+            atmStrike={atmStrike}
           />
         ))}
-      </tbody>
-    </table>
-  );
-}
-
-interface ForwardTableProps {
-  callSide: EnrichedSide;
-  putSide: EnrichedSide;
-  strike: number;
-  activeVenues: string[];
-  consensus: number | null;
-}
-
-function ForwardTable({ callSide, putSide, strike, activeVenues, consensus }: ForwardTableProps) {
-  const rows = computeForwardRows(callSide, putSide, strike, activeVenues, consensus);
-
-  if (rows.length === 0) {
-    return <div className={styles.noQuotes}>No quotes</div>;
-  }
-
-  return (
-    <table className={styles.venueTable}>
-      <thead>
-        <tr className={styles.thead}>
-          <th className={styles.thVenue}>VENUE</th>
-          <th className={styles.th}>F_IMPLIED</th>
-          <th className={styles.th}>Δ VS CONSENSUS</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(({ venueId, fImplied, delta }) => {
-          const meta = VENUES[venueId];
-          const edge = delta != null ? (delta > 0 ? 'positive' : delta < 0 ? 'negative' : undefined) : undefined;
-          return (
-            <tr key={venueId} className={styles.venueRow}>
-              <td className={styles.tdVenue}>
-                <div className={styles.venueCell}>
-                  {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
-                  <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
-                </div>
-              </td>
-              <td className={styles.tdNum} data-accent="true">
-                {fmtUsd(fImplied)}
-              </td>
-              <td className={styles.tdNum} data-edge={edge}>
-                {delta != null ? fmtDelta(delta) : '–'}
-              </td>
-            </tr>
-          );
-        })}
       </tbody>
     </table>
   );
@@ -186,14 +159,47 @@ export default function ExpandedRow({
   atmStrike,
   atmConsensusForward,
 }: ExpandedRowProps) {
+  const forwardsByVenue = useMemo<Map<VenueId, ForwardCell>>(() => {
+    const map = new Map<VenueId, ForwardCell>();
+    const ids = new Set<VenueId>([
+      ...(Object.keys(callSide.venues) as VenueId[]),
+      ...(Object.keys(putSide.venues) as VenueId[]),
+    ]);
+    for (const v of ids) {
+      if (!activeVenues.includes(v)) continue;
+      const fImplied = computeImpliedForward(
+        strike,
+        callSide.venues[v]?.mid ?? null,
+        putSide.venues[v]?.mid ?? null,
+      );
+      const delta =
+        fImplied != null && atmConsensusForward != null ? fImplied - atmConsensusForward : null;
+      map.set(v, { fImplied, delta });
+    }
+    return map;
+  }, [callSide, putSide, strike, activeVenues, atmConsensusForward]);
+
   return (
     <div className={styles.expanded}>
+      {atmConsensusForward != null && atmStrike != null && (
+        <div className={styles.consensusLine}>
+          CONSENSUS F @ ATM {atmStrike.toLocaleString()}: {fmtUsd(atmConsensusForward)}
+        </div>
+      )}
+
       <div className={styles.side} data-type="call">
         <div className={styles.sideHeader}>
           <span className={styles.sideLabel}>CALLS</span>
           <span className={styles.sideStrike}>{strike.toLocaleString()}</span>
         </div>
-        <SideTable side={callSide} type="call" strike={strike} myIv={myIv} />
+        <SideTable
+          side={callSide}
+          type="call"
+          strike={strike}
+          myIv={myIv}
+          forwardsByVenue={forwardsByVenue}
+          atmStrike={atmStrike}
+        />
       </div>
 
       <div className={styles.divider} />
@@ -202,24 +208,13 @@ export default function ExpandedRow({
         <div className={styles.sideHeader}>
           <span className={styles.sideLabel}>PUTS</span>
         </div>
-        <SideTable side={putSide} type="put" strike={strike} myIv={myIv} />
-      </div>
-
-      <div className={styles.divider} />
-
-      <div className={styles.side} data-type="forward">
-        <div className={styles.sideHeader}>
-          <span className={styles.sideLabel}>FORWARD</span>
-          {atmStrike != null && (
-            <span className={styles.sideStrike}>vs ATM {atmStrike.toLocaleString()}</span>
-          )}
-        </div>
-        <ForwardTable
-          callSide={callSide}
-          putSide={putSide}
+        <SideTable
+          side={putSide}
+          type="put"
           strike={strike}
-          activeVenues={activeVenues}
-          consensus={atmConsensusForward}
+          myIv={myIv}
+          forwardsByVenue={forwardsByVenue}
+          atmStrike={atmStrike}
         />
       </div>
     </div>

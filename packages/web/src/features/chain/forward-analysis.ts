@@ -1,10 +1,4 @@
-import type { EnrichedSide, EnrichedStrike, VenueId } from '@shared/enriched';
-
-export interface ForwardRow {
-  venueId: VenueId;
-  fImplied: number | null;
-  delta: number | null;
-}
+import type { EnrichedStrike, VenueId } from '@shared/enriched';
 
 export function computeImpliedForward(
   strike: number,
@@ -51,28 +45,4 @@ export function computeAtmConsensus(
   const pairs = venueForwardsAt(row, activeVenues);
   if (pairs.length < 2) return null;
   return median(pairs.map((p) => p.f));
-}
-
-export function computeForwardRows(
-  callSide: EnrichedSide,
-  putSide: EnrichedSide,
-  strike: number,
-  activeVenues: readonly string[],
-  consensus: number | null,
-): ForwardRow[] {
-  const rows: ForwardRow[] = [];
-  const seen = new Set<VenueId>();
-  const pushVenue = (venueId: VenueId) => {
-    if (seen.has(venueId)) return;
-    if (!activeVenues.includes(venueId)) return;
-    seen.add(venueId);
-    const callMid = callSide.venues[venueId]?.mid ?? null;
-    const putMid = putSide.venues[venueId]?.mid ?? null;
-    const fImplied = computeImpliedForward(strike, callMid, putMid);
-    const delta = fImplied != null && consensus != null ? fImplied - consensus : null;
-    rows.push({ venueId, fImplied, delta });
-  };
-  for (const v of Object.keys(callSide.venues) as VenueId[]) pushVenue(v);
-  for (const v of Object.keys(putSide.venues) as VenueId[]) pushVenue(v);
-  return rows;
 }

@@ -8,6 +8,7 @@ export { default as IvChip } from './IvChip';
 export { default as MobileDrawer } from './MobileDrawer';
 export { default as Spinner } from './Spinner';
 export { default as SpreadPill } from './SpreadPill';
+export { default as ForwardDeltaPill } from './ForwardDeltaPill';
 export { default as VenueCard } from './VenueCard';
 export type { VenueCardDetail } from './VenueCard';
 export { default as VenueDot } from './VenueDot';

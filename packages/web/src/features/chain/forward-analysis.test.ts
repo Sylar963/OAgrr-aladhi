@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { EnrichedSide, EnrichedStrike, VenueId, VenueQuote } from '@shared/enriched';
-import {
-  computeAtmConsensus,
-  computeForwardRows,
-  computeImpliedForward,
-} from './forward-analysis';
+import { computeAtmConsensus, computeImpliedForward } from './forward-analysis';
+import { forwardDriftLevel } from '@lib/colors';
 
 function quote(mid: number | null): VenueQuote {
   return {
@@ -85,44 +82,35 @@ describe('computeAtmConsensus', () => {
   });
 });
 
-describe('computeForwardRows', () => {
-  const call = side({ deribit: 2_000, okx: 1_970, bybit: null });
-  const put = side({ deribit: 2_080, okx: 2_090, binance: 2_082 });
-
-  it('emits one row per active venue seen on either side', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['deribit', 'okx', 'bybit', 'binance'], 77_900);
-    const ids = rows.map((r) => r.venueId).sort();
-    expect(ids).toEqual(['binance', 'bybit', 'deribit', 'okx']);
+describe('forwardDriftLevel', () => {
+  it('returns muted for null or non-finite', () => {
+    expect(forwardDriftLevel(null)).toBe('muted');
+    expect(forwardDriftLevel(Infinity)).toBe('muted');
+    expect(forwardDriftLevel(NaN)).toBe('muted');
   });
 
-  it('hides venues not in the active filter', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['deribit'], 77_900);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.venueId).toBe('deribit');
+  it('returns green below 1 bps', () => {
+    expect(forwardDriftLevel(0)).toBe('green');
+    expect(forwardDriftLevel(0.5)).toBe('green');
+    expect(forwardDriftLevel(-0.9)).toBe('green');
   });
 
-  it('yields null fImplied when a side is missing a mid', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['bybit'], 77_900);
-    expect(rows[0]!.fImplied).toBeNull();
-    expect(rows[0]!.delta).toBeNull();
+  it('returns amber between 1 and 3 bps', () => {
+    expect(forwardDriftLevel(1)).toBe('amber');
+    expect(forwardDriftLevel(2)).toBe('amber');
+    expect(forwardDriftLevel(-2.5)).toBe('amber');
   });
 
-  it('computes signed delta against consensus', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['deribit', 'okx'], 77_900);
-    const deribit = rows.find((r) => r.venueId === 'deribit')!;
-    const okx = rows.find((r) => r.venueId === 'okx')!;
-    expect(deribit.delta).toBe(20);
-    expect(okx.delta).toBe(-20);
+  it('returns red at or above 3 bps', () => {
+    expect(forwardDriftLevel(3)).toBe('red');
+    expect(forwardDriftLevel(-5)).toBe('red');
+    expect(forwardDriftLevel(21.8)).toBe('red');
   });
 
-  it('leaves delta null when consensus is null', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['deribit'], null);
-    expect(rows[0]!.delta).toBeNull();
-    expect(rows[0]!.fImplied).toBe(77_920);
-  });
-
-  it('does not duplicate a venue that appears on both sides', () => {
-    const rows = computeForwardRows(call, put, 78_000, ['deribit', 'okx'], null);
-    expect(new Set(rows.map((r) => r.venueId)).size).toBe(rows.length);
+  it('is magnitude-based, not sign-based', () => {
+    expect(forwardDriftLevel(-0.5)).toBe(forwardDriftLevel(0.5));
+    expect(forwardDriftLevel(-2)).toBe(forwardDriftLevel(2));
+    expect(forwardDriftLevel(-10)).toBe(forwardDriftLevel(10));
   });
 });
+

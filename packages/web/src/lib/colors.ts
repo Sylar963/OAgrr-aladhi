@@ -48,6 +48,22 @@ export function spreadLevel(pct: number | null): SpreadLevel {
   return 'red';
 }
 
+// ── Forward drift semaphore ───────────────────────────────────────────────
+// |Δ / atmStrike| expressed in basis points. Below 1 bps the venue's forward
+// is in consensus (any price divergence reflects real MM skew). Above 3 bps
+// the venue's forward is drifting and cheap/expensive option prices are
+// mostly forward, not edge.
+
+export type ForwardLevel = 'green' | 'amber' | 'red' | 'muted';
+
+export function forwardDriftLevel(deltaBps: number | null): ForwardLevel {
+  if (deltaBps == null || !Number.isFinite(deltaBps)) return 'muted';
+  const m = Math.abs(deltaBps);
+  if (m < 1) return 'green';
+  if (m < 3) return 'amber';
+  return 'red';
+}
+
 // ── Venue colors ──────────────────────────────────────────────────────────
 
 export const VENUE_COLORS: Record<string, string> = {

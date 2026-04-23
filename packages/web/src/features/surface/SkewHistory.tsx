@@ -1,13 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { ColorType, LineSeries, createChart, type IChartApi } from 'lightweight-charts';
+import { ColorType, LineSeries, createChart } from 'lightweight-charts';
 
 import { getTokenLogo } from '@lib/token-meta';
-import type { IvHistoryPoint, IvTenor } from '@shared/enriched';
+import type { IvTenor } from '@shared/enriched';
 import { getHistoryCoverage } from './history-coverage';
 import { useIvHistory, type IvHistoryWindow } from './queries';
+import {
+  buildSkewLineData,
+  formatSkewDisplayValue,
+  latestSkewDisplayValue,
+  type SkewDisplayMode,
+  type SkewLinePoint,
+} from './skew-history-utils';
 import styles from './SkewHistory.module.css';
 
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
+const DISPLAY_MODES: SkewDisplayMode[] = ['raw', 'normalized', 'zscore'];
+const DISPLAY_LABELS: Record<SkewDisplayMode, string> = {
+  raw: 'Raw',
+  normalized: 'Normalized',
+  zscore: 'Z-Score',
+};
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
 
@@ -23,39 +36,28 @@ const FLY_TIP =
   '• High fly: wings are expensive (fat-tail pricing, event premium).\n' +
   '• Low/negative fly: wings cheap vs body — possible vega pay for directional skew.';
 
-function toLineData(series: IvHistoryPoint[], key: 'rr25d' | 'bfly25d') {
-  // lightweight-charts needs seconds + ascending unique timestamps.
-  const rows: Array<{ time: number; value: number }> = [];
-  let prev = -Infinity;
-  for (const p of series) {
-    const v = p[key];
-    if (v == null || !Number.isFinite(v)) continue;
-    const t = Math.floor(p.ts / 1000);
-    if (t <= prev) continue;
-    rows.push({ time: t, value: v * 100 });
-    prev = t;
-  }
-  return rows;
+function axisFormatter(mode: SkewDisplayMode) {
+  return (value: number) => {
+    const sign = value > 0 ? '+' : '';
+    if (mode === 'zscore') return `${sign}${value.toFixed(2)}σ`;
+    return `${sign}${value.toFixed(1)}%`;
+  };
 }
 
-interface Props {
-  underlying: string;
-}
-
-export default function SkewHistory({ underlying }: Props) {
-  const [window, setWindow] = useState<IvHistoryWindow>('30d');
-  const [tenor, setTenor] = useState<IvTenor>('30d');
+function SkewMiniChart({
+  title,
+  color,
+  data,
+  latest,
+  mode,
+}: {
+  title: string;
+  color: string;
+  data: SkewLinePoint[];
+  latest: string;
+  mode: SkewDisplayMode;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-
-  const { data } = useIvHistory(underlying, window);
-  const result = data?.tenors[tenor];
-  const series = result?.series ?? [];
-
-  const rrData = toLineData(series, 'rr25d');
-  const flyData = toLineData(series, 'bfly25d');
-  const hasAnyPoints = rrData.length > 0 || flyData.length > 0;
-  const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -72,48 +74,69 @@ export default function SkewHistory({ underlying }: Props) {
       grid: { vertLines: { color: '#1A1A1A' }, horzLines: { color: '#1A1A1A' } },
       rightPriceScale: {
         borderColor: '#1F2937',
-        scaleMargins: { top: 0.12, bottom: 0.12 },
+        scaleMargins: { top: 0.18, bottom: 0.18 },
       },
       timeScale: { borderColor: '#1F2937', timeVisible: true },
       crosshair: {
-        horzLine: { color: RR_COLOR, labelBackgroundColor: '#0E3333' },
-        vertLine: { color: RR_COLOR, labelBackgroundColor: '#0E3333', labelVisible: false },
+        horzLine: { color, labelBackgroundColor: '#0E3333' },
+        vertLine: { color, labelBackgroundColor: '#0E3333', labelVisible: false },
       },
     });
 
-    const priceFmt = {
-      type: 'custom' as const,
-      formatter: (p: number) => `${p >= 0 ? '+' : ''}${p.toFixed(1)}%`,
-    };
-
-    const rr = chart.addSeries(LineSeries, {
-      color: RR_COLOR,
+    const line = chart.addSeries(LineSeries, {
+      color,
       lineWidth: 1,
-      priceFormat: priceFmt,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    });
-    const fly = chart.addSeries(LineSeries, {
-      color: FLY_COLOR,
-      lineWidth: 1,
-      priceFormat: priceFmt,
+      priceFormat: {
+        type: 'custom' as const,
+        formatter: axisFormatter(mode),
+      },
       lastValueVisible: false,
       priceLineVisible: false,
     });
 
-    rr.setData(rrData as never);
-    fly.setData(flyData as never);
+    line.setData(data as never);
     chart.timeScale().fitContent();
 
-    chartRef.current = chart;
     return () => {
       chart.remove();
-      chartRef.current = null;
     };
-    // We rebuild the chart whenever inputs change; the series arrays are
-    // regenerated on every render so JSON keying matches deep equality.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [underlying, tenor, window, JSON.stringify(rrData), JSON.stringify(flyData)]);
+  }, [title, color, mode, JSON.stringify(data)]);
+
+  return (
+    <div className={styles.miniChart}>
+      <div className={styles.metricHeader}>
+        <span className={styles.metricName} style={{ color }}>
+          {title}
+        </span>
+        <span className={styles.metricValue}>{latest}</span>
+      </div>
+      <div className={styles.chartWrap}>
+        <div className={styles.chartCanvas} ref={containerRef} />
+        {data.length === 0 && <div className={styles.empty}>insufficient data</div>}
+      </div>
+    </div>
+  );
+}
+
+interface Props {
+  underlying: string;
+}
+
+export default function SkewHistory({ underlying }: Props) {
+  const [window, setWindow] = useState<IvHistoryWindow>('30d');
+  const [tenor, setTenor] = useState<IvTenor>('30d');
+  const [mode, setMode] = useState<SkewDisplayMode>('raw');
+
+  const { data } = useIvHistory(underlying, window);
+  const result = data?.tenors[tenor];
+  const series = result?.series ?? [];
+
+  const rrData = buildSkewLineData(series, 'rr25d', mode);
+  const flyData = buildSkewLineData(series, 'bfly25d', mode);
+  const rrLatest = formatSkewDisplayValue(latestSkewDisplayValue(series, 'rr25d', mode), mode);
+  const flyLatest = formatSkewDisplayValue(latestSkewDisplayValue(series, 'bfly25d', mode), mode);
+  const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   const logo = getTokenLogo(underlying);
 
@@ -158,6 +181,20 @@ export default function SkewHistory({ underlying }: Props) {
               90d
             </button>
           </div>
+          <span className={styles.toggleLabel}>MODE</span>
+          <div className={styles.toggleGroup}>
+            {DISPLAY_MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={styles.toggleBtn}
+                data-active={mode === m ? 'true' : undefined}
+                onClick={() => setMode(m)}
+              >
+                {DISPLAY_LABELS[m]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -176,8 +213,22 @@ export default function SkewHistory({ underlying }: Props) {
       </div>
 
       <div className={styles.chartArea}>
-        <div className={styles.chartWrap} ref={containerRef} />
-        {!hasAnyPoints && <div className={styles.empty}>accumulating history…</div>}
+        <div className={styles.chartStack}>
+          <SkewMiniChart
+            title="25Δ RR"
+            color={RR_COLOR}
+            data={rrData}
+            latest={rrLatest}
+            mode={mode}
+          />
+          <SkewMiniChart
+            title="25Δ Fly"
+            color={FLY_COLOR}
+            data={flyData}
+            latest={flyLatest}
+            mode={mode}
+          />
+        </div>
       </div>
     </div>
   );

@@ -34,6 +34,8 @@
   display: inline-flex;
   gap: var(--space-3);
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .toggleLabel {
@@ -105,15 +107,55 @@
 
 .chartArea {
   flex: 1;
-  min-height: 220px;
-  position: relative;
+  min-height: 260px;
+  display: flex;
+}
+
+.chartStack {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 0;
+}
+
+.miniChart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: 0;
+}
+
+.metricHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.metricName {
+  font-weight: 700;
+}
+
+.metricValue {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .chartWrap {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 112px;
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.chartCanvas {
+  position: absolute;
+  inset: 0;
 }
 
 .empty {

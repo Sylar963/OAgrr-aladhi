@@ -76,7 +76,7 @@ export default function StatStrip({
       <StatCell
         label="25Δ Skew"
         value={stats.skew25d != null ? fmtIv(stats.skew25d) : '–'}
-        sub="put − call"
+        sub="call − put"
         positive={skewPositive}
       />
       <div className={styles.divider} />

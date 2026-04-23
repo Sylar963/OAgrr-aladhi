@@ -423,7 +423,7 @@ export function computeChainStats(
 
   const totalOiUsd = putOiUsd + callOiUsd;
 
-  // 25Δ skew: put25 IV − call25 IV. Positive = put skew (downside fear).
+  // 25Δ skew: call25 IV − put25 IV. Negative = put skew (downside fear).
   // 25Δ butterfly: (call25 + put25) / 2 − ATM. Positive = wing-rich smile.
   const put25Strike = closestDeltaStrike(strikes, -0.25, 'put');
   const call25Strike = closestDeltaStrike(strikes, 0.25, 'call');
@@ -433,7 +433,7 @@ export function computeChainStats(
     const putIv = averageSideIv(put25Strike.put);
     const callIv = averageSideIv(call25Strike.call);
     if (putIv !== null && callIv !== null) {
-      skew25d = putIv - callIv;
+      skew25d = callIv - putIv;
       if (atmIv !== null) {
         bfly25d = (callIv + putIv) / 2 - atmIv;
       }

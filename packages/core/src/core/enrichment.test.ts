@@ -670,7 +670,7 @@ describe('enrichment', () => {
     expect(stats.atmIv).toBe(0.5);
     expect(stats.putCallOiRatio).toBeCloseTo(1.4, 6);
     expect(stats.totalOiUsd).toBe(1_680_000);
-    expect(stats.skew25d).toBeCloseTo(0.15, 6);
+    expect(stats.skew25d).toBeCloseTo(-0.15, 6);
   });
 
   it('computeSmile emits per-strike OTM-blended IV with interpolated ATM + skew', () => {

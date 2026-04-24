@@ -13,6 +13,14 @@ export interface FeedStatus {
   lastUpdateMs: number | null;
 }
 
+export type SessionNoticeKind = 'server-updated' | 'idle-warning' | 'idle-logout';
+
+export interface SessionNotice {
+  kind: SessionNoticeKind;
+  /** Only set for 'idle-warning' — epoch ms when hard logout will fire. */
+  autoLogoutAtMs?: number;
+}
+
 interface AppState {
   underlying: string;
   expiry: string;
@@ -23,6 +31,10 @@ interface AppState {
   apiKey: string | null;
   userId: string | null;
   accountId: string | null;
+  sessionNotice: SessionNotice | null;
+  /** Monotonic counter — incremented by the warning dialog's "Stay active" button
+   * so the idle-timeout hook can observe the request and cancel pending timers. */
+  sessionExtendToken: number;
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
@@ -33,6 +45,8 @@ interface AppState {
   setFeedStatus: (s: Partial<FeedStatus>) => void;
   setAuth: (apiKey: string, userId: string, accountId: string) => void;
   clearAuth: () => void;
+  setSessionNotice: (notice: SessionNotice | null) => void;
+  extendSession: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -51,6 +65,8 @@ export const useAppStore = create<AppState>((set) => ({
   apiKey: localStorage.getItem('paperApiKey'),
   userId: localStorage.getItem('paperUserId'),
   accountId: localStorage.getItem('paperAccountId'),
+  sessionNotice: null,
+  sessionExtendToken: 0,
 
   setUnderlying: (underlying) => set({ underlying, expiry: '' }),
   setExpiry: (expiry) => set({ expiry }),
@@ -78,4 +94,6 @@ export const useAppStore = create<AppState>((set) => ({
     localStorage.removeItem('paperAccountId');
     set({ apiKey: null, userId: null, accountId: null });
   },
+  setSessionNotice: (sessionNotice) => set({ sessionNotice }),
+  extendSession: () => set((s) => ({ sessionExtendToken: s.sessionExtendToken + 1 })),
 }));

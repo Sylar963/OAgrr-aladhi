@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect } from 'react';
 
 import { AppShell } from '@components/layout';
 import { ChainView, useUnderlyings } from '@features/chain';
-import { ErrorBoundary, Spinner } from '@components/ui';
+import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
+import { useServerVersion } from '@hooks/useServerVersion';
+import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './App.module.css';
@@ -37,6 +39,9 @@ const TABS = [
 ] as const;
 
 export default function App() {
+  useServerVersion();
+  useSessionTimeout();
+
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
@@ -75,6 +80,7 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
       </div>
+      <SessionNotice />
     </AppShell>
   );
 }

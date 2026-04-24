@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getRegisteredVenues } from '@oggregator/core';
+import { SERVER_BOOT_TIME, SERVER_VERSION } from '../app.js';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
 import {
   getIvHistoryStorageStats,
@@ -24,6 +25,8 @@ export async function healthRoute(app: FastifyInstance) {
         ivHistory: isIvHistoryReady(),
         ivHistoryStorage,
       },
+      bootTime: SERVER_BOOT_TIME,
+      version: SERVER_VERSION,
       ts: Date.now(),
     };
   });

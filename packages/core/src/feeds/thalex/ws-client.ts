@@ -110,6 +110,8 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
   }
 
   private async refreshInstruments(): Promise<void> {
+    this.sweepExpiredState();
+
     let parsed;
     try {
       const raw = await this.fetchApi(THALEX_INSTRUMENTS);
@@ -136,6 +138,8 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
         parseExpiry: (r) => this.parseExpiry(r),
       });
       if (inst == null) continue;
+      // Skip instruments already past expiry so sweepExpiredState() can't re-add them.
+      if (this.isExpiredInstrument(inst)) continue;
       newInstruments.push(inst);
     }
 
@@ -306,6 +310,23 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
       default:
         return;
     }
+  }
+
+  private sweepExpiredState(): void {
+    const removed = this.sweepExpiredInstruments();
+    if (removed.length === 0) return;
+
+    const removedChannels = buildThalexRemovedTickerChannels(
+      this.subscriptions,
+      removed.map((i) => i.exchangeSymbol),
+    );
+    if (removedChannels.length > 0 && this.wsClient?.isConnected) {
+      for (const batch of chunkChannels(removedChannels, THALEX_MAX_CHANNELS_PER_BATCH)) {
+        this.wsClient.send(buildThalexUnsubscribeMessage(this.subscriptions, batch));
+      }
+    }
+
+    log.info({ count: removed.length }, 'removed expired instruments');
   }
 
   // ── REST helpers ─────────────────────────────────────────────

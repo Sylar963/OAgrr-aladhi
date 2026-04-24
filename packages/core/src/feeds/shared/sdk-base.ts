@@ -488,9 +488,17 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return removed;
   }
 
-  protected sweepExpiredInstruments(now = Date.now()): CachedInstrument[] {
+  // Prefer the venue-reported expiration timestamp so intraday 0DTE
+  // (08:00 UTC) is removed right at the cutoff, not after the UTC date rolls.
+  protected isExpiredInstrument(instrument: CachedInstrument, now = Date.now()): boolean {
+    const ts = instrument.expirationTimestamp;
+    if (ts != null && Number.isFinite(ts)) return ts <= now;
     const today = new Date(now).toISOString().slice(0, 10);
-    return this.removeCachedInstruments((instrument) => instrument.expiry < today);
+    return instrument.expiry < today;
+  }
+
+  protected sweepExpiredInstruments(now = Date.now()): CachedInstrument[] {
+    return this.removeCachedInstruments((instrument) => this.isExpiredInstrument(instrument, now));
   }
 
   // ── symbol normalization ──────────────────────────────────────

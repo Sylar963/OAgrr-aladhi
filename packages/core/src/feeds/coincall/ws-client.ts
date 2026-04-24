@@ -175,6 +175,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   }
 
   private async refreshInstruments(): Promise<void> {
+    this.sweepExpiredState();
+
     const activeSymbols = new Set<string>();
     const newInstruments: CachedInstrument[] = [];
 
@@ -193,6 +195,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
             parseExpiry: (raw) => this.parseExpiry(raw),
           });
           if (inst == null) continue;
+          // Skip already-expired instruments so sweepExpiredState() can't re-add them.
+          if (this.isExpiredInstrument(inst)) continue;
           newInstruments.push(inst);
           this.expiryTsIndex.set(this.expiryKey(inst.base, inst.expiry), item.expirationTimestamp);
         }
@@ -502,6 +506,42 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
 
   private expiryKey(base: string, expiry: string): string {
     return `${base.toUpperCase()}:${expiry}`;
+  }
+
+  private sweepExpiredState(): void {
+    const removed = this.sweepExpiredInstruments();
+    if (removed.length === 0) return;
+
+    const removedSymbols = removed.map((i) => i.exchangeSymbol);
+    const removedBsInfo = buildCoincallRemovedBsInfoSymbols(this.subscriptions, removedSymbols);
+    const removedOrderBook = buildCoincallRemovedOrderBookSymbols(this.subscriptions, removedSymbols);
+
+    if (this.wsClient?.isConnected) {
+      for (const sym of removedBsInfo) this.wsClient.send(buildBsInfoUnsubscribeMessage(sym));
+      for (const sym of removedOrderBook) this.wsClient.send(buildOrderBookUnsubscribeMessage(sym));
+    }
+
+    // Drop tOption subs for any (pairRoot, expiryTs) pair that no longer has
+    // live instruments — otherwise Coincall keeps streaming chain-level ticks
+    // for a settled expiry until the next chain-level unsubscribe.
+    const remainingPairExpiries = new Set<string>();
+    for (const inst of this.instruments) {
+      const ts = this.expiryTsIndex.get(this.expiryKey(inst.base, inst.expiry));
+      if (ts != null) remainingPairExpiries.add(`${pairRootFor(inst.base)}:${ts}`);
+    }
+    for (const inst of removed) {
+      const ts = this.expiryTsIndex.get(this.expiryKey(inst.base, inst.expiry));
+      if (ts == null) continue;
+      const pairRoot = pairRootFor(inst.base);
+      const key = `${pairRoot}:${ts}`;
+      if (remainingPairExpiries.has(key)) continue;
+      if (removeCoincallTOptionSub(this.subscriptions, pairRoot, ts) && this.wsClient?.isConnected) {
+        this.wsClient.send(buildTOptionUnsubscribeMessage(pairRoot, ts));
+      }
+      this.expiryTsIndex.delete(this.expiryKey(inst.base, inst.expiry));
+    }
+
+    log.info({ count: removed.length }, 'removed expired instruments');
   }
 
   override async dispose(): Promise<void> {

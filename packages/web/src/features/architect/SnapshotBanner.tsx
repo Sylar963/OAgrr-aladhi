@@ -5,6 +5,8 @@ import styles from './Architect.module.css';
 interface SnapshotBannerProps {
   dataUpdatedAt: number;
   refreshIntervalMs: number;
+  hasData: boolean;
+  isFetching: boolean;
 }
 
 function formatCountdown(seconds: number): string {
@@ -16,6 +18,8 @@ function formatCountdown(seconds: number): string {
 export default function SnapshotBanner({
   dataUpdatedAt,
   refreshIntervalMs,
+  hasData,
+  isFetching,
 }: SnapshotBannerProps) {
   const [, setTick] = useState(0);
 
@@ -24,7 +28,7 @@ export default function SnapshotBanner({
     return () => clearInterval(id);
   }, []);
 
-  if (!dataUpdatedAt) {
+  if (!hasData) {
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
@@ -33,15 +37,28 @@ export default function SnapshotBanner({
     );
   }
 
-  const elapsed = Date.now() - dataUpdatedAt;
+  // Tenor switch: candle data from previous query is still on screen via
+  // keepPreviousData, but a new fetch is in flight. Show a transient
+  // "updating" state so the user knows the chart is mid-swap.
+  if (isFetching && !dataUpdatedAt) {
+    return (
+      <div className={styles.snapshotBanner} data-state="loading">
+        <span className={styles.snapshotDot} />
+        <span className={styles.snapshotPrimary}>Updating snapshot…</span>
+        <span className={styles.snapshotSecondary}>tenor changed — refetching</span>
+      </div>
+    );
+  }
+
+  const elapsed = dataUpdatedAt ? Date.now() - dataUpdatedAt : 0;
   const remainingMs = Math.max(0, refreshIntervalMs - elapsed);
   const seconds = Math.floor(remainingMs / 1000);
 
   return (
-    <div className={styles.snapshotBanner}>
+    <div className={styles.snapshotBanner} data-state={isFetching ? 'refreshing' : 'fresh'}>
       <span className={styles.snapshotDot} />
       <span className={styles.snapshotPrimary}>
-        Snapshot — refreshes in {formatCountdown(seconds)}
+        {isFetching ? 'Refreshing snapshot…' : `Snapshot — refreshes in ${formatCountdown(seconds)}`}
       </span>
       <span className={styles.snapshotSecondary}>
         prices may have moved since last fetch

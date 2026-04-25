@@ -347,8 +347,12 @@ export default function ArchitectView() {
 
   const candleSpec = useMemo(() => pickCandleSpec(legs), [legs]);
   const candleAvailable = isSpotCandleCurrency(underlying);
-  const { data: spotCandlesData, dataUpdatedAt: spotCandlesUpdatedAt, isLoading: spotCandlesLoading } =
-    useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
+  const {
+    data: spotCandlesData,
+    dataUpdatedAt: spotCandlesUpdatedAt,
+    isLoading: spotCandlesLoading,
+    isFetching: spotCandlesFetching,
+  } = useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
 
   function handleCopyUrl() {
     const url = buildShareUrl(legs, underlying);
@@ -626,6 +630,8 @@ export default function ArchitectView() {
                         <SnapshotBanner
                           dataUpdatedAt={spotCandlesUpdatedAt}
                           refreshIntervalMs={120_000}
+                          hasData={spotCandlesData != null}
+                          isFetching={spotCandlesFetching}
                         />
                       )}
                       <PayoffChartV2

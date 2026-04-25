@@ -43,12 +43,32 @@ export interface CandleSpec {
   buckets: number;
 }
 
+/**
+ * Pick a candle window that scales with the strategy's nearest-leg DTE so
+ * the price-history view always reflects the chosen tenor. Bucket count
+ * varies with DTE within each resolution tier — this guarantees that any
+ * tenor change produces a new query key, so TanStack Query refetches.
+ */
 export function pickCandleSpec(legs: Leg[]): CandleSpec {
   if (legs.length === 0) return { resolutionSec: 3600, buckets: 24 };
-  const minDte = Math.min(...legs.map((l) => dteDays(l.expiry)));
-  if (minDte < 1) return { resolutionSec: 300, buckets: 36 };
-  if (minDte < 7) return { resolutionSec: 3600, buckets: 24 };
-  return { resolutionSec: 14400, buckets: 42 };
+  const minDte = Math.max(0, Math.min(...legs.map((l) => dteDays(l.expiry))));
+
+  if (minDte < 1) {
+    return { resolutionSec: 300, buckets: 48 };
+  }
+  if (minDte < 3) {
+    const buckets = Math.min(96, Math.max(24, Math.round(minDte * 48)));
+    return { resolutionSec: 1800, buckets };
+  }
+  if (minDte < 14) {
+    const buckets = Math.min(168, Math.max(24, Math.round(minDte * 24)));
+    return { resolutionSec: 3600, buckets };
+  }
+  if (minDte < 60) {
+    const buckets = Math.min(180, Math.max(42, Math.round(minDte * 6)));
+    return { resolutionSec: 14400, buckets };
+  }
+  return { resolutionSec: 86400, buckets: Math.min(180, Math.max(60, minDte)) };
 }
 
 function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): Zone[] {
@@ -237,17 +257,31 @@ export default function PayoffChartV2({
         return;
       }
 
+      // Resolve the visible price range so we can clamp out-of-range
+      // boundaries to the chart edges. priceToCoordinate returns null when a
+      // price sits outside the visible scale; without clamping, a butterfly
+      // with break-evens tighter than the candle range would have both BEs
+      // map to null and the entire middle zone would be dropped.
+      const priceTop = series.coordinateToPrice(0);
+      const priceBottom = series.coordinateToPrice(height);
+      if (priceTop == null || priceBottom == null) {
+        setZoneRects([]);
+        return;
+      }
+      const visibleHigh = Math.max(Number(priceTop), Number(priceBottom));
+      const visibleLow = Math.min(Number(priceTop), Number(priceBottom));
+
+      function priceToY(price: number): number {
+        if (price >= visibleHigh) return 0;
+        if (price <= visibleLow) return height;
+        const y = series!.priceToCoordinate(price);
+        return y == null ? height : Math.max(0, Math.min(height, Number(y)));
+      }
+
       const rects: ZoneRect[] = [];
       for (const zone of zones) {
-        const topY = Number.isFinite(zone.high)
-          ? series.priceToCoordinate(zone.high as number)
-          : 0;
-        const bottomY = Number.isFinite(zone.low)
-          ? series.priceToCoordinate(zone.low as number)
-          : height;
-        if (topY == null || bottomY == null) continue;
-        const top = Math.max(0, Math.min(height, Number(topY)));
-        const bottom = Math.max(0, Math.min(height, Number(bottomY)));
+        const top = Number.isFinite(zone.high) ? priceToY(zone.high as number) : 0;
+        const bottom = Number.isFinite(zone.low) ? priceToY(zone.low as number) : height;
         if (bottom <= top) continue;
         rects.push({
           topPct: (top / height) * 100,

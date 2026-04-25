@@ -3,8 +3,10 @@ import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@oggregator/co
 import { isSpotCandlesReady, spotCandleService } from '../services.js';
 
 const SUPPORTED_CURRENCIES: readonly SpotCandleCurrency[] = ['BTC', 'ETH'];
-const SUPPORTED_RESOLUTIONS: readonly SpotCandleResolutionSec[] = [60, 300, 3600, 14400];
-const MAX_BUCKETS = 200;
+const SUPPORTED_RESOLUTIONS: readonly SpotCandleResolutionSec[] = [
+  60, 300, 1800, 3600, 14400, 86400,
+];
+const MAX_BUCKETS = 500;
 
 export async function spotCandlesRoute(app: FastifyInstance) {
   app.get<{

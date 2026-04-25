@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { fetchJson } from '@lib/http';
 
@@ -34,5 +34,9 @@ export function useSpotCandles(currency: string, resolutionSec: number, buckets:
     enabled: isSpotCandleCurrency(currency),
     refetchInterval: 120_000,
     staleTime: 120_000,
+    // Tenor changes swap the query key. keepPreviousData holds the previous
+    // candles on screen while the new fetch is in flight so the banner never
+    // flashes "Loading snapshot…" mid-strategy edit.
+    placeholderData: keepPreviousData,
   });
 }

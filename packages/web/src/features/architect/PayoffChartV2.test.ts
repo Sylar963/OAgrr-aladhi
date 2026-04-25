@@ -34,20 +34,44 @@ describe('pickCandleSpec', () => {
     expect(pickCandleSpec([])).toEqual({ resolutionSec: 3600, buckets: 24 });
   });
 
-  it('picks 5m × 36 buckets for sub-1d expiries', () => {
-    expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({ resolutionSec: 300, buckets: 36 });
+  it('intraday picks 5m × 48 buckets', () => {
+    expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({ resolutionSec: 300, buckets: 48 });
   });
 
-  it('picks 1h × 24 buckets for sub-7d expiries', () => {
-    expect(pickCandleSpec([leg(expiryInDays(3))])).toEqual({ resolutionSec: 3600, buckets: 24 });
+  it('1–3d picks 30m and bucket count tracks DTE', () => {
+    const spec1d = pickCandleSpec([leg(expiryInDays(1))]);
+    const spec2d = pickCandleSpec([leg(expiryInDays(2))]);
+    expect(spec1d.resolutionSec).toBe(1800);
+    expect(spec2d.resolutionSec).toBe(1800);
+    // Different DTE within the same tier must produce different bucket counts
+    // so the query key changes and TanStack Query refetches.
+    expect(spec1d.buckets).not.toBe(spec2d.buckets);
   });
 
-  it('picks 4h × 42 buckets for week+ expiries', () => {
-    expect(pickCandleSpec([leg(expiryInDays(30))])).toEqual({ resolutionSec: 14400, buckets: 42 });
+  it('3–14d picks 1h and bucket count scales with DTE', () => {
+    const spec3d = pickCandleSpec([leg(expiryInDays(3))]);
+    const spec10d = pickCandleSpec([leg(expiryInDays(10))]);
+    expect(spec3d.resolutionSec).toBe(3600);
+    expect(spec10d.resolutionSec).toBe(3600);
+    expect(spec3d.buckets).toBeLessThan(spec10d.buckets);
+  });
+
+  it('14–60d picks 4h and bucket count scales with DTE', () => {
+    const spec14d = pickCandleSpec([leg(expiryInDays(14))]);
+    const spec45d = pickCandleSpec([leg(expiryInDays(45))]);
+    expect(spec14d.resolutionSec).toBe(14400);
+    expect(spec45d.resolutionSec).toBe(14400);
+    expect(spec14d.buckets).toBeLessThan(spec45d.buckets);
+  });
+
+  it('60d+ picks daily resolution', () => {
+    const spec90d = pickCandleSpec([leg(expiryInDays(90))]);
+    expect(spec90d.resolutionSec).toBe(86400);
   });
 
   it('uses the nearest leg DTE when legs have mixed expiries', () => {
     const legs = [leg(expiryInDays(45)), leg(expiryInDays(2))];
-    expect(pickCandleSpec(legs)).toEqual({ resolutionSec: 3600, buckets: 24 });
+    const spec = pickCandleSpec(legs);
+    expect(spec.resolutionSec).toBe(1800);
   });
 });

@@ -52,13 +52,6 @@ export default function AlphaView() {
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
 
-  // Reset leg selection when the underlying or expiry changes — old strikes
-  // may not exist on the new chain.
-  useEffect(() => {
-    setShortStrike(null);
-    setLongStrike(null);
-  }, [underlying, expiry]);
-
   const atmStrike = chain?.stats.atmStrike ?? null;
 
   const sortedStrikes = useMemo(() => {
@@ -79,9 +72,20 @@ export default function AlphaView() {
     return { shortStrike: sortedStrikes[shortIdx]!, longStrike: sortedStrikes[shortIdx - 1]! };
   };
 
-  // Seed defaults once the chain arrives if the user hasn't picked yet.
+  // Seed (or re-seed) leg defaults whenever the current selection isn't valid
+  // for the current chain. This covers initial load AND tenor/underlying
+  // changes — at the moment the *new* chain arrives, if the prior strikes
+  // don't exist on it we atomically swap to fresh defaults, avoiding any
+  // render where strikes are null while old data is still on screen.
   useEffect(() => {
-    if (shortStrike != null || longStrike != null) return;
+    if (!sortedStrikes || sortedStrikes.length < 2) return;
+    const strikeSet = new Set(sortedStrikes);
+    const valid =
+      shortStrike != null &&
+      longStrike != null &&
+      strikeSet.has(shortStrike) &&
+      strikeSet.has(longStrike);
+    if (valid) return;
     const d = defaultsFor(kind);
     if (!d) return;
     setShortStrike(d.shortStrike);

@@ -17,7 +17,7 @@ function avgIv(side: EnrichedSide): number | null {
   return count > 0 ? sum / count : null;
 }
 
-function interpAtStrike(points: SmilePoint[], targetStrike: number): number | null {
+export function interpAtStrike(points: readonly SmilePoint[], targetStrike: number): number | null {
   if (points.length === 0) return null;
   const sorted = [...points].sort((a, b) => a.strike - b.strike);
   const first = sorted[0]!;

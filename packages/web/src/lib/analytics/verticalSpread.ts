@@ -1,5 +1,5 @@
 import type { EnrichedStrike, VenueQuote, VenueId } from '@shared/enriched';
-import { blackScholesCall, blackScholesPut, type OptionRight } from './blackScholes';
+import { blackScholesCall, blackScholesPut, normCdf, type OptionRight } from './blackScholes';
 import { inferMissingIv } from './ivInference';
 
 export type SpreadKind = 'call-credit' | 'put-credit';
@@ -20,6 +20,10 @@ export interface SpreadInput {
   // once per snapshot and pass it in; otherwise the pricer does O(n) on the
   // strike list twice per invocation.
   strikeByKey?: ReadonlyMap<number, EnrichedStrike>;
+  // Optional smile interpolator. When provided, success probability is the
+  // risk-neutral N(±d₂) at the breakeven strike. When omitted, falls back to a
+  // coarse spot/breakeven heuristic.
+  ivAtStrike?: (strike: number) => number | null;
 }
 
 export interface VenueLegCandidate {
@@ -49,6 +53,9 @@ export interface SpreadSignal {
   breakeven: number;
   riskReward: number;
   successProbability: number;
+  // 'risk-neutral' = Black-Scholes N(±d₂) at breakeven IV.
+  // 'heuristic'    = bucketed spot/breakeven ratio (fallback when no IV is available).
+  probabilityMethod: 'risk-neutral' | 'heuristic';
 }
 
 export interface RoutedSpreadAnalysis {
@@ -207,25 +214,51 @@ function pickBestBuy(cands: VenueLegCandidate[]): VenueLegCandidate | null {
   return best;
 }
 
-// ── Signal math (Python §7 parity) ─────────────────────────────────
+// ── Signal math ────────────────────────────────────────────────────
 
-function successProbability(kind: SpreadKind, spot: number, breakeven: number): number {
+interface ProbabilityResult {
+  prob: number;
+  method: 'risk-neutral' | 'heuristic';
+}
+
+// Risk-neutral probability of finishing in the profit zone of a credit spread.
+// For a call-credit, profit ⇔ S_T < BE  → P = N(−d₂).
+// For a put-credit,  profit ⇔ S_T > BE  → P = N( d₂).
+// d₂ = [ln(S/BE) + (r − ½σ²)T] / (σ√T), σ = IV at the breakeven strike.
+//
+// Falls back to a coarse spot/BE bucket when σ or T is unavailable so the UI
+// keeps rendering a probability rather than going blank.
+function successProbability(
+  kind: SpreadKind,
+  spot: number,
+  breakeven: number,
+  T: number,
+  r: number,
+  ivAtBreakeven: number | null,
+): ProbabilityResult {
+  if (ivAtBreakeven != null && ivAtBreakeven > 0 && T > 0 && spot > 0 && breakeven > 0) {
+    const sigma = ivAtBreakeven;
+    const d2 = (Math.log(spot / breakeven) + (r - 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
+    const prob = kind === 'call-credit' ? normCdf(-d2) : normCdf(d2);
+    return { prob, method: 'risk-neutral' };
+  }
+
+  // Heuristic fallback — same buckets as before.
   const ratio = spot / breakeven;
   if (kind === 'call-credit') {
     if (spot <= breakeven) {
-      if (ratio < 0.95) return 0.75;
-      if (ratio < 0.98) return 0.65;
-      return 0.55;
+      if (ratio < 0.95) return { prob: 0.75, method: 'heuristic' };
+      if (ratio < 0.98) return { prob: 0.65, method: 'heuristic' };
+      return { prob: 0.55, method: 'heuristic' };
     }
-    return 0.35;
+    return { prob: 0.35, method: 'heuristic' };
   }
-  // put-credit
   if (spot >= breakeven) {
-    if (ratio > 1.05) return 0.75;
-    if (ratio > 1.02) return 0.65;
-    return 0.55;
+    if (ratio > 1.05) return { prob: 0.75, method: 'heuristic' };
+    if (ratio > 1.02) return { prob: 0.65, method: 'heuristic' };
+    return { prob: 0.55, method: 'heuristic' };
   }
-  return 0.35;
+  return { prob: 0.35, method: 'heuristic' };
 }
 
 function gateSignal(
@@ -235,6 +268,9 @@ function gateSignal(
   shortPremium: number | null,
   longPremium: number | null,
   spot: number,
+  T: number,
+  r: number,
+  ivAtStrike: ((strike: number) => number | null) | undefined,
 ): SpreadSignal | null {
   if (shortPremium == null || longPremium == null) return null;
 
@@ -253,7 +289,8 @@ function gateSignal(
 
   const breakeven = kind === 'call-credit' ? shortStrike + netCredit : shortStrike - netCredit;
   const riskReward = maxProfit > 0 ? Math.min(maxLoss / maxProfit, 999.99) : 999.99;
-  const prob = successProbability(kind, spot, breakeven);
+  const ivBE = ivAtStrike ? ivAtStrike(breakeven) : null;
+  const { prob, method } = successProbability(kind, spot, breakeven, T, r, ivBE);
 
   let signal: TradingSignal;
   let reasoning: string;
@@ -277,6 +314,7 @@ function gateSignal(
     breakeven,
     riskReward,
     successProbability: prob,
+    probabilityMethod: method,
   };
 }
 
@@ -307,6 +345,7 @@ function computeSurfaceSignal(
   spot: number,
   T: number,
   r: number,
+  ivAtStrike: ((strike: number) => number | null) | undefined,
 ): SpreadSignal | null {
   if (!shortSide || !longSide) return null;
   const right = rightForKind(kind);
@@ -322,13 +361,13 @@ function computeSurfaceSignal(
 
   const shortPremium = priceAtIv(right, spot, shortStrike, T, r, shortBidIv);
   const longPremium = priceAtIv(right, spot, longStrike, T, r, longAskIv);
-  return gateSignal(kind, shortStrike, longStrike, shortPremium, longPremium, spot);
+  return gateSignal(kind, shortStrike, longStrike, shortPremium, longPremium, spot, T, r, ivAtStrike);
 }
 
 // ── Public API ─────────────────────────────────────────────────────
 
 export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
-  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues, strikeByKey } = input;
+  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues, strikeByKey, ivAtStrike } = input;
   const right = rightForKind(kind);
   const shortRow = findStrike(strikes, shortStrike, strikeByKey);
   const longRow = findStrike(strikes, longStrike, strikeByKey);
@@ -347,9 +386,22 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
     shortBest?.netAfterFees ?? null,
     longBest?.netAfterFees ?? null,
     spot,
+    T,
+    r,
+    ivAtStrike,
   );
 
-  const surfaceSignal = computeSurfaceSignal(kind, shortStrike, longStrike, shortRow, longRow, spot, T, r);
+  const surfaceSignal = computeSurfaceSignal(
+    kind,
+    shortStrike,
+    longStrike,
+    shortRow,
+    longRow,
+    spot,
+    T,
+    r,
+    ivAtStrike,
+  );
 
   return {
     kind,

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
 import { routeVerticalSpread, type SpreadKind, type RoutedSpreadAnalysis } from '@lib/analytics/verticalSpread';
-import { extractSmile, type SmileCurve } from '@lib/analytics/smile';
+import { extractSmile, interpAtStrike, type SmileCurve } from '@lib/analytics/smile';
 
 const DEFAULT_RISK_FREE_RATE = 0.05;
 
@@ -69,6 +69,8 @@ export function useVerticalSpreadAnalysis({
     ) {
       return null;
     }
+    const smilePoints = smile?.points ?? [];
+    const ivAtStrike = (k: number) => interpAtStrike(smilePoints, k);
     return routeVerticalSpread({
       kind,
       shortStrike,
@@ -79,9 +81,10 @@ export function useVerticalSpreadAnalysis({
       T,
       r: DEFAULT_RISK_FREE_RATE,
       venues: venues as readonly import('@shared/enriched').VenueId[] | undefined,
+      ivAtStrike,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey]);
+  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey, smile]);
 
   return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
 }

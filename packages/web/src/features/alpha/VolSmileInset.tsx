@@ -66,7 +66,28 @@ function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.title}>Vol smile · OTM IV blend</div>
+      <div className={styles.title}>
+        <span>Vol smile · OTM IV blend</span>
+        <span className={styles.stats}>
+          {smile?.atmIv != null && (
+            <span className={styles.stat}>
+              ATM <strong>{(smile.atmIv * 100).toFixed(1)}%</strong>
+            </span>
+          )}
+          {smile?.skew != null && (
+            <span className={styles.stat} title="(IV at 0.9·spot − IV at 1.1·spot) / ATM IV. Positive = downside puts richer than upside calls.">
+              Skew{' '}
+              <strong data-sign={smile.skew >= 0 ? 'pos' : 'neg'}>
+                {smile.skew >= 0 ? '+' : ''}
+                {smile.skew.toFixed(3)}
+              </strong>
+            </span>
+          )}
+        </span>
+        <span className={styles.subtitle}>
+          per-strike avg markIv across venues — puts below spot, calls above
+        </span>
+      </div>
       <svg viewBox={`0 0 ${W} ${H}`} className={styles.svg} role="img" aria-label="Volatility smile">
         {/* Y-axis grid */}
         <line
@@ -114,22 +135,24 @@ function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
           />
         )}
 
-        {/* Short strike dot (green) */}
+        {/* Short strike dot (green) — label always anchored above */}
         {shortDot && (
           <StrikeMarker
             x={layout.sx(shortDot.strike)}
             y={layout.sy(shortDot.blendedIv!)}
             label={`S ${shortDot.strike.toLocaleString()} · ${(shortDot.blendedIv! * 100).toFixed(1)}%`}
             color="var(--color-profit)"
+            placement="above"
           />
         )}
-        {/* Long strike dot (red) */}
+        {/* Long strike dot (red) — label always anchored below to avoid stacking on the short label */}
         {longDot && (
           <StrikeMarker
             x={layout.sx(longDot.strike)}
             y={layout.sy(longDot.blendedIv!)}
             label={`L ${longDot.strike.toLocaleString()} · ${(longDot.blendedIv! * 100).toFixed(1)}%`}
             color="var(--color-loss)"
+            placement="below"
           />
         )}
       </svg>
@@ -137,11 +160,38 @@ function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
   );
 }
 
-function StrikeMarker({ x, y, label, color }: { x: number; y: number; label: string; color: string }) {
+function StrikeMarker({
+  x,
+  y,
+  label,
+  color,
+  placement,
+}: {
+  x: number;
+  y: number;
+  label: string;
+  color: string;
+  placement: 'above' | 'below';
+}) {
+  // Flip horizontal anchor when the dot is in the right half so the label
+  // doesn't get clipped at the chart edge.
+  const anchorRight = x > (W + PAD_L - PAD_R) / 2;
+  const tx = anchorRight ? x - 10 : x + 10;
+  const ty = placement === 'above' ? y - 12 : y + 18;
   return (
     <>
-      <circle cx={x} cy={y} r="6" fill={color} stroke="var(--bg-base)" strokeWidth="2" />
-      <text x={x + 10} y={y - 8} className={styles.strikeLabel} fill={color}>
+      <circle cx={x} cy={y} r="5" fill={color} stroke="var(--bg-base)" strokeWidth="2" />
+      <text
+        x={tx}
+        y={ty}
+        textAnchor={anchorRight ? 'end' : 'start'}
+        className={styles.strikeLabel}
+        fill={color}
+        paintOrder="stroke"
+        stroke="var(--bg-elevated)"
+        strokeWidth="3"
+        strokeLinejoin="round"
+      >
         {label}
       </text>
     </>

@@ -57,8 +57,15 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
 
       <div className={styles.probBlock}>
         <div className={styles.probLabelRow}>
-          <span className={styles.probLabel} title="Heuristic success probability — not N(d2)">
-            Success probability *
+          <span
+            className={styles.probLabel}
+            title={
+              signal.probabilityMethod === 'risk-neutral'
+                ? 'Risk-neutral P(profit at expiry) = N(±d₂) using IV at the breakeven strike (Black-Scholes).'
+                : 'Heuristic — bucketed spot/breakeven ratio. Used as fallback when smile IV is unavailable.'
+            }
+          >
+            Success probability {signal.probabilityMethod === 'risk-neutral' ? '· N(d₂)' : '· heuristic'}
           </span>
           <span className={styles.probPct}>{probPct}%</span>
         </div>

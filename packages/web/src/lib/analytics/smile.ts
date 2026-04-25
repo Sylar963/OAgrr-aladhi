@@ -6,6 +6,15 @@ export type { SmileCurve, SmilePoint };
 // the enriched chain payload does not yet carry the smile curve — when the
 // server starts emitting it, swap consumers to read response.smile and delete
 // this module.
+
+// Half-width of the put/call seam smoothing window, as a fraction of spot.
+// Inside [spot·(1−W), spot·(1+W)] we linearly mix put-side and call-side IVs
+// instead of hard-switching at K=spot. W=0.025 spans ~3 strikes either side of
+// spot on typical BTC/ETH grids — enough to remove the discontinuity that
+// would otherwise jump the breakeven-IV reading by a few tenths of a percent
+// when a tight ATM spread's breakeven crosses spot.
+const ATM_BLEND_HALF_WIDTH = 0.025;
+
 function avgIv(side: EnrichedSide): number | null {
   let sum = 0;
   let count = 0;
@@ -15,6 +24,24 @@ function avgIv(side: EnrichedSide): number | null {
     count += 1;
   }
   return count > 0 ? sum / count : null;
+}
+
+function blendOtmIv(
+  strike: number,
+  spot: number,
+  callIv: number | null,
+  putIv: number | null,
+): number | null {
+  if (callIv == null && putIv == null) return null;
+  if (callIv == null) return putIv;
+  if (putIv == null) return callIv;
+
+  const lo = spot * (1 - ATM_BLEND_HALF_WIDTH);
+  const hi = spot * (1 + ATM_BLEND_HALF_WIDTH);
+  if (strike <= lo) return putIv;
+  if (strike >= hi) return callIv;
+  const w = (strike - lo) / (hi - lo);
+  return (1 - w) * putIv + w * callIv;
 }
 
 export function interpAtStrike(points: readonly SmilePoint[], targetStrike: number): number | null {
@@ -42,7 +69,7 @@ export function extractSmile(strikes: readonly EnrichedStrike[], spot: number): 
   const points: SmilePoint[] = strikes.map((s) => {
     const callIv = avgIv(s.call);
     const putIv = avgIv(s.put);
-    const blended = s.strike < spot ? (putIv ?? callIv) : (callIv ?? putIv);
+    const blended = blendOtmIv(s.strike, spot, callIv, putIv);
     return {
       strike: s.strike,
       moneyness: spot > 0 ? s.strike / spot : 0,

@@ -598,6 +598,30 @@ function interpAtStrike(points: SmilePoint[], targetStrike: number): number | nu
   return null;
 }
 
+// Half-width of the put/call seam smoothing window, as a fraction of spot.
+// Inside [spot·(1−W), spot·(1+W)] we linearly mix put-side and call-side IVs
+// instead of hard-switching at K=spot — removes the discontinuity that would
+// otherwise jump the blended IV by a few tenths of a percent across the seam.
+const ATM_BLEND_HALF_WIDTH = 0.025;
+
+function blendOtmIv(
+  strike: number,
+  spot: number,
+  callIv: number | null,
+  putIv: number | null,
+): number | null {
+  if (callIv == null && putIv == null) return null;
+  if (callIv == null) return putIv;
+  if (putIv == null) return callIv;
+
+  const lo = spot * (1 - ATM_BLEND_HALF_WIDTH);
+  const hi = spot * (1 + ATM_BLEND_HALF_WIDTH);
+  if (strike <= lo) return putIv;
+  if (strike >= hi) return callIv;
+  const w = (strike - lo) / (hi - lo);
+  return (1 - w) * putIv + w * callIv;
+}
+
 /**
  * Extracts the strike-indexed smile curve for a single expiry.
  *
@@ -606,13 +630,15 @@ function interpAtStrike(points: SmilePoint[], targetStrike: number): number | nu
  * that need continuous smile data read from this; consumers that only need
  * a term-structure snapshot keep reading IvSurfaceRow.
  *
- * Uses OTM IV per strike as the blended value — calls above spot, puts below.
+ * Uses OTM IV per strike as the blended value — calls above spot, puts below,
+ * with a smooth linear blend across the ±2.5% window centered on spot to keep
+ * the curve continuous through ATM.
  */
 export function computeSmile(strikes: EnrichedStrike[], spot: number): SmileCurve {
   const points: SmilePoint[] = strikes.map((s) => {
     const callIv = averageSideIv(s.call);
     const putIv = averageSideIv(s.put);
-    const blended = s.strike < spot ? (putIv ?? callIv) : (callIv ?? putIv);
+    const blended = blendOtmIv(s.strike, spot, callIv, putIv);
     return {
       strike: s.strike,
       moneyness: spot > 0 ? s.strike / spot : 0,

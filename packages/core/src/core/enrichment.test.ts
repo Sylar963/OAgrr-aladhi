@@ -698,4 +698,29 @@ describe('enrichment', () => {
     expect(smile.atmIv).toBe(0.65);
     expect(smile.skew!).toBeCloseTo((0.75 - 0.7) / 0.65, 10);
   });
+
+  // Strike grid centered on spot=100 with the ATM blend window at ±2.5% (97.5..102.5).
+  // Asymmetric put/call IVs verify the linear seam-blend rather than a hard switch.
+  it('computeSmile linearly blends put/call IVs inside the ±2.5% ATM window', () => {
+    const side = (iv: number | null) => ({
+      bestIv: iv,
+      bestVenue: 'deribit' as const,
+      venues: { deribit: createVenueQuote({ markIv: iv }) },
+    });
+    const strikes: EnrichedStrike[] = [
+      { strike: 95, call: side(0.7), put: side(0.55) }, // outside, below → put
+      { strike: 99, call: side(0.68), put: side(0.62) }, // inside, w=0.3
+      { strike: 100, call: side(0.66), put: side(0.6) }, // inside, w=0.5
+      { strike: 101, call: side(0.65), put: side(0.59) }, // inside, w=0.7
+      { strike: 105, call: side(0.62), put: side(0.5) }, // outside, above → call
+    ];
+
+    const smile = computeSmile(strikes, 100);
+
+    expect(smile.points[0]!.blendedIv).toBeCloseTo(0.55, 10);
+    expect(smile.points[4]!.blendedIv).toBeCloseTo(0.62, 10);
+    expect(smile.points[1]!.blendedIv).toBeCloseTo(0.7 * 0.62 + 0.3 * 0.68, 10);
+    expect(smile.points[2]!.blendedIv).toBeCloseTo(0.5 * 0.6 + 0.5 * 0.66, 10);
+    expect(smile.points[3]!.blendedIv).toBeCloseTo(0.3 * 0.59 + 0.7 * 0.65, 10);
+  });
 });

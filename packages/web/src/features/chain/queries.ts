@@ -69,6 +69,7 @@ export function useExpiries(underlying: string) {
     queryFn: () => fetchJson<ExpiriesResponse>(`/expiries?underlying=${underlying}`),
     enabled: Boolean(underlying),
     staleTime: 30_000,
+    placeholderData: (prev: ExpiriesResponse | undefined) => prev,
     select: (data): ExpiriesResult => ({
       expiries: data.expiries,
       timestamps: data.timestamps ?? data.expiries.map((expiry) => ({ expiry, expiryTs: null })),

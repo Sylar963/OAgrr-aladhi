@@ -332,16 +332,27 @@ export function useChainWs({
     store.set({ connectionState: 'closed' });
   }, [store]);
 
+  // Connect / disconnect based on enabled + params. Crucially, do NOT tear
+  // down the socket when only `underlying` or `expiry` change — the
+  // resubscribe effect below pushes a new subscribe over the live socket.
+  // Tearing down forced a closed → connecting → live cycle on every tenor
+  // change, which made the FreshnessLabel ms display flicker visibly.
   useEffect(() => {
     if (!enabled || !underlying || !expiry) {
       disconnect();
       return;
     }
+    // connect() is idempotent: it no-ops if the socket is already OPEN or
+    // CONNECTING, so re-running on param change is safe.
     connect();
-    return () => disconnect();
   }, [enabled, connect, disconnect, underlying, expiry]);
 
-  // Resubscribe on param change over an existing connection
+  // Tear down only when the hook itself unmounts.
+  useEffect(() => () => disconnect(), [disconnect]);
+
+  // Resubscribe on param change over an existing connection. When the socket
+  // is still CONNECTING, the onopen handler will sendSubscribe using
+  // paramsRef.current, which is updated every render.
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !underlying || !expiry) return;

@@ -16,6 +16,7 @@ import {
   flowService,
   ivHistoryService,
   ivHistoryStore,
+  spotCandleService,
   spotService,
   tradeStore,
 } from './services.js';
@@ -100,6 +101,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     flowService.dispose();
     blockFlowService.dispose();
     spotService.dispose();
+    spotCandleService.dispose();
     dvolService.dispose();
     ivHistoryService.dispose();
     disposeServiceStores();

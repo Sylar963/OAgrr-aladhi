@@ -110,6 +110,12 @@ export {
 // services
 export { DvolService, type DvolSnapshot, type DvolCandle, type HvPoint } from './services/dvol.js';
 export {
+  SpotCandleService,
+  type SpotCandle,
+  type SpotCandleCurrency,
+  type SpotCandleResolutionSec,
+} from './services/spot-candles.js';
+export {
   IvHistoryService,
   type IvHistoryDeps,
   type IvHistoryOptions,

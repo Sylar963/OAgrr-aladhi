@@ -35,6 +35,13 @@ export interface StrategyMetrics {
   netVega: number | null;
 }
 
+/** Total strategy P&L at expiry for a single underlying price. Used by V2 chart for zone classification. */
+export function pnlAtPrice(legs: Leg[], underlyingPrice: number): number {
+  let total = 0;
+  for (const leg of legs) total += legPnlAtExpiry(leg, underlyingPrice);
+  return total;
+}
+
 /** P&L of a single leg at expiry for a given underlying price. */
 function legPnlAtExpiry(leg: Leg, underlyingPrice: number): number {
   const sign = leg.direction === 'buy' ? 1 : -1;

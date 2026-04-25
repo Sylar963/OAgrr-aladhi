@@ -3,6 +3,7 @@ import {
   BlockTradeRuntime,
   DvolService,
   IvHistoryService,
+  SpotCandleService,
   SpotRuntime,
   TradeRuntime,
   buildIvSurfaceGrid,
@@ -20,6 +21,7 @@ import {
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
+export const spotCandleService = new SpotCandleService();
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
 const databaseUrl = process.env['DATABASE_URL'];
@@ -46,6 +48,7 @@ let ivHistoryStorageAlarmTimer: ReturnType<typeof setInterval> | null = null;
 const serviceHealth = {
   dvol: false,
   spot: false,
+  spotCandles: false,
   flow: false,
   blockFlow: false,
   ivHistory: false,
@@ -56,6 +59,9 @@ export function isDvolReady(): boolean {
 }
 export function isSpotReady(): boolean {
   return serviceHealth.spot;
+}
+export function isSpotCandlesReady(): boolean {
+  return serviceHealth.spotCandles;
 }
 export function isFlowReady(): boolean {
   return serviceHealth.flow;
@@ -85,7 +91,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 
   // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
   // Flow and spot cover every asset that has options on at least one venue.
-  const [dvol, spot, flow, blockFlow] = await Promise.allSettled([
+  const [dvol, spot, flow, blockFlow, spotCandles] = await Promise.allSettled([
     dvolService.start(['BTC', 'ETH']),
     spotService.start([
       'BTCUSDT',
@@ -100,6 +106,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     ]),
     flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE']),
     blockFlowService.start(),
+    spotCandleService.start(),
   ]);
 
   if (dvol.status === 'fulfilled') {
@@ -121,6 +128,11 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     serviceHealth.blockFlow = true;
     log.info('block flow service started');
   } else log.warn({ err: String(blockFlow.reason) }, 'block flow service failed');
+
+  if (spotCandles.status === 'fulfilled') {
+    serviceHealth.spotCandles = true;
+    log.info('spot-candles service started');
+  } else log.warn({ err: String(spotCandles.reason) }, 'spot-candles service failed');
 
   // IvHistoryService must start AFTER DVOL so seedFromDvol sees candles, and
   // AFTER adapters so the first snapshot's surface grid has chains to read.

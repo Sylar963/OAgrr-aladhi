@@ -16,6 +16,9 @@ import {
 import { repriceLeg } from './reprice';
 import { buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
+import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
+import SnapshotBanner from './SnapshotBanner';
+import { isSpotCandleCurrency, useSpotCandles } from './queries';
 import VenueSlideover from './VenueSlideover';
 import { legsToOrderRequest, useCreateTrade } from '@features/trading';
 import { useAppStore as _useAppStoreForTabSwitch } from '@stores/app-store';
@@ -172,6 +175,7 @@ export default function ArchitectView() {
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
   const [paperVenue, setPaperVenue] = useState(ACTIVE_PAPER_VENUES_VALUE);
+  const [variant, setVariant] = useState<'v1' | 'v2'>('v1');
 
   const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
   const createTrade = useCreateTrade();
@@ -341,6 +345,11 @@ export default function ArchitectView() {
 
   const hasScenarios = ivShift !== 0 || dteShift !== 0;
 
+  const candleSpec = useMemo(() => pickCandleSpec(legs), [legs]);
+  const candleAvailable = isSpotCandleCurrency(underlying);
+  const { data: spotCandlesData, dataUpdatedAt: spotCandlesUpdatedAt, isLoading: spotCandlesLoading } =
+    useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
+
   function handleCopyUrl() {
     const url = buildShareUrl(legs, underlying);
     navigator.clipboard.writeText(url);
@@ -465,6 +474,7 @@ export default function ArchitectView() {
           <div className={styles.chartCol}>
             <div
               className={`${styles.chartPanel} ${dragOver ? styles.chartPanelDragOver : ''}`}
+              data-variant={variant}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
@@ -545,44 +555,89 @@ export default function ArchitectView() {
                 </div>
               ) : (
                 <>
-                  <div className={styles.chartTitle}>P&L at Expiry</div>
-                  <PayoffChart
-                    points={payoffPoints}
-                    breakevens={metrics?.breakevens ?? []}
-                    spotPrice={spotPrice}
-                    legs={legs}
-                    maxProfit={metrics?.maxProfit ?? null}
-                    maxLoss={metrics?.maxLoss ?? null}
-                    strikes={availableStrikes}
-                    onLegStrikeDrag={handleLegStrikeDrag}
-                    scenarioIvPoints={scenarioIvPoints}
-                    scenarioDtePoints={scenarioDtePoints}
-                  />
-                  {hasScenarios && (
-                    <div className={styles.scenarioLegend}>
-                      <span className={styles.legendItem}>
-                        <span className={`${styles.legendDot} ${styles.legendDotBase}`} />
-                        <span className={styles.legendLabel}>At expiry</span>
-                      </span>
-                      {ivShift !== 0 && (
-                        <span className={styles.legendItem}>
-                          <span className={`${styles.legendDot} ${styles.legendDotIv}`} />
-                          <span className={styles.legendLabel}>
-                            IV {ivShift > 0 ? '+' : ''}
-                            {ivShift}%
-                          </span>
-                        </span>
-                      )}
-                      {dteShift !== 0 && (
-                        <span className={styles.legendItem}>
-                          <span className={`${styles.legendDot} ${styles.legendDotDte}`} />
-                          <span className={styles.legendLabel}>
-                            {dteShift > 0 ? '+' : ''}
-                            {dteShift}d DTE
-                          </span>
-                        </span>
-                      )}
+                  <div className={styles.chartTitleRow}>
+                    <div className={styles.chartTitle}>
+                      {variant === 'v1' ? 'P&L at Expiry' : 'Spot vs Break-even Zones'}
                     </div>
+                    <div className={styles.variantToggle}>
+                      <button
+                        className={styles.variantBtn}
+                        data-active={variant === 'v1'}
+                        data-variant="v1"
+                        onClick={() => setVariant('v1')}
+                      >
+                        V1
+                      </button>
+                      <button
+                        className={styles.variantBtn}
+                        data-active={variant === 'v2'}
+                        data-variant="v2"
+                        onClick={() => setVariant('v2')}
+                      >
+                        V2
+                      </button>
+                    </div>
+                  </div>
+
+                  {variant === 'v1' ? (
+                    <>
+                      <PayoffChart
+                        points={payoffPoints}
+                        breakevens={metrics?.breakevens ?? []}
+                        spotPrice={spotPrice}
+                        legs={legs}
+                        maxProfit={metrics?.maxProfit ?? null}
+                        maxLoss={metrics?.maxLoss ?? null}
+                        strikes={availableStrikes}
+                        onLegStrikeDrag={handleLegStrikeDrag}
+                        scenarioIvPoints={scenarioIvPoints}
+                        scenarioDtePoints={scenarioDtePoints}
+                      />
+                      {hasScenarios && (
+                        <div className={styles.scenarioLegend}>
+                          <span className={styles.legendItem}>
+                            <span className={`${styles.legendDot} ${styles.legendDotBase}`} />
+                            <span className={styles.legendLabel}>At expiry</span>
+                          </span>
+                          {ivShift !== 0 && (
+                            <span className={styles.legendItem}>
+                              <span className={`${styles.legendDot} ${styles.legendDotIv}`} />
+                              <span className={styles.legendLabel}>
+                                IV {ivShift > 0 ? '+' : ''}
+                                {ivShift}%
+                              </span>
+                            </span>
+                          )}
+                          {dteShift !== 0 && (
+                            <span className={styles.legendItem}>
+                              <span className={`${styles.legendDot} ${styles.legendDotDte}`} />
+                              <span className={styles.legendLabel}>
+                                {dteShift > 0 ? '+' : ''}
+                                {dteShift}d DTE
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {candleAvailable && (
+                        <SnapshotBanner
+                          dataUpdatedAt={spotCandlesUpdatedAt}
+                          refreshIntervalMs={120_000}
+                        />
+                      )}
+                      <PayoffChartV2
+                        candles={spotCandlesData?.candles ?? []}
+                        breakevens={metrics?.breakevens ?? []}
+                        spotPrice={spotPrice}
+                        legs={legs}
+                        loading={spotCandlesLoading && candleAvailable}
+                        available={candleAvailable}
+                        onSwitchToV1={() => setVariant('v1')}
+                      />
+                    </>
                   )}
                 </>
               )}

@@ -61,23 +61,34 @@ export default function AlphaView() {
 
   const atmStrike = chain?.stats.atmStrike ?? null;
 
-  // Seed reasonable defaults once the chain arrives: for call-credit, short
+  const sortedStrikes = useMemo(() => {
+    if (!chain) return null;
+    return [...chain.strikes].map((s) => s.strike).sort((a, b) => a - b);
+  }, [chain]);
+
+  // Compute reasonable defaults for a given spread kind: for call-credit, short
   // ≈ ATM, long ≈ first strike above that. For put-credit, mirror image.
-  useEffect(() => {
-    if (!chain || shortStrike != null || longStrike != null) return;
-    const strikes = [...chain.strikes].map((s) => s.strike).sort((a, b) => a - b);
-    if (strikes.length < 2 || atmStrike == null) return;
-    const atmIdx = nearestIndex(strikes, atmStrike);
-    if (kind === 'call-credit') {
-      const shortIdx = Math.min(atmIdx + 1, strikes.length - 2);
-      setShortStrike(strikes[shortIdx]!);
-      setLongStrike(strikes[shortIdx + 1]!);
-    } else {
-      const shortIdx = Math.max(atmIdx - 1, 1);
-      setShortStrike(strikes[shortIdx]!);
-      setLongStrike(strikes[shortIdx - 1]!);
+  const defaultsFor = (k: SpreadKind): { shortStrike: number; longStrike: number } | null => {
+    if (!sortedStrikes || sortedStrikes.length < 2 || atmStrike == null) return null;
+    const atmIdx = nearestIndex(sortedStrikes, atmStrike);
+    if (k === 'call-credit') {
+      const shortIdx = Math.min(atmIdx + 1, sortedStrikes.length - 2);
+      return { shortStrike: sortedStrikes[shortIdx]!, longStrike: sortedStrikes[shortIdx + 1]! };
     }
-  }, [chain, atmStrike, kind, shortStrike, longStrike]);
+    const shortIdx = Math.max(atmIdx - 1, 1);
+    return { shortStrike: sortedStrikes[shortIdx]!, longStrike: sortedStrikes[shortIdx - 1]! };
+  };
+
+  // Seed defaults once the chain arrives if the user hasn't picked yet.
+  useEffect(() => {
+    if (shortStrike != null || longStrike != null) return;
+    const d = defaultsFor(kind);
+    if (!d) return;
+    setShortStrike(d.shortStrike);
+    setLongStrike(d.longStrike);
+    // defaultsFor is stable per (sortedStrikes, atmStrike); listing those is sufficient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
 
   const analysis = useVerticalSpreadAnalysis({
     chain,
@@ -118,9 +129,16 @@ export default function AlphaView() {
     <SpreadBuilderPanel
       kind={kind}
       onKindChange={(k) => {
+        if (k === kind) return;
+        const d = defaultsFor(k);
         setKind(k);
-        setShortStrike(null);
-        setLongStrike(null);
+        if (d) {
+          setShortStrike(d.shortStrike);
+          setLongStrike(d.longStrike);
+        } else {
+          setShortStrike(null);
+          setLongStrike(null);
+        }
       }}
       strikes={chain.strikes}
       atmStrike={atmStrike}

@@ -14,7 +14,7 @@ import {
   type Leg,
 } from './payoff';
 import { repriceLeg } from './reprice';
-import { buildShareUrl, decodeStrategy } from './share';
+import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
 import SnapshotBanner from './SnapshotBanner';
@@ -236,17 +236,14 @@ export default function ArchitectView() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const encoded = params.get('strategy');
-    if (!encoded) return;
-
-    const decoded = decodeStrategy(encoded);
+    const decoded = decodeStrategy(params);
     if (!decoded) return;
 
     clearLegs();
     for (const leg of decoded.legs) addLeg(leg, decoded.underlying);
     setBuilderExpiry(decoded.legs[0]?.expiry ?? '');
 
-    params.delete('strategy');
+    for (const k of STRATEGY_PARAM_KEYS) params.delete(k);
     const clean = params.toString();
     window.history.replaceState({}, '', clean ? `?${clean}` : window.location.pathname);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

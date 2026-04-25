@@ -148,7 +148,7 @@ export default function ChainView() {
       <div className={styles.main}>
         <ExpiryBar
           underlying={underlying}
-          spotPrice={chain?.stats.spotIndexUsd}
+          spotPrice={chain?.stats.forwardPriceUsd}
           spotChange={marketStats?.spot?.change24hPct}
           expiries={expiries}
           selected={expiry}

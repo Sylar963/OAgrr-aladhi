@@ -120,7 +120,10 @@ export interface GexStrike {
 }
 
 export interface ChainStats {
-  spotIndexUsd: number | null;
+  // Per-expiry forward price (averaged across reporting venues). Sourced from
+  // each contract's `underlyingPriceUsd` (Deribit `underlying_price`, OKX
+  // `fwdPx`). On long tenors this carries basis vs spot — do NOT display as "spot".
+  forwardPriceUsd: number | null;
   indexPriceUsd: number | null;
   basisPct: number | null;
   atmStrike: number | null;
@@ -219,7 +222,7 @@ const GexStrikeSchema = z.object({
 });
 
 const ChainStatsSchema = z.object({
-  spotIndexUsd: NullableNumberSchema,
+  forwardPriceUsd: NullableNumberSchema,
   indexPriceUsd: NullableNumberSchema,
   basisPct: NullableNumberSchema,
   atmStrike: NullableNumberSchema,

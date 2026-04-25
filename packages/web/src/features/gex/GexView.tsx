@@ -27,7 +27,7 @@ export default function GexView() {
 
   const { data: chain, isLoading } = useChainQuery(underlying, expiry, activeVenues);
   const gex = chain?.gex ?? [];
-  const spotPrice = chain?.stats.spotIndexUsd ?? null;
+  const spotPrice = chain?.stats.forwardPriceUsd ?? null;
   const barsRef = useRef<HTMLDivElement | null>(null);
   const spotRowRef = useRef<HTMLDivElement | null>(null);
 

@@ -91,7 +91,7 @@ function snapshot(subId: string, seq: number, underlying = 'BTC'): ServerWsMessa
       expiryTs: null,
       dte: 7,
       stats: {
-        spotIndexUsd: 70_500,
+        forwardPriceUsd: 70_500,
         indexPriceUsd: 70_500,
         basisPct: 0,
         atmStrike: 70_000,
@@ -130,7 +130,7 @@ function deltaMsg(subId: string, seq: number): ServerWsMessage {
     deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: Date.now() }],
     patch: {
       stats: {
-        spotIndexUsd: 70500,
+        forwardPriceUsd: 70500,
         indexPriceUsd: 70500,
         basisPct: 0,
         atmStrike: 70000,

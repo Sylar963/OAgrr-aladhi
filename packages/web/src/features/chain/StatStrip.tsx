@@ -61,8 +61,12 @@ export default function StatStrip({
     <div className={styles.strip}>
       <StatCell
         label={`${underlying} Spot`}
-        value={fmtUsd(stats.spotIndexUsd)}
-        sub={stats.indexPriceUsd != null ? `Index ${fmtUsd(stats.indexPriceUsd)}` : undefined}
+        value={fmtUsd(stats.indexPriceUsd)}
+        sub={
+          stats.forwardPriceUsd != null
+            ? `Forward ${dte}d ${fmtUsd(stats.forwardPriceUsd)}`
+            : undefined
+        }
       />
       <div className={styles.divider} />
       <StatCell label="ATM IV" value={fmtIv(stats.atmIv)} accent />

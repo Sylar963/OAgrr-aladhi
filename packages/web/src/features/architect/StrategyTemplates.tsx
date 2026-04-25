@@ -39,7 +39,7 @@ export type TemplateBuildResult =
   | { ok: false; error: TemplateBuildFailure };
 
 function findAtmStrike(chain: EnrichedChainResponse): number {
-  const ref = chain.stats.indexPriceUsd ?? chain.stats.spotIndexUsd ?? 70000;
+  const ref = chain.stats.indexPriceUsd ?? chain.stats.forwardPriceUsd ?? 70000;
   let best = chain.strikes[0]?.strike ?? ref;
   let bestDist = Infinity;
 

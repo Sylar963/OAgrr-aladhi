@@ -39,7 +39,7 @@ function buildSurfaceGrid(
     .sort((a, b) => a.dte - b.dte);
 
   for (const { chain, dte } of sorted) {
-    const spot = chain.stats.spotIndexUsd;
+    const spot = chain.stats.forwardPriceUsd;
     const smile = extractSmile(chain.strikes, activeVenues, spot, 'delta');
 
     const ivByDelta = new Map<number, number>();

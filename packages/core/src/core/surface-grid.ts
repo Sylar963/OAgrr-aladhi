@@ -67,7 +67,7 @@ export async function buildIvSurfaceGrid({
     const comparison = buildComparisonChain(underlying, expiry, chains);
     const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
     const stats = computeChainStats(enriched.strikes, chains);
-    const refPrice = stats.indexPriceUsd ?? stats.spotIndexUsd;
+    const refPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd;
     const dte = computeDte(expiry);
     const surfaceRow = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
 

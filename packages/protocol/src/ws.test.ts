@@ -85,7 +85,7 @@ describe('ClientWsMessageSchema', () => {
 
 describe('ServerWsMessageSchema', () => {
   const stats = {
-    spotIndexUsd: 70_000,
+    forwardPriceUsd: 70_000,
     indexPriceUsd: 70_000,
     basisPct: 0,
     atmStrike: 70_000,

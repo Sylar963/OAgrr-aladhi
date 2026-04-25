@@ -117,7 +117,10 @@ export interface IvHistoryResponse {
 }
 
 export interface ChainStats {
-  spotIndexUsd: number | null;
+  // Per-expiry forward price (averaged across reporting venues). Sourced from
+  // each contract's `underlyingPriceUsd` (Deribit `underlying_price`, OKX
+  // `fwdPx`). On long tenors this carries basis vs spot — do NOT display as "spot".
+  forwardPriceUsd: number | null;
   indexPriceUsd: number | null;
   basisPct: number | null;
   atmStrike: number | null;
@@ -253,41 +256,45 @@ export function enrichComparisonRow(row: ComparisonRow): EnrichedStrike {
 /**
  * Aggregates reference prices across venue chains.
  *
- * For multi-venue views, a simple average across venue-level spot/index values
- * is less venue-biased than "first chain wins" and keeps summary stats aligned
- * with the selected venue set.
+ * `forwardPriceUsd`: per-expiry forward, averaged across venues. Each venue
+ * contributes its first contract's `underlyingPriceUsd` (Deribit
+ * `underlying_price`, OKX `fwdPx`) — which is the forward to the chain's
+ * expiry, not spot.
+ *
+ * `indexPriceUsd`: spot index, averaged across venues. Each venue contributes
+ * its first contract's `indexPriceUsd`.
  */
 function extractPrices(venueChains: VenueOptionChain[]): {
-  spotIndexUsd: number | null;
+  forwardPriceUsd: number | null;
   indexPriceUsd: number | null;
 } {
-  const spots: number[] = [];
+  const forwards: number[] = [];
   const indices: number[] = [];
 
   for (const vc of venueChains) {
-    let venueSpot: number | null = null;
+    let venueForward: number | null = null;
     let venueIndex: number | null = null;
 
     for (const contract of Object.values(vc.contracts)) {
-      if (venueSpot === null && contract.quote.underlyingPriceUsd !== null) {
-        venueSpot = contract.quote.underlyingPriceUsd;
+      if (venueForward === null && contract.quote.underlyingPriceUsd !== null) {
+        venueForward = contract.quote.underlyingPriceUsd;
       }
       if (venueIndex === null && contract.quote.indexPriceUsd !== null) {
         venueIndex = contract.quote.indexPriceUsd;
       }
-      if (venueSpot !== null && venueIndex !== null) break;
+      if (venueForward !== null && venueIndex !== null) break;
     }
 
-    if (venueSpot !== null) spots.push(venueSpot);
+    if (venueForward !== null) forwards.push(venueForward);
     if (venueIndex !== null) indices.push(venueIndex);
   }
 
-  const spotIndexUsd =
-    spots.length > 0 ? spots.reduce((sum, value) => sum + value, 0) / spots.length : null;
+  const forwardPriceUsd =
+    forwards.length > 0 ? forwards.reduce((sum, value) => sum + value, 0) / forwards.length : null;
   const indexPriceUsd =
     indices.length > 0 ? indices.reduce((sum, value) => sum + value, 0) / indices.length : null;
 
-  return { spotIndexUsd, indexPriceUsd };
+  return { forwardPriceUsd, indexPriceUsd };
 }
 
 /**
@@ -401,15 +408,15 @@ export function computeChainStats(
   strikes: EnrichedStrike[],
   venueChains: VenueOptionChain[],
 ): ChainStats {
-  const { spotIndexUsd, indexPriceUsd } = extractPrices(venueChains);
+  const { forwardPriceUsd, indexPriceUsd } = extractPrices(venueChains);
 
+  // (spot − forward) / forward × 100. Negative under contango (forward > spot).
   const basisPct =
-    indexPriceUsd !== null && spotIndexUsd !== null
-      ? ((indexPriceUsd - spotIndexUsd) / spotIndexUsd) * 100
+    indexPriceUsd !== null && forwardPriceUsd !== null
+      ? ((indexPriceUsd - forwardPriceUsd) / forwardPriceUsd) * 100
       : null;
 
-  // ATM anchored to index price; fall back to spot when unavailable.
-  const refPrice = indexPriceUsd ?? spotIndexUsd;
+  const refPrice = indexPriceUsd ?? forwardPriceUsd;
   let atmStrike: number | null = null;
   let atmIv: number | null = null;
 
@@ -444,7 +451,7 @@ export function computeChainStats(
   }
 
   return {
-    spotIndexUsd,
+    forwardPriceUsd,
     indexPriceUsd,
     basisPct,
     atmStrike,
@@ -734,7 +741,7 @@ export function buildEnrichedChain(
   const expiryTs = pickExpiryTs(venueChains);
   const dte = computeDte(expiry, expiryTs);
 
-  const spotPrice = stats.spotIndexUsd ?? stats.indexPriceUsd ?? 0;
+  const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
   const gex = computeGex(rows, strikes, spotPrice);
 
   return {

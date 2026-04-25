@@ -564,7 +564,8 @@ export default function AnalyticsView() {
     );
   }
 
-  const spotPrice = chains.find((c) => c.stats.spotIndexUsd != null)?.stats.spotIndexUsd ?? null;
+  const spotPrice =
+    chains.find((c) => c.stats.forwardPriceUsd != null)?.stats.forwardPriceUsd ?? null;
   const venueVolume = aggregateVenueVolume(chains);
   const expiryPcr = aggregateExpiryPcr(chains);
 

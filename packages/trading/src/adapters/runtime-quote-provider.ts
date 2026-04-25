@@ -29,7 +29,7 @@ export class RuntimeQuoteProvider implements QuoteProvider {
           bidUsd: quote.bid,
           askUsd: quote.ask,
           markUsd: quote.mid,
-          underlyingPriceUsd: snapshot.stats.spotIndexUsd ?? snapshot.stats.indexPriceUsd,
+          underlyingPriceUsd: snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd,
           feesTakerUsd: quote.estimatedFees?.taker ?? DEFAULT_FEES_TAKER_USD,
         });
       }

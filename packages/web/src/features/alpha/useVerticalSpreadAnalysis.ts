@@ -43,7 +43,7 @@ export function useVerticalSpreadAnalysis({
     return m;
   }, [chain?.strikes]);
 
-  const spot = chain?.stats.indexPriceUsd ?? chain?.stats.spotIndexUsd ?? null;
+  const spot = chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? null;
   const T = computeTFromDte(chain?.dte);
 
   // Smile only depends on strikes + spot. Lifting it out of the main memo

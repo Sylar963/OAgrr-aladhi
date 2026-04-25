@@ -440,7 +440,7 @@ async function getLegMarketData(
     if (venueQuote && hasQuoteData(venueQuote)) {
       return quoteToMarketData(
         venueQuote,
-        venueSnapshot?.stats.spotIndexUsd ?? venueSnapshot?.stats.indexPriceUsd ?? null,
+        venueSnapshot?.stats.forwardPriceUsd ?? venueSnapshot?.stats.indexPriceUsd ?? null,
         marketVenue,
         formatMarketSourceLabel(marketVenue),
       );
@@ -455,7 +455,7 @@ async function getLegMarketData(
   if (!strike) {
     return {
       ...emptyMarketData(marketVenue),
-      underlyingPriceUsd: snapshot.stats.spotIndexUsd ?? snapshot.stats.indexPriceUsd,
+      underlyingPriceUsd: snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd,
     };
   }
 
@@ -468,7 +468,7 @@ async function getLegMarketData(
     theta: avg(quotes.map((quote) => quote.theta)),
     vega: avg(quotes.map((quote) => quote.vega)),
     markIv: avg(quotes.map((quote) => quote.markIv)),
-    underlyingPriceUsd: snapshot.stats.spotIndexUsd ?? snapshot.stats.indexPriceUsd,
+    underlyingPriceUsd: snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd,
     marketSourceVenue: null,
     marketSourceLabel: 'Composite',
   };

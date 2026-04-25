@@ -151,7 +151,7 @@ describe('enrichment', () => {
 
     const stats = computeChainStats([createStrike(60_000)], venueChains);
 
-    expect(stats.spotIndexUsd).toBe(66_000);
+    expect(stats.forwardPriceUsd).toBe(66_000);
     expect(stats.indexPriceUsd).toBe(65_500);
   });
 
@@ -523,7 +523,7 @@ describe('enrichment', () => {
       '2026-03-28',
       7,
       strikes,
-      stats.indexPriceUsd ?? stats.spotIndexUsd,
+      stats.indexPriceUsd ?? stats.forwardPriceUsd,
     );
 
     expect(stats.atmStrike).toBe(67_000);

@@ -157,7 +157,7 @@ export default function AlphaView() {
       {!isMobile && (
         <ExpiryBar
           underlying={underlying}
-          spotPrice={chain?.stats.spotIndexUsd}
+          spotPrice={chain?.stats.forwardPriceUsd}
           expiries={expiries}
           selected={expiry}
           onSelect={setExpiry}

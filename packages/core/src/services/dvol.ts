@@ -200,6 +200,32 @@ export class DvolService {
       existing.low52w * 100,
     );
     this.snapshots.set(currency, snapshot);
+
+    this.upsertLiveCandle(currency, parsed.data.volatility);
+  }
+
+  /** Keep today's daily candle in sync with the live push so the chart's right edge isn't frozen at yesterday's close until the 00:05 UTC refresh. Deribit 1D candles are aligned to UTC midnight. */
+  private upsertLiveCandle(currency: string, valuePct: number): void {
+    const candles = this.candleHistory.get(currency);
+    if (!candles?.length) return;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const todayUtcMs = Math.floor(Date.now() / dayMs) * dayMs;
+    const last = candles[candles.length - 1]!;
+
+    if (last.timestamp >= todayUtcMs) {
+      last.close = valuePct;
+      if (valuePct > last.high) last.high = valuePct;
+      if (valuePct < last.low) last.low = valuePct;
+    } else {
+      candles.push({
+        timestamp: todayUtcMs,
+        open: valuePct,
+        high: valuePct,
+        low: valuePct,
+        close: valuePct,
+      });
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -238,7 +264,7 @@ export class DvolService {
       await Promise.allSettled(
         this.currencies.map(async (currency) => {
           try {
-            await this.fetchHistory(currency);
+            await Promise.all([this.fetchHistory(currency), this.fetchHv(currency)]);
           } catch (err: unknown) {
             log.warn({ currency, err: String(err) }, 'DVOL refresh failed');
           }

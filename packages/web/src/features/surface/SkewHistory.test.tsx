@@ -5,8 +5,13 @@ import SkewHistory from './SkewHistory';
 vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'solid' },
   LineSeries: 'LineSeries',
+  AreaSeries: 'AreaSeries',
+  LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
   createChart: vi.fn(() => ({
-    addSeries: vi.fn(() => ({ setData: vi.fn() })),
+    addSeries: vi.fn(() => ({
+      setData: vi.fn(),
+      createPriceLine: vi.fn(),
+    })),
     timeScale: vi.fn(() => ({ fitContent: vi.fn() })),
     remove: vi.fn(),
   })),

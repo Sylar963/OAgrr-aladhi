@@ -143,6 +143,27 @@
 .metricValue {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.metricValue[data-zone='normal'] {
+  color: var(--color-profit);
+  border-color: rgba(0, 233, 151, 0.25);
+  background: rgba(0, 233, 151, 0.06);
+}
+
+.metricValue[data-zone='stretched'] {
+  color: var(--color-warning);
+  border-color: rgba(254, 249, 160, 0.25);
+  background: rgba(254, 249, 160, 0.06);
+}
+
+.metricValue[data-zone='extreme'] {
+  color: var(--color-loss);
+  border-color: rgba(203, 56, 85, 0.35);
+  background: rgba(203, 56, 85, 0.08);
 }
 
 .chartWrap {

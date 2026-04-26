@@ -4,6 +4,8 @@ import {
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
+  referenceLines,
+  zoneFor,
 } from './skew-history-utils';
 
 function point(ts: number, values: Partial<IvHistoryPoint>): IvHistoryPoint {
@@ -70,6 +72,24 @@ describe('skew history transforms', () => {
     );
 
     expect(rows).toEqual([]);
+  });
+
+  it('reference lines vary by mode', () => {
+    expect(referenceLines('raw')).toEqual([]);
+    expect(referenceLines('normalized').map((r) => r.price)).toEqual([0]);
+    expect(referenceLines('zscore').map((r) => r.price)).toEqual([2, 1, 0, -1, -2]);
+  });
+
+  it('zoneFor classifies by absolute z-score, only in zscore mode', () => {
+    expect(zoneFor(0.4, 'zscore')).toBe('normal');
+    expect(zoneFor(-1.2, 'zscore')).toBe('stretched');
+    expect(zoneFor(2.5, 'zscore')).toBe('extreme');
+    expect(zoneFor(-2, 'zscore')).toBe('extreme');
+    expect(zoneFor(1, 'zscore')).toBe('stretched');
+    expect(zoneFor(0.4, 'raw')).toBeNull();
+    expect(zoneFor(0.4, 'normalized')).toBeNull();
+    expect(zoneFor(null, 'zscore')).toBeNull();
+    expect(zoneFor(Number.NaN, 'zscore')).toBeNull();
   });
 
   it('formats latest values for each display mode', () => {

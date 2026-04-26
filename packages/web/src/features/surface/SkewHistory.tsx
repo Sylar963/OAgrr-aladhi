@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ColorType, LineSeries, createChart } from 'lightweight-charts';
+import {
+  AreaSeries,
+  ColorType,
+  LineSeries,
+  LineStyle,
+  createChart,
+} from 'lightweight-charts';
 
 import { getTokenLogo } from '@lib/token-meta';
 import type { IvTenor } from '@shared/enriched';
@@ -9,8 +15,11 @@ import {
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
+  referenceLines,
+  zoneFor,
   type SkewDisplayMode,
   type SkewLinePoint,
+  type SkewZone,
 } from './skew-history-utils';
 import styles from './SkewHistory.module.css';
 
@@ -50,12 +59,14 @@ function SkewMiniChart({
   data,
   latest,
   mode,
+  zone,
 }: {
   title: string;
   color: string;
   data: SkewLinePoint[];
   latest: string;
   mode: SkewDisplayMode;
+  zone: SkewZone | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +94,37 @@ function SkewMiniChart({
       },
     });
 
+    if (mode === 'zscore' && data.length >= 2) {
+      const firstTime = data[0]!.time;
+      const lastTime = data[data.length - 1]!.time;
+      const upper = chart.addSeries(AreaSeries, {
+        topColor: 'rgba(0, 233, 151, 0.10)',
+        bottomColor: 'rgba(0, 233, 151, 0.10)',
+        lineColor: 'rgba(0, 0, 0, 0)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      upper.setData([
+        { time: firstTime, value: 1 },
+        { time: lastTime, value: 1 },
+      ] as never);
+      const lower = chart.addSeries(AreaSeries, {
+        topColor: 'rgba(0, 0, 0, 0)',
+        bottomColor: 'rgba(0, 0, 0, 0)',
+        lineColor: 'rgba(0, 0, 0, 0)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      lower.setData([
+        { time: firstTime, value: -1 },
+        { time: lastTime, value: -1 },
+      ] as never);
+    }
+
     const line = chart.addSeries(LineSeries, {
       color,
       lineWidth: 1,
@@ -95,6 +137,18 @@ function SkewMiniChart({
     });
 
     line.setData(data as never);
+
+    for (const ref of referenceLines(mode)) {
+      line.createPriceLine({
+        price: ref.price,
+        color: ref.emphasis === 'strong' ? '#3a4248' : '#23292e',
+        lineWidth: 1,
+        lineStyle: ref.emphasis === 'strong' ? LineStyle.Dashed : LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: ref.label,
+      });
+    }
+
     chart.timeScale().fitContent();
 
     return () => {
@@ -109,7 +163,9 @@ function SkewMiniChart({
         <span className={styles.metricName} style={{ color }}>
           {title}
         </span>
-        <span className={styles.metricValue}>{latest}</span>
+        <span className={styles.metricValue} data-zone={zone ?? undefined}>
+          {latest}
+        </span>
       </div>
       <div className={styles.chartWrap}>
         <div className={styles.chartCanvas} ref={containerRef} />
@@ -134,8 +190,12 @@ export default function SkewHistory({ underlying }: Props) {
 
   const rrData = buildSkewLineData(series, 'rr25d', mode);
   const flyData = buildSkewLineData(series, 'bfly25d', mode);
-  const rrLatest = formatSkewDisplayValue(latestSkewDisplayValue(series, 'rr25d', mode), mode);
-  const flyLatest = formatSkewDisplayValue(latestSkewDisplayValue(series, 'bfly25d', mode), mode);
+  const rrLatestVal = latestSkewDisplayValue(series, 'rr25d', mode);
+  const flyLatestVal = latestSkewDisplayValue(series, 'bfly25d', mode);
+  const rrLatest = formatSkewDisplayValue(rrLatestVal, mode);
+  const flyLatest = formatSkewDisplayValue(flyLatestVal, mode);
+  const rrZone = zoneFor(rrLatestVal, mode);
+  const flyZone = zoneFor(flyLatestVal, mode);
   const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   const logo = getTokenLogo(underlying);
@@ -220,6 +280,7 @@ export default function SkewHistory({ underlying }: Props) {
             data={rrData}
             latest={rrLatest}
             mode={mode}
+            zone={rrZone}
           />
           <SkewMiniChart
             title="25Δ Fly"
@@ -227,6 +288,7 @@ export default function SkewHistory({ underlying }: Props) {
             data={flyData}
             latest={flyLatest}
             mode={mode}
+            zone={flyZone}
           />
         </div>
       </div>

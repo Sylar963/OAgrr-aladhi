@@ -84,3 +84,35 @@ export function formatSkewDisplayValue(
   if (mode === 'normalized') return `${sign}${value.toFixed(1)}% ATM`;
   return `${sign}${value.toFixed(1)}%`;
 }
+
+export type SkewZone = 'normal' | 'stretched' | 'extreme';
+
+export interface SkewReferenceLine {
+  price: number;
+  label: string;
+  emphasis: 'strong' | 'soft';
+}
+
+export function referenceLines(mode: SkewDisplayMode): SkewReferenceLine[] {
+  if (mode === 'zscore') {
+    return [
+      { price: 2, label: '+2σ', emphasis: 'strong' },
+      { price: 1, label: '+1σ', emphasis: 'soft' },
+      { price: 0, label: 'μ', emphasis: 'soft' },
+      { price: -1, label: '-1σ', emphasis: 'soft' },
+      { price: -2, label: '-2σ', emphasis: 'strong' },
+    ];
+  }
+  if (mode === 'normalized') {
+    return [{ price: 0, label: '0%', emphasis: 'soft' }];
+  }
+  return [];
+}
+
+export function zoneFor(value: number | null, mode: SkewDisplayMode): SkewZone | null {
+  if (mode !== 'zscore' || value == null || !Number.isFinite(value)) return null;
+  const abs = Math.abs(value);
+  if (abs >= 2) return 'extreme';
+  if (abs >= 1) return 'stretched';
+  return 'normal';
+}

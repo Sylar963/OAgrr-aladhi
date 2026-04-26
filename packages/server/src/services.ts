@@ -18,6 +18,7 @@ import {
   type IvHistoryStore,
   type TradeStore,
 } from '@oggregator/db';
+import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
@@ -145,6 +146,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   }
 
   startIvHistoryStorageAlarm(log);
+  startSettlementJob(log);
 
   log.info({ ms: Date.now() - start, health: serviceHealth }, 'services bootstrapped');
 }
@@ -154,6 +156,7 @@ export function disposeServiceStores(): void {
     clearInterval(ivHistoryStorageAlarmTimer);
     ivHistoryStorageAlarmTimer = null;
   }
+  disposeSettlementJob();
 }
 
 function parseIvHistoryWarnBytes(value: string | undefined): number {

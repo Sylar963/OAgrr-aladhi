@@ -19,11 +19,15 @@ import type { EnrichedChainResponse, VenueQuote } from '@oggregator/protocol';
 import type { Fill, Order, Position } from '@oggregator/trading';
 import {
   DEFAULT_ACCOUNT_ID,
+  applyFill,
   applyFillToPosition,
+  buildSettlementFill,
   fillCashDelta,
+  newClientOrderId,
   type OrderLeg,
   type OrderSide,
 } from '@oggregator/trading';
+import type { PaperPositionRow } from '@oggregator/db';
 import { chainEngines } from '../../chain-engines.js';
 import {
   ensureDefaultAccount,
@@ -31,8 +35,10 @@ import {
   orderRepository,
   paperTradingStore,
   pnlService,
+  positionRepository,
 } from '../../trading-services.js';
 import { activityToDto, fillToDto, orderToDto, tradeNoteToDto } from './mappers.js';
+import { paperEvents } from './events.js';
 import type { AuthenticatedUser } from '../../user-service.js';
 
 type TradeIntent = 'open' | 'add' | 'reduce' | 'close' | 'roll';
@@ -758,4 +764,261 @@ function sameDate(left: Date | null, right: Date | null): boolean {
 
 function capitalize(input: string): string {
   return input[0]?.toUpperCase() ? `${input[0]!.toUpperCase()}${input.slice(1)}` : input;
+}
+
+export interface SettlementRunResult {
+  fillsCount: number;
+  settledTradeIds: string[];
+  skipped: Array<{ underlying: string; expiry: string; reason: string }>;
+}
+
+export interface SettlementResolvers {
+  resolveSpot: (underlying: string, expiry: string, asOf: Date) => Promise<number | null>;
+  log: { warn: (obj: object, msg: string) => void; info: (obj: object, msg: string) => void };
+}
+
+// Auto-settle every position whose expiry has passed for the given account.
+// One settlement fill is generated per (trade, leg) pair so multi-trade leg
+// ownership stays consistent with how user-initiated closes are recorded.
+// Idempotency: re-running this is safe because expired positions land at
+// netQuantity=0 after the first run, so they no longer match the listExpired
+// filter — and the settlement-price table never overwrites once captured.
+export async function settleExpiredPositionsForAccount(
+  accountId: string,
+  asOf: Date,
+  resolvers: SettlementResolvers,
+): Promise<SettlementRunResult> {
+  const expired = await paperTradingStore.listExpiredOpenPositions(accountId, asOf);
+  if (expired.length === 0) {
+    return { fillsCount: 0, settledTradeIds: [], skipped: [] };
+  }
+
+  const skipped: SettlementRunResult['skipped'] = [];
+  const settledTradeIds = new Set<string>();
+  let fillsCount = 0;
+
+  for (const pos of expired) {
+    const spot = await resolvers.resolveSpot(pos.underlying, pos.expiry, asOf);
+    if (spot == null) {
+      skipped.push({ underlying: pos.underlying, expiry: pos.expiry, reason: 'no_spot' });
+      continue;
+    }
+    const expiryAt = expiryInstantUtc(pos.expiry);
+    const venue = await pickAttributionVenue(accountId, pos);
+
+    const tradeRows = await listTradeRowsForLeg(accountId, pos);
+
+    if (tradeRows.length === 0) {
+      const fill = buildSettlementFill({
+        position: positionRowToBookPosition(pos),
+        venue,
+        settlementSpotUsd: spot,
+        asOf: expiryAt,
+      });
+      if (!fill) continue;
+      await persistSettlementFill(accountId, null, fill, expiryAt, resolvers.log);
+      fillsCount += 1;
+      continue;
+    }
+
+    for (const tradeRow of tradeRows) {
+      const tradePosition: Position = {
+        key: {
+          accountId,
+          underlying: pos.underlying,
+          expiry: pos.expiry,
+          strike: pos.strike,
+          optionRight: pos.optionRight,
+        },
+        netQuantity: tradeRow.netQuantity,
+        avgEntryPriceUsd: tradeRow.avgEntryPriceUsd,
+        realizedPnlUsd: tradeRow.realizedPnlUsd,
+        openedAt: tradeRow.openedAt,
+        lastFillAt: tradeRow.lastFillAt,
+      };
+      const fill = buildSettlementFill({
+        position: tradePosition,
+        venue,
+        settlementSpotUsd: spot,
+        asOf: expiryAt,
+      });
+      if (!fill) continue;
+      await persistSettlementFill(accountId, tradeRow.tradeId, fill, expiryAt, resolvers.log);
+      fillsCount += 1;
+      settledTradeIds.add(tradeRow.tradeId);
+    }
+  }
+
+  return { fillsCount, settledTradeIds: [...settledTradeIds], skipped };
+}
+
+// Persists a synthesized settlement fill through the same write path that
+// user-initiated orders use: synthetic order row, fill row, account-level
+// position + cash, optional trade-row update + lifecycle close, activity row,
+// and WS broadcast. Mirrors the orchestration in executeTradeAction so the
+// dashboard sees identical event shapes.
+async function persistSettlementFill(
+  accountId: string,
+  tradeId: string | null,
+  fill: Fill,
+  ts: Date,
+  log: SettlementResolvers['log'],
+): Promise<void> {
+  const order: Order = {
+    id: fill.orderId,
+    clientOrderId: newClientOrderId(),
+    accountId,
+    mode: 'paper',
+    kind: 'market',
+    status: 'accepted',
+    legs: [
+      {
+        index: 0,
+        side: fill.side,
+        optionRight: fill.optionRight,
+        underlying: fill.underlying,
+        expiry: fill.expiry,
+        strike: fill.strike,
+        quantity: fill.quantity,
+        preferredVenues: [fill.venue],
+      },
+    ],
+    submittedAt: ts,
+    filledAt: ts,
+    rejectionReason: null,
+    totalDebitUsd: -fillCashDelta(fill),
+  };
+
+  await orderRepository.saveOrder(order);
+  await orderRepository.saveFills([fill]);
+  await orderRepository.updateOrderStatus({ ...order, status: 'filled' });
+
+  await applyFill(positionRepository, accountId, fill);
+
+  let tradeClosed = false;
+  if (tradeId) {
+    await paperTradingStore.insertTradeOrder({
+      tradeId,
+      orderId: order.id,
+      intent: 'settlement',
+      createdAt: ts,
+    });
+    await applyFillsToTrade(tradeId, [fill]);
+    const trade = await paperTradingStore.getTrade(tradeId);
+    tradeClosed = trade?.status === 'closed';
+  }
+
+  const settledLabel = `${fill.side === 'sell' ? '+' : '-'}${fill.quantity} ${fill.strike}${fill.optionRight === 'call' ? 'C' : 'P'} @ ${fill.priceUsd.toFixed(2)}`;
+  const activity = await paperTradingStore.insertTradeActivity({
+    accountId,
+    tradeId,
+    kind: 'trade_settled',
+    summary: `Auto-settled ${settledLabel}`,
+    payload: {
+      orderId: order.id,
+      fillId: fill.id,
+      underlying: fill.underlying,
+      expiry: fill.expiry,
+      strike: fill.strike,
+      optionRight: fill.optionRight,
+      intrinsicUsd: fill.priceUsd,
+      feesUsd: fill.feesUsd,
+      settlementSpotUsd: fill.underlyingSpotUsd,
+      tradeClosed,
+    },
+    ts,
+  });
+
+  paperEvents.emitOrder(orderToDto({ ...order, status: 'filled' }), [fillToDto(fill)]);
+  paperEvents.emitActivity(activityToDto(activity));
+  if (tradeId) {
+    try {
+      const detail = await getTradeDetailOrThrow(tradeId, accountId);
+      paperEvents.emitTrade(detail);
+    } catch (err: unknown) {
+      log.warn({ err: String(err), tradeId }, 'failed to emit settled trade detail');
+    }
+  }
+}
+
+async function listTradeRowsForLeg(
+  accountId: string,
+  pos: PaperPositionRow,
+): Promise<Array<{
+  tradeId: string;
+  netQuantity: number;
+  avgEntryPriceUsd: number;
+  realizedPnlUsd: number;
+  openedAt: Date;
+  lastFillAt: Date;
+}>> {
+  const trades = await paperTradingStore.listTrades(accountId, 'open', 500);
+  const matches: Array<{
+    tradeId: string;
+    netQuantity: number;
+    avgEntryPriceUsd: number;
+    realizedPnlUsd: number;
+    openedAt: Date;
+    lastFillAt: Date;
+  }> = [];
+  for (const trade of trades) {
+    const positions = await paperTradingStore.listTradePositions(trade.id);
+    for (const row of positions) {
+      if (row.netQuantity === 0) continue;
+      if (
+        row.underlying === pos.underlying &&
+        row.expiry === pos.expiry &&
+        row.strike === pos.strike &&
+        row.optionRight === pos.optionRight
+      ) {
+        matches.push({
+          tradeId: trade.id,
+          netQuantity: row.netQuantity,
+          avgEntryPriceUsd: row.avgEntryPriceUsd,
+          realizedPnlUsd: row.realizedPnlUsd,
+          openedAt: row.openedAt,
+          lastFillAt: row.lastFillAt,
+        });
+      }
+    }
+  }
+  return matches;
+}
+
+async function pickAttributionVenue(
+  accountId: string,
+  pos: PaperPositionRow,
+): Promise<VenueId> {
+  const fills = await orderRepository.listFills(accountId, 1_000);
+  const match = fills.find(
+    (f) =>
+      f.underlying === pos.underlying &&
+      f.expiry === pos.expiry &&
+      f.strike === pos.strike &&
+      f.optionRight === pos.optionRight,
+  );
+  return match?.venue ?? 'deribit';
+}
+
+function positionRowToBookPosition(row: PaperPositionRow): Position {
+  return {
+    key: {
+      accountId: row.accountId,
+      underlying: row.underlying,
+      expiry: row.expiry,
+      strike: row.strike,
+      optionRight: row.optionRight,
+    },
+    netQuantity: row.netQuantity,
+    avgEntryPriceUsd: row.avgEntryPriceUsd,
+    realizedPnlUsd: row.realizedPnlUsd,
+    openedAt: row.openedAt,
+    lastFillAt: row.lastFillAt,
+  };
+}
+
+function expiryInstantUtc(expiryYmd: string): Date {
+  // Deribit settles at 08:00 UTC on the expiry date; we adopt this convention
+  // uniformly across venues for the synthetic settlement fill timestamp.
+  return new Date(`${expiryYmd}T08:00:00.000Z`);
 }

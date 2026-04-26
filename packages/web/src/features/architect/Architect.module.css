@@ -1229,27 +1229,6 @@
   inset: 0;
 }
 
-.chartV2ZoneOverlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.chartV2Zone {
-  position: absolute;
-  left: 0;
-  right: 0;
-}
-
-.chartV2Zone[data-profit="true"] {
-  background: rgba(0, 233, 151, 0.08);
-}
-
-.chartV2Zone[data-profit="false"] {
-  background: rgba(203, 56, 85, 0.10);
-}
-
 .chartV2Overlay {
   position: absolute;
   inset: 0;

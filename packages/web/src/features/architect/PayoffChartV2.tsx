@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -14,6 +14,7 @@ import type { Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import { dteDays } from '@lib/format';
 import type { SpotCandle } from './queries';
+import { ZonesPrimitive, type PriceZone } from './zones-primitive';
 import styles from './Architect.module.css';
 
 interface PayoffChartV2Props {
@@ -24,18 +25,6 @@ interface PayoffChartV2Props {
   loading: boolean;
   available: boolean;
   onSwitchToV1: () => void;
-}
-
-interface Zone {
-  low: number;
-  high: number;
-  profit: boolean;
-}
-
-interface ZoneRect {
-  topPct: number;
-  heightPct: number;
-  profit: boolean;
 }
 
 export interface CandleSpec {
@@ -71,7 +60,7 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   return { resolutionSec: 86400, buckets: Math.min(180, Math.max(60, minDte)) };
 }
 
-function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): Zone[] {
+function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {
   if (legs.length === 0) return [];
 
   if (breakevens.length === 0) {
@@ -80,7 +69,7 @@ function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): Zone[
   }
 
   const sorted = [...breakevens].sort((a, b) => a - b);
-  const zones: Zone[] = [];
+  const zones: PriceZone[] = [];
   const boundaries = [-Infinity, ...sorted, Infinity];
 
   for (let i = 0; i < boundaries.length - 1; i++) {
@@ -111,11 +100,11 @@ export default function PayoffChartV2({
   onSwitchToV1,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
-  const [zoneRects, setZoneRects] = useState<ZoneRect[]>([]);
+  const primitiveRef = useRef<ZonesPrimitive | null>(null);
+  const lastWindowKeyRef = useRef<string>('');
 
   const zones = useMemo(
     () => buildZones(legs, breakevens, spotPrice),
@@ -175,21 +164,30 @@ export default function PayoffChartV2({
       },
     });
 
+    const primitive = new ZonesPrimitive();
+    series.attachPrimitive(primitive);
+
     chartApiRef.current = chart;
     seriesRef.current = series;
+    primitiveRef.current = primitive;
 
     return () => {
       chart.remove();
       chartApiRef.current = null;
       seriesRef.current = null;
       priceLinesRef.current = [];
+      primitiveRef.current = null;
+      lastWindowKeyRef.current = '';
     };
   }, []);
 
-  // Push candle data.
+  // Push candle data. Only fit-content when the underlying window changes
+  // (resolution / tenor swap) — incremental websocket updates must preserve
+  // any zoom or pan the user has applied.
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series || candles.length === 0) return;
+    const chart = chartApiRef.current;
+    if (!series || !chart || candles.length === 0) return;
 
     const seen = new Set<number>();
     const data = candles
@@ -207,7 +205,25 @@ export default function PayoffChartV2({
       })
       .sort((a, b) => a.time - b.time);
     series.setData(data as never);
-    chartApiRef.current?.timeScale().fitContent();
+
+    // A "fresh window" is the first load or a structural reset of the data
+    // window (resolution change or strategy swap). We detect those by a shrink
+    // in length or a backwards jump in the first timestamp; pure rolling
+    // updates only nudge the first timestamp forward and grow length.
+    const first = data[0]!.time as number;
+    const windowKey = `${first}:${data.length}`;
+    const prev = lastWindowKeyRef.current;
+    let isFresh = prev === '';
+    if (!isFresh) {
+      const [prevFirstStr, prevLenStr] = prev.split(':');
+      const prevFirst = Number(prevFirstStr);
+      const prevLen = Number(prevLenStr);
+      isFresh = first < prevFirst || data.length < prevLen;
+    }
+    if (isFresh) {
+      chart.timeScale().fitContent();
+    }
+    lastWindowKeyRef.current = windowKey;
   }, [candles]);
 
   // Apply break-even price lines.
@@ -243,76 +259,12 @@ export default function PayoffChartV2({
     }
   }, [breakevens, spotPrice]);
 
-  // Recompute zone DOM overlay rectangles.
+  // Push zones to the chart-canvas primitive. The primitive itself recomputes
+  // pixel coordinates on every chart redraw via updateAllViews, so there is
+  // nothing to wire up to pan/zoom or resize events here.
   useEffect(() => {
-    const overlay = overlayRef.current;
-    const series = seriesRef.current;
-    if (!overlay || !series) return;
-
-    function recompute() {
-      if (!overlay || !series) return;
-      const height = overlay.clientHeight;
-      if (height === 0) {
-        setZoneRects([]);
-        return;
-      }
-
-      // Resolve the visible price range so we can clamp out-of-range
-      // boundaries to the chart edges. priceToCoordinate returns null when a
-      // price sits outside the visible scale; without clamping, a butterfly
-      // with break-evens tighter than the candle range would have both BEs
-      // map to null and the entire middle zone would be dropped.
-      const priceTop = series.coordinateToPrice(0);
-      const priceBottom = series.coordinateToPrice(height);
-      if (priceTop == null || priceBottom == null) {
-        setZoneRects([]);
-        return;
-      }
-      const visibleHigh = Math.max(Number(priceTop), Number(priceBottom));
-      const visibleLow = Math.min(Number(priceTop), Number(priceBottom));
-
-      function priceToY(price: number): number {
-        if (price >= visibleHigh) return 0;
-        if (price <= visibleLow) return height;
-        const y = series!.priceToCoordinate(price);
-        return y == null ? height : Math.max(0, Math.min(height, Number(y)));
-      }
-
-      const rects: ZoneRect[] = [];
-      for (const zone of zones) {
-        const top = Number.isFinite(zone.high) ? priceToY(zone.high as number) : 0;
-        const bottom = Number.isFinite(zone.low) ? priceToY(zone.low as number) : height;
-        if (bottom <= top) continue;
-        rects.push({
-          topPct: (top / height) * 100,
-          heightPct: ((bottom - top) / height) * 100,
-          profit: zone.profit,
-        });
-      }
-      setZoneRects(rects);
-    }
-
-    recompute();
-
-    const ro = new ResizeObserver(recompute);
-    ro.observe(overlay);
-
-    const chart = chartApiRef.current;
-    const sub = () => recompute();
-    chart?.timeScale().subscribeVisibleLogicalRangeChange(sub);
-
-    // Schedule a couple of recomputes after data settles since priceScale
-    // auto-fits asynchronously after setData.
-    const t1 = setTimeout(recompute, 50);
-    const t2 = setTimeout(recompute, 250);
-
-    return () => {
-      ro.disconnect();
-      chart?.timeScale().unsubscribeVisibleLogicalRangeChange(sub);
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [zones, candles]);
+    primitiveRef.current?.setZones(zones);
+  }, [zones]);
 
   if (!available) {
     return (
@@ -332,16 +284,6 @@ export default function PayoffChartV2({
     <div className={styles.chartV2Frame}>
       <div className={styles.chartV2Inner}>
         <div className={styles.chartV2Wrap} ref={chartRef} />
-        <div className={styles.chartV2ZoneOverlay} ref={overlayRef}>
-          {zoneRects.map((rect, i) => (
-            <div
-              key={i}
-              className={styles.chartV2Zone}
-              data-profit={rect.profit ? 'true' : 'false'}
-              style={{ top: `${rect.topPct}%`, height: `${rect.heightPct}%` }}
-            />
-          ))}
-        </div>
         {loading && (
           <div className={styles.chartV2Overlay}>
             <Spinner size="lg" />

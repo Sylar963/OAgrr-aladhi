@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AreaSeries,
+  BaselineSeries,
   ColorType,
   LineSeries,
   LineStyle,
@@ -97,10 +97,16 @@ function SkewMiniChart({
     if (mode === 'zscore' && data.length >= 2) {
       const firstTime = data[0]!.time;
       const lastTime = data[data.length - 1]!.time;
-      const upper = chart.addSeries(AreaSeries, {
-        topColor: 'rgba(0, 233, 151, 0.10)',
-        bottomColor: 'rgba(0, 233, 151, 0.10)',
-        lineColor: 'rgba(0, 0, 0, 0)',
+      const bandFill = 'rgba(0, 233, 151, 0.10)';
+      const transparent = 'rgba(0, 0, 0, 0)';
+      const upper = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topFillColor1: bandFill,
+        topFillColor2: bandFill,
+        topLineColor: transparent,
+        bottomFillColor1: transparent,
+        bottomFillColor2: transparent,
+        bottomLineColor: transparent,
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -110,10 +116,14 @@ function SkewMiniChart({
         { time: firstTime, value: 1 },
         { time: lastTime, value: 1 },
       ] as never);
-      const lower = chart.addSeries(AreaSeries, {
-        topColor: 'rgba(0, 0, 0, 0)',
-        bottomColor: 'rgba(0, 0, 0, 0)',
-        lineColor: 'rgba(0, 0, 0, 0)',
+      const lower = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topFillColor1: transparent,
+        topFillColor2: transparent,
+        topLineColor: transparent,
+        bottomFillColor1: bandFill,
+        bottomFillColor2: bandFill,
+        bottomLineColor: transparent,
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,

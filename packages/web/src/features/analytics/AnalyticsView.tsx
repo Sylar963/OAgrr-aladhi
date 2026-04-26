@@ -10,7 +10,7 @@ import VolCurves from './VolCurves';
 import DeltaCurves from './DeltaCurves';
 import OiSummary from './OiSummary';
 import styles from './AnalyticsView.module.css';
-import { OiByStrikeChart } from './oi-by-strike';
+import { OiByStrikeCard } from './oi-by-strike';
 
 // ── Data aggregation helpers ────────────────────────────────────
 
@@ -192,7 +192,11 @@ export default function AnalyticsView() {
         <VolCurves chains={chains} spotPrice={spotPrice} />
         <DeltaCurves chains={chains} spotPrice={spotPrice} />
         <PcrChart data={expiryPcr} />
-        <OiByStrikeChart chains={chains} spotPrice={spotPrice} />
+        <OiByStrikeCard
+          chains={chains}
+          spotPrice={spotPrice}
+          currency={underlying as 'BTC' | 'ETH'}
+        />
         <div className={styles.dvolWrap}>
           <DvolChart />
         </div>

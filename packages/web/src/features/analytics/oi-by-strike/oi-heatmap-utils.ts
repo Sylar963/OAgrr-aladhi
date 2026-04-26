@@ -115,3 +115,54 @@ export function computeMaxPain(chains: EnrichedChainResponse[]): number | null {
 
   return maxPainStrike;
 }
+
+export type HeatSide = 'calls' | 'puts' | 'both';
+
+export interface HeatRow {
+  strike: number;
+  callOi: number;
+  putOi: number;
+  magnitude: number;
+  dominant: 'call' | 'put';
+}
+
+export function aggregateHeatRows(
+  chains: EnrichedChainResponse[],
+  spotPrice: number | null,
+  mode: OiMode,
+  hiddenExpiries: Set<string>,
+  side: HeatSide,
+): HeatRow[] {
+  const readOi = mode === 'notional'
+    ? (q: { openInterestUsd: number | null } | undefined) => q?.openInterestUsd ?? 0
+    : (q: { openInterest: number | null } | undefined) => q?.openInterest ?? 0;
+
+  const map = new Map<number, { callOi: number; putOi: number }>();
+
+  for (const chain of chains) {
+    if (hiddenExpiries.has(chain.expiry)) continue;
+    for (const strike of chain.strikes) {
+      const acc = map.get(strike.strike) ?? { callOi: 0, putOi: 0 };
+      for (const q of Object.values(strike.call.venues)) acc.callOi += readOi(q);
+      for (const q of Object.values(strike.put.venues))  acc.putOi  += readOi(q);
+      map.set(strike.strike, acc);
+    }
+  }
+
+  const band = spotPrice ? spotPrice * 0.3 : Infinity;
+  const rows: HeatRow[] = [];
+  for (const [strike, { callOi, putOi }] of map.entries()) {
+    if (callOi <= 0 && putOi <= 0) continue;
+    if (spotPrice && Math.abs(strike - spotPrice) > band) continue;
+    const magnitude = side === 'calls' ? callOi : side === 'puts' ? putOi : callOi + putOi;
+    if (magnitude <= 0) continue;
+    rows.push({
+      strike,
+      callOi,
+      putOi,
+      magnitude,
+      dominant: callOi >= putOi ? 'call' : 'put',
+    });
+  }
+  return rows.sort((a, b) => a.strike - b.strike);
+}

@@ -27,7 +27,7 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
   const effectiveVersion: Version = version === 'v2' && v2Available ? 'v2' : 'v1';
 
   return (
-    <div className={styles.card} style={{ position: 'relative' }}>
+    <div className={`${styles.card} ${styles.oiCardRelative}`}>
       <div className={styles.oiHeader}>
         <div className={styles.cardTitle}>Open Interest by Strike</div>
         <div className={styles.oiControls}>

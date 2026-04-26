@@ -75,7 +75,9 @@ export class HeatBandPrimitive implements ISeriesPrimitive<Time> {
 
   update(rows: HeatRow[]): void {
     this.rows = rows;
-    this.maxMagnitude = rows.reduce((m, r) => (r.magnitude > m ? r.magnitude : m), 1);
+    this.maxMagnitude = rows.length === 0
+      ? 1
+      : rows.reduce((m, r) => (r.magnitude > m ? r.magnitude : m), 0);
     this.requestUpdate?.();
   }
 

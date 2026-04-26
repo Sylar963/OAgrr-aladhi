@@ -171,11 +171,11 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     };
   }, []);
 
-  // Reset fit guard when the user picks a different time range so fitContent
-  // fires once for the new data set.
+  // Reset fit guard when the user picks a different time range or switches
+  // underlying so fitContent fires once for the new data set.
   useEffect(() => {
     didFitRef.current = false;
-  }, [timeRange]);
+  }, [timeRange, currency]);
 
   // ── Push candle data ──────────────────────────────────────────
   useEffect(() => {

@@ -722,6 +722,10 @@
 
 /* ── OI Heatmap (V2) ───────────────────────────────── */
 
+.oiCardRelative {
+  position: relative;
+}
+
 .oiVersionToggle {
   display: flex;
   gap: 0;

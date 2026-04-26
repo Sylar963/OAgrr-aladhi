@@ -50,14 +50,6 @@ interface SurfaceGrid {
   text: string[][];
 }
 
-// Vol scales with sqrt(T) — plotting Y in sqrt(years) keeps the front of the
-// surface (weeklies/dailies) from collapsing into the origin while still
-// preserving temporal ordering. Plain DTE on a linear axis squashed the
-// short-dated rows on top of each other.
-function dteToYearSqrt(dte: number): number {
-  return Math.sqrt(Math.max(dte, 0) / 365);
-}
-
 function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
   const x = data.surfaceFineDeltas;
   if (!x || x.length === 0) return null;
@@ -67,6 +59,11 @@ function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
     .slice()
     .sort((a, b) => a.dte - b.dte);
 
+  // Y is the row's index, not its DTE. A linear-DTE axis collapsed weeklies
+  // on top of each other in the 3D perspective; sqrt(T) helped but the front
+  // tenors still overlapped at the camera vanishing point. Index spacing
+  // guarantees every tenor gets equal visual separation. Temporal context is
+  // preserved by the date labels themselves and the (Nd) hover suffix.
   const y: number[] = [];
   const yLabels: string[] = [];
   const z: (number | null)[][] = [];
@@ -79,7 +76,7 @@ function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
     if (filled < MIN_NON_NULL_PER_ROW) continue;
 
     const label = formatExpiry(row.expiry);
-    y.push(dteToYearSqrt(row.dte));
+    y.push(y.length);
     yLabels.push(label);
     z.push(ivPct);
     text.push(x.map(() => `${label} (${row.dte}d)`));

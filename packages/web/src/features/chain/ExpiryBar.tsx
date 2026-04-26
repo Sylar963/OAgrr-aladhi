@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef } from 'react';
+
 import { getTokenLogo } from '@lib/token-meta';
 import { dteDays, formatExpiry, fmtUsdCompact } from '@lib/format';
 
@@ -23,6 +25,38 @@ export default function ExpiryBar({
   onChangeAsset,
 }: ExpiryBarProps) {
   const logo = getTokenLogo(underlying);
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  // Translate vertical wheel input into horizontal scroll so a regular
+  // mouse-wheel user can reach tabs past the right edge. Skip when the input
+  // is already dominantly horizontal — the browser handles that natively, and
+  // redirecting it would double-apply the delta.
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = tabsRef.current;
+    if (!el) return;
+    if (el.scrollWidth <= el.clientWidth) return;
+    if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+    el.scrollLeft += e.deltaY;
+  }, []);
+
+  // Keep the selected tab in view when it changes (e.g. asset switch lands on
+  // an expiry that's offscreen). Manual scroll math avoids perturbing any
+  // ancestor scroll positions the way scrollIntoView would.
+  useEffect(() => {
+    const tabs = tabsRef.current;
+    if (!tabs) return;
+    const active = tabs.querySelector<HTMLButtonElement>('button[data-active="true"]');
+    if (!active) return;
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    const viewLeft = tabs.scrollLeft;
+    const viewRight = viewLeft + tabs.clientWidth;
+    if (left < viewLeft) {
+      tabs.scrollLeft = left;
+    } else if (right > viewRight) {
+      tabs.scrollLeft = right - tabs.clientWidth;
+    }
+  }, [selected, expiries]);
 
   return (
     <div className={styles.strip}>
@@ -47,7 +81,7 @@ export default function ExpiryBar({
 
       <div className={styles.divider} />
 
-      <div className={styles.tabs}>
+      <div className={styles.tabs} ref={tabsRef} onWheel={handleWheel}>
         {expiries.map((e) => {
           const dte = dteDays(e);
           return (

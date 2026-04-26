@@ -28,3 +28,22 @@ export class InsufficientCashError extends TradingError {
     this.name = 'InsufficientCashError';
   }
 }
+
+export class InsufficientMarginError extends TradingError {
+  constructor(
+    message: string,
+    readonly requiredUsd: number,
+    readonly availableUsd: number,
+    readonly bufferUsd: number,
+  ) {
+    super(message, 'INSUFFICIENT_MARGIN');
+    this.name = 'InsufficientMarginError';
+  }
+}
+
+export class MarginCheckUnavailableError extends TradingError {
+  constructor(message: string, readonly legIndex: number, readonly reason: string) {
+    super(message, 'MARGIN_CHECK_UNAVAILABLE');
+    this.name = 'MarginCheckUnavailableError';
+  }
+}

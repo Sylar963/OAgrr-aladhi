@@ -31,7 +31,9 @@ export { computePositionPnl, computeSnapshot } from './book/pnl.js';
 
 export {
   InsufficientCashError,
+  InsufficientMarginError,
   InvalidOrderError,
+  MarginCheckUnavailableError,
   NoLiquidityError,
   TradingError,
 } from './book/errors.js';
@@ -69,5 +71,18 @@ export {
   RealisticFillModel,
   type RealisticFillModelOptions,
 } from './adapters/realistic-fill-model.js';
+
+export type {
+  MarginEngine,
+  MarginEstimateInput,
+  MarginEstimateLeg,
+  MarginEstimateResult,
+  MarginPerLegBreakdown,
+} from './risk/margin-engine.js';
+export { NoopMarginEngine } from './risk/noop-margin-engine.js';
+export {
+  ApproximationMarginEngine,
+  type ApproximationMarginEngineOptions,
+} from './risk/approximation-margin-engine.js';
 export { PostgresOrderRepository } from './adapters/postgres-order-repository.js';
 export { PostgresPositionRepository } from './adapters/postgres-position-repository.js';

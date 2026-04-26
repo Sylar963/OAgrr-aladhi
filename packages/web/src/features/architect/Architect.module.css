@@ -866,6 +866,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+.rightSection[data-partial='true'] .greekCardVal {
+  opacity: 0.6;
+}
+
+.greeksPartial {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 /* ── Scenario sliders ────────────────────────────────── */
 
 .sliderRow {

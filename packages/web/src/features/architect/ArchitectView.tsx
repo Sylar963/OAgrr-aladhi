@@ -698,7 +698,10 @@ export default function ArchitectView() {
               </div>
             </div>
 
-            <div className={styles.rightSection}>
+            <div
+              className={styles.rightSection}
+              data-partial={metrics ? metrics.greeksMissingLegs > 0 : undefined}
+            >
               <span className={styles.rightSectionTitle}>Greeks</span>
               <div className={styles.greeksGrid}>
                 <div className={styles.greekCard}>
@@ -726,6 +729,11 @@ export default function ArchitectView() {
                   </span>
                 </div>
               </div>
+              {metrics && metrics.greeksMissingLegs > 0 && (
+                <span className={styles.greeksPartial}>
+                  {legs.length - metrics.greeksMissingLegs}/{legs.length} legs reporting
+                </span>
+              )}
             </div>
 
             <div className={styles.rightSection}>

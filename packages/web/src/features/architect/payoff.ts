@@ -33,6 +33,8 @@ export interface StrategyMetrics {
   netGamma: number | null;
   netTheta: number | null;
   netVega: number | null;
+  /** Worst-case missing-leg count across the four greeks. 0 = fully reported. */
+  greeksMissingLegs: number;
 }
 
 /** Total strategy P&L at expiry for a single underlying price. Used by V2 chart for zone classification. */
@@ -125,28 +127,41 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
     return sum + sign * leg.entryPrice * leg.quantity;
   }, 0);
 
-  const sumGreek = (pick: (l: Leg) => number | null): number | null => {
+  const sumGreek = (
+    pick: (l: Leg) => number | null,
+  ): { value: number | null; missing: number } => {
     let total = 0;
-    let hasAny = false;
+    let reported = 0;
+    let missing = 0;
     for (const leg of legs) {
       const val = pick(leg);
-      if (val == null) continue;
-      hasAny = true;
+      if (val == null) {
+        missing++;
+        continue;
+      }
+      reported++;
       const sign = leg.direction === 'buy' ? 1 : -1;
       total += sign * val * leg.quantity;
     }
-    return hasAny ? total : null;
+    return { value: reported > 0 ? total : null, missing };
   };
+
+  const delta = sumGreek((l) => l.delta);
+  const gamma = sumGreek((l) => l.gamma);
+  const theta = sumGreek((l) => l.theta);
+  const vega = sumGreek((l) => l.vega);
+  const greeksMissingLegs = Math.max(delta.missing, gamma.missing, theta.missing, vega.missing);
 
   return {
     maxProfit,
     maxLoss,
     breakevens: findBreakevens(payoff),
     netDebit,
-    netDelta: sumGreek((l) => l.delta),
-    netGamma: sumGreek((l) => l.gamma),
-    netTheta: sumGreek((l) => l.theta),
-    netVega: sumGreek((l) => l.vega),
+    netDelta: delta.value,
+    netGamma: gamma.value,
+    netTheta: theta.value,
+    netVega: vega.value,
+    greeksMissingLegs,
   };
 }
 

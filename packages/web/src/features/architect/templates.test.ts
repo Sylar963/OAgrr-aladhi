@@ -102,6 +102,70 @@ describe('buildTemplateVariant — silent-failure detection', () => {
     }
   });
 
+  it('rejects iron condor on a 3-strike chain with the wider-strike-coverage message', () => {
+    // Only 3 strikes around ATM. Iron condor needs offsets ±2 and ±4 — the
+    // outer wings are out of bounds. Old code clamped silently → duplicate
+    // strikes; new code must report a coverage failure instead.
+    const chain: EnrichedChainResponse = {
+      underlying: 'BTC',
+      expiry: '2026-05-29',
+      expiryTs: 0,
+      dte: 30,
+      stats: {
+        forwardPriceUsd: ATM,
+        indexPriceUsd: ATM,
+        basisPct: 0,
+        atmStrike: ATM,
+        atmIv: 0.6,
+        putCallOiRatio: null,
+        totalOiUsd: null,
+        skew25d: null,
+        bfly25d: null,
+      },
+      strikes: [68_000, 70_000, 72_000].map((s) => buildStrike(s)),
+      gex: [],
+    };
+
+    const result = buildTemplateVariant(chain, '2026-05-29', ironCondor, sellIcVariant);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message.toLowerCase()).toContain('wider strike coverage');
+    }
+  });
+
+  it('rejects butterfly when ATM is at the chain edge', () => {
+    // ATM at the lower edge — offset -2 has no strike below.
+    const chain: EnrichedChainResponse = {
+      underlying: 'BTC',
+      expiry: '2026-05-29',
+      expiryTs: 0,
+      dte: 30,
+      stats: {
+        forwardPriceUsd: 60_000,
+        indexPriceUsd: 60_000,
+        basisPct: 0,
+        atmStrike: 60_000,
+        atmIv: 0.6,
+        putCallOiRatio: null,
+        totalOiUsd: null,
+        skew25d: null,
+        bfly25d: null,
+      },
+      strikes: [60_000, 62_000, 64_000].map((s) => buildStrike(s)),
+      gex: [],
+    };
+
+    const butterfly = TEMPLATE_CARDS.find((t) => t.id === 'butterfly')!;
+    const buyButterfly = butterfly.variants.find((v) => v.id === 'buy')!;
+    const result = buildTemplateVariant(chain, '2026-05-29', butterfly, buyButterfly);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message.toLowerCase()).toContain('wider strike coverage');
+    }
+  });
+
   it('explains missing ask when reverse (buy) iron condor wing has no ask', () => {
     // Reverse condor (buy): outer wings are SOLD, inner wings BOUGHT.
     // Inner short call at ATM+2 (74k) needs an ASK to be bought. Drop it.

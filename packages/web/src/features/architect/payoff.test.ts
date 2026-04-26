@@ -71,3 +71,72 @@ describe('computeMetrics', () => {
     expect(m.maxLoss).not.toBeNull();
   });
 });
+
+describe('computeMetrics — greek partial-coverage reporting', () => {
+  it('reports greeksMissingLegs=0 when every leg has every greek', () => {
+    const legs: Leg[] = [
+      leg({
+        type: 'call', direction: 'buy', strike: 70_000, entryPrice: 100,
+        delta: 0.5, gamma: 0.001, theta: -10, vega: 5,
+      }),
+      leg({
+        type: 'call', direction: 'sell', strike: 72_000, entryPrice: 50,
+        delta: 0.3, gamma: 0.0008, theta: -8, vega: 4,
+      }),
+    ];
+    const m = computeMetrics(legs, 70_000);
+    expect(m.greeksMissingLegs).toBe(0);
+    expect(m.netDelta).toBeCloseTo(0.2, 5);
+  });
+
+  it('reports greeksMissingLegs=1 when one leg of an iron condor lacks delta', () => {
+    const legs: Leg[] = [
+      leg({
+        type: 'put', direction: 'buy', strike: 60_000, entryPrice: 50,
+        delta: -0.1, gamma: 0.001, theta: -5, vega: 2,
+      }),
+      leg({
+        type: 'put', direction: 'sell', strike: 65_000, entryPrice: 100,
+        delta: -0.3, gamma: 0.002, theta: -8, vega: 3,
+      }),
+      leg({
+        type: 'call', direction: 'sell', strike: 75_000, entryPrice: 100,
+        delta: 0.3, gamma: 0.002, theta: -8, vega: 3,
+      }),
+      leg({
+        type: 'call', direction: 'buy', strike: 80_000, entryPrice: 50,
+        delta: null, gamma: 0.001, theta: -5, vega: 2,
+      }),
+    ];
+    const m = computeMetrics(legs, 70_000);
+    expect(m.greeksMissingLegs).toBe(1);
+    expect(m.netDelta).not.toBeNull();
+  });
+
+  it('reports greeksMissingLegs=legs.length when every leg lacks greeks', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 70_000, entryPrice: 100 }),
+      leg({ type: 'call', direction: 'sell', strike: 72_000, entryPrice: 50 }),
+    ];
+    const m = computeMetrics(legs, 70_000);
+    expect(m.greeksMissingLegs).toBe(2);
+    expect(m.netDelta).toBeNull();
+  });
+
+  it('takes the worst-case missing count across the four greeks', () => {
+    // Leg A is missing only theta. Leg B is missing only vega.
+    // Per-greek missing: delta=0, gamma=0, theta=1, vega=1 → worst-case = 1.
+    const legs: Leg[] = [
+      leg({
+        type: 'call', direction: 'buy', strike: 70_000, entryPrice: 100,
+        delta: 0.5, gamma: 0.001, theta: null, vega: 5,
+      }),
+      leg({
+        type: 'call', direction: 'sell', strike: 72_000, entryPrice: 50,
+        delta: 0.3, gamma: 0.0008, theta: -8, vega: null,
+      }),
+    ];
+    const m = computeMetrics(legs, 70_000);
+    expect(m.greeksMissingLegs).toBe(1);
+  });
+});

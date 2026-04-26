@@ -5,9 +5,11 @@ import {
   type PaperTradingStore,
 } from '@oggregator/db';
 import {
+  ApproximationMarginEngine,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_ACCOUNT_LABEL,
   DEFAULT_INITIAL_CASH_USD,
+  NoopMarginEngine,
   OptimisticFillModel,
   OrderPlacementService,
   PaperFillEngine,
@@ -18,6 +20,7 @@ import {
   RuntimeQuoteProvider,
   SystemClock,
   type FillModel,
+  type MarginEngine,
 } from '@oggregator/trading';
 import { chainEngines } from './chain-engines.js';
 
@@ -39,14 +42,26 @@ const fillModel: FillModel =
   fillModeEnv === 'optimistic' ? new OptimisticFillModel() : new RealisticFillModel();
 const fillEngine = new PaperFillEngine(quoteProvider, clock, fillModel);
 
+// PAPER_MARGIN_MODE selects the margin gate. Default 'noop' preserves current
+// behavior (no margin check at order time). Setting it to 'approximation'
+// enables the Reg-T-style single-leg formula in ApproximationMarginEngine.
+// That mode is intentionally NOT venue-accurate; per-venue portfolio-margin
+// rules will replace it once the formulas land in references/.
+const marginModeEnv = (process.env['PAPER_MARGIN_MODE'] ?? 'noop').toLowerCase();
+const marginEngine: MarginEngine =
+  marginModeEnv === 'approximation'
+    ? new ApproximationMarginEngine(quoteProvider)
+    : new NoopMarginEngine();
+
+export const pnlService = new PnlService(positionRepository, quoteProvider, clock);
+
 export const orderPlacementService = new OrderPlacementService(
   orderRepository,
   positionRepository,
   fillEngine,
   clock,
+  { marginEngine, pnlService },
 );
-
-export const pnlService = new PnlService(positionRepository, quoteProvider, clock);
 
 export { orderRepository, positionRepository, quoteProvider };
 

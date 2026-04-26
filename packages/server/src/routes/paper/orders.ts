@@ -2,7 +2,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { PlaceOrderRequestSchema } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import type { OrderLeg } from '@oggregator/trading';
-import { InvalidOrderError, NoLiquidityError, TradingError } from '@oggregator/trading';
+import {
+  InsufficientMarginError,
+  InvalidOrderError,
+  MarginCheckUnavailableError,
+  NoLiquidityError,
+  TradingError,
+} from '@oggregator/trading';
 import {
   ensureDefaultAccount,
   orderPlacementService,
@@ -60,6 +66,23 @@ export async function paperOrdersRoute(app: FastifyInstance) {
           error: 'no_liquidity',
           message: err.message,
           legIndex: err.legIndex,
+        });
+      }
+      if (err instanceof InsufficientMarginError) {
+        return reply.status(422).send({
+          error: 'insufficient_margin',
+          message: err.message,
+          requiredUsd: err.requiredUsd,
+          availableUsd: err.availableUsd,
+          bufferUsd: err.bufferUsd,
+        });
+      }
+      if (err instanceof MarginCheckUnavailableError) {
+        return reply.status(422).send({
+          error: 'margin_check_unavailable',
+          message: err.message,
+          legIndex: err.legIndex,
+          reason: err.reason,
         });
       }
       if (err instanceof InvalidOrderError) {

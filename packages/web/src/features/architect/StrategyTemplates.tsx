@@ -134,11 +134,15 @@ function withMarket(
   };
 }
 
-function offsetStrike(chain: EnrichedChainResponse, atm: number, offset: number): number {
+function offsetStrike(
+  chain: EnrichedChainResponse,
+  atm: number,
+  offset: number,
+): number | null {
   const sorted = chain.strikes.map((entry) => entry.strike).sort((a, b) => a - b);
   const idx = sorted.indexOf(atm);
-  if (idx < 0) return atm;
-  return sorted[Math.max(0, Math.min(sorted.length - 1, idx + offset))] ?? atm;
+  if (idx < 0) return null;
+  return sorted[idx + offset] ?? null;
 }
 
 function tryBuildLeg(
@@ -163,10 +167,14 @@ function tryBuildLeg(
 function materialize(
   chain: EnrichedChainResponse,
   expiry: string,
-  specs: LegSpec[],
+  specs: LegSpec[] | null,
 ): LegAttempt[] {
+  if (specs == null) return [];
   return specs.map((spec) => tryBuildLeg(chain, expiry, spec));
 }
+
+// Spec builders return null when any required strike is out of chain bounds —
+// callers map that to a "wider strike coverage" message.
 
 function singleLegSpecs(atm: number, type: 'call' | 'put', direction: 'buy' | 'sell'): LegSpec[] {
   return [{ type, direction, strike: atm, quantity: 1 }];
@@ -176,10 +184,11 @@ function verticalSpreadSpecs(
   chain: EnrichedChainResponse,
   type: 'call' | 'put',
   direction: 'buy' | 'sell',
-): LegSpec[] {
+): LegSpec[] | null {
   const atm = findAtmStrike(chain);
   const offset = type === 'call' ? 3 : -3;
   const otherStrike = offsetStrike(chain, atm, offset);
+  if (otherStrike == null) return null;
   // Debit spread: buy near-ATM, sell further OTM. Credit spread inverts.
   const nearDirection: 'buy' | 'sell' = direction === 'buy' ? 'buy' : 'sell';
   const farDirection: 'buy' | 'sell' = direction === 'buy' ? 'sell' : 'buy';
@@ -197,50 +206,48 @@ function straddleSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'):
   ];
 }
 
-function strangleSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
+function strangleSpecs(
+  chain: EnrichedChainResponse,
+  direction: 'buy' | 'sell',
+): LegSpec[] | null {
   const atm = findAtmStrike(chain);
+  const callStrike = offsetStrike(chain, atm, 3);
+  const putStrike = offsetStrike(chain, atm, -3);
+  if (callStrike == null || putStrike == null) return null;
   return [
-    { type: 'call', direction, strike: offsetStrike(chain, atm, 3), quantity: 1 },
-    { type: 'put', direction, strike: offsetStrike(chain, atm, -3), quantity: 1 },
+    { type: 'call', direction, strike: callStrike, quantity: 1 },
+    { type: 'put', direction, strike: putStrike, quantity: 1 },
   ];
 }
 
-function ironCondorSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
+function ironCondorSpecs(
+  chain: EnrichedChainResponse,
+  direction: 'buy' | 'sell',
+): LegSpec[] | null {
   const atm = findAtmStrike(chain);
+  const longPut = offsetStrike(chain, atm, -4);
+  const shortPut = offsetStrike(chain, atm, -2);
+  const shortCall = offsetStrike(chain, atm, 2);
+  const longCall = offsetStrike(chain, atm, 4);
+  if (longPut == null || shortPut == null || shortCall == null || longCall == null) return null;
   const isShort = direction === 'sell';
   // Short condor: buy outer wings (protection), sell inner. Reverse inverts.
   return [
-    {
-      type: 'put',
-      direction: isShort ? 'buy' : 'sell',
-      strike: offsetStrike(chain, atm, -4),
-      quantity: 1,
-    },
-    {
-      type: 'put',
-      direction: isShort ? 'sell' : 'buy',
-      strike: offsetStrike(chain, atm, -2),
-      quantity: 1,
-    },
-    {
-      type: 'call',
-      direction: isShort ? 'sell' : 'buy',
-      strike: offsetStrike(chain, atm, 2),
-      quantity: 1,
-    },
-    {
-      type: 'call',
-      direction: isShort ? 'buy' : 'sell',
-      strike: offsetStrike(chain, atm, 4),
-      quantity: 1,
-    },
+    { type: 'put', direction: isShort ? 'buy' : 'sell', strike: longPut, quantity: 1 },
+    { type: 'put', direction: isShort ? 'sell' : 'buy', strike: shortPut, quantity: 1 },
+    { type: 'call', direction: isShort ? 'sell' : 'buy', strike: shortCall, quantity: 1 },
+    { type: 'call', direction: isShort ? 'buy' : 'sell', strike: longCall, quantity: 1 },
   ];
 }
 
-function butterflySpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
+function butterflySpecs(
+  chain: EnrichedChainResponse,
+  direction: 'buy' | 'sell',
+): LegSpec[] | null {
   const atm = findAtmStrike(chain);
   const lower = offsetStrike(chain, atm, -2);
   const upper = offsetStrike(chain, atm, 2);
+  if (lower == null || upper == null) return null;
   const outer: 'buy' | 'sell' = direction;
   const body: 'buy' | 'sell' = direction === 'buy' ? 'sell' : 'buy';
   return [
@@ -248,17 +255,6 @@ function butterflySpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell')
     { type: 'call', direction: body, strike: atm, quantity: 2 },
     { type: 'call', direction: outer, strike: upper, quantity: 1 },
   ];
-}
-
-function hasStrikeOffset(chain: EnrichedChainResponse, offset: number): boolean {
-  const sorted = chain.strikes.map((entry) => entry.strike).sort((a, b) => a - b);
-  if (sorted.length === 0) return false;
-
-  const atm = findAtmStrike(chain);
-  const index = sorted.indexOf(atm);
-  if (index < 0) return false;
-
-  return sorted[index + offset] != null;
 }
 
 function describeMissingLeg(spec: LegSpec): string {
@@ -283,44 +279,13 @@ function formatTemplateBuildError(
   return `${template.name} on ${formattedExpiry}: ${detail}.`;
 }
 
-function getStrikeCoverageError(
-  template: StrategyTemplate,
-  expiry: string,
-  chain: EnrichedChainResponse,
-): string | null {
-  if (chain.strikes.length === 0) {
-    return `No strikes are available for ${formatExpiry(expiry)} yet.`;
-  }
+function emptyChainError(expiry: string): string {
+  return `No strikes are available for ${formatExpiry(expiry)} yet.`;
+}
 
+function strikeCoverageError(template: StrategyTemplate, expiry: string): string {
   const formattedExpiry = expiry ? formatExpiry(expiry) : 'this expiry';
-
-  switch (template.id) {
-    case 'call-spread':
-      return hasStrikeOffset(chain, 3)
-        ? null
-        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
-    case 'put-spread':
-      return hasStrikeOffset(chain, -3)
-        ? null
-        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
-    case 'strangle':
-      return hasStrikeOffset(chain, 3) && hasStrikeOffset(chain, -3)
-        ? null
-        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
-    case 'butterfly':
-      return hasStrikeOffset(chain, 2) && hasStrikeOffset(chain, -2)
-        ? null
-        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
-    case 'iron-condor':
-      return hasStrikeOffset(chain, 4) &&
-        hasStrikeOffset(chain, -4) &&
-        hasStrikeOffset(chain, 2) &&
-        hasStrikeOffset(chain, -2)
-        ? null
-        : `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
-    default:
-      return null;
-  }
+  return `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
 }
 
 export const TEMPLATE_CARDS: StrategyTemplate[] = [
@@ -588,12 +553,18 @@ export function buildTemplateVariant(
     return { ok: false, error: { message: 'Pick an expiry before applying a strategy.' } };
   }
 
-  const strikeCoverageError = getStrikeCoverageError(template, expiry, chain);
-  if (strikeCoverageError) {
-    return { ok: false, error: { message: strikeCoverageError } };
+  if (chain.strikes.length === 0) {
+    return { ok: false, error: { message: emptyChainError(expiry) } };
   }
 
   const attempts = variant.build(chain, expiry);
+
+  // Empty attempts means a spec builder returned null because a required
+  // strike offset is out of chain bounds — single source of truth for coverage.
+  if (attempts.length === 0) {
+    return { ok: false, error: { message: strikeCoverageError(template, expiry) } };
+  }
+
   const built = attempts.flatMap((entry) => (entry.built ? [entry.built] : []));
 
   if (built.length < attempts.length || built.length < template.legs) {

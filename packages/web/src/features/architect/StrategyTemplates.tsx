@@ -13,13 +13,25 @@ type VariantId = 'buy' | 'sell';
 
 type BuiltLeg = Omit<Leg, 'id'>;
 
+interface LegSpec {
+  type: 'call' | 'put';
+  direction: 'buy' | 'sell';
+  strike: number;
+  quantity: number;
+}
+
+interface LegAttempt {
+  spec: LegSpec;
+  built: BuiltLeg | null;
+}
+
 interface StrategyVariant {
   id: VariantId;
   label: string;
   helper: string;
   shape: keyof typeof STRATEGY_SHAPES;
   sentiment: Sentiment;
-  build: (chain: EnrichedChainResponse, expiry: string) => BuiltLeg[];
+  build: (chain: EnrichedChainResponse, expiry: string) => LegAttempt[];
 }
 
 interface StrategyTemplate {
@@ -39,7 +51,10 @@ export type TemplateBuildResult =
   | { ok: false; error: TemplateBuildFailure };
 
 function findAtmStrike(chain: EnrichedChainResponse): number {
-  const ref = chain.stats.indexPriceUsd ?? chain.stats.forwardPriceUsd ?? 70000;
+  // Use the server-provided ATM if present; otherwise match the rest of the
+  // Architect view (forward first, then index) to keep build/chart aligned.
+  if (chain.stats.atmStrike != null) return chain.stats.atmStrike;
+  const ref = chain.stats.forwardPriceUsd ?? chain.stats.indexPriceUsd ?? 70000;
   let best = chain.strikes[0]?.strike ?? ref;
   let bestDist = Infinity;
 
@@ -126,262 +141,113 @@ function offsetStrike(chain: EnrichedChainResponse, atm: number, offset: number)
   return sorted[Math.max(0, Math.min(sorted.length - 1, idx + offset))] ?? atm;
 }
 
-function buildCall(
+function tryBuildLeg(
   chain: EnrichedChainResponse,
   expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
-  const atm = findAtmStrike(chain);
-  const price = getBestPrice(chain, atm, 'call', direction);
-  return price
-    ? [withMarket(price, { type: 'call', direction, strike: atm, expiry, quantity: 1 })]
-    : [];
+  spec: LegSpec,
+): LegAttempt {
+  const price = getBestPrice(chain, spec.strike, spec.type, spec.direction);
+  if (!price) return { spec, built: null };
+  return {
+    spec,
+    built: withMarket(price, {
+      type: spec.type,
+      direction: spec.direction,
+      strike: spec.strike,
+      expiry,
+      quantity: spec.quantity,
+    }),
+  };
 }
 
-function buildPut(
+function materialize(
   chain: EnrichedChainResponse,
   expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
-  const atm = findAtmStrike(chain);
-  const price = getBestPrice(chain, atm, 'put', direction);
-  return price
-    ? [withMarket(price, { type: 'put', direction, strike: atm, expiry, quantity: 1 })]
-    : [];
+  specs: LegSpec[],
+): LegAttempt[] {
+  return specs.map((spec) => tryBuildLeg(chain, expiry, spec));
 }
 
-function buildCallSpread(
-  chain: EnrichedChainResponse,
-  expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
-  const atm = findAtmStrike(chain);
-  const upper = offsetStrike(chain, atm, 3);
-  const lowerCall = getBestPrice(chain, atm, 'call', direction === 'buy' ? 'buy' : 'sell');
-  const upperCall = getBestPrice(chain, upper, 'call', direction === 'buy' ? 'sell' : 'buy');
-  const legs: BuiltLeg[] = [];
-
-  if (lowerCall) {
-    legs.push(
-      withMarket(lowerCall, {
-        type: 'call',
-        direction: direction === 'buy' ? 'buy' : 'sell',
-        strike: atm,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  if (upperCall) {
-    legs.push(
-      withMarket(upperCall, {
-        type: 'call',
-        direction: direction === 'buy' ? 'sell' : 'buy',
-        strike: upper,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  return legs;
+function singleLegSpecs(atm: number, type: 'call' | 'put', direction: 'buy' | 'sell'): LegSpec[] {
+  return [{ type, direction, strike: atm, quantity: 1 }];
 }
 
-function buildPutSpread(
+function verticalSpreadSpecs(
   chain: EnrichedChainResponse,
-  expiry: string,
+  type: 'call' | 'put',
   direction: 'buy' | 'sell',
-): BuiltLeg[] {
+): LegSpec[] {
   const atm = findAtmStrike(chain);
-  const lower = offsetStrike(chain, atm, -3);
-  const atmPut = getBestPrice(chain, atm, 'put', direction === 'buy' ? 'buy' : 'sell');
-  const lowerPut = getBestPrice(chain, lower, 'put', direction === 'buy' ? 'sell' : 'buy');
-  const legs: BuiltLeg[] = [];
-
-  if (atmPut) {
-    legs.push(
-      withMarket(atmPut, {
-        type: 'put',
-        direction: direction === 'buy' ? 'buy' : 'sell',
-        strike: atm,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  if (lowerPut) {
-    legs.push(
-      withMarket(lowerPut, {
-        type: 'put',
-        direction: direction === 'buy' ? 'sell' : 'buy',
-        strike: lower,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  return legs;
+  const offset = type === 'call' ? 3 : -3;
+  const otherStrike = offsetStrike(chain, atm, offset);
+  // Debit spread: buy near-ATM, sell further OTM. Credit spread inverts.
+  const nearDirection: 'buy' | 'sell' = direction === 'buy' ? 'buy' : 'sell';
+  const farDirection: 'buy' | 'sell' = direction === 'buy' ? 'sell' : 'buy';
+  return [
+    { type, direction: nearDirection, strike: atm, quantity: 1 },
+    { type, direction: farDirection, strike: otherStrike, quantity: 1 },
+  ];
 }
 
-function buildStraddle(
-  chain: EnrichedChainResponse,
-  expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
+function straddleSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
   const atm = findAtmStrike(chain);
-  const call = getBestPrice(chain, atm, 'call', direction);
-  const put = getBestPrice(chain, atm, 'put', direction);
-  const legs: BuiltLeg[] = [];
-
-  if (call)
-    legs.push(withMarket(call, { type: 'call', direction, strike: atm, expiry, quantity: 1 }));
-  if (put) legs.push(withMarket(put, { type: 'put', direction, strike: atm, expiry, quantity: 1 }));
-
-  return legs;
+  return [
+    { type: 'call', direction, strike: atm, quantity: 1 },
+    { type: 'put', direction, strike: atm, quantity: 1 },
+  ];
 }
 
-function buildStrangle(
-  chain: EnrichedChainResponse,
-  expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
+function strangleSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
   const atm = findAtmStrike(chain);
-  const callStrike = offsetStrike(chain, atm, 3);
-  const putStrike = offsetStrike(chain, atm, -3);
-  const call = getBestPrice(chain, callStrike, 'call', direction);
-  const put = getBestPrice(chain, putStrike, 'put', direction);
-  const legs: BuiltLeg[] = [];
-
-  if (call)
-    legs.push(
-      withMarket(call, { type: 'call', direction, strike: callStrike, expiry, quantity: 1 }),
-    );
-  if (put)
-    legs.push(withMarket(put, { type: 'put', direction, strike: putStrike, expiry, quantity: 1 }));
-
-  return legs;
+  return [
+    { type: 'call', direction, strike: offsetStrike(chain, atm, 3), quantity: 1 },
+    { type: 'put', direction, strike: offsetStrike(chain, atm, -3), quantity: 1 },
+  ];
 }
 
-function buildIronCondor(
-  chain: EnrichedChainResponse,
-  expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
+function ironCondorSpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
   const atm = findAtmStrike(chain);
-  const shortPutStrike = offsetStrike(chain, atm, -2);
-  const longPutStrike = offsetStrike(chain, atm, -4);
-  const shortCallStrike = offsetStrike(chain, atm, 2);
-  const longCallStrike = offsetStrike(chain, atm, 4);
-
-  const isShortCondor = direction === 'sell';
-  const legs: BuiltLeg[] = [];
-
-  const longPut = getBestPrice(chain, longPutStrike, 'put', isShortCondor ? 'buy' : 'sell');
-  const shortPut = getBestPrice(chain, shortPutStrike, 'put', isShortCondor ? 'sell' : 'buy');
-  const shortCall = getBestPrice(chain, shortCallStrike, 'call', isShortCondor ? 'sell' : 'buy');
-  const longCall = getBestPrice(chain, longCallStrike, 'call', isShortCondor ? 'buy' : 'sell');
-
-  if (longPut) {
-    legs.push(
-      withMarket(longPut, {
-        type: 'put',
-        direction: isShortCondor ? 'buy' : 'sell',
-        strike: longPutStrike,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  if (shortPut) {
-    legs.push(
-      withMarket(shortPut, {
-        type: 'put',
-        direction: isShortCondor ? 'sell' : 'buy',
-        strike: shortPutStrike,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  if (shortCall) {
-    legs.push(
-      withMarket(shortCall, {
-        type: 'call',
-        direction: isShortCondor ? 'sell' : 'buy',
-        strike: shortCallStrike,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  if (longCall) {
-    legs.push(
-      withMarket(longCall, {
-        type: 'call',
-        direction: isShortCondor ? 'buy' : 'sell',
-        strike: longCallStrike,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  }
-
-  return legs;
+  const isShort = direction === 'sell';
+  // Short condor: buy outer wings (protection), sell inner. Reverse inverts.
+  return [
+    {
+      type: 'put',
+      direction: isShort ? 'buy' : 'sell',
+      strike: offsetStrike(chain, atm, -4),
+      quantity: 1,
+    },
+    {
+      type: 'put',
+      direction: isShort ? 'sell' : 'buy',
+      strike: offsetStrike(chain, atm, -2),
+      quantity: 1,
+    },
+    {
+      type: 'call',
+      direction: isShort ? 'sell' : 'buy',
+      strike: offsetStrike(chain, atm, 2),
+      quantity: 1,
+    },
+    {
+      type: 'call',
+      direction: isShort ? 'buy' : 'sell',
+      strike: offsetStrike(chain, atm, 4),
+      quantity: 1,
+    },
+  ];
 }
 
-function buildButterfly(
-  chain: EnrichedChainResponse,
-  expiry: string,
-  direction: 'buy' | 'sell',
-): BuiltLeg[] {
+function butterflySpecs(chain: EnrichedChainResponse, direction: 'buy' | 'sell'): LegSpec[] {
   const atm = findAtmStrike(chain);
   const lower = offsetStrike(chain, atm, -2);
   const upper = offsetStrike(chain, atm, 2);
-  const outerDirection = direction;
-  const bodyDirection = direction === 'buy' ? 'sell' : 'buy';
-  const lowerCall = getBestPrice(chain, lower, 'call', outerDirection);
-  const bodyCall = getBestPrice(chain, atm, 'call', bodyDirection);
-  const upperCall = getBestPrice(chain, upper, 'call', outerDirection);
-  const legs: BuiltLeg[] = [];
-
-  if (lowerCall)
-    legs.push(
-      withMarket(lowerCall, {
-        type: 'call',
-        direction: outerDirection,
-        strike: lower,
-        expiry,
-        quantity: 1,
-      }),
-    );
-  if (bodyCall)
-    legs.push(
-      withMarket(bodyCall, {
-        type: 'call',
-        direction: bodyDirection,
-        strike: atm,
-        expiry,
-        quantity: 2,
-      }),
-    );
-  if (upperCall)
-    legs.push(
-      withMarket(upperCall, {
-        type: 'call',
-        direction: outerDirection,
-        strike: upper,
-        expiry,
-        quantity: 1,
-      }),
-    );
-
-  return legs;
+  const outer: 'buy' | 'sell' = direction;
+  const body: 'buy' | 'sell' = direction === 'buy' ? 'sell' : 'buy';
+  return [
+    { type: 'call', direction: outer, strike: lower, quantity: 1 },
+    { type: 'call', direction: body, strike: atm, quantity: 2 },
+    { type: 'call', direction: outer, strike: upper, quantity: 1 },
+  ];
 }
 
 function hasStrikeOffset(chain: EnrichedChainResponse, offset: number): boolean {
@@ -395,22 +261,26 @@ function hasStrikeOffset(chain: EnrichedChainResponse, offset: number): boolean 
   return sorted[index + offset] != null;
 }
 
+function describeMissingLeg(spec: LegSpec): string {
+  const sideWord = spec.direction === 'buy' ? 'ask' : 'bid';
+  const verb = spec.direction === 'buy' ? 'buy' : 'sell';
+  return `${verb} ${spec.type} ${spec.strike.toLocaleString()} (no live ${sideWord})`;
+}
+
 function formatTemplateBuildError(
   template: StrategyTemplate,
   expiry: string,
-  builtLegCount: number,
+  attempts: LegAttempt[],
 ): string {
   const formattedExpiry = expiry ? formatExpiry(expiry) : 'this expiry';
+  const missing = attempts.filter((entry) => entry.built == null);
 
-  if (template.legs === 1) {
-    return `${template.name} could not be built on ${formattedExpiry} because no live bid/ask is available for that leg.`;
+  if (missing.length === 0) {
+    return `${template.name} could not be built on ${formattedExpiry}.`;
   }
 
-  if (builtLegCount === 0) {
-    return `${template.name} could not be built on ${formattedExpiry} because the required legs do not have live quotes.`;
-  }
-
-  return `${template.name} needs ${template.legs} legs, but only ${builtLegCount} have live quotes on ${formattedExpiry}.`;
+  const detail = missing.map((entry) => describeMissingLeg(entry.spec)).join('; ');
+  return `${template.name} on ${formattedExpiry}: ${detail}.`;
 }
 
 function getStrikeCoverageError(
@@ -466,7 +336,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Long call',
         shape: 'Long Call',
         sentiment: 'bullish',
-        build: (chain, expiry) => buildCall(chain, expiry, 'buy'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, singleLegSpecs(findAtmStrike(chain), 'call', 'buy')),
       },
       {
         id: 'sell',
@@ -474,7 +345,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Short call',
         shape: 'Short Call',
         sentiment: 'bearish',
-        build: (chain, expiry) => buildCall(chain, expiry, 'sell'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, singleLegSpecs(findAtmStrike(chain), 'call', 'sell')),
       },
     ],
   },
@@ -490,7 +362,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Long put',
         shape: 'Long Put',
         sentiment: 'bearish',
-        build: (chain, expiry) => buildPut(chain, expiry, 'buy'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, singleLegSpecs(findAtmStrike(chain), 'put', 'buy')),
       },
       {
         id: 'sell',
@@ -498,7 +371,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Short put',
         shape: 'Short Put',
         sentiment: 'bullish',
-        build: (chain, expiry) => buildPut(chain, expiry, 'sell'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, singleLegSpecs(findAtmStrike(chain), 'put', 'sell')),
       },
     ],
   },
@@ -514,7 +388,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Call debit spread',
         shape: 'Call Debit Spread',
         sentiment: 'bullish',
-        build: (chain, expiry) => buildCallSpread(chain, expiry, 'buy'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, verticalSpreadSpecs(chain, 'call', 'buy')),
       },
       {
         id: 'sell',
@@ -522,7 +397,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Call credit spread',
         shape: 'Call Credit Spread',
         sentiment: 'bearish',
-        build: (chain, expiry) => buildCallSpread(chain, expiry, 'sell'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, verticalSpreadSpecs(chain, 'call', 'sell')),
       },
     ],
   },
@@ -538,7 +414,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Put debit spread',
         shape: 'Put Debit Spread',
         sentiment: 'bearish',
-        build: (chain, expiry) => buildPutSpread(chain, expiry, 'buy'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, verticalSpreadSpecs(chain, 'put', 'buy')),
       },
       {
         id: 'sell',
@@ -546,7 +423,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Put credit spread',
         shape: 'Put Credit Spread',
         sentiment: 'bullish',
-        build: (chain, expiry) => buildPutSpread(chain, expiry, 'sell'),
+        build: (chain, expiry) =>
+          materialize(chain, expiry, verticalSpreadSpecs(chain, 'put', 'sell')),
       },
     ],
   },
@@ -562,7 +440,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Long straddle',
         shape: 'Long Straddle',
         sentiment: 'volatile',
-        build: (chain, expiry) => buildStraddle(chain, expiry, 'buy'),
+        build: (chain, expiry) => materialize(chain, expiry, straddleSpecs(chain, 'buy')),
       },
       {
         id: 'sell',
@@ -570,7 +448,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Short straddle',
         shape: 'Short Straddle',
         sentiment: 'neutral',
-        build: (chain, expiry) => buildStraddle(chain, expiry, 'sell'),
+        build: (chain, expiry) => materialize(chain, expiry, straddleSpecs(chain, 'sell')),
       },
     ],
   },
@@ -586,7 +464,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Long strangle',
         shape: 'Long Strangle',
         sentiment: 'volatile',
-        build: (chain, expiry) => buildStrangle(chain, expiry, 'buy'),
+        build: (chain, expiry) => materialize(chain, expiry, strangleSpecs(chain, 'buy')),
       },
       {
         id: 'sell',
@@ -594,7 +472,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Short strangle',
         shape: 'Short Strangle',
         sentiment: 'neutral',
-        build: (chain, expiry) => buildStrangle(chain, expiry, 'sell'),
+        build: (chain, expiry) => materialize(chain, expiry, strangleSpecs(chain, 'sell')),
       },
     ],
   },
@@ -610,7 +488,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Credit iron condor',
         shape: 'Iron Condor',
         sentiment: 'neutral',
-        build: (chain, expiry) => buildIronCondor(chain, expiry, 'sell'),
+        build: (chain, expiry) => materialize(chain, expiry, ironCondorSpecs(chain, 'sell')),
       },
       {
         id: 'buy',
@@ -618,7 +496,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Reverse iron condor',
         shape: 'Reverse Iron Condor',
         sentiment: 'volatile',
-        build: (chain, expiry) => buildIronCondor(chain, expiry, 'buy'),
+        build: (chain, expiry) => materialize(chain, expiry, ironCondorSpecs(chain, 'buy')),
       },
     ],
   },
@@ -634,7 +512,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Long butterfly',
         shape: 'Butterfly',
         sentiment: 'neutral',
-        build: (chain, expiry) => buildButterfly(chain, expiry, 'buy'),
+        build: (chain, expiry) => materialize(chain, expiry, butterflySpecs(chain, 'buy')),
       },
       {
         id: 'sell',
@@ -642,7 +520,7 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
         helper: 'Short butterfly',
         shape: 'Short Butterfly',
         sentiment: 'volatile',
-        build: (chain, expiry) => buildButterfly(chain, expiry, 'sell'),
+        build: (chain, expiry) => materialize(chain, expiry, butterflySpecs(chain, 'sell')),
       },
     ],
   },
@@ -715,15 +593,17 @@ export function buildTemplateVariant(
     return { ok: false, error: { message: strikeCoverageError } };
   }
 
-  const legs = variant.build(chain, expiry);
-  if (legs.length < template.legs) {
+  const attempts = variant.build(chain, expiry);
+  const built = attempts.flatMap((entry) => (entry.built ? [entry.built] : []));
+
+  if (built.length < attempts.length || built.length < template.legs) {
     return {
       ok: false,
-      error: { message: formatTemplateBuildError(template, expiry, legs.length) },
+      error: { message: formatTemplateBuildError(template, expiry, attempts) },
     };
   }
 
-  return { ok: true, legs };
+  return { ok: true, legs: built };
 }
 
 interface Props {

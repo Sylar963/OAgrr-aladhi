@@ -1,21 +1,19 @@
-import { useState } from 'react';
-import type { EnrichedChainResponse } from '@shared/enriched';
+import { useMemo, useState } from 'react';
+
+import type { IvSurfaceResponse } from '@shared/enriched';
 
 import { Spinner, DropdownPicker, InfoTip } from '@components/ui';
 import { useUnderlyings } from '@features/chain';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
-import { formatExpiry, dteDays } from '@lib/format';
+import { formatExpiry } from '@lib/format';
 import { Plot, PLOTLY_3D_CONFIG, SCENE_DEFAULTS } from './plotly';
-import { extractSmile, deltaTickLabel } from './smile-utils';
-import { useAllExpiriesSmile } from './queries';
+import { deltaTickLabel } from './smile-utils';
+import { useSurface } from './queries';
 import styles from './VolSurface3D.module.css';
 
-const DELTA_TICKS = [
-  0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
-  0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95,
-];
-const DELTA_TICK_LABELS = DELTA_TICKS.map(deltaTickLabel);
+// Drop expiries thinner than this — sparse rows render as spikes/holes.
+const MIN_NON_NULL_PER_ROW = 3;
 
 const SURFACE_TIP_BODY = (
   <>
@@ -49,41 +47,38 @@ interface SurfaceGrid {
   y: number[];
   z: (number | null)[][];
   yLabels: string[];
+  text: string[][];
 }
 
-function buildSurfaceGrid(
-  chains: EnrichedChainResponse[],
-  activeVenues: string[],
-): SurfaceGrid {
-  const x = DELTA_TICKS;
+function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
+  const x = data.surfaceFineDeltas;
+  if (!x || x.length === 0) return null;
+
+  const sorted = data.surfaceFine
+    .filter((r) => r.dte > 0)
+    .slice()
+    .sort((a, b) => a.dte - b.dte);
+
   const y: number[] = [];
   const yLabels: string[] = [];
   const z: (number | null)[][] = [];
+  const text: string[][] = [];
 
-  const sorted = chains
-    .map((c) => ({ chain: c, dte: dteDays(c.expiry) }))
-    .filter((e) => e.dte > 0)
-    .sort((a, b) => a.dte - b.dte);
+  for (const row of sorted) {
+    // Backend stores IV as fraction; chart renders percentage.
+    const ivPct = row.ivs.map((v) => (v != null ? v * 100 : null));
+    const filled = ivPct.filter((v) => v != null).length;
+    if (filled < MIN_NON_NULL_PER_ROW) continue;
 
-  for (const { chain, dte } of sorted) {
-    const spot = chain.stats.forwardPriceUsd;
-    const smile = extractSmile(chain.strikes, activeVenues, spot, 'delta');
-
-    const ivByDelta = new Map<number, number>();
-    for (const p of smile) {
-      const key = Math.round(p.strike * 100) / 100;
-      ivByDelta.set(key, p.iv);
-    }
-
-    const row = x.map((d) => ivByDelta.get(d) ?? null);
-    if (row.some((v) => v != null)) {
-      y.push(dte);
-      yLabels.push(formatExpiry(chain.expiry));
-      z.push(row);
-    }
+    const label = formatExpiry(row.expiry);
+    y.push(row.dte);
+    yLabels.push(label);
+    z.push(ivPct);
+    text.push(x.map(() => `${label} (${row.dte}d)`));
   }
 
-  return { x, y, z, yLabels };
+  if (z.length === 0) return null;
+  return { x, y, z, yLabels, text };
 }
 
 interface Props {
@@ -92,18 +87,17 @@ interface Props {
 
 export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
   const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
-  const [selectedVenue, setSelectedVenue] = useState('deribit');
+  const [selectedVenue, setSelectedVenue] = useState('average');
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
 
-  const { data: chains, isLoading } = useAllExpiriesSmile(localUnderlying, true);
+  const venues = selectedVenue === 'average' ? VENUE_IDS : [selectedVenue];
+  const { data, isLoading } = useSurface(localUnderlying, venues);
 
-  const activeVenues = selectedVenue === 'average' ? VENUE_IDS : [selectedVenue];
-  const grid = chains ? buildSurfaceGrid(chains, activeVenues) : null;
-  const hasData = grid != null && grid.z.length > 0;
+  const grid = useMemo(() => (data ? buildSurfaceGrid(data) : null), [data]);
 
-  if (isLoading || !chains) {
+  if (isLoading || !data) {
     return (
       <div className={styles.wrap}>
         <Spinner size="md" label="Loading 3D surface..." />
@@ -111,7 +105,7 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     );
   }
 
-  if (!hasData) {
+  if (!grid) {
     return <div className={styles.empty}>No surface data</div>;
   }
 
@@ -122,12 +116,18 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     ...VENUE_LIST.map((v) => ({ value: v.id, label: v.label })),
   ];
 
+  const tickLabels = grid.x.map(deltaTickLabel);
+
   const plotData: Partial<Plotly.PlotData>[] = [
     {
       type: 'surface' as const,
       x: grid.x,
       y: grid.y,
       z: grid.z,
+      // Plotly's typings declare text as string | string[]; the runtime accepts
+      // the 2-D form for surface traces and that's required for hover labels
+      // to map to the right (delta, expiry) cell.
+      text: grid.text as unknown as string[],
       colorscale: [
         [0, '#1e40af'],
         [0.35, '#60a5fa'],
@@ -145,7 +145,6 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
       },
       hovertemplate:
         'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
-      text: grid.yLabels.map((label, i) => `${label} (${grid.y[i]}d)`) as unknown as string[],
       contours: {
         z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
       } as Plotly.PlotData['contours'],
@@ -163,8 +162,8 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
       xaxis: {
         ...SCENE_DEFAULTS.xaxis,
         title: '' as never,
-        tickvals: DELTA_TICKS.filter((_, i) => i % 2 === 0),
-        ticktext: DELTA_TICK_LABELS.filter((_, i) => i % 2 === 0),
+        tickvals: grid.x.filter((_, i) => i % 2 === 0),
+        ticktext: tickLabels.filter((_, i) => i % 2 === 0),
       },
       yaxis: {
         ...SCENE_DEFAULTS.yaxis,

@@ -6,8 +6,10 @@ import {
   computeChainStats,
   computeDte,
   computeIvSurface,
+  computeIvSurfaceFine,
   type EnrichedStrike,
   type IvSurfaceRow,
+  type IvSurfaceFineRow,
 } from './enrichment.js';
 import type { ChainRequest, VenueOptionChain } from './types.js';
 
@@ -15,6 +17,7 @@ export interface SurfaceGridEntry {
   expiry: string;
   dte: number;
   surfaceRow: IvSurfaceRow;
+  surfaceFineRow: IvSurfaceFineRow;
   atmStrike: EnrichedStrike | null;
   strikes: EnrichedStrike[];
 }
@@ -70,6 +73,7 @@ export async function buildIvSurfaceGrid({
     const refPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd;
     const dte = computeDte(expiry);
     const surfaceRow = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
+    const surfaceFineRow = computeIvSurfaceFine(expiry, dte, enriched.strikes);
 
     let atmStrike: EnrichedStrike | null = null;
     if (refPrice != null && enriched.strikes.length > 0) {
@@ -83,7 +87,14 @@ export async function buildIvSurfaceGrid({
       }
     }
 
-    entries.push({ expiry, dte, surfaceRow, atmStrike, strikes: enriched.strikes });
+    entries.push({
+      expiry,
+      dte,
+      surfaceRow,
+      surfaceFineRow,
+      atmStrike,
+      strikes: enriched.strikes,
+    });
   }
 
   return entries;

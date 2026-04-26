@@ -4,8 +4,10 @@ import {
   computeDte,
   computeGex,
   computeIvSurface,
+  computeIvSurfaceFine,
   computeSmile,
   computeTermStructure,
+  FINE_DELTA_GRID,
   type EnrichedStrike,
   type VenueQuote,
 } from './enrichment.js';
@@ -394,6 +396,90 @@ describe('enrichment', () => {
     expect(surface.delta10c).toBe(0.7);
     expect(surface.delta25p).toBe(0.65);
     expect(surface.delta10p).toBe(0.8);
+  });
+
+  it('builds the fine 19-bucket surface with OTM-only side filtering', () => {
+    const strikes: EnrichedStrike[] = [
+      {
+        strike: 60_000,
+        call: {
+          bestIv: 0.7,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: 0.1, markIv: 0.7 }) },
+        },
+        put: {
+          // ITM put at this strike (|δ|=0.9) — must NOT pollute the call wing.
+          bestIv: 0.95,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: -0.9, markIv: 0.95 }) },
+        },
+      },
+      {
+        strike: 70_000,
+        call: {
+          bestIv: 0.5,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: 0.5, markIv: 0.5 }) },
+        },
+        put: {
+          bestIv: 0.55,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: -0.5, markIv: 0.55 }) },
+        },
+      },
+      {
+        strike: 80_000,
+        call: {
+          // ITM call (δ=0.9) — must NOT pollute the put wing at x=0.10.
+          bestIv: 0.95,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: 0.9, markIv: 0.95 }) },
+        },
+        put: {
+          bestIv: 0.7,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: -0.1, markIv: 0.7 }) },
+        },
+      },
+    ];
+
+    const fine = computeIvSurfaceFine('2026-03-28', 7, strikes);
+    expect(fine.expiry).toBe('2026-03-28');
+    expect(fine.dte).toBe(7);
+    expect(fine.ivs).toHaveLength(FINE_DELTA_GRID.length);
+
+    const at = (target: number) =>
+      fine.ivs[FINE_DELTA_GRID.findIndex((d) => Math.abs(d - target) < 1e-9)] ?? null;
+
+    // OTM call δ=0.10 → bucket 1−0.10 = 0.90.
+    expect(at(0.9)).toBeCloseTo(0.7, 6);
+    // OTM put δ=−0.10 → bucket |δ| = 0.10.
+    expect(at(0.1)).toBeCloseTo(0.7, 6);
+    // ATM put and ATM call (δ=±0.5) both land at 0.50 — averaged.
+    expect(at(0.5)).toBeCloseTo((0.5 + 0.55) / 2, 6);
+    // ITM legs were dropped: 0.95 must not appear anywhere on the grid.
+    expect(fine.ivs.every((v) => v == null || v <= 0.8)).toBe(true);
+  });
+
+  it('rejects out-of-range fine-surface IVs (zero, negative, NaN, > 5)', () => {
+    const strikes: EnrichedStrike[] = [
+      {
+        strike: 60_000,
+        call: {
+          bestIv: null,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: 0.1, markIv: 0 }) },
+        },
+        put: {
+          bestIv: null,
+          bestVenue: 'deribit',
+          venues: { deribit: createVenueQuote({ delta: -0.1, markIv: 99 }) },
+        },
+      },
+    ];
+    const fine = computeIvSurfaceFine('2026-03-28', 7, strikes);
+    // Both quotes were invalid → grid is all-null.
+    expect(fine.ivs.every((v) => v == null)).toBe(true);
   });
 
   it('returns null surface points when no strike is close to the target delta', () => {

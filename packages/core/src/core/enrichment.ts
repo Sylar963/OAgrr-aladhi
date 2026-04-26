@@ -55,6 +55,21 @@ export interface IvSurfaceRow {
   delta10c: number | null;
 }
 
+// Fine-grained delta grid for the 3D surface view. Aligns with FINE_DELTA_GRID
+// (0.05 → 0.95 step 0.05): keys ≤ 0.5 hold OTM put IVs, keys ≥ 0.5 hold OTM
+// call IVs, 0.5 itself is the put/call blended ATM.
+export const FINE_DELTA_GRID: readonly number[] = [
+  0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
+  0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
+];
+
+export interface IvSurfaceFineRow {
+  expiry: string;
+  dte: number;
+  // ivs[i] aligns with FINE_DELTA_GRID[i]; null where no observable strike.
+  ivs: (number | null)[];
+}
+
 // Per-strike smile point — the strike-indexed view of the surface used by
 // consumers that need continuous IV data (e.g. spread analyzers, smile
 // visualizations) rather than the 5-delta summary above.
@@ -577,6 +592,76 @@ export function computeIvSurface(
     delta25c: d25c ? averageSideIv(d25c.call) : null,
     delta10c: d10c ? averageSideIv(d10c.call) : null,
   };
+}
+
+// Cap on accepted mark-IV values (fractional, so 5.0 = 500%). Anything outside
+// this band is treated as a venue glitch and ignored — keeps the 3D colorbar
+// from being blown out by a single bad quote.
+const MIN_IV = 0.05;
+const MAX_IV = 5;
+
+function isValidIv(iv: number | null | undefined): iv is number {
+  return iv != null && Number.isFinite(iv) && iv >= MIN_IV && iv <= MAX_IV;
+}
+
+// Map an OTM delta to its slot on FINE_DELTA_GRID. Puts use |δ|, calls use
+// 1−δ, mirroring the deltaTickLabel convention. ITM deltas (|δ| > 0.5) are
+// rejected so they don't pollute the opposite wing of the smile.
+function deltaToFineKey(delta: number, side: 'put' | 'call'): number | null {
+  if (!Number.isFinite(delta)) return null;
+  if (side === 'put') {
+    if (delta >= -0.02 || delta < -0.5) return null;
+    return Math.round((Math.abs(delta) / 0.05)) * 0.05;
+  }
+  if (delta <= 0.02 || delta > 0.5) return null;
+  return Math.round(((1 - delta) / 0.05)) * 0.05;
+}
+
+/**
+ * Builds a 19-bucket OTM delta grid for the 3D surface.
+ *
+ * For each strike, the put leg lands on the put wing (keys < 0.5) and the
+ * call leg lands on the call wing (keys > 0.5); puts and calls only meet at
+ * the 0.5 ATM bucket. Within each bucket we average across whichever
+ * observed strikes round into it, then average across venues via the same
+ * averageSideIv helper used by the 5-point row.
+ */
+export function computeIvSurfaceFine(
+  expiry: string,
+  dte: number,
+  strikes: EnrichedStrike[],
+): IvSurfaceFineRow {
+  const buckets = new Map<number, { sum: number; count: number }>();
+
+  const add = (key: number, iv: number) => {
+    const rounded = Math.round(key * 100) / 100;
+    const b = buckets.get(rounded);
+    if (b) { b.sum += iv; b.count += 1; }
+    else buckets.set(rounded, { sum: iv, count: 1 });
+  };
+
+  for (const s of strikes) {
+    const putIv = averageSideIv(s.put);
+    const putDelta = averageSideDelta(s.put);
+    if (isValidIv(putIv) && putDelta != null) {
+      const key = deltaToFineKey(putDelta, 'put');
+      if (key != null) add(key, putIv);
+    }
+
+    const callIv = averageSideIv(s.call);
+    const callDelta = averageSideDelta(s.call);
+    if (isValidIv(callIv) && callDelta != null) {
+      const key = deltaToFineKey(callDelta, 'call');
+      if (key != null) add(key, callIv);
+    }
+  }
+
+  const ivs = FINE_DELTA_GRID.map((d) => {
+    const b = buckets.get(Math.round(d * 100) / 100);
+    return b ? b.sum / b.count : null;
+  });
+
+  return { expiry, dte, ivs };
 }
 
 /**

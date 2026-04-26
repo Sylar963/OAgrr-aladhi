@@ -4,9 +4,11 @@ import {
   computeTermStructure,
   getAllAdapters,
   type IvSurfaceRow,
+  type IvSurfaceFineRow,
   type TermStructure,
   type VenueId,
   VENUE_IDS,
+  FINE_DELTA_GRID,
 } from '@oggregator/core';
 
 export async function surfaceRoute(app: FastifyInstance) {
@@ -26,6 +28,7 @@ export async function surfaceRoute(app: FastifyInstance) {
     const entries = await buildIvSurfaceGrid({ underlying, venues: requestedVenues });
 
     const surface: IvSurfaceRow[] = entries.map((e) => e.surfaceRow);
+    const surfaceFine: IvSurfaceFineRow[] = entries.map((e) => e.surfaceFineRow);
     const venueAtm: Record<string, Array<{ expiry: string; dte: number; atm: number | null }>> = {};
     for (const venueId of requestedVenues) {
       venueAtm[venueId] = [];
@@ -46,6 +49,8 @@ export async function surfaceRoute(app: FastifyInstance) {
     return {
       underlying,
       surface,
+      surfaceFine,
+      surfaceFineDeltas: FINE_DELTA_GRID,
       termStructure,
       venueAtm,
     };

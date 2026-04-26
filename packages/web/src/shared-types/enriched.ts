@@ -25,6 +25,14 @@ export interface IvSurfaceRow {
   delta10c: number | null;
 }
 
+// Fine-grained per-expiry IV grid for the 3D surface view. ivs is aligned to
+// IvSurfaceResponse.surfaceFineDeltas (mirrors core FINE_DELTA_GRID).
+export interface IvSurfaceFineRow {
+  expiry: string;
+  dte: number;
+  ivs: (number | null)[];
+}
+
 // Per-strike smile point — mirrors core/enrichment.ts SmilePoint.
 // Used by the Alpha analyzer and any surface-curve visualization.
 export interface SmilePoint {
@@ -53,6 +61,10 @@ export interface VenueAtmPoint {
 export interface IvSurfaceResponse {
   underlying: string;
   surface: IvSurfaceRow[];
+  surfaceFine: IvSurfaceFineRow[];
+  // Delta tick values aligned 1:1 with each row's ivs[] (typically 0.05–0.95
+  // step 0.05). Frontend should render against these instead of hard-coding.
+  surfaceFineDeltas: number[];
   termStructure: TermStructure;
   venueAtm: Record<string, VenueAtmPoint[]>;
 }

@@ -43,6 +43,7 @@ export type { CanonicalOption } from './core/symbol.js';
 export {
   buildEnrichedChain,
   computeIvSurface,
+  computeIvSurfaceFine,
   computeSmile,
   computeTermStructure,
   computeDte,
@@ -50,6 +51,7 @@ export {
   computeChainStats,
   computeGex,
   interpTenor,
+  FINE_DELTA_GRID,
 } from './core/enrichment.js';
 
 export { buildIvSurfaceGrid } from './core/surface-grid.js';
@@ -61,6 +63,7 @@ export type {
   EnrichedSide,
   VenueQuote,
   IvSurfaceRow,
+  IvSurfaceFineRow,
   SmilePoint,
   SmileCurve,
   GexStrike,

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
-import { aggregateHeatRows } from './oi-heatmap-utils';
+import { aggregateHeatRows, computeOpacity } from './oi-heatmap-utils';
 
 function venueQuote(openInterest: number, openInterestUsd: number) {
   return {
@@ -126,5 +126,30 @@ describe('aggregateHeatRows', () => {
     ]);
     const rows = aggregateHeatRows([c], 80_000, 'contracts', new Set(), 'both');
     expect(rows.map((r) => r.strike)).toEqual([79_000, 80_000, 81_000]);
+  });
+});
+
+describe('computeOpacity', () => {
+  it('returns the floor 0.05 for magnitude 0', () => {
+    expect(computeOpacity(0, 100)).toBeCloseTo(0.05, 5);
+  });
+
+  it('returns the ceiling 0.95 for magnitude == maxMagnitude', () => {
+    expect(computeOpacity(100, 100)).toBeCloseTo(0.95, 5);
+  });
+
+  it('produces ~0.5 for magnitude == 0.25 × max (sqrt curve sanity)', () => {
+    const v = computeOpacity(25, 100);
+    expect(v).toBeGreaterThan(0.45);
+    expect(v).toBeLessThan(0.55);
+  });
+
+  it('returns the floor when maxMagnitude is 0 (no NaN)', () => {
+    expect(computeOpacity(0,   0)).toBeCloseTo(0.05, 5);
+    expect(computeOpacity(100, 0)).toBeCloseTo(0.05, 5);
+  });
+
+  it('clamps inputs above max to the ceiling', () => {
+    expect(computeOpacity(200, 100)).toBeCloseTo(0.95, 5);
   });
 });

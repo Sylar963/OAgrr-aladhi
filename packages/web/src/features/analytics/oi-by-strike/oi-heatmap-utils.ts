@@ -166,3 +166,12 @@ export function aggregateHeatRows(
   }
   return rows.sort((a, b) => a.strike - b.strike);
 }
+
+const OPACITY_FLOOR = 0.05;
+const OPACITY_CEILING = 0.95;
+
+export function computeOpacity(magnitude: number, maxMagnitude: number): number {
+  if (maxMagnitude <= 0) return OPACITY_FLOOR;
+  const ratio = Math.max(0, Math.min(1, magnitude / maxMagnitude));
+  return OPACITY_FLOOR + Math.sqrt(ratio) * (OPACITY_CEILING - OPACITY_FLOOR);
+}

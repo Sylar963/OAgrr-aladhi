@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
-import { aggregateHeatRows, computeOpacity } from './oi-heatmap-utils';
+import { aggregateHeatRows, computeOpacity, heatColor } from './oi-heatmap-utils';
+import type { HeatRow } from './oi-heatmap-utils';
 
 function venueQuote(openInterest: number, openInterestUsd: number) {
   return {
@@ -151,5 +152,42 @@ describe('computeOpacity', () => {
 
   it('clamps inputs above max to the ceiling', () => {
     expect(computeOpacity(200, 100)).toBeCloseTo(0.95, 5);
+  });
+});
+
+function row(dominant: 'call' | 'put', magnitude: number): HeatRow {
+  return {
+    strike: 80_000,
+    callOi: dominant === 'call' ? magnitude : 0,
+    putOi:  dominant === 'put'  ? magnitude : 0,
+    magnitude,
+    dominant,
+  };
+}
+
+describe('heatColor', () => {
+  it('returns an rgba string with green channel dominant for call rows', () => {
+    const out = heatColor(row('call', 100), 100);
+    // #00E997 = rgb(0, 233, 151)
+    expect(out).toMatch(/^rgba\(0,\s*233,\s*151,\s*[0-9.]+\)$/);
+  });
+
+  it('returns an rgba string with red channel dominant for put rows', () => {
+    const out = heatColor(row('put', 100), 100);
+    // #CB3855 = rgb(203, 56, 85)
+    expect(out).toMatch(/^rgba\(203,\s*56,\s*85,\s*[0-9.]+\)$/);
+  });
+
+  it('embeds the computed alpha (0.95 at max magnitude)', () => {
+    const out = heatColor(row('call', 100), 100);
+    const m = out.match(/rgba\(0,\s*233,\s*151,\s*([0-9.]+)\)/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeCloseTo(0.95, 2);
+  });
+
+  it('embeds the floor alpha (0.05) when magnitude is 0', () => {
+    const out = heatColor(row('call', 0), 100);
+    const m = out.match(/rgba\(0,\s*233,\s*151,\s*([0-9.]+)\)/);
+    expect(Number(m![1])).toBeCloseTo(0.05, 2);
   });
 });

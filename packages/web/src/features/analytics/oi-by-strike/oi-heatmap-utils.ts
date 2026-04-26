@@ -175,3 +175,12 @@ export function computeOpacity(magnitude: number, maxMagnitude: number): number 
   const ratio = Math.max(0, Math.min(1, magnitude / maxMagnitude));
   return OPACITY_FLOOR + Math.sqrt(ratio) * (OPACITY_CEILING - OPACITY_FLOOR);
 }
+
+const CALL_RGB = '0, 233, 151';   // #00E997
+const PUT_RGB  = '203, 56, 85';   // #CB3855
+
+export function heatColor(row: HeatRow, maxMagnitude: number): string {
+  const alpha = computeOpacity(row.magnitude, maxMagnitude);
+  const rgb = row.dominant === 'call' ? CALL_RGB : PUT_RGB;
+  return `rgba(${rgb}, ${alpha.toFixed(3)})`;
+}

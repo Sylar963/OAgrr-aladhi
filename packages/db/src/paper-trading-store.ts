@@ -49,8 +49,16 @@ export interface PaperFillRow {
   benchmarkAskUsd: number | null;
   benchmarkMidUsd: number | null;
   underlyingSpotUsd: number | null;
-  source: 'paper' | 'live';
+  source: 'paper' | 'live' | 'settlement';
   filledAt: Date;
+}
+
+export interface PaperSettlementPriceRow {
+  underlying: string;
+  expiry: string;
+  priceUsd: number;
+  source: string;
+  capturedAt: Date;
 }
 
 export interface PaperTradeRow {
@@ -69,7 +77,7 @@ export interface PaperTradeRow {
 export interface PaperTradeOrderRow {
   tradeId: string;
   orderId: string;
-  intent: 'open' | 'add' | 'reduce' | 'close' | 'roll';
+  intent: 'open' | 'add' | 'reduce' | 'close' | 'roll' | 'settlement';
   createdAt: Date;
 }
 
@@ -142,6 +150,10 @@ export interface PaperTradingStore {
 
   upsertPosition(row: PaperPositionRow): Promise<void>;
   listPositions(accountId: string): Promise<PaperPositionRow[]>;
+  listAllAccountIdsWithOpenPositions(): Promise<string[]>;
+  listExpiredOpenPositions(accountId: string, asOf: Date): Promise<PaperPositionRow[]>;
+  getSettlementPrice(underlying: string, expiry: string): Promise<PaperSettlementPriceRow | null>;
+  upsertSettlementPrice(row: PaperSettlementPriceRow): Promise<void>;
 
   appendCashLedger(row: PaperCashLedgerRow): Promise<void>;
   sumCashLedger(accountId: string): Promise<number>;
@@ -197,6 +209,16 @@ export class NoopPaperTradingStore implements PaperTradingStore {
   async listPositions(): Promise<PaperPositionRow[]> {
     return [];
   }
+  async listAllAccountIdsWithOpenPositions(): Promise<string[]> {
+    return [];
+  }
+  async listExpiredOpenPositions(): Promise<PaperPositionRow[]> {
+    return [];
+  }
+  async getSettlementPrice(): Promise<PaperSettlementPriceRow | null> {
+    return null;
+  }
+  async upsertSettlementPrice(): Promise<void> {}
   async appendCashLedger(): Promise<void> {}
   async sumCashLedger(): Promise<number> {
     return 0;
@@ -485,6 +507,64 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       [accountId],
     );
     return res.rows.map(mapPositionRow);
+  }
+
+  async listAllAccountIdsWithOpenPositions(): Promise<string[]> {
+    const res = await this.pool.query<{ account_id: string }>(
+      `SELECT DISTINCT account_id FROM paper_positions WHERE net_quantity <> 0`,
+    );
+    return res.rows.map((r) => r.account_id);
+  }
+
+  async listExpiredOpenPositions(
+    accountId: string,
+    asOf: Date,
+  ): Promise<PaperPositionRow[]> {
+    const res = await this.pool.query<PositionRowDb>(
+      `SELECT * FROM paper_positions
+       WHERE account_id = $1
+         AND net_quantity <> 0
+         AND expiry < $2::date`,
+      [accountId, asOf],
+    );
+    return res.rows.map(mapPositionRow);
+  }
+
+  async getSettlementPrice(
+    underlying: string,
+    expiry: string,
+  ): Promise<PaperSettlementPriceRow | null> {
+    const res = await this.pool.query<{
+      underlying: string;
+      expiry: Date | string;
+      price_usd: string;
+      source: string;
+      captured_at: Date;
+    }>(
+      `SELECT underlying, expiry, price_usd, source, captured_at
+       FROM paper_settlement_prices
+       WHERE underlying = $1 AND expiry = $2::date`,
+      [underlying, expiry],
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      underlying: row.underlying,
+      expiry: typeof row.expiry === 'string' ? row.expiry : toIsoDate(row.expiry),
+      priceUsd: Number(row.price_usd),
+      source: row.source,
+      capturedAt: row.captured_at,
+    };
+  }
+
+  async upsertSettlementPrice(row: PaperSettlementPriceRow): Promise<void> {
+    // First write wins — once a settlement price is captured, re-runs reuse it.
+    await this.pool.query(
+      `INSERT INTO paper_settlement_prices (underlying, expiry, price_usd, source, captured_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (underlying, expiry) DO NOTHING`,
+      [row.underlying, row.expiry, row.priceUsd, row.source, row.capturedAt],
+    );
   }
 
   async appendCashLedger(row: PaperCashLedgerRow): Promise<void> {

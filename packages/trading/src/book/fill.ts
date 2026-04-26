@@ -3,7 +3,7 @@ import type { UsdAmount } from './money.js';
 import type { OptionRight, OrderId, OrderSide } from './order.js';
 
 export type FillId = string;
-export type FillSource = 'paper' | 'live';
+export type FillSource = 'paper' | 'live' | 'settlement';
 
 export interface Fill {
   id: FillId;

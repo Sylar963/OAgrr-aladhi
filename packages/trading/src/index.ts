@@ -58,6 +58,8 @@ export {
   type PlaceOrderResult,
 } from './desk/place-order.js';
 export { applyFill } from './desk/apply-fill.js';
+export { buildSettlementFill, type SettlementInput } from './desk/settle-expirations.js';
+export { deliveryFeeUsd } from './desk/delivery-fees.js';
 export { PnlService } from './desk/compute-pnl.js';
 export {
   computePortfolioGreeks,

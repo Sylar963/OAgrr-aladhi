@@ -30,7 +30,14 @@ export const PlaceOrderRequestSchema = z.object({
 export type PlaceOrderRequest = z.infer<typeof PlaceOrderRequestSchema>;
 
 export const PaperTradeStatusSchema = z.enum(['open', 'closed']);
-export const PaperTradeOrderIntentSchema = z.enum(['open', 'add', 'reduce', 'close', 'roll']);
+export const PaperTradeOrderIntentSchema = z.enum([
+  'open',
+  'add',
+  'reduce',
+  'close',
+  'roll',
+  'settlement',
+]);
 export const PaperTradeNoteKindSchema = z.enum(['thesis', 'invalidation', 'review', 'note']);
 
 export const CreatePaperTradeRequestSchema = z.object({

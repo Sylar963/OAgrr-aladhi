@@ -212,6 +212,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         lineVisible: false,
         axisLabelVisible: true,
         title: row.strike.toLocaleString(),
+        axisLabelColor: row.dominant === 'call' ? '#0E3D2C' : '#3D0E1A',
+        axisLabelTextColor: row.dominant === 'call' ? '#00E997' : '#CB3855',
       });
       lines.set(row.strike, line);
     }

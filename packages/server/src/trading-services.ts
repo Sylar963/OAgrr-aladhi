@@ -8,13 +8,16 @@ import {
   DEFAULT_ACCOUNT_ID,
   DEFAULT_ACCOUNT_LABEL,
   DEFAULT_INITIAL_CASH_USD,
+  OptimisticFillModel,
   OrderPlacementService,
   PaperFillEngine,
   PnlService,
   PostgresOrderRepository,
   PostgresPositionRepository,
+  RealisticFillModel,
   RuntimeQuoteProvider,
   SystemClock,
+  type FillModel,
 } from '@oggregator/trading';
 import { chainEngines } from './chain-engines.js';
 
@@ -26,7 +29,15 @@ const clock = new SystemClock();
 const quoteProvider = new RuntimeQuoteProvider(chainEngines);
 const orderRepository = new PostgresOrderRepository(paperTradingStore);
 const positionRepository = new PostgresPositionRepository(paperTradingStore);
-const fillEngine = new PaperFillEngine(quoteProvider, clock);
+
+// PAPER_FILL_MODE selects the slippage model. Default is 'realistic' so paper
+// fills experience depth/spread degradation similar to live execution. Set
+// PAPER_FILL_MODE=optimistic for the legacy infinite-depth behavior (useful
+// when comparing strategy backtests against an idealized baseline).
+const fillModeEnv = (process.env['PAPER_FILL_MODE'] ?? 'realistic').toLowerCase();
+const fillModel: FillModel =
+  fillModeEnv === 'optimistic' ? new OptimisticFillModel() : new RealisticFillModel();
+const fillEngine = new PaperFillEngine(quoteProvider, clock, fillModel);
 
 export const orderPlacementService = new OrderPlacementService(
   orderRepository,

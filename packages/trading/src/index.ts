@@ -39,8 +39,14 @@ export {
 export type { Clock } from './gateways/clock.js';
 export { FixedClock, SystemClock } from './gateways/clock.js';
 
-export type { QuoteBook, QuoteKey, QuoteProvider } from './gateways/quote-provider.js';
+export type {
+  QuoteBook,
+  QuoteBookLevel,
+  QuoteKey,
+  QuoteProvider,
+} from './gateways/quote-provider.js';
 export type { FillEngine, LegFillPlan } from './gateways/fill-engine.js';
+export type { FillModel, FillModelInput, FillModelQuote } from './gateways/fill-model.js';
 export type { OrderRepository } from './gateways/order-repository.js';
 export type { CashLedgerEntry, PositionRepository } from './gateways/position-repository.js';
 
@@ -58,5 +64,10 @@ export {
 
 export { RuntimeQuoteProvider } from './adapters/runtime-quote-provider.js';
 export { PaperFillEngine } from './adapters/paper-fill-engine.js';
+export { OptimisticFillModel } from './adapters/optimistic-fill-model.js';
+export {
+  RealisticFillModel,
+  type RealisticFillModelOptions,
+} from './adapters/realistic-fill-model.js';
 export { PostgresOrderRepository } from './adapters/postgres-order-repository.js';
 export { PostgresPositionRepository } from './adapters/postgres-position-repository.js';

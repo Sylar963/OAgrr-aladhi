@@ -86,8 +86,11 @@ export interface PaperFillDto {
   expiry: string;
   strike: number;
   quantity: number;
+  requestedQuantity: number;
   priceUsd: number;
   feesUsd: number;
+  slippageUsd: number;
+  partialFill: boolean;
   benchmarkBidUsd: number | null;
   benchmarkAskUsd: number | null;
   benchmarkMidUsd: number | null;

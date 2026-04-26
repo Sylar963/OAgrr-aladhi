@@ -40,8 +40,11 @@ export interface PaperFillRow {
   expiry: string;
   strike: number;
   quantity: number;
+  requestedQuantity: number;
   priceUsd: number;
   feesUsd: number;
+  slippageUsd: number;
+  partialFill: boolean;
   benchmarkBidUsd: number | null;
   benchmarkAskUsd: number | null;
   benchmarkMidUsd: number | null;
@@ -394,9 +397,10 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
 
   async insertFills(rows: PaperFillRow[]): Promise<void> {
     if (rows.length === 0) return;
+    const COLS = 21;
     const values: unknown[] = [];
     const placeholders = rows.map((row, i) => {
-      const o = i * 18;
+      const o = i * COLS;
       values.push(
         row.id,
         row.orderId,
@@ -408,8 +412,11 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
         row.expiry,
         row.strike,
         row.quantity,
+        row.requestedQuantity,
         row.priceUsd,
         row.feesUsd,
+        row.slippageUsd,
+        row.partialFill,
         row.benchmarkBidUsd,
         row.benchmarkAskUsd,
         row.benchmarkMidUsd,
@@ -417,12 +424,14 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
         row.source,
         row.filledAt,
       );
-      return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8}, $${o + 9}, $${o + 10}, $${o + 11}, $${o + 12}, $${o + 13}, $${o + 14}, $${o + 15}, $${o + 16}, $${o + 17}, $${o + 18})`;
+      const slots = Array.from({ length: COLS }, (_, k) => `$${o + k + 1}`).join(', ');
+      return `(${slots})`;
     });
     await this.pool.query(
       `INSERT INTO paper_fills (
         id, order_id, leg_index, venue, side, option_right,
-        underlying, expiry, strike, quantity, price_usd, fees_usd,
+        underlying, expiry, strike, quantity, requested_quantity,
+        price_usd, fees_usd, slippage_usd, partial_fill,
         benchmark_bid_usd, benchmark_ask_usd, benchmark_mid_usd, underlying_spot_usd,
         source, filled_at
        ) VALUES ${placeholders.join(', ')}`,
@@ -739,8 +748,11 @@ interface FillRowDb {
   expiry: Date | string;
   strike: string;
   quantity: string;
+  requested_quantity: string | null;
   price_usd: string;
   fees_usd: string;
+  slippage_usd: string | null;
+  partial_fill: boolean | null;
   benchmark_bid_usd: string | null;
   benchmark_ask_usd: string | null;
   benchmark_mid_usd: string | null;
@@ -831,6 +843,7 @@ function mapOrderRow(row: OrderRowDb): PaperOrderRow {
 }
 
 function mapFillRow(row: FillRowDb): PaperFillRow {
+  const quantity = Number(row.quantity);
   return {
     id: row.id,
     orderId: row.order_id,
@@ -841,9 +854,13 @@ function mapFillRow(row: FillRowDb): PaperFillRow {
     underlying: row.underlying,
     expiry: typeof row.expiry === 'string' ? row.expiry : toIsoDate(row.expiry),
     strike: Number(row.strike),
-    quantity: Number(row.quantity),
+    quantity,
+    requestedQuantity:
+      row.requested_quantity != null ? Number(row.requested_quantity) : quantity,
     priceUsd: Number(row.price_usd),
     feesUsd: Number(row.fees_usd),
+    slippageUsd: row.slippage_usd != null ? Number(row.slippage_usd) : 0,
+    partialFill: row.partial_fill ?? false,
     benchmarkBidUsd: row.benchmark_bid_usd != null ? Number(row.benchmark_bid_usd) : null,
     benchmarkAskUsd: row.benchmark_ask_usd != null ? Number(row.benchmark_ask_usd) : null,
     benchmarkMidUsd: row.benchmark_mid_usd != null ? Number(row.benchmark_mid_usd) : null,

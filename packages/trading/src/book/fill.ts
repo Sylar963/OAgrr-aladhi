@@ -15,9 +15,19 @@ export interface Fill {
   underlying: string;
   expiry: string;
   strike: number;
+  // Quantity actually filled. May be < requestedQuantity for partial fills.
   quantity: number;
+  // Quantity originally requested by the order leg. Equal to `quantity` for
+  // full fills; persisted so partial-fill diagnostics survive a restart.
+  requestedQuantity: number;
   priceUsd: UsdAmount;
   feesUsd: UsdAmount;
+  // Per-contract slippage vs L1 reference (ask for buy, bid for sell). 0 under
+  // OptimisticFillModel; positive when RealisticFillModel walked depth or paid
+  // a spread penalty.
+  slippageUsd: UsdAmount;
+  // True when quantity < requestedQuantity.
+  partialFill: boolean;
   benchmarkBidUsd: UsdAmount | null;
   benchmarkAskUsd: UsdAmount | null;
   benchmarkMidUsd: UsdAmount | null;

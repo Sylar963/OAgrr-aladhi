@@ -31,6 +31,8 @@ export class RuntimeQuoteProvider implements QuoteProvider {
           markUsd: quote.mid,
           underlyingPriceUsd: snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd,
           feesTakerUsd: quote.estimatedFees?.taker ?? DEFAULT_FEES_TAKER_USD,
+          bidSize: quote.bidSize,
+          askSize: quote.askSize,
         });
       }
       return books;

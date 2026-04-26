@@ -1,5 +1,10 @@
 import type { VenueId } from '@oggregator/core';
 
+export interface QuoteBookLevel {
+  priceUsd: number;
+  size: number;
+}
+
 export interface QuoteBook {
   venue: VenueId;
   bidUsd: number | null;
@@ -8,6 +13,15 @@ export interface QuoteBook {
   underlyingPriceUsd: number | null;
   /** Absolute USD taker fee per contract (not a rate). */
   feesTakerUsd: number;
+  // Top-of-book sizes in contracts. Null when the venue feed does not surface
+  // L1 depth (e.g. Deribit/OKX option tickers do not include sizes).
+  bidSize: number | null;
+  askSize: number | null;
+  // Optional L2 ladder. Reserved for venues that publish depth beyond L1; the
+  // realistic fill model walks this when present, falls back to spread penalty
+  // otherwise. Empty/undefined for L1-only venues.
+  bidLevels?: QuoteBookLevel[];
+  askLevels?: QuoteBookLevel[];
 }
 
 export interface QuoteKey {

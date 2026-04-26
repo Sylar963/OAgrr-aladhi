@@ -4,19 +4,29 @@ import type { Order, OrderLeg } from '../book/order.js';
 import { NoLiquidityError } from '../book/errors.js';
 import type { Clock } from '../gateways/clock.js';
 import type { FillEngine } from '../gateways/fill-engine.js';
+import type { FillModel } from '../gateways/fill-model.js';
 import type { QuoteBook, QuoteProvider } from '../gateways/quote-provider.js';
+import { OptimisticFillModel } from './optimistic-fill-model.js';
 
 export class PaperFillEngine implements FillEngine {
+  private readonly fillModel: FillModel;
+
   constructor(
     private readonly quotes: QuoteProvider,
     private readonly clock: Clock,
-  ) {}
+    fillModel?: FillModel,
+  ) {
+    this.fillModel = fillModel ?? new OptimisticFillModel();
+  }
 
   async executeOrder(order: Order, venueFilter: VenueId[]): Promise<Fill[]> {
     const plans: Array<{
       leg: OrderLeg;
       venue: VenueId;
       priceUsd: number;
+      filledQuantity: number;
+      slippageUsd: number;
+      partialFill: boolean;
       feesUsd: number;
       benchmarkBidUsd: number | null;
       benchmarkAskUsd: number | null;
@@ -44,13 +54,27 @@ export class PaperFillEngine implements FillEngine {
         );
       }
 
-      const priceUsd = leg.side === 'buy' ? chosen.book.askUsd! : chosen.book.bidUsd!;
-      const feesUsd = chosen.book.feesTakerUsd * leg.quantity;
+      const quote = this.fillModel.quote({
+        side: leg.side,
+        requestedQuantity: leg.quantity,
+        book: chosen.book,
+      });
+      if (quote.filledQuantity <= 0) {
+        throw new NoLiquidityError(
+          `Fill model returned zero size for leg ${leg.index}`,
+          leg.index,
+        );
+      }
+
+      const feesUsd = chosen.book.feesTakerUsd * quote.filledQuantity;
 
       plans.push({
         leg,
         venue: chosen.book.venue,
-        priceUsd,
+        priceUsd: quote.priceUsd,
+        filledQuantity: quote.filledQuantity,
+        slippageUsd: quote.slippageUsd,
+        partialFill: quote.partial,
         feesUsd,
         benchmarkBidUsd: chosen.book.bidUsd,
         benchmarkAskUsd: chosen.book.askUsd,
@@ -71,9 +95,12 @@ export class PaperFillEngine implements FillEngine {
         underlying: p.leg.underlying,
         expiry: p.leg.expiry,
         strike: p.leg.strike,
-        quantity: p.leg.quantity,
+        quantity: p.filledQuantity,
+        requestedQuantity: p.leg.quantity,
         priceUsd: p.priceUsd,
         feesUsd: p.feesUsd,
+        slippageUsd: p.slippageUsd,
+        partialFill: p.partialFill,
         benchmarkBidUsd: p.benchmarkBidUsd,
         benchmarkAskUsd: p.benchmarkAskUsd,
         benchmarkMidUsd: p.benchmarkMidUsd,

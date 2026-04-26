@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import type { SpotCandleCurrency } from '@shared/common';
 
+import InfoTip from '@components/ui/InfoTip';
+
 import styles from '../AnalyticsView.module.css';
 import OiByStrikeChart from './OiByStrikeChart';
 import OiHeatmap from './OiHeatmap';
@@ -49,6 +51,25 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
               V2
             </button>
           </div>
+          {effectiveVersion === 'v2' && (
+            <InfoTip label="V2 OI Heatmap" title="V2 — Live OI Heatmap" align="start">
+              <p>
+                Bookmap-style live view of open interest by strike, plotted against
+                the last 90 days of spot price action.
+              </p>
+              <p>
+                Each horizontal band marks a strike. <strong>Color</strong> shows
+                the dominant side (green = calls, red = puts);{' '}
+                <strong>opacity</strong> encodes OI magnitude (sqrt-scaled). Use the
+                Calls / Puts / Both toggle to isolate one side, and click an expiry
+                in the legend to hide it from the aggregation.
+              </p>
+              <p>
+                Live only — bands reflect the current chain snapshot, not history.
+                BTC and ETH only.
+              </p>
+            </InfoTip>
+          )}
           {maxPain != null && (
             <div className={styles.maxPainBadge}>
               Max Pain: <strong>{maxPain.toLocaleString()}</strong>

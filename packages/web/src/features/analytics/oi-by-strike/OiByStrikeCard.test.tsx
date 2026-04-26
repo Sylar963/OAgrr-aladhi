@@ -53,15 +53,15 @@ describe('OiByStrikeCard', () => {
     expect(screen.queryByRole('button', { name: 'Calls' })).toBeNull();
   });
 
-  it('switches to V2 when V2 is clicked, exposing the Calls/Puts/Both and time-range toggles', () => {
+  it('switches to V2 when V2 is clicked, exposing the Calls/Puts/Both toggles', () => {
     render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
     fireEvent.click(screen.getByRole('button', { name: 'V2' }));
     expect(screen.getByRole('button', { name: 'Calls' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Puts' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Both' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '24h' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '7d' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '30d' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '24h' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '7d' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '30d' })).toBeNull();
   });
 
   it('switches back to V1 when V1 is clicked', () => {

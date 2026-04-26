@@ -12,7 +12,7 @@ import {
 } from 'lightweight-charts';
 
 import type { EnrichedChainResponse } from '@shared/enriched';
-import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common';
+import type { SpotCandleCurrency } from '@shared/common';
 import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
 
 import styles from '../AnalyticsView.module.css';
@@ -33,18 +33,8 @@ const EXPIRY_COLORS = [
   '#A855F7', '#14B8A6',
 ];
 
-type TimeRange = '24h' | '7d' | '30d';
-
-interface RangeParams {
-  resolution: SpotCandleResolutionSec;
-  buckets: number;
-}
-
-const TIME_RANGE: Record<TimeRange, RangeParams> = {
-  '24h': { resolution: 1800,  buckets: 48 },
-  '7d':  { resolution: 3600,  buckets: 168 },
-  '30d': { resolution: 14400, buckets: 180 },
-};
+const CANDLE_RESOLUTION_SEC = 86400;
+const CANDLE_BUCKETS = 90;
 
 interface Props {
   chains: EnrichedChainResponse[];
@@ -55,7 +45,6 @@ interface Props {
 export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [mode, setMode] = useState<OiMode>('contracts');
   const [side, setSide] = useState<HeatSide>('both');
-  const [timeRange, setTimeRange] = useState<TimeRange>('7d');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
@@ -69,9 +58,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const spotLineRef = useRef<IPriceLine | null>(null);
   const maxPainLineRef = useRef<IPriceLine | null>(null);
 
-  const range = TIME_RANGE[timeRange];
   const { data: candleData, isLoading: candlesLoading, error: candlesError, refetch } =
-    useSpotCandles(currency, range.resolution, range.buckets);
+    useSpotCandles(currency, CANDLE_RESOLUTION_SEC, CANDLE_BUCKETS);
 
   const sortedExpiries = useMemo(() => chains.map((c) => c.expiry).sort(), [chains]);
   const expiryColorMap = useMemo(
@@ -171,11 +159,11 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     };
   }, []);
 
-  // Reset fit guard when the user picks a different time range or switches
-  // underlying so fitContent fires once for the new data set.
+  // Reset fit guard when the underlying changes so fitContent fires once
+  // for the new candle set.
   useEffect(() => {
     didFitRef.current = false;
-  }, [timeRange, currency]);
+  }, [currency]);
 
   // ── Push candle data ──────────────────────────────────────────
   useEffect(() => {
@@ -295,11 +283,6 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
           <button className={styles.oiToggleBtn} data-active={side === 'calls' || undefined} onClick={() => setSide('calls')}>Calls</button>
           <button className={styles.oiToggleBtn} data-active={side === 'puts'  || undefined} onClick={() => setSide('puts')}>Puts</button>
           <button className={styles.oiToggleBtn} data-active={side === 'both'  || undefined} onClick={() => setSide('both')}>Both</button>
-        </div>
-        <div className={styles.oiToggle}>
-          {(['24h', '7d', '30d'] as TimeRange[]).map((r) => (
-            <button key={r} className={styles.oiToggleBtn} data-active={timeRange === r || undefined} onClick={() => setTimeRange(r)}>{r}</button>
-          ))}
         </div>
       </div>
 

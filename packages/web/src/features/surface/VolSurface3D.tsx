@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
-import { Spinner, DropdownPicker } from '@components/ui';
+import { Spinner, DropdownPicker, InfoTip } from '@components/ui';
 import { useUnderlyings } from '@features/chain';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
@@ -16,6 +16,33 @@ const DELTA_TICKS = [
   0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95,
 ];
 const DELTA_TICK_LABELS = DELTA_TICKS.map(deltaTickLabel);
+
+const SURFACE_TIP_BODY = (
+  <>
+    <div>
+      Implied vol across strike (X = delta), time (Y = tenor), and magnitude
+      (Z = IV %, also encoded by color).
+    </div>
+    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+      <li>
+        <strong>X — delta</strong>: 5Δp (deep OTM put) → ATM (0.5) → 5Δc (deep OTM call).
+        Wings above ATM = skew / tail-risk premium.
+      </li>
+      <li>
+        <strong>Y — tenor</strong>: days to expiry, near → far.
+        Upward slope = contango; inversion = near-term stress.
+      </li>
+      <li>
+        <strong>Z &amp; color</strong>: IV in %. Blue = low, white = mid, orange = high.
+        Color gaps = missing venue quotes.
+      </li>
+      <li>
+        <strong>Venue picker</strong>: single-venue vs cross-venue Average.
+        Average smooths venue quirks; single venue exposes microstructure.
+      </li>
+    </ul>
+  </>
+);
 
 interface SurfaceGrid {
   x: number[];
@@ -159,6 +186,9 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>3D IV Surface</span>
+        <InfoTip label="3D IV Surface" title="3D IV Surface" align="start">
+          {SURFACE_TIP_BODY}
+        </InfoTip>
         <DropdownPicker
           size="sm"
           value={localUnderlying}

@@ -5,6 +5,7 @@ export { default as EmptyState } from './EmptyState';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as SessionNotice } from './SessionNotice';
 export { default as ShortcutHelp } from './ShortcutHelp';
+export { default as InfoTip } from './InfoTip';
 export { default as IvChip } from './IvChip';
 export { default as MobileDrawer } from './MobileDrawer';
 export { default as Spinner } from './Spinner';

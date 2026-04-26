@@ -183,9 +183,8 @@ function OiByStrikeChart({
   };
 
   return (
-    <div className={styles.card} ref={cardRef} style={{ position: 'relative' }}>
+    <div ref={cardRef} style={{ position: 'relative' }}>
       <div className={styles.oiHeader}>
-        <div className={styles.cardTitle}>Open Interest by Strike</div>
         <div className={styles.oiControls}>
           <div className={styles.oiToggle}>
             <button
@@ -203,11 +202,6 @@ function OiByStrikeChart({
               Notional
             </button>
           </div>
-          {maxPain != null && (
-            <div className={styles.maxPainBadge}>
-              Max Pain: <strong>{maxPain.toLocaleString()}</strong>
-            </div>
-          )}
         </div>
       </div>
 

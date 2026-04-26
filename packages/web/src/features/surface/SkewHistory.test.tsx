@@ -6,6 +6,7 @@ vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'solid' },
   LineSeries: 'LineSeries',
   AreaSeries: 'AreaSeries',
+  BaselineSeries: 'BaselineSeries',
   LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
   createChart: vi.fn(() => ({
     addSeries: vi.fn(() => ({

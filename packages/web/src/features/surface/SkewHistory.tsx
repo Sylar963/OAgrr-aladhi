@@ -7,6 +7,7 @@ import {
   createChart,
 } from 'lightweight-charts';
 
+import InfoTip from '@components/ui/InfoTip';
 import { getTokenLogo } from '@lib/token-meta';
 import type { IvTenor } from '@shared/enriched';
 import { getHistoryCoverage } from './history-coverage';
@@ -33,17 +34,27 @@ const DISPLAY_LABELS: Record<SkewDisplayMode, string> = {
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
 
-const RR_TIP =
-  '25Δ RISK-REVERSAL — call25 IV − put25 IV.\n\n' +
-  '• Positive: calls richer than puts → upside fear/FOMO.\n' +
-  '• Negative: puts richer than calls → downside fear (the usual state in BTC/ETH).\n' +
-  '• Moves to zero when skew compresses; blow-outs often precede directional regimes.';
+const RR_TIP_BODY = (
+  <>
+    <div>call25 IV − put25 IV.</div>
+    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+      <li>Positive: calls richer than puts → upside fear/FOMO.</li>
+      <li>Negative: puts richer than calls → downside fear (usual state in BTC/ETH).</li>
+      <li>Moves to zero when skew compresses; blow-outs often precede directional regimes.</li>
+    </ul>
+  </>
+);
 
-const FLY_TIP =
-  '25Δ BUTTERFLY — (call25 IV + put25 IV) / 2 − ATM IV.\n\n' +
-  '• Measures wing richness vs body — the convexity premium.\n' +
-  '• High fly: wings are expensive (fat-tail pricing, event premium).\n' +
-  '• Low/negative fly: wings cheap vs body — possible vega pay for directional skew.';
+const FLY_TIP_BODY = (
+  <>
+    <div>(call25 IV + put25 IV) / 2 − ATM IV.</div>
+    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+      <li>Measures wing richness vs body — the convexity premium.</li>
+      <li>High fly: wings expensive (fat-tail pricing, event premium).</li>
+      <li>Low/negative fly: wings cheap vs body — possible vega pay for directional skew.</li>
+    </ul>
+  </>
+);
 
 function axisFormatter(mode: SkewDisplayMode) {
   return (value: number) => {
@@ -269,13 +280,19 @@ export default function SkewHistory({ underlying }: Props) {
       </div>
 
       <div className={styles.legend}>
-        <span className={styles.legendItem} title={RR_TIP}>
+        <span className={styles.legendItem}>
           <span className={styles.legendSwatch} style={{ background: RR_COLOR }} />
           25Δ RR (call − put)
+          <InfoTip label="25Δ RR" title="25Δ Risk-Reversal" align="start">
+            {RR_TIP_BODY}
+          </InfoTip>
         </span>
-        <span className={styles.legendItem} title={FLY_TIP}>
+        <span className={styles.legendItem}>
           <span className={styles.legendSwatch} style={{ background: FLY_COLOR }} />
           25Δ Fly (wing − ATM)
+          <InfoTip label="25Δ Fly" title="25Δ Butterfly" align="start">
+            {FLY_TIP_BODY}
+          </InfoTip>
         </span>
       </div>
       <div className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>

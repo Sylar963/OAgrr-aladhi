@@ -50,6 +50,14 @@ interface SurfaceGrid {
   text: string[][];
 }
 
+// Vol scales with sqrt(T) — plotting Y in sqrt(years) keeps the front of the
+// surface (weeklies/dailies) from collapsing into the origin while still
+// preserving temporal ordering. Plain DTE on a linear axis squashed the
+// short-dated rows on top of each other.
+function dteToYearSqrt(dte: number): number {
+  return Math.sqrt(Math.max(dte, 0) / 365);
+}
+
 function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
   const x = data.surfaceFineDeltas;
   if (!x || x.length === 0) return null;
@@ -71,7 +79,7 @@ function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
     if (filled < MIN_NON_NULL_PER_ROW) continue;
 
     const label = formatExpiry(row.expiry);
-    y.push(row.dte);
+    y.push(dteToYearSqrt(row.dte));
     yLabels.push(label);
     z.push(ivPct);
     text.push(x.map(() => `${label} (${row.dte}d)`));

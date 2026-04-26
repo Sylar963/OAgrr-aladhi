@@ -4,6 +4,7 @@ import { Spinner, EmptyState, VenuePickerButton, AssetPickerButton } from '@comp
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { fmtIv } from '@lib/format';
+import { playTradeCue, tierForNotional } from '@lib/audio';
 import { useFlow, useFlowHistoryPage, useFlowHistorySummary } from './queries';
 import type { HistoryRange, TradeEvent, TradeHistoryCursor } from './queries';
 import BlockFlowView from './BlockFlowView';
@@ -171,6 +172,8 @@ export default function FlowView() {
   const [historyCursors, setHistoryCursors] = useState<Array<TradeHistoryCursor | null>>([null]);
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
+  const soundEnabled = useAppStore((s) => s.soundEnabled);
+  const setSoundEnabled = useAppStore((s) => s.setSoundEnabled);
   const { data, isLoading, error } = useFlow(underlying);
   const liveTrades = useMemo(
     () => (data?.trades ?? []).filter((trade) => activeVenues.includes(trade.venue)),
@@ -207,6 +210,7 @@ export default function FlowView() {
   );
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const prevCountRef = useRef(0);
+  const cueIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!liveTrades.length) return;
@@ -222,6 +226,35 @@ export default function FlowView() {
     const timer = setTimeout(() => setSeenIds(currentIds), 1500);
     return () => clearTimeout(timer);
   }, [liveTrades]);
+
+  useEffect(() => {
+    if (!liveTrades.length) return;
+
+    const previous = cueIdsRef.current;
+    const isFirstTick = previous.size === 0;
+    const nextIds = new Set(liveTrades.map((trade) => trade.tradeUid));
+    cueIdsRef.current = nextIds;
+
+    if (isFirstTick) return;
+    if (!soundEnabled || scope !== 'tape' || mode !== 'all') return;
+
+    const fresh = liveTrades.filter((trade) => !previous.has(trade.tradeUid));
+    if (!fresh.length) return;
+
+    const ranked = fresh
+      .map((trade) => ({
+        trade,
+        notional: trade.notionalUsd ?? trade.premiumUsd ?? 0,
+      }))
+      .filter((entry) => entry.notional >= 10_000)
+      .sort((a, b) => b.notional - a.notional)
+      .slice(0, 3);
+
+    for (const { trade, notional } of ranked) {
+      const tier = tierForNotional(notional);
+      if (tier) playTradeCue(trade.side, tier);
+    }
+  }, [liveTrades, soundEnabled, scope, mode]);
 
   useEffect(() => {
     setHistoryCursors([null]);
@@ -345,6 +378,17 @@ export default function FlowView() {
             </div>
             <AssetPickerButton />
             <VenuePickerButton />
+            {scope === 'tape' && mode === 'all' ? (
+              <button
+                className={styles.modeBtn}
+                data-active={soundEnabled}
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                title={soundEnabled ? 'Mute trade sounds' : 'Enable trade sounds'}
+                aria-label={soundEnabled ? 'Mute trade sounds' : 'Enable trade sounds'}
+              >
+                {soundEnabled ? '🔊' : '🔇'}
+              </button>
+            ) : null}
           </div>
           <span className={styles.subtitle}>
             {mode === 'all'

@@ -31,6 +31,7 @@ interface AppState {
   apiKey: string | null;
   userId: string | null;
   accountId: string | null;
+  soundEnabled: boolean;
   sessionNotice: SessionNotice | null;
   /** Monotonic counter — incremented by the warning dialog's "Stay active" button
    * so the idle-timeout hook can observe the request and cancel pending timers. */
@@ -47,6 +48,7 @@ interface AppState {
   clearAuth: () => void;
   setSessionNotice: (notice: SessionNotice | null) => void;
   extendSession: () => void;
+  setSoundEnabled: (enabled: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -65,6 +67,7 @@ export const useAppStore = create<AppState>((set) => ({
   apiKey: localStorage.getItem('paperApiKey'),
   userId: localStorage.getItem('paperUserId'),
   accountId: localStorage.getItem('paperAccountId'),
+  soundEnabled: localStorage.getItem('tapeSoundEnabled') === '1',
   sessionNotice: null,
   sessionExtendToken: 0,
 
@@ -96,4 +99,9 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setSessionNotice: (sessionNotice) => set({ sessionNotice }),
   extendSession: () => set((s) => ({ sessionExtendToken: s.sessionExtendToken + 1 })),
+  setSoundEnabled: (enabled) => {
+    if (enabled) localStorage.setItem('tapeSoundEnabled', '1');
+    else localStorage.removeItem('tapeSoundEnabled');
+    set({ soundEnabled: enabled });
+  },
 }));

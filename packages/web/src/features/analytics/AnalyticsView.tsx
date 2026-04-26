@@ -195,7 +195,7 @@ export default function AnalyticsView() {
         <OiByStrikeCard
           chains={chains}
           spotPrice={spotPrice}
-          currency={underlying as 'BTC' | 'ETH'}
+          currency={underlying}
         />
         <div className={styles.dvolWrap}>
           <DvolChart />

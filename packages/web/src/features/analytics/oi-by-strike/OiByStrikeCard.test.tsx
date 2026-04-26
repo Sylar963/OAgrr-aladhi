@@ -71,4 +71,13 @@ describe('OiByStrikeCard', () => {
     expect(screen.getByRole('button', { name: 'Contracts' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Calls' })).toBeNull();
   });
+
+  it('disables the V2 toggle for non-BTC/ETH underlyings', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="SOL" />));
+    const v2Button = screen.getByRole('button', { name: 'V2' });
+    expect(v2Button.hasAttribute('disabled')).toBe(true);
+    // Clicking the disabled button must NOT swap to V2
+    fireEvent.click(v2Button);
+    expect(screen.queryByRole('button', { name: 'Calls' })).toBeNull();
+  });
 });

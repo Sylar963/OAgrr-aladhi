@@ -7,6 +7,7 @@ import {
   createChart,
   type IChartApi,
   type IPriceLine,
+  type ISeriesApi,
   type Time,
 } from 'lightweight-charts';
 
@@ -61,7 +62,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
+  const didFitRef = useRef(false);
   const primitiveRef = useRef<HeatBandPrimitive | null>(null);
   const strikeLinesRef = useRef<Map<number, IPriceLine>>(new Map());
   const spotLineRef = useRef<IPriceLine | null>(null);
@@ -124,17 +126,17 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       },
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
+    const series: ISeriesApi<'Candlestick', Time> = chart.addSeries(CandlestickSeries, {
       upColor: '#00E997',
       downColor: '#CB3855',
       wickUpColor: '#00E997',
       wickDownColor: '#CB3855',
       borderVisible: false,
       priceLineVisible: false,
-    });
+    }) as ISeriesApi<'Candlestick', Time>;
 
     const primitive = new HeatBandPrimitive();
-    series.attachPrimitive(primitive as never);
+    series.attachPrimitive(primitive);
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -169,6 +171,12 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     };
   }, []);
 
+  // Reset fit guard when the user picks a different time range so fitContent
+  // fires once for the new data set.
+  useEffect(() => {
+    didFitRef.current = false;
+  }, [timeRange]);
+
   // ── Push candle data ──────────────────────────────────────────
   useEffect(() => {
     const series = seriesRef.current;
@@ -180,8 +188,11 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       low: c.low,
       close: c.close,
     }));
-    series.setData(data as never);
-    chartRef.current?.timeScale().fitContent();
+    series.setData(data);
+    if (!didFitRef.current && data.length > 0) {
+      chartRef.current?.timeScale().fitContent();
+      didFitRef.current = true;
+    }
   }, [candleData]);
 
   // ── Push heat rows to the primitive ───────────────────────────

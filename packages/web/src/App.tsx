@@ -5,6 +5,8 @@ import { ChainView, useUnderlyings } from '@features/chain';
 import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
+import { useTabUrlSync } from '@hooks/useTabUrlSync';
+import { TABS } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './App.module.css';
@@ -27,20 +29,10 @@ const AlphaView = lazy(() =>
   import('@features/alpha').then((m) => ({ default: m.AlphaView })),
 );
 
-const TABS = [
-  { id: 'chain', label: 'Chain' },
-  { id: 'alpha', label: 'Alpha', badge: 'NEW' },
-  { id: 'architect', label: 'Builder' },
-  { id: 'trading', label: 'Paper' },
-  { id: 'surface', label: 'Volatility' },
-  { id: 'flow', label: 'Flow', badge: 'LIVE' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'gex', label: 'GEX' },
-] as const;
-
 export default function App() {
   useServerVersion();
   useSessionTimeout();
+  useTabUrlSync();
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];

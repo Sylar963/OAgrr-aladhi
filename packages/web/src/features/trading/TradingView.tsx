@@ -13,6 +13,7 @@ import {
 } from '@features/architect/payoff';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import type { TabId } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import { registerUser } from './api';
 import PaperHelpPopover from './PaperHelpPopover';
@@ -708,7 +709,7 @@ function rollTradeInBuilder(
   trade: PaperTradeDetailDto,
   replaceLegs: (legs: StrategyLeg[], underlying: string) => void,
   setUnderlying: (underlying: string) => void,
-  setActiveTab: (tab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading') => void,
+  setActiveTab: (tab: TabId) => void,
 ) {
   const legs = trade.legs
     .filter((leg) => leg.netQuantity !== 0)

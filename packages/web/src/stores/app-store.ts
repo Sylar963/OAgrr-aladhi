@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { WsConnectionState } from '@oggregator/protocol';
+import type { TabId } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
 
 export interface FeedStatus {
@@ -24,7 +25,7 @@ export interface SessionNotice {
 interface AppState {
   underlying: string;
   expiry: string;
-  activeTab: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading' | 'alpha';
+  activeTab: TabId;
   activeVenues: string[];
   myIv: string;
   feedStatus: FeedStatus;
@@ -39,7 +40,7 @@ interface AppState {
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
-  setActiveTab: (t: 'chain' | 'surface' | 'gex' | 'flow' | 'analytics' | 'architect' | 'trading' | 'alpha') => void;
+  setActiveTab: (t: TabId) => void;
   toggleVenue: (venueId: string) => void;
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;

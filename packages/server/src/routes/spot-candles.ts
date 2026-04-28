@@ -6,7 +6,7 @@ const SUPPORTED_CURRENCIES: readonly SpotCandleCurrency[] = ['BTC', 'ETH'];
 const SUPPORTED_RESOLUTIONS: readonly SpotCandleResolutionSec[] = [
   60, 300, 1800, 3600, 14400, 86400,
 ];
-const MAX_BUCKETS = 1000;
+const MAX_BUCKETS = 3000;
 
 export async function spotCandlesRoute(app: FastifyInstance) {
   app.get<{

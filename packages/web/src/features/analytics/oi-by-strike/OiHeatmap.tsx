@@ -51,16 +51,17 @@ interface TimeframeSpec {
   windowSec: number;
 }
 
-// Finest resolution that fits within the 1000-candle backend cap for each
-// window. Doubled buckets (resolution × 2 × windowSec) so the visible range
-// can cover [now − window, now + window] symmetrically — the past half holds
-// candles, the future half is empty space for the EM cones to render in.
+// Buckets are 3× the visible window so users can pan/scroll left and see ~3
+// windows worth of history at the chosen resolution. The default visible
+// range (set in the candle effect below) stays at ±windowSec so the chart
+// opens at the same zoom regardless of how many extra historical candles
+// were preloaded.
 const TIMEFRAMES: Record<Timeframe, TimeframeSpec> = {
-  '1d':  { resolution: 300,   buckets: 288, windowSec: 86_400 },
-  '3d':  { resolution: 300,   buckets: 864, windowSec: 3 * 86_400 },
-  '7d':  { resolution: 1800,  buckets: 336, windowSec: 7 * 86_400 },
-  '30d': { resolution: 3600,  buckets: 720, windowSec: 30 * 86_400 },
-  '90d': { resolution: 14400, buckets: 540, windowSec: 90 * 86_400 },
+  '1d':  { resolution: 300,   buckets:  864, windowSec: 86_400 },
+  '3d':  { resolution: 300,   buckets: 2592, windowSec: 3 * 86_400 },
+  '7d':  { resolution: 1800,  buckets: 1008, windowSec: 7 * 86_400 },
+  '30d': { resolution: 3600,  buckets: 2160, windowSec: 30 * 86_400 },
+  '90d': { resolution: 14400, buckets: 1620, windowSec: 90 * 86_400 },
 };
 const DEFAULT_TIMEFRAME: Timeframe = '30d';
 

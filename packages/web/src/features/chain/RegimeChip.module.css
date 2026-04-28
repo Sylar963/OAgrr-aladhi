@@ -179,6 +179,16 @@
   margin-left: 4px;
 }
 
+.tipCaveat {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  font-style: italic;
+}
+
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {

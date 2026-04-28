@@ -32,36 +32,39 @@ function pcBucket(pc: number | null): PcBucket | null {
   return 'flat';
 }
 
+// Labels describe what's measured (basis sign, skew sign, IV change sign, P/C
+// bucket). Tones reflect commonly cited practitioner regimes from skew/IV
+// literature and trader frameworks — they are heuristics, not signals. See
+// tooltip footer for sourcing.
+
 function basisSkewTone(b: Sign3 | null, s: Sign3 | null): { tone: Tone; label: string } {
   if (!b || !s) return { tone: 'unknown', label: 'No skew data' };
-  if (b === 'flat' || s === 'flat') return { tone: 'neutral', label: 'Flat carry / skew' };
-  if (b === 'pos' && s === 'pos') return { tone: 'bull', label: 'Healthy call-led carry' };
-  if (b === 'pos' && s === 'neg') return { tone: 'mixed', label: 'Fragile rally — longs hedging' };
-  if (b === 'neg' && s === 'pos') return { tone: 'bull', label: 'Washed-out shorts — turn?' };
-  return { tone: 'bear', label: 'Stress — basis & puts both bid' };
+  if (b === 'flat' || s === 'flat') return { tone: 'neutral', label: 'Flat carry or flat skew' };
+  if (b === 'pos' && s === 'pos') return { tone: 'bull', label: 'Contango + call-skew bid' };
+  if (b === 'pos' && s === 'neg') return { tone: 'mixed', label: 'Contango + put-skew premium' };
+  if (b === 'neg' && s === 'pos') return { tone: 'bull', label: 'Backwardation + call-skew bid' };
+  return { tone: 'bear', label: 'Backwardation + put-skew premium' };
 }
 
 function basisIvTone(b: Sign3 | null, iv: Sign3 | null): { tone: Tone; label: string } {
   if (!b || !iv) return { tone: 'unknown', label: 'No IV Δ data' };
   if (b === 'flat') return { tone: 'neutral', label: 'Flat carry' };
-  if (b === 'neg' && iv === 'pos') return { tone: 'bear', label: 'Active panic — backwardation + IV bid' };
+  if (b === 'neg' && iv === 'pos') return { tone: 'bear', label: 'Backwardation + IV expanding' };
   if (b === 'neg' && (iv === 'neg' || iv === 'flat'))
-    return { tone: 'mixed', label: 'Passive deleveraging' };
+    return { tone: 'mixed', label: 'Backwardation + IV calming' };
   if (b === 'pos' && (iv === 'neg' || iv === 'flat'))
-    return { tone: 'bull', label: 'Stable carry, vol bleeding' };
-  return { tone: 'mixed', label: 'Vol expanding into rally' };
+    return { tone: 'bull', label: 'Contango + IV bleeding' };
+  return { tone: 'mixed', label: 'Contango + IV expanding' };
 }
 
 function basisPcTone(b: Sign3 | null, pc: PcBucket | null): { tone: Tone; label: string } {
   if (!b || !pc) return { tone: 'unknown', label: 'No P/C data' };
   if (b === 'flat') return { tone: 'neutral', label: 'Flat carry' };
-  // Backwardation + call-heavy OI: futures shorts vs options-side longs.
-  // Classic short-squeeze fuel — contrarian bullish, not bearish.
-  if (b === 'neg' && pc === 'low') return { tone: 'bull', label: 'Squeeze setup — backwardation, no put hedges' };
-  if (b === 'pos' && pc === 'high') return { tone: 'bull', label: 'Hedged grind higher' };
-  if (b === 'pos' && pc === 'low') return { tone: 'mixed', label: 'Unhedged longs — fragile rally' };
-  if (b === 'neg' && pc === 'high') return { tone: 'mixed', label: 'Stressed & put-heavy — capitulation watch' };
-  return { tone: 'neutral', label: 'Balanced positioning' };
+  if (b === 'neg' && pc === 'low') return { tone: 'bull', label: 'Backwardation + call-heavy OI' };
+  if (b === 'pos' && pc === 'high') return { tone: 'bull', label: 'Contango + put-heavy OI' };
+  if (b === 'pos' && pc === 'low') return { tone: 'bull', label: 'Contango + call-heavy OI' };
+  if (b === 'neg' && pc === 'high') return { tone: 'bear', label: 'Backwardation + put-heavy OI' };
+  return { tone: 'neutral', label: 'Balanced OI' };
 }
 
 export default function RegimeChip({
@@ -110,28 +113,28 @@ export default function RegimeChip({
       <div className={styles.tipDivider} />
 
       <div>
-        <div className={styles.tipMatrixTitle}>Reading the matrix</div>
+        <div className={styles.tipMatrixTitle}>Common heuristic reads</div>
         <ul className={styles.tipList}>
           <li>
-            <strong>+Basis / −Skew</strong> — fragile rally (longs leveraged & hedging)
+            <strong>+B / −Skew</strong> — contango with crash premium → often called fragile rally
           </li>
           <li>
-            <strong>−Basis / +Skew</strong> — washed-out shorts, often a turn signal
+            <strong>−B / +Skew</strong> — backwardation with calls bid → often called turn / squeeze
           </li>
           <li>
-            <strong>−Basis / +IV Δ</strong> — active panic
+            <strong>−B / +IV Δ</strong> — backwardation + IV expanding → active panic
           </li>
           <li>
-            <strong>−Basis / flat IV</strong> — passive deleveraging, less alarming
+            <strong>−B / flat IV</strong> — backwardation + IV calming → passive deleveraging
           </li>
           <li>
-            <strong>+Basis / high P/C</strong> — hedged grind higher
+            <strong>+B / call-heavy OI</strong> — aligned bullish positioning
           </li>
           <li>
-            <strong>−Basis / low P/C</strong> — squeeze setup, contrarian bullish
+            <strong>−B / call-heavy OI</strong> — backwardation w/ no put demand → squeeze fuel
           </li>
           <li>
-            <strong>−Basis / high P/C</strong> — stressed & put-heavy, capitulation watch
+            <strong>−B / put-heavy OI</strong> — stress + downside hedged → capitulation watch
           </li>
         </ul>
         <div className={styles.tipLegend}>
@@ -139,6 +142,12 @@ export default function RegimeChip({
           <span className={styles.tipBadge} data-tone="mixed" /> mixed
           <span className={styles.tipBadge} data-tone="bear" /> bearish
           <span className={styles.tipBadge} data-tone="neutral" /> neutral
+        </div>
+        <div className={styles.tipCaveat}>
+          Heuristic reads from cost-of-carry theory, skew/IV literature (Bates,
+          Black), and crypto practitioner frameworks (Deribit Insights, Block
+          Scholes, Genesis Vol). Not investment signals — interpretation flips
+          with retail vs. institutional flow.
         </div>
       </div>
     </div>

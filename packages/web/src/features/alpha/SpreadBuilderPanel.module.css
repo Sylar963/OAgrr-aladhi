@@ -26,6 +26,9 @@
 }
 
 .label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;

@@ -65,9 +65,6 @@ describe('OiByStrikeCard', () => {
     expect(screen.getByRole('button', { name: 'Calls' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Puts' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Both' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '24h' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '7d' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '30d' })).toBeNull();
   });
 
   it('exposes the A3/A4 significance toggle in V2 with A3 active by default', () => {
@@ -81,6 +78,18 @@ describe('OiByStrikeCard', () => {
     fireEvent.click(a4);
     expect(screen.getByRole('button', { name: /A4/ }).hasAttribute('data-active')).toBe(true);
     expect(screen.getByRole('button', { name: 'A3' }).hasAttribute('data-active')).toBe(false);
+  });
+
+  it('exposes timeframe tabs (1d/3d/7d/30d/90d) in V2 with 30d active by default', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
+    fireEvent.click(screen.getByRole('button', { name: 'V2' }));
+    for (const tf of ['1d', '3d', '7d', '30d', '90d']) {
+      expect(screen.getByRole('button', { name: tf })).toBeTruthy();
+    }
+    expect(screen.getByRole('button', { name: '30d' }).hasAttribute('data-active')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '1d' }));
+    expect(screen.getByRole('button', { name: '1d' }).hasAttribute('data-active')).toBe(true);
+    expect(screen.getByRole('button', { name: '30d' }).hasAttribute('data-active')).toBe(false);
   });
 
   it('switches back to V1 when V1 is clicked', () => {

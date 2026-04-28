@@ -12,7 +12,7 @@ import {
 } from 'lightweight-charts';
 
 import type { EnrichedChainResponse } from '@shared/enriched';
-import type { SpotCandleCurrency } from '@shared/common';
+import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common';
 import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
 
 import styles from '../AnalyticsView.module.css';
@@ -43,8 +43,26 @@ const EXPIRY_COLORS = [
   '#A855F7', '#14B8A6',
 ];
 
-const CANDLE_RESOLUTION_SEC = 86400;
-const CANDLE_BUCKETS = 90;
+type Timeframe = '1d' | '3d' | '7d' | '30d' | '90d';
+
+interface TimeframeSpec {
+  resolution: SpotCandleResolutionSec;
+  buckets: number;
+  windowSec: number;
+}
+
+// Finest resolution that fits within the 1000-candle backend cap for each
+// window. Doubled buckets (resolution × 2 × windowSec) so the visible range
+// can cover [now − window, now + window] symmetrically — the past half holds
+// candles, the future half is empty space for the EM cones to render in.
+const TIMEFRAMES: Record<Timeframe, TimeframeSpec> = {
+  '1d':  { resolution: 300,   buckets: 288, windowSec: 86_400 },
+  '3d':  { resolution: 300,   buckets: 864, windowSec: 3 * 86_400 },
+  '7d':  { resolution: 1800,  buckets: 336, windowSec: 7 * 86_400 },
+  '30d': { resolution: 3600,  buckets: 720, windowSec: 30 * 86_400 },
+  '90d': { resolution: 14400, buckets: 540, windowSec: 90 * 86_400 },
+};
+const DEFAULT_TIMEFRAME: Timeframe = '30d';
 
 // Per-strike, per-session OI buffer. Capped per strike so a long session
 // does not grow unbounded. ~1 sample per WS coalesced snapshot.
@@ -62,6 +80,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [mode, setMode] = useState<OiMode>('contracts');
   const [side, setSide] = useState<HeatSide>('both');
   const [significance, setSignificance] = useState<SignificanceMode>('a3-topk');
+  const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TIMEFRAME);
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
@@ -78,8 +97,9 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
 
   const sessionBufferRef = useRef<Map<number, SessionPoint[]>>(new Map());
 
+  const tfSpec = TIMEFRAMES[timeframe];
   const { data: candleData, isLoading: candlesLoading, error: candlesError, refetch } =
-    useSpotCandles(currency, CANDLE_RESOLUTION_SEC, CANDLE_BUCKETS);
+    useSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
 
   const sortedExpiries = useMemo(() => chains.map((c) => c.expiry).sort(), [chains]);
   const expiryColorMap = useMemo(
@@ -229,11 +249,11 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     };
   }, []);
 
-  // Reset fit guard when underlying changes so the time scale rebuilds
-  // for the new candle set.
-  useEffect(() => { didFitRef.current = false; }, [currency]);
+  // Re-fit visible range whenever the underlying or timeframe changes so the
+  // chart shows [now − window, now + window] symmetrically for the new TF.
+  useEffect(() => { didFitRef.current = false; }, [currency, timeframe]);
 
-  // ── Push candle data + extend time scale to cover farthest cone ──
+  // ── Push candle data + set symmetric visible range for the TF ─────
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartRef.current;
@@ -249,39 +269,14 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     if (data.length === 0) return;
 
     if (!didFitRef.current) {
-      const firstTime = data[0]!.time as number;
-      const lastTime = data[data.length - 1]!.time as number;
-      const farthestExpiry = coneEntries.reduce(
-        (m, e) => (e.expiryTimeSec > m ? e.expiryTimeSec : m),
-        0,
-      );
-      const to = Math.max(lastTime, farthestExpiry);
+      const nowSec = Math.floor(Date.now() / 1000);
       chart.timeScale().setVisibleRange({
-        from: firstTime as Time,
-        to: to as Time,
+        from: (nowSec - tfSpec.windowSec) as Time,
+        to: (nowSec + tfSpec.windowSec) as Time,
       });
       didFitRef.current = true;
     }
-  }, [candleData, coneEntries]);
-
-  // Re-extend time scale when a new expiry shows up further out than the
-  // current visible window (e.g. after the user re-enables a hidden expiry).
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart || !didFitRef.current) return;
-    const range = chart.timeScale().getVisibleRange();
-    if (!range) return;
-    const farthestExpiry = coneEntries.reduce(
-      (m, e) => (e.expiryTimeSec > m ? e.expiryTimeSec : m),
-      0,
-    );
-    if (farthestExpiry > (range.to as number)) {
-      chart.timeScale().setVisibleRange({
-        from: range.from,
-        to: farthestExpiry as Time,
-      });
-    }
-  }, [coneEntries]);
+  }, [candleData, tfSpec]);
 
   // ── Push heat rows + cones to the primitives ────────────────────
   useEffect(() => {
@@ -432,6 +427,18 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
             A4
             <span className={styles.betaBadge}>BETA</span>
           </button>
+        </div>
+        <div className={styles.oiToggle}>
+          {(Object.keys(TIMEFRAMES) as Timeframe[]).map((tf) => (
+            <button
+              key={tf}
+              className={styles.oiToggleBtn}
+              data-active={timeframe === tf || undefined}
+              onClick={() => setTimeframe(tf)}
+            >
+              {tf}
+            </button>
+          ))}
         </div>
       </div>
 

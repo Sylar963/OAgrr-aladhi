@@ -73,10 +73,18 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
                 "wall" strikes; can be empty on flat chains.
               </p>
               <p>
-                Bands are still a <strong>live snapshot</strong>; candles show
-                the last 90 days of spot. Hover any strike for an EM-zone
-                classifier, per-expiry EM badge, and a session OI sparkline
-                (in-memory only — clears on refresh). BTC and ETH only.
+                <strong>Timeframe tabs (1d / 3d / 7d / 30d / 90d):</strong>
+                pick the candle window that matches the expiry you care about.
+                Each tab loads the finest resolution that fits the 1000-candle
+                budget — 5m on 1d/3d, 30m on 7d, 1h on 30d, 4h on 90d. Visible
+                range is symmetric (window past + window future) so cones
+                always have empty space to the right to render in.
+              </p>
+              <p>
+                Bands are still a <strong>live snapshot</strong>. Hover any
+                strike for an EM-zone classifier, per-expiry EM badge, and a
+                session OI sparkline (in-memory only — clears on refresh).
+                BTC and ETH only.
               </p>
             </InfoTip>
           )}

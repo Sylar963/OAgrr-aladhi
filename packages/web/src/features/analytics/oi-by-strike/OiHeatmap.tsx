@@ -17,6 +17,7 @@ import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
 
 import styles from '../AnalyticsView.module.css';
 import { HeatBandPrimitive } from './HeatBandPrimitive';
+import { EmConePrimitive, type EmConeEntry } from './EmConePrimitive';
 import {
   aggregateHeatRows,
   aggregateStrikeOi,
@@ -25,6 +26,15 @@ import {
   type OiMode,
   type StrikeOi,
 } from './oi-heatmap-utils';
+import {
+  classifyStrikeVsEm,
+  computeExpectedMove,
+  filterRowsBySignificance,
+  selectSignificantStrikes,
+  type EmZone,
+  type ExpectedMove,
+  type SignificanceMode,
+} from './oi-em-utils';
 import { useSpotCandles } from './queries';
 
 const EXPIRY_COLORS = [
@@ -36,6 +46,12 @@ const EXPIRY_COLORS = [
 const CANDLE_RESOLUTION_SEC = 86400;
 const CANDLE_BUCKETS = 90;
 
+// Per-strike, per-session OI buffer. Capped per strike so a long session
+// does not grow unbounded. ~1 sample per WS coalesced snapshot.
+const SESSION_BUFFER_CAP = 1440;
+
+interface SessionPoint { ts: number; oi: number }
+
 interface Props {
   chains: EnrichedChainResponse[];
   spotPrice: number | null;
@@ -45,6 +61,7 @@ interface Props {
 export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [mode, setMode] = useState<OiMode>('contracts');
   const [side, setSide] = useState<HeatSide>('both');
+  const [significance, setSignificance] = useState<SignificanceMode>('a3-topk');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
@@ -53,10 +70,13 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const didFitRef = useRef(false);
-  const primitiveRef = useRef<HeatBandPrimitive | null>(null);
+  const heatPrimitiveRef = useRef<HeatBandPrimitive | null>(null);
+  const conePrimitiveRef = useRef<EmConePrimitive | null>(null);
   const strikeLinesRef = useRef<Map<number, IPriceLine>>(new Map());
   const spotLineRef = useRef<IPriceLine | null>(null);
   const maxPainLineRef = useRef<IPriceLine | null>(null);
+
+  const sessionBufferRef = useRef<Map<number, SessionPoint[]>>(new Map());
 
   const { data: candleData, isLoading: candlesLoading, error: candlesError, refetch } =
     useSpotCandles(currency, CANDLE_RESOLUTION_SEC, CANDLE_BUCKETS);
@@ -67,10 +87,56 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [sortedExpiries],
   );
 
-  const heatRows = useMemo(
+  const emByExpiry = useMemo(() => {
+    const map = new Map<string, ExpectedMove>();
+    if (spotPrice == null) return map;
+    for (const chain of chains) {
+      const em = computeExpectedMove(chain, spotPrice);
+      if (em) map.set(chain.expiry, em);
+    }
+    return map;
+  }, [chains, spotPrice]);
+
+  const allRows = useMemo(
     () => aggregateHeatRows(chains, spotPrice, mode, hiddenExpiries, side),
     [chains, spotPrice, mode, hiddenExpiries, side],
   );
+
+  const significantStrikes = useMemo(
+    () => selectSignificantStrikes({
+      chains,
+      spotPrice,
+      mode,
+      hiddenExpiries,
+      side,
+      emByExpiry,
+      significance,
+    }),
+    [chains, spotPrice, mode, hiddenExpiries, side, emByExpiry, significance],
+  );
+
+  const heatRows = useMemo(
+    () => filterRowsBySignificance(allRows, significantStrikes),
+    [allRows, significantStrikes],
+  );
+
+  const coneEntries = useMemo<EmConeEntry[]>(() => {
+    const entries: EmConeEntry[] = [];
+    for (const chain of chains) {
+      if (hiddenExpiries.has(chain.expiry)) continue;
+      if (chain.expiryTs == null) continue;
+      const em = emByExpiry.get(chain.expiry);
+      if (!em) continue;
+      entries.push({
+        expiry: chain.expiry,
+        expiryTimeSec: Math.floor(chain.expiryTs / 1000),
+        emValue: em.value,
+        color: expiryColorMap.get(chain.expiry) ?? '#888',
+        source: em.source,
+      });
+    }
+    return entries;
+  }, [chains, hiddenExpiries, emByExpiry, expiryColorMap]);
 
   // Tooltip needs venue/expiry breakdown (re-uses V1 aggregation).
   const fullStrikeData = useMemo(
@@ -87,8 +153,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [chains, hiddenExpiries],
   );
 
-  // Keep latest heatRows in a ref so the crosshair callback (registered once at mount)
-  // can read fresh data without re-subscribing.
+  // Latest heatRows in a ref so the crosshair callback (registered once at
+  // mount) can read fresh data without re-subscribing.
   const heatRowsRef = useRef(heatRows);
   useEffect(() => { heatRowsRef.current = heatRows; }, [heatRows]);
 
@@ -123,12 +189,15 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       priceLineVisible: false,
     }) as ISeriesApi<'Candlestick', Time>;
 
-    const primitive = new HeatBandPrimitive();
-    series.attachPrimitive(primitive);
+    const heatPrimitive = new HeatBandPrimitive();
+    series.attachPrimitive(heatPrimitive);
+    const conePrimitive = new EmConePrimitive();
+    series.attachPrimitive(conePrimitive);
 
     chartRef.current = chart;
     seriesRef.current = series;
-    primitiveRef.current = primitive;
+    heatPrimitiveRef.current = heatPrimitive;
+    conePrimitiveRef.current = conePrimitive;
 
     chart.subscribeCrosshairMove((param) => {
       if (param.point === undefined || param.time === undefined) {
@@ -152,23 +221,23 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      primitiveRef.current = null;
+      heatPrimitiveRef.current = null;
+      conePrimitiveRef.current = null;
       strikeLinesRef.current.clear();
       spotLineRef.current = null;
       maxPainLineRef.current = null;
     };
   }, []);
 
-  // Reset fit guard when the underlying changes so fitContent fires once
+  // Reset fit guard when underlying changes so the time scale rebuilds
   // for the new candle set.
-  useEffect(() => {
-    didFitRef.current = false;
-  }, [currency]);
+  useEffect(() => { didFitRef.current = false; }, [currency]);
 
-  // ── Push candle data ──────────────────────────────────────────
+  // ── Push candle data + extend time scale to cover farthest cone ──
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series || !candleData) return;
+    const chart = chartRef.current;
+    if (!series || !chart || !candleData) return;
     const data = candleData.candles.map((c) => ({
       time: Math.floor(c.timestamp / 1000) as Time,
       open: c.open,
@@ -177,18 +246,54 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       close: c.close,
     }));
     series.setData(data);
-    if (!didFitRef.current && data.length > 0) {
-      chartRef.current?.timeScale().fitContent();
+    if (data.length === 0) return;
+
+    if (!didFitRef.current) {
+      const firstTime = data[0]!.time as number;
+      const lastTime = data[data.length - 1]!.time as number;
+      const farthestExpiry = coneEntries.reduce(
+        (m, e) => (e.expiryTimeSec > m ? e.expiryTimeSec : m),
+        0,
+      );
+      const to = Math.max(lastTime, farthestExpiry);
+      chart.timeScale().setVisibleRange({
+        from: firstTime as Time,
+        to: to as Time,
+      });
       didFitRef.current = true;
     }
-  }, [candleData]);
+  }, [candleData, coneEntries]);
 
-  // ── Push heat rows to the primitive ───────────────────────────
+  // Re-extend time scale when a new expiry shows up further out than the
+  // current visible window (e.g. after the user re-enables a hidden expiry).
   useEffect(() => {
-    primitiveRef.current?.update(heatRows);
+    const chart = chartRef.current;
+    if (!chart || !didFitRef.current) return;
+    const range = chart.timeScale().getVisibleRange();
+    if (!range) return;
+    const farthestExpiry = coneEntries.reduce(
+      (m, e) => (e.expiryTimeSec > m ? e.expiryTimeSec : m),
+      0,
+    );
+    if (farthestExpiry > (range.to as number)) {
+      chart.timeScale().setVisibleRange({
+        from: range.from,
+        to: farthestExpiry as Time,
+      });
+    }
+  }, [coneEntries]);
+
+  // ── Push heat rows + cones to the primitives ────────────────────
+  useEffect(() => {
+    heatPrimitiveRef.current?.update(heatRows);
   }, [heatRows]);
 
-  // ── Diff strike axis labels (avoid flicker) ───────────────────
+  useEffect(() => {
+    if (spotPrice == null) return;
+    conePrimitiveRef.current?.update(spotPrice, coneEntries);
+  }, [spotPrice, coneEntries]);
+
+  // ── Diff strike axis labels (avoid flicker) ─────────────────────
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
@@ -218,7 +323,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     }
   }, [heatRows]);
 
-  // ── SPOT and MP price lines ───────────────────────────────────
+  // ── SPOT and MP price lines ─────────────────────────────────────
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
@@ -257,6 +362,30 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     }
   }, [maxPain]);
 
+  // ── Session OI buffer (in-memory, clears on unmount/currency change) ──
+  useEffect(() => {
+    sessionBufferRef.current = new Map();
+  }, [currency]);
+
+  useEffect(() => {
+    if (chains.length === 0) return;
+    const ts = Date.now();
+    const buf = sessionBufferRef.current;
+    for (const chain of chains) {
+      for (const strike of chain.strikes) {
+        let oi = 0;
+        for (const q of Object.values(strike.call.venues)) oi += q?.openInterest ?? 0;
+        for (const q of Object.values(strike.put.venues))  oi += q?.openInterest ?? 0;
+        const series = buf.get(strike.strike) ?? [];
+        const last = series[series.length - 1];
+        if (last && last.oi === oi) continue;
+        series.push({ ts, oi });
+        if (series.length > SESSION_BUFFER_CAP) series.shift();
+        buf.set(strike.strike, series);
+      }
+    }
+  }, [chains]);
+
   const toggleExpiry = (expiry: string) => {
     setHiddenExpiries((prev) => {
       const next = new Set(prev);
@@ -270,6 +399,19 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const hovered = hoveredStrike != null
     ? fullStrikeData.find((s) => s.strike === hoveredStrike) ?? null
     : null;
+  const hoveredZones = useMemo(() => {
+    if (!hovered || spotPrice == null) return new Map<string, EmZone>();
+    const zones = new Map<string, EmZone>();
+    for (const ep of hovered.expiries) {
+      const em = emByExpiry.get(ep.expiry);
+      if (em) zones.set(ep.expiry, classifyStrikeVsEm(hovered.strike, spotPrice, em));
+    }
+    return zones;
+  }, [hovered, emByExpiry, spotPrice]);
+  const hoveredSparkline = useMemo(() => {
+    if (!hovered) return [];
+    return sessionBufferRef.current.get(hovered.strike) ?? [];
+  }, [hovered]);
   const allHidden = hiddenExpiries.size > 0 && hiddenExpiries.size === sortedExpiries.length;
 
   return (
@@ -284,11 +426,19 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
           <button className={styles.oiToggleBtn} data-active={side === 'puts'  || undefined} onClick={() => setSide('puts')}>Puts</button>
           <button className={styles.oiToggleBtn} data-active={side === 'both'  || undefined} onClick={() => setSide('both')}>Both</button>
         </div>
+        <div className={styles.oiToggle}>
+          <button className={styles.oiToggleBtn} data-active={significance === 'a3-topk' || undefined} onClick={() => setSignificance('a3-topk')}>A3</button>
+          <button className={styles.oiToggleBtn} data-active={significance === 'a4-outliers' || undefined} onClick={() => setSignificance('a4-outliers')}>
+            A4
+            <span className={styles.betaBadge}>BETA</span>
+          </button>
+        </div>
       </div>
 
       <div className={styles.curveLegend}>
         {sortedExpiries.map((expiry) => {
           const active = !hiddenExpiries.has(expiry);
+          const em = emByExpiry.get(expiry);
           return (
             <button
               key={expiry}
@@ -296,9 +446,11 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
               className={styles.curveLegendItem}
               data-active={active || undefined}
               onClick={() => toggleExpiry(expiry)}
+              title={em ? `EM ±${fmtUsdCompact(em.value)} · ${em.source}` : undefined}
             >
               <span className={styles.curveLegendDot} style={{ background: expiryColorMap.get(expiry) }} />
               {formatExpiry(expiry)}
+              {em && em.source === 'iv-fallback' && <span className={styles.emFallbackTick}>·iv</span>}
             </button>
           );
         })}
@@ -327,6 +479,9 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
             data={hovered}
             tooltipPos={tooltipPos}
             expiryColorMap={expiryColorMap}
+            emByExpiry={emByExpiry}
+            zones={hoveredZones}
+            sparkline={hoveredSparkline}
             fmt={fmt}
           />
         )}
@@ -339,19 +494,32 @@ function HeatTooltip({
   data,
   tooltipPos,
   expiryColorMap,
+  emByExpiry,
+  zones,
+  sparkline,
   fmt,
 }: {
   data: StrikeOi;
   tooltipPos: { x: number; y: number };
   expiryColorMap: Map<string, string>;
+  emByExpiry: ReadonlyMap<string, ExpectedMove>;
+  zones: ReadonlyMap<string, EmZone>;
+  sparkline: SessionPoint[];
   fmt: (v: number | null | undefined) => string;
 }) {
+  const insideExpiries = data.expiries.filter((ep) => zones.get(ep.expiry) === 'inside-1sigma');
+  const summary = insideExpiries.length > 0
+    ? `Inside ±1σ for: ${insideExpiries.map((ep) => ep.expiry).join(', ')}`
+    : data.expiries.some((ep) => zones.get(ep.expiry) === 'inside-2sigma')
+      ? 'Inside ±2σ (no expiry inside ±1σ)'
+      : 'Outside ±2σ for all visible expiries';
   return (
     <div
       className={styles.oiTooltip}
       style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
     >
       <div className={styles.oiTooltipTitle}>{data.strike.toLocaleString()}</div>
+      <div className={styles.oiTooltipZone}>{summary}</div>
       <div className={styles.oiTooltipColumns}>
         {data.venues.length > 0 && (
           <div className={styles.oiTooltipCol}>
@@ -366,23 +534,56 @@ function HeatTooltip({
             ))}
           </div>
         )}
-        {data.expiries.length > 1 && (
+        {data.expiries.length > 0 && (
           <div className={styles.oiTooltipCol}>
-            <div className={styles.oiTooltipSection}>By Expiry</div>
+            <div className={styles.oiTooltipSection}>By Expiry · EM</div>
             <div className={styles.oiTooltipHeader}><span /><span>Calls</span><span>Puts</span></div>
-            {data.expiries.map((ep) => (
-              <div key={ep.expiry} className={styles.oiTooltipRow}>
-                <span className={styles.oiTooltipVenue}>
-                  <span className={styles.oiTooltipDot} style={{ background: expiryColorMap.get(ep.expiry) }} />
-                  {ep.expiry}
-                </span>
-                <span className={styles.oiCall}>{fmt(ep.callOi)}</span>
-                <span className={styles.oiPut}>{fmt(ep.putOi)}</span>
-              </div>
-            ))}
+            {data.expiries.map((ep) => {
+              const em = emByExpiry.get(ep.expiry);
+              return (
+                <div key={ep.expiry} className={styles.oiTooltipRow}>
+                  <span className={styles.oiTooltipVenue}>
+                    <span className={styles.oiTooltipDot} style={{ background: expiryColorMap.get(ep.expiry) }} />
+                    {ep.expiry}
+                    {em && (
+                      <span className={styles.oiTooltipEm} data-source={em.source}>
+                        ±{fmt(em.value)}·{em.source === 'straddle' ? 's' : 'iv'}
+                      </span>
+                    )}
+                  </span>
+                  <span className={styles.oiCall}>{fmt(ep.callOi)}</span>
+                  <span className={styles.oiPut}>{fmt(ep.putOi)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
+      {sparkline.length >= 2 && <SessionSparkline points={sparkline} />}
+    </div>
+  );
+}
+
+function SessionSparkline({ points }: { points: SessionPoint[] }) {
+  const width = 160;
+  const height = 28;
+  const xs = points.map((_, i) => (i / (points.length - 1)) * width);
+  const ys = (() => {
+    const min = Math.min(...points.map((p) => p.oi));
+    const max = Math.max(...points.map((p) => p.oi));
+    const range = max - min || 1;
+    return points.map((p) => height - ((p.oi - min) / range) * height);
+  })();
+  const d = points.map((_, i) => `${i === 0 ? 'M' : 'L'}${xs[i]!.toFixed(1)},${ys[i]!.toFixed(1)}`).join(' ');
+  const last = points[points.length - 1]!.oi;
+  const first = points[0]!.oi;
+  const trendUp = last >= first;
+  return (
+    <div className={styles.oiTooltipSparkline}>
+      <span className={styles.oiTooltipSparkLabel}>Session OI</span>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <path d={d} fill="none" stroke={trendUp ? '#00E997' : '#CB3855'} strokeWidth={1.25} />
+      </svg>
     </div>
   );
 }

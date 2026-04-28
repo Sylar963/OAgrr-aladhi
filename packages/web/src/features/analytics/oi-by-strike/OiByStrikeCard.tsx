@@ -52,21 +52,31 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
             </button>
           </div>
           {effectiveVersion === 'v2' && (
-            <InfoTip label="V2 OI Heatmap" title="V2 — Live OI Heatmap" align="end">
+            <InfoTip label="V2 OI Heatmap" title="V2 — EM-Anchored OI Heatmap" align="end">
               <p>
-                <strong>Candle timeframe:</strong> 1 day (daily OHLC).<br />
-                <strong>History shown:</strong> last 90 daily candles (~90 days).
+                <strong>EM cones:</strong> for each visible expiry, the tinted
+                fan from <em>now</em> opens to <strong>spot ± 1σ</strong> (dense)
+                and <strong>spot ± 2σ</strong> (faint) at the expiry. EM is
+                computed from the ATM straddle mid (Brenner–Subrahmanyam ×1.25).
+                If the straddle is too wide or stale, we fall back to interpolated
+                ATM IV — those expiries get a dashed cone outline and an
+                <code> ·iv </code> tag in the legend.
               </p>
               <p>
-                Each horizontal band marks a strike. <strong>Color</strong> shows
-                the dominant side (green = calls, red = puts);{' '}
-                <strong>opacity</strong> encodes OI magnitude (sqrt-scaled). Use the
-                Calls / Puts / Both toggle to isolate one side, and click an expiry
-                in the legend to hide it from the aggregation.
+                <strong>Significance toggle (A3 / A4):</strong>
+                <br />
+                <strong>A3</strong> (default) — top 5 strikes by OI per expiry,
+                inside its ±2σ band, then unioned across visible expiries.
+                <br />
+                <strong>A4 BETA</strong> — strikes whose OI exceeds mean + 1.5σ
+                of the per-expiry distribution. Sparser, surfaces single
+                "wall" strikes; can be empty on flat chains.
               </p>
               <p>
-                Live only — bands reflect the current chain snapshot, not history.
-                BTC and ETH only.
+                Bands are still a <strong>live snapshot</strong>; candles show
+                the last 90 days of spot. Hover any strike for an EM-zone
+                classifier, per-expiry EM badge, and a session OI sparkline
+                (in-memory only — clears on refresh). BTC and ETH only.
               </p>
             </InfoTip>
           )}

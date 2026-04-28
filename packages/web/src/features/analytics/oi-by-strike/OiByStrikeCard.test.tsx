@@ -15,9 +15,15 @@ vi.mock('lightweight-charts', () => ({
       createPriceLine: () => ({}),
       removePriceLine: () => undefined,
       coordinateToPrice: () => null,
+      priceToCoordinate: () => null,
     }),
     subscribeCrosshairMove: () => undefined,
-    timeScale: () => ({ fitContent: () => undefined }),
+    timeScale: () => ({
+      fitContent: () => undefined,
+      setVisibleRange: () => undefined,
+      getVisibleRange: () => null,
+      timeToCoordinate: () => null,
+    }),
     remove: () => undefined,
   }),
   ColorType: { Solid: 'solid' },
@@ -62,6 +68,19 @@ describe('OiByStrikeCard', () => {
     expect(screen.queryByRole('button', { name: '24h' })).toBeNull();
     expect(screen.queryByRole('button', { name: '7d' })).toBeNull();
     expect(screen.queryByRole('button', { name: '30d' })).toBeNull();
+  });
+
+  it('exposes the A3/A4 significance toggle in V2 with A3 active by default', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
+    fireEvent.click(screen.getByRole('button', { name: 'V2' }));
+    const a3 = screen.getByRole('button', { name: 'A3' });
+    const a4 = screen.getByRole('button', { name: /A4/ });
+    expect(a3.hasAttribute('data-active')).toBe(true);
+    expect(a4.hasAttribute('data-active')).toBe(false);
+    expect(a4.textContent).toContain('BETA');
+    fireEvent.click(a4);
+    expect(screen.getByRole('button', { name: /A4/ }).hasAttribute('data-active')).toBe(true);
+    expect(screen.getByRole('button', { name: 'A3' }).hasAttribute('data-active')).toBe(false);
   });
 
   it('switches back to V1 when V1 is clicked', () => {

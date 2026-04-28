@@ -28,7 +28,7 @@ Surface the OI nodes that express trader positioning relative to the market's ow
 
 ## Architecture overview
 
-```
+```text
 chains, spotPrice
        │
        ▼
@@ -66,14 +66,18 @@ Algorithm:
 1. **Pick ATM strike for the straddle legs** — the strike with the smallest `|strike − spot|`. Used only by the straddle path (step 4).
 2. **Build cross-venue composite mid** — for each ATM leg (call and put), take the *tightest synthetic NBBO* across venues: `bestBid = max(bid across venues)`, `bestAsk = min(ask across venues)`, then `mid = (bestBid + bestAsk) / 2`. If `bestBid > bestAsk` (crossed across venues), treat as a missing leg and fall back to IV.
 3. **Always compute `EM_iv` (the anchor)** — independent of the straddle:
-   ```
+
+   ```text
    EM_iv = spot × ATM_IV_interpolated × √(DTE / 365)
    ```
+
    `ATM_IV_interpolated` is the linear interpolation, evaluated *at spot*, of the call+put average IV between the two strikes bracketing spot. If spot equals an exact strike, this collapses to that strike's call/put-average IV.
 4. **Compute `EM_straddle`:**
-   ```
+
+   ```text
    EM_straddle = (call_mid + put_mid) × 1.25
    ```
+
    Brenner–Subrahmanyam approximation for an ATM straddle.
 5. **Quality gates** — fall back to `EM_iv` if **any** fails:
    - Either leg has missing or zero bid or ask.
@@ -164,7 +168,7 @@ Strike tooltip (existing `HeatTooltip`) gains:
 ## Files touched
 
 | File | Change |
-|---|---|
+| --- | --- |
 | `packages/web/src/features/analytics/oi-by-strike/oi-em-utils.ts` *(new)* | `computeExpectedMove`, `selectSignificantStrikes`, `EM_HYBRID`, `STRIKE_FILTER`, types |
 | `packages/web/src/features/analytics/oi-by-strike/oi-em-utils.test.ts` *(new)* | Edge cases: wide spread, missing leg, IV fallback, deviation cap, A3/A4 selection behavior, EM band clipping |
 | `packages/web/src/features/analytics/oi-by-strike/EmConePrimitive.ts` *(new)* | Canvas primitive for V-2 cones (modeled on `HeatBandPrimitive`) |

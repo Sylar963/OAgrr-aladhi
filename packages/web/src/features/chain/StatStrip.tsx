@@ -1,8 +1,12 @@
+import type { ReactNode } from 'react';
+
 import type { ChainStats } from '@shared/enriched';
 import type { WsConnectionState } from '@oggregator/protocol';
 
 import { fmtUsd, fmtUsdCompact, fmtIv, fmtPct, fmtNum } from '@lib/format';
 import type { StatsResponse } from './queries';
+import RegimeChip from './RegimeChip';
+import BasisTooltip from './BasisTooltip';
 import styles from './StatStrip.module.css';
 
 interface StatStripProps {
@@ -20,9 +24,18 @@ interface StatCellProps {
   accent?: boolean;
   positive?: boolean | null; // true = green, false = red, null/undefined = neutral
   subPositive?: boolean | null;
+  subTooltip?: ReactNode;
 }
 
-function StatCell({ label, value, sub, accent, positive, subPositive }: StatCellProps) {
+function StatCell({
+  label,
+  value,
+  sub,
+  accent,
+  positive,
+  subPositive,
+  subTooltip,
+}: StatCellProps) {
   return (
     <div className={styles.cell}>
       <span className={styles.label}>{label}</span>
@@ -39,8 +52,10 @@ function StatCell({ label, value, sub, accent, positive, subPositive }: StatCell
           data-positive={
             subPositive === true ? 'true' : subPositive === false ? 'false' : undefined
           }
+          data-interactive={subTooltip ? 'true' : undefined}
         >
           {sub}
+          {subTooltip}
         </span>
       )}
     </div>
@@ -101,6 +116,11 @@ export default function StatStrip({
         value={fmtUsdCompact(stats.totalOiUsd)}
         sub={basisSub ? `Basis ${basisSub}` : undefined}
         subPositive={basisPositive}
+        subTooltip={
+          stats.basisPct != null && dte > 0 ? (
+            <BasisTooltip basisPct={stats.basisPct} dte={dte} />
+          ) : undefined
+        }
       />
       {marketStats?.dvol && (
         <>
@@ -125,6 +145,13 @@ export default function StatStrip({
           />
         </>
       )}
+      <div className={styles.divider} />
+      <RegimeChip
+        basisPct={stats.basisPct}
+        skew25d={stats.skew25d}
+        ivChange1d={marketStats?.dvol?.ivChange1d ?? null}
+        putCallOiRatio={stats.putCallOiRatio}
+      />
       {connectionState && (
         <>
           <div className={styles.divider} />

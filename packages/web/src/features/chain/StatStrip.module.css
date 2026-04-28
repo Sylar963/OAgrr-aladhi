@@ -69,6 +69,25 @@
   color: var(--color-loss);
 }
 
+.sub[data-interactive="true"] {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.sub[data-interactive="true"] [role="tooltip"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sub[data-interactive="true"]:hover [role="tooltip"],
+.sub[data-interactive="true"]:focus-within [role="tooltip"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .feedState {
   display: flex;
   align-items: center;

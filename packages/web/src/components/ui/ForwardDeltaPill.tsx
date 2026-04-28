@@ -6,6 +6,7 @@ import styles from './ForwardDeltaPill.module.css';
 interface ForwardDeltaPillProps {
   delta: number | null;
   atmStrike: number | null;
+  withinConsensusBand: boolean | null;
 }
 
 const TOOLTIPS: Record<ForwardLevel, string> = {
@@ -15,7 +16,14 @@ const TOOLTIPS: Record<ForwardLevel, string> = {
   muted: 'Insufficient data to compute forward divergence',
 };
 
-export default function ForwardDeltaPill({ delta, atmStrike }: ForwardDeltaPillProps) {
+const WITHIN_BAND_TOOLTIP =
+  'Consensus forward lies inside this venue’s bid/ask no-arbitrage band — the apparent drift is explainable by spread, not a real dislocation';
+
+export default function ForwardDeltaPill({
+  delta,
+  atmStrike,
+  withinConsensusBand,
+}: ForwardDeltaPillProps) {
   if (delta == null || atmStrike == null || atmStrike === 0) {
     return (
       <span className={styles.pill} data-level="muted" title={TOOLTIPS.muted}>
@@ -25,6 +33,20 @@ export default function ForwardDeltaPill({ delta, atmStrike }: ForwardDeltaPillP
   }
 
   const deltaBps = (delta / atmStrike) * 10_000;
+
+  if (withinConsensusBand === true) {
+    return (
+      <span
+        className={styles.pill}
+        data-level="muted"
+        data-explained="spread"
+        title={`${WITHIN_BAND_TOOLTIP} (Δ=${fmtDelta(delta)}, ${deltaBps.toFixed(2)} bps)`}
+      >
+        {fmtDelta(delta)}
+      </span>
+    );
+  }
+
   const level = forwardDriftLevel(deltaBps);
 
   return (

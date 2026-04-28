@@ -4,12 +4,13 @@ import type { EnrichedSide, VenueQuote, VenueId } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill, ForwardDeltaPill } from '@components/ui';
 import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
-import { computeImpliedForward } from './forward-analysis';
+import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
 import styles from './ExpandedRow.module.css';
 
 interface ForwardCell {
   fImplied: number | null;
   delta: number | null;
+  withinConsensusBand: boolean | null;
 }
 
 interface ExpandedRowProps {
@@ -81,7 +82,11 @@ function VenueRow({ venueId, quote, myIv, type, strike, forwardCell, atmStrike }
       <td className={styles.tdNum}>{fmtUsd(quote.totalCost)}</td>
 
       <td className={styles.tdChip}>
-        <ForwardDeltaPill delta={forwardCell?.delta ?? null} atmStrike={atmStrike} />
+        <ForwardDeltaPill
+          delta={forwardCell?.delta ?? null}
+          atmStrike={atmStrike}
+          withinConsensusBand={forwardCell?.withinConsensusBand ?? null}
+        />
       </td>
 
       <td
@@ -154,7 +159,8 @@ function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: Sid
               'Δ VS CONSENSUS — how far this venue’s implied forward is from the cross-venue median.\n\n' +
               '• Near zero (green): clean forward. Any price difference here reflects real MM skew — potentially tradeable edge.\n' +
               '• Moderate (amber): some forward drift. Interpret price differences with caution.\n' +
-              '• Large (red): forward drift dominates. Cheap/expensive prices on this venue are mostly just forward, not edge.'
+              '• Large (red): forward drift dominates. Cheap/expensive prices on this venue are mostly just forward, not edge.\n' +
+              '• Muted: consensus lies inside this venue’s bid/ask no-arb band — the drift is explainable by spread, not a real dislocation.'
             }
           >
             Δ CONS
@@ -207,14 +213,23 @@ export default function ExpandedRow({
     ]);
     for (const v of ids) {
       if (!activeVenues.includes(v)) continue;
-      const fImplied = computeImpliedForward(
-        strike,
-        callSide.venues[v]?.mid ?? null,
-        putSide.venues[v]?.mid ?? null,
-      );
+      const callQ = callSide.venues[v];
+      const putQ = putSide.venues[v];
+      const fImplied = computeImpliedForward(strike, callQ?.mid ?? null, putQ?.mid ?? null);
       const delta =
         fImplied != null && atmConsensusForward != null ? fImplied - atmConsensusForward : null;
-      map.set(v, { fImplied, delta });
+      const band = computeImpliedForwardBand(
+        strike,
+        callQ?.bid ?? null,
+        callQ?.ask ?? null,
+        putQ?.bid ?? null,
+        putQ?.ask ?? null,
+      );
+      const withinConsensusBand =
+        band != null && atmConsensusForward != null
+          ? atmConsensusForward >= band.low && atmConsensusForward <= band.high
+          : null;
+      map.set(v, { fImplied, delta, withinConsensusBand });
     }
     return map;
   }, [callSide, putSide, strike, activeVenues, atmConsensusForward]);

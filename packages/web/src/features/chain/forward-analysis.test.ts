@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { EnrichedSide, EnrichedStrike, VenueId, VenueQuote } from '@shared/enriched';
-import { computeAtmConsensus, computeImpliedForward } from './forward-analysis';
+import {
+  computeAtmConsensus,
+  computeImpliedForward,
+  computeImpliedForwardBand,
+} from './forward-analysis';
 import { forwardDriftLevel } from '@lib/colors';
 
 function quote(mid: number | null): VenueQuote {
@@ -41,6 +45,35 @@ describe('computeImpliedForward', () => {
 
   it('returns null for non-finite result', () => {
     expect(computeImpliedForward(78_000, Infinity, 100)).toBeNull();
+  });
+});
+
+describe('computeImpliedForwardBand', () => {
+  it('returns [K + Cbid − Pask, K + Cask − Pbid]', () => {
+    // Cbid=1990 Cask=2010 Pbid=2070 Pask=2090
+    const band = computeImpliedForwardBand(78_000, 1_990, 2_010, 2_070, 2_090);
+    expect(band).toEqual({ low: 78_000 + 1_990 - 2_090, high: 78_000 + 2_010 - 2_070 });
+  });
+
+  it('contains the mid-based forward', () => {
+    const band = computeImpliedForwardBand(78_000, 1_990, 2_010, 2_070, 2_090);
+    const mid = computeImpliedForward(78_000, 2_000, 2_080);
+    expect(mid).not.toBeNull();
+    expect(band!.low).toBeLessThanOrEqual(mid!);
+    expect(mid!).toBeLessThanOrEqual(band!.high);
+  });
+
+  it('returns null when any quote is missing', () => {
+    expect(computeImpliedForwardBand(78_000, null, 2_010, 2_070, 2_090)).toBeNull();
+    expect(computeImpliedForwardBand(78_000, 1_990, null, 2_070, 2_090)).toBeNull();
+    expect(computeImpliedForwardBand(78_000, 1_990, 2_010, null, 2_090)).toBeNull();
+    expect(computeImpliedForwardBand(78_000, 1_990, 2_010, 2_070, null)).toBeNull();
+  });
+
+  it('orders endpoints when crossed quotes invert the band', () => {
+    const band = computeImpliedForwardBand(78_000, 2_010, 1_990, 2_090, 2_070);
+    expect(band).not.toBeNull();
+    expect(band!.low).toBeLessThanOrEqual(band!.high);
   });
 });
 

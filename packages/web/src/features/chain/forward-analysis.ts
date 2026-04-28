@@ -10,6 +10,28 @@ export function computeImpliedForward(
   return Number.isFinite(f) ? f : null;
 }
 
+export interface ForwardBand {
+  low: number;
+  high: number;
+}
+
+// No-arbitrage range of the parity-implied forward, given quoted bid/ask on call and put.
+// low  = K + Cbid − Pask  (forward implied if you sell the call cheap and buy the put rich)
+// high = K + Cask − Pbid  (forward implied if you buy the call rich and sell the put cheap)
+export function computeImpliedForwardBand(
+  strike: number,
+  callBid: number | null,
+  callAsk: number | null,
+  putBid: number | null,
+  putAsk: number | null,
+): ForwardBand | null {
+  if (callBid == null || callAsk == null || putBid == null || putAsk == null) return null;
+  const low = strike + callBid - putAsk;
+  const high = strike + callAsk - putBid;
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  return low <= high ? { low, high } : { low: high, high: low };
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);

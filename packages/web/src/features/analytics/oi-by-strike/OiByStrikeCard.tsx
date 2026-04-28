@@ -52,10 +52,10 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
             </button>
           </div>
           {effectiveVersion === 'v2' && (
-            <InfoTip label="V2 OI Heatmap" title="V2 — Live OI Heatmap" align="start">
+            <InfoTip label="V2 OI Heatmap" title="V2 — Live OI Heatmap" align="end">
               <p>
-                Bookmap-style live view of open interest by strike, plotted against
-                the last 90 days of spot price action.
+                <strong>Candle timeframe:</strong> 1 day (daily OHLC).<br />
+                <strong>History shown:</strong> last 90 daily candles (~90 days).
               </p>
               <p>
                 Each horizontal band marks a strike. <strong>Color</strong> shows

@@ -192,8 +192,7 @@
   .sub {
     font-size: 9px;
   }
-  .tooltip {
-    width: min(300px, calc(100vw - 24px));
-    right: 8px;
+  .panel {
+    width: min(320px, calc(100vw - 16px));
   }
 }

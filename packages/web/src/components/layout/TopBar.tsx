@@ -23,8 +23,8 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
 
   return (
     <header className={styles.bar}>
-      <a href="#" className={styles.logo}>
-        oggregator
+      <a href="#" className={styles.logo} aria-label="oggregator">
+        <img src="/oggregator-logo.svg" alt="oggregator" />
       </a>
 
       <div className={styles.pillGroup} role="tablist">

@@ -9,13 +9,16 @@
 }
 
 .logo {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  font-style: italic;
-  color: var(--text-primary);
-  letter-spacing: -0.04em;
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
   justify-self: start;
+}
+
+.logo img {
+  display: block;
+  height: 28px;
+  width: auto;
 }
 
 /* ── Segmented control (Apple-style) ── */
@@ -135,8 +138,8 @@
     gap: var(--space-2);
   }
 
-  .logo {
-    font-size: var(--text-lg);
+  .logo img {
+    height: 22px;
   }
 
   /* Hide tab pills on mobile — bottom nav handles navigation */

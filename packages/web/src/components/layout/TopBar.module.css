@@ -17,7 +17,7 @@
 
 .logo img {
   display: block;
-  height: 84px;
+  height: 56px;
   width: auto;
 }
 
@@ -139,7 +139,7 @@
   }
 
   .logo img {
-    height: 66px;
+    height: 44px;
   }
 
   /* Hide tab pills on mobile — bottom nav handles navigation */

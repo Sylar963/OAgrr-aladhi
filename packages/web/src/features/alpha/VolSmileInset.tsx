@@ -1,5 +1,6 @@
 import { memo, useMemo, useState, type MouseEvent } from 'react';
 
+import InfoTip from '@components/ui/InfoTip';
 import { interpAtStrike, type SmileCurve, type SmilePoint } from '@lib/analytics/smile';
 
 import styles from './VolSmileInset.module.css';
@@ -77,7 +78,41 @@ function VolSmileInset({ smile, shortStrike, longStrike }: Props) {
   return (
     <div className={styles.wrap}>
       <div className={styles.title}>
-        <span>Vol smile · OTM IV blend</span>
+        <span>
+          Vol smile · OTM IV blend
+          <InfoTip label="How to read the smile" title="Reading the vol smile" align="start">
+            <p>
+              For each strike, IV is averaged across venues using the OTM side
+              (puts below spot, calls above) — the side that actually trades and
+              reflects the wing premium the market is paying.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>What to look for:</strong>
+            </p>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+              <li>
+                <strong>Short leg sitting on a peak</strong> (rich IV vs.
+                neighbours) = you&apos;re selling expensive vol — the structural
+                edge for credit spreads.
+              </li>
+              <li>
+                <strong>Short below the curve</strong> = selling cheap vol; the
+                signal can still gate SELL but the edge is thin.
+              </li>
+              <li>
+                <strong>Long sitting on a trough</strong> = paying for cheap
+                wing protection — desirable.
+              </li>
+            </ul>
+            <p style={{ marginTop: 6 }}>
+              <strong>Skew</strong> = (IV at 0.9·spot − IV at 1.1·spot) / ATM IV.
+              Positive skew → downside puts richer than upside calls (downside
+              fear). In BTC/ETH, mildly positive is normal; spikes often precede
+              directional regimes. Use it to pick the side: rich put skew makes
+              put-credit spreads structurally more attractive.
+            </p>
+          </InfoTip>
+        </span>
         <span className={styles.stats}>
           {smile?.atmIv != null && (
             <span className={styles.stat}>

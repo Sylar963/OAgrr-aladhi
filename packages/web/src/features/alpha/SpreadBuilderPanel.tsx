@@ -1,3 +1,4 @@
+import InfoTip from '@components/ui/InfoTip';
 import type { EnrichedStrike } from '@shared/enriched';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 
@@ -54,7 +55,34 @@ export default function SpreadBuilderPanel({
   return (
     <div className={styles.panel}>
       <div className={styles.block}>
-        <div className={styles.label}>Strategy</div>
+        <div className={styles.label}>
+          Strategy
+          <InfoTip label="Vertical credit spreads" title="Vertical credit spreads" align="start">
+            <p>
+              A <strong>credit spread</strong> sells a closer-to-money option and
+              buys a farther one in the same expiry. You collect premium up front;
+              the long leg caps your tail risk.
+            </p>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+              <li>
+                <strong>Call Credit (bear call):</strong> bearish/neutral. Profit
+                if spot stays <em>below</em> the short call strike at expiry.
+              </li>
+              <li>
+                <strong>Put Credit (bull put):</strong> bullish/neutral. Profit if
+                spot stays <em>above</em> the short put strike at expiry.
+              </li>
+            </ul>
+            <p style={{ marginTop: 6 }}>
+              <strong>How to think about strike choice:</strong>
+            </p>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+              <li>Closer-to-money short = bigger credit, lower probability.</li>
+              <li>Wider gap to long = bigger max loss, better credit ratio.</li>
+              <li>Look at the vol smile: sell where IV is rich relative to the wing.</li>
+            </ul>
+          </InfoTip>
+        </div>
         <div className={styles.kindToggle} role="tablist">
           <button
             role="tab"

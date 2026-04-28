@@ -1,5 +1,6 @@
 import { memo } from 'react';
 
+import InfoTip from '@components/ui/InfoTip';
 import { VenueDot } from '@components/ui';
 import { fmtIv, fmtUsd, fmtCompact } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
@@ -25,7 +26,37 @@ function VenueRouterTable({
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>Cross-venue routing</span>
+        <span className={styles.title}>
+          Cross-venue routing
+          <InfoTip label="How routing is computed" title="Cross-venue routing" align="start">
+            <p>
+              Each leg is priced independently across all venues that quote the
+              strike, then ranked by <strong>net after taker fees</strong>:
+            </p>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+              <li>
+                <strong>Short (sell):</strong> highest <em>bid</em> wins — you
+                want the most premium collected.
+              </li>
+              <li>
+                <strong>Long (buy):</strong> lowest <em>ask</em> wins — you want
+                to pay the least.
+              </li>
+              <li>
+                Fees use venue-specific cap formulas
+                (<code>min(rate × underlying, cap × optionPrice)</code>) so they
+                stay realistic on cheap OTM strikes.
+              </li>
+            </ul>
+            <p style={{ marginTop: 6 }}>
+              <strong>How to think about it:</strong> the highlighted row is the
+              best <em>quoted</em> venue, not a guaranteed fill — size, spread,
+              and your account permissions all matter. The <code>inf</code> badge
+              means IV was inferred from price (venue didn&apos;t publish bid/ask
+              IV), so treat that IV as best-effort.
+            </p>
+          </InfoTip>
+        </span>
         <span className={styles.subtitle}>Best execution per leg</span>
       </div>
 

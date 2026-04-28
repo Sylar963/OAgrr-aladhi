@@ -4,6 +4,7 @@ import type { ChainStats } from '@shared/enriched';
 import type { WsConnectionState } from '@oggregator/protocol';
 
 import { fmtUsd, fmtUsdCompact, fmtIv, fmtPct, fmtNum } from '@lib/format';
+import HoverTooltip from '@components/ui/HoverTooltip';
 import type { StatsResponse } from './queries';
 import RegimeChip from './RegimeChip';
 import BasisTooltip from './BasisTooltip';
@@ -46,18 +47,30 @@ function StatCell({
       >
         {value}
       </span>
-      {sub && (
-        <span
-          className={styles.sub}
-          data-positive={
-            subPositive === true ? 'true' : subPositive === false ? 'false' : undefined
-          }
-          data-interactive={subTooltip ? 'true' : undefined}
-        >
-          {sub}
-          {subTooltip}
-        </span>
-      )}
+      {sub &&
+        (subTooltip ? (
+          <HoverTooltip
+            as="span"
+            className={styles.sub}
+            placement="bottom-start"
+            content={subTooltip}
+            dataPositive={
+              subPositive === true ? 'true' : subPositive === false ? 'false' : undefined
+            }
+            dataInteractive="true"
+          >
+            {sub}
+          </HoverTooltip>
+        ) : (
+          <span
+            className={styles.sub}
+            data-positive={
+              subPositive === true ? 'true' : subPositive === false ? 'false' : undefined
+            }
+          >
+            {sub}
+          </span>
+        ))}
     </div>
   );
 }

@@ -1,0 +1,17 @@
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: auto;
+  animation: ht-fade 120ms ease forwards;
+}
+
+@keyframes ht-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,3 +1,4 @@
+import HoverTooltip from '@components/ui/HoverTooltip';
 import styles from './RegimeChip.module.css';
 
 type Tone = 'bull' | 'bear' | 'mixed' | 'neutral' | 'unknown';
@@ -76,8 +77,75 @@ export default function RegimeChip({
   const biv = basisIvTone(b, iv);
   const bpc = basisPcTone(b, pc);
 
+  const tooltipContent = (
+    <div className={styles.panel}>
+      <div className={styles.tipHeader}>Cross-signal regime</div>
+
+      <div className={styles.tipRow}>
+        <span className={styles.tipBadge} data-tone={bs.tone} />
+        <div>
+          <div className={styles.tipPair}>Basis × 25Δ Skew</div>
+          <div className={styles.tipNow}>{bs.label}</div>
+        </div>
+      </div>
+
+      <div className={styles.tipRow}>
+        <span className={styles.tipBadge} data-tone={biv.tone} />
+        <div>
+          <div className={styles.tipPair}>Basis × IV Δ1d</div>
+          <div className={styles.tipNow}>{biv.label}</div>
+        </div>
+      </div>
+
+      <div className={styles.tipRow}>
+        <span className={styles.tipBadge} data-tone={bpc.tone} />
+        <div>
+          <div className={styles.tipPair}>Basis × P/C OI</div>
+          <div className={styles.tipNow}>{bpc.label}</div>
+        </div>
+      </div>
+
+      <div className={styles.tipDivider} />
+
+      <div>
+        <div className={styles.tipMatrixTitle}>Reading the matrix</div>
+        <ul className={styles.tipList}>
+          <li>
+            <strong>+Basis / −Skew</strong> — fragile rally (longs leveraged & hedging)
+          </li>
+          <li>
+            <strong>−Basis / +Skew</strong> — washed-out shorts, often a turn signal
+          </li>
+          <li>
+            <strong>−Basis / +IV Δ</strong> — active panic
+          </li>
+          <li>
+            <strong>−Basis / flat IV</strong> — passive deleveraging, less alarming
+          </li>
+          <li>
+            <strong>+Basis / high P/C rising</strong> — hedged grind higher
+          </li>
+          <li>
+            <strong>−Basis / low P/C</strong> — directional shorts, squeeze setup
+          </li>
+        </ul>
+        <div className={styles.tipLegend}>
+          <span className={styles.tipBadge} data-tone="bull" /> bullish
+          <span className={styles.tipBadge} data-tone="mixed" /> mixed
+          <span className={styles.tipBadge} data-tone="bear" /> bearish
+          <span className={styles.tipBadge} data-tone="neutral" /> neutral
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className={styles.cell}>
+    <HoverTooltip
+      as="div"
+      className={styles.cell}
+      placement="bottom-end"
+      content={tooltipContent}
+    >
       <span className={styles.label}>Regime</span>
       <div className={styles.dots}>
         <span className={styles.dot} data-tone={bs.tone} aria-label={`Basis × Skew: ${bs.label}`} />
@@ -85,66 +153,6 @@ export default function RegimeChip({
         <span className={styles.dot} data-tone={bpc.tone} aria-label={`Basis × P/C OI: ${bpc.label}`} />
       </div>
       <span className={styles.sub}>B×S · B×IV · B×OI</span>
-
-      <div className={styles.tooltip} role="tooltip">
-        <div className={styles.tipHeader}>Cross-signal regime</div>
-
-        <div className={styles.tipRow}>
-          <span className={styles.tipBadge} data-tone={bs.tone} />
-          <div>
-            <div className={styles.tipPair}>Basis × 25Δ Skew</div>
-            <div className={styles.tipNow}>{bs.label}</div>
-          </div>
-        </div>
-
-        <div className={styles.tipRow}>
-          <span className={styles.tipBadge} data-tone={biv.tone} />
-          <div>
-            <div className={styles.tipPair}>Basis × IV Δ1d</div>
-            <div className={styles.tipNow}>{biv.label}</div>
-          </div>
-        </div>
-
-        <div className={styles.tipRow}>
-          <span className={styles.tipBadge} data-tone={bpc.tone} />
-          <div>
-            <div className={styles.tipPair}>Basis × P/C OI</div>
-            <div className={styles.tipNow}>{bpc.label}</div>
-          </div>
-        </div>
-
-        <div className={styles.tipDivider} />
-
-        <div className={styles.tipMatrix}>
-          <div className={styles.tipMatrixTitle}>Reading the matrix</div>
-          <ul className={styles.tipList}>
-            <li>
-              <strong>+Basis / −Skew</strong> — fragile rally (longs leveraged & hedging)
-            </li>
-            <li>
-              <strong>−Basis / +Skew</strong> — washed-out shorts, often a turn signal
-            </li>
-            <li>
-              <strong>−Basis / +IV Δ</strong> — active panic
-            </li>
-            <li>
-              <strong>−Basis / flat IV</strong> — passive deleveraging, less alarming
-            </li>
-            <li>
-              <strong>+Basis / high P/C rising</strong> — hedged grind higher
-            </li>
-            <li>
-              <strong>−Basis / low P/C</strong> — directional shorts, squeeze setup
-            </li>
-          </ul>
-          <div className={styles.tipLegend}>
-            <span className={styles.tipBadge} data-tone="bull" /> bullish
-            <span className={styles.tipBadge} data-tone="mixed" /> mixed
-            <span className={styles.tipBadge} data-tone="bear" /> bearish
-            <span className={styles.tipBadge} data-tone="neutral" /> neutral
-          </div>
-        </div>
-      </div>
-    </div>
+    </HoverTooltip>
   );
 }

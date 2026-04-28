@@ -76,7 +76,7 @@ export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
   const current = annPct != null ? classify(annPct) : null;
 
   return (
-    <div className={styles.tooltip} role="tooltip">
+    <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.headerLabel}>Annualized basis</span>
         {annPct != null ? (

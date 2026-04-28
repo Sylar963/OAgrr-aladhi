@@ -16,47 +16,9 @@ interface Row {
   bucket: Bucket;
   tone: Tone;
   range: string;
-  example: string;
+  ann: string;
   read: string;
 }
-
-const ROWS: Row[] = [
-  {
-    bucket: 'flat',
-    tone: 'neutral',
-    range: '|ann| < 3%',
-    example: '±0.017% / 4d → ~1.5%',
-    read: 'Flat — no directional conviction priced in',
-  },
-  {
-    bucket: 'tilt-up',
-    tone: 'bull',
-    range: '+3% ≤ ann < +27%',
-    example: '+0.1% / 4d → ~+9%',
-    read: 'Meaningful contango — healthy long carry',
-  },
-  {
-    bucket: 'euphoric',
-    tone: 'bear',
-    range: 'ann ≥ +27%',
-    example: '>+0.3% / 4d → >+27%',
-    read: 'Euphoric — crowded longs, mean-reversion risk',
-  },
-  {
-    bucket: 'tilt-down',
-    tone: 'mixed',
-    range: '−9% < ann ≤ −3%',
-    example: '−0.05% / 4d → ~−4.5%',
-    read: 'Mild backwardation — passive deleveraging',
-  },
-  {
-    bucket: 'stress',
-    tone: 'bear',
-    range: 'ann ≤ −9%',
-    example: '<−0.1% / 4d → <−9%',
-    read: 'Real stress — watch for liquidation cascade',
-  },
-];
 
 function classify(annPct: number): Bucket {
   if (Math.abs(annPct) < FLAT_ANN) return 'flat';
@@ -71,16 +33,67 @@ function fmtAnn(v: number): string {
   return `${sign}${v.toFixed(2)}%`;
 }
 
+function fmtRaw(v: number): string {
+  // Three decimals so 4d bands like 0.033% don't collapse to 0.03%.
+  return `${v.toFixed(3)}%`;
+}
+
+function buildRows(dte: number): Row[] {
+  const k = dte / 365;
+  const flatRaw = FLAT_ANN * k;
+  const tiltRaw = TILT_ANN * k;
+  const euphoricRaw = EUPHORIC_ANN * k;
+
+  return [
+    {
+      bucket: 'flat',
+      tone: 'neutral',
+      range: `|basis| < ${fmtRaw(flatRaw)}`,
+      ann: '|ann| < 3%',
+      read: 'Flat — no directional conviction priced in',
+    },
+    {
+      bucket: 'tilt-up',
+      tone: 'bull',
+      range: `+${fmtRaw(flatRaw)} … +${fmtRaw(euphoricRaw)}`,
+      ann: '+3% … +27% ann',
+      read: 'Meaningful contango — healthy long carry',
+    },
+    {
+      bucket: 'euphoric',
+      tone: 'bear',
+      range: `> +${fmtRaw(euphoricRaw)}`,
+      ann: '≥ +27% ann',
+      read: 'Euphoric — crowded longs, mean-reversion risk',
+    },
+    {
+      bucket: 'tilt-down',
+      tone: 'mixed',
+      range: `−${fmtRaw(tiltRaw)} … −${fmtRaw(flatRaw)}`,
+      ann: '−9% … −3% ann',
+      read: 'Mild backwardation — passive deleveraging',
+    },
+    {
+      bucket: 'stress',
+      tone: 'bear',
+      range: `< −${fmtRaw(tiltRaw)}`,
+      ann: '≤ −9% ann',
+      read: 'Real stress — watch for liquidation cascade',
+    },
+  ];
+}
+
 export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
   const annPct = basisPct != null && dte > 0 ? basisPct * (365 / dte) : null;
   const current = annPct != null ? classify(annPct) : null;
+  const rows = dte > 0 ? buildRows(dte) : [];
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <span className={styles.headerLabel}>Annualized basis</span>
+        <span className={styles.headerLabel}>Annualized basis ({dte}d)</span>
         {annPct != null ? (
-          <span className={styles.headerValue} data-tone={current ? toneOf(current) : undefined}>
+          <span className={styles.headerValue} data-tone={current ? toneOf(rows, current) : undefined}>
             {fmtAnn(annPct)}
           </span>
         ) : (
@@ -92,7 +105,7 @@ export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
       <div className={styles.divider} />
 
       <ul className={styles.list}>
-        {ROWS.map((row) => (
+        {rows.map((row) => (
           <li
             key={row.bucket}
             className={styles.row}
@@ -102,7 +115,7 @@ export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
             <div className={styles.rowBody}>
               <div className={styles.rowHead}>
                 <span className={styles.range}>{row.range}</span>
-                <span className={styles.example}>{row.example}</span>
+                <span className={styles.example}>{row.ann}</span>
               </div>
               <div className={styles.read}>{row.read}</div>
             </div>
@@ -113,6 +126,6 @@ export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
   );
 }
 
-function toneOf(b: Bucket): Tone {
-  return ROWS.find((r) => r.bucket === b)?.tone ?? 'neutral';
+function toneOf(rows: Row[], b: Bucket): Tone {
+  return rows.find((r) => r.bucket === b)?.tone ?? 'neutral';
 }

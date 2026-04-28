@@ -102,3 +102,20 @@
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+
+@media (max-width: 768px) {
+  .header {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .legend {
+    margin-left: 0;
+    flex-basis: 100%;
+    gap: var(--space-3);
+  }
+
+  .chartArea {
+    min-height: 220px;
+  }
+}

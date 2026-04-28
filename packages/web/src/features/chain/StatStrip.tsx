@@ -19,9 +19,10 @@ interface StatCellProps {
   sub?: string;
   accent?: boolean;
   positive?: boolean | null; // true = green, false = red, null/undefined = neutral
+  subPositive?: boolean | null;
 }
 
-function StatCell({ label, value, sub, accent, positive }: StatCellProps) {
+function StatCell({ label, value, sub, accent, positive, subPositive }: StatCellProps) {
   return (
     <div className={styles.cell}>
       <span className={styles.label}>{label}</span>
@@ -32,7 +33,16 @@ function StatCell({ label, value, sub, accent, positive }: StatCellProps) {
       >
         {value}
       </span>
-      {sub && <span className={styles.sub}>{sub}</span>}
+      {sub && (
+        <span
+          className={styles.sub}
+          data-positive={
+            subPositive === true ? 'true' : subPositive === false ? 'false' : undefined
+          }
+        >
+          {sub}
+        </span>
+      )}
     </div>
   );
 }
@@ -54,6 +64,8 @@ export default function StatStrip({
   marketStats,
 }: StatStripProps) {
   const basisSub = stats.basisPct != null ? fmtPct(stats.basisPct, 3) : undefined;
+  const basisPositive =
+    stats.basisPct != null ? (stats.basisPct > 0 ? true : stats.basisPct < 0 ? false : null) : null;
 
   const skewPositive = stats.skew25d != null ? stats.skew25d > 0 : null;
 
@@ -88,6 +100,7 @@ export default function StatStrip({
         label="Total OI"
         value={fmtUsdCompact(stats.totalOiUsd)}
         sub={basisSub ? `Basis ${basisSub}` : undefined}
+        subPositive={basisPositive}
       />
       {marketStats?.dvol && (
         <>

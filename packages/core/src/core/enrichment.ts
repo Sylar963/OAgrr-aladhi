@@ -425,10 +425,11 @@ export function computeChainStats(
 ): ChainStats {
   const { forwardPriceUsd, indexPriceUsd } = extractPrices(venueChains);
 
-  // (spot − forward) / forward × 100. Negative under contango (forward > spot).
+  // (forward − spot) / spot × 100. Positive under contango (forward > spot),
+  // negative under backwardation. Standard derivatives sign convention.
   const basisPct =
-    indexPriceUsd !== null && forwardPriceUsd !== null
-      ? ((indexPriceUsd - forwardPriceUsd) / forwardPriceUsd) * 100
+    indexPriceUsd !== null && forwardPriceUsd !== null && indexPriceUsd !== 0
+      ? ((forwardPriceUsd - indexPriceUsd) / indexPriceUsd) * 100
       : null;
 
   const refPrice = indexPriceUsd ?? forwardPriceUsd;

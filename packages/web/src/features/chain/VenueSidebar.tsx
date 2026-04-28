@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from 'react';
+import { memo, useMemo, type CSSProperties } from 'react';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { venueColor } from '@lib/colors';
 import { fmtUsdCompact } from '@lib/format';
@@ -18,9 +18,14 @@ function VenueSidebar({
   venueOi,
   failedVenues = [],
 }: VenueSidebarProps) {
-  const activeSet = new Set<string>(activeVenues);
-  const failedSet = new Set<string>(failedVenues.map((f) => f.venue));
-  const failedMap = new Map<string, string>(failedVenues.map((f) => [f.venue, f.reason]));
+  const activeSet = useMemo(() => new Set<string>(activeVenues), [activeVenues]);
+  const { failedSet, failedMap } = useMemo(
+    () => ({
+      failedSet: new Set<string>(failedVenues.map((f) => f.venue)),
+      failedMap: new Map<string, string>(failedVenues.map((f) => [f.venue, f.reason])),
+    }),
+    [failedVenues],
+  );
   return (
     <aside className={styles.sidebar}>
       <div className={styles.header}>Venues</div>

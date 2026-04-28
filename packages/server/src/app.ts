@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { registerRoutes } from './routes/index.js';
@@ -82,7 +83,18 @@ export async function buildApp(): Promise<FastifyInstance> {
         ],
     credentials: false,
   });
-  await app.register(websocket);
+  // gzip/deflate JSON responses; small payloads (<1KB) skip compression to
+  // avoid CPU overhead on health/ready probes.
+  await app.register(compress, { global: true, threshold: 1024 });
+  await app.register(websocket, {
+    options: {
+      // Compress outbound WS frames. Snapshot/delta JSON compresses ~80%.
+      perMessageDeflate: {
+        zlibDeflateOptions: { level: 3 },
+        threshold: 1024,
+      },
+    },
+  });
 
   registerRoutes(app);
 

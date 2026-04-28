@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 import { useChainQuery, useExpiries, useStats } from './queries';
@@ -38,16 +38,16 @@ export default function ChainView() {
     venues: activeVenues,
   });
 
+  const failedVenueIds = useMemo(() => failedVenues.map((f) => f.venue), [failedVenues]);
   useEffect(() => {
-    const failedVenueIds = failedVenues.map((f) => f.venue);
     setFeedStatus({
       connectionState,
-      failedVenueCount: failedVenues.length,
+      failedVenueCount: failedVenueIds.length,
       failedVenueIds,
       staleMs,
       lastUpdateMs: connectionState === 'live' && staleMs != null ? Date.now() - staleMs : null,
     });
-  }, [connectionState, failedVenues, staleMs, setFeedStatus]);
+  }, [connectionState, failedVenueIds, staleMs, setFeedStatus]);
 
   useEffect(() => {
     if (expiries.length > 0 && !expiry) {

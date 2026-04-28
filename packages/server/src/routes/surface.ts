@@ -27,14 +27,17 @@ export async function surfaceRoute(app: FastifyInstance) {
 
     const entries = await buildIvSurfaceGrid({ underlying, venues: requestedVenues });
 
-    const surface: IvSurfaceRow[] = entries.map((e) => e.surfaceRow);
-    const surfaceFine: IvSurfaceFineRow[] = entries.map((e) => e.surfaceFineRow);
+    const surface: IvSurfaceRow[] = new Array(entries.length);
+    const surfaceFine: IvSurfaceFineRow[] = new Array(entries.length);
     const venueAtm: Record<string, Array<{ expiry: string; dte: number; atm: number | null }>> = {};
     for (const venueId of requestedVenues) {
       venueAtm[venueId] = [];
     }
 
-    for (const entry of entries) {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      surface[i] = entry.surfaceRow;
+      surfaceFine[i] = entry.surfaceFineRow;
       for (const venueId of requestedVenues) {
         const callIv = entry.atmStrike?.call.venues[venueId]?.markIv ?? null;
         const putIv = entry.atmStrike?.put.venues[venueId]?.markIv ?? null;
@@ -45,6 +48,10 @@ export async function surfaceRoute(app: FastifyInstance) {
     }
 
     const termStructure: TermStructure = computeTermStructure(surface);
+
+    // Surface is deterministic per chain tick; allow a 1s shared cache so
+    // bursts of clients hit a proxy cache instead of recomputing.
+    reply.header('Cache-Control', 'public, max-age=0, s-maxage=1, stale-while-revalidate=2');
 
     return {
       underlying,

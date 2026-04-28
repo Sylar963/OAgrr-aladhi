@@ -55,15 +55,15 @@ function fmtVega(v: number | null): string {
 interface VenueColumnProps {
   side: EnrichedSide;
   align: 'left' | 'right';
-  activeVenues: string[];
+  activeSet: ReadonlySet<string>;
 }
 
-function VenueColumn({ side, align, activeVenues }: VenueColumnProps) {
-  const entries = Object.entries(side.venues).filter(([venueId]) => activeVenues.includes(venueId));
+function VenueColumn({ side, align, activeSet }: VenueColumnProps) {
+  const ids = Object.keys(side.venues).filter((venueId) => activeSet.has(venueId));
 
   return (
     <div className={styles.venueCol} data-align={align}>
-      {entries.map(([venueId]) => {
+      {ids.map((venueId) => {
         const meta = VENUES[venueId];
         return (
           <div key={venueId} className={styles.logoItem} title={meta?.label ?? venueId}>
@@ -88,14 +88,14 @@ interface BestBidAskResult {
   askVenue: string | null;
 }
 
-function bestBidAsk(side: EnrichedSide, activeVenues: string[]): BestBidAskResult {
+function bestBidAsk(side: EnrichedSide, activeSet: ReadonlySet<string>): BestBidAskResult {
   let bestBid: number | null = null;
   let bestAsk: number | null = null;
   let bestBidVenue: string | null = null;
   let bestAskVenue: string | null = null;
 
   for (const [venueId, quote] of Object.entries(side.venues)) {
-    if (!activeVenues.includes(venueId) || !quote) continue;
+    if (!activeSet.has(venueId) || !quote) continue;
 
     if (quote.bid != null && (bestBid == null || quote.bid > bestBid)) {
       bestBid = quote.bid;
@@ -157,6 +157,11 @@ interface StrikeRowProps {
   atmConsensusForward: number | null;
 }
 
+interface StrikeRowItemPropsInternal extends Omit<StrikeRowProps, 'activeVenues'> {
+  activeVenues: string[];
+  activeSet: ReadonlySet<string>;
+}
+
 const StrikeRowItem = memo(function StrikeRowItem({
   strike,
   isAtm,
@@ -165,17 +170,18 @@ const StrikeRowItem = memo(function StrikeRowItem({
   putItm,
   onToggle,
   activeVenues,
+  activeSet,
   myIv,
   onQuickTrade,
   atmStrike,
   atmConsensusForward,
-}: StrikeRowProps) {
+}: StrikeRowItemPropsInternal) {
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
   const putQ =
     strike.put.bestVenue != null ? (strike.put.venues[strike.put.bestVenue] ?? null) : null;
-  const callBba = useMemo(() => bestBidAsk(strike.call, activeVenues), [strike.call, activeVenues]);
-  const putBba = useMemo(() => bestBidAsk(strike.put, activeVenues), [strike.put, activeVenues]);
+  const callBba = useMemo(() => bestBidAsk(strike.call, activeSet), [strike.call, activeSet]);
+  const putBba = useMemo(() => bestBidAsk(strike.put, activeSet), [strike.put, activeSet]);
   const handleToggle = useCallback(() => onToggle(strike.strike), [onToggle, strike.strike]);
 
   return (
@@ -194,7 +200,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }
         }}
       >
-        <VenueColumn side={strike.call} align="left" activeVenues={activeVenues} />
+        <VenueColumn side={strike.call} align="left" activeSet={activeSet} />
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ''}`}>
           {fmtGamma(callQ?.gamma ?? null)}
         </span>
@@ -297,7 +303,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
         <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ''}`}>
           {fmtGamma(putQ?.gamma ?? null)}
         </span>
-        <VenueColumn side={strike.put} align="right" activeVenues={activeVenues} />
+        <VenueColumn side={strike.put} align="right" activeSet={activeSet} />
       </div>
 
       {isExpanded && (
@@ -340,9 +346,17 @@ export default function NewChainTable({
     });
   }, []);
 
+  const activeSet = useMemo<ReadonlySet<string>>(() => new Set(activeVenues), [activeVenues]);
+
+  const strikeIndexMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (let i = 0; i < strikes.length; i++) m.set(strikes[i]!.strike, i);
+    return m;
+  }, [strikes]);
+
   const atmIndex = useMemo(
-    () => (atmStrike != null ? strikes.findIndex((s) => s.strike === atmStrike) : -1),
-    [strikes, atmStrike],
+    () => (atmStrike != null ? (strikeIndexMap.get(atmStrike) ?? -1) : -1),
+    [strikeIndexMap, atmStrike],
   );
 
   const atmConsensusForward = useMemo(
@@ -499,6 +513,7 @@ export default function NewChainTable({
                   putItm={indexPrice != null && s.strike > indexPrice}
                   onToggle={toggleRow}
                   activeVenues={activeVenues}
+                  activeSet={activeSet}
                   myIv={myIv}
                   onQuickTrade={setQuickTrade}
                   atmStrike={atmStrike}

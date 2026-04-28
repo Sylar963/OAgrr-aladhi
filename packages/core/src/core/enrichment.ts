@@ -229,10 +229,9 @@ function buildEnrichedSide(
   let bestIv: number | null = null;
   let bestVenue: VenueId | null = null;
 
-  for (const [venueKey, contract] of Object.entries(contracts) as [
-    VenueId,
-    NormalizedOptionContract,
-  ][]) {
+  for (const venueKey of Object.keys(contracts) as VenueId[]) {
+    const contract = contracts[venueKey];
+    if (contract == null) continue;
     const quote = contractToVenueQuote(contract);
     venues[venueKey] = quote;
 
@@ -502,10 +501,8 @@ export function computeGex(
     let callGex = 0;
     let putGex = 0;
 
-    for (const [venueKey, vq] of Object.entries(s.call.venues) as [
-      VenueId,
-      VenueQuote | undefined,
-    ][]) {
+    for (const venueKey of Object.keys(s.call.venues) as VenueId[]) {
+      const vq = s.call.venues[venueKey];
       if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
         continue;
       }
@@ -516,10 +513,8 @@ export function computeGex(
       callGex += (vq.openInterest * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
     }
 
-    for (const [venueKey, vq] of Object.entries(s.put.venues) as [
-      VenueId,
-      VenueQuote | undefined,
-    ][]) {
+    for (const venueKey of Object.keys(s.put.venues) as VenueId[]) {
+      const vq = s.put.venues[venueKey];
       if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
         continue;
       }

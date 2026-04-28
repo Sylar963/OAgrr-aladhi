@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { pickCandleSpec } from './PayoffChartV2';
 import type { Leg } from './payoff';
 
@@ -30,6 +30,17 @@ function expiryInDays(days: number): string {
 }
 
 describe('pickCandleSpec', () => {
+  // Pin clock past 08:00 UTC so dteDays — which anchors expiry dates to
+  // 08:00Z and uses Math.ceil — returns the day-offset exactly.
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-27T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it('defaults to 1h × 24 buckets when no legs', () => {
     expect(pickCandleSpec([])).toEqual({ resolutionSec: 3600, buckets: 24 });
   });

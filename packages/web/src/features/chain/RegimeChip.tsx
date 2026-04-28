@@ -55,10 +55,12 @@ function basisIvTone(b: Sign3 | null, iv: Sign3 | null): { tone: Tone; label: st
 function basisPcTone(b: Sign3 | null, pc: PcBucket | null): { tone: Tone; label: string } {
   if (!b || !pc) return { tone: 'unknown', label: 'No P/C data' };
   if (b === 'flat') return { tone: 'neutral', label: 'Flat carry' };
+  // Backwardation + call-heavy OI: futures shorts vs options-side longs.
+  // Classic short-squeeze fuel — contrarian bullish, not bearish.
+  if (b === 'neg' && pc === 'low') return { tone: 'bull', label: 'Squeeze setup — backwardation, no put hedges' };
   if (b === 'pos' && pc === 'high') return { tone: 'bull', label: 'Hedged grind higher' };
-  if (b === 'neg' && pc === 'low') return { tone: 'bear', label: 'Directional shorts — squeeze setup' };
-  if (b === 'pos' && pc === 'low') return { tone: 'mixed', label: 'Unhedged longs' };
-  if (b === 'neg' && pc === 'high') return { tone: 'mixed', label: 'Hedged downside' };
+  if (b === 'pos' && pc === 'low') return { tone: 'mixed', label: 'Unhedged longs — fragile rally' };
+  if (b === 'neg' && pc === 'high') return { tone: 'mixed', label: 'Stressed & put-heavy — capitulation watch' };
   return { tone: 'neutral', label: 'Balanced positioning' };
 }
 
@@ -123,10 +125,13 @@ export default function RegimeChip({
             <strong>−Basis / flat IV</strong> — passive deleveraging, less alarming
           </li>
           <li>
-            <strong>+Basis / high P/C rising</strong> — hedged grind higher
+            <strong>+Basis / high P/C</strong> — hedged grind higher
           </li>
           <li>
-            <strong>−Basis / low P/C</strong> — directional shorts, squeeze setup
+            <strong>−Basis / low P/C</strong> — squeeze setup, contrarian bullish
+          </li>
+          <li>
+            <strong>−Basis / high P/C</strong> — stressed & put-heavy, capitulation watch
           </li>
         </ul>
         <div className={styles.tipLegend}>

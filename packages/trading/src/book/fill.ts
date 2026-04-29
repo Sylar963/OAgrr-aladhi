@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import type { UsdAmount } from './money.js';
 import type { OptionRight, OrderId, OrderSide } from './order.js';
 
@@ -9,7 +9,7 @@ export interface Fill {
   id: FillId;
   orderId: OrderId;
   legIndex: number;
-  venue: VenueId;
+  venue: PaperVenueId;
   side: OrderSide;
   optionRight: OptionRight;
   underlying: string;

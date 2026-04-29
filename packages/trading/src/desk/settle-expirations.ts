@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import { newFillId, type Fill } from '../book/fill.js';
 import { newOrderId } from '../book/order.js';
 import type { Position } from '../book/position.js';
@@ -6,7 +6,7 @@ import { deliveryFeeUsd } from './delivery-fees.js';
 
 export interface SettlementInput {
   position: Position;
-  venue: VenueId;
+  venue: PaperVenueId;
   settlementSpotUsd: number;
   asOf: Date;
 }

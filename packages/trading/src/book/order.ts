@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import type { AccountId } from './account.js';
 import type { UsdAmount } from './money.js';
 
@@ -17,7 +17,7 @@ export interface OrderLeg {
   expiry: string;
   strike: number;
   quantity: number;
-  preferredVenues: VenueId[] | null;
+  preferredVenues: PaperVenueId[] | null;
 }
 
 export interface Order {

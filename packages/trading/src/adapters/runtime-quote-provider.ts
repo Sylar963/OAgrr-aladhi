@@ -1,5 +1,6 @@
-import type { VenueId } from '@oggregator/core';
-import { ChainRuntimeRegistry, VENUE_IDS } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
+import { PAPER_VENUE_IDS } from '@oggregator/protocol';
+import { ChainRuntimeRegistry } from '@oggregator/core';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
 
 const DEFAULT_FEES_TAKER_USD = 0;
@@ -7,8 +8,8 @@ const DEFAULT_FEES_TAKER_USD = 0;
 export class RuntimeQuoteProvider implements QuoteProvider {
   constructor(private readonly registry: ChainRuntimeRegistry) {}
 
-  async getBooks(key: QuoteKey, venues: VenueId[]): Promise<QuoteBook[]> {
-    const requestedVenues = venues.length > 0 ? venues : [...VENUE_IDS];
+  async getBooks(key: QuoteKey, venues: PaperVenueId[]): Promise<QuoteBook[]> {
+    const requestedVenues = venues.length > 0 ? venues : [...PAPER_VENUE_IDS];
     const { runtime, release } = await this.registry.acquire({
       underlying: key.underlying,
       expiry: key.expiry,
@@ -21,7 +22,7 @@ export class RuntimeQuoteProvider implements QuoteProvider {
       const side = key.optionRight === 'call' ? strike.call : strike.put;
       const books: QuoteBook[] = [];
       for (const [venueId, quote] of Object.entries(side.venues)) {
-        const venue = venueId as VenueId;
+        const venue = venueId as PaperVenueId;
         if (!requestedVenues.includes(venue)) continue;
         if (!quote) continue;
         books.push({
@@ -42,7 +43,7 @@ export class RuntimeQuoteProvider implements QuoteProvider {
   }
 
   async getMark(key: QuoteKey): Promise<number | null> {
-    const books = await this.getBooks(key, [...VENUE_IDS]);
+    const books = await this.getBooks(key, [...PAPER_VENUE_IDS]);
     const marks = books.map((b) => b.markUsd).filter((m): m is number => m != null);
     if (marks.length === 0) return null;
     return marks.reduce((sum, m) => sum + m, 0) / marks.length;

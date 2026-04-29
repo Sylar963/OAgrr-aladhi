@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import type { AccountId } from '../book/account.js';
 import {
   InsufficientMarginError,
@@ -26,7 +26,7 @@ export interface PlaceOrderInput {
   accountId: AccountId;
   clientOrderId?: string;
   legs: Array<Omit<OrderLeg, 'index'>>;
-  venueFilter: VenueId[];
+  venueFilter: PaperVenueId[];
 }
 
 export interface PlaceOrderResult {
@@ -116,7 +116,7 @@ export class OrderPlacementService {
     return { order: filled, fills };
   }
 
-  private async checkMargin(order: Order, venueFilter: VenueId[]): Promise<void> {
+  private async checkMargin(order: Order, venueFilter: PaperVenueId[]): Promise<void> {
     if (this.marginEngine instanceof NoopMarginEngine) return;
     const equityUsd = await this.equityFor(order.accountId);
     const existingPositions = await this.positions.listPositions(order.accountId);

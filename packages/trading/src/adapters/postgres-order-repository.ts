@@ -1,5 +1,5 @@
 import type { PaperTradingStore, PaperOrderRow, PaperFillRow } from '@oggregator/db';
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import type { AccountId } from '../book/account.js';
 import type { Fill } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
@@ -99,7 +99,7 @@ function fromFillRow(row: PaperFillRow): Fill {
     id: row.id,
     orderId: row.orderId,
     legIndex: row.legIndex,
-    venue: row.venue as VenueId,
+    venue: row.venue as PaperVenueId,
     side: row.side,
     optionRight: row.optionRight,
     underlying: row.underlying,

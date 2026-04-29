@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 import { newFillId, type Fill } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
 import { NoLiquidityError } from '../book/errors.js';
@@ -19,10 +19,10 @@ export class PaperFillEngine implements FillEngine {
     this.fillModel = fillModel ?? new OptimisticFillModel();
   }
 
-  async executeOrder(order: Order, venueFilter: VenueId[]): Promise<Fill[]> {
+  async executeOrder(order: Order, venueFilter: PaperVenueId[]): Promise<Fill[]> {
     const plans: Array<{
       leg: OrderLeg;
-      venue: VenueId;
+      venue: PaperVenueId;
       priceUsd: number;
       filledQuantity: number;
       slippageUsd: number;

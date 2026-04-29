@@ -1,4 +1,4 @@
-import type { VenueId } from '@oggregator/core';
+import type { PaperVenueId } from '@oggregator/protocol';
 
 interface DeliveryFeeSpec {
   rate: number;
@@ -13,7 +13,7 @@ interface DeliveryFeeSpec {
 //
 // Deribit's 0.015% delivery fee is documented; the other four are placeholders
 // pending a doc-driven pass against references/options-docs/{venue}/.
-const DELIVERY_FEES: Record<VenueId, DeliveryFeeSpec> = {
+const DELIVERY_FEES: Record<PaperVenueId, DeliveryFeeSpec> = {
   deribit: { rate: 0.00015, cap: 0.125 },
   okx: { rate: 0.0002, cap: 0.125 },
   binance: { rate: 0.00015, cap: 0.125 },
@@ -21,11 +21,10 @@ const DELIVERY_FEES: Record<VenueId, DeliveryFeeSpec> = {
   derive: { rate: 0.0001, cap: 0.125 },
   coincall: { rate: 0.0002, cap: 0.125 },
   thalex: { rate: 0.00015, cap: 0.125 },
-  tastytrade: { rate: 0, cap: 0 }, // listed-options venue: no per-contract delivery fee here; broker commissions handled separately
 };
 
 export function deliveryFeeUsd(
-  venue: VenueId,
+  venue: PaperVenueId,
   underlyingSpotUsd: number,
   intrinsicUsd: number,
   quantity: number,

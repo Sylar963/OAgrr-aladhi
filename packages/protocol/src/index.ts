@@ -1,4 +1,7 @@
 export {
+  PAPER_VENUE_IDS,
+  PaperVenueIdSchema,
+  type PaperVenueId,
   PaperOrderLegSchema,
   PlaceOrderRequestSchema,
   PaperTradeStatusSchema,

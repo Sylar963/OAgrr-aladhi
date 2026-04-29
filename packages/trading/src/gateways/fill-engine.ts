@@ -1,4 +1,4 @@
-import type { PaperPaperVenueId } from '@oggregator/protocol';
+import type { PaperVenueId } from '@oggregator/protocol';
 import type { Fill } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
 

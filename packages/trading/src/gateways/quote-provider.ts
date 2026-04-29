@@ -1,4 +1,4 @@
-import type { PaperPaperVenueId } from '@oggregator/protocol';
+import type { PaperVenueId } from '@oggregator/protocol';
 
 export interface QuoteBookLevel {
   priceUsd: number;

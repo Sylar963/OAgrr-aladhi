@@ -78,6 +78,7 @@ export type {
 
 // feeds/shared — adapter interfaces
 export type {
+  AssetClass,
   OptionVenueAdapter,
   VenueCapabilities,
   StreamHandlers,
@@ -160,3 +161,5 @@ export { BybitWsAdapter } from './feeds/bybit/index.js';
 export { DeriveWsAdapter } from './feeds/derive/index.js';
 export { CoincallWsAdapter } from './feeds/coincall/index.js';
 export { ThalexWsAdapter } from './feeds/thalex/index.js';
+export { TastytradeWsAdapter, TastytradeRestClient } from './feeds/tastytrade/index.js';
+export type { TastytradeAuth, TastytradeSession } from './feeds/tastytrade/index.js';

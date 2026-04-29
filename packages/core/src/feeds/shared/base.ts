@@ -1,10 +1,11 @@
-import type { OptionVenueAdapter, VenueCapabilities } from './types.js';
+import type { AssetClass, OptionVenueAdapter, VenueCapabilities } from './types.js';
 import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 
 export abstract class BaseAdapter implements OptionVenueAdapter {
   abstract readonly venue: VenueId;
   abstract readonly capabilities: VenueCapabilities;
+  readonly assetClass: AssetClass = 'crypto';
 
   abstract loadMarkets(force?: boolean): Promise<void>;
   abstract listUnderlyings(): Promise<string[]>;

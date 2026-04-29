@@ -21,6 +21,7 @@ const DELIVERY_FEES: Record<VenueId, DeliveryFeeSpec> = {
   derive: { rate: 0.0001, cap: 0.125 },
   coincall: { rate: 0.0002, cap: 0.125 },
   thalex: { rate: 0.00015, cap: 0.125 },
+  tastytrade: { rate: 0, cap: 0 }, // listed-options venue: no per-contract delivery fee here; broker commissions handled separately
 };
 
 export function deliveryFeeUsd(

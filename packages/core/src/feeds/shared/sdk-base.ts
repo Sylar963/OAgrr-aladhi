@@ -24,6 +24,7 @@ const FEE_CAP: Record<VenueId, number> = {
   derive: 0.125, // 12.5% of option premium
   coincall: 0.125, // 12.5% of option premium
   thalex: 0.125, // 12.5% of option premium
+  tastytrade: 0.125, // listed-options venue (placeholder; actual fees set during live wire-up)
 };
 
 export interface CachedInstrument {

@@ -10,6 +10,7 @@ import type { VenueId } from '../types/common.js';
 
 class MockAdapter implements OptionVenueAdapter {
   readonly venue: VenueId = 'deribit';
+  readonly assetClass = 'crypto' as const;
   readonly capabilities: VenueCapabilities = {
     optionChain: true,
     greeks: true,

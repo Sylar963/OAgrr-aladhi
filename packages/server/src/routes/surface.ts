@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import {
   buildIvSurfaceGrid,
   computeTermStructure,
-  getAllAdapters,
   type IvSurfaceRow,
   type IvSurfaceFineRow,
   type TermStructure,
@@ -10,6 +9,7 @@ import {
   VENUE_IDS,
   FINE_DELTA_GRID,
 } from '@oggregator/core';
+import { getAdaptersByAssetClass } from '../asset-class.js';
 
 export async function surfaceRoute(app: FastifyInstance) {
   app.get<{
@@ -21,9 +21,12 @@ export async function surfaceRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'underlying query param required' });
     }
 
+    const cryptoVenues = getAdaptersByAssetClass('crypto').map((a) => a.venue);
     const requestedVenues: VenueId[] = venuesParam
-      ? (venuesParam.split(',').filter((v) => VENUE_IDS.includes(v as VenueId)) as VenueId[])
-      : getAllAdapters().map((a) => a.venue);
+      ? (venuesParam
+          .split(',')
+          .filter((v) => VENUE_IDS.includes(v as VenueId) && cryptoVenues.includes(v as VenueId)) as VenueId[])
+      : cryptoVenues;
 
     const entries = await buildIvSurfaceGrid({ underlying, venues: requestedVenues });
 

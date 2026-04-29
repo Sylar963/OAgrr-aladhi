@@ -2,6 +2,8 @@ import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueDelta, VenueStatus } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 
+export type AssetClass = 'crypto' | 'tradfi';
+
 export interface VenueCapabilities {
   /** Whether the venue supports fetching a full option chain in one call */
   optionChain: boolean;
@@ -20,6 +22,8 @@ export interface StreamHandlers {
 export interface OptionVenueAdapter {
   readonly venue: VenueId;
   readonly capabilities: VenueCapabilities;
+  /** 'crypto' = existing v1 chain; 'tradfi' = v2 listed-options chain. Defaults to 'crypto' on BaseAdapter. */
+  readonly assetClass: AssetClass;
 
   /** Load/refresh instrument catalog for this venue */
   loadMarkets(force?: boolean): Promise<void>;

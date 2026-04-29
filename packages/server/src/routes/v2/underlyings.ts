@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { OptionVenueAdapter } from '@oggregator/core';
-import { getAdaptersByAssetClass } from '../asset-class.js';
+import { getAdaptersByAssetClass } from '../../asset-class.js';
 
-export async function underlyingsRoute(app: FastifyInstance) {
-  app.get('/underlyings', async () => {
-    const adapters = getAdaptersByAssetClass('crypto');
+export async function v2UnderlyingsRoute(app: FastifyInstance) {
+  app.get('/v2/underlyings', async () => {
+    const adapters = getAdaptersByAssetClass('tradfi');
     const results = await Promise.all(
       adapters.map(async (a: OptionVenueAdapter) => ({
         venue: a.venue,

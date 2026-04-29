@@ -1,11 +1,15 @@
 import type { FastifyInstance } from 'fastify';
-import { getAllAdapters, VENUE_IDS, type VenueId } from '@oggregator/core';
+import { VENUE_IDS, type VenueId } from '@oggregator/core';
 import { chainEngines } from '../chain-engines.js';
+import { getAdaptersByAssetClass } from '../asset-class.js';
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
+  const cryptoVenues = getAdaptersByAssetClass('crypto').map((a) => a.venue);
   return venuesParam
-    ? (venuesParam.split(',').filter((venue) => VENUE_IDS.includes(venue as VenueId)) as VenueId[])
-    : getAllAdapters().map((adapter) => adapter.venue);
+    ? (venuesParam
+        .split(',')
+        .filter((venue) => VENUE_IDS.includes(venue as VenueId) && cryptoVenues.includes(venue as VenueId)) as VenueId[])
+    : cryptoVenues;
 }
 
 export async function chainsRoute(app: FastifyInstance) {

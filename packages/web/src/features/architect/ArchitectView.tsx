@@ -381,7 +381,9 @@ export default function ArchitectView() {
     }
 
     setBuilderError(null);
-    clearLegs();
+    // Drop appends — drags are how the user composes a custom multi-leg
+    // strategy (e.g. straddle + put spread). Click-to-apply on the card
+    // still replaces, since that gesture means "use this template".
     for (const leg of result.legs) addLeg(leg, underlying);
   }
 

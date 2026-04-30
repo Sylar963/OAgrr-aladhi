@@ -49,29 +49,33 @@ describe('pickCandleSpec', () => {
     expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({ resolutionSec: 300, buckets: 48 });
   });
 
-  it('1–3d picks 30m and bucket count tracks DTE', () => {
+  it('1–3d picks 30m and collapses same-tier DTEs onto the same key', () => {
     const spec1d = pickCandleSpec([leg(expiryInDays(1))]);
     const spec2d = pickCandleSpec([leg(expiryInDays(2))]);
     expect(spec1d.resolutionSec).toBe(1800);
     expect(spec2d.resolutionSec).toBe(1800);
-    // Different DTE within the same tier must produce different bucket counts
-    // so the query key changes and TanStack Query refetches.
-    expect(spec1d.buckets).not.toBe(spec2d.buckets);
+    // Same tier ⇒ same bucket count ⇒ same query key ⇒ server cache stays warm.
+    expect(spec1d.buckets).toBe(spec2d.buckets);
   });
 
-  it('3–14d picks 1h and bucket count scales with DTE', () => {
+  it('3–14d picks 1h with two sub-tiers around the 7d boundary', () => {
     const spec3d = pickCandleSpec([leg(expiryInDays(3))]);
+    const spec5d = pickCandleSpec([leg(expiryInDays(5))]);
     const spec10d = pickCandleSpec([leg(expiryInDays(10))]);
     expect(spec3d.resolutionSec).toBe(3600);
     expect(spec10d.resolutionSec).toBe(3600);
+    // < 7d collapses to one tier, ≥ 7d to another.
+    expect(spec3d.buckets).toBe(spec5d.buckets);
     expect(spec3d.buckets).toBeLessThan(spec10d.buckets);
   });
 
-  it('14–60d picks 4h and bucket count scales with DTE', () => {
+  it('14–60d picks 4h with two sub-tiers around the 30d boundary', () => {
     const spec14d = pickCandleSpec([leg(expiryInDays(14))]);
+    const spec25d = pickCandleSpec([leg(expiryInDays(25))]);
     const spec45d = pickCandleSpec([leg(expiryInDays(45))]);
     expect(spec14d.resolutionSec).toBe(14400);
     expect(spec45d.resolutionSec).toBe(14400);
+    expect(spec14d.buckets).toBe(spec25d.buckets);
     expect(spec14d.buckets).toBeLessThan(spec45d.buckets);
   });
 

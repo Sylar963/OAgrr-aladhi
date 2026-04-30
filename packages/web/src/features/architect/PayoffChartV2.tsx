@@ -33,31 +33,27 @@ export interface CandleSpec {
 }
 
 /**
- * Pick a candle window that scales with the strategy's nearest-leg DTE so
- * the price-history view always reflects the chosen tenor. Bucket count
- * varies with DTE within each resolution tier — this guarantees that any
- * tenor change produces a new query key, so TanStack Query refetches.
+ * Pick a candle window that scales with the strategy's nearest-leg DTE.
+ * Bucket counts are quantized to a small fixed set of tiers per resolution:
+ * small DTE edits collapse onto the same query key, which keeps the server
+ * cache warm and avoids forcing an upstream Deribit refetch on every leg
+ * adjustment. The previous design varied buckets per-day to force refetches,
+ * which was the root cause of the "Snapshot stale" banner appearing whenever
+ * the user retuned a strategy.
  */
 export function pickCandleSpec(legs: Leg[]): CandleSpec {
   if (legs.length === 0) return { resolutionSec: 3600, buckets: 24 };
   const minDte = Math.max(0, Math.min(...legs.map((l) => dteDays(l.expiry))));
 
-  if (minDte < 1) {
-    return { resolutionSec: 300, buckets: 48 };
-  }
-  if (minDte < 3) {
-    const buckets = Math.min(96, Math.max(24, Math.round(minDte * 48)));
-    return { resolutionSec: 1800, buckets };
-  }
+  if (minDte < 1) return { resolutionSec: 300, buckets: 48 };          // 4h window
+  if (minDte < 3) return { resolutionSec: 1800, buckets: 96 };         // 2d window
   if (minDte < 14) {
-    const buckets = Math.min(168, Math.max(24, Math.round(minDte * 24)));
-    return { resolutionSec: 3600, buckets };
+    return { resolutionSec: 3600, buckets: minDte < 7 ? 96 : 168 };    // 4d or 7d
   }
   if (minDte < 60) {
-    const buckets = Math.min(180, Math.max(42, Math.round(minDte * 6)));
-    return { resolutionSec: 14400, buckets };
+    return { resolutionSec: 14400, buckets: minDte < 30 ? 90 : 180 };  // 15d or 30d
   }
-  return { resolutionSec: 86400, buckets: Math.min(180, Math.max(60, minDte)) };
+  return { resolutionSec: 86400, buckets: minDte < 120 ? 90 : 180 };   // 90d or 180d
 }
 
 function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {

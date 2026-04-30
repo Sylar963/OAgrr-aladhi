@@ -145,6 +145,10 @@ export default function MobileStrikeCard({
   const callItm = indexPrice != null && strike.strike < indexPrice;
   const putItm = indexPrice != null && strike.strike > indexPrice;
   const venues = Object.keys(strike.call.venues).filter((v) => activeVenues.includes(v));
+  const distLabel =
+    indexPrice != null && indexPrice !== 0
+      ? `${(strike.strike - indexPrice) / indexPrice >= 0 ? '+' : ''}${(((strike.strike - indexPrice) / indexPrice) * 100).toFixed(1)}%`
+      : null;
 
   return (
     <div className={styles.card} data-atm={isAtm} data-expanded={isExpanded}>
@@ -152,6 +156,7 @@ export default function MobileStrikeCard({
         <div className={styles.strikeInfo}>
           {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
         <span className={styles.chevron} data-expanded={isExpanded}>
           ›

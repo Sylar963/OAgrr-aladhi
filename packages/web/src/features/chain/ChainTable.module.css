@@ -334,3 +334,18 @@
 .strikeCenter[data-moneyness="itm-put"] .strikeNum {
   color: color-mix(in srgb, var(--color-loss) 75%, var(--text-secondary));
 }
+
+.strikeDist {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.strikeCenter[data-atm="true"] .strikeDist {
+  color: var(--accent-primary);
+  opacity: 0.85;
+}

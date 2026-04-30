@@ -77,13 +77,34 @@ export class SpotCandleService {
       return cached.candles;
     }
 
-    const candles = await this.fetchFromDeribit(currency, resolutionSec, buckets);
-    // Don't cache empty results: a transient Deribit error or schema drift
-    // would otherwise lock every requester into "no data" for the full TTL.
-    if (candles.length > 0) {
-      this.cache.set(key, { fetchedAt: Date.now(), candles });
+    try {
+      const candles = await this.fetchFromDeribit(currency, resolutionSec, buckets);
+      // Don't cache empty results: a transient Deribit error or schema drift
+      // would otherwise lock every requester into "no data" for the full TTL.
+      if (candles.length > 0) {
+        this.cache.set(key, { fetchedAt: Date.now(), candles });
+      }
+      return candles;
+    } catch (err) {
+      // Upstream blew up. If we've ever served this key successfully, keep
+      // serving the last good payload past TTL rather than 502'ing the
+      // client — a slightly stale snapshot is far better UX than an error
+      // banner during transient Deribit hiccups.
+      if (cached) {
+        log.warn(
+          {
+            currency,
+            resolutionSec,
+            buckets,
+            ageMs: Date.now() - cached.fetchedAt,
+            err: String(err),
+          },
+          'serving stale candles after upstream failure',
+        );
+        return cached.candles;
+      }
+      throw err;
     }
-    return candles;
   }
 
   private async fetchFromDeribit(

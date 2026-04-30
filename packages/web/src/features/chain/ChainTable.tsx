@@ -155,6 +155,14 @@ interface StrikeRowProps {
   onQuickTrade: (info: QuickTradeInfo) => void;
   atmStrike: number | null;
   atmConsensusForward: number | null;
+  indexPrice: number | null;
+}
+
+function fmtDistPct(strike: number, indexPrice: number | null): string | null {
+  if (indexPrice == null || indexPrice === 0) return null;
+  const pct = ((strike - indexPrice) / indexPrice) * 100;
+  const sign = pct >= 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
 }
 
 interface StrikeRowItemPropsInternal extends Omit<StrikeRowProps, 'activeVenues'> {
@@ -175,7 +183,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
   onQuickTrade,
   atmStrike,
   atmConsensusForward,
+  indexPrice,
 }: StrikeRowItemPropsInternal) {
+  const distLabel = fmtDistPct(strike.strike, indexPrice);
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
   const putQ =
@@ -256,6 +266,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
         >
           {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
 
         <PriceCell
@@ -518,6 +529,7 @@ export default function NewChainTable({
                   onQuickTrade={setQuickTrade}
                   atmStrike={atmStrike}
                   atmConsensusForward={atmConsensusForward}
+                  indexPrice={indexPrice}
                 />
               </div>
             );

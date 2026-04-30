@@ -50,6 +50,20 @@
   color: var(--accent-primary);
 }
 
+.strikeDist {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.card[data-atm="true"] .strikeDist {
+  color: var(--accent-primary);
+  opacity: 0.85;
+}
+
 .atmBadge {
   font-size: 8px;
   font-weight: 700;

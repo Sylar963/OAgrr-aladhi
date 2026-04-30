@@ -63,6 +63,58 @@ export function blackScholesPut(
   return strike * Math.exp(-r * T) * normCdf(-d2) - spot * normCdf(-d1v);
 }
 
+// Closed-form Black-Scholes Greeks. Raw units: vega per unit σ, theta per year,
+// rho per unit r. Convert to per-1% / per-day at the display layer.
+export interface GreeksArgs {
+  spot: number;
+  strike: number;
+  T: number;
+  r: number;
+  sigma: number;
+  right: OptionRight;
+}
+
+export function delta(args: GreeksArgs): number {
+  const { spot, strike, T, r, sigma, right } = args;
+  if (T <= 0) {
+    if (right === 'call') return spot > strike ? 1 : spot < strike ? 0 : 0.5;
+    return spot < strike ? -1 : spot > strike ? 0 : -0.5;
+  }
+  if (sigma <= 0 || spot <= 0) return 0;
+  const n = normCdf(d1(spot, strike, T, r, sigma));
+  return right === 'call' ? n : n - 1;
+}
+
+export function gamma(args: Omit<GreeksArgs, 'right'>): number {
+  const { spot, strike, T, r, sigma } = args;
+  if (T <= 0 || sigma <= 0 || spot <= 0) return 0;
+  return normPdf(d1(spot, strike, T, r, sigma)) / (spot * sigma * Math.sqrt(T));
+}
+
+export function vega(args: Omit<GreeksArgs, 'right'>): number {
+  const { spot, strike, T, r, sigma } = args;
+  if (T <= 0 || sigma <= 0 || spot <= 0) return 0;
+  return spot * normPdf(d1(spot, strike, T, r, sigma)) * Math.sqrt(T);
+}
+
+export function theta(args: GreeksArgs): number {
+  const { spot, strike, T, r, sigma, right } = args;
+  if (T <= 0 || sigma <= 0 || spot <= 0) return 0;
+  const d1v = d1(spot, strike, T, r, sigma);
+  const d2 = d1v - sigma * Math.sqrt(T);
+  const term1 = (-spot * normPdf(d1v) * sigma) / (2 * Math.sqrt(T));
+  const discount = r * strike * Math.exp(-r * T);
+  return right === 'call' ? term1 - discount * normCdf(d2) : term1 + discount * normCdf(-d2);
+}
+
+export function rho(args: GreeksArgs): number {
+  const { spot, strike, T, r, sigma, right } = args;
+  if (T <= 0 || sigma <= 0 || spot <= 0) return 0;
+  const d2 = d1(spot, strike, T, r, sigma) - sigma * Math.sqrt(T);
+  const base = strike * T * Math.exp(-r * T);
+  return right === 'call' ? base * normCdf(d2) : -base * normCdf(-d2);
+}
+
 export interface ImpliedVolArgs {
   marketPrice: number;
   spot: number;

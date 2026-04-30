@@ -13,6 +13,7 @@ import StatStrip from './StatStrip';
 import ChainTable from './ChainTable';
 import VenueSidebar from './VenueSidebar';
 import MyIvInput from './MyIvInput';
+import OptionCalculator from './OptionCalculator';
 import styles from './ChainView.module.css';
 
 export default function ChainView() {
@@ -70,6 +71,7 @@ export default function ChainView() {
 
   const isMobile = useIsMobile();
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(false);
 
   const myIvFloat = myIv !== '' ? parseFloat(myIv) / 100 : null;
   const myIvValid = myIvFloat != null && !Number.isNaN(myIvFloat) && myIvFloat > 0;
@@ -199,6 +201,25 @@ export default function ChainView() {
           )}
         </div>
       </div>
+
+      <button
+        type="button"
+        className={styles.calcFab}
+        data-active={calcOpen}
+        onClick={() => setCalcOpen((v) => !v)}
+        aria-label="Toggle option calculator"
+        title="Option Calculator"
+      >
+        ⌥
+      </button>
+      {calcOpen && (
+        <OptionCalculator
+          defaultUnderlying={underlying}
+          defaultExpiry={expiry}
+          defaultSpot={chain?.stats.indexPriceUsd}
+          onClose={() => setCalcOpen(false)}
+        />
+      )}
     </div>
   );
 }

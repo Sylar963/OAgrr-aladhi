@@ -7,6 +7,10 @@ interface SnapshotBannerProps {
   refreshIntervalMs: number;
   hasData: boolean;
   isFetching: boolean;
+  isError?: boolean;
+  errorMessage?: string | null;
+  isEmpty?: boolean;
+  onRetry?: () => void;
 }
 
 function formatCountdown(seconds: number): string {
@@ -20,6 +24,10 @@ export default function SnapshotBanner({
   refreshIntervalMs,
   hasData,
   isFetching,
+  isError = false,
+  errorMessage = null,
+  isEmpty = false,
+  onRetry,
 }: SnapshotBannerProps) {
   const [, setTick] = useState(0);
 
@@ -28,11 +36,49 @@ export default function SnapshotBanner({
     return () => clearInterval(id);
   }, []);
 
+  // Error state takes precedence: if upstream failed we should never silently
+  // pretend we're still loading. Show the error and offer a manual retry so
+  // the user isn't stranded.
+  if (isError && !isFetching) {
+    return (
+      <div className={styles.snapshotBanner} data-state="error">
+        <span className={styles.snapshotDot} />
+        <span className={styles.snapshotPrimary}>Snapshot unavailable</span>
+        <span className={styles.snapshotSecondary}>
+          {errorMessage ?? 'upstream candle fetch failed'}
+        </span>
+        {onRetry && (
+          <button className={styles.snapshotRetry} onClick={onRetry}>
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (!hasData) {
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
         <span>Loading snapshot…</span>
+      </div>
+    );
+  }
+
+  // Server returned 200 with an empty candle array (e.g. Zod parse fallback).
+  // This is distinct from "still loading" — the request succeeded with
+  // unusable data. Surface it explicitly so the user knows to try later.
+  if (isEmpty && !isFetching) {
+    return (
+      <div className={styles.snapshotBanner} data-state="error">
+        <span className={styles.snapshotDot} />
+        <span className={styles.snapshotPrimary}>No spot history available</span>
+        <span className={styles.snapshotSecondary}>upstream returned empty data</span>
+        {onRetry && (
+          <button className={styles.snapshotRetry} onClick={onRetry}>
+            Retry
+          </button>
+        )}
       </div>
     );
   }

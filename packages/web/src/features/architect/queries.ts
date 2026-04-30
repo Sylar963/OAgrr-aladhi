@@ -34,6 +34,10 @@ export function useSpotCandles(currency: string, resolutionSec: number, buckets:
     enabled: isSpotCandleCurrency(currency),
     refetchInterval: 120_000,
     staleTime: 120_000,
+    // fetchJson already retries on 503/network up to 10x. Cap query-level
+    // retries at 1 so a real upstream failure surfaces in seconds, not
+    // minutes — the banner has an explicit error state for this case.
+    retry: 1,
     // Tenor changes swap the query key. keepPreviousData holds the previous
     // candles on screen while the new fetch is in flight so the banner never
     // flashes "Loading snapshot…" mid-strategy edit.

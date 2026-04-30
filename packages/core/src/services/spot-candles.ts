@@ -78,7 +78,11 @@ export class SpotCandleService {
     }
 
     const candles = await this.fetchFromDeribit(currency, resolutionSec, buckets);
-    this.cache.set(key, { fetchedAt: Date.now(), candles });
+    // Don't cache empty results: a transient Deribit error or schema drift
+    // would otherwise lock every requester into "no data" for the full TTL.
+    if (candles.length > 0) {
+      this.cache.set(key, { fetchedAt: Date.now(), candles });
+    }
     return candles;
   }
 
@@ -98,7 +102,12 @@ export class SpotCandleService {
     });
 
     const url = `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`;
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    // 10s timeout matches the pattern used in trade/block-trade runtimes.
+    // Without it, a hung Deribit connection blocks every client retry.
+    const res = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) {
       throw new Error(`Deribit klines ${res.status}`);
     }

@@ -349,7 +349,11 @@ export default function ArchitectView() {
     dataUpdatedAt: spotCandlesUpdatedAt,
     isLoading: spotCandlesLoading,
     isFetching: spotCandlesFetching,
+    isError: spotCandlesIsError,
+    error: spotCandlesError,
+    refetch: refetchSpotCandles,
   } = useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
+  const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
 
   function handleCopyUrl() {
     const url = buildShareUrl(legs, underlying);
@@ -631,6 +635,14 @@ export default function ArchitectView() {
                           refreshIntervalMs={120_000}
                           hasData={spotCandlesData != null}
                           isFetching={spotCandlesFetching}
+                          isError={spotCandlesIsError}
+                          errorMessage={
+                            spotCandlesError instanceof Error ? spotCandlesError.message : null
+                          }
+                          isEmpty={spotCandlesEmpty}
+                          onRetry={() => {
+                            void refetchSpotCandles();
+                          }}
                         />
                       )}
                       <PayoffChartV2

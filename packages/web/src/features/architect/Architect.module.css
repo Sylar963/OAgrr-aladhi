@@ -1215,6 +1215,30 @@
   animation: snapshotPulse 1.4s ease-in-out infinite;
 }
 
+.snapshotBanner[data-state="error"] {
+  background: rgba(203, 56, 85, 0.14);
+  border-color: rgba(203, 56, 85, 0.45);
+}
+
+.snapshotBanner[data-state="error"] .snapshotDot {
+  background: #CB3855;
+  box-shadow: 0 0 8px rgba(203, 56, 85, 0.9);
+}
+
+.snapshotRetry {
+  background: rgba(203, 56, 85, 0.18);
+  color: #F0A0B0;
+  border: 1px solid rgba(203, 56, 85, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.snapshotRetry:hover {
+  background: rgba(203, 56, 85, 0.28);
+}
+
 @keyframes snapshotPulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }

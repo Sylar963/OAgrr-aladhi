@@ -815,6 +815,8 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  /* allow breakeven card to wrap when listing up to 4 values */
+  min-width: 0;
 }
 
 .metricCardLabel {
@@ -831,6 +833,7 @@
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .metricCardVal[data-positive="true"] {

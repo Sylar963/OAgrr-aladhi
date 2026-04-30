@@ -38,3 +38,7 @@ references/         Official API docs and upstream reference repos
 - `.pi/skills/comment-cleanup/SKILL.md` — comment conventions
 - `.pi/skills/vite-react-ts-2026/SKILL.md` — frontend coding standard
 - `.pi/skills/vitest-2026/SKILL.md` — testing standard
+
+
+# CODE POLICY
+- do not write comments unless it is necessary

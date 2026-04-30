@@ -50,16 +50,36 @@ export default function SnapshotBanner({
     );
   }
 
-  // Error state takes precedence: if upstream failed we should never silently
-  // pretend we're still loading. Show the error and offer a manual retry so
-  // the user isn't stranded.
-  if (isError) {
+  // Hard error: latest fetch failed AND there's no cached data on screen.
+  // This is the "you have nothing to look at" case.
+  if (isError && !hasData) {
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
         <span className={styles.snapshotPrimary}>Snapshot unavailable</span>
         <span className={styles.snapshotSecondary}>
           {errorMessage ?? 'upstream candle fetch failed'}
+        </span>
+        {onRetry && (
+          <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Soft error: latest fetch failed but `keepPreviousData` left a previous
+  // successful payload on screen. The chart has usable candles, so don't
+  // shout "unavailable" — that's misleading. Surface as a stale-data warning
+  // and still offer a retry.
+  if (isError && hasData) {
+    return (
+      <div className={styles.snapshotBanner} data-state="error">
+        <span className={styles.snapshotDot} />
+        <span className={styles.snapshotPrimary}>Snapshot stale</span>
+        <span className={styles.snapshotSecondary}>
+          {errorMessage ?? 'last refresh failed — showing cached candles'}
         </span>
         {onRetry && (
           <button type="button" className={styles.snapshotRetry} onClick={onRetry}>

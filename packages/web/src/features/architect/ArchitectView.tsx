@@ -705,7 +705,7 @@ export default function ArchitectView() {
                   <span className={styles.metricCardLabel}>Breakeven</span>
                   <span className={styles.metricCardVal}>
                     {metrics && metrics.breakevens.length > 0
-                      ? metrics.breakevens.map((b) => `$${(b / 1000).toFixed(1)}k`).join(', ')
+                      ? metrics.breakevens.map((b) => fmtUsd(b)).join(', ')
                       : '–'}
                   </span>
                 </div>

@@ -290,7 +290,6 @@ export function detectStrategy(legs: Leg[]): string {
     const calls = sorted.filter((l) => l.type === 'call');
     const puts = sorted.filter((l) => l.type === 'put');
 
-    // Iron condor: buy put, sell put, sell call, buy call
     if (calls.length === 2 && puts.length === 2) {
       const buyPuts = puts.filter((l) => l.direction === 'buy');
       const sellPuts = puts.filter((l) => l.direction === 'sell');
@@ -303,7 +302,31 @@ export function detectStrategy(legs: Leg[]): string {
         buyCalls.length === 1 &&
         sellCalls.length === 1
       ) {
-        return 'Iron Condor';
+        const bp = buyPuts[0]!.strike;
+        const sp = sellPuts[0]!.strike;
+        const sc = sellCalls[0]!.strike;
+        const bc = buyCalls[0]!.strike;
+
+        // Iron Condor: shorts in middle, longs as wings, no strike overlap.
+        // Layout: long put < short put < short call < long call.
+        if (bp < sp && sp < sc && sc < bc) return 'Iron Condor';
+
+        // Iron Butterfly: short straddle at the body, long strangle wings.
+        // Layout: long put < short put == short call < long call.
+        if (bp < sp && sp === sc && sc < bc) return 'Iron Butterfly';
+
+        // Reverse Iron Condor: longs in middle, shorts as wings.
+        if (sp < bp && bp < bc && bc < sc) return 'Reverse Iron Condor';
+
+        // Reverse Iron Butterfly: long straddle body, short strangle wings.
+        if (sp < bp && bp === bc && bc < sc) return 'Reverse Iron Butterfly';
+
+        // Straddle Spread: long straddle at one strike, short straddle at the
+        // other. Two unique strikes, both options at each strike share a
+        // direction. Bullish if the long straddle is at the lower strike.
+        if (bp === bc && sp === sc && bp !== sp) {
+          return bp < sp ? 'Long Straddle Spread' : 'Short Straddle Spread';
+        }
       }
     }
   }

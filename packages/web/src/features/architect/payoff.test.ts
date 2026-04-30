@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMetrics, type Leg } from './payoff';
+import { computeMetrics, detectStrategy, type Leg } from './payoff';
 
 function leg(overrides: Partial<Leg> & Pick<Leg, 'type' | 'direction' | 'strike' | 'entryPrice'>): Leg {
   return {
@@ -138,5 +138,70 @@ describe('computeMetrics — greek partial-coverage reporting', () => {
     ];
     const m = computeMetrics(legs, 70_000);
     expect(m.greeksMissingLegs).toBe(1);
+  });
+});
+
+describe('detectStrategy', () => {
+  it('classifies a real iron condor (shorts in middle, longs as wings)', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 70_000, entryPrice: 200 }),
+      leg({ type: 'put', direction: 'sell', strike: 75_000, entryPrice: 400 }),
+      leg({ type: 'call', direction: 'sell', strike: 82_000, entryPrice: 400 }),
+      leg({ type: 'call', direction: 'buy', strike: 87_000, entryPrice: 200 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Iron Condor');
+  });
+
+  it('does NOT mislabel a long straddle spread as Iron Condor', () => {
+    // Long 2300 straddle + Short 2400 straddle. 2C+2P with 1 buy/sell each,
+    // but strike order does not match an iron condor.
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'sell', strike: 2_400, entryPrice: 221 }),
+      leg({ type: 'put', direction: 'buy', strike: 2_300, entryPrice: 160 }),
+      leg({ type: 'call', direction: 'buy', strike: 2_300, entryPrice: 115 }),
+      leg({ type: 'call', direction: 'sell', strike: 2_400, entryPrice: 78.5 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Long Straddle Spread');
+  });
+
+  it('classifies an iron butterfly (short straddle body, long strangle wings)', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 70_000, entryPrice: 200 }),
+      leg({ type: 'put', direction: 'sell', strike: 78_000, entryPrice: 800 }),
+      leg({ type: 'call', direction: 'sell', strike: 78_000, entryPrice: 800 }),
+      leg({ type: 'call', direction: 'buy', strike: 86_000, entryPrice: 200 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Iron Butterfly');
+  });
+
+  it('classifies a reverse iron condor (longs in middle, shorts as wings)', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'sell', strike: 70_000, entryPrice: 200 }),
+      leg({ type: 'put', direction: 'buy', strike: 75_000, entryPrice: 400 }),
+      leg({ type: 'call', direction: 'buy', strike: 82_000, entryPrice: 400 }),
+      leg({ type: 'call', direction: 'sell', strike: 87_000, entryPrice: 200 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Reverse Iron Condor');
+  });
+
+  it('classifies a short straddle spread (short lower straddle, long higher)', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'sell', strike: 2_300, entryPrice: 160 }),
+      leg({ type: 'call', direction: 'sell', strike: 2_300, entryPrice: 115 }),
+      leg({ type: 'put', direction: 'buy', strike: 2_400, entryPrice: 221 }),
+      leg({ type: 'call', direction: 'buy', strike: 2_400, entryPrice: 78.5 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Short Straddle Spread');
+  });
+
+  it('falls back to Custom for unrecognized 4-leg shapes', () => {
+    // 3 buys + 1 sell — not a known 4-leg pattern.
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 2_200, entryPrice: 100 }),
+      leg({ type: 'put', direction: 'buy', strike: 2_300, entryPrice: 160 }),
+      leg({ type: 'call', direction: 'buy', strike: 2_400, entryPrice: 78.5 }),
+      leg({ type: 'call', direction: 'sell', strike: 2_500, entryPrice: 40 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Custom (4 legs)');
   });
 });

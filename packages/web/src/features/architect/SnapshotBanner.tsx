@@ -36,10 +36,24 @@ export default function SnapshotBanner({
     return () => clearInterval(id);
   }, []);
 
+  // Retry in flight: previous attempt errored and a new fetch is now running.
+  // Surface this explicitly so the click registers visually instead of falling
+  // through to the generic "Loading…" state, which is indistinguishable from
+  // the error banner at a glance.
+  if (isError && isFetching) {
+    return (
+      <div className={styles.snapshotBanner} data-state="loading">
+        <span className={styles.snapshotDot} />
+        <span className={styles.snapshotPrimary}>Retrying snapshot…</span>
+        <span className={styles.snapshotSecondary}>fetching from upstream</span>
+      </div>
+    );
+  }
+
   // Error state takes precedence: if upstream failed we should never silently
   // pretend we're still loading. Show the error and offer a manual retry so
   // the user isn't stranded.
-  if (isError && !isFetching) {
+  if (isError) {
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
@@ -48,7 +62,7 @@ export default function SnapshotBanner({
           {errorMessage ?? 'upstream candle fetch failed'}
         </span>
         {onRetry && (
-          <button className={styles.snapshotRetry} onClick={onRetry}>
+          <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
             Retry
           </button>
         )}
@@ -75,7 +89,7 @@ export default function SnapshotBanner({
         <span className={styles.snapshotPrimary}>No spot history available</span>
         <span className={styles.snapshotSecondary}>upstream returned empty data</span>
         {onRetry && (
-          <button className={styles.snapshotRetry} onClick={onRetry}>
+          <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
             Retry
           </button>
         )}

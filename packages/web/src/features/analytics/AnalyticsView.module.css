@@ -646,6 +646,16 @@
   overflow: hidden;
 }
 
+.curveSpotLine {
+  position: absolute;
+  top: 0;
+  bottom: 22px;
+  width: 0;
+  border-left: 1px dashed rgba(120, 130, 135, 0.7);
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* ── OI Summary ────────────────────────────────────── */
 
 .summaryGrid {

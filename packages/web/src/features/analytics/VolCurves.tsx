@@ -2,15 +2,19 @@ import { useRef, useEffect, useMemo, useState } from 'react';
 import {
   createChart,
   AreaSeries,
-  LineSeries,
   type IChartApi,
   type ISeriesApi,
   ColorType,
 } from 'lightweight-charts';
 
-import type { EnrichedChainResponse } from '@shared/enriched';
+import type {
+  EnrichedChainResponse,
+  EnrichedSide,
+  EnrichedStrike,
+  VenueQuote,
+} from '@shared/enriched';
 import { formatExpiry } from '@lib/format';
-import { extractSmile } from '@lib/analytics/smile';
+import InfoTip from '@components/ui/InfoTip';
 import styles from './AnalyticsView.module.css';
 
 interface CurvePoint {
@@ -18,7 +22,10 @@ interface CurvePoint {
   iv: number;
 }
 
-// Hue ramp: warm (red/orange) for near-dated, cool (blue/violet) for long-dated.
+const ATM_BLEND_HALF_WIDTH = 0.025;
+const MIN_IV = 0.05;
+const MAX_IV = 5;
+
 function tenorColor(idx: number, total: number): string {
   const hue = total <= 1 ? 160 : Math.round(10 + (270 * idx) / (total - 1));
   return `hsl(${hue}, 70%, 60%)`;
@@ -28,31 +35,74 @@ function withAlpha(hslColor: string, alpha: number): string {
   return hslColor.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`);
 }
 
-function buildPoints(chain: EnrichedChainResponse, spot: number | null): CurvePoint[] {
-  if (spot != null && spot > 0) {
-    const band = spot * 0.3;
-    return extractSmile(chain.strikes, spot)
-      .points.filter((p) => p.blendedIv != null && Math.abs(p.strike - spot) <= band)
-      .map((p) => ({ strike: p.strike, iv: p.blendedIv! * 100 }))
-      .sort((a, b) => a.strike - b.strike);
+// Mirrors core/enrichment.ts → buildEnrichedSide hasMarket gate. Without this,
+// phantom quotes (no genuine bid/ask, no OI) inflate far-OTM averages and
+// produce the 100%+ IV spikes on short-dated wings.
+function hasMarket(quote: VenueQuote): boolean {
+  const hasQuotes =
+    (quote.bid != null && quote.bid > 0) || (quote.ask != null && quote.ask > 0);
+  const hasLiquidity =
+    (quote.openInterest ?? 0) > 0 ||
+    (quote.bid != null && quote.ask != null && quote.bid !== quote.ask);
+  return hasQuotes && hasLiquidity;
+}
+
+function liquidAvgIv(side: EnrichedSide): number | null {
+  let sum = 0;
+  let count = 0;
+  for (const quote of Object.values(side.venues)) {
+    if (!quote || quote.markIv == null) continue;
+    if (quote.markIv < MIN_IV || quote.markIv > MAX_IV) continue;
+    if (!hasMarket(quote)) continue;
+    sum += quote.markIv;
+    count += 1;
   }
-  const points: CurvePoint[] = [];
-  for (const strike of chain.strikes) {
-    const ivs: number[] = [];
-    for (const q of Object.values(strike.call.venues)) {
-      if (q?.markIv != null) ivs.push(q.markIv);
-    }
-    for (const q of Object.values(strike.put.venues)) {
-      if (q?.markIv != null) ivs.push(q.markIv);
-    }
-    if (ivs.length === 0) continue;
-    points.push({ strike: strike.strike, iv: (ivs.reduce((a, b) => a + b, 0) / ivs.length) * 100 });
+  return count > 0 ? sum / count : null;
+}
+
+function blendOtm(
+  strike: number,
+  ref: number,
+  callIv: number | null,
+  putIv: number | null,
+): number | null {
+  if (callIv == null && putIv == null) return null;
+  if (callIv == null) return putIv;
+  if (putIv == null) return callIv;
+  const lo = ref * (1 - ATM_BLEND_HALF_WIDTH);
+  const hi = ref * (1 + ATM_BLEND_HALF_WIDTH);
+  if (strike <= lo) return putIv;
+  if (strike >= hi) return callIv;
+  const w = (strike - lo) / (hi - lo);
+  return (1 - w) * putIv + w * callIv;
+}
+
+function buildPoints(
+  strikes: readonly EnrichedStrike[],
+  ref: number | null,
+  band: number | null,
+): CurvePoint[] {
+  const out: CurvePoint[] = [];
+  for (const s of strikes) {
+    if (band != null && ref != null && Math.abs(s.strike - ref) > band) continue;
+    const callIv = liquidAvgIv(s.call);
+    const putIv = liquidAvgIv(s.put);
+    const iv =
+      ref != null
+        ? blendOtm(s.strike, ref, callIv, putIv)
+        : callIv != null && putIv != null
+          ? (callIv + putIv) / 2
+          : (callIv ?? putIv);
+    if (iv == null) continue;
+    out.push({ strike: s.strike, iv: iv * 100 });
   }
-  return points.sort((a, b) => a.strike - b.strike);
+  return out.sort((a, b) => a.strike - b.strike);
 }
 
 interface VolCurvesProps {
   chains: EnrichedChainResponse[];
+  // Parent passes a per-expiry forward as `spotPrice`; we keep it as a fallback
+  // but prefer chain.stats.indexPriceUsd (true spot) when available.
   spotPrice: number | null;
 }
 
@@ -61,19 +111,29 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
   const chartApi = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<Map<string, ISeriesApi<'Area'>>>(new Map());
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
+  const [spotX, setSpotX] = useState<number | null>(null);
+
+  const indexSpot = useMemo(
+    () => chains.find((c) => c.stats.indexPriceUsd != null)?.stats.indexPriceUsd ?? spotPrice,
+    [chains, spotPrice],
+  );
 
   const curves = useMemo(() => {
     const sorted = chains.filter((c) => c.strikes.length > 5).sort((a, b) => a.dte - b.dte);
+    const band = indexSpot != null ? indexSpot * 0.3 : null;
     return sorted
-      .map((chain, i) => ({
-        expiry: chain.expiry,
-        label: formatExpiry(chain.expiry),
-        dte: chain.dte,
-        color: tenorColor(i, sorted.length),
-        points: buildPoints(chain, spotPrice),
-      }))
+      .map((chain, i) => {
+        const ref = chain.stats.forwardPriceUsd ?? indexSpot ?? null;
+        return {
+          expiry: chain.expiry,
+          label: formatExpiry(chain.expiry),
+          dte: chain.dte,
+          color: tenorColor(i, sorted.length),
+          points: buildPoints(chain.strikes, ref, band),
+        };
+      })
       .filter((curve) => curve.points.length > 3);
-  }, [chains, spotPrice]);
+  }, [chains, indexSpot]);
 
   const visibleCurves = useMemo(
     () => curves.filter((curve) => !hiddenExpiries.has(curve.expiry)),
@@ -131,31 +191,34 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
       seriesRefs.current.set(curve.expiry, series);
     }
 
-    if (spotPrice != null && spotPrice > 0) {
-      const spotLine = chart.addSeries(LineSeries, {
-        color: 'rgba(85, 91, 94, 0.55)',
-        lineWidth: 1,
-        lineStyle: 2,
-        lastValueVisible: false,
-        priceLineVisible: false,
-        crosshairMarkerVisible: false,
-        autoscaleInfoProvider: () => null,
-      });
-      spotLine.setData([
-        { time: spotPrice as unknown as number, value: 0 },
-        { time: spotPrice as unknown as number, value: 1000 },
-      ] as never);
-    }
-
     chart.timeScale().fitContent();
     chartApi.current = chart;
 
+    // Spot vertical reference: lightweight-charts has no native vertical line,
+    // so we render an HTML overlay positioned via timeToCoordinate. Subscribe
+    // to range/size changes so it tracks zoom and resize.
+    const updateSpot = () => {
+      const api = chartApi.current;
+      if (api == null || indexSpot == null) {
+        setSpotX(null);
+        return;
+      }
+      const x = api.timeScale().timeToCoordinate(indexSpot as never);
+      setSpotX(typeof x === 'number' && Number.isFinite(x) ? x : null);
+    };
+    updateSpot();
+    const ts = chart.timeScale();
+    ts.subscribeVisibleTimeRangeChange(updateSpot);
+    ts.subscribeSizeChange(updateSpot);
+
     return () => {
+      ts.unsubscribeVisibleTimeRangeChange(updateSpot);
+      ts.unsubscribeSizeChange(updateSpot);
       chart.remove();
       chartApi.current = null;
       seriesRefs.current.clear();
     };
-  }, [visibleCurves, spotPrice]);
+  }, [visibleCurves, indexSpot]);
 
   const handleHover = (expiry: string | null) => {
     for (const curve of visibleCurves) {
@@ -190,7 +253,56 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
 
   return (
     <div className={styles.card}>
-      <div className={styles.cardTitle}>Implied Volatility Curves</div>
+      <div className={styles.cardTitle}>
+        <span>
+          Implied Volatility Curves
+          <InfoTip label="How to read these curves" title="Reading the IV curves" align="start">
+            <p>
+              Each line is one expiry&apos;s <strong>volatility smile</strong>:
+              implied volatility (Y) vs. strike (X). Per strike we blend the
+              <strong> OTM side</strong> only — puts below spot, calls above —
+              because OTM options are what actually trade and price the wings.
+              ITM legs are excluded; their wide spreads otherwise pollute the
+              mean.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>Quote filter:</strong> a venue contributes only if it has
+              a real market (genuine bid/ask AND OI &gt; 0 or bid ≠ ask) and IV
+              sits in the 5%–500% sanity band. This is what kills the phantom
+              quotes that spike far-OTM short-dated wings.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>How to read it:</strong>
+            </p>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+              <li>
+                <strong>Dip</strong> near the dashed line = ATM IV for that
+                expiry.
+              </li>
+              <li>
+                <strong>Curvature</strong> (smile width) = relative wing
+                premium.
+              </li>
+              <li>
+                <strong>Left wing higher than right</strong> = put skew
+                (downside fear), normal in BTC/ETH.
+              </li>
+              <li>
+                <strong>Color = tenor</strong>: warm = near-dated, cool =
+                long-dated. Near above far = backwardation (event risk priced
+                in).
+              </li>
+            </ul>
+            <p style={{ marginTop: 6 }}>
+              Dashed vertical line marks current spot (
+              {indexSpot != null ? `$${(indexSpot / 1000).toFixed(1)}k` : '—'}).
+              Per-curve OTM boundary uses each expiry&apos;s own forward, so the
+              dip aligns with that tenor&apos;s ATM. Hover a legend item to
+              highlight one curve.
+            </p>
+          </InfoTip>
+        </span>
+      </div>
       <div className={styles.cardSubtitle}>OTM-blended mark IV per strike, all expiries</div>
       <div className={styles.curveLegend}>
         {curves.map((curve) => {
@@ -219,7 +331,15 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
         })}
       </div>
       <div className={styles.curveChartArea}>
-        <div className={styles.curveChartWrap} ref={chartRef} />
+        <div className={styles.curveChartWrap} ref={chartRef}>
+          {spotX != null && (
+            <div
+              className={styles.curveSpotLine}
+              style={{ left: `${spotX}px` }}
+              aria-hidden="true"
+            />
+          )}
+        </div>
       </div>
     </div>
   );

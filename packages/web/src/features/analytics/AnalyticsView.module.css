@@ -594,6 +594,15 @@
 
 /* ── Curve charts (Vol Curves + Delta Curves) ──────── */
 
+.curveHint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin: 4px 0 6px;
+  letter-spacing: 0.02em;
+}
+
 .curveLegend {
   display: flex;
   flex-wrap: wrap;

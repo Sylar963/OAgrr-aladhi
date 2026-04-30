@@ -96,7 +96,40 @@ function buildPoints(
     if (iv == null) continue;
     out.push({ strike: s.strike, iv: iv * 100 });
   }
-  return out.sort((a, b) => a.strike - b.strike);
+  out.sort((a, b) => a.strike - b.strike);
+  return ref != null ? rejectWingSpikes(out, ref) : out;
+}
+
+// Black-Scholes IV becomes ill-conditioned as option price approaches zero, so
+// far-OTM short-dated wings can return mathematically real but visually noisy
+// 100%+ IVs from a single venue. Drop a wing point only if it sits well above
+// the median of its neighbors AND it is in the wing region (>15% from spot).
+// Inside ±15% we never trim — that's where the real smile lives.
+function rejectWingSpikes(points: CurvePoint[], ref: number): CurvePoint[] {
+  if (points.length < 5) return points;
+  const result: CurvePoint[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
+    const moneyness = Math.abs(p.strike - ref) / ref;
+    if (moneyness < 0.15) {
+      result.push(p);
+      continue;
+    }
+    const lo = Math.max(0, i - 2);
+    const hi = Math.min(points.length, i + 3);
+    const neighbors: number[] = [];
+    for (let j = lo; j < hi; j++) {
+      if (j !== i) neighbors.push(points[j]!.iv);
+    }
+    if (neighbors.length === 0) {
+      result.push(p);
+      continue;
+    }
+    neighbors.sort((a, b) => a - b);
+    const median = neighbors[Math.floor(neighbors.length / 2)]!;
+    if (p.iv <= median * 2) result.push(p);
+  }
+  return result;
 }
 
 interface VolCurvesProps {
@@ -178,6 +211,8 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
         topColor: 'rgba(0,0,0,0)',
         bottomColor: 'rgba(0,0,0,0)',
         lineWidth: 2,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 2,
         priceFormat: { type: 'custom', formatter: (p: number) => `${p.toFixed(1)}%` },
         lastValueVisible: false,
         priceLineVisible: false,
@@ -207,12 +242,18 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
       setSpotX(typeof x === 'number' && Number.isFinite(x) ? x : null);
     };
     updateSpot();
+    // Layout isn't ready synchronously after createChart — defer one frame so
+    // the canvas has actually sized itself before timeToCoordinate is queried.
+    const raf = requestAnimationFrame(updateSpot);
     const ts = chart.timeScale();
     ts.subscribeVisibleTimeRangeChange(updateSpot);
+    ts.subscribeVisibleLogicalRangeChange(updateSpot);
     ts.subscribeSizeChange(updateSpot);
 
     return () => {
+      cancelAnimationFrame(raf);
       ts.unsubscribeVisibleTimeRangeChange(updateSpot);
+      ts.unsubscribeVisibleLogicalRangeChange(updateSpot);
       ts.unsubscribeSizeChange(updateSpot);
       chart.remove();
       chartApi.current = null;
@@ -294,16 +335,30 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
-              Dashed vertical line marks current spot (
-              {indexSpot != null ? `$${(indexSpot / 1000).toFixed(1)}k` : '—'}).
-              Per-curve OTM boundary uses each expiry&apos;s own forward, so the
-              dip aligns with that tenor&apos;s ATM. Hover a legend item to
-              highlight one curve.
+              <strong>Markings:</strong> dots are real per-strike OTM-blended
+              quotes (interpolated line connects them). The dashed vertical line
+              marks current spot
+              {indexSpot != null ? ` ($${(indexSpot / 1000).toFixed(1)}k)` : ''}.
+              Each curve&apos;s OTM boundary uses that expiry&apos;s own forward
+              so the dip aligns with that tenor&apos;s ATM.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>Wing trim:</strong> single-point wing IVs more than 2× the
+              local median are dropped — this kills the Black-Scholes
+              degeneracies on 0–1 DTE far-OTM strikes (option price → $0 makes
+              implied vol numerically unstable). Real skew within ±15% of spot
+              is never trimmed.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>Interaction:</strong> hover a legend chip to highlight one
+              expiry (others fade, soft fill appears below the line). Click a
+              chip to hide / show that expiry.
             </p>
           </InfoTip>
         </span>
       </div>
       <div className={styles.cardSubtitle}>OTM-blended mark IV per strike, all expiries</div>
+      <div className={styles.curveHint}>Hover an expiry to highlight · click to toggle visibility</div>
       <div className={styles.curveLegend}>
         {curves.map((curve) => {
           const active = !hiddenExpiries.has(curve.expiry);

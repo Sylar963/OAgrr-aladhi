@@ -47,17 +47,61 @@ function hasMarket(quote: VenueQuote): boolean {
   return hasQuotes && hasLiquidity;
 }
 
-function liquidAvgIv(side: EnrichedSide): number | null {
+type IvField = 'markIv' | 'bidIv' | 'askIv';
+
+function liquidAvg(side: EnrichedSide, key: IvField): number | null {
   let sum = 0;
   let count = 0;
   for (const quote of Object.values(side.venues)) {
-    if (!quote || quote.markIv == null) continue;
-    if (quote.markIv < MIN_IV || quote.markIv > MAX_IV) continue;
+    if (!quote) continue;
+    const v = quote[key];
+    if (v == null) continue;
+    if (v < MIN_IV || v > MAX_IV) continue;
     if (!hasMarket(quote)) continue;
-    sum += quote.markIv;
+    sum += v;
     count += 1;
   }
   return count > 0 ? sum / count : null;
+}
+
+function liquidAvgIv(side: EnrichedSide): number | null {
+  return liquidAvg(side, 'markIv');
+}
+
+interface AtmEntryIv {
+  atmStrike: number;
+  bidIv: number | null;
+  askIv: number | null;
+}
+
+function atmEntryIvs(
+  strikes: readonly EnrichedStrike[],
+  ref: number | null,
+): AtmEntryIv | null {
+  if (ref == null || strikes.length === 0) return null;
+  let nearest: EnrichedStrike | null = null;
+  let bestDiff = Infinity;
+  for (const s of strikes) {
+    const diff = Math.abs(s.strike - ref);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      nearest = s;
+    }
+  }
+  if (!nearest) return null;
+  const bidIv = blendOtm(
+    nearest.strike,
+    ref,
+    liquidAvg(nearest.call, 'bidIv'),
+    liquidAvg(nearest.put, 'bidIv'),
+  );
+  const askIv = blendOtm(
+    nearest.strike,
+    ref,
+    liquidAvg(nearest.call, 'askIv'),
+    liquidAvg(nearest.put, 'askIv'),
+  );
+  return { atmStrike: nearest.strike, bidIv, askIv };
 }
 
 function blendOtm(
@@ -145,6 +189,15 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
   const seriesRefs = useRef<Map<string, ISeriesApi<'Area'>>>(new Map());
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [spotX, setSpotX] = useState<number | null>(null);
+  const [hoveredExpiry, setHoveredExpiry] = useState<string | null>(null);
+  const [hoverDots, setHoverDots] = useState<{
+    color: string;
+    atmX: number;
+    bidY: number | null;
+    askY: number | null;
+    bidIvPct: number | null;
+    askIvPct: number | null;
+  } | null>(null);
 
   const indexSpot = useMemo(
     () => chains.find((c) => c.stats.indexPriceUsd != null)?.stats.indexPriceUsd ?? spotPrice,
@@ -172,6 +225,16 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
     () => curves.filter((curve) => !hiddenExpiries.has(curve.expiry)),
     [curves, hiddenExpiries],
   );
+
+  const entryByExpiry = useMemo(() => {
+    const map = new Map<string, AtmEntryIv>();
+    for (const chain of chains) {
+      const ref = chain.stats.forwardPriceUsd ?? indexSpot ?? null;
+      const entry = atmEntryIvs(chain.strikes, ref);
+      if (entry) map.set(chain.expiry, entry);
+    }
+    return map;
+  }, [chains, indexSpot]);
 
   useEffect(() => {
     const container = chartRef.current;
@@ -261,7 +324,59 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
     };
   }, [visibleCurves, indexSpot]);
 
+  useEffect(() => {
+    const api = chartApi.current;
+    if (!api || !hoveredExpiry) {
+      setHoverDots(null);
+      return;
+    }
+    const curve = visibleCurves.find((c) => c.expiry === hoveredExpiry);
+    const entry = entryByExpiry.get(hoveredExpiry);
+    const series = seriesRefs.current.get(hoveredExpiry);
+    if (!curve || !entry || !series) {
+      setHoverDots(null);
+      return;
+    }
+
+    const update = () => {
+      const x = api.timeScale().timeToCoordinate(entry.atmStrike as never);
+      if (typeof x !== 'number' || !Number.isFinite(x)) {
+        setHoverDots(null);
+        return;
+      }
+      const bidPct = entry.bidIv != null ? entry.bidIv * 100 : null;
+      const askPct = entry.askIv != null ? entry.askIv * 100 : null;
+      const bidYRaw = bidPct != null ? series.priceToCoordinate(bidPct) : null;
+      const askYRaw = askPct != null ? series.priceToCoordinate(askPct) : null;
+      setHoverDots({
+        color: curve.color,
+        atmX: x,
+        bidY:
+          typeof bidYRaw === 'number' && Number.isFinite(bidYRaw) ? bidYRaw : null,
+        askY:
+          typeof askYRaw === 'number' && Number.isFinite(askYRaw) ? askYRaw : null,
+        bidIvPct: bidPct,
+        askIvPct: askPct,
+      });
+    };
+
+    update();
+    const raf = requestAnimationFrame(update);
+    const ts = api.timeScale();
+    ts.subscribeVisibleTimeRangeChange(update);
+    ts.subscribeVisibleLogicalRangeChange(update);
+    ts.subscribeSizeChange(update);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ts.unsubscribeVisibleTimeRangeChange(update);
+      ts.unsubscribeVisibleLogicalRangeChange(update);
+      ts.unsubscribeSizeChange(update);
+    };
+  }, [hoveredExpiry, entryByExpiry, visibleCurves]);
+
   const handleHover = (expiry: string | null) => {
+    setHoveredExpiry(expiry);
     for (const curve of visibleCurves) {
       const series = seriesRefs.current.get(curve.expiry);
       if (!series) continue;
@@ -351,8 +466,12 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
             </p>
             <p style={{ marginTop: 6 }}>
               <strong>Interaction:</strong> hover a legend chip to highlight one
-              expiry (others fade, soft fill appears below the line). Click a
-              chip to hide / show that expiry.
+              expiry (others fade, soft fill appears below the line). Two dots
+              also appear at that expiry&apos;s ATM strike — <strong>hollow</strong>{' '}
+              = OTM-blended <strong>bid IV</strong>, <strong>filled</strong> ={' '}
+              <strong>ask IV</strong>. They refresh live with each WS snapshot,
+              so you can watch your real entry IV move. Click a chip to hide /
+              show that expiry.
             </p>
           </InfoTip>
         </span>
@@ -392,6 +511,31 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
               className={styles.curveSpotLine}
               style={{ left: `${spotX}px` }}
               aria-hidden="true"
+            />
+          )}
+          {hoverDots != null && hoverDots.bidY != null && hoverDots.bidIvPct != null && (
+            <div
+              className={styles.curveEntryDotBid}
+              style={{
+                left: `${hoverDots.atmX}px`,
+                top: `${hoverDots.bidY}px`,
+                borderColor: hoverDots.color,
+              }}
+              aria-hidden="true"
+              title={`ATM bid IV ${hoverDots.bidIvPct.toFixed(1)}%`}
+            />
+          )}
+          {hoverDots != null && hoverDots.askY != null && hoverDots.askIvPct != null && (
+            <div
+              className={styles.curveEntryDotAsk}
+              style={{
+                left: `${hoverDots.atmX}px`,
+                top: `${hoverDots.askY}px`,
+                background: hoverDots.color,
+                borderColor: hoverDots.color,
+              }}
+              aria-hidden="true"
+              title={`ATM ask IV ${hoverDots.askIvPct.toFixed(1)}%`}
             />
           )}
         </div>

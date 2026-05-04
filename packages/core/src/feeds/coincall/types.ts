@@ -67,29 +67,32 @@ export type CoincallPublicConfig = z.infer<typeof CoincallPublicConfigSchema>;
 // Envelope: { dt: 3, c: 20, d: { ... fields below ... } }
 // bsInfo does NOT include bid/ask — that lives in tOption.
 
+// Coincall changed their API — numeric fields now arrive as strings.
+// Same pattern as NumericLike in config.
+
 export const CoincallBsInfoDataSchema = z.object({
   s: z.string(),
-  mp: z.number().optional(),
-  lp: z.number().optional(),
-  ip: z.number().optional(),
-  iv: z.number().optional(),
-  delta: z.number().optional(),
-  gamma: z.number().optional(),
-  theta: z.number().optional(),
-  vega: z.number().optional(),
-  up: z.number().optional(),
-  oi: z.number().optional(),
-  v: z.number().optional(),
-  v24: z.number().optional(),
-  uv: z.number().optional(),
-  uv24: z.number().optional(),
-  h: z.number().optional(),
-  l: z.number().optional(),
-  cp: z.number().optional(),
-  cr: z.number().optional(),
-  pr0: z.number().optional(),
-  rt: z.number().optional(),
-  ts: z.number(),
+  mp: NumericLike.optional(),
+  lp: NumericLike.optional(),
+  ip: NumericLike.optional(),
+  iv: NumericLike.optional(),
+  delta: NumericLike.optional(),
+  gamma: NumericLike.optional(),
+  theta: NumericLike.optional(),
+  vega: NumericLike.optional(),
+  up: NumericLike.optional(),
+  oi: NumericLike.optional(),
+  v: NumericLike.optional(),
+  v24: NumericLike.optional(),
+  uv: NumericLike.optional(),
+  uv24: NumericLike.optional(),
+  h: NumericLike.optional(),
+  l: NumericLike.optional(),
+  cp: NumericLike.optional(),
+  cr: NumericLike.optional(),
+  pr0: NumericLike.optional(),
+  rt: NumericLike.optional(),
+  ts: NumericLike,
 });
 export type CoincallBsInfoData = z.infer<typeof CoincallBsInfoDataSchema>;
 

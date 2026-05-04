@@ -1,3 +1,4 @@
+import { feedLogger } from '../../utils/logger.js';
 import {
   CoincallBsInfoMessageSchema,
   CoincallHeartbeatAckSchema,
@@ -13,6 +14,8 @@ import {
   type CoincallPublicConfig,
   type CoincallTOptionMessage,
 } from './types.js';
+
+const log = feedLogger('coincall');
 
 export function parseCoincallInstruments(input: unknown): CoincallInstrumentsResponse | null {
   const parsed = CoincallInstrumentsResponseSchema.safeParse(input);
@@ -31,7 +34,13 @@ export function parseCoincallTime(input: unknown): number | null {
 
 export function parseCoincallBsInfoMessage(input: unknown): CoincallBsInfoMessage | null {
   const parsed = CoincallBsInfoMessageSchema.safeParse(input);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+
+  if (parsed.error) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    log.warn({ zodError: issues }, 'Coincall bsInfo Zod validation failed');
+  }
+  return null;
 }
 
 export function parseCoincallTOptionMessage(input: unknown): CoincallTOptionMessage | null {

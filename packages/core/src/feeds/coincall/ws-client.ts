@@ -48,6 +48,33 @@ import type { CoincallOptionConfigEntry } from './types.js';
 
 const log = feedLogger('coincall');
 
+const ERROR_LOG_TTL_MS = 60_000;
+const MAX_UNIQUE_ERRORS = 100;
+
+interface ErrorLogEntry {
+  key: string;
+  lastLogged: number;
+}
+
+const errorLogCache: ErrorLogEntry[] = [];
+
+function shouldLogValidationError(key: string): boolean {
+  const now = Date.now();
+  const existing = errorLogCache.find((e) => e.key === key);
+  if (existing) {
+    if (now - existing.lastLogged > ERROR_LOG_TTL_MS) {
+      existing.lastLogged = now;
+      return true;
+    }
+    return false;
+  }
+  if (errorLogCache.length >= MAX_UNIQUE_ERRORS) {
+    errorLogCache.shift();
+  }
+  errorLogCache.push({ key, lastLogged: now });
+  return true;
+}
+
 // Coincall closes idle connections after 30s — heartbeat well within.
 const COINCALL_PING_INTERVAL_MS = 15_000;
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -418,7 +445,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 3) {
       const msg = parseCoincallBsInfoMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
+        const errKey = `bsInfo:${JSON.stringify(payloadShape(envelope['d']))}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
+        }
         return;
       }
       const inst = this.instrumentMap.get(msg.d.s);
@@ -432,7 +462,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 4) {
       const msg = parseCoincallTOptionMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
+        const errKey = `tOption:${JSON.stringify(payloadShape(envelope['d']))}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
+        }
         return;
       }
       const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
@@ -459,7 +492,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 5) {
       const msg = parseCoincallOrderBookMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall orderBook validation failed');
+        const errKey = `orderBook:${JSON.stringify(payloadShape(envelope['d']))}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall orderBook validation failed');
+        }
         return;
       }
       const inst = this.instrumentMap.get(msg.d.s);

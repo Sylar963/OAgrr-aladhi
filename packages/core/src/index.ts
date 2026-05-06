@@ -120,6 +120,21 @@ export {
 } from './services/spot-candles.js';
 export { realizedVol } from './services/realized-vol.js';
 export {
+  backward,
+  fitGaussianHmm,
+  forward,
+  gaussianLogPdf,
+  logSumExp,
+  smoothedPosteriors,
+  viterbi,
+  type BackwardResult,
+  type FitOptions,
+  type FitResult,
+  type ForwardResult,
+  type HmmModel,
+  type ViterbiResult,
+} from './services/regime-hmm.js';
+export {
   fitSvi,
   sviIv,
   sviTotalVariance,

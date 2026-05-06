@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fitSvi, sviTotalVariance, sviIv, type SviParams } from './svi';
+import { fitSvi, isButterflyArbFree, sviTotalVariance, sviIv, type SviParams } from './svi';
 
 const TRUTH: SviParams = { a: 0.04, b: 0.4, rho: -0.3, m: 0.02, sigma: 0.1 };
 
@@ -21,6 +21,12 @@ describe('svi (web mirror)', () => {
     for (const k of ks) {
       expect(sviTotalVariance(fit!, k)).toBeCloseTo(sviTotalVariance(TRUTH, k), 4);
     }
+  });
+
+  it('isButterflyArbFree accepts well-behaved params and rejects density-violating ones', () => {
+    expect(isButterflyArbFree(TRUTH, -0.5, 0.5)).toBe(true);
+    const violating: SviParams = { a: 0.001, b: 2.0, rho: -0.99, m: 0, sigma: 0.01 };
+    expect(isButterflyArbFree(violating, -0.2, 0.2)).toBe(false);
   });
 
   it('returns null for fewer than 5 points or invalid T', () => {

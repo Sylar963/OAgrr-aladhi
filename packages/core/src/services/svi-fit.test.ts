@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitSvi, sviTotalVariance, sviIv, type SviParams } from './svi-fit.js';
+import { fitSvi, isButterflyArbFree, sviTotalVariance, sviIv, type SviParams } from './svi-fit.js';
 
 const TRUTH: SviParams = { a: 0.04, b: 0.4, rho: -0.3, m: 0.02, sigma: 0.1 };
 
@@ -79,12 +79,54 @@ describe('fitSvi — arbitrage-free constraints', () => {
 
   it('handles a strongly skewed slice (ρ near −0.7) without crashing', () => {
     const T = 14 / 365;
-    const skewed: SviParams = { a: 0.05, b: 0.6, rho: -0.7, m: -0.05, sigma: 0.08 };
+    // Skewed but butterfly-arb-free across the calibrated range — gentler b
+    // than a strict-recovery scenario so g(k) stays positive at the wings.
+    const skewed: SviParams = { a: 0.06, b: 0.3, rho: -0.7, m: -0.05, sigma: 0.1 };
     const ks = [-0.4, -0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2, 0.4];
     const points = generateSlice(skewed, T, ks);
     const fit = fitSvi(points, T);
     expect(fit).not.toBeNull();
     expect(Math.abs(fit!.rho)).toBeLessThan(1);
+  });
+});
+
+describe('isButterflyArbFree — Roger Lee g(k) ≥ 0 check', () => {
+  it('accepts a well-behaved SVI slice from realistic parameters', () => {
+    expect(isButterflyArbFree(TRUTH, -0.5, 0.5)).toBe(true);
+  });
+
+  it('rejects parameters that drive g(k) < 0 (large |ρ|, small a, large b)', () => {
+    // wp²/(4w) dominates → density turns negative even though Martini–Mingone
+    // wing condition (a + b·σ·√(1−ρ²) ≥ 0) is satisfied.
+    const violating: SviParams = { a: 0.001, b: 2.0, rho: -0.99, m: 0, sigma: 0.01 };
+    expect(isButterflyArbFree(violating, -0.2, 0.2)).toBe(false);
+  });
+
+  it('rejects parameters where total variance crosses zero in the test range', () => {
+    const negativeWing: SviParams = { a: -0.05, b: 0.1, rho: 0, m: 0, sigma: 0.05 };
+    expect(isButterflyArbFree(negativeWing, -0.5, 0.5)).toBe(false);
+  });
+});
+
+describe('fitSvi — butterfly arbitrage', () => {
+  it('returns null when the calibrated surface fails the g(k) ≥ 0 check', () => {
+    // Pathological synthetic IVs that would fit a butterfly-violating surface:
+    // a sharp V-shape with collapsing variance near m forces b to be large
+    // relative to a/σ, pushing g(k) negative.
+    const T = 14 / 365;
+    const points = [
+      { k: -0.4, iv: 1.5 },
+      { k: -0.2, iv: 1.0 },
+      { k: -0.05, iv: 0.05 },
+      { k: 0, iv: 0.04 },
+      { k: 0.05, iv: 0.05 },
+      { k: 0.2, iv: 1.0 },
+      { k: 0.4, iv: 1.5 },
+    ];
+    const fit = fitSvi(points, T);
+    if (fit !== null) {
+      expect(isButterflyArbFree(fit, -0.4, 0.4)).toBe(true);
+    }
   });
 });
 

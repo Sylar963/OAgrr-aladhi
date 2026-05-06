@@ -374,6 +374,22 @@ function blendedSideIv(
   return count > 0 ? sum / count : null;
 }
 
+// Restricts a venues map to the `allowed` set. Returns the original map when
+// no filter was provided so the surface signal still blends across everything
+// the chain has when the user hasn't narrowed venues.
+function filterVenues(
+  venues: Partial<Record<VenueId, VenueQuote>>,
+  allowed: readonly VenueId[],
+): Partial<Record<VenueId, VenueQuote>> {
+  if (allowed.length === 0) return venues;
+  const out: Partial<Record<VenueId, VenueQuote>> = {};
+  for (const v of allowed) {
+    const q = venues[v];
+    if (q) out[v] = q;
+  }
+  return out;
+}
+
 function computeSurfaceSignal(
   kind: SpreadKind,
   shortStrike: number,
@@ -385,11 +401,12 @@ function computeSurfaceSignal(
   r: number,
   ivAtStrike: ((strike: number) => number | null) | undefined,
   realWorld: RealWorldParams | undefined,
+  venuesFilter: readonly VenueId[],
 ): SpreadSignal | null {
   if (!shortSide || !longSide) return null;
   const right = rightForKind(kind);
-  const shortVenues = sideForKind(shortSide, kind).venues;
-  const longVenues = sideForKind(longSide, kind).venues;
+  const shortVenues = filterVenues(sideForKind(shortSide, kind).venues, venuesFilter);
+  const longVenues = filterVenues(sideForKind(longSide, kind).venues, venuesFilter);
 
   const shortBidIv =
     blendedSideIv(shortVenues, (q) => q.bidIv) ?? blendedSideIv(shortVenues, (q) => q.markIv);
@@ -442,6 +459,7 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
     r,
     ivAtStrike,
     realWorld,
+    venueList,
   );
 
   return {

@@ -31,6 +31,30 @@ const RHO_CLAMP = 0.999;
 const PENALTY_WEIGHT = 1e6;
 const NM_MAX_ITER = 250;
 const NM_TOL = 1e-12;
+const BUTTERFLY_SAMPLES = 64;
+const BUTTERFLY_TOL = 1e-9;
+
+// Roger Lee density-positivity check: g(k) ≥ 0 across the calibrated range.
+// Necessary parameter constraints (b≥0, |ρ|<1, σ>0, a + b·σ·√(1−ρ²) ≥ 0) are
+// not sufficient — this evaluates the actual implied density and rejects
+// any sample where it goes negative.
+export function isButterflyArbFree(params: SviParams, kMin: number, kMax: number): boolean {
+  if (!Number.isFinite(kMin) || !Number.isFinite(kMax) || kMax < kMin) return false;
+  for (let i = 0; i <= BUTTERFLY_SAMPLES; i++) {
+    const k = kMin + ((kMax - kMin) * i) / BUTTERFLY_SAMPLES;
+    const z = k - params.m;
+    const y = Math.sqrt(z * z + params.sigma * params.sigma);
+    const w = params.a + params.b * (params.rho * z + y);
+    if (w <= 0) return false;
+    const wp = params.b * (params.rho + z / y);
+    const wpp = (params.b * params.sigma * params.sigma) / (y * y * y);
+    const term1 = (1 - (k * wp) / (2 * w)) ** 2;
+    const term2 = ((wp * wp) / 4) * (1 / w + 1 / 4);
+    const term3 = wpp / 2;
+    if (term1 - term2 + term3 < -BUTTERFLY_TOL) return false;
+  }
+  return true;
+}
 
 export function fitSvi(points: readonly SviFitPoint[], T: number): SviParams | null {
   if (T <= 0 || points.length < 5) return null;
@@ -62,7 +86,9 @@ export function fitSvi(points: readonly SviFitPoint[], T: number): SviParams | n
   const b = q;
 
   if (a + b * sigma * Math.sqrt(1 - rho * rho) < -1e-6) return null;
-  return { a, b, rho, m, sigma };
+  const fit: SviParams = { a, b, rho, m, sigma };
+  if (!isButterflyArbFree(fit, lo, hi)) return null;
+  return fit;
 }
 
 interface InnerResult {

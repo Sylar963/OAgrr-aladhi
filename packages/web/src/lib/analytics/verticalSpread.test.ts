@@ -169,6 +169,34 @@ describe('routeVerticalSpread — call credit spread', () => {
     expect(result.short.candidates.map((c) => c.venue)).toEqual([venueB]);
     expect(result.long.candidates.map((c) => c.venue)).toEqual([venueB]);
   });
+
+  it('surfaceSignal blends only across the venues filter (not all venues)', () => {
+    // With both venues, the blended short bid IV is (0.60+0.55)/2 = 0.575,
+    // giving a higher surface short premium than venueB alone (0.55).
+    const both = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike,
+      longStrike,
+      strikes,
+      spot,
+      T,
+      r,
+    });
+    const onlyB = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike,
+      longStrike,
+      strikes,
+      spot,
+      T,
+      r,
+      venues: [venueB],
+    });
+    expect(both.surfaceSignal).not.toBeNull();
+    expect(onlyB.surfaceSignal).not.toBeNull();
+    // Surface signals should differ — the filtered run sees only OKX prices.
+    expect(onlyB.surfaceSignal!.netCredit).not.toBeCloseTo(both.surfaceSignal!.netCredit, 3);
+  });
 });
 
 describe('routeVerticalSpread — put credit spread', () => {
@@ -462,61 +490,68 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   });
 
   it('gate AVOIDs a low-ROC trade even with positive credit and high pop', () => {
-    // Hand-crafted: tight strikes, large width — EV is positive but ROC is tiny.
-    // With pop=0.99 and credit=$0.05 on width=$10 (loss=$9.95), EV = $0.0505,
-    // ROC = 0.51% — well below the 10% gate.
+    // Put-credit spread: short 85 / long 75 with spot=100. Breakeven sits well
+    // below spot, so a low realized vol drives POP near 1.
+    // Credit=$0.05 on width=$10 → maxLoss=$9.95.
+    // EV = 0.99·0.05 − 0.01·9.95 ≈ +$0.0505, ROC ≈ 0.51% — well under the 10% gate.
     const tinyCreditStrikes: EnrichedStrike[] = [
       {
-        strike: 95,
-        call: {
+        strike: 75,
+        call: { bestIv: null, bestVenue: null, venues: {} },
+        put: {
           bestIv: null,
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 5.05,
-              ask: 5.15,
-              bidIv: 0.55,
-              askIv: 0.56,
-              markIv: 0.55,
+              bid: 0.20,
+              ask: 0.25,
+              bidIv: 0.40,
+              askIv: 0.41,
+              markIv: 0.40,
               estimatedFees: { maker: 0, taker: 0 },
             }),
           },
         },
-        put: { bestIv: null, bestVenue: null, venues: {} },
       },
       {
-        strike: 105,
-        call: {
+        strike: 85,
+        call: { bestIv: null, bestVenue: null, venues: {} },
+        put: {
           bestIv: null,
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 4.95,
-              ask: 5.0,
-              bidIv: 0.55,
-              askIv: 0.56,
-              markIv: 0.55,
+              bid: 0.30,
+              ask: 0.35,
+              bidIv: 0.40,
+              askIv: 0.41,
+              markIv: 0.40,
               estimatedFees: { maker: 0, taker: 0 },
             }),
           },
         },
-        put: { bestIv: null, bestVenue: null, venues: {} },
       },
     ];
     const result = routeVerticalSpread({
-      kind: 'call-credit',
-      shortStrike: 95,
-      longStrike: 105,
+      kind: 'put-credit',
+      shortStrike: 85,
+      longStrike: 75,
       strikes: tinyCreditStrikes,
       spot,
       T,
       r,
+      // Drive POP deterministically via the real-world measure: low σ_RV +
+      // breakeven well below spot ⇒ probability of profit near 1.
+      realWorld: { drift: 0, sigmaRV: 0.10 },
     });
     const sig = result.combinedSignal!;
+    expect(sig.probabilityMethod).toBe('real-world');
+    expect(sig.successProbability).toBeGreaterThan(0.95);
     expect(sig.netCredit).toBeGreaterThan(0);
     expect(sig.netCredit).toBeLessThan(0.5);
-    expect(sig.signal).toBe('AVOID');
+    expect(sig.expectedValue).toBeGreaterThan(0);
     expect(sig.roc).toBeLessThan(0.1);
+    expect(sig.signal).toBe('AVOID');
   });
 });
 

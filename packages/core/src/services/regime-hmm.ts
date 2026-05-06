@@ -18,6 +18,10 @@ export interface ForwardResult {
   readonly logAlpha: readonly (readonly number[])[];
 }
 
+export interface BackwardResult {
+  readonly logBeta: readonly (readonly number[])[];
+}
+
 // Diagonal multivariate Gaussian log-pdf.
 //   log p(x | μ, diag(σ²)) = -0.5 · Σ_i [ log(2π·σ²_i) + (x_i − μ_i)² / σ²_i ]
 // Diagonal Σ is the standard choice for HMM regime models — full Σ adds
@@ -89,4 +93,31 @@ export function forward(model: HmmModel, obs: readonly (readonly number[])[]): F
   }
 
   return { logLikelihood: logSumExp(logAlpha[T - 1]!), logAlpha };
+}
+
+// Log-domain backward algorithm.
+//   β_T(i) = 0
+//   β_t(i) = logSumExp_j [ log A_{i,j} + log b_j(o_{t+1}) + β_{t+1}(j) ]
+export function backward(model: HmmModel, obs: readonly (readonly number[])[]): BackwardResult {
+  if (obs.length === 0) {
+    throw new Error('backward: observations must be non-empty');
+  }
+  const N = model.nStates;
+  const T = obs.length;
+  const logA: number[][] = model.A.map((row) => row.map((p) => Math.log(p)));
+
+  const logBeta: number[][] = Array.from({ length: T }, () => new Array<number>(N).fill(0));
+
+  const buf = new Array<number>(N);
+  for (let t = T - 2; t >= 0; t--) {
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const emit = gaussianLogPdf(obs[t + 1]!, model.mu[j]!, model.sigma2[j]!);
+        buf[j] = logA[i]![j]! + emit + logBeta[t + 1]![j]!;
+      }
+      logBeta[t]![i] = logSumExp(buf);
+    }
+  }
+
+  return { logBeta };
 }

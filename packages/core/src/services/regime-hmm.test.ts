@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  backward,
   forward,
   gaussianLogPdf,
   logSumExp,
@@ -178,5 +179,36 @@ describe('forward — log-domain forward algorithm', () => {
       sigma2: [[1]],
     };
     expect(() => forward(model, [])).toThrow();
+  });
+});
+
+describe('backward — log-domain backward algorithm', () => {
+  const model: HmmModel = {
+    nStates: 3,
+    pi: [0.3, 0.4, 0.3],
+    A: [
+      [0.8, 0.15, 0.05],
+      [0.1, 0.7, 0.2],
+      [0.05, 0.25, 0.7],
+    ],
+    mu: [[0], [2], [-1]],
+    sigma2: [[1], [0.8], [1.2]],
+  };
+  const obs = [[0.1], [1.8], [-0.9], [0.3], [2.1]];
+
+  it('β_T initializes to log 1 = 0 for every state', () => {
+    const result = backward(model, obs);
+    for (const x of result.logBeta[result.logBeta.length - 1]!) {
+      expect(x).toBe(0);
+    }
+  });
+
+  it('forward-backward consistency: logSumExp_i (α_t + β_t) = log P(O) at every t', () => {
+    const fwd = forward(model, obs);
+    const bwd = backward(model, obs);
+    for (let t = 0; t < obs.length; t++) {
+      const merged = fwd.logAlpha[t]!.map((a, i) => a + bwd.logBeta[t]![i]!);
+      expect(logSumExp(merged)).toBeCloseTo(fwd.logLikelihood, 9);
+    }
   });
 });

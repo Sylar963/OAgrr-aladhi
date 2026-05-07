@@ -196,7 +196,7 @@ function useMultiDeltaTermStructureChart(
         priceFormat: IV_PRICE_FORMAT,
         lastValueVisible: false,
         priceLineVisible: false,
-        visible: enabledRef.current.size === 0 || enabledRef.current.has(d),
+        visible: enabledRef.current.has(d),
       });
       series.setData(seriesData);
       seriesByDelta.set(d, series);
@@ -214,7 +214,7 @@ function useMultiDeltaTermStructureChart(
       const values: Array<{ delta: number; iv: number }> = [];
       const enabledNow = enabledRef.current;
       for (const [delta, series] of seriesByDeltaRef.current) {
-        if (enabledNow.size > 0 && !enabledNow.has(delta)) continue;
+        if (!enabledNow.has(delta)) continue;
         const datum = param.seriesData.get(series) as { value?: number } | undefined;
         if (datum && typeof datum.value === 'number') {
           values.push({ delta, iv: datum.value });
@@ -237,9 +237,8 @@ function useMultiDeltaTermStructureChart(
   useEffect(() => {
     const seriesByDelta = seriesByDeltaRef.current;
     if (seriesByDelta.size === 0) return;
-    const allOff = enabledDeltas.size === 0;
     for (const [delta, series] of seriesByDelta) {
-      series.applyOptions({ visible: allOff || enabledDeltas.has(delta) });
+      series.applyOptions({ visible: enabledDeltas.has(delta) });
     }
   }, [enabledDeltas]);
 }
@@ -301,11 +300,17 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
     setSelectedVenue(venuesWithFine[0] ?? null);
   }, [mode, selectedVenue, venuesWithFine]);
 
-  const { rows: multiRows, deltas: multiDeltas } = pickRows(data, selectedVenue, tenorMode);
+  const { rows: multiRows, deltas: multiDeltas } = useMemo(
+    () => pickRows(data, selectedVenue, tenorMode),
+    [data, selectedVenue, tenorMode],
+  );
 
+  const presetAppliedRef = useRef(false);
   useEffect(() => {
     if (multiDeltas.length === 0) return;
-    setEnabledDeltas((prev) => (prev.size === 0 ? preset25Deltas(multiDeltas) : prev));
+    if (presetAppliedRef.current) return;
+    presetAppliedRef.current = true;
+    setEnabledDeltas(preset25Deltas(multiDeltas));
   }, [multiDeltas]);
 
   useTermStructureChart(

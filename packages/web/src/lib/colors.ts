@@ -80,6 +80,30 @@ export function venueColor(venueId: string): string {
   return VENUE_COLORS[venueId] ?? '#8b909e';
 }
 
+// ── Delta-bucket color ramp ───────────────────────────────────────────────
+// Cool (puts) → bright (ATM) → warm (calls). Used to color the multi-delta
+// term-structure curves so OTM puts and OTM calls visually separate.
+
+export function deltaColor(delta: number): string {
+  if (Math.abs(delta - 0.5) < 1e-6) return '#FFFFFF';
+  if (delta < 0.5) {
+    const t = delta / 0.5;
+    const hue = 210 - 30 * t;
+    const light = 40 + 30 * t;
+    return `hsl(${hue}, 70%, ${light}%)`;
+  }
+  const t = (delta - 0.5) / 0.5;
+  const hue = 50 - 50 * t;
+  const light = 65 - 25 * t;
+  return `hsl(${hue}, 75%, ${light}%)`;
+}
+
+export function deltaLabel(delta: number): string {
+  if (Math.abs(delta - 0.5) < 1e-6) return 'ATM';
+  if (delta < 0.5) return `${Math.round(delta * 100)}Δ Put`;
+  return `${Math.round((1 - delta) * 100)}Δ Call`;
+}
+
 // ── IV surface heatmap color ───────────────────────────────────────────────
 // Maps a value in [0,1] range (normalized between min and max IV) to a color.
 // 0 = green (low IV), 0.5 = amber, 1 = red (high IV)

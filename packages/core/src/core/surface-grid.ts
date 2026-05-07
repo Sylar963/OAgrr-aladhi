@@ -23,6 +23,8 @@ export interface SurfaceGridEntry {
   surfaceRow: IvSurfaceRow;
   surfaceFineRow: IvSurfaceFineRow;
   surfaceFineSmoothedRow: IvSurfaceFineRow;
+  venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>>;
+  venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>>;
   atmStrike: EnrichedStrike | null;
   strikes: EnrichedStrike[];
   // Per-expiry basis as a percentage of spot. Surfaced here so consumers that
@@ -34,6 +36,10 @@ export interface SurfaceGridEntry {
 export interface BuildSurfaceGridOptions {
   underlying: string;
   venues?: VenueId[];
+  // Default false — per-venue surfaces add ~5× SVI fits per expiry. Only the
+  // /api/surface route needs them; IvHistoryService and RegimeService consume
+  // the cross-venue rows only and should leave this off.
+  includeVenueSurfaces?: boolean;
 }
 
 /**
@@ -46,6 +52,7 @@ export interface BuildSurfaceGridOptions {
 export async function buildIvSurfaceGrid({
   underlying,
   venues,
+  includeVenueSurfaces = false,
 }: BuildSurfaceGridOptions): Promise<SurfaceGridEntry[]> {
   const requestedVenues: VenueId[] = venues ?? getAllAdapters().map((a) => a.venue);
 
@@ -92,6 +99,24 @@ export async function buildIvSurfaceGrid({
       ULTRA_FINE_DELTA_GRID,
     );
 
+    const venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+    const venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+    if (includeVenueSurfaces) {
+      for (const v of requestedVenues) {
+        const fine = computeIvSurfaceFine(expiry, dte, enriched.strikes, v);
+        if (fine.ivs.every((iv) => iv == null)) continue;
+        venueSurfaceFineRow[v] = fine;
+        venueSurfaceFineSmoothedRow[v] = smoothFineSurfaceRow(
+          fine,
+          enriched.strikes,
+          refPrice,
+          T,
+          ULTRA_FINE_DELTA_GRID,
+          v,
+        );
+      }
+    }
+
     let atmStrike: EnrichedStrike | null = null;
     if (refPrice != null && enriched.strikes.length > 0) {
       let bestDist = Infinity;
@@ -110,6 +135,8 @@ export async function buildIvSurfaceGrid({
       surfaceRow,
       surfaceFineRow,
       surfaceFineSmoothedRow,
+      venueSurfaceFineRow,
+      venueSurfaceFineSmoothedRow,
       atmStrike,
       strikes: enriched.strikes,
       basisPct: stats.basisPct,

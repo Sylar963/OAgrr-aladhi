@@ -636,6 +636,7 @@ export function computeIvSurfaceFine(
   expiry: string,
   dte: number,
   strikes: EnrichedStrike[],
+  venueId?: VenueId,
 ): IvSurfaceFineRow {
   const buckets = new Map<number, { sum: number; count: number }>();
 
@@ -646,16 +647,21 @@ export function computeIvSurfaceFine(
     else buckets.set(rounded, { sum: iv, count: 1 });
   };
 
+  const ivOf = (side: EnrichedSide): number | null =>
+    venueId ? side.venues[venueId]?.markIv ?? null : averageSideIv(side);
+  const deltaOf = (side: EnrichedSide): number | null =>
+    venueId ? side.venues[venueId]?.delta ?? null : averageSideDelta(side);
+
   for (const s of strikes) {
-    const putIv = averageSideIv(s.put);
-    const putDelta = averageSideDelta(s.put);
+    const putIv = ivOf(s.put);
+    const putDelta = deltaOf(s.put);
     if (isValidIv(putIv) && putDelta != null) {
       const key = deltaToFineKey(putDelta, 'put');
       if (key != null) add(key, putIv);
     }
 
-    const callIv = averageSideIv(s.call);
-    const callDelta = averageSideDelta(s.call);
+    const callIv = ivOf(s.call);
+    const callDelta = deltaOf(s.call);
     if (isValidIv(callIv) && callDelta != null) {
       const key = deltaToFineKey(callDelta, 'call');
       if (key != null) add(key, callIv);

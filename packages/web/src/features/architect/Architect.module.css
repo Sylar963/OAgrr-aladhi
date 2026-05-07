@@ -641,7 +641,7 @@
 
 .dragHint {
   position: absolute;
-  bottom: 6px;
+  top: 6px;
   right: 10px;
   font-family: var(--font-mono);
   font-size: 9px;

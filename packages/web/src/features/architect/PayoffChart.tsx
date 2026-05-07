@@ -218,7 +218,8 @@ export default function PayoffChart({
 
       // ── Draggable leg handles ───────────────────────────────
       const strikeSpanK = (layout.maxX - layout.minX) / 1000;
-      const strikeDecimals = strikeSpanK >= 10 ? 1 : strikeSpanK >= 2 ? 2 : 3;
+      const strikeDecimals =
+        strikeSpanK >= 10 ? 1 : strikeSpanK >= 2 ? 2 : strikeSpanK >= 0.5 ? 3 : 4;
       const uniqueStrikes = [...new Set(lg.map((l) => l.strike))];
       for (const strike of uniqueStrikes) {
         if (strike < layout.minX || strike > layout.maxX) continue;
@@ -296,9 +297,9 @@ export default function PayoffChart({
       ctx.fillStyle = '#444';
       ctx.font = "10px 'IBM Plex Mono', monospace";
       ctx.textAlign = 'center';
-      const xTicks = Math.min(4, Math.floor(layout.cw / 100));
+      const xTicks = Math.min(5, Math.floor(layout.cw / 100));
       const spanK = (layout.maxX - layout.minX) / 1000;
-      const xDecimals = spanK >= 10 ? 0 : spanK >= 2 ? 1 : 2;
+      const xDecimals = spanK >= 10 ? 0 : spanK >= 2 ? 1 : spanK >= 0.5 ? 2 : 3;
       for (let i = 0; i <= xTicks; i++) {
         const price = layout.minX + (i / xTicks) * (layout.maxX - layout.minX);
         ctx.fillText(`$${(price / 1000).toFixed(xDecimals)}k`, toX(price), h - 6);

@@ -39,7 +39,11 @@ export async function surfaceRoute(app: FastifyInstance) {
       ? (venuesParam.split(',').filter((v) => VENUE_IDS.includes(v as VenueId)) as VenueId[])
       : getAllAdapters().map((a) => a.venue);
 
-    const entries = await buildIvSurfaceGrid({ underlying, venues: requestedVenues });
+    const entries = await buildIvSurfaceGrid({
+      underlying,
+      venues: requestedVenues,
+      includeVenueSurfaces: true,
+    });
 
     const surface: IvSurfaceRow[] = new Array(entries.length);
     const surfaceFine: IvSurfaceFineRow[] = new Array(entries.length);

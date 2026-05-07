@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react';
 import {
   createChart,
   LineSeries,
@@ -6,18 +6,26 @@ import {
   type IChartApi,
   type ISeriesApi,
   type Time,
+  type UTCTimestamp,
 } from 'lightweight-charts';
 
 import { useUnderlyings } from '@features/chain';
 import { DropdownPicker } from '@components/ui';
 import { getTokenLogo } from '@lib/token-meta';
 import { venueColor, deltaColor, deltaLabel } from '@lib/colors';
+import { fmtIv } from '@lib/format';
 import { VENUE_LIST, VENUE_IDS } from '@lib/venue-meta';
 import { useSurface } from './queries';
 import DeltaToggleLegend from './DeltaToggleLegend';
 import styles from './AtmTermStructure.module.css';
 
 const AVG_COLOR = '#50D2C1';
+
+const IV_PRICE_FORMAT = {
+  type: 'custom' as const,
+  formatter: (p: number) => fmtIv(p),
+  minMove: 0.0001,
+};
 
 type Mode = 'per-venue-atm' | 'multi-delta';
 type TenorMode = 'listed' | 'cmm';
@@ -31,6 +39,11 @@ interface CrosshairState {
   x: number;
   y: number;
   values: Array<{ delta: number; iv: number }>;
+}
+
+interface MultiDeltaRow {
+  dte: number;
+  ivs: (number | null)[];
 }
 
 function useTermStructureChart(
@@ -71,19 +84,17 @@ function useTermStructureChart(
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     });
 
-    const priceFmt = { type: 'custom' as const, formatter: (p: number) => `${p.toFixed(1)}%` };
-
     for (const [venueId, points] of Object.entries(data.venueAtm)) {
       if (!enabledVenues.has(venueId)) continue;
       const seriesData = points
         .filter((p) => p.atm != null && p.dte > 0)
-        .map((p) => ({ time: p.dte as unknown as Time, value: p.atm! * 100 }));
+        .map((p) => ({ time: p.dte as UTCTimestamp, value: p.atm! }));
       if (seriesData.length === 0) continue;
 
       const series = chart.addSeries(LineSeries, {
         color: venueColor(venueId),
         lineWidth: 1,
-        priceFormat: priceFmt,
+        priceFormat: IV_PRICE_FORMAT,
         lastValueVisible: false,
         priceLineVisible: false,
       });
@@ -93,13 +104,13 @@ function useTermStructureChart(
     if (showAverage) {
       const avgData = data.surface
         .filter((r) => r.atm != null && r.dte > 0)
-        .map((r) => ({ time: r.dte as unknown as Time, value: r.atm! * 100 }));
+        .map((r) => ({ time: r.dte as UTCTimestamp, value: r.atm! }));
 
       if (avgData.length > 0) {
         const avgSeries = chart.addSeries(LineSeries, {
           color: AVG_COLOR,
           lineWidth: 2,
-          priceFormat: priceFmt,
+          priceFormat: IV_PRICE_FORMAT,
           lastValueVisible: false,
           priceLineVisible: false,
         });
@@ -124,15 +135,19 @@ function useMultiDeltaTermStructureChart(
   enabledDeltas: Set<number>,
   onCrosshair: (state: CrosshairState | null) => void,
 ) {
-  const enabledKey = [...enabledDeltas].sort((a, b) => a - b).join(',');
+  const seriesByDeltaRef = useRef<Map<number, ISeriesApi<'Line', Time>>>(new Map());
+  const enabledRef = useRef<Set<number>>(enabledDeltas);
+  enabledRef.current = enabledDeltas;
+
   const rowsKey = useMemo(
     () => (rows ?? []).map((r) => `${r.dte}:${r.ivs.length}`).join('|'),
     [rows],
   );
+  const deltasKey = useMemo(() => deltas.join(','), [deltas]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !rows || rows.length === 0) return;
+    if (!container || !rows || rows.length === 0 || deltas.length === 0) return;
 
     const chart = createChart(container, {
       autoSize: true,
@@ -164,29 +179,28 @@ function useMultiDeltaTermStructureChart(
       },
     });
 
-    const priceFmt = { type: 'custom' as const, formatter: (p: number) => `${p.toFixed(1)}%` };
-
     const seriesByDelta = new Map<number, ISeriesApi<'Line', Time>>();
     for (let i = 0; i < deltas.length; i++) {
       const d = deltas[i]!;
-      if (!enabledDeltas.has(d)) continue;
       const isAtm = Math.abs(d - 0.5) < 1e-6;
       const seriesData = rows
         .filter((r) => r.dte > 0 && r.ivs[i] != null)
-        .map((r) => ({ time: r.dte as unknown as Time, value: r.ivs[i]! * 100 }));
+        .map((r) => ({ time: r.dte as UTCTimestamp, value: r.ivs[i]! }));
       if (seriesData.length === 0) continue;
 
       const series = chart.addSeries(LineSeries, {
         color: deltaColor(d),
         lineWidth: isAtm ? 2 : 1,
-        priceFormat: priceFmt,
+        priceFormat: IV_PRICE_FORMAT,
         lastValueVisible: false,
         priceLineVisible: false,
+        visible: enabledRef.current.size === 0 || enabledRef.current.has(d),
       });
       series.setData(seriesData);
       seriesByDelta.set(d, series);
     }
 
+    seriesByDeltaRef.current = seriesByDelta;
     chart.timeScale().fitContent();
 
     chart.subscribeCrosshairMove((param) => {
@@ -196,7 +210,9 @@ function useMultiDeltaTermStructureChart(
       }
       const dte = Number(param.time);
       const values: Array<{ delta: number; iv: number }> = [];
-      for (const [delta, series] of seriesByDelta) {
+      const enabledNow = enabledRef.current;
+      for (const [delta, series] of seriesByDeltaRef.current) {
+        if (enabledNow.size > 0 && !enabledNow.has(delta)) continue;
         const datum = param.seriesData.get(series) as { value?: number } | undefined;
         if (datum && typeof datum.value === 'number') {
           values.push({ delta, iv: datum.value });
@@ -211,14 +227,19 @@ function useMultiDeltaTermStructureChart(
 
     return () => {
       chart.remove();
+      seriesByDeltaRef.current = new Map();
       onCrosshair(null);
     };
-  }, [containerRef, rows, rowsKey, deltas, enabledKey, onCrosshair]);
-}
+  }, [containerRef, rows, rowsKey, deltas, deltasKey, onCrosshair]);
 
-interface MultiDeltaRow {
-  dte: number;
-  ivs: (number | null)[];
+  useEffect(() => {
+    const seriesByDelta = seriesByDeltaRef.current;
+    if (seriesByDelta.size === 0) return;
+    const allOff = enabledDeltas.size === 0;
+    for (const [delta, series] of seriesByDelta) {
+      series.applyOptions({ visible: allOff || enabledDeltas.has(delta) });
+    }
+  }, [enabledDeltas]);
 }
 
 function pickRows(
@@ -246,6 +267,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
   const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
   const containerRef = useRef<HTMLDivElement>(null);
   const multiContainerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [enabledVenues, setEnabledVenues] = useState<Set<string>>(new Set());
   const [showAverage, setShowAverage] = useState(true);
 
@@ -298,6 +320,23 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
     enabledDeltas,
     setCrosshair,
   );
+
+  useLayoutEffect(() => {
+    const tooltip = tooltipRef.current;
+    const container = multiContainerRef.current;
+    if (!tooltip || !container || !crosshair) return;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const tw = tooltip.offsetWidth;
+    const th = tooltip.offsetHeight;
+    const margin = 12;
+    let left = crosshair.x + margin;
+    let top = crosshair.y + margin;
+    if (left + tw + margin > cw) left = Math.max(margin, crosshair.x - tw - margin);
+    if (top + th + margin > ch) top = Math.max(margin, crosshair.y - th - margin);
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  }, [crosshair]);
 
   const expiryByDte = useMemo(() => {
     const m = new Map<number, string>();
@@ -441,10 +480,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
             <div className={styles.chartArea}>
               <div className={styles.chartWrap} ref={multiContainerRef} />
               {crosshair && (
-                <div
-                  className={styles.tooltip}
-                  style={{ left: crosshair.x + 12, top: crosshair.y + 12 }}
-                >
+                <div ref={tooltipRef} className={styles.tooltip}>
                   <div className={styles.tooltipHead}>
                     {expiryByDte.get(crosshair.dte) ?? `${crosshair.dte}d`}
                     {expiryByDte.has(crosshair.dte) ? ` (${crosshair.dte}d)` : ''}
@@ -460,7 +496,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
                             style={{ background: deltaColor(delta) }}
                           />
                           <span className={styles.tooltipLabel}>{deltaLabel(delta)}</span>
-                          <span className={styles.tooltipValue}>{iv.toFixed(2)}%</span>
+                          <span className={styles.tooltipValue}>{fmtIv(iv)}</span>
                         </li>
                       ))}
                   </ul>

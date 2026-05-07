@@ -87,6 +87,12 @@ export interface IvSurfaceResponse {
   surfaceFineDeltasDense: number[];
   termStructure: TermStructure;
   venueAtm: Record<string, VenueAtmPoint[]>;
+  // Per-venue fine surface (raw 19-pt grid, smoothed 91-pt grid, CMM dense).
+  // Each value is the same shape as the cross-venue counterpart but built
+  // from a single venue's quotes. Optional for backward compatibility.
+  venueSurfaceFine?: Partial<Record<string, IvSurfaceFineRow[]>>;
+  venueSurfaceFineSmoothed?: Partial<Record<string, IvSurfaceFineRow[]>>;
+  venueSurfaceFineCmm?: Partial<Record<string, CmmIvSurfaceRow[]>>;
   // Constant-maturity 30d ATM IV (fraction). Source: IvHistoryService.
   atmIv30d: number | null;
   // Trailing 30d close-to-close annualized RV (fraction). Source: spot candles.

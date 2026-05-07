@@ -23,6 +23,8 @@ export interface SurfaceGridEntry {
   surfaceRow: IvSurfaceRow;
   surfaceFineRow: IvSurfaceFineRow;
   surfaceFineSmoothedRow: IvSurfaceFineRow;
+  venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>>;
+  venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>>;
   atmStrike: EnrichedStrike | null;
   strikes: EnrichedStrike[];
   // Per-expiry basis as a percentage of spot. Surfaced here so consumers that
@@ -92,6 +94,22 @@ export async function buildIvSurfaceGrid({
       ULTRA_FINE_DELTA_GRID,
     );
 
+    const venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+    const venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+    for (const v of requestedVenues) {
+      const fine = computeIvSurfaceFine(expiry, dte, enriched.strikes, v);
+      if (fine.ivs.every((iv) => iv == null)) continue;
+      venueSurfaceFineRow[v] = fine;
+      venueSurfaceFineSmoothedRow[v] = smoothFineSurfaceRow(
+        fine,
+        enriched.strikes,
+        refPrice,
+        T,
+        ULTRA_FINE_DELTA_GRID,
+        v,
+      );
+    }
+
     let atmStrike: EnrichedStrike | null = null;
     if (refPrice != null && enriched.strikes.length > 0) {
       let bestDist = Infinity;
@@ -110,6 +128,8 @@ export async function buildIvSurfaceGrid({
       surfaceRow,
       surfaceFineRow,
       surfaceFineSmoothedRow,
+      venueSurfaceFineRow,
+      venueSurfaceFineSmoothedRow,
       atmStrike,
       strikes: enriched.strikes,
       basisPct: stats.basisPct,

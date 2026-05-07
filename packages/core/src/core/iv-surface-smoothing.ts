@@ -1,3 +1,4 @@
+import type { VenueId } from '../types/common.js';
 import { fitSvi, sviIv } from '../services/svi-fit.js';
 import {
   FINE_DELTA_GRID,
@@ -135,15 +136,19 @@ export function fitRowFromStrikesSvi(
   refPrice: number,
   T: number,
   deltaGrid: readonly number[] = FINE_DELTA_GRID,
+  venueId?: VenueId,
 ): (number | null)[] | null {
   if (!Number.isFinite(refPrice) || refPrice <= 0) return null;
   if (!Number.isFinite(T) || T <= 0) return null;
 
+  const ivOf = (side: EnrichedSide): number | null =>
+    venueId ? side.venues[venueId]?.markIv ?? null : averageSideIv(side);
+
   const points: { k: number; iv: number }[] = [];
   for (const s of strikes) {
     if (s.strike <= 0) continue;
-    const callIv = averageSideIv(s.call);
-    const putIv = averageSideIv(s.put);
+    const callIv = ivOf(s.call);
+    const putIv = ivOf(s.put);
     const ivs: number[] = [];
     if (isValidIv(callIv)) ivs.push(callIv);
     if (isValidIv(putIv)) ivs.push(putIv);
@@ -249,9 +254,10 @@ export function smoothFineSurfaceRow(
   refPrice: number | null,
   T: number,
   deltaGrid: readonly number[] = FINE_DELTA_GRID,
+  venueId?: VenueId,
 ): IvSurfaceFineRow {
   if (refPrice != null && refPrice > 0 && T > 0) {
-    const sviIvs = fitRowFromStrikesSvi(strikes, refPrice, T, deltaGrid);
+    const sviIvs = fitRowFromStrikesSvi(strikes, refPrice, T, deltaGrid, venueId);
     if (sviIvs && sviIvs.every((v): v is number => v != null)) {
       return { expiry: rawRow.expiry, dte: rawRow.dte, ivs: sviIvs };
     }

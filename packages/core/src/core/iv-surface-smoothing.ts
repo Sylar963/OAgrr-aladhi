@@ -29,7 +29,7 @@ function averageSideIv(side: EnrichedSide): number | null {
   let count = 0;
   for (const quote of Object.values(side.venues)) {
     if (!quote) continue;
-    if (quote.markIv == null || !Number.isFinite(quote.markIv)) continue;
+    if (!isValidIv(quote.markIv)) continue;
     sum += quote.markIv;
     count += 1;
   }
@@ -193,7 +193,7 @@ export function smoothFineSurfaceRow(
 ): IvSurfaceFineRow {
   if (refPrice != null && refPrice > 0 && T > 0) {
     const sviIvs = fitRowFromStrikesSvi(strikes, refPrice, T);
-    if (sviIvs) {
+    if (sviIvs && sviIvs.every((v): v is number => v != null)) {
       return { expiry: rawRow.expiry, dte: rawRow.dte, ivs: sviIvs };
     }
   }

@@ -70,6 +70,9 @@ function buildListedGrid(data: IvSurfaceResponse): SurfaceGrid | null {
     .slice()
     .sort((a, b) => a.dte - b.dte);
 
+  const rawByDte = new Map<number, (number | null)[]>();
+  for (const r of data.surfaceFine) rawByDte.set(r.dte, r.ivs);
+
   // Y is the row's index, not its DTE. A linear-DTE axis collapsed weeklies
   // on top of each other in the 3D perspective; sqrt(T) helped but the front
   // tenors still overlapped at the camera vanishing point. Index spacing
@@ -80,14 +83,12 @@ function buildListedGrid(data: IvSurfaceResponse): SurfaceGrid | null {
   const z: (number | null)[][] = [];
   const text: string[][] = [];
 
-  const useFallbackThreshold = source === data.surfaceFine;
-
   for (const row of sorted) {
+    const rawRow = rawByDte.get(row.dte);
+    const rawNonNull = rawRow ? rawRow.filter((v) => v != null).length : 0;
+    if (rawNonNull < MIN_NON_NULL_PER_ROW) continue;
+
     const ivPct = row.ivs.map((v) => (v != null ? v * 100 : null));
-    if (useFallbackThreshold) {
-      const filled = ivPct.filter((v) => v != null).length;
-      if (filled < MIN_NON_NULL_PER_ROW) continue;
-    }
 
     const label = formatExpiry(row.expiry);
     y.push(y.length);

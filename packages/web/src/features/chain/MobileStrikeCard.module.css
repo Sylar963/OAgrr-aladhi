@@ -146,11 +146,11 @@
   object-fit: contain;
 }
 
-/* Key metrics — 2-col compact grid */
+/* Key metrics — 3-col compact grid (BID | SPR | ASK / IV | Δ) */
 .sideRow {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1px 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 4px;
   align-items: center;
 }
 

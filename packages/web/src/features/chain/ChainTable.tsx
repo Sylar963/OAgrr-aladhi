@@ -223,9 +223,6 @@ const StrikeRowItem = memo(function StrikeRowItem({
         <div className={`${styles.ivCell} ${callItm ? styles.itmCall : ''}`}>
           <IvChip iv={strike.call.bestIv} size="sm" />
         </div>
-        <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
-          <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
-        </div>
         <PriceCell
           value={callBba.bid}
           venueId={callBba.bidVenue}
@@ -241,6 +238,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Sell call at best bid"
         />
+        <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
+          <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
+        </div>
         <PriceCell
           value={callBba.ask}
           venueId={callBba.askVenue}
@@ -284,6 +284,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Sell put at best bid"
         />
+        <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
+          <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
+        </div>
         <PriceCell
           value={putBba.ask}
           venueId={putBba.askVenue}
@@ -299,9 +302,6 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Buy put at best ask"
         />
-        <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
-          <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
-        </div>
         <div className={`${styles.ivCell} ${putItm ? styles.itmPut : ''}`}>
           <IvChip iv={strike.put.bestIv} size="sm" />
         </div>
@@ -455,10 +455,10 @@ export default function NewChainTable({
         <span className={styles.hdrLabel} title={VEGA_TIP}>ν</span>
         <span className={styles.hdrLabel} title={DELTA_TIP}>Δ</span>
         <span className={styles.hdrLabel}>IV</span>
-        <span className={styles.hdrLabel}>SPREAD</span>
         <span className={styles.hdrLabel} data-align="right">
           BID
         </span>
+        <span className={styles.hdrLabel}>SPREAD</span>
         <span className={styles.hdrLabel} data-align="right">
           ASK
         </span>
@@ -466,8 +466,8 @@ export default function NewChainTable({
           STRIKE
         </span>
         <span className={styles.hdrLabel}>BID</span>
-        <span className={styles.hdrLabel}>ASK</span>
         <span className={styles.hdrLabel}>SPREAD</span>
+        <span className={styles.hdrLabel}>ASK</span>
         <span className={styles.hdrLabel}>IV</span>
         <span className={styles.hdrLabel} data-align="right" title={DELTA_TIP}>
           Δ

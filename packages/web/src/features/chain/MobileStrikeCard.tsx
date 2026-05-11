@@ -63,6 +63,10 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
           <span className={styles.metricBid}>{fmtUsd(bba.bid)}</span>
         </div>
         <div className={styles.sideMetric}>
+          <span className={styles.metricLabel}>SPR</span>
+          <SpreadPill spreadPct={bestQ?.spreadPct ?? null} />
+        </div>
+        <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>ASK</span>
           <span className={styles.metricAsk}>{fmtUsd(bba.ask)}</span>
         </div>

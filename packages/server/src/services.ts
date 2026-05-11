@@ -26,12 +26,14 @@ import {
   type TradeStore,
 } from '@oggregator/db';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
+import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
 export const spotCandleService = new SpotCandleService();
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
+export let newsService: NewsRuntime | null = null;
 const databaseUrl = process.env['DATABASE_URL'];
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(
   process.env['IV_HISTORY_SIZE_WARN_BYTES'],
@@ -163,6 +165,7 @@ const serviceHealth = {
   blockFlow: false,
   ivHistory: false,
   regime: false,
+  news: false,
 };
 
 export function isDvolReady(): boolean {
@@ -185,6 +188,9 @@ export function isIvHistoryReady(): boolean {
 }
 export function isRegimeReady(): boolean {
   return serviceHealth.regime;
+}
+export function isNewsReady(): boolean {
+  return serviceHealth.news;
 }
 
 export async function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
@@ -271,6 +277,19 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
 
+  newsService = createNewsRuntimeFromEnv(process.env, log);
+  if (newsService) {
+    try {
+      await newsService.start();
+      serviceHealth.news = true;
+      log.info('news service started');
+    } catch (err: unknown) {
+      log.warn({ err: String(err) }, 'news service failed');
+    }
+  } else {
+    log.info('news service disabled (OP_FEED_BASE_URL / OP_FEED_SECRET not set)');
+  }
+
   log.info({ ms: Date.now() - start, health: serviceHealth }, 'services bootstrapped');
 }
 
@@ -280,6 +299,7 @@ export function disposeServiceStores(): void {
     ivHistoryStorageAlarmTimer = null;
   }
   regimeService.dispose();
+  newsService?.dispose();
   disposeSettlementJob();
 }
 

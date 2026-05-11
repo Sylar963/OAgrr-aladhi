@@ -14,6 +14,7 @@ vi.mock('../services.js', () => ({
   isDvolReady: vi.fn(() => true),
   isFlowReady: vi.fn(() => true),
   isIvHistoryReady: vi.fn(() => true),
+  isNewsReady: vi.fn(() => true),
   isSpotReady: vi.fn(() => true),
 }));
 

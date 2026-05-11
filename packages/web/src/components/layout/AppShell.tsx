@@ -9,6 +9,7 @@ import { useIsMobile } from '@hooks/useIsMobile';
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
+import { NewsTicker } from './NewsTicker';
 import styles from './AppShell.module.css';
 
 type TabId = 'chain' | 'alpha' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
@@ -116,6 +117,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   return (
     <PaletteContext.Provider value={() => setPaletteOpen(true)}>
       <div className={styles.shell}>
+        <NewsTicker />
         <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
         {isMobile && <MobileToolbar />}
         <main className={styles.main}>{children}</main>

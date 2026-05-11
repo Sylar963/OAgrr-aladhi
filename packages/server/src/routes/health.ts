@@ -8,6 +8,7 @@ import {
   isDvolReady,
   isFlowReady,
   isIvHistoryReady,
+  isNewsReady,
   isSpotReady,
 } from '../services.js';
 
@@ -23,6 +24,7 @@ export async function healthRoute(app: FastifyInstance) {
         spot: isSpotReady(),
         blockFlow: isBlockFlowReady(),
         ivHistory: isIvHistoryReady(),
+        news: isNewsReady(),
         ivHistoryStorage,
       },
       bootTime: SERVER_BOOT_TIME,

@@ -105,7 +105,32 @@
 }
 
 .sponsorChip {
+  min-width: 360px;
   background: color-mix(in srgb, var(--accent-primary-dim) 80%, transparent);
+  transition: background-color 320ms ease;
+}
+
+.sponsorChip .primary,
+.sponsorChip .secondary,
+.sponsorChip .sponsorCategory {
+  transition: color 320ms ease;
+}
+
+.sponsorChip[data-sponsor="coincall"] {
+  background: color-mix(in srgb, var(--accent-primary-dim) 80%, transparent);
+}
+.sponsorChip[data-sponsor="coincall"] .sponsorCategory {
+  color: var(--accent-primary);
+}
+
+.sponsorChip[data-sponsor="thalex"] {
+  background: color-mix(in srgb, var(--color-info) 14%, transparent);
+}
+.sponsorChip[data-sponsor="thalex"] .sponsorCategory {
+  color: var(--color-info);
+}
+.sponsorChip[data-sponsor="thalex"] .primary {
+  color: var(--color-info);
 }
 
 .dot {

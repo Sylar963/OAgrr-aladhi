@@ -127,7 +127,7 @@ export function NewsTicker() {
       <div className={styles.viewport}>
         <div key={itemsKey} ref={trackRef} className={styles.track} style={trackStyle}>
           {doubled.map((item, i) => (
-            <TickerChip key={`${item.id}-${i}`} item={item} />
+            <TickerChip key={`slot-${i}`} item={item} />
           ))}
         </div>
       </div>

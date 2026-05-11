@@ -41,6 +41,12 @@
 }
 
 .side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sideScroll {
   overflow-x: auto;
   min-width: 0;
 }

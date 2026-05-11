@@ -291,14 +291,16 @@ export default function ExpandedRow({
           <div className={styles.sideHeader}>
             <span className={styles.sideLabel}>CALLS</span>
           </div>
-          <SideTable
-            side={callSide}
-            type="call"
-            strike={strike}
-            myIv={myIv}
-            forwardsByVenue={forwardsByVenue}
-            atmStrike={atmStrike}
-          />
+          <div className={styles.sideScroll}>
+            <SideTable
+              side={callSide}
+              type="call"
+              strike={strike}
+              myIv={myIv}
+              forwardsByVenue={forwardsByVenue}
+              atmStrike={atmStrike}
+            />
+          </div>
         </div>
 
         <div className={styles.strikeChannel} data-atm={isAtm || undefined}>
@@ -314,14 +316,16 @@ export default function ExpandedRow({
           <div className={styles.sideHeader} data-align="end">
             <span className={styles.sideLabel}>PUTS</span>
           </div>
-          <SideTable
-            side={putSide}
-            type="put"
-            strike={strike}
-            myIv={myIv}
-            forwardsByVenue={forwardsByVenue}
-            atmStrike={atmStrike}
-          />
+          <div className={styles.sideScroll}>
+            <SideTable
+              side={putSide}
+              type="put"
+              strike={strike}
+              myIv={myIv}
+              forwardsByVenue={forwardsByVenue}
+              atmStrike={atmStrike}
+            />
+          </div>
         </div>
       </div>
     </div>

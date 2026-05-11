@@ -236,41 +236,43 @@ export default function ExpandedRow({
 
   return (
     <div className={styles.expanded}>
-      {atmConsensusForward != null && atmStrike != null && (
-        <div className={styles.consensusLine}>
-          CONSENSUS F @ ATM {atmStrike.toLocaleString()}: {fmtUsd(atmConsensusForward)}
-        </div>
-      )}
-
-      <div className={styles.side} data-type="call">
-        <div className={styles.sideHeader}>
-          <span className={styles.sideLabel}>CALLS</span>
-          <span className={styles.sideStrike}>{strike.toLocaleString()}</span>
-        </div>
-        <SideTable
-          side={callSide}
-          type="call"
-          strike={strike}
-          myIv={myIv}
-          forwardsByVenue={forwardsByVenue}
-          atmStrike={atmStrike}
-        />
+      <div className={styles.topBar}>
+        <span className={styles.strikeBadge}>STRIKE {strike.toLocaleString()}</span>
+        {atmConsensusForward != null && atmStrike != null && (
+          <span className={styles.consensusInline}>
+            CONSENSUS F @ ATM {atmStrike.toLocaleString()}: {fmtUsd(atmConsensusForward)}
+          </span>
+        )}
       </div>
 
-      <div className={styles.divider} />
-
-      <div className={styles.side} data-type="put">
-        <div className={styles.sideHeader}>
-          <span className={styles.sideLabel}>PUTS</span>
+      <div className={styles.sides}>
+        <div className={styles.side} data-type="call">
+          <div className={styles.sideHeader}>
+            <span className={styles.sideLabel}>CALLS</span>
+          </div>
+          <SideTable
+            side={callSide}
+            type="call"
+            strike={strike}
+            myIv={myIv}
+            forwardsByVenue={forwardsByVenue}
+            atmStrike={atmStrike}
+          />
         </div>
-        <SideTable
-          side={putSide}
-          type="put"
-          strike={strike}
-          myIv={myIv}
-          forwardsByVenue={forwardsByVenue}
-          atmStrike={atmStrike}
-        />
+
+        <div className={styles.side} data-type="put">
+          <div className={styles.sideHeader}>
+            <span className={styles.sideLabel}>PUTS</span>
+          </div>
+          <SideTable
+            side={putSide}
+            type="put"
+            strike={strike}
+            myIv={myIv}
+            forwardsByVenue={forwardsByVenue}
+            atmStrike={atmStrike}
+          />
+        </div>
       </div>
     </div>
   );

@@ -1079,9 +1079,15 @@
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {
+  .view {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .mainArea {
     padding: var(--space-3);
     gap: var(--space-2);
+    overflow: visible;
+    flex: 0 0 auto;
   }
 
   .title {
@@ -1093,12 +1099,26 @@
 
   .splitBody {
     grid-template-columns: 1fr;
+    overflow: visible;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+  .controlsCol,
+  .rightCol {
+    overflow: visible;
+    min-height: 0;
+  }
+  .chartCol {
+    height: auto;
+    min-height: 0;
   }
   .rightCol {
     order: -1;
   }
   .chartPanel {
-    min-height: 300px;
+    flex: 0 0 auto;
+    height: 320px;
+    min-height: 320px;
   }
 
   .templateCard {

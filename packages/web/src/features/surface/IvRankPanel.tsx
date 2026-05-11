@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import InfoTip from '@components/ui/InfoTip';
 import { getTokenLogo } from '@lib/token-meta';
 import { fmtIv } from '@lib/format';
 import type { IvHistoryTenorResult, IvTenor } from '@shared/enriched';
@@ -66,6 +67,52 @@ const SAMPLES_TIP =
   '• Other tenors accumulate one new point every 5 min from the live surface.\n' +
   '• Rank/percentile need ≥ 2 distinct samples — they show “–” until the window has variation.';
 
+const IVR_TIP_BODY = (
+  <>
+    <div>Where current ATM IV sits within the look-back window (toggle above).</div>
+    <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)' }}>
+      rank = (current − min) / (max − min) × 100
+    </div>
+    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+      <li>
+        <b style={{ color: 'var(--color-profit)' }}>0–30</b>: IV is cheap vs the window — vol buyers
+        favored.
+      </li>
+      <li>
+        <b style={{ color: 'var(--color-warning)' }}>30–70</b>: mid-range; no strong edge.
+      </li>
+      <li>
+        <b style={{ color: 'var(--color-loss)' }}>70–100</b>: IV is rich vs the window — vol sellers
+        favored.
+      </li>
+    </ul>
+    <div style={{ marginTop: 8 }}>
+      <b>pct</b> — share of past samples ≤ current IV. Robust to single outlier prints; pair with
+      rank to spot outlier-distorted distributions.
+    </div>
+    <div style={{ marginTop: 6 }}>
+      <b>n</b> — valid samples in the window. Rank/pct show “–” until n ≥ 2 with a non-zero range.
+    </div>
+    <div style={{ marginTop: 8 }}>
+      <b>Per-tenor methodology</b>
+      <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+        <li>
+          <b>30d</b> (BTC/ETH): Deribit DVOL — seeded with ~1 year of daily closes, kept live by the
+          DVOL push.
+        </li>
+        <li>
+          <b>7d / 60d / 90d</b>: cross-venue ATM averages interpolated to the tenor, snapshotted
+          every 5 min.
+        </li>
+        <li>
+          A fresh server start leaves 7d/60d/90d thinly populated until enough live snapshots
+          accumulate — “n” reveals this.
+        </li>
+      </ul>
+    </div>
+  </>
+);
+
 function Chip({ tenor, result }: { tenor: IvTenor; result: IvHistoryTenorResult | undefined }) {
   const series = result?.series ?? [];
   const n = series.filter((p) => p.atmIv != null).length;
@@ -131,6 +178,9 @@ export default function IvRankPanel({ underlying }: Props) {
         <span className={styles.title}>
           {logo && <img src={logo} alt="" className={styles.tokenLogo} />}
           {underlying} IV RANK
+          <InfoTip label="IV Rank" title="How to read IV Rank" align="start">
+            {IVR_TIP_BODY}
+          </InfoTip>
         </span>
         <div className={styles.windowToggle}>
           <button

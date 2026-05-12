@@ -3,6 +3,7 @@ import type {
   PositionStore,
   PositionStoreListener,
 } from './types.js';
+import { logger } from '../utils/logger.js';
 
 function makeLegId(): string {
   return `leg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -27,13 +28,9 @@ export class InMemoryPositionStore implements PositionStore {
       legs = new Map();
       this.byAccount.set(accountId, legs);
     }
-    const stored: PositionLeg = {
-      ...leg,
-      legId: leg.legId.length > 0 ? leg.legId : makeLegId(),
-    };
-    legs.set(stored.legId, stored);
-    this.broadcast({ accountId, changedLegIds: [stored.legId] });
-    return stored;
+    legs.set(leg.legId, leg);
+    this.broadcast({ accountId, changedLegIds: [leg.legId] });
+    return leg;
   }
 
   remove(accountId: string, legId: string): boolean {
@@ -55,7 +52,12 @@ export class InMemoryPositionStore implements PositionStore {
     for (const listener of this.listeners) {
       try {
         listener(event);
-      } catch {}
+      } catch (err) {
+        logger.error(
+          { err, accountId: event.accountId, changedLegIds: event.changedLegIds },
+          'portfolio store listener failed',
+        );
+      }
     }
   }
 }

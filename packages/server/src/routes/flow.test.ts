@@ -248,3 +248,82 @@ describe('GET /flow/instruments', () => {
     });
   });
 });
+
+describe('GET /flow/instrument-trades', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('400s when venue or instrument is missing', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/flow/instrument-trades?underlying=BTC&venue=deribit',
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns trades filtered to a single instrument', async () => {
+    const services = await import('../services.js');
+    vi.mocked(services.tradeStore.loadHistory).mockResolvedValueOnce([
+      {
+        tradeUid: 'deribit:abc',
+        mode: 'live',
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrumentName: 'BTC-28MAR26-100000-C',
+        tradeTs: new Date('2026-05-12T10:00:00Z'),
+        ingestedAt: new Date('2026-05-12T10:00:01Z'),
+        direction: 'buy',
+        contracts: 5,
+        price: 0.04,
+        premiumUsd: 1200,
+        notionalUsd: 24000,
+        referencePriceUsd: 4800,
+        expiry: '2026-03-28',
+        strike: 100000,
+        optionType: 'call',
+        iv: 0.5,
+        markPrice: 0.041,
+        isBlock: false,
+        strategyLabel: null,
+        legs: null,
+        raw: {},
+      },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/flow/instrument-trades?underlying=BTC&venue=deribit&instrument=BTC-28MAR26-100000-C',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.available).toBe(true);
+    expect(body.trades).toHaveLength(1);
+    expect(body.trades[0]).toMatchObject({
+      tradeUid: 'deribit:abc',
+      venue: 'deribit',
+      instrument: 'BTC-28MAR26-100000-C',
+      side: 'buy',
+      price: 0.04,
+      size: 5,
+      iv: 0.5,
+      premiumUsd: 1200,
+      notionalUsd: 24000,
+      referencePriceUsd: 4800,
+    });
+
+    expect(vi.mocked(services.tradeStore.loadHistory)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'live',
+        venues: ['deribit'],
+        instrumentName: 'BTC-28MAR26-100000-C',
+      }),
+    );
+  });
+});

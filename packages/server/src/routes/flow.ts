@@ -136,6 +136,60 @@ export async function flowRoute(app: FastifyInstance) {
   });
 
   app.get<{
+    Querystring: {
+      underlying?: string;
+      venue?: string;
+      instrument?: string;
+      start?: string;
+      end?: string;
+      beforeTs?: string;
+      beforeUid?: string;
+      limit?: string;
+    };
+  }>('/flow/instrument-trades', async (req, reply) => {
+    const venue = req.query.venue?.trim();
+    const instrument = req.query.instrument?.trim();
+    if (!venue || !instrument) {
+      return reply.status(400).send({ error: 'venue and instrument are required' });
+    }
+
+    if (!tradeStore.enabled) {
+      return {
+        available: false,
+        trades: [] as EnrichedTradeEvent[],
+        nextCursor: null as TradeHistoryCursor | null,
+      };
+    }
+
+    const historyQuery = buildHistoryQuery(
+      {
+        venues: venue,
+        ...(req.query.underlying ? { underlying: req.query.underlying } : {}),
+        ...(req.query.start ? { start: req.query.start } : {}),
+        ...(req.query.end ? { end: req.query.end } : {}),
+        ...(req.query.beforeTs ? { beforeTs: req.query.beforeTs } : {}),
+        ...(req.query.beforeUid ? { beforeUid: req.query.beforeUid } : {}),
+        ...(req.query.limit ? { limit: req.query.limit } : {}),
+      },
+      'live',
+    );
+    historyQuery.instrumentName = instrument;
+    historyQuery.limit = parseBoundedLimit(req.query.limit, 200, 1000);
+
+    const rows = await tradeStore.loadHistory(historyQuery);
+    const trades = rows.flatMap((row) => {
+      const trade = mapStoredLiveTrade(row);
+      return trade ? [trade] : [];
+    });
+
+    return {
+      available: true,
+      trades,
+      nextCursor: buildNextCursor(trades),
+    };
+  });
+
+  app.get<{
     Querystring: { underlying?: string; venues?: string; start?: string; end?: string };
   }>('/flow/history/summary', async (req): Promise<HistorySummary> => {
     if (!tradeStore.enabled) {

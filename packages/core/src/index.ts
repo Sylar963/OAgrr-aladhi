@@ -2,6 +2,8 @@
 export type { VenueId, OptionRight, DataSource } from './types/common.js';
 export { VENUE_IDS } from './types/common.js';
 
+export { logger, feedLogger } from './utils/logger.js';
+
 // core — canonical types, aggregator, registry, symbol utils
 export type {
   OptionGreeks,
@@ -203,6 +205,54 @@ export {
   type ParsedTradeInstrument,
   type TradeAmounts,
 } from './trade-persistence.js';
+
+// Black-76 helpers (re-exported for downstream Greek work)
+export {
+  d1,
+  pdf,
+  cdf,
+  price76,
+  vega76,
+  solveIv,
+  thetaPerDay,
+  yearsToExpiry,
+} from './feeds/thalex/bs-solver.js';
+
+// portfolio module
+export type {
+  PositionLeg,
+  MarkContext,
+  MarkProvider,
+  PositionStore,
+  PositionStoreEvent,
+  PositionStoreListener,
+  PortfolioPersistence,
+} from './portfolio/index.js';
+export {
+  InMemoryPositionStore,
+  generateLegId,
+  vanna76,
+  volga76,
+  aggregateGreeksByStrike,
+  aggregateGreeksByExpiry,
+  breakEvenIvCurve,
+  computeTotals,
+  attachMarks,
+  legMarkFromShockedIv,
+  applyVolShock,
+  computeShockPnl,
+  computeShockGrid,
+} from './portfolio/index.js';
+export {
+  PortfolioRuntime,
+  type ChainSurfaceProvider,
+  type PortfolioRuntimeEvent,
+  type PortfolioRuntimeListener,
+  type PortfolioRuntimeOptions,
+  type PortfolioSnapshotEvent,
+  type PortfolioDeltaEvent,
+  type PortfolioErrorEvent,
+} from './runtime/portfolio/index.js';
 
 // feeds — venue adapters
 export { DeribitWsAdapter } from './feeds/deribit/index.js';

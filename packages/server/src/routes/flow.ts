@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import {
   buildLiveTradeUid,
   computeLiveTradeAmounts,
@@ -34,6 +35,29 @@ interface HistorySummary {
     notionalUsd: number;
   }>;
 }
+
+const isoDate = z
+  .string()
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), 'invalid date');
+
+const FlowInstrumentsQuerySchema = z.object({
+  underlying: z.string().min(1).optional(),
+  venue: z.string().min(1),
+  start: isoDate.optional(),
+  end: isoDate.optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+});
+
+const FlowInstrumentTradesQuerySchema = z.object({
+  underlying: z.string().min(1).optional(),
+  venue: z.string().min(1),
+  instrument: z.string().min(1),
+  start: isoDate.optional(),
+  end: isoDate.optional(),
+  beforeTs: z.string().optional(),
+  beforeUid: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(1000).optional(),
+});
 
 export async function flowRoute(app: FastifyInstance) {
   app.get<{
@@ -80,6 +104,86 @@ export async function flowRoute(app: FastifyInstance) {
         nextCursor: null as TradeHistoryCursor | null,
       };
     }
+
+    const rows = await tradeStore.loadHistory(historyQuery);
+    const trades = rows.flatMap((row) => {
+      const trade = mapStoredLiveTrade(row);
+      return trade ? [trade] : [];
+    });
+
+    return {
+      available: true,
+      trades,
+      nextCursor: buildNextCursor(trades),
+    };
+  });
+
+  app.get('/flow/instruments', async (req, reply) => {
+    if (!tradeStore.enabled) {
+      return { available: false, instruments: [] };
+    }
+    const parsed = FlowInstrumentsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_query', issues: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const underlying = q.underlying ? normalizeApiUnderlying(q.underlying) : undefined;
+    const limit = q.limit ?? 50;
+    const startTs = q.start ? new Date(q.start) : undefined;
+    const endTs = q.end ? new Date(q.end) : undefined;
+
+    const rows = await tradeStore.listInstruments({
+      mode: 'live',
+      limit,
+      ...(underlying ? { underlying } : {}),
+      venues: [q.venue],
+      ...(startTs ? { startTs } : {}),
+      ...(endTs ? { endTs } : {}),
+    });
+
+    return {
+      available: true,
+      instruments: rows.map((row) => ({
+        instrument: row.instrument,
+        count: row.count,
+        lastTs: row.lastTs.toISOString(),
+        lastPrice: row.lastPrice,
+        lastReferencePriceUsd: row.lastReferencePriceUsd,
+        optionType: row.optionType,
+        strike: row.strike,
+        expiry: row.expiry,
+      })),
+    };
+  });
+
+  app.get('/flow/instrument-trades', async (req, reply) => {
+    const parsed = FlowInstrumentTradesQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_query', issues: parsed.error.issues });
+    }
+    const q = parsed.data;
+
+    if (!tradeStore.enabled) {
+      return {
+        available: false,
+        trades: [] as EnrichedTradeEvent[],
+        nextCursor: null as TradeHistoryCursor | null,
+      };
+    }
+
+    const historyQuery = buildHistoryQuery(
+      {
+        venues: q.venue,
+        ...(q.underlying ? { underlying: q.underlying } : {}),
+        ...(q.start ? { start: q.start } : {}),
+        ...(q.end ? { end: q.end } : {}),
+        ...(q.beforeTs ? { beforeTs: q.beforeTs } : {}),
+        ...(q.beforeUid ? { beforeUid: q.beforeUid } : {}),
+      },
+      'live',
+    );
+    historyQuery.instrumentName = q.instrument;
+    historyQuery.limit = q.limit ?? 200;
 
     const rows = await tradeStore.loadHistory(historyQuery);
     const trades = rows.flatMap((row) => {

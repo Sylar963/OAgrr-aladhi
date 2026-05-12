@@ -1,14 +1,16 @@
 import { render, screen } from "@testing-library/react";
 
-import Home from "./page";
+import HomePage from "./page";
 
 describe("landing page", () => {
   it("renders the hero headline and CTA", () => {
-    render(Home());
+    render(<HomePage />);
 
     expect(
-      screen.getByRole("heading", { name: "Stop venue hopping." }),
+      screen.getByRole("heading", { name: /stop venue hopping/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Request Access" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /request access/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,108 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --background: #06131b;
-  --background-elevated: rgba(7, 28, 39, 0.82);
-  --foreground: #f4f7f2;
-  --muted: #98a9ad;
-  --line: rgba(116, 201, 214, 0.22);
-  --accent: #7df9c6;
-  --accent-strong: #b6ffe3;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+  --landing-bg: #07141d;
+  --landing-panel: rgba(10, 25, 35, 0.88);
+  --landing-text: #f4f7f5;
+  --landing-muted: #91a3ad;
+  --landing-accent: #8cf6d1;
+  --landing-border: rgba(140, 246, 209, 0.18);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-background-elevated: var(--background-elevated);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
+  --color-landing-bg: var(--landing-bg);
+  --color-landing-panel: var(--landing-panel);
+  --color-landing-text: var(--landing-text);
+  --color-landing-muted: var(--landing-muted);
+  --color-landing-accent: var(--landing-accent);
+  --color-landing-border: var(--landing-border);
   --font-sans: var(--font-display);
   --font-mono: var(--font-mono);
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html {
-  background:
-    radial-gradient(circle at top, rgba(20, 96, 98, 0.34), transparent 42%),
-    linear-gradient(180deg, #0a1d26 0%, #06131b 58%, #030b11 100%);
+html,
+body {
+  min-height: 100vh;
+  background: var(--landing-bg);
+  margin: 0;
+  color: var(--landing-text);
 }
 
 body {
-  min-height: 100vh;
-  margin: 0;
-  color: var(--foreground);
   font-family: var(--font-display), sans-serif;
-}
-
-a {
-  color: inherit;
+  background-image: radial-gradient(
+    circle at top,
+    rgba(140, 246, 209, 0.12),
+    transparent 38%
+  );
 }
 
 .landing-shell {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 32px;
+  padding: 24px;
 }
 
-.hero {
-  width: min(100%, 880px);
-  padding: clamp(32px, 8vw, 72px);
-  border: 1px solid var(--line);
-  border-radius: 32px;
-  background: linear-gradient(
-    180deg,
-    rgba(9, 30, 41, 0.94) 0%,
-    rgba(7, 22, 31, 0.88) 100%
-  );
-  box-shadow: var(--shadow);
+.landing-panel {
+  width: min(100%, 760px);
+  padding: clamp(32px, 7vw, 64px);
+  border: 1px solid var(--landing-border);
+  border-radius: 28px;
+  background: var(--landing-panel);
 }
 
-.eyebrow {
-  margin: 0 0 18px;
-  color: var(--accent-strong);
+.landing-eyebrow {
+  margin: 0 0 20px;
+  color: var(--landing-muted);
   font-family: var(--font-mono), monospace;
   font-size: 0.75rem;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.accent-line {
-  width: 104px;
-  height: 4px;
-  margin-bottom: 28px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), rgba(125, 249, 198, 0.12));
-}
-
-.hero h1 {
+.landing-title {
   margin: 0;
   max-width: 10ch;
-  font-size: clamp(3.5rem, 9vw, 6.75rem);
-  line-height: 0.95;
+  font-size: clamp(3.4rem, 8vw, 6.4rem);
+  line-height: 0.94;
   letter-spacing: -0.06em;
 }
 
-.lede {
-  max-width: 34rem;
-  margin: 24px 0 0;
-  color: var(--muted);
-  font-size: clamp(1rem, 2vw, 1.2rem);
-  line-height: 1.7;
+.landing-accent {
+  margin: 20px 0 0;
+  color: var(--landing-accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.cta {
+.landing-button {
   margin-top: 32px;
   padding: 0.95rem 1.5rem;
   border: 0;
   border-radius: 999px;
-  background: var(--accent);
-  color: #062129;
+  background: var(--landing-accent);
+  color: #07141d;
   font-family: var(--font-mono), monospace;
   font-size: 0.92rem;
   font-weight: 500;
@@ -111,21 +93,7 @@ a {
   cursor: pointer;
 }
 
-.cta:hover {
-  background: var(--accent-strong);
-}
-
-.cta:focus-visible {
-  outline: 2px solid var(--accent-strong);
+.landing-button:focus-visible {
+  outline: 2px solid var(--landing-accent);
   outline-offset: 3px;
-}
-
-@media (max-width: 640px) {
-  .landing-shell {
-    padding: 18px;
-  }
-
-  .hero {
-    border-radius: 24px;
-  }
 }

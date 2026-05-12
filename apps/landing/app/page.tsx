@@ -1,29 +1,16 @@
-import { createElement } from "react";
-
-export default function Home() {
-  return createElement(
-    "main",
-    { className: "landing-shell" },
-    createElement(
-      "section",
-      { className: "hero" },
-      createElement(
-        "p",
-        { className: "eyebrow" },
-        "Public Alpha for crypto derivatives teams",
-      ),
-      createElement("div", { "aria-hidden": "true", className: "accent-line" }),
-      createElement("h1", null, "Stop venue hopping."),
-      createElement(
-        "p",
-        { className: "lede" },
-        "Track venue-wide options flow, term structure, and volatility context from one calm command center.",
-      ),
-      createElement(
-        "button",
-        { className: "cta", type: "button" },
-        "Request Access",
-      ),
-    ),
+export default function HomePage() {
+  return (
+    <main className="landing-shell">
+      <section className="landing-panel">
+        <p className="landing-eyebrow">
+          Live IV. Cross-venue liquidity. Desk-grade context.
+        </p>
+        <h1 className="landing-title">Stop venue hopping.</h1>
+        <p className="landing-accent">Start routing smarter.</p>
+        <button className="landing-button" type="button">
+          Request Access
+        </button>
+      </section>
+    </main>
   );
 }

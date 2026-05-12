@@ -9,17 +9,6 @@
   --landing-border: rgba(140, 246, 209, 0.18);
 }
 
-@theme inline {
-  --color-landing-bg: var(--landing-bg);
-  --color-landing-panel: var(--landing-panel);
-  --color-landing-text: var(--landing-text);
-  --color-landing-muted: var(--landing-muted);
-  --color-landing-accent: var(--landing-accent);
-  --color-landing-border: var(--landing-border);
-  --font-sans: var(--font-display);
-  --font-mono: var(--font-mono);
-}
-
 html,
 body {
   min-height: 100vh;
@@ -30,11 +19,7 @@ body {
 
 body {
   font-family: var(--font-display), sans-serif;
-  background-image: radial-gradient(
-    circle at top,
-    rgba(140, 246, 209, 0.12),
-    transparent 38%
-  );
+  background-image: radial-gradient(circle at top, rgba(140, 246, 209, 0.12), transparent 38%);
 }
 
 .landing-shell {

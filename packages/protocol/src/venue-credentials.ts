@@ -220,7 +220,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
   },
   thalex: {
     venue: 'thalex',
-    status: 'planned',
+    status: 'available',
     wsEndpoint: 'wss://thalex.com/ws/api/v2',
     authScheme: 'jwt-rs512',
     subscribeMethod: 'private/subscribe',

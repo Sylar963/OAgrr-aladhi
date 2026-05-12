@@ -14,7 +14,7 @@ import styles from './BlockFlowView.module.css';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-type FlowScope = 'tape' | 'history';
+type FlowScope = 'tape' | 'history' | 'charts';
 
 interface BlockFlowViewProps {
   scope: FlowScope;

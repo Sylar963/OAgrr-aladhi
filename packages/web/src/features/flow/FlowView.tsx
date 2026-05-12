@@ -8,6 +8,7 @@ import { playTradeCue, tierForNotional } from '@lib/audio';
 import { useFlow, useFlowHistoryPage, useFlowHistorySummary } from './queries';
 import type { HistoryRange, TradeEvent, TradeHistoryCursor } from './queries';
 import BlockFlowView from './BlockFlowView';
+import FlowChartsView from './FlowChartsView';
 import { getCustomRangeFromBounds } from './DateRangePicker';
 import { HistoryControls, getPresetRange, type HistoryPreset } from './HistoryControls';
 import styles from './FlowView.module.css';
@@ -17,7 +18,7 @@ const SHARK_THRESHOLD = 10_000;
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 type FlowMode = 'all' | 'block';
-type FlowScope = 'tape' | 'history';
+type FlowScope = 'tape' | 'history' | 'charts';
 
 function parseStrikeAndType(instrument: string): { strike: string; type: string } {
   const match = instrument.match(/-(\d+(?:\.\d+)?)-([CP])(?:-|$)/);
@@ -382,6 +383,13 @@ export default function FlowView() {
               >
                 History
               </button>
+              <button
+                className={styles.modeBtn}
+                data-active={scope === 'charts'}
+                onClick={() => setScope('charts')}
+              >
+                Charts
+              </button>
             </div>
             <AssetPickerButton />
             <VenuePickerButton />
@@ -401,7 +409,9 @@ export default function FlowView() {
             {mode === 'all'
               ? scope === 'tape'
                 ? `${liveTrades.length} live trades · ${activeVenues.length} venues · auto-refreshing`
-                : `${getScopeLabel(scope)} · ${isCustomInitializing ? 'Loading available history…' : getHistorySubtitle(historyRange)} · ${activeVenues.length} venues`
+                : scope === 'charts'
+                  ? `Per-instrument trade chart · ${getHistorySubtitle(historyRange)}`
+                  : `${getScopeLabel(scope)} · ${isCustomInitializing ? 'Loading available history…' : getHistorySubtitle(historyRange)} · ${activeVenues.length} venues`
               : `${scope === 'history' ? `${getHistorySubtitle(historyRange)} · ` : ''}Institutional RFQ & block trades · ${activeVenues.length} venues`}
           </span>
         </div>
@@ -477,6 +487,13 @@ export default function FlowView() {
             )}
           </div>
         </>
+      ) : scope === 'charts' ? (
+        <FlowChartsView
+          historyPreset={historyPreset}
+          historyRange={historyRange}
+          onPresetChange={handlePresetChange}
+          onRangeChange={handleRangeChange}
+        />
       ) : (
         <>
           <div className={styles.tableHeader}>

@@ -1,8 +1,18 @@
 import { create } from 'zustand';
 
-import type { WsConnectionState } from '@oggregator/protocol';
+import {
+  VENUE_IDS as PROTOCOL_VENUE_IDS,
+  type VenueCredentials,
+  type VenueId,
+  type WsConnectionState,
+} from '@oggregator/protocol';
 import type { TabId } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
+import {
+  loadAllVenueCreds,
+  removeVenueCreds as storageRemoveVenueCreds,
+  saveVenueCreds as storageSaveVenueCreds,
+} from '@lib/venue-credentials';
 
 export interface FeedStatus {
   connectionState: WsConnectionState;
@@ -32,6 +42,7 @@ interface AppState {
   apiKey: string | null;
   userId: string | null;
   accountId: string | null;
+  venueCreds: Partial<Record<VenueId, VenueCredentials>>;
   soundEnabled: boolean;
   sessionNotice: SessionNotice | null;
   /** Monotonic counter — incremented by the warning dialog's "Stay active" button
@@ -47,6 +58,8 @@ interface AppState {
   setFeedStatus: (s: Partial<FeedStatus>) => void;
   setAuth: (apiKey: string, userId: string, accountId: string) => void;
   clearAuth: () => void;
+  setVenueCreds: (creds: VenueCredentials) => void;
+  removeVenueCreds: (venue: VenueId) => void;
   setSessionNotice: (notice: SessionNotice | null) => void;
   extendSession: () => void;
   setSoundEnabled: (enabled: boolean) => void;
@@ -68,6 +81,7 @@ export const useAppStore = create<AppState>((set) => ({
   apiKey: localStorage.getItem('paperApiKey'),
   userId: localStorage.getItem('paperUserId'),
   accountId: localStorage.getItem('paperAccountId'),
+  venueCreds: loadAllVenueCreds(PROTOCOL_VENUE_IDS),
   soundEnabled: localStorage.getItem('tapeSoundEnabled') === '1',
   sessionNotice: null,
   sessionExtendToken: 0,
@@ -97,6 +111,18 @@ export const useAppStore = create<AppState>((set) => ({
     localStorage.removeItem('paperUserId');
     localStorage.removeItem('paperAccountId');
     set({ apiKey: null, userId: null, accountId: null });
+  },
+  setVenueCreds: (creds) => {
+    storageSaveVenueCreds(creds);
+    set((s) => ({ venueCreds: { ...s.venueCreds, [creds.venue]: creds } }));
+  },
+  removeVenueCreds: (venue) => {
+    storageRemoveVenueCreds(venue);
+    set((s) => {
+      const next = { ...s.venueCreds };
+      delete next[venue];
+      return { venueCreds: next };
+    });
   },
   setSessionNotice: (sessionNotice) => set({ sessionNotice }),
   extendSession: () => set((s) => ({ sessionExtendToken: s.sessionExtendToken + 1 })),

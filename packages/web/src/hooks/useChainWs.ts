@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
+import type {
+  EnrichedChainResponse,
+  EnrichedSide,
+  EnrichedStrike,
+  VenueQuote,
+} from '@shared/enriched';
 import type { WsConnectionState, VenueFailure } from '@oggregator/protocol';
 import { ServerWsMessageSchema } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain/queries';
@@ -70,6 +75,62 @@ function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 15_000);
 }
 
+// Structural equality on a single venue quote. Two refs that read equal here
+// can be treated as the same value — letting React.memo skip the row render.
+function quotesEqual(
+  a: VenueQuote | null | undefined,
+  b: VenueQuote | null | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+  return (
+    a.bid === b.bid &&
+    a.ask === b.ask &&
+    a.mid === b.mid &&
+    a.bidSize === b.bidSize &&
+    a.askSize === b.askSize &&
+    a.markIv === b.markIv &&
+    a.bidIv === b.bidIv &&
+    a.askIv === b.askIv &&
+    a.delta === b.delta &&
+    a.gamma === b.gamma &&
+    a.theta === b.theta &&
+    a.vega === b.vega &&
+    a.spreadPct === b.spreadPct &&
+    a.totalCost === b.totalCost &&
+    a.openInterest === b.openInterest &&
+    a.volume24h === b.volume24h &&
+    a.openInterestUsd === b.openInterestUsd &&
+    a.volume24hUsd === b.volume24hUsd &&
+    (a.estimatedFees == null
+      ? b.estimatedFees == null
+      : b.estimatedFees != null &&
+        a.estimatedFees.maker === b.estimatedFees.maker &&
+        a.estimatedFees.taker === b.estimatedFees.taker)
+  );
+}
+
+function sidesEqual(a: EnrichedSide, b: EnrichedSide): boolean {
+  if (a === b) return true;
+  if (a.bestIv !== b.bestIv || a.bestVenue !== b.bestVenue) return false;
+  const aKeys = Object.keys(a.venues);
+  const bKeys = Object.keys(b.venues);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (!quotesEqual(a.venues[k as keyof typeof a.venues], b.venues[k as keyof typeof b.venues])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function strikesEqual(a: EnrichedStrike, b: EnrichedStrike): boolean {
+  return a === b || (a.strike === b.strike && sidesEqual(a.call, b.call) && sidesEqual(a.put, b.put));
+}
+
+// Delta path: incoming carries only the strikes that changed. Keep every
+// existing entry; overlay changed ones, reusing the prior ref when the new
+// strike happens to be content-equal so memo'd rows don't re-render.
 function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): EnrichedStrike[] {
   const byStrike = new Map<number, EnrichedStrike>();
 
@@ -77,10 +138,29 @@ function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): E
     byStrike.set(strike.strike, strike);
   }
   for (const strike of incoming) {
-    byStrike.set(strike.strike, strike);
+    const prev = byStrike.get(strike.strike);
+    byStrike.set(strike.strike, prev && strikesEqual(prev, strike) ? prev : strike);
   }
 
   return [...byStrike.values()].sort((left, right) => left.strike - right.strike);
+}
+
+// Snapshot path: incoming defines the complete strike set for the tenor. Any
+// strike not present in `incoming` must be dropped (so a resync removes
+// stale entries). For strikes present in both, reuse the existing ref when
+// content matches — this is what makes a resync snapshot not re-render the
+// whole table.
+function reconcileSnapshotStrikes(
+  existing: EnrichedStrike[],
+  incoming: EnrichedStrike[],
+): EnrichedStrike[] {
+  if (existing.length === 0) return incoming;
+  const existingByStrike = new Map<number, EnrichedStrike>();
+  for (const s of existing) existingByStrike.set(s.strike, s);
+  return incoming.map((next) => {
+    const prev = existingByStrike.get(next.strike);
+    return prev && strikesEqual(prev, next) ? prev : next;
+  });
 }
 
 type DeltaMsg = Extract<
@@ -208,7 +288,13 @@ export function useChainWs({
             msg.request.expiry,
             msg.request.venues,
           );
-          qc.setQueryData(key, msg.data);
+          qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
+            if (current == null) return msg.data;
+            return {
+              ...msg.data,
+              strikes: reconcileSnapshotStrikes(current.strikes, msg.data.strikes),
+            };
+          });
           store.set({ connectionState: 'live', staleMs: msg.meta.staleMs, lastSeq: msg.seq });
           break;
         }

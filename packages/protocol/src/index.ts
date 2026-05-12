@@ -92,3 +92,17 @@ export {
   type PortfolioWsClientMessage,
   type PortfolioWsServerMessage,
 } from './portfolio.js';
+
+export {
+  VenueCredentialFieldKeySchema,
+  VenueCredentialFieldSpecSchema,
+  VenuePrivateAdapterStatusSchema,
+  VenuePrivateAdapterSpecSchema,
+  VenueCredentialsSchema,
+  PRIVATE_ADAPTER_SPECS,
+  type VenueCredentialFieldKey,
+  type VenueCredentialFieldSpec,
+  type VenuePrivateAdapterStatus,
+  type VenuePrivateAdapterSpec,
+  type VenueCredentials,
+} from './venue-credentials.js';

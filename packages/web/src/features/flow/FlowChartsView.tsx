@@ -4,6 +4,8 @@ import {
   LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type MouseEventHandler,
+  type Time,
   ColorType,
 } from 'lightweight-charts';
 
@@ -33,8 +35,8 @@ function optionTypeFromInstrument(instrument: string): 'C' | 'P' | null {
 function tradeToBubble(trade: TradeEvent): TradeBubble | null {
   const optionType = optionTypeFromInstrument(trade.instrument);
   if (!optionType) return null;
-  const priceUsd = trade.referencePriceUsd ?? trade.price;
-  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null;
+  const priceUsd = trade.referencePriceUsd;
+  if (priceUsd == null || !Number.isFinite(priceUsd) || priceUsd <= 0) return null;
   const notional = trade.notionalUsd ?? trade.premiumUsd ?? 0;
   return {
     timeSec: Math.floor(trade.timestamp / 1000),
@@ -109,10 +111,14 @@ export default function FlowChartsView({
     }
   }, [instrumentsQuery.data, selectedInstrument]);
 
+  const [hoverTrade, setHoverTrade] = useState<TradeEvent | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
+
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const primitiveRef = useRef<TradeBubblePrimitive | null>(null);
+  const tradeIndexRef = useRef<Map<string, TradeEvent>>(new Map());
 
   useEffect(() => {
     const container = chartRef.current;
@@ -153,7 +159,33 @@ export default function FlowChartsView({
     seriesRef.current = series;
     primitiveRef.current = primitive;
 
+    const handleCrosshair: MouseEventHandler<Time> = (param) => {
+      const point = param.point;
+      if (!point || !primitiveRef.current) {
+        setHoverTrade(null);
+        setHoverPos(null);
+        return;
+      }
+      const bubble = primitiveRef.current.findBubbleAt(point.x, point.y);
+      if (!bubble) {
+        setHoverTrade(null);
+        setHoverPos(null);
+        return;
+      }
+      const trade = tradeIndexRef.current.get(bubble.tradeUid);
+      if (!trade) {
+        setHoverTrade(null);
+        setHoverPos(null);
+        return;
+      }
+      setHoverTrade(trade);
+      setHoverPos({ x: point.x, y: point.y });
+    };
+
+    chart.subscribeCrosshairMove(handleCrosshair);
+
     return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshair);
       chart.remove();
       chartApiRef.current = null;
       seriesRef.current = null;
@@ -173,6 +205,8 @@ export default function FlowChartsView({
   useEffect(() => {
     if (!seriesRef.current || !primitiveRef.current) return;
 
+    tradeIndexRef.current = new Map(trades.map((t) => [t.tradeUid, t]));
+
     const seen = new Set<number>();
     const linePoints = bubbles
       .slice()
@@ -187,7 +221,7 @@ export default function FlowChartsView({
     seriesRef.current.setData(linePoints as never);
     primitiveRef.current.update(bubbles);
     chartApiRef.current?.timeScale().fitContent();
-  }, [bubbles]);
+  }, [bubbles, trades]);
 
   const stats = useMemo(() => {
     if (!trades.length) return null;
@@ -329,6 +363,57 @@ export default function FlowChartsView({
                   title="No trades for this instrument in range"
                   detail="Try a wider time range."
                 />
+              </div>
+            ) : null}
+            {hoverTrade && hoverPos ? (
+              <div
+                className={styles.tooltip}
+                style={{ left: hoverPos.x + 12, top: hoverPos.y + 12 }}
+                role="status"
+              >
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>Time</span>
+                  <span className={styles.tooltipValue}>
+                    {new Date(hoverTrade.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
+                  </span>
+                </div>
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>Side</span>
+                  <span className={styles.tooltipValue} data-side={hoverTrade.side}>
+                    {hoverTrade.side.toUpperCase()}
+                  </span>
+                </div>
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>Size</span>
+                  <span className={styles.tooltipValue}>{hoverTrade.size}</span>
+                </div>
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>Price</span>
+                  <span className={styles.tooltipValue}>
+                    {hoverTrade.referencePriceUsd != null
+                      ? `$${hoverTrade.referencePriceUsd.toLocaleString()}`
+                      : '–'}
+                  </span>
+                </div>
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>IV</span>
+                  <span className={styles.tooltipValue}>
+                    {hoverTrade.iv != null ? fmtIv(hoverTrade.iv) : '–'}
+                  </span>
+                </div>
+                <div className={styles.tooltipRow}>
+                  <span className={styles.tooltipLabel}>Premium</span>
+                  <span className={styles.tooltipValue}>
+                    {hoverTrade.premiumUsd != null
+                      ? `$${Math.round(hoverTrade.premiumUsd).toLocaleString()}`
+                      : '–'}
+                  </span>
+                </div>
+                {hoverTrade.isBlock ? (
+                  <div className={styles.tooltipRow}>
+                    <span className={styles.tooltipBadge}>BLOCK</span>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

@@ -8,7 +8,7 @@ import { AD_EVERY, SPONSORS } from '@lib/sponsors';
 import { mergeTickerItems, type TickerItem } from './news-ticker/items';
 import styles from './NewsTicker.module.css';
 
-const PX_PER_SEC = 28;
+const PX_PER_SEC = 34;
 const AD_ROTATE_MS = 20_000;
 
 function symbolToBase(symbol: string): string {
@@ -31,6 +31,40 @@ function changeClass(pct: number): string {
   if (pct > 0) return styles.changeUp!;
   if (pct < 0) return styles.changeDown!;
   return styles.changeNeutral!;
+}
+
+type AdItem = Extract<TickerItem, { kind: 'ad' }>;
+
+function AdChip({ item }: { item: AdItem }) {
+  const [shown, setShown] = useState<AdItem>(item);
+  const [fadingOut, setFadingOut] = useState(false);
+
+  useEffect(() => {
+    if (item.id === shown.id) return;
+    setFadingOut(true);
+    const t = setTimeout(() => {
+      setShown(item);
+      setFadingOut(false);
+    }, 220);
+    return () => clearTimeout(t);
+  }, [item, shown.id]);
+
+  const sponsorKey = shown.id.split(':')[1];
+  const fadeClass = `${styles.sponsorFade} ${fadingOut ? styles.sponsorFadeOut : ''}`;
+
+  return (
+    <a
+      className={`${styles.chip} ${styles.chipLink} ${styles.sponsorChip} ${fadeClass}`}
+      href={shown.href}
+      target="_blank"
+      rel="sponsored noopener"
+      data-sponsor={sponsorKey}
+    >
+      <span className={`${styles.category} ${styles.sponsorCategory}`}>{shown.category}</span>
+      <span className={styles.primary}>{shown.sponsor}</span>
+      <span className={styles.secondary}>{shown.label} →</span>
+    </a>
+  );
 }
 
 function TickerChip({ item }: { item: TickerItem }) {
@@ -63,19 +97,7 @@ function TickerChip({ item }: { item: TickerItem }) {
     );
   }
 
-  return (
-    <a
-      className={`${styles.chip} ${styles.chipLink} ${styles.sponsorChip}`}
-      href={item.href}
-      target="_blank"
-      rel="sponsored noopener"
-      data-sponsor={item.id.split(':')[1]}
-    >
-      <span className={`${styles.category} ${styles.sponsorCategory}`}>{item.category}</span>
-      <span className={styles.primary}>{item.sponsor}</span>
-      <span className={styles.secondary}>{item.label} →</span>
-    </a>
-  );
+  return <AdChip item={item} />;
 }
 
 export function NewsTicker() {

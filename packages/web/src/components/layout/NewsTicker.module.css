@@ -105,9 +105,19 @@
 }
 
 .sponsorChip {
-  min-width: 360px;
+  flex: 0 0 540px;
+  justify-content: flex-start;
   background: color-mix(in srgb, var(--accent-primary-dim) 80%, transparent);
   transition: background-color 320ms ease;
+}
+
+.sponsorFade {
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.sponsorFadeOut {
+  opacity: 0;
 }
 
 .sponsorChip .primary,

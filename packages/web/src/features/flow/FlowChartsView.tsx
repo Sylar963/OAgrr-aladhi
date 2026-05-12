@@ -32,11 +32,25 @@ function optionTypeFromInstrument(instrument: string): 'C' | 'P' | null {
   return match[1] as 'C' | 'P';
 }
 
+// Per-contract option premium in USD. Deribit/OKX quote premium in base
+// currency (BTC/ETH) — multiply by the index price to get USD. Linear venues
+// quote premium in the settle currency already.
+function optionPremiumUsd(trade: TradeEvent): number | null {
+  const isInverse = trade.venue === 'deribit' || trade.venue === 'okx';
+  if (!isInverse) {
+    return Number.isFinite(trade.price) && trade.price > 0 ? trade.price : null;
+  }
+  const ref = trade.referencePriceUsd;
+  if (ref == null || !Number.isFinite(ref) || ref <= 0) return null;
+  const value = trade.price * ref;
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 function tradeToBubble(trade: TradeEvent): TradeBubble | null {
   const optionType = optionTypeFromInstrument(trade.instrument);
   if (!optionType) return null;
-  const priceUsd = trade.referencePriceUsd;
-  if (priceUsd == null || !Number.isFinite(priceUsd) || priceUsd <= 0) return null;
+  const priceUsd = optionPremiumUsd(trade);
+  if (priceUsd == null) return null;
   const notional = trade.notionalUsd ?? trade.premiumUsd ?? 0;
   return {
     timeSec: Math.floor(trade.timestamp / 1000),
@@ -92,6 +106,7 @@ export default function FlowChartsView({
   );
 
   const historyBounds = useFlowHistorySummary(underlying, [selectedVenue], { start: null, end: null }, true);
+  const historySummary = useFlowHistorySummary(underlying, [selectedVenue], historyRange, true);
 
   useEffect(() => {
     if (historyPreset !== 'custom') return;
@@ -247,7 +262,7 @@ export default function FlowChartsView({
       sellPct: totalNotional > 0 ? (sellNotional / totalNotional) * 100 : 0,
       calls,
       puts,
-      lastPrice: lastTrade?.referencePriceUsd ?? lastTrade?.price ?? null,
+      lastPrice: lastTrade ? optionPremiumUsd(lastTrade) : null,
       lastIv: lastTrade?.iv ?? null,
     };
   }, [trades]);
@@ -282,14 +297,14 @@ export default function FlowChartsView({
         <HistoryControls
           preset={historyPreset}
           range={historyRange}
-          summary={undefined}
+          summary={historySummary.data}
           bounds={historyBounds.data}
           activeVenues={[selectedVenue]}
           page={1}
           hasPreviousPage={false}
           hasNextPage={false}
           isPageLoading={tradesQuery.isFetching}
-          isSummaryLoading={false}
+          isSummaryLoading={historySummary.isLoading}
           onPresetChange={onPresetChange}
           onRangeChange={onRangeChange}
           onPreviousPage={() => {}}
@@ -328,7 +343,9 @@ export default function FlowChartsView({
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>Last</span>
                   <span className={styles.statValue}>
-                    {stats.lastPrice != null ? `$${stats.lastPrice.toLocaleString()}` : '–'}
+                    {stats.lastPrice != null
+                      ? `$${stats.lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                      : '–'}
                   </span>
                 </div>
                 <div className={styles.stat}>
@@ -390,9 +407,10 @@ export default function FlowChartsView({
                 <div className={styles.tooltipRow}>
                   <span className={styles.tooltipLabel}>Price</span>
                   <span className={styles.tooltipValue}>
-                    {hoverTrade.referencePriceUsd != null
-                      ? `$${hoverTrade.referencePriceUsd.toLocaleString()}`
-                      : '–'}
+                    {(() => {
+                      const p = optionPremiumUsd(hoverTrade);
+                      return p != null ? `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '–';
+                    })()}
                   </span>
                 </div>
                 <div className={styles.tooltipRow}>

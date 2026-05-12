@@ -18,9 +18,14 @@ function b64urlDecode(input: string): Buffer {
 }
 
 describe('mintAuthToken', () => {
-  it('produces a 3-part JWT with RS512 + kid in header and iat in payload', () => {
+  it('produces a 3-part JWT with RS512 + kid in header and iat/exp in payload', () => {
     const { privatePem } = generateRsaPemPair();
-    const token = mintAuthToken({ kid: 'kid-abc', privateKeyPem: privatePem, nowSec: 1_700_000_000 });
+    const token = mintAuthToken({
+      kid: 'kid-abc',
+      privateKeyPem: privatePem,
+      nowSec: 1_700_000_000,
+      lifetimeSec: 300,
+    });
     const parts = token.split('.');
     expect(parts).toHaveLength(3);
     const header = JSON.parse(b64urlDecode(parts[0]!).toString('utf8'));
@@ -29,6 +34,7 @@ describe('mintAuthToken', () => {
     expect(header.typ).toBe('JWT');
     expect(header.kid).toBe('kid-abc');
     expect(payload.iat).toBe(1_700_000_000);
+    expect(payload.exp).toBe(1_700_000_300);
   });
 
   it('signature verifies against the public key with RSA-SHA512', () => {

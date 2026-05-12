@@ -78,6 +78,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         return { venue, connected: true };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'connect failed';
+        req.log.warn({ err: String(err), venue: 'thalex' }, 'thalex connect_failed');
         return reply.status(502).send({ error: 'connect_failed', message });
       }
     }

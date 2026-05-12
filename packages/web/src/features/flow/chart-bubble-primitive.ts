@@ -125,6 +125,30 @@ export class TradeBubblePrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
+  findBubbleAt(xMedia: number, yMedia: number): TradeBubble | null {
+    if (!this.series || !this.chart) return null;
+    const series = this.series;
+    const chart = this.chart;
+    let best: { bubble: TradeBubble; distSq: number } | null = null;
+
+    for (const bubble of this.bubbles) {
+      const x = chart.timeScale().timeToCoordinate(bubble.timeSec as Time);
+      if (x === null) continue;
+      const y = series.priceToCoordinate(bubble.price);
+      if (y === null) continue;
+      const dx = x - xMedia;
+      const dy = y - yMedia;
+      const distSq = dx * dx + dy * dy;
+      const r = TIER_RADIUS[bubble.tier];
+      if (distSq > r * r) continue;
+      if (best === null || distSq < best.distSq) {
+        best = { bubble, distSq };
+      }
+    }
+
+    return best?.bubble ?? null;
+  }
+
   paneViews(): readonly IPrimitivePaneView[] {
     if (!this.series || !this.chart) return [];
     const series = this.series;

@@ -55,3 +55,10 @@ export const testimonials = [
     company: "Systematic Trading Team",
   },
 ] as const;
+
+export const surfaceStats = [
+  { label: "Data points", value: "91 deltas" },
+  { label: "Venues", value: "7 venues" },
+  { label: "Refresh", value: "sub-second" },
+  { label: "Interaction", value: "interactive tenor map" },
+] as const;

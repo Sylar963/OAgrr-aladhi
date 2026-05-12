@@ -1,3 +1,4 @@
+import { logger } from '@oggregator/core';
 import type { PortfolioWsServerMessage } from '@oggregator/protocol';
 
 type Listener = (msg: PortfolioWsServerMessage) => void;
@@ -24,7 +25,12 @@ class PortfolioEventBus {
     for (const listener of set) {
       try {
         listener(msg);
-      } catch {}
+      } catch (err) {
+        logger.error(
+          { err, accountId, msgType: msg.type },
+          'portfolio event bus listener failed',
+        );
+      }
     }
   }
 }

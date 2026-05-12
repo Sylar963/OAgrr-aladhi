@@ -92,7 +92,6 @@ export function useChainQuery(
         `/chains?underlying=${underlying}&expiry=${expiry}${venueParam}`,
       ),
     enabled: Boolean(underlying && expiry) && (options?.enabled ?? true),
-    placeholderData: (prev: EnrichedChainResponse | undefined) => prev,
     refetchInterval: options?.refetchInterval,
   });
 }

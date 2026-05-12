@@ -1,16 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type {
-  PositionLegInput,
-  VolShockScenario,
-} from '@oggregator/protocol';
+import type { PositionLegInput } from '@oggregator/protocol';
 
 import {
   addPosition,
   fetchMetrics,
   fetchPositions,
   removePosition,
-  runScenarios,
   type PortfolioSource,
 } from '../api';
 
@@ -56,8 +52,3 @@ export function useRemovePosition() {
   });
 }
 
-export function useRunScenarios(source: PortfolioSource = 'manual') {
-  return useMutation({
-    mutationFn: (scenarios: VolShockScenario[]) => runScenarios(scenarios, source),
-  });
-}

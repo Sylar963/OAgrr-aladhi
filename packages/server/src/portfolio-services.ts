@@ -10,7 +10,6 @@ import {
   type MarkProvider,
   type PositionLeg,
   type PositionStore,
-  type VenueId,
 } from '@oggregator/core';
 import type { PortfolioSource } from '@oggregator/protocol';
 
@@ -273,5 +272,3 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000).unref?.();
-
-export type VenueIdList = VenueId[];

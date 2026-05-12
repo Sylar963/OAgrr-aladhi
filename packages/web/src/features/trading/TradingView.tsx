@@ -15,7 +15,6 @@ import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import type { TabId } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
-import { registerUser } from './api';
 import PaperHelpPopover from './PaperHelpPopover';
 import {
   useActivity,
@@ -32,9 +31,6 @@ import { usePaperWs } from './hooks/usePaperWs';
 import styles from './TradingView.module.css';
 
 export default function TradingView() {
-  const apiKey = useAppStore((state) => state.apiKey);
-  const setAuth = useAppStore((state) => state.setAuth);
-  const clearAuth = useAppStore((state) => state.clearAuth);
   const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
   const { data: openTradesData } = useTrades('open', 100);
@@ -59,42 +55,12 @@ export default function TradingView() {
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const setUnderlying = useAppStore((state) => state.setUnderlying);
   const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
-  const [loginLabel, setLoginLabel] = useState('Trader');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     if (wsState === 'error') {
       setShowRefreshPrompt(true);
     }
   }, [wsState]);
-
-  useEffect(() => {
-    if (apiKey) {
-      setLoginLabel('Logged in');
-    } else {
-      setLoginLabel('Trader');
-    }
-  }, [apiKey]);
-
-  const handleRegister = async (username: string) => {
-    setLoginError(null);
-    setIsRegistering(true);
-    try {
-      const result = await registerUser(username);
-      setAuth(result.apiKey, result.userId, result.accountId);
-      setLoginLabel('Logged in');
-    } catch {
-      setLoginError('Registration failed');
-    } finally {
-      setIsRegistering(false);
-    }
-  };
-
-  const handleLogout = () => {
-    clearAuth();
-    setLoginLabel('Trader');
-  };
 
   useEffect(() => {
     const candidate = openTrades[0]?.id ?? closedTrades[0]?.id ?? null;
@@ -153,35 +119,6 @@ export default function TradingView() {
         <HeaderStat label="Theta" value={fmtUsd(overview?.risk.theta ?? null)} />
         <HeaderStat label="Vega" value={fmtUsd(overview?.risk.vega ?? null)} />
         <HeaderStat label="Sync" value={wsLabel(wsState)} tone={wsState === 'live' ? 'positive' : 'neutral'} />
-        {loginError && <span style={{ color: 'red', fontSize: '12px' }}>{loginError}</span>}
-        <button
-          className={styles.secondaryButton}
-          onClick={() => window.location.reload()}
-          style={{ padding: '4px 12px', fontSize: '12px' }}
-        >
-          Refresh
-        </button>
-        {apiKey ? (
-          <button
-            className={styles.secondaryButton}
-            onClick={handleLogout}
-            style={{ padding: '4px 12px', fontSize: '12px' }}
-          >
-            Logout
-          </button>
-        ) : (
-          <button
-            className={styles.primaryButton}
-            disabled={isRegistering}
-            onClick={() => {
-              const username = window.prompt('Enter a username:');
-              if (username) handleRegister(username);
-            }}
-            style={{ padding: '4px 12px', fontSize: '12px' }}
-          >
-            {isRegistering ? 'Registering...' : loginLabel}
-          </button>
-        )}
       </div>
 
       <div className={styles.workspace}>

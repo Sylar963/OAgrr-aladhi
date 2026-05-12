@@ -31,9 +31,7 @@ export function usePortfolioWs(
       let apiKey = '';
       try {
         apiKey = localStorage.getItem('paperApiKey') ?? '';
-      } catch (err) {
-        console.error('localStorage access failed', err);
-      }
+      } catch {}
       const params = new URLSearchParams();
       if (apiKey) params.set('apiKey', apiKey);
       params.set('source', source);

@@ -22,6 +22,7 @@ import {
   tradeStore,
 } from './services.js';
 import { paperTradingStore } from './trading-services.js';
+import { disposePortfolioServices } from './portfolio-services.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
@@ -117,6 +118,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     dvolService.dispose();
     ivHistoryService.dispose();
     disposeServiceStores();
+    await disposePortfolioServices();
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
     await tradeStore.dispose();

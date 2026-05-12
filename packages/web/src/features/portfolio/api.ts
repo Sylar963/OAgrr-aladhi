@@ -15,9 +15,7 @@ function getHeaders(): HeadersInit {
   let apiKey: string | null = null;
   try {
     apiKey = localStorage.getItem('paperApiKey');
-  } catch (err) {
-    console.error('localStorage access failed', err);
-  }
+  } catch {}
   if (apiKey) headers['X-API-Key'] = apiKey;
   return headers;
 }

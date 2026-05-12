@@ -1,6 +1,7 @@
 import { useAppStore } from '@stores/app-store';
 
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
+import AccountChip from './AccountChip';
 import FreshnessLabel from './FreshnessLabel';
 import VenueStatusRow from './VenueStatusRow';
 import styles from './TopBar.module.css';
@@ -51,6 +52,7 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
             <FreshnessLabel />
           </span>
         </div>
+        <AccountChip />
         <button className={styles.cmdk} onClick={onOpenPalette}>
           ⌘K
         </button>

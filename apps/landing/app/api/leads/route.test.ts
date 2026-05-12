@@ -37,7 +37,7 @@ describe("POST /api/leads", () => {
     expect(json.ok).toBe(true);
 
     const stored = await readFile(leadFilePath, "utf8");
-    const [line] = stored.trim().split("\n");
+    const [line = ""] = stored.trim().split("\n");
     const record = JSON.parse(line) as {
       createdAt: string;
       email: string;

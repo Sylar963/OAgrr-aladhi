@@ -112,10 +112,10 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .ticker-track {
-    animation: none !important;
+    animation: none;
   }
 
   * {
-    scroll-behavior: auto !important;
+    scroll-behavior: auto;
   }
 }

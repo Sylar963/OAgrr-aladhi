@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+.next/
+**/.next/
 *.tsbuildinfo
 .superpowers
 docs/
@@ -53,3 +55,4 @@ docs/superpowers/
 .superpowers/brainstorm/2-1778607033/state/server.pid
 .superpowers/brainstorm/2118714-1778607184/state/server.pid
 .superpowers/brainstorm/2118714-1778607184/state/server-info
+apps/landing/.data/

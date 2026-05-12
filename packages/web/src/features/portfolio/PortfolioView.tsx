@@ -69,6 +69,15 @@ export default function PortfolioView() {
   const positions = positionsData?.positions ?? metricsData?.positions ?? [];
   const metrics = metricsData?.metrics ?? null;
   const isReadOnly = source !== 'manual';
+  const sourceLabel =
+    source === 'manual'
+      ? 'Manual'
+      : source === 'paper'
+        ? 'paper'
+        : (VENUES[source as VenueId]?.label ?? source);
+  const emptyMessage = isReadOnly
+    ? `No open ${sourceLabel} positions yet. They will appear here as the feed reports them.`
+    : undefined;
 
   return (
     <div className={styles.wrap}>
@@ -152,6 +161,7 @@ export default function PortfolioView() {
               positions={positions}
               breakEven={metrics?.breakEven ?? []}
               readOnly={isReadOnly}
+              {...(emptyMessage != null && { emptyMessage })}
             />
           </div>
         </div>

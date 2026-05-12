@@ -137,6 +137,17 @@ export default function AccountChip() {
     () => VENUE_IDS.filter((v) => venueCreds[v] != null),
     [venueCreds],
   );
+  const hasUnsupportedConfigured = useMemo(
+    () => configuredVenues.some((v) => PRIVATE_ADAPTER_SPECS[v].status !== 'available'),
+    [configuredVenues],
+  );
+  const unsupportedVenueLabels = useMemo(
+    () =>
+      configuredVenues
+        .filter((v) => PRIVATE_ADAPTER_SPECS[v].status !== 'available')
+        .map((v) => VENUES[v]?.label ?? v),
+    [configuredVenues],
+  );
 
   const refresh = () => {
     void qc.invalidateQueries();
@@ -385,12 +396,14 @@ export default function AccountChip() {
                 >
                   + Add venue key
                 </button>
-                <div className={styles.warning}>
-                  <strong>Derive</strong> and <strong>Thalex</strong> have working private WS adapters
-                  today. Other venues store keys locally but won&apos;t show positions in the Portfolio
-                  tab until the server-side adapter is built — see TODOs in
-                  <code className={styles.codeInline}> protocol/venue-credentials.ts</code>.
-                </div>
+                {hasUnsupportedConfigured && (
+                  <div className={styles.warning}>
+                    {unsupportedVenueLabels.join(', ')} private feed
+                    {unsupportedVenueLabels.length === 1 ? '' : 's'} not available yet — keys are
+                    saved locally but positions won&apos;t appear in the Portfolio tab. Derive and
+                    Thalex are live today.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -550,9 +563,9 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
         </div>
       ) : (
         <div className={styles.warning}>
-          <strong>Heads-up:</strong> {VENUES[venue]?.label ?? venue}&apos;s private adapter is{' '}
-          <strong>{spec.status}</strong>. Keys will be stored locally, but the Portfolio tab can&apos;t
-          show your live positions until the server-side adapter is built (see TODO list in the spec).
+          <strong>Heads-up:</strong> the {VENUES[venue]?.label ?? venue} private feed isn&apos;t
+          available yet. Your keys will be stored locally so you can use them later, but live
+          positions won&apos;t appear in the Portfolio tab.
         </div>
       )}
     </>

@@ -129,17 +129,16 @@ export default function FlowChartsView({
   const [hoverTrade, setHoverTrade] = useState<TradeEvent | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
 
-  const chartRef = useRef<HTMLDivElement>(null);
+  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const primitiveRef = useRef<TradeBubblePrimitive | null>(null);
   const tradeIndexRef = useRef<Map<string, TradeEvent>>(new Map());
 
   useEffect(() => {
-    const container = chartRef.current;
-    if (!container) return;
+    if (!chartContainer) return;
 
-    const chart = createChart(container, {
+    const chart = createChart(chartContainer, {
       autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: '#0A0A0A' },
@@ -206,7 +205,7 @@ export default function FlowChartsView({
       seriesRef.current = null;
       primitiveRef.current = null;
     };
-  }, []);
+  }, [chartContainer]);
 
   const trades = tradesQuery.data?.trades ?? [];
   const bubbles = useMemo(
@@ -236,7 +235,7 @@ export default function FlowChartsView({
     seriesRef.current.setData(linePoints as never);
     primitiveRef.current.update(bubbles);
     chartApiRef.current?.timeScale().fitContent();
-  }, [bubbles, trades]);
+  }, [bubbles, trades, chartContainer]);
 
   const stats = useMemo(() => {
     if (!trades.length) return null;
@@ -368,7 +367,7 @@ export default function FlowChartsView({
             ) : null}
           </div>
           <div className={styles.chartArea}>
-            <div className={styles.chartWrap} ref={chartRef} />
+            <div className={styles.chartWrap} ref={setChartContainer} />
             {tradesQuery.isLoading ? (
               <div className={styles.chartOverlay}>
                 <Spinner size="lg" />

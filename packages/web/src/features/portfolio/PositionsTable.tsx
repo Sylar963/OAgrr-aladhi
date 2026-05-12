@@ -10,6 +10,7 @@ interface Props {
   positions: PositionLeg[];
   breakEven: BreakEvenIvRow[];
   readOnly?: boolean;
+  emptyMessage?: string;
 }
 
 function fmtUsd(value: number | null | undefined): string {
@@ -28,17 +29,19 @@ function fmtPct(value: number | null | undefined): string {
   return `${sign}${(value * 100).toFixed(2)}%`;
 }
 
-export default function PositionsTable({ positions, breakEven, readOnly = false }: Props) {
+export default function PositionsTable({
+  positions,
+  breakEven,
+  readOnly = false,
+  emptyMessage,
+}: Props) {
   const removePosition = useRemovePosition();
   const isMobile = useIsMobile();
   const breakEvenByLegId = new Map(breakEven.map((row) => [row.legId, row]));
 
   if (positions.length === 0) {
-    return (
-      <div className={styles.empty}>
-        {readOnly ? 'No open paper positions.' : 'No positions yet — add a leg below.'}
-      </div>
-    );
+    const fallback = readOnly ? 'No open positions.' : 'No positions yet — add a leg below.';
+    return <div className={styles.empty}>{emptyMessage ?? fallback}</div>;
   }
 
   if (isMobile) {

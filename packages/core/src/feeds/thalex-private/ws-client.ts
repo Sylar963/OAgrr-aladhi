@@ -48,12 +48,18 @@ export class ThalexPrivateClient {
   private disposed = false;
   private readonly log = feedLogger('thalex-private');
 
+  private firstLoginResolved = false;
+
   constructor(private readonly creds: ThalexPrivateCreds) {
     const url = creds.env === 'test' ? TEST_WS_URL : PROD_WS_URL;
     this.client = new TopicWsClient(url, 'thalex-private', {
       onMessage: (raw) => this.handleRawMessage(raw),
       onStatusChange: (state) => {
-        if (state === 'connected') void this.afterConnect();
+        if (state === 'connected' && this.firstLoginResolved) {
+          void this.bootstrap().catch((err) => {
+            this.log.warn({ err: String(err) }, 'thalex reconnect bootstrap failed');
+          });
+        }
       },
       onClose: () => this.rejectAllPending('connection closed'),
     });
@@ -61,6 +67,15 @@ export class ThalexPrivateClient {
 
   async start(): Promise<void> {
     await this.client.connect();
+    await this.bootstrap();
+    this.firstLoginResolved = true;
+  }
+
+  private async bootstrap(): Promise<void> {
+    if (this.disposed) return;
+    await this.login();
+    await this.privateSubscribe([...PRIVATE_CHANNELS]);
+    this.log.info({ channels: PRIVATE_CHANNELS.length }, 'thalex private subscribed');
   }
 
   subscribe(listener: ThalexPositionsListener): () => void {
@@ -86,19 +101,14 @@ export class ThalexPrivateClient {
     await this.client.disconnect();
   }
 
-  private async afterConnect(): Promise<void> {
-    if (this.disposed) return;
-    try {
-      await this.login();
-      await this.privateSubscribe([...PRIVATE_CHANNELS]);
-      this.log.info({ channels: PRIVATE_CHANNELS.length }, 'thalex private subscribed');
-    } catch (err) {
-      this.log.warn({ err: String(err) }, 'thalex private bootstrap failed');
-    }
-  }
-
   private async login(): Promise<void> {
-    const token = mintAuthToken({ kid: this.creds.kid, privateKeyPem: this.creds.privateKeyPem });
+    let token: string;
+    try {
+      token = mintAuthToken({ kid: this.creds.kid, privateKeyPem: this.creds.privateKeyPem });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`thalex auth: failed to mint JWT (${msg}). Check kid and RSA private key PEM.`);
+    }
     const params: Record<string, unknown> = { token };
     if (this.creds.account != null) params['account'] = this.creds.account;
     await this.call('public/login', params);

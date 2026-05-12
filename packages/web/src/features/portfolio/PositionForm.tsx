@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { z } from 'zod';
 
 import type { PositionLegInput } from '@oggregator/protocol';
 
@@ -9,19 +10,18 @@ interface Props {
   defaultUnderlying?: string;
 }
 
-function parseNumber(raw: string, opts: { min?: number; max?: number } = {}): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  if (opts.min != null && n < opts.min) return null;
-  if (opts.max != null && n > opts.max) return null;
-  return n;
-}
-
-function parseSize(raw: string): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n === 0) return null;
-  return n;
-}
+const PositionFormSchema = z.object({
+  underlying: z.string().min(1, 'underlying is required').transform((v) => v.trim()),
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expiry must be YYYY-MM-DD'),
+  strike: z.coerce.number().positive('strike must be a positive number'),
+  optionRight: z.enum(['call', 'put']),
+  size: z.coerce.number().refine((v) => v !== 0, 'size must be a non-zero number'),
+  entryPriceUsd: z.coerce.number().positive('entry price must be > 0'),
+  entryIvPct: z.preprocess(
+    (v) => (v == null || (typeof v === 'string' && v.trim().length === 0) ? null : v),
+    z.union([z.null(), z.coerce.number().min(0).max(500)]),
+  ),
+});
 
 export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
   const [underlying, setUnderlying] = useState(defaultUnderlying);
@@ -39,26 +39,31 @@ export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
     event.preventDefault();
     setError(null);
 
-    const strikeN = parseNumber(strike, { min: 0 });
-    const sizeN = parseSize(size);
-    const entryN = parseNumber(entryPrice, { min: 0 });
-    const ivPctN = entryIvPct.trim().length > 0 ? parseNumber(entryIvPct, { min: 0, max: 500 }) : null;
-    const ivFraction = ivPctN != null ? ivPctN / 100 : null;
-
-    if (!underlying.trim()) return setError('underlying is required');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return setError('expiry must be YYYY-MM-DD');
-    if (strikeN == null || strikeN <= 0) return setError('strike must be a positive number');
-    if (sizeN == null) return setError('size must be a non-zero number');
-    if (entryN == null || entryN <= 0) return setError('entry price must be > 0');
-
-    const input: PositionLegInput = {
-      underlying: underlying.trim(),
+    const parsed = PositionFormSchema.safeParse({
+      underlying,
       expiry,
-      strike: strikeN,
+      strike,
       optionRight,
-      size: sizeN,
-      entryPriceUsd: entryN,
-      entryIv: ivFraction,
+      size,
+      entryPriceUsd: entryPrice,
+      entryIvPct,
+    });
+
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      setError(first?.message ?? 'invalid form');
+      return;
+    }
+
+    const data = parsed.data;
+    const input: PositionLegInput = {
+      underlying: data.underlying,
+      expiry: data.expiry,
+      strike: data.strike,
+      optionRight: data.optionRight,
+      size: data.size,
+      entryPriceUsd: data.entryPriceUsd,
+      entryIv: data.entryIvPct == null ? null : data.entryIvPct / 100,
       venueHint: null,
       source: 'manual',
     };

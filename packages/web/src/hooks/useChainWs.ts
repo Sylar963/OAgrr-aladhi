@@ -10,6 +10,7 @@ import type {
 import type { WsConnectionState, VenueFailure } from '@oggregator/protocol';
 import { ServerWsMessageSchema } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain/queries';
+import { wsUrl } from '@lib/http';
 
 interface UseChainWsOptions {
   underlying: string;
@@ -365,11 +366,11 @@ export function useChainWs({
     }
 
     const envWsBase = import.meta.env.VITE_WS_URL;
-    const wsUrl = envWsBase
+    const chainWsUrl = envWsBase
       ? `${envWsBase.replace(/\/$/, '')}/ws/chain`
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chain`;
+      : wsUrl('/ws/chain');
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(chainWsUrl);
     wsRef.current = ws;
     store.set({ connectionState: 'connecting' });
 

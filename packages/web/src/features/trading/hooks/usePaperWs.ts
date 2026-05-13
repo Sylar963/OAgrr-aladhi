@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PaperWsServerMessage } from '@oggregator/protocol';
+
+import { wsUrl } from '@lib/http';
+
 import { QKEY } from './queries';
 
 type PaperConnectionState = 'connecting' | 'live' | 'closed' | 'error';
@@ -25,10 +28,10 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       const apiKey = localStorage.getItem('paperApiKey');
       const apiKeyParam = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : '';
       const envWsBase = import.meta.env.VITE_WS_URL;
-      const wsUrl = envWsBase
+      const paperWsUrl = envWsBase
         ? `${envWsBase.replace(/\/$/, '')}/ws/paper${apiKeyParam}`
-        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/paper${apiKeyParam}`;
-      const ws = new WebSocket(wsUrl);
+        : `${wsUrl('/ws/paper')}${apiKeyParam}`;
+      const ws = new WebSocket(paperWsUrl);
       wsRef.current = ws;
       setState('connecting');
 

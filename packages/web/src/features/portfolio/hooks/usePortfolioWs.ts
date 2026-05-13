@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { PortfolioWsServerMessageSchema } from '@oggregator/protocol';
 
+import { wsUrl } from '@lib/http';
+
 import type { PortfolioSource } from '../api';
 import { PORTFOLIO_QKEY } from './queries';
 
@@ -32,7 +34,6 @@ export function usePortfolioWs(
     const open = () => {
       if (disposed) return;
       setConnectionState('connecting');
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       let apiKey = '';
       try {
         apiKey = localStorage.getItem('paperApiKey') ?? '';
@@ -40,7 +41,7 @@ export function usePortfolioWs(
       const params = new URLSearchParams();
       if (apiKey) params.set('apiKey', apiKey);
       params.set('source', source);
-      const url = `${proto}//${window.location.host}/ws/portfolio?${params.toString()}`;
+      const url = `${wsUrl('/ws/portfolio')}?${params.toString()}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 

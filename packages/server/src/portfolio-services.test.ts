@@ -7,7 +7,7 @@ import {
   type SviParams,
 } from '@oggregator/core';
 
-import { buildSviFitPoints, getSmileFit, sviMark } from './portfolio-services.js';
+import { blendSvi, buildSviFitPoints, getSmileFit, sviMark } from './portfolio-services.js';
 
 function makeSnapshot(
   underlying: string,
@@ -149,6 +149,20 @@ describe('portfolio-services SVI fallback', () => {
     const points = buildSviFitPoints(snap, FORWARD);
     expect(points.find((p) => Math.abs(p.iv - 4.5) < 0.01)).toBeUndefined();
     expect(points.length).toBe(5);
+  });
+
+  it('blendSvi linearly EMAs each parameter and short-circuits at the ends', () => {
+    const prev: SviParams = { a: 0.1, b: 0.5, rho: -0.2, m: 0.0, sigma: 0.1 };
+    const next: SviParams = { a: 0.2, b: 0.6, rho: 0.0, m: 0.1, sigma: 0.2 };
+    const out = blendSvi(prev, next)!;
+    // alpha = 0.3 → out = prev + 0.3 * (next - prev)
+    expect(out.a).toBeCloseTo(0.1 + 0.3 * (0.2 - 0.1), 10);
+    expect(out.b).toBeCloseTo(0.5 + 0.3 * (0.6 - 0.5), 10);
+    expect(out.rho).toBeCloseTo(-0.2 + 0.3 * (0.0 - -0.2), 10);
+    expect(out.m).toBeCloseTo(0.0 + 0.3 * (0.1 - 0.0), 10);
+    expect(out.sigma).toBeCloseTo(0.1 + 0.3 * (0.2 - 0.1), 10);
+    expect(blendSvi(null, next)).toBe(next);
+    expect(blendSvi(prev, null)).toBeNull();
   });
 
   it('returns null when SVI extrapolates beyond the SVI_IV_MAX band', () => {

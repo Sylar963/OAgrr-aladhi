@@ -19,6 +19,7 @@ import {
   type PositionStore,
   type SviFitPoint,
   type SviParams,
+  type VenueQuote,
 } from '@oggregator/core';
 import type { PortfolioSource } from '@oggregator/protocol';
 
@@ -161,6 +162,63 @@ function sanePriceForLeg(
 const SVI_IV_MIN = 0.05;
 const SVI_IV_MAX = 2.0;
 
+// Drop a venue's quote from the cross-venue median when it hasn't ticked in
+// this long. Sized larger than typical near-ATM cadence (~1s) and shorter
+// than the gap that produces the visible snap when a stuck venue catches up.
+const QUOTE_STALENESS_MS = 10_000;
+
+// Bounds on the per-venue underlying / canonical-forward ratio. An inverse
+// venue's USD mid was multiplied by THIS venue's underlying during normPrice;
+// when its cached underlying drifts from consensus, every USD mid it publishes
+// carries that bias. Outside this band, treat the venue's snapshot as
+// not-yet-caught-up and drop it.
+const UNDERLYING_RATIO_MIN = 0.97;
+const UNDERLYING_RATIO_MAX = 1.03;
+
+// EMA weight on each new SVI fit. 0.3 → a step change in the smile fully
+// propagates within ~5–10 snapshot ticks (1–2s at 200ms cadence), which kills
+// per-tick fit-noise wobble without meaningfully lagging real moves.
+const SVI_FIT_ALPHA = 0.3;
+
+function freshAndPlausible(q: VenueQuote, canonicalForward: number | null, now: number): boolean {
+  if (q.asOfMs != null && now - q.asOfMs > QUOTE_STALENESS_MS) return false;
+  if (
+    q.inverse === true &&
+    q.underlyingPriceUsd != null &&
+    q.underlyingPriceUsd > 0 &&
+    canonicalForward != null &&
+    canonicalForward > 0
+  ) {
+    const ratio = canonicalForward / q.underlyingPriceUsd;
+    if (!(ratio >= UNDERLYING_RATIO_MIN && ratio <= UNDERLYING_RATIO_MAX)) return false;
+  }
+  return true;
+}
+
+// Renormalize an inverse-venue USD mid against the chain's canonical forward
+// instead of the per-venue underlying used at conversion time. Linear venues
+// pass through (their USD mid never carried a spot scalar).
+function canonicalUsdMid(q: VenueQuote, canonicalForward: number | null): number | null {
+  if (q.mid == null) return null;
+  if (q.inverse !== true) return q.mid;
+  if (q.underlyingPriceUsd == null || !(q.underlyingPriceUsd > 0)) return q.mid;
+  if (canonicalForward == null || !(canonicalForward > 0)) return q.mid;
+  return q.mid * (canonicalForward / q.underlyingPriceUsd);
+}
+
+export function blendSvi(prev: SviParams | null, next: SviParams | null): SviParams | null {
+  if (next == null) return null;
+  if (prev == null) return next;
+  const a = SVI_FIT_ALPHA;
+  return {
+    a: prev.a + (next.a - prev.a) * a,
+    b: prev.b + (next.b - prev.b) * a,
+    rho: prev.rho + (next.rho - prev.rho) * a,
+    m: prev.m + (next.m - prev.m) * a,
+    sigma: prev.sigma + (next.sigma - prev.sigma) * a,
+  };
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -245,9 +303,10 @@ export function getSmileFit(
   if (cached != null && cached.snapshot === snapshot) return cached.params;
 
   const points = buildSviFitPoints(snapshot, forward);
-  const params = points.length >= SVI_MIN_POINTS ? fitSvi(points, tYears) : null;
-  smileFits.set(key, { snapshot, params });
-  return params;
+  const fresh = points.length >= SVI_MIN_POINTS ? fitSvi(points, tYears) : null;
+  const blended = blendSvi(cached?.params ?? null, fresh);
+  smileFits.set(key, { snapshot, params: blended });
+  return blended;
 }
 
 export function sviMark(
@@ -289,25 +348,34 @@ function freshMark(leg: PositionLeg): MarkContext {
   const venueMark = (() => {
     if (strikeRow == null) return null;
     const side = leg.optionRight === 'call' ? strikeRow.call : strikeRow.put;
-    const allQuotes = Object.values(side.venues).filter(
-      (q): q is NonNullable<typeof q> => q != null,
-    );
+    const now = Date.now();
+    const allQuotes = Object.values(side.venues)
+      .filter((q): q is NonNullable<typeof q> => q != null)
+      .filter((q) => freshAndPlausible(q, forwardPriceUsd, now));
     if (allQuotes.length === 0) return null;
 
-    // Prefer venues with a real two-sided book for mark/IV. One-sided quotes
-    // fall back to the exchange's published mark in enrichment, which is a
-    // different series with different cadence — mixing them into the same
-    // arithmetic average is most of the visible mark jitter on near-expiry
-    // OTM strikes.
+    // Require a real two-sided book for mark/IV. q.mid in enrichment is
+    // (bid+ask)/2 when both sides exist, else the exchange's markMid — a
+    // different series with different cadence. Letting one-sided quotes into
+    // the median means q.mid flickers between two series tick-to-tick, which
+    // is the dominant source of single-tick P&L jitter. If no venue is
+    // two-sided, drop through to the SVI / sticky tier instead of averaging
+    // noise.
     const twoSided = allQuotes.filter(
       (q) => q.bid != null && q.ask != null && q.bid > 0 && q.ask >= q.bid,
     );
-    const priceQuotes = twoSided.length >= 1 ? twoSided : allQuotes;
 
     const markPriceUsd = robustCentral(
-      priceQuotes.map((q) => sanePriceForLeg(q.mid, forwardPriceUsd, leg.strike, leg.optionRight)),
+      twoSided.map((q) =>
+        sanePriceForLeg(
+          canonicalUsdMid(q, forwardPriceUsd),
+          forwardPriceUsd,
+          leg.strike,
+          leg.optionRight,
+        ),
+      ),
     );
-    const iv = robustCentral(priceQuotes.map((q) => saneIv(q.markIv)));
+    const iv = robustCentral(twoSided.map((q) => saneIv(q.markIv)));
     const delta = robustCentral(allQuotes.map((q) => saneDelta(q.delta)));
     const gamma = robustCentral(allQuotes.map((q) => saneGamma(q.gamma)));
     const vega = robustCentral(allQuotes.map((q) => saneVegaPct(q.vega)));

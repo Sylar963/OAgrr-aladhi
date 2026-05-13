@@ -31,6 +31,13 @@ export interface VenueQuote {
   volume24h: number | null;
   openInterestUsd: number | null;
   volume24hUsd: number | null;
+  // Per-quote staleness + the per-venue underlying that was applied during USD
+  // normalization. Consumers that aggregate USD prices across venues need both
+  // to (a) drop stale venues from the median and (b) renormalize inverse-venue
+  // USD mids against a canonical underlying instead of each venue's own.
+  asOfMs?: number | null;
+  underlyingPriceUsd?: number | null;
+  inverse?: boolean;
 }
 
 export interface EnrichedSide {
@@ -222,6 +229,9 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
       (contract.quote.volume24h != null && contract.quote.underlyingPriceUsd != null
         ? contract.quote.volume24h * contract.quote.underlyingPriceUsd
         : null),
+    asOfMs: contract.quote.timestamp,
+    underlyingPriceUsd: contract.quote.underlyingPriceUsd,
+    inverse: contract.inverse,
   };
 }
 

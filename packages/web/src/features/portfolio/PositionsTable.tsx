@@ -73,9 +73,9 @@ export default function PositionsTable({
           <th>Entry $</th>
           <th>Entry IV</th>
           <th>Mark $</th>
-          <th>Cur IV</th>
-          <th>BE IV</th>
-          <th>Cushion</th>
+          <th>Live IV</th>
+          <th>Break-even IV</th>
+          <th>IV Cushion</th>
           <th></th>
         </tr>
       </thead>

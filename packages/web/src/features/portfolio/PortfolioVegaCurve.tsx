@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { VegaByStrikeRow } from '@oggregator/protocol';
+import type { BreakEvenIvRow, VegaByStrikeRow } from '@oggregator/protocol';
 
 import styles from './PortfolioVegaCurve.module.css';
 
@@ -15,6 +15,7 @@ interface ModeMeta {
 
 interface Props {
   byStrike: VegaByStrikeRow[];
+  breakEven: BreakEvenIvRow[];
 }
 
 const COLORS: Record<Mode, string> = {
@@ -51,7 +52,11 @@ const HEIGHT = 240;
 const PADDING = { top: 12, right: 16, bottom: 28, left: 56 };
 
 function fmtStrike(v: number): string {
-  return v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v);
+  if (!Number.isFinite(v)) return '—';
+  return v.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(v) ? 0 : 2,
+  });
 }
 
 function fmtValue(v: number): string {
@@ -65,9 +70,28 @@ function fmtSignedValue(v: number): string {
   return `${sign}${fmtValue(v)}`;
 }
 
-export default function PortfolioVegaCurve({ byStrike }: Props) {
+function fmtIv(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return `${(v * 100).toFixed(1)}%`;
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${(v * 100).toFixed(2)}%`;
+}
+
+function strikeTicks(points: Array<{ x: number }>): number[] {
+  if (points.length <= 6) return points.map((point) => point.x);
+  const lastIndex = points.length - 1;
+  const indexes = new Set([0, Math.floor(lastIndex / 4), Math.floor(lastIndex / 2), Math.floor((lastIndex * 3) / 4), lastIndex]);
+  return [...indexes].sort((left, right) => left - right).map((index) => points[index]!.x);
+}
+
+export default function PortfolioVegaCurve({ byStrike, breakEven }: Props) {
   const [mode, setMode] = useState<Mode>('vega');
   const [expiry, setExpiry] = useState<string | null>(null);
+  const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const meta = MODE_META[mode];
 
   const expiries = useMemo(
@@ -105,12 +129,23 @@ export default function PortfolioVegaCurve({ byStrike }: Props) {
     const toX = (x: number) => PADDING.left + ((x - xMin) / xSpan) * innerW;
     const toY = (y: number) => PADDING.top + (1 - (y - yMin) / ySpan) * innerH;
     const zeroY = toY(0);
-    const xTicks = [xMin, xMin + xSpan / 2, xMax];
+    const xTicks = strikeTicks(points);
     const yTicks = [yMin, -maxAbsY / 2, 0, maxAbsY / 2, yMax];
     const total = points.reduce((sum, point) => sum + point.y, 0);
 
     return { barWidth, total, zeroY, xTicks, yTicks, toX, toY };
   }, [points]);
+
+  const activeStrike = points.some((point) => point.x === selectedStrike)
+    ? selectedStrike
+    : (points[0]?.x ?? null);
+
+  const activeBreakEvenRows = useMemo(() => {
+    if (activeExpiry == null || activeStrike == null) return [];
+    return breakEven
+      .filter((row) => row.expiry === activeExpiry && row.strike === activeStrike)
+      .sort((left, right) => left.optionRight.localeCompare(right.optionRight));
+  }, [activeExpiry, activeStrike, breakEven]);
 
   return (
     <div className={styles.wrap}>
@@ -162,6 +197,28 @@ export default function PortfolioVegaCurve({ byStrike }: Props) {
       <div className={styles.explainer}>
         <strong>{meta.label}:</strong> {meta.explanation} {meta.positiveHint}
       </div>
+      {activeStrike != null && (
+        <div className={styles.breakEvenPanel}>
+          <div className={styles.breakEvenHeader}>
+            <span className={styles.breakEvenTitle}>Selected strike {fmtStrike(activeStrike)}</span>
+            <span className={styles.breakEvenSubtitle}>Break-even IV lives in the table and here for the selected strike.</span>
+          </div>
+          {activeBreakEvenRows.length === 0 ? (
+            <div className={styles.breakEvenEmpty}>No break-even rows for this strike yet.</div>
+          ) : (
+            <div className={styles.breakEvenRows}>
+              {activeBreakEvenRows.map((row) => (
+                <div key={row.legId} className={styles.breakEvenChip}>
+                  <span className={styles.breakEvenRight}>{row.optionRight === 'call' ? 'Call' : 'Put'}</span>
+                  <span>live {fmtIv(row.currentIv)}</span>
+                  <span>BE {fmtIv(row.breakEvenIv)}</span>
+                  <span>cushion {fmtPct(row.ivCushionPct)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className={styles.chartWrap}>
         {chart == null ? (
           <div className={styles.empty}>No data</div>
@@ -226,12 +283,14 @@ export default function PortfolioVegaCurve({ byStrike }: Props) {
                   rx={2}
                   fill={p.y > 0 ? COLORS[mode] : p.y < 0 ? NEGATIVE_BAR_COLOR : NEUTRAL_BAR_COLOR}
                   fillOpacity={0.92}
+                  onMouseEnter={() => setSelectedStrike(p.x)}
                 />
                 <circle
                   cx={chart.toX(p.x)}
                   cy={chart.toY(p.y)}
                   r={2.5}
                   fill="#f8fafc"
+                  onMouseEnter={() => setSelectedStrike(p.x)}
                 />
               </g>
             ))}

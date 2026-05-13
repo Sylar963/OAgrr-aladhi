@@ -15,6 +15,37 @@ import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
 
 const FORWARD_OPTIONS: number[] = [0, 1, 3, 7];
+const SOURCE_STORAGE_KEY = 'portfolioSource';
+const FORWARD_STORAGE_KEY = 'portfolioForwardDays';
+const DEFAULT_SOURCE: PortfolioSource = 'manual';
+
+function loadStoredSource(): PortfolioSource {
+  try {
+    const raw = localStorage.getItem(SOURCE_STORAGE_KEY);
+    if (
+      raw === 'manual' ||
+      raw === 'paper' ||
+      raw === 'deribit' ||
+      raw === 'okx' ||
+      raw === 'binance' ||
+      raw === 'bybit' ||
+      raw === 'derive' ||
+      raw === 'coincall' ||
+      raw === 'thalex'
+    ) {
+      return raw;
+    }
+  } catch {}
+  return DEFAULT_SOURCE;
+}
+
+function loadStoredForwardDays(): number {
+  try {
+    const raw = Number(localStorage.getItem(FORWARD_STORAGE_KEY));
+    if (FORWARD_OPTIONS.includes(raw)) return raw;
+  } catch {}
+  return 0;
+}
 
 interface SourceOption {
   value: PortfolioSource;
@@ -57,8 +88,8 @@ function fmtNum(value: number | null | undefined, digits = 2): string {
 
 export default function PortfolioView() {
   const underlying = useAppStore((s) => s.underlying);
-  const [forwardDays, setForwardDays] = useState(0);
-  const [source, setSource] = useState<PortfolioSource>('manual');
+  const [forwardDays, setForwardDays] = useState(loadStoredForwardDays);
+  const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
   const { connectionState, lastSeq } = usePortfolioWs(source);
   const { data: positionsData } = usePortfolioPositions(source);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source);
@@ -79,6 +110,20 @@ export default function PortfolioView() {
     ? `No open ${sourceLabel} positions yet. They will appear here as the feed reports them.`
     : undefined;
 
+  const onSelectSource = (nextSource: PortfolioSource) => {
+    setSource(nextSource);
+    try {
+      localStorage.setItem(SOURCE_STORAGE_KEY, nextSource);
+    } catch {}
+  };
+
+  const onSelectForwardDays = (days: number) => {
+    setForwardDays(days);
+    try {
+      localStorage.setItem(FORWARD_STORAGE_KEY, String(days));
+    } catch {}
+  };
+
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
@@ -94,7 +139,7 @@ export default function PortfolioView() {
                 data-disabled={!opt.ready || undefined}
                 disabled={!opt.ready}
                 title={opt.note}
-                onClick={() => setSource(opt.value)}
+                onClick={() => onSelectSource(opt.value)}
               >
                 {opt.label}
                 {!opt.ready && <span className={styles.todoTag}>TODO</span>}
@@ -111,7 +156,7 @@ export default function PortfolioView() {
                 type="button"
                 className={styles.toggle}
                 data-active={forwardDays === days || undefined}
-                onClick={() => setForwardDays(days)}
+                onClick={() => onSelectForwardDays(days)}
               >
                 T+{days}d
               </button>
@@ -155,7 +200,7 @@ export default function PortfolioView() {
 
       <div className={styles.bodyGrid}>
         <div className={styles.mainCol}>
-          <PortfolioVegaCurve byStrike={metrics?.byStrike ?? []} />
+          <PortfolioVegaCurve byStrike={metrics?.byStrike ?? []} breakEven={metrics?.breakEven ?? []} />
           <div className={styles.tableWrap}>
             <PositionsTable
               positions={positions}

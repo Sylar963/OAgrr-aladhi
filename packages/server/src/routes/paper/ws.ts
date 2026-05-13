@@ -26,14 +26,28 @@ function send(
 export async function paperWsRoute(app: FastifyInstance) {
   app.get('/ws/paper', { websocket: true }, async (socket, req) => {
     let disposed = false;
-    let accountId = DEFAULT_ACCOUNT_ID;
 
     const apiKey = new URL(req.url, 'http://localhost').searchParams.get('apiKey');
-    if (apiKey && paperTradingStore.enabled) {
-      const user = await getUserByApiKey(apiKey);
-      if (user) {
-        accountId = user.accountId;
+    let accountId: string;
+    if (paperTradingStore.enabled) {
+      if (!apiKey) {
+        send(socket, {
+          type: 'error',
+          code: 'unauthorized',
+          message: 'apiKey query parameter required',
+        });
+        socket.close(1008, 'Unauthorized');
+        return;
       }
+      const user = await getUserByApiKey(apiKey);
+      if (!user) {
+        send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid apiKey' });
+        socket.close(1008, 'Unauthorized');
+        return;
+      }
+      accountId = user.accountId;
+    } else {
+      accountId = DEFAULT_ACCOUNT_ID;
     }
 
     send(socket, {

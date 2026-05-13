@@ -7,6 +7,7 @@ import { VenueIdSchema, type VenueId } from '@oggregator/protocol';
 import { derivePositionStore } from '../../derive-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { getOrCreatePortfolioRuntime } from '../../portfolio-services.js';
+import { getRequestAccountId } from '../../user-service.js';
 
 const DeriveCredsSchema = z.object({
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
@@ -23,7 +24,7 @@ const ThalexCredsSchema = z.object({
 });
 
 function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 }
 
 export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {

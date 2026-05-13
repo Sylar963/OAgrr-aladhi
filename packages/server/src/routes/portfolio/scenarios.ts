@@ -16,6 +16,7 @@ import {
   listPositions,
   portfolioMarkProvider,
 } from '../../portfolio-services.js';
+import { getRequestAccountId } from '../../user-service.js';
 
 function parseScenarios(body: unknown): { scenarios: VolShockScenario[] } | { error: string; issues: unknown[] } {
   if (typeof body !== 'object' || body == null) {
@@ -35,7 +36,7 @@ function parseScenarios(body: unknown): { scenarios: VolShockScenario[] } | { er
 }
 
 function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 }
 
 export async function portfolioScenariosRoute(app: FastifyInstance) {

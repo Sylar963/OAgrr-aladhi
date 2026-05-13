@@ -8,6 +8,7 @@ import {
   bootstrapPortfolioForAccount,
   getOrCreatePortfolioRuntime,
 } from '../../portfolio-services.js';
+import { paperTradingStore } from '../../trading-services.js';
 import { getUserByApiKey } from '../../user-service.js';
 import { portfolioEvents } from './events.js';
 
@@ -35,18 +36,36 @@ export async function portfolioWsRoute(app: FastifyInstance) {
     });
 
     try {
-      let accountId = DEFAULT_ACCOUNT_ID;
-
       const url = new URL(req.url, 'http://localhost');
       const apiKey = url.searchParams.get('apiKey');
-      if (apiKey) {
+
+      let accountId: string;
+      if (paperTradingStore.enabled) {
+        if (!apiKey) {
+          send(socket, {
+            type: 'error',
+            code: 'unauthorized',
+            message: 'apiKey query parameter required',
+          });
+          socket.close(1008, 'Unauthorized');
+          return;
+        }
+        let user: Awaited<ReturnType<typeof getUserByApiKey>> = null;
         try {
-          const user = await getUserByApiKey(apiKey);
-          if (user) accountId = user.accountId;
+          user = await getUserByApiKey(apiKey);
         } catch (err) {
           req.log.warn({ err: String(err) }, 'portfolio ws: getUserByApiKey failed');
         }
+        if (!user) {
+          send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid apiKey' });
+          socket.close(1008, 'Unauthorized');
+          return;
+        }
+        accountId = user.accountId;
+      } else {
+        accountId = DEFAULT_ACCOUNT_ID;
       }
+
       const sourceParsed = PortfolioSourceSchema.safeParse(url.searchParams.get('source'));
       const source = sourceParsed.success ? sourceParsed.data : 'manual';
       const underlyingRaw = url.searchParams.get('underlying')?.trim();

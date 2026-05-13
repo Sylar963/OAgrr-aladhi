@@ -16,10 +16,11 @@ import {
   listPositions,
   portfolioStore,
 } from '../../portfolio-services.js';
+import { getRequestAccountId } from '../../user-service.js';
 import { portfolioEvents } from './events.js';
 
 function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 }
 
 function parseSource(raw: unknown): PortfolioSource {

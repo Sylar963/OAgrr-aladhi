@@ -8,6 +8,7 @@ import {
   bootstrapPortfolioForAccount,
   getOrCreatePortfolioRuntime,
 } from '../../portfolio-services.js';
+import { getRequestAccountId } from '../../user-service.js';
 
 const MetricsQuerySchema = z.object({
   forwardDays: z.coerce.number().int().min(0).max(365).optional(),
@@ -16,7 +17,7 @@ const MetricsQuerySchema = z.object({
 });
 
 function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 }
 
 export async function portfolioMetricsRoute(app: FastifyInstance) {

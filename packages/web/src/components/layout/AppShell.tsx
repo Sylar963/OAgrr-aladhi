@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { CommandPalette, ShortcutHelp } from '@components/ui';
@@ -11,6 +11,7 @@ import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import { NewsTicker } from './NewsTicker';
+import { PaletteContext } from './palette-context';
 import styles from './AppShell.module.css';
 
 // Second key of a `g <x>` chord maps to a tab.
@@ -41,12 +42,6 @@ interface AppShellProps {
   children: ReactNode;
   underlyings: string[];
   tabs: readonly Tab[];
-}
-
-const PaletteContext = createContext<() => void>(() => {});
-
-export function useOpenPalette() {
-  return useContext(PaletteContext);
 }
 
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {

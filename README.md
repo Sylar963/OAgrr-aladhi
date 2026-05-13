@@ -89,7 +89,12 @@ Chain transport path: **Exchange deltas → `ChainRuntime` projection → `WS /w
 | `GET /api/ready` | Readiness for deploy health checks |
 | `GET /api/flow?underlying=BTC` | Recent options trades across venues |
 | `GET /api/block-flow?underlying=BTC` | Institutional RFQ / block trades |
+| `GET /api/portfolio/positions?source=manual` | Current portfolio legs for the selected source |
+| `GET /api/portfolio/metrics?source=manual&forwardDays=0` | Portfolio totals, pnl curve, greeks, break-even, and shock grid |
+| `POST /api/portfolio/scenarios?source=manual` | Run custom vol shock scenarios against current positions |
+| `POST/DELETE/GET /api/portfolio/venue-credentials/:venue` | Connect, disconnect, and inspect private-venue portfolio adapters |
 | `WS /ws/chain` | Real-time chain snapshot + delta stream to the browser |
+| `WS /ws/portfolio` | Real-time portfolio metrics snapshot + delta stream |
 | `POST /api/paper/auth/register` · `/paper/account` · `/paper/orders` · `/paper/positions` · `/paper/fills` · `/paper/pnl` · `/paper/trades` · `/paper/activity` | Paper trading engine (auth, accounts, multi-leg orders, fills, P&L, activity feed) |
 | `WS /ws/paper` | Real-time paper trading account/order/fill events |
 
@@ -105,6 +110,7 @@ The web dashboard includes:
 - **Analytics** — OI by venue, call/put summary, put/call ratio by expiry, DVOL chart with HV overlay, OI by strike, and cross-expiry curves
 - **GEX** — Gamma exposure by strike with dealer positioning explanation
 - **DVOL** — Standalone DVOL chart with historical candles and HV bands
+- **Portfolio** — Manual and venue-backed option positions with live pnl curve, strike/expiry greek aggregation, break-even IV view, and shock scenarios
 - **Trading** — Paper trading: accounts, multi-leg order entry, live positions, fills, realized/unrealized P&L, and activity feed (real-time via `WS /ws/paper`)
 
 Mobile responsive with bottom navigation, shared toolbar, and full-screen settings drawer.

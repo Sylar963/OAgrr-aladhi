@@ -1,6 +1,6 @@
 # @oggregator/server
 
-Fastify REST + WebSocket API. Bootstraps venue adapters from `@oggregator/core`, serves enriched chain data, flow routes, readiness, and the production SPA.
+Fastify REST + WebSocket API. Bootstraps venue adapters from `@oggregator/core`, serves enriched chain data, paper trading, portfolio analytics, flow routes, readiness, and the production SPA.
 
 ## Commands
 

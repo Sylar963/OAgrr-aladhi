@@ -5,14 +5,13 @@ import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useAppStore } from '@stores/app-store';
 
 import { useIsMobile } from '@hooks/useIsMobile';
+import type { TabId } from '@lib/tabs';
 
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import { NewsTicker } from './NewsTicker';
 import styles from './AppShell.module.css';
-
-type TabId = 'chain' | 'alpha' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
 
 // Second key of a `g <x>` chord maps to a tab.
 const GOTO_MAP: Record<string, TabId> = {
@@ -56,7 +55,11 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
+
+  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set(['trading', 'portfolio', 'analytics']);
+  const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -119,7 +122,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
       <div className={styles.shell}>
         <NewsTicker />
         <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
-        {isMobile && <MobileToolbar />}
+        {showToolbar && <MobileToolbar />}
         <main className={styles.main}>{children}</main>
         <MobileNav />
 

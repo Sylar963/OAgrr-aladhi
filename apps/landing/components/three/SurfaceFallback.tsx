@@ -1,5 +1,3 @@
-import React from "react";
-
 export function SurfaceFallback() {
   const verticalGuides = [110, 170, 230, 290, 350, 410, 470, 530];
   const horizontalGuides = [96, 148, 200, 252, 304];

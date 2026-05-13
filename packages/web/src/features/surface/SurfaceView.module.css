@@ -110,6 +110,7 @@
 
   .chartPanel {
     padding: var(--space-3);
-    height: 280px;
+    height: auto;
+    min-height: 360px;
   }
 }

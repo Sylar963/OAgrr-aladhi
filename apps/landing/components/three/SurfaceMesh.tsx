@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { Mesh } from "three";
 import { DoubleSide, PlaneGeometry } from "three";
 

@@ -17,11 +17,11 @@ function fmtSigned(value: number, digits = 2): string {
 
 function fmtContracts(value: number): string {
   const abs = Math.abs(value);
-  if (abs === 0) return '+0';
-  if (Number.isInteger(value)) return fmtSigned(value, 0);
-  if (abs >= 10) return fmtSigned(value, 2);
-  if (abs >= 1) return fmtSigned(value, 3);
-  return fmtSigned(value, 4);
+  if (abs === 0) return '0';
+  if (Number.isInteger(value)) return abs.toFixed(0);
+  if (abs >= 10) return trimTrailingZeros(abs.toFixed(2));
+  if (abs >= 1) return trimTrailingZeros(abs.toFixed(3));
+  return trimTrailingZeros(abs.toFixed(4));
 }
 
 function fmtGamma(value: number): string {

@@ -92,6 +92,17 @@ describe('aggregateGreeksByExpiry', () => {
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.expiry)).toEqual(['2026-06-27', '2026-09-26']);
   });
+
+  it('contracts is gross open size, not signed net (spreads do not collapse to zero)', () => {
+    const legs = [
+      makeLeg({ strike: 70_000, size: 1, legId: 'long-70k' }),
+      makeLeg({ strike: 80_000, size: -1, legId: 'short-80k' }),
+    ];
+    const withMarks = attachMarks(legs, constantMarks);
+    const rows = aggregateGreeksByExpiry(withMarks, Date.UTC(2026, 4, 12));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.contracts).toBe(2);
+  });
 });
 
 describe('breakEvenIvCurve', () => {

@@ -82,7 +82,9 @@ export function aggregateGreeksByExpiry(
     row.vega += (mark.vega ?? 0) * leg.size;
     row.gamma += (mark.gamma ?? 0) * leg.size;
     row.theta += (mark.theta ?? 0) * leg.size;
-    row.contracts += leg.size;
+    // Gross open contracts in the expiry — net signed sum would be 0 for any
+    // balanced spread, which hides real position size in the UI.
+    row.contracts += Math.abs(leg.size);
 
     acc.set(leg.expiry, row);
   }

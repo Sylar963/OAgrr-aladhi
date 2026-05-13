@@ -18,3 +18,4 @@ export {
   legMarkFromShockedIv,
 } from './aggregator.js';
 export { applyVolShock, computeShockPnl, computeShockGrid } from './scenarios.js';
+export { buildPortfolioPnlCurve } from './pnl-curve.js';

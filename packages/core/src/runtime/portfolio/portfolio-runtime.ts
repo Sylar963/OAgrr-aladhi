@@ -2,6 +2,7 @@ import type {
   BreakEvenIvRow,
   ExpiryBucketRow,
   PortfolioMetrics,
+  PortfolioPnlCurve,
   PortfolioTotals,
   PositionLeg,
   ShockGridCell,
@@ -17,6 +18,7 @@ import {
   breakEvenIvCurve,
   computeTotals,
 } from '../../portfolio/aggregator.js';
+import { buildPortfolioPnlCurve } from '../../portfolio/pnl-curve.js';
 import { computeShockGrid } from '../../portfolio/scenarios.js';
 import type {
   MarkProvider,
@@ -77,6 +79,20 @@ function emptyTotals(): PortfolioTotals {
     netVannaUsd: 0,
     netVolgaUsd: 0,
     unrealizedPnlUsd: 0,
+  };
+}
+
+function emptyPnlCurve(): PortfolioPnlCurve {
+  return {
+    status: 'empty',
+    underlying: null,
+    currentSpotUsd: null,
+    breakEvenPricesUsd: [],
+    maxProfitUsd: null,
+    maxLossUsd: null,
+    upsideBounded: false,
+    downsideBounded: false,
+    points: [],
   };
 }
 
@@ -179,6 +195,7 @@ export class PortfolioRuntime {
     const nowMs = this.now() + this.forwardDays * 86_400_000;
 
     let totals: PortfolioTotals;
+    let pnlCurve: PortfolioPnlCurve;
     let byStrike: VegaByStrikeRow[];
     let byExpiry: ExpiryBucketRow[];
     let breakEven: BreakEvenIvRow[];
@@ -186,12 +203,14 @@ export class PortfolioRuntime {
 
     if (positions.length === 0) {
       totals = emptyTotals();
+      pnlCurve = emptyPnlCurve();
       byStrike = [];
       byExpiry = [];
       breakEven = [];
       shockGrid = [];
     } else {
       totals = computeTotals(withMarks);
+      pnlCurve = buildPortfolioPnlCurve(withMarks, this.now(), this.forwardDays);
       byStrike = aggregateGreeksByStrike(withMarks);
       byExpiry = aggregateGreeksByExpiry(withMarks, nowMs);
       breakEven = breakEvenIvCurve(withMarks);
@@ -204,6 +223,7 @@ export class PortfolioRuntime {
       generatedAt: this.now(),
       forwardDays: this.forwardDays,
       totals,
+      pnlCurve,
       byStrike,
       byExpiry,
       breakEven,
@@ -230,6 +250,7 @@ export class PortfolioRuntime {
         generatedAt: this.now(),
         forwardDays: this.forwardDays,
         totals: emptyTotals(),
+        pnlCurve: emptyPnlCurve(),
         byStrike: [],
         byExpiry: [],
         breakEven: [],

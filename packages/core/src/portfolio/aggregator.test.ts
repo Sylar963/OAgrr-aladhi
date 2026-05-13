@@ -66,6 +66,7 @@ describe('aggregateGreeksByStrike', () => {
 
     const row70 = rows.find((r) => r.strike === 70_000);
     expect(row70?.vega).toBeGreaterThan(0);
+    expect(row70?.delta).toBeCloseTo(0.5, 6);
   });
 
   it('merges multiple legs at same strike+expiry', () => {

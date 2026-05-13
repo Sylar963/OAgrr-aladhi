@@ -33,9 +33,10 @@ export function aggregateGreeksByStrike(legsWithMarks: LegWithMark[]): VegaByStr
 
   for (const { leg, mark } of legsWithMarks) {
     const key = strikeKeyOf(leg.strike, leg.expiry);
-    const row = acc.get(key) ?? {
+    const row: VegaByStrikeRow = acc.get(key) ?? {
       strike: leg.strike,
       expiry: leg.expiry,
+      delta: 0,
       vega: 0,
       gamma: 0,
       vanna: 0,
@@ -46,6 +47,7 @@ export function aggregateGreeksByStrike(legsWithMarks: LegWithMark[]): VegaByStr
     const vanna = vanna76(mark.forwardPriceUsd, leg.strike, mark.iv, mark.yearsToExpiry) ?? 0;
     const volga = volga76(mark.forwardPriceUsd, leg.strike, mark.iv, mark.yearsToExpiry) ?? 0;
 
+    row.delta += (mark.delta ?? 0) * leg.size;
     row.vega += (mark.vega ?? 0) * leg.size;
     row.gamma += (mark.gamma ?? 0) * leg.size;
     row.vanna += vanna * leg.size;

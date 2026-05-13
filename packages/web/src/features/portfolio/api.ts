@@ -166,6 +166,7 @@ const PortfolioTotalsSchema = z.object({
 const VegaByStrikeRowSchema = z.object({
   strike: z.number(),
   expiry: z.string(),
+  delta: z.number(),
   vega: z.number(),
   gamma: z.number(),
   vanna: z.number(),
@@ -200,11 +201,38 @@ const ShockGridCellSchema = z.object({
   totalPnlUsd: z.number(),
 });
 
+const PortfolioPnlCurveStatusSchema = z.enum([
+  'ok',
+  'empty',
+  'mixed_underlyings',
+  'missing_marks',
+]);
+
+const PortfolioPnlPointSchema = z.object({
+  underlyingPriceUsd: z.number(),
+  nowPnlUsd: z.number(),
+  forwardPnlUsd: z.number().nullable(),
+  expiryPnlUsd: z.number(),
+});
+
+const PortfolioPnlCurveSchema = z.object({
+  status: PortfolioPnlCurveStatusSchema,
+  underlying: z.string().nullable(),
+  currentSpotUsd: z.number().nullable(),
+  breakEvenPricesUsd: z.array(z.number()),
+  maxProfitUsd: z.number().nullable(),
+  maxLossUsd: z.number().nullable(),
+  upsideBounded: z.boolean(),
+  downsideBounded: z.boolean(),
+  points: z.array(PortfolioPnlPointSchema),
+});
+
 const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
   accountId: z.string(),
   generatedAt: z.number(),
   forwardDays: z.number(),
   totals: PortfolioTotalsSchema,
+  pnlCurve: PortfolioPnlCurveSchema,
   byStrike: z.array(VegaByStrikeRowSchema),
   byExpiry: z.array(ExpiryBucketRowSchema),
   breakEven: z.array(BreakEvenIvRowSchema),

@@ -236,6 +236,7 @@ export {
   aggregateGreeksByStrike,
   aggregateGreeksByExpiry,
   breakEvenIvCurve,
+  buildPortfolioPnlCurve,
   computeTotals,
   attachMarks,
   legMarkFromShockedIv,

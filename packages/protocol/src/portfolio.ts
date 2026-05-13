@@ -52,6 +52,7 @@ export type PositionLegInput = z.infer<typeof PositionLegInputSchema>;
 export const VegaByStrikeRowSchema = z.object({
   strike: z.number(),
   expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  delta: z.number(),
   vega: z.number(),
   gamma: z.number(),
   vanna: z.number(),
@@ -140,11 +141,41 @@ export const ShockGridCellSchema = z.object({
 });
 export type ShockGridCell = z.infer<typeof ShockGridCellSchema>;
 
+export const PortfolioPnlCurveStatusSchema = z.enum([
+  'ok',
+  'empty',
+  'mixed_underlyings',
+  'missing_marks',
+]);
+export type PortfolioPnlCurveStatus = z.infer<typeof PortfolioPnlCurveStatusSchema>;
+
+export const PortfolioPnlPointSchema = z.object({
+  underlyingPriceUsd: z.number().positive(),
+  nowPnlUsd: z.number(),
+  forwardPnlUsd: z.number().nullable(),
+  expiryPnlUsd: z.number(),
+});
+export type PortfolioPnlPoint = z.infer<typeof PortfolioPnlPointSchema>;
+
+export const PortfolioPnlCurveSchema = z.object({
+  status: PortfolioPnlCurveStatusSchema,
+  underlying: z.string().nullable(),
+  currentSpotUsd: z.number().positive().nullable(),
+  breakEvenPricesUsd: z.array(z.number().positive()),
+  maxProfitUsd: z.number().nullable(),
+  maxLossUsd: z.number().nullable(),
+  upsideBounded: z.boolean(),
+  downsideBounded: z.boolean(),
+  points: z.array(PortfolioPnlPointSchema),
+});
+export type PortfolioPnlCurve = z.infer<typeof PortfolioPnlCurveSchema>;
+
 export const PortfolioMetricsSchema = z.object({
   accountId: z.string(),
   generatedAt: z.number().int(),
   forwardDays: z.number().int().nonnegative(),
   totals: PortfolioTotalsSchema,
+  pnlCurve: PortfolioPnlCurveSchema,
   byStrike: z.array(VegaByStrikeRowSchema),
   byExpiry: z.array(ExpiryBucketRowSchema),
   breakEven: z.array(BreakEvenIvRowSchema),

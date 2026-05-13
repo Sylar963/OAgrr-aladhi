@@ -1,6 +1,8 @@
 import { createPrivateKey, createSign, type KeyObject } from 'node:crypto';
 
 const DEFAULT_TOKEN_LIFETIME_SEC = 600;
+const MIN_IAT_STEP_SEC = 0.001;
+const lastIssuedAtByKid = new Map<string, number>();
 
 export interface MintTokenInput {
   kid: string;
@@ -55,7 +57,10 @@ export function mintAuthToken({ kid, privateKeyPem, nowSec, lifetimeSec }: MintT
   if (privateKeyPem == null || privateKeyPem === '') {
     throw new Error('thalex auth: privateKeyPem is required');
   }
-  const iat = nowSec ?? Math.floor(Date.now() / 1000);
+  const requestedIat = nowSec ?? Date.now() / 1000;
+  const priorIat = lastIssuedAtByKid.get(kid);
+  const iat = priorIat == null ? requestedIat : Math.max(requestedIat, priorIat + MIN_IAT_STEP_SEC);
+  lastIssuedAtByKid.set(kid, iat);
   const exp = iat + (lifetimeSec ?? DEFAULT_TOKEN_LIFETIME_SEC);
   const header = base64UrlEncode(JSON.stringify({ alg: 'RS512', typ: 'JWT', kid }));
   const payload = base64UrlEncode(JSON.stringify({ iat, exp }));

@@ -46,6 +46,25 @@ describe('mintAuthToken', () => {
     expect(verify('sha512', signed, createPublicKey(publicPem), sig)).toBe(true);
   });
 
+  it('bumps iat forward when the same key mints multiple tokens in the same second', () => {
+    const { privatePem } = generateRsaPemPair();
+
+    const firstToken = mintAuthToken({ kid: 'same-key', privateKeyPem: privatePem, nowSec: 1_700_000_000 });
+    const secondToken = mintAuthToken({ kid: 'same-key', privateKeyPem: privatePem, nowSec: 1_700_000_000 });
+
+    const firstPayload = JSON.parse(b64urlDecode(firstToken.split('.')[1]!).toString('utf8')) as {
+      iat: number;
+      exp: number;
+    };
+    const secondPayload = JSON.parse(b64urlDecode(secondToken.split('.')[1]!).toString('utf8')) as {
+      iat: number;
+      exp: number;
+    };
+
+    expect(secondPayload.iat).toBeGreaterThan(firstPayload.iat);
+    expect(secondPayload.exp).toBeGreaterThan(firstPayload.exp);
+  });
+
   it('accepts a KeyObject as well as PEM string', () => {
     const { privatePem } = generateRsaPemPair();
     const keyObject = createPrivateKey(privatePem);

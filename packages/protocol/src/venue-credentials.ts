@@ -9,6 +9,7 @@ export const VenueCredentialFieldKeySchema = z.enum([
   'clientId',
   'clientSecret',
   'subaccountId',
+  'account',
   'walletAddress',
   'privateKeyPem',
   'kid',
@@ -241,6 +242,13 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
         secret: true,
         required: true,
         multiline: true,
+      },
+      {
+        key: 'account',
+        label: 'Account number',
+        placeholder: 'optional: connect a non-default account',
+        secret: false,
+        required: false,
       },
     ],
     todos: [

@@ -30,3 +30,11 @@ export const ThalexJsonRpcErrorSchema = z.object({
   id: z.union([z.number(), z.string(), z.null()]).optional(),
   error: z.object({ code: z.number(), message: z.string() }),
 });
+
+export const ThalexLoginResultSchema = z.object({
+  account_number: z.string(),
+});
+export type ThalexLoginResult = z.infer<typeof ThalexLoginResultSchema>;
+
+export const ThalexSubscribedChannelsSchema = z.array(z.string());
+export type ThalexSubscribedChannels = z.infer<typeof ThalexSubscribedChannelsSchema>;

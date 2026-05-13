@@ -6,14 +6,34 @@ import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
 import { thalexPortfolioToLegs } from './codec.js';
 import {
+  ThalexLoginResultSchema,
   ThalexPortfolioNotificationSchema,
+  ThalexSubscribedChannelsSchema,
   type ThalexPortfolioEntry,
 } from './types.js';
 
 const PROD_WS_URL = 'wss://thalex.com/ws/api/v2';
 const TEST_WS_URL = 'wss://testnet.thalex.com/ws/api/v2';
-const PRIVATE_CHANNELS = ['account.portfolio'] as const;
+const PRIVATE_CHANNELS = ['account.portfolio', 'account.summary'] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
+
+function assertSubscribedChannels(result: unknown, channels: readonly string[]): string[] {
+  const parsed = ThalexSubscribedChannelsSchema.safeParse(result);
+  if (!parsed.success) {
+    throw new Error('[thalex-private] subscribe returned an invalid payload');
+  }
+
+  const subscribed = parsed.data;
+  const missing = channels.filter((channel) => !subscribed.includes(channel));
+  if (missing.length > 0) {
+    throw new Error(
+      `[thalex-private] subscribe did not confirm channels: ${missing.join(', ')}. ` +
+        'Check the selected account and API key permissions.',
+    );
+  }
+
+  return subscribed;
+}
 
 export interface ThalexPrivateCreds {
   kid: string;
@@ -74,8 +94,8 @@ export class ThalexPrivateClient {
   private async bootstrap(): Promise<void> {
     if (this.disposed) return;
     await this.login();
-    await this.privateSubscribe([...PRIVATE_CHANNELS]);
-    this.log.info({ channels: PRIVATE_CHANNELS.length }, 'thalex private subscribed');
+    const subscribed = await this.privateSubscribe([...PRIVATE_CHANNELS]);
+    this.log.info({ channels: subscribed }, 'thalex private subscribed');
   }
 
   subscribe(listener: ThalexPositionsListener): () => void {
@@ -111,12 +131,15 @@ export class ThalexPrivateClient {
     }
     const params: Record<string, unknown> = { token };
     if (this.creds.account != null) params['account'] = this.creds.account;
-    await this.call('public/login', params);
-    this.log.info({ account: this.creds.account ?? 'default' }, 'thalex private login ok');
+    const result = await this.call('public/login', params);
+    const parsed = ThalexLoginResultSchema.safeParse(result);
+    const selectedAccount = parsed.success ? parsed.data.account_number : this.creds.account ?? 'default';
+    this.log.info({ account: selectedAccount }, 'thalex private login ok');
   }
 
-  private async privateSubscribe(channels: string[]): Promise<void> {
-    await this.call('private/subscribe', { channels });
+  private async privateSubscribe(channels: string[]): Promise<string[]> {
+    const result = await this.call('private/subscribe', { channels });
+    return assertSubscribedChannels(result, channels);
   }
 
   private call(method: string, params: Record<string, unknown>): Promise<unknown> {

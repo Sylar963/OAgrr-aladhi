@@ -104,7 +104,11 @@ export default function AccountChip() {
         if (cancelled || status.connected) return;
         await connectVenue('derive', { walletAddress, signerPrivateKey, subaccountId });
         if (!cancelled) refresh();
-      } catch {}
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? `Derive reconnect failed: ${err.message}` : 'Derive reconnect failed');
+        }
+      }
     };
 
     const reconnectThalex = async () => {
@@ -112,13 +116,22 @@ export default function AccountChip() {
       if (creds == null) return;
       const kid = creds.fields.kid;
       const privateKeyPem = creds.fields.privateKeyPem;
+      const account = creds.fields.account?.trim();
       if (!kid || !privateKeyPem) return;
       try {
         const status = await venueStatus('thalex');
         if (cancelled || status.connected) return;
-        await connectVenue('thalex', { kid, privateKeyPem });
+        await connectVenue('thalex', {
+          kid,
+          privateKeyPem,
+          ...(account ? { account } : {}),
+        });
         if (!cancelled) refresh();
-      } catch {}
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? `Thalex reconnect failed: ${err.message}` : 'Thalex reconnect failed');
+        }
+      }
     };
 
     void reconnectDerive();
@@ -241,6 +254,7 @@ export default function AccountChip() {
         await connectVenue('thalex', {
           kid: trimmedFields.kid ?? '',
           privateKeyPem: trimmedFields.privateKeyPem ?? '',
+          ...((trimmedFields.account ?? '') !== '' ? { account: trimmedFields.account } : {}),
         });
         refresh();
       } catch (err) {

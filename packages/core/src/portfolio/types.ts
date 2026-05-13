@@ -12,6 +12,10 @@ export interface MarkContext {
   vega: number | null;
   theta: number | null;
   yearsToExpiry: number | null;
+  // True when the IV (and downstream price/greeks) came from a per-expiry
+  // SVI fit because no venue quoted the strike. Surfaces in the UI so the
+  // user can tell venue-mid from model-mid.
+  ivFromSvi?: boolean;
 }
 
 export type MarkProvider = (leg: PositionLeg) => MarkContext;

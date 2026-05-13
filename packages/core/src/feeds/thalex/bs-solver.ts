@@ -52,6 +52,21 @@ export function vega76(forward: number, strike: number, sigma: number, tYears: n
   return forward * Math.sqrt(tYears) * pdf(d1(forward, strike, sigma, tYears));
 }
 
+export function delta76(
+  forward: number,
+  strike: number,
+  sigma: number,
+  tYears: number,
+  right: OptionRight,
+): number {
+  const _d1 = d1(forward, strike, sigma, tYears);
+  return right === 'call' ? cdf(_d1) : cdf(_d1) - 1;
+}
+
+export function gamma76(forward: number, strike: number, sigma: number, tYears: number): number {
+  return pdf(d1(forward, strike, sigma, tYears)) / (forward * sigma * Math.sqrt(tYears));
+}
+
 export interface IvInputs {
   price: number | null;
   forward: number | null;

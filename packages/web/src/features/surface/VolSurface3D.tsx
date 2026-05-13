@@ -150,6 +150,92 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     return tenorMode === 'cmm' ? buildCmmGrid(data) : buildListedGrid(data);
   }, [data, tenorMode]);
 
+  const plotData = useMemo<Partial<Plotly.PlotData>[] | null>(() => {
+    if (!grid) return null;
+    return [
+      {
+        type: 'surface' as const,
+        x: grid.x,
+        y: grid.y,
+        z: grid.z,
+        // Plotly's typings declare text as string | string[]; the runtime accepts
+        // the 2-D form for surface traces and that's required for hover labels
+        // to map to the right (delta, expiry) cell.
+        text: grid.text as unknown as string[],
+        colorscale: [
+          [0, '#1e40af'],
+          [0.35, '#60a5fa'],
+          [0.5, '#f5f5f5'],
+          [0.7, '#fb923c'],
+          [1, '#ea580c'],
+        ],
+        showscale: true,
+        colorbar: {
+          title: { text: 'IV %', font: { color: '#888', size: 11 } },
+          tickfont: { color: '#888', size: 10, family: "'IBM Plex Mono', monospace" },
+          bgcolor: 'rgba(0,0,0,0)',
+          thickness: 12,
+          len: 0.6,
+        },
+        hovertemplate:
+          'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
+        contours: {
+          z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
+        } as Plotly.PlotData['contours'],
+      },
+    ];
+  }, [grid]);
+
+  const layout = useMemo<Partial<Plotly.Layout> | null>(() => {
+    if (!grid) return null;
+
+    const tickLabels = grid.x.map(deltaTickLabel);
+
+    // Aim for ~10 X labels and ~8 Y labels regardless of grid density. Plotly
+    // shows every value otherwise, which collides into an unreadable smear at
+    // 91 deltas / 240 CMM tenors.
+    const xStride = Math.max(1, Math.floor(grid.x.length / 10));
+    const yStride = Math.max(1, Math.floor(grid.y.length / 8));
+    const xTickVals = grid.x.filter((_, i) => i % xStride === 0);
+    const xTickText = tickLabels.filter((_, i) => i % xStride === 0);
+    const yTickVals = grid.y.filter((_, i) => i % yStride === 0);
+    const yTickText = grid.yLabels.filter((_, i) => i % yStride === 0);
+
+    return {
+      autosize: true,
+      paper_bgcolor: '#0A0A0A',
+      plot_bgcolor: '#0A0A0A',
+      font: { family: "'IBM Plex Mono', monospace", size: 11, color: '#555B5E' },
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      scene: {
+        ...SCENE_DEFAULTS,
+        // Plotly resets scene.camera on every react() call unless uirevision
+        // stays stable. Keying on the user-facing selectors preserves rotation
+        // across the 15s surface refetch and only resets on explicit switch.
+        uirevision: `${localUnderlying}-${selectedVenue}-${tenorMode}`,
+        xaxis: {
+          ...SCENE_DEFAULTS.xaxis,
+          title: '' as never,
+          tickvals: xTickVals,
+          ticktext: xTickText,
+        },
+        yaxis: {
+          ...SCENE_DEFAULTS.yaxis,
+          title: '' as never,
+          tickvals: yTickVals,
+          ticktext: yTickText,
+        },
+        zaxis: {
+          ...SCENE_DEFAULTS.zaxis,
+          title: '' as never,
+          ticksuffix: '%',
+        },
+        camera: { eye: { x: 1.5, y: -1.5, z: 0.7 } },
+        aspectratio: { x: 1.4, y: 1.2, z: 0.8 },
+      },
+    };
+  }, [grid, localUnderlying, selectedVenue, tenorMode]);
+
   if (isLoading || !data) {
     return (
       <div className={styles.wrap}>
@@ -158,7 +244,7 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     );
   }
 
-  if (!grid) {
+  if (!grid || !plotData || !layout) {
     return <div className={styles.empty}>No surface data</div>;
   }
 
@@ -173,81 +259,6 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     { value: 'listed', label: 'Listed' },
     { value: 'cmm', label: 'Constant Maturity' },
   ];
-
-  const tickLabels = grid.x.map(deltaTickLabel);
-
-  // Aim for ~10 X labels and ~8 Y labels regardless of grid density. Plotly
-  // shows every value otherwise, which collides into an unreadable smear at
-  // 91 deltas / 240 CMM tenors.
-  const xStride = Math.max(1, Math.floor(grid.x.length / 10));
-  const yStride = Math.max(1, Math.floor(grid.y.length / 8));
-  const xTickVals = grid.x.filter((_, i) => i % xStride === 0);
-  const xTickText = tickLabels.filter((_, i) => i % xStride === 0);
-  const yTickVals = grid.y.filter((_, i) => i % yStride === 0);
-  const yTickText = grid.yLabels.filter((_, i) => i % yStride === 0);
-
-  const plotData: Partial<Plotly.PlotData>[] = [
-    {
-      type: 'surface' as const,
-      x: grid.x,
-      y: grid.y,
-      z: grid.z,
-      // Plotly's typings declare text as string | string[]; the runtime accepts
-      // the 2-D form for surface traces and that's required for hover labels
-      // to map to the right (delta, expiry) cell.
-      text: grid.text as unknown as string[],
-      colorscale: [
-        [0, '#1e40af'],
-        [0.35, '#60a5fa'],
-        [0.5, '#f5f5f5'],
-        [0.7, '#fb923c'],
-        [1, '#ea580c'],
-      ],
-      showscale: true,
-      colorbar: {
-        title: { text: 'IV %', font: { color: '#888', size: 11 } },
-        tickfont: { color: '#888', size: 10, family: "'IBM Plex Mono', monospace" },
-        bgcolor: 'rgba(0,0,0,0)',
-        thickness: 12,
-        len: 0.6,
-      },
-      hovertemplate:
-        'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
-      contours: {
-        z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
-      } as Plotly.PlotData['contours'],
-    },
-  ];
-
-  const layout: Partial<Plotly.Layout> = {
-    autosize: true,
-    paper_bgcolor: '#0A0A0A',
-    plot_bgcolor: '#0A0A0A',
-    font: { family: "'IBM Plex Mono', monospace", size: 11, color: '#555B5E' },
-    margin: { l: 0, r: 0, t: 0, b: 0 },
-    scene: {
-      ...SCENE_DEFAULTS,
-      xaxis: {
-        ...SCENE_DEFAULTS.xaxis,
-        title: '' as never,
-        tickvals: xTickVals,
-        ticktext: xTickText,
-      },
-      yaxis: {
-        ...SCENE_DEFAULTS.yaxis,
-        title: '' as never,
-        tickvals: yTickVals,
-        ticktext: yTickText,
-      },
-      zaxis: {
-        ...SCENE_DEFAULTS.zaxis,
-        title: '' as never,
-        ticksuffix: '%',
-      },
-      camera: { eye: { x: 1.5, y: -1.5, z: 0.7 } },
-      aspectratio: { x: 1.4, y: 1.2, z: 0.8 },
-    },
-  };
 
   return (
     <div className={styles.wrap}>

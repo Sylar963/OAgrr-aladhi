@@ -321,8 +321,12 @@ interface RuntimeEntry {
 
 const portfolioRuntimes = new Map<string, RuntimeEntry>();
 
-function runtimeKey(accountId: string, source: PortfolioSource): string {
-  return `${source}|${accountId}`;
+function runtimeKey(
+  accountId: string,
+  source: PortfolioSource,
+  underlying: string | undefined,
+): string {
+  return `${source}|${accountId}|${underlying ?? 'all'}`;
 }
 
 function storeFor(source: PortfolioSource): PositionStore {
@@ -339,8 +343,9 @@ function isVenueSource(source: PortfolioSource): boolean {
 export function getOrCreatePortfolioRuntime(
   accountId: string,
   source: PortfolioSource = 'manual',
+  underlying?: string,
 ): PortfolioRuntime {
-  const key = runtimeKey(accountId, source);
+  const key = runtimeKey(accountId, source, underlying);
   const existing = portfolioRuntimes.get(key);
   if (existing != null) return existing.runtime;
 
@@ -350,6 +355,7 @@ export function getOrCreatePortfolioRuntime(
     store,
     markProvider: portfolioMarkProvider,
     chainSurface: portfolioChainSurface,
+    ...(underlying != null ? { underlyingFilter: underlying } : {}),
   });
 
   const unsubscribe = store.subscribe((event) => {
@@ -374,11 +380,12 @@ export function getOrCreatePortfolioRuntime(
 export async function bootstrapPortfolioForAccount(
   accountId: string,
   source: PortfolioSource = 'manual',
+  underlying?: string,
 ): Promise<void> {
   const store = storeFor(source);
   const legs = store.list(accountId);
   await ensureChainsForBook(legs);
-  getOrCreatePortfolioRuntime(accountId, source);
+  getOrCreatePortfolioRuntime(accountId, source, underlying);
 }
 
 export function listPositions(accountId: string, source: PortfolioSource): PositionLeg[] {

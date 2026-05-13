@@ -67,6 +67,9 @@ export interface PortfolioRuntimeOptions {
   markProvider: MarkProvider;
   chainSurface?: ChainSurfaceProvider;
   now?: () => number;
+  // When set, the runtime emits metrics only for legs whose `underlying`
+  // matches. Used by the UI's per-asset view. Omit to include every leg.
+  underlyingFilter?: string;
 }
 
 function emptyTotals(): PortfolioTotals {
@@ -115,6 +118,7 @@ export class PortfolioRuntime {
   private readonly chainSurface: ChainSurfaceProvider | undefined;
   private readonly listeners = new Set<PortfolioRuntimeListener>();
   private readonly now: () => number;
+  private readonly underlyingFilter: string | undefined;
 
   private pushTimer: ReturnType<typeof setInterval> | null = null;
   private storeUnsubscribe: (() => void) | null = null;
@@ -136,6 +140,7 @@ export class PortfolioRuntime {
     this.chainSurface = options.chainSurface;
     this.forwardDays = options.forwardDays ?? 0;
     this.now = options.now ?? Date.now;
+    this.underlyingFilter = options.underlyingFilter;
   }
 
   start(): void {
@@ -191,7 +196,11 @@ export class PortfolioRuntime {
   }
 
   private buildMetrics(): { positions: PositionLeg[]; metrics: PortfolioMetrics } {
-    const rawPositions = this.store.list(this.accountId);
+    const storeList = this.store.list(this.accountId);
+    const rawPositions =
+      this.underlyingFilter == null
+        ? storeList
+        : storeList.filter((leg) => leg.underlying === this.underlyingFilter);
     const rawMarks = rawPositions.map((leg) => this.markProvider(leg));
 
     // Capture the first live IV we see per leg as an entryIv proxy for

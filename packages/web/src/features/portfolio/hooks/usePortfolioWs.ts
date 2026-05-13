@@ -16,6 +16,7 @@ function backoffMs(attempt: number): number {
 
 export function usePortfolioWs(
   source: PortfolioSource = 'manual',
+  underlying?: string,
 ): {
   connectionState: ConnectionState;
   lastSeq: number;
@@ -41,6 +42,7 @@ export function usePortfolioWs(
       const params = new URLSearchParams();
       if (apiKey) params.set('apiKey', apiKey);
       params.set('source', source);
+      if (underlying) params.set('underlying', underlying);
       const url = `${wsUrl('/ws/portfolio')}?${params.toString()}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
@@ -58,22 +60,25 @@ export function usePortfolioWs(
           if (!parsed.success) return;
           const msg = parsed.data;
           if (msg.type === 'snapshot') {
-            qc.setQueryData(PORTFOLIO_QKEY.positions(source), {
+            qc.setQueryData(PORTFOLIO_QKEY.positions(source, underlying), {
               accountId: msg.metrics.accountId,
               source,
               positions: msg.positions,
             });
-            qc.setQueryData(PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source), {
-              accountId: msg.metrics.accountId,
-              source,
-              metrics: msg.metrics,
-              positions: msg.positions,
-            });
+            qc.setQueryData(
+              PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying),
+              {
+                accountId: msg.metrics.accountId,
+                source,
+                metrics: msg.metrics,
+                positions: msg.positions,
+              },
+            );
             setLastSeq(msg.seq);
             setLastError(null);
           } else if (msg.type === 'delta') {
             qc.setQueryData(
-              PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source),
+              PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying),
               (prev: { positions?: unknown } | undefined) => ({
                 accountId: msg.metrics.accountId,
                 source,
@@ -112,7 +117,7 @@ export function usePortfolioWs(
       wsRef.current = null;
       setConnectionState('closed');
     };
-  }, [qc, source]);
+  }, [qc, source, underlying]);
 
   return { connectionState, lastSeq, lastError };
 }

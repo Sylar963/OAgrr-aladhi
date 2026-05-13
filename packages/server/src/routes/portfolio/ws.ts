@@ -49,8 +49,10 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       }
       const sourceParsed = PortfolioSourceSchema.safeParse(url.searchParams.get('source'));
       const source = sourceParsed.success ? sourceParsed.data : 'manual';
+      const underlyingRaw = url.searchParams.get('underlying')?.trim();
+      const underlying = underlyingRaw && underlyingRaw.length > 0 ? underlyingRaw : undefined;
 
-      req.log.info({ accountId, source }, 'portfolio ws: connected');
+      req.log.info({ accountId, source, underlying }, 'portfolio ws: connected');
       send(socket, {
         type: 'hello',
         accountId,
@@ -58,15 +60,15 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       });
 
       try {
-        await bootstrapPortfolioForAccount(accountId, source);
+        await bootstrapPortfolioForAccount(accountId, source, underlying);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        req.log.warn({ err: message, accountId, source }, 'portfolio ws: bootstrap failed');
+        req.log.warn({ err: message, accountId, source, underlying }, 'portfolio ws: bootstrap failed');
         send(socket, { type: 'error', code: 'bootstrap_failed', message });
       }
       if (disposed) return;
 
-      const runtime = getOrCreatePortfolioRuntime(accountId, source);
+      const runtime = getOrCreatePortfolioRuntime(accountId, source, underlying);
 
       const initial = runtime.getSnapshot();
       if (initial != null) {

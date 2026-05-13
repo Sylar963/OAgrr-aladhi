@@ -19,8 +19,11 @@ import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
 
 const FORWARD_OPTIONS: number[] = [0, 1, 3, 7];
+const UNDERLYING_OPTIONS = ['all', 'BTC', 'ETH'] as const;
+type UnderlyingOption = (typeof UNDERLYING_OPTIONS)[number];
 const SOURCE_STORAGE_KEY = 'portfolioSource';
 const FORWARD_STORAGE_KEY = 'portfolioForwardDays';
+const UNDERLYING_STORAGE_KEY = 'portfolioUnderlying';
 const DEFAULT_SOURCE: PortfolioSource = 'manual';
 const EMPTY_PNL_CURVE: PortfolioPnlCurveData = {
   status: 'empty',
@@ -60,6 +63,16 @@ function loadStoredForwardDays(): number {
     if (FORWARD_OPTIONS.includes(raw)) return raw;
   } catch {}
   return 0;
+}
+
+function loadStoredUnderlying(): UnderlyingOption {
+  try {
+    const raw = localStorage.getItem(UNDERLYING_STORAGE_KEY);
+    if (raw != null && (UNDERLYING_OPTIONS as readonly string[]).includes(raw)) {
+      return raw as UnderlyingOption;
+    }
+  } catch {}
+  return 'all';
 }
 
 interface SourceOption {
@@ -107,10 +120,14 @@ export default function PortfolioView() {
   const qc = useQueryClient();
   const [forwardDays, setForwardDays] = useState(loadStoredForwardDays);
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
-  const { connectionState, lastSeq, lastError } = usePortfolioWs(source);
+  const [underlyingFilter, setUnderlyingFilter] = useState<UnderlyingOption>(loadStoredUnderlying);
+  const underlyingParam = underlyingFilter === 'all' ? undefined : underlyingFilter;
+  const { connectionState, lastSeq, lastError } = usePortfolioWs(source, underlyingParam);
   const wsLive = connectionState === 'open' && lastSeq > 0;
-  const { data: positionsData } = usePortfolioPositions(source, { wsLive });
-  const { data: metricsData } = usePortfolioMetrics(forwardDays, source, { wsLive });
+  const positionsOpts = underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
+  const metricsOpts = underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
+  const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
+  const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
   const [venueConnectError, setVenueConnectError] = useState<string | null>(null);
 
   const sourceOptions = useMemo(() => [...BASE_SOURCES, ...venueSourceOptions()], []);
@@ -140,6 +157,13 @@ export default function PortfolioView() {
     setForwardDays(days);
     try {
       localStorage.setItem(FORWARD_STORAGE_KEY, String(days));
+    } catch {}
+  };
+
+  const onSelectUnderlying = (next: UnderlyingOption) => {
+    setUnderlyingFilter(next);
+    try {
+      localStorage.setItem(UNDERLYING_STORAGE_KEY, next);
     } catch {}
   };
 
@@ -237,6 +261,19 @@ export default function PortfolioView() {
             {connectionState} · seq {lastSeq}
             {lastError != null && ` · ${lastError.code}`}
           </span>
+          <div className={styles.toggleGroup} role="radiogroup" aria-label="Underlying">
+            {UNDERLYING_OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={styles.toggle}
+                data-active={underlyingFilter === opt || undefined}
+                onClick={() => onSelectUnderlying(opt)}
+              >
+                {opt === 'all' ? 'All' : opt}
+              </button>
+            ))}
+          </div>
           <div className={styles.toggleGroup} role="radiogroup" aria-label="Forward days">
             {FORWARD_OPTIONS.map((days) => (
               <button

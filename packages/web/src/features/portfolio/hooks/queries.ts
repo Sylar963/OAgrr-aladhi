@@ -11,18 +11,19 @@ import {
 } from '../api';
 
 export const PORTFOLIO_QKEY = {
-  positions: (source: PortfolioSource) => ['portfolio', 'positions', source] as const,
-  metrics: (forwardDays: number, source: PortfolioSource) =>
-    ['portfolio', 'metrics', forwardDays, source] as const,
+  positions: (source: PortfolioSource, underlying?: string) =>
+    ['portfolio', 'positions', source, underlying ?? 'all'] as const,
+  metrics: (forwardDays: number, source: PortfolioSource, underlying?: string) =>
+    ['portfolio', 'metrics', forwardDays, source, underlying ?? 'all'] as const,
 };
 
 export function usePortfolioPositions(
   source: PortfolioSource = 'manual',
-  options?: { wsLive?: boolean },
+  options?: { wsLive?: boolean; underlying?: string },
 ) {
   return useQuery({
-    queryKey: PORTFOLIO_QKEY.positions(source),
-    queryFn: () => fetchPositions(source),
+    queryKey: PORTFOLIO_QKEY.positions(source, options?.underlying),
+    queryFn: () => fetchPositions(source, options?.underlying),
     refetchInterval: options?.wsLive === true ? false : 5_000,
   });
 }
@@ -30,11 +31,11 @@ export function usePortfolioPositions(
 export function usePortfolioMetrics(
   forwardDays: number,
   source: PortfolioSource = 'manual',
-  options?: { wsLive?: boolean },
+  options?: { wsLive?: boolean; underlying?: string },
 ) {
   return useQuery({
-    queryKey: PORTFOLIO_QKEY.metrics(forwardDays, source),
-    queryFn: () => fetchMetrics(forwardDays, source),
+    queryKey: PORTFOLIO_QKEY.metrics(forwardDays, source, options?.underlying),
+    queryFn: () => fetchMetrics(forwardDays, source, options?.underlying),
     refetchInterval: options?.wsLive === true ? false : 5_000,
   });
 }

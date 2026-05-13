@@ -291,17 +291,25 @@ const RemovePositionResponseSchema = z.object({
   removed: z.boolean(),
 });
 
-export function fetchPositions(source: PortfolioSource = 'manual'): Promise<PositionsResponse> {
-  return getJson(`/portfolio/positions?source=${source}`, PositionsResponseSchema);
+export function fetchPositions(
+  source: PortfolioSource = 'manual',
+  underlying?: string,
+): Promise<PositionsResponse> {
+  const params = new URLSearchParams();
+  params.set('source', source);
+  if (underlying) params.set('underlying', underlying);
+  return getJson(`/portfolio/positions?${params.toString()}`, PositionsResponseSchema);
 }
 
 export function fetchMetrics(
   forwardDays: number,
   source: PortfolioSource = 'manual',
+  underlying?: string,
 ): Promise<MetricsResponse> {
   const params = new URLSearchParams();
   if (forwardDays > 0) params.set('forwardDays', String(forwardDays));
   params.set('source', source);
+  if (underlying) params.set('underlying', underlying);
   return getJson(`/portfolio/metrics?${params.toString()}`, MetricsResponseSchema);
 }
 

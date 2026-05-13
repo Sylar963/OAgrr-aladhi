@@ -28,12 +28,16 @@ function parseSource(raw: unknown): PortfolioSource {
 }
 
 export async function portfolioPositionsRoute(app: FastifyInstance) {
-  app.get<{ Querystring: { source?: string } }>(
+  app.get<{ Querystring: { source?: string; underlying?: string } }>(
     '/portfolio/positions',
     async (req) => {
       const accountId = getAccountId(req);
       const source = parseSource(req.query.source);
-      return { accountId, source, positions: listPositions(accountId, source) };
+      const underlying = req.query.underlying?.trim() || undefined;
+      const all = listPositions(accountId, source);
+      const positions =
+        underlying == null ? all : all.filter((leg) => leg.underlying === underlying);
+      return { accountId, source, positions };
     },
   );
 

@@ -72,6 +72,9 @@ export function requireUser() {
     if (request.url.startsWith('/api/paper/auth/')) {
       return;
     }
+    if (!paperTradingStore.enabled) {
+      return;
+    }
     const user = await authenticateUser(request, reply);
     if (!user) {
       reply.status(401).send({ error: 'unauthorized', message: 'Invalid or missing X-API-Key' });
@@ -79,6 +82,16 @@ export function requireUser() {
     }
     request.user = user;
   };
+}
+
+export function getRequestAccountId(req: FastifyRequest, fallback: string): string {
+  if (paperTradingStore.enabled) {
+    if (!req.user) {
+      throw new Error('getRequestAccountId called without authenticated user');
+    }
+    return req.user.accountId;
+  }
+  return req.user?.accountId ?? fallback;
 }
 
 declare module 'fastify' {

@@ -12,6 +12,7 @@ import {
 const MetricsQuerySchema = z.object({
   forwardDays: z.coerce.number().int().min(0).max(365).optional(),
   source: z.string().optional(),
+  underlying: z.string().min(1).optional(),
 });
 
 function getAccountId(req: FastifyRequest): string {
@@ -27,8 +28,9 @@ export async function portfolioMetricsRoute(app: FastifyInstance) {
     const accountId = getAccountId(req);
     const sourceParsed = PortfolioSourceSchema.safeParse(parsed.data.source);
     const source = sourceParsed.success ? sourceParsed.data : 'manual';
-    await bootstrapPortfolioForAccount(accountId, source);
-    const runtime = getOrCreatePortfolioRuntime(accountId, source);
+    const underlying = parsed.data.underlying;
+    await bootstrapPortfolioForAccount(accountId, source, underlying);
+    const runtime = getOrCreatePortfolioRuntime(accountId, source, underlying);
     const forwardDays = parsed.data.forwardDays ?? 0;
     runtime.setForwardDays(forwardDays);
     const snapshot = runtime.getSnapshot();

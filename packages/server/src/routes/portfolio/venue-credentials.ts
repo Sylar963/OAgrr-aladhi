@@ -41,6 +41,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     if (venue === 'derive') {
       const credsParsed = DeriveCredsSchema.safeParse(req.body);
       if (!credsParsed.success) {
+        req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
         return reply.status(400).send({ error: 'invalid_creds', issues: credsParsed.error.issues });
       }
       try {
@@ -63,6 +64,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     if (venue === 'thalex') {
       const credsParsed = ThalexCredsSchema.safeParse(req.body);
       if (!credsParsed.success) {
+        req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
         return reply.status(400).send({ error: 'invalid_creds', issues: credsParsed.error.issues });
       }
       try {

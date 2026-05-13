@@ -71,7 +71,12 @@ export default function MobilePositionCard({ leg, be, readOnly, onRemove, removi
         <div className={styles.cell}>
           <span className={styles.label}>Mark</span>
           <span className={styles.value}>{fmtUsd(be?.currentMarkUsd)}</span>
-          <span className={styles.sub}>{fmtIv(be?.currentIv)}</span>
+          <span
+            className={`${styles.sub} ${be?.currentIvIsModel === true ? styles.ivModel : ''}`}
+            title={be?.currentIvIsModel === true ? 'fair value from smile fit' : undefined}
+          >
+            {fmtIv(be?.currentIv)}
+          </span>
         </div>
         <div className={styles.cell}>
           <span className={styles.label}>BE IV</span>

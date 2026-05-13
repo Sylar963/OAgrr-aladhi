@@ -213,6 +213,8 @@ export {
   cdf,
   price76,
   vega76,
+  delta76,
+  gamma76,
   solveIv,
   thetaPerDay,
   yearsToExpiry,

@@ -193,6 +193,7 @@ const BreakEvenIvRowSchema = z.object({
   currentIv: z.number().nullable(),
   breakEvenIv: z.number().nullable(),
   ivCushionPct: z.number().nullable(),
+  currentIvIsModel: z.boolean().optional(),
 });
 
 const ShockGridCellSchema = z.object({

@@ -119,6 +119,7 @@ export function breakEvenIvCurve(legsWithMarks: LegWithMark[]): BreakEvenIvRow[]
       currentIv: mark.iv,
       breakEvenIv,
       ivCushionPct,
+      ...(mark.ivFromSvi === true ? { currentIvIsModel: true } : {}),
     };
   });
 }

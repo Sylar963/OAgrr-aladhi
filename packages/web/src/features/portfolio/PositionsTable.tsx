@@ -98,7 +98,14 @@ export default function PositionsTable({
               <td>{fmtUsd(leg.entryPriceUsd)}</td>
               <td>{fmtIv(leg.entryIv)}</td>
               <td>{fmtUsd(be?.currentMarkUsd)}</td>
-              <td>{fmtIv(be?.currentIv)}</td>
+              <td
+                className={be?.currentIvIsModel === true ? styles.ivModel : undefined}
+                title={
+                  be?.currentIvIsModel === true ? 'fair value from smile fit' : undefined
+                }
+              >
+                {fmtIv(be?.currentIv)}
+              </td>
               <td>{fmtIv(be?.breakEvenIv)}</td>
               <td className={cushionClass}>{fmtPct(be?.ivCushionPct)}</td>
               <td>

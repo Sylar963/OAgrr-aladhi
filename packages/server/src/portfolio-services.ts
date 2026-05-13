@@ -3,7 +3,13 @@ import {
   InMemoryPositionStore,
   PortfolioRuntime,
   VENUE_IDS,
+  delta76,
+  fitSvi,
+  gamma76,
+  price76,
+  sviIv,
   thetaPerDay,
+  vega76,
   type ChainRuntimeListener,
   type EnrichedChainResponse,
   type EnrichedStrike,
@@ -11,6 +17,8 @@ import {
   type MarkProvider,
   type PositionLeg,
   type PositionStore,
+  type SviFitPoint,
+  type SviParams,
 } from '@oggregator/core';
 import type { PortfolioSource } from '@oggregator/protocol';
 
@@ -141,47 +149,113 @@ function yearsToExpiry(expiry: string, nowMs: number): number | null {
 }
 
 const lastSeenMark = new Map<string, MarkContext>();
+const smileFits = new Map<string, { snapshot: EnrichedChainResponse; params: SviParams | null }>();
+const SVI_MIN_POINTS = 5;
+
+export function buildSviFitPoints(snapshot: EnrichedChainResponse, forward: number): SviFitPoint[] {
+  const points: SviFitPoint[] = [];
+  for (const row of snapshot.strikes) {
+    if (!(row.strike > 0)) continue;
+    // Prefer the OTM side per Gatheral — avoids ITM call/put quote crossing.
+    const side = row.strike >= forward ? row.call : row.put;
+    const iv = side.bestIv;
+    if (iv == null || !Number.isFinite(iv) || iv <= 0) continue;
+    points.push({ k: Math.log(row.strike / forward), iv });
+  }
+  return points;
+}
+
+export function getSmileFit(
+  underlying: string,
+  expiry: string,
+  snapshot: EnrichedChainResponse,
+  forward: number,
+  tYears: number,
+): SviParams | null {
+  const key = chainKey(underlying, expiry);
+  const cached = smileFits.get(key);
+  if (cached != null && cached.snapshot === snapshot) return cached.params;
+
+  const points = buildSviFitPoints(snapshot, forward);
+  const params = points.length >= SVI_MIN_POINTS ? fitSvi(points, tYears) : null;
+  smileFits.set(key, { snapshot, params });
+  return params;
+}
+
+export function sviMark(
+  leg: PositionLeg,
+  underlyingPriceUsd: number | null,
+  forwardPriceUsd: number,
+  tYears: number,
+  fit: SviParams,
+): MarkContext | null {
+  const iv = sviIv(fit, Math.log(leg.strike / forwardPriceUsd), tYears);
+  if (!(Number.isFinite(iv) && iv > 0)) return null;
+  return {
+    underlyingPriceUsd,
+    forwardPriceUsd,
+    markPriceUsd: price76(forwardPriceUsd, leg.strike, iv, tYears, leg.optionRight),
+    iv,
+    delta: delta76(forwardPriceUsd, leg.strike, iv, tYears, leg.optionRight),
+    gamma: gamma76(forwardPriceUsd, leg.strike, iv, tYears),
+    vega: vega76(forwardPriceUsd, leg.strike, iv, tYears),
+    theta: thetaPerDay(forwardPriceUsd, leg.strike, iv, tYears),
+    yearsToExpiry: tYears,
+    ivFromSvi: true,
+  };
+}
 
 function freshMark(leg: PositionLeg): MarkContext {
   const snapshot = chainRefs.get(chainKey(leg.underlying, leg.expiry))?.snapshot ?? null;
   const ty = yearsToExpiry(leg.expiry, Date.now());
   if (snapshot == null) return { ...emptyMark(), yearsToExpiry: ty };
 
-  const strikeRow = findStrike(snapshot, leg.strike);
   const forwardPriceUsd = snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd ?? null;
   const underlyingPriceUsd = snapshot.stats.indexPriceUsd ?? forwardPriceUsd;
+  const strikeRow = findStrike(snapshot, leg.strike);
 
-  if (strikeRow == null) {
-    return { ...emptyMark(), underlyingPriceUsd, forwardPriceUsd, yearsToExpiry: ty };
+  const venueMark = (() => {
+    if (strikeRow == null) return null;
+    const side = leg.optionRight === 'call' ? strikeRow.call : strikeRow.put;
+    const quotes = Object.values(side.venues).filter(
+      (q): q is NonNullable<typeof q> => q != null,
+    );
+    if (quotes.length === 0) return null;
+
+    const markPriceUsd = average(quotes.map((q) => q.mid ?? null));
+    const iv = average(quotes.map((q) => q.markIv ?? null));
+    const delta = average(quotes.map((q) => q.delta ?? null));
+    const gamma = average(quotes.map((q) => q.gamma ?? null));
+    const vega = average(quotes.map((q) => q.vega ?? null));
+    const venueTheta = average(quotes.map((q) => q.theta ?? null));
+    const theta = venueTheta ?? thetaPerDay(forwardPriceUsd, leg.strike, iv, ty);
+
+    if (iv == null && markPriceUsd == null && delta == null) return null;
+
+    return {
+      underlyingPriceUsd,
+      forwardPriceUsd,
+      markPriceUsd,
+      iv,
+      delta,
+      gamma,
+      vega,
+      theta,
+      yearsToExpiry: ty,
+    } satisfies MarkContext;
+  })();
+
+  if (venueMark != null) return venueMark;
+
+  if (forwardPriceUsd != null && forwardPriceUsd > 0 && ty != null && ty > 0) {
+    const fit = getSmileFit(leg.underlying, leg.expiry, snapshot, forwardPriceUsd, ty);
+    if (fit != null) {
+      const synthetic = sviMark(leg, underlyingPriceUsd, forwardPriceUsd, ty, fit);
+      if (synthetic != null) return synthetic;
+    }
   }
 
-  const side = leg.optionRight === 'call' ? strikeRow.call : strikeRow.put;
-  const quotes = Object.values(side.venues).filter(
-    (q): q is NonNullable<typeof q> => q != null,
-  );
-  if (quotes.length === 0) {
-    return { ...emptyMark(), underlyingPriceUsd, forwardPriceUsd, yearsToExpiry: ty };
-  }
-
-  const markPriceUsd = average(quotes.map((q) => q.mid ?? null));
-  const iv = average(quotes.map((q) => q.markIv ?? null));
-  const delta = average(quotes.map((q) => q.delta ?? null));
-  const gamma = average(quotes.map((q) => q.gamma ?? null));
-  const vega = average(quotes.map((q) => q.vega ?? null));
-  const venueTheta = average(quotes.map((q) => q.theta ?? null));
-  const theta = venueTheta ?? thetaPerDay(forwardPriceUsd, leg.strike, iv, ty);
-
-  return {
-    underlyingPriceUsd,
-    forwardPriceUsd,
-    markPriceUsd,
-    iv,
-    delta,
-    gamma,
-    vega,
-    theta,
-    yearsToExpiry: ty,
-  };
+  return { ...emptyMark(), underlyingPriceUsd, forwardPriceUsd, yearsToExpiry: ty };
 }
 
 // Stickiness rule: time-varying fields (yearsToExpiry) always come from
@@ -193,6 +267,7 @@ export const portfolioMarkProvider: MarkProvider = (leg: PositionLeg) => {
   const fresh = freshMark(leg);
   const cached = lastSeenMark.get(leg.legId);
 
+  const ivFromSvi = fresh.iv != null ? fresh.ivFromSvi === true : cached?.ivFromSvi === true;
   const merged: MarkContext = {
     underlyingPriceUsd: fresh.underlyingPriceUsd ?? cached?.underlyingPriceUsd ?? null,
     forwardPriceUsd: fresh.forwardPriceUsd ?? cached?.forwardPriceUsd ?? null,
@@ -203,6 +278,7 @@ export const portfolioMarkProvider: MarkProvider = (leg: PositionLeg) => {
     vega: fresh.vega ?? cached?.vega ?? null,
     theta: fresh.theta ?? cached?.theta ?? null,
     yearsToExpiry: fresh.yearsToExpiry,
+    ...(ivFromSvi ? { ivFromSvi: true } : {}),
   };
 
   if (merged.markPriceUsd != null || merged.iv != null || merged.delta != null) {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './queries';
-import { useOpenPalette } from '@components/layout';
+import { useOpenPalette } from '@components/layout/palette-context';
 import { Spinner, EmptyState } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { fmtIv, fmtUsdCompact } from '@lib/format';

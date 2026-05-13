@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { useOpenPalette } from '@components/layout';
+import { useOpenPalette } from '@components/layout/palette-context';
 import { VENUES } from '@lib/venue-meta';
 
 import { useChainQuery, useExpiries } from '../chain/queries';

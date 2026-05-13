@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
 import { useSurface } from '@features/surface/queries';
-import { useOpenPalette } from '@components/layout';
+import { useOpenPalette } from '@components/layout/palette-context';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { Spinner, EmptyState } from '@components/ui';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';

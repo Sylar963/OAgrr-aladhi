@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 
-const { storeMock, getUserByApiKeyMock } = vi.hoisted(() => ({
-  storeMock: { enabled: false as boolean },
-  getUserByApiKeyMock: vi.fn(),
+const { storeMock, storeGetUserMock } = vi.hoisted(() => ({
+  storeMock: {
+    enabled: false as boolean,
+    getUserByApiKey: vi.fn(),
+  },
+  storeGetUserMock: vi.fn(),
 }));
+storeMock.getUserByApiKey = storeGetUserMock;
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
@@ -39,16 +43,6 @@ vi.mock('../../thalex-position-store.js', () => ({
   },
 }));
 
-vi.mock('../../user-service.js', async () => {
-  const mod = await vi.importActual<typeof import('../../user-service.js')>(
-    '../../user-service.js',
-  );
-  return {
-    ...mod,
-    getUserByApiKey: getUserByApiKeyMock,
-  };
-});
-
 import { portfolioRoutes } from './index.js';
 
 async function buildApp() {
@@ -71,7 +65,7 @@ describe('Portfolio REST auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    getUserByApiKeyMock.mockReset();
+    storeGetUserMock.mockReset();
   });
 
   it('returns 401 on anonymous GET /portfolio/positions when persistence is enabled', async () => {
@@ -97,7 +91,7 @@ describe('Portfolio REST auth gate', () => {
 
   it('allows authenticated requests to reach the handler when persistence is enabled', async () => {
     storeMock.enabled = true;
-    getUserByApiKeyMock.mockResolvedValue({
+    storeGetUserMock.mockResolvedValue({
       id: 'usr_carol',
       apiKey: 'carol-key',
       accountId: 'acct_carol',

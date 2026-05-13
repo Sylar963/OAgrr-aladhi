@@ -16,17 +16,26 @@ export const PORTFOLIO_QKEY = {
     ['portfolio', 'metrics', forwardDays, source] as const,
 };
 
-export function usePortfolioPositions(source: PortfolioSource = 'manual') {
+export function usePortfolioPositions(
+  source: PortfolioSource = 'manual',
+  options?: { wsLive?: boolean },
+) {
   return useQuery({
     queryKey: PORTFOLIO_QKEY.positions(source),
     queryFn: () => fetchPositions(source),
+    refetchInterval: options?.wsLive === true ? false : 5_000,
   });
 }
 
-export function usePortfolioMetrics(forwardDays: number, source: PortfolioSource = 'manual') {
+export function usePortfolioMetrics(
+  forwardDays: number,
+  source: PortfolioSource = 'manual',
+  options?: { wsLive?: boolean },
+) {
   return useQuery({
     queryKey: PORTFOLIO_QKEY.metrics(forwardDays, source),
     queryFn: () => fetchMetrics(forwardDays, source),
+    refetchInterval: options?.wsLive === true ? false : 5_000,
   });
 }
 

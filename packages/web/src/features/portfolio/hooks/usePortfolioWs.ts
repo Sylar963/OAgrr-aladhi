@@ -14,10 +14,15 @@ function backoffMs(attempt: number): number {
 
 export function usePortfolioWs(
   source: PortfolioSource = 'manual',
-): { connectionState: ConnectionState; lastSeq: number } {
+): {
+  connectionState: ConnectionState;
+  lastSeq: number;
+  lastError: { code: string; message: string } | null;
+} {
   const qc = useQueryClient();
   const [connectionState, setConnectionState] = useState<ConnectionState>('closed');
   const [lastSeq, setLastSeq] = useState(0);
+  const [lastError, setLastError] = useState<{ code: string; message: string } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
 
@@ -64,6 +69,7 @@ export function usePortfolioWs(
               positions: msg.positions,
             });
             setLastSeq(msg.seq);
+            setLastError(null);
           } else if (msg.type === 'delta') {
             qc.setQueryData(
               PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source),
@@ -75,6 +81,10 @@ export function usePortfolioWs(
               }),
             );
             setLastSeq(msg.seq);
+            setLastError(null);
+          } else if (msg.type === 'error') {
+            setLastError({ code: msg.code, message: msg.message });
+            console.warn('[portfolio ws] error from server', msg);
           }
         } catch {}
       });
@@ -103,5 +113,5 @@ export function usePortfolioWs(
     };
   }, [qc, source]);
 
-  return { connectionState, lastSeq };
+  return { connectionState, lastSeq, lastError };
 }

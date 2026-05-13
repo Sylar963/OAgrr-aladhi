@@ -107,9 +107,10 @@ export default function PortfolioView() {
   const qc = useQueryClient();
   const [forwardDays, setForwardDays] = useState(loadStoredForwardDays);
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
-  const { connectionState, lastSeq } = usePortfolioWs(source);
-  const { data: positionsData } = usePortfolioPositions(source);
-  const { data: metricsData } = usePortfolioMetrics(forwardDays, source);
+  const { connectionState, lastSeq, lastError } = usePortfolioWs(source);
+  const wsLive = connectionState === 'open' && lastSeq > 0;
+  const { data: positionsData } = usePortfolioPositions(source, { wsLive });
+  const { data: metricsData } = usePortfolioMetrics(forwardDays, source, { wsLive });
 
   const sourceOptions = useMemo(() => [...BASE_SOURCES, ...venueSourceOptions()], []);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';
@@ -215,8 +216,13 @@ export default function PortfolioView() {
               </button>
             ))}
           </div>
-          <span className={styles.status} data-state={connectionState}>
+          <span
+            className={styles.status}
+            data-state={connectionState}
+            title={lastError != null ? `${lastError.code}: ${lastError.message}` : undefined}
+          >
             {connectionState} · seq {lastSeq}
+            {lastError != null && ` · ${lastError.code}`}
           </span>
           <div className={styles.toggleGroup} role="radiogroup" aria-label="Forward days">
             {FORWARD_OPTIONS.map((days) => (

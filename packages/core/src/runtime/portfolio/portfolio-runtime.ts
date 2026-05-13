@@ -212,8 +212,43 @@ export class PortfolioRuntime {
     return { positions, metrics };
   }
 
+  private buildMetricsSafe(): {
+    positions: PositionLeg[];
+    metrics: PortfolioMetrics;
+    error: PortfolioErrorEvent | null;
+  } {
+    try {
+      return {
+        ...this.buildMetrics(),
+        error: null,
+      };
+    } catch (err: unknown) {
+      logger.error({ err, accountId: this.accountId }, 'portfolio metrics build failed');
+      const positions = this.store.list(this.accountId);
+      const metrics: PortfolioMetrics = {
+        accountId: this.accountId,
+        generatedAt: this.now(),
+        forwardDays: this.forwardDays,
+        totals: emptyTotals(),
+        byStrike: [],
+        byExpiry: [],
+        breakEven: [],
+        shockGrid: [],
+      };
+      return {
+        positions,
+        metrics,
+        error: {
+          type: 'error',
+          code: 'portfolio_metrics_failed',
+          message: err instanceof Error ? err.message : 'portfolio metrics build failed',
+        },
+      };
+    }
+  }
+
   private emitSnapshot(): void {
-    const { positions, metrics } = this.buildMetrics();
+    const { positions, metrics, error } = this.buildMetricsSafe();
     this.seq += 1;
     const event: PortfolioSnapshotEvent = {
       type: 'snapshot',
@@ -224,10 +259,11 @@ export class PortfolioRuntime {
     this.lastSnapshot = event;
     this.pendingChangedLegIds.clear();
     this.broadcast(event);
+    if (error != null) this.broadcast(error);
   }
 
   private emitDelta(): void {
-    const { positions, metrics } = this.buildMetrics();
+    const { positions, metrics, error } = this.buildMetricsSafe();
     this.seq += 1;
     const changedLegIds = [...this.pendingChangedLegIds];
     this.pendingChangedLegIds.clear();
@@ -245,6 +281,7 @@ export class PortfolioRuntime {
       changedLegIds,
     };
     this.broadcast(event);
+    if (error != null) this.broadcast(error);
   }
 
   private broadcast(event: PortfolioRuntimeEvent): void {

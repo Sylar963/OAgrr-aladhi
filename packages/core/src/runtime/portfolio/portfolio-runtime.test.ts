@@ -160,4 +160,34 @@ describe('PortfolioRuntime', () => {
     vi.advanceTimersByTime(500);
     expect(events.length).toBe(afterDispose);
   });
+
+  it('falls back to raw positions when metrics build fails', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider: () => {
+        throw new Error('mark provider boom');
+      },
+      now: () => NOW,
+    });
+    const events: PortfolioRuntimeEvent[] = [];
+    runtime.subscribe({ onEvent: (e) => events.push(e) });
+
+    runtime.start();
+
+    expect(events[0]?.type).toBe('snapshot');
+    if (events[0]?.type === 'snapshot') {
+      expect(events[0].positions).toHaveLength(1);
+      expect(events[0].metrics.totals.netVegaUsd).toBe(0);
+      expect(events[0].metrics.byStrike).toEqual([]);
+    }
+    expect(events[1]).toEqual({
+      type: 'error',
+      code: 'portfolio_metrics_failed',
+      message: 'mark provider boom',
+    });
+    runtime.dispose();
+  });
 });

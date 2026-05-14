@@ -10,6 +10,18 @@ interface HealthResponse {
   version?: string;
 }
 
+function createTimeoutSignal(timeoutMs: number): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
 /**
  * Polls /api/health and raises a 'server-updated' session notice when the
  * server's bootTime changes after the first successful observation. A bootTime
@@ -26,9 +38,10 @@ export function useServerVersion() {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const poll = async () => {
+      const { signal, cleanup } = createTimeoutSignal(5000);
       try {
         const res = await fetch(`${API_BASE}/health`, {
-          signal: AbortSignal.timeout(5000),
+          signal,
         });
         if (!res.ok) throw new Error(`health ${res.status}`);
         const body = (await res.json()) as HealthResponse;
@@ -47,6 +60,7 @@ export function useServerVersion() {
       } catch {
         // Silent — transient network errors during server restart are expected.
       } finally {
+        cleanup();
         if (!cancelled) {
           timeoutId = setTimeout(poll, POLL_INTERVAL_MS);
         }

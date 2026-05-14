@@ -15,6 +15,14 @@ import {
   saveVenueCreds as storageSaveVenueCreds,
 } from '@lib/venue-credentials';
 
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 export interface FeedStatus {
   connectionState: WsConnectionState;
   failedVenueCount: number;
@@ -81,11 +89,11 @@ export const useAppStore = create<AppState>((set) => ({
     staleMs: null,
     lastUpdateMs: null,
   },
-  apiKey: localStorage.getItem('paperApiKey'),
-  userId: localStorage.getItem('paperUserId'),
-  accountId: localStorage.getItem('paperAccountId'),
+  apiKey: readStorage('paperApiKey'),
+  userId: readStorage('paperUserId'),
+  accountId: readStorage('paperAccountId'),
   venueCreds: loadAllVenueCreds(PROTOCOL_VENUE_IDS),
-  soundEnabled: localStorage.getItem('tapeSoundEnabled') === '1',
+  soundEnabled: readStorage('tapeSoundEnabled') === '1',
   sessionNotice: null,
   sessionExtendToken: 0,
 

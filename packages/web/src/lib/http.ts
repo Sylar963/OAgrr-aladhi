@@ -17,7 +17,12 @@ export function wsUrl(path: string): string {
 
 function getHeaders(): HeadersInit {
   const headers: HeadersInit = {};
-  const apiKey = localStorage.getItem('paperApiKey');
+  let apiKey: string | null = null;
+  try {
+    apiKey = localStorage.getItem('paperApiKey');
+  } catch {
+    apiKey = null;
+  }
   if (apiKey) {
     headers['X-API-Key'] = apiKey;
   }

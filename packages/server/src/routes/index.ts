@@ -22,12 +22,9 @@ import { portfolioRoutes, portfolioWsRoute } from './portfolio/index.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (_req, reply) => {
-    if (
-      !isTrafficReady() &&
-      _req.url !== '/api/health' &&
-      _req.url !== '/api/ready' &&
-      !_req.url.startsWith('/ws/')
-    ) {
+    const isApiRequest = _req.url.startsWith('/api/');
+    const isReadinessRoute = _req.url === '/api/health' || _req.url === '/api/ready';
+    if (!isTrafficReady() && isApiRequest && !isReadinessRoute) {
       return reply
         .status(503)
         .send({ error: 'initializing', message: 'Server is loading market data' });

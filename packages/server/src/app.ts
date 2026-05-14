@@ -26,6 +26,25 @@ import { disposePortfolioServices } from './portfolio-services.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
+interface WebEntryAssets {
+  entryJs: string | null;
+  entryCss: string | null;
+}
+
+function readWebEntryAssets(webDist: string): WebEntryAssets {
+  try {
+    const indexHtml = readFileSync(resolve(webDist, 'index.html'), 'utf-8');
+    const jsMatch = indexHtml.match(/<script[^>]+src="([^"]*\/assets\/index-[^"]+\.js)"/i);
+    const cssMatch = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]*\/assets\/index-[^"]+\.css)"/i);
+    return {
+      entryJs: jsMatch?.[1]?.replace(/^\//, '') ?? null,
+      entryCss: cssMatch?.[1]?.replace(/^\//, '') ?? null,
+    };
+  } catch {
+    return { entryJs: null, entryCss: null };
+  }
+}
+
 export const SERVER_VERSION = (() => {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
@@ -129,8 +148,35 @@ export async function buildApp(): Promise<FastifyInstance> {
   const here = dirname(fileURLToPath(import.meta.url));
   const webDist = resolve(here, '../../web/dist');
   if (!isDev && existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist, wildcard: false });
-    app.setNotFoundHandler((_req, reply) => {
+    const webEntryAssets = readWebEntryAssets(webDist);
+
+    app.addHook('onSend', async (req, reply, payload) => {
+      if (
+        req.url === '/' ||
+        req.url.endsWith('.html') ||
+        req.url === '/sw.js' ||
+        req.url === '/manifest.json'
+      ) {
+        reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+      }
+      return payload;
+    });
+
+    await app.register(fastifyStatic, {
+      root: webDist,
+      wildcard: false,
+    });
+
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/assets/index-') && req.url.endsWith('.js') && webEntryAssets.entryJs) {
+        return reply.type('application/javascript; charset=utf-8').sendFile(webEntryAssets.entryJs);
+      }
+      if (req.url.startsWith('/assets/index-') && req.url.endsWith('.css') && webEntryAssets.entryCss) {
+        return reply.type('text/css; charset=utf-8').sendFile(webEntryAssets.entryCss);
+      }
+      if (req.url.startsWith('/assets/')) {
+        return reply.status(404).send({ error: 'asset_not_found' });
+      }
       return reply.sendFile('index.html');
     });
   }

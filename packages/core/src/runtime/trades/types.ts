@@ -47,5 +47,10 @@ export interface VenueStream {
   connect: (ws: WebSocket, underlying: string) => void;
   parse: (msg: unknown, underlying: string) => TradeEvent[];
   seed?: (underlying: string) => Promise<TradeEvent[]>;
+  // Set on venues whose WS stream alone produces sparse history (e.g. Coincall
+  // has per-symbol prints with no bulk history endpoint). The runtime invokes
+  // `seed()` on this interval after startup; tradeId-based dedup in
+  // pushTradeEvents prevents duplicates across reseeds.
+  reseedIntervalMs?: number;
   startKeepalive?: (ws: WebSocket) => ReturnType<typeof setInterval>;
 }

@@ -45,6 +45,7 @@ export class TradeRuntime {
   private connections = new Map<string, WebSocket>();
   private keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private reseedTimers = new Map<string, ReturnType<typeof setInterval>>();
   private subscribedUnderlyingsByConnection = new Map<string, Set<string>>();
   private listeners = new Set<(trade: TradeEvent) => void>();
   private streamState = new Map<string, TradeStreamState>();
@@ -78,8 +79,51 @@ export class TradeRuntime {
     // Seed recent trades in the background. Slow REST venues must not delay live flow availability.
     void Promise.allSettled(underlyings.map((u) => this.seedFromRest(u)));
 
+    this.startReseedTimers(underlyings);
+
     this.watchdogTimer = setInterval(() => this.checkStreamLiveness(), WATCHDOG_INTERVAL_MS);
     this.stopEventLoopMonitor = startEventLoopLagMonitor();
+  }
+
+  private startReseedTimers(underlyings: string[]): void {
+    for (const stream of VENUE_STREAMS) {
+      if (stream.seed == null || stream.reseedIntervalMs == null) continue;
+      for (const underlying of underlyings) {
+        if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) continue;
+        if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) continue;
+        if (stream.venue === 'deribit' && getDeribitTradeCurrency(underlying) == null) continue;
+
+        const key = this.streamKey(stream.venue, underlying);
+        if (this.reseedTimers.has(key)) continue;
+
+        const timer = setInterval(() => {
+          void this.runVenueReseed(stream, underlying);
+        }, stream.reseedIntervalMs);
+        this.reseedTimers.set(key, timer);
+      }
+    }
+  }
+
+  private async runVenueReseed(stream: VenueStream, underlying: string): Promise<void> {
+    if (stream.seed == null) return;
+    try {
+      const trades = await stream.seed(underlying);
+      if (trades.length === 0) return;
+      this.updateStreamState(stream.venue, underlying, {
+        seedTrades: trades.length,
+        lastStatusAt: Date.now(),
+      });
+      this.pushTrades(underlying, trades);
+      log.info(
+        { venue: stream.venue, underlying, count: trades.length },
+        'venue reseed completed',
+      );
+    } catch (err) {
+      log.warn(
+        { venue: stream.venue, underlying, err: String(err) },
+        'venue reseed failed',
+      );
+    }
   }
 
   // Detects half-open TCP connections that report `connected:true` locally but
@@ -380,6 +424,8 @@ export class TradeRuntime {
     this.reconnectTimers.clear();
     for (const timer of this.keepaliveTimers.values()) clearInterval(timer);
     this.keepaliveTimers.clear();
+    for (const timer of this.reseedTimers.values()) clearInterval(timer);
+    this.reseedTimers.clear();
     for (const ws of this.connections.values()) ws.close();
     this.connections.clear();
     this.subscribedUnderlyingsByConnection.clear();
@@ -1175,6 +1221,11 @@ export const VENUE_STREAMS: VenueStream[] = [
   },
   {
     venue: 'coincall',
+    // Coincall is per-symbol with no bulk trade-history endpoint; the live WS
+    // only emits prints after subscribe. Reseeding every 10 min keeps a rolling
+    // historical slice visible in the tape. tradeId dedup in pushTradeEvents
+    // prevents duplicates between the startup seed and each reseed cycle.
+    reseedIntervalMs: 10 * 60 * 1000,
     // Coincall's public WS requires HMAC-signed query params — the signature
     // includes a timestamp that goes stale, so re-sign on every reconnect.
     url: () => buildSignedWsUrl(),

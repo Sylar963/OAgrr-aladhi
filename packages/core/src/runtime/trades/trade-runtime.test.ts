@@ -9,6 +9,7 @@ import {
   getDeribitUnderlyingFromInstrument,
   normalizeTradeUnderlying,
 } from './trade-runtime.js';
+import { TRADE_RUNTIME_BUFFER_SIZE } from './retention.js';
 import type { TradeEvent } from './types.js';
 
 function makeTrade(underlying: string, price = 70_000, size = 1): TradeEvent {
@@ -89,24 +90,32 @@ describe('TradeRuntime — ring buffer', () => {
     expect(runtime.getTrades('ETH')).toHaveLength(1);
   });
 
-  it('caps buffer at 500 entries', () => {
+  it('caps buffer at TRADE_RUNTIME_BUFFER_SIZE entries', () => {
+    const overflow = 100;
     pushTrades(
       runtime,
       'BTC',
-      Array.from({ length: 600 }, (_, i) => makeTrade('BTC', i)),
+      Array.from({ length: TRADE_RUNTIME_BUFFER_SIZE + overflow }, (_, i) =>
+        makeTrade('BTC', i),
+      ),
     );
-    expect(runtime.getTrades('BTC')).toHaveLength(500);
+    expect(runtime.getTrades('BTC')).toHaveLength(TRADE_RUNTIME_BUFFER_SIZE);
   });
 
-  it('keeps the newest 500 entries after overflow', () => {
+  it('keeps the newest TRADE_RUNTIME_BUFFER_SIZE entries after overflow', () => {
+    const overflow = 100;
     pushTrades(
       runtime,
       'BTC',
-      Array.from({ length: 600 }, (_, i) => makeTrade('BTC', i)),
+      Array.from({ length: TRADE_RUNTIME_BUFFER_SIZE + overflow }, (_, i) =>
+        makeTrade('BTC', i),
+      ),
     );
     const trades = runtime.getTrades('BTC');
-    expect(trades[0]!.price).toBe(100);
-    expect(trades[499]!.price).toBe(599);
+    expect(trades[0]!.price).toBe(overflow);
+    expect(trades[TRADE_RUNTIME_BUFFER_SIZE - 1]!.price).toBe(
+      TRADE_RUNTIME_BUFFER_SIZE + overflow - 1,
+    );
   });
 
   it('filters by minNotional when > 0', () => {
@@ -235,6 +244,108 @@ describe('TradeRuntime — start() resolves before seeding finishes', () => {
 
     expect(resolved).toBe(true);
     expect(order).not.toContain('seed');
+
+    runtime.dispose();
+  });
+});
+
+describe('TradeRuntime — periodic reseed', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it('Coincall VENUE_STREAMS entry declares a reseedIntervalMs', () => {
+    const stream = VENUE_STREAMS.find((s) => s.venue === 'coincall');
+    expect(stream?.reseedIntervalMs).toBe(10 * 60 * 1000);
+    expect(stream?.seed).toBeDefined();
+  });
+
+  it('schedules a reseed timer per (venue with reseed, supported underlying) and clears on dispose', async () => {
+    vi.stubEnv('COINCALL_API_KEY', 'test-key');
+    vi.stubEnv('COINCALL_API_SECRET', 'test-secret');
+
+    const runtime = new TradeRuntime();
+    vi.spyOn(
+      runtime as unknown as { connectStream(...args: unknown[]): void },
+      'connectStream',
+    ).mockImplementation(() => {});
+    vi.spyOn(
+      runtime as unknown as { seedFromRest(u: string): Promise<void> },
+      'seedFromRest',
+    ).mockResolvedValue(undefined);
+
+    await runtime.start(['BTC', 'ETH']);
+
+    const reseedTimers = (runtime as unknown as { reseedTimers: Map<string, unknown> }).reseedTimers;
+    expect(reseedTimers.has('coincall:BTC')).toBe(true);
+    expect(reseedTimers.has('coincall:ETH')).toBe(true);
+    // No other venue currently declares reseedIntervalMs.
+    expect(Array.from(reseedTimers.keys()).every((k) => k.startsWith('coincall:'))).toBe(true);
+
+    runtime.dispose();
+    expect(reseedTimers.size).toBe(0);
+  });
+
+  it('invokes the stream seed() at each reseed interval and pushes returned trades', async () => {
+    vi.stubEnv('COINCALL_API_KEY', 'test-key');
+    vi.stubEnv('COINCALL_API_SECRET', 'test-secret');
+
+    const runtime = new TradeRuntime();
+    vi.spyOn(
+      runtime as unknown as { connectStream(...args: unknown[]): void },
+      'connectStream',
+    ).mockImplementation(() => {});
+    vi.spyOn(
+      runtime as unknown as { seedFromRest(u: string): Promise<void> },
+      'seedFromRest',
+    ).mockResolvedValue(undefined);
+
+    const reseedSpy = vi
+      .spyOn(
+        runtime as unknown as {
+          runVenueReseed(stream: { venue: string }, underlying: string): Promise<void>;
+        },
+        'runVenueReseed',
+      )
+      .mockResolvedValue(undefined);
+
+    await runtime.start(['BTC']);
+    expect(reseedSpy).not.toHaveBeenCalled();
+
+    // Advance one interval — should fire one reseed for coincall:BTC.
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(reseedSpy).toHaveBeenCalledTimes(1);
+    const firstCall = reseedSpy.mock.calls[0];
+    expect((firstCall?.[0] as { venue: string }).venue).toBe('coincall');
+    expect(firstCall?.[1]).toBe('BTC');
+
+    // Advance a second interval — fires again.
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(reseedSpy).toHaveBeenCalledTimes(2);
+
+    runtime.dispose();
+  });
+
+  it('skips reseed scheduling for coincall when keys are missing', async () => {
+    // Default vitest env has no COINCALL_API_KEY.
+    const runtime = new TradeRuntime();
+    vi.spyOn(
+      runtime as unknown as { connectStream(...args: unknown[]): void },
+      'connectStream',
+    ).mockImplementation(() => {});
+    vi.spyOn(
+      runtime as unknown as { seedFromRest(u: string): Promise<void> },
+      'seedFromRest',
+    ).mockResolvedValue(undefined);
+
+    await runtime.start(['BTC']);
+
+    const reseedTimers = (runtime as unknown as { reseedTimers: Map<string, unknown> }).reseedTimers;
+    expect(reseedTimers.size).toBe(0);
 
     runtime.dispose();
   });

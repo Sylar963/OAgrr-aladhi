@@ -1,11 +1,11 @@
-import { landingCopy } from "@/lib/copy";
+import { landingCopy } from '@/lib/copy';
 
-import { TerminalMockup } from "./TerminalMockup";
+import { TerminalMockup } from './TerminalMockup';
 
 export function HeroTerminalSection() {
   return (
     <section id="hero" className="landing-container px-6 pb-20 pt-10 sm:px-10 sm:pb-24 sm:pt-14">
-      <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-12">
+      <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center lg:gap-10">
         <div className="max-w-2xl">
           <div className="landing-chip">
             <span className="h-2 w-2 rounded-full bg-[var(--landing-accent)] shadow-[0_0_18px_rgba(80,210,193,0.8)]" />

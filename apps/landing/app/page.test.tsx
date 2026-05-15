@@ -22,8 +22,8 @@ describe('landing page', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('img', {
-        name: /simulated live volatility surface inspired by the app view/i,
+      screen.getByRole('heading', {
+        name: /3d iv surface/i,
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /request access/i }).length).toBeGreaterThan(0);

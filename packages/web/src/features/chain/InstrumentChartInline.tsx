@@ -43,7 +43,7 @@ export default function InstrumentChartInline({
 }: Props) {
   const initialVenue = useMemo(() => pickPrimaryVenue(side, activeVenues), [side, activeVenues]);
   const [venue, setVenue] = useState<VenueId | null>(initialVenue);
-  const [interval, setInterval] = useState<InstrumentCandleInterval>('1h');
+  const [interval, setIntervalSel] = useState<InstrumentCandleInterval>('1h');
   const openPanel = useChartPanelsStore((s) => s.openPanel);
 
   const { symbol, unsupported } = useMemo(
@@ -99,7 +99,7 @@ export default function InstrumentChartInline({
               key={i}
               type="button"
               data-active={interval === i || undefined}
-              onClick={() => setInterval(i)}
+              onClick={() => setIntervalSel(i)}
             >
               {i}
             </button>

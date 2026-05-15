@@ -1,10 +1,13 @@
 // packages/web/src/features/chain/FloatingChartPanel.tsx
 import { useEffect, useRef, useState } from 'react';
-import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
+import { useQueryClient } from '@tanstack/react-query';
+import type { InstrumentCandleInterval, InstrumentCandleRange, VenueId } from '@oggregator/protocol';
+import type { EnrichedChainResponse } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import type { ChartPanel } from './chart-panels-store.js';
 import { useChartPanelsStore } from './chart-panels-store.js';
 import { useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
+import { toVenueSymbol } from './instrument-symbol.js';
 import InstrumentChart from './InstrumentChart.js';
 import styles from './FloatingChartPanel.module.css';
 
@@ -14,10 +17,54 @@ const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
 interface DragState { startX: number; startY: number; panelX: number; panelY: number }
 interface ResizeState { startX: number; startY: number; w: number; h: number }
 
+function useStrikeVenues(underlying: string, expiry: string, strike: number, type: 'call' | 'put'): VenueId[] {
+  const qc = useQueryClient();
+  const entries = qc.getQueriesData<EnrichedChainResponse>({ queryKey: ['chain', underlying, expiry] });
+  for (const [, data] of entries) {
+    if (!data) continue;
+    const row = data.strikes.find((s) => s.strike === strike);
+    if (!row) continue;
+    const side = type === 'call' ? row.call : row.put;
+    return Object.keys(side.venues) as VenueId[];
+  }
+  return [];
+}
+
+function switchPanelVenue(
+  newVenue: VenueId,
+  panel: ChartPanel,
+  close: (id: string) => void,
+  openPanel: (args: { venue: VenueId; symbol: string; underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => string,
+): void {
+  if (newVenue === panel.venue) return;
+  try {
+    const newSymbol = toVenueSymbol({
+      venue: newVenue,
+      underlying: panel.underlying,
+      expiry: panel.expiry,
+      strike: panel.strike,
+      type: panel.type,
+    });
+    close(panel.id);
+    openPanel({
+      venue: newVenue,
+      symbol: newSymbol,
+      underlying: panel.underlying,
+      expiry: panel.expiry,
+      strike: panel.strike,
+      type: panel.type,
+    });
+  } catch {
+    // NotSupportedVenueError — silently ignore.
+  }
+}
+
 export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
   const update = useChartPanelsStore((s) => s.updatePanel);
   const close = useChartPanelsStore((s) => s.closePanel);
   const front = useChartPanelsStore((s) => s.bringToFront);
+  const openPanel = useChartPanelsStore((s) => s.openPanel);
+  const strikeVenues = useStrikeVenues(panel.underlying, panel.expiry, panel.strike, panel.type);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
   const [, setDragTick] = useState(0);
@@ -146,6 +193,18 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
                 onClick={() => update(panel.id, { overlays: { ...panel.overlays, ma20: !panel.overlays.ma20 } })}
               >MA20</button>
             </div>
+            {strikeVenues.length > 0 && (
+              <div className={styles.venueDots}>
+                {strikeVenues.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    data-active={panel.venue === v || undefined}
+                    onClick={() => switchPanelVenue(v, panel, close, openPanel)}
+                  >{VENUES[v]?.shortLabel ?? v}</button>
+                ))}
+              </div>
+            )}
           </div>
           <div className={styles.body}>
             {isLoading && <div className={styles.empty}>loading…</div>}
@@ -168,6 +227,8 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
 export function MobileChartModal({ panel }: { panel: ChartPanel }) {
   const update = useChartPanelsStore((s) => s.updatePanel);
   const close = useChartPanelsStore((s) => s.closePanel);
+  const openPanel = useChartPanelsStore((s) => s.openPanel);
+  const strikeVenues = useStrikeVenues(panel.underlying, panel.expiry, panel.strike, panel.type);
 
   const liveMid = useLiveMidFromChain(
     panel.underlying, panel.expiry, panel.strike, panel.type, panel.venue,
@@ -218,6 +279,18 @@ export function MobileChartModal({ panel }: { panel: ChartPanel }) {
           <button type="button" data-active={panel.overlays.ma20 || undefined}
             onClick={() => update(panel.id, { overlays: { ...panel.overlays, ma20: !panel.overlays.ma20 } })}>MA20</button>
         </div>
+        {strikeVenues.length > 0 && (
+          <div className={styles.venueDots}>
+            {strikeVenues.map((v) => (
+              <button
+                key={v}
+                type="button"
+                data-active={panel.venue === v || undefined}
+                onClick={() => switchPanelVenue(v, panel, close, openPanel)}
+              >{VENUES[v]?.shortLabel ?? v}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className={styles.body}>
         {isLoading && <div className={styles.empty}>loading…</div>}

@@ -38,6 +38,8 @@
 .sides {
   display: grid;
   grid-template-columns: 1fr 100px 1fr;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .side {

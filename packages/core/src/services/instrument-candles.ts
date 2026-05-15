@@ -21,10 +21,11 @@ interface RawCandle {
 
 export class InstrumentCandlesError extends Error {
   constructor(
-    public readonly code: 'not_found' | 'expired' | 'unsupported_venue' | 'upstream',
+    public readonly code: 'not_found' | 'unsupported_venue' | 'upstream',
     message: string,
   ) {
     super(message);
+    this.name = 'InstrumentCandlesError';
   }
 }
 
@@ -50,14 +51,12 @@ export function mergeTradeAndMark(
 }
 
 const INTERVAL_TO_DERIBIT: Record<InstrumentCandleInterval, string> = {
-  '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240',
-  '1d': '1D', '1w': '1D', '1M': '1D',
+  '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': '1D',
 };
 
 const INTERVAL_TO_MS: Record<InstrumentCandleInterval, number> = {
   '1m': 60_000, '5m': 5 * 60_000, '15m': 15 * 60_000,
-  '1h': 60 * 60_000, '4h': 4 * 60 * 60_000,
-  '1d': 24 * 60 * 60_000, '1w': 7 * 24 * 60 * 60_000, '1M': 30 * 24 * 60 * 60_000,
+  '1h': 60 * 60_000, '4h': 4 * 60 * 60_000, '1d': 24 * 60 * 60_000,
 };
 
 const RANGE_TO_MS: Record<InstrumentCandleRange, number> = {
@@ -108,16 +107,24 @@ export async function fetchDeribitTrade(
 ): Promise<RawCandle[]> {
   const now = Date.now();
   const start = now - RANGE_TO_MS[range];
-  const url = new URL('/api/v2/public/get_tradingview_chart_data', DERIBIT_REST_BASE_URL);
-  url.searchParams.set('instrument_name', symbol);
-  url.searchParams.set('resolution', INTERVAL_TO_DERIBIT[interval]);
-  url.searchParams.set('start_timestamp', String(start));
-  url.searchParams.set('end_timestamp', String(now));
-  const res = await fetch(url);
+  const params = new URLSearchParams({
+    instrument_name: symbol,
+    resolution: INTERVAL_TO_DERIBIT[interval],
+    start_timestamp: String(start),
+    end_timestamp: String(now),
+  });
+  const res = await fetch(
+    `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`,
+    { signal: AbortSignal.timeout(10_000), headers: { accept: 'application/json' } },
+  );
   if (res.status === 404) throw new InstrumentCandlesError('not_found', `Deribit: ${symbol}`);
   if (!res.ok) throw new InstrumentCandlesError('upstream', `Deribit ${res.status}`);
-  const parsed = TradingViewSchema.parse(await res.json());
-  const r = parsed.result;
+  const result = TradingViewSchema.safeParse(await res.json());
+  if (!result.success) {
+    log.warn({ issues: result.error.issues, symbol }, 'deribit response parse failed');
+    return [];
+  }
+  const r = result.data.result;
   if (r.status === 'no_data') return [];
   const len = Math.min(
     r.ticks.length, r.open.length, r.high.length, r.low.length, r.close.length,
@@ -143,16 +150,21 @@ export async function fetchDeribitMark(
 ): Promise<RawCandle[]> {
   const now = Date.now();
   const start = now - RANGE_TO_MS[range];
-  const url = new URL('/api/v2/public/get_mark_price_history', DERIBIT_REST_BASE_URL);
-  url.searchParams.set('instrument_name', symbol);
-  url.searchParams.set('start_timestamp', String(start));
-  url.searchParams.set('end_timestamp', String(now));
-  const res = await fetch(url);
+  const params = new URLSearchParams({
+    instrument_name: symbol,
+    start_timestamp: String(start),
+    end_timestamp: String(now),
+  });
+  const res = await fetch(
+    `${DERIBIT_REST_BASE_URL}/api/v2/public/get_mark_price_history?${params}`,
+    { signal: AbortSignal.timeout(10_000), headers: { accept: 'application/json' } },
+  );
   if (res.status === 404) throw new InstrumentCandlesError('not_found', `Deribit: ${symbol}`);
   if (!res.ok) throw new InstrumentCandlesError('upstream', `Deribit ${res.status}`);
-  const parsed = MarkHistorySchema.parse(await res.json());
-  return bucketTicks(parsed.result, INTERVAL_TO_MS[interval]);
+  const result = MarkHistorySchema.safeParse(await res.json());
+  if (!result.success) {
+    log.warn({ issues: result.error.issues, symbol }, 'deribit response parse failed');
+    return [];
+  }
+  return bucketTicks(result.data.result, INTERVAL_TO_MS[interval]);
 }
-
-// Suppress "unused" until Task 3 wires the cache that uses log.
-void log;

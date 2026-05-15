@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { VenueIdSchema } from './ws.js';
 
 export const InstrumentCandleIntervalSchema = z.enum([
-  '1m', '5m', '15m', '1h', '4h', '1d', '1w', '1M',
+  '1m', '5m', '15m', '1h', '4h', '1d',
 ]);
 export type InstrumentCandleInterval = z.infer<typeof InstrumentCandleIntervalSchema>;
 

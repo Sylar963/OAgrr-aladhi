@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeTradeAndMark } from './instrument-candles.js';
+import { mergeTradeAndMark, bucketTicks } from './instrument-candles.js';
 
 describe('mergeTradeAndMark', () => {
   it('uses trade bar when vol > 0', () => {
@@ -51,8 +51,6 @@ describe('mergeTradeAndMark', () => {
   });
 });
 
-import { bucketTicks } from './instrument-candles.js';
-
 describe('bucketTicks', () => {
   it('aggregates ticks into bucketed candles preserving high/low/close', () => {
     const ticks: [number, number][] = [
@@ -67,5 +65,18 @@ describe('bucketTicks', () => {
       { ts: 60_000, o: 10, h: 12, l: 9, c: 9, vol: 0 },
       { ts: 120_000, o: 8, h: 11, l: 8, c: 11, vol: 0 },
     ]);
+  });
+
+  it('sorts buckets ascending when ticks arrive out of order', () => {
+    const ticks: [number, number][] = [
+      [120_000, 8],
+      [60_000, 10],
+      [121_000, 11],
+      [60_500, 12],
+    ];
+    const out = bucketTicks(ticks, 60_000);
+    expect(out.map((c) => c.ts)).toEqual([60_000, 120_000]);
+    expect(out[0]?.h).toBe(12);
+    expect(out[1]?.h).toBe(11);
   });
 });

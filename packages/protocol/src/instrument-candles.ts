@@ -10,18 +10,18 @@ export const InstrumentCandleRangeSchema = z.enum(['1d', '7d', '30d', 'max']);
 export type InstrumentCandleRange = z.infer<typeof InstrumentCandleRangeSchema>;
 
 export const InstrumentCandleSchema = z.object({
-  ts: z.number(),        // milliseconds, UTC, bucket start
+  ts: z.number().int().nonnegative(),
   o: z.number(),
   h: z.number(),
   l: z.number(),
   c: z.number(),
-  vol: z.number(),       // trade volume; 0 for synthetic bars
-  synthetic: z.boolean(), // true when bar is mark-filled (no trades)
+  vol: z.number().nonnegative(),
+  synthetic: z.boolean(),
 });
 export type InstrumentCandle = z.infer<typeof InstrumentCandleSchema>;
 
 export const InstrumentMarkPointSchema = z.object({
-  ts: z.number(),
+  ts: z.number().int().nonnegative(),
   c: z.number(),
 });
 export type InstrumentMarkPoint = z.infer<typeof InstrumentMarkPointSchema>;

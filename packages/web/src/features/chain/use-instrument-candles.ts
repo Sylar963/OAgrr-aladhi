@@ -10,6 +10,12 @@ import type {
 import { fetchJson } from '@lib/http';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
+let warmupDone = false;
+const warmupPromise = new Promise<void>((resolve) => {
+  if (typeof window === 'undefined') { warmupDone = true; resolve(); return; }
+  setTimeout(() => { warmupDone = true; resolve(); }, 200);
+});
+
 export function applyLiveTick(
   candles: readonly InstrumentCandle[],
   liveMid: number | null,
@@ -44,10 +50,12 @@ export function useInstrumentCandles({
 }: UseInstrumentCandlesArgs) {
   const query = useQuery<InstrumentCandlesResponse>({
     queryKey: ['instrument-candles', venue, symbol, interval, range],
-    queryFn: () =>
-      fetchJson<InstrumentCandlesResponse>(
+    queryFn: async () => {
+      if (!warmupDone) await warmupPromise;
+      return fetchJson<InstrumentCandlesResponse>(
         `/instrument-candles?venue=${venue}&symbol=${encodeURIComponent(symbol)}&interval=${interval}&range=${range}`,
-      ),
+      );
+    },
     enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,

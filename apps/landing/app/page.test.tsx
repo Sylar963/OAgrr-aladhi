@@ -21,11 +21,6 @@ describe('landing page', () => {
         name: /technical answers before the onboarding call/i,
       }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', {
-        name: /3d iv surface/i,
-      }),
-    ).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /request access/i }).length).toBeGreaterThan(0);
   });
 });

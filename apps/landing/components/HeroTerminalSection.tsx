@@ -13,8 +13,6 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import { landingCopy } from "@/lib/copy";
 
-import { VolatilitySurfaceExperience } from "./VolatilitySurfaceExperience";
-
 const VolSurfaceTheaterCanvas = dynamic(
   () => import("./three/VolSurfaceTheaterCanvas"),
   {
@@ -22,7 +20,7 @@ const VolSurfaceTheaterCanvas = dynamic(
     loading: () => (
       <div
         aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(circle_at_22%_38%,_rgba(215,122,82,0.32),_transparent_42%),_linear-gradient(180deg,_#0a0d10,_#0f1115)]"
+        className="absolute inset-0 bg-[radial-gradient(circle_at_30%_52%,_rgba(64,128,255,0.18),_transparent_45%),_radial-gradient(circle_at_72%_42%,_rgba(251,146,60,0.22),_transparent_45%),_#0a0a0a]"
       />
     ),
   },
@@ -96,13 +94,9 @@ export function HeroTerminalSection() {
     });
   }, [scrollYProgress, scrollProgress]);
 
-  const surfaceScale = useTransform(scrollYProgress, [0, 0.45, 0.78, 1], [1, 0.96, 0.78, 0.7]);
-  const surfaceX = useTransform(
-    scrollYProgress,
-    [0, 0.45, 0.78, 1],
-    ["0%", "12%", "26%", "30%"],
-  );
-  const surfaceOpacity = useTransform(scrollYProgress, [0, 0.5, 0.78, 1], [1, 0.78, 0.5, 0]);
+  const surfaceScale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.92, 0.84]);
+  const surfaceX = useTransform(scrollYProgress, [0, 0.5, 1], ["0%", "16%", "26%"]);
+  const surfaceOpacity = useTransform(scrollYProgress, [0, 0.55, 1], [1, 0.7, 0.55]);
 
   const scrollHintOpacity = useTransform(scrollYProgress, [0, 0.12], [1, 0]);
   const ruleProgress = useTransform(scrollYProgress, [0.04, 0.98], [0, 1]);
@@ -113,7 +107,7 @@ export function HeroTerminalSection() {
       ref={sectionRef}
       aria-label="Hero · terminal-first options intelligence"
       className="relative"
-      style={{ height: staticMode ? "auto" : "320vh" }}
+      style={{ height: staticMode ? "auto" : "240vh" }}
     >
       <div
         className={
@@ -123,6 +117,8 @@ export function HeroTerminalSection() {
         }
       >
         <motion.div
+          aria-label="Interactive 3D volatility surface"
+          role="img"
           className="absolute inset-0"
           {...(staticMode
             ? {}
@@ -136,6 +132,41 @@ export function HeroTerminalSection() {
               })}
         >
           <VolSurfaceTheaterCanvas scrollProgress={scrollProgress} />
+
+          <div
+            aria-hidden
+            className="pointer-events-none absolute right-6 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-2 md:flex md:right-10"
+          >
+            <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+              IV %
+            </span>
+            <div className="flex h-56 items-stretch gap-2">
+              <div
+                className="w-2 rounded-full"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(180deg, #ea580c 0%, #fb923c 30%, #f5f5f5 50%, #60a5fa 75%, #1e40af 100%)",
+                }}
+              />
+              <div className="flex flex-col justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                <span>55</span>
+                <span>50</span>
+                <span>45</span>
+                <span>40</span>
+                <span>35</span>
+                <span>30</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-24 left-6 hidden flex-col gap-1 font-[var(--font-mono)] text-[9px] uppercase tracking-[0.28em] text-zinc-600 md:flex md:left-10"
+          >
+            <span>x · delta</span>
+            <span>y · tenor</span>
+            <span>z · iv %</span>
+          </div>
         </motion.div>
 
         <div
@@ -181,7 +212,7 @@ export function HeroTerminalSection() {
         <HeroScene
           scrollYProgress={scrollYProgress}
           start={0}
-          end={0.32}
+          end={0.42}
           staticVisible={false}
         >
           <div className="max-w-3xl">
@@ -197,8 +228,8 @@ export function HeroTerminalSection() {
 
         <HeroScene
           scrollYProgress={scrollYProgress}
-          start={0.28}
-          end={0.7}
+          start={0.4}
+          end={1}
           staticVisible={staticMode}
           pointerEvents
         >
@@ -222,26 +253,6 @@ export function HeroTerminalSection() {
                 {landingCopy.hero.secondaryCta}
               </a>
             </div>
-          </div>
-        </HeroScene>
-
-        <HeroScene
-          scrollYProgress={scrollYProgress}
-          start={0.7}
-          end={1}
-          staticVisible={staticMode}
-          pointerEvents
-        >
-          <div className="w-full">
-            <div className="flex items-baseline justify-between gap-4 pb-5">
-              <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
-                ◢ desk view
-              </span>
-              <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-500">
-                same surface · same grammar
-              </span>
-            </div>
-            <VolatilitySurfaceExperience />
           </div>
         </HeroScene>
       </div>

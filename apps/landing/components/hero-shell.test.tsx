@@ -27,12 +27,5 @@ describe('hero shell', () => {
     expect(screen.getAllByLabelText(/interactive 3d volatility surface/i).length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByRole('heading', { name: /3d iv surface/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: /portfolio workspace screenshot from the live app/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: /chain workspace screenshot from the live app/i }),
-    ).toBeInTheDocument();
   });
 });

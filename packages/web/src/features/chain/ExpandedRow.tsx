@@ -5,6 +5,8 @@ import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill, ForwardDeltaPill } from '@components/ui';
 import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
 import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
+import { useChartPanelsStore } from './chart-panels-store.js';
+import { toVenueSymbol, NotSupportedVenueError, isChartSupportedVenue } from './instrument-symbol.js';
 import styles from './ExpandedRow.module.css';
 
 interface ForwardCell {
@@ -21,6 +23,8 @@ interface ExpandedRowProps {
   activeVenues: string[];
   atmStrike: number | null;
   atmConsensusForward: number | null;
+  underlying: string;
+  expiry: string;
 }
 
 interface VenueRowProps {
@@ -246,6 +250,8 @@ export default function ExpandedRow({
   activeVenues,
   atmStrike,
   atmConsensusForward,
+  underlying,
+  expiry,
 }: ExpandedRowProps) {
   const forwardsByVenue = useMemo<Map<VenueId, ForwardCell>>(() => {
     const map = new Map<VenueId, ForwardCell>();
@@ -290,6 +296,14 @@ export default function ExpandedRow({
         <div className={styles.side} data-type="call">
           <div className={styles.sideHeader}>
             <span className={styles.sideLabel}>CALLS</span>
+            <ChartButton
+              underlying={underlying}
+              expiry={expiry}
+              strike={strike}
+              type="call"
+              side={callSide}
+              activeVenues={activeVenues as VenueId[]}
+            />
           </div>
           <div className={styles.sideScroll}>
             <SideTable
@@ -314,6 +328,14 @@ export default function ExpandedRow({
 
         <div className={styles.side} data-type="put">
           <div className={styles.sideHeader} data-align="end">
+            <ChartButton
+              underlying={underlying}
+              expiry={expiry}
+              strike={strike}
+              type="put"
+              side={putSide}
+              activeVenues={activeVenues as VenueId[]}
+            />
             <span className={styles.sideLabel}>PUTS</span>
           </div>
           <div className={styles.sideScroll}>
@@ -329,5 +351,48 @@ export default function ExpandedRow({
         </div>
       </div>
     </div>
+  );
+}
+
+interface ChartButtonProps {
+  underlying: string;
+  expiry: string;
+  strike: number;
+  type: 'call' | 'put';
+  side: EnrichedSide;
+  activeVenues: readonly VenueId[];
+}
+
+function pickPrimaryVenue(side: EnrichedSide, active: readonly VenueId[]): VenueId | null {
+  const entries = (Object.entries(side.venues) as [VenueId, VenueQuote][])
+    .filter(([v]) => active.includes(v) && isChartSupportedVenue(v));
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => (b[1].openInterest ?? 0) - (a[1].openInterest ?? 0));
+  return entries[0]?.[0] ?? null;
+}
+
+function ChartButton({ underlying, expiry, strike, type, side, activeVenues }: ChartButtonProps) {
+  const openPanel = useChartPanelsStore((s) => s.openPanel);
+  const venue = pickPrimaryVenue(side, activeVenues);
+  const disabled = venue == null;
+  return (
+    <button
+      type="button"
+      className={styles.chartBtn}
+      disabled={disabled}
+      title={disabled ? 'No venue available for this strike' : `Open chart for ${type.toUpperCase()}`}
+      onClick={() => {
+        if (!venue) return;
+        try {
+          const symbol = toVenueSymbol({ venue, underlying, expiry, strike, type });
+          openPanel({ venue, symbol, underlying, expiry, strike, type });
+        } catch (err) {
+          if (err instanceof NotSupportedVenueError) return;
+          throw err;
+        }
+      }}
+    >
+      Chart
+    </button>
   );
 }

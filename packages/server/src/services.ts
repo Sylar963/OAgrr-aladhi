@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import {
   BlockTradeRuntime,
   DvolService,
+  InstrumentCandleService,
   IvHistoryService,
   RegimeService,
   SpotCandleService,
@@ -31,6 +32,7 @@ import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
 export const spotCandleService = new SpotCandleService();
+export const instrumentCandleService = new InstrumentCandleService();
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
 export let newsService: NewsRuntime | null = null;
@@ -161,6 +163,7 @@ const serviceHealth = {
   dvol: false,
   spot: false,
   spotCandles: false,
+  instrumentCandles: false,
   flow: false,
   blockFlow: false,
   ivHistory: false,
@@ -176,6 +179,9 @@ export function isSpotReady(): boolean {
 }
 export function isSpotCandlesReady(): boolean {
   return serviceHealth.spotCandles;
+}
+export function isInstrumentCandlesReady(): boolean {
+  return serviceHealth.instrumentCandles;
 }
 export function isFlowReady(): boolean {
   return serviceHealth.flow;
@@ -211,7 +217,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 
   // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
   // Flow and spot cover every asset that has options on at least one venue.
-  const [dvol, spot, flow, blockFlow, spotCandles] = await Promise.allSettled([
+  const [dvol, spot, flow, blockFlow, spotCandles, instrumentCandles] = await Promise.allSettled([
     dvolService.start(['BTC', 'ETH']),
     spotService.start([
       'BTCUSDT',
@@ -227,6 +233,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE']),
     blockFlowService.start(),
     spotCandleService.start(),
+    instrumentCandleService.start(),
   ]);
 
   if (dvol.status === 'fulfilled') {
@@ -253,6 +260,11 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     serviceHealth.spotCandles = true;
     log.info('spot-candles service started');
   } else log.warn({ err: String(spotCandles.reason) }, 'spot-candles service failed');
+
+  if (instrumentCandles.status === 'fulfilled') {
+    serviceHealth.instrumentCandles = true;
+    log.info('instrument-candles service started');
+  } else log.warn({ err: String(instrumentCandles.reason) }, 'instrument-candles service failed');
 
   // IvHistoryService must start AFTER DVOL so seedFromDvol sees candles, and
   // AFTER adapters so the first snapshot's surface grid has chains to read.

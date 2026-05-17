@@ -11,6 +11,7 @@ import { flowRoute } from './flow.js';
 import { blockFlowRoute } from './block-flow.js';
 import { dvolHistoryRoute } from './dvol-history.js';
 import { spotCandlesRoute } from './spot-candles.js';
+import { instrumentCandlesRoute } from './instrument-candles.js';
 import { ivHistoryRoute } from './iv-history.js';
 import { regimeRoute } from './regime.js';
 import { newsRoute } from './news.js';
@@ -42,6 +43,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(blockFlowRoute, { prefix: '/api' });
   app.register(dvolHistoryRoute, { prefix: '/api' });
   app.register(spotCandlesRoute, { prefix: '/api' });
+  app.register(instrumentCandlesRoute, { prefix: '/api' });
   app.register(ivHistoryRoute, { prefix: '/api' });
   app.register(regimeRoute, { prefix: '/api' });
   app.register(newsRoute, { prefix: '/api' });

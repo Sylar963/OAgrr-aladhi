@@ -1,78 +1,249 @@
-import { landingCopy } from '@/lib/copy';
+"use client";
 
-import { VolatilitySurfaceExperience } from './VolatilitySurfaceExperience';
+import {
+  motion,
+  useMotionValue,
+  useScroll,
+  useTransform,
+  useReducedMotion,
+  type MotionValue,
+} from "framer-motion";
+import dynamic from "next/dynamic";
+import { useEffect, useRef, type ReactNode } from "react";
+
+import { landingCopy } from "@/lib/copy";
+
+import { VolatilitySurfaceExperience } from "./VolatilitySurfaceExperience";
+
+const VolSurfaceTheaterCanvas = dynamic(
+  () => import("./three/VolSurfaceTheaterCanvas"),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(circle_at_22%_38%,_rgba(215,122,82,0.32),_transparent_42%),_linear-gradient(180deg,_#0a0d10,_#0f1115)]"
+      />
+    ),
+  },
+);
+
+function clamp01(value: number) {
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function HeroScene({
+  scrollYProgress,
+  start,
+  end,
+  staticVisible,
+  children,
+  pointerEvents,
+}: {
+  scrollYProgress: MotionValue<number>;
+  start: number;
+  end: number;
+  staticVisible: boolean;
+  children: ReactNode;
+  pointerEvents?: boolean;
+}) {
+  const span = Math.max(end - start, 0.001);
+  const center = (start + end) / 2;
+  const fadeIn = span * 0.35;
+  const fadeOut = span * 0.35;
+
+  const opacity = useTransform(scrollYProgress, (value) => {
+    if (value < start - fadeIn) return 0;
+    if (value > end + fadeOut) return 0;
+    if (value < start) return clamp01((value - (start - fadeIn)) / fadeIn);
+    if (value > end) return clamp01(1 - (value - end) / fadeOut);
+    return 1;
+  });
+
+  const y = useTransform(scrollYProgress, (value) => {
+    const local = (value - center) / span;
+    return local * -28;
+  });
+
+  return (
+    <motion.div
+      className={
+        (pointerEvents ? "" : "pointer-events-none ") +
+        "absolute inset-0 flex items-center px-6 sm:px-10"
+      }
+      style={staticVisible ? { opacity: 1 } : { opacity, y }}
+    >
+      <div className="landing-container w-full">{children}</div>
+    </motion.div>
+  );
+}
 
 export function HeroTerminalSection() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  const staticMode = Boolean(prefersReducedMotion);
+
+  const scrollProgress = useMotionValue(0);
+
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end end"],
+  });
+
+  useEffect(() => {
+    return scrollYProgress.on("change", (value) => {
+      scrollProgress.set(clamp01(value));
+    });
+  }, [scrollYProgress, scrollProgress]);
+
+  const surfaceScale = useTransform(scrollYProgress, [0, 0.45, 0.78, 1], [1, 0.96, 0.78, 0.7]);
+  const surfaceX = useTransform(
+    scrollYProgress,
+    [0, 0.45, 0.78, 1],
+    ["0%", "12%", "26%", "30%"],
+  );
+  const surfaceOpacity = useTransform(scrollYProgress, [0, 0.5, 0.78, 1], [1, 0.78, 0.5, 0]);
+
+  const scrollHintOpacity = useTransform(scrollYProgress, [0, 0.12], [1, 0]);
+  const ruleProgress = useTransform(scrollYProgress, [0.04, 0.98], [0, 1]);
+
   return (
-    <section id="hero" className="landing-container px-6 pb-18 pt-10 sm:px-10 sm:pb-24 sm:pt-14">
-      <div className="max-w-4xl">
-        <div className="max-w-2xl">
-          <div className="landing-chip">
-            <span className="h-2 w-2 rounded-full bg-[var(--landing-accent)] shadow-[0_0_18px_rgba(80,210,193,0.8)]" />
-            {landingCopy.hero.eyebrow}
-          </div>
-          <h1 className="landing-display-title mt-6 max-w-[12ch] text-[clamp(3.8rem,8vw,7.3rem)]">
-            {landingCopy.hero.headline}
-          </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-[var(--landing-muted-strong)] sm:text-xl">
-            {landingCopy.hero.subheadline}
-          </p>
+    <section
+      id="hero"
+      ref={sectionRef}
+      aria-label="Hero · terminal-first options intelligence"
+      className="relative"
+      style={{ height: staticMode ? "auto" : "320vh" }}
+    >
+      <div
+        className={
+          staticMode
+            ? "relative w-full overflow-hidden bg-[#080b0d]"
+            : "sticky top-0 h-screen w-full overflow-hidden bg-[#080b0d]"
+        }
+      >
+        <motion.div
+          className="absolute inset-0"
+          {...(staticMode
+            ? {}
+            : {
+                style: {
+                  scale: surfaceScale,
+                  x: surfaceX,
+                  opacity: surfaceOpacity,
+                  transformOrigin: "50% 50%",
+                },
+              })}
+        >
+          <VolSurfaceTheaterCanvas scrollProgress={scrollProgress} />
+        </motion.div>
 
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <a href="#access" className="landing-button-primary">
-              {landingCopy.hero.primaryCta}
-            </a>
-            <a href="#features" className="landing-button-secondary">
-              {landingCopy.hero.secondaryCta}
-            </a>
-          </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,11,13,0.5)_0%,rgba(8,11,13,0)_22%,rgba(8,11,13,0)_70%,rgba(8,11,13,0.92)_100%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:148px_148px] opacity-30 mix-blend-screen"
+        />
+
+        <div className="pointer-events-none absolute left-0 right-0 top-7 flex items-center justify-between px-6 sm:px-10">
+          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]/80">
+            ◢ surface.live
+          </span>
+          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-500">
+            tenor · delta · venue
+          </span>
         </div>
 
-        <div className="mt-8 flex flex-wrap items-center gap-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-500">
-          <span>{landingCopy.hero.proofLabel}</span>
-          {landingCopy.hero.proofPoints.map((point) => (
-            <span
-              key={point}
-              className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-zinc-300"
+        <div className="pointer-events-none absolute bottom-7 left-0 right-0 px-6 sm:px-10">
+          <div className="relative h-px w-full overflow-hidden bg-white/10">
+            <motion.span
+              aria-hidden
+              className="absolute inset-y-0 left-0 block w-full bg-[var(--landing-accent)]"
+              style={
+                staticMode
+                  ? { transform: "scaleX(0.4)", transformOrigin: "0% 50%" }
+                  : { transformOrigin: "0% 50%", scaleX: ruleProgress }
+              }
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500">
+            <motion.span
+              {...(staticMode ? {} : { style: { opacity: scrollHintOpacity } })}
             >
-              {point}
+              scroll → dive into the surface
+            </motion.span>
+            <span>three depths · one object</span>
+          </div>
+        </div>
+
+        <HeroScene
+          scrollYProgress={scrollYProgress}
+          start={0}
+          end={0.32}
+          staticVisible={false}
+        >
+          <div className="max-w-3xl">
+            <span className="inline-flex items-center gap-3 border border-white/15 bg-white/[0.03] px-4 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--landing-accent)] shadow-[0_0_12px_rgba(80,210,193,0.8)]" />
+              surface.live · tick-by-tick
             </span>
-          ))}
-        </div>
+            <p className="mt-12 max-w-xl font-[var(--font-mono)] text-[11px] uppercase leading-6 tracking-[0.32em] text-zinc-400">
+              a real volatility surface — not a screenshot. tilt, skew, term and venue context, recalculated tick-by-tick.
+            </p>
+          </div>
+        </HeroScene>
 
-        <div className="mt-8">
-          <VolatilitySurfaceExperience />
-        </div>
+        <HeroScene
+          scrollYProgress={scrollYProgress}
+          start={0.28}
+          end={0.7}
+          staticVisible={staticMode}
+          pointerEvents
+        >
+          <div className="max-w-3xl">
+            <span className="landing-chip">
+              <span className="h-2 w-2 rounded-full bg-[var(--landing-accent)] shadow-[0_0_18px_rgba(80,210,193,0.8)]" />
+              {landingCopy.hero.eyebrow}
+            </span>
+            <h1 className="landing-display-title mt-7 max-w-[14ch] text-[clamp(3.4rem,8.4vw,7.6rem)] [text-wrap:balance]">
+              {landingCopy.hero.headline}
+            </h1>
+            <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--landing-muted-strong)] sm:text-xl">
+              {landingCopy.hero.subheadline}
+            </p>
 
-        <div className="mt-6 grid gap-3 text-sm leading-6 text-[var(--landing-muted-strong)] md:grid-cols-3">
-          <div className="rounded-[1.2rem] border border-white/8 bg-white/[0.025] px-4 py-4">
-            <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-[var(--landing-accent)]">
-              Surface parity
-            </p>
-            <p className="mt-3">
-              The landing page now uses the same terminal grammar as the app instead of a detached
-              marketing mockup.
-            </p>
+            <div className="mt-10 flex flex-wrap items-center gap-3">
+              <a href="#access" className="landing-button-primary">
+                {landingCopy.hero.primaryCta}
+              </a>
+              <a href="#features" className="landing-button-secondary">
+                {landingCopy.hero.secondaryCta}
+              </a>
+            </div>
           </div>
-          <div className="rounded-[1.2rem] border border-white/8 bg-white/[0.025] px-4 py-4">
-            <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-[var(--landing-accent)]">
-              Real captures
-            </p>
-            <p className="mt-3">
-              Portfolio and chain previews are pulled from the actual app so the landing page feels
-              native to the product.
-            </p>
+        </HeroScene>
+
+        <HeroScene
+          scrollYProgress={scrollYProgress}
+          start={0.7}
+          end={1}
+          staticVisible={staticMode}
+          pointerEvents
+        >
+          <div className="w-full">
+            <div className="flex items-baseline justify-between gap-4 pb-5">
+              <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
+                ◢ desk view
+              </span>
+              <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-500">
+                same surface · same grammar
+              </span>
+            </div>
+            <VolatilitySurfaceExperience />
           </div>
-          <div className="rounded-[1.2rem] border border-white/8 bg-white/[0.025] px-4 py-4">
-            <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-[var(--landing-accent)]">
-              Live tape feel
-            </p>
-            <p className="mt-3">
-              Feed tape and surface motion keep the page moving like the app, without inventing fake
-              book data.
-            </p>
-          </div>
-        </div>
+        </HeroScene>
       </div>
     </section>
   );

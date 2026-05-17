@@ -6,7 +6,6 @@ import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { LandingHeader } from "@/components/LandingHeader";
 import { LeadCaptureSection } from "@/components/LeadCaptureSection";
 import { SectionReveal } from "@/components/SectionReveal";
-import { SurfaceScrollTheater } from "@/components/SurfaceScrollTheater";
 import { TopTicker } from "@/components/TopTicker";
 
 export default function HomePage() {
@@ -14,16 +13,13 @@ export default function HomePage() {
     <main className="landing-page min-h-screen bg-[var(--landing-bg)] text-[var(--landing-text)]">
       <TopTicker />
       <LandingHeader />
-      <SectionReveal>
-        <HeroTerminalSection />
-      </SectionReveal>
+      <HeroTerminalSection />
       <SectionReveal>
         <HowItWorksSection />
       </SectionReveal>
       <SectionReveal>
         <FeatureBentoSection />
       </SectionReveal>
-      <SurfaceScrollTheater />
       <FaqSection />
       <LeadCaptureSection />
       <Footer />

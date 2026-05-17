@@ -6,6 +6,7 @@ import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { LandingHeader } from "@/components/LandingHeader";
 import { LeadCaptureSection } from "@/components/LeadCaptureSection";
 import { SectionReveal } from "@/components/SectionReveal";
+import { SurfaceScrollTheater } from "@/components/SurfaceScrollTheater";
 import { TopTicker } from "@/components/TopTicker";
 
 export default function HomePage() {
@@ -22,12 +23,9 @@ export default function HomePage() {
       <SectionReveal>
         <FeatureBentoSection />
       </SectionReveal>
-      <SectionReveal>
-        <FaqSection />
-      </SectionReveal>
-      <SectionReveal>
-        <LeadCaptureSection />
-      </SectionReveal>
+      <SurfaceScrollTheater />
+      <FaqSection />
+      <LeadCaptureSection />
       <Footer />
     </main>
   );

@@ -36,6 +36,8 @@ vi.mock('./queries', () => ({
             { ts: 3_000, atmIv: 0.5, rr25d: -0.04, bfly25d: 0.03 },
           ],
           current: {},
+          rrPercentile: 12,
+          flyPercentile: 88,
           min: {},
           max: {},
         },
@@ -55,9 +57,15 @@ describe('SkewHistory', () => {
     expect(screen.getByRole('button', { name: 'Z-Score' })).toBeTruthy();
     expect(screen.getByText('-8.0% ATM')).toBeTruthy();
     expect(screen.getByText('Default lens: skew relative to ATM IV')).toBeTruthy();
+    expect(screen.getByText('12th pct')).toBeTruthy();
+    expect(screen.getByText('88th pct')).toBeTruthy();
+    expect(
+      screen.getByText('Puts rich vs calls; Wings rich vs ATM. Read these as skew and wing richness after adjusting for ATM IV.'),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Z-Score' }));
     expect(screen.getAllByText('+1.22σ')).toHaveLength(2);
+    expect(screen.getByText('Puts rich vs calls, stretched vs window; Wings rich vs ATM, stretched vs window.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }));
     expect(screen.getByText('-4.0%')).toBeTruthy();

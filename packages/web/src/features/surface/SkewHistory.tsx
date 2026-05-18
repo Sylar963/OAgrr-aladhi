@@ -41,6 +41,8 @@ const MODE_DESCRIPTIONS: Record<SkewDisplayMode, string> = {
   zscore: 'Best for extremes. Use this to spot when skew is stretched versus the selected history window.',
   raw: 'Best for absolute pricing. Keep this as the advanced view when you care about straight vol-point moves.',
 };
+const NORMALIZED_SOFT_BAND = 5;
+const NORMALIZED_EXTREME_BAND = 10;
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
 
@@ -96,11 +98,39 @@ function describeStretch(zone: SkewZone | null): string {
   return 'insufficient history';
 }
 
-function describeMetric(value: number | null, zone: SkewZone | null, mode: SkewDisplayMode, title: string): string {
-  const base = title === '25Δ RR' ? describeRrState(value) : describeFlyState(value);
+function describeMetric(
+  directionalValue: number | null,
+  zone: SkewZone | null,
+  mode: SkewDisplayMode,
+  title: string,
+): string {
+  const base = title === '25Δ RR' ? describeRrState(directionalValue) : describeFlyState(directionalValue);
   if (mode === 'zscore') return `${base} · ${describeStretch(zone)}`;
   if (mode === 'normalized') return `${base} · scaled by ATM IV`;
   return `${base} · absolute vol points`;
+}
+
+function formatPercentile(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return 'hist n/a';
+  return `${Math.round(value)}th pct`;
+}
+
+function describeTakeaway(
+  mode: SkewDisplayMode,
+  rrDirectionalValue: number | null,
+  flyDirectionalValue: number | null,
+  rrZone: SkewZone | null,
+  flyZone: SkewZone | null,
+): string {
+  const rrState = describeRrState(rrDirectionalValue);
+  const flyState = describeFlyState(flyDirectionalValue);
+  if (mode === 'zscore') {
+    return `${rrState}, ${describeStretch(rrZone)}; ${flyState}, ${describeStretch(flyZone)}.`;
+  }
+  if (mode === 'normalized') {
+    return `${rrState}; ${flyState}. Read these as skew and wing richness after adjusting for ATM IV.`;
+  }
+  return `${rrState}; ${flyState}. Raw mode shows the same moves in straight vol points.`;
 }
 
 function SkewMiniChart({
@@ -109,6 +139,7 @@ function SkewMiniChart({
   data,
   latest,
   insight,
+  percentile,
   mode,
   zone,
 }: {
@@ -117,6 +148,7 @@ function SkewMiniChart({
   data: SkewLinePoint[];
   latest: string;
   insight: string;
+  percentile: string;
   mode: SkewDisplayMode;
   zone: SkewZone | null;
 }) {
@@ -187,6 +219,82 @@ function SkewMiniChart({
       ] as never);
     }
 
+    if (mode === 'normalized' && data.length >= 2) {
+      const firstTime = data[0]!.time;
+      const lastTime = data[data.length - 1]!.time;
+      const mildFill = 'rgba(80, 210, 193, 0.07)';
+      const extremeFill = 'rgba(245, 158, 11, 0.08)';
+      const transparent = 'rgba(0, 0, 0, 0)';
+      const upperMild = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topFillColor1: mildFill,
+        topFillColor2: mildFill,
+        topLineColor: transparent,
+        bottomFillColor1: transparent,
+        bottomFillColor2: transparent,
+        bottomLineColor: transparent,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      upperMild.setData([
+        { time: firstTime, value: NORMALIZED_SOFT_BAND },
+        { time: lastTime, value: NORMALIZED_SOFT_BAND },
+      ] as never);
+      const lowerMild = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topFillColor1: transparent,
+        topFillColor2: transparent,
+        topLineColor: transparent,
+        bottomFillColor1: mildFill,
+        bottomFillColor2: mildFill,
+        bottomLineColor: transparent,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      lowerMild.setData([
+        { time: firstTime, value: -NORMALIZED_SOFT_BAND },
+        { time: lastTime, value: -NORMALIZED_SOFT_BAND },
+      ] as never);
+      const upperExtreme = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: NORMALIZED_SOFT_BAND },
+        topFillColor1: extremeFill,
+        topFillColor2: extremeFill,
+        topLineColor: transparent,
+        bottomFillColor1: transparent,
+        bottomFillColor2: transparent,
+        bottomLineColor: transparent,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      upperExtreme.setData([
+        { time: firstTime, value: NORMALIZED_EXTREME_BAND },
+        { time: lastTime, value: NORMALIZED_EXTREME_BAND },
+      ] as never);
+      const lowerExtreme = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: -NORMALIZED_SOFT_BAND },
+        topFillColor1: transparent,
+        topFillColor2: transparent,
+        topLineColor: transparent,
+        bottomFillColor1: extremeFill,
+        bottomFillColor2: extremeFill,
+        bottomLineColor: transparent,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      lowerExtreme.setData([
+        { time: firstTime, value: -NORMALIZED_EXTREME_BAND },
+        { time: lastTime, value: -NORMALIZED_EXTREME_BAND },
+      ] as never);
+    }
+
     const line = chart.addSeries(LineSeries, {
       color,
       lineWidth: 1,
@@ -223,9 +331,12 @@ function SkewMiniChart({
     <div className={styles.miniChart}>
       <div className={styles.metricHeader}>
         <div className={styles.metricMeta}>
-          <span className={styles.metricName} style={{ color }}>
-            {title}
-          </span>
+          <div className={styles.metricRow}>
+            <span className={styles.metricName} style={{ color }}>
+              {title}
+            </span>
+            <span className={styles.metricBadge}>{percentile}</span>
+          </div>
           <span className={styles.metricInsight}>{insight}</span>
         </div>
         <span className={styles.metricValue} data-zone={zone ?? undefined}>
@@ -257,12 +368,17 @@ export default function SkewHistory({ underlying }: Props) {
   const flyData = buildSkewLineData(series, 'bfly25d', mode);
   const rrLatestVal = latestSkewDisplayValue(series, 'rr25d', mode);
   const flyLatestVal = latestSkewDisplayValue(series, 'bfly25d', mode);
+  const rrDirectionalVal = latestSkewDisplayValue(series, 'rr25d', 'raw');
+  const flyDirectionalVal = latestSkewDisplayValue(series, 'bfly25d', 'raw');
   const rrLatest = formatSkewDisplayValue(rrLatestVal, mode);
   const flyLatest = formatSkewDisplayValue(flyLatestVal, mode);
   const rrZone = zoneFor(rrLatestVal, mode);
   const flyZone = zoneFor(flyLatestVal, mode);
-  const rrInsight = describeMetric(rrLatestVal, rrZone, mode, '25Δ RR');
-  const flyInsight = describeMetric(flyLatestVal, flyZone, mode, '25Δ Fly');
+  const rrInsight = describeMetric(rrDirectionalVal, rrZone, mode, '25Δ RR');
+  const flyInsight = describeMetric(flyDirectionalVal, flyZone, mode, '25Δ Fly');
+  const rrPercentile = formatPercentile(result?.rrPercentile ?? null);
+  const flyPercentile = formatPercentile(result?.flyPercentile ?? null);
+  const takeaway = describeTakeaway(mode, rrDirectionalVal, flyDirectionalVal, rrZone, flyZone);
   const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   const logo = getTokenLogo(underlying);
@@ -344,6 +460,7 @@ export default function SkewHistory({ underlying }: Props) {
       <div className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
         {coverage.label}
       </div>
+      <div className={styles.takeaway}>{takeaway}</div>
       <div className={styles.modeGuide}>
         <span className={styles.modeGuideTitle}>{MODE_TITLES[mode]}</span>
         <span className={styles.modeGuideText}>{MODE_DESCRIPTIONS[mode]}</span>
@@ -357,6 +474,7 @@ export default function SkewHistory({ underlying }: Props) {
             data={rrData}
             latest={rrLatest}
             insight={rrInsight}
+            percentile={rrPercentile}
             mode={mode}
             zone={rrZone}
           />
@@ -366,6 +484,7 @@ export default function SkewHistory({ underlying }: Props) {
             data={flyData}
             latest={flyLatest}
             insight={flyInsight}
+            percentile={flyPercentile}
             mode={mode}
             zone={flyZone}
           />

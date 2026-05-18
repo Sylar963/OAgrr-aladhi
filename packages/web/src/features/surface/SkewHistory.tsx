@@ -115,12 +115,24 @@ function formatPercentile(value: number | null): string {
   return `${Math.round(value)}th pct`;
 }
 
+function formatIvContext(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return 'ATM IV n/a';
+  return `ATM IV ${value.toFixed(1)}%`;
+}
+
+function formatVolPoints(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return 'n/a';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)} vol pts`;
+}
+
 function describeTakeaway(
   mode: SkewDisplayMode,
   rrDirectionalValue: number | null,
   flyDirectionalValue: number | null,
   rrZone: SkewZone | null,
   flyZone: SkewZone | null,
+  atmIv: number | null,
 ): string {
   const rrState = describeRrState(rrDirectionalValue);
   const flyState = describeFlyState(flyDirectionalValue);
@@ -128,9 +140,14 @@ function describeTakeaway(
     return `${rrState}, ${describeStretch(rrZone)}; ${flyState}, ${describeStretch(flyZone)}.`;
   }
   if (mode === 'normalized') {
-    return `${rrState}; ${flyState}. Read these as skew and wing richness after adjusting for ATM IV.`;
+    return `${rrState}; ${flyState}. ${formatIvContext(atmIv)} is the denominator, so ${formatVolPoints(rrDirectionalValue)} RR reads relative to today's vol regime.`;
   }
   return `${rrState}; ${flyState}. Raw mode shows the same moves in straight vol points.`;
+}
+
+function describeModeGuide(mode: SkewDisplayMode, atmIv: number | null): string {
+  if (mode !== 'normalized') return MODE_DESCRIPTIONS[mode];
+  return `${MODE_DESCRIPTIONS[mode]} Current context: ${formatIvContext(atmIv)}.`;
 }
 
 function SkewMiniChart({
@@ -378,7 +395,15 @@ export default function SkewHistory({ underlying }: Props) {
   const flyInsight = describeMetric(flyDirectionalVal, flyZone, mode, '25Δ Fly');
   const rrPercentile = formatPercentile(result?.rrPercentile ?? null);
   const flyPercentile = formatPercentile(result?.flyPercentile ?? null);
-  const takeaway = describeTakeaway(mode, rrDirectionalVal, flyDirectionalVal, rrZone, flyZone);
+  const atmIvContext = result?.current.atmIv != null ? result.current.atmIv * 100 : null;
+  const takeaway = describeTakeaway(
+    mode,
+    rrDirectionalVal,
+    flyDirectionalVal,
+    rrZone,
+    flyZone,
+    atmIvContext,
+  );
   const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
 
   const logo = getTokenLogo(underlying);
@@ -463,7 +488,7 @@ export default function SkewHistory({ underlying }: Props) {
       <div className={styles.takeaway}>{takeaway}</div>
       <div className={styles.modeGuide}>
         <span className={styles.modeGuideTitle}>{MODE_TITLES[mode]}</span>
-        <span className={styles.modeGuideText}>{MODE_DESCRIPTIONS[mode]}</span>
+        <span className={styles.modeGuideText}>{describeModeGuide(mode, atmIvContext)}</span>
       </div>
 
       <div className={styles.chartArea}>

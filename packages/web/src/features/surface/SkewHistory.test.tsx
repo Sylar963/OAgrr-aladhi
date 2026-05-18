@@ -35,7 +35,7 @@ vi.mock('./queries', () => ({
             { ts: 2_000, atmIv: 0.5, rr25d: -0.05, bfly25d: 0.02 },
             { ts: 3_000, atmIv: 0.5, rr25d: -0.04, bfly25d: 0.03 },
           ],
-          current: {},
+          current: { ts: 3_000, atmIv: 0.5, rr25d: -0.04, bfly25d: 0.03 },
           rrPercentile: 12,
           flyPercentile: 88,
           min: {},
@@ -60,7 +60,14 @@ describe('SkewHistory', () => {
     expect(screen.getByText('12th pct')).toBeTruthy();
     expect(screen.getByText('88th pct')).toBeTruthy();
     expect(
-      screen.getByText('Puts rich vs calls; Wings rich vs ATM. Read these as skew and wing richness after adjusting for ATM IV.'),
+      screen.getByText(
+        'Puts rich vs calls; Wings rich vs ATM. ATM IV 50.0% is the denominator, so -4.0 vol pts RR reads relative to today\'s vol regime.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Best for cross-regime reading. Compare skew after adjusting for the current vol level. Current context: ATM IV 50.0%.',
+      ),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Z-Score' }));

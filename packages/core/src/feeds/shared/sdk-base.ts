@@ -1,5 +1,8 @@
 import { BaseAdapter } from './base.js';
+import { feedLogger } from '../../utils/logger.js';
 import type { VenueCapabilities, StreamHandlers } from './types.js';
+
+const recorderLog = feedLogger('sdk-base');
 import type {
   ChainRequest,
   VenueOptionChain,
@@ -303,7 +306,16 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           ts: update.quote.timestamp,
           markPrice: update.quote.markPrice,
         };
-        for (const recorder of this.quoteRecorders) recorder(event);
+        for (const recorder of this.quoteRecorders) {
+          try {
+            recorder(event);
+          } catch (err: unknown) {
+            recorderLog.warn(
+              { venue: event.venue, exchangeSymbol: event.exchangeSymbol, err: String(err) },
+              'quote recorder threw — continuing fanout',
+            );
+          }
+        }
       }
 
       if (this.deltaHandlers.size === 0) continue;

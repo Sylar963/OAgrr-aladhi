@@ -160,13 +160,15 @@ export class MarkHistoryBuffer {
   }
 
   // Prune entries older than the retention window. Runs every 256 writes to
-  // amortize the cost. A timer-driven sweep would work too, but on-write keeps
-  // the buffer self-contained.
-  private maybePrune(store: InstrumentStore, ts: number): void {
+  // amortize the cost. Sweeps every instrument store, not just the one being
+  // written — otherwise inactive instruments keep stale buckets forever.
+  private maybePrune(_store: InstrumentStore, ts: number): void {
     this.writeCount++;
     if ((this.writeCount & 0xff) !== 0) return;
     const cutoff = ts - this.retentionMs;
-    this.pruneStore(store, cutoff);
+    for (const store of this.stores.values()) {
+      this.pruneStore(store, cutoff);
+    }
   }
 
   private pruneStore(store: InstrumentStore, cutoff: number): void {
@@ -212,6 +214,9 @@ export function mergeBaseBuckets(
   sorted: readonly RawCandle[],
   intervalMs: number,
 ): RawCandle[] {
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new TypeError(`mergeBaseBuckets: intervalMs must be a finite positive number, got ${intervalMs}`);
+  }
   if (sorted.length === 0) return [];
   const out: RawCandle[] = [];
   let current: RawCandle | null = null;

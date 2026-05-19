@@ -96,6 +96,8 @@ describe('IndexPriceRuntime — Gate.io REST refresh', () => {
   });
 
   it('does not start the Coincall WS subscription path when keys are missing', async () => {
+    vi.stubEnv('COINCALL_API_KEY', '');
+    vi.stubEnv('COINCALL_API_SECRET', '');
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify([]), { status: 200 }),
     );

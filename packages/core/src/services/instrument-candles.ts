@@ -639,15 +639,20 @@ export async function fetchThalexMark(
 }
 
 // ── Venue capability map ──────────────────────────────────────────
-// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex.
-// Intentionally NOT wired (verified against official docs):
-//   coincall — GET /open/option/market/kline/history/v1/{optionName}
-//              is the official kline path, but Coincall's own example
-//              curl explicitly requires signed headers (X-CC-APIKEY,
-//              sign, ts, X-REQ-TS-DIFF). Probing the endpoint without
-//              auth returns code:4003 "token auth fail". Vendor-gated.
+// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex, coincall.
+//
+// Coincall's REST kline endpoint (`/open/option/market/kline/v1`) is HMAC-
+// signed and the param schema isn't in the references we have. To stay
+// public-only, coincall reads chart data from the in-process MarkHistoryBuffer
+// fed by the chain adapter's bsInfo quote recorder (see adapters.ts). Same
+// pattern as Derive — cold-start gap until the buffer warms.
+//
+// Gate.io's public `/options/candlesticks` is trade-derived and returns []
+// for sparse altcoin strikes that never trade. We pair it with the same
+// MarkHistoryBuffer fallback so the chart panel always has at least a mark
+// line to draw, even for untraded strikes.
 const SUPPORTED_VENUES = new Set<VenueId>([
-  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex',
+  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex', 'coincall',
 ]);
 
 const PRICE_CURRENCY: Record<string, string> = {
@@ -658,6 +663,7 @@ const PRICE_CURRENCY: Record<string, string> = {
   bybit: 'USDT',
   derive: 'USDC',
   thalex: 'USD',
+  coincall: 'USD',    // Coincall options are USD-quoted (e.g. BTCUSD-…)
 };
 
 function priceCurrencyFor(venue: VenueId, symbol: string): string {
@@ -757,11 +763,42 @@ export class InstrumentCandleService {
           fetchOkxTrade(symbol, interval, range),
           fetchOkxMark(symbol, interval, range),
         ]);
-      case 'gateio':
-        return Promise.all([
-          fetchGateioTrade(symbol, interval, range),
-          Promise.resolve([] as RawCandle[]),
-        ]);
+      case 'gateio': {
+        const buffer = this.markHistoryBuffer;
+        // /options/candlesticks is trade-derived — empty for untraded strikes.
+        // Pair with buffered marks from the chain adapter's quote recorder so
+        // every gateio strike has at least a mark line once it's been viewed
+        // in the chain.
+        const tradeCandles = await fetchGateioTrade(symbol, interval, range);
+        const bufferedMark = buffer?.getMarkCandles(
+          'gateio',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        return [tradeCandles, bufferedMark ?? []];
+      }
+      case 'coincall': {
+        const buffer = this.markHistoryBuffer;
+        // Coincall has no public chart REST — both trade and mark series come
+        // from the live buffer fed by the chain adapter (bsInfo `mp` for mark;
+        // TradeRuntime is per-symbol so its prints are also recorded by the
+        // recorder for the same exchangeSymbol). Cold-start gap until the
+        // buffer warms.
+        const bufferedTrades = buffer?.getTradeCandles(
+          'coincall',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        const bufferedMark = buffer?.getMarkCandles(
+          'coincall',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        return [bufferedTrades ?? [], bufferedMark ?? []];
+      }
       case 'bybit':
         return Promise.all([
           fetchBybitTradeBucketed(symbol, interval, range),

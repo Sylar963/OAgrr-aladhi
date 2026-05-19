@@ -338,7 +338,8 @@ describe('TradeRuntime — periodic reseed', () => {
   });
 
   it('skips coincall reseed scheduling when keys are missing but still schedules gateio', async () => {
-    // Default vitest env has no COINCALL_API_KEY.
+    vi.stubEnv('COINCALL_API_KEY', '');
+    vi.stubEnv('COINCALL_API_SECRET', '');
     const runtime = new TradeRuntime();
     vi.spyOn(
       runtime as unknown as { connectStream(...args: unknown[]): void },

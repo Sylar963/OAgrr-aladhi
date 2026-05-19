@@ -39,8 +39,14 @@ export class IndexPriceRuntime {
   private coincallSymbolByUnderlying = new Map<string, string>();
   private coincallUnderlyingBySymbol = new Map<string, string>();
   private shouldReconnect = true;
+  private started = false;
 
   async start(opts: IndexPriceRuntimeStartOptions = {}): Promise<void> {
+    // Idempotent: a second start() would leak timers and double-open the WS.
+    if (this.started) return;
+    this.started = true;
+    this.shouldReconnect = true;
+
     if (opts.gateio) {
       void this.refreshGateio();
       this.gateioTimer = setInterval(() => void this.refreshGateio(), GATEIO_POLL_INTERVAL_MS);
@@ -60,6 +66,7 @@ export class IndexPriceRuntime {
   }
 
   dispose(): void {
+    this.started = false;
     this.shouldReconnect = false;
     if (this.gateioTimer != null) {
       clearInterval(this.gateioTimer);

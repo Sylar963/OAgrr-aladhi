@@ -97,6 +97,7 @@ export type {
   StreamHandlers,
 } from './feeds/shared/types.js';
 export { BaseAdapter } from './feeds/shared/base.js';
+export type { QuoteRecorder, QuoteRecorderEvent } from './feeds/shared/sdk-base.js';
 
 // runtime
 export {

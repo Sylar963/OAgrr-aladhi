@@ -552,6 +552,27 @@ export function computeGex(
 }
 
 /**
+ * Sums per-expiry GEX into a single strike profile.
+ *
+ * Dealer hedging in reality is the sum across all listed expiries — a per-
+ * expiry view shows only one slice. Use this to render an "all expiries"
+ * profile. Strikes that exist in some expiries but not others are unioned;
+ * strikes shared across expiries have their gexUsdMillions added (signs
+ * preserved). Output is sorted ascending by strike.
+ */
+export function combineGex(perExpiryGex: GexStrike[][]): GexStrike[] {
+  const byStrike = new Map<number, number>();
+  for (const list of perExpiryGex) {
+    for (const row of list) {
+      byStrike.set(row.strike, (byStrike.get(row.strike) ?? 0) + row.gexUsdMillions);
+    }
+  }
+  return [...byStrike.entries()]
+    .map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }))
+    .sort((left, right) => left.strike - right.strike);
+}
+
+/**
  * Days to expiry. Prefers an exact ms timestamp when the caller has one
  * (all 7 adapters now surface one), falls back to the 08:00 UTC convention
  * on the date string. Math.ceil so the expiry day itself counts as 1 DTE.

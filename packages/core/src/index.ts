@@ -52,6 +52,7 @@ export {
   enrichComparisonRow,
   computeChainStats,
   computeGex,
+  combineGex,
   interpTenor,
   FINE_DELTA_GRID,
   ULTRA_FINE_DELTA_GRID,

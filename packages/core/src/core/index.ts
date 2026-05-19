@@ -41,6 +41,7 @@ export {
   enrichComparisonRow,
   computeChainStats,
   computeGex,
+  combineGex,
 } from './enrichment.js';
 
 export type {

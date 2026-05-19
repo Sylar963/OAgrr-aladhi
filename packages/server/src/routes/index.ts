@@ -5,6 +5,7 @@ import { venuesRoute } from './venues.js';
 import { underlyingsRoute } from './underlyings.js';
 import { expiriesRoute } from './expiries.js';
 import { chainsRoute } from './chains.js';
+import { gexAllExpiriesRoute } from './gex-all-expiries.js';
 import { surfaceRoute } from './surface.js';
 import { statsRoute } from './stats.js';
 import { flowRoute } from './flow.js';
@@ -37,6 +38,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(underlyingsRoute, { prefix: '/api' });
   app.register(expiriesRoute, { prefix: '/api' });
   app.register(chainsRoute, { prefix: '/api' });
+  app.register(gexAllExpiriesRoute, { prefix: '/api' });
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });

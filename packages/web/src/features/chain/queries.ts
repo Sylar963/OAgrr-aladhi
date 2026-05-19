@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { fetchJson } from '@lib/http';
-import type { EnrichedChainResponse } from '@shared/enriched';
+import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
 
 // ── Response types matching the live API ──────────────────────────────────
 
@@ -30,9 +30,18 @@ export const chainKeys = {
   expiries: (underlying: string) => ['expiries', underlying] as const,
   chain: (underlying: string, expiry: string, venues: string[]) =>
     ['chain', underlying, expiry, venues.slice().sort().join(',')] as const,
+  gexAllExpiries: (underlying: string, venues: string[]) =>
+    ['gex-all-expiries', underlying, venues.slice().sort().join(',')] as const,
   surface: (underlying: string) => ['surface', underlying] as const,
   venues: () => ['venues'] as const,
 };
+
+export interface AllExpiriesGexResponse {
+  underlying: string;
+  expiries: string[];
+  spotPrice: number | null;
+  gex: GexStrike[];
+}
 
 // ── Hooks ─────────────────────────────────────────────────────────────────
 
@@ -121,6 +130,22 @@ export function usePrefetchChain(underlying: string, activeVenues: string[]) {
     },
     [qc, underlying, activeVenues],
   );
+}
+
+export function useAllExpiriesGex(
+  underlying: string,
+  venues: string[],
+  options?: { enabled?: boolean; refetchInterval?: number },
+) {
+  const venueParam = venues.length > 0 ? `&venues=${venues.join(',')}` : '';
+  return useQuery({
+    queryKey: chainKeys.gexAllExpiries(underlying, venues),
+    queryFn: () =>
+      fetchJson<AllExpiriesGexResponse>(`/gex-all-expiries?underlying=${underlying}${venueParam}`),
+    enabled: Boolean(underlying) && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval ?? 15_000,
+    staleTime: 10_000,
+  });
 }
 
 export function useVenues() {

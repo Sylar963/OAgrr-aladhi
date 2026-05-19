@@ -46,6 +46,15 @@ export interface CachedInstrument {
   takerFee: number | null;
 }
 
+export interface QuoteRecorderEvent {
+  venue: VenueId;
+  exchangeSymbol: string;
+  ts: number;
+  markPrice: number;
+}
+
+export type QuoteRecorder = (event: QuoteRecorderEvent) => void;
+
 export interface LiveQuote {
   bidPrice: number | null;
   askPrice: number | null;
@@ -254,6 +263,19 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   // ── internal helpers ──────────────────────────────────────────
 
   protected deltaHandlers = new Set<StreamHandlers>();
+  private quoteRecorders = new Set<QuoteRecorder>();
+
+  /**
+   * Register a recorder that observes every mark-price update emitted by this
+   * adapter. Used to feed the cross-venue MarkHistoryBuffer for venues without
+   * a REST mark-history endpoint (Derive). Returns an unsubscribe handle.
+   */
+  addQuoteRecorder(recorder: QuoteRecorder): () => void {
+    this.quoteRecorders.add(recorder);
+    return () => {
+      this.quoteRecorders.delete(recorder);
+    };
+  }
 
   /** Broadcast venue connection state to all registered handlers. */
   protected emitStatus(state: VenueConnectionState, message?: string): void {
@@ -273,6 +295,16 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
     for (const update of updates) {
       this.quoteStore.set(update.exchangeSymbol, update.quote);
+
+      if (this.quoteRecorders.size > 0 && update.quote.markPrice != null) {
+        const event: QuoteRecorderEvent = {
+          venue: this.venue,
+          exchangeSymbol: update.exchangeSymbol,
+          ts: update.quote.timestamp,
+          markPrice: update.quote.markPrice,
+        };
+        for (const recorder of this.quoteRecorders) recorder(event);
+      }
 
       if (this.deltaHandlers.size === 0) continue;
 

@@ -21,6 +21,7 @@ import adaLogo from '@/assets/tokens/ada.svg';
 import tonLogo from '@/assets/tokens/ton.svg';
 import trumpLogo from '@/assets/tokens/trump.png';
 import xtiLogo from '@/assets/tokens/xti.svg';
+import enaLogo from '@/assets/tokens/ena.svg';
 
 export interface TokenMeta {
   symbol: string;
@@ -53,6 +54,7 @@ const TOKEN_MAP: Record<string, TokenMeta> = {
   TON: { symbol: 'TON', name: 'Toncoin', logo: tonLogo },
   TRUMP: { symbol: 'TRUMP', name: 'Official Trump', logo: trumpLogo },
   XTI: { symbol: 'XTI', name: 'WTI Crude Oil', logo: xtiLogo },
+  ENA: { symbol: 'ENA', name: 'Ethena', logo: enaLogo },
 };
 
 export function getTokenMeta(symbol: string): TokenMeta | undefined {

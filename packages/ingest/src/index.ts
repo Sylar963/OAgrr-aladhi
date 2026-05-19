@@ -40,7 +40,34 @@ const log = pino(
     : undefined,
 );
 
-const UNDERLYINGS = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE'] as const;
+// Universe spans every base with options on at least one venue we ingest.
+// Per-venue filters in trade-runtime skip unsupported pairs: Deribit/Thalex
+// are BTC/ETH-centric, Coincall checks COINCALL_TRADE_UNDERLYINGS, Gate.io
+// silently no-ops via REST CONTRACT_NOT_FOUND.
+const UNDERLYINGS = [
+  'BTC',
+  'ETH',
+  'SOL',
+  'DOGE',
+  'XRP',
+  'BNB',
+  'AVAX',
+  'TRX',
+  'HYPE',
+  // Gate.io has options for these (+ Binance USDT spot for USD reference).
+  'LTC',
+  'ADA',
+  'TON',
+  'SUI',
+  'XAUT',
+  // Coincall-listed altcoins with Binance USDT spot for USD reference.
+  'AAVE',
+  'ORDI',
+  'WLFI',
+  'ENA',
+  'PENDLE',
+  'TRUMP',
+] as const;
 const SPOT_SYMBOLS = [
   'BTCUSDT',
   'ETHUSDT',
@@ -51,6 +78,17 @@ const SPOT_SYMBOLS = [
   'AVAXUSDT',
   'TRXUSDT',
   'HYPEUSDT',
+  'LTCUSDT',
+  'ADAUSDT',
+  'TONUSDT',
+  'SUIUSDT',
+  'XAUTUSDT',
+  'AAVEUSDT',
+  'ORDIUSDT',
+  'WLFIUSDT',
+  'ENAUSDT',
+  'PENDLEUSDT',
+  'TRUMPUSDT',
 ] as const;
 const FLUSH_INTERVAL_MS = 250;
 const FLUSH_BATCH_SIZE = 250;

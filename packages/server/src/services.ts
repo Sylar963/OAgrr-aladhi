@@ -217,6 +217,9 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 
   // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
   // Flow and spot cover every asset that has options on at least one venue.
+  // Keep this list in sync with `UNDERLYINGS`/`SPOT_SYMBOLS` in @oggregator/ingest;
+  // both processes maintain independent TradeRuntime instances against the
+  // same venue universe.
   const [dvol, spot, flow, blockFlow, spotCandles, instrumentCandles] = await Promise.allSettled([
     dvolService.start(['BTC', 'ETH']),
     spotService.start([
@@ -229,8 +232,40 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
       'AVAXUSDT',
       'TRXUSDT',
       'HYPEUSDT',
+      'LTCUSDT',
+      'ADAUSDT',
+      'TONUSDT',
+      'SUIUSDT',
+      'XAUTUSDT',
+      'AAVEUSDT',
+      'ORDIUSDT',
+      'WLFIUSDT',
+      'ENAUSDT',
+      'PENDLEUSDT',
+      'TRUMPUSDT',
     ]),
-    flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE']),
+    flowService.start([
+      'BTC',
+      'ETH',
+      'SOL',
+      'DOGE',
+      'XRP',
+      'BNB',
+      'AVAX',
+      'TRX',
+      'HYPE',
+      'LTC',
+      'ADA',
+      'TON',
+      'SUI',
+      'XAUT',
+      'AAVE',
+      'ORDI',
+      'WLFI',
+      'ENA',
+      'PENDLE',
+      'TRUMP',
+    ]),
     blockFlowService.start(),
     spotCandleService.start(),
     instrumentCandleService.start(),

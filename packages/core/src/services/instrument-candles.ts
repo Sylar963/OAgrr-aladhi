@@ -17,6 +17,7 @@ import type {
   InstrumentCandlesResponse,
   VenueId,
 } from '@oggregator/protocol';
+import type { MarkHistoryBuffer } from './mark-history-buffer.js';
 
 const log = feedLogger('instrument-candles');
 
@@ -671,6 +672,15 @@ interface CacheEntry {
   response: InstrumentCandlesResponse;
 }
 
+export interface InstrumentCandleServiceOptions {
+  /**
+   * Live rolling buffer used to serve mark history for venues whose REST API
+   * does not expose a mark-price-history endpoint (Derive). When the buffer is
+   * cold for a symbol, REST trade history is still used.
+   */
+  markHistoryBuffer?: MarkHistoryBuffer;
+}
+
 export class InstrumentCandleService {
   // Map preserves insertion order; we use that for FIFO eviction once the cap
   // is exceeded. Bound: ~5KB per entry × 500 keys = ~2.5MB ceiling.
@@ -678,6 +688,11 @@ export class InstrumentCandleService {
   private readonly cacheTtlMs = 30_000;
   private readonly cacheMaxEntries = 500;
   private ready = false;
+  private readonly markHistoryBuffer: MarkHistoryBuffer | null;
+
+  constructor(options: InstrumentCandleServiceOptions = {}) {
+    this.markHistoryBuffer = options.markHistoryBuffer ?? null;
+  }
 
   async start(): Promise<void> {
     this.ready = true;
@@ -752,11 +767,30 @@ export class InstrumentCandleService {
           fetchBybitTradeBucketed(symbol, interval, range),
           fetchBybitMark(symbol, interval, range),
         ]);
-      case 'derive':
-        return Promise.all([
-          fetchDeriveTradeBucketed(symbol, interval, range),
-          Promise.resolve([] as RawCandle[]),
-        ]);
+      case 'derive': {
+        const buffer = this.markHistoryBuffer;
+        const bufferedTrades = buffer?.getTradeCandles(
+          'derive',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        const bufferedMark = buffer?.getMarkCandles(
+          'derive',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        // Derive has no REST mark-price-history endpoint, so mark comes from
+        // the live buffer only. REST trades are still useful as a backfill
+        // for low-volume contracts when the process just started.
+        const tradePromise =
+          bufferedTrades && bufferedTrades.length > 0
+            ? Promise.resolve(bufferedTrades)
+            : fetchDeriveTradeBucketed(symbol, interval, range);
+        const markPromise = Promise.resolve(bufferedMark ?? []);
+        return Promise.all([tradePromise, markPromise]);
+      }
       case 'thalex':
         return Promise.all([
           Promise.resolve([] as RawCandle[]),

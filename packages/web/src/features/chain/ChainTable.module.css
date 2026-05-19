@@ -255,6 +255,7 @@
 .ivCell {
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 6px;
 }
 
@@ -263,23 +264,32 @@
 }
 
 .deltaCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--text-sm);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   padding: 0 6px;
+  text-align: center;
 }
 
 .greekCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--text-sm);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   padding: 0 6px;
+  text-align: center;
   white-space: nowrap;
 }
 
 .spreadCell {
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 6px;
 }
 

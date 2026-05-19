@@ -461,14 +461,24 @@ export default function NewChainTable({
     <div className={styles.wrapper}>
       <div className={styles.header}>
         <span className={styles.hdrLabel}>VENUES</span>
-        <span className={styles.hdrLabel} title={GAMMA_TIP}>γ</span>
-        <span className={styles.hdrLabel} title={VEGA_TIP}>ν</span>
-        <span className={styles.hdrLabel} title={DELTA_TIP}>Δ</span>
-        <span className={styles.hdrLabel}>IV</span>
+        <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
+          γ
+        </span>
+        <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
+          ν
+        </span>
+        <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
+          Δ
+        </span>
+        <span className={styles.hdrLabel} data-align="center">
+          IV
+        </span>
         <span className={styles.hdrLabel} data-align="right">
           BID
         </span>
-        <span className={styles.hdrLabel}>SPREAD</span>
+        <span className={styles.hdrLabel} data-align="center">
+          SPREAD
+        </span>
         <span className={styles.hdrLabel} data-align="right">
           ASK
         </span>
@@ -476,16 +486,20 @@ export default function NewChainTable({
           STRIKE
         </span>
         <span className={styles.hdrLabel}>BID</span>
-        <span className={styles.hdrLabel}>SPREAD</span>
+        <span className={styles.hdrLabel} data-align="center">
+          SPREAD
+        </span>
         <span className={styles.hdrLabel}>ASK</span>
-        <span className={styles.hdrLabel}>IV</span>
-        <span className={styles.hdrLabel} data-align="right" title={DELTA_TIP}>
+        <span className={styles.hdrLabel} data-align="center">
+          IV
+        </span>
+        <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
           Δ
         </span>
-        <span className={styles.hdrLabel} data-align="right" title={VEGA_TIP}>
+        <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
           ν
         </span>
-        <span className={styles.hdrLabel} data-align="right" title={GAMMA_TIP}>
+        <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
           γ
         </span>
         <span className={styles.hdrLabel} data-align="right">

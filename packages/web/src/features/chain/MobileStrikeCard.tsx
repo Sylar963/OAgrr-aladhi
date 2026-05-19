@@ -158,7 +158,6 @@ export default function MobileStrikeCard({
     <div className={styles.card} data-atm={isAtm} data-expanded={isExpanded}>
       <button className={styles.cardHeader} onClick={onToggle}>
         <div className={styles.strikeInfo}>
-          {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>

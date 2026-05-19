@@ -329,25 +329,12 @@
 
 .strikeCenter {
   display: grid;
+  grid-auto-rows: min-content;
   justify-items: center;
   align-content: center;
   height: 48px;
-  gap: 2px;
+  gap: 1px;
   width: 100%;
-  text-align: center;
-}
-
-.atmBadge {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 1px 5px;
-  border-radius: 2px;
-  background: var(--accent-primary);
-  color: var(--bg-base);
-  line-height: 1.4;
-  max-width: 100%;
   text-align: center;
 }
 
@@ -359,6 +346,7 @@
   color: var(--text-secondary);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
   max-width: 100%;
   white-space: nowrap;
   text-align: center;
@@ -385,7 +373,7 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  line-height: 1.1;
+  line-height: 1;
   max-width: 100%;
   text-align: center;
 }

@@ -270,7 +270,6 @@ const StrikeRowItem = memo(function StrikeRowItem({
             isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'
           }
         >
-          {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>

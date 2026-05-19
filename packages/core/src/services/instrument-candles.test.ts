@@ -137,26 +137,86 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     expect(res.markLine).toEqual([]);
   });
 
-  it('serves Coincall mark + trade history entirely from the live buffer', async () => {
+  it('serves Coincall trades from signed REST and overlays live buffer mark', async () => {
+    vi.stubEnv('COINCALL_API_KEY', 'test-key');
+    vi.stubEnv('COINCALL_API_SECRET', 'test-secret');
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 0,
+          msg: 'Success',
+          data: [
+            { ts: BASE_TS, open: '1200', high: '1205', low: '1195', close: '1200', volume: '3' },
+            { ts: BASE_TS + MIN, o: '1200', h: '1210', l: '1190', c: '1180', v: '5' },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    // Buffer adds live mark on top of REST historical.
     buffer.recordMark('coincall', 'BTCUSD-22MAY26-110000-C', BASE_TS, 1200);
     buffer.recordMark('coincall', 'BTCUSD-22MAY26-110000-C', BASE_TS + MIN, 1180);
-    buffer.recordTrade('coincall', 'BTCUSD-22MAY26-110000-C', BASE_TS, 1190, 5);
 
     const res = await svc.getCandles('coincall', 'BTCUSD-22MAY26-110000-C', '1m', '1d');
 
-    // No REST call — buffer is the only source for coincall charts.
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // REST kline was called once with signed headers.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [calledUrl, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(calledUrl).toContain('/open/option/market/kline/v1/BTCUSD-22MAY26-110000-C');
+    expect(calledUrl).toContain('period=m1');
+    const headers = calledInit.headers as Record<string, string>;
+    expect(headers['X-CC-APIKEY']).toBe('test-key');
+    expect(headers.sign).toMatch(/^[0-9A-F]+$/);
+
     expect(res.priceCurrency).toBe('USD');
     expect(res.markLine.map((m) => m.c)).toEqual([1200, 1180]);
     expect(res.candles.some((c) => c.vol > 0)).toBe(true);
   });
 
-  it('returns empty candles for Coincall when buffer is cold (no REST fallback)', async () => {
+  it('falls back to live buffer when Coincall credentials are missing', async () => {
+    vi.stubEnv('COINCALL_API_KEY', '');
+    vi.stubEnv('COINCALL_API_SECRET', '');
+    buffer.recordMark('coincall', 'KAS-WARM', BASE_TS, 0.05);
+    buffer.recordTrade('coincall', 'KAS-WARM', BASE_TS, 0.05, 1);
+
+    const res = await svc.getCandles('coincall', 'KAS-WARM', '1m', '1d');
+
+    // No REST call when credentials missing — buffer-only path.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(res.markLine.map((m) => m.c)).toEqual([0.05]);
+    expect(res.candles.some((c) => c.vol > 0)).toBe(true);
+  });
+
+  it('returns empty candles for Coincall when neither REST nor buffer has data', async () => {
+    vi.stubEnv('COINCALL_API_KEY', 'test-key');
+    vi.stubEnv('COINCALL_API_SECRET', 'test-secret');
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ code: 0, msg: 'Success', data: [] }), { status: 200 }),
+    );
+
     const res = await svc.getCandles('coincall', 'KAS-COLD', '1m', '1d');
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(res.candles).toEqual([]);
     expect(res.markLine).toEqual([]);
+  });
+
+  it('degrades to buffer when Coincall REST returns a non-success code', async () => {
+    vi.stubEnv('COINCALL_API_KEY', 'test-key');
+    vi.stubEnv('COINCALL_API_SECRET', 'test-secret');
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ code: 10004, msg: 'Parameter illegal', data: null }),
+        { status: 200 },
+      ),
+    );
+    buffer.recordMark('coincall', 'KAS-FALLBACK', BASE_TS, 0.05);
+
+    const res = await svc.getCandles('coincall', 'KAS-FALLBACK', '1m', '1d');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // REST returned no usable rows but the buffer mark still seeds the line.
+    expect(res.markLine.map((m) => m.c)).toEqual([0.05]);
   });
 
   it('pairs Gate.io REST candlesticks with buffered mark when REST returns []', async () => {

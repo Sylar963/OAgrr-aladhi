@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { mergeTradeAndMark, bucketTicks, bucketTrades } from './instrument-candles.js';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { mergeTradeAndMark, bucketTicks, bucketTrades, InstrumentCandleService } from './instrument-candles.js';
+import { MarkHistoryBuffer } from './mark-history-buffer.js';
 
 describe('mergeTradeAndMark', () => {
   it('uses trade bar when vol > 0', () => {
@@ -85,6 +86,55 @@ describe('bucketTrades', () => {
     ];
     const out = bucketTrades(trades, 60_000);
     expect(out).toEqual([{ ts: 60_000, o: 12, h: 12, l: 12, c: 12, vol: 1 }]);
+  });
+});
+
+describe('InstrumentCandleService — Derive buffer integration', () => {
+  const MIN = 60_000;
+  const BASE_TS = Math.floor(1_700_000_000_000 / (60 * MIN)) * (60 * MIN);
+  let svc: InstrumentCandleService;
+  let buffer: MarkHistoryBuffer;
+  const fetchSpy = vi.fn();
+
+  beforeEach(() => {
+    buffer = new MarkHistoryBuffer({ retentionMs: 24 * 60 * MIN });
+    svc = new InstrumentCandleService({ markHistoryBuffer: buffer });
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TS + 30 * MIN);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('serves Derive mark + trade history from the live buffer when populated', async () => {
+    buffer.recordMark('derive', 'HYPE-TEST', BASE_TS, 50);
+    buffer.recordMark('derive', 'HYPE-TEST', BASE_TS + MIN, 52);
+    buffer.recordTrade('derive', 'HYPE-TEST', BASE_TS, 51, 2);
+
+    const res = await svc.getCandles('derive', 'HYPE-TEST', '1m', '1d');
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(res.markLine.map((m) => m.c)).toEqual([50, 52]);
+    expect(res.candles.some((c) => c.vol > 0)).toBe(true);
+  });
+
+  it('falls back to REST trades when the Derive buffer is cold', async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ result: { trades: [], pagination: { num_pages: 0, count: 0 } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const res = await svc.getCandles('derive', 'COLD-X', '1m', '1d');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0]?.[0]).toContain('/public/get_trade_history');
+    expect(res.candles).toEqual([]);
+    expect(res.markLine).toEqual([]);
   });
 });
 

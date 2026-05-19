@@ -337,6 +337,7 @@
 }
 
 .atmBadge {
+  display: block;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -345,9 +346,12 @@
   background: var(--accent-primary);
   color: var(--bg-base);
   line-height: 1.4;
+  text-align: center;
 }
 
 .strikeNum {
+  display: block;
+  width: 100%;
   font-family: var(--font-mono);
   font-size: var(--text-lg);
   font-weight: 600;
@@ -355,6 +359,7 @@
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: center;
 }
 
 .strikeCenter[data-atm="true"] .strikeNum {
@@ -371,6 +376,8 @@
 }
 
 .strikeDist {
+  display: block;
+  width: 100%;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
@@ -378,6 +385,7 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   line-height: 1.1;
+  text-align: center;
 }
 
 .strikeCenter[data-atm="true"] .strikeDist {

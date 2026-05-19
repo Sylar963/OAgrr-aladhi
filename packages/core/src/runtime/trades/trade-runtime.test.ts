@@ -283,8 +283,10 @@ describe('TradeRuntime — periodic reseed', () => {
     const reseedTimers = (runtime as unknown as { reseedTimers: Map<string, unknown> }).reseedTimers;
     expect(reseedTimers.has('coincall:BTC')).toBe(true);
     expect(reseedTimers.has('coincall:ETH')).toBe(true);
-    // No other venue currently declares reseedIntervalMs.
-    expect(Array.from(reseedTimers.keys()).every((k) => k.startsWith('coincall:'))).toBe(true);
+    // Gate.io reseeds for every underlying — newly-listed daily strikes wouldn't
+    // be WS-subscribed until reconnect, so the reseed backfills via REST.
+    expect(reseedTimers.has('gateio:BTC')).toBe(true);
+    expect(reseedTimers.has('gateio:ETH')).toBe(true);
 
     runtime.dispose();
     expect(reseedTimers.size).toBe(0);
@@ -316,22 +318,28 @@ describe('TradeRuntime — periodic reseed', () => {
     await runtime.start(['BTC']);
     expect(reseedSpy).not.toHaveBeenCalled();
 
-    // Advance one interval — should fire one reseed for coincall:BTC.
+    // Advance one interval — should fire one reseed per venue with seed
+    // (currently coincall + gateio) for the single subscribed underlying.
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
-    expect(reseedSpy).toHaveBeenCalledTimes(1);
-    const firstCall = reseedSpy.mock.calls[0];
-    expect((firstCall?.[0] as { venue: string }).venue).toBe('coincall');
-    expect(firstCall?.[1]).toBe('BTC');
+    const venues = reseedSpy.mock.calls
+      .map((call) => (call[0] as { venue: string }).venue)
+      .sort();
+    expect(venues).toEqual(['coincall', 'gateio']);
+    for (const call of reseedSpy.mock.calls) {
+      expect(call[1]).toBe('BTC');
+    }
+    const callsAfterFirst = reseedSpy.mock.calls.length;
 
-    // Advance a second interval — fires again.
+    // Advance a second interval — both venues fire again.
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
-    expect(reseedSpy).toHaveBeenCalledTimes(2);
+    expect(reseedSpy.mock.calls.length).toBe(callsAfterFirst * 2);
 
     runtime.dispose();
   });
 
-  it('skips reseed scheduling for coincall when keys are missing', async () => {
-    // Default vitest env has no COINCALL_API_KEY.
+  it('skips coincall reseed scheduling when keys are missing but still schedules gateio', async () => {
+    vi.stubEnv('COINCALL_API_KEY', '');
+    vi.stubEnv('COINCALL_API_SECRET', '');
     const runtime = new TradeRuntime();
     vi.spyOn(
       runtime as unknown as { connectStream(...args: unknown[]): void },
@@ -345,7 +353,9 @@ describe('TradeRuntime — periodic reseed', () => {
     await runtime.start(['BTC']);
 
     const reseedTimers = (runtime as unknown as { reseedTimers: Map<string, unknown> }).reseedTimers;
-    expect(reseedTimers.size).toBe(0);
+    const keys = Array.from(reseedTimers.keys());
+    expect(keys).toContain('gateio:BTC');
+    expect(keys.some((k) => k.startsWith('coincall:'))).toBe(false);
 
     runtime.dispose();
   });
@@ -564,5 +574,72 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
       ],
     };
     expect(stream.parse(frame, 'BTC')).toEqual([]);
+  });
+
+  it('seed() pulls recent trades from REST and converts them like the WS parser', async () => {
+    const stream = getGateioStream();
+    expect(stream.seed).toBeDefined();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      expect(url).toContain('/api/v4/options/trades');
+      expect(url).toContain('underlying=DOGE_USDT');
+      expect(url).toContain('limit=200');
+      return new Response(
+        JSON.stringify([
+          {
+            size: -3,
+            id: 7,
+            create_time: 1779100000,
+            contract: 'DOGE_USDT-20260519-0.106-C',
+            price: '0.0004',
+          },
+          {
+            size: 2,
+            id: 8,
+            create_time: 1779100100,
+            create_time_ms: 1779100100_500,
+            contract: 'DOGE_USDT-20260519-0.108-C',
+            price: '0.00031',
+          },
+          // Cross-underlying noise — Gate.io's REST always filters by the
+          // underlying query param, but the helper still defends.
+          { size: 1, id: 1, create_time: 1, contract: 'BTC_USDT-20260605-70000-C', price: '100' },
+        ]),
+        { status: 200 },
+      );
+    });
+
+    const trades = await stream.seed!('DOGE');
+    expect(trades).toHaveLength(2);
+    expect(trades[0]).toMatchObject({
+      venue: 'gateio',
+      side: 'sell',
+      size: 3,
+      price: 0.0004,
+      instrument: 'DOGE_USDT-20260519-0.106-C',
+      underlying: 'DOGE',
+      tradeId: 'DOGE_USDT-20260519-0.106-C:7',
+      timestamp: 1779100000_000,
+    });
+    expect(trades[1]).toMatchObject({
+      side: 'buy',
+      size: 2,
+      timestamp: 1779100100_500,
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('seed() returns [] for underlyings Gate.io does not list (400/404) instead of throwing', async () => {
+    const stream = getGateioStream();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ label: 'CONTRACT_NOT_FOUND' }), { status: 400 }),
+      );
+
+    await expect(stream.seed!('AVAX')).resolves.toEqual([]);
+    fetchSpy.mockRestore();
   });
 });

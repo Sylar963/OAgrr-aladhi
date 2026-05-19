@@ -11,6 +11,7 @@ import {
   DERIBIT_WS_URL,
   DERIVE_WS_URL,
   GATEIO_OPTIONS_CONTRACTS,
+  GATEIO_OPTIONS_TRADES,
   GATEIO_OPTIONS_WS_URL,
   GATEIO_REST_BASE_URL,
   OKX_INSTRUMENT_FAMILY_TRADES,
@@ -19,6 +20,7 @@ import {
   THALEX_MARKET_WS_URL,
 } from '../../feeds/shared/endpoints.js';
 import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
+import { toGateioRestBase } from '../../feeds/gateio/aliases.js';
 import { GateioWsEnvelopeSchema, GateioWsTradeSchema } from '../../feeds/gateio/types.js';
 import type { VenueId } from '../../types/common.js';
 import { startEventLoopLagMonitor } from '../../utils/event-loop-lag.js';
@@ -560,6 +562,11 @@ const GateioTradeListSchema = GateioWsTradeSchema.array();
 const GATEIO_TRADE_BATCH = 50;
 const GATEIO_PING_INTERVAL_MS = 15_000;
 const GATEIO_REST_TIMEOUT_MS = 10_000;
+// Backfills sparse altcoins whose new daily strikes list after the WS opens.
+// 200 covers ~10 min of BTC/ETH activity comfortably; dedup in pushTradeEvents
+// handles overlap with the live stream.
+const GATEIO_TRADE_SEED_LIMIT = 200;
+const GATEIO_TRADE_RESEED_INTERVAL_MS = 10 * 60 * 1000;
 
 async function fetchGateioContractNames(underlying: string): Promise<string[]> {
   const url = new URL(GATEIO_OPTIONS_CONTRACTS, GATEIO_REST_BASE_URL);
@@ -568,6 +575,61 @@ async function fetchGateioContractNames(underlying: string): Promise<string[]> {
   if (!res.ok) throw new Error(`gateio: contracts ${res.status}`);
   const data = (await res.json()) as Array<{ name: string; is_active?: boolean }>;
   return data.filter((c) => c.is_active !== false).map((c) => c.name);
+}
+
+function gateioRowsToTradeEvents(
+  rows: z.infer<typeof GateioTradeListSchema>,
+  underlying: string,
+): TradeEvent[] {
+  // `publicBase` is the canonical name surfaced to the rest of the system
+  // (e.g. 'XTI'); `restBase` matches Gate.io's contract prefix (e.g. 'CL').
+  const publicBase = normalizeTradeUnderlying(underlying);
+  const restBase = toGateioRestBase(publicBase);
+  const prefix = `${restBase}_USDT-`;
+  const out: TradeEvent[] = [];
+  for (const t of rows) {
+    if (!t.contract.startsWith(prefix)) continue;
+    const magnitude = Math.abs(t.size);
+    if (magnitude === 0) continue;
+    // Gate.io encodes taker direction in the sign of `size` (positive = buy,
+    // negative = sell). Verified against /api/v4/options/trades.
+    const side: 'buy' | 'sell' = t.size > 0 ? 'buy' : 'sell';
+    const priceNum = Number(t.price);
+    if (!Number.isFinite(priceNum)) continue;
+    out.push({
+      venue: 'gateio',
+      tradeId: `${t.contract}:${t.id}`,
+      instrument: t.contract,
+      underlying: publicBase,
+      side,
+      price: priceNum,
+      size: magnitude,
+      iv: null,
+      markPrice: null,
+      indexPrice: null,
+      isBlock: false,
+      timestamp: t.create_time_ms ?? t.create_time * 1000,
+    });
+  }
+  return out;
+}
+
+async function fetchGateioRecentTrades(underlying: string): Promise<TradeEvent[]> {
+  const publicBase = normalizeTradeUnderlying(underlying);
+  const restBase = toGateioRestBase(publicBase);
+  const url = new URL(GATEIO_OPTIONS_TRADES, GATEIO_REST_BASE_URL);
+  url.searchParams.set('underlying', `${restBase}_USDT`);
+  url.searchParams.set('limit', String(GATEIO_TRADE_SEED_LIMIT));
+  const res = await fetch(url, { signal: AbortSignal.timeout(GATEIO_REST_TIMEOUT_MS) });
+  // Gate.io returns 400 CONTRACT_NOT_FOUND for underlyings it doesn't list
+  // (AVAX/TRX). Treat as empty rather than throwing so the reseed timer doesn't
+  // log a warn every 10 min for known-unsupported assets.
+  if (res.status === 400 || res.status === 404) return [];
+  if (!res.ok) throw new Error(`gateio: trades ${res.status}`);
+  const data = (await res.json()) as unknown;
+  const parsed = GateioTradeListSchema.safeParse(data);
+  if (!parsed.success) return [];
+  return gateioRowsToTradeEvents(parsed.data, publicBase);
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -1386,6 +1448,13 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'gateio',
     url: GATEIO_OPTIONS_WS_URL,
+    // Gate.io `options.trades` is per-contract and the contract set is fetched
+    // once on WS open (see `connect` below). Daily strikes listed after that
+    // are never WS-subscribed until reconnect, so their trades drop. Reseed
+    // every 10 min via `/options/trades?underlying=…` to backfill any gaps;
+    // pushTradeEvents dedupes on tradeId so this doesn't double-count overlap
+    // with the live stream.
+    reseedIntervalMs: GATEIO_TRADE_RESEED_INTERVAL_MS,
     // Gate.io requires an app-level JSON ping every 15s on this socket
     // (per references/options-docs/gateio/summary.json + feeds/gateio/ws-client.ts).
     // WS-level pings alone are not enough.
@@ -1398,12 +1467,16 @@ export const VENUE_STREAMS: VenueStream[] = [
         }
       }, GATEIO_PING_INTERVAL_MS);
     },
+    seed: fetchGateioRecentTrades,
     connect(ws, underlying) {
-      const base = normalizeTradeUnderlying(underlying);
+      // `restBase` is what Gate.io expects in the contracts query (`CL_USDT`
+      // for the frontend's `XTI`); contract names from the response keep that
+      // prefix and the parse step matches them as-is.
+      const restBase = toGateioRestBase(normalizeTradeUnderlying(underlying));
       // options.trades is per-contract — fetch the live contract list and
       // chunk-subscribe (50 per frame). REST happens async after `open`; trades
       // start flowing on whichever batch lands first.
-      void fetchGateioContractNames(base)
+      void fetchGateioContractNames(restBase)
         .then((contracts) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const time = Math.floor(Date.now() / 1000);
@@ -1420,7 +1493,7 @@ export const VENUE_STREAMS: VenueStream[] = [
         })
         .catch((err: unknown) => {
           log.warn(
-            { venue: 'gateio', underlying: base, err: String(err) },
+            { venue: 'gateio', underlying: restBase, err: String(err) },
             'gateio trade contract enumeration failed',
           );
         });
@@ -1435,34 +1508,7 @@ export const VENUE_STREAMS: VenueStream[] = [
       const list = GateioTradeListSchema.safeParse(envelope.data.result);
       if (!list.success) return [];
 
-      const base = normalizeTradeUnderlying(underlying);
-      const prefix = `${base}_USDT-`;
-      const out: TradeEvent[] = [];
-      for (const t of list.data) {
-        if (!t.contract.startsWith(prefix)) continue;
-        const magnitude = Math.abs(t.size);
-        if (magnitude === 0) continue;
-        // Gate.io encodes taker direction in the sign of `size` (positive = buy,
-        // negative = sell). Verified against /api/v4/options/trades.
-        const side: 'buy' | 'sell' = t.size > 0 ? 'buy' : 'sell';
-        const priceNum = Number(t.price);
-        if (!Number.isFinite(priceNum)) continue;
-        out.push({
-          venue: 'gateio',
-          tradeId: `${t.contract}:${t.id}`,
-          instrument: t.contract,
-          underlying: base,
-          side,
-          price: priceNum,
-          size: magnitude,
-          iv: null,
-          markPrice: null,
-          indexPrice: null,
-          isBlock: false,
-          timestamp: t.create_time_ms ?? t.create_time * 1000,
-        });
-      }
-      return out;
+      return gateioRowsToTradeEvents(list.data, underlying);
     },
   },
 ];

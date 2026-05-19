@@ -2,8 +2,10 @@ import type { FastifyBaseLogger } from 'fastify';
 import {
   BlockTradeRuntime,
   DvolService,
+  IndexPriceRuntime,
   InstrumentCandleService,
   IvHistoryService,
+  MarkHistoryBuffer,
   RegimeService,
   SpotCandleService,
   SpotRuntime,
@@ -32,9 +34,18 @@ import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
 export const spotCandleService = new SpotCandleService();
-export const instrumentCandleService = new InstrumentCandleService();
+// Rolling mark + trade buffer for venues with no REST mark-history endpoint
+// (Derive). Fed by every adapter's quote recorder and by TradeRuntime, queried
+// by the instrument-candles service when the chart panel asks for history.
+export const markHistoryBuffer = new MarkHistoryBuffer();
+export const instrumentCandleService = new InstrumentCandleService({ markHistoryBuffer });
 export const flowService = new TradeRuntime();
 export const blockFlowService = new BlockTradeRuntime();
+// Third-tier fallback for `referencePriceUsd` lookups (after trade.indexPrice
+// and Binance USDT SpotRuntime). Sourced from Gate.io's `/options/underlyings`
+// REST poll (covers XTI/CL crude) and Coincall's bsInfo WS channel (covers
+// MNT/LIT/KAS — Coincall-listed altcoins with no Binance USDT spot pair).
+export const indexPriceService = new IndexPriceRuntime();
 export let newsService: NewsRuntime | null = null;
 const databaseUrl = process.env['DATABASE_URL'];
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(
@@ -217,7 +228,11 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 
   // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
   // Flow and spot cover every asset that has options on at least one venue.
-  const [dvol, spot, flow, blockFlow, spotCandles, instrumentCandles] = await Promise.allSettled([
+  // Keep this list in sync with `UNDERLYINGS`/`SPOT_SYMBOLS` in @oggregator/ingest;
+  // both processes maintain independent TradeRuntime instances against the
+  // same venue universe.
+  const [dvol, spot, flow, blockFlow, spotCandles, instrumentCandles, indexPrice] =
+    await Promise.allSettled([
     dvolService.start(['BTC', 'ETH']),
     spotService.start([
       'BTCUSDT',
@@ -229,11 +244,51 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
       'AVAXUSDT',
       'TRXUSDT',
       'HYPEUSDT',
+      'LTCUSDT',
+      'ADAUSDT',
+      'TONUSDT',
+      'SUIUSDT',
+      'XAUTUSDT',
+      'AAVEUSDT',
+      'ORDIUSDT',
+      'WLFIUSDT',
+      'ENAUSDT',
+      'PENDLEUSDT',
+      'TRUMPUSDT',
     ]),
-    flowService.start(['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE']),
+    flowService.start([
+      'BTC',
+      'ETH',
+      'SOL',
+      'DOGE',
+      'XRP',
+      'BNB',
+      'AVAX',
+      'TRX',
+      'HYPE',
+      'LTC',
+      'ADA',
+      'TON',
+      'SUI',
+      'XAUT',
+      'AAVE',
+      'ORDI',
+      'WLFI',
+      'ENA',
+      'PENDLE',
+      'TRUMP',
+      'MNT',
+      'LIT',
+      'KAS',
+      'XTI',
+    ]),
     blockFlowService.start(),
     spotCandleService.start(),
     instrumentCandleService.start(),
+    indexPriceService.start({
+      gateio: true,
+      coincallUnderlyings: ['MNT', 'LIT', 'KAS'],
+    }),
   ]);
 
   if (dvol.status === 'fulfilled') {
@@ -265,6 +320,10 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     serviceHealth.instrumentCandles = true;
     log.info('instrument-candles service started');
   } else log.warn({ err: String(instrumentCandles.reason) }, 'instrument-candles service failed');
+
+  if (indexPrice.status === 'rejected') {
+    log.warn({ err: String(indexPrice.reason) }, 'index price runtime failed');
+  }
 
   // IvHistoryService must start AFTER DVOL so seedFromDvol sees candles, and
   // AFTER adapters so the first snapshot's surface grid has chains to read.

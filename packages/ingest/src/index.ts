@@ -5,6 +5,7 @@ setDefaultResultOrder('ipv4first');
 import { config as loadEnv } from 'dotenv';
 import {
   BlockTradeRuntime,
+  IndexPriceRuntime,
   SpotRuntime,
   TradeRuntime,
   buildBlockTradeUid,
@@ -40,7 +41,40 @@ const log = pino(
     : undefined,
 );
 
-const UNDERLYINGS = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'BNB', 'AVAX', 'TRX', 'HYPE'] as const;
+// Universe spans every base with options on at least one venue we ingest.
+// Per-venue filters in trade-runtime skip unsupported pairs: Deribit/Thalex
+// are BTC/ETH-centric, Coincall checks COINCALL_TRADE_UNDERLYINGS, Gate.io
+// silently no-ops via REST CONTRACT_NOT_FOUND.
+const UNDERLYINGS = [
+  'BTC',
+  'ETH',
+  'SOL',
+  'DOGE',
+  'XRP',
+  'BNB',
+  'AVAX',
+  'TRX',
+  'HYPE',
+  // Gate.io has options for these (+ Binance USDT spot for USD reference).
+  'LTC',
+  'ADA',
+  'TON',
+  'SUI',
+  'XAUT',
+  // Coincall-listed altcoins with Binance USDT spot for USD reference.
+  'AAVE',
+  'ORDI',
+  'WLFI',
+  'ENA',
+  'PENDLE',
+  'TRUMP',
+  // No Binance USDT spot — `referencePriceUsd` falls back to IndexPriceRuntime
+  // (Coincall bsInfo for MNT/LIT/KAS, Gate.io underlyings poll for XTI/CL).
+  'MNT',
+  'LIT',
+  'KAS',
+  'XTI',
+] as const;
 const SPOT_SYMBOLS = [
   'BTCUSDT',
   'ETHUSDT',
@@ -51,6 +85,17 @@ const SPOT_SYMBOLS = [
   'AVAXUSDT',
   'TRXUSDT',
   'HYPEUSDT',
+  'LTCUSDT',
+  'ADAUSDT',
+  'TONUSDT',
+  'SUIUSDT',
+  'XAUTUSDT',
+  'AAVEUSDT',
+  'ORDIUSDT',
+  'WLFIUSDT',
+  'ENAUSDT',
+  'PENDLEUSDT',
+  'TRUMPUSDT',
 ] as const;
 const FLUSH_INTERVAL_MS = 250;
 const FLUSH_BATCH_SIZE = 250;
@@ -91,23 +136,30 @@ async function main(): Promise<void> {
   const spotRuntime = new SpotRuntime();
   const tradeRuntime = new TradeRuntime();
   const blockTradeRuntime = new BlockTradeRuntime();
+  const indexPriceRuntime = new IndexPriceRuntime();
   const writer = new BufferedTradeWriter(tradeStore, alerts);
   const ops = new IngestOpsTracker();
 
   tradeRuntime.subscribe((trade: TradeEvent) => {
     ops.recordTrade('live', trade.venue, trade.timestamp);
-    writer.push(mapLiveTrade(trade, spotRuntime));
+    writer.push(mapLiveTrade(trade, spotRuntime, indexPriceRuntime));
   });
 
   blockTradeRuntime.subscribe((trade: BlockTradeEvent) => {
     ops.recordTrade('institutional', trade.venue, trade.timestamp);
-    writer.push(mapInstitutionalTrade(trade, spotRuntime));
+    writer.push(mapInstitutionalTrade(trade, spotRuntime, indexPriceRuntime));
   });
 
-  const [spotStart, tradeStart, blockTradeStart] = await Promise.allSettled([
+  const [spotStart, tradeStart, blockTradeStart, indexPriceStart] = await Promise.allSettled([
     spotRuntime.start([...SPOT_SYMBOLS]),
     tradeRuntime.start([...UNDERLYINGS]),
     blockTradeRuntime.start(),
+    indexPriceRuntime.start({
+      gateio: true,
+      // Coincall fallback only matters for underlyings with no Binance USDT
+      // spot pair (MNT/LIT/KAS). Others already resolve via SpotRuntime.
+      coincallUnderlyings: ['MNT', 'LIT', 'KAS'],
+    }),
   ]);
 
   if (spotStart.status === 'rejected') {
@@ -118,6 +170,9 @@ async function main(): Promise<void> {
   }
   if (blockTradeStart.status === 'rejected') {
     log.warn({ err: String(blockTradeStart.reason) }, 'block trade runtime failed to start');
+  }
+  if (indexPriceStart.status === 'rejected') {
+    log.warn({ err: String(indexPriceStart.reason) }, 'index price runtime failed to start');
   }
 
   if (
@@ -175,6 +230,7 @@ async function main(): Promise<void> {
       tradeRuntime.dispose();
       blockTradeRuntime.dispose();
       spotRuntime.dispose();
+      indexPriceRuntime.dispose();
       await tradeStore.dispose();
     })();
 
@@ -450,9 +506,16 @@ function isStorageQuotaError(error: unknown): boolean {
   return message.includes('project size limit') || message.includes('could not extend file');
 }
 
-function mapLiveTrade(trade: TradeEvent, spotService: SpotRuntime): PersistedTradeRecord {
+function mapLiveTrade(
+  trade: TradeEvent,
+  spotService: SpotRuntime,
+  indexPriceService: IndexPriceRuntime,
+): PersistedTradeRecord {
   const instrument = parseTradeInstrument(trade.instrument);
-  const referencePriceUsd = trade.indexPrice ?? getSpotPriceUsd(spotService, trade.underlying);
+  const referencePriceUsd =
+    trade.indexPrice ??
+    getSpotPriceUsd(spotService, trade.underlying) ??
+    indexPriceService.get(trade.venue, trade.underlying);
   const amounts = computeLiveTradeAmounts(trade, referencePriceUsd);
 
   return {
@@ -488,8 +551,12 @@ function mapLiveTrade(trade: TradeEvent, spotService: SpotRuntime): PersistedTra
 function mapInstitutionalTrade(
   trade: BlockTradeEvent,
   spotService: SpotRuntime,
+  indexPriceService: IndexPriceRuntime,
 ): PersistedTradeRecord {
-  const referencePriceUsd = trade.indexPrice ?? getSpotPriceUsd(spotService, trade.underlying);
+  const referencePriceUsd =
+    trade.indexPrice ??
+    getSpotPriceUsd(spotService, trade.underlying) ??
+    indexPriceService.get(trade.venue, trade.underlying);
   const amounts = computeBlockTradeAmounts(trade, referencePriceUsd);
   const firstInstrument = parseTradeInstrument(trade.legs[0]?.instrument ?? trade.underlying);
   const legs: PersistedTradeLeg[] = trade.legs.map((leg) => ({

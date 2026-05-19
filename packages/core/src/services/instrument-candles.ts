@@ -2,12 +2,14 @@ import { z } from 'zod';
 import {
   BINANCE_REST_BASE_URL,
   BYBIT_REST_BASE_URL,
+  COINCALL_REST_BASE_URL,
   DERIBIT_REST_BASE_URL,
   DERIVE_REST_BASE_URL,
   GATEIO_REST_BASE_URL,
   OKX_REST_BASE_URL,
   THALEX_REST_URL,
 } from '../feeds/shared/endpoints.js';
+import { loadCoincallCredentials, signCoincallRequest } from '../feeds/coincall/rest-client.js';
 import { feedLogger } from '../utils/logger.js';
 import type {
   InstrumentCandle,
@@ -17,6 +19,7 @@ import type {
   InstrumentCandlesResponse,
   VenueId,
 } from '@oggregator/protocol';
+import type { MarkHistoryBuffer } from './mark-history-buffer.js';
 
 const log = feedLogger('instrument-candles');
 
@@ -76,6 +79,16 @@ const RANGE_TO_MS: Record<InstrumentCandleRange, number> = {
   '30d': 30 * 24 * 60 * 60 * 1000,
   max: 365 * 24 * 60 * 60 * 1000,
 };
+
+// Merge two RawCandle series by timestamp. Live-buffer rows win on tie so
+// the latest in-progress bucket reflects the freshest WS print/quote;
+// otherwise the bars are unioned and sorted ascending.
+export function mergeCandlesByTs(historical: readonly RawCandle[], live: readonly RawCandle[]): RawCandle[] {
+  const merged = new Map<number, RawCandle>();
+  for (const c of historical) merged.set(c.ts, c);
+  for (const c of live) merged.set(c.ts, c);
+  return [...merged.values()].sort((a, b) => a.ts - b.ts);
+}
 
 export function bucketTicks(
   ticks: ReadonlyArray<[number, number]>,
@@ -637,16 +650,123 @@ export async function fetchThalexMark(
   return candles;
 }
 
+// ── Coincall ───────────────────────────────────────────────────────
+// Path: GET /open/option/market/kline/v1/{symbol}
+// Probing without auth returns code:4003 "token auth fail" — so we sign
+// every call (HMAC-SHA256, see feeds/coincall/rest-client.ts). The kline
+// endpoint isn't fully documented in the references we have; we go with
+// the same `period` naming Coincall uses on the WS kline channel (m1, m5,
+// m15, h1, h4, d1). If the param schema is wrong, we surface a structured
+// warn and fall back to the live MarkHistoryBuffer in the caller.
+const INTERVAL_TO_COINCALL: Record<InstrumentCandleInterval, string> = {
+  '1m': 'm1', '5m': 'm5', '15m': 'm15', '1h': 'h1', '4h': 'h4', '1d': 'd1',
+};
+
+// Lenient by design — the kline payload field names aren't fully nailed
+// down in our docs. Accept the common variants; anything missing degrades
+// the row, not the whole response.
+const NumericLike = z.union([z.string(), z.number()]).transform((v) => {
+  const n = typeof v === 'string' ? Number(v) : v;
+  return Number.isFinite(n) ? n : null;
+});
+
+const CoincallKlineEntrySchema = z.object({
+  // Timestamp: `ts` (WS), `time`, or `t` are all plausible.
+  ts: NumericLike.optional(),
+  time: NumericLike.optional(),
+  t: NumericLike.optional(),
+  // OHLCV: short and long forms both seen across Coincall endpoints.
+  open: NumericLike.optional(),
+  o: NumericLike.optional(),
+  high: NumericLike.optional(),
+  h: NumericLike.optional(),
+  low: NumericLike.optional(),
+  l: NumericLike.optional(),
+  close: NumericLike.optional(),
+  c: NumericLike.optional(),
+  volume: NumericLike.optional(),
+  v: NumericLike.optional(),
+}).passthrough();
+
+const CoincallKlineResponseSchema = z.object({
+  code: z.number(),
+  msg: z.string().optional(),
+  data: z.array(CoincallKlineEntrySchema).nullable().optional(),
+});
+
+export async function fetchCoincallKline(
+  symbol: string,
+  interval: InstrumentCandleInterval,
+): Promise<RawCandle[]> {
+  const credentials = loadCoincallCredentials();
+  if (credentials == null) return [];
+
+  const path = `/open/option/market/kline/v1/${symbol}`;
+  // `size` is a best-guess for the row-count param (Coincall accepts the
+  // request without it; with it, more rows come back when the endpoint
+  // supports it — silently ignored otherwise per the lastTrade precedent).
+  const { url, headers } = signCoincallRequest(
+    'GET',
+    path,
+    { period: INTERVAL_TO_COINCALL[interval], size: 1000 },
+    credentials,
+  );
+
+  const res = await fetch(`${COINCALL_REST_BASE_URL}${url}`, {
+    method: 'GET',
+    signal: AbortSignal.timeout(10_000),
+    headers: { accept: 'application/json', ...headers },
+  });
+  if (res.status === 404) {
+    throw new InstrumentCandlesError('not_found', `Coincall: ${symbol}`);
+  }
+  if (!res.ok) {
+    log.warn({ symbol, status: res.status }, 'coincall kline http error');
+    return [];
+  }
+
+  const parsed = CoincallKlineResponseSchema.safeParse(await res.json());
+  if (!parsed.success) {
+    log.warn({ symbol, issues: parsed.error.issues.slice(0, 3) }, 'coincall kline parse failed');
+    return [];
+  }
+  if (parsed.data.code !== 0) {
+    log.warn(
+      { symbol, code: parsed.data.code, msg: parsed.data.msg },
+      'coincall kline non-success code',
+    );
+    return [];
+  }
+
+  const rows = parsed.data.data ?? [];
+  const candles: RawCandle[] = [];
+  for (const r of rows) {
+    const ts = r.ts ?? r.time ?? r.t;
+    const o = r.open ?? r.o;
+    const h = r.high ?? r.h;
+    const l = r.low ?? r.l;
+    const c = r.close ?? r.c;
+    const vol = r.volume ?? r.v ?? 0;
+    if (ts == null || o == null || h == null || l == null || c == null) continue;
+    candles.push({ ts, o, h, l, c, vol: vol ?? 0 });
+  }
+  return candles.sort((a, b) => a.ts - b.ts);
+}
+
 // ── Venue capability map ──────────────────────────────────────────
-// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex.
-// Intentionally NOT wired (verified against official docs):
-//   coincall — GET /open/option/market/kline/history/v1/{optionName}
-//              is the official kline path, but Coincall's own example
-//              curl explicitly requires signed headers (X-CC-APIKEY,
-//              sign, ts, X-REQ-TS-DIFF). Probing the endpoint without
-//              auth returns code:4003 "token auth fail". Vendor-gated.
+// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex, coincall.
+//
+// Coincall reads chart data from its signed REST kline endpoint (see
+// fetchCoincallKline above). The live MarkHistoryBuffer is layered on top
+// to add intra-bucket freshness between REST calls. If credentials are
+// missing or the endpoint returns nothing, we degrade to buffer-only.
+//
+// Gate.io's public `/options/candlesticks` is trade-derived and returns []
+// for sparse altcoin strikes that never trade. We pair it with the same
+// MarkHistoryBuffer fallback so the chart panel always has at least a mark
+// line to draw, even for untraded strikes.
 const SUPPORTED_VENUES = new Set<VenueId>([
-  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex',
+  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex', 'coincall',
 ]);
 
 const PRICE_CURRENCY: Record<string, string> = {
@@ -657,6 +777,7 @@ const PRICE_CURRENCY: Record<string, string> = {
   bybit: 'USDT',
   derive: 'USDC',
   thalex: 'USD',
+  coincall: 'USD',    // Coincall options are USD-quoted (e.g. BTCUSD-…)
 };
 
 function priceCurrencyFor(venue: VenueId, symbol: string): string {
@@ -671,6 +792,15 @@ interface CacheEntry {
   response: InstrumentCandlesResponse;
 }
 
+export interface InstrumentCandleServiceOptions {
+  /**
+   * Live rolling buffer used to serve mark history for venues whose REST API
+   * does not expose a mark-price-history endpoint (Derive). When the buffer is
+   * cold for a symbol, REST trade history is still used.
+   */
+  markHistoryBuffer?: MarkHistoryBuffer;
+}
+
 export class InstrumentCandleService {
   // Map preserves insertion order; we use that for FIFO eviction once the cap
   // is exceeded. Bound: ~5KB per entry × 500 keys = ~2.5MB ceiling.
@@ -678,6 +808,11 @@ export class InstrumentCandleService {
   private readonly cacheTtlMs = 30_000;
   private readonly cacheMaxEntries = 500;
   private ready = false;
+  private readonly markHistoryBuffer: MarkHistoryBuffer | null;
+
+  constructor(options: InstrumentCandleServiceOptions = {}) {
+    this.markHistoryBuffer = options.markHistoryBuffer ?? null;
+  }
 
   async start(): Promise<void> {
     this.ready = true;
@@ -742,21 +877,80 @@ export class InstrumentCandleService {
           fetchOkxTrade(symbol, interval, range),
           fetchOkxMark(symbol, interval, range),
         ]);
-      case 'gateio':
-        return Promise.all([
-          fetchGateioTrade(symbol, interval, range),
-          Promise.resolve([] as RawCandle[]),
-        ]);
+      case 'gateio': {
+        const buffer = this.markHistoryBuffer;
+        // /options/candlesticks is trade-derived — empty for untraded strikes.
+        // Pair with buffered marks from the chain adapter's quote recorder so
+        // every gateio strike has at least a mark line once it's been viewed
+        // in the chain.
+        const tradeCandles = await fetchGateioTrade(symbol, interval, range);
+        const bufferedMark = buffer?.getMarkCandles(
+          'gateio',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        return [tradeCandles, bufferedMark ?? []];
+      }
+      case 'coincall': {
+        const buffer = this.markHistoryBuffer;
+        // REST kline carries OHLCV historical bars; the live buffer adds
+        // sub-bucket freshness for the current candle (chain adapter feeds
+        // mark via bsInfo `mp`, TradeRuntime feeds prints). When REST is
+        // empty (auth missing, network error, untraded contract), fall back
+        // to buffer alone.
+        const restPromise = fetchCoincallKline(symbol, interval).catch((err: unknown) => {
+          if (err instanceof InstrumentCandlesError) throw err;
+          log.warn({ symbol, err: String(err) }, 'coincall kline fetch error');
+          return [] as RawCandle[];
+        });
+        const bufferedTrades = buffer?.getTradeCandles(
+          'coincall',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        const bufferedMark = buffer?.getMarkCandles(
+          'coincall',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        const restCandles = await restPromise;
+        // REST candles are trade-derived (OHLCV); buffered trades from the
+        // live tape are additive and dedupe naturally via timestamp bucket.
+        const trades = mergeCandlesByTs(restCandles, bufferedTrades ?? []);
+        return [trades, bufferedMark ?? []];
+      }
       case 'bybit':
         return Promise.all([
           fetchBybitTradeBucketed(symbol, interval, range),
           fetchBybitMark(symbol, interval, range),
         ]);
-      case 'derive':
-        return Promise.all([
-          fetchDeriveTradeBucketed(symbol, interval, range),
-          Promise.resolve([] as RawCandle[]),
-        ]);
+      case 'derive': {
+        const buffer = this.markHistoryBuffer;
+        const bufferedTrades = buffer?.getTradeCandles(
+          'derive',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        const bufferedMark = buffer?.getMarkCandles(
+          'derive',
+          symbol,
+          INTERVAL_TO_MS[interval],
+          RANGE_TO_MS[range],
+        );
+        // Derive has no REST mark-price-history endpoint, so mark comes from
+        // the live buffer only. REST trades are still useful as a backfill
+        // for low-volume contracts when the process just started.
+        const tradePromise =
+          bufferedTrades && bufferedTrades.length > 0
+            ? Promise.resolve(bufferedTrades)
+            : fetchDeriveTradeBucketed(symbol, interval, range);
+        const markPromise = Promise.resolve(bufferedMark ?? []);
+        return Promise.all([tradePromise, markPromise]);
+      }
       case 'thalex':
         return Promise.all([
           Promise.resolve([] as RawCandle[]),

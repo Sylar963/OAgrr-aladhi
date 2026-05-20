@@ -15,16 +15,18 @@ import { computeAtmConsensus } from './forward-analysis';
 import styles from './ChainTable.module.css';
 
 const GAMMA_TIP =
-  'Γ GAMMA — rate of change of Δ per $1 move in spot.\n\n' +
+  'Γ GAMMA — change in Δ for a 1% move in spot.\n\n' +
   '• Highest at-the-money and near expiry; near-zero deep OTM.\n' +
   '• Long options are long gamma — Δ moves in your favor as spot moves.\n' +
-  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.';
+  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.\n' +
+  '• Scale-invariant display: gamma × spot / 100. Comparable across BTC, ETH, $LIT, etc.';
 
 const VEGA_TIP =
-  'ν VEGA — option price change in USD per 1 vol-point move in IV (0.01 of IV).\n\n' +
+  'ν VEGA — option price change as % of spot per 1% IV move.\n\n' +
   '• Long options are long vega (gain when IV rises); short options are short vega.\n' +
   '• Largest on long-dated ATM options; tiny on short-dated deep OTM.\n' +
-  '• Your exposure to IV re-pricing, independent of spot moves.';
+  '• Your exposure to IV re-pricing, independent of spot moves.\n' +
+  '• Scale-invariant display: vega / spot × 100. Comparable across underlyings.';
 
 const DELTA_TIP =
   'Δ DELTA — price sensitivity of the option to the underlying.\n\n' +
@@ -42,14 +44,18 @@ interface NewChainTableProps {
   underlying: string;
 }
 
-function fmtGamma(v: number | null): string {
-  if (v == null) return '–';
-  return `${Math.round(v * 1e6)}`;
+// Scale-invariant Greek display: delta-change per 1% spot move.
+// Equivalent to gamma × spot × 0.01. Reads the same across BTC ($60K) and $LIT ($0.06).
+function fmtGamma(v: number | null, spot: number | null): string {
+  if (v == null || spot == null || spot === 0) return '–';
+  return (v * spot * 0.01).toFixed(3);
 }
 
-function fmtVega(v: number | null): string {
-  if (v == null) return '–';
-  return `${Math.round(v)}`;
+// Scale-invariant Greek display: option-price change as % of spot per 1% IV move.
+// Coincall vega is dollars per 1-vol-point IV move; divide by spot to remove the price-scale dependency.
+function fmtVega(v: number | null, spot: number | null): string {
+  if (v == null || spot == null || spot === 0) return '–';
+  return `${((v / spot) * 100).toFixed(3)}%`;
 }
 
 // ── Venue column ──────────────────────────────────────────────────────────────
@@ -218,10 +224,10 @@ const StrikeRowItem = memo(function StrikeRowItem({
       >
         <VenueColumn side={strike.call} align="left" activeSet={activeSet} />
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ''}`}>
-          {fmtGamma(callQ?.gamma ?? null)}
+          {fmtGamma(callQ?.gamma ?? null, indexPrice)}
         </span>
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ''}`}>
-          {fmtVega(callQ?.vega ?? null)}
+          {fmtVega(callQ?.vega ?? null, indexPrice)}
         </span>
         <span className={`${styles.deltaCell} ${callItm ? styles.itmCall : ''}`}>
           {fmtDelta(callQ?.delta ?? null)}
@@ -314,10 +320,10 @@ const StrikeRowItem = memo(function StrikeRowItem({
           {fmtDelta(putQ?.delta ?? null)}
         </span>
         <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ''}`}>
-          {fmtVega(putQ?.vega ?? null)}
+          {fmtVega(putQ?.vega ?? null, indexPrice)}
         </span>
         <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ''}`}>
-          {fmtGamma(putQ?.gamma ?? null)}
+          {fmtGamma(putQ?.gamma ?? null, indexPrice)}
         </span>
         <VenueColumn side={strike.put} align="right" activeSet={activeSet} />
       </div>

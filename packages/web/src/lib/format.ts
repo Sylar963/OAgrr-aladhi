@@ -8,7 +8,9 @@ export function fmtUsd(v: number | null | undefined): string {
   const sign = v < 0 ? '-' : '';
   const abs = Math.abs(v);
   if (abs >= 100) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-  return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
+  return `${sign}$${abs.toFixed(6)}`;
 }
 
 function compactNum(v: number): string {

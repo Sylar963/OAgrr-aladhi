@@ -156,6 +156,57 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     ]);
   });
 
+  it('synthesizes Derive mark line from candle closes when buffer covers only the current bucket', async () => {
+    // Derive has no REST mark-history endpoint; the buffer only retains
+    // recent ticks. The chart_data endpoint already fills non-trade buckets
+    // with mark-derived OHLC (open=high=low=close=mark, vol=0), so the
+    // candle close IS the venue's mark per bucket. Synthesizing markLine
+    // from closes gives the orange overlay continuous coverage.
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: [
+            {
+              open_price: '100', high_price: '100', low_price: '100', close_price: '100',
+              volume_contracts: '0', volume_usd: '0',
+              timestamp: Math.floor((BASE_TS - 2 * MIN) / 1000),
+              timestamp_bucket: Math.floor((BASE_TS - 2 * MIN) / 1000),
+            },
+            {
+              open_price: '105', high_price: '105', low_price: '105', close_price: '105',
+              volume_contracts: '0', volume_usd: '0',
+              timestamp: Math.floor((BASE_TS - MIN) / 1000),
+              timestamp_bucket: Math.floor((BASE_TS - MIN) / 1000),
+            },
+            {
+              open_price: '108', high_price: '112', low_price: '107', close_price: '110',
+              volume_contracts: '5', volume_usd: '550',
+              timestamp: Math.floor(BASE_TS / 1000),
+              timestamp_bucket: Math.floor(BASE_TS / 1000),
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    // Buffer covers only the current bucket with a sub-bucket-fresh mark
+    // that differs from the candle close (109 vs 110) — buffer must win on
+    // collision so the live mark stays accurate.
+    buffer.recordMark('derive', 'WARM-X', BASE_TS, 109);
+
+    const res = await svc.getCandles('derive', 'WARM-X', '1m', '1d');
+
+    expect(res.candles).toHaveLength(3);
+    // Older buckets: synthesized from candle close. Current bucket: buffer
+    // value (109), not the candle close (110).
+    expect(res.markLine.map((m) => m.c)).toEqual([100, 105, 109]);
+    expect(res.markLine.map((m) => m.ts)).toEqual([
+      BASE_TS - 2 * MIN,
+      BASE_TS - MIN,
+      BASE_TS,
+    ]);
+  });
+
   it('degrades Derive to buffer-only when REST returns no rows', async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ result: [] }), {

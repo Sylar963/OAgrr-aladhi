@@ -909,6 +909,24 @@ export class InstrumentCandleService {
 
     const [trade, mark] = await this.fetchForVenue(venue, symbol, interval, range);
     const merged = mergeTradeAndMark(trade, mark);
+
+    // Derive has no REST mark-history endpoint, and the live MarkHistoryBuffer
+    // only retains recent ticks (~minutes). But Derive's
+    // get_tradingview_chart_data already fills non-trade buckets with
+    // mark-derived OHLC (open=high=low=close=mark, vol=0), so the candle
+    // close IS Derive's mark per bucket. Synthesize markLine entries from
+    // candle closes for any bucket the buffer didn't cover so the mark
+    // overlay has continuous coverage. Buffer-derived marks (sub-bucket
+    // fresh) still win on collisions because they were added to markLine
+    // first by mergeTradeAndMark.
+    if (venue === 'derive' && merged.markLine.length < merged.candles.length) {
+      const haveMark = new Set<number>(merged.markLine.map((m) => m.ts));
+      for (const c of merged.candles) {
+        if (!haveMark.has(c.ts)) merged.markLine.push({ ts: c.ts, c: c.c });
+      }
+      merged.markLine.sort((a, b) => a.ts - b.ts);
+    }
+
     const response: InstrumentCandlesResponse = {
       venue,
       symbol,

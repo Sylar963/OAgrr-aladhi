@@ -26,7 +26,7 @@
 
 .header {
   display: grid;
-  grid-template-columns: 1fr 50px 50px 60px 72px 80px 72px 80px 100px 80px 72px 80px 72px 60px 50px 50px 1fr;
+  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 100px 92px 72px 92px 72px 60px 50px 50px 1fr;
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-elevated);
   flex-shrink: 0;
@@ -146,7 +146,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 50px 50px 60px 72px 80px 72px 80px 100px 80px 72px 80px 72px 60px 50px 50px 1fr;
+  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 100px 92px 72px 92px 72px 60px 50px 50px 1fr;
   align-items: center;
   height: 48px;
   cursor: pointer;
@@ -225,7 +225,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 .askCell {
@@ -236,7 +236,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 .clickable {

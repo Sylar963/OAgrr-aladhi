@@ -101,6 +101,19 @@ export const GateioUnderlyingTickerSchema = passthrough.extend({
 });
 export type GateioUnderlyingTicker = z.infer<typeof GateioUnderlyingTickerSchema>;
 
+// Public endpoint: GET /api/v4/options/settlements?underlying={BASE}_USDT
+// One row per contract; settle_price is the index spot at expiration moment
+// and is identical across all contracts sharing the same underlying+expiry.
+// See references/options-docs/gateio/rest-settlements.json.
+export const GateioSettlementSchema = passthrough.extend({
+  time: z.number(),
+  contract: z.string(),
+  strike_price: z.string().optional(),
+  settle_price: z.string(),
+});
+export type GateioSettlement = z.infer<typeof GateioSettlementSchema>;
+export const GateioSettlementsResponseSchema = GateioSettlementSchema.array();
+
 const GateioOrderBookLevelSchema = z.object({ p: z.string(), s: z.number() });
 export const GateioOrderBookSchema = passthrough.extend({
   id: z.number().optional(),

@@ -132,6 +132,11 @@ export {
 } from './runtime/index-price/index-price-runtime.js';
 
 export { toGateioRestBase, fromGateioRestBase } from './feeds/gateio/aliases.js';
+export {
+  fetchGateioSettlement,
+  type FetchGateioSettlementArgs,
+  type GateioSettlementResult,
+} from './feeds/gateio/settlement.js';
 
 // services
 export {

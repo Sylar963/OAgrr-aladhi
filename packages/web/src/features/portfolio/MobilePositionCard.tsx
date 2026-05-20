@@ -12,7 +12,13 @@ interface Props {
 
 function fmtUsd(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 100) return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
+  if (abs === 0) return '$0.00';
+  return `${sign}$${abs.toFixed(6)}`;
 }
 
 function fmtIv(value: number | null | undefined): string {

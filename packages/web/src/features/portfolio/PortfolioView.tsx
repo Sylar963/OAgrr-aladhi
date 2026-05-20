@@ -103,10 +103,16 @@ function venueSourceOptions(): SourceOption[] {
   });
 }
 
+// Tiered precision so sub-$1 underlyings (e.g. $LIT, $WFLI) don't collapse small dollar greeks to "$0.00".
 function fmtUsdSigned(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const sign = value >= 0 ? '+' : '';
-  return `${sign}$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(value);
+  if (abs >= 100) return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`;
+  if (abs === 0) return '+$0.00';
+  return `${sign}$${abs.toFixed(6)}`;
 }
 
 function fmtNum(value: number | null | undefined, digits = 2): string {

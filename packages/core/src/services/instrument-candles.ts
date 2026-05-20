@@ -550,77 +550,75 @@ export async function fetchBybitTradeBucketed(
 }
 
 // ── Derive (Lyra v2) ───────────────────────────────────────────────
-// Derive has no aggregated kline endpoint, so we paginate
-// public/get_trade_history and bucket trades locally. Trades appear
-// twice (one record per side of the fill, sharing trade_id) and we
-// dedupe on trade_id before bucketing.
-const DeriveTradeHistorySchema = z.object({
-  result: z.object({
-    trades: z.array(z.object({
-      trade_id: z.string(),
+// POST /public/get_tradingview_chart_data returns ClickHouse-backed OHLCV
+// candles by instrument. Probe-verified contract (api.lyra.finance):
+//   body: { instrument_name, start_timestamp, end_timestamp, period }
+//   timestamps are Unix SECONDS (not ms — note the divergence from every
+//     other Derive REST endpoint we call)
+//   period is integer seconds; enum: 60, 300, 900, 1800, 3600, 14400, 86400
+//   row shape: {
+//     open_price, high_price, low_price, close_price, // strings
+//     volume_usd, volume_contracts,                   // strings
+//     timestamp, timestamp_bucket,                    // seconds
+//   }
+// Mark line still comes from the live MarkHistoryBuffer — Derive does not
+// expose a REST mark-price-history endpoint.
+const INTERVAL_TO_DERIVE_PERIOD: Record<InstrumentCandleInterval, number> = {
+  '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
+};
+
+const DeriveChartDataSchema = z.object({
+  result: z.array(
+    z.object({
+      open_price: z.string(),
+      high_price: z.string(),
+      low_price: z.string(),
+      close_price: z.string(),
+      volume_contracts: z.string(),
+      volume_usd: z.string().optional(),
       timestamp: z.number(),
-      trade_price: z.string(),
-      trade_amount: z.string(),
-    })),
-    pagination: z.object({
-      num_pages: z.number(),
-      count: z.number(),
-    }).optional(),
-  }),
+      timestamp_bucket: z.number().optional(),
+    }),
+  ),
 });
 
-const DERIVE_MAX_PAGES = 5;
-const DERIVE_PAGE_SIZE = 1000;
-
-export async function fetchDeriveTradeBucketed(
+export async function fetchDeriveTrade(
   symbol: string,
   interval: InstrumentCandleInterval,
   range: InstrumentCandleRange,
 ): Promise<RawCandle[]> {
-  const cutoff = Date.now() - RANGE_TO_MS[range];
-  const seen = new Set<string>();
-  const trades: Array<{ execId: string; ts: number; price: number; size: number }> = [];
-
-  for (let page = 1; page <= DERIVE_MAX_PAGES; page++) {
-    const res = await fetch(`${DERIVE_REST_BASE_URL}/public/get_trade_history`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        instrument_name: symbol,
-        page_size: DERIVE_PAGE_SIZE,
-        page,
-      }),
-    });
-    if (res.status === 404) throw new InstrumentCandlesError('not_found', `Derive: ${symbol}`);
-    if (!res.ok) throw new InstrumentCandlesError('upstream', `Derive ${res.status}`);
-    const result = DeriveTradeHistorySchema.safeParse(await res.json());
-    if (!result.success) {
-      log.warn({ symbol, issues: result.error.issues }, 'derive trade parse failed');
-      return [];
-    }
-    const pageTrades = result.data.result.trades;
-    if (pageTrades.length === 0) break;
-
-    let oldestTs = Number.POSITIVE_INFINITY;
-    for (const t of pageTrades) {
-      if (seen.has(t.trade_id)) continue;
-      seen.add(t.trade_id);
-      if (t.timestamp < oldestTs) oldestTs = t.timestamp;
-      trades.push({
-        execId: t.trade_id,
-        ts: t.timestamp,
-        price: Number(t.trade_price),
-        size: Number(t.trade_amount),
-      });
-    }
-    if (oldestTs < cutoff) break;
-    if (pageTrades.length < DERIVE_PAGE_SIZE) break;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const startSec = nowSec - Math.floor(RANGE_TO_MS[range] / 1000);
+  const res = await fetch(`${DERIVE_REST_BASE_URL}/public/get_tradingview_chart_data`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(10_000),
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      instrument_name: symbol,
+      start_timestamp: startSec,
+      end_timestamp: nowSec,
+      period: INTERVAL_TO_DERIVE_PERIOD[interval],
+    }),
+  });
+  if (res.status === 404) throw new InstrumentCandlesError('not_found', `Derive: ${symbol}`);
+  if (!res.ok) throw new InstrumentCandlesError('upstream', `Derive ${res.status}`);
+  const parsed = DeriveChartDataSchema.safeParse(await res.json());
+  if (!parsed.success) {
+    log.warn({ symbol, issues: parsed.error.issues.slice(0, 3) }, 'derive chart parse failed');
+    return [];
   }
-  return bucketTrades(
-    trades.filter((t) => t.ts >= cutoff),
-    INTERVAL_TO_MS[interval],
-  );
+  const candles: RawCandle[] = [];
+  for (const row of parsed.data.result) {
+    const ts = row.timestamp * 1000;
+    const o = Number(row.open_price);
+    const h = Number(row.high_price);
+    const l = Number(row.low_price);
+    const c = Number(row.close_price);
+    const vol = Number(row.volume_contracts);
+    if (!Number.isFinite(ts) || !Number.isFinite(o)) continue;
+    candles.push({ ts, o, h, l, c, vol: Number.isFinite(vol) ? vol : 0 });
+  }
+  return candles.sort((a, b) => a.ts - b.ts);
 }
 
 // Bucket dedup'd trades (execId-keyed at the caller) into OHLCV candles.
@@ -1029,6 +1027,16 @@ export class InstrumentCandleService {
         ]);
       case 'derive': {
         const buffer = this.markHistoryBuffer;
+        // get_tradingview_chart_data gives ClickHouse-backed OHLCV history
+        // in one call; the live MarkHistoryBuffer overlays sub-bucket
+        // freshness so the active candle tracks the WS tape. Mark stays
+        // buffer-only — Derive doesn't expose a REST mark-price-history
+        // endpoint. REST failures degrade to buffer-only rather than 502.
+        const restPromise = fetchDeriveTrade(symbol, interval, range).catch((err: unknown) => {
+          if (err instanceof InstrumentCandlesError) throw err;
+          log.warn({ symbol, err: String(err) }, 'derive chart fetch error');
+          return [] as RawCandle[];
+        });
         const bufferedTrades = buffer?.getTradeCandles(
           'derive',
           symbol,
@@ -1041,15 +1049,9 @@ export class InstrumentCandleService {
           INTERVAL_TO_MS[interval],
           RANGE_TO_MS[range],
         );
-        // Derive has no REST mark-price-history endpoint, so mark comes from
-        // the live buffer only. REST trades are still useful as a backfill
-        // for low-volume contracts when the process just started.
-        const tradePromise =
-          bufferedTrades && bufferedTrades.length > 0
-            ? Promise.resolve(bufferedTrades)
-            : fetchDeriveTradeBucketed(symbol, interval, range);
-        const markPromise = Promise.resolve(bufferedMark ?? []);
-        return Promise.all([tradePromise, markPromise]);
+        const restCandles = await restPromise;
+        const trades = mergeCandlesByTs(restCandles, bufferedTrades ?? []);
+        return [trades, bufferedMark ?? []];
       }
       case 'thalex':
         return Promise.all([

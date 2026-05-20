@@ -92,6 +92,7 @@ function VenueSidebar({
             <span>Derive · USDC</span>
             <span>Coincall · USDT</span>
             <span>Thalex · USDT</span>
+            <span>Gate.io · USDT</span>
           </div>
         </div>
       </div>

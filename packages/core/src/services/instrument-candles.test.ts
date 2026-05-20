@@ -109,21 +109,56 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     vi.unstubAllGlobals();
   });
 
-  it('serves Derive mark + trade history from the live buffer when populated', async () => {
+  it('merges Derive REST chart history with live buffer trades and mark', async () => {
+    // REST returns a historical bar one minute ago; the live buffer carries
+    // the active bucket. mergeCandlesByTs gives the buffer the tie-break on
+    // the current bucket so the chart stays smooth across the REST/WS seam.
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: [
+            {
+              open_price: '50',
+              high_price: '50',
+              low_price: '50',
+              close_price: '50',
+              volume_contracts: '1',
+              volume_usd: '50',
+              timestamp: Math.floor(BASE_TS / 1000),
+              timestamp_bucket: Math.floor(BASE_TS / 1000),
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    buffer.recordTrade('derive', 'HYPE-TEST', BASE_TS + MIN, 52, 3);
     buffer.recordMark('derive', 'HYPE-TEST', BASE_TS, 50);
     buffer.recordMark('derive', 'HYPE-TEST', BASE_TS + MIN, 52);
-    buffer.recordTrade('derive', 'HYPE-TEST', BASE_TS, 51, 2);
 
     const res = await svc.getCandles('derive', 'HYPE-TEST', '1m', '1d');
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [calledUrl, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(calledUrl).toContain('/public/get_tradingview_chart_data');
+    expect(calledInit.method).toBe('POST');
+    const body = JSON.parse(String(calledInit.body));
+    expect(body.instrument_name).toBe('HYPE-TEST');
+    expect(body.period).toBe(60);
+    // Timestamps in the request must be seconds, not ms.
+    expect(body.start_timestamp).toBeLessThan(1e11);
+    expect(body.end_timestamp).toBeLessThan(1e11);
+
     expect(res.markLine.map((m) => m.c)).toEqual([50, 52]);
-    expect(res.candles.some((c) => c.vol > 0)).toBe(true);
+    expect(res.candles.map((c) => ({ ts: c.ts, c: c.c }))).toEqual([
+      { ts: BASE_TS, c: 50 },
+      { ts: BASE_TS + MIN, c: 52 },
+    ]);
   });
 
-  it('falls back to REST trades when the Derive buffer is cold', async () => {
+  it('degrades Derive to buffer-only when REST returns no rows', async () => {
     fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ result: { trades: [], pagination: { num_pages: 0, count: 0 } } }), {
+      new Response(JSON.stringify({ result: [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -132,7 +167,7 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     const res = await svc.getCandles('derive', 'COLD-X', '1m', '1d');
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]?.[0]).toContain('/public/get_trade_history');
+    expect(fetchSpy.mock.calls[0]?.[0]).toContain('/public/get_tradingview_chart_data');
     expect(res.candles).toEqual([]);
     expect(res.markLine).toEqual([]);
   });

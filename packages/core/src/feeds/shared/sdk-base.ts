@@ -30,6 +30,14 @@ const FEE_CAP: Record<VenueId, number> = {
   gateio: 0.125, // venue-published price_limit_fee_rate on every options contract
 };
 
+const FEED_WATCHDOG_INTERVAL_MS = 30_000;
+const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+
+interface FeedConnectionSnapshot {
+  connected: boolean;
+  lastActivityAt: number;
+}
+
 export interface CachedInstrument {
   symbol: string;
   exchangeSymbol: string;
@@ -93,6 +101,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   protected marketsLoaded = false;
   protected requestRefCounts = new Map<string, number>();
   protected handlerRefCounts = new Map<StreamHandlers, number>();
+  protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
+  private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private lastWatchdogReconnectAt = 0;
 
   protected abstract initClients(): void;
   protected abstract fetchInstruments(): Promise<CachedInstrument[]>;
@@ -125,6 +136,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     this.marketsLoaded = true;
 
     await this.eagerSubscribe();
+    this.startFeedWatchdog();
   }
 
   protected async eagerSubscribe(): Promise<void> {
@@ -260,8 +272,22 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   async dispose(): Promise<void> {
+    if (this.feedWatchdogTimer != null) {
+      clearInterval(this.feedWatchdogTimer);
+      this.feedWatchdogTimer = null;
+    }
     await this.unsubscribeAll();
   }
+
+  protected shouldWatchFeed(): boolean {
+    return this.marketsLoaded;
+  }
+
+  protected getFeedConnectionSnapshot(): FeedConnectionSnapshot | null {
+    return null;
+  }
+
+  protected restartFeedFromWatchdog(): void {}
 
   // ── internal helpers ──────────────────────────────────────────
 
@@ -297,6 +323,10 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const deltas: VenueDelta[] = [];
 
     for (const update of updates) {
+      if (Date.now() > this.lastWatchdogReconnectAt) {
+        this.lastWatchdogReconnectAt = 0;
+      }
+
       this.quoteStore.set(update.exchangeSymbol, update.quote);
 
       if (this.quoteRecorders.size > 0 && update.quote.markPrice != null) {
@@ -361,6 +391,35 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     for (const h of this.deltaHandlers) {
       h.onDelta(deltas);
     }
+  }
+
+  private startFeedWatchdog(): void {
+    if (this.feedWatchdogTimer != null) {
+      clearInterval(this.feedWatchdogTimer);
+    }
+
+    this.feedWatchdogTimer = setInterval(() => {
+      this.checkFeedLiveness();
+    }, FEED_WATCHDOG_INTERVAL_MS);
+  }
+
+  private checkFeedLiveness(): void {
+    if (!this.shouldWatchFeed()) return;
+
+    const snapshot = this.getFeedConnectionSnapshot();
+    if (snapshot == null || !snapshot.connected || snapshot.lastActivityAt <= 0) return;
+
+    const staleMs = Date.now() - snapshot.lastActivityAt;
+    if (staleMs < this.feedStalenessThresholdMs) return;
+    if (snapshot.lastActivityAt <= this.lastWatchdogReconnectAt) return;
+
+    this.lastWatchdogReconnectAt = Date.now();
+    recorderLog.error(
+      { venue: this.venue, staleMs, thresholdMs: this.feedStalenessThresholdMs },
+      'feed stale, forcing reconnect',
+    );
+    this.emitStatus('reconnecting', `feed stale after ${Math.round(staleMs / 1000)}s`);
+    this.restartFeedFromWatchdog();
   }
 
   protected buildContract(

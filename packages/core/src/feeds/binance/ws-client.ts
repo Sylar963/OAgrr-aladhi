@@ -167,6 +167,20 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     };
   }
 
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
+
   private waitForFirstData(): Promise<void> {
     const target = new Set(
       [...this.subscriptions.subscribedStreams, ...this.subscriptions.pendingSubscribeStreams]

@@ -28,6 +28,12 @@ import type {
 } from './types.js';
 
 const log = feedLogger('block-trade-runtime');
+const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
+
+function isRateLimitSignal(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
 
 // ── Runtime configuration ─────────────────────────────────────
 const DERIBIT_SEED_COUNT = 250;
@@ -344,6 +350,7 @@ function deribitBlockStream(): BlockVenueStream {
   let shouldReconnect = true;
   let handlers: BlockVenueStreamHandlers | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let rateLimitUntil = 0;
 
   function connect(attempt = 0): void {
     if (!shouldReconnect || ws != null || reconnectTimer != null) return;
@@ -357,6 +364,7 @@ function deribitBlockStream(): BlockVenueStream {
 
       didOpen = true;
       openedAt = Date.now();
+      rateLimitUntil = 0;
       handlers?.onConnected();
       log.info({ venue: 'deribit' }, 'block trade WS connected');
       socket.send(
@@ -407,7 +415,7 @@ function deribitBlockStream(): BlockVenueStream {
       handlers?.onDisconnected();
       if (shouldReconnect) {
         handlers?.onReconnect();
-        const delay = backoffDelay(didOpen ? 0 : attempt + 1);
+        const delay = Math.max(backoffDelay(didOpen ? 0 : attempt + 1), rateLimitUntil - Date.now());
         if (reconnectTimer != null) return;
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
@@ -418,6 +426,9 @@ function deribitBlockStream(): BlockVenueStream {
 
     socket.on('error', (err) => {
       if (ws !== socket) return;
+      if (isRateLimitSignal(err)) {
+        rateLimitUntil = Math.max(rateLimitUntil, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+      }
       handlers?.onError();
       log.warn({ venue: 'deribit', err: err.message }, 'block trade WS error');
     });
@@ -559,6 +570,7 @@ function bybitBlockStream(): BlockVenueStream {
   let handlers: BlockVenueStreamHandlers | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  let rateLimitUntil = 0;
 
   function connect(attempt = 0): void {
     if (!shouldReconnect || ws != null || reconnectTimer != null) return;
@@ -572,6 +584,7 @@ function bybitBlockStream(): BlockVenueStream {
 
       didOpen = true;
       openedAt = Date.now();
+      rateLimitUntil = 0;
       handlers?.onConnected();
       log.info({ venue: 'bybit' }, 'block trade WS connected');
       socket.send(JSON.stringify({ op: 'subscribe', args: ['rfq.open.public.trades'] }));
@@ -619,7 +632,7 @@ function bybitBlockStream(): BlockVenueStream {
       }
       if (shouldReconnect) {
         handlers?.onReconnect();
-        const delay = backoffDelay(didOpen ? 0 : attempt + 1);
+        const delay = Math.max(backoffDelay(didOpen ? 0 : attempt + 1), rateLimitUntil - Date.now());
         if (reconnectTimer != null) return;
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
@@ -630,6 +643,9 @@ function bybitBlockStream(): BlockVenueStream {
 
     socket.on('error', (err) => {
       if (ws !== socket) return;
+      if (isRateLimitSignal(err)) {
+        rateLimitUntil = Math.max(rateLimitUntil, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+      }
       handlers?.onError();
       log.warn({ venue: 'bybit', err: err.message }, 'block trade WS error');
     });

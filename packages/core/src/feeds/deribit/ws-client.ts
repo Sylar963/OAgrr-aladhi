@@ -44,6 +44,8 @@ const SUBSCRIBE_BATCH_SIZE = 500;
 
 // ~3.3 calls/sec sustained (30k credit pool, 3k per call).
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
+const RESUBSCRIBE_BATCH_DELAY_MS = 500;
+const EAGER_UNDERLYING_DELAY_MS = 750;
 
 // Eager subscriptions use agg2 (~1s aggregation) to reduce traffic.
 // On-demand subscriptions (user viewing a chain) use 100ms for tight updates.
@@ -98,14 +100,22 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
 
-  // All expiries get ticker subscriptions at boot so bid/ask and greeks are
-  // live from second one. agg2 (~1s aggregation) keeps traffic manageable.
-  // Rate budget: ~4300 instruments ÷ 500/batch = 9 calls × 3000 credits = 27k
-  // out of 30k pool (refills at 10k/sec).
+  // Keep bulk marks live for every underlying at boot, but reserve eager ticker
+  // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
+  // opens the chain, which cuts cold-start load without losing broad coverage.
   protected override async eagerSubscribe(): Promise<void> {
     const underlyings = await this.listUnderlyings();
+    const priority = underlyings.filter((underlying) => this.shouldEagerTickerUnderlying(underlying));
+    const deferred = underlyings.filter((underlying) => !this.shouldEagerTickerUnderlying(underlying));
 
-    for (const underlying of underlyings) {
+    for (const underlying of [...priority, ...deferred]) {
+      await this.ensureBulkSubscriptions(underlying, 'eager');
+
+      if (!this.shouldEagerTickerUnderlying(underlying)) {
+        await this.delayBetweenEagerUnderlyings();
+        continue;
+      }
+
       const expiries = await this.listExpiries(underlying);
 
       for (const expiry of expiries) {
@@ -116,7 +126,20 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
           await this.subscribeWithInterval(underlying, matching, EAGER_TICKER_INTERVAL);
         }
       }
+
+      await this.delayBetweenEagerUnderlyings();
     }
+  }
+
+  protected override getFeedConnectionSnapshot() {
+    return {
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.rpc.terminate();
   }
 
   protected initClients(): void {
@@ -125,7 +148,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       heartbeatIntervalSec: 30,
       requestTimeoutMs: 15_000,
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
-      resubscribeBatchDelayMs: SUBSCRIBE_BATCH_DELAY_MS,
+      resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
+      rateLimitCooldownMs: 120_000,
       onStatusChange: (state) =>
         this.emitStatus(
           state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
@@ -307,30 +331,28 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     interval: string,
     source = 'eager',
   ): Promise<void> {
+    if (source === 'eager' && !this.shouldEagerTickerUnderlying(underlying)) return;
+
+    const indexName = deribitIndexNameFor(underlying);
+
+    if (!this.state.indexToInstruments.has(indexName)) {
+      const symbols = new Set<string>();
+      for (const inst of this.instruments) {
+        if (deribitIndexNameFor(inst.base) === indexName) {
+          symbols.add(inst.exchangeSymbol);
+        }
+      }
+      this.state.indexToInstruments.set(indexName, symbols);
+    }
+
+    await this.ensureBulkSubscriptions(underlying, source);
+
     const plan = buildDeribitSubscriptionPlan(
       this.subscriptions,
       underlying,
       instruments,
       interval,
     );
-
-    if (!this.state.indexToInstruments.has(plan.indexName)) {
-      const symbols = new Set<string>();
-      for (const inst of this.instruments) {
-        if (deribitIndexNameFor(inst.base) === plan.indexName) {
-          symbols.add(inst.exchangeSymbol);
-        }
-      }
-      this.state.indexToInstruments.set(plan.indexName, symbols);
-    }
-
-    if (plan.bulkChannels.length > 0) {
-      await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
-      log.info(
-        { count: plan.bulkChannels.length, underlying, source },
-        'subscribed to bulk index channels',
-      );
-    }
 
     if (plan.channelsToUnsubscribe.length > 0) {
       await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
@@ -358,6 +380,25 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         await new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_BATCH_DELAY_MS));
       }
     }
+  }
+
+  private async ensureBulkSubscriptions(underlying: string, source: string): Promise<void> {
+    const plan = buildDeribitSubscriptionPlan(this.subscriptions, underlying, [], EAGER_TICKER_INTERVAL);
+    if (plan.bulkChannels.length === 0) return;
+
+    await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
+    log.info(
+      { count: plan.bulkChannels.length, underlying, source },
+      'subscribed to bulk index channels',
+    );
+  }
+
+  private async delayBetweenEagerUnderlyings(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, EAGER_UNDERLYING_DELAY_MS));
+  }
+
+  private shouldEagerTickerUnderlying(underlying: string): boolean {
+    return underlying === 'BTC' || underlying === 'ETH' || underlying.startsWith('BTC_') || underlying.startsWith('ETH_');
   }
 
   protected override async unsubscribeChain(

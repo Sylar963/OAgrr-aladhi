@@ -37,6 +37,12 @@ const log = feedLogger('trade-runtime');
 // every 20-180s per venue, a 5-minute gap is unambiguous zombie state.
 const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
+const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
+
+function isRateLimitSignal(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
 
 /**
  * Subscribes to bulk option trade streams across all 7 venues.
@@ -47,6 +53,7 @@ export class TradeRuntime {
   private connections = new Map<string, WebSocket>();
   private keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private rateLimitCooldownUntil = new Map<string, number>();
   private reseedTimers = new Map<string, ReturnType<typeof setInterval>>();
   private subscribedUnderlyingsByConnection = new Map<string, Set<string>>();
   private listeners = new Set<(trade: TradeEvent) => void>();
@@ -256,6 +263,7 @@ export class TradeRuntime {
 
       didOpen = true;
       openedAt = Date.now();
+      this.rateLimitCooldownUntil.delete(key);
       this.updateStreamStates(stream.venue, subscribedUnderlyings, {
         connected: true,
         lastStatusAt: Date.now(),
@@ -329,7 +337,7 @@ export class TradeRuntime {
                 ?.reconnects ?? 0) + 1,
           });
         }
-        const delay = backoffDelay(nextAttempt);
+        const delay = Math.max(backoffDelay(nextAttempt), this.remainingRateLimitCooldownMs(key));
         if (this.reconnectTimers.has(key)) return;
         const timer = setTimeout(() => {
           this.reconnectTimers.delete(key);
@@ -341,6 +349,8 @@ export class TradeRuntime {
 
     ws.on('error', (err) => {
       if (this.connections.get(key) !== ws) return;
+
+      this.noteRateLimit(key, err);
 
       for (const subscribedUnderlying of subscribedUnderlyings) {
         this.updateStreamState(stream.venue, subscribedUnderlying, {
@@ -361,6 +371,21 @@ export class TradeRuntime {
 
   private streamKey(venue: VenueId, underlying: string): string {
     return `${venue}:${underlying}`;
+  }
+
+  private remainingRateLimitCooldownMs(key: string): number {
+    return Math.max(0, (this.rateLimitCooldownUntil.get(key) ?? 0) - Date.now());
+  }
+
+  private noteRateLimit(key: string, error: unknown): void {
+    if (!isRateLimitSignal(error)) return;
+
+    const until = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+    const currentUntil = this.rateLimitCooldownUntil.get(key) ?? 0;
+    if (until > currentUntil) {
+      this.rateLimitCooldownUntil.set(key, until);
+    }
+    log.warn({ connectionKey: key, retryAt: until }, 'trade stream rate limited, delaying reconnect');
   }
 
   private connectionKey(stream: VenueStream, underlying: string): string {

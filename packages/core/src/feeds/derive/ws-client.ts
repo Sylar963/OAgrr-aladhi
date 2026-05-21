@@ -83,6 +83,17 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     });
   }
 
+  protected override getFeedConnectionSnapshot() {
+    return {
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.rpc.terminate();
+  }
+
   // ─── instrument loading ───────────────────────────────────────
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {

@@ -6,14 +6,21 @@ import { backoffDelay } from '../../utils/reconnect.js';
 const RETRY_AFTER_MAX_ATTEMPTS_MS = 60_000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
 
 export type PingMessage = string | Record<string, unknown>;
+
+function isRateLimitSignal(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
 
 export interface TopicWsClientOptions {
   pingIntervalMs?: number;
   pingMessage?: PingMessage | (() => PingMessage);
   maxReconnectAttempts?: number;
   reconnectDelayMs?: number;
+  rateLimitCooldownMs?: number;
   onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
   onSocket?: (socket: WebSocket) => void;
   getReplayMessages?: () => Array<string | Record<string, unknown>>;
@@ -30,6 +37,9 @@ export class TopicWsClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = true;
   private reconnectAttempts = 0;
+  private lastActivityAt = 0;
+  private rateLimitUntil = 0;
+  private rateLimitHits = 0;
   private connectedAt = 0;
   private readonly log: pino.Logger;
 
@@ -47,6 +57,18 @@ export class TopicWsClient {
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  get connectedAtMs(): number {
+    return this.connectedAt;
+  }
+
+  get lastActivityAtMs(): number {
+    return this.lastActivityAt;
+  }
+
+  terminate(): void {
+    this.ws?.terminate();
   }
 
   connect(): Promise<void> {
@@ -80,6 +102,8 @@ export class TopicWsClient {
         if (this.ws !== socket) return;
 
         this.connectedAt = Date.now();
+        this.lastActivityAt = this.connectedAt;
+        this.rateLimitUntil = 0;
         this.log.info({ url: this.url }, 'ws connected');
         this.reconnectAttempts = 0;
         this.startPing();
@@ -95,13 +119,25 @@ export class TopicWsClient {
 
       socket.on('message', (raw: WebSocket.RawData) => {
         if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
         this.options.onMessage?.(raw);
+      });
+
+      socket.on('ping', () => {
+        if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
+      });
+
+      socket.on('pong', () => {
+        if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
       });
 
       socket.on('close', (code: number, reason: Buffer) => {
         const reasonStr = reason.length > 0 ? reason.toString() : undefined;
         const uptimeMs = this.connectedAt > 0 ? Date.now() - this.connectedAt : undefined;
         this.log.warn({ closeCode: code, closeReason: reasonStr, uptimeMs }, 'ws closed');
+        this.noteRateLimit(reasonStr);
 
         if (!settled) {
           rejectConnect(new Error(`[${this.label}] socket closed before connect completed`));
@@ -118,6 +154,7 @@ export class TopicWsClient {
 
       socket.on('error', (error) => {
         this.log.error({ err: error.message }, 'ws error');
+        this.noteRateLimit(error);
         this.options.onError?.(error);
         if (socket.readyState !== WebSocket.OPEN) rejectConnect(error);
       });
@@ -164,12 +201,13 @@ export class TopicWsClient {
 
     const maxAttempts = this.options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     const exceededMaxAttempts = this.reconnectAttempts >= maxAttempts;
-    const delay = exceededMaxAttempts
+    const baseDelay = exceededMaxAttempts
       ? RETRY_AFTER_MAX_ATTEMPTS_MS
       : backoffDelay(
           this.reconnectAttempts,
           this.options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS,
         );
+    const delay = Math.max(baseDelay, this.remainingRateLimitCooldownMs());
 
     this.reconnectAttempts += 1;
 
@@ -189,6 +227,7 @@ export class TopicWsClient {
       try {
         await this.connect();
       } catch (error: unknown) {
+        this.noteRateLimit(error);
         this.log.warn({ err: String(error) }, 'reconnect failed');
         if (this.shouldReconnect && this.isConnected) {
           this.ws?.terminate();
@@ -222,5 +261,24 @@ export class TopicWsClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+  }
+
+  private remainingRateLimitCooldownMs(): number {
+    return Math.max(0, this.rateLimitUntil - Date.now());
+  }
+
+  private noteRateLimit(error: unknown): void {
+    if (!isRateLimitSignal(error)) return;
+
+    const cooldownMs = this.options.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS;
+    const until = Date.now() + cooldownMs;
+    if (until > this.rateLimitUntil) {
+      this.rateLimitUntil = until;
+    }
+    this.rateLimitHits += 1;
+    this.log.warn(
+      { cooldownMs, rateLimitHits: this.rateLimitHits, retryAt: this.rateLimitUntil },
+      'rate limit detected, delaying reconnects',
+    );
   }
 }

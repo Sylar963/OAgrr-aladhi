@@ -15,6 +15,7 @@ const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RESUBSCRIBE_BATCH_SIZE = 200;
 const DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS = 350;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
 const SEC_TO_MS = 1_000;
 
 // Deribit closes the connection if the `public/test` response lags behind the
@@ -40,6 +41,11 @@ function isConnectionClosedError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('connection closed');
 }
 
+function isRateLimitSignal(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
+
 export class JsonRpcWsClient {
   private ws: WebSocket | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -52,6 +58,9 @@ export class JsonRpcWsClient {
   private reconnectAttempts = 0;
   private subscribedChannels = new Set<string>();
   private heartbeatToken = 0;
+  private lastActivityAt = 0;
+  private rateLimitUntil = 0;
+  private rateLimitHits = 0;
   private connectedAt = 0;
   private log: pino.Logger;
 
@@ -68,6 +77,7 @@ export class JsonRpcWsClient {
       unsubscribeAllMethod?: string;
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
+      rateLimitCooldownMs?: number;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
     } = {},
   ) {
@@ -106,6 +116,8 @@ export class JsonRpcWsClient {
         if (this.ws !== socket) return;
 
         this.connectedAt = Date.now();
+        this.lastActivityAt = this.connectedAt;
+        this.rateLimitUntil = 0;
         this.log.info({ url: this.url }, 'ws connected');
         this.reconnectAttempts = 0;
         this.startHeartbeat();
@@ -115,6 +127,7 @@ export class JsonRpcWsClient {
 
       socket.on('message', (raw: WebSocket.RawData) => {
         if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
 
         try {
           const msg = JSON.parse(raw.toString()) as JsonRpcMessage;
@@ -122,6 +135,16 @@ export class JsonRpcWsClient {
         } catch (e: unknown) {
           this.log.debug({ err: String(e) }, 'malformed WS frame');
         }
+      });
+
+      socket.on('ping', () => {
+        if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
+      });
+
+      socket.on('pong', () => {
+        if (this.ws !== socket) return;
+        this.lastActivityAt = Date.now();
       });
 
       socket.on('close', (code: number, reason: Buffer) => {
@@ -136,6 +159,7 @@ export class JsonRpcWsClient {
           },
           'ws closed',
         );
+        this.noteRateLimit(reasonStr);
 
         if (!settled) {
           rejectConnect(new Error(`[${this.label}] socket closed before connect completed`));
@@ -151,6 +175,7 @@ export class JsonRpcWsClient {
 
       socket.on('error', (err) => {
         this.log.error({ err: err.message }, 'ws error');
+        this.noteRateLimit(err);
         if (socket.readyState !== WebSocket.OPEN) rejectConnect(err);
       });
     });
@@ -171,6 +196,18 @@ export class JsonRpcWsClient {
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  get connectedAtMs(): number {
+    return this.connectedAt;
+  }
+
+  get lastActivityAtMs(): number {
+    return this.lastActivityAt;
+  }
+
+  terminate(): void {
+    this.ws?.terminate();
   }
 
   // ─── JSON-RPC request/response ────────────────────────────────
@@ -271,6 +308,7 @@ export class JsonRpcWsClient {
       clearTimeout(entry.timer);
 
       if (msg.error) {
+        this.noteRateLimit(msg.error.message);
         entry.reject(
           new Error(`[${this.label}] RPC error ${msg.error.code}: ${msg.error.message}`),
         );
@@ -336,12 +374,13 @@ export class JsonRpcWsClient {
 
     const maxAttempts = this.options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     const exceededMaxAttempts = this.reconnectAttempts >= maxAttempts;
-    const delay = exceededMaxAttempts
+    const baseDelay = exceededMaxAttempts
       ? RETRY_AFTER_MAX_ATTEMPTS_MS
       : backoffDelay(
           this.reconnectAttempts,
           this.options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS,
         );
+    const delay = Math.max(baseDelay, this.remainingRateLimitCooldownMs());
 
     this.reconnectAttempts += 1;
 
@@ -362,6 +401,7 @@ export class JsonRpcWsClient {
         await this.connect();
         await this.resubscribe();
       } catch (e: unknown) {
+        this.noteRateLimit(e);
         this.log.warn({ err: String(e) }, 'reconnect failed');
         if (this.shouldReconnect && this.isConnected) {
           this.ws?.terminate();
@@ -408,5 +448,24 @@ export class JsonRpcWsClient {
       reject(new Error(`[${this.label}] connection closed`));
     }
     this.pending.clear();
+  }
+
+  private remainingRateLimitCooldownMs(): number {
+    return Math.max(0, this.rateLimitUntil - Date.now());
+  }
+
+  private noteRateLimit(error: unknown): void {
+    if (!isRateLimitSignal(error)) return;
+
+    const cooldownMs = this.options.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS;
+    const until = Date.now() + cooldownMs;
+    if (until > this.rateLimitUntil) {
+      this.rateLimitUntil = until;
+    }
+    this.rateLimitHits += 1;
+    this.log.warn(
+      { cooldownMs, rateLimitHits: this.rateLimitHits, retryAt: this.rateLimitUntil },
+      'rate limit detected, delaying reconnects',
+    );
   }
 }

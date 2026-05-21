@@ -446,6 +446,20 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     this.wsClient?.send(payload);
   }
 
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
+
   private sweepExpiredState(): void {
     const removed = this.sweepExpiredInstruments();
     if (removed.length === 0) return;

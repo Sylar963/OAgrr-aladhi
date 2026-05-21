@@ -121,6 +121,20 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
   protected initClients(): void {}
 
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
+
   // ── instrument loading ────────────────────────────────────────
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {

@@ -35,20 +35,46 @@ interface VenueRowProps {
   strike: number;
   forwardCell: ForwardCell | undefined;
   atmStrike: number | null;
+  underlying: string;
 }
 
-function VenueRow({ venueId, quote, myIv, type, strike, forwardCell, atmStrike }: VenueRowProps) {
+// Strip the linear-product tail (e.g. "BTC_USDC" → "BTC") so the badge shows
+// the base coin even on chains where the underlying token is the USDC variant.
+// Inverse venues never trade _USDC instruments in practice; this is defensive.
+function inverseBaseLabel(underlying: string): string {
+  return underlying.split('_')[0] ?? underlying;
+}
+
+function VenueRow({
+  venueId,
+  quote,
+  myIv,
+  type,
+  strike,
+  forwardCell,
+  atmStrike,
+  underlying,
+}: VenueRowProps) {
   const meta = VENUES[venueId];
   const mid = quote.mid;
   const breakeven = mid != null ? (type === 'call' ? strike + mid : strike - mid) : null;
   const edge = myIv != null && quote.markIv != null ? myIv - quote.markIv : null;
   const mirror = type === 'put';
+  const inverseLabel = quote.inverse ? inverseBaseLabel(underlying) : null;
 
   const cells = [
     <td key="venue" className={styles.tdVenue} data-mirror={mirror || undefined}>
       <div className={styles.venueCell}>
         {meta?.logo && <img src={meta.logo} className={styles.venueLogo} alt="" />}
         <span className={styles.venueLabel}>{meta?.shortLabel ?? venueId}</span>
+        {inverseLabel && (
+          <span
+            className={styles.inverseTag}
+            title={`Inverse contract — premium quoted in ${inverseLabel}, not USD. The mid shown is the USD equivalent at the venue's current underlying mark.`}
+          >
+            {inverseLabel}
+          </span>
+        )}
       </div>
     </td>,
     <td key="fimplied" className={styles.tdNum} data-accent="true">
@@ -120,9 +146,18 @@ interface SideTableProps {
   myIv: number | null;
   forwardsByVenue: Map<VenueId, ForwardCell>;
   atmStrike: number | null;
+  underlying: string;
 }
 
-function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: SideTableProps) {
+function SideTable({
+  side,
+  type,
+  strike,
+  myIv,
+  forwardsByVenue,
+  atmStrike,
+  underlying,
+}: SideTableProps) {
   const entries = Object.entries(side.venues) as [VenueId, VenueQuote][];
 
   if (entries.length === 0) {
@@ -235,6 +270,7 @@ function SideTable({ side, type, strike, myIv, forwardsByVenue, atmStrike }: Sid
             strike={strike}
             forwardCell={forwardsByVenue.get(venueId)}
             atmStrike={atmStrike}
+            underlying={underlying}
           />
         ))}
       </tbody>
@@ -313,6 +349,7 @@ export default function ExpandedRow({
               myIv={myIv}
               forwardsByVenue={forwardsByVenue}
               atmStrike={atmStrike}
+              underlying={underlying}
             />
           </div>
         </div>
@@ -346,6 +383,7 @@ export default function ExpandedRow({
               myIv={myIv}
               forwardsByVenue={forwardsByVenue}
               atmStrike={atmStrike}
+              underlying={underlying}
             />
           </div>
         </div>

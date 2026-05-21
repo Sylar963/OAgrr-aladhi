@@ -105,6 +105,10 @@ export interface VenueQuote {
   volume24h: number | null;
   openInterestUsd: number | null;
   volume24hUsd: number | null;
+  // True when the venue quotes this contract in the base coin (BTC/ETH) rather
+  // than USD/USDC/USDT. Surfaced so the UI can distinguish inverse venues
+  // (Deribit/OKX BTC-USD-…) from linear venues at a glance.
+  inverse?: boolean;
 }
 
 export interface EnrichedSide {
@@ -192,6 +196,7 @@ const VenueQuoteSchema = z.object({
   ask: NullableNumberSchema,
   mid: NullableNumberSchema,
   midRaw: NullableNumberSchema,
+  inverse: z.boolean().optional(),
   bidSize: NullableNumberSchema,
   askSize: NullableNumberSchema,
   markIv: NullableNumberSchema,

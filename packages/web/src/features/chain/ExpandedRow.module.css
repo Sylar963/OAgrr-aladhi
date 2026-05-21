@@ -249,6 +249,23 @@
   white-space: nowrap;
 }
 
+/* Inverse-contract badge — appears next to the venue label when premium is
+   quoted in the base coin (BTC/ETH) rather than USD/USDC/USDT. Distinct from
+   linear venues so users can tell the unit of the displayed value at a glance. */
+.inverseTag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: rgba(251, 191, 36, 0.12);
+  color: #FBBF24;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
 /* ── Empty state ─────────────────────────────────────────────────────────── */
 
 .noQuotes {

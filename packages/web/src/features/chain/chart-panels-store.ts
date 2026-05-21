@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { VenueId, InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 
+export type ChartMode = 'price' | 'attribution';
+
 export interface ChartPanel {
   id: string;
   venue: VenueId;
@@ -17,6 +19,7 @@ export interface ChartPanel {
   range: InstrumentCandleRange;
   interval: InstrumentCandleInterval;
   overlays: { mark: boolean; ma9: boolean; ma20: boolean };
+  chartMode: ChartMode;
   minimized: boolean;
   zSeq: number;
 }
@@ -72,6 +75,7 @@ export const useChartPanelsStore = create<ChartPanelsState>()(
           range: '7d',
           interval: '1h',
           overlays: { ...DEFAULT_OVERLAYS },
+          chartMode: 'price',
           minimized: false,
           zSeq: z,
         };
@@ -100,6 +104,19 @@ export const useChartPanelsStore = create<ChartPanelsState>()(
           })),
         }),
     }),
-    { name: 'chartPanels.v1' },
+    {
+      name: 'chartPanels.v2',
+      version: 2,
+      migrate: (persisted: unknown) => {
+        if (persisted && typeof persisted === 'object' && 'panels' in persisted) {
+          const state = persisted as { panels: ChartPanel[]; zCounter: number };
+          return {
+            ...state,
+            panels: state.panels.map((p) => ({ ...p, chartMode: p.chartMode ?? 'price' })),
+          };
+        }
+        return persisted as Partial<ChartPanelsState>;
+      },
+    },
   ),
 );

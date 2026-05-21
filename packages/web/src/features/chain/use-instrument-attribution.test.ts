@@ -62,3 +62,20 @@ describe('alignBarsForAttribution', () => {
     expect(bars[0]!.ts).toBe(1_700_000_000_000);
   });
 });
+
+describe('inverse-venue unit conversion', () => {
+  it('multiplying aligned mark by forward gives USD price equivalent', () => {
+    // For an inverse venue: mark in BTC, forward in USD. The standard
+    // identity for crypto inverse options is: priceUsd = priceBase * forward.
+    const aligned = alignBarsForAttribution(
+      [{ ts: 1_700_000_000_000, c: 0.05 }], // 0.05 BTC mark
+      [{
+        timestamp: 1_700_000_000_000,
+        open: 69_900, high: 70_010, low: 69_900, close: 70_000,
+      }],
+    );
+    expect(aligned).toHaveLength(1);
+    const usd = aligned[0]!.mark * aligned[0]!.forward;
+    expect(usd).toBeCloseTo(3500, 2); // 0.05 * 70000 = 3500
+  });
+});

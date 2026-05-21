@@ -115,6 +115,8 @@ export interface UseInstrumentAttributionResult {
   unsupportedUnderlying: boolean;
   /** True when the option candle response was empty (e.g. illiquid strike). */
   insufficientData: boolean;
+  /** USD for inverse venues (after conversion) or the raw priceCurrency for linear. */
+  displayCurrency: string;
 }
 
 export function useInstrumentAttribution(
@@ -158,8 +160,16 @@ export function useInstrumentAttribution(
   const computed = useMemo<AttributionResult | null>(() => {
     if (unsupportedUnderlying) return null;
     if (!optionQuery.data || !forwardQuery.data || expirationMs == null) return null;
-    const bars = alignBarsForAttribution(optionQuery.data.markLine, forwardQuery.data.candles);
-    if (bars.length < 2) return null;
+    const aligned = alignBarsForAttribution(optionQuery.data.markLine, forwardQuery.data.candles);
+    if (aligned.length < 2) return null;
+    // Inverse venues quote the mark in BASE (BTC/ETH); forward is always USD.
+    // Convert to USD so Black-76 sees consistent units. Linear venues already
+    // quote in USD-equivalent, so the multiplication doesn't apply.
+    const priceCurrency = optionQuery.data.priceCurrency;
+    const isInverse = priceCurrency === 'BTC' || priceCurrency === 'ETH';
+    const bars = isInverse
+      ? aligned.map((b) => ({ ts: b.ts, mark: b.mark * b.forward, forward: b.forward }))
+      : aligned;
     return attributePnL({ bars, strike, right, expirationMs });
   }, [unsupportedUnderlying, optionQuery.data, forwardQuery.data, expirationMs, strike, right]);
 
@@ -168,5 +178,16 @@ export function useInstrumentAttribution(
   const insufficientData =
     !isLoading && !error && computed == null && !unsupportedUnderlying;
 
-  return { result: computed, isLoading, error, unsupportedUnderlying, insufficientData };
+  const rawCurrency = optionQuery.data?.priceCurrency ?? 'USD';
+  const isInverse = rawCurrency === 'BTC' || rawCurrency === 'ETH';
+  const displayCurrency = isInverse ? 'USD' : rawCurrency;
+
+  return {
+    result: computed,
+    isLoading,
+    error,
+    unsupportedUnderlying,
+    insufficientData,
+    displayCurrency,
+  };
 }

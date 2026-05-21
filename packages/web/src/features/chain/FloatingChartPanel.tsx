@@ -271,8 +271,8 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
                 )}
                 {attribution.result && (
                   <>
-                    <AttributionSummary summary={attribution.result.summary} priceCurrency={priceCurrency ?? 'USD'} />
-                    <InstrumentAttributionChart result={attribution.result} priceCurrency={priceCurrency ?? 'USD'} />
+                    <AttributionSummary summary={attribution.result.summary} priceCurrency={attribution.displayCurrency ?? 'USD'} />
+                    <InstrumentAttributionChart result={attribution.result} priceCurrency={attribution.displayCurrency ?? 'USD'} />
                   </>
                 )}
               </>
@@ -411,8 +411,8 @@ export function MobileChartModal({ panel }: { panel: ChartPanel }) {
             )}
             {attribution.result && (
               <>
-                <AttributionSummary summary={attribution.result.summary} priceCurrency={priceCurrency ?? 'USD'} />
-                <InstrumentAttributionChart result={attribution.result} priceCurrency={priceCurrency ?? 'USD'} />
+                <AttributionSummary summary={attribution.result.summary} priceCurrency={attribution.displayCurrency ?? 'USD'} />
+                <InstrumentAttributionChart result={attribution.result} priceCurrency={attribution.displayCurrency ?? 'USD'} />
               </>
             )}
           </>

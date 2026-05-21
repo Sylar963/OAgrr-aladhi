@@ -1,5 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
+
+const spotHealth = {
+  connected: true,
+  symbols: [],
+  lastSuccessAt: Date.now(),
+  lastStatusAt: Date.now(),
+  errors: 0,
+};
+
+const flowHealthRows: Array<{
+  venue: string;
+  underlying: string;
+  connected: boolean;
+  lastMessageAt: number | null;
+}> = [];
+
+vi.mock('../app.js', () => ({
+  SERVER_BOOT_TIME: Date.now(),
+  SERVER_VERSION: 'test',
+  isReady: () => true,
+  isShuttingDown: () => false,
+}));
 
 vi.mock('../services.js', () => ({
   getIvHistoryStorageStats: vi.fn(() =>
@@ -16,6 +38,20 @@ vi.mock('../services.js', () => ({
   isIvHistoryReady: vi.fn(() => true),
   isNewsReady: vi.fn(() => true),
   isSpotReady: vi.fn(() => true),
+  spotService: { getHealth: () => spotHealth },
+  flowService: {
+    getHealth: () =>
+      flowHealthRows.map((row) => ({
+        ...row,
+        lastTradeAt: row.lastMessageAt,
+        lastStatusAt: row.lastMessageAt,
+        reconnects: 0,
+        errors: 0,
+        seedTrades: 0,
+        bufferedTrades: 0,
+      })),
+  },
+  blockFlowService: { getHealth: () => [] },
 }));
 
 import * as services from '../services.js';
@@ -27,6 +63,14 @@ async function buildApp() {
   await app.ready();
   return app;
 }
+
+beforeEach(() => {
+  spotHealth.connected = true;
+  spotHealth.lastSuccessAt = Date.now();
+  spotHealth.lastStatusAt = Date.now();
+  spotHealth.errors = 0;
+  flowHealthRows.length = 0;
+});
 
 describe('GET /health', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -58,8 +102,7 @@ describe('GET /health', () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.runtime).toMatchObject({
+    expect(res.json().runtime).toMatchObject({
       uptimeSec: expect.any(Number),
       memory: {
         rssMb: expect.any(Number),
@@ -79,6 +122,28 @@ describe('GET /health', () => {
     });
   });
 
+  it('includes a per-venue feed health summary', async () => {
+    flowHealthRows.push({
+      venue: 'deribit',
+      underlying: 'BTC',
+      connected: true,
+      lastMessageAt: Date.now() - 1_000,
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const feeds = res.json().feeds;
+    expect(feeds.summary).toMatchObject({
+      totalVenues: expect.any(Number),
+      connectedVenues: expect.any(Number),
+      lastAnyMessageAgeMs: expect.any(Number),
+    });
+    expect(feeds.venues.find((v: { venue: string }) => v.venue === 'deribit')).toMatchObject({
+      sources: ['flow'],
+      connected: true,
+    });
+  });
+
   it('surfaces IV history storage warnings', async () => {
     vi.mocked(services.getIvHistoryStorageStats).mockResolvedValueOnce({
       enabled: true,
@@ -94,5 +159,53 @@ describe('GET /health', () => {
       bytes: 11 * 1024 * 1024 * 1024,
       warning: true,
     });
+  });
+});
+
+describe('GET /ready', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('returns 200 when bootstrap is complete and feeds are fresh', async () => {
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('ok');
+  });
+
+  it('returns 503 with status=stale when all feeds are silent past the threshold', async () => {
+    spotHealth.lastSuccessAt = Date.now() - 5 * 60 * 1000;
+    flowHealthRows.push({
+      venue: 'deribit',
+      underlying: 'BTC',
+      connected: true,
+      lastMessageAt: Date.now() - 5 * 60 * 1000,
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(503);
+    const body = res.json();
+    expect(body.status).toBe('stale');
+    expect(body.lastAnyMessageAgeMs).toBeGreaterThan(90_000);
+  });
+
+  it('returns 503 with status=initializing while bootstrap is incomplete', async () => {
+    // currentReadinessStatus + isTrafficReady both read isSpotReady, so a
+    // single-use mock would flip back mid-handler. Use the persistent override
+    // and restore explicitly.
+    vi.mocked(services.isSpotReady).mockReturnValue(false);
+    try {
+      const res = await app.inject({ method: 'GET', url: '/ready' });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().status).toBe('initializing');
+    } finally {
+      vi.mocked(services.isSpotReady).mockReturnValue(true);
+    }
   });
 });

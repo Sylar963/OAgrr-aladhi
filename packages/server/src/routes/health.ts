@@ -4,6 +4,13 @@ import { SERVER_BOOT_TIME, SERVER_VERSION } from '../app.js';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
 import { getRuntimeMetricsSnapshot } from '../runtime-metrics.js';
 import {
+  getFeedHealthSnapshot,
+  getLivenessMaxMs,
+  isFeedLivenessStale,
+} from '../feed-health.js';
+import {
+  blockFlowService,
+  flowService,
   getIvHistoryStorageStats,
   isBlockFlowReady,
   isDvolReady,
@@ -11,6 +18,7 @@ import {
   isIvHistoryReady,
   isNewsReady,
   isSpotReady,
+  spotService,
 } from '../services.js';
 
 export async function healthRoute(app: FastifyInstance) {
@@ -29,6 +37,11 @@ export async function healthRoute(app: FastifyInstance) {
         ivHistoryStorage,
       },
       runtime: getRuntimeMetricsSnapshot(),
+      feeds: getFeedHealthSnapshot({
+        spot: spotService,
+        flow: flowService,
+        blockFlow: blockFlowService,
+      }),
       bootTime: SERVER_BOOT_TIME,
       version: SERVER_VERSION,
       ts: Date.now(),
@@ -38,6 +51,21 @@ export async function healthRoute(app: FastifyInstance) {
   app.get('/ready', async (_req, reply) => {
     if (!isTrafficReady()) {
       return reply.status(503).send({ status: currentReadinessStatus() });
+    }
+    // Post-bootstrap liveness check: bootstrap succeeded once, but every feed
+    // has gone silent — process is alive but useless. Returning 503 here lets
+    // an external watchdog (systemd / Caddy / cron) recycle the process,
+    // replacing the blunt 2h restart cron.
+    const feeds = getFeedHealthSnapshot({
+      spot: spotService,
+      flow: flowService,
+      blockFlow: blockFlowService,
+    });
+    if (isFeedLivenessStale(feeds, getLivenessMaxMs())) {
+      return reply.status(503).send({
+        status: 'stale',
+        lastAnyMessageAgeMs: feeds.summary.lastAnyMessageAgeMs,
+      });
     }
     return { status: 'ok' };
   });

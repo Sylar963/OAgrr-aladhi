@@ -5,7 +5,7 @@ import { feedLogger } from '../utils/logger.js';
 const log = feedLogger('spot-candles');
 
 export type SpotCandleCurrency = 'BTC' | 'ETH';
-export type SpotCandleResolutionSec = 60 | 300 | 1800 | 3600 | 14400 | 86400;
+export type SpotCandleResolutionSec = 60 | 300 | 900 | 1800 | 3600 | 14400 | 86400;
 
 export interface SpotCandle {
   timestamp: number;
@@ -31,6 +31,7 @@ const ResponseSchema = z.object({
 const RESOLUTION_TO_DERIBIT: Record<SpotCandleResolutionSec, string> = {
   60: '1',
   300: '5',
+  900: '15',
   1800: '30',
   3600: '60',
   14400: '240',

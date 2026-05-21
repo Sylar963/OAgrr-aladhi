@@ -4,7 +4,7 @@ import { isSpotCandlesReady, spotCandleService } from '../services.js';
 
 const SUPPORTED_CURRENCIES: readonly SpotCandleCurrency[] = ['BTC', 'ETH'];
 const SUPPORTED_RESOLUTIONS: readonly SpotCandleResolutionSec[] = [
-  60, 300, 1800, 3600, 14400, 86400,
+  60, 300, 900, 1800, 3600, 14400, 86400,
 ];
 const MAX_BUCKETS = 3000;
 

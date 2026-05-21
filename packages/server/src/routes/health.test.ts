@@ -54,6 +54,31 @@ describe('GET /health', () => {
     });
   });
 
+  it('includes a runtime metrics snapshot', async () => {
+    const res = await app.inject({ method: 'GET', url: '/health' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.runtime).toMatchObject({
+      uptimeSec: expect.any(Number),
+      memory: {
+        rssMb: expect.any(Number),
+        heapUsedMb: expect.any(Number),
+        heapTotalMb: expect.any(Number),
+      },
+      eventLoopLag: {
+        p50Ms: expect.any(Number),
+        p99Ms: expect.any(Number),
+        maxMs: expect.any(Number),
+        windowSec: expect.any(Number),
+      },
+      resources: {
+        total: expect.any(Number),
+        byType: expect.any(Object),
+      },
+    });
+  });
+
   it('surfaces IV history storage warnings', async () => {
     vi.mocked(services.getIvHistoryStorageStats).mockResolvedValueOnce({
       enabled: true,

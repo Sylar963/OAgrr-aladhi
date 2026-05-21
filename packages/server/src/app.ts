@@ -25,6 +25,7 @@ import {
 } from './services.js';
 import { paperTradingStore } from './trading-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
+import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
@@ -119,6 +120,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   registerRoutes(app);
+  startRuntimeMetrics(app.log);
 
   // Tracked so onClose can await any in-flight bootstrap before disposing —
   // otherwise SIGTERM arriving mid-bootstrap would start runtimes that nobody
@@ -145,6 +147,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await ivHistoryStore.dispose();
     await tradeStore.dispose();
     await paperTradingStore.dispose();
+    disposeRuntimeMetrics();
   });
 
   // Serve the built web SPA in production (single-service deploy)

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getRegisteredVenues } from '@oggregator/core';
 import { SERVER_BOOT_TIME, SERVER_VERSION } from '../app.js';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
+import { getRuntimeMetricsSnapshot } from '../runtime-metrics.js';
 import {
   getIvHistoryStorageStats,
   isBlockFlowReady,
@@ -27,6 +28,7 @@ export async function healthRoute(app: FastifyInstance) {
         news: isNewsReady(),
         ivHistoryStorage,
       },
+      runtime: getRuntimeMetricsSnapshot(),
       bootTime: SERVER_BOOT_TIME,
       version: SERVER_VERSION,
       ts: Date.now(),

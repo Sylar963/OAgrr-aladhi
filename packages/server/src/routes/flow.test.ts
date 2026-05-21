@@ -340,4 +340,48 @@ describe('GET /flow/instrument-trades', () => {
       }),
     );
   });
+
+  it('passes Gate.io trades through (regression: toVenueId allow-list)', async () => {
+    const services = await import('../services.js');
+    vi.mocked(services.tradeStore.loadHistory).mockResolvedValueOnce([
+      {
+        tradeUid: 'gateio:BTC_USDT-20260522-78000-C:42',
+        mode: 'live',
+        venue: 'gateio',
+        underlying: 'BTC',
+        instrumentName: 'BTC_USDT-20260522-78000-C',
+        tradeTs: new Date('2026-05-21T14:42:54Z'),
+        ingestedAt: new Date('2026-05-21T14:42:55Z'),
+        direction: 'buy',
+        contracts: 1,
+        price: 62,
+        premiumUsd: 62,
+        notionalUsd: 76939.8,
+        referencePriceUsd: 76939.8,
+        expiry: '2026-05-22',
+        strike: 78000,
+        optionType: 'call',
+        iv: null,
+        markPrice: null,
+        isBlock: false,
+        strategyLabel: null,
+        legs: null,
+        raw: {},
+      },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/flow/instrument-trades?underlying=BTC&venue=gateio&instrument=BTC_USDT-20260522-78000-C',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.available).toBe(true);
+    expect(body.trades).toHaveLength(1);
+    expect(body.trades[0]).toMatchObject({
+      venue: 'gateio',
+      instrument: 'BTC_USDT-20260522-78000-C',
+    });
+  });
 });

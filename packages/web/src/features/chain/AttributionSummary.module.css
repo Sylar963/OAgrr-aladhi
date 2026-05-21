@@ -3,16 +3,16 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #c9d1d9;
+  color: var(--text-secondary);
   border-bottom: 1px solid #1A1A1A;
   background: rgba(255, 255, 255, 0.02);
 }
 
 .total {
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   margin-right: auto;
 }
 

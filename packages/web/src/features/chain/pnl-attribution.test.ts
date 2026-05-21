@@ -69,8 +69,13 @@ describe('attributePnL', () => {
     expect(result.points).toHaveLength(4);
   });
 
-  it('a flat market produces ~zero PnL and ~zero attribution', () => {
-    // All bars identical → dS=0, dIV=0, theta_PL is the only nonzero term.
+  it('a flat market produces ~zero total PnL (theta and vega cancel)', () => {
+    // Constant mark + constant forward across bars. dS=0 → deltaPL=0, gammaPL=0.
+    // Time still ticks down, so to keep the mark flat the solved IV must drift
+    // up slightly each bar. The resulting positive vegaPL exactly cancels the
+    // negative thetaPL — total realized PL is zero. That cancellation IS the
+    // genuine "flat market" property; the individual greeks are not separately
+    // zero.
     const bars = makeFlatBars(10, { mark: 2000, forward: 70_000 });
     const result = attributePnL({
       bars,
@@ -81,9 +86,9 @@ describe('attributePnL', () => {
     for (const p of result.points) {
       expect(Math.abs(p.deltaPL)).toBeLessThan(1e-6);
       expect(Math.abs(p.gammaPL)).toBeLessThan(1e-6);
-      expect(Math.abs(p.vegaPL)).toBeLessThan(1e-6);
-      // Theta drift only — small per minute but nonzero
       expect(p.thetaPL).toBeLessThan(0);
+      expect(p.vegaPL).toBeGreaterThan(0);
+      expect(p.totalPL).toBeCloseTo(0, 6);
     }
   });
 

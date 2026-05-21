@@ -12,29 +12,29 @@ import {
 describe('Black-76 helpers', () => {
   it('ATM call delta is ≈0.5 (no drift, r=0)', () => {
     // F = K, sigma = 0.6, T = 7 days
-    const d = bs76Delta(70_000, 70_000, 0.6, 7 / 365.25, 'call');
+    const d = bs76Delta(70_000, 70_000, 0.6, 7 / 365, 'call');
     expect(d).toBeGreaterThan(0.5);
     expect(d).toBeLessThan(0.55);
   });
 
   it('put delta is call delta minus one', () => {
-    const c = bs76Delta(70_000, 65_000, 0.6, 7 / 365.25, 'call');
-    const p = bs76Delta(70_000, 65_000, 0.6, 7 / 365.25, 'put');
+    const c = bs76Delta(70_000, 65_000, 0.6, 7 / 365, 'call');
+    const p = bs76Delta(70_000, 65_000, 0.6, 7 / 365, 'put');
     expect(c - p).toBeCloseTo(1, 6);
   });
 
   it('gamma is positive and symmetric in call/put (Black-76)', () => {
-    const g = bs76Gamma(70_000, 70_000, 0.6, 7 / 365.25);
+    const g = bs76Gamma(70_000, 70_000, 0.6, 7 / 365);
     expect(g).toBeGreaterThan(0);
   });
 
   it('vega is positive', () => {
-    const v = bs76Vega(70_000, 70_000, 0.6, 7 / 365.25);
+    const v = bs76Vega(70_000, 70_000, 0.6, 7 / 365);
     expect(v).toBeGreaterThan(0);
   });
 
   it('theta per day is negative for long options (r=0)', () => {
-    const t = bs76ThetaPerDay(70_000, 70_000, 0.6, 7 / 365.25);
+    const t = bs76ThetaPerDay(70_000, 70_000, 0.6, 7 / 365);
     expect(t).toBeLessThan(0);
   });
 
@@ -42,7 +42,7 @@ describe('Black-76 helpers', () => {
     const f = 70_000;
     const k = 67_000;
     const sigma = 0.55;
-    const tYears = 14 / 365.25;
+    const tYears = 14 / 365;
     const price = bs76Price(f, k, sigma, tYears, 'call');
     const solved = solveIvBs76({ price, forward: f, strike: k, tYears, right: 'call', seed: 0.5 });
     expect(solved).not.toBeNull();
@@ -52,7 +52,7 @@ describe('Black-76 helpers', () => {
   it('solveIvBs76 returns null for prices outside no-arbitrage bounds', () => {
     // intrinsic for a 67k call when F=70k is 3000; price below that is invalid.
     expect(
-      solveIvBs76({ price: 100, forward: 70_000, strike: 67_000, tYears: 14 / 365.25, right: 'call', seed: 0.5 }),
+      solveIvBs76({ price: 100, forward: 70_000, strike: 67_000, tYears: 14 / 365, right: 'call', seed: 0.5 }),
     ).toBeNull();
   });
 });

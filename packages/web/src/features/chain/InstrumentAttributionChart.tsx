@@ -9,6 +9,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { AttributionPoint, AttributionResult } from './pnl-attribution.js';
+import { pickPriceFormat } from './chart-precision.js';
 import styles from './InstrumentAttributionChart.module.css';
 
 interface Props {
@@ -102,7 +103,9 @@ export default function InstrumentAttributionChart({ result, priceCurrency }: Pr
   // Pre-compute the cumulative series whenever the result changes.
   const cumulative = useMemo(() => buildCumulative(result.points), [result.points]);
 
-  // Push data into each series.
+  // Push data into each series + adapt y-axis precision. Sub-$1 cumulative
+  // PL would otherwise round to a 2-decimal grid and collapse small moves
+  // onto a single horizontal line (Deribit BTC inverse, untraded altcoins).
   useEffect(() => {
     totalRef.current?.setData(cumulative.total);
     deltaRef.current?.setData(cumulative.delta);
@@ -110,6 +113,25 @@ export default function InstrumentAttributionChart({ result, priceCurrency }: Pr
     thetaRef.current?.setData(cumulative.theta);
     vegaRef.current?.setData(cumulative.vega);
     residualRef.current?.setData(cumulative.residual);
+
+    let maxAbs = 0;
+    for (const arr of [
+      cumulative.total, cumulative.delta, cumulative.gamma,
+      cumulative.theta, cumulative.vega, cumulative.residual,
+    ]) {
+      for (const { value } of arr) {
+        const a = Math.abs(value);
+        if (a > maxAbs) maxAbs = a;
+      }
+    }
+    const { precision, minMove } = pickPriceFormat(maxAbs);
+    const priceFormat = { type: 'price' as const, precision, minMove };
+    totalRef.current?.applyOptions({ priceFormat });
+    deltaRef.current?.applyOptions({ priceFormat });
+    gammaRef.current?.applyOptions({ priceFormat });
+    thetaRef.current?.applyOptions({ priceFormat });
+    vegaRef.current?.applyOptions({ priceFormat });
+    residualRef.current?.applyOptions({ priceFormat });
   }, [cumulative]);
 
   // Hover handler — map crosshair time back to the matching AttributionPoint.

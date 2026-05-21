@@ -9,6 +9,7 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { registerRoutes } from './routes/index.js';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
+import { warmupChainRuntimes, disposeChainWarmup } from './chain-warmup.js';
 import {
   blockFlowService,
   bootstrapServices,
@@ -142,6 +143,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     indexPriceService.dispose();
     ivHistoryService.dispose();
     disposeServiceStores();
+    await disposeChainWarmup();
     await disposePortfolioServices();
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
@@ -197,6 +199,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       await bootstrapServices(app.log);
     } catch (err: unknown) {
       app.log.warn({ err: String(err) }, 'services bootstrap failed');
+    }
+    if (shuttingDown) return;
+    try {
+      await warmupChainRuntimes(app.log);
+    } catch (err: unknown) {
+      app.log.warn({ err: String(err) }, 'chain warmup failed');
     }
   });
 

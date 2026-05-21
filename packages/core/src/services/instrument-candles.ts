@@ -934,6 +934,17 @@ export class InstrumentCandleService {
     const merged = mergeTradeAndMark(trade, mark);
 
     // For venues whose REST trade endpoint fills non-trade buckets with
+    // mark-derived OHLC (see TRADE_CLOSE_IS_MARK above), the merge's third
+    // branch labels vol=0 bars synthetic=false because no separate mark
+    // series was provided. Re-flag those bars synthetic=true so the chart's
+    // gray-styling kicks in and they aren't confused with real trade bars.
+    if (TRADE_CLOSE_IS_MARK.has(venue)) {
+      for (const c of merged.candles) {
+        if (c.vol === 0) c.synthetic = true;
+      }
+    }
+
+    // For venues whose REST trade endpoint fills non-trade buckets with
     // mark-derived OHLC (see TRADE_CLOSE_IS_MARK above), synthesize
     // markLine entries from candle closes for any bucket the live
     // MarkHistoryBuffer didn't already cover. Buffer-derived marks

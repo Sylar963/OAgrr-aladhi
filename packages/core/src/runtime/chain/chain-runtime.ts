@@ -245,27 +245,46 @@ export class ChainRuntime {
 
     this.activeRequest = { ...this.request, venues: liveVenues };
 
-    for (const venueId of liveVenues) {
-      if (this.disposed) return;
-      try {
-        const handle = await this.coordinator.acquire(
+    // Acquire all venues concurrently — each call may do a WS subscribe
+    // round-trip, and serializing them stacks the cold-start latency. The
+    // coordinator's per-venue operation queue still serializes against any
+    // single venue (different runtimes acquiring the same venue), so this
+    // does not slam an upstream socket.
+    const acquired = await Promise.allSettled(
+      liveVenues.map((venueId) =>
+        this.coordinator.acquire(
           venueId,
           { underlying: this.request.underlying, expiry: this.request.expiry },
           this.venueListener,
-        );
-        if (this.disposed) {
-          await handle.release();
-          return;
-        }
-        this.handles.push(handle);
-      } catch (error: unknown) {
-        const reason = error instanceof Error ? error.message : String(error);
+        ),
+      ),
+    );
+
+    // Release anything that resolved after dispose() — same guarantee the
+    // sequential version provided.
+    if (this.disposed) {
+      await Promise.allSettled(
+        acquired
+          .filter(
+            (r): r is PromiseFulfilledResult<VenueSubscriptionHandle> =>
+              r.status === 'fulfilled',
+          )
+          .map(async (r) => r.value.release()),
+      );
+      return;
+    }
+
+    acquired.forEach((result, idx) => {
+      const venueId = liveVenues[idx]!;
+      if (result.status === 'fulfilled') {
+        this.handles.push(result.value);
+      } else {
+        const reason =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
         this.failedVenues.push({ venue: venueId, reason });
         this.log.warn({ venue: venueId, err: reason }, 'venue subscribe failed');
       }
-    }
-
-    if (this.disposed) return;
+    });
 
     await this.buildSnapshot();
     this.pushTimer = setInterval(() => {

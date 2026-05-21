@@ -100,6 +100,46 @@ type ChainRuntimeInternals = {
 };
 
 describe('ChainRuntime', () => {
+  it('acquires all venues in parallel during initialize', async () => {
+    getRegisteredVenuesMock.mockReturnValue(['okx', 'deribit', 'binance']);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const gates = [deferred<void>(), deferred<void>(), deferred<void>()];
+    const acquireCalls: string[] = [];
+
+    const coordinator = {
+      acquire: vi.fn(async (venueId: string) => {
+        acquireCalls.push(venueId);
+        inFlight += 1;
+        if (inFlight > maxInFlight) maxInFlight = inFlight;
+        // Block until released — the test asserts on the in-flight count
+        // observed once every acquire has been dispatched.
+        await gates[acquireCalls.length - 1]!.promise;
+        inFlight -= 1;
+        return { release: async () => {} };
+      }),
+    };
+
+    const runtime = new ChainRuntime(
+      'test',
+      { underlying: 'BTC', expiry: '2026-03-27', venues: ['okx', 'deribit', 'binance'] },
+      { coordinator: coordinator as never },
+    );
+
+    const readyPromise = runtime.ready();
+    // Yield enough microtasks for all three acquire calls to dispatch.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(acquireCalls).toHaveLength(3);
+    expect(maxInFlight).toBe(3);
+
+    gates.forEach((g) => g.resolve());
+    await readyPromise;
+  });
+
   it('releases handles that resolve after runtime disposal', async () => {
     const acquireGate = deferred<{ release: () => Promise<void> }>();
     const release = vi.fn(async () => {});

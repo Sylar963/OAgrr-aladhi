@@ -343,6 +343,50 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     expect(res.markLine.map((m) => m.c)).toEqual([100, 105, 110]);
   });
 
+  it('flags vol=0 bars from TRADE_CLOSE_IS_MARK venues as synthetic', async () => {
+    // Binance/Deribit/Derive/Coincall fill non-trade buckets with mark-OHLC in
+    // their trade endpoint. Those bars are mark-derived, not real trades, so
+    // they must carry synthetic=true — the chart styles synthetic candles in
+    // gray (vs green/red) and renders them visibly even when o=h=l=c collapses
+    // the body to zero height. Without the flag, flat candles draw as 0-pixel
+    // invisible defaults and the user thinks data is missing.
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          [BASE_TS - 2 * MIN, '100', '100', '100', '100', '0', 0, '0', 0, '0', '0', '0'],
+          [BASE_TS - MIN, '105', '105', '105', '105', '0', 0, '0', 0, '0', '0', '0'],
+          [BASE_TS, '108', '112', '107', '110', '5', 0, '550', 0, '0', '0', '0'],
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const res = await svc.getCandles('binance', 'BTC-260520-100000-C', '1m', '1d');
+
+    expect(res.candles.map((c) => c.synthetic)).toEqual([true, true, false]);
+  });
+
+  it('leaves vol=0 bars unflagged on venues with a separate mark series', async () => {
+    // Gate.io public /options/candlesticks is trade-only — vol=0 bars there
+    // are NOT mark-derived (verified), so the synthetic flag must stay false.
+    // Same gate prevents over-flagging on okx/bybit/thalex where the merge
+    // already routes vol=0 buckets through the mark branch correctly.
+    vi.stubEnv('GATEIO_API_KEY', '');
+    vi.stubEnv('GATEIO_API_SECRET', '');
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { t: Math.floor(BASE_TS / 1000), o: '5.84', h: '5.85', l: '5.83', c: '5.84', v: 1 },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const res = await svc.getCandles('gateio', 'HYPE_USDT-20260522-40-C', '1m', '1d');
+
+    expect(res.candles.some((c) => c.synthetic)).toBe(false);
+  });
+
   it('does not synthesize markLine for Gate.io (public candlesticks endpoint is trade-only, not mark-filled)', async () => {
     vi.stubEnv('GATEIO_API_KEY', '');
     vi.stubEnv('GATEIO_API_SECRET', '');

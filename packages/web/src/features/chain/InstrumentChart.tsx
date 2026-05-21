@@ -65,7 +65,11 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
       downColor: '#CB3855',
       wickUpColor: '#00E997',
       wickDownColor: '#CB3855',
-      borderVisible: false,
+      // Borders draw so synthetic (mark-derived) bars with flat o=h=l=c bodies
+      // still show a 1px horizontal line at the mark level. Real candle borders
+      // pick up borderUpColor/borderDownColor from the body color via the
+      // per-bar overrides below.
+      borderVisible: true,
       priceLineVisible: false,
     });
     markSeriesRef.current = chart.addSeries(LineSeries, {
@@ -107,22 +111,41 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
     chartRef.current?.applyOptions({ timeScale: { visible: !compact } });
   }, [compact]);
 
+  // Adaptive y-axis precision — sub-$1 option premiums and Deribit inverse
+  // BTC/ETH quotes (~0.03 BTC) would otherwise round to the default 2-decimal
+  // grid and collapse every move into the same horizontal line. Resolved
+  // before the candle effect because the synthetic-bar epsilon depends on it.
+  const priceFormat = useMemo(() => {
+    const highs = candles.map((c) => c.h);
+    const marks = markLine.map((m) => m.c);
+    return priceFormatFromSeries(highs, marks);
+  }, [candles, markLine]);
+
   useEffect(() => {
     const series = candleSeriesRef.current;
     if (!series) return;
+    const epsilon = priceFormat.minMove;
     series.setData(
-      candles.map((c) => ({
-        time: (c.ts / 1000) as Time,
-        open: c.o,
-        high: c.h,
-        low: c.l,
-        close: c.c,
-        ...(c.synthetic
-          ? { color: '#6b7280', wickColor: '#6b7280' }
-          : {}),
-      })),
+      candles.map((c) => {
+        // Synthetic bars (mark-derived, no trade activity) are usually flat
+        // o=h=l=c, which renders as a 0-pixel-tall invisible candle. Nudge
+        // h/l by one minMove so the gray wick draws as a visible 1-2px tick
+        // at the mark price. Borders (enabled at the series level) ensure
+        // the body's top/bottom edges still render even when height=0.
+        const flat = c.synthetic && c.o === c.h && c.h === c.l && c.l === c.c;
+        return {
+          time: (c.ts / 1000) as Time,
+          open: c.o,
+          high: flat ? c.c + epsilon : c.h,
+          low: flat ? c.c - epsilon : c.l,
+          close: c.c,
+          ...(c.synthetic
+            ? { color: '#6b7280', wickColor: '#6b7280', borderColor: '#6b7280' }
+            : {}),
+        };
+      }),
     );
-  }, [candles]);
+  }, [candles, priceFormat.minMove]);
 
   useEffect(() => {
     const series = markSeriesRef.current;
@@ -134,15 +157,6 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
   const closes = useMemo(() => candles.map((c) => c.c), [candles]);
   const ma9 = useMemo(() => sma(closes, 9), [closes]);
   const ma20 = useMemo(() => sma(closes, 20), [closes]);
-
-  // Adaptive y-axis precision — sub-$1 option premiums and Deribit inverse
-  // BTC/ETH quotes (~0.03 BTC) would otherwise round to the default 2-decimal
-  // grid and collapse every move into the same horizontal line.
-  const priceFormat = useMemo(() => {
-    const highs = candles.map((c) => c.h);
-    const marks = markLine.map((m) => m.c);
-    return priceFormatFromSeries(highs, marks);
-  }, [candles, markLine]);
 
   useEffect(() => {
     const fmt = {

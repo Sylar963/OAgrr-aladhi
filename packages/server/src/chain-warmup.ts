@@ -2,7 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { getAdapter, getRegisteredVenues, type VenueId } from '@oggregator/core';
 import { chainEngines } from './chain-engines.js';
 
-const WARMUP_UNDERLYINGS = ['BTC', 'ETH'] as const;
+const WARMUP_UNDERLYINGS = ['BTC', 'ETH', 'BTC_USDC', 'ETH_USDC', 'SOL_USDC'] as const;
 const WARMUP_EXPIRY_COUNT = 4;
 
 // Hold pre-warm handles for the lifetime of the process so the runtimes stay

@@ -124,3 +124,28 @@
   color: #e6e6e6;
   border-color: #50D2C1;
 }
+.modes {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 10px;
+  padding: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #1F2937;
+}
+
+.modes button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.modes button[data-active] {
+  background: rgba(96, 165, 250, 0.18);
+  color: var(--text-primary);
+}

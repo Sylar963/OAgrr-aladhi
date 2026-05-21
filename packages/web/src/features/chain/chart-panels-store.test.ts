@@ -78,4 +78,23 @@ describe('chart-panels-store', () => {
     expect(p.x).toBeLessThanOrEqual(1280 - p.w);
     expect(p.y).toBeLessThanOrEqual(720 - p.h);
   });
+
+  it('openPanel defaults chartMode to "price"', () => {
+    const s = useChartPanelsStore.getState();
+    s.openPanel(samplePanel);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const p = useChartPanelsStore.getState().panels[0]!;
+    expect(p.chartMode).toBe('price');
+  });
+
+  it('updatePanel can switch chartMode to attribution', () => {
+    const s = useChartPanelsStore.getState();
+    s.openPanel(samplePanel);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const id = useChartPanelsStore.getState().panels[0]!.id;
+    s.updatePanel(id, { chartMode: 'attribution' });
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const p = useChartPanelsStore.getState().panels[0]!;
+    expect(p.chartMode).toBe('attribution');
+  });
 });

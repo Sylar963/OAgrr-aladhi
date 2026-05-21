@@ -10,6 +10,9 @@ import { useInstrumentCandles, useLiveMidFromChain } from './use-instrument-cand
 import { useCandleCountdown } from './candle-countdown.js';
 import { toVenueSymbol, NotSupportedVenueError, isChartSupportedVenue } from './instrument-symbol.js';
 import InstrumentChart from './InstrumentChart.js';
+import InstrumentAttributionChart from './InstrumentAttributionChart.js';
+import { AttributionSummary } from './AttributionSummary.js';
+import { useInstrumentAttribution } from './use-instrument-attribution.js';
 import styles from './FloatingChartPanel.module.css';
 
 const INTERVALS: InstrumentCandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -79,6 +82,17 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
     interval: panel.interval,
     range: panel.range,
     liveMid,
+  });
+  const attribution = useInstrumentAttribution({
+    venue: panel.venue,
+    symbol: panel.symbol,
+    interval: panel.interval,
+    range: panel.range,
+    underlying: panel.underlying,
+    strike: panel.strike,
+    right: panel.type,
+    expiry: panel.expiry,
+    enabled: panel.chartMode === 'attribution',
   });
   const countdown = useCandleCountdown(panel.interval);
 
@@ -160,6 +174,18 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
       {!panel.minimized && (
         <>
           <div className={styles.toolbar}>
+            <div className={styles.modes}>
+              <button
+                type="button"
+                data-active={panel.chartMode === 'price' || undefined}
+                onClick={() => update(panel.id, { chartMode: 'price' })}
+              >Price</button>
+              <button
+                type="button"
+                data-active={panel.chartMode === 'attribution' || undefined}
+                onClick={() => update(panel.id, { chartMode: 'attribution' })}
+              >Attribution</button>
+            </div>
             <div className={styles.intervals}>
               {INTERVALS.map((i) => (
                 <button
@@ -214,17 +240,42 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
             )}
           </div>
           <div className={styles.body}>
-            {isLoading && <div className={styles.empty}>loading…</div>}
-            {error && <div className={styles.empty}>error — retry</div>}
-            {!isLoading && !error && candles.length === 0 && (
-              <div className={styles.empty}>No historical data for this strike on {VENUES[panel.venue]?.shortLabel ?? panel.venue}</div>
-            )}
-            {!isLoading && !error && candles.length > 0 && (
-              <InstrumentChart
-                candles={candles}
-                markLine={markLine}
-                overlays={panel.overlays}
-              />
+            {panel.chartMode === 'price' ? (
+              <>
+                {isLoading && <div className={styles.empty}>loading…</div>}
+                {error && <div className={styles.empty}>error — retry</div>}
+                {!isLoading && !error && candles.length === 0 && (
+                  <div className={styles.empty}>No historical data for this strike on {VENUES[panel.venue]?.shortLabel ?? panel.venue}</div>
+                )}
+                {!isLoading && !error && candles.length > 0 && (
+                  <InstrumentChart
+                    candles={candles}
+                    markLine={markLine}
+                    overlays={panel.overlays}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                {attribution.unsupportedUnderlying && (
+                  <div className={styles.empty}>Attribution unavailable for {panel.underlying} (BTC / ETH only)</div>
+                )}
+                {!attribution.unsupportedUnderlying && attribution.isLoading && (
+                  <div className={styles.empty}>computing attribution…</div>
+                )}
+                {!attribution.unsupportedUnderlying && attribution.error && (
+                  <div className={styles.empty}>error — retry</div>
+                )}
+                {!attribution.unsupportedUnderlying && attribution.insufficientData && (
+                  <div className={styles.empty}>insufficient option / forward data overlap</div>
+                )}
+                {attribution.result && (
+                  <>
+                    <AttributionSummary summary={attribution.result.summary} priceCurrency={priceCurrency ?? 'USD'} />
+                    <InstrumentAttributionChart result={attribution.result} priceCurrency={priceCurrency ?? 'USD'} />
+                  </>
+                )}
+              </>
             )}
           </div>
           <div className={styles.resize} onPointerDown={startResize} />
@@ -250,6 +301,17 @@ export function MobileChartModal({ panel }: { panel: ChartPanel }) {
     range: panel.range,
     liveMid,
   });
+  const attribution = useInstrumentAttribution({
+    venue: panel.venue,
+    symbol: panel.symbol,
+    interval: panel.interval,
+    range: panel.range,
+    underlying: panel.underlying,
+    strike: panel.strike,
+    right: panel.type,
+    expiry: panel.expiry,
+    enabled: panel.chartMode === 'attribution',
+  });
   const countdown = useCandleCountdown(panel.interval);
 
   return (
@@ -265,6 +327,18 @@ export function MobileChartModal({ panel }: { panel: ChartPanel }) {
         <button type="button" onClick={() => close(panel.id)} aria-label="Close">✕</button>
       </div>
       <div className={styles.toolbar}>
+        <div className={styles.modes}>
+          <button
+            type="button"
+            data-active={panel.chartMode === 'price' || undefined}
+            onClick={() => update(panel.id, { chartMode: 'price' })}
+          >Price</button>
+          <button
+            type="button"
+            data-active={panel.chartMode === 'attribution' || undefined}
+            onClick={() => update(panel.id, { chartMode: 'attribution' })}
+          >Attribution</button>
+        </div>
         <div className={styles.intervals}>
           {INTERVALS.map((i) => (
             <button
@@ -310,13 +384,38 @@ export function MobileChartModal({ panel }: { panel: ChartPanel }) {
         )}
       </div>
       <div className={styles.body}>
-        {isLoading && <div className={styles.empty}>loading…</div>}
-        {error && <div className={styles.empty}>error — retry</div>}
-        {!isLoading && !error && candles.length === 0 && (
-          <div className={styles.empty}>No historical data for this strike on {VENUES[panel.venue]?.shortLabel ?? panel.venue}</div>
-        )}
-        {!isLoading && !error && candles.length > 0 && (
-          <InstrumentChart candles={candles} markLine={markLine} overlays={panel.overlays} />
+        {panel.chartMode === 'price' ? (
+          <>
+            {isLoading && <div className={styles.empty}>loading…</div>}
+            {error && <div className={styles.empty}>error — retry</div>}
+            {!isLoading && !error && candles.length === 0 && (
+              <div className={styles.empty}>No historical data for this strike on {VENUES[panel.venue]?.shortLabel ?? panel.venue}</div>
+            )}
+            {!isLoading && !error && candles.length > 0 && (
+              <InstrumentChart candles={candles} markLine={markLine} overlays={panel.overlays} />
+            )}
+          </>
+        ) : (
+          <>
+            {attribution.unsupportedUnderlying && (
+              <div className={styles.empty}>Attribution unavailable for {panel.underlying} (BTC / ETH only)</div>
+            )}
+            {!attribution.unsupportedUnderlying && attribution.isLoading && (
+              <div className={styles.empty}>computing attribution…</div>
+            )}
+            {!attribution.unsupportedUnderlying && attribution.error && (
+              <div className={styles.empty}>error — retry</div>
+            )}
+            {!attribution.unsupportedUnderlying && attribution.insufficientData && (
+              <div className={styles.empty}>insufficient option / forward data overlap</div>
+            )}
+            {attribution.result && (
+              <>
+                <AttributionSummary summary={attribution.result.summary} priceCurrency={priceCurrency ?? 'USD'} />
+                <InstrumentAttributionChart result={attribution.result} priceCurrency={priceCurrency ?? 'USD'} />
+              </>
+            )}
+          </>
         )}
       </div>
     </div>

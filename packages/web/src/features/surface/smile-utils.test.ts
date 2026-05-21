@@ -6,7 +6,7 @@ type Strike = EnrichedChainResponse['strikes'][number];
 
 function makeVenue(markIv: number | null, delta: number | null) {
   return {
-    bid: null, ask: null, mid: null, bidSize: null, askSize: null,
+    bid: null, ask: null, mid: null, midRaw: null, bidSize: null, askSize: null,
     markIv, bidIv: null, askIv: null, delta, gamma: null, theta: null, vega: null,
     spreadPct: null, totalCost: null, estimatedFees: null,
     openInterest: null, volume24h: null, openInterestUsd: null, volume24hUsd: null,

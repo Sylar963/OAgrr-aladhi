@@ -84,6 +84,11 @@ export interface VenueQuote {
   bid: number | null;
   ask: number | null;
   mid: number | null;
+  // Mid in the venue's quote currency (BTC/ETH on inverse venues, settlement
+  // stable on linear venues). Equal to `mid` for linear; differs by underlying
+  // multiplier for inverse. Charts whose REST candles are in raw currency
+  // overlay this value on the active bar.
+  midRaw: number | null;
   bidSize: number | null;
   askSize: number | null;
   markIv: number | null;
@@ -186,6 +191,7 @@ const VenueQuoteSchema = z.object({
   bid: NullableNumberSchema,
   ask: NullableNumberSchema,
   mid: NullableNumberSchema,
+  midRaw: NullableNumberSchema,
   bidSize: NullableNumberSchema,
   askSize: NullableNumberSchema,
   markIv: NullableNumberSchema,

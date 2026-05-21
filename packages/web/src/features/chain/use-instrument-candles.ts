@@ -32,13 +32,31 @@ export function applyLiveTick(
   return [...candles.slice(0, -1), next];
 }
 
+export interface LiveMid {
+  usd: number | null;
+  raw: number | null;
+}
+
+// Inverse-venue charts (Deribit BTC/ETH, OKX BTC-USD-…) draw candles in base
+// currency; everything else draws in USD-equivalent. Pick the leg whose unit
+// matches the chart's reported priceCurrency so the live overlay doesn't
+// produce a unit-mismatch spike on the active bar.
+export function pickLiveMid(
+  liveMid: LiveMid | null,
+  priceCurrency: string | null,
+): number | null {
+  if (liveMid == null) return null;
+  const useRaw = priceCurrency === 'BTC' || priceCurrency === 'ETH';
+  return useRaw ? liveMid.raw : liveMid.usd;
+}
+
 interface UseInstrumentCandlesArgs {
   venue: VenueId;
   symbol: string;
   interval: InstrumentCandleInterval;
   range: InstrumentCandleRange;
   enabled?: boolean;
-  liveMid?: number | null;
+  liveMid?: LiveMid | null;
 }
 
 export function useInstrumentCandles({
@@ -67,16 +85,17 @@ export function useInstrumentCandles({
     gcTime: 5 * 60_000,
   });
 
+  const priceCurrency = query.data?.priceCurrency ?? null;
   const candles = useMemo(
-    () => applyLiveTick(query.data?.candles ?? [], liveMid),
-    [query.data?.candles, liveMid],
+    () => applyLiveTick(query.data?.candles ?? [], pickLiveMid(liveMid, priceCurrency)),
+    [query.data?.candles, liveMid, priceCurrency],
   );
 
   return {
     ...query,
     candles,
     markLine: query.data?.markLine ?? [],
-    priceCurrency: query.data?.priceCurrency ?? null,
+    priceCurrency,
   };
 }
 
@@ -86,7 +105,7 @@ export function useLiveMidFromChain(
   strike: number,
   type: 'call' | 'put',
   venue: VenueId,
-): number | null {
+): LiveMid | null {
   const qc = useQueryClient();
   const entries = qc.getQueriesData<EnrichedChainResponse>({
     queryKey: ['chain', underlying, expiry],
@@ -96,8 +115,10 @@ export function useLiveMidFromChain(
     const row = data.strikes.find((s) => s.strike === strike);
     if (!row) continue;
     const side = type === 'call' ? row.call : row.put;
-    const mid = side.venues[venue]?.mid;
-    if (mid != null) return mid;
+    const q = side.venues[venue];
+    if (!q) continue;
+    if (q.mid == null && q.midRaw == null) continue;
+    return { usd: q.mid ?? null, raw: q.midRaw ?? null };
   }
   return null;
 }

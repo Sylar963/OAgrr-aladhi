@@ -8,6 +8,7 @@ const BASE_QUOTE: VenueQuote = {
   bid: null,
   ask: null,
   mid: null,
+  midRaw: null,
   bidSize: null,
   askSize: null,
   markIv: null,

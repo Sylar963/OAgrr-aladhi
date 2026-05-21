@@ -11,6 +11,7 @@ function quote(bid: number | null, ask: number | null): VenueQuote {
     bid,
     ask,
     mid: bid != null && ask != null ? (bid + ask) / 2 : null,
+    midRaw: bid != null && ask != null ? (bid + ask) / 2 : null,
     bidSize: 10,
     askSize: 10,
     markIv: 0.6,

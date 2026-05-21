@@ -9,7 +9,7 @@ import { forwardDriftLevel } from '@lib/colors';
 
 function quote(mid: number | null): VenueQuote {
   return {
-    bid: null, ask: null, mid, bidSize: null, askSize: null,
+    bid: null, ask: null, mid, midRaw: mid, bidSize: null, askSize: null,
     markIv: null, bidIv: null, askIv: null,
     delta: null, gamma: null, theta: null, vega: null,
     spreadPct: null, totalCost: null, estimatedFees: null,

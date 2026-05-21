@@ -22,10 +22,12 @@ interface QuoteSpec {
 }
 
 function quote(s: QuoteSpec): VenueQuote {
+  const mid = s.bid != null && s.ask != null ? (s.bid + s.ask) / 2 : null;
   return {
     bid: s.bid ?? null,
     ask: s.ask ?? null,
-    mid: s.bid != null && s.ask != null ? (s.bid + s.ask) / 2 : null,
+    mid,
+    midRaw: mid,
     bidSize: null,
     askSize: null,
     markIv: s.markIv ?? null,

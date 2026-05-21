@@ -5,6 +5,7 @@ function mkQuote(overrides: Partial<VenueQuote> = {}): VenueQuote {
     bid: 120,
     ask: 130,
     mid: 125,
+    midRaw: 125,
     bidSize: 10,
     askSize: 8,
     markIv: 0.52,

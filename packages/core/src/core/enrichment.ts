@@ -15,6 +15,11 @@ export interface VenueQuote {
   bid: number | null;
   ask: number | null;
   mid: number | null;
+  // Mid in the venue's quote currency (BTC/ETH for inverse venues, settlement
+  // stable for linear venues). Equal to `mid` for linear venues; differs by
+  // the underlying multiplier for inverse. Use this when overlaying charts
+  // whose REST candles are denominated in the venue's raw currency.
+  midRaw: number | null;
   bidSize: number | null;
   askSize: number | null;
   markIv: number | null;
@@ -191,6 +196,15 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
   // Prefer computed mid from live bid/ask; fall back to exchange mark price.
   const mid = bid !== null && ask !== null ? (bid + ask) / 2 : markMid;
 
+  // Parallel mid in the venue's raw quote currency. Inverse-venue option
+  // charts (Deribit BTC/ETH, OKX BTC-USD-…) draw candles in base currency,
+  // so a USD-only live tick produces a unit-mismatch spike on the active
+  // bar. Carrying both lets the chart pick the value matching its axis.
+  const bidRaw = contract.quote.bid.raw;
+  const askRaw = contract.quote.ask.raw;
+  const markMidRaw = contract.quote.mark.raw;
+  const midRaw = bidRaw !== null && askRaw !== null ? (bidRaw + askRaw) / 2 : markMidRaw;
+
   // One-sided markets (bid=0 or ask=0) and Derive's inverted quotes (bid > ask)
   // both produce ±200% or negative spread via the formula — return null so the
   // UI renders '–' rather than a misleading red percentage.
@@ -207,6 +221,7 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
     bid,
     ask,
     mid,
+    midRaw,
     bidSize: contract.quote.bidSize,
     askSize: contract.quote.askSize,
     markIv: contract.greeks.markIv,

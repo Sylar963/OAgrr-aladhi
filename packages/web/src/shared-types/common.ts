@@ -66,7 +66,7 @@ export interface SpotCandle {
 }
 
 export type SpotCandleCurrency = 'BTC' | 'ETH';
-export type SpotCandleResolutionSec = 60 | 300 | 1800 | 3600 | 14400 | 86400;
+export type SpotCandleResolutionSec = 60 | 300 | 900 | 1800 | 3600 | 14400 | 86400;
 
 export interface SpotCandlesResponse {
   currency: SpotCandleCurrency;

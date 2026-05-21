@@ -180,19 +180,20 @@ describe('GET /ready', () => {
   });
 
   it('returns 503 with status=stale when all feeds are silent past the threshold', async () => {
-    spotHealth.lastSuccessAt = Date.now() - 5 * 60 * 1000;
+    const tenMinAgo = Date.now() - 10 * 60 * 1000;
+    spotHealth.lastSuccessAt = tenMinAgo;
     flowHealthRows.push({
       venue: 'deribit',
       underlying: 'BTC',
       connected: true,
-      lastMessageAt: Date.now() - 5 * 60 * 1000,
+      lastMessageAt: tenMinAgo,
     });
 
     const res = await app.inject({ method: 'GET', url: '/ready' });
     expect(res.statusCode).toBe(503);
     const body = res.json();
     expect(body.status).toBe('stale');
-    expect(body.lastAnyMessageAgeMs).toBeGreaterThan(90_000);
+    expect(body.lastAnyMessageAgeMs).toBeGreaterThan(300_000);
   });
 
   it('returns 503 with status=initializing while bootstrap is incomplete', async () => {

@@ -149,10 +149,11 @@ export function getFeedHealthSnapshot(
   };
 }
 
-// Default: 90s without any feed message anywhere is silence we want to act on.
-// Long enough to ride out brief venue hiccups, short enough that systemd can
-// restart and recover before users notice a stale chain.
-const DEFAULT_LIVENESS_MAX_MS = 90_000;
+// Default: 5 minutes without any feed message anywhere. Matches a 5-min
+// candle; long enough to ride out venue maintenance and low-volume gaps,
+// short enough that a stuck process gets recycled before the user reaches
+// for the refresh button. Override with FEED_LIVENESS_MAX_MS.
+const DEFAULT_LIVENESS_MAX_MS = 300_000;
 
 export function getLivenessMaxMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env['FEED_LIVENESS_MAX_MS'];

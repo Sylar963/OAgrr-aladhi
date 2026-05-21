@@ -150,8 +150,8 @@ describe('isFeedLivenessStale', () => {
 });
 
 describe('getLivenessMaxMs', () => {
-  it('defaults to 90s when env is unset', () => {
-    expect(getLivenessMaxMs({})).toBe(90_000);
+  it('defaults to 5 minutes when env is unset', () => {
+    expect(getLivenessMaxMs({})).toBe(300_000);
   });
 
   it('reads FEED_LIVENESS_MAX_MS when valid', () => {
@@ -159,8 +159,8 @@ describe('getLivenessMaxMs', () => {
   });
 
   it('falls back to the default on garbage input', () => {
-    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: 'abc' })).toBe(90_000);
-    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: '0' })).toBe(90_000);
-    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: '-5' })).toBe(90_000);
+    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: 'abc' })).toBe(300_000);
+    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: '0' })).toBe(300_000);
+    expect(getLivenessMaxMs({ FEED_LIVENESS_MAX_MS: '-5' })).toBe(300_000);
   });
 });

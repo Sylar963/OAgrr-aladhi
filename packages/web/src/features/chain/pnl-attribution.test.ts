@@ -104,6 +104,11 @@ describe('attributePnL', () => {
       const reconstructed = p.deltaPL + p.gammaPL + p.thetaPL + p.vegaPL + p.residualPL;
       expect(reconstructed).toBeCloseTo(p.totalPL, 8);
     }
+    // Aggregate check: summary.totalPL - summary.attributedPL should equal the
+    // sum of per-point residuals. Pins the contract between point-level and
+    // summary-level numbers.
+    const sumResid = result.points.reduce((acc, p) => acc + p.residualPL, 0);
+    expect(result.summary.totalPL - result.summary.attributedPL).toBeCloseTo(sumResid, 8);
   });
 
   it('summary percentages sum to 100 (component share of |contribution|)', () => {

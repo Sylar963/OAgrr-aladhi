@@ -2,9 +2,13 @@
 // has no dependency on @oggregator/core. Mirrors core/feeds/thalex/bs-solver.ts
 // — keep in sync if the underlying math changes. Crypto convention: r=0, IV
 // stored as fractions (0.50 = 50%), theta returned per calendar day, vega per
-// unit sigma (Δsigma=1.0).
+// unit sigma (Δsigma=1.0). Year-day count uses 365 to match core's tYears
+// (core/feeds/thalex/bs-solver.ts) so this attribution reproduces the live
+// chain IV computation exactly.
 
-export type OptionRight = 'call' | 'put';
+import type { OptionRight } from '@lib/analytics/blackScholes';
+
+export type { OptionRight };
 
 const SQRT_2PI = Math.sqrt(2 * Math.PI);
 
@@ -62,7 +66,7 @@ export function bs76ThetaPerDay(
   f: number, k: number, sigma: number, tYears: number,
 ): number {
   const annual = -(f * bs76Pdf(bs76D1(f, k, sigma, tYears)) * sigma) / (2 * Math.sqrt(tYears));
-  return annual / 365.25;
+  return annual / 365;
 }
 
 export interface SolveIvInput {
@@ -144,7 +148,7 @@ export interface AttributionResult {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const YEAR_MS = 365.25 * MS_PER_DAY;
+const YEAR_MS = 365 * MS_PER_DAY;
 
 // Helper: solve IV for one bar; returns null on no-arb violation or pathological vega.
 function solveBar(
@@ -185,6 +189,9 @@ export function attributePnL(input: AttributionInput): AttributionResult {
       // Bar contributes no IV — drop the segment that would have ended here,
       // and reset prev so the next valid bar starts a fresh segment.
       if (prev != null) skipped++;
+      // Keep prevSeed pointing at the last valid IV — Newton converges faster
+      // from a regime-continuous seed than from a cold 0.5, even across a one-bar
+      // gap. prev itself resets so the next segment starts fresh.
       prev = null;
       continue;
     }
@@ -212,6 +219,9 @@ export function attributePnL(input: AttributionInput): AttributionResult {
           ts: bar.ts, totalPL, deltaPL, gammaPL, thetaPL, vegaPL, residualPL,
           iv, forward: bar.forward, mark: bar.mark,
         });
+      } else {
+        // Bar is at or past expiration — no meaningful Greek to evaluate.
+        skipped++;
       }
     }
     prev = { bar, iv };

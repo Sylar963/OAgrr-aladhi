@@ -66,6 +66,25 @@ describe('JsonRpcWsClient', () => {
     vi.useRealTimers();
   });
 
+  it('does not queue duplicate reconnect timers for the same outage', () => {
+    vi.useFakeTimers();
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      maxReconnectAttempts: 0,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const connect = vi.fn(async () => {});
+
+    internals.connect = connect;
+    internals.scheduleReconnect();
+    internals.scheduleReconnect();
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
   it('does not install a fallback ping timer after cleanup cancels heartbeat setup', async () => {
     vi.useFakeTimers();
 

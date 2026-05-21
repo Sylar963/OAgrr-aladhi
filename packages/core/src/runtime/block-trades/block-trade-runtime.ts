@@ -346,17 +346,20 @@ function deribitBlockStream(): BlockVenueStream {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   function connect(attempt = 0): void {
-    if (!shouldReconnect) return;
-    ws = new WebSocket(DERIBIT_WS_URL);
+    if (!shouldReconnect || ws != null || reconnectTimer != null) return;
+    const socket = new WebSocket(DERIBIT_WS_URL);
+    ws = socket;
     let didOpen = false;
     let openedAt = 0;
 
-    ws.on('open', () => {
+    socket.on('open', () => {
+      if (ws !== socket) return;
+
       didOpen = true;
       openedAt = Date.now();
       handlers?.onConnected();
       log.info({ venue: 'deribit' }, 'block trade WS connected');
-      ws!.send(
+      socket.send(
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -366,7 +369,9 @@ function deribitBlockStream(): BlockVenueStream {
       );
     });
 
-    ws.on('message', (raw: WebSocket.RawData) => {
+    socket.on('message', (raw: WebSocket.RawData) => {
+      if (ws !== socket) return;
+
       try {
         const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
         if (msg['method'] !== 'subscription') return;
@@ -389,7 +394,10 @@ function deribitBlockStream(): BlockVenueStream {
       }
     });
 
-    ws.on('close', (code: number, reason: Buffer) => {
+    socket.on('close', (code: number, reason: Buffer) => {
+      if (ws !== socket) return;
+
+      ws = null;
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -400,11 +408,16 @@ function deribitBlockStream(): BlockVenueStream {
       if (shouldReconnect) {
         handlers?.onReconnect();
         const delay = backoffDelay(didOpen ? 0 : attempt + 1);
-        reconnectTimer = setTimeout(() => connect(didOpen ? 0 : attempt + 1), delay);
+        if (reconnectTimer != null) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect(didOpen ? 0 : attempt + 1);
+        }, delay);
       }
     });
 
-    ws.on('error', (err) => {
+    socket.on('error', (err) => {
+      if (ws !== socket) return;
       handlers?.onError();
       log.warn({ venue: 'deribit', err: err.message }, 'block trade WS error');
     });
@@ -446,7 +459,10 @@ function deribitBlockStream(): BlockVenueStream {
     dispose() {
       shouldReconnect = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      ws?.close();
+      reconnectTimer = null;
+      const socket = ws;
+      ws = null;
+      socket?.close();
     },
   };
 }
@@ -545,23 +561,28 @@ function bybitBlockStream(): BlockVenueStream {
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   function connect(attempt = 0): void {
-    if (!shouldReconnect) return;
-    ws = new WebSocket(BYBIT_RFQ_WS_URL);
+    if (!shouldReconnect || ws != null || reconnectTimer != null) return;
+    const socket = new WebSocket(BYBIT_RFQ_WS_URL);
+    ws = socket;
     let didOpen = false;
     let openedAt = 0;
 
-    ws.on('open', () => {
+    socket.on('open', () => {
+      if (ws !== socket) return;
+
       didOpen = true;
       openedAt = Date.now();
       handlers?.onConnected();
       log.info({ venue: 'bybit' }, 'block trade WS connected');
-      ws!.send(JSON.stringify({ op: 'subscribe', args: ['rfq.open.public.trades'] }));
+      socket.send(JSON.stringify({ op: 'subscribe', args: ['rfq.open.public.trades'] }));
       keepaliveTimer = setInterval(() => {
-        if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' }));
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 'ping' }));
       }, 20_000);
     });
 
-    ws.on('message', (raw: WebSocket.RawData) => {
+    socket.on('message', (raw: WebSocket.RawData) => {
+      if (ws !== socket) return;
+
       try {
         const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
         const data = msg['data'];
@@ -581,7 +602,10 @@ function bybitBlockStream(): BlockVenueStream {
       }
     });
 
-    ws.on('close', (code: number, reason: Buffer) => {
+    socket.on('close', (code: number, reason: Buffer) => {
+      if (ws !== socket) return;
+
+      ws = null;
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -596,11 +620,16 @@ function bybitBlockStream(): BlockVenueStream {
       if (shouldReconnect) {
         handlers?.onReconnect();
         const delay = backoffDelay(didOpen ? 0 : attempt + 1);
-        reconnectTimer = setTimeout(() => connect(didOpen ? 0 : attempt + 1), delay);
+        if (reconnectTimer != null) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect(didOpen ? 0 : attempt + 1);
+        }, delay);
       }
     });
 
-    ws.on('error', (err) => {
+    socket.on('error', (err) => {
+      if (ws !== socket) return;
       handlers?.onError();
       log.warn({ venue: 'bybit', err: err.message }, 'block trade WS error');
     });
@@ -615,8 +644,12 @@ function bybitBlockStream(): BlockVenueStream {
     dispose() {
       shouldReconnect = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       if (keepaliveTimer) clearInterval(keepaliveTimer);
-      ws?.close();
+      keepaliveTimer = null;
+      const socket = ws;
+      ws = null;
+      socket?.close();
     },
   };
 }

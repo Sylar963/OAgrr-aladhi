@@ -252,6 +252,8 @@ export class TradeRuntime {
     let openedAt = 0;
 
     ws.on('open', () => {
+      if (this.connections.get(key) !== ws) return;
+
       didOpen = true;
       openedAt = Date.now();
       this.updateStreamStates(stream.venue, subscribedUnderlyings, {
@@ -271,6 +273,8 @@ export class TradeRuntime {
     });
 
     ws.on('message', (raw: WebSocket.RawData) => {
+      if (this.connections.get(key) !== ws) return;
+
       try {
         const msg = JSON.parse(raw.toString());
         const now = Date.now();
@@ -291,6 +295,8 @@ export class TradeRuntime {
     });
 
     ws.on('close', (code: number, reason: Buffer) => {
+      if (this.connections.get(key) !== ws) return;
+
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -324,6 +330,7 @@ export class TradeRuntime {
           });
         }
         const delay = backoffDelay(nextAttempt);
+        if (this.reconnectTimers.has(key)) return;
         const timer = setTimeout(() => {
           this.reconnectTimers.delete(key);
           this.connectStream(stream, underlying, nextAttempt);
@@ -333,6 +340,8 @@ export class TradeRuntime {
     });
 
     ws.on('error', (err) => {
+      if (this.connections.get(key) !== ws) return;
+
       for (const subscribedUnderlying of subscribedUnderlyings) {
         this.updateStreamState(stream.venue, subscribedUnderlying, {
           errors:

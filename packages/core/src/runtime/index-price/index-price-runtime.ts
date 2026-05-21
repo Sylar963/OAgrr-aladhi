@@ -138,11 +138,15 @@ export class IndexPriceRuntime {
 
   private connectCoincall(attempt = 0): void {
     if (!this.shouldReconnect || this.coincallSymbolByUnderlying.size === 0) return;
+    if (this.coincallWs != null || this.coincallReconnect != null) return;
 
     const ws = new WebSocket(buildSignedWsUrl());
     let openedAt = 0;
+    this.coincallWs = ws;
 
     ws.on('open', () => {
+      if (this.coincallWs !== ws) return;
+
       openedAt = Date.now();
       log.info(
         { underlyings: [...this.coincallSymbolByUnderlying.keys()].join(',') },
@@ -160,6 +164,8 @@ export class IndexPriceRuntime {
     });
 
     ws.on('message', (raw: WebSocket.RawData) => {
+      if (this.coincallWs !== ws) return;
+
       try {
         const json = JSON.parse(raw.toString());
         const parsed = CoincallBsInfoMessageSchema.safeParse(json);
@@ -176,6 +182,8 @@ export class IndexPriceRuntime {
     });
 
     ws.on('close', () => {
+      if (this.coincallWs !== ws) return;
+
       this.coincallWs = null;
       if (this.coincallKeepalive != null) {
         clearInterval(this.coincallKeepalive);
@@ -185,6 +193,7 @@ export class IndexPriceRuntime {
       const opened = openedAt > 0;
       const nextAttempt = opened ? 0 : attempt + 1;
       const delay = backoffDelay(nextAttempt);
+      if (this.coincallReconnect != null) return;
       this.coincallReconnect = setTimeout(() => {
         this.coincallReconnect = null;
         this.connectCoincall(nextAttempt);
@@ -192,10 +201,9 @@ export class IndexPriceRuntime {
     });
 
     ws.on('error', (err) => {
+      if (this.coincallWs !== ws) return;
       log.warn({ err: err.message }, 'coincall index ws error');
     });
-
-    this.coincallWs = ws;
   }
 }
 

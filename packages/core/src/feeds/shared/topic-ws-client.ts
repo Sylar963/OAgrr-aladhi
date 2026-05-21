@@ -25,6 +25,7 @@ export interface TopicWsClientOptions {
 
 export class TopicWsClient {
   private ws: WebSocket | null = null;
+  private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = true;
@@ -49,17 +50,35 @@ export class TopicWsClient {
   }
 
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.isConnected) return Promise.resolve();
+    if (this.connectPromise != null) return this.connectPromise;
+
+    this.shouldReconnect = true;
+
+    this.connectPromise = new Promise((resolve, reject) => {
+      const socket = new WebSocket(this.url);
+      let settled = false;
+
+      const resolveConnect = (): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
         resolve();
-        return;
-      }
+      };
 
-      this.shouldReconnect = true;
-      this.ws = new WebSocket(this.url);
-      this.options.onSocket?.(this.ws);
+      const rejectConnect = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        reject(error);
+      };
 
-      this.ws.on('open', () => {
+      this.ws = socket;
+      this.options.onSocket?.(socket);
+
+      socket.on('open', () => {
+        if (this.ws !== socket) return;
+
         this.connectedAt = Date.now();
         this.log.info({ url: this.url }, 'ws connected');
         this.reconnectAttempts = 0;
@@ -68,38 +87,53 @@ export class TopicWsClient {
 
         Promise.resolve(this.replaySubscriptions())
           .then(() => this.options.onOpen?.())
-          .then(() => resolve())
-          .catch((error: unknown) => reject(error));
+          .then(() => resolveConnect())
+          .catch((error: unknown) =>
+            rejectConnect(error instanceof Error ? error : new Error(String(error))),
+          );
       });
 
-      this.ws.on('message', (raw: WebSocket.RawData) => {
+      socket.on('message', (raw: WebSocket.RawData) => {
+        if (this.ws !== socket) return;
         this.options.onMessage?.(raw);
       });
 
-      this.ws.on('close', (code: number, reason: Buffer) => {
+      socket.on('close', (code: number, reason: Buffer) => {
         const reasonStr = reason.length > 0 ? reason.toString() : undefined;
         const uptimeMs = this.connectedAt > 0 ? Date.now() - this.connectedAt : undefined;
         this.log.warn({ closeCode: code, closeReason: reasonStr, uptimeMs }, 'ws closed');
+
+        if (!settled) {
+          rejectConnect(new Error(`[${this.label}] socket closed before connect completed`));
+        }
+
+        if (this.ws !== socket) return;
+
+        this.ws = null;
         this.cleanup();
         this.options.onClose?.();
         this.options.onStatusChange?.('reconnecting');
         if (this.shouldReconnect) this.scheduleReconnect();
       });
 
-      this.ws.on('error', (error) => {
+      socket.on('error', (error) => {
         this.log.error({ err: error.message }, 'ws error');
         this.options.onError?.(error);
-        if (this.ws?.readyState !== WebSocket.OPEN) reject(error);
+        if (socket.readyState !== WebSocket.OPEN) rejectConnect(error);
       });
     });
+
+    return this.connectPromise;
   }
 
   async disconnect(): Promise<void> {
     this.shouldReconnect = false;
+    this.connectPromise = null;
     this.cleanup();
     if (this.ws != null) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      socket.close();
     }
   }
 
@@ -125,6 +159,9 @@ export class TopicWsClient {
   }
 
   private scheduleReconnect(): void {
+    if (!this.shouldReconnect || this.isConnected || this.connectPromise != null) return;
+    if (this.reconnectTimer != null) return;
+
     const maxAttempts = this.options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     const exceededMaxAttempts = this.reconnectAttempts >= maxAttempts;
     const delay = exceededMaxAttempts
@@ -147,11 +184,15 @@ export class TopicWsClient {
     }
 
     this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+
       try {
         await this.connect();
       } catch (error: unknown) {
         this.log.warn({ err: String(error) }, 'reconnect failed');
-        if (this.shouldReconnect) this.scheduleReconnect();
+        if (this.shouldReconnect && this.isConnected) {
+          this.ws?.terminate();
+        }
       }
     }, delay);
   }

@@ -42,6 +42,7 @@ function isConnectionClosedError(error: unknown): boolean {
 
 export class JsonRpcWsClient {
   private ws: WebSocket | null = null;
+  private connectPromise: Promise<void> | null = null;
   private nextId = 1;
   private pending = new Map<number, JsonRpcPendingRequest>();
   private subscriptionHandler: ((channel: string, data: unknown) => void) | null = null;
@@ -76,20 +77,45 @@ export class JsonRpcWsClient {
   // ─── connection lifecycle ─────────────────────────────────────
 
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.shouldReconnect = true;
-      this.ws = new WebSocket(this.url);
+    if (this.isConnected) return Promise.resolve();
+    if (this.connectPromise != null) return this.connectPromise;
 
-      this.ws.on('open', () => {
+    this.shouldReconnect = true;
+
+    this.connectPromise = new Promise((resolve, reject) => {
+      const socket = new WebSocket(this.url);
+      let settled = false;
+
+      const resolveConnect = (): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        resolve();
+      };
+
+      const rejectConnect = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        reject(error);
+      };
+
+      this.ws = socket;
+
+      socket.on('open', () => {
+        if (this.ws !== socket) return;
+
         this.connectedAt = Date.now();
         this.log.info({ url: this.url }, 'ws connected');
         this.reconnectAttempts = 0;
         this.startHeartbeat();
         this.options.onStatusChange?.('connected');
-        resolve();
+        resolveConnect();
       });
 
-      this.ws.on('message', (raw: WebSocket.RawData) => {
+      socket.on('message', (raw: WebSocket.RawData) => {
+        if (this.ws !== socket) return;
+
         try {
           const msg = JSON.parse(raw.toString()) as JsonRpcMessage;
           this.handleMessage(msg);
@@ -98,7 +124,7 @@ export class JsonRpcWsClient {
         }
       });
 
-      this.ws.on('close', (code: number, reason: Buffer) => {
+      socket.on('close', (code: number, reason: Buffer) => {
         const reasonStr = reason.length > 0 ? reason.toString() : undefined;
         const uptimeMs = this.connectedAt > 0 ? Date.now() - this.connectedAt : undefined;
         this.log.warn(
@@ -110,24 +136,36 @@ export class JsonRpcWsClient {
           },
           'ws closed',
         );
+
+        if (!settled) {
+          rejectConnect(new Error(`[${this.label}] socket closed before connect completed`));
+        }
+
+        if (this.ws !== socket) return;
+
+        this.ws = null;
         this.cleanup();
         this.options.onStatusChange?.('reconnecting');
         if (this.shouldReconnect) this.scheduleReconnect();
       });
 
-      this.ws.on('error', (err) => {
+      socket.on('error', (err) => {
         this.log.error({ err: err.message }, 'ws error');
-        if (this.ws?.readyState !== WebSocket.OPEN) reject(err);
+        if (socket.readyState !== WebSocket.OPEN) rejectConnect(err);
       });
     });
+
+    return this.connectPromise;
   }
 
   async disconnect(): Promise<void> {
     this.shouldReconnect = false;
+    this.connectPromise = null;
     this.cleanup();
     if (this.ws) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      socket.close();
     }
   }
 
@@ -293,6 +331,9 @@ export class JsonRpcWsClient {
   // ─── reconnection ────────────────────────────────────────────
 
   private scheduleReconnect(): void {
+    if (!this.shouldReconnect || this.isConnected || this.connectPromise != null) return;
+    if (this.reconnectTimer != null) return;
+
     const maxAttempts = this.options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     const exceededMaxAttempts = this.reconnectAttempts >= maxAttempts;
     const delay = exceededMaxAttempts
@@ -315,12 +356,16 @@ export class JsonRpcWsClient {
     }
 
     this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+
       try {
         await this.connect();
         await this.resubscribe();
       } catch (e: unknown) {
         this.log.warn({ err: String(e) }, 'reconnect failed');
-        if (this.shouldReconnect) this.scheduleReconnect();
+        if (this.shouldReconnect && this.isConnected) {
+          this.ws?.terminate();
+        }
       }
     }, delay);
   }

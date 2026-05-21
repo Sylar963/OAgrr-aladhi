@@ -1,0 +1,41 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
+}
+
+.tooltip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(15, 15, 17, 0.92);
+  border: 1px solid #1F2937;
+  border-radius: 4px;
+  min-width: 130px;
+  pointer-events: none;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.row[data-greek='delta']    { color: #60A5FA; }
+.row[data-greek='gamma']    { color: #FBBF24; }
+.row[data-greek='theta']    { color: #F87171; }
+.row[data-greek='vega']     { color: #A855F7; }
+.row[data-greek='residual'] { color: #9aa0a6; }

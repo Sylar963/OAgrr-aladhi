@@ -97,11 +97,20 @@ export const useChartPanelsStore = create<ChartPanelsState>()(
       },
       clampToViewport: (vw, vh) =>
         set({
-          panels: get().panels.map((p) => ({
-            ...p,
-            x: Math.max(0, Math.min(p.x, vw - p.w)),
-            y: Math.max(0, Math.min(p.y, vh - p.h)),
-          })),
+          panels: get().panels.map((p) => {
+            const VISIBLE_MARGIN = 32;
+            const fullyOffScreen =
+              p.x > vw - VISIBLE_MARGIN ||
+              p.x + p.w < VISIBLE_MARGIN ||
+              p.y > vh - VISIBLE_MARGIN ||
+              p.y + p.h < VISIBLE_MARGIN;
+            if (!fullyOffScreen) return p;
+            return {
+              ...p,
+              x: Math.max(0, Math.min(p.x, vw - p.w)),
+              y: Math.max(0, Math.min(p.y, vh - p.h)),
+            };
+          }),
         }),
     }),
     {

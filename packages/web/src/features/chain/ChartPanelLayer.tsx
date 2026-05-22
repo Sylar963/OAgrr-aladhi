@@ -28,7 +28,8 @@ export default function ChartPanelLayer() {
 
   useEffect(() => {
     function onResize() { clamp(window.innerWidth, window.innerHeight); }
-    onResize();
+    // Only react to actual resize events — panels keep their persisted
+    // position on mount, even if it would slightly clip the right/bottom edge.
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [clamp]);

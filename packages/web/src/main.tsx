@@ -7,17 +7,20 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import ErrorBoundary from '@components/ui/ErrorBoundary';
 import { queryClient } from '@lib/query-client';
 import App from './App';
+import PopoutChartPage from '@features/chain/PopoutChartPage';
 
 import './styles/index.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element not found in index.html');
 
+const isPopout = new URLSearchParams(window.location.search).get('popout') === '1';
+
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary label="Application">
-        <App />
+      <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>
+        {isPopout ? <PopoutChartPage /> : <App />}
       </ErrorBoundary>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

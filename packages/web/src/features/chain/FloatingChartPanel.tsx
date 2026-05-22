@@ -1,5 +1,5 @@
 // packages/web/src/features/chain/FloatingChartPanel.tsx
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InstrumentCandleInterval, InstrumentCandleRange, VenueId } from '@oggregator/protocol';
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -13,13 +13,14 @@ import InstrumentChart from './InstrumentChart.js';
 import InstrumentAttributionChart from './InstrumentAttributionChart.js';
 import { AttributionSummary } from './AttributionSummary.js';
 import { useInstrumentAttribution } from './use-instrument-attribution.js';
+import { openPanelPopout } from './chart-popout-url.js';
 import styles from './FloatingChartPanel.module.css';
 
 const INTERVALS: InstrumentCandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
 
-interface DragState { startX: number; startY: number; panelX: number; panelY: number }
-interface ResizeState { startX: number; startY: number; w: number; h: number }
+interface DragState { startX: number; startY: number; panelX: number; panelY: number; currentX: number; currentY: number }
+interface ResizeState { startX: number; startY: number; w: number; h: number; currentW: number; currentH: number }
 
 function useStrikeVenues(underlying: string, expiry: string, strike: number, type: 'call' | 'put'): VenueId[] {
   const qc = useQueryClient();
@@ -70,6 +71,7 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
   const front = useChartPanelsStore((s) => s.bringToFront);
   const openPanel = useChartPanelsStore((s) => s.openPanel);
   const strikeVenues = useStrikeVenues(panel.underlying, panel.expiry, panel.strike, panel.type);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
 
@@ -96,27 +98,51 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
   });
   const countdown = useCandleCountdown(panel.interval);
 
+  // Sync layout from store → DOM, but only when no gesture is in flight.
+  // During drag/resize, the gesture mutates style directly via the ref so
+  // unrelated re-renders (live ticks, zIndex changes) don't snap the panel
+  // back to its committed coordinates.
+  useLayoutEffect(() => {
+    const node = panelRef.current;
+    if (!node) return;
+    if (dragRef.current || resizeRef.current) return;
+    node.style.transform = `translate(${panel.x}px, ${panel.y}px)`;
+    node.style.width = `${panel.w}px`;
+    node.style.height = panel.minimized ? '28px' : `${panel.h}px`;
+  }, [panel.x, panel.y, panel.w, panel.h, panel.minimized]);
+
   useEffect(() => {
     function onMove(e: PointerEvent) {
+      const node = panelRef.current;
+      if (!node) return;
       if (dragRef.current) {
         const dx = e.clientX - dragRef.current.startX;
         const dy = e.clientY - dragRef.current.startY;
-        update(panel.id, {
-          x: Math.max(0, dragRef.current.panelX + dx),
-          y: Math.max(0, dragRef.current.panelY + dy),
-        });
+        const nx = Math.max(0, dragRef.current.panelX + dx);
+        const ny = Math.max(0, dragRef.current.panelY + dy);
+        dragRef.current.currentX = nx;
+        dragRef.current.currentY = ny;
+        node.style.transform = `translate(${nx}px, ${ny}px)`;
       } else if (resizeRef.current) {
         const dw = e.clientX - resizeRef.current.startX;
         const dh = e.clientY - resizeRef.current.startY;
-        update(panel.id, {
-          w: Math.max(320, resizeRef.current.w + dw),
-          h: Math.max(220, resizeRef.current.h + dh),
-        });
+        const nw = Math.max(320, resizeRef.current.w + dw);
+        const nh = Math.max(220, resizeRef.current.h + dh);
+        resizeRef.current.currentW = nw;
+        resizeRef.current.currentH = nh;
+        node.style.width = `${nw}px`;
+        node.style.height = `${nh}px`;
       }
     }
     function onUp() {
-      dragRef.current = null;
-      resizeRef.current = null;
+      if (dragRef.current) {
+        update(panel.id, { x: dragRef.current.currentX, y: dragRef.current.currentY });
+        dragRef.current = null;
+      }
+      if (resizeRef.current) {
+        update(panel.id, { w: resizeRef.current.currentW, h: resizeRef.current.currentH });
+        resizeRef.current = null;
+      }
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -130,6 +156,7 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
     dragRef.current = {
       startX: e.clientX, startY: e.clientY,
       panelX: panel.x, panelY: panel.y,
+      currentX: panel.x, currentY: panel.y,
     };
     front(panel.id);
   }
@@ -138,12 +165,14 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
     resizeRef.current = {
       startX: e.clientX, startY: e.clientY,
       w: panel.w, h: panel.h,
+      currentW: panel.w, currentH: panel.h,
     };
     front(panel.id);
   }
 
   return (
     <div
+      ref={panelRef}
       className={styles.panel}
       data-minimized={panel.minimized || undefined}
       style={{
@@ -163,6 +192,12 @@ export default function FloatingChartPanel({ panel }: { panel: ChartPanel }) {
           )}
         </span>
         <span className={styles.controls}>
+          <button
+            type="button"
+            onClick={() => openPanelPopout(panel, close)}
+            aria-label="Pop out to new window"
+            title="Pop out (drag to any monitor)"
+          >⧉</button>
           <button
             type="button"
             onClick={() => update(panel.id, { minimized: !panel.minimized })}

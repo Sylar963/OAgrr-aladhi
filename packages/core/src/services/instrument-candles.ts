@@ -635,6 +635,66 @@ export async function fetchDeriveTrade(
   return candles.sort((a, b) => a.ts - b.ts);
 }
 
+// POST /public/get_trade_history returns each individual trade with the
+// venue mark_price captured at the moment of the trade. Used as a sparse
+// backfill for the mark line on options whose MarkHistoryBuffer is cold
+// (chart just opened). Probe-verified contract (2026-05-22):
+//   body: { instrument_name, from_timestamp_sec, to_timestamp_sec, page_size }
+//   timestamp is in MILLISECONDS (unlike chart_data which uses seconds);
+//   page_size=500 returns all trades in one shot for any 7-day window we've
+//   seen (max observed: 258 trades on a high-volume strike). The default
+//   page_size is 100, so an explicit higher cap avoids paging.
+// Buffer still wins on the active bucket via mergeCandlesByTs.
+const DeriveTradeHistorySchema = z.object({
+  result: z.object({
+    trades: z.array(
+      z.object({
+        timestamp: z.number(),
+        trade_price: z.string(),
+        trade_amount: z.string(),
+        mark_price: z.string(),
+      }).passthrough(),
+    ),
+  }),
+});
+
+export async function fetchDeriveTradeHistory(
+  symbol: string,
+  range: InstrumentCandleRange,
+): Promise<Array<[number, number]>> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const startSec = nowSec - Math.floor(RANGE_TO_MS[range] / 1000);
+  const res = await fetch(`${DERIVE_REST_BASE_URL}/public/get_trade_history`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(10_000),
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      instrument_name: symbol,
+      from_timestamp_sec: startSec,
+      to_timestamp_sec: nowSec,
+      page_size: 500,
+    }),
+  });
+  if (res.status === 404) throw new InstrumentCandlesError('not_found', `Derive: ${symbol}`);
+  if (!res.ok) {
+    log.warn({ symbol, status: res.status }, 'derive trade history http error');
+    return [];
+  }
+  const parsed = DeriveTradeHistorySchema.safeParse(await res.json());
+  if (!parsed.success) {
+    log.warn({ symbol, issues: parsed.error.issues.slice(0, 3) }, 'derive trade history parse failed');
+    return [];
+  }
+  const ticks: Array<[number, number]> = [];
+  for (const t of parsed.data.result.trades) {
+    const ts = t.timestamp;
+    const mark = Number(t.mark_price);
+    if (!Number.isFinite(ts) || !Number.isFinite(mark) || mark <= 0) continue;
+    ticks.push([ts, mark]);
+  }
+  return ticks;
+}
+
 // Bucket dedup'd trades (execId-keyed at the caller) into OHLCV candles.
 export function bucketTrades(
   trades: ReadonlyArray<{ execId: string; ts: number; price: number; size: number }>,
@@ -1095,16 +1155,26 @@ export class InstrumentCandleService {
         ]);
       case 'derive': {
         const buffer = this.markHistoryBuffer;
-        // get_tradingview_chart_data returns only forward-filled stale-trade
-        // rows for vol=0 buckets (see fetchDeriveTrade header); we drop those
-        // at the fetch layer and let the live MarkHistoryBuffer carry the
-        // mark line. Real REST trade buckets still merge with buffered trade
-        // ticks for sub-bucket freshness. REST failures degrade to buffer-
-        // only rather than 502.
+        // Two REST sources, neither sufficient on its own:
+        //   - get_tradingview_chart_data: trade-derived OHLCV. We keep only
+        //     vol>0 buckets (see fetchDeriveTrade header — vol=0 rows are
+        //     stale forward-fills, not marks).
+        //   - get_trade_history: per-trade records carrying the venue
+        //     mark_price at the moment of each trade. Bucketed into a sparse
+        //     historical mark series so the chart isn't blank when the live
+        //     MarkHistoryBuffer is cold (chart just opened, buffer warms via
+        //     WS subscription afterwards). Buffer still wins on tie via
+        //     mergeCandlesByTs for the active bucket.
+        // REST failures degrade to buffer-only rather than 502.
         const restPromise = fetchDeriveTrade(symbol, interval, range).catch((err: unknown) => {
           if (err instanceof InstrumentCandlesError) throw err;
           log.warn({ symbol, err: String(err) }, 'derive chart fetch error');
           return [] as RawCandle[];
+        });
+        const historyPromise = fetchDeriveTradeHistory(symbol, range).catch((err: unknown) => {
+          if (err instanceof InstrumentCandlesError) throw err;
+          log.warn({ symbol, err: String(err) }, 'derive trade history fetch error');
+          return [] as Array<[number, number]>;
         });
         const bufferedTrades = buffer?.getTradeCandles(
           'derive',
@@ -1118,9 +1188,11 @@ export class InstrumentCandleService {
           INTERVAL_TO_MS[interval],
           RANGE_TO_MS[range],
         );
-        const restCandles = await restPromise;
+        const [restCandles, historyTicks] = await Promise.all([restPromise, historyPromise]);
+        const historicalMark = bucketTicks(historyTicks, INTERVAL_TO_MS[interval]);
         const trades = mergeCandlesByTs(restCandles, bufferedTrades ?? []);
-        return [trades, bufferedMark ?? []];
+        const mark = mergeCandlesByTs(historicalMark, bufferedMark ?? []);
+        return [trades, mark];
       }
       case 'thalex':
         return Promise.all([

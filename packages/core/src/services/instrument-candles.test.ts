@@ -109,40 +109,62 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     vi.unstubAllGlobals();
   });
 
+  // Derive's chart service issues two REST calls in parallel: chart_data for
+  // candles and trade_history for the historical mark backfill. Route by URL
+  // so each test can opt in to either source.
+  function mockDeriveFetch(opts: { chart?: unknown; history?: unknown }) {
+    fetchSpy.mockImplementation(async (input: string) => {
+      if (typeof input === 'string' && input.includes('/public/get_trade_history')) {
+        return new Response(
+          JSON.stringify(opts.history ?? { result: { trades: [] } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify(opts.chart ?? { result: [] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+  }
+
   it('merges Derive REST chart history with live buffer trades and mark', async () => {
     // REST returns a historical bar one minute ago; the live buffer carries
     // the active bucket. mergeCandlesByTs gives the buffer the tie-break on
     // the current bucket so the chart stays smooth across the REST/WS seam.
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          result: [
-            {
-              open_price: '50',
-              high_price: '50',
-              low_price: '50',
-              close_price: '50',
-              volume_contracts: '1',
-              volume_usd: '50',
-              timestamp: Math.floor(BASE_TS / 1000),
-              timestamp_bucket: Math.floor(BASE_TS / 1000),
-            },
-          ],
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
+    mockDeriveFetch({
+      chart: {
+        result: [
+          {
+            open_price: '50',
+            high_price: '50',
+            low_price: '50',
+            close_price: '50',
+            volume_contracts: '1',
+            volume_usd: '50',
+            timestamp: Math.floor(BASE_TS / 1000),
+            timestamp_bucket: Math.floor(BASE_TS / 1000),
+          },
+        ],
+      },
+    });
     buffer.recordTrade('derive', 'HYPE-TEST', BASE_TS + MIN, 52, 3);
     buffer.recordMark('derive', 'HYPE-TEST', BASE_TS, 50);
     buffer.recordMark('derive', 'HYPE-TEST', BASE_TS + MIN, 52);
 
     const res = await svc.getCandles('derive', 'HYPE-TEST', '1m', '1d');
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [calledUrl, calledInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(calledUrl).toContain('/public/get_tradingview_chart_data');
-    expect(calledInit.method).toBe('POST');
-    const body = JSON.parse(String(calledInit.body));
+    // Both chart_data and trade_history are called (parallel).
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const urls = fetchSpy.mock.calls.map((c) => c[0] as string);
+    expect(urls).toEqual(expect.arrayContaining([
+      expect.stringContaining('/public/get_tradingview_chart_data'),
+      expect.stringContaining('/public/get_trade_history'),
+    ]));
+    const chartCall = fetchSpy.mock.calls.find((c) =>
+      String(c[0]).includes('/public/get_tradingview_chart_data'),
+    ) as [string, RequestInit];
+    expect(chartCall[1].method).toBe('POST');
+    const body = JSON.parse(String(chartCall[1].body));
     expect(body.instrument_name).toBe('HYPE-TEST');
     expect(body.period).toBe(60);
     // Timestamps in the request must be seconds, not ms.
@@ -164,33 +186,30 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     // mark (75000-P chart read 48 vs mark 13). The fetch layer drops vol=0
     // rows so this stale plateau cannot bleed into candles or the synthesized
     // mark line; mark continuity comes from the MarkHistoryBuffer instead.
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          result: [
-            {
-              open_price: '100', high_price: '100', low_price: '100', close_price: '100',
-              volume_contracts: '0', volume_usd: '0',
-              timestamp: Math.floor((BASE_TS - 2 * MIN) / 1000),
-              timestamp_bucket: Math.floor((BASE_TS - 2 * MIN) / 1000),
-            },
-            {
-              open_price: '105', high_price: '105', low_price: '105', close_price: '105',
-              volume_contracts: '0', volume_usd: '0',
-              timestamp: Math.floor((BASE_TS - MIN) / 1000),
-              timestamp_bucket: Math.floor((BASE_TS - MIN) / 1000),
-            },
-            {
-              open_price: '108', high_price: '112', low_price: '107', close_price: '110',
-              volume_contracts: '5', volume_usd: '550',
-              timestamp: Math.floor(BASE_TS / 1000),
-              timestamp_bucket: Math.floor(BASE_TS / 1000),
-            },
-          ],
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
+    mockDeriveFetch({
+      chart: {
+        result: [
+          {
+            open_price: '100', high_price: '100', low_price: '100', close_price: '100',
+            volume_contracts: '0', volume_usd: '0',
+            timestamp: Math.floor((BASE_TS - 2 * MIN) / 1000),
+            timestamp_bucket: Math.floor((BASE_TS - 2 * MIN) / 1000),
+          },
+          {
+            open_price: '105', high_price: '105', low_price: '105', close_price: '105',
+            volume_contracts: '0', volume_usd: '0',
+            timestamp: Math.floor((BASE_TS - MIN) / 1000),
+            timestamp_bucket: Math.floor((BASE_TS - MIN) / 1000),
+          },
+          {
+            open_price: '108', high_price: '112', low_price: '107', close_price: '110',
+            volume_contracts: '5', volume_usd: '550',
+            timestamp: Math.floor(BASE_TS / 1000),
+            timestamp_bucket: Math.floor(BASE_TS / 1000),
+          },
+        ],
+      },
+    });
     // Buffer is the authoritative mark source for Derive; it covers the
     // older buckets and the current one (sub-bucket-fresh 109 ≠ trade close 110).
     buffer.recordMark('derive', 'WARM-X', BASE_TS - 2 * MIN, 50);
@@ -215,18 +234,97 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     ]);
   });
 
-  it('degrades Derive to buffer-only when REST returns no rows', async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ result: [] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+  it('backfills Derive mark line from get_trade_history when buffer is cold', async () => {
+    // Live probe 2026-05-22: public/get_trade_history returns each trade with
+    // the venue mark_price captured at trade time. We bucket those mark
+    // points so the chart has honest historical mark data on illiquid
+    // strikes whose MarkHistoryBuffer is empty (chart just opened). Trade
+    // history mark_price (2961) differs from trade_price (3000) — we must
+    // use mark_price, not trade_price, for the mark line.
+    const olderTs = BASE_TS - 2 * MIN;
+    const recentTs = BASE_TS - MIN;
+    mockDeriveFetch({
+      chart: { result: [] }, // no real trade buckets — illiquid strike
+      history: {
+        result: {
+          trades: [
+            {
+              timestamp: olderTs,
+              trade_price: '2268',
+              trade_amount: '100',
+              mark_price: '2268',
+            },
+            {
+              timestamp: recentTs,
+              trade_price: '3000',     // off-market print
+              trade_amount: '0.012',
+              mark_price: '2961.333',  // actual mark at trade time
+            },
+          ],
+        },
+      },
+    });
+    // Buffer is cold for this symbol — no live marks yet.
+
+    const res = await svc.getCandles('derive', 'COLD-WITH-HISTORY', '1m', '1d');
+
+    // No real trade candles (chart_data was empty). Mark-only synthetic bars
+    // appear at each historical mark point so the chart has visible
+    // structure instead of being completely blank.
+    expect(res.candles.map((c) => ({ ts: c.ts, c: c.c, vol: c.vol, synthetic: c.synthetic }))).toEqual([
+      { ts: olderTs, c: 2268, vol: 0, synthetic: true },
+      { ts: recentTs, c: 2961.333, vol: 0, synthetic: true },
+    ]);
+    // Mark line is seeded from each trade's mark_price (NOT trade_price),
+    // bucketed at 1m resolution.
+    expect(res.markLine).toEqual([
+      { ts: olderTs, c: 2268 },
+      { ts: recentTs, c: 2961.333 },
+    ]);
+    // Verify the trade_history POST body includes the window and page_size.
+    const historyCall = fetchSpy.mock.calls.find((c) =>
+      String(c[0]).includes('/public/get_trade_history'),
+    ) as [string, RequestInit];
+    const body = JSON.parse(String(historyCall[1].body));
+    expect(body.instrument_name).toBe('COLD-WITH-HISTORY');
+    expect(body.page_size).toBe(500);
+    expect(body.from_timestamp_sec).toBeLessThan(1e11);
+    expect(body.to_timestamp_sec).toBeLessThan(1e11);
+  });
+
+  it('buffer wins over trade_history on the active bucket', async () => {
+    // Live buffer mark for the current bucket is fresher than the trade-
+    // history snapshot from earlier in the same bucket — mergeCandlesByTs
+    // gives the buffer the tie-break.
+    mockDeriveFetch({
+      chart: { result: [] },
+      history: {
+        result: {
+          trades: [
+            { timestamp: BASE_TS, trade_price: '110', trade_amount: '1', mark_price: '108' },
+          ],
+        },
+      },
+    });
+    buffer.recordMark('derive', 'WIN-TEST', BASE_TS, 109);
+
+    const res = await svc.getCandles('derive', 'WIN-TEST', '1m', '1d');
+
+    // Buffer (109) wins over history (108) at BASE_TS.
+    expect(res.markLine).toEqual([{ ts: BASE_TS, c: 109 }]);
+  });
+
+  it('degrades Derive to buffer-only when both REST endpoints return no rows', async () => {
+    mockDeriveFetch({ chart: { result: [] }, history: { result: { trades: [] } } });
 
     const res = await svc.getCandles('derive', 'COLD-X', '1m', '1d');
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]?.[0]).toContain('/public/get_tradingview_chart_data');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const urls = fetchSpy.mock.calls.map((c) => c[0] as string);
+    expect(urls).toEqual(expect.arrayContaining([
+      expect.stringContaining('/public/get_tradingview_chart_data'),
+      expect.stringContaining('/public/get_trade_history'),
+    ]));
     expect(res.candles).toEqual([]);
     expect(res.markLine).toEqual([]);
   });

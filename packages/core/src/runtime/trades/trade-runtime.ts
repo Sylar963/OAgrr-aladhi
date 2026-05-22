@@ -465,6 +465,7 @@ export class TradeRuntime {
     for (const ws of this.connections.values()) ws.close();
     this.connections.clear();
     this.subscribedUnderlyingsByConnection.clear();
+    clearTradeCaches();
   }
 }
 
@@ -751,6 +752,12 @@ const coincallInstrumentCache = new Map<string, CoincallInstrumentCacheEntry>();
 
 export function clearCoincallInstrumentCache(): void {
   coincallInstrumentCache.clear();
+}
+
+export function clearTradeCaches(): void {
+  deribitSeedCache.clear();
+  coincallInstrumentCache.clear();
+  coincallStartupFilterLogged.clear();
 }
 
 export function fetchCoincallInstrumentsForBase(base: string): Promise<string[]> {

@@ -288,15 +288,18 @@ export class DvolService {
     };
   }
 
+  private disposed = false;
+
   /** Re-fetch history daily so previousClose, 52w range, and IVR stay correct. */
   private scheduleHistoryRefresh(): void {
     const now = new Date();
     const nextMidnight = new Date(now);
     nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
-    nextMidnight.setUTCHours(0, 5, 0, 0); // 00:05 UTC — 5 min buffer for candle close
+    nextMidnight.setUTCHours(0, 5, 0, 0);
     const msUntil = nextMidnight.getTime() - now.getTime();
 
     this.refreshTimer = setTimeout(async () => {
+      if (this.disposed) return;
       log.info('refreshing DVOL history (daily rollover)');
       await Promise.allSettled(
         this.currencies.map(async (currency) => {
@@ -307,11 +310,13 @@ export class DvolService {
           }
         }),
       );
+      if (this.disposed) return;
       this.scheduleHistoryRefresh();
     }, msUntil);
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;

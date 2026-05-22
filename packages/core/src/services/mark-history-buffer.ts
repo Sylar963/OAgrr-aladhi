@@ -166,9 +166,12 @@ export class MarkHistoryBuffer {
     this.writeCount++;
     if ((this.writeCount & 0xff) !== 0) return;
     const cutoff = ts - this.retentionMs;
+    let emptyCount = 0;
     for (const store of this.stores.values()) {
       this.pruneStore(store, cutoff);
+      if (store.mark.size === 0 && store.trade.size === 0) emptyCount++;
     }
+    if (emptyCount > 0) this.sweepEmptyStores();
   }
 
   private pruneStore(store: InstrumentStore, cutoff: number): void {
@@ -181,6 +184,14 @@ export class MarkHistoryBuffer {
       }
       if (removed > 0) {
         log.debug({ removed, cutoff }, 'pruned stale buckets');
+      }
+    }
+  }
+
+  private sweepEmptyStores(): void {
+    for (const [k, store] of this.stores) {
+      if (store.mark.size === 0 && store.trade.size === 0) {
+        this.stores.delete(k);
       }
     }
   }

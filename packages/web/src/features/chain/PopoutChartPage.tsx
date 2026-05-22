@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { VENUE_IDS, type InstrumentCandleInterval, type InstrumentCandleRange, type VenueId } from '@oggregator/protocol';
+import type { EnrichedChainResponse } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { useChainQuery } from './queries.js';
 import { useChainWs } from '@hooks/useChainWs';
@@ -10,6 +12,12 @@ import InstrumentChart from './InstrumentChart.js';
 import InstrumentAttributionChart from './InstrumentAttributionChart.js';
 import { AttributionSummary } from './AttributionSummary.js';
 import { parsePopoutParams } from './chart-popout-url.js';
+import {
+  CHART_SUPPORTED_VENUES,
+  isChartSupportedVenue,
+  NotSupportedVenueError,
+  toVenueSymbol,
+} from './instrument-symbol.js';
 import styles from './PopoutChartPage.module.css';
 
 const INTERVALS: InstrumentCandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -17,6 +25,19 @@ const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
 
 function isVenueId(v: string): v is VenueId {
   return (VENUE_IDS as readonly string[]).includes(v);
+}
+
+function useStrikeVenues(underlying: string, expiry: string, strike: number, type: 'call' | 'put'): VenueId[] {
+  const qc = useQueryClient();
+  const entries = qc.getQueriesData<EnrichedChainResponse>({ queryKey: ['chain', underlying, expiry] });
+  for (const [, data] of entries) {
+    if (!data) continue;
+    const row = data.strikes.find((s) => s.strike === strike);
+    if (!row) continue;
+    const side = type === 'call' ? row.call : row.put;
+    return (Object.keys(side.venues) as VenueId[]).filter(isChartSupportedVenue);
+  }
+  return [];
 }
 
 export default function PopoutChartPage() {
@@ -34,6 +55,8 @@ interface PopoutInnerProps {
 }
 
 function PopoutInner({ initial }: PopoutInnerProps) {
+  const [venue, setVenue] = useState<VenueId>(initial.venue);
+  const [symbol, setSymbol] = useState<string>(initial.symbol);
   const [interval, setIntervalState] = useState<InstrumentCandleInterval>(
     INTERVALS.includes(initial.interval as InstrumentCandleInterval)
       ? (initial.interval as InstrumentCandleInterval)
@@ -52,30 +75,34 @@ function PopoutInner({ initial }: PopoutInnerProps) {
   const [mode, setMode] = useState<'price' | 'attribution'>(initial.mode);
 
   useEffect(() => {
-    document.title = `${initial.symbol} · ${VENUES[initial.venue]?.shortLabel ?? initial.venue}`;
-  }, [initial.symbol, initial.venue]);
+    document.title = `${symbol} · ${VENUES[venue]?.shortLabel ?? venue}`;
+  }, [symbol, venue]);
 
-  // Bootstrap chain data so useLiveMidFromChain has something to read.
-  useChainQuery(initial.underlying, initial.expiry, [initial.venue]);
+  // Fetch the chain across all chart-supported venues so the venue selector
+  // can enumerate which venues quote this strike. WS stays scoped to the
+  // active venue — we only need live mid for one chart at a time.
+  useChainQuery(initial.underlying, initial.expiry, CHART_SUPPORTED_VENUES.slice());
   useChainWs({
     underlying: initial.underlying,
     expiry: initial.expiry,
-    venues: [initial.venue],
+    venues: [venue],
   });
 
+  const strikeVenues = useStrikeVenues(initial.underlying, initial.expiry, initial.strike, initial.type);
+
   const liveMid = useLiveMidFromChain(
-    initial.underlying, initial.expiry, initial.strike, initial.type, initial.venue,
+    initial.underlying, initial.expiry, initial.strike, initial.type, venue,
   );
   const { candles, markLine, isLoading, error, priceCurrency } = useInstrumentCandles({
-    venue: initial.venue,
-    symbol: initial.symbol,
+    venue,
+    symbol,
     interval,
     range,
     liveMid,
   });
   const attribution = useInstrumentAttribution({
-    venue: initial.venue,
-    symbol: initial.symbol,
+    venue,
+    symbol,
     interval,
     range,
     underlying: initial.underlying,
@@ -86,12 +113,30 @@ function PopoutInner({ initial }: PopoutInnerProps) {
   });
   const countdown = useCandleCountdown(interval);
 
+  function switchVenue(nextVenue: VenueId): void {
+    if (nextVenue === venue) return;
+    try {
+      const nextSymbol = toVenueSymbol({
+        venue: nextVenue,
+        underlying: initial.underlying,
+        expiry: initial.expiry,
+        strike: initial.strike,
+        type: initial.type,
+      });
+      setVenue(nextVenue);
+      setSymbol(nextSymbol);
+    } catch (err) {
+      if (err instanceof NotSupportedVenueError) return;
+      throw err;
+    }
+  }
+
   return (
     <div className={styles.root}>
       <div className={styles.titlebar}>
         <span className={styles.title}>
-          {initial.symbol}
-          <span className={styles.venueLabel}> · {VENUES[initial.venue]?.shortLabel ?? initial.venue}</span>
+          {symbol}
+          <span className={styles.venueLabel}> · {VENUES[venue]?.shortLabel ?? venue}</span>
           {priceCurrency && (
             <span className={styles.venueLabel}> · {priceCurrency}</span>
           )}
@@ -150,6 +195,18 @@ function PopoutInner({ initial }: PopoutInnerProps) {
             onClick={() => setOverlays((o) => ({ ...o, ma20: !o.ma20 }))}
           >MA20</button>
         </div>
+        {strikeVenues.length > 0 && (
+          <div className={styles.venueDots}>
+            {strikeVenues.map((v) => (
+              <button
+                key={v}
+                type="button"
+                data-active={venue === v || undefined}
+                onClick={() => switchVenue(v)}
+              >{VENUES[v]?.shortLabel ?? v}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className={styles.body}>
         {mode === 'price' ? (
@@ -158,7 +215,7 @@ function PopoutInner({ initial }: PopoutInnerProps) {
             {error && <div className={styles.empty}>error — retry</div>}
             {!isLoading && !error && candles.length === 0 && (
               <div className={styles.empty}>
-                No historical data for this strike on {VENUES[initial.venue]?.shortLabel ?? initial.venue}
+                No historical data for this strike on {VENUES[venue]?.shortLabel ?? venue}
               </div>
             )}
             {!isLoading && !error && candles.length > 0 && (

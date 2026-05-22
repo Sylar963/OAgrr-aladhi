@@ -114,3 +114,23 @@
   font-family: var(--font-mono, 'IBM Plex Mono', monospace);
   font-size: 13px;
 }
+
+.venueDots {
+  display: flex;
+  gap: 2px;
+}
+
+.venueDots button {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 9px;
+  padding: 1px 4px;
+  background: transparent;
+  border: 1px solid var(--border-subtle, #1F2937);
+  color: #9aa0a6;
+  cursor: pointer;
+}
+
+.venueDots button[data-active] {
+  color: #e6e6e6;
+  border-color: #50D2C1;
+}

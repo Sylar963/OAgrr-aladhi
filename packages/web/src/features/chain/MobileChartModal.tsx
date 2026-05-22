@@ -1,197 +1,36 @@
-import { useQueryClient } from '@tanstack/react-query';
-import type { InstrumentCandleInterval, InstrumentCandleRange, VenueId } from '@oggregator/protocol';
-import type { EnrichedChainResponse } from '@shared/enriched';
-import { VENUES } from '@lib/venue-meta';
 import type { ChartPanel } from './chart-panels-store.js';
 import { useChartPanelsStore } from './chart-panels-store.js';
-import { useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
-import { useCandleCountdown } from './candle-countdown.js';
-import { toVenueSymbol, NotSupportedVenueError, isChartSupportedVenue } from './instrument-symbol.js';
-import InstrumentChart from './InstrumentChart.js';
-import InstrumentAttributionChart from './InstrumentAttributionChart.js';
-import { AttributionSummary } from './AttributionSummary.js';
-import { useInstrumentAttribution } from './use-instrument-attribution.js';
+import { ChartPanelView } from './ChartPanelView.js';
 import styles from './MobileChartModal.module.css';
-
-const INTERVALS: InstrumentCandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
-const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
-
-function useStrikeVenues(underlying: string, expiry: string, strike: number, type: 'call' | 'put'): VenueId[] {
-  const qc = useQueryClient();
-  const entries = qc.getQueriesData<EnrichedChainResponse>({ queryKey: ['chain', underlying, expiry] });
-  for (const [, data] of entries) {
-    if (!data) continue;
-    const row = data.strikes.find((s) => s.strike === strike);
-    if (!row) continue;
-    const side = type === 'call' ? row.call : row.put;
-    return (Object.keys(side.venues) as VenueId[]).filter(isChartSupportedVenue);
-  }
-  return [];
-}
-
-function switchPanelVenue(
-  newVenue: VenueId,
-  panel: ChartPanel,
-  close: (id: string) => void,
-  openPanel: (args: { venue: VenueId; symbol: string; underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => string,
-): void {
-  if (newVenue === panel.venue) return;
-  try {
-    const newSymbol = toVenueSymbol({
-      venue: newVenue,
-      underlying: panel.underlying,
-      expiry: panel.expiry,
-      strike: panel.strike,
-      type: panel.type,
-    });
-    close(panel.id);
-    openPanel({
-      venue: newVenue,
-      symbol: newSymbol,
-      underlying: panel.underlying,
-      expiry: panel.expiry,
-      strike: panel.strike,
-      type: panel.type,
-    });
-  } catch (err) {
-    if (err instanceof NotSupportedVenueError) return;
-    throw err;
-  }
-}
 
 export default function MobileChartModal({ panel }: { panel: ChartPanel }) {
   const update = useChartPanelsStore((s) => s.updatePanel);
   const close = useChartPanelsStore((s) => s.closePanel);
   const openPanel = useChartPanelsStore((s) => s.openPanel);
-  const strikeVenues = useStrikeVenues(panel.underlying, panel.expiry, panel.strike, panel.type);
 
-  const liveMid = useLiveMidFromChain(
-    panel.underlying, panel.expiry, panel.strike, panel.type, panel.venue,
-  );
-  const { candles, markLine, isLoading, error, priceCurrency } = useInstrumentCandles({
-    venue: panel.venue,
-    symbol: panel.symbol,
-    interval: panel.interval,
-    range: panel.range,
-    liveMid,
-  });
-  const attribution = useInstrumentAttribution({
-    venue: panel.venue,
-    symbol: panel.symbol,
-    interval: panel.interval,
-    range: panel.range,
-    underlying: panel.underlying,
-    strike: panel.strike,
-    right: panel.type,
-    expiry: panel.expiry,
-    enabled: panel.chartMode === 'attribution',
-  });
-  const countdown = useCandleCountdown(panel.interval);
+  const { id, ...data } = panel;
 
   return (
     <div className={styles.modal}>
-      <div className={styles.titlebar}>
-        <span className={styles.title}>
-          {panel.symbol}
-          <span className={styles.venueLabel}> · {VENUES[panel.venue]?.shortLabel ?? panel.venue}</span>
-          {priceCurrency && (
-            <span className={styles.venueLabel}> · {priceCurrency}</span>
-          )}
-        </span>
-        <button type="button" onClick={() => close(panel.id)} aria-label="Close">✕</button>
-      </div>
-      <div className={styles.toolbar}>
-        <div className={styles.modes}>
-          <button
-            type="button"
-            data-active={panel.chartMode === 'price' || undefined}
-            onClick={() => update(panel.id, { chartMode: 'price' })}
-          >Price</button>
-          <button
-            type="button"
-            data-active={panel.chartMode === 'attribution' || undefined}
-            onClick={() => update(panel.id, { chartMode: 'attribution' })}
-          >Attribution</button>
-        </div>
-        <div className={styles.intervals}>
-          {INTERVALS.map((i) => (
-            <button
-              key={i}
-              type="button"
-              data-active={panel.interval === i || undefined}
-              onClick={() => update(panel.id, { interval: i })}
-            >{i}</button>
-          ))}
-          <span className={styles.countdown} title={`Next ${panel.interval} bar closes in ${countdown}`}>
-            {countdown}
-          </span>
-        </div>
-        <div className={styles.ranges}>
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              data-active={panel.range === r || undefined}
-              onClick={() => update(panel.id, { range: r })}
-            >{r}</button>
-          ))}
-        </div>
-        <div className={styles.overlays}>
-          <button type="button" data-active={panel.overlays.mark || undefined}
-            onClick={() => update(panel.id, { overlays: { ...panel.overlays, mark: !panel.overlays.mark } })}>Mark</button>
-          <button type="button" data-active={panel.overlays.ma9 || undefined}
-            onClick={() => update(panel.id, { overlays: { ...panel.overlays, ma9: !panel.overlays.ma9 } })}>MA9</button>
-          <button type="button" data-active={panel.overlays.ma20 || undefined}
-            onClick={() => update(panel.id, { overlays: { ...panel.overlays, ma20: !panel.overlays.ma20 } })}>MA20</button>
-        </div>
-        {strikeVenues.length > 0 && (
-          <div className={styles.venueDots}>
-            {strikeVenues.map((v) => (
-              <button
-                key={v}
-                type="button"
-                data-active={panel.venue === v || undefined}
-                onClick={() => switchPanelVenue(v, panel, close, openPanel)}
-              >{VENUES[v]?.shortLabel ?? v}</button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className={styles.body}>
-        {panel.chartMode === 'price' ? (
-          <>
-            {isLoading && <div className={styles.empty}>loading…</div>}
-            {error && <div className={styles.empty}>error — retry</div>}
-            {!isLoading && !error && candles.length === 0 && (
-              <div className={styles.empty}>No historical data for this strike on {VENUES[panel.venue]?.shortLabel ?? panel.venue}</div>
-            )}
-            {!isLoading && !error && candles.length > 0 && (
-              <InstrumentChart candles={candles} markLine={markLine} overlays={panel.overlays} />
-            )}
-          </>
-        ) : (
-          <>
-            {attribution.unsupportedUnderlying && (
-              <div className={styles.empty}>Attribution unavailable for {panel.underlying} (BTC / ETH only)</div>
-            )}
-            {!attribution.unsupportedUnderlying && attribution.isLoading && (
-              <div className={styles.empty}>computing attribution…</div>
-            )}
-            {!attribution.unsupportedUnderlying && attribution.error && (
-              <div className={styles.empty}>error — retry</div>
-            )}
-            {!attribution.unsupportedUnderlying && attribution.insufficientData && (
-              <div className={styles.empty}>insufficient option / forward data overlap</div>
-            )}
-            {attribution.result && (
-              <>
-                <AttributionSummary summary={attribution.result.summary} priceCurrency={attribution.displayCurrency ?? 'USD'} />
-                <InstrumentAttributionChart result={attribution.result} priceCurrency={attribution.displayCurrency ?? 'USD'} />
-              </>
-            )}
-          </>
-        )}
-      </div>
+      <ChartPanelView
+        data={data}
+        styles={styles}
+        onPatch={(patch) => update(id, patch)}
+        onSwitchVenue={(newVenue, newSymbol) => {
+          // Panel id is keyed on venue+symbol, so a venue switch is modeled
+          // as close + reopen rather than an in-place update.
+          close(id);
+          openPanel({
+            venue: newVenue,
+            symbol: newSymbol,
+            underlying: panel.underlying,
+            expiry: panel.expiry,
+            strike: panel.strike,
+            type: panel.type,
+          });
+        }}
+        onClose={() => close(id)}
+      />
     </div>
   );
 }

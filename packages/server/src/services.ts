@@ -210,17 +210,27 @@ export function isNewsReady(): boolean {
   return serviceHealth.news;
 }
 
-export async function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
-  try {
-    return await ivHistoryStore.getStorageStats();
-  } catch {
-    return {
-      enabled: ivHistoryStore.enabled,
-      bytes: null,
-      thresholdBytes: ivHistorySizeWarnBytes,
-      warning: false,
-    };
+// Cached so /health doesn't pay a Postgres round-trip
+// (`pg_total_relation_size('iv_history_points')`) on every probe. The value
+// changes glacially — the background alarm below also recomputes every 5 min.
+const IV_HISTORY_STORAGE_STATS_TTL_MS = 30_000;
+let ivHistoryStorageStatsCache:
+  | { expiresAt: number; promise: Promise<IvHistoryStorageStats> }
+  | null = null;
+
+export function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
+  const now = Date.now();
+  if (ivHistoryStorageStatsCache != null && ivHistoryStorageStatsCache.expiresAt > now) {
+    return ivHistoryStorageStatsCache.promise;
   }
+  const promise = ivHistoryStore.getStorageStats().catch(() => ({
+    enabled: ivHistoryStore.enabled,
+    bytes: null,
+    thresholdBytes: ivHistorySizeWarnBytes,
+    warning: false,
+  }));
+  ivHistoryStorageStatsCache = { expiresAt: now + IV_HISTORY_STORAGE_STATS_TTL_MS, promise };
+  return promise;
 }
 
 export async function bootstrapServices(log: FastifyBaseLogger) {

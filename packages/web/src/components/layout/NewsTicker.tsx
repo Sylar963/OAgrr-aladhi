@@ -8,7 +8,7 @@ import { AD_EVERY, SPONSORS } from '@lib/sponsors';
 import { mergeTickerItems, type TickerItem } from './news-ticker/items';
 import styles from './NewsTicker.module.css';
 
-const PX_PER_SEC = 34;
+const PX_PER_SEC = 22;
 const AD_ROTATE_MS = 20_000;
 
 function symbolToBase(symbol: string): string {

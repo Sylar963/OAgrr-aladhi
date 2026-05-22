@@ -115,10 +115,14 @@ export function NewsTicker() {
     [news, spots, adTick],
   );
 
-  const itemsKey = useMemo(
-    () => items.filter((i) => i.kind !== 'ad').map((i) => i.id).join('|'),
-    [items],
-  );
+  const doubled = useMemo(() => {
+    const buildHalf = (half: 'a' | 'b') =>
+      items.map((item, i) => ({
+        item,
+        key: item.kind === 'ad' ? `${half}-ad-${i}` : `${half}-${item.id}`,
+      }));
+    return [...buildHalf('a'), ...buildHalf('b')];
+  }, [items]);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const [durationSec, setDurationSec] = useState(60);
@@ -137,19 +141,18 @@ export function NewsTicker() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [itemsKey]);
+  }, []);
 
   if (items.length === 0) return null;
 
   const trackStyle = { '--scroll-duration': `${durationSec}s` } as CSSProperties;
-  const doubled = [...items, ...items];
 
   return (
     <div className={styles.ticker}>
       <div className={styles.viewport}>
-        <div key={itemsKey} ref={trackRef} className={styles.track} style={trackStyle}>
-          {doubled.map((item, i) => (
-            <TickerChip key={`slot-${i}`} item={item} />
+        <div ref={trackRef} className={styles.track} style={trackStyle}>
+          {doubled.map(({ item, key }) => (
+            <TickerChip key={key} item={item} />
           ))}
         </div>
       </div>

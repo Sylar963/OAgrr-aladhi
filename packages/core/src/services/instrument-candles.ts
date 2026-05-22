@@ -561,8 +561,19 @@ export async function fetchBybitTradeBucketed(
 //     volume_usd, volume_contracts,                   // strings
 //     timestamp, timestamp_bucket,                    // seconds
 //   }
-// Mark line still comes from the live MarkHistoryBuffer — Derive does not
-// expose a REST mark-price-history endpoint.
+//
+// Verified live behavior (2026-05-22) on BTC-20260605-78000-P,
+// BTC-20260523-77000-C, BTC-20260523-75000-P:
+//   - Every row has open=high=low=close (single price per bucket).
+//   - vol=0 buckets forward-fill the LAST TRADE PRICE — they are NOT mark-
+//     derived. Example: BTC-20260523-75000-P chart shows 48 across all bars
+//     while the live ticker mark is 13 (~3.7x off); BTC-20260605-78000-P
+//     reads 3000 vs live mark 2423. For illiquid options this stickiness can
+//     persist for days/weeks after the last print.
+// Consequence: we only keep vol>0 rows here and rely on the live
+// MarkHistoryBuffer (Derive has no REST mark-price-history) for the mark
+// line. Returning the forward-filled rows misleads the chart into showing
+// a stale price plateau as if it were the venue's mark.
 const INTERVAL_TO_DERIVE_PERIOD: Record<InstrumentCandleInterval, number> = {
   '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
 };
@@ -616,7 +627,10 @@ export async function fetchDeriveTrade(
     const c = Number(row.close_price);
     const vol = Number(row.volume_contracts);
     if (!Number.isFinite(ts) || !Number.isFinite(o)) continue;
-    candles.push({ ts, o, h, l, c, vol: Number.isFinite(vol) ? vol : 0 });
+    // Drop forward-filled stale-trade rows (see header comment). Only real
+    // print buckets survive; mark continuity comes from the MarkHistoryBuffer.
+    if (!Number.isFinite(vol) || vol <= 0) continue;
+    candles.push({ ts, o, h, l, c, vol });
   }
   return candles.sort((a, b) => a.ts - b.ts);
 }
@@ -864,13 +878,17 @@ function priceCurrencyFor(venue: VenueId, symbol: string): string {
 // real mark series is shorter than the candle series — gives the orange
 // mark overlay continuous coverage instead of a 1-point live blip.
 // Verified live behavior (2026-05-20):
-//   - derive: get_tradingview_chart_data → vol=0 buckets are o=h=l=c=mark
 //   - coincall: signed kline → vol=0 buckets carry intra-bar mark range
 //   - binance: eapi/v1/klines → vol=0 buckets are o=h=l=c=mark (flat)
 //   - deribit: get_tradingview_chart_data → vol=0 buckets are flat marks;
 //             needed because Deribit's mark-history endpoint only covers
 //             vol-index strikes and returns [] for every other contract.
 // Excluded:
+//   - derive: vol=0 buckets forward-fill the LAST TRADE price, not mark
+//     (verified 2026-05-22, see fetchDeriveTrade header). Earlier comments
+//     in this file claimed Derive belonged here — they were wrong. Stale
+//     trade prices get dropped at the fetch layer; mark history is
+//     buffer-only.
 //   - okx / bybit / thalex: dedicated mark-history REST already returns
 //     full coverage, so markLine.length >= candles.length naturally.
 //   - gateio: public /options/candlesticks is trade-only and returns []
@@ -878,7 +896,7 @@ function priceCurrencyFor(venue: VenueId, symbol: string): string {
 //     /mark_price_candlesticks endpoint (with creds) already fills the
 //     mark series properly.
 const TRADE_CLOSE_IS_MARK: ReadonlySet<VenueId> = new Set([
-  'deribit', 'binance', 'derive', 'coincall',
+  'deribit', 'binance', 'coincall',
 ]);
 
 interface CacheEntry {
@@ -1077,11 +1095,12 @@ export class InstrumentCandleService {
         ]);
       case 'derive': {
         const buffer = this.markHistoryBuffer;
-        // get_tradingview_chart_data gives ClickHouse-backed OHLCV history
-        // in one call; the live MarkHistoryBuffer overlays sub-bucket
-        // freshness so the active candle tracks the WS tape. Mark stays
-        // buffer-only — Derive doesn't expose a REST mark-price-history
-        // endpoint. REST failures degrade to buffer-only rather than 502.
+        // get_tradingview_chart_data returns only forward-filled stale-trade
+        // rows for vol=0 buckets (see fetchDeriveTrade header); we drop those
+        // at the fetch layer and let the live MarkHistoryBuffer carry the
+        // mark line. Real REST trade buckets still merge with buffered trade
+        // ticks for sub-bucket freshness. REST failures degrade to buffer-
+        // only rather than 502.
         const restPromise = fetchDeriveTrade(symbol, interval, range).catch((err: unknown) => {
           if (err instanceof InstrumentCandlesError) throw err;
           log.warn({ symbol, err: String(err) }, 'derive chart fetch error');

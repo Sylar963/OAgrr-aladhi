@@ -156,12 +156,14 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     ]);
   });
 
-  it('synthesizes Derive mark line from candle closes when buffer covers only the current bucket', async () => {
-    // Derive has no REST mark-history endpoint; the buffer only retains
-    // recent ticks. The chart_data endpoint already fills non-trade buckets
-    // with mark-derived OHLC (open=high=low=close=mark, vol=0), so the
-    // candle close IS the venue's mark per bucket. Synthesizing markLine
-    // from closes gives the orange overlay continuous coverage.
+  it('drops vol=0 Derive REST rows (they forward-fill stale trade price, not mark) and uses buffer for mark line', async () => {
+    // Live probe 2026-05-22 (BTC-20260605-78000-P, BTC-20260523-77000-C,
+    // BTC-20260523-75000-P): get_tradingview_chart_data returns o=h=l=c=
+    // last-trade-price for vol=0 buckets — not the venue mark. On illiquid
+    // strikes this carries forward for days and is multiples off the live
+    // mark (75000-P chart read 48 vs mark 13). The fetch layer drops vol=0
+    // rows so this stale plateau cannot bleed into candles or the synthesized
+    // mark line; mark continuity comes from the MarkHistoryBuffer instead.
     fetchSpy.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -189,17 +191,23 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
     );
-    // Buffer covers only the current bucket with a sub-bucket-fresh mark
-    // that differs from the candle close (109 vs 110) — buffer must win on
-    // collision so the live mark stays accurate.
+    // Buffer is the authoritative mark source for Derive; it covers the
+    // older buckets and the current one (sub-bucket-fresh 109 ≠ trade close 110).
+    buffer.recordMark('derive', 'WARM-X', BASE_TS - 2 * MIN, 50);
+    buffer.recordMark('derive', 'WARM-X', BASE_TS - MIN, 52);
     buffer.recordMark('derive', 'WARM-X', BASE_TS, 109);
 
     const res = await svc.getCandles('derive', 'WARM-X', '1m', '1d');
 
-    expect(res.candles).toHaveLength(3);
-    // Older buckets: synthesized from candle close. Current bucket: buffer
-    // value (109), not the candle close (110).
-    expect(res.markLine.map((m) => m.c)).toEqual([100, 105, 109]);
+    // Only the vol>0 REST row survives, plus the older buffer marks as
+    // synthetic mark-only bars (vol=0 from the merge's mark branch).
+    expect(res.candles.map((c) => ({ ts: c.ts, c: c.c, vol: c.vol, synthetic: c.synthetic }))).toEqual([
+      { ts: BASE_TS - 2 * MIN, c: 50, vol: 0, synthetic: true },
+      { ts: BASE_TS - MIN, c: 52, vol: 0, synthetic: true },
+      { ts: BASE_TS, c: 110, vol: 5, synthetic: false },
+    ]);
+    // Mark line is purely buffer-derived; no stale REST forward-fills.
+    expect(res.markLine.map((m) => m.c)).toEqual([50, 52, 109]);
     expect(res.markLine.map((m) => m.ts)).toEqual([
       BASE_TS - 2 * MIN,
       BASE_TS - MIN,
@@ -344,12 +352,13 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
   });
 
   it('flags vol=0 bars from TRADE_CLOSE_IS_MARK venues as synthetic', async () => {
-    // Binance/Deribit/Derive/Coincall fill non-trade buckets with mark-OHLC in
+    // Binance/Deribit/Coincall fill non-trade buckets with mark-OHLC in
     // their trade endpoint. Those bars are mark-derived, not real trades, so
     // they must carry synthetic=true — the chart styles synthetic candles in
     // gray (vs green/red) and renders them visibly even when o=h=l=c collapses
     // the body to zero height. Without the flag, flat candles draw as 0-pixel
-    // invisible defaults and the user thinks data is missing.
+    // invisible defaults and the user thinks data is missing. Derive is
+    // intentionally NOT in this set — see drops-vol=0-rows test.
     fetchSpy.mockResolvedValue(
       new Response(
         JSON.stringify([

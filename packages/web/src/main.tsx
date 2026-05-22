@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import ErrorBoundary from '@components/ui/ErrorBoundary';
 import { queryClient } from '@lib/query-client';
@@ -22,6 +24,8 @@ createRoot(root).render(
       <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>
         {isPopout ? <PopoutChartPage /> : <App />}
       </ErrorBoundary>
+      <Analytics />
+      <SpeedInsights />
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   </StrictMode>,

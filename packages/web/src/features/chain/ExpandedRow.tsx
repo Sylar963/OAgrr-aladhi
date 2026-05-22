@@ -7,6 +7,8 @@ import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
 import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
 import { useChartPanelsStore } from './chart-panels-store.js';
 import { toVenueSymbol, NotSupportedVenueError, isChartSupportedVenue } from './instrument-symbol.js';
+import { openChartPopout } from './chart-popout-url.js';
+import { useIsMobile } from '@hooks/useIsMobile';
 import styles from './ExpandedRow.module.css';
 
 interface ForwardCell {
@@ -411,6 +413,7 @@ function pickPrimaryVenue(side: EnrichedSide, active: readonly VenueId[]): Venue
 
 function ChartButton({ underlying, expiry, strike, type, side, activeVenues }: ChartButtonProps) {
   const openPanel = useChartPanelsStore((s) => s.openPanel);
+  const isMobile = useIsMobile();
   const venue = pickPrimaryVenue(side, activeVenues);
   const disabled = venue == null;
   return (
@@ -423,7 +426,11 @@ function ChartButton({ underlying, expiry, strike, type, side, activeVenues }: C
         if (!venue) return;
         try {
           const symbol = toVenueSymbol({ venue, underlying, expiry, strike, type });
-          openPanel({ venue, symbol, underlying, expiry, strike, type });
+          if (isMobile) {
+            openPanel({ venue, symbol, underlying, expiry, strike, type });
+          } else {
+            openChartPopout({ venue, symbol, underlying, expiry, strike, type });
+          }
         } catch (err) {
           if (err instanceof NotSupportedVenueError) return;
           throw err;

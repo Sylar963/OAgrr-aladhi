@@ -1,4 +1,4 @@
-import type { ChartPanel } from './chart-panels-store.js';
+import type { VenueId } from '@oggregator/protocol';
 
 export interface PopoutChartParams {
   venue: string;
@@ -15,23 +15,13 @@ export interface PopoutChartParams {
   mode: 'price' | 'attribution';
 }
 
-export function buildPopoutUrl(panel: ChartPanel): string {
-  const params = new URLSearchParams({
-    popout: '1',
-    venue: panel.venue,
-    symbol: panel.symbol,
-    underlying: panel.underlying,
-    expiry: panel.expiry,
-    strike: String(panel.strike),
-    type: panel.type,
-    interval: panel.interval,
-    range: panel.range,
-    mark: panel.overlays.mark ? '1' : '0',
-    ma9: panel.overlays.ma9 ? '1' : '0',
-    ma20: panel.overlays.ma20 ? '1' : '0',
-    mode: panel.chartMode,
-  });
-  return `${window.location.origin}/?${params.toString()}`;
+export interface OpenChartPopoutArgs {
+  venue: VenueId;
+  symbol: string;
+  underlying: string;
+  expiry: string;
+  strike: number;
+  type: 'call' | 'put';
 }
 
 export function parsePopoutParams(search: string): PopoutChartParams | null {
@@ -67,13 +57,28 @@ export function parsePopoutParams(search: string): PopoutChartParams | null {
   };
 }
 
-export function openPanelPopout(panel: ChartPanel, close: (id: string) => void): void {
-  const url = buildPopoutUrl(panel);
-  const features = `popup=yes,width=${Math.max(560, panel.w)},height=${Math.max(420, panel.h + 80)}`;
-  const win = window.open(url, `chart-popout-${panel.id}`, features);
-  if (!win) {
-    // Popup blocked — leave the panel in place so the user can still interact with it
-    return;
-  }
-  close(panel.id);
+export function openChartPopout(args: OpenChartPopoutArgs): Window | null {
+  const params = new URLSearchParams({
+    popout: '1',
+    venue: args.venue,
+    symbol: args.symbol,
+    underlying: args.underlying,
+    expiry: args.expiry,
+    strike: String(args.strike),
+    type: args.type,
+    interval: '1h',
+    range: '7d',
+    mark: '1',
+    ma9: '1',
+    ma20: '1',
+    mode: 'price',
+  });
+  const url = `${window.location.origin}/?${params.toString()}`;
+  // Stable per-(venue, symbol) name: clicking Chart again on the same strike
+  // focuses the existing window instead of spawning a duplicate. Different
+  // strike → different name → new window.
+  const windowName = `chart-${args.venue}-${args.symbol}`;
+  const win = window.open(url, windowName, 'popup=yes,width=720,height=480');
+  if (win) win.focus();
+  return win;
 }

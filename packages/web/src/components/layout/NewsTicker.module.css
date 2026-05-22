@@ -143,6 +143,26 @@
   color: var(--color-info);
 }
 
+.sponsorChip[data-sponsor="bybit"] {
+  background: color-mix(in srgb, var(--venue-bybit) 14%, transparent);
+}
+.sponsorChip[data-sponsor="bybit"] .sponsorCategory {
+  color: var(--venue-bybit);
+}
+.sponsorChip[data-sponsor="bybit"] .primary {
+  color: var(--venue-bybit);
+}
+
+.sponsorChip[data-sponsor="derive"] {
+  background: color-mix(in srgb, var(--venue-derive) 14%, transparent);
+}
+.sponsorChip[data-sponsor="derive"] .sponsorCategory {
+  color: var(--venue-derive);
+}
+.sponsorChip[data-sponsor="derive"] .primary {
+  color: var(--venue-derive);
+}
+
 .dot {
   display: inline-block;
   width: 6px;

@@ -91,29 +91,30 @@ function StatCell({
   );
 }
 
-const IVR_TIP = (
+const IVP_TIP = (
   <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>IV Rank (52-week)</div>
+    <div className={styles.statTipTitle}>IV Percentile (52-week)</div>
     <div>
-      Position of current Deribit DVOL within its 52-week range. DVOL is Deribit’s 30-day
-      ATM IV index — the same series the IV history panel seeds from.
+      Share of trailing-year Deribit DVOL daily closes at or below today’s value. DVOL is
+      Deribit’s 30-day ATM IV index — the same series the IV history panel seeds from.
+      Robust to one-off vol spikes that would otherwise poison a min/max IV Rank denominator.
     </div>
     <div className={styles.statTipFormula}>
-      IVR = (current − 52w low) / (52w high − 52w low) × 100
+      IVP = (# daily closes ≤ current) / (365 days) × 100
     </div>
     <ul className={styles.statTipList}>
       <li>
-        <b style={{ color: 'var(--color-profit)' }}>0–30</b>: IV cheap historically — vol buyers favored.
+        <b style={{ color: 'var(--color-profit)' }}>0–30</b>: IV cheap vs the past year — vol buyers favored.
       </li>
       <li>
-        <b style={{ color: 'var(--color-warning)' }}>30–70</b>: mid-range; no strong edge.
+        <b style={{ color: 'var(--color-warning)' }}>30–70</b>: mid-distribution; no strong edge.
       </li>
       <li>
-        <b style={{ color: 'var(--color-loss)' }}>70–100</b>: IV rich historically — vol sellers favored.
+        <b style={{ color: 'var(--color-loss)' }}>70–100</b>: IV rich vs the past year — vol sellers favored.
       </li>
     </ul>
     <ul className={styles.statTipList}>
-      <li>Sub-text shows the 52w low–high band the rank is measured against.</li>
+      <li>Sub-text shows the 52w low–high band for absolute context.</li>
       <li>Available for BTC and ETH only (the venues Deribit publishes DVOL for).</li>
     </ul>
   </div>
@@ -140,7 +141,7 @@ const ATM_IV_TIP = (
     </div>
     <ul className={styles.statTipList}>
       <li>Reflects this expiry only — for a constant-maturity view see the IV Rank panel.</li>
-      <li>Pair with IVR to gauge whether this expiry’s IV is rich vs the 52-week range.</li>
+      <li>Pair with IVP to gauge whether this expiry’s IV is rich vs the past year.</li>
     </ul>
   </div>
 );
@@ -235,11 +236,11 @@ export default function StatStrip({
         <>
           <div className={styles.divider} />
           <StatCell
-            label="IVR"
-            value={`${marketStats.dvol.ivr.toFixed(0)}`}
+            label="IVP"
+            value={`${marketStats.dvol.ivp.toFixed(0)}`}
             sub={`52w: ${fmtIv(marketStats.dvol.low52w)}–${fmtIv(marketStats.dvol.high52w)}`}
             accent
-            labelTooltip={IVR_TIP}
+            labelTooltip={IVP_TIP}
           />
           <div className={styles.divider} />
           <StatCell

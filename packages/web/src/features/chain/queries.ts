@@ -168,7 +168,7 @@ export interface StatsResponse {
   } | null;
   dvol: {
     current: number;
-    ivr: number;
+    ivp: number;
     ivChange1d: number;
     high52w: number;
     low52w: number;

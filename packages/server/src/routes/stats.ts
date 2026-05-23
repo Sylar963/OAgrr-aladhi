@@ -26,7 +26,7 @@ export async function statsRoute(app: FastifyInstance) {
       dvol: dvol
         ? {
             current: dvol.current,
-            ivr: dvol.ivr,
+            ivp: dvol.ivp,
             ivChange1d: dvol.ivChange1d,
             high52w: dvol.high52w,
             low52w: dvol.low52w,

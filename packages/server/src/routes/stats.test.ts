@@ -22,7 +22,7 @@ function makeDvol(overrides: Partial<DvolSnapshot> = {}): DvolSnapshot {
     current: 0.52,
     high52w: 0.8,
     low52w: 0.3,
-    ivr: 65,
+    ivp: 65,
     previousClose: 0.5,
     ivChange1d: 0.02,
     updatedAt: Date.now(),
@@ -105,7 +105,7 @@ describe('GET /stats', () => {
 
   it('returns full stats when both services are ready', async () => {
     setReady(true, true);
-    getDvol().mockReturnValue(makeDvol({ current: 0.52, ivr: 65 }));
+    getDvol().mockReturnValue(makeDvol({ current: 0.52, ivp: 65 }));
     getSpot().mockReturnValue(makeSpot({ lastPrice: 70_000, change24hPct: 2.5 }));
 
     const res = await app.inject({ method: 'GET', url: '/stats?underlying=BTC' });
@@ -113,7 +113,7 @@ describe('GET /stats', () => {
     const body = res.json();
     expect(body.underlying).toBe('BTC');
     expect(body.spot).toMatchObject({ price: 70_000, change24hPct: 2.5 });
-    expect(body.dvol).toMatchObject({ current: 0.52, ivr: 65 });
+    expect(body.dvol).toMatchObject({ current: 0.52, ivp: 65 });
     expect(getDvol()).toHaveBeenCalledWith('BTC');
     expect(getSpot()).toHaveBeenCalledWith('BTC');
   });

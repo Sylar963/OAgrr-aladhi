@@ -182,8 +182,8 @@ export default function DvolChart() {
               </span>
             </div>
             <div className={styles.stat}>
-              <span className={styles.statLabel}>IVR</span>
-              <span className={styles.statValue}>{dvol.ivr.toFixed(0)}</span>
+              <span className={styles.statLabel}>IVP</span>
+              <span className={styles.statValue}>{dvol.ivp.toFixed(0)}</span>
             </div>
             <div className={styles.stat}>
               <span className={styles.statLabel}>1d Δ</span>

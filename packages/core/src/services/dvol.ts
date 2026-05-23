@@ -15,13 +15,45 @@ export interface DvolSnapshot {
   high52w: number;
   /** 52-week low as fraction */
   low52w: number;
-  /** IV Rank: 0–100 percentile within 52-week range */
-  ivr: number;
+  /**
+   * IV Percentile: 0–100 = % of trailing-year daily closes ≤ current.
+   * Robust to single-day vol spikes — preferred over min/max IV Rank for fat-tailed
+   * crypto DVOL distributions where one outlier print poisons the denominator.
+   */
+  ivp: number;
   /** Yesterday's close as fraction */
   previousClose: number;
   /** 1-day IV change as fraction (current − previousClose) */
   ivChange1d: number;
   updatedAt: number;
+}
+
+/**
+ * IV Percentile: % of past-year daily closes at or below `currentPct`.
+ * Ties (close == current) count as ≤. Empty distribution returns 0.
+ */
+export function computeIvp(currentPct: number, dailyClosesPct: number[]): number {
+  if (dailyClosesPct.length === 0) return 0;
+  let countLeq = 0;
+  for (const c of dailyClosesPct) {
+    if (c <= currentPct) countLeq++;
+  }
+  return (countLeq / dailyClosesPct.length) * 100;
+}
+
+/**
+ * Collapse a sorted (ascending) merged daily+hourly candle stream to one close per UTC day —
+ * the latest candle in each day wins. Hourly resolution near the right edge would otherwise
+ * over-weight recent observations in the IVP denominator.
+ */
+export function dailyClosesFromCandles(candles: DvolCandle[]): number[] {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const lastClosePerDay = new Map<number, number>();
+  for (const c of candles) {
+    const day = Math.floor(c.timestamp / MS_PER_DAY);
+    lastClosePerDay.set(day, c.close);
+  }
+  return [...lastClosePerDay.values()];
 }
 
 // DVOL candle: [timestamp, open, high, low, close]
@@ -38,7 +70,7 @@ const DvolPushSchema = z.object({
 
 /**
  * Fetches Deribit DVOL (30-day ATM IV index) history and subscribes to
- * live updates. Computes IVR and 1-day IV change from the candle data.
+ * live updates. Computes IV Percentile and 1-day IV change from the candle data.
  */
 export interface DvolCandle {
   timestamp: number;
@@ -56,6 +88,7 @@ export interface HvPoint {
 export class DvolService {
   private snapshots = new Map<string, DvolSnapshot>();
   private candleHistory = new Map<string, DvolCandle[]>();
+  private dailyCloses = new Map<string, number[]>();
   private hvHistory = new Map<string, HvPoint[]>();
   private rpc: JsonRpcWsClient | null = null;
   private currencies: string[] = [];
@@ -109,7 +142,7 @@ export class DvolService {
     const oneYearAgo = now - 365 * MS_PER_DAY;
     const thirtyDaysAgo = now - 30 * MS_PER_DAY;
 
-    // Daily for the 52-week IVR window, hourly for the recent overlap with HV.
+    // Daily for the 52-week IVP window, hourly for the recent overlap with HV.
     // Hourly matches Deribit HV's native 1h resolution so the chart's categorical
     // time axis spaces both series at the same cadence — without this, hourly HV
     // points stretch each daily DVOL bar across 24 slots and the line goes flat.
@@ -177,14 +210,21 @@ export class DvolService {
       }
     }
 
-    this.snapshots.set(currency, this.buildSnapshot(currency, last[4], prev[4], high52w, low52w));
+    const dailyClosesPct = dailyClosesFromCandles(this.candleHistory.get(currency)!);
+    this.dailyCloses.set(currency, dailyClosesPct);
+
+    this.snapshots.set(
+      currency,
+      this.buildSnapshot(currency, last[4], prev[4], high52w, low52w, dailyClosesPct),
+    );
 
     log.info(
       {
         currency,
         current: (last[4] / 100).toFixed(4),
-        ivr: this.snapshots.get(currency)!.ivr.toFixed(1),
+        ivp: this.snapshots.get(currency)!.ivp.toFixed(1),
         candles: candles.length,
+        dailyCloses: dailyClosesPct.length,
         daily: dailyData.length,
         hourly: hourlyData.length,
       },
@@ -228,13 +268,16 @@ export class DvolService {
     const existing = this.snapshots.get(currency);
     if (!existing) return;
 
-    // Rebuild snapshot with new current value, keeping 52w range and previous close
+    // Rebuild snapshot with new current value, keeping 52w range and previous close.
+    // IVP re-derives from the cached daily-close series so a tick that crosses additional
+    // historical observations advances the percentile without a full history refetch.
     const snapshot = this.buildSnapshot(
       currency,
       parsed.data.volatility,
       existing.previousClose * 100, // back to percentage for buildSnapshot
       existing.high52w * 100,
       existing.low52w * 100,
+      this.dailyCloses.get(currency) ?? [],
     );
     this.snapshots.set(currency, snapshot);
 
@@ -274,14 +317,14 @@ export class DvolService {
     previousClosePct: number,
     high52wPct: number,
     low52wPct: number,
+    dailyClosesPct: number[],
   ): DvolSnapshot {
-    const range = high52wPct - low52wPct;
     return {
       currency,
       current: currentPct / 100,
       high52w: high52wPct / 100,
       low52w: low52wPct / 100,
-      ivr: range > 0 ? ((currentPct - low52wPct) / range) * 100 : 0,
+      ivp: computeIvp(currentPct, dailyClosesPct),
       previousClose: previousClosePct / 100,
       ivChange1d: (currentPct - previousClosePct) / 100,
       updatedAt: Date.now(),
@@ -290,7 +333,7 @@ export class DvolService {
 
   private disposed = false;
 
-  /** Re-fetch history daily so previousClose, 52w range, and IVR stay correct. */
+  /** Re-fetch history daily so previousClose, 52w range, and IVP stay correct. */
   private scheduleHistoryRefresh(): void {
     const now = new Date();
     const nextMidnight = new Date(now);

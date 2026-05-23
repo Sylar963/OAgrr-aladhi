@@ -3,7 +3,6 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
-import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useStrategyStore } from './strategy-store';
@@ -19,7 +18,12 @@ import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
 import SnapshotBanner from './SnapshotBanner';
-import { isSpotCandleCurrency, useSpotCandles } from './queries';
+import {
+  hasUsableSpotCandles,
+  isSpotCandleCurrency,
+  useSpotCandles,
+  type SpotCandlesResponse,
+} from './queries';
 import VenueSlideover from './VenueSlideover';
 import type { StrategyRouting } from '@features/builder/round-trip';
 import { legsToOrderRequest, useCreateTrade } from '@features/trading';
@@ -154,12 +158,6 @@ export default function ArchitectView() {
   const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, {
     refetchInterval: 10_000,
   });
-  const { connectionState: chainConnectionState } = useChainWs({
-    underlying,
-    expiry: builderExpiry,
-    venues: activeVenues,
-    enabled: Boolean(underlying && builderExpiry),
-  });
 
   const legs = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
@@ -184,6 +182,10 @@ export default function ArchitectView() {
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
   const [routeVenue, setRouteVenue] = useState(BEST_ROUTE_VALUE);
   const [variant, setVariant] = useState<'v1' | 'v2'>('v1');
+  const [lastGoodSpotCandles, setLastGoodSpotCandles] = useState<{
+    data: SpotCandlesResponse;
+    dataUpdatedAt: number;
+  } | null>(null);
 
   const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
   const createTrade = useCreateTrade();
@@ -391,6 +393,31 @@ export default function ArchitectView() {
     candleSpec.refetchIntervalMs,
   );
   const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
+  const spotCandlesFailureMessage =
+    spotCandlesEmpty
+      ? 'upstream returned empty data'
+      : spotCandlesError instanceof Error
+        ? spotCandlesError.message
+        : null;
+
+  useEffect(() => {
+    if (hasUsableSpotCandles(spotCandlesData)) {
+      setLastGoodSpotCandles({ data: spotCandlesData, dataUpdatedAt: spotCandlesUpdatedAt });
+    }
+  }, [spotCandlesData, spotCandlesUpdatedAt]);
+
+  useEffect(() => {
+    setLastGoodSpotCandles(null);
+  }, [underlying]);
+
+  const visibleSpotCandles = hasUsableSpotCandles(spotCandlesData)
+    ? spotCandlesData
+    : lastGoodSpotCandles?.data ?? null;
+  const visibleSpotCandlesUpdatedAt = hasUsableSpotCandles(spotCandlesData)
+    ? spotCandlesUpdatedAt
+    : lastGoodSpotCandles?.dataUpdatedAt ?? 0;
+  const hasVisibleSpotCandles = hasUsableSpotCandles(visibleSpotCandles);
+  const spotCandlesUnavailable = spotCandlesIsError || (spotCandlesEmpty && !spotCandlesFetching);
 
   function handleCopyUrl() {
     const url = buildShareUrl(legs, underlying);
@@ -683,25 +710,22 @@ export default function ArchitectView() {
                     <>
                       {candleAvailable && (
                         <SnapshotBanner
-                          dataUpdatedAt={spotCandlesUpdatedAt}
-                          hasData={spotCandlesData != null}
+                          dataUpdatedAt={visibleSpotCandlesUpdatedAt}
+                          hasData={hasVisibleSpotCandles}
                           isFetching={spotCandlesFetching}
                           windowLabel={candleSpec.rangeLabel}
                           intervalLabel={candleSpec.intervalLabel}
-                          liveState={chainConnectionState}
-                          isSwitchingWindow={spotCandlesIsPlaceholderData}
-                          isError={spotCandlesIsError}
-                          errorMessage={
-                            spotCandlesError instanceof Error ? spotCandlesError.message : null
-                          }
-                          isEmpty={spotCandlesEmpty}
+                          isSwitchingWindow={spotCandlesIsPlaceholderData && hasVisibleSpotCandles}
+                          isError={spotCandlesUnavailable}
+                          errorMessage={spotCandlesFailureMessage}
+                          isEmpty={spotCandlesEmpty && !hasVisibleSpotCandles}
                           onRetry={() => {
                             void refetchSpotCandles();
                           }}
                         />
                       )}
                       <PayoffChartV2
-                        candles={spotCandlesData?.candles ?? []}
+                        candles={visibleSpotCandles?.candles ?? []}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
                         legs={legs}

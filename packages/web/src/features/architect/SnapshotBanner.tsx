@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import type { WsConnectionState } from '@oggregator/protocol';
 
 import styles from './Architect.module.css';
 
@@ -9,7 +8,6 @@ interface SnapshotBannerProps {
   isFetching: boolean;
   windowLabel: string;
   intervalLabel: string;
-  liveState: WsConnectionState;
   isSwitchingWindow?: boolean;
   isError?: boolean;
   errorMessage?: string | null;
@@ -30,7 +28,6 @@ export default function SnapshotBanner({
   isFetching,
   windowLabel,
   intervalLabel,
-  liveState,
   isSwitchingWindow = false,
   isError = false,
   errorMessage = null,
@@ -133,24 +130,10 @@ export default function SnapshotBanner({
 
   const elapsed = dataUpdatedAt ? Date.now() - dataUpdatedAt : 0;
   const seconds = Math.floor(elapsed / 1000);
-  const livePrimary =
-    liveState === 'live'
-      ? isFetching
-        ? 'Syncing live history…'
-        : 'Live chart active'
-      : liveState === 'reconnecting'
-        ? 'Live feed reconnecting…'
-        : liveState === 'stale'
-          ? 'Live feed stale'
-          : liveState === 'error'
-            ? 'Live feed unavailable'
-            : 'Connecting live feed…';
+  const livePrimary = isFetching ? 'Refreshing Deribit perp history…' : 'Deribit perp history active';
 
   return (
-    <div
-      className={styles.snapshotBanner}
-      data-state={liveState === 'error' ? 'error' : isFetching || liveState !== 'live' ? 'loading' : 'fresh'}
-    >
+    <div className={styles.snapshotBanner} data-state={isFetching ? 'loading' : 'fresh'}>
       <span className={styles.snapshotDot} />
       <span className={styles.snapshotPrimary}>{livePrimary}</span>
       <span className={styles.snapshotSecondary}>

@@ -10,7 +10,7 @@ export interface SpotCandle {
   close: number;
 }
 
-interface SpotCandlesResponse {
+export interface SpotCandlesResponse {
   currency: string;
   resolution: number;
   count: number;
@@ -22,6 +22,12 @@ export type SpotCandleCurrency = (typeof SPOT_CANDLE_CURRENCIES)[number];
 
 export function isSpotCandleCurrency(value: string): value is SpotCandleCurrency {
   return (SPOT_CANDLE_CURRENCIES as readonly string[]).includes(value);
+}
+
+export function hasUsableSpotCandles(
+  response: SpotCandlesResponse | null | undefined,
+): response is SpotCandlesResponse {
+  return (response?.candles.length ?? 0) > 0;
 }
 
 export function useSpotCandles(

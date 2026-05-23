@@ -99,60 +99,6 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   };
 }
 
-interface MergeLiveSpotCandlesInput {
-  candles: SpotCandle[];
-  resolutionSec: number;
-  spotPrice: number;
-  nowMs: number;
-  previousLiveCandle: SpotCandle | null;
-}
-
-interface MergeLiveSpotCandlesResult {
-  candles: SpotCandle[];
-  liveCandle: SpotCandle | null;
-}
-
-export function mergeLiveSpotCandles({
-  candles,
-  resolutionSec,
-  spotPrice,
-  nowMs,
-  previousLiveCandle,
-}: MergeLiveSpotCandlesInput): MergeLiveSpotCandlesResult {
-  if (!Number.isFinite(spotPrice) || spotPrice <= 0 || resolutionSec <= 0) {
-    return { candles, liveCandle: null };
-  }
-
-  const bucketMs = resolutionSec * 1000;
-  const liveBucket = Math.floor(nowMs / bucketMs) * bucketMs;
-  const lastHistorical = candles.at(-1) ?? null;
-  const seededFromHistory = lastHistorical?.timestamp === liveBucket;
-  const baseOpen = seededFromHistory ? lastHistorical.open : (lastHistorical?.close ?? spotPrice);
-  const baseHigh = seededFromHistory ? lastHistorical.high : baseOpen;
-  const baseLow = seededFromHistory ? lastHistorical.low : baseOpen;
-  const activeLive = previousLiveCandle?.timestamp === liveBucket ? previousLiveCandle : null;
-
-  const liveCandle: SpotCandle = {
-    timestamp: liveBucket,
-    open: activeLive?.open ?? baseOpen,
-    high: Math.max(activeLive?.high ?? baseHigh, baseHigh, spotPrice),
-    low: Math.min(activeLive?.low ?? baseLow, baseLow, spotPrice),
-    close: spotPrice,
-  };
-
-  if (lastHistorical?.timestamp === liveBucket) {
-    return {
-      candles: [...candles.slice(0, -1), liveCandle],
-      liveCandle,
-    };
-  }
-
-  return {
-    candles: [...candles, liveCandle],
-    liveCandle,
-  };
-}
-
 function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {
   if (legs.length === 0) return [];
 
@@ -199,7 +145,6 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
-  const liveCandleRef = useRef<SpotCandle | null>(null);
 
   const zones = useMemo(
     () => buildZones(legs, breakevens, spotPrice),
@@ -273,29 +218,18 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
-      liveCandleRef.current = null;
     };
   }, []);
 
-  // Only fit-content when the history window changes. Live updates inside the
-  // active bucket should preserve any zoom or pan the user has applied.
+  // Only fit-content when the history window changes so refreshes preserve any
+  // zoom or pan the user has applied.
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartApiRef.current;
-    if (!series || !chart) return;
-
-    const merged = mergeLiveSpotCandles({
-      candles,
-      resolutionSec,
-      spotPrice,
-      nowMs: Date.now(),
-      previousLiveCandle: liveCandleRef.current,
-    });
-    liveCandleRef.current = merged.liveCandle;
-    if (merged.candles.length === 0) return;
+    if (!series || !chart || candles.length === 0) return;
 
     const seen = new Set<number>();
-    const data = merged.candles
+    const data = candles
       .map((c) => ({
         time: Math.floor(c.timestamp / 1000) as number,
         open: c.open,

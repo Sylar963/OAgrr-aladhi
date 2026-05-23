@@ -202,6 +202,30 @@ describe('Coincall types', () => {
     }
   });
 
+  it('coerces numeric-string tOption fields', () => {
+    const result = CoincallTOptionMessageSchema.safeParse({
+      ...TOPTION_FIXTURE,
+      d: [
+        {
+          ...TOPTION_FIXTURE.d[0],
+          bid: '1',
+          ask: '0',
+          biv: '0.01',
+          aiv: '0.01',
+          ts: '1688452774463',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const first = result.data.d[0]!;
+      expect(first.bid).toBe(1);
+      expect(first.ask).toBe(0);
+      expect(first.biv).toBe(0.01);
+      expect(first.ts).toBe(1688452774463);
+    }
+  });
+
   it('accepts a heartbeat ack', () => {
     const result = CoincallHeartbeatAckSchema.safeParse(HEARTBEAT_ACK_FIXTURE);
     expect(result.success).toBe(true);

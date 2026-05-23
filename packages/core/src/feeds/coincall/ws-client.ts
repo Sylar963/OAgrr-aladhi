@@ -125,6 +125,17 @@ function payloadShape(value: unknown): Record<string, unknown> {
   return { kind: typeof value };
 }
 
+function payloadShapeKey(value: unknown): string {
+  const shape = payloadShape(value);
+  if (shape['kind'] === 'array') {
+    return JSON.stringify({ kind: 'array', firstKeys: shape['firstKeys'] ?? [] });
+  }
+  if (shape['kind'] === 'object') {
+    return JSON.stringify({ kind: 'object', keys: shape['keys'] ?? [] });
+  }
+  return JSON.stringify(shape);
+}
+
 interface CoincallEnvelope {
   code?: number;
   msg?: string | null;
@@ -484,7 +495,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 3) {
       const msg = parseCoincallBsInfoMessage(json);
       if (msg == null) {
-        const errKey = `bsInfo:${JSON.stringify(payloadShape(envelope['d']))}`;
+        const errKey = `bsInfo:${payloadShapeKey(envelope['d'])}`;
         if (shouldLogValidationError(errKey)) {
           log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
         }
@@ -501,7 +512,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 4) {
       const msg = parseCoincallTOptionMessage(json);
       if (msg == null) {
-        const errKey = `tOption:${JSON.stringify(payloadShape(envelope['d']))}`;
+        const errKey = `tOption:${payloadShapeKey(envelope['d'])}`;
         if (shouldLogValidationError(errKey)) {
           log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
         }

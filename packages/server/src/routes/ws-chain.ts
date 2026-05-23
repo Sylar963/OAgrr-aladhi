@@ -51,7 +51,7 @@ export async function wsChainRoute(app: FastifyInstance) {
 
       if (version !== subscribeVersion) return;
 
-      const nextSession = new ChainStreamSession(socket, subscriptionId, request);
+      const nextSession = new ChainStreamSession(socket, subscriptionId, request, log);
       session = nextSession;
       await nextSession.subscribe();
 
@@ -111,11 +111,17 @@ export async function wsChainRoute(app: FastifyInstance) {
       }
     });
 
-    socket.on('close', () => {
+    socket.on('close', (code: number, reason: Buffer) => {
       subscribeVersion += 1;
       void disposeSession(session);
       session = null;
-      log.info('client disconnected');
+      log.info(
+        {
+          closeCode: code,
+          closeReason: reason.length > 0 ? reason.toString() : undefined,
+        },
+        'client disconnected',
+      );
     });
   });
 }

@@ -13,6 +13,13 @@ const MAX_SOCKET_BUFFERED_BYTES = 1_000_000;
 // before the browser drains the first frame. Only treat backpressure as fatal
 // if it persists beyond a short grace window.
 const SLOW_CLIENT_GRACE_MS = 15_000;
+const LARGE_FRAME_BYTES = 250_000;
+const LARGE_FRAME_LOG_TTL_MS = 5_000;
+
+interface SessionLogger {
+  info: (obj: object, msg: string) => void;
+  warn: (obj: object, msg: string) => void;
+}
 
 type SessionSocket = {
   readyState: number;
@@ -20,12 +27,6 @@ type SessionSocket = {
   close?: (code?: number, reason?: string) => void;
   bufferedAmount?: number;
 };
-
-function send(socket: SessionSocket, message: ServerWsMessage): void {
-  if (socket.readyState === WS_OPEN) {
-    socket.send(JSON.stringify(message));
-  }
-}
 
 export class ChainStreamSession {
   private detachEngineListener: (() => void) | null = null;
@@ -36,11 +37,14 @@ export class ChainStreamSession {
   private bufferedEvents: ChainRuntimeEvent[] = [];
   private engineListener: ChainRuntimeListener | null = null;
   private slowClientSince: number | null = null;
+  private lastLargeFrameLoggedAt = 0;
+  private readonly lastVenueStatusByVenue = new Map<string, string>();
 
   constructor(
     private readonly socket: SessionSocket,
     readonly subscriptionId: string,
     readonly request: WsSubscriptionRequest,
+    private readonly log?: SessionLogger,
   ) {}
 
   async subscribe(): Promise<void> {
@@ -56,7 +60,7 @@ export class ChainStreamSession {
     };
     this.detachEngineListener = runtime.subscribe(this.engineListener);
 
-    send(this.socket, {
+    this.sendMessage('subscribed', {
       type: 'subscribed',
       subscriptionId: this.subscriptionId,
       request: runtime.getActiveRequest(),
@@ -84,6 +88,7 @@ export class ChainStreamSession {
     this.engineListener = null;
     this.bufferedEvents = [];
     this.slowClientSince = null;
+    this.lastVenueStatusByVenue.clear();
 
     const release = this.releaseEngine;
     this.releaseEngine = null;
@@ -121,7 +126,7 @@ export class ChainStreamSession {
     switch (event.type) {
       case 'snapshot':
         this.lastSentSeq = event.seq;
-        send(this.socket, {
+        this.sendMessage('snapshot', {
           type: 'snapshot',
           subscriptionId: this.subscriptionId,
           seq: event.seq,
@@ -129,12 +134,12 @@ export class ChainStreamSession {
           meta: event.meta,
           data: event.data,
         });
-        this.trackBackpressure(now);
+        this.trackBackpressure(now, 'snapshot');
         return;
 
       case 'delta':
         this.lastSentSeq = event.seq;
-        send(this.socket, {
+        this.sendMessage('delta', {
           type: 'delta',
           subscriptionId: this.subscriptionId,
           seq: event.seq,
@@ -143,11 +148,27 @@ export class ChainStreamSession {
           deltas: event.deltas,
           patch: event.patch,
         });
-        this.trackBackpressure(now);
+        this.trackBackpressure(now, 'delta');
         return;
 
       case 'status':
-        send(this.socket, {
+        const statusKey = `${event.status.state}:${event.status.message ?? ''}`;
+        const previousStatusKey = this.lastVenueStatusByVenue.get(event.status.venue);
+        this.lastVenueStatusByVenue.set(event.status.venue, statusKey);
+        if (event.status.state !== 'connected' && previousStatusKey !== statusKey) {
+          this.log?.warn(
+            {
+              subscriptionId: this.subscriptionId,
+              underlying: this.request.underlying,
+              expiry: this.request.expiry,
+              venue: event.status.venue,
+              state: event.status.state,
+              message: event.status.message,
+            },
+            'chain ws venue status',
+          );
+        }
+        this.sendMessage('status', {
           type: 'status',
           subscriptionId: this.subscriptionId,
           venue: event.status.venue,
@@ -155,8 +176,37 @@ export class ChainStreamSession {
           ts: event.status.ts,
           message: event.status.message,
         });
-        this.trackBackpressure(now);
+        this.trackBackpressure(now, 'status');
         return;
+    }
+  }
+
+  private sendMessage(kind: 'subscribed' | 'snapshot' | 'delta' | 'status', message: ServerWsMessage): void {
+    if (this.socket.readyState !== WS_OPEN) return;
+
+    const payload = JSON.stringify(message);
+    this.socket.send(payload);
+
+    const bytes = Buffer.byteLength(payload);
+    if (
+      (kind === 'snapshot' || kind === 'delta') &&
+      bytes >= LARGE_FRAME_BYTES &&
+      Date.now() - this.lastLargeFrameLoggedAt >= LARGE_FRAME_LOG_TTL_MS
+    ) {
+      this.lastLargeFrameLoggedAt = Date.now();
+      const staleMs = 'meta' in message ? message.meta.staleMs : undefined;
+      this.log?.info(
+        {
+          subscriptionId: this.subscriptionId,
+          underlying: this.request.underlying,
+          expiry: this.request.expiry,
+          frameType: kind,
+          bytes,
+          staleMs,
+          bufferedAmount: this.socket.bufferedAmount ?? 0,
+        },
+        'chain ws large frame',
+      );
     }
   }
 
@@ -173,11 +223,24 @@ export class ChainStreamSession {
     return now - this.slowClientSince >= SLOW_CLIENT_GRACE_MS;
   }
 
-  private trackBackpressure(now: number): void {
+  private trackBackpressure(now: number, frameType: 'snapshot' | 'delta' | 'status'): void {
     const bufferedAmount = this.socket.bufferedAmount ?? 0;
     if (bufferedAmount < MAX_SOCKET_BUFFERED_BYTES) {
       this.slowClientSince = null;
       return;
+    }
+    if (this.slowClientSince == null) {
+      this.log?.warn(
+        {
+          subscriptionId: this.subscriptionId,
+          underlying: this.request.underlying,
+          expiry: this.request.expiry,
+          frameType,
+          bufferedAmount,
+          thresholdBytes: MAX_SOCKET_BUFFERED_BYTES,
+        },
+        'chain ws backpressure started',
+      );
     }
     this.slowClientSince ??= now;
   }
@@ -190,6 +253,16 @@ export class ChainStreamSession {
     this.engineListener = null;
     this.bufferedEvents = [];
     this.slowClientSince = null;
+    this.lastVenueStatusByVenue.clear();
+    this.log?.warn(
+      {
+        subscriptionId: this.subscriptionId,
+        underlying: this.request.underlying,
+        expiry: this.request.expiry,
+        bufferedAmount: this.socket.bufferedAmount ?? 0,
+      },
+      'chain ws slow client closed',
+    );
     this.socket.close?.(1013, 'slow client');
 
     const release = this.releaseEngine;

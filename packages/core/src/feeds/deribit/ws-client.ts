@@ -1,6 +1,7 @@
 import { DERIBIT_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -46,12 +47,16 @@ const SUBSCRIBE_BATCH_SIZE = 500;
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
 const RESUBSCRIBE_BATCH_DELAY_MS = 500;
 const EAGER_UNDERLYING_DELAY_MS = 750;
+const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 
 // Eager subscriptions use agg2 (~1s aggregation) to reduce traffic.
 // On-demand subscriptions (user viewing a chain) use 100ms for tight updates.
 const EAGER_TICKER_INTERVAL = 'agg2';
 const ACTIVE_TICKER_INTERVAL = '100ms';
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
+const DERIBIT_CHAIN_STALE_LOG_MS = 15_000;
+const DERIBIT_CHAIN_SAMPLE_SIZE = 5;
 
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
@@ -99,6 +104,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly state = createDeribitState();
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
+  private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -142,11 +148,20 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     this.rpc.terminate();
   }
 
+  override async fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
+    const chain = await super.fetchOptionChain(request);
+    this.maybeLogChainDiagnostics(request, chain);
+    return chain;
+  }
+
   protected initClients(): void {
     if (this.rpc) return;
     this.rpc = new JsonRpcWsClient(DERIBIT_WS_URL, 'deribit-ws', {
       heartbeatIntervalSec: 30,
-      requestTimeoutMs: 15_000,
+      // Far expiries can require large subscribe batches and Deribit's RPC ack
+      // can lag well past 15s under venue load. A short timeout causes false
+      // reconnect loops precisely when users switch into those tenors.
+      requestTimeoutMs: DERIBIT_REQUEST_TIMEOUT_MS,
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
       resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
       rateLimitCooldownMs: 120_000,
@@ -436,6 +451,82 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   protected async unsubscribeAll(): Promise<void> {
     await this.rpc.unsubscribeAll();
     resetDeribitSubscriptionState(this.subscriptions);
+  }
+
+  private maybeLogChainDiagnostics(request: ChainRequest, chain: VenueOptionChain): void {
+    const now = Date.now();
+    const diagnosticKey = `${request.underlying}:${request.expiry}`;
+    const lastLoggedAt = this.chainDiagnosticsLastLoggedAt.get(diagnosticKey) ?? 0;
+    if (now - lastLoggedAt < DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS) return;
+
+    let contracts = 0;
+    let subscribedTickers = 0;
+    let quotesWithTs = 0;
+    let staleQuotes = 0;
+    let missingBidAsk = 0;
+    let oldestQuoteTs = 0;
+    let newestQuoteTs = 0;
+    const intervalCounts = new Map<string, number>();
+    const staleExamples: string[] = [];
+    const unsubscribedExamples: string[] = [];
+
+    for (const contract of Object.values(chain.contracts)) {
+      contracts += 1;
+
+      const interval = this.subscriptions.tickerIntervals.get(contract.exchangeSymbol) ?? 'none';
+      intervalCounts.set(interval, (intervalCounts.get(interval) ?? 0) + 1);
+      if (interval !== 'none') subscribedTickers += 1;
+      else if (unsubscribedExamples.length < DERIBIT_CHAIN_SAMPLE_SIZE) {
+        unsubscribedExamples.push(contract.exchangeSymbol);
+      }
+
+      if (contract.quote.bid.raw == null && contract.quote.ask.raw == null) {
+        missingBidAsk += 1;
+      }
+
+      const ts = contract.quote.timestamp ?? 0;
+      if (ts <= 0) continue;
+
+      quotesWithTs += 1;
+      if (oldestQuoteTs === 0 || ts < oldestQuoteTs) oldestQuoteTs = ts;
+      if (ts > newestQuoteTs) newestQuoteTs = ts;
+
+      if (now - ts > DERIBIT_CHAIN_STALE_LOG_MS) {
+        staleQuotes += 1;
+        if (staleExamples.length < DERIBIT_CHAIN_SAMPLE_SIZE) {
+          staleExamples.push(contract.exchangeSymbol);
+        }
+      }
+    }
+
+    const oldestQuoteAgeMs = oldestQuoteTs > 0 ? now - oldestQuoteTs : null;
+    const newestQuoteAgeMs = newestQuoteTs > 0 ? now - newestQuoteTs : null;
+    const suspicious =
+      contracts === 0 ||
+      subscribedTickers < contracts ||
+      staleQuotes > 0 ||
+      missingBidAsk === contracts ||
+      quotesWithTs === 0;
+    if (!suspicious) return;
+
+    this.chainDiagnosticsLastLoggedAt.set(diagnosticKey, now);
+    log.warn(
+      {
+        underlying: request.underlying,
+        expiry: request.expiry,
+        contracts,
+        subscribedTickers,
+        quotesWithTs,
+        staleQuotes,
+        missingBidAsk,
+        oldestQuoteAgeMs,
+        newestQuoteAgeMs,
+        intervalCounts: Object.fromEntries(intervalCounts),
+        staleExamples,
+        unsubscribedExamples,
+      },
+      'deribit chain diagnostics',
+    );
   }
 
   // ─── normalization override ───────────────────────────────────

@@ -86,6 +86,26 @@ export function releaseDeribitTickerSubscription(
   return interval != null ? `ticker.${exchangeSymbol}.${interval}` : null;
 }
 
+export function downgradeDeribitTickerSubscription(
+  state: DeribitSubscriptionState,
+  exchangeSymbol: string,
+  fallbackInterval: string,
+): { unsubscribeChannel: string; subscribeChannel: string } | null {
+  const currentInterval = state.tickerIntervals.get(exchangeSymbol);
+  if (currentInterval == null || currentInterval === fallbackInterval) return null;
+
+  const currentPriority = INTERVAL_PRIORITY[currentInterval] ?? 0;
+  const fallbackPriority = INTERVAL_PRIORITY[fallbackInterval] ?? 0;
+  if (currentPriority <= fallbackPriority) return null;
+
+  state.subscribedTickers.add(exchangeSymbol);
+  state.tickerIntervals.set(exchangeSymbol, fallbackInterval);
+  return {
+    unsubscribeChannel: `ticker.${exchangeSymbol}.${currentInterval}`,
+    subscribeChannel: `ticker.${exchangeSymbol}.${fallbackInterval}`,
+  };
+}
+
 export function resetDeribitSubscriptionState(state: DeribitSubscriptionState): void {
   state.subscribedIndexes.clear();
   state.subscribedPriceIndexes.clear();

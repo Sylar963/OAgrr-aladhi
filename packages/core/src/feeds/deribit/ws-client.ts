@@ -14,6 +14,7 @@ import {
   buildDeribitSubscriptionPlan,
   createDeribitSubscriptionState,
   deribitIndexNameFor,
+  downgradeDeribitTickerSubscription,
   releaseDeribitTickerSubscription,
   resetDeribitSubscriptionState,
 } from './planner.js';
@@ -421,30 +422,49 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    const channels: string[] = [];
+    const channelsToUnsubscribe: string[] = [];
+    const channelsToSubscribe: string[] = [];
+    const preserveEagerTickers = this.shouldEagerTickerUnderlying(underlying);
 
     for (const instrument of instruments) {
-      const channel = releaseDeribitTickerSubscription(
-        this.subscriptions,
-        instrument.exchangeSymbol,
-      );
+      if (preserveEagerTickers) {
+        const downgrade = downgradeDeribitTickerSubscription(
+          this.subscriptions,
+          instrument.exchangeSymbol,
+          EAGER_TICKER_INTERVAL,
+        );
+        if (downgrade != null) {
+          channelsToUnsubscribe.push(downgrade.unsubscribeChannel);
+          channelsToSubscribe.push(downgrade.subscribeChannel);
+        }
+        continue;
+      }
+
+      const channel = releaseDeribitTickerSubscription(this.subscriptions, instrument.exchangeSymbol);
       if (channel != null) {
-        channels.push(channel);
+        channelsToUnsubscribe.push(channel);
       }
     }
 
-    if (this.activeRequestsForUnderlying(underlying) === 0) {
+    if (!preserveEagerTickers && this.activeRequestsForUnderlying(underlying) === 0) {
       const indexName = deribitIndexNameFor(underlying);
       if (this.subscriptions.subscribedIndexes.delete(indexName)) {
-        channels.push(`markprice.options.${indexName}`);
+        channelsToUnsubscribe.push(`markprice.options.${indexName}`);
       }
       if (this.subscriptions.subscribedPriceIndexes.delete(indexName)) {
-        channels.push(`deribit_price_index.${indexName}`);
+        channelsToUnsubscribe.push(`deribit_price_index.${indexName}`);
       }
     }
 
-    if (channels.length > 0) {
-      await this.rpc.unsubscribe(channels);
+    if (channelsToUnsubscribe.length > 0) {
+      await this.rpc.unsubscribe(channelsToUnsubscribe);
+    }
+    if (channelsToSubscribe.length > 0) {
+      await this.subscribeBatched(channelsToSubscribe, 'ticker-downgrade');
+      log.info(
+        { count: channelsToSubscribe.length, underlying, interval: EAGER_TICKER_INTERVAL },
+        'downgraded ticker channels to eager interval',
+      );
     }
   }
 

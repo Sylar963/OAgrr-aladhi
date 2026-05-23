@@ -43,15 +43,24 @@ interface CacheEntry {
   candles: SpotCandle[];
 }
 
+export function spotCandleCacheTtlMs(resolutionSec: SpotCandleResolutionSec): number {
+  if (resolutionSec <= 300) return 15_000;
+  if (resolutionSec <= 1800) return 30_000;
+  if (resolutionSec <= 3600) return 60_000;
+  if (resolutionSec <= 14400) return 120_000;
+  return 300_000;
+}
+
 /**
- * On-demand fetcher for Deribit perpetual klines used as a "spot proxy" for
- * BTC/ETH on the Builder V2 chart. Perp basis vs index is bps-scale; acceptable
- * for the 2-minute snapshot view. Deribit only lists BTC/ETH perps — SOL is
- * unsupported here and the caller must handle it as an empty result.
+ * On-demand fetcher for Deribit perpetual klines used as a spot proxy for
+ * BTC/ETH on the Builder V2 chart. The frontend layers live chain spot updates
+ * onto these historical bars, so this service only needs to keep the history
+ * window reasonably fresh per resolution tier. Deribit only lists BTC/ETH
+ * perps — SOL is unsupported here and the caller must handle it as an empty
+ * result.
  */
 export class SpotCandleService {
   private readonly cache = new Map<string, CacheEntry>();
-  private readonly cacheTtlMs = 60_000;
   private ready = false;
 
   async start(): Promise<void> {
@@ -72,9 +81,10 @@ export class SpotCandleService {
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
   ): Promise<SpotCandle[]> {
+    const ttlMs = spotCandleCacheTtlMs(resolutionSec);
     const key = `${currency}|${resolutionSec}|${buckets}`;
     const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.fetchedAt < this.cacheTtlMs) {
+    if (cached && Date.now() - cached.fetchedAt < ttlMs) {
       return cached.candles;
     }
 
@@ -89,8 +99,8 @@ export class SpotCandleService {
     } catch (err) {
       // Upstream blew up. If we've ever served this key successfully, keep
       // serving the last good payload past TTL rather than 502'ing the
-      // client — a slightly stale snapshot is far better UX than an error
-      // banner during transient Deribit hiccups.
+      // client — slightly stale history is far better UX than dropping the
+      // chart during transient Deribit hiccups.
       if (cached) {
         log.warn(
           {

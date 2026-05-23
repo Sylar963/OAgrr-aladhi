@@ -1,29 +1,37 @@
 import { useEffect, useState } from 'react';
+import type { WsConnectionState } from '@oggregator/protocol';
 
 import styles from './Architect.module.css';
 
 interface SnapshotBannerProps {
   dataUpdatedAt: number;
-  refreshIntervalMs: number;
   hasData: boolean;
   isFetching: boolean;
+  windowLabel: string;
+  intervalLabel: string;
+  liveState: WsConnectionState;
+  isSwitchingWindow?: boolean;
   isError?: boolean;
   errorMessage?: string | null;
   isEmpty?: boolean;
   onRetry?: () => void;
 }
 
-function formatCountdown(seconds: number): string {
+function formatAge(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  if (m === 0) return `${s}s ago`;
+  return `${m}m ${s.toString().padStart(2, '0')}s ago`;
 }
 
 export default function SnapshotBanner({
   dataUpdatedAt,
-  refreshIntervalMs,
   hasData,
   isFetching,
+  windowLabel,
+  intervalLabel,
+  liveState,
+  isSwitchingWindow = false,
   isError = false,
   errorMessage = null,
   isEmpty = false,
@@ -36,15 +44,12 @@ export default function SnapshotBanner({
     return () => clearInterval(id);
   }, []);
 
-  // Retry in flight: previous attempt errored and a new fetch is now running.
-  // Surface this explicitly so the click registers visually instead of falling
-  // through to the generic "Loading…" state, which is indistinguishable from
-  // the error banner at a glance.
+  // Show retries explicitly so the button click has immediate visible feedback.
   if (isError && isFetching) {
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Retrying snapshot…</span>
+        <span className={styles.snapshotPrimary}>Retrying live history…</span>
         <span className={styles.snapshotSecondary}>fetching from upstream</span>
       </div>
     );
@@ -56,7 +61,7 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Snapshot unavailable</span>
+        <span className={styles.snapshotPrimary}>Live history unavailable</span>
         <span className={styles.snapshotSecondary}>
           {errorMessage ?? 'upstream candle fetch failed'}
         </span>
@@ -69,15 +74,13 @@ export default function SnapshotBanner({
     );
   }
 
-  // Soft error: latest fetch failed but `keepPreviousData` left a previous
-  // successful payload on screen. The chart has usable candles, so don't
-  // shout "unavailable" — that's misleading. Surface as a stale-data warning
-  // and still offer a retry.
+  // `keepPreviousData` leaves the last good history window on screen, so this
+  // becomes a stale-data warning rather than a hard outage.
   if (isError && hasData) {
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Snapshot stale</span>
+        <span className={styles.snapshotPrimary}>History sync stale</span>
         <span className={styles.snapshotSecondary}>
           {errorMessage ?? 'last refresh failed — showing cached candles'}
         </span>
@@ -94,19 +97,18 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span>Loading snapshot…</span>
+        <span>Loading live chart…</span>
       </div>
     );
   }
 
-  // Server returned 200 with an empty candle array (e.g. Zod parse fallback).
-  // This is distinct from "still loading" — the request succeeded with
-  // unusable data. Surface it explicitly so the user knows to try later.
+  // Empty history is distinct from loading: the request succeeded but the
+  // upstream payload could not produce usable candles.
   if (isEmpty && !isFetching) {
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>No spot history available</span>
+        <span className={styles.snapshotPrimary}>No live history available</span>
         <span className={styles.snapshotSecondary}>upstream returned empty data</span>
         {onRetry && (
           <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
@@ -117,31 +119,42 @@ export default function SnapshotBanner({
     );
   }
 
-  // Tenor switch: candle data from previous query is still on screen via
-  // keepPreviousData, but a new fetch is in flight. Show a transient
-  // "updating" state so the user knows the chart is mid-swap.
-  if (isFetching && !dataUpdatedAt) {
+  // keepPreviousData keeps the previous window visible while the new tenor's
+  // history loads.
+  if (isSwitchingWindow) {
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Updating snapshot…</span>
-        <span className={styles.snapshotSecondary}>tenor changed — refetching</span>
+        <span className={styles.snapshotPrimary}>Switching live window…</span>
+        <span className={styles.snapshotSecondary}>{windowLabel} window · {intervalLabel} candles</span>
       </div>
     );
   }
 
   const elapsed = dataUpdatedAt ? Date.now() - dataUpdatedAt : 0;
-  const remainingMs = Math.max(0, refreshIntervalMs - elapsed);
-  const seconds = Math.floor(remainingMs / 1000);
+  const seconds = Math.floor(elapsed / 1000);
+  const livePrimary =
+    liveState === 'live'
+      ? isFetching
+        ? 'Syncing live history…'
+        : 'Live chart active'
+      : liveState === 'reconnecting'
+        ? 'Live feed reconnecting…'
+        : liveState === 'stale'
+          ? 'Live feed stale'
+          : liveState === 'error'
+            ? 'Live feed unavailable'
+            : 'Connecting live feed…';
 
   return (
-    <div className={styles.snapshotBanner} data-state={isFetching ? 'refreshing' : 'fresh'}>
+    <div
+      className={styles.snapshotBanner}
+      data-state={liveState === 'error' ? 'error' : isFetching || liveState !== 'live' ? 'loading' : 'fresh'}
+    >
       <span className={styles.snapshotDot} />
-      <span className={styles.snapshotPrimary}>
-        {isFetching ? 'Refreshing snapshot…' : `Snapshot — refreshes in ${formatCountdown(seconds)}`}
-      </span>
+      <span className={styles.snapshotPrimary}>{livePrimary}</span>
       <span className={styles.snapshotSecondary}>
-        prices may have moved since last fetch
+        {windowLabel} window · {intervalLabel} candles · sync {formatAge(seconds)}
       </span>
     </div>
   );

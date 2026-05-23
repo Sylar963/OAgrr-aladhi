@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { pickCandleSpec } from './PayoffChartV2';
+import { mergeLiveSpotCandles, pickCandleSpec } from './PayoffChartV2';
 import type { Leg } from './payoff';
 
 function leg(expiry: string): Leg {
@@ -42,11 +42,23 @@ describe('pickCandleSpec', () => {
   });
 
   it('defaults to 1h × 24 buckets when no legs', () => {
-    expect(pickCandleSpec([])).toEqual({ resolutionSec: 3600, buckets: 24 });
+    expect(pickCandleSpec([])).toEqual({
+      resolutionSec: 3600,
+      buckets: 24,
+      rangeLabel: '1D',
+      intervalLabel: '1H',
+      refetchIntervalMs: 60_000,
+    });
   });
 
   it('intraday picks 5m × 48 buckets', () => {
-    expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({ resolutionSec: 300, buckets: 48 });
+    expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({
+      resolutionSec: 300,
+      buckets: 48,
+      rangeLabel: '4H',
+      intervalLabel: '5M',
+      refetchIntervalMs: 15_000,
+    });
   });
 
   it('1–3d picks 30m and collapses same-tier DTEs onto the same key', () => {
@@ -88,5 +100,73 @@ describe('pickCandleSpec', () => {
     const legs = [leg(expiryInDays(45)), leg(expiryInDays(2))];
     const spec = pickCandleSpec(legs);
     expect(spec.resolutionSec).toBe(1800);
+  });
+});
+
+describe('mergeLiveSpotCandles', () => {
+  it('updates the active historical candle with the live spot price', () => {
+    const result = mergeLiveSpotCandles({
+      candles: [
+        { timestamp: 1_700_000_000_000, open: 100, high: 105, low: 99, close: 102 },
+        { timestamp: 1_700_002_800_000, open: 102, high: 108, low: 101, close: 107 },
+      ],
+      resolutionSec: 3600,
+      spotPrice: 110,
+      nowMs: 1_700_004_000_000,
+      previousLiveCandle: null,
+    });
+
+    expect(result.candles.at(-1)).toEqual({
+      timestamp: 1_700_002_800_000,
+      open: 102,
+      high: 110,
+      low: 101,
+      close: 110,
+    });
+  });
+
+  it('appends a new live candle when spot moves into a fresh bucket', () => {
+    const result = mergeLiveSpotCandles({
+      candles: [{ timestamp: 1_700_000_000_000, open: 100, high: 105, low: 99, close: 102 }],
+      resolutionSec: 3600,
+      spotPrice: 104,
+      nowMs: 1_700_004_000_000,
+      previousLiveCandle: null,
+    });
+
+    expect(result.candles).toHaveLength(2);
+    expect(result.candles.at(-1)).toEqual({
+      timestamp: 1_700_002_800_000,
+      open: 102,
+      high: 104,
+      low: 102,
+      close: 104,
+    });
+  });
+
+  it('preserves intrabucket high and low across successive live updates', () => {
+    const first = mergeLiveSpotCandles({
+      candles: [{ timestamp: 1_700_000_000_000, open: 100, high: 105, low: 99, close: 102 }],
+      resolutionSec: 3600,
+      spotPrice: 110,
+      nowMs: 1_700_004_000_000,
+      previousLiveCandle: null,
+    });
+
+    const second = mergeLiveSpotCandles({
+      candles: [{ timestamp: 1_700_000_000_000, open: 100, high: 105, low: 99, close: 102 }],
+      resolutionSec: 3600,
+      spotPrice: 101,
+      nowMs: 1_700_004_100_000,
+      previousLiveCandle: first.liveCandle,
+    });
+
+    expect(second.candles.at(-1)).toEqual({
+      timestamp: 1_700_002_800_000,
+      open: 102,
+      high: 110,
+      low: 101,
+      close: 101,
+    });
   });
 });

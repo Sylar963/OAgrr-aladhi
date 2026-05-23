@@ -1161,6 +1161,21 @@
   flex-shrink: 0;
 }
 
+.chartTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chartTitleMeta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .variantToggle {
   display: flex;
   gap: 1px;
@@ -1213,6 +1228,7 @@
 .snapshotBanner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: 6px 10px;
   background: rgba(203, 56, 85, 0.08);

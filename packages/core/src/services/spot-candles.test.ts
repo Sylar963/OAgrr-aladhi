@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SpotCandleService } from './spot-candles.js';
+import { SpotCandleService, spotCandleCacheTtlMs } from './spot-candles.js';
 
 function makeKlinesPayload(closes: number[]): unknown {
   const ticks = closes.map((_, i) => 1_700_000_000_000 + i * 60_000);
@@ -63,5 +63,13 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
     fetchSpy.mockRejectedValueOnce(new Error('Deribit 502'));
 
     await expect(svc.getCandles('BTC', 3600, 24)).rejects.toThrow('Deribit 502');
+  });
+
+  it('uses shorter cache TTLs for shorter resolutions', () => {
+    expect(spotCandleCacheTtlMs(300)).toBe(15_000);
+    expect(spotCandleCacheTtlMs(1800)).toBe(30_000);
+    expect(spotCandleCacheTtlMs(3600)).toBe(60_000);
+    expect(spotCandleCacheTtlMs(14400)).toBe(120_000);
+    expect(spotCandleCacheTtlMs(86400)).toBe(300_000);
   });
 });

@@ -3,6 +3,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useStrategyStore } from './strategy-store';
@@ -152,6 +153,12 @@ export default function ArchitectView() {
 
   const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, {
     refetchInterval: 10_000,
+  });
+  const { connectionState: chainConnectionState } = useChainWs({
+    underlying,
+    expiry: builderExpiry,
+    venues: activeVenues,
+    enabled: Boolean(underlying && builderExpiry),
   });
 
   const legs = useStrategyStore((s) => s.legs);
@@ -373,10 +380,16 @@ export default function ArchitectView() {
     dataUpdatedAt: spotCandlesUpdatedAt,
     isLoading: spotCandlesLoading,
     isFetching: spotCandlesFetching,
+    isPlaceholderData: spotCandlesIsPlaceholderData,
     isError: spotCandlesIsError,
     error: spotCandlesError,
     refetch: refetchSpotCandles,
-  } = useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
+  } = useSpotCandles(
+    underlying,
+    candleSpec.resolutionSec,
+    candleSpec.buckets,
+    candleSpec.refetchIntervalMs,
+  );
   const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
 
   function handleCopyUrl() {
@@ -595,8 +608,15 @@ export default function ArchitectView() {
               ) : (
                 <>
                   <div className={styles.chartTitleRow}>
-                    <div className={styles.chartTitle}>
-                      {variant === 'v1' ? 'P&L at Expiry' : 'Spot vs Break-even Zones'}
+                    <div className={styles.chartTitleBlock}>
+                      <div className={styles.chartTitle}>
+                        {variant === 'v1' ? 'P&L at Expiry' : 'Live Spot vs Break-even Zones'}
+                      </div>
+                      {variant === 'v2' && (
+                        <div className={styles.chartTitleMeta}>
+                          {candleSpec.rangeLabel} window · {candleSpec.intervalLabel} candles · tenor-led
+                        </div>
+                      )}
                     </div>
                     <div className={styles.variantToggle}>
                       <button
@@ -664,9 +684,12 @@ export default function ArchitectView() {
                       {candleAvailable && (
                         <SnapshotBanner
                           dataUpdatedAt={spotCandlesUpdatedAt}
-                          refreshIntervalMs={120_000}
                           hasData={spotCandlesData != null}
                           isFetching={spotCandlesFetching}
+                          windowLabel={candleSpec.rangeLabel}
+                          intervalLabel={candleSpec.intervalLabel}
+                          liveState={chainConnectionState}
+                          isSwitchingWindow={spotCandlesIsPlaceholderData}
                           isError={spotCandlesIsError}
                           errorMessage={
                             spotCandlesError instanceof Error ? spotCandlesError.message : null
@@ -682,6 +705,7 @@ export default function ArchitectView() {
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
                         legs={legs}
+                        resolutionSec={candleSpec.resolutionSec}
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}

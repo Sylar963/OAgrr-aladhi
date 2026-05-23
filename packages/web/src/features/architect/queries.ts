@@ -24,7 +24,12 @@ export function isSpotCandleCurrency(value: string): value is SpotCandleCurrency
   return (SPOT_CANDLE_CURRENCIES as readonly string[]).includes(value);
 }
 
-export function useSpotCandles(currency: string, resolutionSec: number, buckets: number) {
+export function useSpotCandles(
+  currency: string,
+  resolutionSec: number,
+  buckets: number,
+  refetchIntervalMs: number,
+) {
   return useQuery({
     queryKey: ['spot-candles', currency, resolutionSec, buckets],
     queryFn: () =>
@@ -32,8 +37,8 @@ export function useSpotCandles(currency: string, resolutionSec: number, buckets:
         `/spot-candles?currency=${currency}&resolution=${resolutionSec}&buckets=${buckets}`,
       ),
     enabled: isSpotCandleCurrency(currency),
-    refetchInterval: 120_000,
-    staleTime: 120_000,
+    refetchInterval: refetchIntervalMs,
+    staleTime: refetchIntervalMs,
     // fetchJson already retries on 503/network up to 10x. Cap query-level
     // retries at 1 so a real upstream failure surfaces in seconds, not
     // minutes — the banner has an explicit error state for this case.

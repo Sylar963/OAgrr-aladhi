@@ -22,6 +22,7 @@ interface PayoffChartV2Props {
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
+  resolutionSec: number;
   loading: boolean;
   available: boolean;
   onSwitchToV1: () => void;
@@ -30,30 +31,126 @@ interface PayoffChartV2Props {
 export interface CandleSpec {
   resolutionSec: number;
   buckets: number;
+  rangeLabel: string;
+  intervalLabel: string;
+  refetchIntervalMs: number;
 }
 
 /**
  * Pick a candle window that scales with the strategy's nearest-leg DTE.
- * Bucket counts are quantized to a small fixed set of tiers per resolution:
- * small DTE edits collapse onto the same query key, which keeps the server
- * cache warm and avoids forcing an upstream Deribit refetch on every leg
- * adjustment. The previous design varied buckets per-day to force refetches,
- * which was the root cause of the "Snapshot stale" banner appearing whenever
- * the user retuned a strategy.
+ * Bucket counts stay on fixed tiers so small tenor edits reuse the same query
+ * key. That keeps the history cache warm and avoids unnecessary upstream
+ * refetches while the user fine-tunes a structure.
  */
 export function pickCandleSpec(legs: Leg[]): CandleSpec {
-  if (legs.length === 0) return { resolutionSec: 3600, buckets: 24 };
+  if (legs.length === 0) {
+    return {
+      resolutionSec: 3600,
+      buckets: 24,
+      rangeLabel: '1D',
+      intervalLabel: '1H',
+      refetchIntervalMs: 60_000,
+    };
+  }
   const minDte = Math.max(0, Math.min(...legs.map((l) => dteDays(l.expiry))));
 
-  if (minDte < 1) return { resolutionSec: 300, buckets: 48 };          // 4h window
-  if (minDte < 3) return { resolutionSec: 1800, buckets: 96 };         // 2d window
+  if (minDte < 1) {
+    return {
+      resolutionSec: 300,
+      buckets: 48,
+      rangeLabel: '4H',
+      intervalLabel: '5M',
+      refetchIntervalMs: 15_000,
+    };
+  }
+  if (minDte < 3) {
+    return {
+      resolutionSec: 1800,
+      buckets: 96,
+      rangeLabel: '2D',
+      intervalLabel: '30M',
+      refetchIntervalMs: 30_000,
+    };
+  }
   if (minDte < 14) {
-    return { resolutionSec: 3600, buckets: minDte < 7 ? 96 : 168 };    // 4d or 7d
+    return {
+      resolutionSec: 3600,
+      buckets: minDte < 7 ? 96 : 168,
+      rangeLabel: minDte < 7 ? '4D' : '7D',
+      intervalLabel: '1H',
+      refetchIntervalMs: 60_000,
+    };
   }
   if (minDte < 60) {
-    return { resolutionSec: 14400, buckets: minDte < 30 ? 90 : 180 };  // 15d or 30d
+    return {
+      resolutionSec: 14400,
+      buckets: minDte < 30 ? 90 : 180,
+      rangeLabel: minDte < 30 ? '15D' : '30D',
+      intervalLabel: '4H',
+      refetchIntervalMs: 120_000,
+    };
   }
-  return { resolutionSec: 86400, buckets: minDte < 120 ? 90 : 180 };   // 90d or 180d
+  return {
+    resolutionSec: 86400,
+    buckets: minDte < 120 ? 90 : 180,
+    rangeLabel: minDte < 120 ? '90D' : '180D',
+    intervalLabel: '1D',
+    refetchIntervalMs: 300_000,
+  };
+}
+
+interface MergeLiveSpotCandlesInput {
+  candles: SpotCandle[];
+  resolutionSec: number;
+  spotPrice: number;
+  nowMs: number;
+  previousLiveCandle: SpotCandle | null;
+}
+
+interface MergeLiveSpotCandlesResult {
+  candles: SpotCandle[];
+  liveCandle: SpotCandle | null;
+}
+
+export function mergeLiveSpotCandles({
+  candles,
+  resolutionSec,
+  spotPrice,
+  nowMs,
+  previousLiveCandle,
+}: MergeLiveSpotCandlesInput): MergeLiveSpotCandlesResult {
+  if (!Number.isFinite(spotPrice) || spotPrice <= 0 || resolutionSec <= 0) {
+    return { candles, liveCandle: null };
+  }
+
+  const bucketMs = resolutionSec * 1000;
+  const liveBucket = Math.floor(nowMs / bucketMs) * bucketMs;
+  const lastHistorical = candles.at(-1) ?? null;
+  const seededFromHistory = lastHistorical?.timestamp === liveBucket;
+  const baseOpen = seededFromHistory ? lastHistorical.open : (lastHistorical?.close ?? spotPrice);
+  const baseHigh = seededFromHistory ? lastHistorical.high : baseOpen;
+  const baseLow = seededFromHistory ? lastHistorical.low : baseOpen;
+  const activeLive = previousLiveCandle?.timestamp === liveBucket ? previousLiveCandle : null;
+
+  const liveCandle: SpotCandle = {
+    timestamp: liveBucket,
+    open: activeLive?.open ?? baseOpen,
+    high: Math.max(activeLive?.high ?? baseHigh, baseHigh, spotPrice),
+    low: Math.min(activeLive?.low ?? baseLow, baseLow, spotPrice),
+    close: spotPrice,
+  };
+
+  if (lastHistorical?.timestamp === liveBucket) {
+    return {
+      candles: [...candles.slice(0, -1), liveCandle],
+      liveCandle,
+    };
+  }
+
+  return {
+    candles: [...candles, liveCandle],
+    liveCandle,
+  };
 }
 
 function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {
@@ -91,6 +188,7 @@ export default function PayoffChartV2({
   breakevens,
   spotPrice,
   legs,
+  resolutionSec,
   loading,
   available,
   onSwitchToV1,
@@ -101,6 +199,7 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
+  const liveCandleRef = useRef<SpotCandle | null>(null);
 
   const zones = useMemo(
     () => buildZones(legs, breakevens, spotPrice),
@@ -174,19 +273,29 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
+      liveCandleRef.current = null;
     };
   }, []);
 
-  // Push candle data. Only fit-content when the underlying window changes
-  // (resolution / tenor swap) — incremental websocket updates must preserve
-  // any zoom or pan the user has applied.
+  // Only fit-content when the history window changes. Live updates inside the
+  // active bucket should preserve any zoom or pan the user has applied.
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartApiRef.current;
-    if (!series || !chart || candles.length === 0) return;
+    if (!series || !chart) return;
+
+    const merged = mergeLiveSpotCandles({
+      candles,
+      resolutionSec,
+      spotPrice,
+      nowMs: Date.now(),
+      previousLiveCandle: liveCandleRef.current,
+    });
+    liveCandleRef.current = merged.liveCandle;
+    if (merged.candles.length === 0) return;
 
     const seen = new Set<number>();
-    const data = candles
+    const data = merged.candles
       .map((c) => ({
         time: Math.floor(c.timestamp / 1000) as number,
         open: c.open,
@@ -207,20 +316,21 @@ export default function PayoffChartV2({
     // in length or a backwards jump in the first timestamp; pure rolling
     // updates only nudge the first timestamp forward and grow length.
     const first = data[0]!.time as number;
-    const windowKey = `${first}:${data.length}`;
+    const windowKey = `${resolutionSec}:${first}:${data.length}`;
     const prev = lastWindowKeyRef.current;
     let isFresh = prev === '';
     if (!isFresh) {
-      const [prevFirstStr, prevLenStr] = prev.split(':');
+      const [prevResolutionStr, prevFirstStr, prevLenStr] = prev.split(':');
+      const prevResolution = Number(prevResolutionStr);
       const prevFirst = Number(prevFirstStr);
       const prevLen = Number(prevLenStr);
-      isFresh = first < prevFirst || data.length < prevLen;
+      isFresh = prevResolution !== resolutionSec || first < prevFirst || data.length < prevLen;
     }
     if (isFresh) {
       chart.timeScale().fitContent();
     }
     lastWindowKeyRef.current = windowKey;
-  }, [candles]);
+  }, [candles, resolutionSec, spotPrice]);
 
   // Apply break-even price lines.
   useEffect(() => {

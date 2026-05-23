@@ -359,6 +359,10 @@ function deribitBlockStream(): BlockVenueStream {
     let didOpen = false;
     let openedAt = 0;
 
+    const detachSocket = (): void => {
+      socket.removeAllListeners();
+    };
+
     socket.on('open', () => {
       if (ws !== socket) return;
 
@@ -406,6 +410,7 @@ function deribitBlockStream(): BlockVenueStream {
       if (ws !== socket) return;
 
       ws = null;
+      detachSocket();
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -473,6 +478,7 @@ function deribitBlockStream(): BlockVenueStream {
       reconnectTimer = null;
       const socket = ws;
       ws = null;
+      socket?.removeAllListeners();
       socket?.close();
     },
   };
@@ -579,6 +585,10 @@ function bybitBlockStream(): BlockVenueStream {
     let didOpen = false;
     let openedAt = 0;
 
+    const detachSocket = (): void => {
+      socket.removeAllListeners();
+    };
+
     socket.on('open', () => {
       if (ws !== socket) return;
 
@@ -619,6 +629,7 @@ function bybitBlockStream(): BlockVenueStream {
       if (ws !== socket) return;
 
       ws = null;
+      detachSocket();
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -665,6 +676,7 @@ function bybitBlockStream(): BlockVenueStream {
       keepaliveTimer = null;
       const socket = ws;
       ws = null;
+      socket?.removeAllListeners();
       socket?.close();
     },
   };

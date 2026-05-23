@@ -258,6 +258,13 @@ export class TradeRuntime {
     let didOpen = false;
     let openedAt = 0;
 
+    const stopKeepalive = (): void => {
+      const timer = this.keepaliveTimers.get(key);
+      if (timer == null) return;
+      clearInterval(timer);
+      this.keepaliveTimers.delete(key);
+    };
+
     ws.on('open', () => {
       if (this.connections.get(key) !== ws) return;
 
@@ -322,11 +329,8 @@ export class TradeRuntime {
         connected: false,
         lastStatusAt: Date.now(),
       });
-      const ka = this.keepaliveTimers.get(key);
-      if (ka) {
-        clearInterval(ka);
-        this.keepaliveTimers.delete(key);
-      }
+      stopKeepalive();
+      ws.removeAllListeners();
 
       if (this.shouldReconnect) {
         const nextAttempt = didOpen ? 0 : attempt + 1;
@@ -462,7 +466,10 @@ export class TradeRuntime {
     this.keepaliveTimers.clear();
     for (const timer of this.reseedTimers.values()) clearInterval(timer);
     this.reseedTimers.clear();
-    for (const ws of this.connections.values()) ws.close();
+    for (const ws of this.connections.values()) {
+      ws.removeAllListeners();
+      ws.close();
+    }
     this.connections.clear();
     this.subscribedUnderlyingsByConnection.clear();
     clearTradeCaches();
@@ -873,6 +880,18 @@ function fetchDeribitTradesByCurrency(currency: string): Promise<TradeEvent[]> {
 function deribitRpcSeed(currency: string): Promise<TradeEvent[]> {
   return new Promise<TradeEvent[]>((resolve) => {
     const ws = new WebSocket(DERIBIT_WS_URL);
+    const timeout = setTimeout(() => {
+      ws.removeAllListeners();
+      ws.close();
+      resolve([]);
+    }, 10_000);
+
+    const finish = (trades: TradeEvent[]): void => {
+      clearTimeout(timeout);
+      ws.removeAllListeners();
+      ws.close();
+      resolve(trades);
+    };
 
     ws.on('open', () => {
       ws.send(
@@ -889,14 +908,13 @@ function deribitRpcSeed(currency: string): Promise<TradeEvent[]> {
       const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
       if (msg['id'] !== 1) return;
 
-      ws.close();
       const trades = (msg['result'] as Record<string, unknown> | undefined)?.['trades'];
       if (!Array.isArray(trades)) {
-        resolve([]);
+        finish([]);
         return;
       }
 
-      resolve(
+      finish(
         trades.flatMap((t) => {
           const p = DeribitTradeSchema.safeParse(t);
           if (!p.success) return [];
@@ -910,14 +928,7 @@ function deribitRpcSeed(currency: string): Promise<TradeEvent[]> {
       );
     });
 
-    ws.on('error', () => {
-      ws.close();
-      resolve([]);
-    });
-    setTimeout(() => {
-      ws.close();
-      resolve([]);
-    }, 10_000);
+    ws.on('error', () => finish([]));
   });
 }
 
@@ -1260,9 +1271,12 @@ export const VENUE_STREAMS: VenueStream[] = [
       const ws = new WebSocket(DERIVE_WS_URL);
       return new Promise<TradeEvent[]>((resolve) => {
         let settled = false;
+        const timeout = setTimeout(() => finish([]), 10_000);
         const finish = (trades: TradeEvent[]) => {
           if (settled) return;
           settled = true;
+          clearTimeout(timeout);
+          ws.removeAllListeners();
           ws.close();
           resolve(trades);
         };
@@ -1318,7 +1332,6 @@ export const VENUE_STREAMS: VenueStream[] = [
         });
 
         ws.on('error', () => finish([]));
-        setTimeout(() => finish([]), 10_000);
       });
     },
   },

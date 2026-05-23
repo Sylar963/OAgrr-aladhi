@@ -169,6 +169,7 @@ export class JsonRpcWsClient {
 
         this.ws = null;
         this.cleanup();
+        this.detachSocket(socket);
         this.options.onStatusChange?.('reconnecting');
         if (this.shouldReconnect) this.scheduleReconnect();
       });
@@ -190,6 +191,7 @@ export class JsonRpcWsClient {
     if (this.ws) {
       const socket = this.ws;
       this.ws = null;
+      this.detachSocket(socket);
       socket.close();
     }
   }
@@ -208,6 +210,10 @@ export class JsonRpcWsClient {
 
   terminate(): void {
     this.ws?.terminate();
+  }
+
+  private detachSocket(socket: WebSocket): void {
+    socket.removeAllListeners();
   }
 
   // ─── JSON-RPC request/response ────────────────────────────────

@@ -81,6 +81,7 @@ export class IndexPriceRuntime {
       this.coincallReconnect = null;
     }
     if (this.coincallWs != null) {
+      this.coincallWs.removeAllListeners();
       this.coincallWs.close();
       this.coincallWs = null;
     }
@@ -144,6 +145,10 @@ export class IndexPriceRuntime {
     let openedAt = 0;
     this.coincallWs = ws;
 
+    const detachSocket = (): void => {
+      ws.removeAllListeners();
+    };
+
     ws.on('open', () => {
       if (this.coincallWs !== ws) return;
 
@@ -185,6 +190,7 @@ export class IndexPriceRuntime {
       if (this.coincallWs !== ws) return;
 
       this.coincallWs = null;
+      detachSocket();
       if (this.coincallKeepalive != null) {
         clearInterval(this.coincallKeepalive);
         this.coincallKeepalive = null;

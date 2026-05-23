@@ -5,6 +5,10 @@ type TopicWsClientInternals = {
   reconnectAttempts: number;
   scheduleReconnect: () => void;
   connect: () => Promise<void>;
+  ws: {
+    close: () => void;
+    removeAllListeners: () => void;
+  } | null;
 };
 
 describe('TopicWsClient', () => {
@@ -44,5 +48,21 @@ describe('TopicWsClient', () => {
 
     expect(connect).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  it('detaches socket listeners before closing on disconnect', async () => {
+    const client = new TopicWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as TopicWsClientInternals;
+    const socket = {
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+
+    internals.ws = socket;
+    await client.disconnect();
+
+    expect(socket.removeAllListeners).toHaveBeenCalledOnce();
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(internals.ws).toBeNull();
   });
 });

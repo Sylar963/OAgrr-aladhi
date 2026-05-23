@@ -71,6 +71,10 @@ export class TopicWsClient {
     this.ws?.terminate();
   }
 
+  private detachSocket(socket: WebSocket): void {
+    socket.removeAllListeners();
+  }
+
   connect(): Promise<void> {
     if (this.isConnected) return Promise.resolve();
     if (this.connectPromise != null) return this.connectPromise;
@@ -147,6 +151,7 @@ export class TopicWsClient {
 
         this.ws = null;
         this.cleanup();
+        this.detachSocket(socket);
         this.options.onClose?.();
         this.options.onStatusChange?.('reconnecting');
         if (this.shouldReconnect) this.scheduleReconnect();
@@ -170,6 +175,7 @@ export class TopicWsClient {
     if (this.ws != null) {
       const socket = this.ws;
       this.ws = null;
+      this.detachSocket(socket);
       socket.close();
     }
   }

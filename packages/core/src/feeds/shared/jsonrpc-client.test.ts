@@ -20,6 +20,10 @@ type JsonRpcWsClientInternals = {
   startHeartbeat: () => void;
   cleanup: () => void;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
+  ws: {
+    close: () => void;
+    removeAllListeners: () => void;
+  } | null;
 };
 
 describe('JsonRpcWsClient', () => {
@@ -101,5 +105,21 @@ describe('JsonRpcWsClient', () => {
 
     expect(internals.heartbeatTimer).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('detaches socket listeners before closing on disconnect', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const socket = {
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+
+    internals.ws = socket;
+    await client.disconnect();
+
+    expect(socket.removeAllListeners).toHaveBeenCalledOnce();
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(internals.ws).toBeNull();
   });
 });

@@ -9,6 +9,10 @@ import { chainEngines } from './chain-engines.js';
 // WebSocket.OPEN is 1 per RFC 6455 — duck-typed socket interface doesn't carry the constant
 const WS_OPEN = 1;
 const MAX_SOCKET_BUFFERED_BYTES = 1_000_000;
+// Older expiries can produce a multi-message burst (ack + snapshot + status)
+// before the browser drains the first frame. Only treat backpressure as fatal
+// if it persists beyond a short grace window.
+const SLOW_CLIENT_GRACE_MS = 15_000;
 
 type SessionSocket = {
   readyState: number;
@@ -31,6 +35,7 @@ export class ChainStreamSession {
   private lastSentSeq = 0;
   private bufferedEvents: ChainRuntimeEvent[] = [];
   private engineListener: ChainRuntimeListener | null = null;
+  private slowClientSince: number | null = null;
 
   constructor(
     private readonly socket: SessionSocket,
@@ -76,6 +81,9 @@ export class ChainStreamSession {
     this.disposed = true;
     this.detachEngineListener?.();
     this.detachEngineListener = null;
+    this.engineListener = null;
+    this.bufferedEvents = [];
+    this.slowClientSince = null;
 
     const release = this.releaseEngine;
     this.releaseEngine = null;
@@ -104,7 +112,8 @@ export class ChainStreamSession {
     if ((event.type === 'snapshot' || event.type === 'delta') && event.seq <= this.lastSentSeq) {
       return;
     }
-    if (this.isSlowClient()) {
+    const now = Date.now();
+    if (this.isSlowClient(now)) {
       this.disposeForSlowClient();
       return;
     }
@@ -120,6 +129,7 @@ export class ChainStreamSession {
           meta: event.meta,
           data: event.data,
         });
+        this.trackBackpressure(now);
         return;
 
       case 'delta':
@@ -133,6 +143,7 @@ export class ChainStreamSession {
           deltas: event.deltas,
           patch: event.patch,
         });
+        this.trackBackpressure(now);
         return;
 
       case 'status':
@@ -144,12 +155,31 @@ export class ChainStreamSession {
           ts: event.status.ts,
           message: event.status.message,
         });
+        this.trackBackpressure(now);
         return;
     }
   }
 
-  private isSlowClient(): boolean {
-    return (this.socket.bufferedAmount ?? 0) >= MAX_SOCKET_BUFFERED_BYTES;
+  private isSlowClient(now: number): boolean {
+    const bufferedAmount = this.socket.bufferedAmount ?? 0;
+    if (bufferedAmount < MAX_SOCKET_BUFFERED_BYTES) {
+      this.slowClientSince = null;
+      return false;
+    }
+    if (this.slowClientSince == null) {
+      this.slowClientSince = now;
+      return false;
+    }
+    return now - this.slowClientSince >= SLOW_CLIENT_GRACE_MS;
+  }
+
+  private trackBackpressure(now: number): void {
+    const bufferedAmount = this.socket.bufferedAmount ?? 0;
+    if (bufferedAmount < MAX_SOCKET_BUFFERED_BYTES) {
+      this.slowClientSince = null;
+      return;
+    }
+    this.slowClientSince ??= now;
   }
 
   private disposeForSlowClient(): void {
@@ -157,6 +187,9 @@ export class ChainStreamSession {
     this.disposed = true;
     this.detachEngineListener?.();
     this.detachEngineListener = null;
+    this.engineListener = null;
+    this.bufferedEvents = [];
+    this.slowClientSince = null;
     this.socket.close?.(1013, 'slow client');
 
     const release = this.releaseEngine;

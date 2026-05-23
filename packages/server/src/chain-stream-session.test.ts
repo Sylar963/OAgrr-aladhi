@@ -43,7 +43,8 @@ describe('ChainStreamSession', () => {
     getSnapshotMock.mockReturnValue(null);
   });
 
-  it('closes and releases the runtime when the socket is too far behind', async () => {
+  it('waits for sustained backpressure before closing the socket', async () => {
+    vi.useFakeTimers();
     let listener: { onEvent(event: ChainRuntimeEvent): void } | null = null;
     subscribeMock.mockImplementation(
       (nextListener: { onEvent(event: ChainRuntimeEvent): void }) => {
@@ -71,7 +72,22 @@ describe('ChainStreamSession', () => {
       },
     });
 
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(releaseMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    listener?.onEvent({
+      type: 'status',
+      status: {
+        venue: 'deribit',
+        state: 'connected',
+        ts: Date.now(),
+      },
+    });
+
     expect(socket.close).toHaveBeenCalledWith(1013, 'slow client');
     expect(releaseMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

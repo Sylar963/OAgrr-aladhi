@@ -40,15 +40,9 @@ export default function ChainView() {
   });
   const { data: marketStats } = useStats(underlying);
 
-  // Hold the most recent chain across tenor swaps so the table doesn't unmount
-  // during the ~50ms gap between subscribe and snapshot. Once placeholderData
-  // is gone, query.data is briefly `undefined` on each tenor change; we keep
-  // the table mounted with the previous chain dimmed, then swap in fresh data
-  // when it lands. Avoids losing virtualizer / expanded-row state.
-  const lastChainRef = useRef<typeof chain>(undefined);
-  if (chain) lastChainRef.current = chain;
-  const displayChain = chain ?? lastChainRef.current;
-  const isStale = !chain && lastChainRef.current != null;
+  const displayChain = chain;
+  const showLoading =
+    !displayChain && (isLoading || connectionState === 'live' || connectionState === 'connecting');
 
   const prefetchChain = usePrefetchChain(underlying, activeVenues);
 
@@ -103,8 +97,8 @@ export default function ChainView() {
             />
           )}
 
-          <div className={styles.tableArea} data-stale={isStale}>
-            {isLoading && !displayChain && <Spinner size="lg" label="Loading chain data…" />}
+          <div className={styles.tableArea}>
+            {showLoading && <Spinner size="lg" label="Loading chain data…" />}
             {error && !displayChain && (
               <EmptyState
                 icon="⚠"
@@ -172,8 +166,8 @@ export default function ChainView() {
           <MyIvInput />
         </div>
 
-        <div className={styles.tableArea} data-stale={isStale}>
-          {isLoading && !displayChain && <Spinner size="lg" label="Loading chain data…" />}
+        <div className={styles.tableArea}>
+          {showLoading && <Spinner size="lg" label="Loading chain data…" />}
           {error && !displayChain && (
             <EmptyState
               icon="⚠"

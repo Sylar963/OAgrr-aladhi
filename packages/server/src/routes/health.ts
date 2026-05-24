@@ -20,6 +20,7 @@ import {
   isSpotReady,
   spotService,
 } from '../services.js';
+import { getSystemAnnouncement } from '../system-status.js';
 
 export async function healthRoute(app: FastifyInstance) {
   app.get('/health', async () => {
@@ -45,6 +46,7 @@ export async function healthRoute(app: FastifyInstance) {
       }),
       bootTime: SERVER_BOOT_TIME,
       version: SERVER_VERSION,
+      announcement: getSystemAnnouncement(),
       ts: Date.now(),
     };
   });

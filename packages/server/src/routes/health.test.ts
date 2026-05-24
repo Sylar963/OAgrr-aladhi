@@ -23,6 +23,10 @@ vi.mock('../app.js', () => ({
   isShuttingDown: () => false,
 }));
 
+vi.mock('../system-status.js', () => ({
+  getSystemAnnouncement: vi.fn(() => null),
+}));
+
 vi.mock('../services.js', () => ({
   getIvHistoryStorageStats: vi.fn(() =>
     Promise.resolve({
@@ -55,6 +59,7 @@ vi.mock('../services.js', () => ({
 }));
 
 import * as services from '../services.js';
+import * as systemStatus from '../system-status.js';
 import { healthRoute } from './health.js';
 
 async function buildApp() {
@@ -159,6 +164,21 @@ describe('GET /health', () => {
       bytes: 11 * 1024 * 1024 * 1024,
       warning: true,
     });
+  });
+
+  it('returns a null announcement when none is set', async () => {
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().announcement).toBeNull();
+  });
+
+  it('includes the system announcement when present', async () => {
+    vi.mocked(systemStatus.getSystemAnnouncement).mockReturnValueOnce({
+      id: 'm1', severity: 'notice', blocking: false, title: 'Under construction',
+    });
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().announcement).toMatchObject({ id: 'm1', severity: 'notice' });
   });
 });
 

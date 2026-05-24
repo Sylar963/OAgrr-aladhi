@@ -19,6 +19,8 @@ import {
 import { detectStrategy } from './payoff';
 import styles from './VenueSlideover.module.css';
 
+const RANKING_SCROLL_MARGIN_PX = 8;
+
 interface VenueSlideoverProps {
   legs: Leg[];
   chain: EnrichedChainResponse | null;
@@ -84,7 +86,8 @@ export default function VenueSlideover({
 }: VenueSlideoverProps) {
   const [expandedVenue, setExpandedVenue] = useState<string | null>(null);
   const [routing, setRouting] = useState<StrategyRouting>({ legs: {} });
-  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const rankingListRef = useRef<HTMLDivElement | null>(null);
+  const venueRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const legInputs = useMemo<LegInput[]>(() => {
     if (!chain) return [];
@@ -118,7 +121,28 @@ export default function VenueSlideover({
 
   useEffect(() => {
     if (!expandedVenue) return;
-    rowRefs.current[expandedVenue]?.scrollIntoView({ block: 'nearest' });
+
+    const frameId = window.requestAnimationFrame(() => {
+      const list = rankingListRef.current;
+      const row = venueRowRefs.current[expandedVenue];
+      if (!list || !row) return;
+
+      const listRect = list.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const topOverflow = rowRect.top - listRect.top - RANKING_SCROLL_MARGIN_PX;
+      const bottomOverflow = rowRect.bottom - listRect.bottom + RANKING_SCROLL_MARGIN_PX;
+
+      if (topOverflow < 0) {
+        list.scrollBy({ top: topOverflow });
+        return;
+      }
+
+      if (bottomOverflow > 0) {
+        list.scrollBy({ top: bottomOverflow });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, [expandedVenue]);
 
   const strategy = useMemo(
@@ -267,7 +291,7 @@ export default function VenueSlideover({
         </div>
       )}
 
-      <div className={styles.list}>
+      <div className={styles.list} ref={rankingListRef}>
         <div className={styles.sectionHeader}>Single-route ranking</div>
         {sortedVenues.map((vc, i) => {
           const meta = VENUES[vc.venue];
@@ -281,7 +305,7 @@ export default function VenueSlideover({
               data-best={isBest || undefined}
               data-unavailable={!vc.available || undefined}
               ref={(node) => {
-                rowRefs.current[vc.venue] = node;
+                venueRowRefs.current[vc.venue] = node;
               }}
             >
               <button

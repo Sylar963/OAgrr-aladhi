@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { isTrafficReady } from '../readiness.js';
+import { isReady } from '../app.js';
 import { healthRoute } from './health.js';
 import { venuesRoute } from './venues.js';
 import { underlyingsRoute } from './underlyings.js';
@@ -22,11 +22,14 @@ import { paperRoutes, paperWsRoute } from './paper/index.js';
 import { paperAuthRoute } from './paper/auth.js';
 import { portfolioRoutes, portfolioWsRoute } from './portfolio/index.js';
 
+export function shouldBlockApiRequestWhileBootstrapping(url: string): boolean {
+  if (!url.startsWith('/api/')) return false;
+  return url !== '/api/health' && url !== '/api/ready';
+}
+
 export function registerRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (_req, reply) => {
-    const isApiRequest = _req.url.startsWith('/api/');
-    const isReadinessRoute = _req.url === '/api/health' || _req.url === '/api/ready';
-    if (!isTrafficReady() && isApiRequest && !isReadinessRoute) {
+    if (!isReady() && shouldBlockApiRequestWhileBootstrapping(_req.url)) {
       return reply
         .status(503)
         .send({ error: 'initializing', message: 'Server is loading market data' });

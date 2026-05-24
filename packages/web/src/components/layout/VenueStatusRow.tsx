@@ -21,6 +21,8 @@ export default function VenueStatusRow() {
         const isActive = activeSet.has(venue.id);
         const isFailed = failedSet.has(venue.id);
         const venueLiveState = venueStates[venue.id];
+        // Live status event wins. When undefined (no status received yet),
+        // fall through to the subscribe-time failure list / global feed state.
         const state: DotState = !isActive
           ? 'inactive'
           : venueLiveState === 'live'

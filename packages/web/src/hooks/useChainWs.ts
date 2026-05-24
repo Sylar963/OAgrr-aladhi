@@ -172,6 +172,37 @@ type DeltaMsg = Extract<
   { type: 'delta' }
 >;
 
+type StatusMsg = Extract<
+  ReturnType<typeof ServerWsMessageSchema.parse>,
+  { type: 'status' }
+>;
+
+const CONNECTION_STATE_ORDER: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
+
+function mapServerStateToWsConnectionState(state: StatusMsg['state']): WsConnectionState {
+  switch (state) {
+    case 'connected':
+      return 'live';
+    case 'reconnecting':
+    case 'polling':
+      return 'reconnecting';
+    case 'degraded':
+      return 'stale';
+    case 'down':
+      return 'error';
+    default:
+      return 'live';
+  }
+}
+
+function worstConnectionState(states: Iterable<WsConnectionState>): WsConnectionState {
+  let worst: WsConnectionState = 'live';
+  for (const s of states) {
+    if (CONNECTION_STATE_ORDER.indexOf(s) > CONNECTION_STATE_ORDER.indexOf(worst)) worst = s;
+  }
+  return worst;
+}
+
 interface PendingDelta {
   key: ReturnType<typeof chainKeys.chain>;
   patch: DeltaMsg['patch'];
@@ -335,27 +366,19 @@ export function useChainWs({
           break;
 
         case 'status': {
-          const mapped: WsConnectionState =
-            msg.state === 'connected'
-              ? 'live'
-              : msg.state === 'reconnecting' || msg.state === 'polling'
-                ? 'reconnecting'
-                : msg.state === 'degraded'
-                  ? 'stale'
-                  : msg.state === 'down'
-                    ? 'error'
-                    : 'live';
+          const mapped = mapServerStateToWsConnectionState(msg.state);
           const prev = store.get();
+          // Skip the spread + store.set when nothing changed — preserves
+          // reference equality so useSyncExternalStore doesn't re-render.
+          if (prev.venueStates[msg.venue] === mapped) break;
           const venueStates: Record<string, WsConnectionState> = {
             ...prev.venueStates,
             [msg.venue]: mapped,
           };
-          const order: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
-          let worst: WsConnectionState = 'live';
-          for (const s of Object.values(venueStates)) {
-            if (order.indexOf(s) > order.indexOf(worst)) worst = s;
-          }
-          store.set({ connectionState: worst, venueStates });
+          store.set({
+            connectionState: worstConnectionState(Object.values(venueStates)),
+            venueStates,
+          });
           break;
         }
 

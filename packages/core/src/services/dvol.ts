@@ -4,6 +4,7 @@ import { JsonRpcWsClient } from '../feeds/shared/jsonrpc-client.js';
 import { feedLogger } from '../utils/logger.js';
 
 const log = feedLogger('dvol');
+const DVOL_REQUEST_TIMEOUT_MS = 60_000;
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ export class DvolService {
 
     this.rpc = new JsonRpcWsClient(DERIBIT_WS_URL, 'dvol', {
       heartbeatIntervalSec: 30,
+      requestTimeoutMs: DVOL_REQUEST_TIMEOUT_MS,
     });
 
     this.rpc.onSubscription((_channel: string, data: unknown) => {

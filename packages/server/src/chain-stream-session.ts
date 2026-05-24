@@ -1,7 +1,9 @@
 import type {
   ChainRuntimeEvent,
+  ChainRuntimeSnapshotEvent,
   ChainRuntimeListener,
   ServerWsMessage,
+  VenueFailure,
   WsSubscriptionRequest,
 } from '@oggregator/core';
 import { chainEngines } from './chain-engines.js';
@@ -15,10 +17,18 @@ const MAX_SOCKET_BUFFERED_BYTES = 1_000_000;
 const SLOW_CLIENT_GRACE_MS = 15_000;
 const LARGE_FRAME_BYTES = 250_000;
 const LARGE_FRAME_LOG_TTL_MS = 5_000;
+const SOFT_BACKPRESSURE_BYTES = 500_000;
 
 interface SessionLogger {
   info: (obj: object, msg: string) => void;
   warn: (obj: object, msg: string) => void;
+}
+
+interface SessionRuntime {
+  subscribe: (listener: ChainRuntimeListener) => () => void;
+  getSnapshot: () => ChainRuntimeSnapshotEvent | null;
+  getActiveRequest: () => WsSubscriptionRequest;
+  getFailedVenues: () => VenueFailure[];
 }
 
 type SessionSocket = {
@@ -39,6 +49,8 @@ export class ChainStreamSession {
   private slowClientSince: number | null = null;
   private lastLargeFrameLoggedAt = 0;
   private readonly lastVenueStatusByVenue = new Map<string, string>();
+  private runtime: SessionRuntime | null = null;
+  private needsResync = false;
 
   constructor(
     private readonly socket: SessionSocket,
@@ -48,27 +60,29 @@ export class ChainStreamSession {
   ) {}
 
   async subscribe(): Promise<void> {
-    const { runtime, release } = await chainEngines.acquire(this.request);
+    const acquired = await chainEngines.acquire(this.request);
     if (this.disposed) {
-      await release();
+      await acquired.release();
       return;
     }
 
-    this.releaseEngine = release;
+    this.runtime = acquired.runtime as SessionRuntime;
+    this.releaseEngine = acquired.release;
     this.engineListener = {
       onEvent: (event) => this.handleEngineEvent(event),
     };
-    this.detachEngineListener = runtime.subscribe(this.engineListener);
+    this.detachEngineListener = acquired.runtime.subscribe(this.engineListener);
 
     this.sendMessage('subscribed', {
       type: 'subscribed',
       subscriptionId: this.subscriptionId,
-      request: runtime.getActiveRequest(),
+      request: acquired.runtime.getActiveRequest(),
       serverTime: Date.now(),
-      failedVenues: runtime.getFailedVenues().length > 0 ? runtime.getFailedVenues() : undefined,
+      failedVenues:
+        acquired.runtime.getFailedVenues().length > 0 ? acquired.runtime.getFailedVenues() : undefined,
     });
 
-    const snapshot = runtime.getSnapshot();
+    const snapshot = acquired.runtime.getSnapshot();
     if (snapshot != null) {
       this.sendEngineEvent(snapshot);
     }
@@ -89,6 +103,8 @@ export class ChainStreamSession {
     this.bufferedEvents = [];
     this.slowClientSince = null;
     this.lastVenueStatusByVenue.clear();
+    this.runtime = null;
+    this.needsResync = false;
 
     const release = this.releaseEngine;
     this.releaseEngine = null;
@@ -118,6 +134,10 @@ export class ChainStreamSession {
       return;
     }
     const now = Date.now();
+    if (this.needsResync && !this.isBackpressured()) {
+      this.flushResyncSnapshot();
+      if (this.disposed) return;
+    }
     if (this.isSlowClient(now)) {
       this.disposeForSlowClient();
       return;
@@ -138,6 +158,10 @@ export class ChainStreamSession {
         return;
 
       case 'delta':
+        if (this.shouldDeferDelta()) {
+          this.needsResync = true;
+          return;
+        }
         this.lastSentSeq = event.seq;
         this.sendMessage('delta', {
           type: 'delta',
@@ -210,6 +234,29 @@ export class ChainStreamSession {
     }
   }
 
+  private shouldDeferDelta(): boolean {
+    return (this.socket.bufferedAmount ?? 0) >= SOFT_BACKPRESSURE_BYTES;
+  }
+
+  private isBackpressured(): boolean {
+    return (this.socket.bufferedAmount ?? 0) >= SOFT_BACKPRESSURE_BYTES;
+  }
+
+  private flushResyncSnapshot(): void {
+    const snapshot = this.runtime?.getSnapshot();
+    if (snapshot == null) return;
+    this.needsResync = false;
+    this.lastSentSeq = snapshot.seq;
+    this.sendMessage('snapshot', {
+      type: 'snapshot',
+      subscriptionId: this.subscriptionId,
+      seq: snapshot.seq,
+      request: snapshot.request,
+      meta: snapshot.meta,
+      data: snapshot.data,
+    });
+  }
+
   private isSlowClient(now: number): boolean {
     const bufferedAmount = this.socket.bufferedAmount ?? 0;
     if (bufferedAmount < MAX_SOCKET_BUFFERED_BYTES) {
@@ -254,6 +301,8 @@ export class ChainStreamSession {
     this.bufferedEvents = [];
     this.slowClientSince = null;
     this.lastVenueStatusByVenue.clear();
+    this.runtime = null;
+    this.needsResync = false;
     this.log?.warn(
       {
         subscriptionId: this.subscriptionId,

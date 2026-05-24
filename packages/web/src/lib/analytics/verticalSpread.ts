@@ -4,7 +4,8 @@ import { inferMissingIv } from './ivInference';
 
 export type SpreadKind = 'call-credit' | 'put-credit';
 export type TradingSignal = 'SELL' | 'AVOID' | 'HOLD';
-export type RegimeLabel = 'bull' | 'neutral' | 'stress';
+export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
+export type RegimeDirection = 'risk-on' | 'neutral' | 'risk-off';
 
 // Physical-measure inputs. When supplied, success probability is computed
 // against realized vol and the user's directional drift instead of the
@@ -38,7 +39,7 @@ export interface SpreadInput {
   // drift and realized vol instead of the risk-neutral surface IV.
   realWorld?: RealWorldParams;
   // When provided, the SELL gate's ROC threshold flexes with the macro
-  // regime: stress tightens the gate (less aggressive selling), bull loosens
+  // regime: high-vol tightens the gate (less aggressive selling), low-vol loosens
   // it. Drives `gateSignal` only; pricing/EV are unaffected.
   regimeDominant?: RegimeLabel | null;
 }
@@ -298,13 +299,13 @@ const ROC_GATE_NEUTRAL = 0.10;
 const ROC_GATE_STRESS = 0.20;
 const ROC_GATE_BULL = 0.07;
 
-// Macro regime modulates the SELL gate. In stress the cost of being short
+// Vol-level modulates the SELL gate. In high-vol the cost of being short
 // vol/short gamma is non-linear (tail blow-ups), so the gate doubles. In
-// low-vol bull the realized-vs-implied gap typically widens in the seller's
-// favor, so the gate eases. Neutral keeps the practitioner default.
+// low-vol the realized-vs-implied gap typically widens in the seller's favor,
+// so the gate eases. Mid-vol keeps the practitioner default.
 export function rocGateForRegime(regime: RegimeLabel | null | undefined): number {
-  if (regime === 'stress') return ROC_GATE_STRESS;
-  if (regime === 'bull') return ROC_GATE_BULL;
+  if (regime === 'high-vol') return ROC_GATE_STRESS;
+  if (regime === 'low-vol') return ROC_GATE_BULL;
   return ROC_GATE_NEUTRAL;
 }
 
@@ -345,10 +346,10 @@ function gateSignal(
   const roc = maxLoss > 0 ? expectedValue / maxLoss : 0;
   const rocGate = rocGateForRegime(regimeDominant);
   const regimeSuffix =
-    regimeDominant === 'stress'
-      ? ' [stress: gate 20%]'
-      : regimeDominant === 'bull'
-        ? ' [bull: gate 7%]'
+    regimeDominant === 'high-vol'
+      ? ' [high-vol: gate 20%]'
+      : regimeDominant === 'low-vol'
+        ? ' [low-vol: gate 7%]'
         : '';
 
   let signal: TradingSignal;

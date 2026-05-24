@@ -12,11 +12,29 @@ export interface BasisPoint {
   basisPct: number;
 }
 
-export type RegimeLabel = 'bull' | 'neutral' | 'stress';
+// Vol-level labels. NOT directional. `low-vol` means the HMM is sitting in
+// its lowest-ATM-IV cluster, not that price is rising. For a directional
+// read use RegimeQueryResult.direction (derived from 25Δ risk-reversal).
+export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
+
+// Risk-reversal-derived sentiment. Decoupled from RegimeLabel so a "low-vol"
+// regime can still be risk-off if puts are bid.
+export type RegimeDirection = 'risk-on' | 'neutral' | 'risk-off';
+
+// 25Δ RR magnitude (vol points) below which direction is reported as neutral.
+// Above this, the sign of RR drives risk-on/off. 0.005 ≈ 0.5 vol point — large
+// enough to ignore inter-venue noise, small enough to flip on a real tilt.
+const DIRECTION_FLAT_BAND = 0.005;
+
+export function deriveDirection(rr25d: number | null): RegimeDirection | null {
+  if (rr25d == null || !Number.isFinite(rr25d)) return null;
+  if (Math.abs(rr25d) < DIRECTION_FLAT_BAND) return 'neutral';
+  return rr25d > 0 ? 'risk-on' : 'risk-off';
+}
 
 // Map HMM state indices to regime labels using the chosen feature (typically
-// ATM IV) as the ordering signal. Lowest vol → bull, highest vol → stress,
-// everything in between → neutral. This resolves the EM label-permutation
+// ATM IV) as the ordering signal. Lowest vol → low-vol, highest vol → high-vol,
+// everything in between → mid-vol. This resolves the EM label-permutation
 // problem deterministically so callers can act on the labels.
 export function labelStatesByVolLevel(
   stateMeans: readonly (readonly number[])[],
@@ -29,15 +47,27 @@ export function labelStatesByVolLevel(
       `labelStatesByVolLevel: featureIndex ${featureIndex} out of range [0, ${stateMeans[0]!.length})`,
     );
   }
-  if (N === 1) return ['neutral'];
+  if (N === 1) return ['mid-vol'];
 
   const indexed = stateMeans.map((mu, i) => ({ i, v: mu[featureIndex]! }));
   indexed.sort((a, b) => a.v - b.v);
 
-  const labels = new Array<RegimeLabel>(N).fill('neutral');
-  labels[indexed[0]!.i] = 'bull';
-  labels[indexed[N - 1]!.i] = 'stress';
+  const labels = new Array<RegimeLabel>(N).fill('mid-vol');
+  labels[indexed[0]!.i] = 'low-vol';
+  labels[indexed[N - 1]!.i] = 'high-vol';
   return labels;
+}
+
+// Bridges persisted state from before the bull/neutral/stress → vol-level
+// rename. Used at model-load so a restart doesn't surface stale label strings
+// for the up-to-7-days between restarts and the next HMM refit.
+const LEGACY_LABEL_MAP: Record<string, RegimeLabel> = {
+  bull: 'low-vol',
+  neutral: 'mid-vol',
+  stress: 'high-vol',
+};
+export function normalizeLegacyLabel(label: string): RegimeLabel {
+  return LEGACY_LABEL_MAP[label] ?? (label as RegimeLabel);
 }
 
 // ── RegimeService ────────────────────────────────────────────────────────
@@ -93,6 +123,11 @@ export interface RegimeServiceOptions {
   seed?: number;
   maxFitIter?: number;
   fitTol?: number;
+  // Below this max-posterior value, `dominant` reports null so callers don't
+  // act on a near-uniform distribution. The full posterior is still returned.
+  // Default 0.5 — for 3 states, that means the leading state must beat the
+  // uniform 1/3 by a meaningful margin before we name a winner.
+  confidenceFloor?: number;
 }
 
 export interface RegimeQueryResult {
@@ -102,6 +137,7 @@ export interface RegimeQueryResult {
   posterior: number[] | null;
   stateLabels: RegimeLabel[] | null;
   dominant: RegimeLabel | null;
+  direction: RegimeDirection | null;
   confidence: number | null;
   modelFittedAt: number | null;
   lastTransitionAt: number | null;
@@ -127,7 +163,7 @@ interface UnderlyingState {
 // Feature order: [atmIv30d, rr25d_30d, bfly25d_30d, basis30d]. This order is
 // load-bearing — it determines the layout of standardization params, HMM
 // emission means, and persisted features JSONB. ATM IV is at index 0 because
-// it's the labeling feature for bull/neutral/stress.
+// it's the labeling feature for low-vol/mid-vol/high-vol.
 const VOL_FEATURE_INDEX = 0;
 const HISTORY_LOAD_DAYS = 90;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -161,6 +197,7 @@ export class RegimeService {
   private readonly seed: number;
   private readonly maxFitIter: number;
   private readonly fitTol: number;
+  private readonly confidenceFloor: number;
 
   constructor(
     private readonly deps: RegimeServiceDeps,
@@ -169,11 +206,18 @@ export class RegimeService {
     this.intervalMs = opts.intervalMs ?? 5 * 60 * 1000;
     this.capacity = opts.capacity ?? 90 * 24 * 12;
     this.minSamplesToFit = opts.minSamplesToFit ?? 500;
-    this.refitIntervalMs = opts.refitIntervalMs ?? 7 * MS_PER_DAY;
+    // Default refit cadence: 1 day. Was 7d, but a week of drift inside a single
+    // refit window is long enough for the standardization the HMM was trained
+    // against to lag reality. Rolling standardization without refit can't fix
+    // it — the HMM emission means live in the z-space that was active at fit
+    // time, so re-standardizing without re-fitting moves observations into a
+    // coordinate system the model wasn't trained on. Cheaper to just refit.
+    this.refitIntervalMs = opts.refitIntervalMs ?? MS_PER_DAY;
     this.nStates = opts.nStates ?? 3;
     this.seed = opts.seed ?? 42;
     this.maxFitIter = opts.maxFitIter ?? 100;
     this.fitTol = opts.fitTol ?? 1e-5;
+    this.confidenceFloor = opts.confidenceFloor ?? 0.5;
     for (const u of deps.underlyings) this.states.set(u, this.emptyState());
   }
 
@@ -213,19 +257,29 @@ export class RegimeService {
         posterior: null,
         stateLabels: null,
         dominant: null,
+        direction: null,
         confidence: null,
         modelFittedAt: null,
         lastTransitionAt: null,
       };
     }
+    const confidence = s.posterior ? Math.max(...s.posterior) : null;
+    // Below the floor the posterior is too flat to name a winner. We still
+    // expose the distribution and labels so a debug surface can show it; only
+    // `dominant` is suppressed because that's what downstream gates branch on.
+    const dominant =
+      confidence != null && confidence >= this.confidenceFloor ? s.dominant : null;
+    const lastFeatures = s.buffer.length > 0 ? s.buffer[s.buffer.length - 1]!.features : null;
+    const direction = deriveDirection(lastFeatures ? (lastFeatures[1] ?? null) : null);
     return {
       underlying,
       ts: s.posteriorTs ?? 0,
       observationCount: s.buffer.length,
       posterior: s.posterior ? [...s.posterior] : null,
       stateLabels: s.stateLabels ? [...s.stateLabels] : null,
-      dominant: s.dominant,
-      confidence: s.posterior ? Math.max(...s.posterior) : null,
+      dominant,
+      direction,
+      confidence,
       modelFittedAt: s.modelFittedAt,
       lastTransitionAt: s.lastTransitionAt,
     };
@@ -391,7 +445,10 @@ export class RegimeService {
         if (!state) continue;
         state.model = model.hmm;
         state.standardization = model.standardization;
-        state.stateLabels = model.stateLabels;
+        // Bridge any persisted bull/neutral/stress strings from before the
+        // vol-level rename. New refits will overwrite the row with the new
+        // labels; this keeps the in-memory state honest until then.
+        state.stateLabels = model.stateLabels.map(normalizeLegacyLabel);
         state.modelFittedAt = model.fittedAt;
         log.info({ underlying, fittedAt: model.fittedAt }, 'restored persisted regime model');
       } catch (err: unknown) {

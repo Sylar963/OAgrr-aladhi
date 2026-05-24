@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 
-export type RegimeLabel = 'bull' | 'neutral' | 'stress';
+export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
 
 export interface PersistedRegimeModel {
   underlying: string;

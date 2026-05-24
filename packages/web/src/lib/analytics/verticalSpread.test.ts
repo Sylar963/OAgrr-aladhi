@@ -491,16 +491,16 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   });
 
   it('rocGateForRegime maps regime label to the right ROC threshold', () => {
-    expect(rocGateForRegime('stress')).toBeCloseTo(0.20, 6);
-    expect(rocGateForRegime('bull')).toBeCloseTo(0.07, 6);
-    expect(rocGateForRegime('neutral')).toBeCloseTo(0.10, 6);
+    expect(rocGateForRegime('high-vol')).toBeCloseTo(0.20, 6);
+    expect(rocGateForRegime('low-vol')).toBeCloseTo(0.07, 6);
+    expect(rocGateForRegime('mid-vol')).toBeCloseTo(0.10, 6);
     expect(rocGateForRegime(null)).toBeCloseTo(0.10, 6);
     expect(rocGateForRegime(undefined)).toBeCloseTo(0.10, 6);
   });
 
   it('reasoning string surfaces the active regime gate so it shows up in the UI', () => {
-    // Run the same low-credit AVOID twice — once with no regime, once stress —
-    // and assert the reasoning line carries the regime suffix.
+    // Run the same low-credit AVOID twice — once high-vol, once low-vol — and
+    // assert the reasoning line carries the regime suffix.
     const strikes: EnrichedStrike[] = [
       {
         strike: 75,
@@ -549,12 +549,12 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       r: 0.05,
       realWorld: { drift: 0, sigmaRV: 0.10 },
     };
-    const stress = routeVerticalSpread({ ...base, regimeDominant: 'stress' });
-    const bull = routeVerticalSpread({ ...base, regimeDominant: 'bull' });
-    expect(stress.combinedSignal!.reasoning).toContain('stress');
-    expect(stress.combinedSignal!.reasoning).toContain('20%');
-    expect(bull.combinedSignal!.reasoning).toContain('bull');
-    expect(bull.combinedSignal!.reasoning).toContain('7%');
+    const highVol = routeVerticalSpread({ ...base, regimeDominant: 'high-vol' });
+    const lowVol = routeVerticalSpread({ ...base, regimeDominant: 'low-vol' });
+    expect(highVol.combinedSignal!.reasoning).toContain('high-vol');
+    expect(highVol.combinedSignal!.reasoning).toContain('20%');
+    expect(lowVol.combinedSignal!.reasoning).toContain('low-vol');
+    expect(lowVol.combinedSignal!.reasoning).toContain('7%');
   });
 
   it('gate AVOIDs a low-ROC trade even with positive credit and high pop', () => {

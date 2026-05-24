@@ -176,11 +176,14 @@ export {
 } from './services/regime-hmm.js';
 export {
   applyStandardization,
+  deriveDirection,
   fitStandardization,
   interpBasisToTenor,
   labelStatesByVolLevel,
+  normalizeLegacyLabel,
   RegimeService,
   type BasisPoint,
+  type RegimeDirection,
   type RegimeInputs,
   type RegimeLabel,
   type RegimePersistedModel,

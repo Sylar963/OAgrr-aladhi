@@ -129,15 +129,40 @@
   color: var(--bg-base);
 }
 
-.regimePill[data-regime="bull"] {
+.regimePill[data-regime="low-vol"] {
   background: var(--color-profit);
 }
 
-.regimePill[data-regime="neutral"] {
+.regimePill[data-regime="mid-vol"] {
   background: var(--text-dim);
 }
 
-.regimePill[data-regime="stress"] {
+.regimePill[data-regime="high-vol"] {
+  background: var(--color-loss);
+  color: #fff;
+}
+
+.directionPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  color: var(--bg-base);
+}
+
+.directionPill[data-direction="risk-on"] {
+  background: var(--color-profit);
+}
+
+.directionPill[data-direction="neutral"] {
+  background: var(--text-dim);
+}
+
+.directionPill[data-direction="risk-off"] {
   background: var(--color-loss);
   color: #fff;
 }

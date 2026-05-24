@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchJson } from '@lib/http';
-import type { RegimeLabel } from '@lib/analytics/verticalSpread';
+import type { RegimeDirection, RegimeLabel } from '@lib/analytics/verticalSpread';
 
 export interface RegimeResponse {
   underlying: string;
@@ -10,6 +10,7 @@ export interface RegimeResponse {
   posterior: number[] | null;
   stateLabels: RegimeLabel[] | null;
   dominant: RegimeLabel | null;
+  direction: RegimeDirection | null;
   confidence: number | null;
   modelFittedAt: number | null;
   lastTransitionAt: number | null;

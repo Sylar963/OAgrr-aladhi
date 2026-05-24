@@ -14,9 +14,15 @@ interface Props {
 }
 
 const REGIME_GATE_PCT: Record<string, string> = {
-  bull: '7%',
-  neutral: '10%',
-  stress: '20%',
+  'low-vol': '7%',
+  'mid-vol': '10%',
+  'high-vol': '20%',
+};
+
+const DIRECTION_LABEL: Record<string, string> = {
+  'risk-on': 'RISK-ON',
+  neutral: 'NEUTRAL',
+  'risk-off': 'RISK-OFF',
 };
 
 function SignalCard({ signal, label = 'Executable (best routing)', regime }: Props) {
@@ -29,6 +35,7 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
   }
 
   const dominant = regime?.dominant ?? null;
+  const direction = regime?.direction ?? null;
   const confidencePct =
     regime?.confidence != null ? Math.round(regime.confidence * 100) : null;
   const gatePct = dominant ? REGIME_GATE_PCT[dominant] : null;
@@ -85,12 +92,19 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
         <span className={styles.reasoning}>{signal.reasoning}</span>
       </div>
 
-      {dominant && (
-        <div className={styles.regimeRow} data-regime={dominant}>
+      {(dominant || direction) && (
+        <div className={styles.regimeRow} data-regime={dominant ?? 'unknown'}>
           <span className={styles.regimeLabel}>Regime</span>
-          <span className={styles.regimePill} data-regime={dominant}>
-            {dominant.toUpperCase()}
-          </span>
+          {dominant && (
+            <span className={styles.regimePill} data-regime={dominant}>
+              {dominant.toUpperCase()}
+            </span>
+          )}
+          {direction && (
+            <span className={styles.directionPill} data-direction={direction}>
+              {DIRECTION_LABEL[direction]}
+            </span>
+          )}
           {confidencePct != null && (
             <span className={styles.regimeMeta}>{confidencePct}% confidence</span>
           )}

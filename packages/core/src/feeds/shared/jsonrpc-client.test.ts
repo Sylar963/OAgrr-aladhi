@@ -156,6 +156,44 @@ describe('JsonRpcWsClient', () => {
     vi.useRealTimers();
   });
 
+  it('caps stacked rate-limit cooldowns at the configured ceiling', () => {
+    vi.useFakeTimers();
+    // Use a non-zero base time so the implementation's first-hit sentinel
+    // (`rateLimitFirstHitAt === 0`) correctly anchors on the first call.
+    const t0 = 1_000_000;
+    vi.setSystemTime(t0);
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      rateLimitCooldownMs: 60_000,
+      maxCooldownTotalMs: 120_000,
+    });
+    const internals = client as unknown as {
+      noteRateLimit: (error: unknown) => void;
+      remainingRateLimitCooldownMs: () => number;
+    };
+
+    // t=0 (relative): first hit → cooldown until +60_000
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=30_000: second hit → would extend to +90_000, still under ceiling
+    vi.advanceTimersByTime(30_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=60_000: third hit → would extend to +120_000, at ceiling
+    vi.advanceTimersByTime(30_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=70_000: fourth hit → would push to +130_000, must cap at +120_000
+    vi.advanceTimersByTime(10_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBeLessThanOrEqual(50_000);
+
+    vi.useRealTimers();
+  });
+
   it('detaches socket listeners before closing on disconnect', async () => {
     const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
     const internals = client as unknown as JsonRpcWsClientInternals;

@@ -16,6 +16,7 @@ const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RESUBSCRIBE_BATCH_SIZE = 200;
 const DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS = 350;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
+const DEFAULT_MAX_COOLDOWN_TOTAL_MS = 5 * 60 * 1000;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const SEC_TO_MS = 1_000;
 
@@ -61,6 +62,7 @@ export class JsonRpcWsClient {
   private heartbeatToken = 0;
   private lastActivityAt = 0;
   private rateLimitUntil = 0;
+  private rateLimitFirstHitAt = 0;
   private rateLimitHits = 0;
   private connectedAt = 0;
   private log: pino.Logger;
@@ -79,6 +81,7 @@ export class JsonRpcWsClient {
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
       rateLimitCooldownMs?: number;
+      maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
     } = {},
@@ -133,6 +136,7 @@ export class JsonRpcWsClient {
         this.connectedAt = Date.now();
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
+        this.rateLimitFirstHitAt = 0;
         this.log.info({ url: this.url }, 'ws connected');
         this.reconnectAttempts = 0;
         this.startHeartbeat();
@@ -479,13 +483,23 @@ export class JsonRpcWsClient {
     if (!isRateLimitSignal(error)) return;
 
     const cooldownMs = this.options.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS;
-    const until = Date.now() + cooldownMs;
-    if (until > this.rateLimitUntil) {
-      this.rateLimitUntil = until;
-    }
+    const maxTotalMs = this.options.maxCooldownTotalMs ?? DEFAULT_MAX_COOLDOWN_TOTAL_MS;
+    const now = Date.now();
+    if (this.rateLimitFirstHitAt === 0) this.rateLimitFirstHitAt = now;
+
+    const proposed = now + cooldownMs;
+    const ceiling = this.rateLimitFirstHitAt + maxTotalMs;
+    const until = Math.min(proposed, ceiling);
+    if (until > this.rateLimitUntil) this.rateLimitUntil = until;
+
     this.rateLimitHits += 1;
     this.log.warn(
-      { cooldownMs, rateLimitHits: this.rateLimitHits, retryAt: this.rateLimitUntil },
+      {
+        cooldownMs,
+        rateLimitHits: this.rateLimitHits,
+        retryAt: this.rateLimitUntil,
+        ceilingHit: until < proposed,
+      },
       'rate limit detected, delaying reconnects',
     );
   }

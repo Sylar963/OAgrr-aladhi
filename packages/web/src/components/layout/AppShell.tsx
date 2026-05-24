@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { CommandPalette, ShortcutHelp } from '@components/ui';
+import { SystemNotifications } from '@components/notifications';
 import { useAppStore } from '@stores/app-store';
 
 import { useIsMobile } from '@hooks/useIsMobile';
@@ -117,6 +118,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
       <div className={styles.shell}>
         <NewsTicker />
         <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
+        <SystemNotifications />
         {showToolbar && <MobileToolbar />}
         <main className={styles.main}>{children}</main>
         <MobileNav />

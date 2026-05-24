@@ -619,6 +619,35 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     expect(res.markLine.map((m) => m.c)).toEqual([0.0005, 0.0007]);
   });
 
+  it('falls back to trade candles when signed Gate.io mark REST returns 404', async () => {
+    // Regression: Gate.io's mark endpoint can legitimately 404 for contracts
+    // not in its mark-history universe (newly listed, low-volume strikes)
+    // even when the same contract has trade-derived candles. Previously the
+    // 404 propagated as InstrumentCandlesError('not_found') and killed every
+    // Gate.io chart in production once GATEIO_API_KEY/SECRET were set.
+    vi.stubEnv('GATEIO_API_KEY', 'test-key');
+    vi.stubEnv('GATEIO_API_SECRET', 'test-secret');
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/options/mark_price_candlesticks')) {
+        return new Response('Not Found', { status: 404 });
+      }
+      return new Response(
+        JSON.stringify([
+          { t: Math.floor(BASE_TS / 1000), o: '1737', h: '1737', l: '1737', c: '1737', v: 20 },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const res = await svc.getCandles('gateio', 'BTC_USDT-20260605-77000-C', '1h', '7d');
+
+    expect(res.candles.map((c) => c.c)).toEqual([1737]);
+    // Mark line empty (no buffer seed, mark REST 404'd) — chart still renders
+    // from trade candles instead of surfacing an upstream error.
+    expect(res.markLine).toEqual([]);
+  });
+
   it('falls back to buffered Gate.io mark when signed REST returns []', async () => {
     vi.stubEnv('GATEIO_API_KEY', 'test-key');
     vi.stubEnv('GATEIO_API_SECRET', 'test-secret');

@@ -119,6 +119,13 @@ export {
 } from './instrument-candles.js';
 
 export {
+  SystemAnnouncementSchema,
+  SystemAnnouncementSeveritySchema,
+  type SystemAnnouncement,
+  type SystemAnnouncementSeverity,
+} from './system-status.js';
+
+export {
   VenueCredentialFieldKeySchema,
   VenueCredentialFieldSpecSchema,
   VenuePrivateAdapterStatusSchema,

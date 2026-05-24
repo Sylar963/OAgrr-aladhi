@@ -16,6 +16,7 @@ const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RESUBSCRIBE_BATCH_SIZE = 200;
 const DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS = 350;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const SEC_TO_MS = 1_000;
 
 // Deribit closes the connection if the `public/test` response lags behind the
@@ -78,6 +79,7 @@ export class JsonRpcWsClient {
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
       rateLimitCooldownMs?: number;
+      handshakeTimeoutMs?: number;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
     } = {},
   ) {
@@ -99,6 +101,7 @@ export class JsonRpcWsClient {
       const resolveConnect = (): void => {
         if (settled) return;
         settled = true;
+        clearTimeout(handshakeTimer);
         this.connectPromise = null;
         resolve();
       };
@@ -106,11 +109,23 @@ export class JsonRpcWsClient {
       const rejectConnect = (error: Error): void => {
         if (settled) return;
         settled = true;
+        clearTimeout(handshakeTimer);
         this.connectPromise = null;
         reject(error);
       };
 
       this.ws = socket;
+
+      // Guard against upstream WS upgrades that accept TCP but never complete —
+      // the close handler downstream will pick up the resulting termination and
+      // schedule the next reconnect attempt.
+      const timeoutMs = this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+      const handshakeTimer = setTimeout(() => {
+        if (settled) return;
+        this.log.warn({ url: this.url, timeoutMs }, 'ws handshake timeout, terminating');
+        socket.terminate();
+        rejectConnect(new Error(`[${this.label}] handshake timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       socket.on('open', () => {
         if (this.ws !== socket) return;

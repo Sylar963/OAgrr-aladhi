@@ -1,4 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { FakeWebSocket } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { EventEmitter } = require('node:events') as typeof import('node:events');
+  class FakeWebSocket extends EventEmitter {
+    static OPEN = 1;
+    static instances: FakeWebSocket[] = [];
+    readyState = 0;
+    terminate = vi.fn();
+    close = vi.fn();
+    ping = vi.fn();
+    send = vi.fn();
+    bufferedAmount = 0;
+    constructor(public url: string) {
+      super();
+      FakeWebSocket.instances.push(this);
+    }
+  }
+  return { FakeWebSocket };
+});
+
+vi.mock('ws', () => ({
+  default: FakeWebSocket,
+}));
+
 import { JsonRpcWsClient } from './jsonrpc-client.js';
 
 function deferred<T>() {
@@ -104,6 +129,30 @@ describe('JsonRpcWsClient', () => {
     await Promise.resolve();
 
     expect(internals.heartbeatTimer).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('rejects connect() and terminates the socket when the WS handshake hangs', async () => {
+    vi.useFakeTimers();
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      handshakeTimeoutMs: 100,
+      maxReconnectAttempts: 0,
+    });
+
+    const connectPromise = client.connect();
+    // Catch the rejection eagerly so the unhandled rejection doesn't fail the run
+    // before we get to the assertion below.
+    const assertion = expect(connectPromise).rejects.toThrow(/handshake/i);
+
+    const socket = FakeWebSocket.instances.at(-1);
+    expect(socket).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    await assertion;
+    expect(socket!.terminate).toHaveBeenCalled();
     vi.useRealTimers();
   });
 

@@ -36,6 +36,7 @@ import {
   createDeribitState,
   registerDeribitInstrument,
   removeDeribitInstrument,
+  summarizeDeribitSubscribedTickerStaleness,
 } from './state.js';
 
 const log = feedLogger('deribit');
@@ -58,6 +59,10 @@ const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
 const DERIBIT_CHAIN_STALE_LOG_MS = 15_000;
 const DERIBIT_CHAIN_SAMPLE_SIZE = 5;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS = 90_000;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS = 30_000;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO = 0.9;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
 
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
@@ -106,6 +111,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
   private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
+  private subscribedTickerStaleSince = 0;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -221,6 +227,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
     this.healthTimer = setInterval(() => {
       void this.refreshPublicStatus();
+      this.checkSubscribedTickerStaleness();
     }, HEALTH_CHECK_INTERVAL_MS);
     void this.refreshPublicStatus();
 
@@ -731,6 +738,69 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private emitPlatformHealth(): void {
     const health = deriveDeribitPlatformHealth(this.health);
     this.emitStatus(health.status, health.message);
+  }
+
+  private checkSubscribedTickerStaleness(): void {
+    if (!this.rpc.isConnected) {
+      this.subscribedTickerStaleSince = 0;
+      return;
+    }
+
+    const now = Date.now();
+    const summary = summarizeDeribitSubscribedTickerStaleness(
+      this.subscriptions.subscribedTickers,
+      this.quoteStore,
+      now,
+      DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS,
+      DERIBIT_CHAIN_SAMPLE_SIZE,
+    );
+    if (summary == null || summary.subscribedTickers < DERIBIT_SUBSCRIBED_TICKER_STALE_MIN) {
+      this.subscribedTickerStaleSince = 0;
+      return;
+    }
+
+    const staleRatio = summary.staleSubscribedTickers / summary.subscribedTickers;
+    if (staleRatio < DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO) {
+      this.subscribedTickerStaleSince = 0;
+      return;
+    }
+
+    if (this.subscribedTickerStaleSince === 0) {
+      this.subscribedTickerStaleSince = now;
+      log.warn(
+        {
+          subscribedTickers: summary.subscribedTickers,
+          staleSubscribedTickers: summary.staleSubscribedTickers,
+          missingQuotes: summary.missingQuotes,
+          staleRatio,
+          oldestStaleAgeMs: summary.oldestStaleAgeMs,
+          newestStaleAgeMs: summary.newestStaleAgeMs,
+          staleExamples: summary.staleExamples,
+        },
+        'deribit subscribed tickers look globally stale',
+      );
+      return;
+    }
+
+    const staleWindowMs = now - this.subscribedTickerStaleSince;
+    if (staleWindowMs < DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) return;
+
+    this.subscribedTickerStaleSince = now;
+    log.error(
+      {
+        subscribedTickers: summary.subscribedTickers,
+        staleSubscribedTickers: summary.staleSubscribedTickers,
+        missingQuotes: summary.missingQuotes,
+        staleRatio,
+        staleWindowMs,
+        oldestStaleAgeMs: summary.oldestStaleAgeMs,
+        newestStaleAgeMs: summary.newestStaleAgeMs,
+        staleExamples: summary.staleExamples,
+      },
+      'deribit subscribed tickers stayed stale, forcing reconnect',
+    );
+    this.emitStatus('reconnecting', `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`);
+    this.rpc.terminate();
   }
 
   private async refreshPublicStatus(): Promise<void> {

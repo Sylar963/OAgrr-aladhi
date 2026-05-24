@@ -7,6 +7,15 @@ export interface DeribitState {
   indexToInstruments: Map<string, Set<string>>;
 }
 
+export interface DeribitSubscribedTickerStaleness {
+  subscribedTickers: number;
+  staleSubscribedTickers: number;
+  missingQuotes: number;
+  oldestStaleAgeMs: number | null;
+  newestStaleAgeMs: number | null;
+  staleExamples: string[];
+}
+
 export function createDeribitState(): DeribitState {
   return {
     liveIndexPrices: new Map(),
@@ -186,5 +195,56 @@ export function buildDeribitTickerQuote(
       askIv: ivToFraction(ticker.ask_iv),
     },
     timestamp: ticker.timestamp ?? Date.now(),
+  };
+}
+
+export function summarizeDeribitSubscribedTickerStaleness(
+  subscribedTickers: ReadonlySet<string>,
+  quoteStore: ReadonlyMap<string, LiveQuote>,
+  now: number,
+  staleAfterMs: number,
+  sampleSize: number,
+): DeribitSubscribedTickerStaleness | null {
+  if (subscribedTickers.size === 0) return null;
+
+  let staleSubscribedTickers = 0;
+  let missingQuotes = 0;
+  let oldestStaleAgeMs: number | null = null;
+  let newestStaleAgeMs: number | null = null;
+  const staleExamples: string[] = [];
+
+  for (const exchangeSymbol of subscribedTickers) {
+    const timestamp = quoteStore.get(exchangeSymbol)?.timestamp ?? 0;
+    if (timestamp <= 0) {
+      staleSubscribedTickers += 1;
+      missingQuotes += 1;
+      if (staleExamples.length < sampleSize) {
+        staleExamples.push(exchangeSymbol);
+      }
+      continue;
+    }
+
+    const staleAgeMs = now - timestamp;
+    if (staleAgeMs <= staleAfterMs) continue;
+
+    staleSubscribedTickers += 1;
+    if (oldestStaleAgeMs == null || staleAgeMs > oldestStaleAgeMs) {
+      oldestStaleAgeMs = staleAgeMs;
+    }
+    if (newestStaleAgeMs == null || staleAgeMs < newestStaleAgeMs) {
+      newestStaleAgeMs = staleAgeMs;
+    }
+    if (staleExamples.length < sampleSize) {
+      staleExamples.push(exchangeSymbol);
+    }
+  }
+
+  return {
+    subscribedTickers: subscribedTickers.size,
+    staleSubscribedTickers,
+    missingQuotes,
+    oldestStaleAgeMs,
+    newestStaleAgeMs,
+    staleExamples,
   };
 }

@@ -98,6 +98,7 @@ export function parseGateioWsMessage(raw: unknown): GateioWsParsed {
         kind: 'order_book_update',
         data: GateioWsOrderBookUpdateSchema.parse(envelope.result),
       };
+    case 'options.ul_tickers':
     case 'options.underlying_tickers':
       return {
         kind: 'underlying_ticker',

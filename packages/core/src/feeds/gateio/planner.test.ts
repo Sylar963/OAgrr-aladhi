@@ -32,19 +32,7 @@ describe('Gate.io planner', () => {
       },
       {
         time: 1747008000,
-        channel: 'options.order_book_update',
-        event: 'subscribe',
-        payload: ['BTC_USDT-20260626-70000-C', '20ms', '5'],
-      },
-      {
-        time: 1747008000,
-        channel: 'options.order_book_update',
-        event: 'subscribe',
-        payload: ['BTC_USDT-20260626-70000-P', '20ms', '5'],
-      },
-      {
-        time: 1747008000,
-        channel: 'options.underlying_tickers',
+        channel: 'options.ul_tickers',
         event: 'subscribe',
         payload: ['BTC_USDT'],
       },
@@ -70,7 +58,7 @@ describe('Gate.io planner', () => {
     expect(replay.find((f) => f.channel === 'options.contract_tickers')?.payload).toEqual([
       'BTC_USDT-20260626-70000-C',
     ]);
-    expect(replay.find((f) => f.channel === 'options.underlying_tickers')?.payload).toEqual([
+    expect(replay.find((f) => f.channel === 'options.ul_tickers')?.payload).toEqual([
       'BTC_USDT',
     ]);
   });
@@ -87,7 +75,7 @@ describe('Gate.io planner', () => {
     expect(frames.find((f) => f.channel === 'options.contract_tickers')?.payload).toEqual([
       'BTC_USDT-20260626-70000-C',
     ]);
-    expect(frames.find((f) => f.channel === 'options.underlying_tickers')?.payload).toEqual([
+    expect(frames.find((f) => f.channel === 'options.ul_tickers')?.payload).toEqual([
       'BTC_USDT',
     ]);
     expect(state.contracts.size).toBe(0);

@@ -63,8 +63,7 @@ function nowSeconds(): number {
  * WebSocket (wss://op-ws.gateio.live/v4/ws/usdt):
  *   options.contract_tickers      — per-contract bid/ask/mark/IV/greeks
  *   options.trades                — per-contract trade prints
- *   options.order_book_update     — schema-validated, not merged (future trades runtime)
- *   options.underlying_tickers    — index price for an underlying name (e.g. BTC_USDT)
+ *   options.ul_tickers            — index price for an underlying name (e.g. BTC_USDT)
  *
  * Heartbeat: JSON `{time, channel: 'options.ping'}` every 15s.
  */

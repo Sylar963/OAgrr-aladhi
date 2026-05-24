@@ -73,17 +73,9 @@ export function buildGateioSubscribeFrames(
   for (const batch of chunk(contracts, MAX_CONTRACTS_PER_FRAME)) {
     frames.push({ time, channel: 'options.trades', event: 'subscribe', payload: batch });
   }
-  for (const c of contracts) {
-    frames.push({
-      time,
-      channel: 'options.order_book_update',
-      event: 'subscribe',
-      payload: [c, '20ms', '5'],
-    });
-  }
   frames.push({
     time,
-    channel: 'options.underlying_tickers',
+    channel: 'options.ul_tickers',
     event: 'subscribe',
     payload: [underlying],
   });
@@ -103,21 +95,13 @@ export function buildGateioUnsubscribeFrames(
     frames.push({ time, channel: 'options.contract_tickers', event: 'unsubscribe', payload: batch });
     frames.push({ time, channel: 'options.trades', event: 'unsubscribe', payload: batch });
   }
-  for (const c of contracts) {
-    frames.push({
-      time,
-      channel: 'options.order_book_update',
-      event: 'unsubscribe',
-      payload: [c, '20ms', '5'],
-    });
-  }
 
   untrackContracts(state, contracts, underlying);
 
   if (!state.underlyings.has(underlying)) {
     frames.push({
       time,
-      channel: 'options.underlying_tickers',
+      channel: 'options.ul_tickers',
       event: 'unsubscribe',
       payload: [underlying],
     });
@@ -138,17 +122,9 @@ export function buildGateioReplayFrames(
       frames.push({ time, channel: 'options.contract_tickers', event: 'subscribe', payload: batch });
       frames.push({ time, channel: 'options.trades', event: 'subscribe', payload: batch });
     }
-    for (const c of contracts) {
-      frames.push({
-        time,
-        channel: 'options.order_book_update',
-        event: 'subscribe',
-        payload: [c, '20ms', '5'],
-      });
-    }
     frames.push({
       time,
-      channel: 'options.underlying_tickers',
+      channel: 'options.ul_tickers',
       event: 'subscribe',
       payload: [underlying],
     });

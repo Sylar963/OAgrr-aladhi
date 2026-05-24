@@ -1,9 +1,18 @@
+import type { VenueConnectionState } from '../../core/types.js';
 import type { BybitSystemStatusResponse } from './types.js';
 
 export function deriveBybitHealth(
   status: BybitSystemStatusResponse | null,
   error?: unknown,
-): { status: 'connected' | 'degraded'; message: string } {
+  connectionState: VenueConnectionState = 'connected',
+): { status: VenueConnectionState; message: string } {
+  if (connectionState !== 'connected') {
+    return {
+      status: connectionState,
+      message: `ws ${connectionState}`,
+    };
+  }
+
   if (error != null) {
     return {
       status: 'degraded',

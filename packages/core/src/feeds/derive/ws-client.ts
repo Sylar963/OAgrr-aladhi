@@ -16,6 +16,7 @@ import {
   buildDeriveSubscriptionPlan,
   createDeriveSubscriptionState,
   deriveTickerChannel,
+  markDeriveSubscribedTickers,
   removeDeriveSubscribedTickers,
   resetDeriveSubscriptionState,
   subscribeDeriveBatches,
@@ -36,6 +37,7 @@ const CURRENCIES = ['BTC', 'ETH', 'SOL', 'HYPE'];
 // Derive has no instrument lifecycle push channel — poll for new strikes/expiries.
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+const CONTROL_PLANE_RECONNECT_COOLDOWN_MS = 60 * 1000;
 
 /**
  * Derive (formerly Lyra Finance) adapter using direct JSON-RPC over WebSocket.
@@ -61,6 +63,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private readonly state = createDeriveState();
   private readonly subscriptions = createDeriveSubscriptionState();
+  private lastControlPlaneReconnectAt = 0;
 
   protected initClients(): void {
     if (this.rpc) return;
@@ -243,19 +246,30 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
+    if (instruments.length === 0) return;
+
+    await this.ensureConnected();
+
     // Derive's get_tickers requires expiry_date — non-eager expiries have no data until fetched
     try {
       const count = await this.fetchTickersForExpiry(underlying, expiry.replace(/-/g, ''));
       log.info({ count, underlying, expiry }, 'fetched tickers for expiry');
     } catch (err: unknown) {
       log.warn({ underlying, expiry, err: String(err) }, 'get_tickers failed for expiry');
+      if (this.maybeReconnectControlPlane(err, { underlying, expiry }, 'ticker fetch')) return;
     }
 
     const plan = buildDeriveSubscriptionPlan(this.subscriptions, instruments);
 
     if (plan.channels.length > 0) {
-      await subscribeDeriveBatches(plan.channels, (batch) => this.rpc.subscribe(batch, 'ticker'));
-      log.info({ count: plan.channels.length, underlying }, 'subscribed to ticker channels');
+      try {
+        await subscribeDeriveBatches(plan.channels, (batch) => this.rpc.subscribe(batch, 'ticker'));
+        markDeriveSubscribedTickers(this.subscriptions, plan.exchangeSymbols);
+        log.info({ count: plan.channels.length, underlying }, 'subscribed to ticker channels');
+      } catch (err: unknown) {
+        log.warn({ underlying, expiry, err: String(err) }, 'subscribe failed for expiry');
+        this.maybeReconnectControlPlane(err, { underlying, expiry }, 'subscribe');
+      }
     }
   }
 
@@ -288,6 +302,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
    */
   private async refreshInstruments(): Promise<void> {
     this.sweepExpiredState();
+    await this.ensureConnected();
 
     for (const currency of CURRENCIES) {
       try {
@@ -322,6 +337,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
         log.info({ count: newInstruments.length, currency }, 'added new instruments from refresh');
       } catch (err: unknown) {
         log.warn({ currency, err: String(err) }, 'instrument refresh failed');
+        if (this.maybeReconnectControlPlane(err, { currency }, 'instrument refresh')) break;
       }
     }
   }
@@ -349,23 +365,38 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
           { underlying, expiry, err: String(error) },
           'get_tickers failed for refreshed expiry',
         );
+        if (this.maybeReconnectControlPlane(error, { underlying, expiry }, 'refresh ticker fetch')) {
+          return;
+        }
       }
 
       const plan = buildDeriveSubscriptionPlan(this.subscriptions, grouped);
       if (plan.channels.length === 0) continue;
 
-      await subscribeDeriveBatches(plan.channels, (batch) =>
-        this.rpc.subscribe(batch, 'ticker-refresh'),
-      );
-      log.info(
-        { count: plan.channels.length, underlying, expiry },
-        'subscribed refreshed ticker channels',
-      );
+      try {
+        await subscribeDeriveBatches(plan.channels, (batch) =>
+          this.rpc.subscribe(batch, 'ticker-refresh'),
+        );
+        markDeriveSubscribedTickers(this.subscriptions, plan.exchangeSymbols);
+        log.info(
+          { count: plan.channels.length, underlying, expiry },
+          'subscribed refreshed ticker channels',
+        );
+      } catch (error: unknown) {
+        log.warn(
+          { underlying, expiry, err: String(error) },
+          'subscribe failed for refreshed expiry',
+        );
+        if (this.maybeReconnectControlPlane(error, { underlying, expiry }, 'refresh subscribe')) {
+          return;
+        }
+      }
     }
   }
 
   private async refreshHealth(): Promise<void> {
     try {
+      await this.ensureConnected();
       const [serverTimeRaw, incidentsRaw] = await Promise.all([
         this.rpc.call('public/get_time', {}),
         this.rpc.call('public/get_live_incidents', {}),
@@ -383,7 +414,34 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
         error,
       });
       this.emitStatus(health.status, health.message);
+      this.maybeReconnectControlPlane(error, {}, 'health probe');
     }
+  }
+
+  private async ensureConnected(): Promise<void> {
+    await this.rpc.connect();
+  }
+
+  private maybeReconnectControlPlane(
+    error: unknown,
+    context: Record<string, unknown>,
+    activity: string,
+  ): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/timed out|not connected|connection closed|socket closed before connect completed/i.test(message)) {
+      return false;
+    }
+
+    const now = Date.now();
+    if (now - this.lastControlPlaneReconnectAt < CONTROL_PLANE_RECONNECT_COOLDOWN_MS) {
+      return true;
+    }
+
+    this.lastControlPlaneReconnectAt = now;
+    log.warn({ ...context, err: message }, 'derive control plane unhealthy, forcing reconnect');
+    this.emitStatus('reconnecting', `derive ${activity} failed, reconnecting`);
+    this.rpc.terminate();
+    return true;
   }
 
   // ─── WS message handlers ─────────────────────────────────────

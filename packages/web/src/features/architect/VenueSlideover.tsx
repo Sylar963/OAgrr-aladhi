@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { Leg } from './payoff';
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -18,8 +18,6 @@ import {
 } from '@features/builder/round-trip';
 import { detectStrategy } from './payoff';
 import styles from './VenueSlideover.module.css';
-
-const RANKING_SCROLL_MARGIN_PX = 8;
 
 interface VenueSlideoverProps {
   legs: Leg[];
@@ -86,8 +84,6 @@ export default function VenueSlideover({
 }: VenueSlideoverProps) {
   const [expandedVenue, setExpandedVenue] = useState<string | null>(null);
   const [routing, setRouting] = useState<StrategyRouting>({ legs: {} });
-  const rankingListRef = useRef<HTMLDivElement | null>(null);
-  const venueRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const legInputs = useMemo<LegInput[]>(() => {
     if (!chain) return [];
@@ -118,32 +114,6 @@ export default function VenueSlideover({
       return merged;
     });
   }, [legInputs]);
-
-  useEffect(() => {
-    if (!expandedVenue) return;
-
-    const frameId = window.requestAnimationFrame(() => {
-      const list = rankingListRef.current;
-      const row = venueRowRefs.current[expandedVenue];
-      if (!list || !row) return;
-
-      const listRect = list.getBoundingClientRect();
-      const rowRect = row.getBoundingClientRect();
-      const topOverflow = rowRect.top - listRect.top - RANKING_SCROLL_MARGIN_PX;
-      const bottomOverflow = rowRect.bottom - listRect.bottom + RANKING_SCROLL_MARGIN_PX;
-
-      if (topOverflow < 0) {
-        list.scrollBy({ top: topOverflow });
-        return;
-      }
-
-      if (bottomOverflow > 0) {
-        list.scrollBy({ top: bottomOverflow });
-      }
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [expandedVenue]);
 
   const strategy = useMemo(
     () =>
@@ -185,6 +155,11 @@ export default function VenueSlideover({
       return a.totalRoundTripUsd - b.totalRoundTripUsd;
     });
   }, [venueRanking]);
+
+  const expandedVenueSummary = useMemo(
+    () => sortedVenues.find((venue) => venue.venue === expandedVenue) ?? null,
+    [expandedVenue, sortedVenues],
+  );
 
   function pinLeg(legId: string, venue: string, side: 'bid' | 'ask') {
     setRouting((prev) => ({
@@ -291,7 +266,7 @@ export default function VenueSlideover({
         </div>
       )}
 
-      <div className={styles.list} ref={rankingListRef}>
+      <div className={styles.list}>
         <div className={styles.sectionHeader}>Single-route ranking</div>
         {sortedVenues.map((vc, i) => {
           const meta = VENUES[vc.venue];
@@ -303,10 +278,8 @@ export default function VenueSlideover({
               key={vc.venue}
               className={styles.venueRow}
               data-best={isBest || undefined}
+              data-open={isExpanded || undefined}
               data-unavailable={!vc.available || undefined}
-              ref={(node) => {
-                venueRowRefs.current[vc.venue] = node;
-              }}
             >
               <button
                 className={styles.venueMain}
@@ -341,21 +314,24 @@ export default function VenueSlideover({
                   ▾
                 </span>
               </button>
-
-              {isExpanded && vc.available && (
-                <div className={styles.venueExpand}>
-                  <button
-                    className={styles.useAllBtn}
-                    onClick={() => pinAllToVenue(vc.venue)}
-                  >
-                    Pin every leg to {meta?.label ?? vc.venue}
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
       </div>
+
+      {expandedVenueSummary?.available && (
+        <div className={styles.listAction}>
+          <span className={styles.listActionLabel}>
+            Selected single-route venue: {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+          </span>
+          <button
+            className={styles.useAllBtn}
+            onClick={() => pinAllToVenue(expandedVenueSummary.venue)}
+          >
+            Pin every leg to {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+          </button>
+        </div>
+      )}
 
       <div className={styles.legsSection}>
         <div className={styles.legsSectionHead}>

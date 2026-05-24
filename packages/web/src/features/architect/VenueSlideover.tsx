@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Leg } from './payoff';
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -84,6 +84,7 @@ export default function VenueSlideover({
 }: VenueSlideoverProps) {
   const [expandedVenue, setExpandedVenue] = useState<string | null>(null);
   const [routing, setRouting] = useState<StrategyRouting>({ legs: {} });
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const legInputs = useMemo<LegInput[]>(() => {
     if (!chain) return [];
@@ -114,6 +115,11 @@ export default function VenueSlideover({
       return merged;
     });
   }, [legInputs]);
+
+  useEffect(() => {
+    if (!expandedVenue) return;
+    rowRefs.current[expandedVenue]?.scrollIntoView({ block: 'nearest' });
+  }, [expandedVenue]);
 
   const strategy = useMemo(
     () =>
@@ -274,15 +280,18 @@ export default function VenueSlideover({
               className={styles.venueRow}
               data-best={isBest || undefined}
               data-unavailable={!vc.available || undefined}
+              ref={(node) => {
+                rowRefs.current[vc.venue] = node;
+              }}
             >
-              <div className={styles.rank} data-best={isBest || undefined}>
-                {vc.available ? `#${i + 1}` : '–'}
-              </div>
-
               <button
                 className={styles.venueMain}
                 onClick={() => setExpandedVenue(isExpanded ? null : vc.venue)}
               >
+                <div className={styles.rank} data-best={isBest || undefined}>
+                  {vc.available ? `#${i + 1}` : '–'}
+                </div>
+
                 <div className={styles.venueId}>
                   {meta?.logo && <img src={meta.logo} alt="" className={styles.venueLogo} />}
                   <span className={styles.venueName}>{meta?.label ?? vc.venue}</span>

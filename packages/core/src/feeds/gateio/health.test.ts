@@ -13,6 +13,7 @@ describe('Gate.io health', () => {
       restLatencyMs: 320,
       lastWsError: null,
       lastUpdateAt: Date.now(),
+      trackedContracts: 24,
     };
     expect(deriveGateioHealth(input).state).toBe('connected');
   });
@@ -23,6 +24,7 @@ describe('Gate.io health', () => {
       restLatencyMs: 320,
       lastWsError: { code: 2, message: 'invalid argument', at: Date.now() },
       lastUpdateAt: Date.now() - 60_000,
+      trackedContracts: 24,
     };
     expect(deriveGateioHealth(input).state).toBe('degraded');
   });
@@ -33,6 +35,32 @@ describe('Gate.io health', () => {
       restLatencyMs: 320,
       lastWsError: { code: 2, message: 'invalid argument', at: Date.now() - 31_000 },
       lastUpdateAt: Date.now(),
+      trackedContracts: 24,
+    };
+    expect(deriveGateioHealth(input).state).toBe('connected');
+  });
+
+  it('is degraded when subscribed contracts stop receiving updates', () => {
+    const input: GateioHealthInput = {
+      restOk: true,
+      restLatencyMs: 320,
+      lastWsError: null,
+      lastUpdateAt: Date.now() - 121_000,
+      trackedContracts: 24,
+    };
+    expect(deriveGateioHealth(input)).toEqual({
+      state: 'degraded',
+      reason: 'ws-stale:121s',
+    });
+  });
+
+  it('does not report stale quotes when nothing is subscribed', () => {
+    const input: GateioHealthInput = {
+      restOk: true,
+      restLatencyMs: 320,
+      lastWsError: null,
+      lastUpdateAt: Date.now() - 121_000,
+      trackedContracts: 0,
     };
     expect(deriveGateioHealth(input).state).toBe('connected');
   });
@@ -43,6 +71,7 @@ describe('Gate.io health', () => {
       restLatencyMs: 0,
       lastWsError: null,
       lastUpdateAt: 0,
+      trackedContracts: 0,
     };
     expect(deriveGateioHealth(input).state).toBe('down');
   });

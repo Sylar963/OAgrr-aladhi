@@ -1,4 +1,5 @@
 import type WebSocket from 'ws';
+import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -10,6 +11,7 @@ import {
   GATEIO_REST_BASE_URL,
 } from '../shared/endpoints.js';
 import { type CachedInstrument, type LiveQuote, SdkBaseAdapter } from '../shared/sdk-base.js';
+import type { StreamHandlers } from '../shared/types.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import {
   parseGateioContracts,
@@ -24,6 +26,7 @@ import {
   buildGateioSubscribeFrames,
   buildGateioUnsubscribeFrames,
   createGateioSubscriptionState,
+  pruneGateioSubscriptionState,
   type GateioFrame,
 } from './planner.js';
 import {
@@ -46,6 +49,10 @@ const GATEIO_PING_INTERVAL_MS = 15_000;
 const HEALTH_CHECK_INTERVAL_MS = 60_000;
 
 const GATEIO_REST_TIMEOUT_MS = 10_000;
+
+const GATEIO_WS_ERROR_LOG_COOLDOWN_MS = 30_000;
+
+const GATEIO_QUOTE_STALE_RECONNECT_MS = 5 * 60_000;
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -80,8 +87,34 @@ export class GateioWsAdapter extends SdkBaseAdapter {
   private restLatencyMs = 0;
   private lastUpdateAt = 0;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private lastQuoteStaleReconnectAt = 0;
+  private lastWsErrorLogKey: string | null = null;
+  private lastWsErrorLogAt = 0;
 
   protected initClients(): void {}
+
+  override async listUnderlyings(): Promise<string[]> {
+    this.pruneExpiredState();
+    return super.listUnderlyings();
+  }
+
+  override async listExpiries(underlying: string): Promise<string[]> {
+    this.pruneExpiredState();
+    return super.listExpiries(underlying);
+  }
+
+  override fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
+    this.pruneExpiredState();
+    return super.fetchOptionChain(request);
+  }
+
+  override async subscribe(
+    request: ChainRequest,
+    handlers: StreamHandlers,
+  ): Promise<() => Promise<void>> {
+    this.pruneExpiredState();
+    return super.subscribe(request, handlers);
+  }
 
   protected override getFeedConnectionSnapshot() {
     const client = this.wsClient;
@@ -145,10 +178,12 @@ export class GateioWsAdapter extends SdkBaseAdapter {
       }
     }
 
-    log.info({ count: instruments.length }, 'loaded option instruments');
+    const activeInstruments = instruments.filter((instrument) => !this.isExpiredInstrument(instrument));
+
+    log.info({ count: activeInstruments.length }, 'loaded option instruments');
 
     this.instrumentsByUnderlyingName.clear();
-    for (const inst of instruments) {
+    for (const inst of activeInstruments) {
       this.quoteStore.set(inst.exchangeSymbol, this.emptyQuote());
       const key = `${inst.base}_USDT`;
       const bucket = this.instrumentsByUnderlyingName.get(key);
@@ -166,14 +201,16 @@ export class GateioWsAdapter extends SdkBaseAdapter {
     this.ensureHealthLoop();
     this.emitHealth();
 
-    return instruments;
+    return activeInstruments;
   }
 
   private ensureHealthLoop(): void {
     if (this.healthTimer == null) {
       this.healthTimer = setInterval(() => {
+        this.pruneExpiredState();
         this.emitHealth();
         this.pruneVolumeWindows();
+        this.checkQuoteStaleness();
       }, HEALTH_CHECK_INTERVAL_MS);
     }
   }
@@ -228,12 +265,15 @@ export class GateioWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    if (instruments.length === 0) return;
+    this.pruneExpiredState();
+
+    const activeInstruments = this.filterActiveInstruments(instruments);
+    if (activeInstruments.length === 0) return;
 
     await this.ensureConnected();
 
     const underlyingName = `${underlying}_USDT`;
-    const contracts = instruments.map((i) => i.exchangeSymbol);
+    const contracts = activeInstruments.map((i) => i.exchangeSymbol);
     const frames = buildGateioSubscribeFrames(this.subscriptions, contracts, underlyingName, nowSeconds);
     this.sendFrames(frames);
 
@@ -245,10 +285,13 @@ export class GateioWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    if (!this.wsClient?.isConnected || instruments.length === 0) return;
+    this.pruneExpiredState();
+
+    const activeInstruments = this.filterActiveInstruments(instruments);
+    if (!this.wsClient?.isConnected || activeInstruments.length === 0) return;
 
     const underlyingName = `${underlying}_USDT`;
-    const contracts = instruments.map((i) => i.exchangeSymbol);
+    const contracts = activeInstruments.map((i) => i.exchangeSymbol);
     const frames = buildGateioUnsubscribeFrames(
       this.subscriptions,
       contracts,
@@ -296,6 +339,7 @@ export class GateioWsAdapter extends SdkBaseAdapter {
           );
         },
         getReplayMessages: () => {
+          this.pruneExpiredState();
           const frames = buildGateioReplayFrames(this.subscriptions, nowSeconds);
           return frames.map((f) => f as unknown as Record<string, unknown>);
         },
@@ -395,7 +439,7 @@ export class GateioWsAdapter extends SdkBaseAdapter {
         if (msg.code !== undefined) err.code = msg.code;
         if (msg.message !== undefined) err.message = msg.message;
         this.lastWsError = err;
-        log.warn({ channel: msg.channel, code: msg.code, message: msg.message }, 'ws error');
+        this.logWsError(msg.channel, msg.code, msg.message);
         this.emitHealth();
         return;
       }
@@ -413,8 +457,67 @@ export class GateioWsAdapter extends SdkBaseAdapter {
       restLatencyMs: this.restLatencyMs,
       lastWsError: this.lastWsError,
       lastUpdateAt: this.lastUpdateAt,
+      trackedContracts: this.subscriptions.contracts.size,
     });
     this.emitStatus(health.state, health.reason);
+  }
+
+  private checkQuoteStaleness(now = Date.now()): void {
+    if (this.subscriptions.contracts.size === 0 || this.lastUpdateAt <= 0) return;
+
+    const staleMs = now - this.lastUpdateAt;
+    if (staleMs < GATEIO_QUOTE_STALE_RECONNECT_MS) return;
+    if (this.lastUpdateAt <= this.lastQuoteStaleReconnectAt) return;
+
+    this.lastQuoteStaleReconnectAt = now;
+    log.error(
+      {
+        trackedContracts: this.subscriptions.contracts.size,
+        staleMs,
+      },
+      'gateio quotes stale, forcing reconnect',
+    );
+    this.emitStatus('reconnecting', `gateio quotes stale for ${Math.round(staleMs / 1000)}s`);
+    this.wsClient?.terminate();
+  }
+
+  private filterActiveInstruments(instruments: CachedInstrument[], now = Date.now()): CachedInstrument[] {
+    return instruments.filter((instrument) => !this.isExpiredInstrument(instrument, now));
+  }
+
+  private pruneExpiredState(now = Date.now()): void {
+    const expiredInstruments = this.sweepExpiredInstruments(now);
+    if (expiredInstruments.length === 0) return;
+
+    const expiredSymbols = new Set(expiredInstruments.map((instrument) => instrument.exchangeSymbol));
+
+    for (const symbol of expiredSymbols) {
+      this.volumeWindows.delete(symbol);
+    }
+
+    for (const [underlying, instruments] of this.instrumentsByUnderlyingName) {
+      const activeInstruments = instruments.filter((instrument) => !expiredSymbols.has(instrument.exchangeSymbol));
+      if (activeInstruments.length > 0) {
+        this.instrumentsByUnderlyingName.set(underlying, activeInstruments);
+        continue;
+      }
+      this.instrumentsByUnderlyingName.delete(underlying);
+    }
+
+    pruneGateioSubscriptionState(this.subscriptions, (contract) => !expiredSymbols.has(contract));
+
+    log.info({ expiredContracts: expiredSymbols.size }, 'pruned expired contracts from gateio state');
+  }
+
+  private logWsError(channel: string, code?: number, message?: string): void {
+    const key = `${channel}:${code ?? ''}:${message ?? ''}`;
+    const now = Date.now();
+    if (this.lastWsErrorLogKey === key && now - this.lastWsErrorLogAt < GATEIO_WS_ERROR_LOG_COOLDOWN_MS) {
+      return;
+    }
+    this.lastWsErrorLogKey = key;
+    this.lastWsErrorLogAt = now;
+    log.warn({ channel, code, message }, 'ws error');
   }
 
   // ── helpers ───────────────────────────────────────────────────

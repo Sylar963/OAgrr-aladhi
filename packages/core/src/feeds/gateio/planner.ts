@@ -131,3 +131,19 @@ export function buildGateioReplayFrames(
   }
   return frames;
 }
+
+export function pruneGateioSubscriptionState(
+  state: GateioSubscriptionState,
+  shouldKeep: (contract: string, underlying: string) => boolean,
+): void {
+  for (const [underlying, set] of state.contractsByUnderlying) {
+    for (const contract of [...set]) {
+      if (shouldKeep(contract, underlying)) continue;
+      set.delete(contract);
+      state.contracts.delete(contract);
+    }
+    if (set.size > 0) continue;
+    state.contractsByUnderlying.delete(underlying);
+    state.underlyings.delete(underlying);
+  }
+}

@@ -13,14 +13,18 @@ export function createBinanceSubscriptionState(): BinanceSubscriptionState {
   };
 }
 
-export function buildBinanceInitialStreams(instruments: CachedInstrument[]): string[] {
+export function buildBinanceMarkPriceStreams(instruments: CachedInstrument[]): string[] {
   const underlyings = new Set<string>();
   for (const instrument of instruments) {
     underlyings.add(`${instrument.base.toLowerCase()}${instrument.settle.toLowerCase()}`);
   }
 
+  return [...underlyings].map((underlying) => `${underlying}@optionMarkPrice`);
+}
+
+export function buildBinanceInitialStreams(instruments: CachedInstrument[]): string[] {
   return [
-    ...[...underlyings].map((underlying) => `${underlying}@optionMarkPrice`),
+    ...buildBinanceMarkPriceStreams(instruments),
     '!optionSymbol',
     ...buildBinanceOiStreams(instruments),
   ];
@@ -38,11 +42,8 @@ export function trackBinanceStreams(state: BinanceSubscriptionState, streams: st
   return accepted;
 }
 
-export function buildBinanceChainStreams(
-  underlying: string,
-  instruments: CachedInstrument[],
-): string[] {
-  return [`${underlying.toLowerCase()}usdt@optionMarkPrice`, ...buildBinanceOiStreams(instruments)];
+export function buildBinanceChainStreams(instruments: CachedInstrument[]): string[] {
+  return [...buildBinanceMarkPriceStreams(instruments), ...buildBinanceOiStreams(instruments)];
 }
 
 export function confirmBinanceSubscribedStreams(

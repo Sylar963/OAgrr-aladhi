@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { deriveOkxNoticeHealth, deriveOkxStatusHealth } from './health.js';
+import {
+  deriveOkxNoticeHealth,
+  deriveOkxStatusHealth,
+  deriveOkxStatusHealthForConnection,
+} from './health.js';
 
 describe('OKX health', () => {
   it('turns notice events into reconnecting status', () => {
@@ -32,6 +36,21 @@ describe('OKX health', () => {
     ).toEqual({
       status: 'connected',
       message: 'system status healthy',
+    });
+  });
+
+  it('does not report healthy status while the websocket is reconnecting', () => {
+    expect(
+      deriveOkxStatusHealthForConnection(
+        {
+          arg: { channel: 'status' },
+          data: [{ state: 'completed' }],
+        },
+        'reconnecting',
+      ),
+    ).toEqual({
+      status: 'reconnecting',
+      message: 'ws reconnecting',
     });
   });
 });

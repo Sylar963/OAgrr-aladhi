@@ -214,6 +214,16 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     );
     const key = `${request.underlying}:${request.expiry}`;
 
+    if (matching.length === 0) {
+      handlers.onStatus({
+        venue: this.venue,
+        state: 'down',
+        ts: Date.now(),
+        message: 'no instruments for request',
+      });
+      return async () => {};
+    }
+
     handlers.onStatus({ venue: this.venue, state: 'connected', ts: Date.now() });
 
     const handlerRefCount = this.handlerRefCounts.get(handlers) ?? 0;

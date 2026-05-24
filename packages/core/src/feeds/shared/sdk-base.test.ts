@@ -112,6 +112,25 @@ describe('SdkBaseAdapter', () => {
     expect(deltas).toHaveLength(2);
   });
 
+  it('reports unsupported requests immediately when no instruments match', async () => {
+    const adapter = new TestSdkAdapter();
+    const onStatus = vi.fn();
+
+    const release = await adapter.subscribe(
+      { underlying: 'AVAX_USDC', expiry: '2026-05-29' },
+      { onDelta: vi.fn(), onStatus },
+    );
+
+    expect(onStatus).toHaveBeenCalledWith({
+      venue: 'binance',
+      state: 'down',
+      ts: expect.any(Number),
+      message: 'no instruments for request',
+    });
+
+    await expect(release()).resolves.toBeUndefined();
+  });
+
   describe('sweepExpiredInstruments', () => {
     // 2026-04-24 08:00 UTC — canonical 0DTE cutoff for all venues.
     const EXPIRY_TS = Date.UTC(2026, 3, 24, 8, 0, 0);

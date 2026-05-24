@@ -7,6 +7,7 @@ import {
 } from '../shared/endpoints.js';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
+import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -19,10 +20,11 @@ import {
   parseBinanceOiEvent,
   parseBinanceRestTicker,
 } from './codec.js';
-import { deriveBinanceHealth } from './health.js';
+import { deriveBinanceHealthForConnection } from './health.js';
 import {
   buildBinanceChainStreams,
   buildBinanceInitialStreams,
+  buildBinanceMarkPriceStreams,
   confirmBinanceSubscribedStreams,
   createBinanceSubscriptionState,
   removeBinanceTrackedStreams,
@@ -78,6 +80,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
   private hasConnectedOnce = false;
   private readonly subscriptions = createBinanceSubscriptionState();
   private readonly pendingSubscribeById = new Map<number, string[]>();
+  private wsState: VenueConnectionState = 'down';
 
   protected initClients(): void {}
 
@@ -225,9 +228,9 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     if (this.wsClient == null) {
       this.wsClient = new TopicWsClient(BINANCE_MARK_WS_URL, 'binance-ws', {
         onStatusChange: (state) => {
-          this.emitStatus(
-            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
-          );
+          this.wsState =
+            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting';
+          this.emitStatus(this.wsState);
         },
         onSocket: (socket) => {
           socket.on('ping', () => {
@@ -296,22 +299,17 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
 
       if (newInstruments.length === 0) return;
 
-      const newOiStreams: string[] = [];
       for (const inst of newInstruments) {
         this.instruments.push(inst);
         this.instrumentMap.set(inst.exchangeSymbol, inst);
         this.symbolIndex.set(inst.symbol, inst.exchangeSymbol);
-
-        const oiStreams = buildBinanceOiStreams([inst]);
-        for (const s of oiStreams) {
-          if (!this.subscriptions.subscribedStreams.has(s)) {
-            this.subscriptions.subscribedStreams.add(s);
-            newOiStreams.push(s);
-          }
-        }
       }
 
-      if (newOiStreams.length > 0) this.sendSubscribe(newOiStreams);
+      const newStreams = trackBinanceStreams(
+        this.subscriptions,
+        buildBinanceInitialStreams(newInstruments),
+      );
+      if (newStreams.length > 0) this.sendSubscribe(newStreams);
       log.info({ count: newInstruments.length }, 'added instruments from reconnect refresh');
     } catch (err: unknown) {
       log.warn({ err: String(err) }, 'reconnect instrument refresh failed');
@@ -321,11 +319,11 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
   // ── subscriptions ─────────────────────────────────────────────
 
   protected async subscribeChain(
-    underlying: string,
+    _underlying: string,
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    const streams = buildBinanceChainStreams(underlying, instruments);
+    const streams = buildBinanceChainStreams(instruments);
     const newStreams = trackBinanceStreams(this.subscriptions, streams);
 
     if (newStreams.length > 0) this.sendSubscribe(newStreams);
@@ -336,11 +334,9 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    if (!this.wsClient?.isConnected) return;
-
     const streams = buildBinanceOiStreams(instruments);
     if (this.activeRequestsForUnderlying(underlying) === 0) {
-      streams.unshift(`${underlying.toLowerCase()}usdt@optionMarkPrice`);
+      streams.unshift(...buildBinanceMarkPriceStreams(instruments));
     }
 
     const removedStreams = streams.filter(
@@ -353,7 +349,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     const ackedStreams = removedStreams.filter((stream) =>
       this.subscriptions.subscribedStreams.has(stream),
     );
-    if (ackedStreams.length > 0) {
+    if (this.wsClient?.isConnected && ackedStreams.length > 0) {
       this.wsClient.send({ method: 'UNSUBSCRIBE', params: ackedStreams, id: ++this.msgId });
     }
     removeBinanceTrackedStreams(this.subscriptions, removedStreams);
@@ -494,9 +490,8 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     this.instrumentMap.set(inst.exchangeSymbol, inst);
     this.symbolIndex.set(inst.symbol, inst.exchangeSymbol);
 
-    // Subscribe OI stream for this instrument's expiry if not already tracked.
-    const oiStreams = trackBinanceStreams(this.subscriptions, buildBinanceOiStreams([inst]));
-    if (oiStreams.length > 0) this.sendSubscribe(oiStreams);
+    const newStreams = trackBinanceStreams(this.subscriptions, buildBinanceInitialStreams([inst]));
+    if (newStreams.length > 0) this.sendSubscribe(newStreams);
 
     log.info({ symbol: d.s }, 'added new instrument from !optionSymbol');
   }
@@ -602,13 +597,14 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
         this.fetchEapi(BINANCE_EXCHANGE_INFO),
       ]);
 
-      const health = deriveBinanceHealth(
+      const health = deriveBinanceHealthForConnection(
         parseBinanceHealthTime(serverTimeRaw),
         parseBinanceHealthExchangeInfo(exchangeInfoRaw),
+        this.wsState,
       );
       this.emitStatus(health.status, health.message);
     } catch (error: unknown) {
-      const health = deriveBinanceHealth(null, null, error);
+      const health = deriveBinanceHealthForConnection(null, null, this.wsState, error);
       this.emitStatus(health.status, health.message);
     }
   }

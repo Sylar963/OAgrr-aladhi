@@ -1,3 +1,4 @@
+import type { VenueConnectionState } from '../../core/types.js';
 import type { OkxWsNotice, OkxWsStatusMsg } from './types.js';
 
 export function deriveOkxNoticeHealth(notice: OkxWsNotice): {
@@ -12,9 +13,26 @@ export function deriveOkxNoticeHealth(notice: OkxWsNotice): {
 }
 
 export function deriveOkxStatusHealth(message: OkxWsStatusMsg): {
-  status: 'connected' | 'degraded';
+  status: VenueConnectionState;
   message: string;
 } {
+  return deriveOkxStatusHealthForConnection(message, 'connected');
+}
+
+export function deriveOkxStatusHealthForConnection(
+  message: OkxWsStatusMsg,
+  connectionState: VenueConnectionState,
+): {
+  status: VenueConnectionState;
+  message: string;
+} {
+  if (connectionState !== 'connected') {
+    return {
+      status: connectionState,
+      message: `ws ${connectionState}`,
+    };
+  }
+
   const active = message.data.find(
     (item) => item.state === 'scheduled' || item.state === 'ongoing' || item.state === 'pre_open',
   );

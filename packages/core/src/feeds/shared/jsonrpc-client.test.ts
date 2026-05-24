@@ -194,6 +194,48 @@ describe('JsonRpcWsClient', () => {
     vi.useRealTimers();
   });
 
+  it('does not reset reconnectAttempts on bare open — only after a successful subscribe RPC', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      reconnectDelayMs: 100,
+      maxReconnectAttempts: 5,
+      handshakeTimeoutMs: 10_000,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    // First connect: open fires, no subscribe RPC happens.
+    const p1 = client.connect();
+    const socket1 = FakeWebSocket.instances.at(-1)!;
+    socket1.readyState = FakeWebSocket.OPEN;
+    socket1.emit('open');
+    await p1;
+    expect(internals.reconnectAttempts).toBe(0);
+
+    // Drop the socket — close handler should schedule a reconnect and increment attempts.
+    socket1.readyState = 3;
+    socket1.emit('close', 1006, Buffer.from(''));
+    expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(1);
+    const attemptsAfterFirstClose = internals.reconnectAttempts;
+
+    // Let the reconnect timer fire (backoff base 100ms + ≤200ms jitter, so wait long
+    // enough to cover the upper bound). Second open arrives without a subscribe RPC.
+    await vi.advanceTimersByTimeAsync(500);
+    const socket2 = FakeWebSocket.instances.at(-1)!;
+    expect(socket2).not.toBe(socket1);
+    socket2.readyState = FakeWebSocket.OPEN;
+    socket2.emit('open');
+
+    // With the bug: reconnectAttempts would be reset back to 0 by the 'open' handler.
+    // With the fix: it stays at the value scheduleReconnect raised it to, because
+    // subscribe() never roundtripped successfully.
+    expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(attemptsAfterFirstClose);
+
+    vi.useRealTimers();
+  });
+
   it('detaches socket listeners before closing on disconnect', async () => {
     const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
     const internals = client as unknown as JsonRpcWsClientInternals;

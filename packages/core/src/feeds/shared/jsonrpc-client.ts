@@ -138,7 +138,10 @@ export class JsonRpcWsClient {
         this.rateLimitUntil = 0;
         this.rateLimitFirstHitAt = 0;
         this.log.info({ url: this.url }, 'ws connected');
-        this.reconnectAttempts = 0;
+        // Note: reconnectAttempts is intentionally NOT reset here. A bare TCP+WS
+        // upgrade isn't proof of a working session — resubscribe can still fail
+        // immediately. We only reset after a roundtripped subscribe RPC (see
+        // subscribe() and resubscribe()) so chronic flaps actually escalate.
         this.startHeartbeat();
         this.options.onStatusChange?.('connected');
         resolveConnect();
@@ -290,6 +293,9 @@ export class JsonRpcWsClient {
 
     try {
       await this.call(method, { channels });
+      // A roundtripped subscribe RPC is the real bidirectional health proof —
+      // only here do we trust the connection enough to reset escalation.
+      this.reconnectAttempts = 0;
     } catch (error: unknown) {
       if (!isConnectionClosedError(error)) {
         for (const channel of added) {
@@ -452,6 +458,9 @@ export class JsonRpcWsClient {
     for (let i = 0; i < channels.length; i += batchSize) {
       const batch = channels.slice(i, i + batchSize);
       await this.call(method, { channels: batch });
+      // Each successful resubscribe batch is bidirectional proof — reset the
+      // escalation counter so a long resubscribe doesn't keep us in a half-state.
+      this.reconnectAttempts = 0;
       if (i + batchSize < channels.length) {
         await new Promise((r) => setTimeout(r, delayMs));
       }

@@ -2,7 +2,7 @@ import { memo } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
 import { fmtUsd } from '@lib/format';
-import type { SpreadSignal } from '@lib/analytics/verticalSpread';
+import type { RegimeLabel, SpreadSignal } from '@lib/analytics/verticalSpread';
 
 import type { RegimeResponse } from './useRegimeQuery';
 import styles from './SignalCard.module.css';
@@ -13,16 +13,10 @@ interface Props {
   regime?: RegimeResponse | null;
 }
 
-const REGIME_GATE_PCT: Record<string, string> = {
+const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
   'low-vol': '7%',
   'mid-vol': '10%',
   'high-vol': '20%',
-};
-
-const DIRECTION_LABEL: Record<string, string> = {
-  'risk-on': 'RISK-ON',
-  neutral: 'NEUTRAL',
-  'risk-off': 'RISK-OFF',
 };
 
 function SignalCard({ signal, label = 'Executable (best routing)', regime }: Props) {
@@ -93,7 +87,7 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
       </div>
 
       {(dominant || direction) && (
-        <div className={styles.regimeRow} data-regime={dominant ?? 'unknown'}>
+        <div className={styles.regimeRow}>
           <span className={styles.regimeLabel}>Regime</span>
           {dominant && (
             <span className={styles.regimePill} data-regime={dominant}>
@@ -102,7 +96,7 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
           )}
           {direction && (
             <span className={styles.directionPill} data-direction={direction}>
-              {DIRECTION_LABEL[direction]}
+              {direction.toUpperCase()}
             </span>
           )}
           {confidencePct != null && (

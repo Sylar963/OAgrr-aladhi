@@ -59,15 +59,19 @@ export function labelStatesByVolLevel(
 }
 
 // Bridges persisted state from before the bull/neutral/stress → vol-level
-// rename. Used at model-load so a restart doesn't surface stale label strings
-// for the up-to-7-days between restarts and the next HMM refit.
+// rename. Applied at model-load so a restart between deploy and the next HMM
+// refit doesn't surface stale labels. Unknown strings collapse to mid-vol —
+// the next refit overwrites this with a real labeling anyway.
 const LEGACY_LABEL_MAP: Record<string, RegimeLabel> = {
   bull: 'low-vol',
   neutral: 'mid-vol',
   stress: 'high-vol',
+  'low-vol': 'low-vol',
+  'mid-vol': 'mid-vol',
+  'high-vol': 'high-vol',
 };
 export function normalizeLegacyLabel(label: string): RegimeLabel {
-  return LEGACY_LABEL_MAP[label] ?? (label as RegimeLabel);
+  return LEGACY_LABEL_MAP[label] ?? 'mid-vol';
 }
 
 // ── RegimeService ────────────────────────────────────────────────────────
@@ -206,12 +210,10 @@ export class RegimeService {
     this.intervalMs = opts.intervalMs ?? 5 * 60 * 1000;
     this.capacity = opts.capacity ?? 90 * 24 * 12;
     this.minSamplesToFit = opts.minSamplesToFit ?? 500;
-    // Default refit cadence: 1 day. Was 7d, but a week of drift inside a single
-    // refit window is long enough for the standardization the HMM was trained
-    // against to lag reality. Rolling standardization without refit can't fix
-    // it — the HMM emission means live in the z-space that was active at fit
-    // time, so re-standardizing without re-fitting moves observations into a
-    // coordinate system the model wasn't trained on. Cheaper to just refit.
+    // 1d (was 7d). Don't try to substitute rolling standardization between
+    // refits — HMM emission means live in the z-space active at fit time, so
+    // re-standardizing without re-fitting moves observations into a coordinate
+    // system the model wasn't trained on. Just refit more often.
     this.refitIntervalMs = opts.refitIntervalMs ?? MS_PER_DAY;
     this.nStates = opts.nStates ?? 3;
     this.seed = opts.seed ?? 42;
@@ -264,13 +266,13 @@ export class RegimeService {
       };
     }
     const confidence = s.posterior ? Math.max(...s.posterior) : null;
-    // Below the floor the posterior is too flat to name a winner. We still
-    // expose the distribution and labels so a debug surface can show it; only
-    // `dominant` is suppressed because that's what downstream gates branch on.
+    // Suppress dominant when the posterior is too flat to call a winner. The
+    // full distribution stays available; only the argmax label is hidden,
+    // since that's what downstream gates branch on.
     const dominant =
       confidence != null && confidence >= this.confidenceFloor ? s.dominant : null;
-    const lastFeatures = s.buffer.length > 0 ? s.buffer[s.buffer.length - 1]!.features : null;
-    const direction = deriveDirection(lastFeatures ? (lastFeatures[1] ?? null) : null);
+    const lastFeatures = s.buffer[s.buffer.length - 1]?.features;
+    const direction = deriveDirection(lastFeatures?.[1] ?? null);
     return {
       underlying,
       ts: s.posteriorTs ?? 0,

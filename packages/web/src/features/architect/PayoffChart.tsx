@@ -34,6 +34,28 @@ interface DragState {
   currentStrike: number;
 }
 
+function fmtChartPrice(price: number, useK: boolean, decimals: number): string {
+  if (useK) return `${(price / 1000).toFixed(decimals)}k`;
+  return price.toFixed(decimals);
+}
+
+function fmtChartPriceUsd(price: number, useK: boolean, decimals: number): string {
+  return `$${fmtChartPrice(price, useK, decimals)}`;
+}
+
+function shouldUseKFormat(maxPrice: number): boolean {
+  return maxPrice >= 1000;
+}
+
+function pickDecimals(span: number, useK: boolean): number {
+  const effective = useK ? span / 1000 : span;
+  if (effective >= 10) return 0;
+  if (effective >= 2) return 1;
+  if (effective >= 0.5) return 2;
+  if (effective >= 0.05) return 3;
+  return 4;
+}
+
 export default function PayoffChart({
   points,
   breakevens,
@@ -217,9 +239,8 @@ export default function PayoffChart({
       }
 
       // ── Draggable leg handles ───────────────────────────────
-      const strikeSpanK = (layout.maxX - layout.minX) / 1000;
-      const strikeDecimals =
-        strikeSpanK >= 10 ? 1 : strikeSpanK >= 2 ? 2 : strikeSpanK >= 0.5 ? 3 : 4;
+      const useKFormat = shouldUseKFormat(layout.maxX);
+      const strikeDecimals = pickDecimals(layout.maxX - layout.minX, useKFormat);
       const uniqueStrikes = [...new Set(lg.map((l) => l.strike))];
       for (const strike of uniqueStrikes) {
         if (strike < layout.minX || strike > layout.maxX) continue;
@@ -259,7 +280,7 @@ export default function PayoffChart({
         ctx.fillStyle = isDragging ? '#50D2C1' : '#666';
         ctx.font = "10px 'IBM Plex Mono', monospace";
         ctx.textAlign = 'center';
-        ctx.fillText(`${(strike / 1000).toFixed(strikeDecimals)}k`, x, h - PAD.bottom + 14);
+        ctx.fillText(fmtChartPrice(strike, useKFormat, strikeDecimals), x, h - PAD.bottom + 14);
 
         // Leg type labels above handle
         const labels = legsAtStrike.map(
@@ -287,7 +308,7 @@ export default function PayoffChart({
         ctx.font = "bold 11px 'IBM Plex Mono', monospace";
         ctx.textAlign = 'center';
         ctx.fillText(
-          `→ ${(dragState.currentStrike / 1000).toFixed(strikeDecimals)}k`,
+          `→ ${fmtChartPrice(dragState.currentStrike, useKFormat, strikeDecimals)}`,
           gx,
           PAD.top - 6,
         );
@@ -298,11 +319,10 @@ export default function PayoffChart({
       ctx.font = "10px 'IBM Plex Mono', monospace";
       ctx.textAlign = 'center';
       const xTicks = Math.min(5, Math.floor(layout.cw / 100));
-      const spanK = (layout.maxX - layout.minX) / 1000;
-      const xDecimals = spanK >= 10 ? 0 : spanK >= 2 ? 1 : spanK >= 0.5 ? 2 : 3;
+      const xDecimals = pickDecimals(layout.maxX - layout.minX, useKFormat);
       for (let i = 0; i <= xTicks; i++) {
         const price = layout.minX + (i / xTicks) * (layout.maxX - layout.minX);
-        ctx.fillText(`$${(price / 1000).toFixed(xDecimals)}k`, toX(price), h - 6);
+        ctx.fillText(fmtChartPriceUsd(price, useKFormat, xDecimals), toX(price), h - 6);
       }
 
       // Y-axis

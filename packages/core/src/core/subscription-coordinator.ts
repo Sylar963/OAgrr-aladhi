@@ -28,6 +28,10 @@ interface SubscriptionCoordinatorOptions {
   getAdapter?: (venue: VenueId) => OptionVenueAdapter;
 }
 
+function isRequestScopedStatus(status: VenueStatus): boolean {
+  return status.message === 'no instruments for request';
+}
+
 function requestKey(request: ChainRequest): string {
   return `${request.underlying}:${request.expiry}`;
 }
@@ -81,18 +85,38 @@ export class VenueSubscriptionCoordinator {
         return;
       }
 
-      const adapter = this.resolveAdapter(venue);
-      const upstreamRelease =
-        adapter.subscribe != null
-          ? await adapter.subscribe(request, entry.handlers)
-          : async () => {};
-
-      entry.requestEntries.set(key, {
+      const nextRequestEntry: CoordinatedRequestEntry = {
         request,
         refCount: 1,
         listeners: listener != null ? new Set([listener]) : new Set(),
-        upstreamRelease,
-      });
+        upstreamRelease: async () => {},
+      };
+      entry.requestEntries.set(key, nextRequestEntry);
+
+      const adapter = this.resolveAdapter(venue);
+      try {
+        nextRequestEntry.upstreamRelease =
+          adapter.subscribe != null
+            ? await adapter.subscribe(request, {
+                onDelta: entry.handlers.onDelta,
+                onStatus: (status: VenueStatus) => {
+                  if (isRequestScopedStatus(status)) {
+                    for (const currentListener of nextRequestEntry.listeners) {
+                      try {
+                        currentListener.onStatus?.(status);
+                      } catch {}
+                    }
+                    return;
+                  }
+
+                  entry.handlers.onStatus(status);
+                },
+              })
+            : async () => {};
+      } catch (error: unknown) {
+        entry.requestEntries.delete(key);
+        throw error;
+      }
     });
 
     let released = false;

@@ -24,6 +24,7 @@ interface UseChainWsResult {
   staleMs: number | null;
   lastSeq: number;
   failedVenues: VenueFailure[];
+  venueStates: Record<string, WsConnectionState>;
 }
 
 type StatusSnapshot = UseChainWsResult;
@@ -33,6 +34,7 @@ const INITIAL_SNAPSHOT: StatusSnapshot = {
   staleMs: null,
   lastSeq: 0,
   failedVenues: [],
+  venueStates: {},
 };
 
 /**
@@ -51,7 +53,8 @@ function createStatusStore() {
         merged.connectionState === snap.connectionState &&
         merged.staleMs === snap.staleMs &&
         merged.lastSeq === snap.lastSeq &&
-        merged.failedVenues === snap.failedVenues
+        merged.failedVenues === snap.failedVenues &&
+        merged.venueStates === snap.venueStates
       ) {
         return;
       }
@@ -168,6 +171,37 @@ type DeltaMsg = Extract<
   ReturnType<typeof ServerWsMessageSchema.parse>,
   { type: 'delta' }
 >;
+
+type StatusMsg = Extract<
+  ReturnType<typeof ServerWsMessageSchema.parse>,
+  { type: 'status' }
+>;
+
+const CONNECTION_STATE_ORDER: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
+
+function mapServerStateToWsConnectionState(state: StatusMsg['state']): WsConnectionState {
+  switch (state) {
+    case 'connected':
+      return 'live';
+    case 'reconnecting':
+    case 'polling':
+      return 'reconnecting';
+    case 'degraded':
+      return 'stale';
+    case 'down':
+      return 'error';
+    default:
+      return 'live';
+  }
+}
+
+function worstConnectionState(states: Iterable<WsConnectionState>): WsConnectionState {
+  let worst: WsConnectionState = 'live';
+  for (const s of states) {
+    if (CONNECTION_STATE_ORDER.indexOf(s) > CONNECTION_STATE_ORDER.indexOf(worst)) worst = s;
+  }
+  return worst;
+}
 
 interface PendingDelta {
   key: ReturnType<typeof chainKeys.chain>;
@@ -331,23 +365,22 @@ export function useChainWs({
           store.set({ connectionState: 'live', failedVenues: msg.failedVenues ?? [] });
           break;
 
-        case 'status':
-          switch (msg.state) {
-            case 'connected':
-              store.set({ connectionState: 'live' });
-              break;
-            case 'reconnecting':
-            case 'polling':
-              store.set({ connectionState: 'reconnecting' });
-              break;
-            case 'degraded':
-              store.set({ connectionState: 'stale' });
-              break;
-            case 'down':
-              store.set({ connectionState: 'error' });
-              break;
-          }
+        case 'status': {
+          const mapped = mapServerStateToWsConnectionState(msg.state);
+          const prev = store.get();
+          // Skip the spread + store.set when nothing changed — preserves
+          // reference equality so useSyncExternalStore doesn't re-render.
+          if (prev.venueStates[msg.venue] === mapped) break;
+          const venueStates: Record<string, WsConnectionState> = {
+            ...prev.venueStates,
+            [msg.venue]: mapped,
+          };
+          store.set({
+            connectionState: worstConnectionState(Object.values(venueStates)),
+            venueStates,
+          });
           break;
+        }
 
         case 'error':
           if (!msg.retryable) store.set({ connectionState: 'error' });
@@ -465,6 +498,7 @@ export function useChainWs({
       staleMs: snapshot.staleMs,
       lastSeq: snapshot.lastSeq,
       failedVenues: snapshot.failedVenues,
+      venueStates: snapshot.venueStates,
     }),
     [snapshot],
   );

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getRegisteredVenues } from '@oggregator/core';
+import { getAllAdapters, getRegisteredVenues } from '@oggregator/core';
 import { SERVER_BOOT_TIME, SERVER_VERSION } from '../app.js';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
 import { getRuntimeMetricsSnapshot } from '../runtime-metrics.js';
@@ -41,6 +41,7 @@ export async function healthRoute(app: FastifyInstance) {
         spot: spotService,
         flow: flowService,
         blockFlow: blockFlowService,
+        chain: getAllAdapters(),
       }),
       bootTime: SERVER_BOOT_TIME,
       version: SERVER_VERSION,
@@ -60,6 +61,7 @@ export async function healthRoute(app: FastifyInstance) {
       spot: spotService,
       flow: flowService,
       blockFlow: blockFlowService,
+      chain: getAllAdapters(),
     });
     if (isFeedLivenessStale(feeds, getLivenessMaxMs())) {
       return reply.status(503).send({

@@ -14,7 +14,7 @@ export function useGlobalFeedStatus() {
 
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
-  const { connectionState, staleMs, failedVenues } = useChainWs({
+  const { connectionState, staleMs, failedVenues, venueStates } = useChainWs({
     underlying,
     expiry,
     venues: activeVenues,
@@ -34,8 +34,9 @@ export function useGlobalFeedStatus() {
       failedVenueCount: failedVenueIds.length,
       failedVenueIds,
       failedVenues,
+      venueStates,
       staleMs,
       lastUpdateMs: connectionState === 'live' && staleMs != null ? Date.now() - staleMs : null,
     });
-  }, [connectionState, failedVenueIds, failedVenues, staleMs, setFeedStatus]);
+  }, [connectionState, failedVenueIds, failedVenues, venueStates, staleMs, setFeedStatus]);
 }

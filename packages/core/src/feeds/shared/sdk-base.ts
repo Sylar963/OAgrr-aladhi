@@ -289,6 +289,22 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     await this.unsubscribeAll();
   }
 
+  getFeedDiagnostics(): {
+    connected: boolean;
+    lastActivityAt: number;
+    reconnectAttempts: number;
+    rateLimitUntil: number;
+  } | null {
+    const snap = this.getFeedConnectionSnapshot();
+    if (snap == null) return null;
+    return {
+      connected: snap.connected,
+      lastActivityAt: snap.lastActivityAt,
+      reconnectAttempts: 0,
+      rateLimitUntil: 0,
+    };
+  }
+
   protected shouldWatchFeed(): boolean {
     return this.marketsLoaded;
   }

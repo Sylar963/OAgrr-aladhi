@@ -1,4 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { FakeWebSocket } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { EventEmitter } = require('node:events') as typeof import('node:events');
+  class FakeWebSocket extends EventEmitter {
+    static OPEN = 1;
+    static instances: FakeWebSocket[] = [];
+    readyState = 0;
+    terminate = vi.fn();
+    close = vi.fn();
+    ping = vi.fn();
+    send = vi.fn();
+    bufferedAmount = 0;
+    constructor(public url: string) {
+      super();
+      FakeWebSocket.instances.push(this);
+    }
+  }
+  return { FakeWebSocket };
+});
+
+vi.mock('ws', () => ({
+  default: FakeWebSocket,
+}));
+
 import { JsonRpcWsClient } from './jsonrpc-client.js';
 
 function deferred<T>() {
@@ -105,6 +130,123 @@ describe('JsonRpcWsClient', () => {
 
     expect(internals.heartbeatTimer).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('rejects connect() and terminates the socket when the WS handshake hangs', async () => {
+    vi.useFakeTimers();
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      handshakeTimeoutMs: 100,
+      maxReconnectAttempts: 0,
+    });
+
+    const connectPromise = client.connect();
+    // Catch the rejection eagerly so the unhandled rejection doesn't fail the run
+    // before we get to the assertion below.
+    const assertion = expect(connectPromise).rejects.toThrow(/handshake/i);
+
+    const socket = FakeWebSocket.instances.at(-1);
+    expect(socket).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    await assertion;
+    expect(socket!.terminate).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('caps stacked rate-limit cooldowns at the configured ceiling', () => {
+    vi.useFakeTimers();
+    // Use a non-zero base time so the implementation's first-hit sentinel
+    // (`rateLimitFirstHitAt === 0`) correctly anchors on the first call.
+    const t0 = 1_000_000;
+    vi.setSystemTime(t0);
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      rateLimitCooldownMs: 60_000,
+      maxCooldownTotalMs: 120_000,
+    });
+    const internals = client as unknown as {
+      noteRateLimit: (error: unknown) => void;
+      remainingRateLimitCooldownMs: () => number;
+    };
+
+    // t=0 (relative): first hit → cooldown until +60_000
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=30_000: second hit → would extend to +90_000, still under ceiling
+    vi.advanceTimersByTime(30_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=60_000: third hit → would extend to +120_000, at ceiling
+    vi.advanceTimersByTime(30_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBe(60_000);
+
+    // t=70_000: fourth hit → would push to +130_000, must cap at +120_000
+    vi.advanceTimersByTime(10_000);
+    internals.noteRateLimit(new Error('over_limit'));
+    expect(internals.remainingRateLimitCooldownMs()).toBeLessThanOrEqual(50_000);
+
+    vi.useRealTimers();
+  });
+
+  it('does not reset reconnectAttempts on bare open — only after a successful subscribe RPC', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      reconnectDelayMs: 100,
+      maxReconnectAttempts: 5,
+      handshakeTimeoutMs: 10_000,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    // First connect: open fires, no subscribe RPC happens.
+    const p1 = client.connect();
+    const socket1 = FakeWebSocket.instances.at(-1)!;
+    socket1.readyState = FakeWebSocket.OPEN;
+    socket1.emit('open');
+    await p1;
+    expect(internals.reconnectAttempts).toBe(0);
+
+    // Drop the socket — close handler should schedule a reconnect and increment attempts.
+    socket1.readyState = 3;
+    socket1.emit('close', 1006, Buffer.from(''));
+    expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(1);
+    const attemptsAfterFirstClose = internals.reconnectAttempts;
+
+    // Let the reconnect timer fire (backoff base 100ms + ≤200ms jitter, so wait long
+    // enough to cover the upper bound). Second open arrives without a subscribe RPC.
+    await vi.advanceTimersByTimeAsync(500);
+    const socket2 = FakeWebSocket.instances.at(-1)!;
+    expect(socket2).not.toBe(socket1);
+    socket2.readyState = FakeWebSocket.OPEN;
+    socket2.emit('open');
+
+    // With the bug: reconnectAttempts would be reset back to 0 by the 'open' handler.
+    // With the fix: it stays at the value scheduleReconnect raised it to, because
+    // subscribe() never roundtripped successfully.
+    expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(attemptsAfterFirstClose);
+
+    vi.useRealTimers();
+  });
+
+  it('exposes reconnectAttempts and rateLimitUntil via public getters', () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
+
+    expect(client.reconnectAttemptsCount).toBe(0);
+    expect(client.rateLimitUntilMs).toBe(0);
+
+    (client as unknown as { noteRateLimit: (e: unknown) => void }).noteRateLimit(
+      new Error('over_limit'),
+    );
+
+    expect(client.rateLimitUntilMs).toBeGreaterThan(0);
   });
 
   it('detaches socket listeners before closing on disconnect', async () => {

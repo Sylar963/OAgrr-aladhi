@@ -47,4 +47,12 @@ export interface OptionVenueAdapter {
 
   /** Cleanup connections */
   dispose?(): Promise<void>;
+
+  /** Optional per-venue connection diagnostics — surfaced via /api/health. */
+  getFeedDiagnostics?(): {
+    connected: boolean;
+    lastActivityAt: number;
+    reconnectAttempts: number;
+    rateLimitUntil: number;
+  } | null;
 }

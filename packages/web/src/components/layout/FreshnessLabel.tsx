@@ -27,6 +27,14 @@ export default function FreshnessLabel() {
     return <span>connecting…</span>;
   }
 
+  if (connectionState === 'reconnecting') {
+    return <span aria-live="polite">reconnecting…</span>;
+  }
+
+  if (connectionState === 'error') {
+    return <span aria-live="polite">disconnected</span>;
+  }
+
   // Live feed: show raw server→client latency in ms — the pro signal.
   if (connectionState === 'live' && staleMs != null) {
     return <span>{`${staleMs}ms`}</span>;

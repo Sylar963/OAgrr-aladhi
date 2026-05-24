@@ -16,6 +16,8 @@ const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RESUBSCRIBE_BATCH_SIZE = 200;
 const DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS = 350;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
+const DEFAULT_MAX_COOLDOWN_TOTAL_MS = 5 * 60 * 1000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const SEC_TO_MS = 1_000;
 
 // Deribit closes the connection if the `public/test` response lags behind the
@@ -60,6 +62,7 @@ export class JsonRpcWsClient {
   private heartbeatToken = 0;
   private lastActivityAt = 0;
   private rateLimitUntil = 0;
+  private rateLimitFirstHitAt = 0;
   private rateLimitHits = 0;
   private connectedAt = 0;
   private log: pino.Logger;
@@ -78,6 +81,8 @@ export class JsonRpcWsClient {
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
       rateLimitCooldownMs?: number;
+      maxCooldownTotalMs?: number;
+      handshakeTimeoutMs?: number;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
     } = {},
   ) {
@@ -99,6 +104,7 @@ export class JsonRpcWsClient {
       const resolveConnect = (): void => {
         if (settled) return;
         settled = true;
+        clearTimeout(handshakeTimer);
         this.connectPromise = null;
         resolve();
       };
@@ -106,11 +112,23 @@ export class JsonRpcWsClient {
       const rejectConnect = (error: Error): void => {
         if (settled) return;
         settled = true;
+        clearTimeout(handshakeTimer);
         this.connectPromise = null;
         reject(error);
       };
 
       this.ws = socket;
+
+      // Guard against upstream WS upgrades that accept TCP but never complete —
+      // the close handler downstream will pick up the resulting termination and
+      // schedule the next reconnect attempt.
+      const timeoutMs = this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+      const handshakeTimer = setTimeout(() => {
+        if (settled) return;
+        this.log.warn({ url: this.url, timeoutMs }, 'ws handshake timeout, terminating');
+        socket.terminate();
+        rejectConnect(new Error(`[${this.label}] handshake timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       socket.on('open', () => {
         if (this.ws !== socket) return;
@@ -118,8 +136,12 @@ export class JsonRpcWsClient {
         this.connectedAt = Date.now();
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
+        this.rateLimitFirstHitAt = 0;
         this.log.info({ url: this.url }, 'ws connected');
-        this.reconnectAttempts = 0;
+        // Note: reconnectAttempts is intentionally NOT reset here. A bare TCP+WS
+        // upgrade isn't proof of a working session — resubscribe can still fail
+        // immediately. We only reset after a roundtripped subscribe RPC (see
+        // subscribe() and resubscribe()) so chronic flaps actually escalate.
         this.startHeartbeat();
         this.options.onStatusChange?.('connected');
         resolveConnect();
@@ -208,6 +230,14 @@ export class JsonRpcWsClient {
     return this.lastActivityAt;
   }
 
+  get reconnectAttemptsCount(): number {
+    return this.reconnectAttempts;
+  }
+
+  get rateLimitUntilMs(): number {
+    return this.rateLimitUntil;
+  }
+
   terminate(): void {
     this.ws?.terminate();
   }
@@ -271,6 +301,9 @@ export class JsonRpcWsClient {
 
     try {
       await this.call(method, { channels });
+      // A roundtripped subscribe RPC is the real bidirectional health proof —
+      // only here do we trust the connection enough to reset escalation.
+      this.reconnectAttempts = 0;
     } catch (error: unknown) {
       if (!isConnectionClosedError(error)) {
         for (const channel of added) {
@@ -433,6 +466,9 @@ export class JsonRpcWsClient {
     for (let i = 0; i < channels.length; i += batchSize) {
       const batch = channels.slice(i, i + batchSize);
       await this.call(method, { channels: batch });
+      // Each successful resubscribe batch is bidirectional proof — reset the
+      // escalation counter so a long resubscribe doesn't keep us in a half-state.
+      this.reconnectAttempts = 0;
       if (i + batchSize < channels.length) {
         await new Promise((r) => setTimeout(r, delayMs));
       }
@@ -464,13 +500,23 @@ export class JsonRpcWsClient {
     if (!isRateLimitSignal(error)) return;
 
     const cooldownMs = this.options.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS;
-    const until = Date.now() + cooldownMs;
-    if (until > this.rateLimitUntil) {
-      this.rateLimitUntil = until;
-    }
+    const maxTotalMs = this.options.maxCooldownTotalMs ?? DEFAULT_MAX_COOLDOWN_TOTAL_MS;
+    const now = Date.now();
+    if (this.rateLimitFirstHitAt === 0) this.rateLimitFirstHitAt = now;
+
+    const proposed = now + cooldownMs;
+    const ceiling = this.rateLimitFirstHitAt + maxTotalMs;
+    const until = Math.min(proposed, ceiling);
+    if (until > this.rateLimitUntil) this.rateLimitUntil = until;
+
     this.rateLimitHits += 1;
     this.log.warn(
-      { cooldownMs, rateLimitHits: this.rateLimitHits, retryAt: this.rateLimitUntil },
+      {
+        cooldownMs,
+        rateLimitHits: this.rateLimitHits,
+        retryAt: this.rateLimitUntil,
+        ceilingHit: until < proposed,
+      },
       'rate limit detected, delaying reconnects',
     );
   }

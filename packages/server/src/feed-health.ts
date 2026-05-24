@@ -6,9 +6,9 @@
 // — the silent-failure mode that the 2h restart cron was masking.
 
 import type { SpotRuntime } from '@oggregator/core';
-import type { BlockTradeRuntime, TradeRuntime } from '@oggregator/core';
+import type { BlockTradeRuntime, OptionVenueAdapter, TradeRuntime } from '@oggregator/core';
 
-export type FeedSource = 'spot' | 'flow' | 'blockFlow';
+export type FeedSource = 'spot' | 'flow' | 'blockFlow' | 'chain';
 
 export interface VenueFeedHealth {
   venue: string;
@@ -38,6 +38,7 @@ export interface FeedHealthSources {
   spot: Pick<SpotRuntime, 'getHealth'>;
   flow: Pick<TradeRuntime, 'getHealth'>;
   blockFlow: Pick<BlockTradeRuntime, 'getHealth'>;
+  chain?: ReadonlyArray<Pick<OptionVenueAdapter, 'venue' | 'getFeedDiagnostics'>>;
 }
 
 // Bybit's REST spot poller is venue-agnostic upstream but it's the only source
@@ -114,6 +115,18 @@ export function getFeedHealthSnapshot(
       lastMessageAt: row.lastSuccessAt,
       reconnects: row.reconnects,
       errors: row.errors,
+    });
+  }
+
+  // Chain WS adapters surface JsonRpcWsClient health directly so ops can
+  // verify the socket is alive, not infer from message timestamps alone.
+  for (const adapter of sources.chain ?? []) {
+    const diag = adapter.getFeedDiagnostics?.();
+    if (diag == null) continue;
+    upsert(adapter.venue, 'chain', {
+      connected: diag.connected,
+      lastMessageAt: diag.lastActivityAt > 0 ? diag.lastActivityAt : null,
+      reconnects: diag.reconnectAttempts,
     });
   }
 

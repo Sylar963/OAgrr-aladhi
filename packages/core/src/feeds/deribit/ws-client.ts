@@ -151,6 +151,15 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     };
   }
 
+  override getFeedDiagnostics() {
+    return {
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+      reconnectAttempts: this.rpc.reconnectAttemptsCount,
+      rateLimitUntil: this.rpc.rateLimitUntilMs,
+    };
+  }
+
   protected override restartFeedFromWatchdog(): void {
     this.rpc.terminate();
   }

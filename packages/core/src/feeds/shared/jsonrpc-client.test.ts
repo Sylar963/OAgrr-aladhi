@@ -236,6 +236,19 @@ describe('JsonRpcWsClient', () => {
     vi.useRealTimers();
   });
 
+  it('exposes reconnectAttempts and rateLimitUntil via public getters', () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
+
+    expect(client.reconnectAttemptsCount).toBe(0);
+    expect(client.rateLimitUntilMs).toBe(0);
+
+    (client as unknown as { noteRateLimit: (e: unknown) => void }).noteRateLimit(
+      new Error('over_limit'),
+    );
+
+    expect(client.rateLimitUntilMs).toBeGreaterThan(0);
+  });
+
   it('detaches socket listeners before closing on disconnect', async () => {
     const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
     const internals = client as unknown as JsonRpcWsClientInternals;

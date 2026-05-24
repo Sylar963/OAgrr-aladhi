@@ -230,6 +230,14 @@ export class JsonRpcWsClient {
     return this.lastActivityAt;
   }
 
+  get reconnectAttemptsCount(): number {
+    return this.reconnectAttempts;
+  }
+
+  get rateLimitUntilMs(): number {
+    return this.rateLimitUntil;
+  }
+
   terminate(): void {
     this.ws?.terminate();
   }

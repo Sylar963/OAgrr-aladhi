@@ -11,6 +11,7 @@ type BinanceWsAdapterInternals = {
     send: (payload: unknown) => void;
     isConnected: boolean;
   };
+  pendingSubscribeById: Map<number, string[]>;
   subscribeChain: (
     underlying: string,
     expiry: string,
@@ -100,6 +101,50 @@ describe('BinanceWsAdapter', () => {
     internals.subscriptions.subscribedStreams.add('btcusdt@openInterest@260327');
 
     await internals.unsubscribeChain('BTC', '2026-03-27', [instrument]);
+
+    expect(internals.subscriptions.subscribedStreams.size).toBe(0);
+    expect(internals.subscriptions.pendingSubscribeStreams.size).toBe(0);
+  });
+
+  it('does not re-add removed streams when a late subscribe ack arrives', async () => {
+    const adapter = new BinanceWsAdapter();
+    const internals = adapter as unknown as BinanceWsAdapterInternals;
+
+    internals.wsClient = {
+      send: vi.fn(),
+      isConnected: true,
+    };
+
+    const instrument: CachedInstrument = {
+      symbol: 'BTC/USDT:USDT-BTC-260327-70000-C',
+      exchangeSymbol: 'BTC-260327-70000-C',
+      base: 'BTC',
+      quote: 'USDT',
+      settle: 'USDT',
+      expiry: '2026-03-27',
+      strike: 70_000,
+      right: 'call',
+      inverse: false,
+      contractSize: 1,
+      contractValueCurrency: 'BTC',
+      tickSize: null,
+      minQty: null,
+      makerFee: null,
+      takerFee: null,
+    };
+
+    await internals.subscribeChain('BTC', '2026-03-27', [instrument]);
+
+    expect(internals.pendingSubscribeById.get(1)).toEqual([
+      'btcusdt@optionMarkPrice',
+      'btcusdt@openInterest@260327',
+    ]);
+
+    await internals.unsubscribeChain('BTC', '2026-03-27', [instrument]);
+
+    expect(internals.pendingSubscribeById.size).toBe(0);
+
+    internals.handleWsMessage({ result: null, id: 1 });
 
     expect(internals.subscriptions.subscribedStreams.size).toBe(0);
     expect(internals.subscriptions.pendingSubscribeStreams.size).toBe(0);

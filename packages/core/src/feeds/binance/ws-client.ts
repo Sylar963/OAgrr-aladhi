@@ -353,6 +353,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
       this.wsClient.send({ method: 'UNSUBSCRIBE', params: ackedStreams, id: ++this.msgId });
     }
     removeBinanceTrackedStreams(this.subscriptions, removedStreams);
+    this.prunePendingSubscribeIds(removedStreams);
   }
 
   protected async unsubscribeAll(): Promise<void> {
@@ -362,6 +363,22 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     }
     this.pendingSubscribeById.clear();
     resetBinanceSubscriptionState(this.subscriptions);
+  }
+
+  private prunePendingSubscribeIds(removedStreams: string[]): void {
+    if (removedStreams.length === 0 || this.pendingSubscribeById.size === 0) return;
+
+    const removed = new Set(removedStreams);
+    for (const [id, streams] of this.pendingSubscribeById) {
+      const remainingStreams = streams.filter((stream) => !removed.has(stream));
+      if (remainingStreams.length === 0) {
+        this.pendingSubscribeById.delete(id);
+        continue;
+      }
+      if (remainingStreams.length !== streams.length) {
+        this.pendingSubscribeById.set(id, remainingStreams);
+      }
+    }
   }
 
   // ── WS message handling ───────────────────────────────────────

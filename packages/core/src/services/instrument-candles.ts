@@ -428,12 +428,10 @@ export async function fetchGateioMark(
     signal: AbortSignal.timeout(10_000),
     headers: { accept: 'application/json', ...headers },
   });
-  // Mark is a secondary source: trade-derived candles already came from
-  // /options/candlesticks (which returns 200 [] for missing contracts, never
-  // 404). Gate.io's mark endpoint legitimately 404s for contracts not in its
-  // mark-history universe (newly listed, low-volume strikes), so a 404 here
-  // must degrade to buffer-only marks — not propagate as a hard `not_found`
-  // and kill the whole chart.
+  // /options/candlesticks returns 200 [] for unknown contracts (never 404),
+  // so a 404 here means Gate.io has no mark-history coverage for the contract
+  // (newly listed, low volume), not that the contract is missing. Degrade
+  // like other non-OK statuses so trade-derived candles still render.
   if (!res.ok) {
     log.warn({ symbol, status: res.status }, 'gateio mark candles http error');
     return [];

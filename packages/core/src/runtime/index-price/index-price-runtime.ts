@@ -98,7 +98,7 @@ export class IndexPriceRuntime {
         log.warn({ status: res.status }, 'gateio underlyings refresh failed');
         return;
       }
-      const data = (await res.json()) as unknown;
+      const data = (await res.clone().json()) as unknown;
       const parsed = GateioUnderlyingsResponseSchema.safeParse(data);
       if (!parsed.success) {
         log.warn('gateio underlyings response failed schema');
@@ -113,7 +113,7 @@ export class IndexPriceRuntime {
         if (!Number.isFinite(price) || price <= 0) continue;
         this.prices.set(`gateio:${publicBase}`, price);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       log.warn({ err: String(err) }, 'gateio underlyings refresh error');
     }
   }

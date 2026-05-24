@@ -95,6 +95,26 @@ describe('IndexPriceRuntime — Gate.io REST refresh', () => {
     runtime.dispose();
   });
 
+  it('can reuse the same Response instance across refreshes', async () => {
+    const response = new Response(
+      JSON.stringify([{ name: 'BTC_USDT', index_price: '70000' }]),
+      { status: 200 },
+    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    const firstRuntime = new IndexPriceRuntime();
+    await firstRuntime.start({ gateio: true });
+    await vi.waitFor(() => expect(firstRuntime.get('gateio', 'BTC')).toBe(70_000));
+    firstRuntime.dispose();
+
+    const secondRuntime = new IndexPriceRuntime();
+    await secondRuntime.start({ gateio: true });
+    await vi.waitFor(() => expect(secondRuntime.get('gateio', 'BTC')).toBe(70_000));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    secondRuntime.dispose();
+  });
+
   it('does not start the Coincall WS subscription path when keys are missing', async () => {
     vi.stubEnv('COINCALL_API_KEY', '');
     vi.stubEnv('COINCALL_API_SECRET', '');

@@ -42,6 +42,7 @@ describe('useGlobalFeedStatus', () => {
         failedVenueCount: 0,
         failedVenueIds: [],
         failedVenues: [],
+        venueStates: {},
         staleMs: null,
         lastUpdateMs: null,
       },
@@ -58,6 +59,7 @@ describe('useGlobalFeedStatus', () => {
       staleMs: 42,
       lastSeq: 7,
       failedVenues: [{ venue: 'okx', reason: 'down' }],
+      venueStates: {},
     });
   });
 

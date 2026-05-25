@@ -127,10 +127,13 @@ function findBreakevens(points: PayoffPoint[]): number[] {
     const prev = points[i - 1]!;
     const curr = points[i]!;
     if ((prev.pnl <= 0 && curr.pnl >= 0) || (prev.pnl >= 0 && curr.pnl <= 0)) {
-      // Linear interpolation
+      // Linear interpolation. Keep full precision — rounding to whole dollars
+      // here is fine for BTC/ETH but destroys sub-$100 altcoin break-evens (a
+      // $0.42 BE rounds to 0, which fmtUsd then renders as "–"). Display-layer
+      // formatters (fmtUsd, the chart) handle precision per underlying scale.
       const ratio = Math.abs(prev.pnl) / (Math.abs(prev.pnl) + Math.abs(curr.pnl));
       const be = prev.underlyingPrice + ratio * (curr.underlyingPrice - prev.underlyingPrice);
-      breakevens.push(Math.round(be));
+      breakevens.push(be);
     }
   }
   return breakevens;
@@ -150,7 +153,13 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
   const n = pnls.length;
   const highSlope = (pnls[n - 1] ?? 0) - (pnls[n - 2] ?? 0);
   const lowSlope = (pnls[1] ?? 0) - (pnls[0] ?? 0);
-  const FLAT_EPS = 1;
+  // Threshold must scale with the strategy's P&L magnitude. A flat $1 reads as
+  // "still sloping" for a BTC position but as "flat" for a sub-$1k altcoin, so
+  // low-priced underlyings had their unbounded tails (e.g. a long straddle's
+  // infinite upside) misreported as a small finite max profit/loss. Gauge the
+  // edge slope against the total P&L span instead — a genuinely capped edge is
+  // ≈0 relative to the span at any price scale.
+  const FLAT_EPS = Math.max((maxPnl - minPnl) * 1e-4, Number.EPSILON);
   const profitUnbounded = highSlope > FLAT_EPS || lowSlope < -FLAT_EPS;
   const lossUnbounded = highSlope < -FLAT_EPS || lowSlope > FLAT_EPS;
   const maxProfit = profitUnbounded ? null : maxPnl;

@@ -87,6 +87,55 @@ describe('computeMetrics', () => {
   });
 });
 
+// Regression: scale-dependent constants in the math layer (integer break-even
+// rounding, a flat $1 unbounded-P&L threshold) silently corrupted low-priced
+// altcoins while leaving BTC/ETH correct. A straddle was the worst case.
+describe('computeMetrics — low-priced altcoin scaling', () => {
+  it('keeps sub-$1 break-evens precise instead of rounding to whole dollars', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 0.5, entryPrice: 0.05 }),
+      leg({ type: 'put', direction: 'buy', strike: 0.5, entryPrice: 0.05 }),
+    ];
+    const m = computeMetrics(legs, 0.5);
+    const [lower, upper] = [...m.breakevens].sort((a, b) => a - b);
+    // True BEs are strike ± total premium = 0.5 ± 0.10.
+    expect(lower).toBeCloseTo(0.4, 2);
+    expect(upper).toBeCloseTo(0.6, 2);
+  });
+
+  it('reports unbounded max profit for a sub-$1 long straddle', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 0.5, entryPrice: 0.05 }),
+      leg({ type: 'put', direction: 'buy', strike: 0.5, entryPrice: 0.05 }),
+    ];
+    const m = computeMetrics(legs, 0.5);
+    expect(m.maxProfit).toBeNull();
+    expect(m.maxLoss).not.toBeNull();
+    expect(m.maxLoss!).toBeCloseTo(-0.1, 4);
+  });
+
+  it('reports unbounded max profit for a mid-priced (~$150) long straddle', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 150, entryPrice: 8 }),
+      leg({ type: 'put', direction: 'buy', strike: 150, entryPrice: 8 }),
+    ];
+    const m = computeMetrics(legs, 150);
+    expect(m.maxProfit).toBeNull();
+    expect(m.maxLoss!).toBeCloseTo(-16, 0);
+  });
+
+  it('reports unbounded max loss for a sub-$1 short straddle', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'sell', strike: 0.5, entryPrice: 0.05 }),
+      leg({ type: 'put', direction: 'sell', strike: 0.5, entryPrice: 0.05 }),
+    ];
+    const m = computeMetrics(legs, 0.5);
+    expect(m.maxLoss).toBeNull();
+    expect(m.maxProfit).not.toBeNull();
+    expect(m.maxProfit!).toBeCloseTo(0.1, 4);
+  });
+});
+
 describe('computeMetrics — greek partial-coverage reporting', () => {
   it('reports greeksMissingLegs=0 when every leg has every greek', () => {
     const legs: Leg[] = [

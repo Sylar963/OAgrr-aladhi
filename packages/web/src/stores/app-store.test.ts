@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useAppStore } from './app-store';
 
 describe('app-store', () => {
@@ -59,5 +59,36 @@ describe('app-store', () => {
 
     expect(useAppStore.getState().underlying).toBe('SOL');
     expect(useAppStore.getState().expiry).toBe('2026-04-10');
+  });
+});
+
+describe('system notification slices', () => {
+  beforeEach(() => {
+    useAppStore.setState({ announcement: null, feedDegraded: false, toasts: [] });
+  });
+
+  it('sets and clears the announcement', () => {
+    useAppStore
+      .getState()
+      .setAnnouncement({ id: 'm1', severity: 'info', blocking: false, title: 'Hi' });
+    expect(useAppStore.getState().announcement).toMatchObject({ id: 'm1' });
+    useAppStore.getState().setAnnouncement(null);
+    expect(useAppStore.getState().announcement).toBeNull();
+  });
+
+  it('toggles feedDegraded', () => {
+    useAppStore.getState().setFeedDegraded(true);
+    expect(useAppStore.getState().feedDegraded).toBe(true);
+    useAppStore.getState().setFeedDegraded(false);
+    expect(useAppStore.getState().feedDegraded).toBe(false);
+  });
+
+  it('pushes and dismisses toasts', () => {
+    useAppStore.getState().pushToast({ tone: 'success', icon: '✓', text: 'Feed restored' });
+    const toasts = useAppStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toMatchObject({ tone: 'success', text: 'Feed restored' });
+    useAppStore.getState().dismissToast(toasts[0]!.id);
+    expect(useAppStore.getState().toasts).toHaveLength(0);
   });
 });

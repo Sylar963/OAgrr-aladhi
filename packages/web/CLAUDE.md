@@ -51,6 +51,8 @@ src/
 
 - **Path aliases synced in two places**: `tsconfig.json` paths AND `vite.config.ts` resolve.alias. If you add one, update both.
 
+- **System notifications are read-only consumers of feed state**: `components/notifications/SystemNotifications` renders the status banner / takeover (from the `/health` `announcement`) and feed toasts. `useFeedToasts` and the banner read the `feedStatus` store slice only — they never touch WS transport/subscription code.
+
 - **CSS Modules throughout**: every component has a `.module.css` file. Zero global class names except in `styles/`.
 
 ## Don't

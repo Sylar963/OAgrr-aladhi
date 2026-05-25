@@ -1,18 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
-
+import { SystemNotifications } from '@components/notifications';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
-import { useAppStore } from '@stores/app-store';
-
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { TabId } from '@lib/tabs';
-
-import TopBar from './TopBar';
+import { useAppStore } from '@stores/app-store';
+import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import styles from './AppShell.module.css';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
 import { NewsTicker } from './NewsTicker';
 import { PaletteContext } from './palette-context';
-import styles from './AppShell.module.css';
+import TopBar from './TopBar';
 
 // Second key of a `g <x>` chord maps to a tab.
 const GOTO_MAP: Record<string, TabId> = {
@@ -117,6 +115,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
       <div className={styles.shell}>
         <NewsTicker />
         <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
+        <SystemNotifications />
         {showToolbar && <MobileToolbar />}
         <main className={styles.main}>{children}</main>
         <MobileNav />

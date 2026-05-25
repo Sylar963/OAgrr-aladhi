@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-
+import { parseAnnouncement } from '@lib/system-status';
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const POLL_INTERVAL_MS = 30_000;
@@ -8,6 +8,7 @@ const POLL_INTERVAL_MS = 30_000;
 interface HealthResponse {
   bootTime?: number;
   version?: string;
+  announcement?: unknown;
 }
 
 function createTimeoutSignal(timeoutMs: number): {
@@ -31,6 +32,7 @@ function createTimeoutSignal(timeoutMs: number): {
 export function useServerVersion() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
   const currentNoticeKind = useAppStore((s) => s.sessionNotice?.kind);
+  const setAnnouncement = useAppStore((s) => s.setAnnouncement);
   const initialBootRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -57,6 +59,8 @@ export function useServerVersion() {
             setSessionNotice({ kind: 'server-updated' });
           }
         }
+
+        setAnnouncement(parseAnnouncement(body.announcement));
       } catch {
         // Silent — transient network errors during server restart are expected.
       } finally {
@@ -73,5 +77,5 @@ export function useServerVersion() {
       cancelled = true;
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [setSessionNotice, currentNoticeKind]);
+  }, [setSessionNotice, currentNoticeKind, setAnnouncement]);
 }

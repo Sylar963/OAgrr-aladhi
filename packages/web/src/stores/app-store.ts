@@ -1,19 +1,19 @@
-import { create } from 'zustand';
-
-import {
-  VENUE_IDS as PROTOCOL_VENUE_IDS,
-  type VenueCredentials,
-  type VenueFailure,
-  type VenueId,
-  type WsConnectionState,
-} from '@oggregator/protocol';
 import type { TabId } from '@lib/tabs';
-import { VENUE_IDS } from '@lib/venue-meta';
 import {
   loadAllVenueCreds,
   removeVenueCreds as storageRemoveVenueCreds,
   saveVenueCreds as storageSaveVenueCreds,
 } from '@lib/venue-credentials';
+import { VENUE_IDS } from '@lib/venue-meta';
+import {
+  VENUE_IDS as PROTOCOL_VENUE_IDS,
+  type SystemAnnouncement,
+  type VenueCredentials,
+  type VenueFailure,
+  type VenueId,
+  type WsConnectionState,
+} from '@oggregator/protocol';
+import { create } from 'zustand';
 
 function readStorage(key: string): string | null {
   try {
@@ -44,6 +44,23 @@ export interface SessionNotice {
   autoLogoutAtMs?: number;
 }
 
+export type ToastTone = 'info' | 'success' | 'warning';
+
+export interface Toast {
+  id: string;
+  tone: ToastTone;
+  icon: string;
+  text: string;
+  createdAt: number;
+}
+
+export interface ToastInput {
+  tone: ToastTone;
+  icon: string;
+  text: string;
+  id?: string;
+}
+
 interface AppState {
   underlying: string;
   expiry: string;
@@ -60,6 +77,9 @@ interface AppState {
   /** Monotonic counter — incremented by the warning dialog's "Stay active" button
    * so the idle-timeout hook can observe the request and cancel pending timers. */
   sessionExtendToken: number;
+  announcement: SystemAnnouncement | null;
+  feedDegraded: boolean;
+  toasts: Toast[];
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
@@ -75,6 +95,10 @@ interface AppState {
   setSessionNotice: (notice: SessionNotice | null) => void;
   extendSession: () => void;
   setSoundEnabled: (enabled: boolean) => void;
+  setAnnouncement: (a: SystemAnnouncement | null) => void;
+  setFeedDegraded: (degraded: boolean) => void;
+  pushToast: (toast: ToastInput) => void;
+  dismissToast: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -99,6 +123,9 @@ export const useAppStore = create<AppState>((set) => ({
   soundEnabled: readStorage('tapeSoundEnabled') === '1',
   sessionNotice: null,
   sessionExtendToken: 0,
+  announcement: null,
+  feedDegraded: false,
+  toasts: [],
 
   setUnderlying: (underlying) => set({ underlying, expiry: '' }),
   setExpiry: (expiry) => set({ expiry }),
@@ -140,6 +167,25 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setSessionNotice: (sessionNotice) => set({ sessionNotice }),
   extendSession: () => set((s) => ({ sessionExtendToken: s.sessionExtendToken + 1 })),
+  setAnnouncement: (announcement) => set({ announcement }),
+  setFeedDegraded: (feedDegraded) => set({ feedDegraded }),
+  pushToast: (toast) =>
+    set((prev) => {
+      const now = Date.now();
+      return {
+        toasts: [
+          ...prev.toasts,
+          {
+            id: toast.id ?? `${now}-${Math.random().toString(36).slice(2, 8)}`,
+            tone: toast.tone,
+            icon: toast.icon,
+            text: toast.text,
+            createdAt: now,
+          },
+        ],
+      };
+    }),
+  dismissToast: (id) => set((prev) => ({ toasts: prev.toasts.filter((t) => t.id !== id) })),
   setSoundEnabled: (enabled) => {
     if (enabled) localStorage.setItem('tapeSoundEnabled', '1');
     else localStorage.removeItem('tapeSoundEnabled');

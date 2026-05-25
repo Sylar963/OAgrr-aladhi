@@ -1,7 +1,6 @@
-import { useEffect, useRef } from 'react';
-
 import { parseAnnouncement } from '@lib/system-status';
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const POLL_INTERVAL_MS = 30_000;

@@ -1,4 +1,4 @@
-import { SEVERITY_ICON, type ActiveNotice } from '@lib/system-status';
+import { type ActiveNotice, SEVERITY_ICON } from '@lib/system-status';
 
 import styles from './StatusBanner.module.css';
 
@@ -32,7 +32,9 @@ export default function StatusBanner({ notice, now, onDismiss }: StatusBannerPro
       <span className={styles.body}>
         <span className={styles.title}>{notice.title}</span>
         {notice.message && <span className={styles.message}>{notice.message}</span>}
-        {countdownMs != null && <span className={styles.countdown}>in {formatCountdown(countdownMs)}</span>}
+        {countdownMs != null && (
+          <span className={styles.countdown}>in {formatCountdown(countdownMs)}</span>
+        )}
       </span>
       {notice.dismissible && (
         <button type="button" className={styles.close} aria-label="Dismiss" onClick={onDismiss}>

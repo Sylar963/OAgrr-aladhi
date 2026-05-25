@@ -49,9 +49,15 @@
   background: rgba(203, 56, 85, 0.14);
   color: var(--color-loss);
 }
-.panel[data-severity='degraded'] .icon,
-.panel[data-severity='notice'] .icon { background: rgba(254, 249, 160, 0.12); color: var(--color-warning); }
-.panel[data-severity='info'] .icon { background: var(--accent-primary-dim); color: var(--accent-primary); }
+.panel[data-severity="degraded"] .icon,
+.panel[data-severity="notice"] .icon {
+  background: rgba(254, 249, 160, 0.12);
+  color: var(--color-warning);
+}
+.panel[data-severity="info"] .icon {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
 
 .title {
   font-size: var(--text-md);
@@ -66,15 +72,28 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .backdrop, .panel { animation: none; }
+  .backdrop,
+  .panel {
+    animation: none;
+  }
 }

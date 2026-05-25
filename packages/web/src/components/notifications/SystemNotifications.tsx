@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-
 import { useFeedToasts } from '@hooks/useFeedToasts';
 import { addDismissedId, loadDismissedIds, selectActiveNotice } from '@lib/system-status';
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useState } from 'react';
 
 import StatusBanner from './StatusBanner';
 import StatusTakeover from './StatusTakeover';
@@ -21,8 +20,7 @@ export default function SystemNotifications() {
 
   // Tick once per second only while a countdown or expiry is pending.
   const needsTick =
-    (announcement?.startsAt != null && announcement.startsAt > now) ||
-    announcement?.endsAt != null;
+    (announcement?.startsAt != null && announcement.startsAt > now) || announcement?.endsAt != null;
 
   useEffect(() => {
     if (!needsTick) return;

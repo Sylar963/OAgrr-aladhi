@@ -1,14 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
 
 import type { ActiveNotice } from '@lib/system-status';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import StatusTakeover from './StatusTakeover';
 
 const outage: ActiveNotice = {
-  id: 'o1', severity: 'outage', title: 'System under maintenance', message: 'Back at 14:00 UTC', dismissible: false,
+  id: 'o1',
+  severity: 'outage',
+  title: 'System under maintenance',
+  message: 'Back at 14:00 UTC',
+  dismissible: false,
 };
 
 afterEach(() => cleanup());

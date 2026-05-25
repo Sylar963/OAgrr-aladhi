@@ -1,15 +1,17 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
 
 import { useAppStore } from '@stores/app-store';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFeedToasts } from './useFeedToasts';
 
 function setConn(state: string) {
   act(() => {
-    useAppStore.setState((s) => ({ feedStatus: { ...s.feedStatus, connectionState: state as never } }));
+    useAppStore.setState((s) => ({
+      feedStatus: { ...s.feedStatus, connectionState: state as never },
+    }));
   });
 }
 
@@ -37,7 +39,9 @@ describe('useFeedToasts', () => {
   it('sets feedDegraded after 8s of trouble and clears + toasts on recovery', () => {
     renderHook(() => useFeedToasts());
     setConn('reconnecting');
-    act(() => { vi.advanceTimersByTime(8000); });
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
     expect(useAppStore.getState().feedDegraded).toBe(true);
 
     setConn('live');
@@ -48,9 +52,13 @@ describe('useFeedToasts', () => {
   it('does not mark degraded for a brief blip under 8s', () => {
     renderHook(() => useFeedToasts());
     setConn('reconnecting');
-    act(() => { vi.advanceTimersByTime(3000); });
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
     setConn('live');
-    act(() => { vi.advanceTimersByTime(8000); });
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
     expect(useAppStore.getState().feedDegraded).toBe(false);
   });
 

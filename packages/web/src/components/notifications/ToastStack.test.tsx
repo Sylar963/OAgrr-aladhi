@@ -1,10 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, cleanup } from '@testing-library/react';
 
 import { useAppStore } from '@stores/app-store';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ToastStack from './ToastStack';
 
 beforeEach(() => {
@@ -25,7 +25,9 @@ describe('ToastStack', () => {
 
   it('renders a toast and auto-dismisses it after 4s', () => {
     act(() => {
-      useAppStore.getState().pushToast({ id: 't1', tone: 'success', icon: '✓', text: 'Feed restored' });
+      useAppStore
+        .getState()
+        .pushToast({ id: 't1', tone: 'success', icon: '✓', text: 'Feed restored' });
     });
     render(<ToastStack />);
     expect(screen.getByText('Feed restored')).toBeTruthy();

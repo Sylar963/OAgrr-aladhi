@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SystemAnnouncementSchema } from './system-status.js';
 
 describe('SystemAnnouncementSchema', () => {
@@ -10,15 +10,22 @@ describe('SystemAnnouncementSchema', () => {
 
   it('keeps an explicit blocking flag and optional fields', () => {
     const r = SystemAnnouncementSchema.safeParse({
-      id: 'm2', severity: 'outage', blocking: true, title: 'Down', message: 'brb',
-      startsAt: 1_700_000_000_000, endsAt: 1_700_003_600_000,
+      id: 'm2',
+      severity: 'outage',
+      blocking: true,
+      title: 'Down',
+      message: 'brb',
+      startsAt: 1_700_000_000_000,
+      endsAt: 1_700_003_600_000,
     });
     expect(r.success).toBe(true);
     if (r.success) expect(r.data).toMatchObject({ blocking: true, message: 'brb' });
   });
 
   it('rejects an unknown severity', () => {
-    expect(SystemAnnouncementSchema.safeParse({ id: 'm1', severity: 'boom', title: 'x' }).success).toBe(false);
+    expect(
+      SystemAnnouncementSchema.safeParse({ id: 'm1', severity: 'boom', title: 'x' }).success,
+    ).toBe(false);
   });
 
   it('rejects a missing title', () => {

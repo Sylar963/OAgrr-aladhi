@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const spotHealth = {
   connected: true,
@@ -174,7 +174,10 @@ describe('GET /health', () => {
 
   it('includes the system announcement when present', async () => {
     vi.mocked(systemStatus.getSystemAnnouncement).mockReturnValueOnce({
-      id: 'm1', severity: 'notice', blocking: false, title: 'Under construction',
+      id: 'm1',
+      severity: 'notice',
+      blocking: false,
+      title: 'Under construction',
     });
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);

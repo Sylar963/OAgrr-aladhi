@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useAppStore } from './app-store';
 
 describe('app-store', () => {
@@ -68,7 +68,9 @@ describe('system notification slices', () => {
   });
 
   it('sets and clears the announcement', () => {
-    useAppStore.getState().setAnnouncement({ id: 'm1', severity: 'info', blocking: false, title: 'Hi' });
+    useAppStore
+      .getState()
+      .setAnnouncement({ id: 'm1', severity: 'info', blocking: false, title: 'Hi' });
     expect(useAppStore.getState().announcement).toMatchObject({ id: 'm1' });
     useAppStore.getState().setAnnouncement(null);
     expect(useAppStore.getState().announcement).toBeNull();

@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import type { SystemAnnouncement } from '@oggregator/protocol';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  parseAnnouncement,
-  loadDismissedIds,
   addDismissedId,
+  loadDismissedIds,
+  parseAnnouncement,
   selectActiveNotice,
 } from './system-status';
-import type { SystemAnnouncement } from '@oggregator/protocol';
 
 const base: SystemAnnouncement = { id: 'a1', severity: 'info', blocking: false, title: 'Hi' };
 const NOW = 1_700_000_000_000;
@@ -16,7 +16,9 @@ describe('parseAnnouncement', () => {
     expect(parseAnnouncement({ nope: true })).toBeNull();
   });
   it('parses a valid payload', () => {
-    expect(parseAnnouncement({ id: 'a1', severity: 'info', title: 'Hi' })).toMatchObject({ id: 'a1' });
+    expect(parseAnnouncement({ id: 'a1', severity: 'info', title: 'Hi' })).toMatchObject({
+      id: 'a1',
+    });
   });
 });
 

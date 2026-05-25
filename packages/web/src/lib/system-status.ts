@@ -1,6 +1,6 @@
 import {
-  SystemAnnouncementSchema,
   type SystemAnnouncement,
+  SystemAnnouncementSchema,
   type SystemAnnouncementSeverity,
 } from '@oggregator/protocol';
 

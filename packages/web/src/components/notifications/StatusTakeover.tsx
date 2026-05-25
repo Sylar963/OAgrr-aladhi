@@ -1,6 +1,5 @@
+import { type ActiveNotice, SEVERITY_ICON } from '@lib/system-status';
 import { useEffect, useRef } from 'react';
-
-import { SEVERITY_ICON, type ActiveNotice } from '@lib/system-status';
 
 import styles from './StatusTakeover.module.css';
 

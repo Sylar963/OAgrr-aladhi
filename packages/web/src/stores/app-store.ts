@@ -1,5 +1,10 @@
-import { create } from 'zustand';
-
+import type { TabId } from '@lib/tabs';
+import {
+  loadAllVenueCreds,
+  removeVenueCreds as storageRemoveVenueCreds,
+  saveVenueCreds as storageSaveVenueCreds,
+} from '@lib/venue-credentials';
+import { VENUE_IDS } from '@lib/venue-meta';
 import {
   VENUE_IDS as PROTOCOL_VENUE_IDS,
   type SystemAnnouncement,
@@ -8,13 +13,7 @@ import {
   type VenueId,
   type WsConnectionState,
 } from '@oggregator/protocol';
-import type { TabId } from '@lib/tabs';
-import { VENUE_IDS } from '@lib/venue-meta';
-import {
-  loadAllVenueCreds,
-  removeVenueCreds as storageRemoveVenueCreds,
-  saveVenueCreds as storageSaveVenueCreds,
-} from '@lib/venue-credentials';
+import { create } from 'zustand';
 
 function readStorage(key: string): string | null {
   try {

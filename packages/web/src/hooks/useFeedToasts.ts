@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react';
-
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef } from 'react';
 
 const DEGRADED_DELAY_MS = 8000;
 

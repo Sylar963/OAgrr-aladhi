@@ -1,10 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 
 import { useAppStore } from '@stores/app-store';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SystemNotifications } from './index';
 
 beforeEach(() => {
@@ -26,14 +26,18 @@ afterEach(() => {
 
 describe('SystemNotifications', () => {
   it('renders a banner for a non-blocking announcement', () => {
-    useAppStore.setState({ announcement: { id: 'a1', severity: 'notice', blocking: false, title: 'Under construction' } });
+    useAppStore.setState({
+      announcement: { id: 'a1', severity: 'notice', blocking: false, title: 'Under construction' },
+    });
     render(<SystemNotifications />);
     expect(screen.getByText('Under construction')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('renders a takeover for a blocking announcement', () => {
-    useAppStore.setState({ announcement: { id: 'o1', severity: 'outage', blocking: true, title: 'Down for maintenance' } });
+    useAppStore.setState({
+      announcement: { id: 'o1', severity: 'outage', blocking: true, title: 'Down for maintenance' },
+    });
     render(<SystemNotifications />);
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
@@ -45,7 +49,9 @@ describe('SystemNotifications', () => {
   });
 
   it('dismisses a banner and remembers it', () => {
-    useAppStore.setState({ announcement: { id: 'a1', severity: 'info', blocking: false, title: 'Scheduled maintenance' } });
+    useAppStore.setState({
+      announcement: { id: 'a1', severity: 'info', blocking: false, title: 'Scheduled maintenance' },
+    });
     render(<SystemNotifications />);
     fireEvent.click(screen.getByLabelText('Dismiss'));
     expect(screen.queryByText('Scheduled maintenance')).toBeNull();
@@ -55,7 +61,13 @@ describe('SystemNotifications', () => {
   it('expires a banner once endsAt passes', () => {
     const now = Date.now();
     useAppStore.setState({
-      announcement: { id: 'e1', severity: 'info', blocking: false, title: 'Ending soon', endsAt: now + 5000 },
+      announcement: {
+        id: 'e1',
+        severity: 'info',
+        blocking: false,
+        title: 'Ending soon',
+        endsAt: now + 5000,
+      },
     });
     render(<SystemNotifications />);
     expect(screen.getByText('Ending soon')).toBeTruthy();

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getSystemAnnouncement, __resetSystemStatusCache } from './system-status.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { __resetSystemStatusCache, getSystemAnnouncement } from './system-status.js';
 
 let dir: string;
 let file: string;

@@ -1,6 +1,5 @@
+import { type Toast, useAppStore } from '@stores/app-store';
 import { useEffect } from 'react';
-
-import { useAppStore, type Toast } from '@stores/app-store';
 
 import styles from './ToastStack.module.css';
 
@@ -18,7 +17,12 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
         {toast.icon}
       </span>
       <span className={styles.text}>{toast.text}</span>
-      <button type="button" className={styles.close} aria-label="Dismiss" onClick={() => onDismiss(toast.id)}>
+      <button
+        type="button"
+        className={styles.close}
+        aria-label="Dismiss"
+        onClick={() => onDismiss(toast.id)}
+      >
         ✕
       </button>
     </div>

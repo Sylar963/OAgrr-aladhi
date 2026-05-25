@@ -1,14 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 import type { ActiveNotice } from '@lib/system-status';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import StatusBanner from './StatusBanner';
 
 const NOW = 1_700_000_000_000;
-const info: ActiveNotice = { id: 'a1', severity: 'info', title: 'Scheduled maintenance', dismissible: true };
+const info: ActiveNotice = {
+  id: 'a1',
+  severity: 'info',
+  title: 'Scheduled maintenance',
+  dismissible: true,
+};
 
 afterEach(() => cleanup());
 
@@ -22,7 +27,12 @@ describe('StatusBanner', () => {
   });
 
   it('hides the dismiss button for non-dismissible notices', () => {
-    const degraded: ActiveNotice = { id: null, severity: 'degraded', title: 'Live feed disconnected', dismissible: false };
+    const degraded: ActiveNotice = {
+      id: null,
+      severity: 'degraded',
+      title: 'Live feed disconnected',
+      dismissible: false,
+    };
     render(<StatusBanner notice={degraded} now={NOW} onDismiss={() => {}} />);
     expect(screen.queryByLabelText('Dismiss')).toBeNull();
   });
@@ -40,7 +50,12 @@ describe('StatusBanner', () => {
   });
 
   it('uses an assertive alert role for critical severities', () => {
-    const outage: ActiveNotice = { id: 'o1', severity: 'outage', title: 'Down', dismissible: false };
+    const outage: ActiveNotice = {
+      id: 'o1',
+      severity: 'outage',
+      title: 'Down',
+      dismissible: false,
+    };
     render(<StatusBanner notice={outage} now={NOW} onDismiss={() => {}} />);
     expect(screen.getByRole('alert')).toBeTruthy();
   });

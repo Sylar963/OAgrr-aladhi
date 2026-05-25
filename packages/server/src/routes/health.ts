@@ -1,13 +1,9 @@
-import type { FastifyInstance } from 'fastify';
 import { getAllAdapters, getRegisteredVenues } from '@oggregator/core';
+import type { FastifyInstance } from 'fastify';
 import { SERVER_BOOT_TIME, SERVER_VERSION } from '../app.js';
+import { getFeedHealthSnapshot, getLivenessMaxMs, isFeedLivenessStale } from '../feed-health.js';
 import { currentReadinessStatus, isTrafficReady } from '../readiness.js';
 import { getRuntimeMetricsSnapshot } from '../runtime-metrics.js';
-import {
-  getFeedHealthSnapshot,
-  getLivenessMaxMs,
-  isFeedLivenessStale,
-} from '../feed-health.js';
 import {
   blockFlowService,
   flowService,

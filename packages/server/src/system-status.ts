@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { SystemAnnouncementSchema, type SystemAnnouncement } from '@oggregator/protocol';
+import { type SystemAnnouncement, SystemAnnouncementSchema } from '@oggregator/protocol';
 
 const CACHE_TTL_MS = 5_000;
 

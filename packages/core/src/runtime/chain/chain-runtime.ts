@@ -145,6 +145,9 @@ export class ChainRuntime {
     this.log = options.log ?? { warn: () => {} };
     this.venueListener = {
       onDelta: (deltas) => {
+        // Drop ticks while no listener is attached — otherwise an idle engine
+        // keeps buffering + re-projecting for the full idle-TTL window.
+        if (this.listeners.size === 0) return;
         const firstDelta = deltas[0];
         if (firstDelta != null) {
           const lastDeltaTs = deltas.reduce((latest, delta) => Math.max(latest, delta.ts), 0);
@@ -188,8 +191,10 @@ export class ChainRuntime {
 
   subscribe(listener: ChainRuntimeListener): () => void {
     this.listeners.add(listener);
+    this.ensurePushTimer();
     return () => {
       this.listeners.delete(listener);
+      if (this.listeners.size === 0) this.pausePushTimer();
     };
   }
 
@@ -287,6 +292,15 @@ export class ChainRuntime {
     });
 
     await this.buildSnapshot();
+    // Re-projection starts only when a listener subscribes (ensurePushTimer);
+    // an engine with no consumers stays idle instead of looping every 100ms.
+  }
+
+  private ensurePushTimer(): void {
+    if (this.pushTimer != null || this.disposed || this.listeners.size === 0) return;
+    // Resuming after idle: ticks were dropped while paused, so refresh from the
+    // venue quote stores before streaming live patches.
+    void this.buildSnapshot();
     this.pushTimer = setInterval(() => {
       if (this.disposed) return;
       if (this.needsResync) {
@@ -298,6 +312,14 @@ export class ChainRuntime {
         this.pushDelta();
       }
     }, PUSH_INTERVAL_MS);
+  }
+
+  private pausePushTimer(): void {
+    if (this.pushTimer != null) {
+      clearInterval(this.pushTimer);
+      this.pushTimer = null;
+    }
+    this.pendingBySymbol.clear();
   }
 
   private async buildSnapshot(): Promise<void> {

@@ -97,6 +97,7 @@ type ChainRuntimeInternals = {
     ) => void;
   };
   pendingBySymbol: Map<string, { version: number }>;
+  listeners: Set<{ onEvent: (event: unknown) => void }>;
 };
 
 describe('ChainRuntime', () => {
@@ -204,6 +205,7 @@ describe('ChainRuntime', () => {
       };
     };
 
+    internals.listeners.add({ onEvent: () => {} });
     const build = internals.buildSnapshot();
     internals.venueListener.onDelta([
       {
@@ -219,5 +221,52 @@ describe('ChainRuntime', () => {
     await build;
 
     expect(internals.pendingBySymbol.size).toBe(1);
+  });
+
+  it('drops deltas while no listeners are attached (idle engines do not re-project)', async () => {
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    internals.venueListener.onDelta([
+      {
+        venue: 'okx',
+        symbol: 'BTC/USD:BTC-260327-70000-C',
+        ts: 2_000,
+        quote: { bid: { raw: 0.2, rawCurrency: 'BTC', usd: 300 } },
+      },
+    ]);
+
+    expect(internals.pendingBySymbol.size).toBe(0);
+    await runtime.dispose();
+  });
+
+  it('buffers deltas when a listener is attached and drops them when it detaches', async () => {
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    const unsubscribe = runtime.subscribe({ onEvent: () => {} });
+
+    const delta = {
+      venue: 'okx' as const,
+      symbol: 'BTC/USD:BTC-260327-70000-C',
+      ts: 2_000,
+      quote: { bid: { raw: 0.2, rawCurrency: 'BTC' as const, usd: 300 } },
+    };
+
+    internals.venueListener.onDelta([delta]);
+    expect(internals.pendingBySymbol.size).toBe(1);
+
+    unsubscribe();
+    expect(internals.pendingBySymbol.size).toBe(0);
+
+    await runtime.dispose();
   });
 });

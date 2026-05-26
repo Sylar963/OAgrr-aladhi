@@ -1,0 +1,157 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.74);
+  animation: fadeIn var(--transition-base);
+}
+
+.ring {
+  position: absolute;
+  border: 1.5px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 9999px rgba(10, 10, 10, 0.74);
+  transition:
+    top var(--transition-base),
+    left var(--transition-base),
+    width var(--transition-base),
+    height var(--transition-base);
+}
+
+.tooltip {
+  position: absolute;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  padding: var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-left: 2px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  pointer-events: auto;
+  animation: rise var(--transition-base);
+}
+
+.tooltipCentered {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tipTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.tipBody {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  margin: 0 0 var(--space-4);
+}
+
+.tipFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.dot,
+.dotActive {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.dotActive {
+  background: var(--accent-primary);
+}
+
+.tipActions {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+.skipBtn,
+.navBtn {
+  padding: 5px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.skipBtn {
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.skipBtn:hover {
+  color: var(--text-secondary);
+}
+
+.navBtn {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+}
+
+.navBtn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.navBtnPrimary {
+  color: var(--accent-primary);
+  background: var(--accent-primary-bg);
+  border-color: var(--accent-primary);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .ring,
+  .tooltip {
+    animation: none;
+    transition: none;
+  }
+}

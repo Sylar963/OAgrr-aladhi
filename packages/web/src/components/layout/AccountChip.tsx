@@ -304,7 +304,7 @@ export default function AccountChip() {
   };
 
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    <div className={styles.wrap} ref={wrapRef} data-tour="account">
       <button
         type="button"
         className={styles.chip}

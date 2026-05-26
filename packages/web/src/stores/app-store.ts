@@ -80,6 +80,8 @@ interface AppState {
   announcement: SystemAnnouncement | null;
   feedDegraded: boolean;
   toasts: Toast[];
+  tourActive: boolean;
+  tourStep: number;
 
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
@@ -99,6 +101,10 @@ interface AppState {
   setFeedDegraded: (degraded: boolean) => void;
   pushToast: (toast: ToastInput) => void;
   dismissToast: (id: string) => void;
+  startTour: () => void;
+  endTour: () => void;
+  nextStep: () => void;
+  prevStep: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -126,6 +132,8 @@ export const useAppStore = create<AppState>((set) => ({
   announcement: null,
   feedDegraded: false,
   toasts: [],
+  tourActive: false,
+  tourStep: 0,
 
   setUnderlying: (underlying) => set({ underlying, expiry: '' }),
   setExpiry: (expiry) => set({ expiry }),
@@ -186,6 +194,10 @@ export const useAppStore = create<AppState>((set) => ({
       };
     }),
   dismissToast: (id) => set((prev) => ({ toasts: prev.toasts.filter((t) => t.id !== id) })),
+  startTour: () => set({ tourActive: true, tourStep: 0 }),
+  endTour: () => set({ tourActive: false, tourStep: 0 }),
+  nextStep: () => set((s) => ({ tourStep: s.tourStep + 1 })),
+  prevStep: () => set((s) => ({ tourStep: Math.max(0, s.tourStep - 1) })),
   setSoundEnabled: (enabled) => {
     if (enabled) localStorage.setItem('tapeSoundEnabled', '1');
     else localStorage.removeItem('tapeSoundEnabled');

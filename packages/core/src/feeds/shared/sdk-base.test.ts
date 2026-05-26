@@ -46,8 +46,8 @@ class TestSdkAdapter extends SdkBaseAdapter {
     return [...this.instruments];
   }
 
-  override async fetchOptionChain(_request: ChainRequest): Promise<VenueOptionChain> {
-    throw new Error('not implemented');
+  override async fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
+    return super.fetchOptionChain(request);
   }
 }
 
@@ -129,6 +129,58 @@ describe('SdkBaseAdapter', () => {
     });
 
     await expect(release()).resolves.toBeUndefined();
+  });
+
+  it('maps a base request to the only alias family on that venue', async () => {
+    const adapter = new TestSdkAdapter();
+    const subscribeChain = vi
+      .spyOn(
+        adapter as unknown as { subscribeChain: (...args: unknown[]) => Promise<void> },
+        'subscribeChain',
+      )
+      .mockResolvedValue(undefined);
+
+    adapter.addInstrument({
+      ...createInstrument('AVAX_USDC-260327-9-C', 9),
+      symbol: 'AVAX/USD:USDC-260327-9-C',
+      base: 'AVAX_USDC',
+      quote: 'USD',
+      settle: 'USDC',
+    });
+
+    expect(await adapter.listExpiries('AVAX')).toEqual(['2026-03-27']);
+
+    const release = await adapter.subscribe(
+      { underlying: 'AVAX', expiry: '2026-03-27' },
+      { onDelta: vi.fn(), onStatus: vi.fn() },
+    );
+
+    expect(subscribeChain).toHaveBeenCalledWith(
+      'AVAX_USDC',
+      '2026-03-27',
+      expect.arrayContaining([expect.objectContaining({ base: 'AVAX_USDC' })]),
+    );
+
+    await release();
+  });
+
+  it('keeps sibling base and alias families separate on the same venue', async () => {
+    const adapter = new TestSdkAdapter();
+    adapter.addInstrument(createInstrument('BTC-260327-70000-C', 70_000));
+    adapter.addInstrument({
+      ...createInstrument('BTC_USDC-260327-70000-C', 70_000),
+      symbol: 'BTC/USD:USDC-260327-70000-C',
+      base: 'BTC_USDC',
+      quote: 'USD',
+      settle: 'USDC',
+    });
+
+    expect(await adapter.fetchOptionChain({ underlying: 'BTC', expiry: '2026-03-27' })).toMatchObject({
+      contracts: { 'BTC/USD:USDT-260327-70000-C': expect.any(Object) },
+    });
+    expect(await adapter.fetchOptionChain({ underlying: 'BTC_USDC', expiry: '2026-03-27' })).toMatchObject({
+      contracts: { 'BTC/USD:USDC-260327-70000-C': expect.any(Object) },
+    });
   });
 
   describe('sweepExpiredInstruments', () => {

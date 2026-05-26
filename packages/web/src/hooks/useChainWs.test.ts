@@ -127,7 +127,6 @@ function deltaMsg(subId: string, seq: number): ServerWsMessage {
     seq,
     request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
     meta: { generatedAt: Date.now(), maxQuoteTs: Date.now() - 25, staleMs: 25 },
-    deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: Date.now() }],
     patch: {
       stats: {
         forwardPriceUsd: 70500,

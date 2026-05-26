@@ -136,6 +136,14 @@ describe('computeQuoteCost', () => {
     expect(cost.fillable).toBe(false);
   });
 
+  it('treats zero top-of-book prices as unavailable', () => {
+    const v = exec({ venue: 'deribit', askPrice: 0, bidPrice: 0 });
+    const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
+    expect(cost.roundTripUsd).toBeNull();
+    expect(cost.classification).toBeNull();
+    expect(cost.fillable).toBe(false);
+  });
+
   it('classifies wide spread as excessive', () => {
     const v = exec({ venue: 'okx', bidPrice: 100, askPrice: 110, takerFee: 0 });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');

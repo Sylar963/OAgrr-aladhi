@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 
-import { getTokenLogo } from '@lib/token-meta';
+import { getTokenLogo, getUnderlyingDisplayMeta } from '@lib/token-meta';
 import { VENUE_LIST } from '@lib/venue-meta';
 import { useUnderlyings } from '@features/chain/queries';
 
@@ -46,7 +46,8 @@ export default function CommandPalette({
   }, [venueFilter, byVenue]);
 
   const filtered = underlyings.filter((u) => {
-    if (!u.toLowerCase().includes(search.toLowerCase())) return false;
+    const display = getUnderlyingDisplayMeta(u, underlyings);
+    if (!display.searchText.toLowerCase().includes(search.toLowerCase())) return false;
     if (venueUnderlyings && !venueUnderlyings.has(u)) return false;
     return true;
   });
@@ -130,6 +131,7 @@ export default function CommandPalette({
           {filtered.map((u, i) => {
             const logo = getTokenLogo(u);
             const supportedVenues = venuesByUnderlying.get(u);
+            const display = getUnderlyingDisplayMeta(u, underlyings);
             return (
               <button
                 key={u}
@@ -145,8 +147,8 @@ export default function CommandPalette({
                 <div className={styles.assetLeft}>
                   {logo && <img src={logo} alt={u} className={styles.assetLogo} />}
                   <div className={styles.assetInfo}>
-                    <span className={styles.assetSymbol}>{u}</span>
-                    <span className={styles.assetSub}>Options</span>
+                    <span className={styles.assetSymbol}>{display.label}</span>
+                    <span className={styles.assetSub}>{display.sublabel}</span>
                   </div>
                 </div>
                 <div className={styles.assetVenues}>

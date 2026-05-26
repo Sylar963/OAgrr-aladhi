@@ -112,12 +112,18 @@ export default function LegInput({ expiry, onExpiryChange }: LegInputProps) {
         <div className={styles.strikeInputWrap} ref={strikeRef}>
           <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             className={styles.legInputField}
             placeholder={atmStrike ? atmStrike.toLocaleString() : 'Strike'}
             value={strikeInput}
             onChange={(e) => {
-              setStrikeInput(e.target.value.replace(/\D/g, ''));
+              const cleaned = e.target.value.replace(/[^\d.]/g, '');
+              const firstDot = cleaned.indexOf('.');
+              const normalized =
+                firstDot === -1
+                  ? cleaned
+                  : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+              setStrikeInput(normalized);
               setShowSuggestions(true);
             }}
             onFocus={() => setShowSuggestions(true)}

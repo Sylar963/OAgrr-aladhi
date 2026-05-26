@@ -106,7 +106,7 @@ export function computeQuoteCost(
   const exitPrice = direction === 'buy' ? bidPrice : askPrice;
   const sizeAtEntry = direction === 'buy' ? askSize : bidSize;
 
-  if (entryPrice == null || exitPrice == null) {
+  if (entryPrice == null || entryPrice <= 0 || exitPrice == null || exitPrice <= 0) {
     return {
       legId,
       venue: exec.venue,

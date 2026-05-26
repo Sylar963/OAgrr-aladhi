@@ -29,6 +29,12 @@ export interface TokenMeta {
   logo: string;
 }
 
+export interface UnderlyingDisplayMeta {
+  label: string;
+  sublabel: string;
+  searchText: string;
+}
+
 const TOKEN_MAP: Record<string, TokenMeta> = {
   BTC: { symbol: 'BTC', name: 'Bitcoin', logo: btcLogo },
   ETH: { symbol: 'ETH', name: 'Ethereum', logo: ethLogo },
@@ -66,4 +72,26 @@ export function getTokenLogo(symbol: string): string | undefined {
   // Try exact match first, then extract base from "BTC_USDC" → "BTC"
   const upper = symbol.toUpperCase();
   return TOKEN_MAP[upper]?.logo ?? TOKEN_MAP[upper.split('_')[0]!]?.logo;
+}
+
+export function getUnderlyingDisplayMeta(
+  underlying: string,
+  allUnderlyings: readonly string[] = [],
+): UnderlyingDisplayMeta {
+  const upper = underlying.toUpperCase();
+  const [base, settle] = upper.split('_');
+  if (!base || !settle) {
+    return {
+      label: upper,
+      sublabel: 'Options',
+      searchText: upper,
+    };
+  }
+
+  const hasBaseSibling = allUnderlyings.some((entry) => entry.toUpperCase() === base);
+  return {
+    label: hasBaseSibling ? `${base}/${settle}` : base,
+    sublabel: `${settle}-settled options`,
+    searchText: `${upper} ${base} ${base}/${settle} ${settle}`,
+  };
 }

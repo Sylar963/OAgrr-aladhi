@@ -40,7 +40,7 @@ function buildVenueExecution(
   if (!q) return null;
   return {
     venue: venueId,
-    available: true,
+    available: (q.bid != null && q.bid > 0) || (q.ask != null && q.ask > 0),
     bidPrice: q.bid,
     askPrice: q.ask,
     markPrice: q.mid,

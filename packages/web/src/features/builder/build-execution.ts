@@ -13,12 +13,14 @@ export function contractToExecution(
   underlyingPrice: number,
 ): VenueExecution {
   const defaults = DEFAULT_FEES[contract.venue];
+  const bidPrice = contract.quote.bid.usd;
+  const askPrice = contract.quote.ask.usd;
 
   return {
     venue: contract.venue,
-    available: contract.quote.bid.usd != null || contract.quote.ask.usd != null,
-    bidPrice: contract.quote.bid.usd,
-    askPrice: contract.quote.ask.usd,
+    available: (bidPrice != null && bidPrice > 0) || (askPrice != null && askPrice > 0),
+    bidPrice,
+    askPrice,
     markPrice: contract.quote.mark.usd,
     bidSize: contract.quote.bidSize,
     askSize: contract.quote.askSize,

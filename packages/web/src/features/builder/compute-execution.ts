@@ -11,7 +11,7 @@ export function computeExecutionCost(
   const oppositePrice = orderSide === 'buy' ? venue.bidPrice : venue.askPrice;
   const sizeAtPrice = orderSide === 'buy' ? venue.askSize : venue.bidSize;
 
-  if (price == null) return null;
+  if (price == null || price <= 0) return null;
 
   // Prices are already in USD — core normalization handles inverse conversion
   const priceUsd = price;

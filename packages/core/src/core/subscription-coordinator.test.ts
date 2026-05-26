@@ -127,6 +127,61 @@ describe('VenueSubscriptionCoordinator', () => {
     await feb.release();
   });
 
+  it('routes alias-family deltas to the matching alias request only', async () => {
+    const adapter = new MockAdapter();
+    const coordinator = createCoordinator(adapter);
+    const baseDelta = vi.fn<(deltas: VenueDelta[]) => void>();
+    const aliasDelta = vi.fn<(deltas: VenueDelta[]) => void>();
+
+    const base = await coordinator.acquire(
+      'deribit',
+      { underlying: 'BTC', expiry: '2026-01-01' },
+      { onDelta: baseDelta },
+    );
+    const alias = await coordinator.acquire(
+      'deribit',
+      { underlying: 'BTC_USDC', expiry: '2026-01-01' },
+      { onDelta: aliasDelta },
+    );
+
+    adapter.handlers[0]?.onDelta([
+      { venue: 'deribit', symbol: 'BTC/USD:USDC-260101-100-C', ts: 1 },
+      { venue: 'deribit', symbol: 'BTC/USD:BTC-260101-100-C', ts: 2 },
+    ]);
+
+    expect(aliasDelta).toHaveBeenCalledWith([
+      { venue: 'deribit', symbol: 'BTC/USD:USDC-260101-100-C', ts: 1 },
+    ]);
+    expect(baseDelta).toHaveBeenCalledWith([
+      { venue: 'deribit', symbol: 'BTC/USD:BTC-260101-100-C', ts: 2 },
+    ]);
+
+    await base.release();
+    await alias.release();
+  });
+
+  it('lets a base request consume alias-family deltas when no specific alias request exists', async () => {
+    const adapter = new MockAdapter();
+    const coordinator = createCoordinator(adapter);
+    const onDelta = vi.fn<(deltas: VenueDelta[]) => void>();
+
+    const handle = await coordinator.acquire(
+      'deribit',
+      { underlying: 'AVAX', expiry: '2026-01-01' },
+      { onDelta },
+    );
+
+    adapter.handlers[0]?.onDelta([
+      { venue: 'deribit', symbol: 'AVAX/USD:USDC-260101-10-C', ts: 1 },
+    ]);
+
+    expect(onDelta).toHaveBeenCalledWith([
+      { venue: 'deribit', symbol: 'AVAX/USD:USDC-260101-10-C', ts: 1 },
+    ]);
+
+    await handle.release();
+  });
+
   it('broadcasts venue status to all active listeners on the venue', async () => {
     const adapter = new MockAdapter();
     const coordinator = createCoordinator(adapter);

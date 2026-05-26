@@ -33,6 +33,11 @@ const FEE_CAP: Record<VenueId, number> = {
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 
+function splitUnderlyingFamily(underlying: string): { base: string; settle: string | null } {
+  const [base, settle] = underlying.split('_');
+  return { base: base ?? underlying, settle: settle ?? null };
+}
+
 interface FeedConnectionSnapshot {
   connected: boolean;
   lastActivityAt: number;
@@ -161,10 +166,39 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return [...new Set(this.instruments.map((i) => i.base))].sort();
   }
 
+  private matchesRequestedUnderlying(requestUnderlying: string, instrumentBase: string): boolean {
+    if (requestUnderlying === instrumentBase) return true;
+
+    const request = splitUnderlyingFamily(requestUnderlying);
+    if (request.settle != null) return false;
+
+    const instrument = splitUnderlyingFamily(instrumentBase);
+    if (request.base !== instrument.base) return false;
+    if (this.instruments.some((entry) => entry.base === request.base)) return false;
+
+    const aliasBases = new Set(
+      this.instruments
+        .filter((entry) => splitUnderlyingFamily(entry.base).base === request.base)
+        .map((entry) => entry.base),
+    );
+    return aliasBases.size === 1 && aliasBases.has(instrumentBase);
+  }
+
+  private matchingInstruments(underlying: string, expiry: string): CachedInstrument[] {
+    return this.instruments.filter(
+      (instrument) =>
+        this.matchesRequestedUnderlying(underlying, instrument.base) && instrument.expiry === expiry,
+    );
+  }
+
+  private matchingEffectiveUnderlying(underlying: string, matching: CachedInstrument[]): string {
+    return matching[0]?.base ?? underlying;
+  }
+
   override async listExpiries(underlying: string): Promise<string[]> {
     const expiries = new Set<string>();
     for (const inst of this.instruments) {
-      if (inst.base === underlying) expiries.add(inst.expiry);
+      if (this.matchesRequestedUnderlying(underlying, inst.base)) expiries.add(inst.expiry);
     }
     return [...expiries].sort();
   }
@@ -174,7 +208,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   ): Promise<Array<{ expiry: string; expiryTs: number | null }>> {
     const byExpiry = new Map<string, number | null>();
     for (const inst of this.instruments) {
-      if (inst.base !== underlying) continue;
+      if (!this.matchesRequestedUnderlying(underlying, inst.base)) continue;
       const ts = inst.expirationTimestamp ?? null;
       const prev = byExpiry.get(inst.expiry);
       if (prev === undefined) {
@@ -189,9 +223,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   override fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
-    const matching = this.instruments.filter(
-      (i) => i.base === request.underlying && i.expiry === request.expiry,
-    );
+    const matching = this.matchingInstruments(request.underlying, request.expiry);
     const contracts: Record<string, NormalizedOptionContract> = {};
 
     for (const inst of matching) {
@@ -209,10 +241,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   async subscribe(request: ChainRequest, handlers: StreamHandlers): Promise<() => Promise<void>> {
-    const matching = this.instruments.filter(
-      (i) => i.base === request.underlying && i.expiry === request.expiry,
-    );
-    const key = `${request.underlying}:${request.expiry}`;
+    const matching = this.matchingInstruments(request.underlying, request.expiry);
+    const effectiveUnderlying = this.matchingEffectiveUnderlying(request.underlying, matching);
+    const key = `${effectiveUnderlying}:${request.expiry}`;
 
     if (matching.length === 0) {
       handlers.onStatus({
@@ -235,7 +266,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const requestRefCount = this.requestRefCounts.get(key) ?? 0;
     this.requestRefCounts.set(key, requestRefCount + 1);
     if (requestRefCount === 0) {
-      await this.subscribeChain(request.underlying, request.expiry, matching);
+      await this.subscribeChain(effectiveUnderlying, request.expiry, matching);
     }
 
     let released = false;
@@ -255,7 +286,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       const nextRequestRefCount = (this.requestRefCounts.get(key) ?? 1) - 1;
       if (nextRequestRefCount <= 0) {
         this.requestRefCounts.delete(key);
-        await this.unsubscribeChain(request.underlying, request.expiry, matching);
+        await this.unsubscribeChain(effectiveUnderlying, request.expiry, matching);
         return;
       }
 

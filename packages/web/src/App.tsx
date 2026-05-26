@@ -48,6 +48,11 @@ export default function App() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   useEffect(() => {
     if (underlyings.length > 0 && !underlyings.includes(underlying)) {
+      const baseFallback = underlying.split('_')[0];
+      if (baseFallback && underlyings.includes(baseFallback)) {
+        setUnderlying(baseFallback);
+        return;
+      }
       setUnderlying(underlyings[0]!);
     }
   }, [underlyings, underlying, setUnderlying]);

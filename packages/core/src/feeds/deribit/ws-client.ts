@@ -56,6 +56,7 @@ const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 const EAGER_TICKER_INTERVAL = 'agg2';
 const ACTIVE_TICKER_INTERVAL = '100ms';
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+const DERIBIT_PUBLIC_STATUS_TIMEOUT_MS = 15_000;
 const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
 const DERIBIT_CHAIN_STALE_LOG_MS = 15_000;
 const DERIBIT_CHAIN_SAMPLE_SIZE = 5;
@@ -74,6 +75,10 @@ const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
 const INSTRUMENT_STATE_COALESCE_MS = 1_000;
 const INSTRUMENT_STATE_FETCH_CONCURRENCY = 8;
 const INSTRUMENT_STATE_FETCH_CHUNK_DELAY_MS = 250;
+
+function isDeribitPublicStatusTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('public/status timed out');
+}
 
 /** Regex for Deribit instrument names, supporting decimal strikes (e.g. 420d5 → 420.5). */
 const INSTRUMENT_RE = /^(\w+)-(\w+)-(\d+(?:d\d+)?)-([CP])$/;
@@ -112,6 +117,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly health = createDeribitHealthState();
   private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
   private subscribedTickerStaleSince = 0;
+  private publicStatusRefreshPromise: Promise<void> | null = null;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -813,15 +819,35 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   private async refreshPublicStatus(): Promise<void> {
-    try {
-      const raw: unknown = await this.rpc.call('public/status', {});
-      const parsed = parseDeribitPublicStatus(raw);
-      const health = deriveDeribitPublicStatusHealth(this.health, parsed);
-      this.emitStatus(health.status, health.message);
-    } catch (error: unknown) {
-      const health = deriveDeribitPublicStatusHealth(this.health, null, error);
-      this.emitStatus(health.status, health.message);
+    if (this.publicStatusRefreshPromise != null) {
+      await this.publicStatusRefreshPromise;
+      return;
     }
+
+    this.publicStatusRefreshPromise = (async () => {
+      try {
+        const raw: unknown = await this.rpc.call(
+          'public/status',
+          {},
+          DERIBIT_PUBLIC_STATUS_TIMEOUT_MS,
+        );
+        const parsed = parseDeribitPublicStatus(raw);
+        const health = deriveDeribitPublicStatusHealth(this.health, parsed);
+        this.emitStatus(health.status, health.message);
+      } catch (error: unknown) {
+        const health = deriveDeribitPublicStatusHealth(this.health, null, error);
+        this.emitStatus(health.status, health.message);
+
+        if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
+          this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
+          this.rpc.terminate();
+        }
+      }
+    })().finally(() => {
+      this.publicStatusRefreshPromise = null;
+    });
+
+    await this.publicStatusRefreshPromise;
   }
 
   private handlePlatformState(data: unknown): void {
@@ -916,6 +942,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.publicStatusRefreshPromise = null;
     if (this.instrumentStateFlushTimer != null) {
       clearTimeout(this.instrumentStateFlushTimer);
       this.instrumentStateFlushTimer = null;

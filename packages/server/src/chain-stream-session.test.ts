@@ -174,4 +174,36 @@ describe('ChainStreamSession', () => {
     expect(socket.send).toHaveBeenCalledTimes(3);
     expect(JSON.parse(socket.send.mock.calls[1]![0])).toMatchObject({ type: 'snapshot', seq: 2 });
   });
+
+  it('suppresses duplicate stale status logs when only elapsed time changes', async () => {
+    let listener: { onEvent(event: ChainRuntimeEvent): void } | null = null;
+    subscribeMock.mockImplementation(
+      (nextListener: { onEvent(event: ChainRuntimeEvent): void }) => {
+        listener = nextListener;
+        return vi.fn();
+      },
+    );
+
+    const socket = {
+      readyState: 1,
+      bufferedAmount: 0,
+      send: vi.fn(),
+      close: vi.fn(),
+    };
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    const session = new ChainStreamSession(socket, 'sub-1', makeRequest(), log);
+    await session.subscribe();
+
+    listener?.onEvent({
+      type: 'status',
+      status: { venue: 'deribit', state: 'degraded', ts: 1, message: 'stale for 1000ms' },
+    });
+    listener?.onEvent({
+      type: 'status',
+      status: { venue: 'deribit', state: 'degraded', ts: 2, message: 'stale for 2000ms' },
+    });
+
+    expect(log.warn).toHaveBeenCalledTimes(1);
+  });
 });

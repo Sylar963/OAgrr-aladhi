@@ -37,6 +37,7 @@ const log = feedLogger('trade-runtime');
 // every 20-180s per venue, a 5-minute gap is unambiguous zombie state.
 const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
+const WATCHDOG_TERMINATE_JITTER_MS = 5_000;
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
 
 function isRateLimitSignal(error: unknown): boolean {
@@ -53,6 +54,7 @@ export class TradeRuntime {
   private connections = new Map<string, WebSocket>();
   private keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private watchdogTerminateTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private rateLimitCooldownUntil = new Map<string, number>();
   private reseedTimers = new Map<string, ReturnType<typeof setInterval>>();
   private subscribedUnderlyingsByConnection = new Map<string, Set<string>>();
@@ -165,6 +167,8 @@ export class TradeRuntime {
       }
 
       if (worstStaleMs >= STALENESS_THRESHOLD_MS && worstUnderlying != null) {
+        if (this.watchdogTerminateTimers.has(connectionKey)) continue;
+        const delayMs = Math.floor(Math.random() * WATCHDOG_TERMINATE_JITTER_MS);
         log.error(
           {
             venue,
@@ -172,10 +176,24 @@ export class TradeRuntime {
             connectionKey,
             staleMs: worstStaleMs,
             thresholdMs: STALENESS_THRESHOLD_MS,
+            delayMs,
           },
           'trade stream stale, forcing reconnect',
         );
-        ws.terminate();
+        const timer = setTimeout(() => {
+          this.watchdogTerminateTimers.delete(connectionKey);
+          if (!this.shouldReconnect) return;
+          if (this.connections.get(connectionKey) !== ws) return;
+          ws.terminate();
+        }, delayMs);
+        this.watchdogTerminateTimers.set(connectionKey, timer);
+        continue;
+      }
+
+      const pendingTimer = this.watchdogTerminateTimers.get(connectionKey);
+      if (pendingTimer != null) {
+        clearTimeout(pendingTimer);
+        this.watchdogTerminateTimers.delete(connectionKey);
       }
     }
   }
@@ -270,6 +288,11 @@ export class TradeRuntime {
 
       didOpen = true;
       openedAt = Date.now();
+      const watchdogTimer = this.watchdogTerminateTimers.get(key);
+      if (watchdogTimer != null) {
+        clearTimeout(watchdogTimer);
+        this.watchdogTerminateTimers.delete(key);
+      }
       this.rateLimitCooldownUntil.delete(key);
       this.updateStreamStates(stream.venue, subscribedUnderlyings, {
         connected: true,
@@ -312,6 +335,11 @@ export class TradeRuntime {
     ws.on('close', (code: number, reason: Buffer) => {
       if (this.connections.get(key) !== ws) return;
 
+      const watchdogTimer = this.watchdogTerminateTimers.get(key);
+      if (watchdogTimer != null) {
+        clearTimeout(watchdogTimer);
+        this.watchdogTerminateTimers.delete(key);
+      }
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
       log.warn(
@@ -462,6 +490,8 @@ export class TradeRuntime {
     }
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
+    for (const timer of this.watchdogTerminateTimers.values()) clearTimeout(timer);
+    this.watchdogTerminateTimers.clear();
     for (const timer of this.keepaliveTimers.values()) clearInterval(timer);
     this.keepaliveTimers.clear();
     for (const timer of this.reseedTimers.values()) clearInterval(timer);

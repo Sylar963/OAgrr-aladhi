@@ -126,8 +126,19 @@ describe('ServerWsMessageSchema', () => {
       seq: 6,
       request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
       meta: { generatedAt: 1001, maxQuoteTs: 1000, staleMs: 1 },
-      deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: 1000 }],
       patch: { stats, strikes: [], gex: [] },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts delta patches without gex', () => {
+    const result = ServerWsMessageSchema.safeParse({
+      type: 'delta',
+      subscriptionId: 'sub-1',
+      seq: 6,
+      request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+      meta: { generatedAt: 1001, maxQuoteTs: 1000, staleMs: 1 },
+      patch: { stats, strikes: [] },
     });
     expect(result.success).toBe(true);
   });

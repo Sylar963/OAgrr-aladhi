@@ -20,8 +20,16 @@ function classifySource(status: VenueStatus): 'transport' | 'health' {
   return status.message != null ? 'health' : 'transport';
 }
 
+function normalizeStatusMessage(message?: string): string {
+  if (message == null) return '';
+  return message
+    .replace(/stale for \d+ms/g, 'stale for <ms>')
+    .replace(/\b\d+ms\b/g, '<ms>')
+    .replace(/\b\d+s\b/g, '<s>');
+}
+
 function sameStatus(left: VenueStatus | null, right: VenueStatus): boolean {
-  return left?.state === right.state && left?.message === right.message;
+  return left?.state === right.state && normalizeStatusMessage(left?.message) === normalizeStatusMessage(right.message);
 }
 
 const STALE_AFTER_MS = 3 * 60 * 1000;

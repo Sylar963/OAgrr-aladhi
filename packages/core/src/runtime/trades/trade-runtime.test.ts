@@ -205,6 +205,52 @@ describe('TradeRuntime — reconnect backoff resets after healthy open', () => {
   });
 });
 
+describe('TradeRuntime — watchdog reconnect jitter', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('schedules stale stream termination instead of closing inline', async () => {
+    const runtime = new TradeRuntime();
+    const terminate = vi.fn();
+
+    const runtimeAny = runtime as unknown as {
+      shouldReconnect: boolean;
+      connections: Map<
+        string,
+        { terminate: () => void; close: () => void; removeAllListeners: () => void }
+      >;
+      subscribedUnderlyingsByConnection: Map<string, Set<string>>;
+      streamState: Map<string, { connected: boolean; lastMessageAt: number | null }>;
+      checkStreamLiveness(): void;
+    };
+
+    runtimeAny.shouldReconnect = true;
+    runtimeAny.connections.set('okx:BTC', {
+      terminate,
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    });
+    runtimeAny.subscribedUnderlyingsByConnection.set('okx:BTC', new Set(['BTC']));
+    runtimeAny.streamState.set('okx:BTC', {
+      connected: true,
+      lastMessageAt: Date.now() - 5 * 60 * 1000 - 1,
+    });
+
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    runtimeAny.checkStreamLiveness();
+    expect(terminate).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(terminate).toHaveBeenCalledTimes(1);
+
+    runtime.dispose();
+  });
+});
+
 describe('TradeRuntime — start() resolves before seeding finishes', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

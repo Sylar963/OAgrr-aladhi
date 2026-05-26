@@ -171,8 +171,8 @@ export class ChainRuntime {
       },
       onStatus: (status) => {
         if (this.disposed) return;
-        const effective =
-          this.venueHealth.ingest(status) ?? this.venueHealth.get(status.venue) ?? status;
+        const effective = this.venueHealth.ingest(status);
+        if (effective == null) return;
         this.broadcast({ type: 'status', status: effective });
       },
     };

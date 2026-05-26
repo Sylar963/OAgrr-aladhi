@@ -302,7 +302,7 @@ export const VenueDeltaSchema = z.object({
 export const DeltaPatchSchema = z.object({
   stats: ChainStatsSchema,
   strikes: z.array(EnrichedStrikeSchema),
-  gex: z.array(GexStrikeSchema),
+  gex: z.array(GexStrikeSchema).optional(),
 });
 
 export const ServerWsMessageSchema = z.discriminatedUnion('type', [
@@ -327,7 +327,6 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
     seq: z.number(),
     request: WsSubscriptionRequestSchema,
     meta: SnapshotMetaSchema,
-    deltas: z.array(VenueDeltaSchema),
     patch: DeltaPatchSchema,
   }),
   z.object({

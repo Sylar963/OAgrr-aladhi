@@ -54,6 +54,25 @@ describe('VenueHealthManager', () => {
     expect(second).toBeNull();
   });
 
+  it('suppresses duplicate stale states when only elapsed time changes', () => {
+    const manager = new VenueHealthManager();
+    const first = manager.ingest({
+      venue: 'binance',
+      state: 'degraded',
+      ts: 1,
+      message: 'stale for 180001ms',
+    });
+    const second = manager.ingest({
+      venue: 'binance',
+      state: 'degraded',
+      ts: 2,
+      message: 'stale for 180002ms',
+    });
+
+    expect(first?.message).toBe('stale for 180001ms');
+    expect(second).toBeNull();
+  });
+
   it('degrades stale venues when no status or activity arrives for too long', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

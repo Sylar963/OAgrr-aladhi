@@ -248,11 +248,15 @@ export class JsonRpcWsClient {
 
   // ─── JSON-RPC request/response ────────────────────────────────
 
-  async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  async call(
+    method: string,
+    params: Record<string, unknown> = {},
+    timeoutOverrideMs?: number,
+  ): Promise<unknown> {
     if (!this.isConnected) throw new Error(`[${this.label}] not connected`);
 
     const id = this.nextId++;
-    const timeout = this.options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const timeout = timeoutOverrideMs ?? this.options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

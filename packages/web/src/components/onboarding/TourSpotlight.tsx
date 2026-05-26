@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react';
-
 import { useIsMobile } from '@hooks/useIsMobile';
 import { useAppStore } from '@stores/app-store';
-
-import { TOUR_STEPS } from './tour-steps';
+import { useEffect, useState } from 'react';
 import styles from './TourSpotlight.module.css';
+import { TOUR_STEPS } from './tour-steps';
 
 const TOOLTIP_WIDTH = 280;
 const GAP = 12;
@@ -84,7 +82,11 @@ export default function TourSpotlight() {
         <div className={styles.tipFooter}>
           <span className={styles.dots} aria-label={`Step ${tourStep + 1} of ${TOUR_STEPS.length}`}>
             {TOUR_STEPS.map((s, i) => (
-              <span key={s.title} className={i === tourStep ? styles.dotActive : styles.dot} aria-hidden="true" />
+              <span
+                key={s.title}
+                className={i === tourStep ? styles.dotActive : styles.dot}
+                aria-hidden="true"
+              />
             ))}
           </span>
           <span className={styles.tipActions}>

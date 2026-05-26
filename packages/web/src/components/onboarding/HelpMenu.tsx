@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef, useState } from 'react';
 
 import styles from './HelpMenu.module.css';
 

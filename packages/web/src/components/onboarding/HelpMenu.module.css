@@ -20,7 +20,7 @@
 }
 
 .qbtn:hover,
-.qbtn[aria-expanded='true'] {
+.qbtn[aria-expanded="true"] {
   color: var(--accent-primary);
   border-color: var(--accent-primary);
 }

@@ -1,11 +1,11 @@
-import { useAppStore } from '@stores/app-store';
+import { HelpMenu } from '@components/onboarding';
 
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
+import { useAppStore } from '@stores/app-store';
 import AccountChip from './AccountChip';
 import FreshnessLabel from './FreshnessLabel';
-import VenueStatusRow from './VenueStatusRow';
-import { HelpMenu } from '@components/onboarding';
 import styles from './TopBar.module.css';
+import VenueStatusRow from './VenueStatusRow';
 
 interface Tab {
   id: string;

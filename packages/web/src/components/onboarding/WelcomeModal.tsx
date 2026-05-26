@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-
 import { useIsMobile } from '@hooks/useIsMobile';
 import { hasSeenOnboarding, markOnboardingSeen } from '@lib/onboarding';
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef, useState } from 'react';
 
 import styles from './WelcomeModal.module.css';
 

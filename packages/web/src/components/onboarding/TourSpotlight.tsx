@@ -5,6 +5,8 @@ import styles from './TourSpotlight.module.css';
 import { TOUR_STEPS } from './tour-steps';
 
 const TOOLTIP_WIDTH = 280;
+// Upper-bound estimate of tooltip height; used to keep it clear of the bottom edge.
+const TOOLTIP_MAX_HEIGHT = 200;
 const GAP = 12;
 
 export default function TourSpotlight() {
@@ -59,7 +61,7 @@ export default function TourSpotlight() {
   const tooltipStyle = centered
     ? undefined
     : {
-        top: Math.min(rect.bottom + GAP, window.innerHeight - GAP),
+        top: Math.min(rect.bottom + GAP, window.innerHeight - TOOLTIP_MAX_HEIGHT - GAP),
         left: Math.max(GAP, Math.min(rect.left, window.innerWidth - TOOLTIP_WIDTH - GAP)),
       };
 

@@ -13,7 +13,7 @@
 **Branch:** `feat/onboarding-tour` (already created off `main`).
 
 **Convention:** Every commit message ends with the trailer:
-```
+```text
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
 

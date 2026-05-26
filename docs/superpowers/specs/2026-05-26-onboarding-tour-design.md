@@ -1,7 +1,7 @@
 # Onboarding — Welcome Modal + Guided Tour — Design
 
 **Date:** 2026-05-26
-**Status:** Approved (design); pending implementation plan
+**Status:** Approved (design); implementation plan included
 **Branch:** `feat/onboarding-tour` (off `main`; workstream ① system-status already merged via PR #13)
 **Scope:** Workstream ② of "formalize the app" — intros & tutorials. System Status & Announcements (workstream ①) shipped separately and is **not** revisited here.
 
@@ -38,7 +38,7 @@ Any task that appears to require a WS-layer, server, or protocol change is out o
 
 ## 4. Experience flow
 
-```
+```text
 First visit (no localStorage flag)
   └─► WelcomeModal (auto)
         ├─ "Take the tour"  ─► startTour()            (desktop only; hidden < 768px)

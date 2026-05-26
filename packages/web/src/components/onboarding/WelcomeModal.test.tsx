@@ -1,4 +1,3 @@
-// packages/web/src/components/onboarding/WelcomeModal.test.tsx
 /**
  * @vitest-environment jsdom
  */

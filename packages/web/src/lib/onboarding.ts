@@ -1,5 +1,3 @@
-// packages/web/src/lib/onboarding.ts
-
 const ONBOARDING_SEEN_KEY = 'onboardingSeen';
 
 export function hasSeenOnboarding(): boolean {

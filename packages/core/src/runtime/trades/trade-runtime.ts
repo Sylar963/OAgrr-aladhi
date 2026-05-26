@@ -39,10 +39,20 @@ const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
 const WATCHDOG_TERMINATE_JITTER_MS = 5_000;
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
+const IDLE_UNDERLYING_TTL_MS = 30 * 1000;
+const SEED_PUSH_BATCH_SIZE = 250;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function isRateLimitSignal(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
+
+function sharedConnectionKey(venue: VenueId): string {
+  return `${venue}:shared`;
 }
 
 /**
@@ -58,60 +68,198 @@ export class TradeRuntime {
   private rateLimitCooldownUntil = new Map<string, number>();
   private reseedTimers = new Map<string, ReturnType<typeof setInterval>>();
   private subscribedUnderlyingsByConnection = new Map<string, Set<string>>();
+  private activeUnderlyings = new Set<string>();
+  private alwaysOnUnderlyings = new Set<string>();
+  private underlyingLeaseCounts = new Map<string, number>();
+  private idleUnderlyingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private ensureUnderlyingPromises = new Map<string, Promise<void>>();
+  private seedPromises = new Map<string, Promise<void>>();
   private listeners = new Set<(trade: TradeEvent) => void>();
   private streamState = new Map<string, TradeStreamState>();
   private shouldReconnect = true;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private stopEventLoopMonitor: (() => void) | null = null;
+  private started = false;
 
   async start(underlyings: string[] = ['BTC', 'ETH']): Promise<void> {
-    // Open live WS connections first so callers can serve /flow without waiting for REST seeds.
-    for (const underlying of underlyings) {
-      this.buffers.set(underlying, []);
-      for (const stream of VENUE_STREAMS) {
-        this.streamState.set(this.streamKey(stream.venue, underlying), createTradeStreamState());
+    this.ensureRuntimeStarted();
 
-        if (stream.venue === 'deribit' && getDeribitTradeCurrency(underlying) == null) {
-          continue;
-        }
-        if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) {
-          logCoincallFilteredAtStartup(underlying);
-          continue;
-        }
-        if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) {
-          continue;
-        }
+    const normalizedUnderlyings = [...new Set(underlyings.map((underlying) => normalizeTradeUnderlying(underlying)))];
+    normalizedUnderlyings.forEach((underlying) => this.alwaysOnUnderlyings.add(underlying));
+    await Promise.all(normalizedUnderlyings.map((underlying) => this.ensureUnderlying(underlying)));
+  }
 
-        this.registerConnectionUnderlying(stream, underlying);
-        this.connectStream(stream, underlying);
-      }
-    }
+  async acquire(underlying: string): Promise<() => void> {
+    const normalizedUnderlying = normalizeTradeUnderlying(underlying);
+    this.ensureRuntimeStarted();
+    this.clearIdleUnderlyingTimer(normalizedUnderlying);
+    this.underlyingLeaseCounts.set(
+      normalizedUnderlying,
+      (this.underlyingLeaseCounts.get(normalizedUnderlying) ?? 0) + 1,
+    );
+    await this.ensureUnderlying(normalizedUnderlying);
 
-    // Seed recent trades in the background. Slow REST venues must not delay live flow availability.
-    void Promise.allSettled(underlyings.map((u) => this.seedFromRest(u)));
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.releaseUnderlying(normalizedUnderlying);
+    };
+  }
 
-    this.startReseedTimers(underlyings);
-
+  private ensureRuntimeStarted(): void {
+    if (this.started) return;
+    this.started = true;
     this.watchdogTimer = setInterval(() => this.checkStreamLiveness(), WATCHDOG_INTERVAL_MS);
     this.stopEventLoopMonitor = startEventLoopLagMonitor();
   }
 
-  private startReseedTimers(underlyings: string[]): void {
+  private async ensureUnderlying(underlying: string): Promise<void> {
+    const normalizedUnderlying = normalizeTradeUnderlying(underlying);
+    const inFlight = this.ensureUnderlyingPromises.get(normalizedUnderlying);
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    const ensurePromise = (async () => {
+      if (this.activeUnderlyings.has(normalizedUnderlying)) return;
+
+      this.activeUnderlyings.add(normalizedUnderlying);
+      this.buffers.set(normalizedUnderlying, this.buffers.get(normalizedUnderlying) ?? []);
+
+      for (const stream of VENUE_STREAMS) {
+        if (!this.supportsUnderlying(stream, normalizedUnderlying)) continue;
+        this.streamState.set(
+          this.streamKey(stream.venue, normalizedUnderlying),
+          this.streamState.get(this.streamKey(stream.venue, normalizedUnderlying)) ?? createTradeStreamState(),
+        );
+
+        const connectionKey = this.connectionKey(stream, normalizedUnderlying);
+        const alreadyRegistered =
+          this.subscribedUnderlyingsByConnection.get(connectionKey)?.has(normalizedUnderlying) ?? false;
+
+        this.registerConnectionUnderlying(stream, normalizedUnderlying);
+
+        const ws = this.connections.get(connectionKey);
+        if (ws != null && ws.readyState === WebSocket.OPEN && alreadyRegistered) continue;
+
+        if (ws != null && ws.readyState === WebSocket.CONNECTING) continue;
+
+        if (ws != null && ws.readyState === WebSocket.OPEN && stream.subscribe != null) {
+          stream.subscribe(ws, [normalizedUnderlying]);
+          continue;
+        }
+
+        if (ws != null) {
+          this.restartConnection(stream, normalizedUnderlying);
+          continue;
+        }
+
+        this.connectStream(stream, normalizedUnderlying);
+      }
+
+      this.startReseedTimersForUnderlying(normalizedUnderlying);
+      this.seedUnderlying(normalizedUnderlying);
+    })();
+
+    this.ensureUnderlyingPromises.set(normalizedUnderlying, ensurePromise);
+    try {
+      await ensurePromise;
+    } finally {
+      if (this.ensureUnderlyingPromises.get(normalizedUnderlying) === ensurePromise) {
+        this.ensureUnderlyingPromises.delete(normalizedUnderlying);
+      }
+    }
+  }
+
+  private seedUnderlying(underlying: string): void {
+    if (this.seedPromises.has(underlying)) return;
+    const seedPromise = this.seedFromRest(underlying).finally(() => {
+      if (this.seedPromises.get(underlying) === seedPromise) {
+        this.seedPromises.delete(underlying);
+      }
+    });
+    this.seedPromises.set(underlying, seedPromise);
+    void seedPromise;
+  }
+
+  private startReseedTimersForUnderlying(underlying: string): void {
     for (const stream of VENUE_STREAMS) {
       if (stream.seed == null || stream.reseedIntervalMs == null) continue;
-      for (const underlying of underlyings) {
-        if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) continue;
-        if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) continue;
-        if (stream.venue === 'deribit' && getDeribitTradeCurrency(underlying) == null) continue;
+      if (!this.supportsUnderlying(stream, underlying)) continue;
 
-        const key = this.streamKey(stream.venue, underlying);
-        if (this.reseedTimers.has(key)) continue;
+      const key = this.streamKey(stream.venue, underlying);
+      if (this.reseedTimers.has(key)) continue;
 
-        const timer = setInterval(() => {
-          void this.runVenueReseed(stream, underlying);
-        }, stream.reseedIntervalMs);
-        this.reseedTimers.set(key, timer);
+      const timer = setInterval(() => {
+        void this.runVenueReseed(stream, underlying);
+      }, stream.reseedIntervalMs);
+      this.reseedTimers.set(key, timer);
+    }
+  }
+
+  private stopReseedTimersForUnderlying(underlying: string): void {
+    for (const stream of VENUE_STREAMS) {
+      const key = this.streamKey(stream.venue, underlying);
+      const timer = this.reseedTimers.get(key);
+      if (timer == null) continue;
+      clearInterval(timer);
+      this.reseedTimers.delete(key);
+    }
+  }
+
+  private releaseUnderlying(underlying: string): void {
+    const current = this.underlyingLeaseCounts.get(underlying) ?? 0;
+    if (current <= 1) this.underlyingLeaseCounts.delete(underlying);
+    else this.underlyingLeaseCounts.set(underlying, current - 1);
+
+    if (this.alwaysOnUnderlyings.has(underlying)) return;
+    if ((this.underlyingLeaseCounts.get(underlying) ?? 0) > 0) return;
+    this.scheduleIdleUnderlyingRelease(underlying);
+  }
+
+  private scheduleIdleUnderlyingRelease(underlying: string): void {
+    this.clearIdleUnderlyingTimer(underlying);
+    const timer = setTimeout(() => {
+      this.idleUnderlyingTimers.delete(underlying);
+      void this.deactivateUnderlying(underlying);
+    }, IDLE_UNDERLYING_TTL_MS);
+    this.idleUnderlyingTimers.set(underlying, timer);
+  }
+
+  private clearIdleUnderlyingTimer(underlying: string): void {
+    const timer = this.idleUnderlyingTimers.get(underlying);
+    if (timer == null) return;
+    clearTimeout(timer);
+    this.idleUnderlyingTimers.delete(underlying);
+  }
+
+  private async deactivateUnderlying(underlying: string): Promise<void> {
+    if (this.alwaysOnUnderlyings.has(underlying)) return;
+    if ((this.underlyingLeaseCounts.get(underlying) ?? 0) > 0) return;
+    if (!this.activeUnderlyings.delete(underlying)) return;
+
+    this.stopReseedTimersForUnderlying(underlying);
+    this.buffers.delete(underlying);
+    this.streamState.forEach((_, key) => {
+      if (key.endsWith(`:${underlying}`)) this.streamState.delete(key);
+    });
+
+    for (const stream of VENUE_STREAMS) {
+      if (!this.supportsUnderlying(stream, underlying)) continue;
+      const connectionKey = this.connectionKey(stream, underlying);
+      const subscribed = this.subscribedUnderlyingsByConnection.get(connectionKey);
+      if (subscribed == null || !subscribed.delete(underlying)) continue;
+
+      if (subscribed.size === 0) {
+        this.subscribedUnderlyingsByConnection.delete(connectionKey);
+        this.closeConnection(connectionKey);
+        continue;
       }
+
+      this.subscribedUnderlyingsByConnection.set(connectionKey, subscribed);
+      this.restartConnection(stream, [...subscribed][0]!);
     }
   }
 
@@ -124,7 +272,7 @@ export class TradeRuntime {
         seedTrades: trades.length,
         lastStatusAt: Date.now(),
       });
-      this.pushTrades(underlying, trades);
+      await this.pushTradesBatched(underlying, trades);
       log.info(
         { venue: stream.venue, underlying, count: trades.length },
         'venue reseed completed',
@@ -199,7 +347,9 @@ export class TradeRuntime {
   }
 
   private async seedFromRest(underlying: string): Promise<void> {
-    const seedStreams = VENUE_STREAMS.filter((stream) => stream.seed != null);
+    const seedStreams = VENUE_STREAMS.filter(
+      (stream) => stream.seed != null && this.supportsUnderlying(stream, underlying),
+    );
     const results = await Promise.allSettled(seedStreams.map((stream) => stream.seed!(underlying)));
 
     let total = 0;
@@ -223,7 +373,7 @@ export class TradeRuntime {
       log.info({ venue: stream.venue, underlying, count }, 'trade seed completed');
 
       if (count === 0) continue;
-      this.pushTrades(underlying, result.value);
+      await this.pushTradesBatched(underlying, result.value);
       total += count;
     }
 
@@ -231,7 +381,7 @@ export class TradeRuntime {
   }
 
   getTrades(underlying: string, minNotional = 0): TradeEvent[] {
-    const buffer = this.buffers.get(underlying) ?? [];
+    const buffer = this.buffers.get(normalizeTradeUnderlying(underlying)) ?? [];
     return filterTradesByMinNotional(buffer, minNotional);
   }
 
@@ -288,21 +438,22 @@ export class TradeRuntime {
 
       didOpen = true;
       openedAt = Date.now();
+      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
       const watchdogTimer = this.watchdogTerminateTimers.get(key);
       if (watchdogTimer != null) {
         clearTimeout(watchdogTimer);
         this.watchdogTerminateTimers.delete(key);
       }
       this.rateLimitCooldownUntil.delete(key);
-      this.updateStreamStates(stream.venue, subscribedUnderlyings, {
+      this.updateStreamStates(stream.venue, activeUnderlyings, {
         connected: true,
         lastStatusAt: Date.now(),
       });
       log.info(
-        { venue: stream.venue, underlying: subscribedUnderlyings.join(',') },
+        { venue: stream.venue, underlying: activeUnderlyings.join(',') },
         'trade stream connected',
       );
-      stream.connect(ws, underlying);
+      stream.connect(ws, activeUnderlyings);
 
       if (stream.startKeepalive) {
         const timer = stream.startKeepalive(ws);
@@ -316,16 +467,25 @@ export class TradeRuntime {
       try {
         const msg = JSON.parse(raw.toString());
         const now = Date.now();
-        this.updateStreamStates(stream.venue, subscribedUnderlyings, { lastMessageAt: now });
+        const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
+        this.updateStreamStates(stream.venue, activeUnderlyings, { lastMessageAt: now });
 
-        for (const subscribedUnderlying of subscribedUnderlyings) {
-          const trades = stream.parse(msg, subscribedUnderlying);
-          if (trades.length === 0) continue;
+        const trades = stream.parse(msg, activeUnderlyings);
+        if (trades.length === 0) return;
 
-          this.updateStreamState(stream.venue, subscribedUnderlying, {
-            lastTradeAt: Math.max(...trades.map((trade) => trade.timestamp)),
+        const tradesByUnderlying = new Map<string, TradeEvent[]>();
+        for (const trade of trades) {
+          const tradeUnderlying = normalizeTradeUnderlying(trade.underlying);
+          const bucket = tradesByUnderlying.get(tradeUnderlying);
+          if (bucket) bucket.push({ ...trade, underlying: tradeUnderlying });
+          else tradesByUnderlying.set(tradeUnderlying, [{ ...trade, underlying: tradeUnderlying }]);
+        }
+
+        for (const [tradeUnderlying, underlyingTrades] of tradesByUnderlying) {
+          this.updateStreamState(stream.venue, tradeUnderlying, {
+            lastTradeAt: Math.max(...underlyingTrades.map((trade) => trade.timestamp)),
           });
-          this.pushTrades(subscribedUnderlying, trades);
+          this.pushTrades(tradeUnderlying, underlyingTrades);
         }
       } catch {
         // Ignore malformed upstream frames.
@@ -342,10 +502,11 @@ export class TradeRuntime {
       }
       const reasonStr = reason.length > 0 ? reason.toString() : undefined;
       const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
+      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
       log.warn(
         {
           venue: stream.venue,
-          underlying: subscribedUnderlyings.join(','),
+          underlying: activeUnderlyings.join(','),
           closeCode: code,
           closeReason: reasonStr,
           uptimeMs,
@@ -353,7 +514,7 @@ export class TradeRuntime {
         'trade stream closed',
       );
       this.connections.delete(key);
-      this.updateStreamStates(stream.venue, subscribedUnderlyings, {
+      this.updateStreamStates(stream.venue, activeUnderlyings, {
         connected: false,
         lastStatusAt: Date.now(),
       });
@@ -362,7 +523,7 @@ export class TradeRuntime {
 
       if (this.shouldReconnect) {
         const nextAttempt = didOpen ? 0 : attempt + 1;
-        for (const subscribedUnderlying of subscribedUnderlyings) {
+        for (const subscribedUnderlying of activeUnderlyings) {
           this.updateStreamState(stream.venue, subscribedUnderlying, {
             reconnects:
               (this.streamState.get(this.streamKey(stream.venue, subscribedUnderlying))
@@ -373,7 +534,7 @@ export class TradeRuntime {
         if (this.reconnectTimers.has(key)) return;
         const timer = setTimeout(() => {
           this.reconnectTimers.delete(key);
-          this.connectStream(stream, underlying, nextAttempt);
+          this.connectStream(stream, activeUnderlyings[0] ?? underlying, nextAttempt);
         }, delay);
         this.reconnectTimers.set(key, timer);
       }
@@ -383,8 +544,9 @@ export class TradeRuntime {
       if (this.connections.get(key) !== ws) return;
 
       this.noteRateLimit(key, err);
+      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
 
-      for (const subscribedUnderlying of subscribedUnderlyings) {
+      for (const subscribedUnderlying of activeUnderlyings) {
         this.updateStreamState(stream.venue, subscribedUnderlying, {
           errors:
             (this.streamState.get(this.streamKey(stream.venue, subscribedUnderlying))?.errors ??
@@ -393,7 +555,7 @@ export class TradeRuntime {
         });
       }
       log.warn(
-        { venue: stream.venue, underlying: subscribedUnderlyings.join(','), err: err.message },
+        { venue: stream.venue, underlying: activeUnderlyings.join(','), err: err.message },
         'trade stream error',
       );
     });
@@ -421,11 +583,21 @@ export class TradeRuntime {
   }
 
   private connectionKey(stream: VenueStream, underlying: string): string {
-    if (stream.venue !== 'deribit') return this.streamKey(stream.venue, underlying);
-    const tradeCurrency = getDeribitTradeCurrency(underlying);
-    return tradeCurrency
-      ? this.streamKey(stream.venue, tradeCurrency)
-      : this.streamKey(stream.venue, underlying);
+    return stream.connectionKey?.([underlying]) ?? this.streamKey(stream.venue, underlying);
+  }
+
+  private supportsUnderlying(stream: VenueStream, underlying: string): boolean {
+    if (stream.venue === 'deribit' && getDeribitTradeCurrency(underlying) == null) {
+      return false;
+    }
+    if (stream.venue === 'coincall' && !isCoincallTradeUnderlyingSupported(underlying)) {
+      logCoincallFilteredAtStartup(underlying);
+      return false;
+    }
+    if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) {
+      return false;
+    }
+    return true;
   }
 
   private registerConnectionUnderlying(stream: VenueStream, underlying: string): void {
@@ -440,6 +612,38 @@ export class TradeRuntime {
     const key = this.connectionKey(stream, underlying);
     const subscribedUnderlyings = this.subscribedUnderlyingsByConnection.get(key);
     return subscribedUnderlyings ? [...subscribedUnderlyings] : [underlying];
+  }
+
+  private restartConnection(stream: VenueStream, underlying: string): void {
+    const key = this.connectionKey(stream, underlying);
+    this.closeConnection(key);
+    this.connectStream(stream, underlying);
+  }
+
+  private closeConnection(key: string): void {
+    const reconnectTimer = this.reconnectTimers.get(key);
+    if (reconnectTimer != null) {
+      clearTimeout(reconnectTimer);
+      this.reconnectTimers.delete(key);
+    }
+
+    const watchdogTimer = this.watchdogTerminateTimers.get(key);
+    if (watchdogTimer != null) {
+      clearTimeout(watchdogTimer);
+      this.watchdogTerminateTimers.delete(key);
+    }
+
+    const keepaliveTimer = this.keepaliveTimers.get(key);
+    if (keepaliveTimer != null) {
+      clearInterval(keepaliveTimer);
+      this.keepaliveTimers.delete(key);
+    }
+
+    const ws = this.connections.get(key);
+    if (ws == null) return;
+    this.connections.delete(key);
+    ws.removeAllListeners();
+    ws.close();
   }
 
   private updateStreamState(
@@ -478,6 +682,15 @@ export class TradeRuntime {
     }
   }
 
+  private async pushTradesBatched(underlying: string, trades: TradeEvent[]): Promise<void> {
+    for (let offset = 0; offset < trades.length; offset += SEED_PUSH_BATCH_SIZE) {
+      this.pushTrades(underlying, trades.slice(offset, offset + SEED_PUSH_BATCH_SIZE));
+      if (offset + SEED_PUSH_BATCH_SIZE < trades.length) {
+        await yieldToEventLoop();
+      }
+    }
+  }
+
   dispose(): void {
     this.shouldReconnect = false;
     if (this.watchdogTimer != null) {
@@ -496,12 +709,19 @@ export class TradeRuntime {
     this.keepaliveTimers.clear();
     for (const timer of this.reseedTimers.values()) clearInterval(timer);
     this.reseedTimers.clear();
+    for (const timer of this.idleUnderlyingTimers.values()) clearTimeout(timer);
+    this.idleUnderlyingTimers.clear();
     for (const ws of this.connections.values()) {
       ws.removeAllListeners();
       ws.close();
     }
     this.connections.clear();
     this.subscribedUnderlyingsByConnection.clear();
+    this.activeUnderlyings.clear();
+    this.alwaysOnUnderlyings.clear();
+    this.underlyingLeaseCounts.clear();
+    this.ensureUnderlyingPromises.clear();
+    this.seedPromises.clear();
     clearTradeCaches();
   }
 }
@@ -966,6 +1186,11 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'deribit',
     url: DERIBIT_WS_URL,
+    connectionKey(underlyings) {
+      const underlying = underlyings[0] ?? 'BTC';
+      const tradeCurrency = getDeribitTradeCurrency(underlying);
+      return `deribit:${tradeCurrency ?? normalizeTradeUnderlying(underlying)}`;
+    },
     // Deribit closes idle sockets silently when the app-level heartbeat isn't
     // configured on this connection. `public/test` is a free no-op RPC; we
     // send it every 25s so the server keeps pushing trades and, critically,
@@ -979,8 +1204,8 @@ export const VENUE_STREAMS: VenueStream[] = [
         }
       }, 25_000);
     },
-    connect(ws, underlying) {
-      const tradeCurrency = getDeribitTradeCurrency(underlying);
+    connect(ws, underlyings) {
+      const tradeCurrency = getDeribitTradeCurrency(underlyings[0] ?? '');
       if (!tradeCurrency) return;
 
       ws.send(
@@ -992,7 +1217,8 @@ export const VENUE_STREAMS: VenueStream[] = [
         }),
       );
     },
-    parse(msg, underlying) {
+    subscribe() {},
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       if (m['method'] !== 'subscription') return [];
       const params = m['params'] as Record<string, unknown> | undefined;
@@ -1002,16 +1228,17 @@ export const VENUE_STREAMS: VenueStream[] = [
       const trades: TradeEvent[] = [];
       for (const item of data) {
         const parsed = DeribitTradeSchema.safeParse(item);
-        if (
-          !parsed.success ||
-          !isDeribitTradeForUnderlying(parsed.data.instrument_name, underlying)
-        )
+        if (!parsed.success) continue;
+        const matchedUnderlying = underlyings.find((underlying) =>
+          isDeribitTradeForUnderlying(parsed.data.instrument_name, underlying),
+        );
+        if (matchedUnderlying == null)
           continue;
         trades.push(
           deribitTradeToEvent(
             parsed.data,
             getDeribitUnderlyingFromInstrument(parsed.data.instrument_name) ??
-              normalizeTradeUnderlying(underlying),
+              normalizeTradeUnderlying(matchedUnderlying),
           ),
         );
       }
@@ -1028,32 +1255,53 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'okx',
     url: OKX_WS_URL,
+    connectionKey() {
+      return sharedConnectionKey('okx');
+    },
     // OKX drops idle connections — must send "ping" text every 25s
     startKeepalive(ws) {
       return setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send('ping');
       }, 25_000);
     },
-    connect(ws, underlying) {
+    connect(ws, underlyings) {
       ws.send(
         JSON.stringify({
           op: 'subscribe',
-          args: [{ channel: 'option-trades', instType: 'OPTION', instFamily: `${underlying}-USD` }],
+          args: underlyings.map((underlying) => ({
+            channel: 'option-trades',
+            instType: 'OPTION',
+            instFamily: `${underlying}-USD`,
+          })),
         }),
       );
     },
-    parse(msg, underlying) {
+    subscribe(ws, underlyings) {
+      ws.send(
+        JSON.stringify({
+          op: 'subscribe',
+          args: underlyings.map((underlying) => ({
+            channel: 'option-trades',
+            instType: 'OPTION',
+            instFamily: `${underlying}-USD`,
+          })),
+        }),
+      );
+    },
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       if (!m['data'] || !Array.isArray(m['data'])) return [];
       const trades: TradeEvent[] = [];
       for (const item of m['data'] as unknown[]) {
         const parsed = OkxTradeSchema.safeParse(item);
         if (!parsed.success) continue;
+        const tradeUnderlying = normalizeTradeUnderlying(parsed.data.instId.split('-')[0] ?? '');
+        if (!underlyings.includes(tradeUnderlying)) continue;
         trades.push({
           venue: 'okx',
           tradeId: parsed.data.tradeId,
           instrument: parsed.data.instId,
-          underlying,
+          underlying: tradeUnderlying,
           side: parsed.data.side,
           price: parsed.data.px,
           size: parsed.data.sz,
@@ -1119,27 +1367,35 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'bybit',
     url: BYBIT_WS_URL,
+    connectionKey() {
+      return sharedConnectionKey('bybit');
+    },
     // Bybit requires JSON ping every 20s — not WS-level ping frames
     startKeepalive(ws) {
       return setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' }));
       }, 20_000);
     },
-    connect(ws, underlying) {
-      ws.send(JSON.stringify({ op: 'subscribe', args: [`publicTrade.${underlying}`] }));
+    connect(ws, underlyings) {
+      ws.send(JSON.stringify({ op: 'subscribe', args: underlyings.map((underlying) => `publicTrade.${underlying}`) }));
     },
-    parse(msg) {
+    subscribe(ws, underlyings) {
+      ws.send(JSON.stringify({ op: 'subscribe', args: underlyings.map((underlying) => `publicTrade.${underlying}`) }));
+    },
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       if (!m['data'] || !Array.isArray(m['data'])) return [];
       const trades: TradeEvent[] = [];
       for (const item of m['data'] as unknown[]) {
         const parsed = BybitTradeSchema.safeParse(item);
         if (!parsed.success) continue;
+        const tradeUnderlying = normalizeTradeUnderlying(parsed.data.s.split('-')[0] ?? '');
+        if (!underlyings.includes(tradeUnderlying)) continue;
         trades.push({
           venue: 'bybit',
           tradeId: parsed.data.i ?? null,
           instrument: parsed.data.s,
-          underlying: parsed.data.s.split('-')[0]!,
+          underlying: tradeUnderlying,
           side: parsed.data.S,
           price: parsed.data.p,
           size: parsed.data.v,
@@ -1203,6 +1459,9 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'binance',
     url: BINANCE_OPTIONS_WS_URL,
+    connectionKey() {
+      return sharedConnectionKey('binance');
+    },
     // No seed: Binance's only public trade history endpoint (GET /eapi/v1/trades)
     // requires a specific symbol — there is no bulk "all trades for underlying"
     // equivalent without auth. Users see no history until a live trade arrives.
@@ -1215,28 +1474,40 @@ export const VENUE_STREAMS: VenueStream[] = [
         if (ws.readyState === WebSocket.OPEN) ws.ping();
       }, 180_000);
     },
-    connect(ws, underlying) {
+    connect(ws, underlyings) {
       ws.send(
         JSON.stringify({
           method: 'SUBSCRIBE',
-          params: [`${underlying.toLowerCase()}usdt@optionTrade`],
+          params: underlyings.map((underlying) => `${underlying.toLowerCase()}usdt@optionTrade`),
           id: 1,
         }),
       );
     },
-    parse(msg) {
+    subscribe(ws, underlyings) {
+      ws.send(
+        JSON.stringify({
+          method: 'SUBSCRIBE',
+          params: underlyings.map((underlying) => `${underlying.toLowerCase()}usdt@optionTrade`),
+          id: 1,
+        }),
+      );
+    },
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       const data = (m['data'] as Record<string, unknown> | undefined) ?? m;
 
       const parsed = BinanceTradeSchema.safeParse(data);
       if (!parsed.success) return [];
 
+      const tradeUnderlying = normalizeTradeUnderlying(parsed.data.s.split('-')[0] ?? '');
+      if (!underlyings.includes(tradeUnderlying)) return [];
+
       return [
         {
           venue: 'binance' as VenueId,
           tradeId: parsed.data.t,
           instrument: parsed.data.s,
-          underlying: parsed.data.s.split('-')[0]!,
+          underlying: tradeUnderlying,
           side: parsed.data.S,
           price: parsed.data.p,
           size: parsed.data.q,
@@ -1252,6 +1523,9 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'derive',
     url: DERIVE_WS_URL,
+    connectionKey() {
+      return sharedConnectionKey('derive');
+    },
     // Derive has no app-level heartbeat per core/CLAUDE.md — rely on WS ping/pong.
     // 20s cadence matches OKX/Bybit and keeps the socket warm against half-open TCP.
     startKeepalive(ws) {
@@ -1259,17 +1533,27 @@ export const VENUE_STREAMS: VenueStream[] = [
         if (ws.readyState === WebSocket.OPEN) ws.ping();
       }, 20_000);
     },
-    connect(ws, underlying) {
+    connect(ws, underlyings) {
       ws.send(
         JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
           method: 'subscribe',
-          params: { channels: [`trades.option.${underlying}`] },
+          params: { channels: underlyings.map((underlying) => `trades.option.${underlying}`) },
         }),
       );
     },
-    parse(msg, underlying) {
+    subscribe(ws, underlyings) {
+      ws.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'subscribe',
+          params: { channels: underlyings.map((underlying) => `trades.option.${underlying}`) },
+        }),
+      );
+    },
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       if (m['method'] !== 'subscription') return [];
       const params = m['params'] as Record<string, unknown> | undefined;
@@ -1280,11 +1564,13 @@ export const VENUE_STREAMS: VenueStream[] = [
       for (const item of data) {
         const parsed = DeriveTradeSchema.safeParse(item);
         if (!parsed.success) continue;
+        const tradeUnderlying = normalizeTradeUnderlying(parsed.data.instrument_name.split('-')[0] ?? '');
+        if (!underlyings.includes(tradeUnderlying)) continue;
         trades.push({
           venue: 'derive',
           tradeId: parsed.data.trade_id,
           instrument: parsed.data.instrument_name,
-          underlying,
+          underlying: tradeUnderlying,
           side: parsed.data.direction,
           price: parsed.data.trade_price,
           size: parsed.data.trade_amount,
@@ -1381,8 +1667,8 @@ export const VENUE_STREAMS: VenueStream[] = [
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'heartbeat' }));
       }, 15_000);
     },
-    connect(ws, underlying) {
-      const base = normalizeTradeUnderlying(underlying);
+    connect(ws, underlyings) {
+      const base = normalizeTradeUnderlying(underlyings[0] ?? '');
       // lastTrade is per-symbol on Coincall — fetch the active instrument list
       // and fan out one subscribe per contract. Fire-and-forget; if the WS
       // closes before the fetch resolves, the readyState guard drops the sends.
@@ -1399,9 +1685,10 @@ export const VENUE_STREAMS: VenueStream[] = [
         }
       });
     },
-    parse(msg, underlying) {
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       if (m['dt'] !== 6 || !Array.isArray(m['d'])) return [];
+      const base = normalizeTradeUnderlying(underlyings[0] ?? '');
       const trades: TradeEvent[] = [];
       for (const item of m['d'] as unknown[]) {
         const parsed = CoincallTradeEntrySchema.safeParse(item);
@@ -1412,7 +1699,7 @@ export const VENUE_STREAMS: VenueStream[] = [
           // one from symbol+ts so the tradeStore dedupe key remains unique.
           tradeId: `${parsed.data.s}:${parsed.data.ts}`,
           instrument: parsed.data.s,
-          underlying: normalizeTradeUnderlying(underlying),
+          underlying: base,
           side: parsed.data.sd === 1 ? 'buy' : 'sell',
           price: parsed.data.pr,
           size: parsed.data.q,
@@ -1484,8 +1771,8 @@ export const VENUE_STREAMS: VenueStream[] = [
     url: THALEX_MARKET_WS_URL,
     // Thalex server pings natively — the `ws` client auto-pongs, so no app-level
     // heartbeat is required (confirmed by feeds/thalex/ws-client.ts).
-    connect(ws, underlying) {
-      const base = normalizeTradeUnderlying(underlying);
+    connect(ws, underlyings) {
+      const base = normalizeTradeUnderlying(underlyings[0] ?? '');
       // Channel expects the pair (BTCUSD/ETHUSD), not the bare base. The initial
       // notification is a snapshot of recent trades, which also serves as the seed.
       ws.send(
@@ -1497,12 +1784,13 @@ export const VENUE_STREAMS: VenueStream[] = [
         }),
       );
     },
-    parse(msg, underlying) {
+    parse(msg, underlyings) {
       const m = msg as Record<string, unknown>;
       const channelName = m['channel_name'];
       if (typeof channelName !== 'string' || !channelName.startsWith('recent_trades.')) return [];
       const notification = m['notification'];
       if (!Array.isArray(notification)) return [];
+      const base = normalizeTradeUnderlying(underlyings[0] ?? '');
 
       const trades: TradeEvent[] = [];
       for (const item of notification) {
@@ -1514,7 +1802,7 @@ export const VENUE_STREAMS: VenueStream[] = [
           // Thalex trade tuples have no stable id — synthesize from symbol+ts.
           tradeId: `${instrument}:${tsSeconds}`,
           instrument,
-          underlying: normalizeTradeUnderlying(underlying),
+          underlying: base,
           side,
           price,
           size,
@@ -1552,11 +1840,11 @@ export const VENUE_STREAMS: VenueStream[] = [
       }, GATEIO_PING_INTERVAL_MS);
     },
     seed: fetchGateioRecentTrades,
-    connect(ws, underlying) {
+    connect(ws, underlyings) {
       // `restBase` is what Gate.io expects in the contracts query (`CL_USDT`
       // for the frontend's `XTI`); contract names from the response keep that
       // prefix and the parse step matches them as-is.
-      const restBase = toGateioRestBase(normalizeTradeUnderlying(underlying));
+      const restBase = toGateioRestBase(normalizeTradeUnderlying(underlyings[0] ?? ''));
       // options.trades is per-contract — fetch the live contract list and
       // chunk-subscribe (50 per frame). REST happens async after `open`; trades
       // start flowing on whichever batch lands first.
@@ -1582,7 +1870,7 @@ export const VENUE_STREAMS: VenueStream[] = [
           );
         });
     },
-    parse(msg, underlying) {
+    parse(msg, underlyings) {
       const envelope = GateioWsEnvelopeSchema.safeParse(msg);
       if (!envelope.success) return [];
       if (envelope.data.channel !== 'options.trades') return [];
@@ -1592,7 +1880,7 @@ export const VENUE_STREAMS: VenueStream[] = [
       const list = GateioTradeListSchema.safeParse(envelope.data.result);
       if (!list.success) return [];
 
-      return gateioRowsToTradeEvents(list.data, underlying);
+      return gateioRowsToTradeEvents(list.data, underlyings[0] ?? '');
     },
   },
 ];

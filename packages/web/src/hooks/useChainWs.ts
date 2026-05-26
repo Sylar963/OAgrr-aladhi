@@ -73,8 +73,6 @@ function nextSubId(): string {
   return `sub-${++subIdCounter}-${Date.now()}`;
 }
 
-const MAX_RETRIES = 5;
-
 function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 15_000);
 }
@@ -420,17 +418,13 @@ export function useChainWs({
       scheduleReconnect();
     };
 
-    ws.onerror = () => {
-      store.set({ connectionState: 'error' });
-    };
+    // onerror usually precedes onclose for transient transport failures.
+    // Keep reconnect logic centralized in onclose so retries remain unbounded.
+    ws.onerror = () => {};
   }, [sendSubscribe, handleMessage, store]);
 
   const scheduleReconnect = useCallback(() => {
     if (reconnectRef.current) return;
-    if (attemptRef.current >= MAX_RETRIES) {
-      store.set({ connectionState: 'error' });
-      return;
-    }
     const delay = backoffMs(attemptRef.current);
     attemptRef.current++;
     reconnectRef.current = setTimeout(() => {

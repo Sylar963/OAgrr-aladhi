@@ -295,6 +295,40 @@ describe('TradeRuntime — start() resolves before seeding finishes', () => {
   });
 });
 
+describe('TradeRuntime — demand-driven underlyings', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('releases non-core underlyings after the idle TTL', async () => {
+    const runtime = new TradeRuntime();
+    vi.spyOn(
+      runtime as unknown as { connectStream(...args: unknown[]): void },
+      'connectStream',
+    ).mockImplementation(() => {});
+    vi.spyOn(
+      runtime as unknown as { seedFromRest(u: string): Promise<void> },
+      'seedFromRest',
+    ).mockResolvedValue(undefined);
+
+    const release = await runtime.acquire('AVAX');
+    const runtimeAny = runtime as unknown as {
+      activeUnderlyings: Set<string>;
+      buffers: Map<string, TradeEvent[]>;
+    };
+
+    expect(runtimeAny.activeUnderlyings.has('AVAX')).toBe(true);
+    expect(runtimeAny.buffers.has('AVAX')).toBe(true);
+
+    release();
+    await vi.advanceTimersByTimeAsync(30_001);
+
+    expect(runtimeAny.activeUnderlyings.has('AVAX')).toBe(false);
+    expect(runtimeAny.buffers.has('AVAX')).toBe(false);
+
+    runtime.dispose();
+  });
+});
+
 describe('TradeRuntime — periodic reseed', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -529,7 +563,7 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
         },
       ],
     };
-    const out = stream.parse(frame, 'BTC');
+    const out = stream.parse(frame, ['BTC']);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
       venue: 'gateio',
@@ -560,7 +594,7 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
         },
       ],
     };
-    const out = stream.parse(frame, 'BTC');
+    const out = stream.parse(frame, ['BTC']);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ side: 'buy', size: 2, timestamp: 1778765126_777 });
   });
@@ -576,8 +610,8 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
         { size: 1, id: 2, create_time: 1, contract: 'BTC_USDT-20260605-70000-C', price: '100' },
       ],
     };
-    expect(stream.parse(frame, 'BTC')).toHaveLength(1);
-    expect(stream.parse(frame, 'ETH')).toHaveLength(1);
+    expect(stream.parse(frame, ['BTC'])).toHaveLength(1);
+    expect(stream.parse(frame, ['ETH'])).toHaveLength(1);
   });
 
   it('ignores subscribe acks, errors, and non-trade channels', () => {
@@ -585,19 +619,19 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
     expect(
       stream.parse(
         { time: 1, channel: 'options.trades', event: 'subscribe', result: { status: 'success' } },
-        'BTC',
+        ['BTC'],
       ),
     ).toEqual([]);
     expect(
       stream.parse(
         { time: 1, channel: 'options.trades', event: 'update', error: { code: 1, message: 'x' } },
-        'BTC',
+        ['BTC'],
       ),
     ).toEqual([]);
     expect(
       stream.parse(
         { time: 1, channel: 'options.contract_tickers', event: 'update', result: [] },
-        'BTC',
+        ['BTC'],
       ),
     ).toEqual([]);
   });
@@ -619,7 +653,7 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
         },
       ],
     };
-    expect(stream.parse(frame, 'BTC')).toEqual([]);
+    expect(stream.parse(frame, ['BTC'])).toEqual([]);
   });
 
   it('seed() pulls recent trades from REST and converts them like the WS parser', async () => {

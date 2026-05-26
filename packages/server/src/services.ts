@@ -47,6 +47,7 @@ export const blockFlowService = new BlockTradeRuntime();
 // MNT/LIT/KAS — Coincall-listed altcoins with no Binance USDT spot pair).
 export const indexPriceService = new IndexPriceRuntime();
 export let newsService: NewsRuntime | null = null;
+const FLOW_ALWAYS_ON_UNDERLYINGS = ['BTC', 'ETH', 'SOL'] as const;
 const databaseUrl = process.env['DATABASE_URL'];
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(
   process.env['IV_HISTORY_SIZE_WARN_BYTES'],
@@ -266,32 +267,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
       'PENDLEUSDT',
       'TRUMPUSDT',
     ]),
-    flowService.start([
-      'BTC',
-      'ETH',
-      'SOL',
-      'DOGE',
-      'XRP',
-      'BNB',
-      'AVAX',
-      'TRX',
-      'HYPE',
-      'LTC',
-      'ADA',
-      'TON',
-      'SUI',
-      'XAUT',
-      'AAVE',
-      'ORDI',
-      'WLFI',
-      'ENA',
-      'PENDLE',
-      'TRUMP',
-      'MNT',
-      'LIT',
-      'KAS',
-      'XTI',
-    ]),
+    flowService.start([...FLOW_ALWAYS_ON_UNDERLYINGS]),
     blockFlowService.start(),
     spotCandleService.start(),
     instrumentCandleService.start(),

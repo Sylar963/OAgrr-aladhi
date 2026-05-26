@@ -71,17 +71,22 @@ export async function flowRoute(app: FastifyInstance) {
     const rawMinNotional = Number(req.query.minNotional);
     const minNotional = Number.isFinite(rawMinNotional) && rawMinNotional >= 0 ? rawMinNotional : 0;
     const limit = parseBoundedLimit(req.query.limit, 100, 500);
+    const release = await flowService.acquire(underlying);
 
-    const trades = flowService
-      .getTrades(underlying)
-      .map((trade) => enrichLiveTrade(trade))
-      .filter((trade) => minNotional <= 0 || (trade.notionalUsd ?? 0) >= minNotional);
+    try {
+      const trades = flowService
+        .getTrades(underlying)
+        .map((trade) => enrichLiveTrade(trade))
+        .filter((trade) => minNotional <= 0 || (trade.notionalUsd ?? 0) >= minNotional);
 
-    return {
-      underlying,
-      count: trades.length,
-      trades: trades.slice(-limit).reverse(),
-    };
+      return {
+        underlying,
+        count: trades.length,
+        trades: trades.slice(-limit).reverse(),
+      };
+    } finally {
+      release();
+    }
   });
 
   app.get<{

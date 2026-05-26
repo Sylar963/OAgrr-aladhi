@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { useExpiries } from '@features/chain/queries';
+import type { EnrichedChainResponse } from '@shared/enriched';
 import { DropdownPicker } from '@components/ui';
 import { formatExpiry, dteDays } from '@lib/format';
 import { useStrategyStore } from './strategy-store';
@@ -9,11 +10,12 @@ import { repriceLeg } from './reprice';
 import styles from './Architect.module.css';
 
 interface LegInputProps {
+  chain: EnrichedChainResponse | null;
   expiry: string;
   onExpiryChange: (expiry: string) => void;
 }
 
-export default function LegInput({ expiry, onExpiryChange }: LegInputProps) {
+export default function LegInput({ chain, expiry, onExpiryChange }: LegInputProps) {
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: expiriesData } = useExpiries(underlying);
@@ -26,7 +28,6 @@ export default function LegInput({ expiry, onExpiryChange }: LegInputProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const strikeRef = useRef<HTMLDivElement>(null);
 
-  const { data: chain } = useChainQuery(underlying, expiry, activeVenues);
   const strikes = chain?.strikes.map((s) => s.strike) ?? [];
   const atmStrike = chain?.stats.atmStrike ?? 0;
 

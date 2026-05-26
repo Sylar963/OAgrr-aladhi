@@ -7,7 +7,7 @@ vi.mock('../services.js', () => ({
   isFlowReady: vi.fn(() => false),
   isDvolReady: vi.fn(() => false),
   isSpotReady: vi.fn(() => false),
-  flowService: { getTrades: vi.fn() },
+  flowService: { getTrades: vi.fn(), acquire: vi.fn(async () => vi.fn()) },
   dvolService: { getSnapshot: vi.fn() },
   spotService: { getSnapshot: vi.fn(() => null) },
   tradeStore: {
@@ -36,6 +36,7 @@ function setFlowReady(v: boolean) {
 }
 
 const getTrades = () => vi.mocked(services.flowService.getTrades);
+const acquireFlow = () => vi.mocked(services.flowService.acquire);
 
 async function buildApp() {
   const app = Fastify({ logger: false });
@@ -93,6 +94,7 @@ describe('GET /flow', () => {
     const body = res.json();
     expect(body.underlying).toBe('BTC');
     expect(body.count).toBe(50);
+    expect(acquireFlow()).toHaveBeenCalledWith('BTC');
     expect(getTrades()).toHaveBeenCalledWith('BTC');
   });
 

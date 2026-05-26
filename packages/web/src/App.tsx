@@ -37,11 +37,11 @@ export default function App() {
   useServerVersion();
   useSessionTimeout();
   useTabUrlSync();
-  useGlobalFeedStatus();
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
+  useGlobalFeedStatus(activeTab === 'chain');
 
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);

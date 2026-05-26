@@ -3,6 +3,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useStrategyStore } from './strategy-store';
@@ -155,15 +156,20 @@ export default function ArchitectView() {
     }
   }, [allExpiries, builderExpiry, globalExpiry, underlying]);
 
+  const { connectionState: builderFeedState } = useChainWs({
+    underlying,
+    expiry: builderExpiry,
+    venues: activeVenues,
+    enabled: Boolean(builderExpiry),
+  });
   const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, {
-    refetchInterval: 10_000,
+    enabled: builderFeedState !== 'live',
   });
 
   const legs = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
   const removeLeg = useStrategyStore((s) => s.removeLeg);
   const updateLeg = useStrategyStore((s) => s.updateLeg);
-  const replaceLegs = useStrategyStore((s) => s.replaceLegs);
   const addLeg = useStrategyStore((s) => s.addLeg);
   const strategyUnderlying = useStrategyStore((s) => s.underlying);
 
@@ -240,11 +246,11 @@ export default function ArchitectView() {
   );
 
   async function handleSendToPaper(routing?: StrategyRouting) {
-    if (legs.length === 0) return;
+    if (pricedLegs.length === 0) return;
     setPaperStatus(null);
     try {
-      const req = legsToOrderRequest(legs, underlying, pricingVenues, routing);
-      const strategyName = detectStrategy(legs);
+      const req = legsToOrderRequest(pricedLegs, underlying, pricingVenues, routing);
+      const strategyName = detectStrategy(pricedLegs);
       const result = await createTrade.mutateAsync({
         label: strategyName,
         strategyName,
@@ -324,58 +330,40 @@ export default function ArchitectView() {
     [handleLegUpdate],
   );
 
-  useEffect(() => {
-    if (!chain || legs.length === 0) return;
-
-    const nextLegs = legs.map((leg) => {
-      const repriced = repriceStrategyLeg(leg);
-      return repriced ? { ...leg, ...repriced } : leg;
-    });
-
-    const changed = nextLegs.some((leg, index) => {
-      const prev = legs[index];
-      return (
-        prev != null &&
-        (leg.expiry !== prev.expiry ||
-          leg.strike !== prev.strike ||
-          leg.entryPrice !== prev.entryPrice ||
-          leg.venue !== prev.venue ||
-          leg.delta !== prev.delta ||
-          leg.gamma !== prev.gamma ||
-          leg.theta !== prev.theta ||
-          leg.vega !== prev.vega ||
-          leg.iv !== prev.iv)
-      );
-    });
-
-    if (changed) replaceLegs(nextLegs, underlying);
-  }, [chain, legs, replaceLegs, repriceStrategyLeg, underlying]);
-
-  const payoffPoints = useMemo(() => computePayoff(legs, spotPrice), [legs, spotPrice]);
-  const metrics = useMemo(
-    () => (legs.length > 0 ? computeMetrics(legs, spotPrice) : null),
-    [legs, spotPrice],
+  const pricedLegs = useMemo(
+    () =>
+      legs.map((leg) => {
+        const repriced = repriceStrategyLeg(leg);
+        return repriced ? { ...leg, ...repriced } : leg;
+      }),
+    [legs, repriceStrategyLeg],
   );
-  const strategyName = useMemo(() => detectStrategy(legs), [legs]);
+
+  const payoffPoints = useMemo(() => computePayoff(pricedLegs, spotPrice), [pricedLegs, spotPrice]);
+  const metrics = useMemo(
+    () => (pricedLegs.length > 0 ? computeMetrics(pricedLegs, spotPrice) : null),
+    [pricedLegs, spotPrice],
+  );
+  const strategyName = useMemo(() => detectStrategy(pricedLegs), [pricedLegs]);
 
   const baseDte = useMemo(() => {
-    if (legs.length === 0) return 30;
-    return dteDays(legs[0]!.expiry);
-  }, [legs]);
+    if (pricedLegs.length === 0) return 30;
+    return dteDays(pricedLegs[0]!.expiry);
+  }, [pricedLegs]);
 
   const scenarioIvPoints = useMemo(() => {
-    if (legs.length === 0 || ivShift === 0) return undefined;
-    return computeScenarioPayoff(legs, spotPrice, ivShift / 100, 0, baseDte);
-  }, [legs, spotPrice, ivShift, baseDte]);
+    if (pricedLegs.length === 0 || ivShift === 0) return undefined;
+    return computeScenarioPayoff(pricedLegs, spotPrice, ivShift / 100, 0, baseDte);
+  }, [pricedLegs, spotPrice, ivShift, baseDte]);
 
   const scenarioDtePoints = useMemo(() => {
-    if (legs.length === 0 || dteShift === 0) return undefined;
-    return computeScenarioPayoff(legs, spotPrice, 0, dteShift, baseDte);
-  }, [legs, spotPrice, dteShift, baseDte]);
+    if (pricedLegs.length === 0 || dteShift === 0) return undefined;
+    return computeScenarioPayoff(pricedLegs, spotPrice, 0, dteShift, baseDte);
+  }, [pricedLegs, spotPrice, dteShift, baseDte]);
 
   const hasScenarios = ivShift !== 0 || dteShift !== 0;
 
-  const candleSpec = useMemo(() => pickCandleSpec(legs), [legs]);
+  const candleSpec = useMemo(() => pickCandleSpec(pricedLegs), [pricedLegs]);
   const candleAvailable = isSpotCandleCurrency(underlying);
   const {
     data: spotCandlesData,
@@ -420,7 +408,7 @@ export default function ArchitectView() {
   const spotCandlesUnavailable = spotCandlesIsError || (spotCandlesEmpty && !spotCandlesFetching);
 
   function handleCopyUrl() {
-    const url = buildShareUrl(legs, underlying);
+    const url = buildShareUrl(pricedLegs, underlying);
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -476,7 +464,7 @@ export default function ArchitectView() {
 
         <div className={styles.splitBody}>
           <div className={styles.controlsCol}>
-            <LegInput expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
+            <LegInput chain={chain ?? null} expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
 
             {legs.length > 0 && (
               <div className={styles.legsSection}>
@@ -671,7 +659,7 @@ export default function ArchitectView() {
                         points={payoffPoints}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={legs}
+                        legs={pricedLegs}
                         maxProfit={metrics?.maxProfit ?? null}
                         maxLoss={metrics?.maxLoss ?? null}
                         strikes={availableStrikes}
@@ -728,7 +716,7 @@ export default function ArchitectView() {
                         candles={visibleSpotCandles?.candles ?? []}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={legs}
+                        legs={pricedLegs}
                         resolutionSec={candleSpec.resolutionSec}
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
@@ -895,9 +883,11 @@ export default function ArchitectView() {
               <span className={styles.rightSectionTitle}>Share</span>
               <div className={styles.shareBar}>
                 <span className={styles.shareUrl}>
-                  {legs.length > 0 ? buildShareUrl(legs, underlying) : 'Build a strategy to share'}
+                  {pricedLegs.length > 0
+                    ? buildShareUrl(pricedLegs, underlying)
+                    : 'Build a strategy to share'}
                 </span>
-                {legs.length > 0 &&
+                {pricedLegs.length > 0 &&
                   (copied ? (
                     <span className={styles.shareCopied}>Copied</span>
                   ) : (
@@ -915,7 +905,7 @@ export default function ArchitectView() {
         <>
           <div className={styles.backdrop} onClick={() => setShowVenues(false)} />
           <VenueSlideover
-            legs={legs}
+            legs={pricedLegs}
             chain={chain ?? null}
             activeVenues={activeVenues}
             onClose={() => setShowVenues(false)}

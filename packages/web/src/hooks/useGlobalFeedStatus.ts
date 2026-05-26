@@ -5,7 +5,7 @@ import { useAppStore } from '@stores/app-store';
 
 import { useChainWs } from './useChainWs';
 
-export function useGlobalFeedStatus() {
+export function useGlobalFeedStatus(enabled = true) {
   const underlying = useAppStore((s) => s.underlying);
   const expiry = useAppStore((s) => s.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
@@ -18,6 +18,7 @@ export function useGlobalFeedStatus() {
     underlying,
     expiry,
     venues: activeVenues,
+    enabled,
   });
 
   const failedVenueIds = useMemo(() => failedVenues.map((venue) => venue.venue), [failedVenues]);

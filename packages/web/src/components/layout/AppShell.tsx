@@ -1,4 +1,5 @@
 import { SystemNotifications } from '@components/notifications';
+import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { TabId } from '@lib/tabs';
@@ -114,8 +115,13 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
     <PaletteContext.Provider value={() => setPaletteOpen(true)}>
       <div className={styles.shell}>
         <NewsTicker />
-        <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
+        <TopBar
+          tabs={tabs}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenShortcuts={() => setHelpOpen(true)}
+        />
         <SystemNotifications />
+        <Onboarding />
         {showToolbar && <MobileToolbar />}
         <main className={styles.main}>{children}</main>
         <MobileNav />

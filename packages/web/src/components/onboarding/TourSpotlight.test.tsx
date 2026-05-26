@@ -59,7 +59,7 @@ describe('TourSpotlight', () => {
       </>,
     );
     fireEvent.click(screen.getByText('Next'));
-    expect(screen.getByText('Asset picker')).toBeTruthy();
+    expect(screen.getByText('Asset picker (⌘K)')).toBeTruthy();
     fireEvent.click(screen.getByText('Back'));
     expect(screen.getByText('Views')).toBeTruthy();
   });

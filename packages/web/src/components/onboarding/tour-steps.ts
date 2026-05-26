@@ -13,7 +13,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     target: 'asset-picker',
-    title: 'Asset picker',
+    title: 'Asset picker (⌘K)',
     body: 'Pick your underlying. Hit ⌘K or / anytime to switch.',
   },
   {

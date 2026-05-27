@@ -13,6 +13,19 @@ function mergeNumber(next: number | undefined | null, previous: number | null): 
   return next ?? previous;
 }
 
+function liveQuoteNumber(next: number | undefined | null): number | null | undefined {
+  if (next == null) return undefined;
+  return next > 0 ? next : null;
+}
+
+function mergeLiveQuoteField(
+  next: number | null | undefined,
+  previous: number | null,
+): number | null {
+  if (next === undefined) return previous;
+  return next;
+}
+
 function erf(x: number): number {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
@@ -180,11 +193,15 @@ export function mergeCoincallTOption(
   empty: LiveQuote,
 ): LiveQuote {
   const base = previous ?? empty;
+  const bidPrice = liveQuoteNumber(entry.bid);
+  const askPrice = liveQuoteNumber(entry.ask);
+  const bidSize = liveQuoteNumber(entry.bs);
+  const askSize = liveQuoteNumber(entry.as);
   return fillMissingCoincallSideIvs(inst, {
-    bidPrice: mergeNumber(entry.bid, base.bidPrice),
-    askPrice: mergeNumber(entry.ask, base.askPrice),
-    bidSize: mergeNumber(entry.bs, base.bidSize),
-    askSize: mergeNumber(entry.as, base.askSize),
+    bidPrice: mergeLiveQuoteField(bidPrice, base.bidPrice),
+    askPrice: mergeLiveQuoteField(askPrice, base.askPrice),
+    bidSize: mergeLiveQuoteField(bidSize, base.bidSize),
+    askSize: mergeLiveQuoteField(askSize, base.askSize),
     markPrice: mergeNumber(entry.mp, base.markPrice),
     lastPrice: mergeNumber(entry.lp, base.lastPrice),
     underlyingPrice: mergeNumber(entry.up, base.underlyingPrice),
@@ -200,8 +217,8 @@ export function mergeCoincallTOption(
       vega: mergeNumber(entry.vega, base.greeks.vega),
       rho: base.greeks.rho,
       markIv: base.greeks.markIv,
-      bidIv: entry.biv ?? (entry.bid != null ? null : base.greeks.bidIv),
-      askIv: entry.aiv ?? (entry.ask != null ? null : base.greeks.askIv),
+      bidIv: entry.biv ?? (bidPrice !== undefined ? null : base.greeks.bidIv),
+      askIv: entry.aiv ?? (askPrice !== undefined ? null : base.greeks.askIv),
     },
     timestamp: entry.ts,
   });

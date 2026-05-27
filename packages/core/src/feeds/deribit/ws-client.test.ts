@@ -22,6 +22,7 @@ type DeribitTestInternals = {
   rpc: FakeRpc;
   activeRpc: FakeRpc;
   instruments: CachedInstrument[];
+  eagerExpiryCount: number;
   subscriptions: {
     subscribedTickers: Set<string>;
     tickerIntervals: Map<string, string>;
@@ -35,6 +36,7 @@ type DeribitTestInternals = {
     interval: string,
     source?: string,
   ) => Promise<void>;
+  eagerSubscribe: () => Promise<void>;
   unsubscribeChain: (
     underlying: string,
     expiry: string,
@@ -210,5 +212,43 @@ describe('DeribitWsAdapter socket split', () => {
     await internals.refreshPublicStatus();
 
     expect(backgroundRpc.terminate).toHaveBeenCalledOnce();
+  });
+
+  it('limits eager BTC ticker coverage to the nearest expiries', async () => {
+    const adapter = new DeribitWsAdapter();
+    const internals = adapter as unknown as DeribitTestInternals & {
+      listUnderlyings: () => Promise<string[]>;
+      listExpiries: (underlying: string) => Promise<string[]>;
+      ensureBulkSubscriptions: (underlying: string, source: string) => Promise<void>;
+      delayBetweenEagerUnderlyings: () => Promise<void>;
+    };
+
+    const subscribeWithInterval = vi.fn(async () => {});
+    internals.listUnderlyings = async () => ['BTC'];
+    internals.listExpiries = async () => [
+      '2026-05-27',
+      '2026-05-28',
+      '2026-05-29',
+      '2026-05-30',
+      '2026-06-05',
+    ];
+    internals.ensureBulkSubscriptions = vi.fn(async () => {});
+    internals.delayBetweenEagerUnderlyings = vi.fn(async () => {});
+    internals.subscribeWithInterval = subscribeWithInterval;
+    internals.instruments = [
+      { ...buildInstrument('BTC-27MAR26-70000-C'), expiry: '2026-05-27' },
+      { ...buildInstrument('BTC-27MAR26-70000-C'), exchangeSymbol: 'BTC-28MAR26-70000-C', expiry: '2026-05-28' },
+      { ...buildInstrument('BTC-27MAR26-70000-C'), exchangeSymbol: 'BTC-29MAR26-70000-C', expiry: '2026-05-29' },
+      { ...buildInstrument('BTC-27MAR26-70000-C'), exchangeSymbol: 'BTC-30MAR26-70000-C', expiry: '2026-05-30' },
+      { ...buildInstrument('BTC-27MAR26-70000-C'), exchangeSymbol: 'BTC-05JUN26-70000-C', expiry: '2026-06-05' },
+    ];
+
+    await internals.eagerSubscribe();
+
+    expect(subscribeWithInterval).toHaveBeenCalledTimes(internals.eagerExpiryCount);
+    const subscribedExpiries = (
+      subscribeWithInterval.mock.calls as unknown as Array<[string, CachedInstrument[]]>
+    ).map((call) => call[1][0]?.expiry);
+    expect(subscribedExpiries).toEqual(['2026-05-27', '2026-05-28', '2026-05-29', '2026-05-30']);
   });
 });

@@ -111,6 +111,7 @@ const INSTRUMENT_RE = /^(\w+)-(\w+)-(\d+(?:d\d+)?)-([CP])$/;
  */
 export class DeribitWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'deribit';
+  protected override eagerExpiryCount = 4;
 
   private rpc!: JsonRpcWsClient;
   private activeRpc!: JsonRpcWsClient;
@@ -145,7 +146,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         continue;
       }
 
-      const expiries = await this.listExpiries(underlying);
+      const expiries = (await this.listExpiries(underlying)).slice(0, this.eagerExpiryCount);
 
       for (const expiry of expiries) {
         const matching = this.instruments.filter(

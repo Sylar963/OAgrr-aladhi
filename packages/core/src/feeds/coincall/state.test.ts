@@ -269,9 +269,9 @@ describe('mergeCoincallTOption', () => {
       emptyQuote(),
     );
     expect(q.bidPrice).toBe(1);
-    expect(q.askPrice).toBe(0);
+    expect(q.askPrice).toBeNull();
     expect(q.bidSize).toBe(0.2);
-    expect(q.askSize).toBe(0);
+    expect(q.askSize).toBeNull();
     expect(q.greeks.bidIv).toBe(0.01);
     expect(q.greeks.askIv).toBe(0.01);
     expect(q.markPrice).toBe(4038.58);
@@ -295,6 +295,30 @@ describe('mergeCoincallTOption', () => {
     // delta is overwritten only when the push provides it; here it stays.
     expect(q.greeks.delta).toBe(0.5);
     expect(q.bidPrice).toBe(1);
+  });
+
+  it('treats zero tOption prices and sizes as missing quotes', () => {
+    const inst = testInstrument();
+    const prev = emptyQuote();
+    prev.bidPrice = 10;
+    prev.askPrice = 12;
+    prev.bidSize = 1;
+    prev.askSize = 2;
+    prev.greeks = { ...prev.greeks, bidIv: 0.4, askIv: 0.5 };
+
+    const q = mergeCoincallTOption(
+      { s: 'X', bid: 0, ask: 0, bs: 0, as: 0, ts: 5 },
+      inst,
+      prev,
+      emptyQuote(),
+    );
+
+    expect(q.bidPrice).toBeNull();
+    expect(q.askPrice).toBeNull();
+    expect(q.bidSize).toBeNull();
+    expect(q.askSize).toBeNull();
+    expect(q.greeks.bidIv).toBeNull();
+    expect(q.greeks.askIv).toBeNull();
   });
 
   it('derives missing side IVs from best bid/ask prices on orderBook fallback', () => {

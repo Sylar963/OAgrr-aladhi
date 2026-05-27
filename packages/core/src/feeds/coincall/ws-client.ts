@@ -170,6 +170,9 @@ interface CoincallEnvelope {
  */
 export class CoincallWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'coincall';
+  // Coincall subscriptions are per-instrument; warming the nearest expiries for
+  // every supported underlying creates a large background book fanout for little gain.
+  protected override eagerExpiryCount = 0;
 
   private wsClient: TopicWsClient | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;

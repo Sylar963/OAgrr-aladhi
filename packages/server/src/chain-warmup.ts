@@ -2,6 +2,12 @@ import type { FastifyBaseLogger } from 'fastify';
 import { getAdapter, getRegisteredVenues, listChainWarmupTargets, type VenueId } from '@oggregator/core';
 import { chainEngines } from './chain-engines.js';
 
+const CHAIN_WARMUP_EXCLUDED_VENUES = new Set<VenueId>(['coincall']);
+
+export function warmupVenues(venues: readonly VenueId[]): VenueId[] {
+  return venues.filter((venue) => !CHAIN_WARMUP_EXCLUDED_VENUES.has(venue));
+}
+
 // Hold pre-warm handles for the lifetime of the process so the runtimes stay
 // pinned in the registry. Without this, a 15-min idle period after boot would
 // let them drain back to cold.
@@ -14,7 +20,7 @@ const heldHandles: Array<{ release: () => Promise<void> }> = [];
  * subscribes per expiry.
  */
 export async function warmupChainRuntimes(log: FastifyBaseLogger): Promise<void> {
-  const venues = getRegisteredVenues() as VenueId[];
+  const venues = warmupVenues(getRegisteredVenues() as VenueId[]);
   if (venues.length === 0) {
     log.warn('chain warmup skipped — no adapters registered');
     return;

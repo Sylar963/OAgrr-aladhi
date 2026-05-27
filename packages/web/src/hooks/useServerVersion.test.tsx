@@ -8,7 +8,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useServerVersion } from './useServerVersion';
 
 beforeEach(() => {
-  useAppStore.setState({ announcement: null });
+  useAppStore.setState({
+    announcement: null,
+    feedStatus: {
+      connectionState: 'closed',
+      failedVenueCount: 0,
+      failedVenueIds: [],
+      failedVenues: [],
+      venueStates: {},
+      staleMs: null,
+      lastUpdateMs: null,
+    },
+  });
 });
 
 afterEach(() => {
@@ -47,6 +58,37 @@ describe('useServerVersion', () => {
     const { unmount } = renderHook(() => useServerVersion());
     await waitFor(() => {
       expect(useAppStore.getState().announcement).toBeNull();
+    });
+    unmount();
+  });
+
+  it('writes venue feed health into global feed status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          bootTime: 1,
+          feeds: {
+            summary: { totalVenues: 2, connectedVenues: 2, lastAnyMessageAgeMs: 25 },
+            venues: [
+              { venue: 'deribit', connected: true, lastMessageAgeMs: 25 },
+              { venue: 'okx', connected: true, lastMessageAgeMs: 40 },
+            ],
+          },
+        }),
+      }),
+    );
+
+    const { unmount } = renderHook(() => useServerVersion());
+    await waitFor(() => {
+      expect(useAppStore.getState().feedStatus).toMatchObject({
+        connectionState: 'live',
+        failedVenueCount: 0,
+        failedVenueIds: [],
+        staleMs: 25,
+        venueStates: { deribit: 'live', okx: 'live' },
+      });
     });
     unmount();
   });

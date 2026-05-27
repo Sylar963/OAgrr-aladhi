@@ -81,4 +81,21 @@ describe('useGlobalFeedStatus', () => {
     });
     expect(useAppStore.getState().feedStatus.lastUpdateMs).toBeTypeOf('number');
   });
+
+  it('does not overwrite global feed status when disabled', () => {
+    useAppStore.setState((s) => ({
+      feedStatus: { ...s.feedStatus, connectionState: 'live', staleMs: 1 },
+    }));
+    useChainWsMock.mockReturnValue({
+      connectionState: 'closed',
+      staleMs: null,
+      lastSeq: 0,
+      failedVenues: [],
+      venueStates: {},
+    });
+
+    renderHook(() => useGlobalFeedStatus(false), { wrapper: createWrapper() });
+
+    expect(useAppStore.getState().feedStatus.connectionState).toBe('live');
+  });
 });

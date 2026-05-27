@@ -30,6 +30,8 @@ export function useGlobalFeedStatus(enabled = true) {
   }, [expiries, expiry, setExpiry]);
 
   useEffect(() => {
+    if (!enabled) return;
+
     setFeedStatus({
       connectionState,
       failedVenueCount: failedVenueIds.length,
@@ -39,5 +41,5 @@ export function useGlobalFeedStatus(enabled = true) {
       staleMs,
       lastUpdateMs: connectionState === 'live' && staleMs != null ? Date.now() - staleMs : null,
     });
-  }, [connectionState, failedVenueIds, failedVenues, venueStates, staleMs, setFeedStatus]);
+  }, [enabled, connectionState, failedVenueIds, failedVenues, venueStates, staleMs, setFeedStatus]);
 }

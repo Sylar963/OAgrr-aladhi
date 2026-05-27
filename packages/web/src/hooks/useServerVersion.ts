@@ -1,5 +1,11 @@
 import { parseAnnouncement } from '@lib/system-status';
 import { useAppStore } from '@stores/app-store';
+import {
+  VENUE_IDS,
+  type VenueFailure,
+  type VenueId,
+  type WsConnectionState,
+} from '@oggregator/protocol';
 import { useEffect, useRef } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -9,6 +15,59 @@ interface HealthResponse {
   bootTime?: number;
   version?: string;
   announcement?: unknown;
+  feeds?: {
+    summary?: {
+      totalVenues?: number;
+      connectedVenues?: number;
+      lastAnyMessageAgeMs?: number;
+    };
+    venues?: Array<{
+      venue: string;
+      connected: boolean;
+      lastMessageAgeMs?: number;
+    }>;
+  };
+}
+
+function mapFeedHealth(body: HealthResponse): {
+  connectionState: WsConnectionState;
+  failedVenues: VenueFailure[];
+  failedVenueIds: VenueId[];
+  venueStates: Record<string, WsConnectionState>;
+  staleMs: number | null;
+} | null {
+  const summary = body.feeds?.summary;
+  const venues = body.feeds?.venues;
+  if (summary == null || venues == null) return null;
+
+  const totalVenues = summary.totalVenues ?? venues.length;
+  const connectedVenues =
+    summary.connectedVenues ?? venues.filter((venue) => venue.connected).length;
+  const failedVenueIds = venues
+    .filter((venue) => !venue.connected && VENUE_IDS.includes(venue.venue as VenueId))
+    .map((venue) => venue.venue as VenueId);
+  const failedVenues = failedVenueIds.map((venue) => ({
+    venue,
+    reason: 'venue feed disconnected',
+  }));
+  const venueStates = Object.fromEntries(
+    venues.map((venue) => [venue.venue, venue.connected ? 'live' : 'error']),
+  ) as Record<string, WsConnectionState>;
+
+  const connectionState: WsConnectionState =
+    totalVenues > 0 && connectedVenues === totalVenues
+      ? 'live'
+      : connectedVenues > 0
+        ? 'reconnecting'
+        : 'error';
+
+  return {
+    connectionState,
+    failedVenues,
+    failedVenueIds,
+    venueStates,
+    staleMs: summary.lastAnyMessageAgeMs ?? null,
+  };
 }
 
 function createTimeoutSignal(timeoutMs: number): {
@@ -33,6 +92,7 @@ export function useServerVersion() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
   const currentNoticeKind = useAppStore((s) => s.sessionNotice?.kind);
   const setAnnouncement = useAppStore((s) => s.setAnnouncement);
+  const setFeedStatus = useAppStore((s) => s.setFeedStatus);
   const initialBootRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -61,6 +121,21 @@ export function useServerVersion() {
         }
 
         setAnnouncement(parseAnnouncement(body.announcement));
+        const feedHealth = mapFeedHealth(body);
+        if (feedHealth != null) {
+          setFeedStatus({
+            connectionState: feedHealth.connectionState,
+            failedVenueCount: feedHealth.failedVenues.length,
+            failedVenueIds: feedHealth.failedVenueIds,
+            failedVenues: feedHealth.failedVenues,
+            venueStates: feedHealth.venueStates,
+            staleMs: feedHealth.staleMs,
+            lastUpdateMs:
+              feedHealth.connectionState === 'live' && feedHealth.staleMs != null
+                ? Date.now() - feedHealth.staleMs
+                : null,
+          });
+        }
       } catch {
         // Silent — transient network errors during server restart are expected.
       } finally {
@@ -77,5 +152,5 @@ export function useServerVersion() {
       cancelled = true;
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [setSessionNotice, currentNoticeKind, setAnnouncement]);
+  }, [setSessionNotice, currentNoticeKind, setAnnouncement, setFeedStatus]);
 }

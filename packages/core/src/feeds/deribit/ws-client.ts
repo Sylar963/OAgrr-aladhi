@@ -36,6 +36,7 @@ import {
   createDeribitState,
   registerDeribitInstrument,
   removeDeribitInstrument,
+  shouldForceDeribitStaleReconnect,
   summarizeDeribitSubscribedTickerStaleness,
 } from './state.js';
 
@@ -117,6 +118,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly health = createDeribitHealthState();
   private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
   private subscribedTickerStaleSince = 0;
+  private forcedStaleReconnectAt = 0;
+  private forcedStaleReconnectStreak = 0;
   private publicStatusRefreshPromise: Promise<void> | null = null;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
@@ -776,7 +779,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
     const staleRatio = summary.staleSubscribedTickers / summary.subscribedTickers;
     if (staleRatio < DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO) {
+      // Quotes are flowing again — clear the stale window and reset the
+      // forced-reconnect backoff so the next outage gets an immediate kick.
       this.subscribedTickerStaleSince = 0;
+      this.forcedStaleReconnectAt = 0;
+      this.forcedStaleReconnectStreak = 0;
       return;
     }
 
@@ -798,9 +805,31 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     }
 
     const staleWindowMs = now - this.subscribedTickerStaleSince;
-    if (staleWindowMs < DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) return;
+    const msSinceLastForcedReconnect =
+      this.forcedStaleReconnectAt === 0 ? null : now - this.forcedStaleReconnectAt;
+
+    if (
+      !shouldForceDeribitStaleReconnect({
+        staleWindowMs,
+        graceMs: DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS,
+        msSinceLastForcedReconnect,
+        forcedReconnectStreak: this.forcedStaleReconnectStreak,
+      })
+    ) {
+      // Past grace, but a recent forced reconnect already failed to restore the
+      // feed: it is dead venue-side, not socket-side. Forcing another full
+      // resubscribe would only block the event loop with a fresh snapshot burst.
+      // Stay degraded and let the backoff window elapse — organic transport
+      // reconnect or a resumed stream still recovers us.
+      if (staleWindowMs >= DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) {
+        this.emitStatus('degraded', `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`);
+      }
+      return;
+    }
 
     this.subscribedTickerStaleSince = now;
+    this.forcedStaleReconnectAt = now;
+    this.forcedStaleReconnectStreak += 1;
     log.error(
       {
         subscribedTickers: summary.subscribedTickers,
@@ -808,6 +837,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         missingQuotes: summary.missingQuotes,
         staleRatio,
         staleWindowMs,
+        forcedStaleReconnectStreak: this.forcedStaleReconnectStreak,
         oldestStaleAgeMs: summary.oldestStaleAgeMs,
         newestStaleAgeMs: summary.newestStaleAgeMs,
         staleExamples: summary.staleExamples,

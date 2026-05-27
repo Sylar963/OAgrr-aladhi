@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveQuote } from '../shared/sdk-base.js';
-import { summarizeDeribitSubscribedTickerStaleness } from './state.js';
+import {
+  deribitStaleReconnectCooldownMs,
+  shouldForceDeribitStaleReconnect,
+  summarizeDeribitSubscribedTickerStaleness,
+} from './state.js';
 
 function createQuote(timestamp: number): LiveQuote {
   return {
@@ -59,5 +63,59 @@ describe('Deribit staleness summary', () => {
       newestStaleAgeMs: 90_000,
       staleExamples: ['BTC-1JAN26-100-P', 'BTC-1JAN26-110-C'],
     });
+  });
+});
+
+describe('Deribit forced-reconnect backoff', () => {
+  it('grows the cooldown exponentially up to a ceiling', () => {
+    expect(deribitStaleReconnectCooldownMs(0)).toBe(0);
+    expect(deribitStaleReconnectCooldownMs(1)).toBe(60_000);
+    expect(deribitStaleReconnectCooldownMs(2)).toBe(120_000);
+    expect(deribitStaleReconnectCooldownMs(3)).toBe(240_000);
+    expect(deribitStaleReconnectCooldownMs(10)).toBe(300_000);
+  });
+
+  it('holds until the stale window clears the grace period', () => {
+    expect(
+      shouldForceDeribitStaleReconnect({
+        staleWindowMs: 20_000,
+        graceMs: 30_000,
+        msSinceLastForcedReconnect: null,
+        forcedReconnectStreak: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it('forces immediately on the first stale detection past grace', () => {
+    expect(
+      shouldForceDeribitStaleReconnect({
+        staleWindowMs: 40_000,
+        graceMs: 30_000,
+        msSinceLastForcedReconnect: null,
+        forcedReconnectStreak: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it('backs off while a prior forced reconnect is still inside its cooldown', () => {
+    expect(
+      shouldForceDeribitStaleReconnect({
+        staleWindowMs: 40_000,
+        graceMs: 30_000,
+        msSinceLastForcedReconnect: 45_000,
+        forcedReconnectStreak: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('retries once the cooldown for the current streak has elapsed', () => {
+    expect(
+      shouldForceDeribitStaleReconnect({
+        staleWindowMs: 40_000,
+        graceMs: 30_000,
+        msSinceLastForcedReconnect: 65_000,
+        forcedReconnectStreak: 1,
+      }),
+    ).toBe(true);
   });
 });

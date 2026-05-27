@@ -294,6 +294,16 @@ export class ChainRuntime {
 
     this.activeRequest = { ...this.request, venues: liveVenues };
 
+    void this.acquireVenuesInBackground(liveVenues);
+
+    await this.buildSnapshot();
+    // Re-projection starts only when a listener subscribes (ensurePushTimer);
+    // an engine with no consumers stays idle instead of looping every 100ms.
+  }
+
+  private async acquireVenuesInBackground(liveVenues: VenueId[]): Promise<void> {
+    if (liveVenues.length === 0) return;
+
     // Acquire all venues concurrently — each call may do a WS subscribe
     // round-trip, and serializing them stacks the cold-start latency. The
     // coordinator's per-venue operation queue still serializes against any
@@ -307,10 +317,10 @@ export class ChainRuntime {
           this.venueListener,
         ),
       ),
-    );
+      );
 
     // Release anything that resolved after dispose() — same guarantee the
-    // sequential version provided.
+    // prior blocking version provided.
     if (this.disposed) {
       await Promise.allSettled(
         acquired
@@ -334,10 +344,6 @@ export class ChainRuntime {
         this.log.warn({ venue: venueId, err: reason }, 'venue subscribe failed');
       }
     });
-
-    await this.buildSnapshot();
-    // Re-projection starts only when a listener subscribes (ensurePushTimer);
-    // an engine with no consumers stays idle instead of looping every 100ms.
   }
 
   private ensurePushTimer(): void {

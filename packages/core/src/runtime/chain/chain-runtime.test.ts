@@ -12,6 +12,12 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function flushMicrotasks(turns = 5): Promise<void> {
+  for (let i = 0; i < turns; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 const fetchOptionChainMock = vi.fn();
 const getRegisteredVenuesMock = vi.fn(() => ['okx']);
 
@@ -153,14 +159,38 @@ describe('ChainRuntime', () => {
       coordinator: coordinator as never,
     });
 
-    const readyPromise = runtime.ready();
-    await Promise.resolve();
+    await runtime.ready();
     await runtime.dispose();
 
     acquireGate.resolve({ release });
-    await readyPromise;
+    await flushMicrotasks();
 
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves ready and serves a snapshot before venue acquisition finishes', async () => {
+    const acquireGate = deferred<{ release: () => Promise<void> }>();
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: {
+        acquire: vi.fn(async () => acquireGate.promise),
+      } as never,
+    });
+
+    const winner = await Promise.race([
+      runtime.ready().then(() => 'ready'),
+      acquireGate.promise.then(() => 'acquired'),
+    ]);
+
+    expect(winner).toBe('ready');
+    expect(fetchOptionChainMock).toHaveBeenCalledTimes(1);
+    expect(runtime.getSnapshot()?.meta.maxQuoteTs).toBe(1_000);
+    expect(runtime.getSnapshot()?.data.strikes[0]?.call.venues.okx?.bid).toBe(100);
+
+    acquireGate.resolve({ release: async () => {} });
+    await flushMicrotasks();
+    await runtime.dispose();
   });
 
   it('keeps the newest snapshot when rebuilds finish out of order', async () => {

@@ -52,17 +52,27 @@ function symbolUnderlying(symbol: string): { underlying: string; base: string; e
   };
 }
 
-function addToGroup(
-  grouped: Map<CoordinatedRequestEntry, VenueDelta[]>,
-  entry: CoordinatedRequestEntry,
-  delta: VenueDelta,
-): void {
-  const group = grouped.get(entry);
-  if (group != null) {
-    group.push(delta);
-  } else {
-    grouped.set(entry, [delta]);
-  }
+function requestMatchesSymbol(
+  request: ChainRequest,
+  symbol: string,
+  activeRequests: Iterable<CoordinatedRequestEntry>,
+): boolean {
+  const parsed = symbolUnderlying(symbol);
+  if (parsed == null || request.expiry !== parsed.expiry) return false;
+  if (request.underlying === parsed.underlying) return true;
+
+  const requestUnderlying = splitUnderlyingFamily(request.underlying);
+  if (requestUnderlying.settle != null || requestUnderlying.base !== parsed.base) return false;
+
+  const hasAliasSpecificRequest = [...activeRequests].some(
+    (entry) =>
+      entry.request.expiry === parsed.expiry &&
+      entry.request.underlying === parsed.underlying &&
+      parsed.underlying !== parsed.base,
+  );
+  if (hasAliasSpecificRequest) return false;
+
+  return true;
 }
 
 export class VenueSubscriptionCoordinator {
@@ -192,52 +202,24 @@ export class VenueSubscriptionCoordinator {
           const currentEntry = this.venueEntries.get(venue);
           if (currentEntry == null) return;
 
-          const exactIndex = new Map<string, CoordinatedRequestEntry[]>();
-          const aliasIndex = new Map<string, CoordinatedRequestEntry[]>();
-
-          for (const requestEntry of currentEntry.requestEntries.values()) {
-            const req = requestEntry.request;
-            const key = requestKey(req);
-
-            let arr = exactIndex.get(key);
-            if (arr == null) {
-              arr = [];
-              exactIndex.set(key, arr);
-            }
-            arr.push(requestEntry);
-
-            const { settle } = splitUnderlyingFamily(req.underlying);
-            if (settle == null) {
-              let aliasArr = aliasIndex.get(key);
-              if (aliasArr == null) {
-                aliasArr = [];
-                aliasIndex.set(key, aliasArr);
-              }
-              aliasArr.push(requestEntry);
-            }
-          }
-
           const grouped = new Map<CoordinatedRequestEntry, VenueDelta[]>();
           for (const delta of deltas) {
-            const parsed = symbolUnderlying(delta.symbol);
-            if (parsed == null) continue;
-
-            const exactKey = `${parsed.underlying}:${parsed.expiry}`;
-            const exactEntries = exactIndex.get(exactKey);
-            if (exactEntries != null) {
-              for (const entry of exactEntries) {
-                addToGroup(grouped, entry, delta);
+            for (const requestEntry of currentEntry.requestEntries.values()) {
+              if (
+                !requestMatchesSymbol(
+                  requestEntry.request,
+                  delta.symbol,
+                  currentEntry.requestEntries.values(),
+                )
+              ) {
+                continue;
               }
-              continue;
-            }
 
-            if (parsed.underlying !== parsed.base) {
-              const baseKey = `${parsed.base}:${parsed.expiry}`;
-              const aliasEntries = aliasIndex.get(baseKey);
-              if (aliasEntries != null) {
-                for (const entry of aliasEntries) {
-                  addToGroup(grouped, entry, delta);
-                }
+              const group = grouped.get(requestEntry);
+              if (group != null) {
+                group.push(delta);
+              } else {
+                grouped.set(requestEntry, [delta]);
               }
             }
           }

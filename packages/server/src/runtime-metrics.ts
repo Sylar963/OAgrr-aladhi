@@ -3,9 +3,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 const NS_PER_MS = 1_000_000;
 const BYTES_PER_MB = 1024 * 1024;
-const HEARTBEAT_INTERVAL_MS = 30_000;
-const EVENT_LOOP_LAG_ALERT_MS = 500;
-const EVENT_LOOP_LAG_BUCKET_MS = 100;
+const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 
 export interface RuntimeMetricsSnapshot {
   uptimeSec: number;
@@ -21,8 +19,6 @@ export interface RuntimeMetricsSnapshot {
     p99Ms: number;
     maxMs: number;
     windowSec: number;
-    over500Count: number;
-    buckets: Record<string, number>;
   };
   resources: {
     total: number;
@@ -36,23 +32,15 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 // p50/p99/max numbers in /api/health describe a known interval rather than
 // "everything since boot" (which would mask recent spikes).
 let windowStartMs = Date.now();
-let eventLoopLagBuckets: Record<string, number> = {};
-let eventLoopLagOver500Count = 0;
 
 export function startRuntimeMetrics(log: FastifyBaseLogger): void {
   if (histogram) return;
   histogram = monitorEventLoopDelay({ resolution: 10 });
   histogram.enable();
   windowStartMs = Date.now();
-  eventLoopLagBuckets = {};
-  eventLoopLagOver500Count = 0;
 
   heartbeatTimer = setInterval(() => {
     const snap = getRuntimeMetricsSnapshot();
-    recordEventLoopLagSample(snap.eventLoopLag.maxMs);
-    if (snap.eventLoopLag.maxMs >= EVENT_LOOP_LAG_ALERT_MS) {
-      log.warn({ eventLoopLag: snap.eventLoopLag }, 'event-loop-lag');
-    }
     log.info(snap, 'runtime metrics heartbeat');
     histogram?.reset();
     windowStartMs = Date.now();
@@ -69,8 +57,6 @@ export function disposeRuntimeMetrics(): void {
     histogram.disable();
     histogram = null;
   }
-  eventLoopLagBuckets = {};
-  eventLoopLagOver500Count = 0;
 }
 
 export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
@@ -99,8 +85,6 @@ export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
       p99Ms: round1(p99Ns / NS_PER_MS),
       maxMs: round1(maxNs / NS_PER_MS),
       windowSec: Math.round((Date.now() - windowStartMs) / 1000),
-      over500Count: eventLoopLagOver500Count,
-      buckets: { ...eventLoopLagBuckets },
     },
     resources: {
       total: resources.length,
@@ -115,14 +99,4 @@ function toMb(bytes: number): number {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
-}
-
-function recordEventLoopLagSample(maxMs: number): void {
-  const bucketStartMs = Math.floor(maxMs / EVENT_LOOP_LAG_BUCKET_MS) * EVENT_LOOP_LAG_BUCKET_MS;
-  const bucketKey = `lag_${bucketStartMs}`;
-
-  eventLoopLagBuckets[bucketKey] = (eventLoopLagBuckets[bucketKey] ?? 0) + 1;
-  if (maxMs >= EVENT_LOOP_LAG_ALERT_MS) {
-    eventLoopLagOver500Count += 1;
-  }
 }

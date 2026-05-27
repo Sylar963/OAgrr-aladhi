@@ -6,7 +6,6 @@ import {
   getAllAdapters,
   realizedVol,
   type CmmIvSurfaceRow,
-  type EnrichedStrike,
   type IvSurfaceRow,
   type IvSurfaceFineRow,
   type TermStructure,
@@ -49,7 +48,6 @@ export async function surfaceRoute(app: FastifyInstance) {
     const surface: IvSurfaceRow[] = new Array(entries.length);
     const surfaceFine: IvSurfaceFineRow[] = new Array(entries.length);
     const surfaceFineSmoothed: IvSurfaceFineRow[] = new Array(entries.length);
-    const strikes: EnrichedStrike[][] = new Array(entries.length);
     const venueAtm: Record<string, Array<{ expiry: string; dte: number; atm: number | null }>> = {};
     const venueSurfaceFine: Partial<Record<VenueId, IvSurfaceFineRow[]>> = {};
     const venueSurfaceFineSmoothed: Partial<Record<VenueId, IvSurfaceFineRow[]>> = {};
@@ -62,7 +60,6 @@ export async function surfaceRoute(app: FastifyInstance) {
       surface[i] = entry.surfaceRow;
       surfaceFine[i] = entry.surfaceFineRow;
       surfaceFineSmoothed[i] = entry.surfaceFineSmoothedRow;
-      strikes[i] = entry.strikes;
       for (const venueId of requestedVenues) {
         const callIv = entry.atmStrike?.call.venues[venueId]?.markIv ?? null;
         const putIv = entry.atmStrike?.put.venues[venueId]?.markIv ?? null;
@@ -92,14 +89,13 @@ export async function surfaceRoute(app: FastifyInstance) {
     }
     const { atmIv30d, rv30d, vrp30d } = await computeVrpContext(underlying, req.log);
 
-    reply.header('Cache-Control', 'public, max-age=0, s-maxage=5, stale-while-revalidate=2');
+    reply.header('Cache-Control', 'public, max-age=0, s-maxage=1, stale-while-revalidate=2');
 
     return {
       underlying,
       surface,
       surfaceFine,
       surfaceFineSmoothed,
-      strikes,
       surfaceFineCmm,
       surfaceFineDeltas: FINE_DELTA_GRID,
       surfaceFineDeltasDense: ULTRA_FINE_DELTA_GRID,

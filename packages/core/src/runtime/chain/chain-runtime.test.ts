@@ -12,12 +12,6 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function flushMicrotasks(turns = 5): Promise<void> {
-  for (let i = 0; i < turns; i += 1) {
-    await Promise.resolve();
-  }
-}
-
 const fetchOptionChainMock = vi.fn();
 const getRegisteredVenuesMock = vi.fn(() => ['okx']);
 
@@ -92,14 +86,13 @@ function makeChain(timestamp: number, bidUsd: number): VenueOptionChain {
 
 type ChainRuntimeInternals = {
   buildSnapshot: () => Promise<void>;
-  pushDelta: () => void;
   venueListener: {
     onDelta: (
       deltas: Array<{
         venue: 'okx';
         symbol: string;
         ts: number;
-        quote?: { bid?: { raw: number; rawCurrency: 'BTC'; usd: number }; timestamp?: number };
+        quote?: { bid?: { raw: number; rawCurrency: 'BTC'; usd: number } };
       }>,
     ) => void;
   };
@@ -159,38 +152,14 @@ describe('ChainRuntime', () => {
       coordinator: coordinator as never,
     });
 
-    await runtime.ready();
+    const readyPromise = runtime.ready();
+    await Promise.resolve();
     await runtime.dispose();
 
     acquireGate.resolve({ release });
-    await flushMicrotasks();
+    await readyPromise;
 
     expect(release).toHaveBeenCalledTimes(1);
-  });
-
-  it('resolves ready and serves a snapshot before venue acquisition finishes', async () => {
-    const acquireGate = deferred<{ release: () => Promise<void> }>();
-    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
-
-    const runtime = new ChainRuntime('test', request(), {
-      coordinator: {
-        acquire: vi.fn(async () => acquireGate.promise),
-      } as never,
-    });
-
-    const winner = await Promise.race([
-      runtime.ready().then(() => 'ready'),
-      acquireGate.promise.then(() => 'acquired'),
-    ]);
-
-    expect(winner).toBe('ready');
-    expect(fetchOptionChainMock).toHaveBeenCalledTimes(1);
-    expect(runtime.getSnapshot()?.meta.maxQuoteTs).toBe(1_000);
-    expect(runtime.getSnapshot()?.data.strikes[0]?.call.venues.okx?.bid).toBe(100);
-
-    acquireGate.resolve({ release: async () => {} });
-    await flushMicrotasks();
-    await runtime.dispose();
   });
 
   it('keeps the newest snapshot when rebuilds finish out of order', async () => {
@@ -230,7 +199,7 @@ describe('ChainRuntime', () => {
             venue: 'okx';
             symbol: string;
             ts: number;
-            quote?: { bid?: { raw: number; rawCurrency: 'BTC'; usd: number }; timestamp?: number };
+            quote?: { bid?: { raw: number; rawCurrency: 'BTC'; usd: number } };
           }>,
         ) => void;
       };
@@ -299,67 +268,5 @@ describe('ChainRuntime', () => {
     expect(internals.pendingBySymbol.size).toBe(0);
 
     await runtime.dispose();
-  });
-
-  it('holds the first snapshot until live quote timestamps arrive', async () => {
-    fetchOptionChainMock.mockResolvedValue(makeChain(0, 100));
-
-    const runtime = new ChainRuntime('test', request(), {
-      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
-    });
-    await runtime.ready();
-
-    const events: Array<{ type: string; meta?: { maxQuoteTs: number } }> = [];
-    const internals = runtime as unknown as ChainRuntimeInternals;
-    internals.listeners.add({ onEvent: (event) => events.push(event as never) });
-
-    expect(runtime.getSnapshot()).toBeNull();
-
-    internals.venueListener.onDelta([
-      {
-        venue: 'okx',
-        symbol: 'BTC/USD:BTC-260327-70000-C',
-        ts: 2_000,
-        quote: {
-          bid: { raw: 0.2, rawCurrency: 'BTC', usd: 300 },
-          timestamp: 2_000,
-        },
-      },
-    ]);
-    internals.pushDelta();
-
-    expect(events[0]).toMatchObject({ type: 'snapshot', meta: { maxQuoteTs: 2_000 } });
-    expect(runtime.getSnapshot()?.meta.maxQuoteTs).toBe(2_000);
-
-    await runtime.dispose();
-  });
-
-  it('backs off repeated resync rebuilds for missing contracts', async () => {
-    vi.useFakeTimers();
-    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
-
-    const runtime = new ChainRuntime('test', request(), {
-      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
-    });
-    await runtime.ready();
-
-    const internals = runtime as unknown as ChainRuntimeInternals;
-    const buildSnapshot = vi.fn(async () => {});
-    internals.buildSnapshot = buildSnapshot;
-    internals.listeners.add({ onEvent: () => {} });
-
-    internals.venueListener.onDelta([{ venue: 'okx', symbol: 'missing', ts: 2_000 }]);
-    internals.pushDelta();
-    expect(buildSnapshot).toHaveBeenCalledTimes(1);
-
-    internals.venueListener.onDelta([{ venue: 'okx', symbol: 'missing', ts: 2_100 }]);
-    internals.pushDelta();
-    expect(buildSnapshot).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(buildSnapshot).toHaveBeenCalledTimes(2);
-
-    await runtime.dispose();
-    vi.useRealTimers();
   });
 });

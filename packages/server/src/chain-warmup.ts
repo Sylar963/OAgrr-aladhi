@@ -1,12 +1,17 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { getAdapter, getRegisteredVenues, listChainWarmupTargets, type VenueId } from '@oggregator/core';
+import { getAdapter, getRegisteredVenues, type VenueId } from '@oggregator/core';
 import { chainEngines } from './chain-engines.js';
 
-const CHAIN_WARMUP_EXCLUDED_VENUES = new Set<VenueId>(['coincall']);
+// Hot tier: full chain runtime acquired with N nearest expiries.
+// These are the underlyings that take >90% of user traffic.
+const HOT_UNDERLYINGS = ['BTC', 'ETH', 'BTC_USDC', 'ETH_USDC', 'SOL_USDC'] as const;
+const HOT_EXPIRY_COUNT = 4;
 
-export function warmupVenues(venues: readonly VenueId[]): VenueId[] {
-  return venues.filter((venue) => !CHAIN_WARMUP_EXCLUDED_VENUES.has(venue));
-}
+// Warm tier: same flow, fewer expiries. Cuts cold-start to ~ms when a user
+// clicks one of these (they don't get a per-strike ticker firehose at boot,
+// but the bulk channels are already live via the adapter's eagerSubscribe).
+const WARM_UNDERLYINGS = ['AVAX_USDC', 'XRP_USDC', 'TRX_USDC'] as const;
+const WARM_EXPIRY_COUNT = 2;
 
 // Hold pre-warm handles for the lifetime of the process so the runtimes stay
 // pinned in the registry. Without this, a 15-min idle period after boot would
@@ -20,27 +25,34 @@ const heldHandles: Array<{ release: () => Promise<void> }> = [];
  * subscribes per expiry.
  */
 export async function warmupChainRuntimes(log: FastifyBaseLogger): Promise<void> {
-  const venues = warmupVenues(getRegisteredVenues() as VenueId[]);
+  const venues = getRegisteredVenues() as VenueId[];
   if (venues.length === 0) {
     log.warn('chain warmup skipped — no adapters registered');
     return;
   }
 
-  const warmupTargets = listChainWarmupTargets();
+  await Promise.allSettled([
+    warmupTier(HOT_UNDERLYINGS, HOT_EXPIRY_COUNT, venues, log, 'hot'),
+    warmupTier(WARM_UNDERLYINGS, WARM_EXPIRY_COUNT, venues, log, 'warm'),
+  ]);
+}
 
+async function warmupTier(
+  underlyings: readonly string[],
+  expiryCount: number,
+  venues: VenueId[],
+  log: FastifyBaseLogger,
+  tier: 'hot' | 'warm',
+): Promise<void> {
   await Promise.allSettled(
-    warmupTargets.map(async ({ underlying, expiryCount, tier }) => {
+    underlyings.map(async (underlying) => {
       const expiries = await collectNearestExpiries(underlying, venues, log, expiryCount);
       if (expiries.length === 0) return;
-
       await Promise.allSettled(
         expiries.map(async (expiry) => {
           const start = Date.now();
           try {
-            const { release } = await chainEngines.acquire(
-              { underlying, expiry, venues },
-              { activity: 'background' },
-            );
+            const { release } = await chainEngines.acquire({ underlying, expiry, venues });
             heldHandles.push({ release });
             log.info({ underlying, expiry, tier, ms: Date.now() - start }, 'chain runtime warmed');
           } catch (err: unknown) {

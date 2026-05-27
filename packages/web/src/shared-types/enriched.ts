@@ -1,7 +1,3 @@
-import type {
-  EnrichedStrike,
-} from '@oggregator/protocol';
-
 export type {
   ChainStats,
   EnrichedChainResponse,
@@ -74,12 +70,6 @@ export interface IvSurfaceResponse {
   underlying: string;
   surface: IvSurfaceRow[];
   surfaceFine: IvSurfaceFineRow[];
-  // Per-expiry per-strike enriched data, aligned 1:1 with surface[].
-  // Populated when the surface includes individual venue quotes. Consumers
-  // such as VolSmile read from here instead of making N individual /api/chains
-  // calls, which previously caused WS subscription storms and event-loop
-  // pressure from parallel chain runtime acquisition.
-  strikes?: EnrichedStrike[][];
   // SVI-fitted (or linearly-filled) variant of surfaceFine. Same shape, same
   // delta alignment — populated where the fit succeeds, falling back to
   // linear interpolation across the row otherwise.

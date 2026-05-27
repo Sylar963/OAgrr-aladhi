@@ -55,19 +55,15 @@ const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 // On-demand subscriptions (user viewing a chain) use 100ms for tight updates.
 const EAGER_TICKER_INTERVAL = 'agg2';
 const ACTIVE_TICKER_INTERVAL = '100ms';
-const HEALTH_CHECK_INTERVAL_MS = 30 * 1000;
+const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 const DERIBIT_PUBLIC_STATUS_TIMEOUT_MS = 15_000;
-const DERIBIT_PUBLIC_STATUS_RECONNECT_IDLE_AFTER_MS = 45_000;
 const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
 const DERIBIT_CHAIN_STALE_LOG_MS = 15_000;
 const DERIBIT_CHAIN_SAMPLE_SIZE = 5;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS = 90_000;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS = 30_000;
-const DERIBIT_ACTIVE_TICKER_STALE_AFTER_MS = 20_000;
-const DERIBIT_ACTIVE_TICKER_STALE_GRACE_MS = 10_000;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO = 0.9;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
-const PRICE_INDEX_COALESCE_MS = 50;
 
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
@@ -111,10 +107,8 @@ const INSTRUMENT_RE = /^(\w+)-(\w+)-(\d+(?:d\d+)?)-([CP])$/;
  */
 export class DeribitWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'deribit';
-  protected override eagerExpiryCount = 4;
 
   private rpc!: JsonRpcWsClient;
-  private activeRpc!: JsonRpcWsClient;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private instrumentStateQueue: unknown[] = [];
   private instrumentStateFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -122,13 +116,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
   private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
-  private readonly pendingPriceIndexUpdates = new Map<
-    string,
-    { price: number; timestamp: number }
-  >();
   private subscribedTickerStaleSince = 0;
   private publicStatusRefreshPromise: Promise<void> | null = null;
-  private priceIndexFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -146,7 +135,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         continue;
       }
 
-      const expiries = (await this.listExpiries(underlying)).slice(0, this.eagerExpiryCount);
+      const expiries = await this.listExpiries(underlying);
 
       for (const expiry of expiries) {
         const matching = this.instruments.filter(
@@ -163,23 +152,22 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
   protected override getFeedConnectionSnapshot() {
     return {
-      connected: this.effectiveFeedConnected(),
-      lastActivityAt: this.effectiveLastActivityAt(),
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
     };
   }
 
   override getFeedDiagnostics() {
     return {
-      connected: this.effectiveFeedConnected(),
-      lastActivityAt: this.effectiveLastActivityAt(),
-      reconnectAttempts: this.effectiveReconnectAttempts(),
-      rateLimitUntil: this.effectiveRateLimitUntil(),
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+      reconnectAttempts: this.rpc.reconnectAttemptsCount,
+      rateLimitUntil: this.rpc.rateLimitUntilMs,
     };
   }
 
   protected override restartFeedFromWatchdog(): void {
     this.rpc.terminate();
-    this.activeRpc.terminate();
   }
 
   override async fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
@@ -199,15 +187,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
       resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
       rateLimitCooldownMs: 120_000,
-      onStatusChange: (state) => this.emitSocketStatus('background', state),
-    });
-    this.activeRpc = new JsonRpcWsClient(DERIBIT_WS_URL, 'deribit-active-ws', {
-      heartbeatIntervalSec: 30,
-      requestTimeoutMs: DERIBIT_REQUEST_TIMEOUT_MS,
-      resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
-      resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
-      rateLimitCooldownMs: 120_000,
-      onStatusChange: (state) => this.emitSocketStatus('active', state),
+      onStatusChange: (state) =>
+        this.emitStatus(
+          state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
+        ),
     });
 
     this.rpc.onSubscription((channel: string, data: unknown) => {
@@ -223,61 +206,6 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         this.handlePlatformState(data);
       }
     });
-    this.activeRpc.onSubscription((channel: string, data: unknown) => {
-      if (channel.startsWith('ticker.')) {
-        this.handleTicker(channel, data);
-      }
-    });
-  }
-
-  private emitSocketStatus(
-    role: 'background' | 'active',
-    state: 'connected' | 'reconnecting' | 'down',
-  ): void {
-    if (role === 'active' && !this.hasActiveTickerSubscriptions()) return;
-    this.emitStatus(
-      state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
-    );
-  }
-
-  private hasActiveTickerSubscriptions(): boolean {
-    for (const interval of this.subscriptions.tickerIntervals.values()) {
-      if (interval === ACTIVE_TICKER_INTERVAL) return true;
-    }
-    return false;
-  }
-
-  private effectiveFeedConnected(): boolean {
-    if (!this.rpc.isConnected) return false;
-    return !this.hasActiveTickerSubscriptions() || this.activeRpc.isConnected;
-  }
-
-  private effectiveLastActivityAt(): number {
-    const backgroundActivity = this.backgroundLastActivityAt();
-    const activeActivity = this.hasActiveTickerSubscriptions()
-      ? this.activeLastActivityAt()
-      : 0;
-    return Math.max(backgroundActivity, activeActivity);
-  }
-
-  private backgroundLastActivityAt(): number {
-    return this.rpc.lastActivityAtMs || this.rpc.connectedAtMs;
-  }
-
-  private activeLastActivityAt(): number {
-    return this.activeRpc.lastActivityAtMs || this.activeRpc.connectedAtMs;
-  }
-
-  private effectiveReconnectAttempts(): number {
-    const activeReconnects = this.hasActiveTickerSubscriptions()
-      ? this.activeRpc.reconnectAttemptsCount
-      : 0;
-    return Math.max(this.rpc.reconnectAttemptsCount, activeReconnects);
-  }
-
-  private effectiveRateLimitUntil(): number {
-    const activeRateLimitUntil = this.hasActiveTickerSubscriptions() ? this.activeRpc.rateLimitUntilMs : 0;
-    return Math.max(this.rpc.rateLimitUntilMs, activeRateLimitUntil);
   }
 
   // ─── instrument loading ───────────────────────────────────────
@@ -465,15 +393,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     );
 
     if (plan.channelsToUnsubscribe.length > 0) {
-      await this.unsubscribeTickerChannels(plan.channelsToUnsubscribe);
+      await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
     }
 
     if (plan.tickerChannels.length > 0) {
-      await this.subscribeBatched(
-        plan.tickerChannels,
-        `ticker-${source}`,
-        interval === ACTIVE_TICKER_INTERVAL ? this.activeRpc : this.rpc,
-      );
+      await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
       log.info(
         { count: plan.tickerChannels.length, underlying, interval, source },
         'subscribed to ticker channels',
@@ -486,15 +410,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
    * a {@link SUBSCRIBE_BATCH_DELAY_MS} delay between calls to stay within
    * Deribit's sustained rate limit of ~3.3 subscribe calls/sec.
    */
-  private async subscribeBatched(
-    channels: string[],
-    source: string,
-    rpc: JsonRpcWsClient = this.rpc,
-  ): Promise<void> {
-    await rpc.connect();
+  private async subscribeBatched(channels: string[], source: string): Promise<void> {
     for (let i = 0; i < channels.length; i += SUBSCRIBE_BATCH_SIZE) {
       const batch = channels.slice(i, i + SUBSCRIBE_BATCH_SIZE);
-      await rpc.subscribe(batch, source);
+      await this.rpc.subscribe(batch, source);
       if (i + SUBSCRIBE_BATCH_SIZE < channels.length) {
         await new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_BATCH_DELAY_MS));
       }
@@ -505,30 +424,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     const plan = buildDeribitSubscriptionPlan(this.subscriptions, underlying, [], EAGER_TICKER_INTERVAL);
     if (plan.bulkChannels.length === 0) return;
 
-    await this.rpc.connect();
     await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
     log.info(
       { count: plan.bulkChannels.length, underlying, source },
       'subscribed to bulk index channels',
     );
-  }
-
-  private async unsubscribeTickerChannels(channels: string[]): Promise<void> {
-    const activeChannels: string[] = [];
-    const backgroundChannels: string[] = [];
-
-    for (const channel of channels) {
-      if (channel.endsWith(`.${ACTIVE_TICKER_INTERVAL}`)) {
-        activeChannels.push(channel);
-        continue;
-      }
-      backgroundChannels.push(channel);
-    }
-
-    await Promise.all([
-      backgroundChannels.length > 0 ? this.rpc.unsubscribe(backgroundChannels) : Promise.resolve(),
-      activeChannels.length > 0 ? this.activeRpc.unsubscribe(activeChannels) : Promise.resolve(),
-    ]);
   }
 
   private async delayBetweenEagerUnderlyings(): Promise<void> {
@@ -579,10 +479,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     }
 
     if (channelsToUnsubscribe.length > 0) {
-      await this.unsubscribeTickerChannels(channelsToUnsubscribe);
+      await this.rpc.unsubscribe(channelsToUnsubscribe);
     }
     if (channelsToSubscribe.length > 0) {
-      await this.subscribeBatched(channelsToSubscribe, 'ticker-downgrade', this.rpc);
+      await this.subscribeBatched(channelsToSubscribe, 'ticker-downgrade');
       log.info(
         { count: channelsToSubscribe.length, underlying, interval: EAGER_TICKER_INTERVAL },
         'downgraded ticker channels to eager interval',
@@ -591,7 +491,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   protected async unsubscribeAll(): Promise<void> {
-    await Promise.all([this.rpc.unsubscribeAll(), this.activeRpc.unsubscribeAll()]);
+    await this.rpc.unsubscribeAll();
     resetDeribitSubscriptionState(this.subscriptions);
   }
 
@@ -838,7 +738,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
     if (channelsToUnsubscribe.length > 0) {
       try {
-        await this.unsubscribeTickerChannels(channelsToUnsubscribe);
+        await this.rpc.unsubscribe(channelsToUnsubscribe);
       } catch (err: unknown) {
         log.warn(
           { count: channelsToUnsubscribe.length, err: String(err) },
@@ -856,23 +756,17 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   private checkSubscribedTickerStaleness(): void {
-    if (!this.rpc.isConnected && !this.activeRpc.isConnected) {
+    if (!this.rpc.isConnected) {
       this.subscribedTickerStaleSince = 0;
       return;
     }
 
     const now = Date.now();
-    const staleAfterMs = this.hasActiveTickerSubscriptions()
-      ? DERIBIT_ACTIVE_TICKER_STALE_AFTER_MS
-      : DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS;
-    const staleGraceMs = this.hasActiveTickerSubscriptions()
-      ? DERIBIT_ACTIVE_TICKER_STALE_GRACE_MS
-      : DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS;
     const summary = summarizeDeribitSubscribedTickerStaleness(
       this.subscriptions.subscribedTickers,
       this.quoteStore,
       now,
-      staleAfterMs,
+      DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS,
       DERIBIT_CHAIN_SAMPLE_SIZE,
     );
     if (summary == null || summary.subscribedTickers < DERIBIT_SUBSCRIBED_TICKER_STALE_MIN) {
@@ -904,7 +798,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     }
 
     const staleWindowMs = now - this.subscribedTickerStaleSince;
-    if (staleWindowMs < staleGraceMs) return;
+    if (staleWindowMs < DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) return;
 
     this.subscribedTickerStaleSince = now;
     log.error(
@@ -921,10 +815,6 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       'deribit subscribed tickers stayed stale, forcing reconnect',
     );
     this.emitStatus('reconnecting', `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`);
-    if (this.hasActiveTickerSubscriptions()) {
-      this.activeRpc.terminate();
-      return;
-    }
     this.rpc.terminate();
   }
 
@@ -949,11 +839,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         this.emitStatus(health.status, health.message);
 
         if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
-          const backgroundIdleMs = Date.now() - this.backgroundLastActivityAt();
-          if (backgroundIdleMs > DERIBIT_PUBLIC_STATUS_RECONNECT_IDLE_AFTER_MS) {
-            this.emitStatus('reconnecting', 'deribit public/status timed out while feed idle, reconnecting');
-            this.rpc.terminate();
-          }
+          this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
+          this.rpc.terminate();
         }
       }
     })().finally(() => {
@@ -1011,34 +898,15 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     const parsed = parseDeribitPriceIndex(data);
     if (parsed == null) return;
 
-    this.queuePriceIndexUpdate(parsed.index_name, parsed.price, parsed.timestamp ?? Date.now());
-  }
+    const updates = applyDeribitPriceIndex(
+      this.state,
+      this.quoteStore,
+      parsed.index_name,
+      parsed.price,
+      parsed.timestamp ?? Date.now(),
+    );
 
-  private queuePriceIndexUpdate(indexName: string, price: number, timestamp: number): void {
-    this.pendingPriceIndexUpdates.set(indexName, { price, timestamp });
-    if (this.priceIndexFlushTimer != null) return;
-
-    this.priceIndexFlushTimer = setTimeout(() => {
-      this.priceIndexFlushTimer = null;
-      this.flushPriceIndexUpdates();
-    }, PRICE_INDEX_COALESCE_MS);
-  }
-
-  private flushPriceIndexUpdates(): void {
-    if (this.pendingPriceIndexUpdates.size === 0) return;
-
-    for (const [indexName, { price, timestamp }] of this.pendingPriceIndexUpdates) {
-      const updates = applyDeribitPriceIndex(
-        this.state,
-        this.quoteStore,
-        indexName,
-        price,
-        timestamp,
-      );
-      this.emitQuoteUpdates(updates);
-    }
-
-    this.pendingPriceIndexUpdates.clear();
+    this.emitQuoteUpdates(updates);
   }
 
   /**
@@ -1075,17 +943,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       this.healthTimer = null;
     }
     this.publicStatusRefreshPromise = null;
-    if (this.priceIndexFlushTimer != null) {
-      clearTimeout(this.priceIndexFlushTimer);
-      this.priceIndexFlushTimer = null;
-    }
-    this.pendingPriceIndexUpdates.clear();
     if (this.instrumentStateFlushTimer != null) {
       clearTimeout(this.instrumentStateFlushTimer);
       this.instrumentStateFlushTimer = null;
     }
     this.instrumentStateQueue.length = 0;
     await this.unsubscribeAll();
-    await Promise.all([this.rpc?.disconnect(), this.activeRpc?.disconnect()]);
+    await this.rpc?.disconnect();
   }
 }

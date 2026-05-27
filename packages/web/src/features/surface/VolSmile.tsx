@@ -103,7 +103,7 @@ export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
   const { data: expiriesData } = useExpiries(localUnderlying);
   const expiries = expiriesData?.expiries ?? [];
 
-  const { data: chains } = useAllExpiriesSmile(localUnderlying);
+  const { data: chains } = useAllExpiriesSmile(localUnderlying, true);
 
   // Only Deribit/OKX/Thalex carry BTC+ETH; SOL/DOGE/AAVE/LIT/etc. live on
   // bybit/coincall/binance/derive/gateio. Without this, picking e.g. SOL while

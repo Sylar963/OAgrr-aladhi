@@ -15,8 +15,6 @@ import type {
 } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 
-const FULL_RECOMPUTE_INTERVAL = 10;
-
 export interface ChainProjectionDelta {
   meta: SnapshotMeta;
   deltas: VenueDelta[];
@@ -81,9 +79,6 @@ export class ChainProjection {
   private venueChains = new Map<VenueId, VenueOptionChain>();
   private comparisonRows = new Map<number, ComparisonRow>();
   private enrichedStrikes = new Map<number, EnrichedStrike>();
-  private lastStats: EnrichedChainResponse['stats'] | null = null;
-  private lastGex: EnrichedChainResponse['gex'] | null = null;
-  private pushesSinceAnalyticsRefresh = 0;
 
   constructor(
     private readonly underlying: string,
@@ -95,18 +90,12 @@ export class ChainProjection {
     this.comparisonRows = comparisonRowsMap(this.underlying, this.expiry, venueChains);
     this.enrichedStrikes = enrichedStrikesMap(this.comparisonRows);
 
-    const snapshot = buildEnrichedChain(
+    return buildEnrichedChain(
       this.underlying,
       this.expiry,
       [...this.comparisonRows.values()],
       venueChains,
     );
-
-    this.lastStats = snapshot.stats;
-    this.lastGex = snapshot.gex;
-    this.pushesSinceAnalyticsRefresh = 0;
-
-    return snapshot;
   }
 
   buildSnapshotMeta(): SnapshotMeta {
@@ -139,32 +128,16 @@ export class ChainProjection {
     }
 
     const venueChains = [...this.venueChains.values()];
+    const strikes = [...this.enrichedStrikes.values()].sort(
+      (left, right) => left.strike - right.strike,
+    );
+    const stats = computeChainStats(strikes, venueChains);
+    const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
+    const gex = computeGex([...this.comparisonRows.values()], strikes, spotPrice);
     const patchStrikes = [...changedStrikes]
       .sort((left, right) => left - right)
       .map((strike) => this.enrichedStrikes.get(strike))
       .filter((strike): strike is EnrichedStrike => strike != null);
-
-    this.pushesSinceAnalyticsRefresh += 1;
-
-    let stats = this.lastStats;
-    let gex = this.lastGex;
-    if (
-      stats == null ||
-      gex == null ||
-      this.pushesSinceAnalyticsRefresh >= FULL_RECOMPUTE_INTERVAL
-    ) {
-      const strikes = [...this.enrichedStrikes.values()].sort(
-        (left, right) => left.strike - right.strike,
-      );
-      stats = computeChainStats(strikes, venueChains);
-      const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-      gex = computeGex([...this.comparisonRows.values()], strikes, spotPrice);
-      this.lastStats = stats;
-      this.lastGex = gex;
-      this.pushesSinceAnalyticsRefresh = 0;
-    }
-
-    if (stats == null || gex == null) return null;
 
     return {
       meta: snapshotMetaFromChains(venueChains),

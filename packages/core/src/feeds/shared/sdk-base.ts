@@ -378,20 +378,6 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
   protected emitQuoteUpdates(updates: Array<{ exchangeSymbol: string; quote: LiveQuote }>): void {
     const deltas: VenueDelta[] = [];
-    const normalizedPriceCache = new Map<
-      string,
-      { raw: number | null; rawCurrency: string; usd: number | null }
-    >();
-
-    const cachedNormPrice = (raw: number | null, inst: CachedInstrument) => {
-      const key = `${inst.exchangeSymbol}:${raw ?? 'null'}`;
-      const cached = normalizedPriceCache.get(key);
-      if (cached != null) return cached;
-
-      const normalized = this.normPrice(raw, inst);
-      normalizedPriceCache.set(key, normalized);
-      return normalized;
-    };
 
     for (const update of updates) {
       if (Date.now() > this.lastWatchdogReconnectAt) {
@@ -424,34 +410,32 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       const inst = this.instrumentMap.get(update.exchangeSymbol);
       if (!inst) continue;
 
-      const bid = cachedNormPrice(update.quote.bidPrice, inst);
-      const ask = cachedNormPrice(update.quote.askPrice, inst);
-      const mark = cachedNormPrice(update.quote.markPrice, inst);
-      const openInterestUsd = this.normalizeOpenInterestUsd(
-        inst,
-        update.quote.openInterest,
-        update.quote.openInterestUsd,
-        update.quote.underlyingPrice,
-      );
-      const estimatedFees = this.estimateFees(inst, mark.usd, update.quote.underlyingPrice);
-
       deltas.push({
         venue: this.venue,
         symbol: inst.symbol,
         ts: update.quote.timestamp,
         quote: {
-          bid,
-          ask,
-          mark,
+          bid: this.normPrice(update.quote.bidPrice, inst),
+          ask: this.normPrice(update.quote.askPrice, inst),
+          mark: this.normPrice(update.quote.markPrice, inst),
           bidSize: update.quote.bidSize,
           askSize: update.quote.askSize,
           underlyingPriceUsd: update.quote.underlyingPrice,
           indexPriceUsd: update.quote.indexPrice,
           volume24h: update.quote.volume24h,
           openInterest: update.quote.openInterest,
-          openInterestUsd,
+          openInterestUsd: this.normalizeOpenInterestUsd(
+            inst,
+            update.quote.openInterest,
+            update.quote.openInterestUsd,
+            update.quote.underlyingPrice,
+          ),
           volume24hUsd: update.quote.volume24hUsd,
-          estimatedFees,
+          estimatedFees: this.estimateFees(
+            inst,
+            this.normPrice(update.quote.markPrice, inst).usd,
+            update.quote.underlyingPrice,
+          ),
           timestamp: update.quote.timestamp,
           source: 'ws',
         },

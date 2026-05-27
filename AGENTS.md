@@ -31,9 +31,6 @@ When touching venue adapters or adding a new venue, read `packages/core/CLAUDE.m
 
 Structural changes to core/server/ingest should preserve the runtime-first architecture: `@oggregator/core` owns reusable live-data runtimes, while server, ingest, bots, and external apps are consumers.
 
-Reference docs:
-- `agent_docs/central-ws-orchestrator.md` — read before changing chain runtime orchestration, venue WS scheduling, warmup policy, or client delivery semantics.
-
 Zod at I/O boundaries. No `any`. No vendor SDKs. Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.
 
 ## Local service ops

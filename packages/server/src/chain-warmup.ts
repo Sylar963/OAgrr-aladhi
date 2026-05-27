@@ -5,13 +5,13 @@ import { chainEngines } from './chain-engines.js';
 // Hot tier: full chain runtime acquired with N nearest expiries.
 // These are the underlyings that take >90% of user traffic.
 const HOT_UNDERLYINGS = ['BTC', 'ETH', 'BTC_USDC', 'ETH_USDC', 'SOL_USDC'] as const;
-const HOT_EXPIRY_COUNT = 12;
+const HOT_EXPIRY_COUNT = 4;
 
 // Warm tier: same flow, fewer expiries. Cuts cold-start to ~ms when a user
 // clicks one of these (they don't get a per-strike ticker firehose at boot,
 // but the bulk channels are already live via the adapter's eagerSubscribe).
 const WARM_UNDERLYINGS = ['AVAX_USDC', 'XRP_USDC', 'TRX_USDC'] as const;
-const WARM_EXPIRY_COUNT = 6;
+const WARM_EXPIRY_COUNT = 2;
 
 // Hold pre-warm handles for the lifetime of the process so the runtimes stay
 // pinned in the registry. Without this, a 15-min idle period after boot would

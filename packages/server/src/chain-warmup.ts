@@ -2,29 +2,24 @@ import type { FastifyBaseLogger } from 'fastify';
 import { getAdapter, getRegisteredVenues, type VenueId } from '@oggregator/core';
 import { chainEngines } from './chain-engines.js';
 
-// Hot tier: full chain runtime acquired with N nearest expiries.
-// These are the underlyings that take >90% of user traffic.
+// Live runtime warmup pins active venue subscriptions. Keep it opt-in because
+// Deribit 100ms ticker channels scale with every warmed expiry.
+const CHAIN_WARMUP_ENABLED = process.env['CHAIN_WARMUP_ENABLED'] === 'true';
+
 const HOT_UNDERLYINGS = ['BTC', 'ETH', 'BTC_USDC', 'ETH_USDC', 'SOL_USDC'] as const;
 const HOT_EXPIRY_COUNT = 4;
 
-// Warm tier: same flow, fewer expiries. Cuts cold-start to ~ms when a user
-// clicks one of these (they don't get a per-strike ticker firehose at boot,
-// but the bulk channels are already live via the adapter's eagerSubscribe).
 const WARM_UNDERLYINGS = ['AVAX_USDC', 'XRP_USDC', 'TRX_USDC'] as const;
 const WARM_EXPIRY_COUNT = 2;
 
-// Hold pre-warm handles for the lifetime of the process so the runtimes stay
-// pinned in the registry. Without this, a 15-min idle period after boot would
-// let them drain back to cold.
 const heldHandles: Array<{ release: () => Promise<void> }> = [];
 
-/**
- * Acquires chain runtimes for the hottest underlyings × nearest expiries × all
- * venues right after adapter bootstrap. The first user-facing Vol Smile request
- * then sees an already-built snapshot instead of doing 8 sequential WS
- * subscribes per expiry.
- */
 export async function warmupChainRuntimes(log: FastifyBaseLogger): Promise<void> {
+  if (!CHAIN_WARMUP_ENABLED) {
+    log.info('chain runtime warmup disabled');
+    return;
+  }
+
   const venues = getRegisteredVenues() as VenueId[];
   if (venues.length === 0) {
     log.warn('chain warmup skipped — no adapters registered');

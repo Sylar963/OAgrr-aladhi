@@ -109,16 +109,15 @@ export function useChainQuery(
 /**
  * Returns a stable prefetch callback for the chain query. Wire it to hover /
  * pointer-enter on tenor tabs: by the time the user clicks, the REST response
- * has populated TanStack cache AND warmed the server-side runtime, so the
- * subsequent WS resubscribe gets an in-memory snapshot back instantly.
+ * has populated TanStack cache before the click while the live WS subscription
+ * upgrades independently after selection.
  */
 export function usePrefetchChain(underlying: string, activeVenues: string[]) {
   const qc = useQueryClient();
   return useCallback(
     (targetExpiry: string) => {
       if (!underlying || !targetExpiry) return;
-      const venueParam =
-        activeVenues.length > 0 ? `&venues=${activeVenues.join(',')}` : '';
+      const venueParam = activeVenues.length > 0 ? `&venues=${activeVenues.join(',')}` : '';
       void qc.prefetchQuery({
         queryKey: chainKeys.chain(underlying, targetExpiry, activeVenues),
         queryFn: () =>

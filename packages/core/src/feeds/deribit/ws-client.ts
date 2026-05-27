@@ -43,9 +43,9 @@ import {
 
 const log = feedLogger('deribit');
 
-// Deribit charges 3k credits per subscribe call regardless of channel count,
-// and supports up to 500 channels per call. Batching large keeps call count low.
-const SUBSCRIBE_BATCH_SIZE = 500;
+// Deribit accepts larger batches, but active-chain ticker acks can stall under
+// load. Smaller batches keep control-plane retries bounded.
+const SUBSCRIBE_BATCH_SIZE = 50;
 
 // ~3.3 calls/sec sustained (30k credit pool, 3k per call).
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
@@ -81,6 +81,10 @@ const INSTRUMENT_STATE_FETCH_CHUNK_DELAY_MS = 250;
 
 function isDeribitPublicStatusTimeout(error: unknown): boolean {
   return error instanceof Error && error.message.includes('public/status timed out');
+}
+
+function isDeribitRequestTimeout(error: unknown): boolean {
+  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }
 
 /** Regex for Deribit instrument names, supporting decimal strikes (e.g. 420d5 → 420.5). */
@@ -392,25 +396,31 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       this.state.indexToInstruments.set(indexName, symbols);
     }
 
-    await this.ensureBulkSubscriptions(underlying, source);
+    try {
+      await this.ensureBulkSubscriptions(underlying, source);
 
-    const plan = buildDeribitSubscriptionPlan(
-      this.subscriptions,
-      underlying,
-      instruments,
-      interval,
-    );
-
-    if (plan.channelsToUnsubscribe.length > 0) {
-      await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
-    }
-
-    if (plan.tickerChannels.length > 0) {
-      await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
-      log.info(
-        { count: plan.tickerChannels.length, underlying, interval, source },
-        'subscribed to ticker channels',
+      const plan = buildDeribitSubscriptionPlan(
+        this.subscriptions,
+        underlying,
+        instruments,
+        interval,
       );
+
+      if (plan.channelsToUnsubscribe.length > 0) {
+        await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
+      }
+
+      if (plan.tickerChannels.length > 0) {
+        await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
+        log.info(
+          { count: plan.tickerChannels.length, underlying, interval, source },
+          'subscribed to ticker channels',
+        );
+      }
+    } catch (error: unknown) {
+      resetDeribitSubscriptionState(this.subscriptions);
+      this.rpc.terminate();
+      throw error;
     }
   }
 
@@ -422,9 +432,28 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private async subscribeBatched(channels: string[], source: string): Promise<void> {
     for (let i = 0; i < channels.length; i += SUBSCRIBE_BATCH_SIZE) {
       const batch = channels.slice(i, i + SUBSCRIBE_BATCH_SIZE);
-      await this.rpc.subscribe(batch, source);
+      await this.subscribeBatch(batch, source);
       if (i + SUBSCRIBE_BATCH_SIZE < channels.length) {
         await new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_BATCH_DELAY_MS));
+      }
+    }
+  }
+
+  private async subscribeBatch(channels: string[], source: string): Promise<void> {
+    try {
+      await this.rpc.subscribe(channels, source);
+      return;
+    } catch (error: unknown) {
+      if (!isDeribitRequestTimeout(error) || channels.length <= 1) throw error;
+
+      const nextBatchSize = Math.ceil(channels.length / 2);
+      log.warn(
+        { count: channels.length, nextBatchSize, source, err: String(error) },
+        'subscribe batch timed out, retrying smaller batches',
+      );
+
+      for (let i = 0; i < channels.length; i += nextBatchSize) {
+        await this.subscribeBatch(channels.slice(i, i + nextBatchSize), source);
       }
     }
   }

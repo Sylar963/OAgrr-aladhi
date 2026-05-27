@@ -10,6 +10,7 @@ import { useServerVersion } from './useServerVersion';
 beforeEach(() => {
   useAppStore.setState({
     announcement: null,
+    activeTab: 'flow',
     feedStatus: {
       connectionState: 'closed',
       failedVenueCount: 0,
@@ -89,6 +90,40 @@ describe('useServerVersion', () => {
         staleMs: 25,
         venueStates: { deribit: 'live', okx: 'live' },
       });
+    });
+    unmount();
+  });
+
+  it('does not overwrite chain WebSocket status while the chain tab is active', async () => {
+    useAppStore.setState((s) => ({
+      activeTab: 'chain',
+      feedStatus: { ...s.feedStatus, connectionState: 'stale', staleMs: 600_000 },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          bootTime: 1,
+          feeds: {
+            summary: { totalVenues: 2, connectedVenues: 2, lastAnyMessageAgeMs: 0 },
+            venues: [
+              { venue: 'deribit', connected: true, lastMessageAgeMs: 0 },
+              { venue: 'okx', connected: true, lastMessageAgeMs: 0 },
+            ],
+          },
+        }),
+      }),
+    );
+
+    const { unmount } = renderHook(() => useServerVersion());
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    expect(useAppStore.getState().feedStatus).toMatchObject({
+      connectionState: 'stale',
+      staleMs: 600_000,
     });
     unmount();
   });

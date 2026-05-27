@@ -310,8 +310,10 @@ export class JsonRpcWsClient {
       'subscribe',
     );
 
+    if (added.length === 0) return;
+
     try {
-      await this.call(method, { channels });
+      await this.call(method, { channels: added });
       // A roundtripped subscribe RPC is the real bidirectional health proof —
       // only here do we trust the connection enough to reset escalation.
       this.reconnectAttempts = 0;

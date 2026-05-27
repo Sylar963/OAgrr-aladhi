@@ -81,6 +81,33 @@ describe('JsonRpcWsClient', () => {
     expect([...internals.subscribedChannels]).toEqual([]);
   });
 
+  it('sends only newly added subscriptions to the RPC call', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    internals.subscribedChannels = new Set(['ticker.BTC-1.raw']);
+    internals.call = vi.fn(async () => undefined);
+
+    await client.subscribe(['ticker.BTC-1.raw', 'ticker.BTC-2.raw']);
+
+    expect(internals.call).toHaveBeenCalledOnce();
+    expect(internals.call).toHaveBeenCalledWith('public/subscribe', {
+      channels: ['ticker.BTC-2.raw'],
+    });
+  });
+
+  it('skips the RPC call when every requested subscription is already active', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    internals.subscribedChannels = new Set(['ticker.BTC-1.raw']);
+    internals.call = vi.fn(async () => undefined);
+
+    await client.subscribe(['ticker.BTC-1.raw']);
+
+    expect(internals.call).not.toHaveBeenCalled();
+  });
+
   it('keeps retrying after the max reconnect attempt budget is exceeded', () => {
     vi.useFakeTimers();
 

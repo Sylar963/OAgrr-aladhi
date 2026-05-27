@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  buildComparisonChain,
+  buildEnrichedChain,
   combineGex,
+  getAdapter,
   getAllAdapters,
   VENUE_IDS,
   type GexStrike,
   type VenueId,
+  type VenueOptionChain,
 } from '@oggregator/core';
-import { chainEngines } from '../chain-engines.js';
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
   return venuesParam
@@ -32,8 +35,6 @@ export interface AllExpiriesGexResponse {
 }
 
 export async function gexAllExpiriesRoute(app: FastifyInstance) {
-  chainEngines.start();
-
   app.get<{ Querystring: { underlying: string; venues?: string } }>(
     '/gex-all-expiries',
     async (req, reply): Promise<AllExpiriesGexResponse | { error: string }> => {
@@ -48,35 +49,30 @@ export async function gexAllExpiriesRoute(app: FastifyInstance) {
         return { underlying, expiries: [], spotPrice: null, gex: [] };
       }
 
-      // Acquire one runtime per expiry, fetch its snapshot, then release.
-      // The chain runtime registry dedupes per (underlying, expiry, venues)
-      // so warm tabs are reused; cold expiries spin up subscriptions which
-      // the idle TTL eventually disposes.
-      const handles = await Promise.all(
-        expiries.map((expiry) =>
-          chainEngines.acquire({ underlying, expiry, venues: requestedVenues }),
-        ),
+      const snapshots = await Promise.all(
+        expiries.map(async (expiry) => {
+          const chains = (
+            await Promise.all(
+              requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
+                try {
+                  return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
+                } catch {
+                  return null;
+                }
+              }),
+            )
+          ).filter((chain): chain is VenueOptionChain => chain != null);
+          const comparison = buildComparisonChain(underlying, expiry, chains);
+          return buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+        }),
       );
 
-      try {
-        const snapshots = await Promise.all(
-          handles.map((handle) => handle.runtime.fetchSnapshotData()),
-        );
+      const aggregated = combineGex(snapshots.map((snap) => snap.gex));
+      const first = snapshots[0];
+      const spotPrice =
+        first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
 
-        const perExpiryGex = snapshots.map((snap) => snap.gex);
-        const aggregated = combineGex(perExpiryGex);
-
-        // Spot reference: take the first snapshot's indexPrice (falls back to
-        // forwardPrice). All expiries on the same underlying share the same
-        // spot at any instant; per-expiry forwards may differ by basis.
-        const first = snapshots[0];
-        const spotPrice =
-          first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
-
-        return { underlying, expiries, spotPrice, gex: aggregated };
-      } finally {
-        await Promise.allSettled(handles.map((handle) => handle.release()));
-      }
+      return { underlying, expiries, spotPrice, gex: aggregated };
     },
   );
 }

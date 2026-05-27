@@ -34,6 +34,7 @@ import {
   buildDeribitMarkPriceQuote,
   buildDeribitTickerQuote,
   createDeribitState,
+  deribitStaleReconnectCooldownMs,
   registerDeribitInstrument,
   removeDeribitInstrument,
   shouldForceDeribitStaleReconnect,
@@ -869,8 +870,21 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         this.emitStatus(health.status, health.message);
 
         if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
-          this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
-          this.rpc.terminate();
+          // Shares the staleness watchdog's backoff state so the two
+          // force-reconnect paths jointly throttle: a status probe that times out
+          // because the event loop is mid-resubscribe must not stack another
+          // terminate (and its full resubscribe burst) on top. The degraded
+          // status emitted above already reflects the failed probe.
+          const now = Date.now();
+          const cooldownMs = deribitStaleReconnectCooldownMs(this.forcedStaleReconnectStreak);
+          const withinBackoff =
+            this.forcedStaleReconnectAt > 0 && now - this.forcedStaleReconnectAt < cooldownMs;
+          if (!withinBackoff) {
+            this.forcedStaleReconnectAt = now;
+            this.forcedStaleReconnectStreak += 1;
+            this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
+            this.rpc.terminate();
+          }
         }
       }
     })().finally(() => {

@@ -1,7 +1,13 @@
 import type { WsSubscriptionRequest } from '../../core/types.js';
 import { ChainRuntime, type ChainRuntimeOptions } from './chain-runtime.js';
 
-const RUNTIME_IDLE_TTL_MS = 15 * 60 * 1000;
+// Idle runtimes keep their upstream venue subscriptions (notably Deribit 100ms
+// tickers) live until reclaimed. A long TTL lets the held-channel set ratchet up
+// as users switch tenors/tickers, saturating the event loop until the venue
+// socket resets (measured: ~3.3k channels, p50 1.5s loop lag, code-1006 closes).
+// Keep this short so abandoned tenors release their channels within minutes;
+// pinned warm-tier runtimes (refCount > 0) are never reclaimed regardless.
+const RUNTIME_IDLE_TTL_MS = 3 * 60 * 1000;
 const RUNTIME_CLEANUP_INTERVAL_MS = 60 * 1000;
 
 interface ChainRuntimeEntry {

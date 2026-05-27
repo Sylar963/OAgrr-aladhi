@@ -82,6 +82,45 @@ describe('ChainProjection', () => {
     expect(patch?.patch.strikes[0]?.call.bestIv).toBe(0.51);
   });
 
+  it('reuses cached stats and gex between full recomputes', () => {
+    const projection = new ChainProjection('BTC', '2026-03-27');
+    const snapshot = projection.loadSnapshot([buildChain()]);
+
+    for (let i = 1; i < 10; i += 1) {
+      const patch = projection.applyDeltas([
+        {
+          venue: 'deribit',
+          symbol: 'BTC/USD:USDC-260327-70000-C',
+          ts: 2_000 + i,
+          quote: {
+            bid: { raw: 310 + i, rawCurrency: 'USDC', usd: 310 + i },
+            timestamp: 2_000 + i,
+          },
+        },
+      ]);
+
+      expect(patch).not.toBeNull();
+      expect(patch?.patch.stats).toBe(snapshot.stats);
+      expect(patch?.patch.gex).toBe(snapshot.gex);
+    }
+
+    const refreshed = projection.applyDeltas([
+      {
+        venue: 'deribit',
+        symbol: 'BTC/USD:USDC-260327-70000-C',
+        ts: 2_010,
+        quote: {
+          bid: { raw: 320, rawCurrency: 'USDC', usd: 320 },
+          timestamp: 2_010,
+        },
+      },
+    ]);
+
+    expect(refreshed).not.toBeNull();
+    expect(refreshed?.patch.stats).not.toBe(snapshot.stats);
+    expect(refreshed?.patch.gex).not.toBe(snapshot.gex);
+  });
+
   it('requests a resync when a delta references an unknown contract', () => {
     const projection = new ChainProjection('BTC', '2026-03-27');
     projection.loadSnapshot([buildChain()]);

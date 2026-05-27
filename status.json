@@ -1,0 +1,9 @@
+{
+  "id": "scheduled-maint-2026-05-27",
+  "severity": "outage",
+  "blocking": true,
+  "title": "Scheduled Maintenance",
+  "message": "The dashboard is undergoing scheduled maintenance. Expected to be back within 4 hours.",
+  "startsAt": 1779840966000,
+  "endsAt": 1779855366000
+}

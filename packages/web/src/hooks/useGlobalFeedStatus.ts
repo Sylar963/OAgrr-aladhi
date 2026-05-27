@@ -24,7 +24,7 @@ export function useGlobalFeedStatus(enabled = true) {
   const failedVenueIds = useMemo(() => failedVenues.map((venue) => venue.venue), [failedVenues]);
 
   useEffect(() => {
-    if (expiries.length > 0 && !expiry) {
+    if (expiries.length > 0 && (!expiry || !expiries.includes(expiry))) {
       setExpiry(expiries[0]!);
     }
   }, [expiries, expiry, setExpiry]);

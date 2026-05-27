@@ -35,6 +35,7 @@ export class TopicWsClient {
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private replayQueue: Array<string | Record<string, unknown>> = [];
   private shouldReconnect = true;
   private reconnectAttempts = 0;
   private lastActivityAt = 0;
@@ -114,6 +115,7 @@ export class TopicWsClient {
         this.options.onStatusChange?.('connected');
 
         Promise.resolve(this.replaySubscriptions())
+          .then((messages) => this.flushReplayQueue(messages))
           .then(() => this.options.onOpen?.())
           .then(() => resolveConnect())
           .catch((error: unknown) =>
@@ -171,6 +173,7 @@ export class TopicWsClient {
   async disconnect(): Promise<void> {
     this.shouldReconnect = false;
     this.connectPromise = null;
+    this.replayQueue = [];
     this.cleanup();
     if (this.ws != null) {
       const socket = this.ws;
@@ -181,8 +184,14 @@ export class TopicWsClient {
   }
 
   send(payload: string | Record<string, unknown>): void {
-    if (this.ws?.readyState !== WebSocket.OPEN) return;
-    this.ws.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(this.serializePayload(payload));
+      return;
+    }
+
+    if (this.shouldReconnect) {
+      this.replayQueue.push(payload);
+    }
   }
 
   sendPong(data?: Buffer): void {
@@ -194,11 +203,25 @@ export class TopicWsClient {
     this.ws?.on(event, listener);
   }
 
-  private replaySubscriptions(): void {
+  private replaySubscriptions(): Array<string | Record<string, unknown>> {
     const messages = this.options.getReplayMessages?.() ?? [];
     for (const message of messages) {
       this.send(message);
     }
+    return messages;
+  }
+
+  private flushReplayQueue(replayedMessages: Array<string | Record<string, unknown>>): void {
+    if (this.ws?.readyState !== WebSocket.OPEN || this.replayQueue.length === 0) return;
+
+    const seen = new Set(replayedMessages.map((message) => this.serializePayload(message)));
+    for (const payload of this.replayQueue) {
+      const serialized = this.serializePayload(payload);
+      if (seen.has(serialized)) continue;
+      this.ws.send(serialized);
+    }
+
+    this.replayQueue = [];
   }
 
   private scheduleReconnect(): void {
@@ -267,6 +290,10 @@ export class TopicWsClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+  }
+
+  private serializePayload(payload: string | Record<string, unknown>): string {
+    return typeof payload === 'string' ? payload : JSON.stringify(payload);
   }
 
   private remainingRateLimitCooldownMs(): number {

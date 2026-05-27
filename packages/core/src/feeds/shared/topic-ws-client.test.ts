@@ -5,7 +5,12 @@ type TopicWsClientInternals = {
   reconnectAttempts: number;
   scheduleReconnect: () => void;
   connect: () => Promise<void>;
+  replayQueue: Array<string | Record<string, unknown>>;
+  replaySubscriptions: () => Array<string | Record<string, unknown>>;
+  flushReplayQueue: (messages: Array<string | Record<string, unknown>>) => void;
   ws: {
+    readyState?: number;
+    send?: (payload: string) => void;
     close: () => void;
     removeAllListeners: () => void;
   } | null;
@@ -64,5 +69,37 @@ describe('TopicWsClient', () => {
     expect(socket.removeAllListeners).toHaveBeenCalledOnce();
     expect(socket.close).toHaveBeenCalledOnce();
     expect(internals.ws).toBeNull();
+  });
+
+  it('queues outbound messages until the socket opens', () => {
+    const client = new TopicWsClient('ws://localhost:1234', 'test', {
+      getReplayMessages: () => [{ op: 'subscribe', topic: 'btc' }],
+    });
+    const internals = client as unknown as TopicWsClientInternals;
+    const send = vi.fn();
+
+    internals.ws = {
+      readyState: 0,
+      send,
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+
+    client.send({ op: 'subscribe', topic: 'btc' });
+    expect(internals.replayQueue).toHaveLength(1);
+
+    internals.ws = {
+      readyState: 1,
+      send,
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+
+    const replayed = internals.replaySubscriptions();
+    internals.flushReplayQueue(replayed);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(JSON.stringify({ op: 'subscribe', topic: 'btc' }));
+    expect(internals.replayQueue).toHaveLength(0);
   });
 });

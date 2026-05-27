@@ -4,6 +4,9 @@ import { useCallback } from 'react';
 import { fetchJson } from '@lib/http';
 import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_EXPIRY_DTE_DAYS = 365;
+
 // ── Response types matching the live API ──────────────────────────────────
 
 interface UnderlyingsResponse {
@@ -21,6 +24,18 @@ interface ExpiriesResponse {
   expiries: string[];
   timestamps?: ExpiryTimestamp[];
   byVenue: Array<{ venue: string; expiries: string[]; timestamps?: ExpiryTimestamp[] }>;
+}
+
+function expiryTargetMs(expiry: string, expiryTs: number | null | undefined): number {
+  return expiryTs ?? new Date(`${expiry}T08:00:00Z`).getTime();
+}
+
+function isWithinMaxExpiryDte(
+  expiry: string,
+  expiryTs: number | null | undefined,
+  now: number,
+): boolean {
+  return expiryTargetMs(expiry, expiryTs) - now <= MAX_EXPIRY_DTE_DAYS * DAY_MS;
 }
 
 // ── Query key factories ───────────────────────────────────────────────────
@@ -80,11 +95,23 @@ export function useExpiries(underlying: string) {
     enabled: Boolean(underlying),
     staleTime: 30_000,
     placeholderData: (prev: ExpiriesResponse | undefined) => prev,
-    select: (data): ExpiriesResult => ({
-      expiries: data.expiries,
-      timestamps: data.timestamps ?? data.expiries.map((expiry) => ({ expiry, expiryTs: null })),
-      byVenue: data.byVenue,
-    }),
+    select: (data): ExpiriesResult => {
+      const now = Date.now();
+      const timestamps = data.timestamps ?? data.expiries.map((expiry) => ({ expiry, expiryTs: null }));
+      const filteredTimestamps = timestamps.filter((item) =>
+        isWithinMaxExpiryDte(item.expiry, item.expiryTs, now),
+      );
+      const allowedExpiries = new Set(filteredTimestamps.map((item) => item.expiry));
+
+      return {
+        expiries: data.expiries.filter((expiry) => allowedExpiries.has(expiry)),
+        timestamps: filteredTimestamps,
+        byVenue: data.byVenue.map((venue) => ({
+          venue: venue.venue,
+          expiries: venue.expiries.filter((expiry) => allowedExpiries.has(expiry)),
+        })),
+      };
+    },
   });
 }
 

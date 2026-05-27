@@ -16,6 +16,7 @@ import { smoothFineSurfaceRow } from './iv-surface-smoothing.js';
 import type { ChainRequest, VenueOptionChain } from './types.js';
 
 const DAYS_IN_YEAR = 365;
+const SURFACE_GRID_EXPIRY_CONCURRENCY = 4;
 
 export interface SurfaceGridEntry {
   expiry: string;
@@ -42,6 +43,27 @@ export interface BuildSurfaceGridOptions {
   includeVenueSurfaces?: boolean;
 }
 
+async function mapConcurrent<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex]!, currentIndex);
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
 /**
  * Builds an IV surface grid (one row per listed expiry) by fetching chains
  * from each requested venue and running shared enrichment.
@@ -57,91 +79,93 @@ export async function buildIvSurfaceGrid({
   const requestedVenues: VenueId[] = venues ?? getAllAdapters().map((a) => a.venue);
 
   const allExpiries = new Set<string>();
-  for (const venueId of requestedVenues) {
-    try {
-      const adapter = getAdapter(venueId);
-      const expiries = await adapter.listExpiries(underlying);
-      for (const e of expiries) allExpiries.add(e);
-    } catch {
-      // Not every venue lists every underlying.
+  const expiryLists = await Promise.allSettled(
+    requestedVenues.map(async (venueId) => getAdapter(venueId).listExpiries(underlying)),
+  );
+  for (const result of expiryLists) {
+    if (result.status !== 'fulfilled') continue;
+    for (const expiry of result.value) {
+      allExpiries.add(expiry);
     }
   }
 
   const sortedExpiries = [...allExpiries].sort();
-  const entries: SurfaceGridEntry[] = [];
+  const entries = await mapConcurrent(
+    sortedExpiries,
+    SURFACE_GRID_EXPIRY_CONCURRENCY,
+    async (expiry): Promise<SurfaceGridEntry | null> => {
+      const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
 
-  for (const expiry of sortedExpiries) {
-    const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
+      const settled = await Promise.allSettled(
+        requestedVenues.map((venueId) => getAdapter(venueId).fetchOptionChain(request)),
+      );
 
-    const settled = await Promise.allSettled(
-      requestedVenues.map((venueId) => getAdapter(venueId).fetchOptionChain(request)),
-    );
+      const chains: VenueOptionChain[] = settled
+        .filter((r): r is PromiseFulfilledResult<VenueOptionChain> => r.status === 'fulfilled')
+        .map((r) => r.value);
 
-    const chains: VenueOptionChain[] = settled
-      .filter((r): r is PromiseFulfilledResult<VenueOptionChain> => r.status === 'fulfilled')
-      .map((r) => r.value);
+      if (chains.length === 0) return null;
 
-    if (chains.length === 0) continue;
+      const comparison = buildComparisonChain(underlying, expiry, chains);
+      const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+      const stats = computeChainStats(enriched.strikes, chains);
+      const refPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd;
+      const dte = computeDte(expiry);
+      const surfaceRow = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
+      const surfaceFineRow = computeIvSurfaceFine(expiry, dte, enriched.strikes);
+      const T = dte > 0 ? dte / DAYS_IN_YEAR : 0;
+      const surfaceFineSmoothedRow = smoothFineSurfaceRow(
+        surfaceFineRow,
+        enriched.strikes,
+        refPrice,
+        T,
+        ULTRA_FINE_DELTA_GRID,
+      );
 
-    const comparison = buildComparisonChain(underlying, expiry, chains);
-    const enriched = buildEnrichedChain(underlying, expiry, comparison.rows, chains);
-    const stats = computeChainStats(enriched.strikes, chains);
-    const refPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd;
-    const dte = computeDte(expiry);
-    const surfaceRow = computeIvSurface(expiry, dte, enriched.strikes, refPrice);
-    const surfaceFineRow = computeIvSurfaceFine(expiry, dte, enriched.strikes);
-    const T = dte > 0 ? dte / DAYS_IN_YEAR : 0;
-    const surfaceFineSmoothedRow = smoothFineSurfaceRow(
-      surfaceFineRow,
-      enriched.strikes,
-      refPrice,
-      T,
-      ULTRA_FINE_DELTA_GRID,
-    );
-
-    const venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
-    const venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
-    if (includeVenueSurfaces) {
-      for (const v of requestedVenues) {
-        const fine = computeIvSurfaceFine(expiry, dte, enriched.strikes, v);
-        if (fine.ivs.every((iv) => iv == null)) continue;
-        venueSurfaceFineRow[v] = fine;
-        venueSurfaceFineSmoothedRow[v] = smoothFineSurfaceRow(
-          fine,
-          enriched.strikes,
-          refPrice,
-          T,
-          ULTRA_FINE_DELTA_GRID,
-          v,
-        );
-      }
-    }
-
-    let atmStrike: EnrichedStrike | null = null;
-    if (refPrice != null && enriched.strikes.length > 0) {
-      let bestDist = Infinity;
-      for (const s of enriched.strikes) {
-        const dist = Math.abs(s.strike - refPrice);
-        if (dist < bestDist) {
-          bestDist = dist;
-          atmStrike = s;
+      const venueSurfaceFineRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+      const venueSurfaceFineSmoothedRow: Partial<Record<VenueId, IvSurfaceFineRow>> = {};
+      if (includeVenueSurfaces) {
+        for (const v of requestedVenues) {
+          const fine = computeIvSurfaceFine(expiry, dte, enriched.strikes, v);
+          if (fine.ivs.every((iv) => iv == null)) continue;
+          venueSurfaceFineRow[v] = fine;
+          venueSurfaceFineSmoothedRow[v] = smoothFineSurfaceRow(
+            fine,
+            enriched.strikes,
+            refPrice,
+            T,
+            ULTRA_FINE_DELTA_GRID,
+            v,
+          );
         }
       }
-    }
 
-    entries.push({
-      expiry,
-      dte,
-      surfaceRow,
-      surfaceFineRow,
-      surfaceFineSmoothedRow,
-      venueSurfaceFineRow,
-      venueSurfaceFineSmoothedRow,
-      atmStrike,
-      strikes: enriched.strikes,
-      basisPct: stats.basisPct,
-    });
-  }
+      let atmStrike: EnrichedStrike | null = null;
+      if (refPrice != null && enriched.strikes.length > 0) {
+        let bestDist = Infinity;
+        for (const strike of enriched.strikes) {
+          const dist = Math.abs(strike.strike - refPrice);
+          if (dist < bestDist) {
+            bestDist = dist;
+            atmStrike = strike;
+          }
+        }
+      }
 
-  return entries;
+      return {
+        expiry,
+        dte,
+        surfaceRow,
+        surfaceFineRow,
+        surfaceFineSmoothedRow,
+        venueSurfaceFineRow,
+        venueSurfaceFineSmoothedRow,
+        atmStrike,
+        strikes: enriched.strikes,
+        basisPct: stats.basisPct,
+      };
+    },
+  );
+
+  return entries.filter((entry): entry is SurfaceGridEntry => entry != null);
 }

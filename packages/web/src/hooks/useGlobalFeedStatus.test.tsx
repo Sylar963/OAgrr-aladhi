@@ -81,4 +81,12 @@ describe('useGlobalFeedStatus', () => {
     });
     expect(useAppStore.getState().feedStatus.lastUpdateMs).toBeTypeOf('number');
   });
+
+  it('replaces an expiry that is no longer in the filtered list', () => {
+    useAppStore.setState({ expiry: '2032-03-27' });
+
+    renderHook(() => useGlobalFeedStatus(), { wrapper: createWrapper() });
+
+    expect(useAppStore.getState().expiry).toBe('2026-03-27');
+  });
 });

@@ -17,6 +17,9 @@ import { VenueHealthManager } from './health.js';
 
 const PUSH_INTERVAL_MS = 100;
 const MAX_PENDING_DELTAS = 5_000;
+const INITIAL_RESYNC_BACKOFF_MS = 1_000;
+const MAX_RESYNC_BACKOFF_MS = 30_000;
+const FIRST_PUBLISHED_SNAPSHOT_WAIT_MS = 5_000;
 
 interface FailedVenue {
   venue: VenueId;
@@ -100,12 +103,30 @@ function mergeStrikes(
   existing: EnrichedChainResponse['strikes'],
   incoming: EnrichedChainResponse['strikes'],
 ): EnrichedChainResponse['strikes'] {
+  if (incoming.length === 0) return existing;
+
+  const incomingByStrike = new Map<number, EnrichedChainResponse['strikes'][number]>();
+  for (const strike of incoming) {
+    incomingByStrike.set(strike.strike, strike);
+  }
+
+  const updated = existing.map((strike) => {
+    const replacement = incomingByStrike.get(strike.strike);
+    if (replacement == null) return strike;
+    incomingByStrike.delete(strike.strike);
+    return replacement;
+  });
+
+  if (incomingByStrike.size === 0) {
+    return updated;
+  }
+
   const byStrike = new Map<number, EnrichedChainResponse['strikes'][number]>();
 
-  for (const strike of existing) {
+  for (const strike of updated) {
     byStrike.set(strike.strike, strike);
   }
-  for (const strike of incoming) {
+  for (const strike of incomingByStrike.values()) {
     byStrike.set(strike.strike, strike);
   }
 
@@ -132,6 +153,11 @@ export class ChainRuntime {
   private disposed = false;
   private pendingDeltaVersion = 0;
   private snapshotBuildVersion = 0;
+  private hasPublishedSnapshot = false;
+  private readonly snapshotPublishWaiters = new Set<() => void>();
+  private lastResyncAt = 0;
+  private resyncBackoffMs = INITIAL_RESYNC_BACKOFF_MS;
+  private resyncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly key: string,
@@ -199,7 +225,7 @@ export class ChainRuntime {
   }
 
   getSnapshot(): ChainRuntimeSnapshotEvent | null {
-    return this.currentSnapshot;
+    return this.hasPublishedSnapshot ? this.currentSnapshot : null;
   }
 
   getActiveRequest(): WsSubscriptionRequest {
@@ -216,12 +242,24 @@ export class ChainRuntime {
 
   async fetchSnapshotData(): Promise<EnrichedChainResponse> {
     await this.ready();
-    const current = this.currentSnapshot;
+    const current = this.getSnapshot();
     if (current != null) return current.data;
 
-    await this.buildSnapshot();
-    const refreshed = this.currentSnapshot;
-    return refreshed != null ? refreshed.data : this.projection.loadSnapshot([]);
+    if (this.currentSnapshot == null) {
+      await this.buildSnapshot();
+    }
+
+    if (!this.hasPublishedSnapshot) {
+      await this.waitForPublishedSnapshot(FIRST_PUBLISHED_SNAPSHOT_WAIT_MS);
+      if (!this.hasPublishedSnapshot) {
+        await this.buildSnapshot();
+      }
+    }
+
+    const refreshed = this.getSnapshot();
+    if (refreshed != null) return refreshed.data;
+
+    return this.currentSnapshot?.data ?? this.projection.loadSnapshot([]);
   }
 
   async dispose(): Promise<void> {
@@ -230,12 +268,18 @@ export class ChainRuntime {
       clearInterval(this.pushTimer);
       this.pushTimer = null;
     }
+    if (this.resyncTimer != null) {
+      clearTimeout(this.resyncTimer);
+      this.resyncTimer = null;
+    }
 
     const handles = this.handles.splice(0, this.handles.length);
     await Promise.allSettled(handles.map(async (handle) => handle.release()));
     this.listeners.clear();
     this.pendingBySymbol.clear();
     this.currentSnapshot = null;
+    this.hasPublishedSnapshot = false;
+    this.snapshotPublishWaiters.clear();
   }
 
   private async initialize(): Promise<void> {
@@ -358,7 +402,17 @@ export class ChainRuntime {
     };
 
     this.currentSnapshot = snapshot;
-    this.broadcast(snapshot);
+    if (this.resyncTimer != null) {
+      clearTimeout(this.resyncTimer);
+      this.resyncTimer = null;
+    }
+    this.lastResyncAt = 0;
+    this.resyncBackoffMs = INITIAL_RESYNC_BACKOFF_MS;
+
+    if (this.hasPublishedSnapshot || this.snapshotHasLiveData(snapshot)) {
+      this.markSnapshotPublished();
+      this.broadcast(snapshot);
+    }
   }
 
   private async fetchSnapshotBuildResult(): Promise<SnapshotBuildResult | null> {
@@ -396,24 +450,13 @@ export class ChainRuntime {
     const patch = this.projection.applyDeltas(deltas);
 
     if (patch == null) {
-      void this.buildSnapshot().catch((error: unknown) => {
-        this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
-      });
+      this.scheduleResync();
       return;
     }
 
     this.seq += 1;
     const snapshot = this.currentSnapshot;
-    const event: ChainRuntimeDeltaEvent = {
-      type: 'delta',
-      seq: this.seq,
-      request: this.activeRequest,
-      meta: patch.meta,
-      deltas: patch.deltas,
-      patch: patch.patch,
-    };
-
-    this.currentSnapshot =
+    const nextSnapshot: ChainRuntimeSnapshotEvent | null =
       snapshot == null
         ? null
         : {
@@ -429,7 +472,86 @@ export class ChainRuntime {
             },
           };
 
+    this.currentSnapshot = nextSnapshot;
+
+    if (!this.hasPublishedSnapshot) {
+      if (nextSnapshot != null && this.snapshotHasLiveData(nextSnapshot)) {
+        this.markSnapshotPublished();
+        this.broadcast(nextSnapshot);
+      }
+      return;
+    }
+
+    const event: ChainRuntimeDeltaEvent = {
+      type: 'delta',
+      seq: this.seq,
+      request: this.activeRequest,
+      meta: patch.meta,
+      deltas: patch.deltas,
+      patch: patch.patch,
+    };
+
     this.broadcast(event);
+  }
+
+  private snapshotHasLiveData(snapshot: ChainRuntimeSnapshotEvent): boolean {
+    return snapshot.meta.maxQuoteTs > 0;
+  }
+
+  private markSnapshotPublished(): void {
+    if (!this.hasPublishedSnapshot) {
+      this.hasPublishedSnapshot = true;
+      for (const waiter of this.snapshotPublishWaiters) {
+        waiter();
+      }
+      this.snapshotPublishWaiters.clear();
+    }
+  }
+
+  private waitForPublishedSnapshot(timeoutMs: number): Promise<boolean> {
+    if (this.hasPublishedSnapshot) return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+      const onPublished = () => {
+        clearTimeout(timer);
+        this.snapshotPublishWaiters.delete(onPublished);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.snapshotPublishWaiters.delete(onPublished);
+        resolve(this.hasPublishedSnapshot);
+      }, timeoutMs);
+
+      timer.unref?.();
+      this.snapshotPublishWaiters.add(onPublished);
+    });
+  }
+
+  private scheduleResync(): void {
+    const now = Date.now();
+    const earliestResyncAt = this.lastResyncAt + this.resyncBackoffMs;
+
+    if (now >= earliestResyncAt) {
+      this.lastResyncAt = now;
+      this.resyncBackoffMs = Math.min(this.resyncBackoffMs * 2, MAX_RESYNC_BACKOFF_MS);
+      void this.buildSnapshot().catch((error: unknown) => {
+        this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
+      });
+      return;
+    }
+
+    if (this.resyncTimer != null) return;
+
+    this.resyncTimer = setTimeout(() => {
+      this.resyncTimer = null;
+      this.lastResyncAt = Date.now();
+      this.resyncBackoffMs = Math.min(this.resyncBackoffMs * 2, MAX_RESYNC_BACKOFF_MS);
+      void this.buildSnapshot().catch((error: unknown) => {
+        this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
+      });
+    }, earliestResyncAt - now);
+
+    this.resyncTimer.unref?.();
   }
 
   private broadcast(event: ChainRuntimeEvent): void {

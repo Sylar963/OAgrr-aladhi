@@ -64,6 +64,7 @@ const DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS = 90_000;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS = 30_000;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO = 0.9;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
+const PRICE_INDEX_COALESCE_MS = 50;
 
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
@@ -116,8 +117,13 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
   private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
+  private readonly pendingPriceIndexUpdates = new Map<
+    string,
+    { price: number; timestamp: number }
+  >();
   private subscribedTickerStaleSince = 0;
   private publicStatusRefreshPromise: Promise<void> | null = null;
+  private priceIndexFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -898,15 +904,34 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     const parsed = parseDeribitPriceIndex(data);
     if (parsed == null) return;
 
-    const updates = applyDeribitPriceIndex(
-      this.state,
-      this.quoteStore,
-      parsed.index_name,
-      parsed.price,
-      parsed.timestamp ?? Date.now(),
-    );
+    this.queuePriceIndexUpdate(parsed.index_name, parsed.price, parsed.timestamp ?? Date.now());
+  }
 
-    this.emitQuoteUpdates(updates);
+  private queuePriceIndexUpdate(indexName: string, price: number, timestamp: number): void {
+    this.pendingPriceIndexUpdates.set(indexName, { price, timestamp });
+    if (this.priceIndexFlushTimer != null) return;
+
+    this.priceIndexFlushTimer = setTimeout(() => {
+      this.priceIndexFlushTimer = null;
+      this.flushPriceIndexUpdates();
+    }, PRICE_INDEX_COALESCE_MS);
+  }
+
+  private flushPriceIndexUpdates(): void {
+    if (this.pendingPriceIndexUpdates.size === 0) return;
+
+    for (const [indexName, { price, timestamp }] of this.pendingPriceIndexUpdates) {
+      const updates = applyDeribitPriceIndex(
+        this.state,
+        this.quoteStore,
+        indexName,
+        price,
+        timestamp,
+      );
+      this.emitQuoteUpdates(updates);
+    }
+
+    this.pendingPriceIndexUpdates.clear();
   }
 
   /**
@@ -943,6 +968,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       this.healthTimer = null;
     }
     this.publicStatusRefreshPromise = null;
+    if (this.priceIndexFlushTimer != null) {
+      clearTimeout(this.priceIndexFlushTimer);
+      this.priceIndexFlushTimer = null;
+    }
+    this.pendingPriceIndexUpdates.clear();
     if (this.instrumentStateFlushTimer != null) {
       clearTimeout(this.instrumentStateFlushTimer);
       this.instrumentStateFlushTimer = null;

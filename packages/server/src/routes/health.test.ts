@@ -119,6 +119,8 @@ describe('GET /health', () => {
         p99Ms: expect.any(Number),
         maxMs: expect.any(Number),
         windowSec: expect.any(Number),
+        over500Count: expect.any(Number),
+        buckets: expect.any(Object),
       },
       resources: {
         total: expect.any(Number),

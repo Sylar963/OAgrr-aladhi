@@ -1,7 +1,6 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useExpiries } from '@features/chain';
-import { VENUE_IDS } from '@lib/venue-meta';
 import { fetchJson } from '@lib/http';
 import type { EnrichedChainResponse, IvHistoryResponse, IvSurfaceResponse } from '@shared/enriched';
 
@@ -36,25 +35,42 @@ export function useIvHistory(underlying: string, window: IvHistoryWindow) {
   });
 }
 
-export function useAllExpiriesSmile(underlying: string, enabled: boolean) {
-  const { data: expiriesData } = useExpiries(underlying);
-  const expiries = expiriesData?.expiries ?? [];
-  const venueParam = `&venues=${VENUE_IDS.join(',')}`;
+/**
+ * Returns per-expiry chain data for the smile chart, derived from the
+ * surface response's per-strike data. This eliminates the 30+ parallel
+ * /api/chains requests that previously caused WS subscription storms and
+ * event-loop blocking from concurrent ChainRuntime acquisition.
+ */
+export function useAllExpiriesSmile(
+  underlying: string,
+): { data: EnrichedChainResponse[] | undefined; isPending: boolean } {
+  const { data: surfaceData, isLoading } = useSurface(underlying, []);
 
-  return useQuery({
-    queryKey: ['smile-all', underlying, expiries.join(',')],
-    queryFn: async (): Promise<EnrichedChainResponse[]> => {
-      const results = await Promise.all(
-        expiries.map((exp) =>
-          fetchJson<EnrichedChainResponse>(
-            `/chains?underlying=${underlying}&expiry=${exp}${venueParam}`,
-          ),
-        ),
-      );
-      return results;
-    },
-    enabled: Boolean(underlying && expiries.length > 0 && enabled),
-    staleTime: 30_000,
-    placeholderData: (prev: EnrichedChainResponse[] | undefined) => prev,
-  });
+  const chains = useMemo<EnrichedChainResponse[] | undefined>(() => {
+    if (!surfaceData?.strikes || !surfaceData.surfaceFine) return undefined;
+    return surfaceData.surfaceFine.map((row, i) => {
+      const expiryStrikes = surfaceData.strikes?.[i];
+      return {
+        underlying,
+        expiry: row.expiry,
+        dte: row.dte,
+        expiryTs: null,
+        stats: {
+          forwardPriceUsd: null,
+          indexPriceUsd: null,
+          basisPct: null,
+          atmStrike: null,
+          atmIv: null,
+          putCallOiRatio: null,
+          totalOiUsd: null,
+          skew25d: null,
+          bfly25d: null,
+        },
+        strikes: expiryStrikes ?? [],
+        gex: [],
+      } satisfies EnrichedChainResponse;
+    });
+  }, [surfaceData, underlying]);
+
+  return { data: chains, isPending: isLoading };
 }

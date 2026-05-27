@@ -17,6 +17,13 @@ import type { ChainRequest, VenueOptionChain } from './types.js';
 
 const DAYS_IN_YEAR = 365;
 const SURFACE_GRID_EXPIRY_CONCURRENCY = 4;
+const SURFACE_CACHE_TTL_MS = 15_000;
+
+const surfaceCache = new Map<string, { ttl: number; entries: SurfaceGridEntry[] }>();
+
+function surfaceCacheKey(underlying: string, venues: VenueId[], includeVenueSurfaces: boolean): string {
+  return `${includeVenueSurfaces ? 'v' : 'c'}:${underlying}:${venues.slice().sort().join(',')}`;
+}
 
 export interface SurfaceGridEntry {
   expiry: string;
@@ -77,6 +84,10 @@ export async function buildIvSurfaceGrid({
   includeVenueSurfaces = false,
 }: BuildSurfaceGridOptions): Promise<SurfaceGridEntry[]> {
   const requestedVenues: VenueId[] = venues ?? getAllAdapters().map((a) => a.venue);
+
+  const key = surfaceCacheKey(underlying, requestedVenues, includeVenueSurfaces);
+  const cached = surfaceCache.get(key);
+  if (cached != null && Date.now() < cached.ttl) return cached.entries;
 
   const allExpiries = new Set<string>();
   const expiryLists = await Promise.allSettled(
@@ -152,6 +163,11 @@ export async function buildIvSurfaceGrid({
         }
       }
 
+      // Yield to the event loop so WebSocket ping/pong and other pending
+      // I/O are not starved during long surface builds. Without this, 30
+      // expiries × 9 SVI fits each can block the event loop for seconds.
+      await new Promise<void>((r) => setImmediate(r));
+
       return {
         expiry,
         dte,
@@ -167,5 +183,9 @@ export async function buildIvSurfaceGrid({
     },
   );
 
-  return entries.filter((entry): entry is SurfaceGridEntry => entry != null);
+  const filtered = entries.filter((entry): entry is SurfaceGridEntry => entry != null);
+
+  surfaceCache.set(key, { ttl: Date.now() + SURFACE_CACHE_TTL_MS, entries: filtered });
+
+  return filtered;
 }

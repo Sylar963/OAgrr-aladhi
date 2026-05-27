@@ -429,9 +429,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   }
 
   private async connectWs(): Promise<void> {
-    const url = buildSignedWsUrl();
     if (this.wsClient == null) {
-      this.wsClient = new TopicWsClient(url, 'coincall-ws', {
+      this.wsClient = new TopicWsClient(() => buildSignedWsUrl(), 'coincall-ws', {
         pingIntervalMs: COINCALL_PING_INTERVAL_MS,
         pingMessage: { action: 'heartbeat' },
         onStatusChange: (state) => {

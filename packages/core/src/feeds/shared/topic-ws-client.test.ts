@@ -102,4 +102,21 @@ describe('TopicWsClient', () => {
     expect(send).toHaveBeenCalledWith(JSON.stringify({ op: 'subscribe', topic: 'btc' }));
     expect(internals.replayQueue).toHaveLength(0);
   });
+
+  it('resolves a fresh URL on each connect when constructed with a factory', () => {
+    let counter = 0;
+    const client = new TopicWsClient(() => `wss://signed/?ts=${counter++}`, 'test');
+    const internals = client as unknown as { resolveUrl: () => string };
+
+    expect(internals.resolveUrl()).toBe('wss://signed/?ts=0');
+    expect(internals.resolveUrl()).toBe('wss://signed/?ts=1');
+  });
+
+  it('returns the same static URL on each connect when constructed with a string', () => {
+    const client = new TopicWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as { resolveUrl: () => string };
+
+    expect(internals.resolveUrl()).toBe('ws://localhost:1234');
+    expect(internals.resolveUrl()).toBe('ws://localhost:1234');
+  });
 });

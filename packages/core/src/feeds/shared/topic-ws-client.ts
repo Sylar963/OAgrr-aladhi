@@ -45,11 +45,18 @@ export class TopicWsClient {
   private readonly log: pino.Logger;
 
   constructor(
-    private readonly url: string,
+    private readonly url: string | (() => string),
     private readonly label: string,
     private readonly options: TopicWsClientOptions = {},
   ) {
     this.log = logger.child({ component: this.label });
+  }
+
+  // Signed venues (Coincall) embed a timestamped HMAC in the URL that expires.
+  // Resolving the factory on every (re)connect keeps the signature fresh
+  // instead of replaying the one captured at construction.
+  private resolveUrl(): string {
+    return typeof this.url === 'function' ? this.url() : this.url;
   }
 
   get socket(): WebSocket | null {
@@ -83,7 +90,8 @@ export class TopicWsClient {
     this.shouldReconnect = true;
 
     this.connectPromise = new Promise((resolve, reject) => {
-      const socket = new WebSocket(this.url);
+      const url = this.resolveUrl();
+      const socket = new WebSocket(url);
       let settled = false;
 
       const resolveConnect = (): void => {
@@ -109,7 +117,7 @@ export class TopicWsClient {
         this.connectedAt = Date.now();
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
-        this.log.info({ url: this.url }, 'ws connected');
+        this.log.info({ url }, 'ws connected');
         this.reconnectAttempts = 0;
         this.startPing();
         this.options.onStatusChange?.('connected');

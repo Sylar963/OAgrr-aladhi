@@ -15,6 +15,7 @@ const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RESUBSCRIBE_BATCH_SIZE = 200;
 const DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS = 350;
+const DEFAULT_RESUBSCRIBE_BATCH_TIMEOUT_MS = 30_000;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
 const DEFAULT_MAX_COOLDOWN_TOTAL_MS = 5 * 60 * 1000;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
@@ -46,6 +47,10 @@ function isConnectionClosedError(error: unknown): boolean {
 function isRateLimitSignal(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
+}
+
+function isRequestTimeoutError(error: unknown): boolean {
+  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }
 
 export class JsonRpcWsClient {
@@ -80,6 +85,7 @@ export class JsonRpcWsClient {
       unsubscribeAllMethod?: string;
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
+      resubscribeBatchTimeoutMs?: number;
       rateLimitCooldownMs?: number;
       maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
@@ -256,7 +262,8 @@ export class JsonRpcWsClient {
     if (!this.isConnected) throw new Error(`[${this.label}] not connected`);
 
     const id = this.nextId++;
-    const timeout = timeoutOverrideMs ?? this.options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const timeout =
+      timeoutOverrideMs ?? this.options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -460,21 +467,49 @@ export class JsonRpcWsClient {
     const method = this.options.subscribeMethod ?? 'public/subscribe';
     const batchSize = this.options.resubscribeBatchSize ?? DEFAULT_RESUBSCRIBE_BATCH_SIZE;
     const delayMs = this.options.resubscribeBatchDelayMs ?? DEFAULT_RESUBSCRIBE_BATCH_DELAY_MS;
+    const batchTimeoutMs =
+      this.options.resubscribeBatchTimeoutMs ??
+      Math.min(
+        this.options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+        DEFAULT_RESUBSCRIBE_BATCH_TIMEOUT_MS,
+      );
     const channels = [...this.subscribedChannels.values()];
     const batches = Math.ceil(channels.length / batchSize);
     this.log.info(
-      { count: channels.length, batches, batchSize, delayMs },
+      { count: channels.length, batches, batchSize, delayMs, batchTimeoutMs },
       're-subscribing to channels',
     );
 
     for (let i = 0; i < channels.length; i += batchSize) {
       const batch = channels.slice(i, i + batchSize);
-      await this.call(method, { channels: batch });
-      // Each successful resubscribe batch is bidirectional proof — reset the
-      // escalation counter so a long resubscribe doesn't keep us in a half-state.
-      this.reconnectAttempts = 0;
+      await this.resubscribeBatch(method, batch, batchTimeoutMs);
       if (i + batchSize < channels.length) {
         await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+
+    this.reconnectAttempts = 0;
+  }
+
+  private async resubscribeBatch(
+    method: string,
+    channels: string[],
+    timeoutMs: number,
+  ): Promise<void> {
+    try {
+      await this.call(method, { channels }, timeoutMs);
+      return;
+    } catch (error: unknown) {
+      if (!isRequestTimeoutError(error) || channels.length <= 1) throw error;
+
+      const nextBatchSize = Math.ceil(channels.length / 2);
+      this.log.warn(
+        { count: channels.length, nextBatchSize, timeoutMs, err: String(error) },
+        'resubscribe batch timed out, retrying smaller batches',
+      );
+
+      for (let i = 0; i < channels.length; i += nextBatchSize) {
+        await this.resubscribeBatch(method, channels.slice(i, i + nextBatchSize), timeoutMs);
       }
     }
   }

@@ -37,7 +37,12 @@ function deferred<T>() {
 }
 
 type JsonRpcWsClientInternals = {
-  call: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+  call: (
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutOverrideMs?: number,
+  ) => Promise<unknown>;
+  resubscribe: () => Promise<void>;
   subscribedChannels: Set<string>;
   reconnectAttempts: number;
   scheduleReconnect: () => void;
@@ -234,6 +239,60 @@ describe('JsonRpcWsClient', () => {
     expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(attemptsAfterFirstClose);
 
     vi.useRealTimers();
+  });
+
+  it('resets reconnectAttempts only after every resubscribe batch succeeds', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      resubscribeBatchSize: 1,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    internals.reconnectAttempts = 4;
+    internals.subscribedChannels = new Set(['a', 'b', 'c']);
+    internals.call = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('[test] public/subscribe timed out after 30000ms'));
+
+    await expect(internals.resubscribe()).rejects.toThrow('timed out');
+
+    expect(internals.reconnectAttempts).toBe(4);
+
+    internals.call = vi.fn(async () => undefined);
+
+    await internals.resubscribe();
+
+    expect(internals.reconnectAttempts).toBe(0);
+  });
+
+  it('retries timed-out resubscribe batches with smaller batches', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      resubscribeBatchSize: 4,
+      resubscribeBatchTimeoutMs: 30_000,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const requestedBatchSizes: number[] = [];
+
+    internals.subscribedChannels = new Set(['a', 'b', 'c', 'd']);
+    internals.call = vi.fn(async (_method, params) => {
+      const channels = params?.channels;
+      if (!Array.isArray(channels)) throw new Error('missing channels');
+      requestedBatchSizes.push(channels.length);
+      if (channels.length === 4) {
+        throw new Error('[test] public/subscribe timed out after 30000ms');
+      }
+      return undefined;
+    });
+
+    await internals.resubscribe();
+
+    expect(requestedBatchSizes).toEqual([4, 2, 2]);
+    expect(internals.call).toHaveBeenCalledWith(
+      'public/subscribe',
+      { channels: ['a', 'b', 'c', 'd'] },
+      30_000,
+    );
   });
 
   it('exposes reconnectAttempts and rateLimitUntil via public getters', () => {

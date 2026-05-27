@@ -50,6 +50,7 @@ const SUBSCRIBE_BATCH_SIZE = 500;
 // ~3.3 calls/sec sustained (30k credit pool, 3k per call).
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
 const RESUBSCRIBE_BATCH_DELAY_MS = 500;
+const EAGER_TICKER_EXPIRY_COUNT = 2;
 const EAGER_UNDERLYING_DELAY_MS = 750;
 const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -128,8 +129,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   // opens the chain, which cuts cold-start load without losing broad coverage.
   protected override async eagerSubscribe(): Promise<void> {
     const underlyings = await this.listUnderlyings();
-    const priority = underlyings.filter((underlying) => this.shouldEagerTickerUnderlying(underlying));
-    const deferred = underlyings.filter((underlying) => !this.shouldEagerTickerUnderlying(underlying));
+    const priority = underlyings.filter((underlying) =>
+      this.shouldEagerTickerUnderlying(underlying),
+    );
+    const deferred = underlyings.filter(
+      (underlying) => !this.shouldEagerTickerUnderlying(underlying),
+    );
 
     for (const underlying of [...priority, ...deferred]) {
       await this.ensureBulkSubscriptions(underlying, 'eager');
@@ -139,7 +144,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         continue;
       }
 
-      const expiries = await this.listExpiries(underlying);
+      const expiries = this.eagerTickerExpiries(underlying);
 
       for (const expiry of expiries) {
         const matching = this.instruments.filter(
@@ -425,7 +430,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   private async ensureBulkSubscriptions(underlying: string, source: string): Promise<void> {
-    const plan = buildDeribitSubscriptionPlan(this.subscriptions, underlying, [], EAGER_TICKER_INTERVAL);
+    const plan = buildDeribitSubscriptionPlan(
+      this.subscriptions,
+      underlying,
+      [],
+      EAGER_TICKER_INTERVAL,
+    );
     if (plan.bulkChannels.length === 0) return;
 
     await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
@@ -440,7 +450,25 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   private shouldEagerTickerUnderlying(underlying: string): boolean {
-    return underlying === 'BTC' || underlying === 'ETH' || underlying.startsWith('BTC_') || underlying.startsWith('ETH_');
+    return (
+      underlying === 'BTC' ||
+      underlying === 'ETH' ||
+      underlying.startsWith('BTC_') ||
+      underlying.startsWith('ETH_')
+    );
+  }
+
+  private eagerTickerExpiries(underlying: string): string[] {
+    return [...new Set(this.instruments.filter((i) => i.base === underlying).map((i) => i.expiry))]
+      .sort()
+      .slice(0, EAGER_TICKER_EXPIRY_COUNT);
+  }
+
+  private shouldEagerTickerInstrument(instrument: CachedInstrument): boolean {
+    return (
+      this.shouldEagerTickerUnderlying(instrument.base) &&
+      this.eagerTickerExpiries(instrument.base).includes(instrument.expiry)
+    );
   }
 
   protected override async unsubscribeChain(
@@ -450,10 +478,9 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   ): Promise<void> {
     const channelsToUnsubscribe: string[] = [];
     const channelsToSubscribe: string[] = [];
-    const preserveEagerTickers = this.shouldEagerTickerUnderlying(underlying);
 
     for (const instrument of instruments) {
-      if (preserveEagerTickers) {
+      if (this.shouldEagerTickerInstrument(instrument)) {
         const downgrade = downgradeDeribitTickerSubscription(
           this.subscriptions,
           instrument.exchangeSymbol,
@@ -466,19 +493,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         continue;
       }
 
-      const channel = releaseDeribitTickerSubscription(this.subscriptions, instrument.exchangeSymbol);
+      const channel = releaseDeribitTickerSubscription(
+        this.subscriptions,
+        instrument.exchangeSymbol,
+      );
       if (channel != null) {
         channelsToUnsubscribe.push(channel);
-      }
-    }
-
-    if (!preserveEagerTickers && this.activeRequestsForUnderlying(underlying) === 0) {
-      const indexName = deribitIndexNameFor(underlying);
-      if (this.subscriptions.subscribedIndexes.delete(indexName)) {
-        channelsToUnsubscribe.push(`markprice.options.${indexName}`);
-      }
-      if (this.subscriptions.subscribedPriceIndexes.delete(indexName)) {
-        channelsToUnsubscribe.push(`deribit_price_index.${indexName}`);
       }
     }
 
@@ -698,16 +718,19 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     }
 
     for (const [underlying, list] of byUnderlying) {
+      const eagerList = list.filter((instrument) => this.shouldEagerTickerInstrument(instrument));
+      if (eagerList.length === 0) continue;
+
       try {
         await this.subscribeWithInterval(
           underlying,
-          list,
+          eagerList,
           EAGER_TICKER_INTERVAL,
           'instrument-state',
         );
       } catch (err: unknown) {
         log.warn(
-          { underlying, count: list.length, err: String(err) },
+          { underlying, count: eagerList.length, err: String(err) },
           'failed to subscribe new instruments',
         );
       }
@@ -751,7 +774,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       }
     }
 
-    log.info({ count: instrumentNames.length }, 'removed expired instruments from instrument.state');
+    log.info(
+      { count: instrumentNames.length },
+      'removed expired instruments from instrument.state',
+    );
   }
 
   private emitPlatformHealth(): void {
@@ -823,7 +849,23 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       // Stay degraded and let the backoff window elapse — organic transport
       // reconnect or a resumed stream still recovers us.
       if (staleWindowMs >= DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) {
-        this.emitStatus('degraded', `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`);
+        if (this.forcedStaleReconnectStreak > 0) {
+          log.warn(
+            {
+              forcedStaleReconnectStreak: this.forcedStaleReconnectStreak,
+              staleWindowMs,
+              msSinceLastForcedReconnect,
+              subscribedTickers: summary.subscribedTickers,
+              staleSubscribedTickers: summary.staleSubscribedTickers,
+              staleRatio,
+            },
+            'deribit stale reconnect streak active',
+          );
+        }
+        this.emitStatus(
+          'degraded',
+          `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`,
+        );
       }
       return;
     }
@@ -845,7 +887,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       },
       'deribit subscribed tickers stayed stale, forcing reconnect',
     );
-    this.emitStatus('reconnecting', `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`);
+    this.emitStatus(
+      'reconnecting',
+      `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`,
+    );
     this.rpc.terminate();
   }
 
@@ -882,8 +927,17 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
           if (!withinBackoff) {
             this.forcedStaleReconnectAt = now;
             this.forcedStaleReconnectStreak += 1;
+            log.warn(
+              { forcedStaleReconnectStreak: this.forcedStaleReconnectStreak, cooldownMs },
+              'deribit public/status timeout forcing reconnect',
+            );
             this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
             this.rpc.terminate();
+          } else if (this.forcedStaleReconnectStreak > 0) {
+            log.warn(
+              { forcedStaleReconnectStreak: this.forcedStaleReconnectStreak, cooldownMs },
+              'deribit public/status timeout within stale reconnect backoff',
+            );
           }
         }
       }

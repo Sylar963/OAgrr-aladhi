@@ -79,10 +79,7 @@ function backoffMs(attempt: number): number {
 
 // Structural equality on a single venue quote. Two refs that read equal here
 // can be treated as the same value — letting React.memo skip the row render.
-function quotesEqual(
-  a: VenueQuote | null | undefined,
-  b: VenueQuote | null | undefined,
-): boolean {
+function quotesEqual(a: VenueQuote | null | undefined, b: VenueQuote | null | undefined): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a == null && b == null;
   return (
@@ -127,7 +124,9 @@ function sidesEqual(a: EnrichedSide, b: EnrichedSide): boolean {
 }
 
 function strikesEqual(a: EnrichedStrike, b: EnrichedStrike): boolean {
-  return a === b || (a.strike === b.strike && sidesEqual(a.call, b.call) && sidesEqual(a.put, b.put));
+  return (
+    a === b || (a.strike === b.strike && sidesEqual(a.call, b.call) && sidesEqual(a.put, b.put))
+  );
 }
 
 // Delta path: incoming carries only the strikes that changed. Keep every
@@ -165,15 +164,9 @@ function reconcileSnapshotStrikes(
   });
 }
 
-type DeltaMsg = Extract<
-  ReturnType<typeof ServerWsMessageSchema.parse>,
-  { type: 'delta' }
->;
+type DeltaMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'delta' }>;
 
-type StatusMsg = Extract<
-  ReturnType<typeof ServerWsMessageSchema.parse>,
-  { type: 'status' }
->;
+type StatusMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'status' }>;
 
 const CONNECTION_STATE_ORDER: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
 
@@ -321,40 +314,68 @@ export function useChainWs({
 
       switch (msg.type) {
         case 'snapshot': {
-          const key = chainKeys.chain(
+          const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
-          qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
-            // Reconcile against the cache for this exact key first (resync
-            // within same tenor); fall back to the most recent snapshot from
-            // any tenor so cross-tenor switches still benefit from content-
-            // equal strikes keeping their refs.
-            const baseline = current ?? lastSnapshotRef.current ?? undefined;
-            if (baseline == null) return msg.data;
-            return {
-              ...msg.data,
-              strikes: reconcileSnapshotStrikes(baseline.strikes, msg.data.strikes),
-            };
-          });
-          lastSnapshotRef.current = qc.getQueryData<EnrichedChainResponse>(key) ?? msg.data;
+          const requestedKey = chainKeys.chain(
+            paramsRef.current.underlying,
+            paramsRef.current.expiry,
+            paramsRef.current.venues,
+          );
+          const writeSnapshot = (key: ReturnType<typeof chainKeys.chain>) => {
+            qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
+              // Reconcile against the cache for this exact key first (resync
+              // within same tenor); fall back to the most recent snapshot from
+              // any tenor so cross-tenor switches still benefit from content-
+              // equal strikes keeping their refs.
+              const baseline = current ?? lastSnapshotRef.current ?? undefined;
+              if (baseline == null) return msg.data;
+              return {
+                ...msg.data,
+                strikes: reconcileSnapshotStrikes(baseline.strikes, msg.data.strikes),
+              };
+            });
+          };
+
+          writeSnapshot(serverKey);
+          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+            writeSnapshot(requestedKey);
+          }
+          lastSnapshotRef.current =
+            qc.getQueryData<EnrichedChainResponse>(requestedKey) ??
+            qc.getQueryData<EnrichedChainResponse>(serverKey) ??
+            msg.data;
           store.set({ connectionState: 'live', staleMs: msg.meta.staleMs, lastSeq: msg.seq });
           break;
         }
 
         case 'delta': {
-          const key = chainKeys.chain(
+          const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
+          const requestedKey = chainKeys.chain(
+            paramsRef.current.underlying,
+            paramsRef.current.expiry,
+            paramsRef.current.venues,
+          );
           pendingRef.current.push({
-            key,
+            key: serverKey,
             patch: msg.patch,
             seq: msg.seq,
             staleMs: msg.meta.staleMs,
           });
+          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+            pendingRef.current.push({
+              key: requestedKey,
+              patch: msg.patch,
+              seq: msg.seq,
+              staleMs: msg.meta.staleMs,
+            });
+          }
           scheduleFlush();
           break;
         }
@@ -397,9 +418,7 @@ export function useChainWs({
     }
 
     const envWsBase = import.meta.env.VITE_WS_URL;
-    const chainWsUrl = envWsBase
-      ? `${envWsBase.replace(/\/$/, '')}/ws/chain`
-      : wsUrl('/ws/chain');
+    const chainWsUrl = envWsBase ? `${envWsBase.replace(/\/$/, '')}/ws/chain` : wsUrl('/ws/chain');
 
     const ws = new WebSocket(chainWsUrl);
     wsRef.current = ws;

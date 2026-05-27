@@ -221,6 +221,22 @@ describe('useChainWs', () => {
     expect(hookResult.result.current.lastSeq).toBe(1);
   });
 
+  it('writes snapshots under the requested venue key when the server filters venues', async () => {
+    const { ws, subId } = await renderAndConnect({
+      underlying: 'BTC',
+      expiry: '2026-03-27',
+      venues: ['deribit', 'gateio'],
+    });
+
+    await act(() => {
+      ws.pushMessage(snapshot(subId, 1));
+    });
+
+    const requestedKey = chainKeys.chain('BTC', '2026-03-27', ['deribit', 'gateio']);
+    const cached = queryClient.getQueryData(requestedKey);
+    expect(cached).toBeDefined();
+  });
+
   it('ignores snapshot with stale subscriptionId', async () => {
     const { hookResult, ws } = await renderAndConnect();
     await act(() => {

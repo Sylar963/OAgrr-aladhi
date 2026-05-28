@@ -222,7 +222,11 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
       if (parsed == null) continue;
       this.quoteStore.set(
         name,
-        buildDeriveQuote(parsed, (value) => this.safeNum(value)),
+        buildDeriveQuote(
+          parsed,
+          (value) => this.safeNum(value),
+          (value) => this.positiveOrNull(value),
+        ),
       );
       count++;
     }
@@ -471,7 +475,11 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     const parsed = parseDeriveTicker(rawTicker);
     if (parsed == null) return;
 
-    const quote = buildDeriveQuote(parsed, (value) => this.safeNum(value));
+    const quote = buildDeriveQuote(
+      parsed,
+      (value) => this.safeNum(value),
+      (value) => this.positiveOrNull(value),
+    );
     this.emitQuoteUpdate(name, quote);
   }
 

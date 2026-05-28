@@ -28,6 +28,9 @@ export abstract class BaseAdapter implements OptionVenueAdapter {
 
   /** Convert IV from percentage (Deribit sends 50.18 for 50.18%) to fraction (0.5018). */
   protected ivToFraction(value: unknown): number | null {
+    if (value == null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+
     const n = Number(value);
     return Number.isFinite(n) ? n / 100 : null;
   }

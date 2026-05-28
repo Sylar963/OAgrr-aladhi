@@ -226,6 +226,26 @@ describe('Coincall types', () => {
     }
   });
 
+  it('accepts null bid/ask/size/iv fields without dropping the whole batch', () => {
+    // Production sends `null` for empty quote sides. Because the push is an
+    // array, one entry rejecting null would drop every contract in the expiry.
+    const result = CoincallTOptionMessageSchema.safeParse({
+      ...TOPTION_FIXTURE,
+      d: [
+        { ...TOPTION_FIXTURE.d[0], bid: null, ask: null, bs: null, as: null, biv: null, aiv: null },
+        { ...TOPTION_FIXTURE.d[0], s: 'BTCUSD-4JUL23-28000-C' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.d).toHaveLength(2);
+      expect(result.data.d[0]?.bid).toBeNull();
+      expect(result.data.d[0]?.ask).toBeNull();
+      // The valid sibling entry still survives.
+      expect(result.data.d[1]?.bid).toBe(1);
+    }
+  });
+
   it('accepts a heartbeat ack', () => {
     const result = CoincallHeartbeatAckSchema.safeParse(HEARTBEAT_ACK_FIXTURE);
     expect(result.success).toBe(true);

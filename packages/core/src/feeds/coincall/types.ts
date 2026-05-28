@@ -108,27 +108,34 @@ export type CoincallBsInfoMessage = z.infer<typeof CoincallBsInfoMessageSchema>;
 // Envelope: { dt: 4, c: 20, d: [ { ...per-contract snapshot... } ] }
 // tOption provides bid/ask/biv/aiv/bs/as — no markIv.
 
+// tOption is an array push, so a single entry that fails validation drops the
+// whole expiry's update. Production sends `null` (not just absent) for empty
+// bid/ask/size/iv fields, which the bare NumericLike union rejects. Widen every
+// optional field to also accept null; mergeCoincallTOption treats null as "no
+// fresh value, keep previous".
+const TOptionNumericLike = NumericLike.nullable();
+
 export const CoincallTOptionEntrySchema = z.object({
   s: z.string(),
-  mp: NumericLike.optional(),
-  lp: NumericLike.optional(),
-  bid: NumericLike.optional(),
-  ask: NumericLike.optional(),
-  bs: NumericLike.optional(),
-  as: NumericLike.optional(),
-  biv: NumericLike.optional(),
-  aiv: NumericLike.optional(),
-  delta: NumericLike.optional(),
-  gamma: NumericLike.optional(),
-  theta: NumericLike.optional(),
-  vega: NumericLike.optional(),
-  up: NumericLike.optional(),
-  upv: NumericLike.optional(),
-  oi: NumericLike.optional(),
-  v: NumericLike.optional(),
-  v24: NumericLike.optional(),
-  cp: NumericLike.optional(),
-  cr: NumericLike.optional(),
+  mp: TOptionNumericLike.optional(),
+  lp: TOptionNumericLike.optional(),
+  bid: TOptionNumericLike.optional(),
+  ask: TOptionNumericLike.optional(),
+  bs: TOptionNumericLike.optional(),
+  as: TOptionNumericLike.optional(),
+  biv: TOptionNumericLike.optional(),
+  aiv: TOptionNumericLike.optional(),
+  delta: TOptionNumericLike.optional(),
+  gamma: TOptionNumericLike.optional(),
+  theta: TOptionNumericLike.optional(),
+  vega: TOptionNumericLike.optional(),
+  up: TOptionNumericLike.optional(),
+  upv: TOptionNumericLike.optional(),
+  oi: TOptionNumericLike.optional(),
+  v: TOptionNumericLike.optional(),
+  v24: TOptionNumericLike.optional(),
+  cp: TOptionNumericLike.optional(),
+  cr: TOptionNumericLike.optional(),
   ts: NumericLike,
 });
 export type CoincallTOptionEntry = z.infer<typeof CoincallTOptionEntrySchema>;

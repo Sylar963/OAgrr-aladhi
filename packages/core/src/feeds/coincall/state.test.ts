@@ -269,9 +269,11 @@ describe('mergeCoincallTOption', () => {
       emptyQuote(),
     );
     expect(q.bidPrice).toBe(1);
-    expect(q.askPrice).toBe(0);
+    // ask/as arrive as 0 (Coincall's "no quote" placeholder); with no previous
+    // quote they stay null rather than being recorded as a $0 price.
+    expect(q.askPrice).toBeNull();
     expect(q.bidSize).toBe(0.2);
-    expect(q.askSize).toBe(0);
+    expect(q.askSize).toBeNull();
     expect(q.greeks.bidIv).toBe(0.01);
     expect(q.greeks.askIv).toBe(0.01);
     expect(q.markPrice).toBe(4038.58);
@@ -295,6 +297,52 @@ describe('mergeCoincallTOption', () => {
     // delta is overwritten only when the push provides it; here it stays.
     expect(q.greeks.delta).toBe(0.5);
     expect(q.bidPrice).toBe(1);
+  });
+
+  it('preserves previous quotes when tOption sends zero/empty prices and sizes', () => {
+    const inst = testInstrument();
+    const prev = emptyQuote();
+    prev.bidPrice = 10;
+    prev.askPrice = 12;
+    prev.bidSize = 1;
+    prev.askSize = 2;
+    prev.greeks = { ...prev.greeks, bidIv: 0.4, askIv: 0.5 };
+
+    // Coincall emits 0 (and null) as "no fresh quote on this side". That must not
+    // clobber the last good bid/ask — it should leave the prior values intact.
+    const q = mergeCoincallTOption(
+      { s: 'X', bid: 0, ask: null, bs: 0, as: null, ts: 5 },
+      inst,
+      prev,
+      emptyQuote(),
+    );
+
+    expect(q.bidPrice).toBe(10);
+    expect(q.askPrice).toBe(12);
+    expect(q.bidSize).toBe(1);
+    expect(q.askSize).toBe(2);
+    expect(q.greeks.bidIv).toBe(0.4);
+    expect(q.greeks.askIv).toBe(0.5);
+  });
+
+  it('overwrites previous quotes when tOption sends a genuine positive bid/ask', () => {
+    const inst = testInstrument();
+    const prev = emptyQuote();
+    prev.bidPrice = 10;
+    prev.askPrice = 12;
+    prev.greeks = { ...prev.greeks, bidIv: 0.4, askIv: 0.5 };
+
+    const q = mergeCoincallTOption(
+      { s: 'X', bid: 11, ask: 13, biv: 0.41, aiv: 0.51, ts: 5 },
+      inst,
+      prev,
+      emptyQuote(),
+    );
+
+    expect(q.bidPrice).toBe(11);
+    expect(q.askPrice).toBe(13);
+    expect(q.greeks.bidIv).toBe(0.41);
+    expect(q.greeks.askIv).toBe(0.51);
   });
 
   it('derives missing side IVs from best bid/ask prices on orderBook fallback', () => {

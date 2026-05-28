@@ -13,6 +13,21 @@ function mergeNumber(next: number | undefined | null, previous: number | null): 
   return next ?? previous;
 }
 
+/** A genuine, tradable quote value — present and strictly positive. */
+function isLiveQuoteValue(next: number | undefined | null): next is number {
+  return next != null && next > 0;
+}
+
+/**
+ * tOption uses 0 (or "" → 0) as a placeholder for "no quote on this side" rather
+ * than omitting the field. Treating that 0 as a real price wipes a valid previous
+ * quote and makes the contract read as "no market" downstream (enrichment requires
+ * bid/ask > 0). So a non-positive value means "no fresh data — keep the previous".
+ */
+function mergeTOptionField(next: number | undefined | null, previous: number | null): number | null {
+  return isLiveQuoteValue(next) ? next : previous;
+}
+
 function erf(x: number): number {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
@@ -181,10 +196,10 @@ export function mergeCoincallTOption(
 ): LiveQuote {
   const base = previous ?? empty;
   return fillMissingCoincallSideIvs(inst, {
-    bidPrice: mergeNumber(entry.bid, base.bidPrice),
-    askPrice: mergeNumber(entry.ask, base.askPrice),
-    bidSize: mergeNumber(entry.bs, base.bidSize),
-    askSize: mergeNumber(entry.as, base.askSize),
+    bidPrice: mergeTOptionField(entry.bid, base.bidPrice),
+    askPrice: mergeTOptionField(entry.ask, base.askPrice),
+    bidSize: mergeTOptionField(entry.bs, base.bidSize),
+    askSize: mergeTOptionField(entry.as, base.askSize),
     markPrice: mergeNumber(entry.mp, base.markPrice),
     lastPrice: mergeNumber(entry.lp, base.lastPrice),
     underlyingPrice: mergeNumber(entry.up, base.underlyingPrice),
@@ -200,8 +215,8 @@ export function mergeCoincallTOption(
       vega: mergeNumber(entry.vega, base.greeks.vega),
       rho: base.greeks.rho,
       markIv: base.greeks.markIv,
-      bidIv: entry.biv ?? (entry.bid != null ? null : base.greeks.bidIv),
-      askIv: entry.aiv ?? (entry.ask != null ? null : base.greeks.askIv),
+      bidIv: entry.biv ?? (isLiveQuoteValue(entry.bid) ? null : base.greeks.bidIv),
+      askIv: entry.aiv ?? (isLiveQuoteValue(entry.ask) ? null : base.greeks.askIv),
     },
     timestamp: entry.ts,
   });

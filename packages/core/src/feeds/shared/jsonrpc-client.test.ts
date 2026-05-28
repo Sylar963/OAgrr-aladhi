@@ -45,6 +45,7 @@ type JsonRpcWsClientInternals = {
   resubscribe: () => Promise<void>;
   subscribedChannels: Set<string>;
   reconnectAttempts: number;
+  shortSessionStreak: number;
   scheduleReconnect: () => void;
   connect: () => Promise<void>;
   startHeartbeat: () => void;
@@ -264,6 +265,113 @@ describe('JsonRpcWsClient', () => {
     // With the fix: it stays at the value scheduleReconnect raised it to, because
     // subscribe() never roundtripped successfully.
     expect(internals.reconnectAttempts).toBeGreaterThanOrEqual(attemptsAfterFirstClose);
+
+    vi.useRealTimers();
+  });
+
+  it('escalates the flap streak across repeated short-lived sessions and resets after a durable one', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      reconnectDelayMs: 100,
+      maxReconnectAttempts: 20,
+      handshakeTimeoutMs: 10_000,
+      heartbeatIntervalSec: 30, // stable threshold = max(90s, 3×30s) = 90s
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    internals.call = vi.fn(async () => undefined);
+
+    const openLatest = () => {
+      const socket = FakeWebSocket.instances.at(-1)!;
+      socket.readyState = FakeWebSocket.OPEN;
+      socket.emit('open');
+      return socket;
+    };
+
+    const p1 = client.connect();
+    let socket = openLatest();
+    await p1;
+    expect(internals.shortSessionStreak).toBe(0);
+
+    // Each session lives 5s (≪ 90s), drops, then the reconnect timer opens the next.
+    for (let i = 1; i <= 3; i += 1) {
+      vi.advanceTimersByTime(5_000);
+      socket.readyState = 3;
+      socket.emit('close', 1006, Buffer.from(''));
+      expect(internals.shortSessionStreak).toBe(i);
+      // Advance past the largest possible flap floor (cap 120s) so the timer fires.
+      await vi.advanceTimersByTimeAsync(130_000);
+      socket = openLatest();
+    }
+
+    // A session that survives past the stable threshold clears the streak.
+    vi.advanceTimersByTime(95_000);
+    socket.readyState = 3;
+    socket.emit('close', 1006, Buffer.from(''));
+    expect(internals.shortSessionStreak).toBe(0);
+
+    vi.useRealTimers();
+  });
+
+  it('floors the reconnect delay with flap backoff when sessions keep dying young', () => {
+    vi.useFakeTimers();
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      reconnectDelayMs: 100, // base/backoff delay stays well under the flap floor
+      maxReconnectAttempts: 20,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const connect = vi.fn(async () => {});
+    internals.connect = connect;
+
+    internals.reconnectAttempts = 0;
+    // streak 3 with a 1-session tolerance → flapBackoffDelay(2) = 30_000ms floor.
+    internals.shortSessionStreak = 3;
+    internals.scheduleReconnect();
+
+    // The tiny base delay would have fired already; the flap floor holds it back.
+    vi.advanceTimersByTime(20_000);
+    expect(connect).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(11_000); // now past 30_000
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it('counts a socket that closes before ever opening as a flap', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      reconnectDelayMs: 100,
+      maxReconnectAttempts: 20,
+      handshakeTimeoutMs: 10_000,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    internals.call = vi.fn(async () => undefined);
+
+    // A durable session first, so connectedAt is non-zero before the never-opened drop.
+    const p1 = client.connect();
+    const socket1 = FakeWebSocket.instances.at(-1)!;
+    socket1.readyState = FakeWebSocket.OPEN;
+    socket1.emit('open');
+    await p1;
+    vi.advanceTimersByTime(95_000);
+    socket1.readyState = 3;
+    socket1.emit('close', 1006, Buffer.from(''));
+    expect(internals.shortSessionStreak).toBe(0);
+
+    // Reconnect creates socket2, but it never opens — closing it reports undefined
+    // uptime (connectedAt was cleared on teardown) and must count as a flap.
+    await vi.advanceTimersByTimeAsync(500);
+    const socket2 = FakeWebSocket.instances.at(-1)!;
+    expect(socket2).not.toBe(socket1);
+    socket2.emit('close', 1006, Buffer.from(''));
+    expect(internals.shortSessionStreak).toBe(1);
 
     vi.useRealTimers();
   });

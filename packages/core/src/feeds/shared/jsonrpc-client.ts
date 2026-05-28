@@ -1,7 +1,7 @@
 import type pino from 'pino';
 import WebSocket from 'ws';
 import { logger } from '../../utils/logger.js';
-import { backoffDelay } from '../../utils/reconnect.js';
+import { backoffDelay, flapBackoffDelay } from '../../utils/reconnect.js';
 
 /**
  * Shared JSON-RPC 2.0 over WebSocket base for Deribit and Derive.
@@ -25,6 +25,18 @@ const SEC_TO_MS = 1_000;
 // heartbeat deadline. Log whenever our response is even close to that boundary
 // so we can distinguish outbound-buffer congestion from other failure modes.
 const SLOW_TEST_RESPONSE_THRESHOLD_MS = 100;
+
+// A session that survives at least this long counts as healthy and clears the
+// flap streak. Anything shorter is a flap: the socket reconnected and resubscribed
+// but dropped again before proving durable. Must outlive the heartbeat-driven flap
+// cycle (Deribit's default ~30s heartbeat), hence 3× the interval with a 90s floor.
+const STABLE_SESSION_FLOOR_MS = 90_000;
+const STABLE_SESSION_HEARTBEAT_MULTIPLE = 3;
+
+// One isolated short session is a tolerable transient (a blip right after connect)
+// and recovers at the normal fast cadence. The flap floor only engages once sessions
+// keep dying young, which is the death-spiral signature.
+const FLAP_TOLERATED_SHORT_SESSIONS = 1;
 
 interface JsonRpcPendingRequest {
   resolve: (value: unknown) => void;
@@ -63,6 +75,7 @@ export class JsonRpcWsClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = true;
   private reconnectAttempts = 0;
+  private shortSessionStreak = 0;
   private subscribedChannels = new Set<string>();
   private heartbeatToken = 0;
   private lastActivityAt = 0;
@@ -194,6 +207,16 @@ export class JsonRpcWsClient {
         }
 
         if (this.ws !== socket) return;
+
+        // Classify the just-ended session before teardown: a durable session clears
+        // the flap streak; a short-lived one — or a socket that never opened
+        // (uptimeMs undefined) — escalates it so scheduleReconnect spaces the next
+        // full-resubscribe burst further apart instead of re-flooding the event loop.
+        if (uptimeMs != null && uptimeMs >= this.stableSessionMs()) {
+          this.shortSessionStreak = 0;
+        } else {
+          this.shortSessionStreak += 1;
+        }
 
         this.ws = null;
         this.cleanup();
@@ -432,18 +455,27 @@ export class JsonRpcWsClient {
           this.reconnectAttempts,
           this.options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS,
         );
-    const delay = Math.max(baseDelay, this.remainingRateLimitCooldownMs());
+    const flapDelay = flapBackoffDelay(this.shortSessionStreak - FLAP_TOLERATED_SHORT_SESSIONS);
+    const delay = Math.max(baseDelay, this.remainingRateLimitCooldownMs(), flapDelay);
 
     this.reconnectAttempts += 1;
 
     if (exceededMaxAttempts) {
       this.log.error(
-        { maxAttempts, delayMs: delay },
+        { maxAttempts, delayMs: delay, shortSessionStreak: this.shortSessionStreak },
         'max reconnect attempts reached, switching to periodic retry',
       );
       this.options.onStatusChange?.('down');
     } else {
-      this.log.info({ delayMs: delay, attempt: this.reconnectAttempts }, 'reconnecting');
+      this.log.info(
+        {
+          delayMs: delay,
+          attempt: this.reconnectAttempts,
+          shortSessionStreak: this.shortSessionStreak,
+          flapDelayMs: flapDelay,
+        },
+        'reconnecting',
+      );
     }
 
     this.reconnectTimer = setTimeout(async () => {
@@ -516,7 +548,16 @@ export class JsonRpcWsClient {
     }
   }
 
+  private stableSessionMs(): number {
+    const heartbeatSec = this.options.heartbeatIntervalSec ?? DEFAULT_HEARTBEAT_INTERVAL_SEC;
+    return Math.max(
+      STABLE_SESSION_FLOOR_MS,
+      heartbeatSec * SEC_TO_MS * STABLE_SESSION_HEARTBEAT_MULTIPLE,
+    );
+  }
+
   private cleanup(): void {
+    this.connectedAt = 0;
     this.heartbeatToken += 1;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);

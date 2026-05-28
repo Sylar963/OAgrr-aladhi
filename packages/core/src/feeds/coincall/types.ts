@@ -38,6 +38,13 @@ export type CoincallInstrumentsResponse = z.infer<typeof CoincallInstrumentsResp
 
 const NumericLike = z.union([z.number(), z.string().transform((s) => Number(s))]);
 
+// Coincall's live WS pushes send explicit `null` (not just an absent key) for
+// empty numeric fields. The bare NumericLike union rejects null, which silently
+// drops the update — and for an array push (tOption) one null entry sinks the
+// whole batch. Optional WS numeric fields use this nullable variant; the merges
+// in state.ts treat null as "no fresh value — keep the previous".
+const NullableNumericLike = NumericLike.nullable();
+
 export const CoincallOptionConfigEntrySchema = z.object({
   symbol: z.string(),
   base: z.string(),
@@ -72,26 +79,26 @@ export type CoincallPublicConfig = z.infer<typeof CoincallPublicConfigSchema>;
 
 export const CoincallBsInfoDataSchema = z.object({
   s: z.string(),
-  mp: NumericLike.optional(),
-  lp: NumericLike.optional(),
-  ip: NumericLike.optional(),
-  iv: NumericLike.optional(),
-  delta: NumericLike.optional(),
-  gamma: NumericLike.optional(),
-  theta: NumericLike.optional(),
-  vega: NumericLike.optional(),
-  up: NumericLike.optional(),
-  oi: NumericLike.optional(),
-  v: NumericLike.optional(),
-  v24: NumericLike.optional(),
-  uv: NumericLike.optional(),
-  uv24: NumericLike.optional(),
-  h: NumericLike.optional(),
-  l: NumericLike.optional(),
-  cp: NumericLike.optional(),
-  cr: NumericLike.optional(),
-  pr0: NumericLike.optional(),
-  rt: NumericLike.optional(),
+  mp: NullableNumericLike.optional(),
+  lp: NullableNumericLike.optional(),
+  ip: NullableNumericLike.optional(),
+  iv: NullableNumericLike.optional(),
+  delta: NullableNumericLike.optional(),
+  gamma: NullableNumericLike.optional(),
+  theta: NullableNumericLike.optional(),
+  vega: NullableNumericLike.optional(),
+  up: NullableNumericLike.optional(),
+  oi: NullableNumericLike.optional(),
+  v: NullableNumericLike.optional(),
+  v24: NullableNumericLike.optional(),
+  uv: NullableNumericLike.optional(),
+  uv24: NullableNumericLike.optional(),
+  h: NullableNumericLike.optional(),
+  l: NullableNumericLike.optional(),
+  cp: NullableNumericLike.optional(),
+  cr: NullableNumericLike.optional(),
+  pr0: NullableNumericLike.optional(),
+  rt: NullableNumericLike.optional(),
   ts: NumericLike,
 });
 export type CoincallBsInfoData = z.infer<typeof CoincallBsInfoDataSchema>;
@@ -108,34 +115,27 @@ export type CoincallBsInfoMessage = z.infer<typeof CoincallBsInfoMessageSchema>;
 // Envelope: { dt: 4, c: 20, d: [ { ...per-contract snapshot... } ] }
 // tOption provides bid/ask/biv/aiv/bs/as — no markIv.
 
-// tOption is an array push, so a single entry that fails validation drops the
-// whole expiry's update. Production sends `null` (not just absent) for empty
-// bid/ask/size/iv fields, which the bare NumericLike union rejects. Widen every
-// optional field to also accept null; mergeCoincallTOption treats null as "no
-// fresh value, keep previous".
-const TOptionNumericLike = NumericLike.nullable();
-
 export const CoincallTOptionEntrySchema = z.object({
   s: z.string(),
-  mp: TOptionNumericLike.optional(),
-  lp: TOptionNumericLike.optional(),
-  bid: TOptionNumericLike.optional(),
-  ask: TOptionNumericLike.optional(),
-  bs: TOptionNumericLike.optional(),
-  as: TOptionNumericLike.optional(),
-  biv: TOptionNumericLike.optional(),
-  aiv: TOptionNumericLike.optional(),
-  delta: TOptionNumericLike.optional(),
-  gamma: TOptionNumericLike.optional(),
-  theta: TOptionNumericLike.optional(),
-  vega: TOptionNumericLike.optional(),
-  up: TOptionNumericLike.optional(),
-  upv: TOptionNumericLike.optional(),
-  oi: TOptionNumericLike.optional(),
-  v: TOptionNumericLike.optional(),
-  v24: TOptionNumericLike.optional(),
-  cp: TOptionNumericLike.optional(),
-  cr: TOptionNumericLike.optional(),
+  mp: NullableNumericLike.optional(),
+  lp: NullableNumericLike.optional(),
+  bid: NullableNumericLike.optional(),
+  ask: NullableNumericLike.optional(),
+  bs: NullableNumericLike.optional(),
+  as: NullableNumericLike.optional(),
+  biv: NullableNumericLike.optional(),
+  aiv: NullableNumericLike.optional(),
+  delta: NullableNumericLike.optional(),
+  gamma: NullableNumericLike.optional(),
+  theta: NullableNumericLike.optional(),
+  vega: NullableNumericLike.optional(),
+  up: NullableNumericLike.optional(),
+  upv: NullableNumericLike.optional(),
+  oi: NullableNumericLike.optional(),
+  v: NullableNumericLike.optional(),
+  v24: NullableNumericLike.optional(),
+  cp: NullableNumericLike.optional(),
+  cr: NullableNumericLike.optional(),
   ts: NumericLike,
 });
 export type CoincallTOptionEntry = z.infer<typeof CoincallTOptionEntrySchema>;

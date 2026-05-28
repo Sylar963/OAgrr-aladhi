@@ -189,6 +189,20 @@ describe('Coincall types', () => {
     }
   });
 
+  it('accepts a bsInfo push with null numeric fields', () => {
+    // Coincall sends null for empty fields; null must not drop the instrument's
+    // mark/iv/greeks update.
+    const result = CoincallBsInfoMessageSchema.safeParse({
+      ...BSINFO_FIXTURE,
+      d: { ...BSINFO_FIXTURE.d, mp: null, iv: null, delta: null, oi: null },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.d.mp).toBeNull();
+      expect(result.data.d.iv).toBeNull();
+    }
+  });
+
   it('accepts a tOption push', () => {
     const result = CoincallTOptionMessageSchema.safeParse(TOPTION_FIXTURE);
     expect(result.success).toBe(true);

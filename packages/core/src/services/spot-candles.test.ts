@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SpotCandleService, spotCandleCacheTtlMs } from './spot-candles.js';
+import { SpotCandleService, downsampleCandles, spotCandleCacheTtlMs } from './spot-candles.js';
 
 function makeKlinesPayload(closes: number[]): unknown {
   const ticks = closes.map((_, i) => 1_700_000_000_000 + i * 60_000);
@@ -101,5 +101,52 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
     expect(spotCandleCacheTtlMs(3600)).toBe(60_000);
     expect(spotCandleCacheTtlMs(14400)).toBe(120_000);
     expect(spotCandleCacheTtlMs(86400)).toBe(300_000);
+  });
+
+  it('serves the 4h tier by fetching 1h and downsampling to 4h buckets', async () => {
+    const hourMs = 3_600_000;
+    const t0 = Math.floor(1_700_000_000_000 / 14_400_000) * 14_400_000; // 4h-grid start
+    const ticks = Array.from({ length: 8 }, (_, i) => t0 + i * hourMs);
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        result: {
+          status: 'ok',
+          ticks,
+          open: [10, 11, 12, 13, 20, 21, 22, 23],
+          high: [15, 16, 17, 18, 25, 26, 27, 28],
+          low: [9, 8, 11, 12, 19, 18, 21, 22],
+          close: [11, 12, 13, 14, 21, 22, 23, 24],
+        },
+      }),
+    );
+
+    const candles = await svc.getCandles('BTC', 14400, 2);
+
+    // The 4h tier must request Deribit at 1h ('60'), never the rejected '240'.
+    const requestedUrl = fetchSpy.mock.calls[0]![0] as string;
+    expect(requestedUrl).toContain('resolution=60');
+    expect(requestedUrl).not.toContain('resolution=240');
+
+    // 8 hourly bars collapse into 2 four-hour buckets on the UTC 4h grid.
+    expect(candles).toEqual([
+      { timestamp: t0, open: 10, high: 18, low: 8, close: 14 },
+      { timestamp: t0 + 4 * hourMs, open: 20, high: 28, low: 18, close: 24 },
+    ]);
+  });
+
+  it('downsampleCandles buckets by the grid and is order-independent', () => {
+    const hourMs = 3_600_000;
+    const input = [
+      { timestamp: 3 * hourMs, open: 13, high: 18, low: 12, close: 14 },
+      { timestamp: 0, open: 10, high: 15, low: 9, close: 11 },
+      { timestamp: 1 * hourMs, open: 11, high: 16, low: 8, close: 12 },
+    ];
+    expect(downsampleCandles(input, 14_400_000)).toEqual([
+      { timestamp: 0, open: 10, high: 18, low: 8, close: 14 },
+    ]);
+  });
+
+  it('downsampleCandles returns empty for empty input', () => {
+    expect(downsampleCandles([], 14_400_000)).toEqual([]);
   });
 });

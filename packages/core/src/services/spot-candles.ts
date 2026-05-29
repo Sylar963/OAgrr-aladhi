@@ -34,9 +34,19 @@ const RESOLUTION_TO_DERIBIT: Record<SpotCandleResolutionSec, string> = {
   900: '15',
   1800: '30',
   3600: '60',
-  14400: '240',
+  // Deribit has no native 4h ('240' is rejected with HTTP 400). The 4h tier is
+  // served by fetching 1h bars and downsampling — fetchFromDeribit remaps 14400
+  // to its source resolution, so this entry is never requested directly.
+  14400: '60',
   86400: '1D',
 };
+
+// 4h is fetched as 1h and downsampled to UTC-4h-grid buckets so the bars line
+// up with other venues' 4h candles (the trade-attribution view matches option
+// marks to these by exact timestamp).
+const AGGREGATE_4H_SEC: SpotCandleResolutionSec = 14400;
+const AGGREGATE_4H_SOURCE_SEC: SpotCandleResolutionSec = 3600;
+const FOUR_HOUR_MS = AGGREGATE_4H_SEC * 1000;
 
 interface CacheEntry {
   fetchedAt: number;
@@ -49,6 +59,35 @@ export function spotCandleCacheTtlMs(resolutionSec: SpotCandleResolutionSec): nu
   if (resolutionSec <= 3600) return 60_000;
   if (resolutionSec <= 14400) return 120_000;
   return 300_000;
+}
+
+/**
+ * Downsample ascending candles into fixed-width buckets aligned to the epoch
+ * grid (bucketMs). Used to build 4h bars from Deribit 1h bars: open is the
+ * first bar in a bucket, close the last, high/low the extremes; the bucket
+ * timestamp is its grid-aligned start so it matches other venues' bars.
+ */
+export function downsampleCandles(candles: SpotCandle[], bucketMs: number): SpotCandle[] {
+  const byBucket = new Map<number, SpotCandle>();
+  // Sort ascending so open=first / close=last hold regardless of input order.
+  for (const c of [...candles].sort((a, b) => a.timestamp - b.timestamp)) {
+    const bucketTs = Math.floor(c.timestamp / bucketMs) * bucketMs;
+    const bar = byBucket.get(bucketTs);
+    if (bar) {
+      bar.high = Math.max(bar.high, c.high);
+      bar.low = Math.min(bar.low, c.low);
+      bar.close = c.close;
+    } else {
+      byBucket.set(bucketTs, {
+        timestamp: bucketTs,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      });
+    }
+  }
+  return [...byBucket.values()];
 }
 
 /**
@@ -123,6 +162,11 @@ export class SpotCandleService {
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
   ): Promise<SpotCandle[]> {
+    // Deribit has no 4h resolution; fetch the 4h tier as 1h over the same
+    // window and downsample below.
+    const aggregate4h = resolutionSec === AGGREGATE_4H_SEC;
+    const fetchResolutionSec = aggregate4h ? AGGREGATE_4H_SOURCE_SEC : resolutionSec;
+
     const end = Date.now();
     const start = end - resolutionSec * 1000 * buckets;
     const instrument = `${currency}-PERPETUAL`;
@@ -130,7 +174,7 @@ export class SpotCandleService {
       instrument_name: instrument,
       start_timestamp: String(start),
       end_timestamp: String(end),
-      resolution: RESOLUTION_TO_DERIBIT[resolutionSec],
+      resolution: RESOLUTION_TO_DERIBIT[fetchResolutionSec],
     });
 
     const url = `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`;
@@ -155,7 +199,7 @@ export class SpotCandleService {
         close: close[i]!,
       });
     }
-    return candles;
+    return aggregate4h ? downsampleCandles(candles, FOUR_HOUR_MS) : candles;
   }
 
   /**

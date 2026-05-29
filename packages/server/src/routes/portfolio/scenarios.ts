@@ -1,9 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
-import {
-  attachMarks,
-  computeShockPnl,
-} from '@oggregator/core';
+import { attachMarks, computeShockPnl } from '@oggregator/core';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import {
   PortfolioSourceSchema,
@@ -18,7 +15,9 @@ import {
 } from '../../portfolio-services.js';
 import { getRequestAccountId } from '../../user-service.js';
 
-function parseScenarios(body: unknown): { scenarios: VolShockScenario[] } | { error: string; issues: unknown[] } {
+function parseScenarios(
+  body: unknown,
+): { scenarios: VolShockScenario[] } | { error: string; issues: unknown[] } {
   if (typeof body !== 'object' || body == null) {
     return { error: 'invalid_body', issues: [{ message: 'body must be an object' }] };
   }
@@ -42,6 +41,7 @@ function getAccountId(req: FastifyRequest): string {
 export async function portfolioScenariosRoute(app: FastifyInstance) {
   app.post<{ Querystring: { source?: string } }>(
     '/portfolio/scenarios',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (req, reply) => {
       const parsed = parseScenarios(req.body);
       if ('error' in parsed) {

@@ -7,6 +7,8 @@ import cors from '@fastify/cors';
 import compress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { registerRoutes } from './routes/index.js';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import { warmupChainRuntimes, disposeChainWarmup } from './chain-warmup.js';
@@ -39,7 +41,9 @@ function readWebEntryAssets(webDist: string): WebEntryAssets {
   try {
     const indexHtml = readFileSync(resolve(webDist, 'index.html'), 'utf-8');
     const jsMatch = indexHtml.match(/<script[^>]+src="([^"]*\/assets\/index-[^"]+\.js)"/i);
-    const cssMatch = indexHtml.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]*\/assets\/index-[^"]+\.css)"/i);
+    const cssMatch = indexHtml.match(
+      /<link[^>]+rel="stylesheet"[^>]+href="([^"]*\/assets\/index-[^"]+\.css)"/i,
+    );
     return {
       entryJs: jsMatch?.[1]?.replace(/^\//, '') ?? null,
       entryCss: cssMatch?.[1]?.replace(/^\//, '') ?? null,
@@ -83,6 +87,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   ready = false;
 
   const app = Fastify({
+    // The API sits behind a TLS-terminating reverse proxy in prod, so derive
+    // req.ip from X-Forwarded-For — without this, per-IP rate limits key on the
+    // proxy IP and lump every client into one bucket.
+    trustProxy: true,
     logger: isDev
       ? {
           transport: {
@@ -119,6 +127,20 @@ export async function buildApp(): Promise<FastifyInstance> {
       },
     },
   });
+
+  // Security headers. CSP is intentionally disabled — the SPA + Plotly + Vercel
+  // analytics need sources a strict policy would block (a separate, larger task).
+  // CORP/COEP are off because the Vercel-hosted SPA calls this API cross-origin.
+  // The rest (HSTS, X-Frame-Options, nosniff, Referrer-Policy) are safe wins.
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: false,
+  });
+  // Opt-in rate limiting (global:false): only routes with config.rateLimit are
+  // throttled, leaving the high-volume data endpoints, SPA assets, and /ws/*
+  // upgrade paths (reconnect storms must never be blocked) untouched.
+  await app.register(rateLimit, { global: false });
 
   registerRoutes(app);
   startRuntimeMetrics(app.log);
@@ -176,10 +198,18 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
 
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/assets/index-') && req.url.endsWith('.js') && webEntryAssets.entryJs) {
+      if (
+        req.url.startsWith('/assets/index-') &&
+        req.url.endsWith('.js') &&
+        webEntryAssets.entryJs
+      ) {
         return reply.type('application/javascript; charset=utf-8').sendFile(webEntryAssets.entryJs);
       }
-      if (req.url.startsWith('/assets/index-') && req.url.endsWith('.css') && webEntryAssets.entryCss) {
+      if (
+        req.url.startsWith('/assets/index-') &&
+        req.url.endsWith('.css') &&
+        webEntryAssets.entryCss
+      ) {
         return reply.type('text/css; charset=utf-8').sendFile(webEntryAssets.entryCss);
       }
       if (req.url.startsWith('/assets/')) {

@@ -10,8 +10,12 @@ import { getOrCreatePortfolioRuntime } from '../../portfolio-services.js';
 import { getRequestAccountId } from '../../user-service.js';
 
 const DeriveCredsSchema = z.object({
-  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
-  signerPrivateKey: z.string().regex(/^(0x)?[a-fA-F0-9]{64}$/, 'signerPrivateKey must be 32-byte hex'),
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
+  signerPrivateKey: z
+    .string()
+    .regex(/^(0x)?[a-fA-F0-9]{64}$/, 'signerPrivateKey must be 32-byte hex'),
   subaccountId: z.coerce.number().int().positive(),
   env: z.enum(['prod', 'test']).optional(),
 });
@@ -23,6 +27,13 @@ const ThalexCredsSchema = z.object({
   env: z.enum(['prod', 'test']).optional(),
 });
 
+// Private-venue adapters accept raw signing keys (ETH private key, RSA PEM).
+// Off by default so the public demo refuses them; self-hosters opt in explicitly.
+function privateAdaptersEnabled(): boolean {
+  const v = process.env['PRIVATE_VENUE_ADAPTERS_ENABLED'];
+  return v === '1' || v === 'true';
+}
+
 function getAccountId(req: FastifyRequest): string {
   return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 }
@@ -31,68 +42,81 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
   app.post<{
     Params: { venue: string };
     Body: unknown;
-  }>('/portfolio/venue-credentials/:venue', async (req, reply) => {
-    const venueParsed = VenueIdSchema.safeParse(req.params.venue);
-    if (!venueParsed.success) {
-      return reply.status(400).send({ error: 'invalid_venue', issues: venueParsed.error.issues });
-    }
-    const venue: VenueId = venueParsed.data;
-    const accountId = getAccountId(req);
-
-    if (venue === 'derive') {
-      const credsParsed = DeriveCredsSchema.safeParse(req.body);
-      if (!credsParsed.success) {
-        req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
-        return reply.status(400).send({ error: 'invalid_creds', issues: credsParsed.error.issues });
-      }
-      try {
-        const creds = credsParsed.data;
-        await derivePositionStore.connect({
-          accountId,
-          walletAddress: creds.walletAddress,
-          signerPrivateKey: creds.signerPrivateKey,
-          subaccountId: creds.subaccountId,
-          ...(creds.env != null && { env: creds.env }),
+  }>(
+    '/portfolio/venue-credentials/:venue',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!privateAdaptersEnabled()) {
+        return reply.status(403).send({
+          error: 'private_adapters_disabled',
+          message:
+            'Submitting private venue keys is disabled. Set PRIVATE_VENUE_ADAPTERS_ENABLED=1 (self-hosted only).',
         });
-        getOrCreatePortfolioRuntime(accountId, 'derive');
-        return { venue, connected: true };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'connect failed';
-        return reply.status(502).send({ error: 'connect_failed', message });
       }
-    }
+      const venueParsed = VenueIdSchema.safeParse(req.params.venue);
+      if (!venueParsed.success) {
+        return reply.status(400).send({ error: 'invalid_venue', issues: venueParsed.error.issues });
+      }
+      const venue: VenueId = venueParsed.data;
+      const accountId = getAccountId(req);
 
-    if (venue === 'thalex') {
-      const credsParsed = ThalexCredsSchema.safeParse(req.body);
-      if (!credsParsed.success) {
-        req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
-        return reply.status(400).send({ error: 'invalid_creds', issues: credsParsed.error.issues });
+      if (venue === 'derive') {
+        const credsParsed = DeriveCredsSchema.safeParse(req.body);
+        if (!credsParsed.success) {
+          req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
+          return reply
+            .status(400)
+            .send({ error: 'invalid_creds', issues: credsParsed.error.issues });
+        }
+        try {
+          const creds = credsParsed.data;
+          await derivePositionStore.connect({
+            accountId,
+            walletAddress: creds.walletAddress,
+            signerPrivateKey: creds.signerPrivateKey,
+            subaccountId: creds.subaccountId,
+            ...(creds.env != null && { env: creds.env }),
+          });
+          getOrCreatePortfolioRuntime(accountId, 'derive');
+          return { venue, connected: true };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'connect failed';
+          return reply.status(502).send({ error: 'connect_failed', message });
+        }
       }
-      try {
-        const creds = credsParsed.data;
-        await thalexPositionStore.connect({
-          accountId,
-          kid: creds.kid,
-          privateKeyPem: creds.privateKeyPem,
-          ...(creds.account != null && { account: creds.account }),
-          ...(creds.env != null && { env: creds.env }),
-        });
-        getOrCreatePortfolioRuntime(accountId, 'thalex');
-        return { venue, connected: true };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'connect failed';
-        req.log.warn({ err: String(err), venue: 'thalex' }, 'thalex connect_failed');
-        return reply.status(502).send({ error: 'connect_failed', message });
-      }
-    }
 
-    return reply
-      .status(501)
-      .send({
+      if (venue === 'thalex') {
+        const credsParsed = ThalexCredsSchema.safeParse(req.body);
+        if (!credsParsed.success) {
+          req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
+          return reply
+            .status(400)
+            .send({ error: 'invalid_creds', issues: credsParsed.error.issues });
+        }
+        try {
+          const creds = credsParsed.data;
+          await thalexPositionStore.connect({
+            accountId,
+            kid: creds.kid,
+            privateKeyPem: creds.privateKeyPem,
+            ...(creds.account != null && { account: creds.account }),
+            ...(creds.env != null && { env: creds.env }),
+          });
+          getOrCreatePortfolioRuntime(accountId, 'thalex');
+          return { venue, connected: true };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'connect failed';
+          req.log.warn({ err: String(err), venue: 'thalex' }, 'thalex connect_failed');
+          return reply.status(502).send({ error: 'connect_failed', message });
+        }
+      }
+
+      return reply.status(501).send({
         error: 'not_implemented',
         message: `private adapter for ${venue} is not wired yet (see PRIVATE_ADAPTER_SPECS.${venue}.todos)`,
       });
-  });
+    },
+  );
 
   app.delete<{ Params: { venue: string } }>(
     '/portfolio/venue-credentials/:venue',

@@ -39,7 +39,7 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
   it('serves cached candles past TTL when the next upstream fetch fails', async () => {
     fetchSpy
       .mockResolvedValueOnce(jsonResponse(makeKlinesPayload([100, 101, 102])))
-      .mockRejectedValueOnce(new Error('Deribit 502'));
+      .mockRejectedValue(new Error('Deribit 502'));
 
     // First call populates the cache.
     const first = await svc.getCandles('BTC', 3600, 24);
@@ -47,8 +47,8 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     // Force the cache entry to look expired so the next call must hit the
-    // network. The fetch is mocked to fail — we expect the service to fall
-    // back to the cached payload instead of throwing.
+    // network. Every retry attempt fails — we expect the service to fall back
+    // to the cached payload after exhausting the bounded retry budget.
     const cache = (svc as unknown as { cache: Map<string, { fetchedAt: number; candles: unknown[] }> }).cache;
     const key = 'BTC|3600|24';
     const entry = cache.get(key)!;
@@ -56,13 +56,43 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
 
     const stale = await svc.getCandles('BTC', 3600, 24);
     expect(stale).toEqual(first);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    // 1 warm fetch + 3 exhausted retry attempts.
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
   it('throws when upstream fails and the cache is cold', async () => {
-    fetchSpy.mockRejectedValueOnce(new Error('Deribit 502'));
+    fetchSpy.mockRejectedValue(new Error('Deribit 502'));
 
     await expect(svc.getCandles('BTC', 3600, 24)).rejects.toThrow('Deribit 502');
+    // Cold cache exhausts the full retry budget before giving up.
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries a transient network failure then succeeds', async () => {
+    fetchSpy
+      .mockRejectedValueOnce(new Error('network blip'))
+      .mockResolvedValueOnce(jsonResponse(makeKlinesPayload([200, 201])));
+
+    const candles = await svc.getCandles('BTC', 3600, 24);
+    expect(candles).toHaveLength(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a 5xx response then succeeds', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('upstream', { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse(makeKlinesPayload([300])));
+
+    const candles = await svc.getCandles('BTC', 3600, 24);
+    expect(candles).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a deterministic 4xx', async () => {
+    fetchSpy.mockResolvedValue(new Response('bad', { status: 400 }));
+
+    await expect(svc.getCandles('BTC', 3600, 24)).rejects.toThrow('Deribit klines 400');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('uses shorter cache TTLs for shorter resolutions', () => {

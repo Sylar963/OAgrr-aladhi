@@ -134,15 +134,7 @@ export class SpotCandleService {
     });
 
     const url = `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`;
-    // 10s timeout matches the pattern used in trade/block-trade runtimes.
-    // Without it, a hung Deribit connection blocks every client retry.
-    const res = await fetch(url, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) {
-      throw new Error(`Deribit klines ${res.status}`);
-    }
+    const res = await this.fetchDeribitWithRetry(url, currency, resolutionSec);
 
     const json: unknown = await res.json();
     const parsed = ResponseSchema.safeParse(json);
@@ -164,5 +156,53 @@ export class SpotCandleService {
       });
     }
     return candles;
+  }
+
+  /**
+   * Bounded retry around the Deribit fetch so a transient blip (timeout,
+   * network error, 5xx, or 429) doesn't reach the route as a 502 when the
+   * cache is cold. Per-attempt timeout is short (4s vs the old single-shot
+   * 10s) to keep the total bounded — ~12.75s worst case across 3 attempts.
+   * A deterministic 4xx (except 429) fails fast rather than burning the budget.
+   */
+  private async fetchDeribitWithRetry(
+    url: string,
+    currency: SpotCandleCurrency,
+    resolutionSec: SpotCandleResolutionSec,
+  ): Promise<Response> {
+    const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total
+    let lastErr: unknown;
+
+    for (let attempt = 0; attempt < backoffsMs.length + 1; attempt++) {
+      let res: Response | null = null;
+      try {
+        res = await fetch(url, {
+          headers: { accept: 'application/json' },
+          signal: AbortSignal.timeout(4_000),
+        });
+      } catch (err) {
+        // AbortError (timeout) and network errors are retryable.
+        lastErr = err;
+      }
+
+      if (res) {
+        if (res.ok) return res;
+        if (res.status < 500 && res.status !== 429) {
+          throw new Error(`Deribit klines ${res.status}`);
+        }
+        lastErr = new Error(`Deribit klines ${res.status}`);
+      }
+
+      if (attempt < backoffsMs.length) {
+        const delay = backoffsMs[attempt]! + Math.random() * 100; // jitter
+        log.warn(
+          { currency, resolutionSec, attempt: attempt + 1, err: String(lastErr) },
+          'deribit klines attempt failed, retrying',
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+
+    throw lastErr;
   }
 }

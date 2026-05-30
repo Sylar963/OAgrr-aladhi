@@ -50,6 +50,11 @@ const SUBSCRIBE_BATCH_SIZE = 50;
 // ~3.3 calls/sec sustained (30k credit pool, 3k per call).
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
 const RESUBSCRIBE_BATCH_DELAY_MS = 500;
+// On reconnect, a 50-channel subscribe Deribit hasn't acked in this long means a
+// dead/half-open session (a healthy ack lands sub-second), not an oversized batch.
+// Detecting it fast — vs the shared 30s default — lets abortResubscribeOnTimeout
+// collapse the old 50→25→13→… timeout cascade into one wait + a flap-backed retry.
+const RESUBSCRIBE_BATCH_TIMEOUT_MS = 12_000;
 const EAGER_TICKER_EXPIRY_COUNT = 2;
 const EAGER_UNDERLYING_DELAY_MS = 750;
 const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
@@ -199,6 +204,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       requestTimeoutMs: DERIBIT_REQUEST_TIMEOUT_MS,
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
       resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
+      resubscribeBatchTimeoutMs: RESUBSCRIBE_BATCH_TIMEOUT_MS,
+      // Deribit's live subscribe path (subscribeBatch) keeps the 60s timeout +
+      // halving for legit large far-tenor batches; only the reconnect path aborts.
+      abortResubscribeOnTimeout: true,
       rateLimitCooldownMs: 120_000,
       onStatusChange: (state) =>
         this.emitStatus(

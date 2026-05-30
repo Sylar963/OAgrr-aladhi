@@ -46,14 +46,16 @@ type JsonRpcWsClientInternals = {
   subscribedChannels: Set<string>;
   reconnectAttempts: number;
   shortSessionStreak: number;
+  lastSubscriptionAt: number;
   scheduleReconnect: () => void;
   connect: () => Promise<void>;
   startHeartbeat: () => void;
   cleanup: () => void;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
   ws: {
-    close: () => void;
-    removeAllListeners: () => void;
+    readyState?: number;
+    close?: () => void;
+    removeAllListeners?: () => void;
   } | null;
 };
 
@@ -306,11 +308,46 @@ describe('JsonRpcWsClient', () => {
       socket = openLatest();
     }
 
-    // A session that survives past the stable threshold clears the streak.
+    // A session that survives past the stable threshold AND was delivering data
+    // up to the end clears the streak.
     vi.advanceTimersByTime(95_000);
+    internals.lastSubscriptionAt = Date.now();
     socket.readyState = 3;
     socket.emit('close', 1006, Buffer.from(''));
     expect(internals.shortSessionStreak).toBe(0);
+
+    vi.useRealTimers();
+  });
+
+  it('treats a long-lived but data-dead session as a flap, not a durable one', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', {
+      reconnectDelayMs: 100,
+      maxReconnectAttempts: 20,
+      handshakeTimeoutMs: 10_000,
+      heartbeatIntervalSec: 30, // stable threshold = max(90s, 3×30s) = 90s
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    internals.call = vi.fn(async () => undefined);
+
+    const p1 = client.connect();
+    const socket = FakeWebSocket.instances.at(-1)!;
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit('open');
+    await p1;
+    expect(internals.shortSessionStreak).toBe(0);
+
+    // The socket stays OPEN well past the 90s stable floor, but no subscription
+    // data ever arrives (half-open: TCP/heartbeat alive, ticks frozen). Wall-clock
+    // uptime alone would wrongly call this durable and reset the flap streak.
+    vi.advanceTimersByTime(120_000);
+    socket.readyState = 3;
+    socket.emit('close', 1006, Buffer.from(''));
+
+    expect(internals.shortSessionStreak).toBe(1);
 
     vi.useRealTimers();
   });
@@ -361,6 +398,7 @@ describe('JsonRpcWsClient', () => {
     socket1.emit('open');
     await p1;
     vi.advanceTimersByTime(95_000);
+    internals.lastSubscriptionAt = Date.now();
     socket1.readyState = 3;
     socket1.emit('close', 1006, Buffer.from(''));
     expect(internals.shortSessionStreak).toBe(0);
@@ -383,6 +421,7 @@ describe('JsonRpcWsClient', () => {
     const internals = client as unknown as JsonRpcWsClientInternals;
 
     internals.reconnectAttempts = 4;
+    internals.ws = { readyState: FakeWebSocket.OPEN };
     internals.subscribedChannels = new Set(['a', 'b', 'c']);
     internals.call = vi
       .fn()
@@ -409,6 +448,7 @@ describe('JsonRpcWsClient', () => {
     const internals = client as unknown as JsonRpcWsClientInternals;
     const requestedBatchSizes: number[] = [];
 
+    internals.ws = { readyState: FakeWebSocket.OPEN };
     internals.subscribedChannels = new Set(['a', 'b', 'c', 'd']);
     internals.call = vi.fn(async (_method, params) => {
       const channels = params?.channels;
@@ -428,6 +468,54 @@ describe('JsonRpcWsClient', () => {
       { channels: ['a', 'b', 'c', 'd'] },
       30_000,
     );
+  });
+
+  it('aborts resubscribe on the first batch timeout when abortResubscribeOnTimeout is set', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      resubscribeBatchSize: 4,
+      resubscribeBatchTimeoutMs: 12_000,
+      abortResubscribeOnTimeout: true,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const requestedBatchSizes: number[] = [];
+
+    internals.ws = { readyState: FakeWebSocket.OPEN };
+    internals.subscribedChannels = new Set(['a', 'b', 'c', 'd']);
+    internals.call = vi.fn(async (_method, params) => {
+      const channels = params?.channels;
+      if (!Array.isArray(channels)) throw new Error('missing channels');
+      requestedBatchSizes.push(channels.length);
+      throw new Error('[test] public/subscribe timed out after 12000ms');
+    });
+
+    await expect(internals.resubscribe()).rejects.toThrow('timed out');
+
+    // Opted-in venues abort instead of walking the 4→2→2 halving spine.
+    expect(requestedBatchSizes).toEqual([4]);
+  });
+
+  it('aborts resubscribe without firing further batches once the socket drops mid-burst', async () => {
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      resubscribeBatchSize: 1,
+      resubscribeBatchDelayMs: 0,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    internals.reconnectAttempts = 4;
+    internals.ws = { readyState: FakeWebSocket.OPEN };
+    internals.subscribedChannels = new Set(['a', 'b', 'c']);
+    internals.call = vi.fn(async () => {
+      // The socket drops right after the first batch acks, before the next one.
+      internals.ws = null;
+      return undefined;
+    });
+
+    await expect(internals.resubscribe()).rejects.toThrow('connection lost during resubscribe');
+
+    // The guard stops the remaining batches; a partial resubscribe is not a
+    // healthy roundtrip, so reconnectAttempts must not reset.
+    expect(internals.call).toHaveBeenCalledTimes(1);
+    expect(internals.reconnectAttempts).toBe(4);
   });
 
   it('exposes reconnectAttempts and rateLimitUntil via public getters', () => {

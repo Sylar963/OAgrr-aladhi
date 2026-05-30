@@ -79,6 +79,7 @@ export class JsonRpcWsClient {
   private subscribedChannels = new Set<string>();
   private heartbeatToken = 0;
   private lastActivityAt = 0;
+  private lastSubscriptionAt = 0;
   private rateLimitUntil = 0;
   private rateLimitFirstHitAt = 0;
   private rateLimitHits = 0;
@@ -99,6 +100,7 @@ export class JsonRpcWsClient {
       resubscribeBatchSize?: number;
       resubscribeBatchDelayMs?: number;
       resubscribeBatchTimeoutMs?: number;
+      abortResubscribeOnTimeout?: boolean;
       rateLimitCooldownMs?: number;
       maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
@@ -212,7 +214,14 @@ export class JsonRpcWsClient {
         // the flap streak; a short-lived one — or a socket that never opened
         // (uptimeMs undefined) — escalates it so scheduleReconnect spaces the next
         // full-resubscribe burst further apart instead of re-flooding the event loop.
-        if (uptimeMs != null && uptimeMs >= this.stableSessionMs()) {
+        // A long-lived socket only counts as durable if it was still delivering
+        // subscription data near the end. A half-open socket (TCP/heartbeat alive,
+        // ticks frozen) racks up wall-clock uptime while delivering nothing; crediting
+        // that uptime would reset the flap streak and re-arm the fast reconnect loop —
+        // the death-spiral. Requiring recent data makes a long-but-dead session escalate.
+        const deliveredDataRecently =
+          this.lastSubscriptionAt > 0 && Date.now() - this.lastSubscriptionAt < this.stableSessionMs();
+        if (uptimeMs != null && uptimeMs >= this.stableSessionMs() && deliveredDataRecently) {
           this.shortSessionStreak = 0;
         } else {
           this.shortSessionStreak += 1;
@@ -419,6 +428,10 @@ export class JsonRpcWsClient {
       const channel = msg.params.channel;
       const data = msg.params.data;
       if (channel != null && this.subscriptionHandler) {
+        // Stamp data liveness here, not on ping/pong: a half-open socket can keep
+        // the protocol alive while delivering no data, and the close-handler flap
+        // classification must be able to tell those apart.
+        this.lastSubscriptionAt = Date.now();
         this.subscriptionHandler(channel, data);
       }
       return;
@@ -515,6 +528,13 @@ export class JsonRpcWsClient {
     );
 
     for (let i = 0; i < channels.length; i += batchSize) {
+      // A close during the inter-batch delay drops the socket; bail rather than
+      // firing the remaining batches into a dead connection (each would wait out
+      // its full timeout). scheduleReconnect, already armed by the close handler,
+      // re-arms a backoff-spaced attempt.
+      if (!this.isConnected) {
+        throw new Error(`[${this.label}] connection lost during resubscribe`);
+      }
       const batch = channels.slice(i, i + batchSize);
       await this.resubscribeBatch(method, batch, batchTimeoutMs);
       if (i + batchSize < channels.length) {
@@ -535,6 +555,13 @@ export class JsonRpcWsClient {
       return;
     } catch (error: unknown) {
       if (!isRequestTimeoutError(error) || channels.length <= 1) throw error;
+
+      // On the reconnect path a batch timeout almost always means a dead/half-open
+      // session, not an oversized batch (a healthy subscribe acks well under a
+      // second). Opted-in venues abort so scheduleReconnect's flap backoff spaces a
+      // clean retry, instead of halving down a 50→25→13→… spine of full-timeout
+      // waits. Venues without their own adaptive shrink (e.g. Derive) keep halving.
+      if (this.options.abortResubscribeOnTimeout) throw error;
 
       const nextBatchSize = Math.ceil(channels.length / 2);
       this.log.warn(

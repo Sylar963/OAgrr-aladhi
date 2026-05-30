@@ -37,11 +37,6 @@ function requestKey(request: ChainRequest): string {
   return `${request.underlying}:${request.expiry}`;
 }
 
-function splitUnderlyingFamily(underlying: string): { base: string; settle: string | null } {
-  const [base, settle] = underlying.split('_');
-  return { base: base ?? underlying, settle: settle ?? null };
-}
-
 function symbolUnderlying(symbol: string): { underlying: string; base: string; expiry: string } | null {
   const parsed = parseOptionSymbol(symbol);
   if (parsed == null) return null;
@@ -50,29 +45,6 @@ function symbolUnderlying(symbol: string): { underlying: string; base: string; e
     base: parsed.base,
     expiry: parsed.expiry,
   };
-}
-
-function requestMatchesSymbol(
-  request: ChainRequest,
-  symbol: string,
-  activeRequests: Iterable<CoordinatedRequestEntry>,
-): boolean {
-  const parsed = symbolUnderlying(symbol);
-  if (parsed == null || request.expiry !== parsed.expiry) return false;
-  if (request.underlying === parsed.underlying) return true;
-
-  const requestUnderlying = splitUnderlyingFamily(request.underlying);
-  if (requestUnderlying.settle != null || requestUnderlying.base !== parsed.base) return false;
-
-  const hasAliasSpecificRequest = [...activeRequests].some(
-    (entry) =>
-      entry.request.expiry === parsed.expiry &&
-      entry.request.underlying === parsed.underlying &&
-      parsed.underlying !== parsed.base,
-  );
-  if (hasAliasSpecificRequest) return false;
-
-  return true;
 }
 
 export class VenueSubscriptionCoordinator {
@@ -202,25 +174,32 @@ export class VenueSubscriptionCoordinator {
           const currentEntry = this.venueEntries.get(venue);
           if (currentEntry == null) return;
 
+          // requestEntries is keyed by `${underlying}:${expiry}`, so routing is two
+          // O(1) lookups per delta instead of scanning every request: the exact
+          // underlying, plus a base-family fallback for alias symbols (e.g. BTC_USDC
+          // delta → "BTC" request) that only applies when no specific alias request
+          // has claimed that underlying.
+          const requestEntries = currentEntry.requestEntries;
           const grouped = new Map<CoordinatedRequestEntry, VenueDelta[]>();
-          for (const delta of deltas) {
-            for (const requestEntry of currentEntry.requestEntries.values()) {
-              if (
-                !requestMatchesSymbol(
-                  requestEntry.request,
-                  delta.symbol,
-                  currentEntry.requestEntries.values(),
-                )
-              ) {
-                continue;
-              }
+          const route = (requestEntry: CoordinatedRequestEntry, delta: VenueDelta): void => {
+            const group = grouped.get(requestEntry);
+            if (group != null) {
+              group.push(delta);
+            } else {
+              grouped.set(requestEntry, [delta]);
+            }
+          };
 
-              const group = grouped.get(requestEntry);
-              if (group != null) {
-                group.push(delta);
-              } else {
-                grouped.set(requestEntry, [delta]);
-              }
+          for (const delta of deltas) {
+            const parsed = symbolUnderlying(delta.symbol);
+            if (parsed == null) continue;
+
+            const exactEntry = requestEntries.get(`${parsed.underlying}:${parsed.expiry}`);
+            if (exactEntry != null) route(exactEntry, delta);
+
+            if (parsed.underlying !== parsed.base && exactEntry == null) {
+              const baseEntry = requestEntries.get(`${parsed.base}:${parsed.expiry}`);
+              if (baseEntry != null) route(baseEntry, delta);
             }
           }
 

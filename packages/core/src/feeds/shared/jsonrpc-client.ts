@@ -105,6 +105,7 @@ export class JsonRpcWsClient {
       maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
+      onResubscribe?: (channels: string[]) => void;
     } = {},
   ) {
     this.log = logger.child({ component: this.label });
@@ -502,6 +503,8 @@ export class JsonRpcWsClient {
         this.log.warn({ err: String(e) }, 'reconnect failed');
         if (this.shouldReconnect && this.isConnected) {
           this.ws?.terminate();
+        } else if (this.shouldReconnect) {
+          this.scheduleReconnect();
         }
       }
     }, delay);
@@ -543,6 +546,7 @@ export class JsonRpcWsClient {
     }
 
     this.reconnectAttempts = 0;
+    this.options.onResubscribe?.(channels);
   }
 
   private async resubscribeBatch(

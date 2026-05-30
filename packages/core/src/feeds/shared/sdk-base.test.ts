@@ -20,6 +20,18 @@ class TestSdkAdapter extends SdkBaseAdapter {
   protected async subscribeChain(): Promise<void> {}
   protected async unsubscribeAll(): Promise<void> {}
 
+  getRequestRefCount(underlying: string, expiry: string): number {
+    return this.requestRefCounts.get(`${underlying}:${expiry}`) ?? 0;
+  }
+
+  getHandlerRefCount(handlers: StreamHandlers): number {
+    return this.handlerRefCounts.get(handlers) ?? 0;
+  }
+
+  hasHandler(handlers: StreamHandlers): boolean {
+    return this.deltaHandlers.has(handlers);
+  }
+
   addInstrument(instrument: CachedInstrument): void {
     this.instruments.push(instrument);
     this.instrumentMap.set(instrument.exchangeSymbol, instrument);
@@ -129,6 +141,24 @@ describe('SdkBaseAdapter', () => {
     });
 
     await expect(release()).resolves.toBeUndefined();
+  });
+
+  it('rolls back refcounts when the first upstream subscribe fails', async () => {
+    const adapter = new TestSdkAdapter();
+    const handlers = { onDelta: vi.fn(), onStatus: vi.fn() };
+    adapter.addInstrument(createInstrument('BTC-260327-70000-C', 70_000));
+    vi.spyOn(
+      adapter as unknown as { subscribeChain: (...args: unknown[]) => Promise<void> },
+      'subscribeChain',
+    ).mockRejectedValue(new Error('subscribe failed'));
+
+    await expect(
+      adapter.subscribe({ underlying: 'BTC', expiry: '2026-03-27' }, handlers),
+    ).rejects.toThrow('subscribe failed');
+
+    expect(adapter.getRequestRefCount('BTC', '2026-03-27')).toBe(0);
+    expect(adapter.getHandlerRefCount(handlers)).toBe(0);
+    expect(adapter.hasHandler(handlers)).toBe(false);
   });
 
   it('maps a base request to the only alias family on that venue', async () => {

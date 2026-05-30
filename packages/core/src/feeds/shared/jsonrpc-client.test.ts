@@ -45,6 +45,7 @@ type JsonRpcWsClientInternals = {
   resubscribe: () => Promise<void>;
   subscribedChannels: Set<string>;
   reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
   shortSessionStreak: number;
   lastSubscriptionAt: number;
   scheduleReconnect: () => void;
@@ -146,6 +147,28 @@ describe('JsonRpcWsClient', () => {
     vi.advanceTimersByTime(60_000);
 
     expect(connect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('schedules another reconnect when a reconnect attempt rejects before opening', async () => {
+    vi.useFakeTimers();
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      reconnectDelayMs: 1_000,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const connect = vi.fn(async () => {
+      throw new Error('connect failed');
+    });
+
+    internals.connect = connect;
+    internals.scheduleReconnect();
+
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(internals.reconnectTimer).not.toBeNull();
+
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -438,6 +461,23 @@ describe('JsonRpcWsClient', () => {
     await internals.resubscribe();
 
     expect(internals.reconnectAttempts).toBe(0);
+  });
+
+  it('notifies after successful resubscribe with replayed channels', async () => {
+    const onResubscribe = vi.fn();
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      onResubscribe,
+      resubscribeBatchSize: 2,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    internals.ws = { readyState: FakeWebSocket.OPEN };
+    internals.subscribedChannels = new Set(['a', 'b']);
+    internals.call = vi.fn(async () => undefined);
+
+    await internals.resubscribe();
+
+    expect(onResubscribe).toHaveBeenCalledWith(['a', 'b']);
   });
 
   it('retries timed-out resubscribe batches with smaller batches', async () => {

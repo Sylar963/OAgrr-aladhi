@@ -28,6 +28,7 @@ export interface TopicWsClientOptions {
   onMessage?: (raw: WebSocket.RawData) => void;
   onClose?: () => void;
   onError?: (error: Error) => void;
+  skipUtf8Validation?: boolean;
 }
 
 export class TopicWsClient {
@@ -90,7 +91,9 @@ export class TopicWsClient {
 
     this.connectPromise = new Promise((resolve, reject) => {
       const url = this.resolveUrl();
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, {
+        skipUTF8Validation: this.options.skipUtf8Validation ?? false,
+      });
       let settled = false;
 
       const resolveConnect = (): void => {
@@ -245,6 +248,8 @@ export class TopicWsClient {
         this.log.warn({ err: String(error) }, 'reconnect failed');
         if (this.shouldReconnect && this.isConnected) {
           this.ws?.terminate();
+        } else if (this.shouldReconnect) {
+          this.scheduleReconnect();
         }
       }
     }, delay);

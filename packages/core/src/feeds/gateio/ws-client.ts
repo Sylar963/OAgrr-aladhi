@@ -333,6 +333,7 @@ export class GateioWsAdapter extends SdkBaseAdapter {
       this.wsClient = new TopicWsClient(GATEIO_OPTIONS_WS_URL, 'gateio-ws', {
         pingIntervalMs: GATEIO_PING_INTERVAL_MS,
         pingMessage: () => ({ time: nowSeconds(), channel: 'options.ping' }),
+        skipUtf8Validation: true,
         onStatusChange: (state) => {
           this.emitStatus(
             state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',

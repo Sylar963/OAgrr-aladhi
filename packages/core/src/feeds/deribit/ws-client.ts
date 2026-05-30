@@ -213,6 +213,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         this.emitStatus(
           state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
         ),
+      onResubscribe: (channels) => this.restoreSubscriptionState(channels),
     });
 
     this.rpc.onSubscription((channel: string, data: unknown) => {
@@ -555,6 +556,32 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   protected async unsubscribeAll(): Promise<void> {
     await this.rpc.unsubscribeAll();
     resetDeribitSubscriptionState(this.subscriptions);
+  }
+
+  private restoreSubscriptionState(channels: string[]): void {
+    resetDeribitSubscriptionState(this.subscriptions);
+
+    for (const channel of channels) {
+      if (channel.startsWith('markprice.options.')) {
+        this.subscriptions.subscribedIndexes.add(channel.slice('markprice.options.'.length));
+        continue;
+      }
+      if (channel.startsWith('deribit_price_index.')) {
+        this.subscriptions.subscribedPriceIndexes.add(
+          channel.slice('deribit_price_index.'.length),
+        );
+        continue;
+      }
+      if (!channel.startsWith('ticker.')) continue;
+
+      const parts = channel.split('.');
+      const interval = parts.at(-1);
+      const exchangeSymbol = parts.slice(1, -1).join('.');
+      if (exchangeSymbol.length === 0 || interval == null) continue;
+
+      this.subscriptions.subscribedTickers.add(exchangeSymbol);
+      this.subscriptions.tickerIntervals.set(exchangeSymbol, interval);
+    }
   }
 
   private maybeLogChainDiagnostics(request: ChainRequest, chain: VenueOptionChain): void {
@@ -1042,7 +1069,9 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       parsed.timestamp ?? Date.now(),
     );
 
-    this.emitQuoteUpdates(updates);
+    for (const update of updates) {
+      this.quoteStore.set(update.exchangeSymbol, update.quote);
+    }
   }
 
   /**

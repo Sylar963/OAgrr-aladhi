@@ -3,6 +3,7 @@ import { TopicWsClient } from './topic-ws-client.js';
 
 type TopicWsClientInternals = {
   reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
   scheduleReconnect: () => void;
   connect: () => Promise<void>;
   ws: {
@@ -47,6 +48,28 @@ describe('TopicWsClient', () => {
     vi.advanceTimersByTime(60_000);
 
     expect(connect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('schedules another reconnect when a reconnect attempt rejects before opening', async () => {
+    vi.useFakeTimers();
+
+    const client = new TopicWsClient('ws://localhost:1234', 'test', {
+      reconnectDelayMs: 1_000,
+    });
+    const internals = client as unknown as TopicWsClientInternals;
+    const connect = vi.fn(async () => {
+      throw new Error('connect failed');
+    });
+
+    internals.connect = connect;
+    internals.scheduleReconnect();
+
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(internals.reconnectTimer).not.toBeNull();
+
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 

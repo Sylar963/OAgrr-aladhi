@@ -266,7 +266,19 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const requestRefCount = this.requestRefCounts.get(key) ?? 0;
     this.requestRefCounts.set(key, requestRefCount + 1);
     if (requestRefCount === 0) {
-      await this.subscribeChain(effectiveUnderlying, request.expiry, matching);
+      try {
+        await this.subscribeChain(effectiveUnderlying, request.expiry, matching);
+      } catch (error: unknown) {
+        const rolledBackHandlerRefCount = (this.handlerRefCounts.get(handlers) ?? 1) - 1;
+        if (rolledBackHandlerRefCount <= 0) {
+          this.handlerRefCounts.delete(handlers);
+          this.deltaHandlers.delete(handlers);
+        } else {
+          this.handlerRefCounts.set(handlers, rolledBackHandlerRefCount);
+        }
+        this.requestRefCounts.delete(key);
+        throw error;
+      }
     }
 
     let released = false;

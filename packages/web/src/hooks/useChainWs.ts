@@ -101,6 +101,7 @@ function quotesEqual(a: VenueQuote | null | undefined, b: VenueQuote | null | un
     a.volume24h === b.volume24h &&
     a.openInterestUsd === b.openInterestUsd &&
     a.volume24hUsd === b.volume24hUsd &&
+    a.asOfMs === b.asOfMs &&
     (a.estimatedFees == null
       ? b.estimatedFees == null
       : b.estimatedFees != null &&

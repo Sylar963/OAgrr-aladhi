@@ -8,6 +8,7 @@ import { createElement, type ReactNode } from 'react';
 
 import { chainKeys } from '@features/chain/queries';
 import type { ServerWsMessage } from '@oggregator/protocol';
+import type { EnrichedStrike, VenueQuote } from '@shared/enriched';
 
 // ── Mock WebSocket — must be set up before hook import ────────
 
@@ -161,6 +162,46 @@ function statusMsg(subId: string, state: 'connected' | 'reconnecting' | 'down'):
   };
 }
 
+function venueQuote(overrides: Partial<VenueQuote>): VenueQuote {
+  return {
+    bid: null,
+    ask: null,
+    mid: null,
+    midRaw: null,
+    bidSize: null,
+    askSize: null,
+    markIv: null,
+    bidIv: null,
+    askIv: null,
+    delta: null,
+    gamma: null,
+    theta: null,
+    vega: null,
+    spreadPct: null,
+    totalCost: null,
+    estimatedFees: null,
+    openInterest: null,
+    volume24h: null,
+    openInterestUsd: null,
+    volume24hUsd: null,
+    ...overrides,
+  };
+}
+
+function strikeWithDeribitQuote(asOfMs: number): EnrichedStrike {
+  return {
+    strike: 70000,
+    call: {
+      venues: {
+        deribit: venueQuote({ bid: 100, ask: 110, asOfMs }),
+      },
+      bestIv: 0.51,
+      bestVenue: 'deribit',
+    },
+    put: { venues: {}, bestIv: null, bestVenue: null },
+  };
+}
+
 function getLastWs(): MockWebSocket {
   const ws = MockWebSocket.instances.at(-1);
   if (!ws) throw new Error('no WebSocket created');
@@ -284,6 +325,32 @@ describe('useChainWs', () => {
     expect(cached).toBeDefined();
     expect((cached?.['gex'] as Array<Record<string, unknown>>)[0]?.['gexUsdMillions']).toBe(12);
     expect(hookResult.result.current.lastSeq).toBe(2);
+  });
+
+  it('updates cached strikes when only quote freshness changes', async () => {
+    const { ws, subId } = await renderAndConnect();
+
+    const first = snapshot(subId, 1);
+    if (first.type !== 'snapshot') throw new Error('expected snapshot message');
+    first.data.strikes = [strikeWithDeribitQuote(1_000)];
+
+    await act(() => {
+      ws.pushMessage(first);
+    });
+
+    const next = deltaMsg(subId, 2);
+    if (next.type !== 'delta') throw new Error('expected delta message');
+    next.patch.strikes = [strikeWithDeribitQuote(2_000)];
+
+    await act(() => {
+      ws.pushMessage(next);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(30));
+
+    const key = chainKeys.chain('BTC', '2026-03-27', ['deribit']);
+    const cached = queryClient.getQueryData<{ strikes: EnrichedStrike[] }>(key);
+
+    expect(cached?.strikes[0]?.call.venues.deribit?.asOfMs).toBe(2_000);
   });
 
   it('captures failedVenues from subscribed message', async () => {

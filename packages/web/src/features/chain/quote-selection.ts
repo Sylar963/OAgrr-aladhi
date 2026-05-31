@@ -43,7 +43,7 @@ export function bestBidAsk(
 }
 
 export function crossVenueSpreadPct(bba: BestBidAskResult): number | null {
-  if (bba.bid == null || bba.ask == null || bba.bid <= 0 || bba.ask <= 0 || bba.ask < bba.bid) {
+  if (bba.bid == null || bba.ask == null || bba.bid <= 0 || bba.ask <= 0) {
     return null;
   }
 

@@ -60,8 +60,13 @@ describe('quote selection', () => {
     ).toBeCloseTo(9.5238, 4);
   });
 
-  it('returns null for invalid cross-venue spreads', () => {
-    expect(crossVenueSpreadPct({ bid: 100, ask: 90, bidVenue: 'deribit', askVenue: 'bybit' })).toBeNull();
+  it('computes negative spreads for crossed cross-venue markets', () => {
+    expect(
+      crossVenueSpreadPct({ bid: 100, ask: 90, bidVenue: 'deribit', askVenue: 'bybit' }),
+    ).toBeCloseTo(-10.5263, 4);
+  });
+
+  it('returns null for missing cross-venue spread prices', () => {
     expect(crossVenueSpreadPct({ bid: null, ask: 110, bidVenue: null, askVenue: 'bybit' })).toBeNull();
   });
 });

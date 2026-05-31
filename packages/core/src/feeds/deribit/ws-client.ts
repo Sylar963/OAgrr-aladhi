@@ -657,12 +657,13 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
     const oldestQuoteAgeMs = oldestQuoteTs > 0 ? now - oldestQuoteTs : null;
     const newestQuoteAgeMs = newestQuoteTs > 0 ? now - newestQuoteTs : null;
+    const hasFreshQuote = newestQuoteTs > 0 && now - newestQuoteTs <= DERIBIT_CHAIN_STALE_LOG_MS;
+    const noQuoteData = contracts > 0 && quotesWithTs === 0;
+    const staleSubscriptionCoverage = contracts > 0 && subscribedTickers < contracts && !hasFreshQuote;
+    const staleQuotedChain = quotesWithTs > 0 && staleQuotes === quotesWithTs;
+    const allQuotesMissingBidAsk = contracts > 0 && missingBidAsk === contracts && !hasFreshQuote;
     const suspicious =
-      contracts === 0 ||
-      subscribedTickers < contracts ||
-      staleQuotes > 0 ||
-      missingBidAsk === contracts ||
-      quotesWithTs === 0;
+      noQuoteData || staleSubscriptionCoverage || staleQuotedChain || allQuotesMissingBidAsk;
     if (!suspicious) return;
 
     this.chainDiagnosticsLastLoggedAt.set(diagnosticKey, now);

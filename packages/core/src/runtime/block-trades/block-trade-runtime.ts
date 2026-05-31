@@ -29,6 +29,7 @@ import type {
 
 const log = feedLogger('block-trade-runtime');
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
+const DERIBIT_BLOCK_KEEPALIVE_MS = 25_000;
 
 function isRateLimitSignal(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -350,6 +351,7 @@ function deribitBlockStream(): BlockVenueStream {
   let shouldReconnect = true;
   let handlers: BlockVenueStreamHandlers | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   let rateLimitUntil = 0;
 
   function connect(attempt = 0): void {
@@ -379,6 +381,13 @@ function deribitBlockStream(): BlockVenueStream {
           params: { channels: ['block_rfq.trades.any'] },
         }),
       );
+      keepaliveTimer = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'public/test', params: {} }),
+          );
+        }
+      }, DERIBIT_BLOCK_KEEPALIVE_MS);
     });
 
     socket.on('message', (raw: WebSocket.RawData) => {
@@ -418,6 +427,10 @@ function deribitBlockStream(): BlockVenueStream {
         'block trade WS closed',
       );
       handlers?.onDisconnected();
+      if (keepaliveTimer) {
+        clearInterval(keepaliveTimer);
+        keepaliveTimer = null;
+      }
       if (shouldReconnect) {
         handlers?.onReconnect();
         const delay = Math.max(backoffDelay(didOpen ? 0 : attempt + 1), rateLimitUntil - Date.now());
@@ -476,6 +489,8 @@ function deribitBlockStream(): BlockVenueStream {
       shouldReconnect = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = null;
+      if (keepaliveTimer) clearInterval(keepaliveTimer);
+      keepaliveTimer = null;
       const socket = ws;
       ws = null;
       socket?.removeAllListeners();

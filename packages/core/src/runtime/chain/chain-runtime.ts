@@ -15,7 +15,7 @@ import type { VenueId } from '../../types/common.js';
 import { ChainProjection } from './projection.js';
 import { VenueHealthManager } from './health.js';
 
-const PUSH_INTERVAL_MS = 100;
+const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
 
 interface FailedVenue {

@@ -24,6 +24,7 @@ vi.mock('../../core/registry.js', () => ({
 }));
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   fetchOptionChainMock.mockReset();
   getRegisteredVenuesMock.mockReset();
@@ -268,5 +269,37 @@ describe('ChainRuntime', () => {
     expect(internals.pendingBySymbol.size).toBe(0);
 
     await runtime.dispose();
+  });
+
+  it('batches live deltas on the push interval', async () => {
+    vi.useFakeTimers();
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const events: unknown[] = [];
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    runtime.subscribe({ onEvent: (event) => events.push(event) });
+    await Promise.resolve();
+
+    internals.venueListener.onDelta([
+      {
+        venue: 'okx',
+        symbol: 'BTC/USD:BTC-260327-70000-C',
+        ts: 2_000,
+        quote: { bid: { raw: 0.2, rawCurrency: 'BTC', usd: 300 } },
+      },
+    ]);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(events.filter((event) => (event as { type?: string }).type === 'delta')).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(events.filter((event) => (event as { type?: string }).type === 'delta')).toHaveLength(1);
+
+    await runtime.dispose();
+    vi.useRealTimers();
   });
 });

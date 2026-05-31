@@ -534,6 +534,42 @@ describe('JsonRpcWsClient', () => {
     expect(requestedBatchSizes).toEqual([4]);
   });
 
+  it('continues replay after a resubscribe timeout when subscription data resumed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+
+    const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
+      resubscribeBatchSize: 2,
+      resubscribeBatchDelayMs: 0,
+      resubscribeBatchTimeoutMs: 12_000,
+      abortResubscribeOnTimeout: true,
+      continueResubscribeOnDataAfterTimeout: true,
+    });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+    const requestedBatchSizes: number[] = [];
+
+    internals.reconnectAttempts = 3;
+    internals.ws = { readyState: FakeWebSocket.OPEN };
+    internals.subscribedChannels = new Set(['a', 'b', 'c', 'd']);
+    internals.call = vi.fn(async (_method, params) => {
+      const channels = params?.channels;
+      if (!Array.isArray(channels)) throw new Error('missing channels');
+      requestedBatchSizes.push(channels.length);
+      if (requestedBatchSizes.length === 1) {
+        internals.lastSubscriptionAt = Date.now();
+        throw new Error('[test] public/subscribe timed out after 12000ms');
+      }
+      return undefined;
+    });
+
+    await internals.resubscribe();
+
+    expect(requestedBatchSizes).toEqual([2, 2]);
+    expect(internals.reconnectAttempts).toBe(0);
+
+    vi.useRealTimers();
+  });
+
   it('aborts resubscribe without firing further batches once the socket drops mid-burst', async () => {
     const client = new JsonRpcWsClient('ws://localhost:1234', 'test', {
       resubscribeBatchSize: 1,

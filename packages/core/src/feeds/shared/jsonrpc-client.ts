@@ -101,6 +101,7 @@ export class JsonRpcWsClient {
       resubscribeBatchDelayMs?: number;
       resubscribeBatchTimeoutMs?: number;
       abortResubscribeOnTimeout?: boolean;
+      continueResubscribeOnDataAfterTimeout?: boolean;
       rateLimitCooldownMs?: number;
       maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
@@ -267,6 +268,10 @@ export class JsonRpcWsClient {
 
   get lastActivityAtMs(): number {
     return this.lastActivityAt;
+  }
+
+  get lastSubscriptionAtMs(): number {
+    return this.lastSubscriptionAt;
   }
 
   get reconnectAttemptsCount(): number {
@@ -525,6 +530,7 @@ export class JsonRpcWsClient {
       );
     const channels = [...this.subscribedChannels.values()];
     const batches = Math.ceil(channels.length / batchSize);
+    const resubscribeStartedAt = Date.now();
     this.log.info(
       { count: channels.length, batches, batchSize, delayMs, batchTimeoutMs },
       're-subscribing to channels',
@@ -539,8 +545,28 @@ export class JsonRpcWsClient {
         throw new Error(`[${this.label}] connection lost during resubscribe`);
       }
       const batch = channels.slice(i, i + batchSize);
-      await this.resubscribeBatch(method, batch, batchTimeoutMs);
-      if (i + batchSize < channels.length) {
+      try {
+        await this.resubscribeBatch(method, batch, batchTimeoutMs);
+      } catch (error: unknown) {
+        if (
+          !this.options.continueResubscribeOnDataAfterTimeout ||
+          !isRequestTimeoutError(error) ||
+          this.lastSubscriptionAt < resubscribeStartedAt
+        ) {
+          throw error;
+        }
+
+        this.log.warn(
+          {
+            count: batch.length,
+            timeoutMs: batchTimeoutMs,
+            lastSubscriptionAgeMs: Date.now() - this.lastSubscriptionAt,
+            err: String(error),
+          },
+          'resubscribe batch timed out after subscription data resumed, continuing replay',
+        );
+      }
+      if (delayMs > 0 && i + batchSize < channels.length) {
         await new Promise((r) => setTimeout(r, delayMs));
       }
     }

@@ -73,6 +73,13 @@ const DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS = 30_000;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO = 0.9;
 const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
 
+type DeribitSubscriptionStateSnapshot = {
+  subscribedIndexes: string[];
+  subscribedPriceIndexes: string[];
+  subscribedTickers: string[];
+  tickerIntervals: Array<[string, string]>;
+};
+
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
 // `public/get_instrument` + `public/subscribe` per event saturates Deribit's
@@ -205,15 +212,16 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
       resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
       resubscribeBatchTimeoutMs: RESUBSCRIBE_BATCH_TIMEOUT_MS,
-      // Deribit's live subscribe path (subscribeBatch) keeps the 60s timeout +
-      // halving for legit large far-tenor batches; only the reconnect path aborts.
+      // Reconnect replay aborts dead sessions quickly, but keeps a socket that is
+      // already delivering subscription data despite a delayed subscribe ack.
       abortResubscribeOnTimeout: true,
+      continueResubscribeOnDataAfterTimeout: true,
       rateLimitCooldownMs: 120_000,
       onStatusChange: (state) =>
         this.emitStatus(
           state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
         ),
-      onResubscribe: (channels) => this.restoreSubscriptionState(channels),
+      onResubscribe: (channels) => this.restoreSubscriptionStateFromChannels(channels),
     });
 
     this.rpc.onSubscription((channel: string, data: unknown) => {
@@ -394,6 +402,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   ): Promise<void> {
     if (source === 'eager' && !this.shouldEagerTickerUnderlying(underlying)) return;
 
+    const previousState = this.snapshotSubscriptionState();
     const indexName = deribitIndexNameFor(underlying);
 
     if (!this.state.indexToInstruments.has(indexName)) {
@@ -416,10 +425,6 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         interval,
       );
 
-      if (plan.channelsToUnsubscribe.length > 0) {
-        await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
-      }
-
       if (plan.tickerChannels.length > 0) {
         await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
         log.info(
@@ -427,8 +432,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
           'subscribed to ticker channels',
         );
       }
+
+      if (plan.channelsToUnsubscribe.length > 0) {
+        await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
+      }
     } catch (error: unknown) {
-      resetDeribitSubscriptionState(this.subscriptions);
+      this.restoreSubscriptionStateSnapshot(previousState);
       this.rpc.terminate();
       throw error;
     }
@@ -558,7 +567,23 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     resetDeribitSubscriptionState(this.subscriptions);
   }
 
-  private restoreSubscriptionState(channels: string[]): void {
+  private snapshotSubscriptionState(): DeribitSubscriptionStateSnapshot {
+    return {
+      subscribedIndexes: [...this.subscriptions.subscribedIndexes],
+      subscribedPriceIndexes: [...this.subscriptions.subscribedPriceIndexes],
+      subscribedTickers: [...this.subscriptions.subscribedTickers],
+      tickerIntervals: [...this.subscriptions.tickerIntervals],
+    };
+  }
+
+  private restoreSubscriptionStateSnapshot(snapshot: DeribitSubscriptionStateSnapshot): void {
+    this.subscriptions.subscribedIndexes = new Set(snapshot.subscribedIndexes);
+    this.subscriptions.subscribedPriceIndexes = new Set(snapshot.subscribedPriceIndexes);
+    this.subscriptions.subscribedTickers = new Set(snapshot.subscribedTickers);
+    this.subscriptions.tickerIntervals = new Map(snapshot.tickerIntervals);
+  }
+
+  private restoreSubscriptionStateFromChannels(channels: string[]): void {
     resetDeribitSubscriptionState(this.subscriptions);
 
     for (const channel of channels) {
@@ -980,6 +1005,20 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
         this.emitStatus(health.status, health.message);
 
         if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
+          const lastSubscriptionAt = this.rpc.lastSubscriptionAtMs;
+          const lastSubscriptionAgeMs =
+            lastSubscriptionAt > 0 ? Date.now() - lastSubscriptionAt : null;
+          if (
+            lastSubscriptionAgeMs != null &&
+            lastSubscriptionAgeMs < DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS
+          ) {
+            log.warn(
+              { lastSubscriptionAgeMs },
+              'deribit public/status timed out while subscription data is flowing',
+            );
+            return;
+          }
+
           // Shares the staleness watchdog's backoff state so the two
           // force-reconnect paths jointly throttle: a status probe that times out
           // because the event loop is mid-resubscribe must not stack another

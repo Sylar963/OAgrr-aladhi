@@ -3,6 +3,7 @@ import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
+import { bestBidAsk } from './quote-selection';
 import styles from './MobileStrikeCard.module.css';
 
 interface MobileStrikeCardProps {
@@ -21,23 +22,9 @@ interface SideSummaryProps {
   venues: string[];
 }
 
-function bestBidAsk(
-  side: EnrichedSide,
-  venues: string[],
-): { bid: number | null; ask: number | null } {
-  let bestBid: number | null = null;
-  let bestAsk: number | null = null;
-  for (const [v, q] of Object.entries(side.venues)) {
-    if (!venues.includes(v) || !q) continue;
-    if (q.bid != null && (bestBid == null || q.bid > bestBid)) bestBid = q.bid;
-    if (q.ask != null && (bestAsk == null || q.ask < bestAsk)) bestAsk = q.ask;
-  }
-  return { bid: bestBid, ask: bestAsk };
-}
-
 function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
   const bestQ = side.bestVenue != null ? (side.venues[side.bestVenue] ?? null) : null;
-  const bba = bestBidAsk(side, venues);
+  const bba = bestBidAsk(side, new Set(venues));
 
   return (
     <div className={styles.side} data-type={type} data-itm={itm}>

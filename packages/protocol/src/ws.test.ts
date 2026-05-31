@@ -108,6 +108,65 @@ describe('ServerWsMessageSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('preserves per-venue quote timestamps in snapshots', () => {
+    const result = ServerWsMessageSchema.safeParse({
+      type: 'snapshot',
+      subscriptionId: 'sub-1',
+      seq: 5,
+      request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+      meta: { generatedAt: 1000, maxQuoteTs: 999, staleMs: 1 },
+      data: {
+        underlying: 'BTC',
+        expiry: '2026-03-27',
+        expiryTs: null,
+        dte: 7,
+        stats,
+        strikes: [
+          {
+            strike: 70_000,
+            call: {
+              bestIv: 0.5,
+              bestVenue: 'deribit',
+              venues: {
+                deribit: {
+                  bid: 1,
+                  ask: 2,
+                  mid: 1.5,
+                  midRaw: 1.5,
+                  bidSize: 1,
+                  askSize: 1,
+                  markIv: 0.5,
+                  bidIv: 0.49,
+                  askIv: 0.51,
+                  delta: 0.5,
+                  gamma: 0.01,
+                  theta: -0.01,
+                  vega: 1,
+                  spreadPct: 1,
+                  totalCost: 2,
+                  estimatedFees: null,
+                  openInterest: 10,
+                  volume24h: 1,
+                  openInterestUsd: 10_000,
+                  volume24hUsd: 1_000,
+                  asOfMs: 999,
+                },
+              },
+            },
+            put: { bestIv: null, bestVenue: null, venues: {} },
+          },
+        ],
+        gex: [],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.type).toBe('snapshot');
+    if (result.data.type !== 'snapshot') return;
+    expect(result.data.data.strikes[0]?.call.venues.deribit?.asOfMs).toBe(999);
+  });
+
   it('accepts valid subscribed with failedVenues', () => {
     const result = ServerWsMessageSchema.safeParse({
       type: 'subscribed',

@@ -2,6 +2,7 @@ import type { EnrichedSide } from '@shared/enriched';
 import { VenueCard, type VenueCardDetail } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
+import { isActionableQuote } from './quote-selection';
 import styles from './QuickTrade.module.css';
 
 interface QuickTradeProps {
@@ -23,7 +24,7 @@ export default function QuickTrade({ strike, type, direction, side, onClose }: Q
   const venues = Object.entries(side.venues)
     .filter(([v]) => activeVenues.includes(v))
     .map(([venueId, q]) => {
-      if (!q) return null;
+      if (!q || !isActionableQuote(q)) return null;
       const price = direction === 'buy' ? q.ask : q.bid;
       const oppositePrice = direction === 'buy' ? q.bid : q.ask;
       const spreadCost =

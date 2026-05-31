@@ -12,6 +12,7 @@ import ExpandedRow from './ExpandedRow';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
 import { computeAtmConsensus } from './forward-analysis';
+import { bestBidAsk } from './quote-selection';
 import styles from './ChainTable.module.css';
 
 const GAMMA_TIP =
@@ -87,36 +88,6 @@ function VenueColumn({ side, align, activeSet }: VenueColumnProps) {
       })}
     </div>
   );
-}
-
-interface BestBidAskResult {
-  bid: number | null;
-  ask: number | null;
-  bidVenue: string | null;
-  askVenue: string | null;
-}
-
-function bestBidAsk(side: EnrichedSide, activeSet: ReadonlySet<string>): BestBidAskResult {
-  let bestBid: number | null = null;
-  let bestAsk: number | null = null;
-  let bestBidVenue: string | null = null;
-  let bestAskVenue: string | null = null;
-
-  for (const [venueId, quote] of Object.entries(side.venues)) {
-    if (!activeSet.has(venueId) || !quote) continue;
-
-    if (quote.bid != null && (bestBid == null || quote.bid > bestBid)) {
-      bestBid = quote.bid;
-      bestBidVenue = venueId;
-    }
-
-    if (quote.ask != null && (bestAsk == null || quote.ask < bestAsk)) {
-      bestAsk = quote.ask;
-      bestAskVenue = venueId;
-    }
-  }
-
-  return { bid: bestBid, ask: bestAsk, bidVenue: bestBidVenue, askVenue: bestAskVenue };
 }
 
 // ── Strike row ────────────────────────────────────────────────────────────────

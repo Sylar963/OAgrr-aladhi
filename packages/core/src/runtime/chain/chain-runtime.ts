@@ -17,6 +17,7 @@ import { VenueHealthManager } from './health.js';
 
 const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
+const GEX_DELTA_MIN_INTERVAL_MS = 2_000;
 
 interface FailedVenue {
   venue: VenueId;
@@ -51,7 +52,7 @@ export interface ChainRuntimeDeltaEvent {
   patch: {
     stats: EnrichedChainResponse['stats'];
     strikes: EnrichedChainResponse['strikes'];
-    gex: EnrichedChainResponse['gex'];
+    gex?: EnrichedChainResponse['gex'];
   };
 }
 
@@ -132,6 +133,7 @@ export class ChainRuntime {
   private disposed = false;
   private pendingDeltaVersion = 0;
   private snapshotBuildVersion = 0;
+  private lastGexComputedAt = 0;
 
   constructor(
     readonly key: string,
@@ -348,6 +350,7 @@ export class ChainRuntime {
     this.needsResync = false;
     const enriched = this.projection.loadSnapshot(result.chains.filter((chain) => chain != null));
     this.seq += 1;
+    this.lastGexComputedAt = Date.now();
 
     const snapshot: ChainRuntimeSnapshotEvent = {
       type: 'snapshot',
@@ -393,7 +396,9 @@ export class ChainRuntime {
         this.pendingBySymbol.delete(key);
       }
     }
-    const patch = this.projection.applyDeltas(deltas);
+    const now = Date.now();
+    const includeGex = now - this.lastGexComputedAt >= GEX_DELTA_MIN_INTERVAL_MS;
+    const patch = this.projection.applyDeltas(deltas, { includeGex });
 
     if (patch == null) {
       void this.buildSnapshot().catch((error: unknown) => {
@@ -401,6 +406,7 @@ export class ChainRuntime {
       });
       return;
     }
+    if (patch.patch.gex != null) this.lastGexComputedAt = now;
 
     this.seq += 1;
     const snapshot = this.currentSnapshot;
@@ -425,7 +431,7 @@ export class ChainRuntime {
               ...snapshot.data,
               stats: patch.patch.stats,
               strikes: mergeStrikes(snapshot.data.strikes, patch.patch.strikes),
-              gex: patch.patch.gex,
+              gex: patch.patch.gex ?? snapshot.data.gex,
             },
           };
 

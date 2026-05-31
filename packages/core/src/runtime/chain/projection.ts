@@ -21,7 +21,7 @@ export interface ChainProjectionDelta {
   patch: {
     stats: EnrichedChainResponse['stats'];
     strikes: EnrichedStrike[];
-    gex: EnrichedChainResponse['gex'];
+    gex?: EnrichedChainResponse['gex'];
   };
 }
 
@@ -102,7 +102,7 @@ export class ChainProjection {
     return snapshotMetaFromChains([...this.venueChains.values()]);
   }
 
-  applyDeltas(deltas: VenueDelta[]): ChainProjectionDelta | null {
+  applyDeltas(deltas: VenueDelta[], options: { includeGex?: boolean } = {}): ChainProjectionDelta | null {
     if (deltas.length === 0) return null;
 
     const changedStrikes = new Set<number>();
@@ -132,21 +132,24 @@ export class ChainProjection {
       (left, right) => left.strike - right.strike,
     );
     const stats = computeChainStats(strikes, venueChains);
-    const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-    const gex = computeGex([...this.comparisonRows.values()], strikes, spotPrice);
     const patchStrikes = [...changedStrikes]
       .sort((left, right) => left - right)
       .map((strike) => this.enrichedStrikes.get(strike))
       .filter((strike): strike is EnrichedStrike => strike != null);
 
+    const patch: ChainProjectionDelta['patch'] = {
+      stats,
+      strikes: patchStrikes,
+    };
+    if (options.includeGex === true) {
+      const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
+      patch.gex = computeGex([...this.comparisonRows.values()], strikes, spotPrice);
+    }
+
     return {
       meta: snapshotMetaFromChains(venueChains),
       deltas,
-      patch: {
-        stats,
-        strikes: patchStrikes,
-        gex,
-      },
+      patch,
     };
   }
 }

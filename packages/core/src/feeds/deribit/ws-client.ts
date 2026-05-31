@@ -59,10 +59,10 @@ const EAGER_TICKER_EXPIRY_COUNT = 2;
 const EAGER_UNDERLYING_DELAY_MS = 750;
 const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 
-// Eager subscriptions use agg2 (~1s aggregation) to reduce traffic.
-// On-demand subscriptions (user viewing a chain) use 100ms for tight updates.
+// Use agg2 for active chains too: hundreds of 100ms option tickers have caused
+// Deribit's data plane to go globally stale while the socket stays open.
 const EAGER_TICKER_INTERVAL = 'agg2';
-const ACTIVE_TICKER_INTERVAL = '100ms';
+const ACTIVE_TICKER_INTERVAL = EAGER_TICKER_INTERVAL;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 const DERIBIT_PUBLIC_STATUS_TIMEOUT_MS = 15_000;
 const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
@@ -498,12 +498,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   }
 
   private shouldEagerTickerUnderlying(underlying: string): boolean {
-    return (
-      underlying === 'BTC' ||
-      underlying === 'ETH' ||
-      underlying.startsWith('BTC_') ||
-      underlying.startsWith('ETH_')
-    );
+    return underlying === 'BTC' || underlying === 'ETH';
   }
 
   private eagerTickerExpiries(underlying: string): string[] {

@@ -92,7 +92,7 @@ async function ensureChain(underlying: string, expiry: string): Promise<void> {
             ...prev,
             stats: event.patch.stats,
             strikes: event.patch.strikes,
-            gex: event.patch.gex,
+            gex: event.patch.gex ?? prev.gex,
           };
           handle.lastUsedAt = Date.now();
           notifyChainTickListeners();

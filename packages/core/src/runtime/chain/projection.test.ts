@@ -80,6 +80,28 @@ describe('ChainProjection', () => {
     expect(patch?.deltas).toHaveLength(1);
     expect(patch?.patch.strikes).toHaveLength(1);
     expect(patch?.patch.strikes[0]?.call.bestIv).toBe(0.51);
+    expect(patch?.patch.gex).toBeUndefined();
+  });
+
+  it('computes delta gex only when requested', () => {
+    const projection = new ChainProjection('BTC', '2026-03-27');
+    projection.loadSnapshot([buildChain()]);
+
+    const patch = projection.applyDeltas(
+      [
+        {
+          venue: 'deribit',
+          symbol: 'BTC/USD:USDC-260327-70000-C',
+          ts: 2000,
+          quote: {
+            bid: { raw: 310, rawCurrency: 'USDC', usd: 310 },
+          },
+        },
+      ],
+      { includeGex: true },
+    );
+
+    expect(patch?.patch.gex).toEqual(expect.any(Array));
   });
 
   it('requests a resync when a delta references an unknown contract', () => {

@@ -10,6 +10,13 @@ import {
   type VenueId,
   type VenueOptionChain,
 } from '@oggregator/core';
+import { ResponseCache } from '../response-cache.js';
+
+const GEX_ALL_EXPIRIES_CACHE_TTL_MS = 10_000;
+const gexAllExpiriesCache = new ResponseCache<AllExpiriesGexResponse>(
+  GEX_ALL_EXPIRIES_CACHE_TTL_MS,
+  64,
+);
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
   return venuesParam
@@ -44,35 +51,38 @@ export async function gexAllExpiriesRoute(app: FastifyInstance) {
       }
 
       const requestedVenues = parseVenues(venuesParam);
-      const expiries = await collectUnderlyingExpiries(underlying);
-      if (expiries.length === 0) {
-        return { underlying, expiries: [], spotPrice: null, gex: [] };
-      }
+      const cacheKey = `${underlying}:${requestedVenues.slice().sort().join(',')}`;
+      return gexAllExpiriesCache.get(cacheKey, async () => {
+        const expiries = await collectUnderlyingExpiries(underlying);
+        if (expiries.length === 0) {
+          return { underlying, expiries: [], spotPrice: null, gex: [] };
+        }
 
-      const snapshots = await Promise.all(
-        expiries.map(async (expiry) => {
-          const chains = (
-            await Promise.all(
-              requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
-                try {
-                  return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
-                } catch {
-                  return null;
-                }
-              }),
-            )
-          ).filter((chain): chain is VenueOptionChain => chain != null);
-          const comparison = buildComparisonChain(underlying, expiry, chains);
-          return buildEnrichedChain(underlying, expiry, comparison.rows, chains);
-        }),
-      );
+        const snapshots = await Promise.all(
+          expiries.map(async (expiry) => {
+            const chains = (
+              await Promise.all(
+                requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
+                  try {
+                    return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
+                  } catch {
+                    return null;
+                  }
+                }),
+              )
+            ).filter((chain): chain is VenueOptionChain => chain != null);
+            const comparison = buildComparisonChain(underlying, expiry, chains);
+            return buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+          }),
+        );
 
-      const aggregated = combineGex(snapshots.map((snap) => snap.gex));
-      const first = snapshots[0];
-      const spotPrice =
-        first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
+        const aggregated = combineGex(snapshots.map((snap) => snap.gex));
+        const first = snapshots[0];
+        const spotPrice =
+          first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
 
-      return { underlying, expiries, spotPrice, gex: aggregated };
+        return { underlying, expiries, spotPrice, gex: aggregated };
+      });
     },
   );
 }

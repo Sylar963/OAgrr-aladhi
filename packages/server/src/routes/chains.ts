@@ -9,6 +9,10 @@ import {
   type VenueOptionChain,
 } from '@oggregator/core';
 import { chainEngines } from '../chain-engines.js';
+import { ResponseCache } from '../response-cache.js';
+
+const CHAIN_RESPONSE_CACHE_TTL_MS = 5_000;
+const chainResponseCache = new ResponseCache(CHAIN_RESPONSE_CACHE_TTL_MS);
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
   return venuesParam
@@ -33,18 +37,21 @@ export async function chainsRoute(app: FastifyInstance) {
     }
 
     const requestedVenues = parseVenues(venuesParam);
-    const chains = (
-      await Promise.all(
-        requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
-          try {
-            return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
-          } catch {
-            return null;
-          }
-        }),
-      )
-    ).filter((chain): chain is VenueOptionChain => chain != null);
-    const comparison = buildComparisonChain(underlying, expiry, chains);
-    return buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+    const cacheKey = `${underlying}:${expiry}:${requestedVenues.slice().sort().join(',')}`;
+    return chainResponseCache.get(cacheKey, async () => {
+      const chains = (
+        await Promise.all(
+          requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
+            try {
+              return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((chain): chain is VenueOptionChain => chain != null);
+      const comparison = buildComparisonChain(underlying, expiry, chains);
+      return buildEnrichedChain(underlying, expiry, comparison.rows, chains);
+    });
   });
 }

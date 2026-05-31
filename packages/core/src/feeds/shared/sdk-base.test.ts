@@ -213,6 +213,29 @@ describe('SdkBaseAdapter', () => {
     });
   });
 
+  it('does not surface stale websocket quotes as live chain data', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-01T00:10:01.000Z'));
+
+    try {
+      const adapter = new TestSdkAdapter();
+      const instrument = createInstrument('BTC-260327-70000-C', 70_000);
+      adapter.addInstrument(instrument);
+      adapter.publish([{ exchangeSymbol: instrument.exchangeSymbol, quote: createQuote(Date.now() - 300_001) }]);
+
+      const chain = await adapter.fetchOptionChain({ underlying: 'BTC', expiry: '2026-03-27' });
+      const contract = chain.contracts[instrument.symbol];
+
+      expect(contract?.quote.bid.raw).toBeNull();
+      expect(contract?.quote.ask.raw).toBeNull();
+      expect(contract?.quote.mark.raw).toBeNull();
+      expect(contract?.quote.timestamp).toBe(0);
+      expect(contract?.quote.source).toBe('rest');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('sweepExpiredInstruments', () => {
     // 2026-04-24 08:00 UTC — canonical 0DTE cutoff for all venues.
     const EXPIRY_TS = Date.UTC(2026, 3, 24, 8, 0, 0);

@@ -32,6 +32,7 @@ const FEE_CAP: Record<VenueId, number> = {
 
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+const DEFAULT_QUOTE_FRESHNESS_MS = 5 * 60 * 1000;
 
 function splitUnderlyingFamily(underlying: string): { base: string; settle: string | null } {
   const [base, settle] = underlying.split('_');
@@ -107,6 +108,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   protected requestRefCounts = new Map<string, number>();
   protected handlerRefCounts = new Map<StreamHandlers, number>();
   protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
+  protected quoteFreshnessMs = DEFAULT_QUOTE_FRESHNESS_MS;
   private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
   private lastWatchdogReconnectAt = 0;
 
@@ -225,9 +227,10 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   override fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
     const matching = this.matchingInstruments(request.underlying, request.expiry);
     const contracts: Record<string, NormalizedOptionContract> = {};
+    const now = Date.now();
 
     for (const inst of matching) {
-      const quote = this.quoteStore.get(inst.exchangeSymbol);
+      const quote = this.freshQuote(inst.exchangeSymbol, now);
       contracts[inst.symbol] = this.buildContract(inst, quote ?? null);
     }
 
@@ -491,6 +494,13 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     this.restartFeedFromWatchdog();
   }
 
+  private freshQuote(exchangeSymbol: string, now: number): LiveQuote | null {
+    const quote = this.quoteStore.get(exchangeSymbol);
+    if (quote == null) return null;
+    if (quote.timestamp <= 0 || now - quote.timestamp > this.quoteFreshnessMs) return null;
+    return quote;
+  }
+
   protected buildContract(
     inst: CachedInstrument,
     quote: LiveQuote | null,
@@ -537,7 +547,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           q.underlyingPrice,
         ),
         timestamp: q.timestamp,
-        source: this.quoteStore.has(inst.exchangeSymbol) ? 'ws' : 'rest',
+        source: quote != null ? 'ws' : 'rest',
       },
     };
   }

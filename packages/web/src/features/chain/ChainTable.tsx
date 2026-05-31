@@ -138,6 +138,7 @@ interface StrikeRowProps {
   indexPrice: number | null;
   underlying: string;
   expiry: string;
+  freshnessNow: number;
 }
 
 function fmtDistPct(strike: number, indexPrice: number | null): string | null {
@@ -168,14 +169,21 @@ const StrikeRowItem = memo(function StrikeRowItem({
   indexPrice,
   underlying,
   expiry,
+  freshnessNow,
 }: StrikeRowItemPropsInternal) {
   const distLabel = fmtDistPct(strike.strike, indexPrice);
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
   const putQ =
     strike.put.bestVenue != null ? (strike.put.venues[strike.put.bestVenue] ?? null) : null;
-  const callBba = useMemo(() => bestBidAsk(strike.call, activeSet), [strike.call, activeSet]);
-  const putBba = useMemo(() => bestBidAsk(strike.put, activeSet), [strike.put, activeSet]);
+  const callBba = useMemo(
+    () => bestBidAsk(strike.call, activeSet, freshnessNow),
+    [strike.call, activeSet, freshnessNow],
+  );
+  const putBba = useMemo(
+    () => bestBidAsk(strike.put, activeSet, freshnessNow),
+    [strike.put, activeSet, freshnessNow],
+  );
   const handleToggle = useCallback(() => onToggle(strike.strike), [onToggle, strike.strike]);
 
   return (
@@ -334,6 +342,7 @@ export default function NewChainTable({
   const listRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
   const isMobile = useIsMobile();
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
 
   const toggleRow = useCallback((s: number) => {
     setExpanded((prev) => {
@@ -345,6 +354,11 @@ export default function NewChainTable({
   }, []);
 
   const activeSet = useMemo<ReadonlySet<string>>(() => new Set(activeVenues), [activeVenues]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setFreshnessNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const strikeIndexMap = useMemo(() => {
     const m = new Map<number, number>();
@@ -425,6 +439,7 @@ export default function NewChainTable({
                   activeVenues={activeVenues}
                   isExpanded={expanded.has(s.strike)}
                   onToggle={() => toggleRow(s.strike)}
+                  freshnessNow={freshnessNow}
                 />
               </div>
             );
@@ -535,6 +550,7 @@ export default function NewChainTable({
                       indexPrice={indexPrice}
                       underlying={underlying}
                       expiry={expiry}
+                      freshnessNow={freshnessNow}
                     />
                   </div>
                 );

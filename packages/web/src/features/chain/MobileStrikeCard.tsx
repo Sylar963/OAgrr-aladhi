@@ -14,6 +14,7 @@ interface MobileStrikeCardProps {
   activeVenues: string[];
   isExpanded: boolean;
   onToggle: () => void;
+  freshnessNow: number;
 }
 
 interface SideSummaryProps {
@@ -21,11 +22,12 @@ interface SideSummaryProps {
   type: 'call' | 'put';
   itm: boolean;
   venues: string[];
+  freshnessNow: number;
 }
 
-function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
+function SideSummary({ side, type, itm, venues, freshnessNow }: SideSummaryProps) {
   const bestQ = side.bestVenue != null ? (side.venues[side.bestVenue] ?? null) : null;
-  const bba = bestBidAsk(side, new Set(venues));
+  const bba = bestBidAsk(side, new Set(venues), freshnessNow);
 
   return (
     <div className={styles.side} data-type={type} data-itm={itm}>
@@ -133,6 +135,7 @@ export default function MobileStrikeCard({
   activeVenues,
   isExpanded,
   onToggle,
+  freshnessNow,
 }: MobileStrikeCardProps) {
   const callItm = indexPrice != null && strike.strike < indexPrice;
   const putItm = indexPrice != null && strike.strike > indexPrice;
@@ -155,8 +158,20 @@ export default function MobileStrikeCard({
       </button>
 
       <div className={styles.sides}>
-        <SideSummary side={strike.call} type="call" itm={callItm} venues={venues} />
-        <SideSummary side={strike.put} type="put" itm={putItm} venues={venues} />
+        <SideSummary
+          side={strike.call}
+          type="call"
+          itm={callItm}
+          venues={venues}
+          freshnessNow={freshnessNow}
+        />
+        <SideSummary
+          side={strike.put}
+          type="put"
+          itm={putItm}
+          venues={venues}
+          freshnessNow={freshnessNow}
+        />
       </div>
 
       {isExpanded && (

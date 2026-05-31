@@ -54,6 +54,25 @@ describe('quote selection', () => {
     expect(isActionableQuote(quote({ ask: 10 }), 1_000_000)).toBe(true);
   });
 
+  it('ignores zero-price placeholders when selecting best bid and ask', () => {
+    const now = 1_000_000;
+    const side: EnrichedSide = {
+      bestIv: null,
+      bestVenue: null,
+      venues: {
+        bybit: quote({ bid: 95, ask: 0, asOfMs: now }),
+        deribit: quote({ bid: 0, ask: 110, asOfMs: now }),
+      },
+    };
+
+    expect(bestBidAsk(side, new Set(['bybit', 'deribit']), now)).toEqual({
+      bid: 95,
+      ask: 110,
+      bidVenue: 'bybit',
+      askVenue: 'deribit',
+    });
+  });
+
   it('computes spread from cross-venue best bid and ask', () => {
     expect(
       crossVenueSpreadPct({ bid: 100, ask: 110, bidVenue: 'deribit', askVenue: 'bybit' }),

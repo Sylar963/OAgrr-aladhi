@@ -28,12 +28,12 @@ export function bestBidAsk(
   for (const [venueId, quote] of Object.entries(side.venues)) {
     if (!activeSet.has(venueId) || !quote || !isActionableQuote(quote, now)) continue;
 
-    if (quote.bid != null && (bestBid == null || quote.bid > bestBid)) {
+    if (quote.bid != null && quote.bid > 0 && (bestBid == null || quote.bid > bestBid)) {
       bestBid = quote.bid;
       bestBidVenue = venueId;
     }
 
-    if (quote.ask != null && (bestAsk == null || quote.ask < bestAsk)) {
+    if (quote.ask != null && quote.ask > 0 && (bestAsk == null || quote.ask < bestAsk)) {
       bestAsk = quote.ask;
       bestAskVenue = venueId;
     }

@@ -41,3 +41,12 @@ export function bestBidAsk(
 
   return { bid: bestBid, ask: bestAsk, bidVenue: bestBidVenue, askVenue: bestAskVenue };
 }
+
+export function crossVenueSpreadPct(bba: BestBidAskResult): number | null {
+  if (bba.bid == null || bba.ask == null || bba.bid <= 0 || bba.ask <= 0 || bba.ask < bba.bid) {
+    return null;
+  }
+
+  const mid = (bba.bid + bba.ask) / 2;
+  return ((bba.ask - bba.bid) / mid) * 100;
+}

@@ -3,7 +3,7 @@ import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
-import { bestBidAsk } from './quote-selection';
+import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
 import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
 
@@ -52,7 +52,7 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>SPR</span>
-          <SpreadPill spreadPct={bestQ?.spreadPct ?? null} />
+          <SpreadPill spreadPct={crossVenueSpreadPct(bba)} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>ASK</span>

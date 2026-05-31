@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { EnrichedSide, VenueQuote } from '@shared/enriched';
 
-import { bestBidAsk, isActionableQuote } from './quote-selection';
+import { bestBidAsk, crossVenueSpreadPct, isActionableQuote } from './quote-selection';
 
 function quote(overrides: Partial<VenueQuote>): VenueQuote {
   return {
@@ -52,5 +52,16 @@ describe('quote selection', () => {
 
   it('treats missing timestamps as actionable for backward-compatible payloads', () => {
     expect(isActionableQuote(quote({ ask: 10 }), 1_000_000)).toBe(true);
+  });
+
+  it('computes spread from cross-venue best bid and ask', () => {
+    expect(
+      crossVenueSpreadPct({ bid: 100, ask: 110, bidVenue: 'deribit', askVenue: 'bybit' }),
+    ).toBeCloseTo(9.5238, 4);
+  });
+
+  it('returns null for invalid cross-venue spreads', () => {
+    expect(crossVenueSpreadPct({ bid: 100, ask: 90, bidVenue: 'deribit', askVenue: 'bybit' })).toBeNull();
+    expect(crossVenueSpreadPct({ bid: null, ask: 110, bidVenue: null, askVenue: 'bybit' })).toBeNull();
   });
 });

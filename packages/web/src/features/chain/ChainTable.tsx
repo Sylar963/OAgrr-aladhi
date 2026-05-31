@@ -13,7 +13,7 @@ import { FlashingPrice } from './FlashingPrice';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
 import { computeAtmConsensus } from './forward-analysis';
-import { bestBidAsk } from './quote-selection';
+import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
 import styles from './ChainTable.module.css';
 
 const GAMMA_TIP =
@@ -223,7 +223,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           title="Sell call at best bid"
         />
         <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
-          <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
+          <SpreadPill spreadPct={crossVenueSpreadPct(callBba)} />
         </div>
         <PriceCell
           value={callBba.ask}
@@ -268,7 +268,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           title="Sell put at best bid"
         />
         <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
-          <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
+          <SpreadPill spreadPct={crossVenueSpreadPct(putBba)} />
         </div>
         <PriceCell
           value={putBba.ask}

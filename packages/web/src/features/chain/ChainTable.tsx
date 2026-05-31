@@ -9,6 +9,7 @@ import { IvChip, SpreadPill, EmptyState } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
 import { useIsMobile } from '@hooks/useIsMobile';
 import ExpandedRow from './ExpandedRow';
+import { FlashingPrice } from './FlashingPrice';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
 import { computeAtmConsensus } from './forward-analysis';
@@ -116,7 +117,7 @@ function PriceCell({
 
   return (
     <span className={className} onClick={onClick} role="button" title={title}>
-      <span>{fmtUsd(value)}</span>
+      <FlashingPrice text={fmtUsd(value)} />
       {meta?.logo ? <img src={meta.logo} alt="" className={styles.priceVenueLogo} /> : null}
     </span>
   );

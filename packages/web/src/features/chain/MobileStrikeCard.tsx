@@ -4,6 +4,7 @@ import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
 import { bestBidAsk } from './quote-selection';
+import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
 
 interface MobileStrikeCardProps {
@@ -47,7 +48,7 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
       <div className={styles.sideRow}>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>BID</span>
-          <span className={styles.metricBid}>{fmtUsd(bba.bid)}</span>
+          <FlashingPrice text={fmtUsd(bba.bid)} className={styles.metricBid} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>SPR</span>
@@ -55,7 +56,7 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>ASK</span>
-          <span className={styles.metricAsk}>{fmtUsd(bba.ask)}</span>
+          <FlashingPrice text={fmtUsd(bba.ask)} className={styles.metricAsk} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>IV</span>

@@ -4,7 +4,7 @@ import { feedLogger } from '../utils/logger.js';
 
 const log = feedLogger('spot-candles');
 
-export type SpotCandleCurrency = 'BTC' | 'ETH';
+export type SpotCandleCurrency = 'BTC' | 'ETH' | 'HYPE';
 export type SpotCandleResolutionSec = 60 | 300 | 900 | 1800 | 3600 | 14400 | 86400;
 
 export interface SpotCandle {
@@ -28,6 +28,19 @@ const ResponseSchema = z.object({
   result: ChartDataSchema,
 });
 
+// Hyperliquid /info candleSnapshot returns a flat array; OHLC arrive as
+// strings ("71.172"), so coerce — z.number() would reject them and the parse
+// would silently yield no candles. t (open time) is already in ms; the unused
+// keys (T, s, i, v, n) are stripped.
+const HyperliquidCandleSchema = z.object({
+  t: z.number(),
+  o: z.coerce.number(),
+  h: z.coerce.number(),
+  l: z.coerce.number(),
+  c: z.coerce.number(),
+});
+const HyperliquidCandleResponseSchema = z.array(HyperliquidCandleSchema);
+
 const RESOLUTION_TO_DERIBIT: Record<SpotCandleResolutionSec, string> = {
   60: '1',
   300: '5',
@@ -47,6 +60,20 @@ const RESOLUTION_TO_DERIBIT: Record<SpotCandleResolutionSec, string> = {
 const AGGREGATE_4H_SEC: SpotCandleResolutionSec = 14400;
 const AGGREGATE_4H_SOURCE_SEC: SpotCandleResolutionSec = 3600;
 const FOUR_HOUR_MS = AGGREGATE_4H_SEC * 1000;
+
+const HYPERLIQUID_REST_URL = 'https://api.hyperliquid.xyz';
+
+// Hyperliquid lists 4h natively, so unlike Deribit the 14400 tier maps straight
+// to '4h' and needs no downsampling.
+const RESOLUTION_TO_HYPERLIQUID: Record<SpotCandleResolutionSec, string> = {
+  60: '1m',
+  300: '5m',
+  900: '15m',
+  1800: '30m',
+  3600: '1h',
+  14400: '4h',
+  86400: '1d',
+};
 
 interface CacheEntry {
   fetchedAt: number;
@@ -91,11 +118,11 @@ export function downsampleCandles(candles: SpotCandle[], bucketMs: number): Spot
 }
 
 /**
- * On-demand fetcher for Deribit perpetual klines used as a spot proxy for
- * BTC/ETH on the Builder V2 chart. The frontend layers live chain spot updates
- * onto these historical bars, so this service only needs to keep the history
- * window reasonably fresh per resolution tier. Deribit only lists BTC/ETH
- * perps — SOL is unsupported here and the caller must handle it as an empty
+ * On-demand fetcher for perpetual klines used as a spot proxy on the chart:
+ * Deribit for BTC/ETH, Hyperliquid for HYPE. The frontend layers live chain
+ * spot updates onto these historical bars, so this service only needs to keep
+ * the history window reasonably fresh per resolution tier. Other underlyings
+ * (e.g. SOL) are unsupported here and the caller must handle them as an empty
  * result.
  */
 export class SpotCandleService {
@@ -128,7 +155,10 @@ export class SpotCandleService {
     }
 
     try {
-      const candles = await this.fetchFromDeribit(currency, resolutionSec, buckets);
+      const candles =
+        currency === 'HYPE'
+          ? await this.fetchFromHyperliquid(currency, resolutionSec, buckets)
+          : await this.fetchFromDeribit(currency, resolutionSec, buckets);
       // Don't cache empty results: a transient Deribit error or schema drift
       // would otherwise lock every requester into "no data" for the full TTL.
       if (candles.length > 0) {
@@ -242,6 +272,91 @@ export class SpotCandleService {
         log.warn(
           { currency, resolutionSec, attempt: attempt + 1, err: String(lastErr) },
           'deribit klines attempt failed, retrying',
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+
+    throw lastErr;
+  }
+
+  private async fetchFromHyperliquid(
+    currency: SpotCandleCurrency,
+    resolutionSec: SpotCandleResolutionSec,
+    buckets: number,
+  ): Promise<SpotCandle[]> {
+    const end = Date.now();
+    const start = end - resolutionSec * 1000 * buckets;
+    const body = JSON.stringify({
+      type: 'candleSnapshot',
+      req: {
+        coin: currency,
+        interval: RESOLUTION_TO_HYPERLIQUID[resolutionSec],
+        startTime: start,
+        endTime: end,
+      },
+    });
+
+    const url = `${HYPERLIQUID_REST_URL}/info`;
+    const res = await this.fetchHyperliquidWithRetry(url, body, currency, resolutionSec);
+
+    const json: unknown = await res.json();
+    const parsed = HyperliquidCandleResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      log.warn({ currency, resolutionSec, issue: parsed.error.message }, 'hyperliquid klines parse failed');
+      return [];
+    }
+
+    return parsed.data.map((k) => ({
+      timestamp: k.t,
+      open: k.o,
+      high: k.h,
+      low: k.l,
+      close: k.c,
+    }));
+  }
+
+  /**
+   * Bounded retry around the Hyperliquid POST, mirroring fetchDeribitWithRetry
+   * (3 attempts, short per-attempt timeout, retry on network/timeout/5xx/429,
+   * fail fast on other 4xx). Keeps the HYPE path as resilient as the Deribit
+   * one so a transient blip on a cold cache doesn't surface as a 502.
+   */
+  private async fetchHyperliquidWithRetry(
+    url: string,
+    body: string,
+    currency: SpotCandleCurrency,
+    resolutionSec: SpotCandleResolutionSec,
+  ): Promise<Response> {
+    const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total
+    let lastErr: unknown;
+
+    for (let attempt = 0; attempt < backoffsMs.length + 1; attempt++) {
+      let res: Response | null = null;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body,
+          signal: AbortSignal.timeout(4_000),
+        });
+      } catch (err) {
+        lastErr = err;
+      }
+
+      if (res) {
+        if (res.ok) return res;
+        if (res.status < 500 && res.status !== 429) {
+          throw new Error(`Hyperliquid klines ${res.status}`);
+        }
+        lastErr = new Error(`Hyperliquid klines ${res.status}`);
+      }
+
+      if (attempt < backoffsMs.length) {
+        const delay = backoffsMs[attempt]! + Math.random() * 100; // jitter
+        log.warn(
+          { currency, resolutionSec, attempt: attempt + 1, err: String(lastErr) },
+          'hyperliquid klines attempt failed, retrying',
         );
         await new Promise((r) => setTimeout(r, delay));
       }

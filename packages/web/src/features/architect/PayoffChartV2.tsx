@@ -309,7 +309,7 @@ export default function PayoffChartV2({
   if (!available) {
     return (
       <div className={styles.chartV2EmptyState}>
-        <div className={styles.chartV2EmptyTitle}>V2 candles cover BTC and ETH only</div>
+        <div className={styles.chartV2EmptyTitle}>V2 candles cover BTC, ETH, and HYPE only</div>
         <div className={styles.chartV2EmptyDetail}>
           SOL spot history isn’t available on Deribit. The V1 expiry view stays accurate.
         </div>

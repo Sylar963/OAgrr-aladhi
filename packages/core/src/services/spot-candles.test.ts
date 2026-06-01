@@ -150,3 +150,95 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
     expect(downsampleCandles([], 14_400_000)).toEqual([]);
   });
 });
+
+describe('SpotCandleService — Hyperliquid (HYPE)', () => {
+  let svc: SpotCandleService;
+  const fetchSpy = vi.fn();
+
+  beforeEach(() => {
+    svc = new SpotCandleService();
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+  });
+  afterEach(() => {
+    svc.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  // Hyperliquid sends a flat array with OHLC as strings — mirror that exactly
+  // so the test fails if the schema ever stops coercing.
+  function hyperliquidResponse(
+    rows: Array<{ t: number; o: number; h: number; l: number; c: number }>,
+  ): Response {
+    const body = rows.map((r) => ({
+      t: r.t,
+      T: r.t + 3_599_999,
+      s: 'HYPE',
+      i: '1h',
+      o: String(r.o),
+      h: String(r.h),
+      l: String(r.l),
+      c: String(r.c),
+      v: '123.4',
+      n: 42,
+    }));
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('coerces Hyperliquid string OHLC into numbers and maps t→timestamp', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      hyperliquidResponse([
+        { t: 1_700_000_000_000, o: 71.1, h: 72.5, l: 70.7, c: 70.9 },
+        { t: 1_700_003_600_000, o: 70.9, h: 73.0, l: 70.4, c: 72.2 },
+      ]),
+    );
+
+    const candles = await svc.getCandles('HYPE', 3600, 24);
+
+    expect(candles).toEqual([
+      { timestamp: 1_700_000_000_000, open: 71.1, high: 72.5, low: 70.7, close: 70.9 },
+      { timestamp: 1_700_003_600_000, open: 70.9, high: 73.0, low: 70.4, close: 72.2 },
+    ]);
+    expect(typeof candles[0]!.open).toBe('number');
+
+    // Hits Hyperliquid's POST /info, not Deribit.
+    const [url, init] = fetchSpy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('https://api.hyperliquid.xyz/info');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      type: 'candleSnapshot',
+      req: { coin: 'HYPE', interval: '1h' },
+    });
+  });
+
+  it('requests the native 4h interval for the 14400 tier (no downsampling)', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      hyperliquidResponse([
+        { t: 1_700_000_000_000, o: 10, h: 15, l: 9, c: 11 },
+        { t: 1_700_014_400_000, o: 11, h: 16, l: 8, c: 12 },
+      ]),
+    );
+
+    const candles = await svc.getCandles('HYPE', 14400, 2);
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(init.body as string).req.interval).toBe('4h');
+    // Bars pass through 1:1 — no 4h bucket collapsing like the Deribit path.
+    expect(candles).toHaveLength(2);
+  });
+
+  it('retries a transient Hyperliquid failure then succeeds', async () => {
+    fetchSpy
+      .mockRejectedValueOnce(new Error('network blip'))
+      .mockResolvedValueOnce(
+        hyperliquidResponse([{ t: 1_700_000_000_000, o: 1, h: 1, l: 1, c: 1 }]),
+      );
+
+    const candles = await svc.getCandles('HYPE', 3600, 24);
+    expect(candles).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+});

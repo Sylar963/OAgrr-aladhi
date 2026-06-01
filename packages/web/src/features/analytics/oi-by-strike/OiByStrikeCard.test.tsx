@@ -108,4 +108,12 @@ describe('OiByStrikeCard', () => {
     fireEvent.click(v2Button);
     expect(screen.queryByRole('button', { name: 'Calls' })).toBeNull();
   });
+
+  it('enables the V2 toggle for HYPE', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="HYPE" />));
+    const v2Button = screen.getByRole('button', { name: 'V2' });
+    expect(v2Button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(v2Button);
+    expect(screen.getByRole('button', { name: 'Calls' })).toBeTruthy();
+  });
 });

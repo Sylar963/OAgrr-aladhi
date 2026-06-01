@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasUsableSpotCandles } from './queries';
+import { hasUsableSpotCandles, isSpotCandleCurrency } from './queries';
 
 describe('hasUsableSpotCandles', () => {
   it('returns true when the response has candle history', () => {
@@ -25,5 +25,14 @@ describe('hasUsableSpotCandles', () => {
         candles: [],
       }),
     ).toBe(false);
+  });
+});
+
+describe('isSpotCandleCurrency', () => {
+  it('recognizes BTC, ETH, and HYPE; rejects others', () => {
+    expect(isSpotCandleCurrency('BTC')).toBe(true);
+    expect(isSpotCandleCurrency('ETH')).toBe(true);
+    expect(isSpotCandleCurrency('HYPE')).toBe(true);
+    expect(isSpotCandleCurrency('SOL')).toBe(false);
   });
 });

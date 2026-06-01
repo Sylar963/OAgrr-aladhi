@@ -17,7 +17,7 @@ export interface SpotCandlesResponse {
   candles: SpotCandle[];
 }
 
-export const SPOT_CANDLE_CURRENCIES = ['BTC', 'ETH'] as const;
+export const SPOT_CANDLE_CURRENCIES = ['BTC', 'ETH', 'HYPE'] as const;
 export type SpotCandleCurrency = (typeof SPOT_CANDLE_CURRENCIES)[number];
 
 export function isSpotCandleCurrency(value: string): value is SpotCandleCurrency {

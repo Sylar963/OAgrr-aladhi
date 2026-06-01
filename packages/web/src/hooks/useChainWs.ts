@@ -73,6 +73,10 @@ function nextSubId(): string {
   return `sub-${++subIdCounter}-${Date.now()}`;
 }
 
+function requestKey(underlying: string, expiry: string, venues: string[]): string {
+  return `${underlying}\u0000${expiry}\u0000${[...venues].sort().join(',')}`;
+}
+
 function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 15_000);
 }
@@ -220,6 +224,7 @@ export function useChainWs({
   const attemptRef = useRef(0);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSubIdRef = useRef<string | null>(null);
+  const lastSubscribeRequestKeyRef = useRef<string | null>(null);
 
   const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
   storeRef.current ??= createStatusStore();
@@ -233,8 +238,9 @@ export function useChainWs({
   // (deep OTM, all-null venues) keep their ref instead of getting a fresh one.
   const lastSnapshotRef = useRef<EnrichedChainResponse | null>(null);
 
-  const paramsRef = useRef({ underlying, expiry, venues });
-  paramsRef.current = { underlying, expiry, venues };
+  const currentRequestKey = requestKey(underlying, expiry, venues);
+  const paramsRef = useRef({ underlying, expiry, venues, requestKey: currentRequestKey });
+  paramsRef.current = { underlying, expiry, venues, requestKey: currentRequestKey };
 
   const flushDeltas = useCallback(() => {
     rafRef.current = null;
@@ -282,8 +288,9 @@ export function useChainWs({
   }, [flushDeltas]);
 
   const sendSubscribe = useCallback((ws: WebSocket) => {
-    const { underlying: u, expiry: e, venues: v } = paramsRef.current;
+    const { underlying: u, expiry: e, venues: v, requestKey: key } = paramsRef.current;
     if (!u || !e) return;
+    if (lastSubscribeRequestKeyRef.current === key) return;
 
     const subId = nextSubId();
     activeSubIdRef.current = subId;
@@ -295,6 +302,7 @@ export function useChainWs({
         request: { underlying: u, expiry: e, venues: v },
       }),
     );
+    lastSubscribeRequestKeyRef.current = key;
   }, []);
 
   const handleMessage = useCallback(
@@ -423,6 +431,7 @@ export function useChainWs({
 
     const ws = new WebSocket(chainWsUrl);
     wsRef.current = ws;
+    lastSubscribeRequestKeyRef.current = null;
     store.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
@@ -469,6 +478,7 @@ export function useChainWs({
     pendingRef.current = [];
     attemptRef.current = 0;
     activeSubIdRef.current = null;
+    lastSubscribeRequestKeyRef.current = null;
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close(1000, 'unmount');
@@ -502,7 +512,7 @@ export function useChainWs({
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !underlying || !expiry) return;
     sendSubscribe(ws);
-  }, [underlying, expiry, venues, sendSubscribe]);
+  }, [underlying, expiry, currentRequestKey, sendSubscribe]);
 
   const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get);
 

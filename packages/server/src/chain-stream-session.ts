@@ -64,7 +64,7 @@ export class ChainStreamSession {
 
   constructor(
     private readonly socket: SessionSocket,
-    readonly subscriptionId: string,
+    private subscriptionId: string,
     readonly request: WsSubscriptionRequest,
     private readonly log?: SessionLogger,
   ) {}
@@ -121,6 +121,29 @@ export class ChainStreamSession {
     this.releaseEngine = null;
     if (release != null) {
       await release();
+    }
+  }
+
+  replaceSubscription(subscriptionId: string): void {
+    if (this.disposed) return;
+    this.subscriptionId = subscriptionId;
+    this.lastSentSeq = 0;
+    this.lastVenueStatusByVenue.clear();
+
+    this.sendMessage('subscribed', {
+      type: 'subscribed',
+      subscriptionId: this.subscriptionId,
+      request: this.runtime?.getActiveRequest() ?? this.request,
+      serverTime: Date.now(),
+      failedVenues:
+        this.runtime != null && this.runtime.getFailedVenues().length > 0
+          ? this.runtime.getFailedVenues()
+          : undefined,
+    });
+
+    const snapshot = this.runtime?.getSnapshot();
+    if (snapshot != null) {
+      this.sendEngineEvent(snapshot);
     }
   }
 

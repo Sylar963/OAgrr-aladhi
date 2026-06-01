@@ -241,6 +241,39 @@ describe('useChainWs', () => {
     expect(result.current.connectionState).not.toBe('closed');
   });
 
+  it('does not resend subscribe for equivalent request params', async () => {
+    const { rerender } = renderHook(
+      ({ venues }) =>
+        useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues }),
+      { wrapper, initialProps: { venues: ['deribit'] } },
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+    expect(ws.sent).toHaveLength(1);
+
+    rerender({ venues: ['deribit'] });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(ws.sent).toHaveLength(1);
+  });
+
+  it('resends subscribe when effective request params change', async () => {
+    const { rerender } = renderHook(
+      ({ venues }) =>
+        useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues }),
+      { wrapper, initialProps: { venues: ['deribit'] } },
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+
+    rerender({ venues: ['deribit', 'okx'] });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(ws.sent).toHaveLength(2);
+  });
+
   it('sets connectionState to live on subscribed message', async () => {
     const { hookResult, ws, subId } = await renderAndConnect();
     await act(() => {

@@ -17,6 +17,10 @@ function send(socket: { readyState: number; send: (data: string) => void }, msg:
   }
 }
 
+function requestKey(request: WsSubscriptionRequest): string {
+  return `${request.underlying}\u0000${request.expiry}\u0000${[...request.venues].sort().join(',')}`;
+}
+
 export async function wsChainRoute(app: FastifyInstance) {
   chainEngines.start();
 
@@ -37,6 +41,7 @@ export async function wsChainRoute(app: FastifyInstance) {
 
     let session: ChainStreamSession | null = null;
     let subscribeVersion = 0;
+    let activeRequestKey: string | null = null;
 
     async function disposeSession(current: ChainStreamSession | null): Promise<void> {
       if (current == null) return;
@@ -44,9 +49,16 @@ export async function wsChainRoute(app: FastifyInstance) {
     }
 
     async function handleSubscribe(subscriptionId: string, request: WsSubscriptionRequest) {
+      const nextRequestKey = requestKey(request);
+      if (session != null && activeRequestKey === nextRequestKey) {
+        session.replaceSubscription(subscriptionId);
+        return;
+      }
+
       const version = ++subscribeVersion;
       const previous = session;
       session = null;
+      activeRequestKey = null;
       await disposeSession(previous);
 
       if (version !== subscribeVersion) return;
@@ -70,6 +82,7 @@ export async function wsChainRoute(app: FastifyInstance) {
         },
         'subscribed',
       );
+      activeRequestKey = nextRequestKey;
     }
 
     // ── Client messages ───────────────────────────────────────────
@@ -108,6 +121,7 @@ export async function wsChainRoute(app: FastifyInstance) {
         subscribeVersion += 1;
         void disposeSession(session);
         session = null;
+        activeRequestKey = null;
       }
     });
 
@@ -115,6 +129,7 @@ export async function wsChainRoute(app: FastifyInstance) {
       subscribeVersion += 1;
       void disposeSession(session);
       session = null;
+      activeRequestKey = null;
       log.info(
         {
           closeCode: code,

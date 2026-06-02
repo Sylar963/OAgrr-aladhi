@@ -181,6 +181,39 @@ export const CoincallHeartbeatAckSchema = z.object({
 });
 export type CoincallHeartbeatAck = z.infer<typeof CoincallHeartbeatAckSchema>;
 
+// ── REST: GET /open/option/get/v1/{index}?endTime={ms} (bulk chain) ──
+// Fixture: option_en.md (## Get Option). Envelope unwrapped to `data`: rows of
+// { strike, callOption, putOption }. Each leg carries openInterest (in the base
+// currency) and a cumulative `volume`. OI is the field of record for analytics:
+// the WS market channels stream 0 for it, so this is the authoritative source.
+export const CoincallRestLegSchema = z.object({
+  symbol: z.string(),
+  openInterest: NullableNumericLike.optional(),
+  volume: NullableNumericLike.optional(),
+});
+export type CoincallRestLeg = z.infer<typeof CoincallRestLegSchema>;
+
+export const CoincallChainRowSchema = z.object({
+  strike: NullableNumericLike.optional(),
+  callOption: CoincallRestLegSchema.nullish(),
+  putOption: CoincallRestLegSchema.nullish(),
+});
+export const CoincallChainResponseSchema = z.array(CoincallChainRowSchema);
+export type CoincallChainResponse = z.infer<typeof CoincallChainResponseSchema>;
+
+// ── REST: GET /open/option/detail/v1/{symbol} (per-contract) ──
+// Fixture: option_en.md (## Get Option Details). The only Coincall endpoint that
+// exposes 24h volume and its USD value (volumeUsd24h); also returns underlyingPrice
+// so OI→USD has a fallback when the WS underlying tick hasn't landed yet.
+export const CoincallOptionDetailSchema = z.object({
+  symbol: z.string(),
+  openInterest: NullableNumericLike.optional(),
+  volume24h: NullableNumericLike.optional(),
+  volumeUsd24h: NullableNumericLike.optional(),
+  underlyingPrice: NullableNumericLike.optional(),
+});
+export type CoincallOptionDetail = z.infer<typeof CoincallOptionDetailSchema>;
+
 // ── Native symbol regex ────────────────────────────────────────
 // Coincall options symbols: {base}USD-{DDMMMYY}-{strike}-{C|P}
 // Examples: BTCUSD-14SEP23-22500-C, ETHUSD-27JUN25-3000-P

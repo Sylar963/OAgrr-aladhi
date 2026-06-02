@@ -1,14 +1,18 @@
 import {
   CoincallBsInfoMessageSchema,
+  CoincallChainResponseSchema,
   CoincallHeartbeatAckSchema,
   CoincallInstrumentsResponseSchema,
+  CoincallOptionDetailSchema,
   CoincallOrderBookMessageSchema,
   CoincallPublicConfigSchema,
   CoincallTOptionMessageSchema,
   CoincallTimeSchema,
   type CoincallBsInfoMessage,
+  type CoincallChainResponse,
   type CoincallHeartbeatAck,
   type CoincallInstrumentsResponse,
+  type CoincallOptionDetail,
   type CoincallOrderBookMessage,
   type CoincallPublicConfig,
   type CoincallTOptionMessage,
@@ -46,5 +50,15 @@ export function parseCoincallOrderBookMessage(input: unknown): CoincallOrderBook
 
 export function parseCoincallHeartbeatAck(input: unknown): CoincallHeartbeatAck | null {
   const parsed = CoincallHeartbeatAckSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseCoincallChainResponse(input: unknown): CoincallChainResponse | null {
+  const parsed = CoincallChainResponseSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseCoincallOptionDetail(input: unknown): CoincallOptionDetail | null {
+  const parsed = CoincallOptionDetailSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }

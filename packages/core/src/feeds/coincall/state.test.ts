@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_GREEKS } from '../../core/types.js';
 import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
 import {
+  applyCoincallRestStats,
   buildCoincallInstrument,
   mergeCoincallBsInfo,
   mergeCoincallOrderBook,
@@ -374,5 +375,77 @@ describe('mergeCoincallTOption', () => {
     expect(q.askPrice).toBeCloseTo(ask, 6);
     expect(q.greeks.bidIv).toBeCloseTo(bidSigma, 3);
     expect(q.greeks.askIv).toBeCloseTo(askSigma, 3);
+  });
+});
+
+describe('Coincall REST OI / volume backfill', () => {
+  it('keeps a REST-backfilled OI/volume when the WS market feed reports 0', () => {
+    const inst = testInstrument();
+    const previous: LiveQuote = {
+      ...emptyQuote(),
+      openInterest: 1015,
+      volume24h: 17,
+      volume24hUsd: 1246,
+      timestamp: 1,
+    };
+    const q = mergeCoincallBsInfo(
+      { s: inst.exchangeSymbol, mp: 5, oi: 0, v24: 0, uv24: 0, ts: 2 },
+      inst,
+      previous,
+      emptyQuote(),
+    );
+    // WS price still lands, but its zero OI/volume must not wipe the REST figures.
+    expect(q.markPrice).toBe(5);
+    expect(q.openInterest).toBe(1015);
+    expect(q.volume24h).toBe(17);
+    expect(q.volume24hUsd).toBe(1246);
+  });
+
+  it('overlays OI/volume, refreshes the timestamp, and preserves the live quote', () => {
+    const base: LiveQuote = {
+      ...emptyQuote(),
+      bidPrice: 11,
+      askPrice: 13,
+      underlyingPrice: 74.5,
+      greeks: { ...EMPTY_GREEKS, delta: 0.5 },
+      timestamp: 100,
+    };
+    const q = applyCoincallRestStats(
+      { openInterest: 1015, volume24h: 17, volume24hUsd: 1246.3, underlyingPrice: 73 },
+      base,
+      emptyQuote(),
+      500,
+    );
+    expect(q.openInterest).toBe(1015);
+    expect(q.volume24h).toBe(17);
+    expect(q.volume24hUsd).toBeCloseTo(1246.3, 3);
+    expect(q.bidPrice).toBe(11);
+    expect(q.askPrice).toBe(13);
+    expect(q.greeks.delta).toBe(0.5);
+    expect(q.underlyingPrice).toBe(74.5); // WS underlying wins over REST
+    expect(q.timestamp).toBe(500);
+  });
+
+  it('uses the REST underlying price only when the WS has none', () => {
+    const q = applyCoincallRestStats(
+      { openInterest: 5, volume24h: null, volume24hUsd: null, underlyingPrice: 73 },
+      undefined,
+      emptyQuote(),
+      500,
+    );
+    expect(q.underlyingPrice).toBe(73);
+    expect(q.openInterest).toBe(5);
+  });
+
+  it('leaves a field unchanged when its REST stat is null', () => {
+    const base: LiveQuote = { ...emptyQuote(), openInterest: 42, volume24h: 7, timestamp: 100 };
+    const q = applyCoincallRestStats(
+      { openInterest: null, volume24h: null, volume24hUsd: null, underlyingPrice: null },
+      base,
+      emptyQuote(),
+      500,
+    );
+    expect(q.openInterest).toBe(42);
+    expect(q.volume24h).toBe(7);
   });
 });

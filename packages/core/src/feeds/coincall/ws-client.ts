@@ -4,6 +4,8 @@ import {
   COINCALL_CONFIG,
   COINCALL_INSTRUMENTS,
   COINCALL_MARKET_WS_URL,
+  COINCALL_OPTION_CHAIN,
+  COINCALL_OPTION_DETAIL,
   COINCALL_REST_BASE_URL,
   COINCALL_TIME,
 } from '../shared/endpoints.js';
@@ -13,7 +15,9 @@ import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
   parseCoincallBsInfoMessage,
+  parseCoincallChainResponse,
   parseCoincallInstruments,
+  parseCoincallOptionDetail,
   parseCoincallOrderBookMessage,
   parseCoincallPublicConfig,
   parseCoincallTOptionMessage,
@@ -39,12 +43,17 @@ import {
   resetCoincallSubscriptionState,
 } from './planner.js';
 import {
+  applyCoincallRestStats,
   buildCoincallInstrument,
   mergeCoincallBsInfo,
   mergeCoincallOrderBook,
   mergeCoincallTOption,
 } from './state.js';
-import type { CoincallOptionConfigEntry } from './types.js';
+import type {
+  CoincallChainResponse,
+  CoincallOptionConfigEntry,
+  CoincallOptionDetail,
+} from './types.js';
 
 const log = feedLogger('coincall');
 
@@ -79,6 +88,11 @@ function shouldLogValidationError(key: string): boolean {
 const COINCALL_PING_INTERVAL_MS = 15_000;
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+// OI / 24h volume are REST-only on Coincall (the WS streams 0). They drift
+// slowly, so a 60s backfill keeps the by-venue analytics accurate without
+// hammering a small venue. One bulk chain call per subscribed expiry, plus a
+// per-symbol detail call for the few legs that actually carry activity.
+const OI_REFRESH_INTERVAL_MS = 60 * 1000;
 
 // Full Coincall optionConfig (21 pairs). Long-tail pairs (ORDI/KAS/MNT/etc.)
 // will be CoinCall-only rows in cross-venue chains. The normalization pipeline
@@ -174,6 +188,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   private wsClient: TopicWsClient | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private oiTimer: ReturnType<typeof setInterval> | null = null;
+  private oiRefreshInFlight = false;
 
   private readonly subscriptions = createCoincallSubscriptionState();
   private optionConfig: Record<string, CoincallOptionConfigEntry> = {};
@@ -247,6 +263,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
       void this.refreshHealth();
     }, HEALTH_CHECK_INTERVAL_MS);
     void this.refreshHealth();
+
+    this.oiTimer = setInterval(() => {
+      void this.refreshOpenInterest();
+    }, OI_REFRESH_INTERVAL_MS);
 
     return instruments;
   }
@@ -589,6 +609,114 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     }
   }
 
+  private async fetchCoincallChain(
+    pairRoot: string,
+    expiryTs: number,
+  ): Promise<CoincallChainResponse | null> {
+    const data = await this.fetchApi(`${COINCALL_OPTION_CHAIN}/${pairRoot}?endTime=${expiryTs}`);
+    return parseCoincallChainResponse(data);
+  }
+
+  private async fetchCoincallDetail(symbol: string): Promise<CoincallOptionDetail | null> {
+    const data = await this.fetchApi(`${COINCALL_OPTION_DETAIL}/${encodeURIComponent(symbol)}`);
+    return parseCoincallOptionDetail(data);
+  }
+
+  /**
+   * Coincall's WS market channels (bsInfo/tOption) stream 0 for open interest and
+   * 24h volume, so the live chain shows none. The bulk REST chain endpoint carries
+   * the real per-leg OI; the per-symbol detail endpoint additionally carries 24h
+   * volume. This periodically overlays both onto the subscribed quotes — a pure
+   * read-only enricher that never touches transport / subscription / health state.
+   */
+  private async refreshOpenInterest(): Promise<void> {
+    // A slow venue must not let the 60s cycles pile up on top of each other.
+    if (this.oiRefreshInFlight) return;
+    this.oiRefreshInFlight = true;
+    let chainFailures = 0;
+    let detailFailures = 0;
+    try {
+      for (const key of [...this.subscriptions.tOptionKeys]) {
+        const sep = key.lastIndexOf(':');
+        if (sep < 0) continue;
+        const pairRoot = key.slice(0, sep);
+        const expiryTs = Number(key.slice(sep + 1));
+        if (!Number.isFinite(expiryTs)) continue;
+
+        let rows: CoincallChainResponse | null;
+        try {
+          rows = await this.fetchCoincallChain(pairRoot, expiryTs);
+        } catch (err: unknown) {
+          chainFailures++;
+          log.debug({ pairRoot, expiryTs, err: String(err) }, 'OI backfill: chain fetch failed');
+          continue;
+        }
+        if (rows == null) continue;
+
+        const now = Date.now();
+        const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
+        const activeSymbols: string[] = [];
+
+        for (const row of rows) {
+          for (const leg of [row.callOption, row.putOption]) {
+            if (leg == null || !this.instrumentMap.has(leg.symbol)) continue;
+            const oi = leg.openInterest ?? null;
+            if ((oi ?? 0) > 0 || (leg.volume ?? 0) > 0) activeSymbols.push(leg.symbol);
+
+            const previous = this.quoteStore.get(leg.symbol);
+            // Skip unchanged OI so we don't re-emit deltas for the (many) empty legs.
+            if ((oi ?? 0) === (previous?.openInterest ?? 0)) continue;
+            updates.push({
+              exchangeSymbol: leg.symbol,
+              quote: applyCoincallRestStats(
+                { openInterest: oi, volume24h: null, volume24hUsd: null, underlyingPrice: null },
+                previous,
+                this.emptyQuote(),
+                now,
+              ),
+            });
+          }
+        }
+        if (updates.length > 0) this.emitQuoteUpdates(updates);
+
+        // 24h volume lives only on the per-symbol detail endpoint — fetch it for the
+        // handful of legs that actually have OI or recent trades.
+        for (const symbol of activeSymbols) {
+          let detail: CoincallOptionDetail | null;
+          try {
+            detail = await this.fetchCoincallDetail(symbol);
+          } catch (err: unknown) {
+            detailFailures++;
+            log.debug({ symbol, err: String(err) }, 'OI backfill: detail fetch failed');
+            continue;
+          }
+          if (detail == null || !this.instrumentMap.has(symbol)) continue;
+          this.emitQuoteUpdate(
+            symbol,
+            applyCoincallRestStats(
+              {
+                openInterest: detail.openInterest ?? null,
+                volume24h: detail.volume24h ?? null,
+                volume24hUsd: detail.volumeUsd24h ?? null,
+                underlyingPrice: detail.underlyingPrice ?? null,
+              },
+              this.quoteStore.get(symbol),
+              this.emptyQuote(),
+              Date.now(),
+            ),
+          );
+        }
+      }
+    } finally {
+      this.oiRefreshInFlight = false;
+    }
+    // One aggregated warn per cycle instead of one per failed expiry/symbol —
+    // a full Coincall REST outage would otherwise flood the log every 60s.
+    if (chainFailures > 0 || detailFailures > 0) {
+      log.warn({ chainFailures, detailFailures }, 'OI backfill: some REST fetches failed');
+    }
+  }
+
   private expiryKey(base: string, expiry: string): string {
     return `${base.toUpperCase()}:${expiry}`;
   }
@@ -637,6 +765,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (this.healthTimer) {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
+    }
+    if (this.oiTimer) {
+      clearInterval(this.oiTimer);
+      this.oiTimer = null;
     }
     await this.unsubscribeAll();
     await this.wsClient?.disconnect();

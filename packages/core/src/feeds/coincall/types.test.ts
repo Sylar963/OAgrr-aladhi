@@ -13,9 +13,11 @@ import { describe, it, expect } from 'vitest';
 import {
   COINCALL_OPTION_SYMBOL_RE,
   CoincallBsInfoMessageSchema,
+  CoincallChainResponseSchema,
   CoincallHeartbeatAckSchema,
   CoincallInstrumentSchema,
   CoincallInstrumentsResponseSchema,
+  CoincallOptionDetailSchema,
   CoincallOrderBookMessageSchema,
   CoincallPublicConfigSchema,
   CoincallTOptionMessageSchema,
@@ -309,5 +311,55 @@ describe('Coincall symbol regex', () => {
 
   it('rejects a missing right suffix', () => {
     expect(COINCALL_OPTION_SYMBOL_RE.exec('BTCUSD-14SEP23-22500')).toBeNull();
+  });
+});
+
+// ── REST: GET /open/option/get/v1/{index} (bulk chain) ─────────
+// Source: live capture 2026-06-01 (HYPEUSD, 26JUN26), envelope unwrapped to `data`.
+// The 30-put carried 1015 contracts of OI that the WS market feed reports as 0.
+describe('CoincallChainResponseSchema', () => {
+  it('parses call/put legs, coerces string numbers, tolerates a one-sided strike', () => {
+    const result = CoincallChainResponseSchema.safeParse([
+      {
+        strike: 30,
+        callOption: { symbol: 'HYPEUSD-26JUN26-30.0-C', openInterest: 0, volume: 0 },
+        putOption: { symbol: 'HYPEUSD-26JUN26-30.0-P', openInterest: '1015', volume: '3' },
+      },
+      {
+        strike: 90,
+        callOption: { symbol: 'HYPEUSD-26JUN26-90.0-C', openInterest: 15 },
+        putOption: null,
+      },
+    ]);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data[0]?.putOption?.openInterest).toBe(1015);
+      expect(result.data[0]?.callOption?.openInterest).toBe(0);
+      expect(result.data[1]?.putOption).toBeNull();
+      expect(result.data[1]?.callOption?.openInterest).toBe(15);
+    }
+  });
+});
+
+// ── REST: GET /open/option/detail/v1/{symbol} (per-contract) ──
+// Source: live capture 2026-06-01. The only endpoint carrying 24h volume.
+describe('CoincallOptionDetailSchema', () => {
+  it('parses OI, 24h volume (+USD), underlyingPrice and ignores extra fields', () => {
+    const result = CoincallOptionDetailSchema.safeParse({
+      symbol: 'HYPEUSD-26JUN26-72.0-P',
+      openInterest: 39,
+      volume24h: '17',
+      volumeUsd24h: 1246.308,
+      underlyingPrice: 74.39,
+      markPrice: 1.23,
+      delta: -0.5,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.openInterest).toBe(39);
+      expect(result.data.volume24h).toBe(17);
+      expect(result.data.volumeUsd24h).toBeCloseTo(1246.308, 3);
+      expect(result.data.underlyingPrice).toBe(74.39);
+    }
   });
 });

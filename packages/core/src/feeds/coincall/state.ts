@@ -28,6 +28,16 @@ function mergeTOptionField(next: number | undefined | null, previous: number | n
   return isLiveQuoteValue(next) ? next : previous;
 }
 
+/**
+ * Open interest and 24h volume only ever arrive via the REST backfill on
+ * Coincall — the bsInfo/tOption market channels stream 0 for these. Treat a
+ * non-positive WS value as "no update" so a REST-sourced figure isn't wiped by
+ * the next tick (mergeNumber's `next ?? previous` would let a literal 0 through).
+ */
+function mergeStat(next: number | undefined | null, previous: number | null): number | null {
+  return isLiveQuoteValue(next) ? next : previous;
+}
+
 function erf(x: number): number {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
@@ -166,10 +176,10 @@ export function mergeCoincallBsInfo(
     lastPrice: mergeNumber(data.lp, base.lastPrice),
     underlyingPrice: mergeNumber(data.up, base.underlyingPrice),
     indexPrice: mergeNumber(data.ip, base.indexPrice),
-    volume24h: mergeNumber(data.v24, base.volume24h),
-    openInterest: mergeNumber(data.oi, base.openInterest),
+    volume24h: mergeStat(data.v24, base.volume24h),
+    openInterest: mergeStat(data.oi, base.openInterest),
     openInterestUsd: base.openInterestUsd,
-    volume24hUsd: mergeNumber(data.uv24, base.volume24hUsd),
+    volume24hUsd: mergeStat(data.uv24, base.volume24hUsd),
     greeks: {
       delta: mergeNumber(data.delta, base.greeks.delta),
       gamma: mergeNumber(data.gamma, base.greeks.gamma),
@@ -204,8 +214,8 @@ export function mergeCoincallTOption(
     lastPrice: mergeNumber(entry.lp, base.lastPrice),
     underlyingPrice: mergeNumber(entry.up, base.underlyingPrice),
     indexPrice: base.indexPrice,
-    volume24h: mergeNumber(entry.v24, base.volume24h),
-    openInterest: mergeNumber(entry.oi, base.openInterest),
+    volume24h: mergeStat(entry.v24, base.volume24h),
+    openInterest: mergeStat(entry.oi, base.openInterest),
     openInterestUsd: base.openInterestUsd,
     volume24hUsd: base.volume24hUsd,
     greeks: {
@@ -252,6 +262,41 @@ export function mergeCoincallOrderBook(
     },
     timestamp: data.ts,
   });
+}
+
+export interface CoincallRestStats {
+  /** Open interest in contracts (base currency), or null to leave unchanged. */
+  openInterest: number | null;
+  /** 24h volume in contracts, or null to leave unchanged. */
+  volume24h: number | null;
+  /** 24h volume in USD, or null to leave unchanged. */
+  volume24hUsd: number | null;
+  /** Underlying price — only used as a fallback when the WS hasn't set one. */
+  underlyingPrice: number | null;
+}
+
+/**
+ * Overlay REST-sourced open interest / 24h volume onto an existing quote and
+ * refresh the timestamp so the figures survive the chain freshness window.
+ * Price / IV / greeks from the live WS feed are untouched. REST is authoritative
+ * for OI and volume (the WS sends 0); the live underlying price is preferred over
+ * the REST one, which only fills in before the first WS underlying tick.
+ */
+export function applyCoincallRestStats(
+  stats: CoincallRestStats,
+  previous: LiveQuote | undefined,
+  empty: LiveQuote,
+  nowMs: number,
+): LiveQuote {
+  const base = previous ?? empty;
+  return {
+    ...base,
+    openInterest: stats.openInterest ?? base.openInterest,
+    volume24h: stats.volume24h ?? base.volume24h,
+    volume24hUsd: stats.volume24hUsd ?? base.volume24hUsd,
+    underlyingPrice: base.underlyingPrice ?? stats.underlyingPrice,
+    timestamp: Math.max(base.timestamp, nowMs),
+  };
 }
 
 export interface CoincallInstrumentDeps {

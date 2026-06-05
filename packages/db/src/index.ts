@@ -28,6 +28,10 @@ export type {
   RegimeStore,
 } from './regime-store.js';
 export { NoopRegimeStore, PostgresRegimeStore } from './regime-store.js';
+export type { OiSnapshotStore, PersistedOiSnapshot } from './oi-snapshot-store.js';
+export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-store.js';
+export type { DealerBookStore, PersistedDealerPosition } from './dealer-book-store.js';
+export { NoopDealerBookStore, PostgresDealerBookStore } from './dealer-book-store.js';
 
 export type {
   PaperUserRow,

@@ -5,6 +5,7 @@ import type {
   ComparisonRow,
   EstimatedFees,
 } from './types.js';
+import type { BookLookup } from './dealer-book.js';
 
 // 2 vol points — avoids noise-driven flips on nearly-flat surfaces
 const TERM_STRUCTURE_THRESHOLD = 0.02;
@@ -526,6 +527,7 @@ export function computeGex(
   rows: ComparisonRow[],
   strikes: EnrichedStrike[],
   fallbackSpotPrice: number,
+  bookLookup?: BookLookup,
 ): GexStrike[] {
   const result: GexStrike[] = [];
 
@@ -545,7 +547,10 @@ export function computeGex(
       const size = original?.contractSize ?? 1;
       const venueSpot =
         original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      callGex += (vq.openInterest * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
+      // Calls: dealerContracts is already +long-gamma. Naive prior = +OI.
+      const qty = pos ? pos.dealerContracts : vq.openInterest;
+      callGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
     }
 
     for (const venueKey of Object.keys(s.put.venues) as VenueId[]) {
@@ -557,7 +562,12 @@ export function computeGex(
       const size = original?.contractSize ?? 1;
       const venueSpot =
         original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      putGex += (vq.openInterest * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
+      // putGex is SUBTRACTED below. dealerContracts means "+ = dealer long the
+      // option (long gamma)", so negate it here to keep that meaning. Naive
+      // prior = +OI (→ subtracted → −OI contribution), preserving call−put.
+      const qty = pos ? -pos.dealerContracts : vq.openInterest;
+      putGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
     }
 
     result.push({ strike: s.strike, gexUsdMillions: callGex - putGex });
@@ -878,6 +888,7 @@ export function buildEnrichedChain(
   expiry: string,
   rows: ComparisonRow[],
   venueChains: VenueOptionChain[],
+  bookLookup?: BookLookup,
 ): EnrichedChainResponse {
   const strikes = rows.map(enrichComparisonRow);
   const stats = computeChainStats(strikes, venueChains);
@@ -885,7 +896,7 @@ export function buildEnrichedChain(
   const dte = computeDte(expiry, expiryTs);
 
   const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-  const gex = computeGex(rows, strikes, spotPrice);
+  const gex = computeGex(rows, strikes, spotPrice, bookLookup);
 
   return {
     underlying,

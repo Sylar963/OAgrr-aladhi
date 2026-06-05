@@ -103,6 +103,7 @@ export class DealerBookService {
   lookup: BookLookup = (venue, symbol) => this.book.get(bookKey(venue, symbol));
 
   async start(): Promise<void> {
+    if (this.timer) return; // already started; don't stack intervals
     await this.warmFromStore();
     await this.runTick();
     this.timer = setInterval(() => {
@@ -148,7 +149,11 @@ export class DealerBookService {
             let chain: VenueOptionChain | null;
             try {
               chain = await this.opts.fetchChain(venue, underlying, expiry);
-            } catch {
+            } catch (err) {
+              this.opts.log.warn(
+                { venue, underlying, expiry, err: String(err) },
+                'dealer book fetchChain failed; skipping',
+              );
               chain = null;
             }
             if (chain != null) chains.push({ chain, underlying });
@@ -250,6 +255,11 @@ export class DealerBookService {
       await this.opts.oiSnapshotStore.writeMany(snapshots);
       await this.opts.dealerBookStore.upsertMany(updated.map(toPersisted));
       await this.opts.oiSnapshotStore.prune(new Date(tickTs - SNAPSHOT_RETENTION_MS));
+      // Drop contracts whose option expiry is already past — they never
+      // reappear in fetched chains, so without this the book grows unbounded
+      // with dead instruments. Prune by expiry date (the column's semantics),
+      // NOT the snapshot-retention window, which governs oi_snapshots only.
+      await this.opts.dealerBookStore.pruneExpired(new Date(tickTs).toISOString().slice(0, 10));
     } catch (err) {
       this.opts.log.warn({ err: String(err) }, 'dealer book persist failed');
     }

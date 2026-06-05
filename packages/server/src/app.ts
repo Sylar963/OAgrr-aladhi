@@ -154,12 +154,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Wait for bootstrap to finish (or fail) so all runtimes that will ever
     // exist are visible before we dispose them.
     await bootstrap.catch(() => {});
+    // Stop the dealer-book timer before its flow dependencies so no new tick
+    // can start (and read flow/block-flow) during the rest of teardown.
+    await dealerBookService.dispose();
     // Stop runtimes first: dispose() flips shouldReconnect=false, clears
     // timers, and closes sockets. If we did this after disposeAdapters(),
     // the runtimes' ws.on('close') handlers would reschedule reconnects.
     flowService.dispose();
     blockFlowService.dispose();
-    await dealerBookService.dispose();
     spotService.dispose();
     spotCandleService.dispose();
     dvolService.dispose();

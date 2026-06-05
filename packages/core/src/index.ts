@@ -91,6 +91,14 @@ export type {
   IvHistoryResponse,
 } from './core/enrichment.js';
 
+export {
+  OI_EPSILON,
+  bootstrapNaivePosition,
+  signOiDelta,
+  applyBookInterval,
+} from './core/dealer-book.js';
+export type { DealerPosition, OiSnapshotInput, BookLookup } from './core/dealer-book.js';
+
 // feeds/shared — adapter interfaces
 export type {
   OptionVenueAdapter,

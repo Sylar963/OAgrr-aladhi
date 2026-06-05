@@ -1,20 +1,22 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import Fastify, { type FastifyInstance } from 'fastify';
-import cors from '@fastify/cors';
 import compress from '@fastify/compress';
-import fastifyStatic from '@fastify/static';
-import websocket from '@fastify/websocket';
+import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { registerRoutes } from './routes/index.js';
+import fastifyStatic from '@fastify/static';
+import websocket from '@fastify/websocket';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
-import { warmupChainRuntimes, disposeChainWarmup } from './chain-warmup.js';
+import { disposeChainWarmup, warmupChainRuntimes } from './chain-warmup.js';
+import { disposePortfolioServices } from './portfolio-services.js';
+import { registerRoutes } from './routes/index.js';
+import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
 import {
   blockFlowService,
   bootstrapServices,
+  dealerBookService,
   disposeServiceStores,
   dvolService,
   flowService,
@@ -27,8 +29,6 @@ import {
   tradeStore,
 } from './services.js';
 import { paperTradingStore } from './trading-services.js';
-import { disposePortfolioServices } from './portfolio-services.js';
-import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
@@ -159,6 +159,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // the runtimes' ws.on('close') handlers would reschedule reconnects.
     flowService.dispose();
     blockFlowService.dispose();
+    await dealerBookService.dispose();
     spotService.dispose();
     spotCandleService.dispose();
     dvolService.dispose();

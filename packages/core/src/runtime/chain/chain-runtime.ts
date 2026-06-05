@@ -1,4 +1,5 @@
 import { getAdapter, getRegisteredVenues } from '../../core/registry.js';
+import type { BookLookup } from '../../core/dealer-book.js';
 import type { EnrichedChainResponse } from '../../core/enrichment.js';
 import type {
   SnapshotMeta,
@@ -76,6 +77,7 @@ export interface ChainRuntimeOptions {
   log?: {
     warn: (obj: object, msg: string) => void;
   };
+  bookLookup?: BookLookup;
 }
 
 function mergeDelta(left: VenueDelta | undefined, right: VenueDelta): VenueDelta {
@@ -141,7 +143,7 @@ export class ChainRuntime {
     options: ChainRuntimeOptions = {},
   ) {
     this.activeRequest = request;
-    this.projection = new ChainProjection(request.underlying, request.expiry);
+    this.projection = new ChainProjection(request.underlying, request.expiry, options.bookLookup);
     this.coordinator = options.coordinator ?? new VenueSubscriptionCoordinator();
     this.venueHealth = options.venueHealth ?? new VenueHealthManager();
     this.log = options.log ?? { warn: () => {} };

@@ -1,4 +1,5 @@
 import { buildComparisonChain } from '../../core/aggregator.js';
+import type { BookLookup } from '../../core/dealer-book.js';
 import {
   buildEnrichedChain,
   computeChainStats,
@@ -83,6 +84,7 @@ export class ChainProjection {
   constructor(
     private readonly underlying: string,
     private readonly expiry: string,
+    private readonly bookLookup?: BookLookup,
   ) {}
 
   loadSnapshot(venueChains: VenueOptionChain[]): EnrichedChainResponse {
@@ -95,6 +97,7 @@ export class ChainProjection {
       this.expiry,
       [...this.comparisonRows.values()],
       venueChains,
+      this.bookLookup,
     );
   }
 
@@ -143,7 +146,12 @@ export class ChainProjection {
     };
     if (options.includeGex === true) {
       const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-      patch.gex = computeGex([...this.comparisonRows.values()], strikes, spotPrice);
+      patch.gex = computeGex(
+        [...this.comparisonRows.values()],
+        strikes,
+        spotPrice,
+        this.bookLookup,
+      );
     }
 
     return {

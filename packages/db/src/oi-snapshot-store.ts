@@ -68,7 +68,9 @@ export class PostgresOiSnapshotStore implements OiSnapshotStore {
   }
 
   async prune(before: Date): Promise<number> {
-    const result = await this.pool.query('DELETE FROM oi_snapshots WHERE snapshot_ts < $1', [before]);
+    const result = await this.pool.query('DELETE FROM oi_snapshots WHERE snapshot_ts < $1', [
+      before,
+    ]);
     return result.rowCount ?? 0;
   }
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ChainProjection } from './projection.js';
 import type { BookLookup } from '../../core/dealer-book.js';
 import type { NormalizedOptionContract, VenueOptionChain } from '../../core/types.js';
 import { EMPTY_GREEKS } from '../../core/types.js';
+import { ChainProjection } from './projection.js';
 
 function callContract(): NormalizedOptionContract {
   return {

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyBookInterval,
   bootstrapNaivePosition,
-  signOiDelta,
   type DealerPosition,
   type OiSnapshotInput,
+  signOiDelta,
 } from './dealer-book.js';
 
 function snap(overrides: Partial<OiSnapshotInput> = {}): OiSnapshotInput {

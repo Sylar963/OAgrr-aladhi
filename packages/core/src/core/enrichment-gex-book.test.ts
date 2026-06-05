@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildComparisonChain } from './aggregator.js';
-import { buildEnrichedChain, computeGex, enrichComparisonRow } from './enrichment.js';
 import type { BookLookup, DealerPosition } from './dealer-book.js';
+import { buildEnrichedChain, computeGex, enrichComparisonRow } from './enrichment.js';
 import type { NormalizedOptionContract, VenueOptionChain } from './types.js';
 import { EMPTY_GREEKS } from './types.js';
 
@@ -70,14 +70,26 @@ describe('computeGex book awareness', () => {
     // Dealers SHORT the call (negative) and SHORT the put (negative).
     const book: Record<string, DealerPosition> = {
       'BTC-30JUN26-70000-C': {
-        venue: 'deribit', symbol: 'BTC-30JUN26-70000-C', underlying: 'BTC',
-        expiry: '2026-06-30', strike: 70000, optionType: 'call',
-        dealerContracts: -100, lastOi: 100, lastSnapshotTs: 1,
+        venue: 'deribit',
+        symbol: 'BTC-30JUN26-70000-C',
+        underlying: 'BTC',
+        expiry: '2026-06-30',
+        strike: 70000,
+        optionType: 'call',
+        dealerContracts: -100,
+        lastOi: 100,
+        lastSnapshotTs: 1,
       },
       'BTC-30JUN26-70000-P': {
-        venue: 'deribit', symbol: 'BTC-30JUN26-70000-P', underlying: 'BTC',
-        expiry: '2026-06-30', strike: 70000, optionType: 'put',
-        dealerContracts: -100, lastOi: 100, lastSnapshotTs: 1,
+        venue: 'deribit',
+        symbol: 'BTC-30JUN26-70000-P',
+        underlying: 'BTC',
+        expiry: '2026-06-30',
+        strike: 70000,
+        optionType: 'put',
+        dealerContracts: -100,
+        lastOi: 100,
+        lastSnapshotTs: 1,
       },
     };
     const lookup: BookLookup = (_v, symbol) => book[symbol];
@@ -90,8 +102,15 @@ describe('computeGex book awareness', () => {
 
   it('buildEnrichedChain forwards bookLookup', () => {
     const lookup: BookLookup = () => ({
-      venue: 'deribit', symbol: 'x', underlying: 'BTC', expiry: '2026-06-30',
-      strike: 70000, optionType: 'call', dealerContracts: 0, lastOi: 0, lastSnapshotTs: 1,
+      venue: 'deribit',
+      symbol: 'x',
+      underlying: 'BTC',
+      expiry: '2026-06-30',
+      strike: 70000,
+      optionType: 'call',
+      dealerContracts: 0,
+      lastOi: 0,
+      lastSnapshotTs: 1,
     });
     const enriched = buildEnrichedChain('BTC', '2026-06-30', rows(), [chain()], lookup);
     // both legs map to dealerContracts 0 → flat GEX

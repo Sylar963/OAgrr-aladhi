@@ -103,6 +103,9 @@ export const dealerBookService = new DealerBookService({
     }
   },
   fetchIntervalFlow: async (venue, symbol, underlying, fromTs, toTs): Promise<IntervalFlow> => {
+    // Attribute ΔOI from the lit/live tape only. Block ('institutional') flow is
+    // deliberately excluded — block-trade aggressor sign is ambiguous — so
+    // block-driven OI changes fall through to the naive-prior sign in the book.
     if (tradeStore.enabled) {
       const rows = await tradeStore.loadHistory({
         mode: 'live',

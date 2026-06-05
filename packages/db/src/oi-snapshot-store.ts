@@ -61,7 +61,7 @@ export class PostgresOiSnapshotStore implements OiSnapshotStore {
         `INSERT INTO oi_snapshots (
           venue, underlying, instrument_name, expiry, strike, option_type, open_interest, snapshot_ts
         ) VALUES ${placeholders.join(', ')}
-        ON CONFLICT (instrument_name, snapshot_ts) DO NOTHING`,
+        ON CONFLICT (venue, instrument_name, snapshot_ts) DO NOTHING`,
         values,
       );
     }

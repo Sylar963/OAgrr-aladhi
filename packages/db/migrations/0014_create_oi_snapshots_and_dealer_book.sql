@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS oi_snapshots (
   option_type TEXT NOT NULL CHECK (option_type IN ('call', 'put')),
   open_interest DOUBLE PRECISION NOT NULL,
   snapshot_ts TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (instrument_name, snapshot_ts)
+  -- venue is part of the key: canonical instrument_name is venue-independent
+  -- (cross-venue matching), so multiple venues emit the same symbol per tick.
+  PRIMARY KEY (venue, instrument_name, snapshot_ts)
 );
 
 CREATE INDEX IF NOT EXISTS oi_snapshots_lookup_idx

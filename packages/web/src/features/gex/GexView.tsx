@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-
-import { useAppStore } from '@stores/app-store';
-import { AssetPickerButton, Spinner, EmptyState, VenuePickerButton } from '@components/ui';
-import { fmtUsd, dteDays, formatExpiry } from '@lib/format';
-import { useChainQuery, useExpiries, useAllExpiriesGex } from '@features/chain/queries';
+import { AssetPickerButton, EmptyState, Spinner, VenuePickerButton } from '@components/ui';
+import { useAllExpiriesGex, useChainQuery, useExpiries } from '@features/chain/queries';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
 import type { GexStrike } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef, useState } from 'react';
 import styles from './GexView.module.css';
 
 type Mode = 'all' | string;
@@ -122,9 +121,7 @@ export default function GexView() {
       {nonzero.length === 0 ? (
         <EmptyState
           icon="◈"
-          title={
-            isAll ? 'No GEX data across listed expiries' : 'No GEX data for this expiry'
-          }
+          title={isAll ? 'No GEX data across listed expiries' : 'No GEX data for this expiry'}
           detail={
             isAll
               ? 'Venues report no open interest yet. Try again once the runtimes have warmed.'
@@ -157,13 +154,14 @@ export default function GexView() {
                 bigger swings
               </span>
               <span className={styles.explainFormula}>
-                GEX per strike = OI × Gamma × Spot² × contract size. Calls contribute positive, puts
-                negative.
+                GEX per strike = dealer position × Gamma × Spot² × contract size, summed across
+                venues. Dealer position is reconstructed from net flow: open-interest changes are
+                signed by the aggressor side of trades (taker buys ⇒ dealer short).
               </span>
               <span className={styles.explainCaveat}>
-                Sign convention assumes dealers are long calls and short puts (industry-standard
-                approximation). Real dealer positioning varies — treat GEX as a directional
-                indicator, not ground truth.
+                Sign is inferred from observed flow, not the call/put assumption. Strikes with no
+                attributed flow yet fall back to the open-interest approximation. Treat GEX as a
+                directional indicator, not ground truth.
               </span>
             </div>
           )}

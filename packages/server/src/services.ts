@@ -1,35 +1,46 @@
-import type { FastifyBaseLogger } from 'fastify';
 import {
   BlockTradeRuntime,
+  buildIvSurfaceGrid,
   DvolService,
+  getAdapter,
+  getAllAdapters,
   IndexPriceRuntime,
   InstrumentCandleService,
   IvHistoryService,
+  interpBasisToTenor,
   MarkHistoryBuffer,
+  type RegimeInputs,
+  type RegimePersistence,
   RegimeService,
   SpotCandleService,
   SpotRuntime,
   TradeRuntime,
-  buildIvSurfaceGrid,
-  interpBasisToTenor,
-  type RegimeInputs,
-  type RegimePersistence,
+  type VenueId,
 } from '@oggregator/core';
 import {
   DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
-  NoopIvHistoryStore,
-  NoopRegimeStore,
-  NoopTradeStore,
-  PostgresIvHistoryStore,
-  PostgresRegimeStore,
-  PostgresTradeStore,
+  type DealerBookStore,
   type IvHistoryStorageStats,
   type IvHistoryStore,
+  NoopDealerBookStore,
+  NoopIvHistoryStore,
+  NoopOiSnapshotStore,
+  NoopRegimeStore,
+  NoopTradeStore,
+  type OiSnapshotStore,
+  PostgresDealerBookStore,
+  PostgresIvHistoryStore,
+  PostgresOiSnapshotStore,
+  PostgresRegimeStore,
+  PostgresTradeStore,
   type RegimeStore,
   type TradeStore,
 } from '@oggregator/db';
-import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
+import type { FastifyBaseLogger } from 'fastify';
+import { registerBookLookup } from './dealer-book-lookup.js';
+import { DealerBookService, type IntervalFlow } from './dealer-book-service.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
+import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
@@ -49,9 +60,7 @@ export const indexPriceService = new IndexPriceRuntime();
 export let newsService: NewsRuntime | null = null;
 const FLOW_ALWAYS_ON_UNDERLYINGS = ['BTC', 'ETH', 'SOL'] as const;
 const databaseUrl = process.env['DATABASE_URL'];
-const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(
-  process.env['IV_HISTORY_SIZE_WARN_BYTES'],
-);
+const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(process.env['IV_HISTORY_SIZE_WARN_BYTES']);
 export const ivHistoryStore: IvHistoryStore = databaseUrl
   ? PostgresIvHistoryStore.fromConnectionString(databaseUrl, ivHistorySizeWarnBytes)
   : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
@@ -66,6 +75,71 @@ export const ivHistoryService = new IvHistoryService({
 export const tradeStore: TradeStore = databaseUrl
   ? PostgresTradeStore.fromConnectionString(databaseUrl)
   : new NoopTradeStore();
+
+export const oiSnapshotStore: OiSnapshotStore = databaseUrl
+  ? PostgresOiSnapshotStore.fromConnectionString(databaseUrl)
+  : new NoopOiSnapshotStore();
+
+export const dealerBookStore: DealerBookStore = databaseUrl
+  ? PostgresDealerBookStore.fromConnectionString(databaseUrl)
+  : new NoopDealerBookStore();
+
+export const dealerBookService = new DealerBookService({
+  underlyings: [...FLOW_ALWAYS_ON_UNDERLYINGS],
+  oiSnapshotStore,
+  dealerBookStore,
+  listExpiries: async (underlying) => {
+    const lists = await Promise.all(getAllAdapters().map((a) => a.listExpiries(underlying)));
+    const all = new Set<string>();
+    for (const list of lists) for (const e of list) all.add(e);
+    return [...all].sort();
+  },
+  listVenues: () => getAllAdapters().map((a) => a.venue),
+  fetchChain: async (venue: VenueId, underlying, expiry) => {
+    try {
+      return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
+    } catch {
+      return null;
+    }
+  },
+  fetchIntervalFlow: async (venue, symbol, underlying, fromTs, toTs): Promise<IntervalFlow> => {
+    // Attribute ΔOI from the lit/live tape only. Block ('institutional') flow is
+    // deliberately excluded — block-trade aggressor sign is ambiguous — so
+    // block-driven OI changes fall through to the naive-prior sign in the book.
+    if (tradeStore.enabled) {
+      const rows = await tradeStore.loadHistory({
+        mode: 'live',
+        underlying,
+        venues: [venue],
+        instrumentName: symbol,
+        startTs: new Date(fromTs),
+        endTs: new Date(toTs),
+        limit: 5000,
+      });
+      if (rows.length > 0) {
+        const net = rows.reduce(
+          (acc, r) => acc + (r.direction === 'buy' ? r.contracts : -r.contracts),
+          0,
+        );
+        return { netFlow: net, hasFlow: true };
+      }
+    }
+    const buffered = flowService
+      .getTrades(underlying)
+      .filter(
+        (t) =>
+          t.venue === venue &&
+          t.instrument === symbol &&
+          t.timestamp > fromTs &&
+          t.timestamp <= toTs,
+      );
+    if (buffered.length === 0) return { netFlow: 0, hasFlow: false };
+    const net = buffered.reduce((acc, t) => acc + (t.side === 'buy' ? t.size : -t.size), 0);
+    return { netFlow: net, hasFlow: true };
+  },
+});
+
+registerBookLookup(dealerBookService.lookup);
 
 export const regimeStore: RegimeStore = databaseUrl
   ? PostgresRegimeStore.fromConnectionString(databaseUrl)
@@ -181,6 +255,7 @@ const serviceHealth = {
   ivHistory: false,
   regime: false,
   news: false,
+  dealerBook: false,
 };
 
 export function isDvolReady(): boolean {
@@ -215,9 +290,10 @@ export function isNewsReady(): boolean {
 // (`pg_total_relation_size('iv_history_points')`) on every probe. The value
 // changes glacially — the background alarm below also recomputes every 5 min.
 const IV_HISTORY_STORAGE_STATS_TTL_MS = 30_000;
-let ivHistoryStorageStatsCache:
-  | { expiresAt: number; promise: Promise<IvHistoryStorageStats> }
-  | null = null;
+let ivHistoryStorageStatsCache: {
+  expiresAt: number;
+  promise: Promise<IvHistoryStorageStats>;
+} | null = null;
 
 export function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
   const now = Date.now();
@@ -244,38 +320,38 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   // same venue universe.
   const [dvol, spot, flow, blockFlow, spotCandles, instrumentCandles, indexPrice] =
     await Promise.allSettled([
-    dvolService.start(['BTC', 'ETH']),
-    spotService.start([
-      'BTCUSDT',
-      'ETHUSDT',
-      'SOLUSDT',
-      'DOGEUSDT',
-      'XRPUSDT',
-      'BNBUSDT',
-      'AVAXUSDT',
-      'TRXUSDT',
-      'HYPEUSDT',
-      'LTCUSDT',
-      'ADAUSDT',
-      'TONUSDT',
-      'SUIUSDT',
-      'XAUTUSDT',
-      'AAVEUSDT',
-      'ORDIUSDT',
-      'WLFIUSDT',
-      'ENAUSDT',
-      'PENDLEUSDT',
-      'TRUMPUSDT',
-    ]),
-    flowService.start([...FLOW_ALWAYS_ON_UNDERLYINGS]),
-    blockFlowService.start(),
-    spotCandleService.start(),
-    instrumentCandleService.start(),
-    indexPriceService.start({
-      gateio: true,
-      coincallUnderlyings: ['MNT', 'LIT', 'KAS'],
-    }),
-  ]);
+      dvolService.start(['BTC', 'ETH']),
+      spotService.start([
+        'BTCUSDT',
+        'ETHUSDT',
+        'SOLUSDT',
+        'DOGEUSDT',
+        'XRPUSDT',
+        'BNBUSDT',
+        'AVAXUSDT',
+        'TRXUSDT',
+        'HYPEUSDT',
+        'LTCUSDT',
+        'ADAUSDT',
+        'TONUSDT',
+        'SUIUSDT',
+        'XAUTUSDT',
+        'AAVEUSDT',
+        'ORDIUSDT',
+        'WLFIUSDT',
+        'ENAUSDT',
+        'PENDLEUSDT',
+        'TRUMPUSDT',
+      ]),
+      flowService.start([...FLOW_ALWAYS_ON_UNDERLYINGS]),
+      blockFlowService.start(),
+      spotCandleService.start(),
+      instrumentCandleService.start(),
+      indexPriceService.start({
+        gateio: true,
+        coincallUnderlyings: ['MNT', 'LIT', 'KAS'],
+      }),
+    ]);
 
   if (dvol.status === 'fulfilled') {
     serviceHealth.dvol = true;
@@ -331,6 +407,14 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     log.warn({ err: String(err) }, 'regime service failed');
   }
 
+  try {
+    await dealerBookService.start();
+    serviceHealth.dealerBook = true;
+    log.info('dealer book service started');
+  } catch (err: unknown) {
+    log.warn({ err: String(err) }, 'dealer book service failed');
+  }
+
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
 
@@ -383,8 +467,11 @@ function startIvHistoryStorageAlarm(log: FastifyBaseLogger): void {
   };
 
   void check();
-  ivHistoryStorageAlarmTimer = setInterval(() => {
-    void check();
-  }, 5 * 60 * 1000);
+  ivHistoryStorageAlarmTimer = setInterval(
+    () => {
+      void check();
+    },
+    5 * 60 * 1000,
+  );
   ivHistoryStorageAlarmTimer.unref?.();
 }

@@ -87,6 +87,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  // null = auto (nearest expiry with an EM); 'off' = hidden; else a chosen expiry.
+  const [coneExpiry, setConeExpiry] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -169,29 +171,35 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [allRows, significantStrikes],
   );
 
+  // One cone at a time. Default to the nearest expiry that has an EM; the Cone
+  // dropdown overrides it ('off' hides it). Deliberately independent of the
+  // legend's per-expiry band hide/show so bands and cone don't fight.
+  const defaultConeExpiry = useMemo(
+    () => sortedExpiries.find((e) => emByExpiry.has(e)) ?? '',
+    [sortedExpiries, emByExpiry],
+  );
+  const effectiveConeExpiry = coneExpiry ?? defaultConeExpiry;
+
   const coneEntries = useMemo<EmConeEntry[]>(() => {
     const { lastBarSec, lastFutureSec, res } = seriesData;
     if (lastBarSec == null || lastFutureSec == null) return [];
-    const entries: EmConeEntry[] = [];
-    for (const chain of chains) {
-      if (hiddenExpiries.has(chain.expiry)) continue;
-      if (chain.expiryTs == null) continue;
-      const em = emByExpiry.get(chain.expiry);
-      if (!em) continue;
-      // Snap onto the whitespace grid (≥1 bar to the right of the anchor) and
-      // clamp into the visible future so timeToCoordinate resolves it.
-      const steps = Math.max(1, Math.round((chain.expiryTs / 1000 - lastBarSec) / res));
-      const expiryTimeSec = Math.min(lastBarSec + steps * res, lastFutureSec);
-      entries.push({
-        expiry: chain.expiry,
-        expiryTimeSec,
-        emValue: em.value,
-        color: expiryColorMap.get(chain.expiry) ?? '#888',
-        source: em.source,
-      });
-    }
-    return entries;
-  }, [chains, hiddenExpiries, emByExpiry, expiryColorMap, seriesData]);
+    if (effectiveConeExpiry === '' || effectiveConeExpiry === 'off') return [];
+    const chain = chains.find((c) => c.expiry === effectiveConeExpiry);
+    if (!chain || chain.expiryTs == null) return [];
+    const em = emByExpiry.get(chain.expiry);
+    if (!em) return [];
+    // Snap onto the whitespace grid (≥1 bar to the right of the anchor) and
+    // clamp into the visible future so timeToCoordinate resolves it.
+    const steps = Math.max(1, Math.round((chain.expiryTs / 1000 - lastBarSec) / res));
+    const expiryTimeSec = Math.min(lastBarSec + steps * res, lastFutureSec);
+    return [{
+      expiry: chain.expiry,
+      expiryTimeSec,
+      emValue: em.value,
+      color: expiryColorMap.get(chain.expiry) ?? '#888',
+      source: em.source,
+    }];
+  }, [chains, emByExpiry, expiryColorMap, seriesData, effectiveConeExpiry]);
 
   // Tooltip needs venue/expiry breakdown (re-uses V1 aggregation).
   const fullStrikeData = useMemo(
@@ -287,6 +295,9 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   // Re-fit visible range whenever the underlying or timeframe changes so the
   // chart shows [now − window, now + window] symmetrically for the new TF.
   useEffect(() => { didFitRef.current = false; }, [currency, timeframe]);
+
+  // Re-default the cone when the underlying changes (its expiry set differs).
+  useEffect(() => { setConeExpiry(null); }, [currency]);
 
   // ── Push candle data + set symmetric visible range for the TF ─────
   useEffect(() => {
@@ -468,6 +479,30 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
             </button>
           ))}
         </div>
+
+        <label className={styles.coneSelect}>
+          <span
+            className={styles.coneSwatch}
+            style={{
+              background:
+                effectiveConeExpiry && effectiveConeExpiry !== 'off'
+                  ? expiryColorMap.get(effectiveConeExpiry) ?? '#888'
+                  : 'transparent',
+            }}
+          />
+          Cone
+          <select
+            value={effectiveConeExpiry === '' ? 'off' : effectiveConeExpiry}
+            onChange={(e) => setConeExpiry(e.target.value)}
+          >
+            <option value="off">Off</option>
+            {sortedExpiries.map((e) => (
+              <option key={e} value={e}>
+                {formatExpiry(e)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className={styles.curveLegend}>

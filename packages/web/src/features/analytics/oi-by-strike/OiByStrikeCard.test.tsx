@@ -92,6 +92,14 @@ describe('OiByStrikeCard', () => {
     expect(screen.getByRole('button', { name: '30d' }).hasAttribute('data-active')).toBe(false);
   });
 
+  it('exposes the single-cone selector (Cone dropdown, Off available) in V2', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
+    fireEvent.click(screen.getByRole('button', { name: 'V2' }));
+    expect(screen.getByText('Cone')).toBeTruthy();
+    expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Off' })).toBeTruthy();
+  });
+
   it('switches back to V1 when V1 is clicked', () => {
     render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
     fireEvent.click(screen.getByRole('button', { name: 'V2' }));

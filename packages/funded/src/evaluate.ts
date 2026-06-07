@@ -37,7 +37,7 @@ export function computeSettlement(
   profitSplitPct: number,
 ): SettlementComputation {
   const cumulativeProfitUsd = equityUsd - abcCredited;
-  const traderShareUsd = profitSplitPct * Math.max(0, cumulativeProfitUsd);
+  const traderShareUsd = accrueRevShare(equityUsd, abcCredited, profitSplitPct);
   const drawdownPct = abcCredited > 0 ? Math.max(0, (abcCredited - equityUsd) / abcCredited) : 0;
   const floorBreached = evaluateFundedFloor(equityUsd, abcCredited, abcFloorPct);
   return { cumulativeProfitUsd, traderShareUsd, drawdownPct, floorBreached };

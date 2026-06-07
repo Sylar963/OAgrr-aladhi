@@ -40,7 +40,7 @@ export class FundedEngine {
       throw new Error(`run limit reached (max ${tmpl.maxRunsPerUser} per user)`);
     }
     const activeFunded = await this.deps.store.countActiveFundedForUser(input.userId);
-    if (activeFunded >= 1 && tmpl.routeType === 'instant') {
+    if (activeFunded >= 1) {
       throw new Error('at most 1 active funded account allowed');
     }
 
@@ -66,9 +66,6 @@ export class FundedEngine {
       abcCredited = 0;
       fundedAt = null;
     } else {
-      if (activeFunded >= 1) {
-        throw new Error('at most 1 active funded account allowed');
-      }
       initialCash = tmpl.fundedAbc;
       status = 'funded_active';
       depositUsd = null;

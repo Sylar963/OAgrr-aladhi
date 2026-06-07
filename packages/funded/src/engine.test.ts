@@ -139,6 +139,26 @@ describe('FundedEngine.settleRun — funded route', () => {
     expect(await store.listSettlements(run.id)).toHaveLength(1);
   });
 
+  it('is idempotent on a non-breaching profit boundary via the !wrote early-return', async () => {
+    const { engine, store } = makeEngine({ equity: 1500 });
+    const run = await engine.startRun({ userId: 'usr_1', templateId: 'tmpl_instant' });
+    const at = new Date('2026-06-07T08:00:00Z');
+
+    await engine.settleRun(run.id, at);
+    const afterFirst = await store.getRun(run.id);
+    expect(afterFirst?.status).toBe('funded_active');
+    const settlementEvents = (await store.listEvents(run.id)).filter(
+      (e) => e.kind === 'settlement',
+    );
+    expect(settlementEvents).toHaveLength(1);
+
+    await engine.settleRun(run.id, at);
+
+    expect(await store.listSettlements(run.id)).toHaveLength(1);
+    expect((await store.getRun(run.id))?.status).toBe('funded_active');
+    expect((await store.listEvents(run.id)).filter((e) => e.kind === 'settlement')).toHaveLength(1);
+  });
+
   it('skips terminal runs', async () => {
     const { engine, store } = makeEngine({ equity: 1100 });
     const run = await engine.startRun({

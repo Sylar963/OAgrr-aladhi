@@ -62,13 +62,11 @@ class EmConeRenderer implements IPrimitivePaneRenderer {
       const spotYBitmap = spotYMedia * verticalPixelRatio;
 
       const anchorXMedia = timeToX(anchorSec as Time);
-      console.log('[EMCONE-VERIFY] anchorSec=', anchorSec, 'anchorXMedia=', anchorXMedia, 'entries=', entries.length); // TEMP-VERIFY
       if (anchorXMedia === null) return;
       const anchorXBitmap = anchorXMedia * horizontalPixelRatio;
 
       for (const entry of entries) {
         const expiryXMedia = timeToX(entry.expiryTimeSec as Time);
-        console.log('[EMCONE-VERIFY] entry', entry.expiry, 'expiryTimeSec=', entry.expiryTimeSec, 'expiryXMedia=', expiryXMedia); // TEMP-VERIFY
         if (expiryXMedia === null) continue;
         const expiryXBitmap = expiryXMedia * horizontalPixelRatio;
         if (expiryXBitmap <= anchorXBitmap) continue;

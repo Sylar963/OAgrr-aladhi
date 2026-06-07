@@ -29,8 +29,7 @@
   },
   "packageManager": "pnpm@10.33.4",
   "devDependencies": {
-    "@biomejs/biome": "2.4.9",
-    "puppeteer-core": "25.1.0"
+    "@biomejs/biome": "2.4.9"
   },
   "dependencies": {
     "@vercel/analytics": "2.0.1",

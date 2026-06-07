@@ -43,7 +43,7 @@ export interface EmConeEntry {
 
 interface ConeContext {
   spot: number;
-  nowSec: number;
+  anchorSec: number;
   entries: EmConeEntry[];
   priceToY: (price: number) => number | null;
   timeToX: (time: Time) => number | null;
@@ -55,21 +55,23 @@ class EmConeRenderer implements IPrimitivePaneRenderer {
   draw(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace((scope) => {
       const { context, bitmapSize, horizontalPixelRatio, verticalPixelRatio } = scope;
-      const { spot, nowSec, entries, priceToY, timeToX } = this.ctx;
+      const { spot, anchorSec, entries, priceToY, timeToX } = this.ctx;
 
       const spotYMedia = priceToY(spot);
       if (spotYMedia === null) return;
       const spotYBitmap = spotYMedia * verticalPixelRatio;
 
-      const nowXMedia = timeToX(nowSec as Time);
-      if (nowXMedia === null) return;
-      const nowXBitmap = nowXMedia * horizontalPixelRatio;
+      const anchorXMedia = timeToX(anchorSec as Time);
+      console.log('[EMCONE-VERIFY] anchorSec=', anchorSec, 'anchorXMedia=', anchorXMedia, 'entries=', entries.length); // TEMP-VERIFY
+      if (anchorXMedia === null) return;
+      const anchorXBitmap = anchorXMedia * horizontalPixelRatio;
 
       for (const entry of entries) {
         const expiryXMedia = timeToX(entry.expiryTimeSec as Time);
+        console.log('[EMCONE-VERIFY] entry', entry.expiry, 'expiryTimeSec=', entry.expiryTimeSec, 'expiryXMedia=', expiryXMedia); // TEMP-VERIFY
         if (expiryXMedia === null) continue;
         const expiryXBitmap = expiryXMedia * horizontalPixelRatio;
-        if (expiryXBitmap <= nowXBitmap) continue;
+        if (expiryXBitmap <= anchorXBitmap) continue;
 
         const yUpper2 = priceToY(spot + STRIKE_FILTER.emBandMultiplier * entry.emValue);
         const yLower2 = priceToY(spot - STRIKE_FILTER.emBandMultiplier * entry.emValue);
@@ -82,7 +84,7 @@ class EmConeRenderer implements IPrimitivePaneRenderer {
         if (yUpper2 !== null && yLower2 !== null) {
           drawCone(
             context,
-            nowXBitmap,
+            anchorXBitmap,
             spotYBitmap,
             xRight,
             yUpper2 * verticalPixelRatio,
@@ -95,7 +97,7 @@ class EmConeRenderer implements IPrimitivePaneRenderer {
         if (yUpper1 !== null && yLower1 !== null) {
           drawCone(
             context,
-            nowXBitmap,
+            anchorXBitmap,
             spotYBitmap,
             xRight,
             yUpper1 * verticalPixelRatio,
@@ -169,7 +171,9 @@ class EmConePaneView implements IPrimitivePaneView {
 
 export class EmConePrimitive implements ISeriesPrimitive<Time> {
   private spot = 0;
-  private nowSec = Math.floor(Date.now() / 1000);
+  // Time of the last real candle — the cone pinches here. Must be an exact
+  // series data-point time so timeToCoordinate resolves it (see update()).
+  private anchorSec = 0;
   private entries: EmConeEntry[] = [];
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private chart: SeriesAttachedParameter<Time>['chart'] | null = null;
@@ -187,9 +191,9 @@ export class EmConePrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate = null;
   }
 
-  update(spot: number, entries: readonly EmConeEntry[]): void {
+  update(spot: number, anchorSec: number, entries: readonly EmConeEntry[]): void {
     this.spot = spot;
-    this.nowSec = Math.floor(Date.now() / 1000);
+    this.anchorSec = anchorSec;
     this.entries = [...entries];
     this.requestUpdate?.();
   }
@@ -200,7 +204,7 @@ export class EmConePrimitive implements ISeriesPrimitive<Time> {
     const chart = this.chart;
     const ctx: ConeContext = {
       spot: this.spot,
-      nowSec: this.nowSec,
+      anchorSec: this.anchorSec,
       entries: this.entries,
       priceToY: (p) => series.priceToCoordinate(p),
       timeToX: (t) => chart.timeScale().timeToCoordinate(t),

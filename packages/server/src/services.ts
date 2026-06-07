@@ -128,6 +128,7 @@ export const dealerBookService = new DealerBookService({
       .getTrades(underlying)
       .filter(
         (t) =>
+          !t.isBlock &&
           t.venue === venue &&
           t.instrument === symbol &&
           t.timestamp > fromTs &&

@@ -1,3 +1,4 @@
+export { FundedEngine, type FundedEngineDeps, type StartRunInput } from './engine.js';
 export {
   accrueRevShare,
   computeSettlement,

@@ -1,3 +1,9 @@
+export {
+  accrueRevShare,
+  computeSettlement,
+  evaluateFundedFloor,
+  evaluateTestRoute,
+} from './evaluate.js';
 export type {
   ChallengeTemplate,
   EquitySnapshotFn,

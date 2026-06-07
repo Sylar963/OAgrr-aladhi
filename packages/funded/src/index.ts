@@ -4,6 +4,7 @@ export {
   evaluateFundedFloor,
   evaluateTestRoute,
 } from './evaluate.js';
+export { assertTransition, canTransition } from './state-machine.js';
 export type {
   ChallengeTemplate,
   EquitySnapshotFn,

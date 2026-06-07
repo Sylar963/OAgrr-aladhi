@@ -199,4 +199,17 @@ describe('FundedEngine.withdrawRun', () => {
     const run = await engine.startRun({ userId: 'usr_1', templateId: 'tmpl_instant' });
     await expect(engine.withdrawRun(run.id, 'usr_other', new Date())).rejects.toThrow(/forbidden/i);
   });
+
+  it('records traderShareUsd = 400 for equity 1500 on a 1000 ABC / 80% split run', async () => {
+    const { engine, store, closed } = makeEngine({ equity: 1500 });
+    const run = await engine.startRun({ userId: 'usr_1', templateId: 'tmpl_instant' });
+    const at = new Date('2026-06-07T08:00:00Z');
+    await engine.withdrawRun(run.id, run.userId, at);
+    const updated = await store.getRun(run.id);
+    expect(updated?.status).toBe('withdrawn');
+    expect(closed).toContain(run.paperAccountId);
+    const events = await store.listEvents(run.id);
+    const withdrawalEvent = events.find((e) => e.kind === 'withdrawal');
+    expect((withdrawalEvent?.payload as { traderShareUsd: number }).traderShareUsd).toBe(400);
+  });
 });

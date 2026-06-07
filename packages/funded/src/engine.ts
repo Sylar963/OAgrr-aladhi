@@ -5,7 +5,7 @@ import type {
   FundedStore,
   FundedTemplateRow,
 } from '@oggregator/db';
-import { computeSettlement, evaluateTestRoute } from './evaluate.js';
+import { accrueRevShare, computeSettlement, evaluateTestRoute } from './evaluate.js';
 import { assertTransition } from './state-machine.js';
 import type { EquitySnapshotFn } from './types.js';
 
@@ -241,8 +241,8 @@ export class FundedEngine {
     await this.deps.closeAllPositions(run.paperAccountId);
     const equity = await this.deps.equitySnapshot(run.paperAccountId);
     const tmpl = await this.deps.store.getTemplate(run.templateId);
-    const split = tmpl?.profitSplitPct ?? 0.8;
-    const share = split * Math.max(0, equity - run.abcCredited);
+    if (!tmpl) throw new Error('funded template not found for run');
+    const share = accrueRevShare(equity, run.abcCredited, tmpl.profitSplitPct);
     assertTransition(run.status, 'withdrawn');
     await this.deps.store.updateRunStatus(run.id, {
       status: 'withdrawn',

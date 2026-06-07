@@ -48,3 +48,6 @@ export type {
   PaperTradingStore,
 } from './paper-trading-store.js';
 export { NoopPaperTradingStore, PostgresPaperTradingStore } from './paper-trading-store.js';
+
+export type { UserRow, UpsertUserInput, UsersStore } from './users-store.js';
+export { NoopUsersStore, PostgresUsersStore } from './users-store.js';

@@ -1,13 +1,17 @@
-export type { PersistedTradeLeg, PersistedTradeMode, PersistedTradeRecord } from './types.js';
+export type { DealerBookStore, PersistedDealerPosition } from './dealer-book-store.js';
+export { NoopDealerBookStore, PostgresDealerBookStore } from './dealer-book-store.js';
 export type {
-  RecentTradeQuery,
-  TradeHistoryQuery,
-  TradeStore,
-  InstrumentSummary,
-  InstrumentListQuery,
-} from './trade-store.js';
-export { NoopTradeStore } from './noop-trade-store.js';
-export { PostgresTradeStore } from './postgres-trade-store.js';
+  FundedRouteType,
+  FundedRunEventRow,
+  FundedRunRow,
+  FundedRunStatus,
+  FundedRunStatusPatch,
+  FundedSettlementCadence,
+  FundedSettlementRow,
+  FundedStore,
+  FundedTemplateRow,
+} from './funded-store.js';
+export { NoopFundedStore, PostgresFundedStore } from './funded-store.js';
 export type {
   IvHistoryLoadQuery,
   IvHistoryPointSource,
@@ -20,6 +24,25 @@ export {
   NoopIvHistoryStore,
   PostgresIvHistoryStore,
 } from './iv-history-store.js';
+export { NoopTradeStore } from './noop-trade-store.js';
+export type { OiSnapshotStore, PersistedOiSnapshot } from './oi-snapshot-store.js';
+export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-store.js';
+export type {
+  PaperAccountRow,
+  PaperCashLedgerRow,
+  PaperFillRow,
+  PaperOrderRow,
+  PaperPositionRow,
+  PaperTradeActivityRow,
+  PaperTradeNoteRow,
+  PaperTradeOrderRow,
+  PaperTradePositionRow,
+  PaperTradeRow,
+  PaperTradingStore,
+  PaperUserRow,
+} from './paper-trading-store.js';
+export { NoopPaperTradingStore, PostgresPaperTradingStore } from './paper-trading-store.js';
+export { PostgresTradeStore } from './postgres-trade-store.js';
 export type {
   PersistedRegimeModel,
   PersistedRegimeObservation,
@@ -28,26 +51,14 @@ export type {
   RegimeStore,
 } from './regime-store.js';
 export { NoopRegimeStore, PostgresRegimeStore } from './regime-store.js';
-export type { OiSnapshotStore, PersistedOiSnapshot } from './oi-snapshot-store.js';
-export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-store.js';
-export type { DealerBookStore, PersistedDealerPosition } from './dealer-book-store.js';
-export { NoopDealerBookStore, PostgresDealerBookStore } from './dealer-book-store.js';
-
 export type {
-  PaperUserRow,
-  PaperAccountRow,
-  PaperOrderRow,
-  PaperFillRow,
-  PaperPositionRow,
-  PaperCashLedgerRow,
-  PaperTradeRow,
-  PaperTradeOrderRow,
-  PaperTradePositionRow,
-  PaperTradeNoteRow,
-  PaperTradeActivityRow,
-  PaperTradingStore,
-} from './paper-trading-store.js';
-export { NoopPaperTradingStore, PostgresPaperTradingStore } from './paper-trading-store.js';
+  InstrumentListQuery,
+  InstrumentSummary,
+  RecentTradeQuery,
+  TradeHistoryQuery,
+  TradeStore,
+} from './trade-store.js';
+export type { PersistedTradeLeg, PersistedTradeMode, PersistedTradeRecord } from './types.js';
 
-export type { UserRow, UpsertUserInput, UsersStore } from './users-store.js';
+export type { UpsertUserInput, UserRow, UsersStore } from './users-store.js';
 export { NoopUsersStore, PostgresUsersStore } from './users-store.js';

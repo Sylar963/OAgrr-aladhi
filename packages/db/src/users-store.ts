@@ -37,7 +37,7 @@ export class NoopUsersStore implements UsersStore {
   async dispose(): Promise<void> {}
 }
 
-function mapRow(row: {
+interface UsersRowDb {
   id: string;
   clerk_user_id: string;
   email: string | null;
@@ -45,7 +45,9 @@ function mapRow(row: {
   country: string | null;
   default_account_id: string | null;
   created_at: Date;
-}): UserRow {
+}
+
+function mapRow(row: UsersRowDb): UserRow {
   return {
     id: row.id,
     clerkUserId: row.clerk_user_id,
@@ -75,15 +77,7 @@ export class PostgresUsersStore implements UsersStore {
 
   async upsertByClerkId(input: UpsertUserInput): Promise<UserRow | null> {
     const id = `usr_${crypto.randomUUID()}`;
-    const res = await this.pool.query<{
-      id: string;
-      clerk_user_id: string;
-      email: string | null;
-      display_name: string | null;
-      country: string | null;
-      default_account_id: string | null;
-      created_at: Date;
-    }>(
+    const res = await this.pool.query<UsersRowDb>(
       `INSERT INTO users (id, clerk_user_id, email, display_name, default_account_id)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (clerk_user_id) DO UPDATE
@@ -97,15 +91,7 @@ export class PostgresUsersStore implements UsersStore {
   }
 
   async getByClerkId(clerkUserId: string): Promise<UserRow | null> {
-    const res = await this.pool.query<{
-      id: string;
-      clerk_user_id: string;
-      email: string | null;
-      display_name: string | null;
-      country: string | null;
-      default_account_id: string | null;
-      created_at: Date;
-    }>(
+    const res = await this.pool.query<UsersRowDb>(
       `SELECT id, clerk_user_id, email, display_name, country, default_account_id, created_at
        FROM users WHERE clerk_user_id = $1`,
       [clerkUserId],

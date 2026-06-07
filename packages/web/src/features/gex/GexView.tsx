@@ -2,12 +2,20 @@ import { AssetPickerButton, EmptyState, Spinner, VenuePickerButton } from '@comp
 import { useAllExpiriesGex, useChainQuery, useExpiries } from '@features/chain/queries';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
+import type { SpotCandleCurrency } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
+import GexBandsChart from './GexBandsChart';
 import styles from './GexView.module.css';
 
 type Mode = 'all' | string;
+type Version = 'bars' | 'bands';
+
+// The bands chart draws on daily spot candles, which only exist for these.
+function isBandsCurrency(c: string): c is SpotCandleCurrency {
+  return c === 'BTC' || c === 'ETH' || c === 'HYPE';
+}
 
 export default function GexView() {
   const underlying = useAppStore((s) => s.underlying);
@@ -29,6 +37,10 @@ export default function GexView() {
 
   const isMobile = useIsMobile();
   const [showExplain, setShowExplain] = useState(false);
+
+  const [version, setVersion] = useState<Version>('bars');
+  const bandsAvailable = isBandsCurrency(underlying);
+  const effectiveVersion: Version = version === 'bands' && bandsAvailable ? 'bands' : 'bars';
 
   const { data: chain, isLoading: chainLoading } = useChainQuery(
     underlying,
@@ -83,6 +95,26 @@ export default function GexView() {
             <span className={styles.title}>Gamma Exposure (GEX)</span>
             <AssetPickerButton />
             <VenuePickerButton />
+            <div className={styles.gexModeToggle}>
+              <button
+                type="button"
+                className={styles.gexModeBtn}
+                data-active={effectiveVersion === 'bars' || undefined}
+                onClick={() => setVersion('bars')}
+              >
+                Bars
+              </button>
+              <button
+                type="button"
+                className={styles.gexModeBtn}
+                data-active={effectiveVersion === 'bands' || undefined}
+                onClick={() => bandsAvailable && setVersion('bands')}
+                disabled={!bandsAvailable}
+                title={bandsAvailable ? undefined : 'Gamma bands support BTC/ETH/HYPE only'}
+              >
+                Bands
+              </button>
+            </div>
           </div>
           <span className={styles.subtitle}>Dealer hedging pressure per strike in $M</span>
         </div>
@@ -166,66 +198,74 @@ export default function GexView() {
             </div>
           )}
 
-          <div className={styles.chart}>
-            <div className={styles.axis}>
-              <div className={styles.axisLeft}>
-                <span className={styles.axisLabel}>← Negative (accelerator)</span>
+          {effectiveVersion === 'bands' ? (
+            <GexBandsChart
+              gex={gex}
+              spotPrice={spotPrice}
+              currency={underlying as SpotCandleCurrency}
+            />
+          ) : (
+            <div className={styles.chart}>
+              <div className={styles.axis}>
+                <div className={styles.axisLeft}>
+                  <span className={styles.axisLabel}>← Negative (accelerator)</span>
+                </div>
+                <div className={styles.axisCenter}>0</div>
+                <div className={styles.axisRight}>
+                  <span className={styles.axisLabel}>Positive (magnet) →</span>
+                </div>
               </div>
-              <div className={styles.axisCenter}>0</div>
-              <div className={styles.axisRight}>
-                <span className={styles.axisLabel}>Positive (magnet) →</span>
+
+              <div className={styles.bars} ref={barsRef}>
+                {sorted.map((g) => {
+                  const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
+                  const positive = g.gexUsdMillions >= 0;
+                  const isNearSpot = g.strike === spotStrike;
+
+                  return (
+                    <div
+                      key={g.strike}
+                      className={styles.barRow}
+                      data-near-spot={isNearSpot || undefined}
+                      ref={isNearSpot ? spotRowRef : undefined}
+                    >
+                      <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
+                        {g.strike.toLocaleString()}
+                        {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
+                      </div>
+                      <div className={styles.barTrack}>
+                        <div className={styles.leftHalf}>
+                          {!positive && (
+                            <div
+                              className={styles.bar}
+                              data-type="negative"
+                              style={{ width: `${pct}%` }}
+                              title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                            />
+                          )}
+                        </div>
+                        <div className={styles.spine} />
+                        <div className={styles.rightHalf}>
+                          {positive && (
+                            <div
+                              className={styles.bar}
+                              data-type="positive"
+                              style={{ width: `${pct}%` }}
+                              title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className={styles.valueLabel}>
+                        {positive ? '+' : ''}
+                        {g.gexUsdMillions.toFixed(1)}M
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            <div className={styles.bars} ref={barsRef}>
-              {sorted.map((g) => {
-                const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
-                const positive = g.gexUsdMillions >= 0;
-                const isNearSpot = g.strike === spotStrike;
-
-                return (
-                  <div
-                    key={g.strike}
-                    className={styles.barRow}
-                    data-near-spot={isNearSpot || undefined}
-                    ref={isNearSpot ? spotRowRef : undefined}
-                  >
-                    <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
-                      {g.strike.toLocaleString()}
-                      {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
-                    </div>
-                    <div className={styles.barTrack}>
-                      <div className={styles.leftHalf}>
-                        {!positive && (
-                          <div
-                            className={styles.bar}
-                            data-type="negative"
-                            style={{ width: `${pct}%` }}
-                            title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
-                          />
-                        )}
-                      </div>
-                      <div className={styles.spine} />
-                      <div className={styles.rightHalf}>
-                        {positive && (
-                          <div
-                            className={styles.bar}
-                            data-type="positive"
-                            style={{ width: `${pct}%` }}
-                            title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <div className={styles.valueLabel}>
-                      {positive ? '+' : ''}
-                      {g.gexUsdMillions.toFixed(1)}M
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </>
       )}
     </div>

@@ -12,6 +12,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { landingCopy } from "@/lib/copy";
+import { appUrl } from "@/lib/links";
 
 const VolSurfaceTheaterCanvas = dynamic(
   () => import("./three/VolSurfaceTheaterCanvas"),
@@ -249,7 +250,7 @@ export function HeroTerminalSection() {
               <a href="#access" className="landing-button-primary">
                 {landingCopy.hero.primaryCta}
               </a>
-              <a href="#features" className="landing-button-secondary">
+              <a href={appUrl} className="landing-button-secondary">
                 {landingCopy.hero.secondaryCta}
               </a>
             </div>

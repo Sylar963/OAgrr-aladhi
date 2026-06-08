@@ -1,4 +1,5 @@
 import { landingCopy } from "@/lib/copy";
+import { appUrl } from "@/lib/links";
 
 export function LandingHeader() {
   return (
@@ -27,6 +28,12 @@ export function LandingHeader() {
           <span className="hidden rounded-full border border-[color:var(--landing-border)] bg-[rgba(237,244,246,0.06)] px-3 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-[var(--landing-accent)] sm:inline-flex">
             Live / institutional preview
           </span>
+          <a
+            href={appUrl}
+            className="landing-button-secondary hidden px-5! py-3! sm:inline-flex"
+          >
+            {landingCopy.nav.launch}
+          </a>
           <a href="#access" className="landing-button-primary px-5! py-3!">
             {landingCopy.nav.cta}
           </a>

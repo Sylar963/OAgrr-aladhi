@@ -5,6 +5,7 @@ export const landingCopy = {
     features: 'Features',
     faq: 'FAQ',
     cta: 'Request Access',
+    launch: 'Launch terminal',
   },
   hero: {
     eyebrow: 'Cross-venue options terminal',

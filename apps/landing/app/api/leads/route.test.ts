@@ -16,6 +16,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   delete process.env.LANDING_LEADS_FILE;
+  delete process.env.LANDING_API_BASE_URL;
+  vi.unstubAllGlobals();
   await rm(leadFilePath, { force: true });
 });
 
@@ -62,5 +64,48 @@ describe('POST /api/leads', () => {
     const response = await POST(request);
 
     expect(response.status).toBe(400);
+  });
+
+  it('forwards to the core API when LANDING_API_BASE_URL is set', async () => {
+    process.env.LANDING_API_BASE_URL = 'https://api.example.test';
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = new Request('http://localhost/api/leads', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'desk@example.com', source: 'landing-hero' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/leads',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // Forwarded successfully → no local fallback file written.
+    await expect(readFile(leadFilePath, 'utf8')).rejects.toThrow();
+  });
+
+  it('falls back to the local file when the API call fails', async () => {
+    process.env.LANDING_API_BASE_URL = 'https://api.example.test';
+    const fetchMock = vi.fn(async () => new Response('nope', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = new Request('http://localhost/api/leads', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'desk@example.com', source: 'landing-hero' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    expect(fetchMock).toHaveBeenCalled();
+    const stored = await readFile(leadFilePath, 'utf8');
+    expect(stored).toContain('desk@example.com');
   });
 });

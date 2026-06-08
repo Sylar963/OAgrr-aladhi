@@ -18,7 +18,7 @@ function resolveLeadFilePath() {
   return defaultDataFile;
 }
 
-export async function persistLead(input: LeadInput): Promise<void> {
+async function appendLeadToFile(input: LeadInput): Promise<void> {
   const filePath = resolveLeadFilePath();
 
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -30,4 +30,25 @@ export async function persistLead(input: LeadInput): Promise<void> {
     })}\n`,
     'utf8',
   );
+}
+
+export async function persistLead(input: LeadInput): Promise<void> {
+  const apiBase = process.env.LANDING_API_BASE_URL;
+
+  if (apiBase) {
+    try {
+      const res = await fetch(`${apiBase}/api/leads`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(2500),
+      });
+      if (res.ok) return;
+    } catch {
+      // Network error / timeout — fall through to the durable file fallback so a
+      // lead is never lost while the core API is unreachable.
+    }
+  }
+
+  await appendLeadToFile(input);
 }

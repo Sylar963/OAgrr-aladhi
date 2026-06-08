@@ -1,3 +1,5 @@
+import { getClerkToken } from '@lib/clerk-token';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const RETRY_DELAY_MS = 1500;
 const MAX_RETRIES = 10;
@@ -32,16 +34,11 @@ export function wsUrl(path: string): string {
   return `${proto}//${window.location.host}${path}`;
 }
 
-function getHeaders(): HeadersInit {
+async function getHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {};
-  let apiKey: string | null = null;
-  try {
-    apiKey = localStorage.getItem('paperApiKey');
-  } catch {
-    apiKey = null;
-  }
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
+  const token = await getClerkToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -52,7 +49,7 @@ export async function fetchJson<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
-        headers: getHeaders(),
+        headers: await getHeaders(),
       });
 
       if (res.status === 503) {

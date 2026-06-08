@@ -1,5 +1,4 @@
-import { z } from 'zod';
-
+import { getClerkToken } from '@lib/clerk-token';
 import type {
   PortfolioMetrics,
   PositionLeg,
@@ -7,16 +6,14 @@ import type {
   VolShockResult,
   VolShockScenario,
 } from '@oggregator/protocol';
+import { z } from 'zod';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
-function getHeaders(): HeadersInit {
+async function getHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  let apiKey: string | null = null;
-  try {
-    apiKey = localStorage.getItem('paperApiKey');
-  } catch {}
-  if (apiKey) headers['X-API-Key'] = apiKey;
+  const token = await getClerkToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 
@@ -34,14 +31,14 @@ async function parseResponse<T>(res: Response, schema: z.ZodType<T>, path: strin
 }
 
 async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
+  const res = await fetch(`${API_BASE}${path}`, { headers: await getHeaders() });
   return parseResponse(res, schema, path);
 }
 
 async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify(body),
   });
   return parseResponse(res, schema, path);
@@ -50,7 +47,7 @@ async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): P
 async function deleteRequest<T>(path: string, schema: z.ZodType<T>): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'DELETE',
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
   return parseResponse(res, schema, path);
 }
@@ -145,7 +142,9 @@ export async function connectVenue(
   );
 }
 
-export async function disconnectVenue(venue: string): Promise<{ venue: string; connected: boolean }> {
+export async function disconnectVenue(
+  venue: string,
+): Promise<{ venue: string; connected: boolean }> {
   return deleteRequest(
     `/portfolio/venue-credentials/${venue}`,
     z.object({ venue: z.string(), connected: z.boolean() }),
@@ -223,12 +222,7 @@ const ShockGridCellSchema = z.object({
   totalPnlUsd: z.number(),
 });
 
-const PortfolioPnlCurveStatusSchema = z.enum([
-  'ok',
-  'empty',
-  'mixed_underlyings',
-  'missing_marks',
-]);
+const PortfolioPnlCurveStatusSchema = z.enum(['ok', 'empty', 'mixed_underlyings', 'missing_marks']);
 
 const PortfolioPnlPointSchema = z.object({
   underlyingPriceUsd: z.number(),

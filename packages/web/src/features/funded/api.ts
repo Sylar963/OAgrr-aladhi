@@ -1,3 +1,4 @@
+import { getClerkToken } from '@lib/clerk-token';
 import { fetchJson } from '@lib/http';
 import type {
   FundedRunDetailDto,
@@ -8,17 +9,19 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
-function getHeaders(): HeadersInit {
+async function getHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  const apiKey = localStorage.getItem('paperApiKey');
-  if (apiKey) headers['X-API-Key'] = apiKey;
+  const token = await getClerkToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   return headers;
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {

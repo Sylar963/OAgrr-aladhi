@@ -1,15 +1,21 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import { pnlService } from '../../trading-services.js';
+import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { pnlToDto } from './mappers.js';
 
-function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
-
 export async function paperPnlRoute(app: FastifyInstance) {
-  app.get('/paper/pnl', async (req) => {
-    const accountId = getAccountId(req);
+  app.get<{
+    Querystring: { accountId?: string };
+  }>('/paper/pnl', async (req, reply) => {
+    let accountId: string;
+    try {
+      accountId = await authorizeAccountScope(req, req.query.accountId);
+    } catch (err) {
+      if (err instanceof AccountScopeError) {
+        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
+      }
+      throw err;
+    }
     const snap = await pnlService.snapshot(accountId);
     return pnlToDto(snap);
   });

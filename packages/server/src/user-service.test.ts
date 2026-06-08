@@ -15,6 +15,10 @@ const state = {
   } | null,
 };
 
+const { fundedStoreMock } = vi.hoisted(() => ({
+  fundedStoreMock: { enabled: true as boolean, listRunsForUser: vi.fn() },
+}));
+
 vi.mock('./clerk-verifier.js', () => ({
   verifyClerkToken: vi.fn(async () => state.identity),
 }));
@@ -34,6 +38,8 @@ vi.mock('./trading-services.js', () => ({
     upsertByClerkId: vi.fn(async () => state.upsertResult),
   },
 }));
+
+vi.mock('./funded-services.js', () => ({ fundedStore: fundedStoreMock }));
 
 function fakeReq(headers: Record<string, string>): FastifyRequest {
   return { headers, url: '/api/paper/positions' } as unknown as FastifyRequest;
@@ -115,5 +121,67 @@ describe('syncUser', () => {
     state.upsertResult = { id: 'usr_1', defaultAccountId: 'acct_1', displayName: 'A' };
     const { syncUser } = await import('./user-service.js');
     expect(await syncUser('good')).toEqual({ accountId: 'acct_1' });
+  });
+});
+
+function scopeReq(
+  user?: { id: string; accountId: string; label: string },
+  accountId?: string,
+): FastifyRequest {
+  return {
+    user,
+    query: accountId ? { accountId } : {},
+    headers: {},
+  } as unknown as FastifyRequest;
+}
+
+describe('authorizeAccountScope', () => {
+  beforeEach(() => {
+    state.dbEnabled = false;
+    fundedStoreMock.enabled = true;
+    fundedStoreMock.listRunsForUser.mockReset();
+  });
+
+  it('falls back to DEFAULT_ACCOUNT_ID when persistence is disabled and no user', async () => {
+    const { authorizeAccountScope } = await import('./user-service.js');
+    const id = await authorizeAccountScope(scopeReq(), undefined);
+    expect(id).toBe('paper-default');
+  });
+
+  it('returns the user default when no scope is requested', async () => {
+    state.dbEnabled = true;
+    const { authorizeAccountScope } = await import('./user-service.js');
+    const id = await authorizeAccountScope(
+      scopeReq({ id: 'u1', accountId: 'acct_default', label: 'a' }),
+      undefined,
+    );
+    expect(id).toBe('acct_default');
+  });
+
+  it('allows a funded-run account owned by the user', async () => {
+    state.dbEnabled = true;
+    fundedStoreMock.listRunsForUser.mockResolvedValue([
+      { paperAccountId: 'acct_run1', userId: 'u1' },
+    ]);
+    const { authorizeAccountScope } = await import('./user-service.js');
+    const id = await authorizeAccountScope(
+      scopeReq({ id: 'u1', accountId: 'acct_default', label: 'a' }, 'acct_run1'),
+      'acct_run1',
+    );
+    expect(id).toBe('acct_run1');
+  });
+
+  it('throws 403 for a foreign account', async () => {
+    state.dbEnabled = true;
+    fundedStoreMock.listRunsForUser.mockResolvedValue([
+      { paperAccountId: 'acct_run1', userId: 'u1' },
+    ]);
+    const { authorizeAccountScope } = await import('./user-service.js');
+    await expect(
+      authorizeAccountScope(
+        scopeReq({ id: 'u1', accountId: 'acct_default', label: 'a' }, 'acct_foreign'),
+        'acct_foreign',
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 });

@@ -11,4 +11,4 @@ export interface Account {
 
 export const DEFAULT_ACCOUNT_ID: AccountId = 'paper-default';
 export const DEFAULT_ACCOUNT_LABEL = 'Paper (default)';
-export const DEFAULT_INITIAL_CASH_USD: UsdAmount = 100_000;
+export const DEFAULT_INITIAL_CASH_USD: UsdAmount = 1_000;

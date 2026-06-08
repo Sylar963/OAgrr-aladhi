@@ -1,9 +1,9 @@
 import type { PaperAccountRow } from '@oggregator/db';
+import { DEFAULT_ACCOUNT_ID, DEFAULT_INITIAL_CASH_USD } from '@oggregator/trading';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { verifyClerkToken } from './clerk-verifier.js';
+import { fundedStore } from './funded-services.js';
 import { paperTradingStore, usersStore } from './trading-services.js';
-
-const DEFAULT_INITIAL_CASH_USD = 100_000;
 
 export interface AuthenticatedUser {
   id: string;
@@ -104,6 +104,43 @@ export function getRequestAccountId(req: FastifyRequest, fallback: string): stri
     return req.user.accountId;
   }
   return req.user?.accountId ?? fallback;
+}
+
+export class AccountScopeError extends Error {
+  readonly statusCode = 403;
+  constructor(message = 'Account not authorized for this user') {
+    super(message);
+    this.name = 'AccountScopeError';
+  }
+}
+
+/**
+ * Resolve + authorize the account a paper request targets.
+ * Allowed iff: no scope requested (→ user default / DEFAULT_ACCOUNT_ID),
+ * the user's own default account, OR a paper_account_id of one of THEIR funded_runs.
+ * Any other requested account → 403.
+ */
+export async function authorizeAccountScope(
+  req: FastifyRequest,
+  requested?: string | null,
+): Promise<string> {
+  if (!paperTradingStore.enabled) {
+    return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  }
+  if (!req.user) {
+    throw new Error('authorizeAccountScope called without authenticated user');
+  }
+  const defaultId = req.user.accountId;
+  if (!requested || requested === defaultId) {
+    return defaultId;
+  }
+  if (fundedStore.enabled) {
+    const runs = await fundedStore.listRunsForUser(req.user.id);
+    if (runs.some((r) => r.paperAccountId === requested)) {
+      return requested;
+    }
+  }
+  throw new AccountScopeError();
 }
 
 declare module 'fastify' {

@@ -1,6 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { PlaceOrderRequestSchema } from '@oggregator/protocol';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import type { OrderLeg } from '@oggregator/trading';
 import {
   InsufficientMarginError,
@@ -9,21 +7,22 @@ import {
   NoLiquidityError,
   TradingError,
 } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import {
   ensureDefaultAccount,
   orderPlacementService,
   orderRepository,
   paperTradingStore,
 } from '../../trading-services.js';
-import { fillToDto, orderToDto } from './mappers.js';
+import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { paperEvents } from './events.js';
-
-function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
+import { fillToDto, orderToDto } from './mappers.js';
 
 export async function paperOrdersRoute(app: FastifyInstance) {
-  app.post('/paper/orders', async (req, reply) => {
+  app.post<{
+    Body: unknown;
+    Querystring: { accountId?: string };
+  }>('/paper/orders', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply
         .status(503)
@@ -35,7 +34,15 @@ export async function paperOrdersRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
-    const accountId = getAccountId(req);
+    let accountId: string;
+    try {
+      accountId = await authorizeAccountScope(req, req.query.accountId);
+    } catch (err) {
+      if (err instanceof AccountScopeError) {
+        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
+      }
+      throw err;
+    }
     await ensureDefaultAccount();
 
     try {
@@ -96,9 +103,17 @@ export async function paperOrdersRoute(app: FastifyInstance) {
   });
 
   app.get<{
-    Querystring: { limit?: string };
-  }>('/paper/orders', async (req) => {
-    const accountId = getAccountId(req);
+    Querystring: { accountId?: string; limit?: string };
+  }>('/paper/orders', async (req, reply) => {
+    let accountId: string;
+    try {
+      accountId = await authorizeAccountScope(req, req.query.accountId);
+    } catch (err) {
+      if (err instanceof AccountScopeError) {
+        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
+      }
+      throw err;
+    }
     const limit = Math.min(Number(req.query.limit ?? '50') || 50, 500);
     const orders = await orderRepository.listOrders(accountId, limit);
     return { orders: orders.map(orderToDto) };

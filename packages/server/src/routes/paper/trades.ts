@@ -1,11 +1,11 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CreatePaperTradeNoteRequestSchema,
   CreatePaperTradeRequestSchema,
   ReducePaperTradeRequestSchema,
 } from '@oggregator/protocol';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { paperTradingStore } from '../../trading-services.js';
+import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { paperEvents } from './events.js';
 import { fillToDto, orderToDto } from './mappers.js';
 import {
@@ -18,8 +18,23 @@ import {
   reduceTrade,
 } from './workspace.js';
 
-function getAccountId(request: FastifyRequest): string {
-  return request.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+/**
+ * Resolve + authorize the requested account, replying 403 on a foreign account.
+ * Returns null after sending the 403 so callers short-circuit.
+ */
+async function resolveScope(
+  request: FastifyRequest<{ Querystring: { accountId?: string } }>,
+  reply: FastifyReply,
+): Promise<string | null> {
+  try {
+    return await authorizeAccountScope(request, request.query.accountId);
+  } catch (err) {
+    if (err instanceof AccountScopeError) {
+      reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
+      return null;
+    }
+    throw err;
+  }
 }
 
 function persistenceUnavailable() {
@@ -28,7 +43,7 @@ function persistenceUnavailable() {
 
 export async function paperTradesRoute(app: FastifyInstance) {
   app.get<{
-    Querystring: { status?: 'open' | 'closed' | 'all'; limit?: string };
+    Querystring: { status?: 'open' | 'closed' | 'all'; limit?: string; accountId?: string };
   }>('/paper/trades', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -38,17 +53,20 @@ export async function paperTradesRoute(app: FastifyInstance) {
         ? req.query.status
         : 'all';
     const limit = Math.min(Number(req.query.limit ?? '100') || 100, 500);
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     return { trades: await listTradeSummaries(status, limit, accountId) };
   });
 
   app.get<{
     Params: { tradeId: string };
+    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       return await getTradeDetailOrThrow(req.params.tradeId, accountId);
     } catch (err) {
@@ -59,15 +77,20 @@ export async function paperTradesRoute(app: FastifyInstance) {
     }
   });
 
-  app.get('/paper/overview', async (req, reply) => {
+  app.get<{
+    Querystring: { accountId?: string };
+  }>('/paper/overview', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     return getPaperOverview(accountId);
   });
 
-  app.post('/paper/trades', async (req, reply) => {
+  app.post<{
+    Querystring: { accountId?: string };
+  }>('/paper/trades', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
@@ -75,7 +98,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const result = await createTrade(parsed.data, accountId);
     paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
     paperEvents.emitTrade(result.trade);
@@ -91,6 +115,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
+    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/notes', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -99,7 +124,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const trade = await addTradeNote(req.params.tradeId, parsed.data, accountId);
       paperEvents.emitTrade(trade);
@@ -117,11 +143,13 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
+    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/actions/close', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const result = await closeTrade(req.params.tradeId, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
@@ -131,7 +159,10 @@ export async function paperTradesRoute(app: FastifyInstance) {
       }
       return result.trade;
     } catch (err) {
-      if (err instanceof Error && (err.message === 'Trade not found' || err.message === 'Trade is already flat')) {
+      if (
+        err instanceof Error &&
+        (err.message === 'Trade not found' || err.message === 'Trade is already flat')
+      ) {
         return reply.status(404).send({ error: 'not_found', message: err.message });
       }
       throw err;
@@ -140,6 +171,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
+    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/actions/reduce', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -148,7 +180,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const result = await reduceTrade(req.params.tradeId, parsed.data.fraction, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
@@ -158,7 +191,10 @@ export async function paperTradesRoute(app: FastifyInstance) {
       }
       return result.trade;
     } catch (err) {
-      if (err instanceof Error && (err.message === 'Trade not found' || err.message === 'Trade is already flat')) {
+      if (
+        err instanceof Error &&
+        (err.message === 'Trade not found' || err.message === 'Trade is already flat')
+      ) {
         return reply.status(404).send({ error: 'not_found', message: err.message });
       }
       throw err;

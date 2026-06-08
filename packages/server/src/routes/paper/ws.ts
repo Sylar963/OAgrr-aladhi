@@ -1,6 +1,7 @@
 import type { PaperWsServerMessage } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import type { FastifyInstance } from 'fastify';
+import { fundedStore } from '../../funded-services.js';
 import {
   paperTradingStore,
   pnlService,
@@ -46,6 +47,20 @@ export async function paperWsRoute(app: FastifyInstance) {
         return;
       }
       accountId = user.accountId;
+
+      const requested = new URL(req.url, 'http://localhost').searchParams.get('accountId');
+      if (requested && requested !== user.accountId) {
+        const owned =
+          fundedStore.enabled &&
+          (await fundedStore.listRunsForUser(user.id)).some((r) => r.paperAccountId === requested);
+        if (owned) {
+          accountId = requested;
+        } else {
+          send(socket, { type: 'error', code: 'forbidden', message: 'Account not authorized' });
+          socket.close(1008, 'Forbidden');
+          return;
+        }
+      }
     } else {
       accountId = DEFAULT_ACCOUNT_ID;
     }

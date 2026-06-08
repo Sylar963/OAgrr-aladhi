@@ -19,7 +19,6 @@ export default function TradingView() {
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [capitalInput, setCapitalInput] = useState('1000');
   const initPaperAccount = useInitPaperAccount();
-  const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
 
   const challengeRunId = activeContext.kind === 'challenge' ? (activeContext.runId ?? null) : null;
   const { data: challengeRun } = useFundedRun(challengeRunId);
@@ -34,12 +33,6 @@ export default function TradingView() {
   }, [activeScope, queryClient]);
 
   useEffect(() => {
-    if (wsState === 'error') {
-      setShowRefreshPrompt(true);
-    }
-  }, [wsState]);
-
-  useEffect(() => {
     if (paperAccount) {
       setCapitalInput(String(Math.round(paperAccount.initialCashUsd)));
     }
@@ -50,19 +43,6 @@ export default function TradingView() {
 
   return (
     <div className={styles.view}>
-      {showRefreshPrompt && (
-        <div className={styles.refreshBanner}>
-          <span>Server restarted. Please refresh to sync.</span>
-          <button
-            className={styles.primaryButton}
-            onClick={() => {
-              window.location.reload();
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-      )}
       <div className={styles.header}>
         <HeaderStat label="Equity" value={fmtUsd(overview?.pnl.equityUsd ?? null)} />
         <HeaderStat label="Cash" value={fmtUsd(overview?.pnl.cashUsd ?? null)} />

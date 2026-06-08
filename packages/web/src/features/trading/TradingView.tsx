@@ -1,11 +1,17 @@
+import { ChallengePanel, useFundedRun } from '@features/funded';
 import { fmtDelta, fmtNum, fmtUsd } from '@lib/format';
+import { useAppStore } from '@stores/app-store';
 import { useEffect, useState } from 'react';
+import AccountContextPicker from './AccountContextPicker';
+import { setPaperAccountScope } from './api';
 import { useInitPaperAccount, useOverview, usePaperAccount } from './hooks/queries';
 import { usePaperWs } from './hooks/usePaperWs';
 import PaperTraderPanel from './PaperTraderPanel';
+import ThalexLivePanel from './ThalexLivePanel';
 import styles from './TradingView.module.css';
 
 export default function TradingView() {
+  const activeContext = useAppStore((s) => s.activeContext);
   const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
@@ -13,6 +19,17 @@ export default function TradingView() {
   const wsState = usePaperWs();
   const initPaperAccount = useInitPaperAccount();
   const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
+
+  const challengeRunId = activeContext.kind === 'challenge' ? (activeContext.runId ?? null) : null;
+  const { data: challengeRun } = useFundedRun(challengeRunId);
+
+  useEffect(() => {
+    if (activeContext.kind === 'challenge') {
+      setPaperAccountScope(challengeRun?.paperAccountId ?? null);
+    } else {
+      setPaperAccountScope(null);
+    }
+  }, [activeContext.kind, challengeRun?.paperAccountId]);
 
   useEffect(() => {
     if (wsState === 'error') {
@@ -66,59 +83,68 @@ export default function TradingView() {
           value={wsLabel(wsState)}
           tone={wsState === 'live' ? 'positive' : 'neutral'}
         />
+        <div className={styles.headerPicker}>
+          <AccountContextPicker />
+        </div>
       </div>
 
       <div className={styles.workspace}>
-        <PaperTraderPanel
-          selectedTradeId={selectedTradeId}
-          setSelectedTradeId={setSelectedTradeId}
-        />
+        {activeContext.kind === 'paper' && (
+          <PaperTraderPanel
+            selectedTradeId={selectedTradeId}
+            setSelectedTradeId={setSelectedTradeId}
+          />
+        )}
+        {activeContext.kind === 'challenge' && <ChallengePanel runId={challengeRunId} />}
+        {activeContext.kind === 'thalex' && <ThalexLivePanel />}
       </div>
 
-      <footer className={styles.accountFooter}>
-        <span className={styles.accountFooterLabel}>
-          {isConfigured
-            ? `${paperAccount?.label ?? 'Paper'} · ${fmtUsd(paperAccount?.initialCashUsd ?? null)}`
-            : 'Paper account not initialized'}
-        </span>
-        <span className={styles.accountFooterSep}>·</span>
-        <input
-          className={styles.accountFooterInput}
-          type="number"
-          min={1000}
-          max={100000}
-          step={1000}
-          inputMode="numeric"
-          value={capitalInput}
-          onChange={(event) => setCapitalInput(event.target.value)}
-          aria-label="Capital"
-        />
-        <button
-          className={styles.accountFooterButton}
-          disabled={initPaperAccount.isPending || selectedCapital == null}
-          onClick={() => {
-            if (selectedCapital == null) return;
-            if (
-              isConfigured &&
-              !window.confirm(
-                `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
-              )
-            ) {
-              return;
-            }
-            initPaperAccount.mutate(
-              { initialCashUsd: selectedCapital },
-              {
-                onSuccess: () => {
-                  setSelectedTradeId(null);
+      {activeContext.kind === 'paper' && (
+        <footer className={styles.accountFooter}>
+          <span className={styles.accountFooterLabel}>
+            {isConfigured
+              ? `${paperAccount?.label ?? 'Paper'} · ${fmtUsd(paperAccount?.initialCashUsd ?? null)}`
+              : 'Paper account not initialized'}
+          </span>
+          <span className={styles.accountFooterSep}>·</span>
+          <input
+            className={styles.accountFooterInput}
+            type="number"
+            min={1000}
+            max={100000}
+            step={1000}
+            inputMode="numeric"
+            value={capitalInput}
+            onChange={(event) => setCapitalInput(event.target.value)}
+            aria-label="Capital"
+          />
+          <button
+            className={styles.accountFooterButton}
+            disabled={initPaperAccount.isPending || selectedCapital == null}
+            onClick={() => {
+              if (selectedCapital == null) return;
+              if (
+                isConfigured &&
+                !window.confirm(
+                  `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
+                )
+              ) {
+                return;
+              }
+              initPaperAccount.mutate(
+                { initialCashUsd: selectedCapital },
+                {
+                  onSuccess: () => {
+                    setSelectedTradeId(null);
+                  },
                 },
-              },
-            );
-          }}
-        >
-          {isConfigured ? 'Reset' : 'Initialize'}
-        </button>
-      </footer>
+              );
+            }}
+          >
+            {isConfigured ? 'Reset' : 'Initialize'}
+          </button>
+        </footer>
+      )}
     </div>
   );
 }

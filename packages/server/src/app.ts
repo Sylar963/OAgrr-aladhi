@@ -10,6 +10,7 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import { disposeChainWarmup, warmupChainRuntimes } from './chain-warmup.js';
+import { disposeFundedSettlementJob, startFundedSettlementJob } from './funded-settlement-job.js';
 import { disposePortfolioServices } from './portfolio-services.js';
 import { registerRoutes } from './routes/index.js';
 import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
@@ -167,6 +168,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     dvolService.dispose();
     indexPriceService.dispose();
     ivHistoryService.dispose();
+    disposeFundedSettlementJob();
     disposeServiceStores();
     await disposeChainWarmup();
     await disposePortfolioServices();
@@ -238,6 +240,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       await warmupChainRuntimes(app.log);
     } catch (err: unknown) {
       app.log.warn({ err: String(err) }, 'chain warmup failed');
+    }
+    try {
+      startFundedSettlementJob(app.log);
+    } catch (err: unknown) {
+      app.log.warn({ err: String(err) }, 'funded settlement job start failed');
     }
   });
 

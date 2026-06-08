@@ -23,6 +23,25 @@ function readStorage(key: string): string | null {
   }
 }
 
+export type ActiveContext = { kind: 'paper' | 'challenge' | 'thalex'; runId?: string };
+
+function readActiveContext(): ActiveContext {
+  const raw = readStorage('activeContext');
+  if (!raw) return { kind: 'paper' };
+  try {
+    const parsed = JSON.parse(raw) as ActiveContext;
+    if (
+      parsed &&
+      (parsed.kind === 'paper' || parsed.kind === 'challenge' || parsed.kind === 'thalex')
+    ) {
+      return parsed;
+    }
+  } catch {
+    // fall through to default
+  }
+  return { kind: 'paper' };
+}
+
 export interface FeedStatus {
   connectionState: WsConnectionState;
   failedVenueCount: number;
@@ -69,6 +88,7 @@ interface AppState {
   myIv: string;
   feedStatus: FeedStatus;
   accountId: string | null;
+  activeContext: ActiveContext;
   venueCreds: Partial<Record<VenueId, VenueCredentials>>;
   soundEnabled: boolean;
   sessionNotice: SessionNotice | null;
@@ -90,6 +110,7 @@ interface AppState {
   setFeedStatus: (s: Partial<FeedStatus>) => void;
   setAccountId: (accountId: string) => void;
   clearAccount: () => void;
+  setActiveContext: (ctx: ActiveContext) => void;
   setVenueCreds: (creds: VenueCredentials) => void;
   removeVenueCreds: (venue: VenueId) => void;
   setSessionNotice: (notice: SessionNotice | null) => void;
@@ -121,6 +142,7 @@ export const useAppStore = create<AppState>((set) => ({
     lastUpdateMs: null,
   },
   accountId: readStorage('paperAccountId'),
+  activeContext: readActiveContext(),
   venueCreds: loadAllVenueCreds(PROTOCOL_VENUE_IDS),
   soundEnabled: readStorage('tapeSoundEnabled') === '1',
   sessionNotice: null,
@@ -152,6 +174,10 @@ export const useAppStore = create<AppState>((set) => ({
   clearAccount: () => {
     localStorage.removeItem('paperAccountId');
     set({ accountId: null });
+  },
+  setActiveContext: (activeContext) => {
+    localStorage.setItem('activeContext', JSON.stringify(activeContext));
+    set({ activeContext });
   },
   setVenueCreds: (creds) => {
     storageSaveVenueCreds(creds);

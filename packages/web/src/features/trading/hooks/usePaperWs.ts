@@ -4,6 +4,7 @@ import type { PaperWsServerMessage } from '@oggregator/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { getPaperAccountScope } from '../api';
 import { QKEY } from './queries';
 
 type PaperConnectionState = 'connecting' | 'live' | 'closed' | 'error';
@@ -27,10 +28,12 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       if (disposed) return;
       const token = await getClerkToken();
       const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+      const acct = getPaperAccountScope();
+      const acctParam = acct ? `&accountId=${encodeURIComponent(acct)}` : '';
       const envWsBase = import.meta.env.VITE_WS_URL;
       const paperWsUrl = envWsBase
-        ? `${envWsBase.replace(/\/$/, '')}/ws/paper${tokenParam}`
-        : `${wsUrl('/ws/paper')}${tokenParam}`;
+        ? `${envWsBase.replace(/\/$/, '')}/ws/paper${tokenParam}${acctParam}`
+        : `${wsUrl('/ws/paper')}${tokenParam}${acctParam}`;
       const ws = new WebSocket(paperWsUrl);
       wsRef.current = ws;
       setState('connecting');

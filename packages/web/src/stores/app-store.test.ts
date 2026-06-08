@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAppStore } from './app-store';
 
 describe('app-store', () => {
@@ -59,6 +59,30 @@ describe('app-store', () => {
 
     expect(useAppStore.getState().underlying).toBe('SOL');
     expect(useAppStore.getState().expiry).toBe('2026-04-10');
+  });
+});
+
+describe('activeContext slice', () => {
+  afterEach(() => {
+    localStorage.clear();
+    useAppStore.setState({ activeContext: { kind: 'paper' } });
+  });
+
+  it('defaults to paper context', () => {
+    expect(useAppStore.getState().activeContext).toEqual({ kind: 'paper' });
+  });
+
+  it('setActiveContext persists to localStorage and updates state', () => {
+    useAppStore.getState().setActiveContext({ kind: 'challenge', runId: 'run_1' });
+    expect(useAppStore.getState().activeContext).toEqual({ kind: 'challenge', runId: 'run_1' });
+    expect(localStorage.getItem('activeContext')).toBe(
+      JSON.stringify({ kind: 'challenge', runId: 'run_1' }),
+    );
+  });
+
+  it('setActiveContext can switch to thalex', () => {
+    useAppStore.getState().setActiveContext({ kind: 'thalex' });
+    expect(useAppStore.getState().activeContext).toEqual({ kind: 'thalex' });
   });
 });
 

@@ -234,6 +234,9 @@ importers:
       '@oggregator/db':
         specifier: workspace:*
         version: link:../db
+      '@oggregator/funded':
+        specifier: workspace:*
+        version: link:../funded
       '@oggregator/protocol':
         specifier: 'workspace:'
         version: link:../protocol

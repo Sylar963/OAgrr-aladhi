@@ -21,6 +21,7 @@
     "@fastify/websocket": "11.2.0",
     "@oggregator/core": "workspace:*",
     "@oggregator/db": "workspace:*",
+    "@oggregator/funded": "workspace:*",
     "@oggregator/protocol": "workspace:",
     "@oggregator/trading": "workspace:",
     "dotenv": "16.6.1",

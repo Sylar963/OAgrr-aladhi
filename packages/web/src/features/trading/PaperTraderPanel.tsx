@@ -54,6 +54,12 @@ export default function PaperTraderPanel({
     setDteShift(0);
   }, [selectedTradeId]);
 
+  useEffect(() => {
+    const candidate = openTrades[0]?.id ?? closedTrades[0]?.id ?? null;
+    const exists = [...openTrades, ...closedTrades].some((t) => t.id === selectedTradeId);
+    if (!selectedTradeId || !exists) setSelectedTradeId(candidate);
+  }, [closedTrades, openTrades, selectedTradeId, setSelectedTradeId]);
+
   const liveTrade = selectedTrade ?? null;
   const scenario = liveTrade ? buildScenario(liveTrade, ivShift, dteShift) : null;
 

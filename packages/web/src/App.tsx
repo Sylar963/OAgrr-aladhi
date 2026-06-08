@@ -1,14 +1,13 @@
-import { lazy, Suspense, useEffect } from 'react';
-
 import { AppShell } from '@components/layout';
-import { ChainView, ChartPanelLayer, useUnderlyings } from '@features/chain';
 import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
+import { ChainView, ChartPanelLayer, useUnderlyings } from '@features/chain';
 import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
 import { TABS } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
+import { lazy, Suspense, useEffect } from 'react';
 
 import styles from './App.module.css';
 
@@ -26,12 +25,11 @@ const ArchitectView = lazy(() =>
 const TradingView = lazy(() =>
   import('@features/trading').then((m) => ({ default: m.TradingView })),
 );
-const AlphaView = lazy(() =>
-  import('@features/alpha').then((m) => ({ default: m.AlphaView })),
-);
+const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView })));
 const PortfolioView = lazy(() =>
   import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
 );
+const FundedView = lazy(() => import('@features/funded').then((m) => ({ default: m.FundedView })));
 
 export default function App() {
   useServerVersion();
@@ -80,6 +78,7 @@ export default function App() {
             {activeTab === 'flow' && <FlowView />}
             {activeTab === 'analytics' && <AnalyticsView />}
             {activeTab === 'gex' && <GexView />}
+            {activeTab === 'funded' && <FundedView />}
           </Suspense>
         </ErrorBoundary>
       </div>

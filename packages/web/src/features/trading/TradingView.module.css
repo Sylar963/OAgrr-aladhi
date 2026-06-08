@@ -18,9 +18,7 @@
   background: var(--bg-surface);
 }
 
-.headerLabel,
-.metricLabel,
-.miniLabel {
+.headerLabel {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -37,14 +35,6 @@
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-  gap: 16px;
-  min-width: 0;
-}
-
-.sidebar,
-.main {
-  display: flex;
-  flex-direction: column;
   gap: 16px;
   min-width: 0;
 }
@@ -106,351 +96,23 @@
   cursor: default;
 }
 
-.section {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-surface);
-  overflow: hidden;
-}
-
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 14px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.tradeList,
-.feedList,
-.noteList {
-  display: flex;
-  flex-direction: column;
-}
-
-.tradeCard {
-  appearance: none;
-  border: none;
-  border-bottom: 1px solid var(--border-subtle);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  padding: 14px;
-  cursor: pointer;
-}
-
-.tradeCard:last-child,
-.feedItem:last-child,
-.noteCard:last-child {
-  border-bottom: none;
-}
-
-.tradeCard[data-selected='true'] {
-  background: color-mix(in srgb, var(--accent-primary) 4%, var(--bg-surface));
-  box-shadow: inset 2px 0 0 var(--accent-primary);
-}
-
-.tradeCardTop,
-.tradeStatsRow,
-.tradeRiskRow,
-.detailHeader,
-.actionRow,
-.noteHeader,
-.tagRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tradeStatsRow,
-.tradeRiskRow {
-  margin-top: 10px;
-}
-
-.tradeLabel,
-.detailTitle {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.tradeMetaLine,
-.detailSubtitle,
-.feedMeta,
-.noteHeader {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.tradeMetaLine {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.premiumFlowBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 10px 3px 4px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: 11px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.premiumFlowLabel {
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: none;
-}
-
-.premiumFlowValue {
-  font-weight: 600;
-}
-
-.premiumFlowBadge[data-kind='debit'] {
-  border-color: color-mix(in srgb, var(--color-loss) 30%, var(--border-subtle));
-}
-
-.premiumFlowBadge[data-kind='credit'] {
-  border-color: color-mix(in srgb, var(--color-profit) 30%, var(--border-subtle));
-}
-
-.premiumFlowBadge[data-kind='debit'] .premiumFlowLabel {
-  background: var(--color-loss);
-  color: #fff;
-}
-
-.premiumFlowBadge[data-kind='credit'] .premiumFlowLabel {
-  background: var(--color-profit);
-  color: #000;
-}
-
-.premiumFlowBadge[data-kind='debit'] .premiumFlowValue {
-  color: var(--color-loss);
-}
-
-.premiumFlowBadge[data-kind='credit'] .premiumFlowValue {
-  color: var(--color-profit);
-}
-
-.miniValue,
-.metricValue {
-  margin-top: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.miniValue {
-  font-size: 13px;
-}
-
-.metricGrid,
-.riskGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  padding: 14px;
-}
-
-.riskGrid {
-  padding-top: 0;
-}
-
-.metricCard {
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--bg-base);
-}
-
-.metricValue {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.riskPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  background: var(--bg-base);
-}
-
-.twoColumn {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: 16px;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.table th,
-.table td {
-  padding: 9px 14px;
-  text-align: left;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.table th {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 500;
-}
-
-.table tr:last-child td {
-  border-bottom: none;
-}
-
-.clickRow {
-  cursor: pointer;
-}
-
-.rightAlign {
-  text-align: right !important;
-}
-
-.chartWrap {
-  height: 320px;
-  padding: 14px;
-  display: flex;
-}
-
-.chartWrap > * {
-  flex: 1;
-  min-height: 0;
-}
-
-.sliderBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 14px 14px;
-}
-
-.sliderRow {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.noteComposer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.noteComposer select,
-.noteComposer input,
-.noteComposer textarea {
-  width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-input);
-  color: inherit;
-  padding: 10px 12px;
-  font: inherit;
-}
-
-.noteComposer textarea {
-  min-height: 112px;
-  resize: vertical;
-}
-
-.primaryButton,
-.secondaryButton {
+.primaryButton {
   border-radius: 8px;
   padding: 9px 12px;
   font: inherit;
   cursor: pointer;
-}
-
-.primaryButton {
   border: 1px solid var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   color: var(--accent-primary);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  color: inherit;
 }
 
 .primaryButton:not(:disabled):hover {
   background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
 }
 
-.primaryButton:disabled,
-.secondaryButton:disabled {
+.primaryButton:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-.feedItem,
-.noteCard {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.feedSummary,
-.noteBody {
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.noteBody {
-  margin-top: 8px;
-}
-
-.tagRow {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.tag {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--accent-primary-dim);
-  color: var(--accent-primary);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.empty {
-  padding: 24px 14px;
-  color: var(--text-dim);
-  text-align: center;
-  font-size: 13px;
 }
 
 .positive {
@@ -462,23 +124,8 @@
 }
 
 @media (max-width: 1080px) {
-  .workspace,
-  .twoColumn {
+  .workspace {
     grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    order: 2;
-  }
-
-  .main {
-    order: 1;
-  }
-
-  .detailHeader,
-  .actionRow {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .accountFooter {
@@ -501,46 +148,6 @@
 
   .headerValue {
     font-size: 15px;
-  }
-
-  .table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .table th,
-  .table td {
-    padding: 8px 10px;
-    white-space: nowrap;
-  }
-
-  .sliderRow {
-    grid-template-columns: 64px minmax(0, 1fr) 48px;
-  }
-
-  .metricGrid,
-  .riskGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 10px;
-    gap: 8px;
-  }
-
-  .metricCard {
-    padding: 8px 10px;
-  }
-
-  .metricValue {
-    font-size: 14px;
-  }
-
-  .chartWrap {
-    height: 240px;
-    padding: 10px;
-  }
-
-  .actionRow {
-    flex-wrap: wrap;
   }
 
   .accountFooter {

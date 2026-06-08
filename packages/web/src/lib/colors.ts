@@ -75,6 +75,7 @@ export const VENUE_COLORS: Record<string, string> = {
   coincall: '#1FE086',
   thalex: '#5DADE2',
   gateio: '#E5374E',
+  paradex: '#A78BFA',
 };
 
 export function venueColor(venueId: string): string {

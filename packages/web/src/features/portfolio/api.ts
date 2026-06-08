@@ -1,10 +1,11 @@
 import { getClerkToken } from '@lib/clerk-token';
-import type {
-  PortfolioMetrics,
-  PositionLeg,
-  PositionLegInput,
-  VolShockResult,
-  VolShockScenario,
+import {
+  type PortfolioMetrics,
+  type PositionLeg,
+  type PositionLegInput,
+  VenueIdSchema,
+  type VolShockResult,
+  type VolShockScenario,
 } from '@oggregator/protocol';
 import { z } from 'zod';
 
@@ -52,17 +53,6 @@ async function deleteRequest<T>(path: string, schema: z.ZodType<T>): Promise<T> 
   return parseResponse(res, schema, path);
 }
 
-const VenueIdSchema = z.enum([
-  'deribit',
-  'okx',
-  'bybit',
-  'binance',
-  'derive',
-  'coincall',
-  'thalex',
-  'gateio',
-]);
-
 const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
   legId: z.string().min(1),
   underlying: z.string().min(1),
@@ -87,6 +77,7 @@ const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
     'coincall',
     'thalex',
     'gateio',
+    'paradex',
   ]),
 }) as z.ZodType<PositionLeg>;
 
@@ -100,7 +91,8 @@ export type PortfolioSource =
   | 'derive'
   | 'coincall'
   | 'thalex'
-  | 'gateio';
+  | 'gateio'
+  | 'paradex';
 
 const PortfolioSourceSchema = z.enum([
   'manual',
@@ -113,6 +105,7 @@ const PortfolioSourceSchema = z.enum([
   'coincall',
   'thalex',
   'gateio',
+  'paradex',
 ]);
 
 export interface DeriveConnectRequest {

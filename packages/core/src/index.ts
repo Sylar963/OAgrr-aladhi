@@ -323,3 +323,4 @@ export { DeriveWsAdapter } from './feeds/derive/index.js';
 export { CoincallWsAdapter } from './feeds/coincall/index.js';
 export { ThalexWsAdapter } from './feeds/thalex/index.js';
 export { GateioWsAdapter } from './feeds/gateio/index.js';
+export { ParadexWsAdapter } from './feeds/paradex/index.js';

@@ -13,6 +13,8 @@ export const VenueCredentialFieldKeySchema = z.enum([
   'walletAddress',
   'privateKeyPem',
   'kid',
+  'starknetAccount',
+  'starknetPrivateKey',
 ]);
 export type VenueCredentialFieldKey = z.infer<typeof VenueCredentialFieldKeySchema>;
 
@@ -33,7 +35,7 @@ export const VenuePrivateAdapterSpecSchema = z.object({
   venue: VenueIdSchema,
   status: VenuePrivateAdapterStatusSchema,
   wsEndpoint: z.string(),
-  authScheme: z.enum(['hmac', 'jwt-rs512', 'oauth-client-credentials', 'eip712', 'listen-key']),
+  authScheme: z.enum(['hmac', 'jwt-rs512', 'oauth-client-credentials', 'eip712', 'listen-key', 'jwt-starknet']),
   positionChannels: z.array(z.string()),
   subscribeMethod: z.string(),
   docsUrl: z.string(),
@@ -275,6 +277,38 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
       'sign auth op: { time, channel: "options.login", event: "api", payload: [{ api_key, timestamp, sign }] } where sign = HMAC-SHA256(secret, channel + "\\n" + event + "\\n" + timestamp)',
       'subscribe to options.positions channel after auth',
       'normalize Gate position fields (size, entry_price) → PositionLeg',
+    ],
+  },
+  paradex: {
+    venue: 'paradex',
+    status: 'planned',
+    wsEndpoint: 'wss://ws.api.prod.paradex.trade/v1',
+    authScheme: 'jwt-starknet',
+    subscribeMethod: 'subscribe',
+    positionChannels: ['account', 'positions', 'fills.ALL'],
+    docsUrl: 'https://docs.paradex.trade/api/general-information/api-authentication',
+    credentialFields: [
+      {
+        key: 'starknetAccount',
+        label: 'StarkNet account address',
+        placeholder: '0x…',
+        secret: false,
+        required: true,
+      },
+      {
+        key: 'starknetPrivateKey',
+        label: 'StarkNet private key',
+        placeholder: '0x… (or use an EVM-derived subkey)',
+        secret: true,
+        required: true,
+      },
+    ],
+    todos: [
+      'create packages/core/src/feeds/paradex-private/ws-client.ts using JsonRpcWsClient (subscribeMethod="subscribe")',
+      'POST /v1/auth/{public_key} with StarkNet signature → JWT (5-min, non-extendable; refresh at ~3min)',
+      'WS: send { method: "auth", params: { bearer: JWT } } once per connection',
+      'subscribe to account / positions / fills channels',
+      'normalize Paradex position fields → PositionLeg; add "paradex" to PortfolioSource enum',
     ],
   },
 };

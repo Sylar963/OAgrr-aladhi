@@ -26,6 +26,9 @@ const DELIVERY_FEES: Record<VenueId, DeliveryFeeSpec> = {
   // GET /api/v4/options/contracts). No notional-rate fee; intrinsic cap matches
   // the standard 12.5% cap shared across venues.
   gateio: { rate: 0, cap: 0.125 },
+  // Paradex publishes no separate settlement notional rate; fee_config.api_fee
+  // cap = 0.125 on every options market (verified live 2026-06-08). Mirrors Gate.io.
+  paradex: { rate: 0, cap: 0.125 },
 };
 
 export function deliveryFeeUsd(

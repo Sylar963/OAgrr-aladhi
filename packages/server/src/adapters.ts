@@ -9,6 +9,7 @@ import {
   CoincallWsAdapter,
   ThalexWsAdapter,
   GateioWsAdapter,
+  ParadexWsAdapter,
   type MarkHistoryBuffer,
   type QuoteRecorderEvent,
   type TradeRuntime,
@@ -28,6 +29,7 @@ const adapters = [
   coincallAdapter,
   new ThalexWsAdapter(),
   gateioAdapter,
+  new ParadexWsAdapter(),
 ];
 
 let tradeRuntimeRecorder: (() => void) | null = null;

@@ -82,9 +82,12 @@ export function closeTrade(tradeId: string): Promise<PaperTradeDetailDto> {
 }
 
 export function reduceTrade(tradeId: string, fraction: number): Promise<PaperTradeDetailDto> {
-  return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/actions/reduce${scopeParam('?')}`, {
-    fraction,
-  });
+  return postJson<PaperTradeDetailDto>(
+    `/paper/trades/${tradeId}/actions/reduce${scopeParam('?')}`,
+    {
+      fraction,
+    },
+  );
 }
 
 export function getPaperAccount(): Promise<PaperAccountDto> {

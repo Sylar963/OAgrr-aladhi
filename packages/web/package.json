@@ -13,6 +13,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@clerk/clerk-react": "5.49.0",
     "@oggregator/protocol": "workspace:",
     "@tanstack/react-query": "5.91.2",
     "@tanstack/react-virtual": "3.13.24",

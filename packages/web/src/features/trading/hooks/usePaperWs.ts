@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import type { PaperWsServerMessage } from '@oggregator/protocol';
-
+import { getClerkToken } from '@lib/clerk-token';
 import { wsUrl } from '@lib/http';
+import type { PaperWsServerMessage } from '@oggregator/protocol';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 
 import { QKEY } from './queries';
 
@@ -23,14 +23,14 @@ export function usePaperWs(enabled = true): PaperConnectionState {
     if (!enabled) return;
     let disposed = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
-      const apiKey = localStorage.getItem('paperApiKey');
-      const apiKeyParam = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : '';
+      const token = await getClerkToken();
+      const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
       const envWsBase = import.meta.env.VITE_WS_URL;
       const paperWsUrl = envWsBase
-        ? `${envWsBase.replace(/\/$/, '')}/ws/paper${apiKeyParam}`
-        : `${wsUrl('/ws/paper')}${apiKeyParam}`;
+        ? `${envWsBase.replace(/\/$/, '')}/ws/paper${tokenParam}`
+        : `${wsUrl('/ws/paper')}${tokenParam}`;
       const ws = new WebSocket(paperWsUrl);
       wsRef.current = ws;
       setState('connecting');
@@ -97,9 +97,9 @@ export function usePaperWs(enabled = true): PaperConnectionState {
           setState('error');
           return;
         }
-        const delay = Math.min(BASE_DELAY * Math.pow(2, retryCountRef.current - 1), 30_000);
+        const delay = Math.min(BASE_DELAY * 2 ** (retryCountRef.current - 1), 30_000);
         setState('connecting');
-        reconnectRef.current = setTimeout(connect, delay);
+        reconnectRef.current = setTimeout(() => void connect(), delay);
       };
 
       ws.onerror = () => {
@@ -107,7 +107,7 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       disposed = true;

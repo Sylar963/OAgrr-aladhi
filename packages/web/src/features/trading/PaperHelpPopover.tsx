@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef, useState } from 'react';
 
 import styles from './PaperHelpPopover.module.css';
 
 export default function PaperHelpPopover() {
-  const apiKey = useAppStore((s) => s.apiKey);
+  const accountId = useAppStore((s) => s.accountId);
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -38,7 +37,9 @@ export default function PaperHelpPopover() {
         onClick={() => setOpen((v) => !v)}
       >
         <span>Paper trading help</span>
-        <span className={styles.triggerQ} aria-hidden="true">?</span>
+        <span className={styles.triggerQ} aria-hidden="true">
+          ?
+        </span>
       </button>
 
       {open && (
@@ -49,17 +50,24 @@ export default function PaperHelpPopover() {
           className={styles.popover}
         >
           <div className={styles.title}>Paper trading</div>
-          {apiKey == null && (
+          {accountId == null && (
             <p className={styles.paragraph}>
               Sign in via the account chip in the top bar to get an API key — your paper book is
               tied to that account.
             </p>
           )}
           <ol className={styles.steps}>
-            <li>Build a strategy in the <strong>Builder</strong> tab.</li>
-            <li>Click <strong>Send to paper</strong> to open a position.</li>
+            <li>
+              Build a strategy in the <strong>Builder</strong> tab.
+            </li>
+            <li>
+              Click <strong>Send to paper</strong> to open a position.
+            </li>
             <li>Manage trades here — reduce, roll, or close.</li>
-            <li>The <strong>Portfolio</strong> tab shows vega/vanna/volga curves and shock P&amp;L on this paper book.</li>
+            <li>
+              The <strong>Portfolio</strong> tab shows vega/vanna/volga curves and shock P&amp;L on
+              this paper book.
+            </li>
           </ol>
         </div>
       )}

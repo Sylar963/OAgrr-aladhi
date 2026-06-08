@@ -1,18 +1,19 @@
+import { getClerkToken } from '@lib/clerk-token';
+import { fetchJson } from '@lib/http';
 import type {
   CreatePaperTradeNoteRequest,
   CreatePaperTradeRequest,
   InitPaperAccountRequest,
   PaperAccountDto,
   PaperFillDto,
-  PaperOverviewDto,
   PaperOrderDto,
+  PaperOverviewDto,
   PaperPnlDto,
   PaperPositionDto,
   PaperTradeDetailDto,
   PaperTradeSummaryDto,
   PlaceOrderRequest,
 } from '@oggregator/protocol';
-import { fetchJson } from '@lib/http';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -25,11 +26,11 @@ export interface CreateTradeResponse extends PlaceOrderResponse {
   trade: PaperTradeDetailDto;
 }
 
-function getHeaders(): HeadersInit {
+async function getHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  const apiKey = localStorage.getItem('paperApiKey');
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
+  const token = await getClerkToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -37,7 +38,7 @@ function getHeaders(): HeadersInit {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -105,7 +106,10 @@ export function getTrade(tradeId: string): Promise<PaperTradeDetailDto> {
   return fetchJson(`/paper/trades/${tradeId}`);
 }
 
-export function getActivity(limit = 100, tradeId?: string): Promise<{ activity: PaperTradeDetailDto['activity'] }> {
+export function getActivity(
+  limit = 100,
+  tradeId?: string,
+): Promise<{ activity: PaperTradeDetailDto['activity'] }> {
   const suffix = tradeId ? `&tradeId=${encodeURIComponent(tradeId)}` : '';
   return fetchJson(`/paper/activity?limit=${limit}${suffix}`);
 }
@@ -115,33 +119,19 @@ export function getFills(limit = 100, tradeId?: string): Promise<{ fills: PaperF
   return fetchJson(`/paper/fills?limit=${limit}${suffix}`);
 }
 
-export interface RegisterResponse {
-  userId: string;
-  apiKey: string;
+export interface SyncAuthResponse {
   accountId: string;
-  label: string;
-  account: {
-    id: string;
-    label: string;
-    initialCashUsd: number;
-    createdAt: string;
-  };
 }
 
-export async function registerUser(label: string): Promise<RegisterResponse> {
-  const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  const apiKey = localStorage.getItem('paperApiKey');
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-  }
-  const res = await fetch(`${API_BASE}/paper/auth/register`, {
+/** Called once after Clerk sign-in: upserts the user + paper account server-side. */
+export async function syncAuth(): Promise<SyncAuthResponse> {
+  const res = await fetch(`${API_BASE}/paper/auth/sync`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ label }),
+    headers: await getHeaders(),
   });
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     throw new Error(payload.message ?? payload.error ?? `HTTP ${res.status}`);
   }
-  return res.json() as Promise<RegisterResponse>;
+  return res.json() as Promise<SyncAuthResponse>;
 }

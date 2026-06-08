@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { getClerkToken } from '@lib/clerk-token';
+import { wsUrl } from '@lib/http';
 
 import { PortfolioWsServerMessageSchema } from '@oggregator/protocol';
-
-import { wsUrl } from '@lib/http';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 
 import type { PortfolioSource } from '../api';
 import { PORTFOLIO_QKEY } from './queries';
@@ -32,15 +32,12 @@ export function usePortfolioWs(
   useEffect(() => {
     let disposed = false;
 
-    const open = () => {
+    const open = async () => {
       if (disposed) return;
       setConnectionState('connecting');
-      let apiKey = '';
-      try {
-        apiKey = localStorage.getItem('paperApiKey') ?? '';
-      } catch {}
+      const token = await getClerkToken();
       const params = new URLSearchParams();
-      if (apiKey) params.set('apiKey', apiKey);
+      if (token) params.set('token', token);
       params.set('source', source);
       if (underlying) params.set('underlying', underlying);
       const url = `${wsUrl('/ws/portfolio')}?${params.toString()}`;
@@ -65,15 +62,12 @@ export function usePortfolioWs(
               source,
               positions: msg.positions,
             });
-            qc.setQueryData(
-              PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying),
-              {
-                accountId: msg.metrics.accountId,
-                source,
-                metrics: msg.metrics,
-                positions: msg.positions,
-              },
-            );
+            qc.setQueryData(PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying), {
+              accountId: msg.metrics.accountId,
+              source,
+              metrics: msg.metrics,
+              positions: msg.positions,
+            });
             setLastSeq(msg.seq);
             setLastError(null);
           } else if (msg.type === 'delta') {
@@ -101,7 +95,7 @@ export function usePortfolioWs(
         setConnectionState('retrying');
         const delay = backoffMs(retryRef.current);
         retryRef.current = Math.min(retryRef.current + 1, 5);
-        setTimeout(open, delay);
+        setTimeout(() => void open(), delay);
       });
 
       ws.addEventListener('error', () => {
@@ -109,7 +103,7 @@ export function usePortfolioWs(
       });
     };
 
-    open();
+    void open();
 
     return () => {
       disposed = true;

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-
+import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
+import { connectVenue, disconnectVenue, venueStatus } from '@features/portfolio/api';
+import { syncAuth } from '@features/trading/api';
+import { VENUES } from '@lib/venue-meta';
 import {
   PRIVATE_ADAPTER_SPECS,
   VENUE_IDS,
@@ -8,21 +9,13 @@ import {
   type VenueCredentials,
   type VenueId,
 } from '@oggregator/protocol';
-
 import { useAppStore } from '@stores/app-store';
-import { registerUser } from '@features/trading/api';
-import { connectVenue, disconnectVenue, venueStatus } from '@features/portfolio/api';
-import { VENUES } from '@lib/venue-meta';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './AccountChip.module.css';
 
-type Mode = 'home' | 'register' | 'paste';
-type PasteTarget = 'paper' | VenueId;
-
-const PASTE_TARGETS: { value: PasteTarget; label: string }[] = [
-  { value: 'paper', label: 'Paper account' },
-  ...VENUE_IDS.map((v) => ({ value: v as PasteTarget, label: VENUES[v]?.label ?? v })),
-];
+type Mode = 'home' | 'paste';
 
 function emptyVenueFields(venue: VenueId): Record<VenueCredentialFieldKey, string> {
   const spec = PRIVATE_ADAPTER_SPECS[venue];
@@ -32,28 +25,52 @@ function emptyVenueFields(venue: VenueId): Record<VenueCredentialFieldKey, strin
 }
 
 export default function AccountChip() {
-  const apiKey = useAppStore((s) => s.apiKey);
   const accountId = useAppStore((s) => s.accountId);
-  const setAuth = useAppStore((s) => s.setAuth);
-  const clearAuth = useAppStore((s) => s.clearAuth);
+  const setAccountId = useAppStore((s) => s.setAccountId);
+  const clearAccount = useAppStore((s) => s.clearAccount);
   const venueCreds = useAppStore((s) => s.venueCreds);
   const setVenueCreds = useAppStore((s) => s.setVenueCreds);
   const removeVenueCreds = useAppStore((s) => s.removeVenueCreds);
   const qc = useQueryClient();
+  const { isSignedIn } = useUser();
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('home');
-  const [pasteTarget, setPasteTarget] = useState<PasteTarget>('paper');
-  const [label, setLabel] = useState('Trader');
-  const [pastedPaperKey, setPastedPaperKey] = useState('');
-  const [pastedPaperAccount, setPastedPaperAccount] = useState('');
+  const [pasteTarget, setPasteTarget] = useState<VenueId>(VENUE_IDS[0]!);
   const [venueFields, setVenueFields] = useState<Record<VenueCredentialFieldKey, string>>(() =>
     emptyVenueFields(VENUE_IDS[0]!),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const refresh = () => {
+    void qc.invalidateQueries();
+  };
+
+  // On sign-in, sync the user server-side and store the resulting paper account id.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isSignedIn) {
+      clearAccount();
+      return;
+    }
+    void (async () => {
+      try {
+        const result = await syncAuth();
+        if (!cancelled) {
+          setAccountId(result.accountId);
+          refresh();
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Sync failed');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,13 +91,9 @@ export default function AccountChip() {
   }, [open]);
 
   useEffect(() => {
-    if (pasteTarget === 'paper') return;
     const existing = venueCreds[pasteTarget];
     if (existing != null) {
-      setVenueFields({
-        ...emptyVenueFields(pasteTarget),
-        ...existing.fields,
-      });
+      setVenueFields({ ...emptyVenueFields(pasteTarget), ...existing.fields });
     } else {
       setVenueFields(emptyVenueFields(pasteTarget));
     }
@@ -106,7 +119,11 @@ export default function AccountChip() {
         if (!cancelled) refresh();
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? `Derive reconnect failed: ${err.message}` : 'Derive reconnect failed');
+          setError(
+            err instanceof Error
+              ? `Derive reconnect failed: ${err.message}`
+              : 'Derive reconnect failed',
+          );
         }
       }
     };
@@ -121,30 +138,27 @@ export default function AccountChip() {
       try {
         const status = await venueStatus('thalex');
         if (cancelled || status.connected) return;
-        await connectVenue('thalex', {
-          kid,
-          privateKeyPem,
-          ...(account ? { account } : {}),
-        });
+        await connectVenue('thalex', { kid, privateKeyPem, ...(account ? { account } : {}) });
         if (!cancelled) refresh();
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? `Thalex reconnect failed: ${err.message}` : 'Thalex reconnect failed');
+          setError(
+            err instanceof Error
+              ? `Thalex reconnect failed: ${err.message}`
+              : 'Thalex reconnect failed',
+          );
         }
       }
     };
 
     void reconnectDerive();
     void reconnectThalex();
-
     return () => {
       cancelled = true;
     };
-    // intentionally only runs once on mount — auto-reconnect, not on every cred change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const signedIn = apiKey != null && accountId != null;
   const acctShort = accountId != null ? accountId.slice(0, 8) : '';
   const configuredVenues = useMemo(
     () => VENUE_IDS.filter((v) => venueCreds[v] != null),
@@ -162,48 +176,7 @@ export default function AccountChip() {
     [configuredVenues],
   );
 
-  const refresh = () => {
-    void qc.invalidateQueries();
-  };
-
-  const onRegister = async () => {
-    const trimmed = label.trim();
-    if (trimmed.length < 1 || trimmed.length > 50) {
-      setError('Label must be 1–50 characters');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await registerUser(trimmed);
-      setAuth(result.apiKey, result.userId, result.accountId);
-      refresh();
-      setMode('home');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onPastePaper = () => {
-    const key = pastedPaperKey.trim();
-    const acct = pastedPaperAccount.trim();
-    if (key.length < 8) {
-      setError('API key looks too short');
-      return;
-    }
-    if (acct.length < 1) {
-      setError('Account ID required');
-      return;
-    }
-    setAuth(key, 'paste', acct);
-    refresh();
-    setMode('home');
-  };
-
   const onPasteVenue = async () => {
-    if (pasteTarget === 'paper') return;
     const venue = pasteTarget;
     const spec = PRIVATE_ADAPTER_SPECS[venue];
     const missing: string[] = [];
@@ -220,18 +193,13 @@ export default function AccountChip() {
     for (const key of Object.keys(trimmedFields) as VenueCredentialFieldKey[]) {
       trimmedFields[key] = trimmedFields[key]!.trim();
     }
-    const creds: VenueCredentials = {
-      venue,
-      fields: trimmedFields,
-      addedAt: Date.now(),
-    };
+    const creds: VenueCredentials = { venue, fields: trimmedFields, addedAt: Date.now() };
     setVenueCreds(creds);
 
     if (venue === 'derive') {
       setBusy(true);
       try {
-        const subaccountIdRaw = trimmedFields.subaccountId ?? '';
-        const subaccountId = Number(subaccountIdRaw);
+        const subaccountId = Number(trimmedFields.subaccountId ?? '');
         if (!Number.isFinite(subaccountId) || subaccountId <= 0) {
           throw new Error('Subaccount ID must be a positive integer');
         }
@@ -280,41 +248,18 @@ export default function AccountChip() {
     }
   };
 
-  const onLogout = () => {
-    clearAuth();
-    refresh();
-    setMode('home');
-  };
-
-  const onCopyKey = async () => {
-    if (apiKey == null) return;
-    try {
-      await navigator.clipboard.writeText(apiKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setError('Copy failed');
-    }
-  };
-
-  const goToPaste = (target: PasteTarget) => {
-    setPasteTarget(target);
-    setError(null);
-    setMode('paste');
-  };
-
   return (
     <div className={styles.wrap} ref={wrapRef} data-tour="account">
       <button
         type="button"
         className={styles.chip}
-        data-signed-in={signedIn || undefined}
+        data-signed-in={isSignedIn || undefined}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
         <span className={styles.dot} />
-        {signedIn ? `acct ${acctShort}` : 'Sign in'}
+        {isSignedIn ? (accountId ? `acct ${acctShort}` : 'Account') : 'Sign in'}
         {configuredVenues.length > 0 && (
           <span className={styles.venueBadge}>+{configuredVenues.length}</span>
         )}
@@ -323,57 +268,30 @@ export default function AccountChip() {
         <div className={styles.popover} role="dialog">
           {mode === 'home' && (
             <div className={styles.body}>
-              {signedIn ? (
-                <>
-                  <div className={styles.section}>
-                    <div className={styles.label}>Paper account</div>
-                    <div className={styles.value}>{accountId}</div>
-                  </div>
-                  <div className={styles.section}>
-                    <div className={styles.label}>API key</div>
-                    <div className={styles.keyRow}>
-                      <code className={styles.key}>
-                        {apiKey.slice(0, 6)}…{apiKey.slice(-4)}
-                      </code>
-                      <button type="button" className={styles.smallBtn} onClick={onCopyKey}>
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                  <button type="button" className={styles.dangerBtn} onClick={onLogout}>
-                    Sign out
-                  </button>
-                </>
-              ) : (
-                <div className={styles.section}>
-                  <div className={styles.label}>Paper account</div>
+              <div className={styles.section}>
+                <div className={styles.label}>Account</div>
+                <SignedOut>
                   <div className={styles.actionRow}>
-                    <button
-                      type="button"
-                      className={styles.primaryBtn}
-                      onClick={() => {
-                        setMode('register');
-                        setError(null);
-                      }}
-                    >
-                      Create new
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.secondaryBtn}
-                      onClick={() => goToPaste('paper')}
-                    >
-                      Paste existing
-                    </button>
+                    <SignInButton mode="modal">
+                      <button type="button" className={styles.primaryBtn}>
+                        Sign in
+                      </button>
+                    </SignInButton>
                   </div>
-                </div>
-              )}
+                </SignedOut>
+                <SignedIn>
+                  <div className={styles.actionRow}>
+                    <UserButton afterSignOutUrl="/" />
+                    {accountId != null && <div className={styles.value}>{accountId}</div>}
+                  </div>
+                </SignedIn>
+              </div>
               <div className={styles.divider} />
               <div className={styles.section}>
                 <div className={styles.label}>Venue API keys</div>
                 {configuredVenues.length === 0 ? (
                   <div className={styles.hint}>
-                    No venue keys yet. Add keys to enable per-venue private feeds (see TODOs in code).
+                    No venue keys yet. Add keys to enable per-venue private feeds.
                   </div>
                 ) : (
                   <div className={styles.venueChipsRow}>
@@ -383,11 +301,6 @@ export default function AccountChip() {
                         <span
                           className={styles.venueChipStatus}
                           data-status={PRIVATE_ADAPTER_SPECS[venue].status}
-                          title={
-                            PRIVATE_ADAPTER_SPECS[venue].status === 'available'
-                              ? 'Live private WS feed wired — switch the Portfolio source toggle to see positions.'
-                              : `Adapter status: ${PRIVATE_ADAPTER_SPECS[venue].status}. Keys are saved but no server-side feed exists yet.`
-                          }
                         >
                           {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? 'live' : 'TODO'}
                         </span>
@@ -406,7 +319,11 @@ export default function AccountChip() {
                 <button
                   type="button"
                   className={styles.secondaryBtn}
-                  onClick={() => goToPaste(VENUE_IDS[0]!)}
+                  onClick={() => {
+                    setPasteTarget(VENUE_IDS[0]!);
+                    setError(null);
+                    setMode('paste');
+                  }}
                 >
                   + Add venue key
                 </button>
@@ -422,93 +339,31 @@ export default function AccountChip() {
             </div>
           )}
 
-          {mode === 'register' && (
-            <div className={styles.body}>
-              <button type="button" className={styles.backBtn} onClick={() => setMode('home')}>
-                ← back
-              </button>
-              <label className={styles.field}>
-                <span>Label</span>
-                <input
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void onRegister();
-                  }}
-                  placeholder="Trader"
-                  autoFocus
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                onClick={onRegister}
-                disabled={busy}
-              >
-                {busy ? 'Creating…' : 'Create paper account'}
-              </button>
-              <div className={styles.hint}>
-                Generates an API key and a $25k paper account. Stored in this browser.
-              </div>
-              {error != null && <div className={styles.error}>{error}</div>}
-            </div>
-          )}
-
           {mode === 'paste' && (
             <div className={styles.body}>
               <button type="button" className={styles.backBtn} onClick={() => setMode('home')}>
                 ← back
               </button>
               <label className={styles.field}>
-                <span>Target</span>
+                <span>Venue</span>
                 <select
                   value={pasteTarget}
-                  onChange={(e) => setPasteTarget(e.target.value as PasteTarget)}
+                  onChange={(e) => setPasteTarget(e.target.value as VenueId)}
                 >
-                  {PASTE_TARGETS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
+                  {VENUE_IDS.map((v) => (
+                    <option key={v} value={v}>
+                      {VENUES[v]?.label ?? v}
                     </option>
                   ))}
                 </select>
               </label>
-
-              {pasteTarget === 'paper' ? (
-                <>
-                  <label className={styles.field}>
-                    <span>API key</span>
-                    <input
-                      value={pastedPaperKey}
-                      onChange={(e) => setPastedPaperKey(e.target.value)}
-                      placeholder="pk_…"
-                      autoFocus
-                    />
-                  </label>
-                  <label className={styles.field}>
-                    <span>Account ID</span>
-                    <input
-                      value={pastedPaperAccount}
-                      onChange={(e) => setPastedPaperAccount(e.target.value)}
-                      placeholder="acct_…"
-                    />
-                  </label>
-                  <button type="button" className={styles.primaryBtn} onClick={onPastePaper}>
-                    Use this key
-                  </button>
-                  <div className={styles.hint}>
-                    Restore a paper account key created earlier.
-                  </div>
-                </>
-              ) : (
-                <VenueCredentialForm
-                  venue={pasteTarget}
-                  values={venueFields}
-                  onChange={(key, value) =>
-                    setVenueFields((prev) => ({ ...prev, [key]: value }))
-                  }
-                  onSubmit={onPasteVenue}
-                />
-              )}
+              <VenueCredentialForm
+                venue={pasteTarget}
+                values={venueFields}
+                onChange={(key, value) => setVenueFields((prev) => ({ ...prev, [key]: value }))}
+                onSubmit={onPasteVenue}
+              />
+              {busy && <div className={styles.hint}>Connecting…</div>}
               {error != null && <div className={styles.error}>{error}</div>}
             </div>
           )}
@@ -570,18 +425,6 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
       <button type="button" className={styles.primaryBtn} onClick={onSubmit}>
         Save {VENUES[venue]?.label ?? venue} keys
       </button>
-      {spec.status === 'available' ? (
-        <div className={styles.hint}>
-          Saving will connect to the private WS and start streaming positions. Pick{' '}
-          <strong>{VENUES[venue]?.label ?? venue}</strong> in the Portfolio source toggle to see them.
-        </div>
-      ) : (
-        <div className={styles.warning}>
-          <strong>Heads-up:</strong> the {VENUES[venue]?.label ?? venue} private feed isn&apos;t
-          available yet. Your keys will be stored locally so you can use them later, but live
-          positions won&apos;t appear in the Portfolio tab.
-        </div>
-      )}
     </>
   );
 }

@@ -68,8 +68,6 @@ interface AppState {
   activeVenues: string[];
   myIv: string;
   feedStatus: FeedStatus;
-  apiKey: string | null;
-  userId: string | null;
   accountId: string | null;
   venueCreds: Partial<Record<VenueId, VenueCredentials>>;
   soundEnabled: boolean;
@@ -90,8 +88,8 @@ interface AppState {
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;
   setFeedStatus: (s: Partial<FeedStatus>) => void;
-  setAuth: (apiKey: string, userId: string, accountId: string) => void;
-  clearAuth: () => void;
+  setAccountId: (accountId: string) => void;
+  clearAccount: () => void;
   setVenueCreds: (creds: VenueCredentials) => void;
   removeVenueCreds: (venue: VenueId) => void;
   setSessionNotice: (notice: SessionNotice | null) => void;
@@ -122,8 +120,6 @@ export const useAppStore = create<AppState>((set) => ({
     staleMs: null,
     lastUpdateMs: null,
   },
-  apiKey: readStorage('paperApiKey'),
-  userId: readStorage('paperUserId'),
   accountId: readStorage('paperAccountId'),
   venueCreds: loadAllVenueCreds(PROTOCOL_VENUE_IDS),
   soundEnabled: readStorage('tapeSoundEnabled') === '1',
@@ -149,17 +145,13 @@ export const useAppStore = create<AppState>((set) => ({
     set({ activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
   setMyIv: (myIv) => set({ myIv }),
   setFeedStatus: (s) => set((prev) => ({ feedStatus: { ...prev.feedStatus, ...s } })),
-  setAuth: (apiKey, userId, accountId) => {
-    localStorage.setItem('paperApiKey', apiKey);
-    localStorage.setItem('paperUserId', userId);
+  setAccountId: (accountId) => {
     localStorage.setItem('paperAccountId', accountId);
-    set({ apiKey, userId, accountId });
+    set({ accountId });
   },
-  clearAuth: () => {
-    localStorage.removeItem('paperApiKey');
-    localStorage.removeItem('paperUserId');
+  clearAccount: () => {
     localStorage.removeItem('paperAccountId');
-    set({ apiKey: null, userId: null, accountId: null });
+    set({ accountId: null });
   },
   setVenueCreds: (creds) => {
     storageSaveVenueCreds(creds);

@@ -29,8 +29,6 @@ const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m
 const PortfolioView = lazy(() =>
   import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
 );
-const FundedView = lazy(() => import('@features/funded').then((m) => ({ default: m.FundedView })));
-
 export default function App() {
   useServerVersion();
   useSessionTimeout();
@@ -78,7 +76,6 @@ export default function App() {
             {activeTab === 'flow' && <FlowView />}
             {activeTab === 'analytics' && <AnalyticsView />}
             {activeTab === 'gex' && <GexView />}
-            {activeTab === 'funded' && <FundedView />}
           </Suspense>
         </ErrorBoundary>
       </div>

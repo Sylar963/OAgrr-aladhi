@@ -1,5 +1,4 @@
 export { ChallengePanel } from './ChallengePanel';
-export { FundedView } from './FundedView';
 export {
   useFundedRun,
   useFundedRuns,

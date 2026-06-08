@@ -95,3 +95,32 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
+
+.claimCta {
+  display: inline-block;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent, #2563eb);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.claimCta:hover {
+  opacity: 0.9;
+}
+
+.instantCta {
+  display: inline-block;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.instantCta:hover {
+  background: var(--surface-2);
+}

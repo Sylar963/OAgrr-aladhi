@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   PARADEX_MARKETS,
   PARADEX_MARKETS_SUMMARY,
@@ -28,11 +29,14 @@ export async function fetchParadexSummaryAll(): Promise<ParadexSummary[]> {
   return parseParadexSummaries(await getJson(`${PARADEX_MARKETS_SUMMARY}?market=ALL`));
 }
 
+const ServerTimeSchema = z.object({ server_time: z.string().optional() });
+
 /** Server time (ms) — health probe. Returns null on failure. */
 export async function fetchParadexServerTime(): Promise<number | null> {
   try {
-    const body = (await getJson(PARADEX_SYSTEM_TIME)) as { server_time?: string };
-    const n = Number(body?.server_time);
+    const parsed = ServerTimeSchema.safeParse(await getJson(PARADEX_SYSTEM_TIME));
+    if (!parsed.success) return null;
+    const n = Number(parsed.data.server_time);
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;

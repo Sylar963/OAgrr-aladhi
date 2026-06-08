@@ -52,6 +52,13 @@ describe('toVenueSymbol', () => {
     })).toBe('BTC_USDT-20260626-80000-C');
   });
 
+  it('formats Paradex BTC call', () => {
+    expect(toVenueSymbol({
+      venue: 'paradex', underlying: 'BTC', expiry: '2026-06-26',
+      strike: 80000, type: 'call',
+    })).toBe('BTC-USD-26JUN26-80000-C');
+  });
+
   it('formats Bybit BTC call with USDT settlement suffix', () => {
     expect(toVenueSymbol({
       venue: 'bybit', underlying: 'BTC', expiry: '2026-06-26',

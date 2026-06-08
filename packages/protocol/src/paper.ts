@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VenueIdSchema } from './ws.js';
 
 export const PaperOrderLegSchema = z.object({
   index: z.number().int().nonnegative(),
@@ -8,9 +9,7 @@ export const PaperOrderLegSchema = z.object({
   expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   strike: z.number().positive(),
   quantity: z.number().positive(),
-  preferredVenues: z
-    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex', 'gateio']))
-    .nullable(),
+  preferredVenues: z.array(VenueIdSchema).nullable(),
 });
 
 export type PaperOrderLeg = z.infer<typeof PaperOrderLegSchema>;
@@ -22,9 +21,7 @@ export const PlaceOrderRequestSchema = z.object({
       preferredVenues: PaperOrderLegSchema.shape.preferredVenues.optional(),
     }),
   ).min(1),
-  venueFilter: z
-    .array(z.enum(['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex', 'gateio']))
-    .default([]),
+  venueFilter: z.array(VenueIdSchema).default([]),
 });
 
 export type PlaceOrderRequest = z.infer<typeof PlaceOrderRequestSchema>;

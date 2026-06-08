@@ -84,3 +84,13 @@ export const GATEIO_OPTIONS_TICKERS = '/api/v4/options/tickers';
 export const GATEIO_OPTIONS_UNDERLYING_TICKER = '/api/v4/options/underlying/tickers';
 export const GATEIO_OPTIONS_ORDER_BOOK = '/api/v4/options/order_book';
 export const GATEIO_OPTIONS_TRADES = '/api/v4/options/trades';
+
+// ── Paradex ──────────────────────────────────────────────────────
+// StarkNet appchain; public market data needs no auth. Testnet swaps the host
+// for api.testnet / ws.api.testnet. JSON-RPC 2.0 WS; bare markets_summary = all
+// markets. Captured 2026-06-08 — see references/options-docs/paradex/.
+export const PARADEX_WS_URL = 'wss://ws.api.prod.paradex.trade/v1';
+export const PARADEX_REST_BASE_URL = 'https://api.prod.paradex.trade/v1';
+export const PARADEX_MARKETS = '/markets';
+export const PARADEX_MARKETS_SUMMARY = '/markets/summary';
+export const PARADEX_SYSTEM_TIME = '/system/time';

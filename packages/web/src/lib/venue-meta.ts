@@ -6,6 +6,7 @@ import deriveLogo from '@/assets/venues/derive.png';
 import coincallLogo from '@/assets/venues/coincall.png';
 import thalexLogo from '@/assets/venues/Thalex.svg';
 import gateioLogo from '@/assets/venues/gateio.svg';
+import paradexLogo from '@/assets/venues/paradex.svg';
 
 export interface VenueMeta {
   id: string;
@@ -61,6 +62,13 @@ export const VENUES: Record<string, VenueMeta> = {
     shortLabel: 'GAT',
     logo: gateioLogo,
     color: '#E5374E',
+  },
+  paradex: {
+    id: 'paradex',
+    label: 'Paradex',
+    shortLabel: 'PDX',
+    logo: paradexLogo,
+    color: '#A78BFA',
   },
 };
 

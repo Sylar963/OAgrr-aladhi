@@ -28,6 +28,7 @@ const FEE_CAP: Record<VenueId, number> = {
   coincall: 0.125, // 12.5% of option premium
   thalex: 0.125, // 12.5% of option premium
   gateio: 0.125, // venue-published price_limit_fee_rate on every options contract
+  paradex: 0.125, // fee_config.api_fee fee_cap = 0.125 on every options market (verified live 2026-06-08)
 };
 
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;

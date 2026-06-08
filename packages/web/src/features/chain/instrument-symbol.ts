@@ -11,6 +11,9 @@ export const CHART_SUPPORTED_VENUES: readonly VenueId[] = [
   'derive',
   'thalex',
   'coincall',
+  // NOTE: 'paradex' chart support is deferred — the server candle service
+  // (packages/core/src/services/instrument-candles.ts) has no paradex source yet.
+  // formatParadex() below is kept ready; re-add 'paradex' here when candles land.
 ];
 
 export function isChartSupportedVenue(v: VenueId): boolean {
@@ -50,6 +53,8 @@ export function toVenueSymbol(args: ToVenueSymbolArgs): string {
       return formatThalex(args);
     case 'coincall':
       return formatCoincall(args);
+    case 'paradex':
+      return formatParadex(args);
     default:
       throw new NotSupportedVenueError(args.venue);
   }
@@ -124,4 +129,13 @@ function formatCoincall({ underlying, expiry, strike, type }: ToVenueSymbolArgs)
   const { day, month, year } = parseExpiry(expiry);
   const yr = String(year).slice(-2);
   return `${underlying}USD-${day}${MONTHS[month]}${yr}-${String(strike)}-${type === 'call' ? 'C' : 'P'}`;
+}
+
+function formatParadex({ underlying, expiry, strike, type }: ToVenueSymbolArgs): string {
+  // Format: BTC-USD-DDMMMYY-STRIKE-C/P  (e.g. BTC-USD-12JUN26-66000-C)
+  const { day, month, year } = parseExpiry(expiry);
+  const dd = String(day).padStart(2, '0');
+  const mmm = MONTHS[month] ?? 'JAN';
+  const yy = String(year).slice(-2);
+  return `${underlying}-USD-${dd}${mmm}${yy}-${String(strike)}-${type === 'call' ? 'C' : 'P'}`;
 }

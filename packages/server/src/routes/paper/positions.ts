@@ -1,21 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { positionRepository, quoteProvider } from '../../trading-services.js';
-import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { positionToDto } from './mappers.js';
+import { resolveScope } from './scope.js';
 
 export async function paperPositionsRoute(app: FastifyInstance) {
-  app.get<{
-    Querystring: { accountId?: string };
-  }>('/paper/positions', async (req, reply) => {
-    let accountId: string;
-    try {
-      accountId = await authorizeAccountScope(req, req.query.accountId);
-    } catch (err) {
-      if (err instanceof AccountScopeError) {
-        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      }
-      throw err;
-    }
+  app.get('/paper/positions', async (req, reply) => {
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const positions = await positionRepository.listPositions(accountId);
     const open = positions.filter((p) => p.netQuantity !== 0);
     const marks = await Promise.all(

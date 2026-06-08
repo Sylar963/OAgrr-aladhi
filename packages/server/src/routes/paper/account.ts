@@ -2,7 +2,7 @@ import { InitPaperAccountRequestSchema, type PaperAccountDto } from '@oggregator
 import { DEFAULT_ACCOUNT_LABEL, DEFAULT_INITIAL_CASH_USD } from '@oggregator/trading';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { getAccount, paperTradingStore, resetAccount } from '../../trading-services.js';
-import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
+import { resolveScope } from './scope.js';
 
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
@@ -15,28 +15,17 @@ function fallbackLabel(req: FastifyRequest): string {
 }
 
 export async function paperAccountRoute(app: FastifyInstance) {
-  app.get<{
-    Querystring: { accountId?: string };
-  }>('/paper/account', async (req, reply) => {
+  app.get('/paper/account', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    let id: string;
-    try {
-      id = await authorizeAccountScope(req, req.query.accountId);
-    } catch (err) {
-      if (err instanceof AccountScopeError) {
-        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      }
-      throw err;
-    }
+    const id = await resolveScope(req, reply);
+    if (id === null) return reply;
     const account = await getAccount(id);
     return toDto(account, id, fallbackLabel(req));
   });
 
-  app.post<{
-    Querystring: { accountId?: string };
-  }>('/paper/account/init', async (req, reply) => {
+  app.post('/paper/account/init', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
@@ -44,15 +33,8 @@ export async function paperAccountRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    let id: string;
-    try {
-      id = await authorizeAccountScope(req, req.query.accountId);
-    } catch (err) {
-      if (err instanceof AccountScopeError) {
-        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      }
-      throw err;
-    }
+    const id = await resolveScope(req, reply);
+    if (id === null) return reply;
     const label = fallbackLabel(req);
     const account = await resetAccount(id, label, parsed.data.initialCashUsd);
     return toDto(account, id, label);

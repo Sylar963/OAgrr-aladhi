@@ -3,11 +3,11 @@ import {
   CreatePaperTradeRequestSchema,
   ReducePaperTradeRequestSchema,
 } from '@oggregator/protocol';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { paperTradingStore } from '../../trading-services.js';
-import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { paperEvents } from './events.js';
 import { fillToDto, orderToDto } from './mappers.js';
+import { resolveScope } from './scope.js';
 import {
   addTradeNote,
   closeTrade,
@@ -18,32 +18,13 @@ import {
   reduceTrade,
 } from './workspace.js';
 
-/**
- * Resolve + authorize the requested account, replying 403 on a foreign account.
- * Returns null after sending the 403 so callers short-circuit.
- */
-async function resolveScope(
-  request: FastifyRequest<{ Querystring: { accountId?: string } }>,
-  reply: FastifyReply,
-): Promise<string | null> {
-  try {
-    return await authorizeAccountScope(request, request.query.accountId);
-  } catch (err) {
-    if (err instanceof AccountScopeError) {
-      reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      return null;
-    }
-    throw err;
-  }
-}
-
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
 }
 
 export async function paperTradesRoute(app: FastifyInstance) {
   app.get<{
-    Querystring: { status?: 'open' | 'closed' | 'all'; limit?: string; accountId?: string };
+    Querystring: { status?: 'open' | 'closed' | 'all'; limit?: string };
   }>('/paper/trades', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -60,7 +41,6 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.get<{
     Params: { tradeId: string };
-    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -77,9 +57,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
     }
   });
 
-  app.get<{
-    Querystring: { accountId?: string };
-  }>('/paper/overview', async (req, reply) => {
+  app.get('/paper/overview', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
@@ -88,9 +66,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
     return getPaperOverview(accountId);
   });
 
-  app.post<{
-    Querystring: { accountId?: string };
-  }>('/paper/trades', async (req, reply) => {
+  app.post('/paper/trades', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
@@ -115,7 +91,6 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
-    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/notes', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -143,7 +118,6 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
-    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/actions/close', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
@@ -171,7 +145,6 @@ export async function paperTradesRoute(app: FastifyInstance) {
 
   app.post<{
     Params: { tradeId: string };
-    Querystring: { accountId?: string };
   }>('/paper/trades/:tradeId/actions/reduce', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());

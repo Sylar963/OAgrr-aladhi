@@ -14,14 +14,13 @@ import {
   orderRepository,
   paperTradingStore,
 } from '../../trading-services.js';
-import { AccountScopeError, authorizeAccountScope } from '../../user-service.js';
 import { paperEvents } from './events.js';
 import { fillToDto, orderToDto } from './mappers.js';
+import { resolveScope } from './scope.js';
 
 export async function paperOrdersRoute(app: FastifyInstance) {
   app.post<{
     Body: unknown;
-    Querystring: { accountId?: string };
   }>('/paper/orders', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply
@@ -34,15 +33,8 @@ export async function paperOrdersRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
-    let accountId: string;
-    try {
-      accountId = await authorizeAccountScope(req, req.query.accountId);
-    } catch (err) {
-      if (err instanceof AccountScopeError) {
-        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      }
-      throw err;
-    }
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     await ensureDefaultAccount();
 
     try {
@@ -103,17 +95,10 @@ export async function paperOrdersRoute(app: FastifyInstance) {
   });
 
   app.get<{
-    Querystring: { accountId?: string; limit?: string };
+    Querystring: { limit?: string };
   }>('/paper/orders', async (req, reply) => {
-    let accountId: string;
-    try {
-      accountId = await authorizeAccountScope(req, req.query.accountId);
-    } catch (err) {
-      if (err instanceof AccountScopeError) {
-        return reply.status(err.statusCode).send({ error: 'forbidden', message: err.message });
-      }
-      throw err;
-    }
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const limit = Math.min(Number(req.query.limit ?? '50') || 50, 500);
     const orders = await orderRepository.listOrders(accountId, limit);
     return { orders: orders.map(orderToDto) };

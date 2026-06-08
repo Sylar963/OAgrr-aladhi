@@ -112,6 +112,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           'http://localhost:5173',
           'https://oggregator.xyz',
           'https://www.oggregator.xyz',
+          'https://app.oggregator.xyz',
           /\.vercel\.app$/,
         ],
     credentials: false,

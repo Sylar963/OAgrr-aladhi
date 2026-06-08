@@ -7,8 +7,7 @@ export type TabId =
   | 'surface'
   | 'flow'
   | 'analytics'
-  | 'gex'
-  | 'funded';
+  | 'gex';
 
 export interface TabDef {
   id: TabId;
@@ -28,7 +27,6 @@ export const TABS: readonly TabDef[] = [
   { id: 'flow', label: 'Flow', slug: 'flow', icon: '⚡', badge: 'LIVE' },
   { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎' },
   { id: 'gex', label: 'GEX', slug: 'gex', icon: '▧' },
-  { id: 'funded', label: 'Funded', slug: 'funded', icon: '◆', badge: 'NEW' },
 ] as const;
 
 export const DEFAULT_TAB: TabId = 'chain';

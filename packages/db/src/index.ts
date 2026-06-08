@@ -24,6 +24,8 @@ export {
   NoopIvHistoryStore,
   PostgresIvHistoryStore,
 } from './iv-history-store.js';
+export type { CaptureLeadInput, LeadRow, LeadsStore } from './leads-store.js';
+export { NoopLeadsStore, PostgresLeadsStore } from './leads-store.js';
 export { NoopTradeStore } from './noop-trade-store.js';
 export type { OiSnapshotStore, PersistedOiSnapshot } from './oi-snapshot-store.js';
 export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-store.js';

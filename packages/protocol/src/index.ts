@@ -28,6 +28,10 @@ export {
   InstrumentMarkPointSchema,
 } from './instrument-candles.js';
 export {
+  type LeadCaptureRequest,
+  LeadCaptureRequestSchema,
+} from './leads.js';
+export {
   type CreatePaperTradeNoteRequest,
   CreatePaperTradeNoteRequestSchema,
   type CreatePaperTradeRequest,

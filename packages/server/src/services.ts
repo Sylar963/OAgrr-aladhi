@@ -22,14 +22,17 @@ import {
   type DealerBookStore,
   type IvHistoryStorageStats,
   type IvHistoryStore,
+  type LeadsStore,
   NoopDealerBookStore,
   NoopIvHistoryStore,
+  NoopLeadsStore,
   NoopOiSnapshotStore,
   NoopRegimeStore,
   NoopTradeStore,
   type OiSnapshotStore,
   PostgresDealerBookStore,
   PostgresIvHistoryStore,
+  PostgresLeadsStore,
   PostgresOiSnapshotStore,
   PostgresRegimeStore,
   PostgresTradeStore,
@@ -75,6 +78,10 @@ export const ivHistoryService = new IvHistoryService({
 export const tradeStore: TradeStore = databaseUrl
   ? PostgresTradeStore.fromConnectionString(databaseUrl)
   : new NoopTradeStore();
+
+export const leadsStore: LeadsStore = databaseUrl
+  ? PostgresLeadsStore.fromConnectionString(databaseUrl)
+  : new NoopLeadsStore();
 
 export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? PostgresOiSnapshotStore.fromConnectionString(databaseUrl)

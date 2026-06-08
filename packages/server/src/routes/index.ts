@@ -10,6 +10,7 @@ import { gexAllExpiriesRoute } from './gex-all-expiries.js';
 import { healthRoute } from './health.js';
 import { instrumentCandlesRoute } from './instrument-candles.js';
 import { ivHistoryRoute } from './iv-history.js';
+import { leadsRoute } from './leads.js';
 import { newsRoute } from './news.js';
 import { paperAuthRoute } from './paper/auth.js';
 import { paperRoutes, paperWsRoute } from './paper/index.js';
@@ -54,6 +55,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(regimeRoute, { prefix: '/api' });
   app.register(newsRoute, { prefix: '/api' });
   app.register(spotsRoute, { prefix: '/api' });
+  app.register(leadsRoute, { prefix: '/api' });
   app.register(paperRoutes, { prefix: '/api' });
   app.register(paperAuthRoute, { prefix: '/api' });
   app.register(portfolioRoutes, { prefix: '/api' });

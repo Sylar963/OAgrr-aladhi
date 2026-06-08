@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import HomePage from './page';
 
 describe('landing page', () => {
-  it('renders the app-like landing architecture', () => {
-    render(<HomePage />);
+  it('renders the app-like landing architecture', async () => {
+    render(await HomePage());
 
     expect(
       screen.getByRole('heading', {

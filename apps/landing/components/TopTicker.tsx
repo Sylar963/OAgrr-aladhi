@@ -1,16 +1,29 @@
 'use client';
 
-const TAPE_ITEMS = [
-  { label: 'Venue', value: 'Deribit · OKX · Binance · Bybit live' },
-  { label: 'Flow', value: 'Thalex private feed synced to portfolio workspace' },
-  { label: 'Spot', value: 'BTC $81.3K +2.5%' },
-  { label: 'Spot', value: 'ETH $2.1K +1.2%' },
-  { label: 'Sponsored', value: 'Coincall low fees + deep options liquidity' },
-  { label: 'Route', value: 'Gate.io · Derive added to best-execution router' },
-] as const;
+type SpotQuote = { priceLabel: string; changeLabel: string };
+export type TickerSpots = Partial<Record<'BTC' | 'ETH', SpotQuote>>;
 
-export function TopTicker() {
-  const doubled = [...TAPE_ITEMS, ...TAPE_ITEMS];
+function buildTapeItems(spots: TickerSpots | undefined) {
+  const btc = spots?.BTC
+    ? `BTC ${spots.BTC.priceLabel} ${spots.BTC.changeLabel}`
+    : 'BTC $81.3K +2.5%';
+  const eth = spots?.ETH
+    ? `ETH ${spots.ETH.priceLabel} ${spots.ETH.changeLabel}`
+    : 'ETH $2.1K +1.2%';
+
+  return [
+    { label: 'Venue', value: 'Deribit · OKX · Binance · Bybit live' },
+    { label: 'Flow', value: 'Thalex private feed synced to portfolio workspace' },
+    { label: 'Spot', value: btc },
+    { label: 'Spot', value: eth },
+    { label: 'Sponsored', value: 'Coincall low fees + deep options liquidity' },
+    { label: 'Route', value: 'Gate.io · Derive added to best-execution router' },
+  ];
+}
+
+export function TopTicker({ spots }: { spots?: TickerSpots }) {
+  const items = buildTapeItems(spots);
+  const doubled = [...items, ...items];
 
   return (
     <div className="overflow-hidden border-b border-[color:var(--landing-border)] bg-[rgba(10,10,10,0.92)] backdrop-blur-xl">

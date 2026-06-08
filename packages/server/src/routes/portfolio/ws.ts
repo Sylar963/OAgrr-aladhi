@@ -9,7 +9,7 @@ import {
   getOrCreatePortfolioRuntime,
 } from '../../portfolio-services.js';
 import { paperTradingStore } from '../../trading-services.js';
-import { getUserByApiKey } from '../../user-service.js';
+import { getUserByToken } from '../../user-service.js';
 import { portfolioEvents } from './events.js';
 
 const WS_OPEN = 1;
@@ -37,27 +37,27 @@ export async function portfolioWsRoute(app: FastifyInstance) {
 
     try {
       const url = new URL(req.url, 'http://localhost');
-      const apiKey = url.searchParams.get('apiKey');
+      const token = url.searchParams.get('token');
 
       let accountId: string;
       if (paperTradingStore.enabled) {
-        if (!apiKey) {
+        if (!token) {
           send(socket, {
             type: 'error',
             code: 'unauthorized',
-            message: 'apiKey query parameter required',
+            message: 'token query parameter required',
           });
           socket.close(1008, 'Unauthorized');
           return;
         }
-        let user: Awaited<ReturnType<typeof getUserByApiKey>> = null;
+        let user: Awaited<ReturnType<typeof getUserByToken>> = null;
         try {
-          user = await getUserByApiKey(apiKey);
+          user = await getUserByToken(token);
         } catch (err) {
-          req.log.warn({ err: String(err) }, 'portfolio ws: getUserByApiKey failed');
+          req.log.warn({ err: String(err) }, 'portfolio ws: getUserByToken failed');
         }
         if (!user) {
-          send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid apiKey' });
+          send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid token' });
           socket.close(1008, 'Unauthorized');
           return;
         }

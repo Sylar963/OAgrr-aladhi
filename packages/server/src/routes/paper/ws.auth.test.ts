@@ -2,9 +2,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 
-const { storeMock, getUserByApiKeyMock } = vi.hoisted(() => ({
+const { storeMock, getUserByTokenMock } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
-  getUserByApiKeyMock: vi.fn(),
+  getUserByTokenMock: vi.fn(),
 }));
 
 vi.mock('../../trading-services.js', () => ({
@@ -23,7 +23,7 @@ vi.mock('../../trading-services.js', () => ({
 }));
 
 vi.mock('../../user-service.js', () => ({
-  getUserByApiKey: getUserByApiKeyMock,
+  getUserByToken: getUserByTokenMock,
 }));
 
 import { paperWsRoute } from './ws.js';
@@ -63,7 +63,7 @@ describe('WS /ws/paper auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    getUserByApiKeyMock.mockReset();
+    getUserByTokenMock.mockReset();
   });
 
   it('closes the connection without a hello when anonymous and persistence is enabled', async () => {
@@ -72,29 +72,27 @@ describe('WS /ws/paper auth gate', () => {
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
-  it('closes the connection when apiKey is invalid and persistence is enabled', async () => {
+  it('closes the connection when token is invalid and persistence is enabled', async () => {
     storeMock.enabled = true;
-    getUserByApiKeyMock.mockResolvedValue(null);
+    getUserByTokenMock.mockResolvedValue(null);
 
-    const ws = await app.injectWS('/ws/paper?apiKey=does-not-exist');
+    const ws = await app.injectWS('/ws/paper?token=does-not-exist');
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
-    expect(getUserByApiKeyMock).toHaveBeenCalledWith('does-not-exist');
+    expect(getUserByTokenMock).toHaveBeenCalledWith('does-not-exist');
   });
 
   it('accepts authenticated connections and keeps them open', async () => {
     storeMock.enabled = true;
-    getUserByApiKeyMock.mockResolvedValue({
+    getUserByTokenMock.mockResolvedValue({
       id: 'usr_abc',
-      apiKey: 'good-key',
       accountId: 'acct_alice',
       label: 'alice',
-      createdAt: new Date(),
     });
 
-    const ws = await app.injectWS('/ws/paper?apiKey=good-key');
+    const ws = await app.injectWS('/ws/paper?token=good-token');
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(getUserByApiKeyMock).toHaveBeenCalledWith('good-key');
+    expect(getUserByTokenMock).toHaveBeenCalledWith('good-token');
     expect(ws.readyState).not.toBe(WS_CLOSED);
 
     ws.terminate();
@@ -105,7 +103,7 @@ describe('WS /ws/paper auth gate', () => {
     const ws = await app.injectWS('/ws/paper');
     await new Promise((r) => setTimeout(r, 100));
     expect(ws.readyState).not.toBe(WS_CLOSED);
-    expect(getUserByApiKeyMock).not.toHaveBeenCalled();
+    expect(getUserByTokenMock).not.toHaveBeenCalled();
     ws.terminate();
   });
 });

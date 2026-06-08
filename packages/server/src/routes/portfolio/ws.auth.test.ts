@@ -2,9 +2,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 
-const { storeMock, getUserByApiKeyMock } = vi.hoisted(() => ({
+const { storeMock, getUserByTokenMock } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
-  getUserByApiKeyMock: vi.fn(),
+  getUserByTokenMock: vi.fn(),
 }));
 
 vi.mock('../../trading-services.js', () => ({
@@ -12,7 +12,7 @@ vi.mock('../../trading-services.js', () => ({
 }));
 
 vi.mock('../../user-service.js', () => ({
-  getUserByApiKey: getUserByApiKeyMock,
+  getUserByToken: getUserByTokenMock,
 }));
 
 vi.mock('../../portfolio-services.js', () => ({
@@ -64,7 +64,7 @@ describe('WS /ws/portfolio auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    getUserByApiKeyMock.mockReset();
+    getUserByTokenMock.mockReset();
   });
 
   it('closes the connection when anonymous and persistence is enabled', async () => {
@@ -73,28 +73,26 @@ describe('WS /ws/portfolio auth gate', () => {
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
-  it('closes the connection when apiKey is invalid and persistence is enabled', async () => {
+  it('closes the connection when token is invalid and persistence is enabled', async () => {
     storeMock.enabled = true;
-    getUserByApiKeyMock.mockResolvedValue(null);
+    getUserByTokenMock.mockResolvedValue(null);
 
-    const ws = await app.injectWS('/ws/portfolio?apiKey=bogus');
+    const ws = await app.injectWS('/ws/portfolio?token=bogus');
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
   it('accepts authenticated connections and keeps them open', async () => {
     storeMock.enabled = true;
-    getUserByApiKeyMock.mockResolvedValue({
+    getUserByTokenMock.mockResolvedValue({
       id: 'usr_bob',
-      apiKey: 'k',
       accountId: 'acct_bob',
       label: 'bob',
-      createdAt: new Date(),
     });
 
-    const ws = await app.injectWS('/ws/portfolio?apiKey=k');
+    const ws = await app.injectWS('/ws/portfolio?token=k');
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(getUserByApiKeyMock).toHaveBeenCalledWith('k');
+    expect(getUserByTokenMock).toHaveBeenCalledWith('k');
     expect(ws.readyState).not.toBe(WS_CLOSED);
 
     ws.terminate();

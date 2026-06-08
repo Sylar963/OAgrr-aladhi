@@ -1,15 +1,15 @@
-import type { FastifyInstance } from 'fastify';
 import type { PaperWsServerMessage } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import {
+  paperTradingStore,
   pnlService,
   positionRepository,
   quoteProvider,
-  paperTradingStore,
 } from '../../trading-services.js';
-import { getUserByApiKey } from '../../user-service.js';
-import { pnlToDto, positionToDto } from './mappers.js';
+import { getUserByToken } from '../../user-service.js';
 import { paperEvents } from './events.js';
+import { pnlToDto, positionToDto } from './mappers.js';
 
 const WS_OPEN = 1;
 const PUSH_INTERVAL_MS = 1000;
@@ -27,21 +27,21 @@ export async function paperWsRoute(app: FastifyInstance) {
   app.get('/ws/paper', { websocket: true }, async (socket, req) => {
     let disposed = false;
 
-    const apiKey = new URL(req.url, 'http://localhost').searchParams.get('apiKey');
+    const token = new URL(req.url, 'http://localhost').searchParams.get('token');
     let accountId: string;
     if (paperTradingStore.enabled) {
-      if (!apiKey) {
+      if (!token) {
         send(socket, {
           type: 'error',
           code: 'unauthorized',
-          message: 'apiKey query parameter required',
+          message: 'token query parameter required',
         });
         socket.close(1008, 'Unauthorized');
         return;
       }
-      const user = await getUserByApiKey(apiKey);
+      const user = await getUserByToken(token);
       if (!user) {
-        send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid apiKey' });
+        send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid token' });
         socket.close(1008, 'Unauthorized');
         return;
       }

@@ -1,17 +1,26 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 
-const { storeMock, storeGetUserMock } = vi.hoisted(() => ({
+const { storeMock, usersStoreMock, verifyClerkTokenMock } = vi.hoisted(() => ({
   storeMock: {
     enabled: false as boolean,
-    getUserByApiKey: vi.fn(),
+    ensureAccount: vi.fn().mockResolvedValue(undefined),
   },
-  storeGetUserMock: vi.fn(),
+  usersStoreMock: {
+    enabled: false as boolean,
+    getByClerkId: vi.fn(),
+    upsertByClerkId: vi.fn(),
+  },
+  verifyClerkTokenMock: vi.fn(),
 }));
-storeMock.getUserByApiKey = storeGetUserMock;
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
+  usersStore: usersStoreMock,
+}));
+
+vi.mock('../../clerk-verifier.js', () => ({
+  verifyClerkToken: verifyClerkTokenMock,
 }));
 
 vi.mock('../../portfolio-services.js', () => ({
@@ -65,7 +74,9 @@ describe('Portfolio REST auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    storeGetUserMock.mockReset();
+    usersStoreMock.getByClerkId.mockReset();
+    usersStoreMock.upsertByClerkId.mockReset();
+    verifyClerkTokenMock.mockReset();
   });
 
   it('returns 401 on anonymous GET /portfolio/positions when persistence is enabled', async () => {
@@ -91,18 +102,21 @@ describe('Portfolio REST auth gate', () => {
 
   it('allows authenticated requests to reach the handler when persistence is enabled', async () => {
     storeMock.enabled = true;
-    storeGetUserMock.mockResolvedValue({
+    verifyClerkTokenMock.mockResolvedValue({
+      clerkUserId: 'user_carol',
+      email: 'carol@example.com',
+      displayName: 'carol',
+    });
+    usersStoreMock.getByClerkId.mockResolvedValue({
       id: 'usr_carol',
-      apiKey: 'carol-key',
-      accountId: 'acct_carol',
-      label: 'carol',
-      createdAt: new Date(),
+      defaultAccountId: 'acct_carol',
+      displayName: 'carol',
     });
 
     const res = await app.inject({
       method: 'GET',
       url: '/api/portfolio/positions',
-      headers: { 'x-api-key': 'carol-key' },
+      headers: { authorization: 'Bearer carol-token' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ accountId: 'acct_carol', positions: [] });

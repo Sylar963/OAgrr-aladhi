@@ -43,13 +43,16 @@ async function getHeaders(): Promise<HeadersInit> {
   return headers;
 }
 
-export async function fetchJson<T>(path: string): Promise<T> {
+export async function fetchJson<T>(
+  path: string,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   let gatewayAttempts = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
-        headers: await getHeaders(),
+        headers: { ...(await getHeaders()), ...extraHeaders },
       });
 
       if (res.status === 503) {

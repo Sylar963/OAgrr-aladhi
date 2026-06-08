@@ -16,16 +16,25 @@ describe('paper api account scope', () => {
     vi.unstubAllGlobals();
   });
 
-  it('omits the accountId param when no scope is set', async () => {
+  it('omits X-Paper-Account header when no scope is set', async () => {
+    await getPositions();
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as RequestInit;
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.['X-Paper-Account']).toBeUndefined();
+  });
+
+  it('sends X-Paper-Account header when a scope is set', async () => {
+    setPaperAccountScope('acct_x');
+    await getPositions();
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as RequestInit;
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.['X-Paper-Account']).toBe('acct_x');
+  });
+
+  it('does not include accountId query param in the URL', async () => {
+    setPaperAccountScope('acct_x');
     await getPositions();
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
     expect(url).not.toContain('accountId=');
-  });
-
-  it('appends the accountId param when a scope is set', async () => {
-    setPaperAccountScope('acct_run1');
-    await getPositions();
-    const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
-    expect(url).toContain('accountId=acct_run1');
   });
 });

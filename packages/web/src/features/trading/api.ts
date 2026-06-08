@@ -24,8 +24,8 @@ export function setPaperAccountScope(accountId: string | null): void {
 export function getPaperAccountScope(): string | null {
   return paperAccountScope;
 }
-function scopeParam(prefix: '?' | '&'): string {
-  return paperAccountScope ? `${prefix}accountId=${encodeURIComponent(paperAccountScope)}` : '';
+function paperScopeHeaders(): Record<string, string> {
+  return paperAccountScope ? { 'X-Paper-Account': paperAccountScope } : {};
 }
 
 export interface PlaceOrderResponse {
@@ -42,6 +42,9 @@ async function getHeaders(): Promise<HeadersInit> {
   const token = await getClerkToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (paperAccountScope) {
+    headers['X-Paper-Account'] = paperAccountScope;
   }
   return headers;
 }
@@ -60,69 +63,61 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function placeOrder(req: PlaceOrderRequest): Promise<PlaceOrderResponse> {
-  return postJson<PlaceOrderResponse>(`/paper/orders${scopeParam('?')}`, req);
+  return postJson<PlaceOrderResponse>('/paper/orders', req);
 }
 
 export function createTrade(req: CreatePaperTradeRequest): Promise<CreateTradeResponse> {
-  return postJson<CreateTradeResponse>(`/paper/trades${scopeParam('?')}`, req);
+  return postJson<CreateTradeResponse>('/paper/trades', req);
 }
 
 export function addTradeNote(
   tradeId: string,
   req: CreatePaperTradeNoteRequest,
 ): Promise<PaperTradeDetailDto> {
-  return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/notes${scopeParam('?')}`, req);
+  return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/notes`, req);
 }
 
 export function closeTrade(tradeId: string): Promise<PaperTradeDetailDto> {
-  return postJson<PaperTradeDetailDto>(
-    `/paper/trades/${tradeId}/actions/close${scopeParam('?')}`,
-    {},
-  );
+  return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/actions/close`, {});
 }
 
 export function reduceTrade(tradeId: string, fraction: number): Promise<PaperTradeDetailDto> {
-  return postJson<PaperTradeDetailDto>(
-    `/paper/trades/${tradeId}/actions/reduce${scopeParam('?')}`,
-    {
-      fraction,
-    },
-  );
+  return postJson<PaperTradeDetailDto>(`/paper/trades/${tradeId}/actions/reduce`, { fraction });
 }
 
 export function getPaperAccount(): Promise<PaperAccountDto> {
-  return fetchJson(`/paper/account${scopeParam('?')}`);
+  return fetchJson('/paper/account', paperScopeHeaders());
 }
 
 export function initPaperAccount(req: InitPaperAccountRequest): Promise<PaperAccountDto> {
-  return postJson<PaperAccountDto>(`/paper/account/init${scopeParam('?')}`, req);
+  return postJson<PaperAccountDto>('/paper/account/init', req);
 }
 
 export function getPositions(): Promise<{ positions: PaperPositionDto[] }> {
-  return fetchJson(`/paper/positions${scopeParam('?')}`);
+  return fetchJson('/paper/positions', paperScopeHeaders());
 }
 
 export function getPnl(): Promise<PaperPnlDto> {
-  return fetchJson(`/paper/pnl${scopeParam('?')}`);
+  return fetchJson('/paper/pnl', paperScopeHeaders());
 }
 
 export function getOrders(limit = 50): Promise<{ orders: PaperOrderDto[] }> {
-  return fetchJson(`/paper/orders?limit=${limit}${scopeParam('&')}`);
+  return fetchJson(`/paper/orders?limit=${limit}`, paperScopeHeaders());
 }
 
 export function getOverview(): Promise<PaperOverviewDto> {
-  return fetchJson(`/paper/overview${scopeParam('?')}`);
+  return fetchJson('/paper/overview', paperScopeHeaders());
 }
 
 export function getTrades(
   status: 'open' | 'closed' | 'all' = 'all',
   limit = 100,
 ): Promise<{ trades: PaperTradeSummaryDto[] }> {
-  return fetchJson(`/paper/trades?status=${status}&limit=${limit}${scopeParam('&')}`);
+  return fetchJson(`/paper/trades?status=${status}&limit=${limit}`, paperScopeHeaders());
 }
 
 export function getTrade(tradeId: string): Promise<PaperTradeDetailDto> {
-  return fetchJson(`/paper/trades/${tradeId}${scopeParam('?')}`);
+  return fetchJson(`/paper/trades/${tradeId}`, paperScopeHeaders());
 }
 
 export function getActivity(
@@ -130,12 +125,12 @@ export function getActivity(
   tradeId?: string,
 ): Promise<{ activity: PaperTradeDetailDto['activity'] }> {
   const suffix = tradeId ? `&tradeId=${encodeURIComponent(tradeId)}` : '';
-  return fetchJson(`/paper/activity?limit=${limit}${suffix}${scopeParam('&')}`);
+  return fetchJson(`/paper/activity?limit=${limit}${suffix}`, paperScopeHeaders());
 }
 
 export function getFills(limit = 100, tradeId?: string): Promise<{ fills: PaperFillDto[] }> {
   const suffix = tradeId ? `&tradeId=${encodeURIComponent(tradeId)}` : '';
-  return fetchJson(`/paper/fills?limit=${limit}${suffix}${scopeParam('&')}`);
+  return fetchJson(`/paper/fills?limit=${limit}${suffix}`, paperScopeHeaders());
 }
 
 export interface SyncAuthResponse {

@@ -12,7 +12,7 @@ type PaperConnectionState = 'connecting' | 'live' | 'closed' | 'error';
 const BASE_DELAY = 1_500;
 const MAX_RETRIES = 5;
 
-export function usePaperWs(enabled = true): PaperConnectionState {
+export function usePaperWs(accountScope?: string | null, enabled = true): PaperConnectionState {
   const qc = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -28,7 +28,7 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       if (disposed) return;
       const token = await getClerkToken();
       const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-      const acct = getPaperAccountScope();
+      const acct = accountScope ?? getPaperAccountScope();
       const acctParam = acct ? `&accountId=${encodeURIComponent(acct)}` : '';
       const envWsBase = import.meta.env.VITE_WS_URL;
       const paperWsUrl = envWsBase
@@ -126,7 +126,7 @@ export function usePaperWs(enabled = true): PaperConnectionState {
       }
       setState('closed');
     };
-  }, [enabled, qc]);
+  }, [accountScope, enabled, qc]);
 
   return state;
 }

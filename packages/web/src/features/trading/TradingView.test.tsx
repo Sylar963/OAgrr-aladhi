@@ -8,7 +8,11 @@ vi.mock('./PaperTraderPanel', () => ({ default: () => <div data-testid="paper-pa
 vi.mock('@features/funded', () => ({
   ChallengePanel: () => <div data-testid="challenge-panel" />,
   useFundedRuns: () => ({ data: { runs: [] }, isLoading: false, isError: false }),
-  useFundedRun: () => ({ data: undefined, isLoading: false, isError: false }),
+  useFundedRun: (runId: string | null) => ({
+    data: runId != null ? { id: runId, paperAccountId: 'pa_challenge' } : undefined,
+    isLoading: false,
+    isError: false,
+  }),
 }));
 vi.mock('./ThalexLivePanel', () => ({ default: () => <div data-testid="thalex-panel" /> }));
 vi.mock('@features/portfolio', () => ({ venueStatus: vi.fn(async () => ({ connected: false })) }));
@@ -22,8 +26,11 @@ vi.mock('./hooks/queries', () => ({
 import { useAppStore } from '@stores/app-store';
 import TradingView from './TradingView';
 
-function wrap(ui: ReactElement) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function makeClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+function wrap(ui: ReactElement, qc: QueryClient = makeClient()) {
   return <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
 }
 
@@ -37,6 +44,19 @@ describe('TradingView shell', () => {
     useAppStore.setState({ activeContext: { kind: 'paper' } });
     render(wrap(<TradingView />));
     expect(screen.getByTestId('paper-panel')).toBeDefined();
+  });
+
+  it('invalidates paper queries when switching to a challenge context', () => {
+    const qc = makeClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    useAppStore.setState({ activeContext: { kind: 'paper' } });
+    const { rerender } = render(wrap(<TradingView />, qc));
+    invalidateSpy.mockClear();
+
+    useAppStore.setState({ activeContext: { kind: 'challenge', runId: 'run_1' } });
+    rerender(wrap(<TradingView />, qc));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['paper'] });
   });
 
   it('renders the challenge panel for the challenge context', () => {

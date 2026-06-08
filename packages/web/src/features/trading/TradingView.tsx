@@ -1,6 +1,7 @@
 import { ChallengePanel, useFundedRun } from '@features/funded';
 import { fmtDelta, fmtNum, fmtUsd } from '@lib/format';
 import { useAppStore } from '@stores/app-store';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import AccountContextPicker from './AccountContextPicker';
 import { setPaperAccountScope } from './api';
@@ -12,24 +13,25 @@ import styles from './TradingView.module.css';
 
 export default function TradingView() {
   const activeContext = useAppStore((s) => s.activeContext);
+  const queryClient = useQueryClient();
   const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [capitalInput, setCapitalInput] = useState('1000');
-  const wsState = usePaperWs();
   const initPaperAccount = useInitPaperAccount();
   const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
 
   const challengeRunId = activeContext.kind === 'challenge' ? (activeContext.runId ?? null) : null;
   const { data: challengeRun } = useFundedRun(challengeRunId);
 
+  const activeScope =
+    activeContext.kind === 'challenge' ? (challengeRun?.paperAccountId ?? null) : null;
+  const wsState = usePaperWs(activeScope);
+
   useEffect(() => {
-    if (activeContext.kind === 'challenge') {
-      setPaperAccountScope(challengeRun?.paperAccountId ?? null);
-    } else {
-      setPaperAccountScope(null);
-    }
-  }, [activeContext.kind, challengeRun?.paperAccountId]);
+    setPaperAccountScope(activeScope);
+    queryClient.invalidateQueries({ queryKey: ['paper'] });
+  }, [activeScope, queryClient]);
 
   useEffect(() => {
     if (wsState === 'error') {

@@ -66,8 +66,9 @@ export default function AccountContextPicker() {
     <div className={styles.picker} data-open={open || undefined} ref={rootRef}>
       <button
         type="button"
-        aria-label="account"
+        aria-label="Account"
         aria-expanded={open}
+        aria-haspopup="menu"
         className={styles.trigger}
         onClick={() => setOpen((v) => !v)}
       >
@@ -79,10 +80,11 @@ export default function AccountContextPicker() {
       </button>
 
       {open ? (
-        <div className={styles.panel}>
+        <div className={styles.panel} role="menu">
           <button
             key="paper"
             type="button"
+            role="menuitem"
             className={styles.option}
             data-active={activeContext.kind === 'paper' || undefined}
             onClick={() => choose({ kind: 'paper' })}
@@ -93,6 +95,7 @@ export default function AccountContextPicker() {
             <button
               key="challenge"
               type="button"
+              role="menuitem"
               className={styles.option}
               data-active={activeContext.kind === 'challenge' || undefined}
               onClick={() => choose({ kind: 'challenge', runId: run.id })}
@@ -104,6 +107,7 @@ export default function AccountContextPicker() {
             <button
               key="thalex"
               type="button"
+              role="menuitem"
               className={styles.option}
               data-active={activeContext.kind === 'thalex' || undefined}
               onClick={() => choose({ kind: 'thalex' })}
@@ -114,6 +118,7 @@ export default function AccountContextPicker() {
           <button
             key="start-challenge"
             type="button"
+            role="menuitem"
             className={styles.action}
             onClick={() =>
               choose(run != null ? { kind: 'challenge', runId: run.id } : { kind: 'challenge' })

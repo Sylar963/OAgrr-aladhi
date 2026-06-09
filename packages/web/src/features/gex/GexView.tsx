@@ -58,6 +58,7 @@ export default function GexView() {
 
   const barsRef = useRef<HTMLDivElement | null>(null);
   const spotRowRef = useRef<HTMLDivElement | null>(null);
+  const hasCenteredBarsRef = useRef(false);
 
   const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1);
   const sorted = [...gex].sort((a, b) => b.strike - a.strike);
@@ -69,15 +70,22 @@ export default function GexView() {
           return Math.abs(row.strike - spotPrice) < Math.abs(best - spotPrice) ? row.strike : best;
         }, null)
       : null;
+  const activeVenueKey = activeVenues.join(',');
 
   useEffect(() => {
+    hasCenteredBarsRef.current = false;
+  }, [activeVenueKey, mode, underlying]);
+
+  useEffect(() => {
+    if (hasCenteredBarsRef.current || effectiveVersion !== 'bars') return;
     if (!barsRef.current || !spotRowRef.current) return;
 
     const list = barsRef.current;
     const row = spotRowRef.current;
     const offset = row.offsetTop - list.offsetTop - list.clientHeight / 2 + row.clientHeight / 2;
     list.scrollTop = Math.max(0, offset);
-  }, [mode, nonzero.length, spotStrike]);
+    hasCenteredBarsRef.current = true;
+  }, [activeVenueKey, effectiveVersion, mode, nonzero.length, spotStrike, underlying]);
 
   if (isLoading && gex.length === 0) {
     return (

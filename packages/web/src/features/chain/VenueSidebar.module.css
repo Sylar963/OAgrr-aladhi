@@ -21,6 +21,7 @@
 
 .list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-2) 0;
   display: flex;
@@ -72,6 +73,15 @@
   box-shadow: none !important;
 }
 
+.logoBox {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .failedDot {
   width: 16px;
   height: 16px;
@@ -80,7 +90,6 @@
   justify-content: center;
   font-size: 10px;
   color: var(--color-loss);
-  flex-shrink: 0;
 }
 
 .statusDot {
@@ -130,7 +139,6 @@
   width: 16px;
   height: 16px;
   object-fit: contain;
-  flex-shrink: 0;
   opacity: 0.9;
 }
 

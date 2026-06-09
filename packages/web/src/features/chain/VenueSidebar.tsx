@@ -57,11 +57,13 @@ function VenueSidebar({
                 checked={active}
                 onChange={() => onToggle(venue.id)}
               />
-              {failed ? (
-                <span className={styles.failedDot}>✕</span>
-              ) : (
-                <img src={venue.logo} alt="" className={styles.logo} />
-              )}
+              <span className={styles.logoBox}>
+                {failed ? (
+                  <span className={styles.failedDot}>✕</span>
+                ) : (
+                  <img src={venue.logo} alt="" className={styles.logo} />
+                )}
+              </span>
               <span className={styles.name} style={failed ? { opacity: 0.5 } : undefined}>
                 {venue.label}
               </span>

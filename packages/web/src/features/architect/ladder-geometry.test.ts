@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Leg } from './payoff';
 import {
   derivePriceDomain,
+  legToBlock,
   makePriceScale,
 } from './ladder-geometry';
 
@@ -67,6 +68,38 @@ describe('derivePriceDomain', () => {
   it('never returns a negative priceMin', () => {
     const d = derivePriceDomain([], 0.5);
     expect(d.priceMin).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('legToBlock', () => {
+  it('long call: block spans strike → strike+premium, far edge above', () => {
+    const b = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3, quantity: 1 }));
+    expect(b.legBreakeven).toBeCloseTo(103);
+    expect(b.spanLowPrice).toBeCloseTo(100);
+    expect(b.spanHighPrice).toBeCloseTo(103);
+    expect(b.label).toBe('+1 C 100');
+  });
+
+  it('long put: block spans strike-premium → strike, far edge below', () => {
+    const b = legToBlock(makeLeg({ type: 'put', direction: 'buy', strike: 100, entryPrice: 3 }));
+    expect(b.legBreakeven).toBeCloseTo(97);
+    expect(b.spanLowPrice).toBeCloseTo(97);
+    expect(b.spanHighPrice).toBeCloseTo(100);
+  });
+
+  it('short call: same span as long call but sell direction + minus label', () => {
+    const b = legToBlock(makeLeg({ type: 'call', direction: 'sell', strike: 100, entryPrice: 3, quantity: 2 }));
+    expect(b.spanLowPrice).toBeCloseTo(100);
+    expect(b.spanHighPrice).toBeCloseTo(103);
+    expect(b.direction).toBe('sell');
+    expect(b.label).toBe('−2 C 100');
+  });
+
+  it('sub-$1 underlying keeps full precision (no rounding to strike)', () => {
+    const b = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 0.5, entryPrice: 0.02 }));
+    expect(b.legBreakeven).toBeCloseTo(0.52);
+    expect(b.spanHighPrice).toBeCloseTo(0.52);
+    expect(b.spanLowPrice).toBeCloseTo(0.5);
   });
 });
 

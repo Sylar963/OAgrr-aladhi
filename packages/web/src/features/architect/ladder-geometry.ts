@@ -43,3 +43,41 @@ export function derivePriceDomain(
   const half = Math.max(spotPrice * 0.1, 1);
   return { priceMin: Math.max(0, spotPrice - half), priceMax: spotPrice + half };
 }
+
+export interface LadderBlock {
+  legId: string;
+  type: 'call' | 'put';
+  direction: 'buy' | 'sell';
+  quantity: number;
+  strike: number;
+  /** This leg's own break-even: strike ± premium. */
+  legBreakeven: number;
+  /** Lower price edge of the block (= min(strike, legBreakeven)). */
+  spanLowPrice: number;
+  /** Upper price edge of the block (= max(strike, legBreakeven)). */
+  spanHighPrice: number;
+  /** Compact label, e.g. "+1 C 100" / "−2 P 95". */
+  label: string;
+}
+
+/** Map a priced leg to its block geometry on the price axis. */
+export function legToBlock(leg: Leg): LadderBlock {
+  const premium = Math.abs(leg.entryPrice);
+  const legBreakeven = leg.type === 'call' ? leg.strike + premium : leg.strike - premium;
+  const spanLowPrice = Math.min(leg.strike, legBreakeven);
+  const spanHighPrice = Math.max(leg.strike, legBreakeven);
+  const sign = leg.direction === 'buy' ? '+' : '−'; // U+2212 minus, matches app typography
+  const typeChar = leg.type === 'call' ? 'C' : 'P';
+  const label = `${sign}${leg.quantity} ${typeChar} ${leg.strike}`;
+  return {
+    legId: leg.id,
+    type: leg.type,
+    direction: leg.direction,
+    quantity: leg.quantity,
+    strike: leg.strike,
+    legBreakeven,
+    spanLowPrice,
+    spanHighPrice,
+    label,
+  };
+}

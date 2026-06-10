@@ -3,8 +3,11 @@ import type { Leg } from './payoff';
 import {
   buildLadderZones,
   derivePriceDomain,
+  formatPriceTick,
   legToBlock,
   makePriceScale,
+  netPnlReadout,
+  packLanes,
 } from './ladder-geometry';
 
 function makeLeg(over: Partial<Leg> = {}): Leg {
@@ -132,6 +135,49 @@ describe('buildLadderZones', () => {
     const zones = buildLadderZones(legs, [], 100);
     expect(zones).toHaveLength(1);
     expect(zones[0]).toMatchObject({ lowPrice: -Infinity, highPrice: Infinity, profit: true });
+  });
+});
+
+describe('packLanes', () => {
+  it('straddle: touching call/put blocks share one lane (they tile)', () => {
+    const blocks = [
+      legToBlock(makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 })), // [100,103]
+      legToBlock(makeLeg({ id: 'leg-2', type: 'put', direction: 'buy', strike: 100, entryPrice: 3 })), // [97,100]
+    ];
+    const lanes = packLanes(blocks);
+    expect(lanes.get('leg-1')).toBe(0);
+    expect(lanes.get('leg-2')).toBe(0);
+  });
+
+  it('overlapping same-strike blocks split into separate lanes', () => {
+    const blocks = [
+      legToBlock(makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 5 })), // [100,105]
+      legToBlock(makeLeg({ id: 'leg-2', type: 'call', direction: 'sell', strike: 100, entryPrice: 5 })), // [100,105]
+    ];
+    const lanes = packLanes(blocks);
+    const used = new Set([lanes.get('leg-1'), lanes.get('leg-2')]);
+    expect(used.size).toBe(2);
+  });
+});
+
+describe('netPnlReadout', () => {
+  it('long call: ~0 at break-even, positive above', () => {
+    const legs = [makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 })];
+    expect(netPnlReadout(legs, 103, -3).pnl).toBeCloseTo(0);
+    expect(netPnlReadout(legs, 110, -3).pnl).toBeGreaterThan(0);
+  });
+
+  it('pct is null when there is no cost basis', () => {
+    const legs = [makeLeg({ id: 'leg-1' })];
+    expect(netPnlReadout(legs, 100, 0).pct).toBeNull();
+  });
+});
+
+describe('formatPriceTick', () => {
+  it('uses k-format above 1000 and decimals scaled to span', () => {
+    expect(formatPriceTick(64000, 4000)).toBe('64.0k');
+    expect(formatPriceTick(100, 40)).toBe('100');
+    expect(formatPriceTick(0.52, 0.3)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
   });
 });
 

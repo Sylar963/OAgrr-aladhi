@@ -118,3 +118,64 @@ export function buildLadderZones(
   }
   return zones;
 }
+
+/**
+ * Greedy interval packing by price-span overlap. Blocks whose spans don't
+ * overlap reuse a lane (touching edges, e.g. a straddle's two legs, count as
+ * non-overlapping so they stay centered and tile). Overlapping blocks get
+ * separate lanes for horizontal offset.
+ */
+export function packLanes(blocks: LadderBlock[]): Map<string, number> {
+  const laneHighs: number[] = []; // laneHighs[i] = highest spanHighPrice placed in lane i
+  const assignment = new Map<string, number>();
+  const sorted = [...blocks].sort((a, b) => a.spanLowPrice - b.spanLowPrice);
+  for (const block of sorted) {
+    let placed = false;
+    for (let i = 0; i < laneHighs.length; i++) {
+      if (laneHighs[i]! <= block.spanLowPrice) {
+        laneHighs[i] = block.spanHighPrice;
+        assignment.set(block.legId, i);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      laneHighs.push(block.spanHighPrice);
+      assignment.set(block.legId, laneHighs.length - 1);
+    }
+  }
+  return assignment;
+}
+
+/** Net position P&L at a price, plus % of cost basis (|netDebit|). */
+export function netPnlReadout(
+  legs: Leg[],
+  price: number,
+  netDebit: number,
+): { pnl: number; pct: number | null } {
+  const pnl = pnlAtPrice(legs, price);
+  const cost = Math.abs(netDebit);
+  return { pnl, pct: cost > 0 ? (pnl / cost) * 100 : null };
+}
+
+/** True when a price is large enough to render with a 'k' suffix. Ported from V1. */
+export function shouldUseKFormat(maxPrice: number): boolean {
+  return maxPrice >= 1000;
+}
+
+/** Decimal places for a price tick, scaled by axis span. Ported from V1. */
+export function pickDecimals(span: number, useK: boolean): number {
+  const effective = useK ? span / 1000 : span;
+  if (effective >= 10) return 0;
+  if (effective >= 2) return 1;
+  if (effective >= 0.5) return 2;
+  if (effective >= 0.05) return 3;
+  return 4;
+}
+
+/** Format a price-axis tick label, sub-$1 safe and k-suffixed for large values. */
+export function formatPriceTick(price: number, span: number): string {
+  const useK = shouldUseKFormat(price);
+  const dp = pickDecimals(span, useK);
+  return useK ? `${(price / 1000).toFixed(dp)}k` : price.toFixed(dp);
+}

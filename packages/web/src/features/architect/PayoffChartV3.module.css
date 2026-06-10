@@ -53,6 +53,14 @@
   animation: legoRemove var(--transition-fast) forwards;
 }
 
+/* Zone washes and break-even lines tween their geometry on live re-flow. */
+.zone {
+  transition: y var(--transition-fast), height var(--transition-fast);
+}
+.beLine {
+  transition: y1 var(--transition-fast), y2 var(--transition-fast);
+}
+
 /* Hover detail card (DOM overlay positioned over the SVG). */
 .card {
   position: absolute;
@@ -143,7 +151,9 @@
   .blockEnter,
   .blockExit,
   .card,
-  .picker {
+  .picker,
+  .zone,
+  .beLine {
     animation: none;
     transition: none;
   }

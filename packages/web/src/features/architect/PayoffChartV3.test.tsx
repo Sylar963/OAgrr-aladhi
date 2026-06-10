@@ -242,6 +242,33 @@ describe('PayoffChartV3 (remove)', () => {
     );
     const removeBtn = container.querySelector('[data-remove-leg="leg-1"]')!;
     fireEvent.click(removeBtn);
+    fireEvent.animationEnd(container.querySelector('[data-leg-id="leg-1"]')!);
+    expect(onRemove).toHaveBeenCalledWith('leg-1');
+  });
+
+  it('fades the block out then removes it', () => {
+    const onRemove = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onRemoveLeg={onRemove}
+      />,
+    );
+    fireEvent.click(container.querySelector('[data-remove-leg="leg-1"]')!);
+    const group = container.querySelector('[data-leg-id="leg-1"]')!;
+    expect(group.getAttribute('class')).toContain('blockExit');
+    expect(onRemove).not.toHaveBeenCalled();
+    fireEvent.animationEnd(group);
+    expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onRemove).toHaveBeenCalledWith('leg-1');
   });
 });
@@ -316,6 +343,7 @@ describe('PayoffChartV3 (placement)', () => {
     );
     // clientY inside the plot so the picker would double-fire absent the target guard.
     fireEvent.click(container.querySelector('[data-remove-leg="leg-1"]')!, { clientX: 300, clientY: 200 });
+    fireEvent.animationEnd(container.querySelector('[data-leg-id="leg-1"]')!);
     expect(onRemove).toHaveBeenCalledWith('leg-1');
     expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
     expect(onAdd).not.toHaveBeenCalled();

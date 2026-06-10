@@ -67,7 +67,20 @@ export default function PayoffChartV3({
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
   const [picker, setPicker] = useState<{ y: number; strike: number } | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const justDraggedRef = useRef(false);
+
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  const requestRemove = (legId: string) => {
+    if (!onRemoveLeg) return;
+    if (reduceMotion) {
+      onRemoveLeg(legId);
+      return;
+    }
+    setRemovingId(legId);
+  };
 
   useEffect(() => {
     const el = containerRef.current;
@@ -211,6 +224,7 @@ export default function PayoffChartV3({
           return (
             <rect
               key={`zone-${i}`}
+              className={s.zone}
               x={plotLeft}
               y={yHigh}
               width={plotW}
@@ -227,7 +241,7 @@ export default function PayoffChartV3({
           if (y < plotTop || y > plotBottom) return null;
           return (
             <g key={`be-${i}`}>
-              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--lego-be)" strokeWidth="1.3" strokeDasharray="5 3" />
+              <line className={s.beLine} x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--lego-be)" strokeWidth="1.3" strokeDasharray="5 3" />
               <text x={plotLeft - 4} y={y + 3} fill="var(--lego-be)" fontSize="9" textAnchor="end">
                 {formatPriceTick(be, span)}
               </text>
@@ -256,7 +270,12 @@ export default function PayoffChartV3({
             onEnter={() => setHoverLegId(b.legId)}
             onLeave={() => setHoverLegId(null)}
             onDragStart={() => setDrag({ legId: b.legId, strike: b.strike })}
-            onRemove={onRemoveLeg ? () => onRemoveLeg(b.legId) : undefined}
+            onRemove={onRemoveLeg ? () => requestRemove(b.legId) : undefined}
+            exiting={removingId === b.legId}
+            onExitEnd={() => {
+              onRemoveLeg?.(b.legId);
+              setRemovingId(null);
+            }}
           />
         ))}
       </svg>
@@ -314,13 +333,27 @@ interface BlockProps {
   active: boolean;
   dragging: boolean;
   isNew: boolean;
+  exiting: boolean;
   onEnter: () => void;
   onLeave: () => void;
   onDragStart: () => void;
   onRemove?: () => void;
+  onExitEnd: () => void;
 }
 
-function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, onEnter, onLeave, onDragStart, onRemove }: BlockProps) {
+function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, exiting, onEnter, onLeave, onDragStart, onRemove, onExitEnd }: BlockProps) {
+  // Native `animationend` (not React's onAnimationEnd) so the keyframe-driven exit
+  // resolves in jsdom too: jsdom has no AnimationEvent, so React never routes its
+  // synthetic onAnimationEnd, but a native listener still fires.
+  const groupRef = useRef<SVGGElement>(null);
+  useEffect(() => {
+    const el = groupRef.current;
+    if (!el || !exiting) return;
+    const handle = () => onExitEnd();
+    el.addEventListener('animationend', handle);
+    return () => el.removeEventListener('animationend', handle);
+  }, [exiting, onExitEnd]);
+
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
@@ -340,7 +373,8 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, on
 
   return (
     <g
-      className={`${s.block} ${isNew ? s.blockEnter : ''}`}
+      ref={groupRef}
+      className={`${s.block} ${isNew ? s.blockEnter : ''} ${exiting ? s.blockExit : ''}`}
       data-leg-id={block.legId}
       data-active={active}
       data-dragging={dragging}

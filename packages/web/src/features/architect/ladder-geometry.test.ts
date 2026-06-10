@@ -47,6 +47,7 @@ describe('makePriceScale', () => {
   it('does not divide by zero when domain is degenerate', () => {
     const s = makePriceScale(100, 100, 20, 200);
     expect(Number.isFinite(s.y(100))).toBe(true);
+    expect(s.y(100)).toBeCloseTo(20);
   });
 });
 
@@ -99,6 +100,14 @@ describe('legToBlock', () => {
     expect(b.label).toBe('−2 C 100');
   });
 
+  it('short put: spans strike-premium → strike, sell direction + minus label', () => {
+    const b = legToBlock(makeLeg({ type: 'put', direction: 'sell', strike: 100, entryPrice: 3, quantity: 1 }));
+    expect(b.label).toBe('−1 P 100');
+    expect(b.spanLowPrice).toBeCloseTo(97);
+    expect(b.spanHighPrice).toBeCloseTo(100);
+    expect(b.legBreakeven).toBeCloseTo(97);
+  });
+
   it('sub-$1 underlying keeps full precision (no rounding to strike)', () => {
     const b = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 0.5, entryPrice: 0.02 }));
     expect(b.legBreakeven).toBeCloseTo(0.52);
@@ -135,6 +144,16 @@ describe('buildLadderZones', () => {
     const zones = buildLadderZones(legs, [], 100);
     expect(zones).toHaveLength(1);
     expect(zones[0]).toMatchObject({ lowPrice: -Infinity, highPrice: Infinity, profit: true });
+  });
+
+  it('bull call spread (one short leg) → loss below break-even, profit above', () => {
+    const legs = [
+      makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 4 }),
+      makeLeg({ id: 'leg-2', type: 'call', direction: 'sell', strike: 110, entryPrice: 1.5 }),
+    ];
+    const zones = buildLadderZones(legs, [102.5], 100);
+    expect(zones).toHaveLength(2);
+    expect(zones.map((z) => z.profit)).toEqual([false, true]);
   });
 });
 

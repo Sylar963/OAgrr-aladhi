@@ -180,6 +180,3 @@ describe('formatPriceTick', () => {
     expect(formatPriceTick(0.52, 0.3)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
   });
 });
-
-// makeLeg is reused by later tasks in this file.
-export {};

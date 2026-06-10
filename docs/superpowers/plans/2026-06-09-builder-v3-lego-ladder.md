@@ -131,8 +131,7 @@ describe('derivePriceDomain', () => {
   });
 });
 
-// makeLeg is reused by later tasks in this file.
-export {};
+// makeLeg is defined here and reused by the describe blocks added in later tasks.
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**

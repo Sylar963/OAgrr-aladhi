@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Leg } from './payoff';
 import {
+  buildLadderZones,
   derivePriceDomain,
   legToBlock,
   makePriceScale,
@@ -100,6 +101,37 @@ describe('legToBlock', () => {
     expect(b.legBreakeven).toBeCloseTo(0.52);
     expect(b.spanHighPrice).toBeCloseTo(0.52);
     expect(b.spanLowPrice).toBeCloseTo(0.5);
+  });
+});
+
+describe('buildLadderZones', () => {
+  it('returns [] for no legs', () => {
+    expect(buildLadderZones([], [], 100)).toEqual([]);
+  });
+
+  it('long call → loss below break-even, profit above', () => {
+    const legs = [makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 })];
+    const zones = buildLadderZones(legs, [103], 100);
+    expect(zones).toHaveLength(2);
+    expect(zones[0]).toMatchObject({ lowPrice: -Infinity, highPrice: 103, profit: false });
+    expect(zones[1]).toMatchObject({ lowPrice: 103, highPrice: Infinity, profit: true });
+  });
+
+  it('long straddle → red band between break-evens, green outside (the hero case)', () => {
+    const legs = [
+      makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }),
+      makeLeg({ id: 'leg-2', type: 'put', direction: 'buy', strike: 100, entryPrice: 3 }),
+    ];
+    const zones = buildLadderZones(legs, [94, 106], 100);
+    expect(zones.map((z) => z.profit)).toEqual([true, false, true]);
+    expect(zones[1]).toMatchObject({ lowPrice: 94, highPrice: 106, profit: false });
+  });
+
+  it('no break-evens → single zone signed by spot P&L', () => {
+    const legs = [makeLeg({ id: 'leg-1', type: 'call', direction: 'sell', strike: 200, entryPrice: 5 })];
+    const zones = buildLadderZones(legs, [], 100);
+    expect(zones).toHaveLength(1);
+    expect(zones[0]).toMatchObject({ lowPrice: -Infinity, highPrice: Infinity, profit: true });
   });
 });
 

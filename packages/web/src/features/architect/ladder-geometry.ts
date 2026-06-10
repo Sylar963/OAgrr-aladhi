@@ -81,3 +81,40 @@ export function legToBlock(leg: Leg): LadderBlock {
     label,
   };
 }
+
+export interface LadderZone {
+  /** May be -Infinity for the unbounded lower band. */
+  lowPrice: number;
+  /** May be +Infinity for the unbounded upper band. */
+  highPrice: number;
+  profit: boolean;
+}
+
+/**
+ * Net P&L wash bands between break-evens. Port of PayoffChartV2's buildZones:
+ * sign each band by probing pnlAtPrice at a representative price.
+ */
+export function buildLadderZones(
+  legs: Leg[],
+  breakevens: number[],
+  spotPrice: number,
+): LadderZone[] {
+  if (legs.length === 0) return [];
+  if (breakevens.length === 0) {
+    return [{ lowPrice: -Infinity, highPrice: Infinity, profit: pnlAtPrice(legs, spotPrice) >= 0 }];
+  }
+  const sorted = [...breakevens].sort((a, b) => a - b);
+  const boundaries = [-Infinity, ...sorted, Infinity];
+  const zones: LadderZone[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const low = boundaries[i]!;
+    const high = boundaries[i + 1]!;
+    let probe: number;
+    if (Number.isFinite(low) && Number.isFinite(high)) probe = (low + high) / 2;
+    else if (Number.isFinite(high)) probe = high * 0.5;
+    else if (Number.isFinite(low)) probe = low * 1.5;
+    else probe = spotPrice;
+    zones.push({ lowPrice: low, highPrice: high, profit: pnlAtPrice(legs, probe) >= 0 });
+  }
+  return zones;
+}

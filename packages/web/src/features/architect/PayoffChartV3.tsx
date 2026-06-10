@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { fmtIv, fmtPct, fmtUsd } from '@lib/format';
 import type { Leg, PayoffPoint } from './payoff';
 import {
   buildLadderZones,
@@ -7,6 +8,7 @@ import {
   formatPriceTick,
   legToBlock,
   makePriceScale,
+  netPnlReadout,
   packLanes,
   type LadderBlock,
 } from './ladder-geometry';
@@ -48,7 +50,7 @@ export default function PayoffChartV3({
   breakevens,
   spotPrice,
   legs,
-  netDebit: _netDebit,
+  netDebit,
   strikes: _strikes = [],
   onLegStrikeDrag: _onLegStrikeDrag,
   onAddLegAtStrike: _onAddLegAtStrike,
@@ -58,6 +60,8 @@ export default function PayoffChartV3({
   // Default to a non-zero size so the chart renders before (and without) a live
   // ResizeObserver — jsdom has no ResizeObserver, and the first paint has no box.
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 600, h: 400 });
+  const [hoverY, setHoverY] = useState<number | null>(null);
+  const [hoverLegId, setHoverLegId] = useState<string | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -105,9 +109,30 @@ export default function PayoffChartV3({
 
   const spotY = clampY(spotPrice, scale.y, plotTop, plotBottom);
 
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.clientY - rect.top;
+    setHoverY(y >= plotTop && y <= plotBottom ? y : null);
+  };
+  const handlePointerLeave = () => {
+    setHoverY(null);
+    setHoverLegId(null);
+  };
+
+  const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
+  const hoverReadout = hoverPrice != null ? netPnlReadout(legs, hoverPrice, netDebit) : null;
+  const hoveredLeg = hoverLegId != null ? legs.find((l) => l.id === hoverLegId) ?? null : null;
+
   return (
     <div className={s.container} ref={containerRef}>
-      <svg className={s.svg} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <svg
+        className={s.svg}
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="none"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+      >
         <defs>
           <pattern id="lego-hatch-call" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
             <line x1="0" y1="0" x2="0" y2="7" stroke="var(--lego-call)" strokeWidth="1.2" opacity="0.6" />
@@ -163,9 +188,29 @@ export default function PayoffChartV3({
             yOf={scale.y}
             plotTop={plotTop}
             plotBottom={plotBottom}
+            active={hoverLegId === b.legId}
+            onEnter={() => setHoverLegId(b.legId)}
+            onLeave={() => setHoverLegId(null)}
           />
         ))}
       </svg>
+
+      {hoverY != null && hoverReadout != null && hoverLegId == null && (
+        <div className={s.crosshairChip} data-testid="crosshair-chip" style={{ left: plotLeft + 6, top: hoverY }}>
+          @{formatPriceTick(hoverPrice as number, span)} → {fmtUsd(hoverReadout.pnl)}
+          {hoverReadout.pct != null ? ` (${fmtPct(hoverReadout.pct, 0)})` : ''}
+        </div>
+      )}
+
+      {hoveredLeg != null && (
+        <div className={s.card} style={{ left: centerX + BLOCK_W, top: scale.y(hoveredLeg.strike) - 40 }}>
+          <div className={s.cardTitle}>{legToBlock(hoveredLeg).label}</div>
+          <div>prem {fmtUsd(hoveredLeg.entryPrice)}</div>
+          <div>IV {fmtIv(hoveredLeg.iv)}</div>
+          <div>Δ {hoveredLeg.delta ?? '–'} · Θ {hoveredLeg.theta ?? '–'}</div>
+          <div>P/L @spot {fmtUsd(netPnlReadout([hoveredLeg], spotPrice, hoveredLeg.entryPrice).pnl)}</div>
+        </div>
+      )}
 
       {legs.length === 0 && <div className={s.empty}>Spot ladder — click a rung to add a leg</div>}
     </div>
@@ -178,9 +223,12 @@ interface BlockProps {
   yOf: (price: number) => number;
   plotTop: number;
   plotBottom: number;
+  active: boolean;
+  onEnter: () => void;
+  onLeave: () => void;
 }
 
-function Block({ block, x, yOf, plotTop, plotBottom }: BlockProps) {
+function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave }: BlockProps) {
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
@@ -197,7 +245,13 @@ function Block({ block, x, yOf, plotTop, plotBottom }: BlockProps) {
   const cx = x + BLOCK_W / 2;
 
   return (
-    <g className={s.block} data-leg-id={block.legId} data-active="false">
+    <g
+      className={s.block}
+      data-leg-id={block.legId}
+      data-active={active}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
+    >
       <rect
         x={x}
         y={yTop}

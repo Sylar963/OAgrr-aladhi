@@ -64,3 +64,16 @@ describe('PayoffChartV3 (render)', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 });
+
+import { fireEvent } from '@testing-library/react';
+
+describe('PayoffChartV3 (crosshair)', () => {
+  it('shows a net P&L readout chip when the ladder is hovered', () => {
+    const { container } = renderChart([makeLeg({ id: 'leg-1', strike: 100 })]);
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 100 });
+    const chip = container.querySelector('[data-testid="crosshair-chip"]');
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toContain('@');
+  });
+});

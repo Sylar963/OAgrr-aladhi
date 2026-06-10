@@ -166,4 +166,56 @@ describe('PayoffChartV3 (placement)', () => {
     expect(direction).toBe('buy');
     expect(qty).toBe(1);
   });
+
+  it('does not open a picker when an existing leg block is clicked', () => {
+    const onAdd = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        maxProfit={null}
+        maxLoss={-3}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+      />,
+    );
+    // clientY inside the plot so the picker would open absent the target guard.
+    fireEvent.click(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 300, clientY: 200 });
+    expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
+  });
+
+  it('does not open a picker (no double-fire) when the remove control is clicked', () => {
+    const onAdd = vi.fn();
+    const onRemove = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        maxProfit={null}
+        maxLoss={-3}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+        onRemoveLeg={onRemove}
+      />,
+    );
+    // clientY inside the plot so the picker would double-fire absent the target guard.
+    fireEvent.click(container.querySelector('[data-remove-leg="leg-1"]')!, { clientX: 300, clientY: 200 });
+    expect(onRemove).toHaveBeenCalledWith('leg-1');
+    expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
 });

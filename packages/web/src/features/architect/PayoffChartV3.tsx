@@ -152,6 +152,10 @@ export default function PayoffChartV3({
   };
   const handleLadderClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!onAddLegAtStrike || drag) return;
+    // Native `click` bubbles from leg blocks (whose stopPropagation is on pointerdown,
+    // not click); ignore clicks landing on a block so it can't open a picker over it
+    // or double-fire with the remove control.
+    if ((e.target as Element).closest('[data-leg-id]')) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = e.clientY - rect.top;

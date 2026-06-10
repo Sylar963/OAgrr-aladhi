@@ -30,8 +30,6 @@ function renderChart(legs: Leg[]) {
       breakevens={legs.length ? [103] : []}
       spotPrice={100}
       legs={legs}
-      maxProfit={null}
-      maxLoss={-3}
       netDebit={-3}
       strikes={[90, 95, 100, 105, 110]}
     />,
@@ -93,8 +91,6 @@ describe('PayoffChartV3 (drag strike)', () => {
         breakevens={[103]}
         spotPrice={100}
         legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
-        maxProfit={null}
-        maxLoss={-3}
         netDebit={-3}
         strikes={[90, 95, 100, 105, 110]}
         onLegStrikeDrag={onDrag}
@@ -103,12 +99,126 @@ describe('PayoffChartV3 (drag strike)', () => {
     const group = container.querySelector('[data-leg-id="leg-1"]')!;
     // Drag downward in pixel space → lower price → expect a snapped strike below 100.
     fireEvent.pointerDown(group, { clientX: 300, clientY: 200 });
-    fireEvent.pointerMove(container.querySelector('svg')!, { clientX: 300, clientY: 360 });
+    fireEvent.pointerMove(container.querySelector('svg')!, { clientX: 300, clientY: 360, buttons: 1 });
     fireEvent.pointerUp(container.querySelector('svg')!, { clientX: 300, clientY: 360 });
     expect(onDrag).toHaveBeenCalledTimes(1);
     const [legId, newStrike] = onDrag.mock.calls[0]!;
     expect(legId).toBe('leg-1');
     expect([90, 95]).toContain(newStrike);
+  });
+});
+
+describe('PayoffChartV3 (drag correctness)', () => {
+  it('does not open a picker after a strike drag', () => {
+    const onAdd = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+        onLegStrikeDrag={vi.fn()}
+      />,
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 300, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 360, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 300, clientY: 360 });
+    fireEvent.click(svg, { clientX: 300, clientY: 360 });
+    expect(container.querySelector('[data-add]')).toBeNull();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('ends a drag when the button is released outside the plot', () => {
+    const onDrag = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onLegStrikeDrag={onDrag}
+      />,
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 300, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 360, buttons: 1 });
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 360, buttons: 0 });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    const [, snapped] = onDrag.mock.calls[0]!;
+    expect([90, 95]).toContain(snapped);
+    // A further move must not keep changing the strike (drag has ended).
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 30, buttons: 1 });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+  });
+
+  it('break-even line re-flows during a strike drag', () => {
+    const onDrag = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100, entryPrice: 3 })]}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onLegStrikeDrag={onDrag}
+      />,
+    );
+    const beTextBefore = Array.from(container.querySelectorAll('text')).find((t) =>
+      (t.textContent ?? '').includes('103'),
+    );
+    expect(beTextBefore).toBeTruthy();
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 300, clientY: 200 });
+    // Drag upward in pixel space → higher price → snap strike up to 110.
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 30, buttons: 1 });
+    const beTextAfter = Array.from(container.querySelectorAll('text')).find((t) =>
+      (t.textContent ?? '').includes('113'),
+    );
+    expect(beTextAfter).toBeTruthy();
+  });
+
+  it('short-leg arrow is a visible (non-degenerate) triangle', () => {
+    const points = [
+      { underlyingPrice: 70, pnl: 3 },
+      { underlyingPrice: 130, pnl: -27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', type: 'call', direction: 'sell', strike: 100 })]}
+        netDebit={3}
+        strikes={[90, 95, 100, 105, 110]}
+      />,
+    );
+    const polygon = container.querySelector('[data-leg-id="leg-1"] polygon')!;
+    expect(polygon).not.toBeNull();
+    const ys = (polygon.getAttribute('points') ?? '')
+      .trim()
+      .split(/\s+/)
+      .map((pt) => Number(pt.split(',')[1]));
+    expect(ys.length).toBe(3);
+    expect(new Set(ys).size).toBeGreaterThan(1);
   });
 });
 
@@ -125,8 +235,6 @@ describe('PayoffChartV3 (remove)', () => {
         breakevens={[103]}
         spotPrice={100}
         legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
-        maxProfit={null}
-        maxLoss={-3}
         netDebit={-3}
         strikes={[90, 95, 100, 105, 110]}
         onRemoveLeg={onRemove}
@@ -147,8 +255,6 @@ describe('PayoffChartV3 (placement)', () => {
         breakevens={[]}
         spotPrice={100}
         legs={[]}
-        maxProfit={null}
-        maxLoss={null}
         netDebit={0}
         strikes={[90, 95, 100, 105, 110]}
         onAddLegAtStrike={onAdd}
@@ -179,8 +285,6 @@ describe('PayoffChartV3 (placement)', () => {
         breakevens={[103]}
         spotPrice={100}
         legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
-        maxProfit={null}
-        maxLoss={-3}
         netDebit={-3}
         strikes={[90, 95, 100, 105, 110]}
         onAddLegAtStrike={onAdd}
@@ -204,8 +308,6 @@ describe('PayoffChartV3 (placement)', () => {
         breakevens={[103]}
         spotPrice={100}
         legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
-        maxProfit={null}
-        maxLoss={-3}
         netDebit={-3}
         strikes={[90, 95, 100, 105, 110]}
         onAddLegAtStrike={onAdd}

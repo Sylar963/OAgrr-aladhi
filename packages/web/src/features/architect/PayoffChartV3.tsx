@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { fmtIv, fmtPct, fmtUsd } from '@lib/format';
-import type { Leg, PayoffPoint } from './payoff';
+import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderZones,
   derivePriceDomain,
@@ -19,8 +19,6 @@ interface PayoffChartV3Props {
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
-  maxProfit: number | null;
-  maxLoss: number | null;
   netDebit: number;
   strikes?: number[];
   onLegStrikeDrag?: (legId: string, newStrike: number) => void;
@@ -69,6 +67,7 @@ export default function PayoffChartV3({
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
   const [picker, setPicker] = useState<{ y: number; strike: number } | null>(null);
+  const justDraggedRef = useRef(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -106,6 +105,10 @@ export default function PayoffChartV3({
     () => (drag ? legs.map((l) => (l.id === drag.legId ? { ...l, strike: drag.strike } : l)) : legs),
     [legs, drag],
   );
+  const viewBreakevens = useMemo(
+    () => (drag ? computeMetrics(viewLegs, spotPrice).breakevens : breakevens),
+    [drag, viewLegs, spotPrice, breakevens],
+  );
 
   const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
   const lanes = useMemo(() => packLanes(blocks), [blocks]);
@@ -114,8 +117,8 @@ export default function PayoffChartV3({
     [lanes],
   );
   const zones = useMemo(
-    () => buildLadderZones(viewLegs, breakevens, spotPrice),
-    [viewLegs, breakevens, spotPrice],
+    () => buildLadderZones(viewLegs, viewBreakevens, spotPrice),
+    [viewLegs, viewBreakevens, spotPrice],
   );
 
   const blockX = (legId: string): number => {
@@ -127,6 +130,10 @@ export default function PayoffChartV3({
   const spotY = clampY(spotPrice, scale.y, plotTop, plotBottom);
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (drag && e.buttons === 0) {
+      endDrag();
+      return;
+    }
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = e.clientY - rect.top;
@@ -144,13 +151,20 @@ export default function PayoffChartV3({
     setPicker(null);
   };
   const endDrag = () => {
-    if (drag && onLegStrikeDrag) {
-      const original = legs.find((l) => l.id === drag.legId);
-      if (original && original.strike !== drag.strike) onLegStrikeDrag(drag.legId, drag.strike);
+    if (drag) {
+      justDraggedRef.current = true;
+      if (onLegStrikeDrag) {
+        const original = legs.find((l) => l.id === drag.legId);
+        if (original && original.strike !== drag.strike) onLegStrikeDrag(drag.legId, drag.strike);
+      }
     }
     setDrag(null);
   };
   const handleLadderClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (justDraggedRef.current) {
+      justDraggedRef.current = false;
+      return;
+    }
     if (!onAddLegAtStrike || drag) return;
     // Native `click` bubbles from leg blocks (whose stopPropagation is on pointerdown,
     // not click); ignore clicks landing on a block so it can't open a picker over it
@@ -208,7 +222,7 @@ export default function PayoffChartV3({
         })}
 
         {/* Break-even lines */}
-        {breakevens.map((be, i) => {
+        {viewBreakevens.map((be, i) => {
           const y = scale.y(be);
           if (y < plotTop || y > plotBottom) return null;
           return (
@@ -237,6 +251,7 @@ export default function PayoffChartV3({
             plotTop={plotTop}
             plotBottom={plotBottom}
             active={hoverLegId === b.legId || drag?.legId === b.legId}
+            dragging={drag?.legId === b.legId}
             isNew={!seenIds.current.has(b.legId)}
             onEnter={() => setHoverLegId(b.legId)}
             onLeave={() => setHoverLegId(null)}
@@ -258,7 +273,7 @@ export default function PayoffChartV3({
           <div className={s.cardTitle}>{legToBlock(hoveredLeg).label}</div>
           <div>prem {fmtUsd(hoveredLeg.entryPrice)}</div>
           <div>IV {fmtIv(hoveredLeg.iv)}</div>
-          <div>Δ {hoveredLeg.delta ?? '–'} · Θ {hoveredLeg.theta ?? '–'}</div>
+          <div>Δ {hoveredLeg.delta != null ? hoveredLeg.delta.toFixed(2) : '–'} · Θ {hoveredLeg.theta != null ? hoveredLeg.theta.toFixed(2) : '–'}</div>
           <div>P/L @spot {fmtUsd(netPnlReadout([hoveredLeg], spotPrice, hoveredLeg.entryPrice).pnl)}</div>
         </div>
       )}
@@ -297,6 +312,7 @@ interface BlockProps {
   plotTop: number;
   plotBottom: number;
   active: boolean;
+  dragging: boolean;
   isNew: boolean;
   onEnter: () => void;
   onLeave: () => void;
@@ -304,7 +320,7 @@ interface BlockProps {
   onRemove?: () => void;
 }
 
-function Block({ block, x, yOf, plotTop, plotBottom, active, isNew, onEnter, onLeave, onDragStart, onRemove }: BlockProps) {
+function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, onEnter, onLeave, onDragStart, onRemove }: BlockProps) {
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
@@ -317,7 +333,9 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, isNew, onEnter, onL
   const arrowApexY = isCall
     ? (isLong ? yTop - 12 : yTop + 14)
     : (isLong ? yTop + height + 12 : yTop + height - 14);
-  const arrowBaseY = isCall ? (isLong ? yTop : yTop + 14) : (isLong ? yTop + height : yTop + height - 14);
+  const arrowBaseY = isCall
+    ? (isLong ? yTop : yTop + 2)
+    : (isLong ? yTop + height : yTop + height - 2);
   const cx = x + BLOCK_W / 2;
 
   return (
@@ -325,6 +343,7 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, isNew, onEnter, onL
       className={`${s.block} ${isNew ? s.blockEnter : ''}`}
       data-leg-id={block.legId}
       data-active={active}
+      data-dragging={dragging}
       onPointerEnter={onEnter}
       onPointerLeave={onLeave}
       onPointerDown={(e) => {

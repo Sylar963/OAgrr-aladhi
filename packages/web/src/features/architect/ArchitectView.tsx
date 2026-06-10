@@ -759,8 +759,6 @@ export default function ArchitectView() {
                       breakevens={metrics?.breakevens ?? []}
                       spotPrice={spotPrice}
                       legs={pricedLegs}
-                      maxProfit={metrics?.maxProfit ?? null}
-                      maxLoss={metrics?.maxLoss ?? null}
                       netDebit={metrics?.netDebit ?? 0}
                       strikes={availableStrikes}
                       onLegStrikeDrag={handleLegStrikeDrag}

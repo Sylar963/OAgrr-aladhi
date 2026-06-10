@@ -45,14 +45,19 @@ function clampY(price: number, yOf: (p: number) => number, plotTop: number, plot
   return Math.max(plotTop, Math.min(plotBottom, yOf(price)));
 }
 
+function nearestStrike(price: number, strikes: number[]): number | null {
+  if (strikes.length === 0) return null;
+  return strikes.reduce((best, k) => (Math.abs(k - price) < Math.abs(best - price) ? k : best));
+}
+
 export default function PayoffChartV3({
   points,
   breakevens,
   spotPrice,
   legs,
   netDebit,
-  strikes: _strikes = [],
-  onLegStrikeDrag: _onLegStrikeDrag,
+  strikes = [],
+  onLegStrikeDrag,
   onAddLegAtStrike: _onAddLegAtStrike,
   onRemoveLeg: _onRemoveLeg,
 }: PayoffChartV3Props) {
@@ -62,6 +67,7 @@ export default function PayoffChartV3({
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 600, h: 400 });
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -90,15 +96,20 @@ export default function PayoffChartV3({
   );
   const span = domain.priceMax - domain.priceMin || 1;
 
-  const blocks = useMemo(() => legs.map(legToBlock), [legs]);
+  const viewLegs = useMemo(
+    () => (drag ? legs.map((l) => (l.id === drag.legId ? { ...l, strike: drag.strike } : l)) : legs),
+    [legs, drag],
+  );
+
+  const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
   const lanes = useMemo(() => packLanes(blocks), [blocks]);
   const laneCount = useMemo(
     () => (lanes.size ? Math.max(...lanes.values()) + 1 : 1),
     [lanes],
   );
   const zones = useMemo(
-    () => buildLadderZones(legs, breakevens, spotPrice),
-    [legs, breakevens, spotPrice],
+    () => buildLadderZones(viewLegs, breakevens, spotPrice),
+    [viewLegs, breakevens, spotPrice],
   );
 
   const blockX = (legId: string): number => {
@@ -113,11 +124,24 @@ export default function PayoffChartV3({
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = e.clientY - rect.top;
+    if (drag) {
+      const price = scale.priceAt(Math.max(plotTop, Math.min(plotBottom, y)));
+      const snapped = nearestStrike(price, strikes);
+      if (snapped != null && snapped !== drag.strike) setDrag({ ...drag, strike: snapped });
+      return;
+    }
     setHoverY(y >= plotTop && y <= plotBottom ? y : null);
   };
   const handlePointerLeave = () => {
     setHoverY(null);
     setHoverLegId(null);
+  };
+  const endDrag = () => {
+    if (drag && onLegStrikeDrag) {
+      const original = legs.find((l) => l.id === drag.legId);
+      if (original && original.strike !== drag.strike) onLegStrikeDrag(drag.legId, drag.strike);
+    }
+    setDrag(null);
   };
 
   const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
@@ -132,6 +156,8 @@ export default function PayoffChartV3({
         preserveAspectRatio="none"
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
       >
         <defs>
           <pattern id="lego-hatch-call" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
@@ -188,9 +214,10 @@ export default function PayoffChartV3({
             yOf={scale.y}
             plotTop={plotTop}
             plotBottom={plotBottom}
-            active={hoverLegId === b.legId}
+            active={hoverLegId === b.legId || drag?.legId === b.legId}
             onEnter={() => setHoverLegId(b.legId)}
             onLeave={() => setHoverLegId(null)}
+            onDragStart={() => setDrag({ legId: b.legId, strike: b.strike })}
           />
         ))}
       </svg>
@@ -226,9 +253,10 @@ interface BlockProps {
   active: boolean;
   onEnter: () => void;
   onLeave: () => void;
+  onDragStart: () => void;
 }
 
-function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave }: BlockProps) {
+function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave, onDragStart }: BlockProps) {
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
@@ -251,6 +279,7 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave }:
       data-active={active}
       onPointerEnter={onEnter}
       onPointerLeave={onLeave}
+      onPointerDown={onDragStart}
     >
       <rect
         x={x}

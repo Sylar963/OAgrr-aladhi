@@ -77,3 +77,37 @@ describe('PayoffChartV3 (crosshair)', () => {
     expect(chip!.textContent).toContain('@');
   });
 });
+
+import { vi } from 'vitest';
+
+describe('PayoffChartV3 (drag strike)', () => {
+  it('fires onLegStrikeDrag with the snapped strike on drag release', () => {
+    const onDrag = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        maxProfit={null}
+        maxLoss={-3}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onLegStrikeDrag={onDrag}
+      />,
+    );
+    const group = container.querySelector('[data-leg-id="leg-1"]')!;
+    // Drag downward in pixel space → lower price → expect a snapped strike below 100.
+    fireEvent.pointerDown(group, { clientX: 300, clientY: 200 });
+    fireEvent.pointerMove(container.querySelector('svg')!, { clientX: 300, clientY: 360 });
+    fireEvent.pointerUp(container.querySelector('svg')!, { clientX: 300, clientY: 360 });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    const [legId, newStrike] = onDrag.mock.calls[0]!;
+    expect(legId).toBe('leg-1');
+    expect([90, 95]).toContain(newStrike);
+  });
+});

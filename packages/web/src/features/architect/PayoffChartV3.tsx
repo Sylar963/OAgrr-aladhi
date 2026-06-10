@@ -58,7 +58,7 @@ export default function PayoffChartV3({
   netDebit,
   strikes = [],
   onLegStrikeDrag,
-  onAddLegAtStrike: _onAddLegAtStrike,
+  onAddLegAtStrike,
   onRemoveLeg,
 }: PayoffChartV3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +68,7 @@ export default function PayoffChartV3({
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
+  const [picker, setPicker] = useState<{ y: number; strike: number } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -140,6 +141,7 @@ export default function PayoffChartV3({
   const handlePointerLeave = () => {
     setHoverY(null);
     setHoverLegId(null);
+    setPicker(null);
   };
   const endDrag = () => {
     if (drag && onLegStrikeDrag) {
@@ -147,6 +149,16 @@ export default function PayoffChartV3({
       if (original && original.strike !== drag.strike) onLegStrikeDrag(drag.legId, drag.strike);
     }
     setDrag(null);
+  };
+  const handleLadderClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!onAddLegAtStrike || drag) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.clientY - rect.top;
+    if (y < plotTop || y > plotBottom) return;
+    const snapped = nearestStrike(scale.priceAt(y), strikes);
+    if (snapped == null) return;
+    setPicker({ y, strike: snapped });
   };
 
   const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
@@ -163,6 +175,7 @@ export default function PayoffChartV3({
         onPointerLeave={handlePointerLeave}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onClick={handleLadderClick}
       >
         <defs>
           <pattern id="lego-hatch-call" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
@@ -246,6 +259,28 @@ export default function PayoffChartV3({
         </div>
       )}
 
+      {picker && onAddLegAtStrike && (
+        <div className={s.picker} style={{ left: centerX - 70, top: picker.y }}>
+          {(['buy', 'sell'] as const).flatMap((direction) =>
+            (['call', 'put'] as const).map((type) => (
+              <button
+                key={`${direction}-${type}`}
+                type="button"
+                data-add={`${direction}-${type}`}
+                className={s.pickerBtn}
+                onClick={() => {
+                  onAddLegAtStrike(picker.strike, type, direction, 1);
+                  setPicker(null);
+                }}
+              >
+                {direction === 'buy' ? '+' : '−'}
+                {type === 'call' ? 'C' : 'P'} {picker.strike}
+              </button>
+            )),
+          )}
+        </div>
+      )}
+
       {legs.length === 0 && <div className={s.empty}>Spot ladder — click a rung to add a leg</div>}
     </div>
   );
@@ -288,7 +323,10 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, isNew, onEnter, onL
       data-active={active}
       onPointerEnter={onEnter}
       onPointerLeave={onLeave}
-      onPointerDown={onDragStart}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onDragStart();
+      }}
     >
       <rect
         x={x}

@@ -137,3 +137,33 @@ describe('PayoffChartV3 (remove)', () => {
     expect(onRemove).toHaveBeenCalledWith('leg-1');
   });
 });
+
+describe('PayoffChartV3 (placement)', () => {
+  it('opens a picker on rung click and fires onAddLegAtStrike', () => {
+    const onAdd = vi.fn();
+    const { container } = render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={[]}
+        spotPrice={100}
+        legs={[]}
+        maxProfit={null}
+        maxLoss={null}
+        netDebit={0}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+      />,
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.click(svg, { clientX: 300, clientY: 200 });
+    const buyCall = container.querySelector('[data-add="buy-call"]')!;
+    expect(buyCall).not.toBeNull();
+    fireEvent.click(buyCall);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    const [strike, type, direction, qty] = onAdd.mock.calls[0]!;
+    expect([90, 95, 100, 105, 110]).toContain(strike);
+    expect(type).toBe('call');
+    expect(direction).toBe('buy');
+    expect(qty).toBe(1);
+  });
+});

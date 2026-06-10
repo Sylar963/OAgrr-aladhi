@@ -225,7 +225,7 @@ Each phase is shippable and leaves V1/V2 untouched.
 
 ## 13. Open questions
 
-1. **Lane vs central-tile preference for ≥4 legs:** spec defaults to central band + lane-offset on overlap. Acceptable, or prefer one-lane-per-leg ordered by strike (loses tiling)?
+1. **Lane vs central-tile preference for ≥4 legs:** ✅ **Resolved (2026-06-09)** — central band + lane-offset on overlap (keeps the tiling look).
 2. **Quantity encoding:** badge `×N` (spec default) vs block-width scaling vs opacity. Confirm badge.
 3. **Crosshair vs card coexistence:** spec suppresses the crosshair chip while a block is hovered. Confirm that's the desired focus behavior.
 4. **V3 as default variant?** Ships as an opt-in toggle (V1 default) initially; promote to default later if it tests well.

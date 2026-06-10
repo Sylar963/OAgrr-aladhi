@@ -39,10 +39,12 @@
 }
 .block [data-remove-leg] {
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--transition-fast);
 }
 .block[data-active='true'] [data-remove-leg] {
   opacity: 1;
+  pointer-events: auto;
 }
 .blockEnter {
   animation: legoDropIn var(--transition-base);

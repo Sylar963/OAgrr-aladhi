@@ -59,7 +59,7 @@ export default function PayoffChartV3({
   strikes = [],
   onLegStrikeDrag,
   onAddLegAtStrike: _onAddLegAtStrike,
-  onRemoveLeg: _onRemoveLeg,
+  onRemoveLeg,
 }: PayoffChartV3Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Default to a non-zero size so the chart renders before (and without) a live
@@ -79,6 +79,11 @@ export default function PayoffChartV3({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const seenIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    seenIds.current = new Set(legs.map((l) => l.id));
+  });
 
   const { w, h } = size;
   const plotTop = PAD.top;
@@ -215,9 +220,11 @@ export default function PayoffChartV3({
             plotTop={plotTop}
             plotBottom={plotBottom}
             active={hoverLegId === b.legId || drag?.legId === b.legId}
+            isNew={!seenIds.current.has(b.legId)}
             onEnter={() => setHoverLegId(b.legId)}
             onLeave={() => setHoverLegId(null)}
             onDragStart={() => setDrag({ legId: b.legId, strike: b.strike })}
+            onRemove={onRemoveLeg ? () => onRemoveLeg(b.legId) : undefined}
           />
         ))}
       </svg>
@@ -251,12 +258,14 @@ interface BlockProps {
   plotTop: number;
   plotBottom: number;
   active: boolean;
+  isNew: boolean;
   onEnter: () => void;
   onLeave: () => void;
   onDragStart: () => void;
+  onRemove?: () => void;
 }
 
-function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave, onDragStart }: BlockProps) {
+function Block({ block, x, yOf, plotTop, plotBottom, active, isNew, onEnter, onLeave, onDragStart, onRemove }: BlockProps) {
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
@@ -274,7 +283,7 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave, o
 
   return (
     <g
-      className={s.block}
+      className={`${s.block} ${isNew ? s.blockEnter : ''}`}
       data-leg-id={block.legId}
       data-active={active}
       onPointerEnter={onEnter}
@@ -303,6 +312,12 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, onEnter, onLeave, o
       <text x={cx} y={yTop + height / 2 + 3} fill="var(--text-primary)" fontSize="10" textAnchor="middle">
         {block.label}
       </text>
+      {onRemove && (
+        <g data-remove-leg={block.legId} style={{ cursor: 'pointer' }} onClick={onRemove}>
+          <circle cx={x + BLOCK_W - 4} cy={yTop + 2} r={7} fill="var(--bg-elevated)" stroke="var(--lego-loss)" />
+          <text x={x + BLOCK_W - 4} y={yTop + 5} fill="var(--lego-loss)" fontSize="9" textAnchor="middle">×</text>
+        </g>
+      )}
     </g>
   );
 }

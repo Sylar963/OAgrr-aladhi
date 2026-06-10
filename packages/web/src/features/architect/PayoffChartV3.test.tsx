@@ -111,3 +111,29 @@ describe('PayoffChartV3 (drag strike)', () => {
     expect([90, 95]).toContain(newStrike);
   });
 });
+
+describe('PayoffChartV3 (remove)', () => {
+  it('fires onRemoveLeg when the block remove control is clicked', () => {
+    const onRemove = vi.fn();
+    const points = [
+      { underlyingPrice: 70, pnl: -3 },
+      { underlyingPrice: 130, pnl: 27 },
+    ];
+    const { container } = render(
+      <PayoffChartV3
+        points={points}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100 })]}
+        maxProfit={null}
+        maxLoss={-3}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        onRemoveLeg={onRemove}
+      />,
+    );
+    const removeBtn = container.querySelector('[data-remove-leg="leg-1"]')!;
+    fireEvent.click(removeBtn);
+    expect(onRemove).toHaveBeenCalledWith('leg-1');
+  });
+});

@@ -37,6 +37,13 @@
 .block[data-dragging='true'] {
   cursor: grabbing;
 }
+.block [data-remove-leg] {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.block[data-active='true'] [data-remove-leg] {
+  opacity: 1;
+}
 .blockEnter {
   animation: legoDropIn var(--transition-base);
 }

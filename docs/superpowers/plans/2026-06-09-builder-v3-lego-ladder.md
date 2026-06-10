@@ -474,7 +474,7 @@ describe('formatPriceTick', () => {
   it('uses k-format above 1000 and decimals scaled to span', () => {
     expect(formatPriceTick(64000, 4000)).toBe('64.0k');
     expect(formatPriceTick(100, 40)).toBe('100');
-    expect(formatPriceTick(0.52, 0.3)).toBe('0.52');
+    expect(formatPriceTick(0.52, 0.3)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
   });
 });
 ```

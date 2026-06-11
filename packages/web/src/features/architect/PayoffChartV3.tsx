@@ -274,11 +274,14 @@ export default function PayoffChartV3({
     }
     setHoverY(y >= plotTop && y <= plotBottom ? y : null);
   };
+  // NOTE: deliberately does NOT clear the picker — the picker overlay is a
+  // sibling of the svg, so moving the mouse onto it fires the svg's
+  // pointerleave first and would dismiss it before any button could be
+  // clicked. The picker closes on container leave (below) or button click.
   const handlePointerLeave = () => {
     setHoverY(null);
     setHoverLegId(null);
     setHoverSpreadKey(null);
-    setPicker(null);
   };
   const endDrag = () => {
     if (drag) {
@@ -327,7 +330,7 @@ export default function PayoffChartV3({
   })();
 
   return (
-    <div className={s.container} ref={containerRef}>
+    <div className={s.container} ref={containerRef} onPointerLeave={() => setPicker(null)}>
       {tenorScale && (
         <div className={s.tenorHeader} style={{ height: TENOR_HEADER_H }}>
           {tenorScale.tenors.map((t) => (

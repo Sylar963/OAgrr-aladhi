@@ -352,7 +352,12 @@ export default function ArchitectView() {
       const leg = legs.find((entry) => entry.id === legId);
       if (!leg) return;
 
-      const repriced = repriceStrategyLeg(leg, patch, patch.strike != null);
+      // exactStrike:false — strike edits originate from the BUILDER expiry's
+      // grid (ladder rungs, LegRow stepper) but commit against the leg's OWN
+      // tenor's chain; when the grids differ an exact lookup misses and the
+      // edit would silently revert. Nearest-snap is identical whenever the
+      // strike exists on the leg's grid.
+      const repriced = repriceStrategyLeg(leg, patch, false);
       if (!repriced) return;
 
       updateLeg(legId, repriced);
@@ -558,7 +563,11 @@ export default function ArchitectView() {
                     <LegRow
                       key={leg.id}
                       leg={leg}
-                      allStrikes={availableStrikes}
+                      // The leg's own tenor's grid — strikes differ per expiry,
+                      // and stepping along the wrong grid dead-ends the stepper.
+                      allStrikes={
+                        chainFor(leg.expiry)?.strikes.map((s) => s.strike) ?? availableStrikes
+                      }
                       onRemove={() => removeLeg(leg.id)}
                       onUpdate={handleLegUpdate}
                     />
@@ -1014,6 +1023,7 @@ export default function ArchitectView() {
           <VenueSlideover
             legs={pricedLegs}
             chain={chain ?? null}
+            chainFor={chainFor}
             activeVenues={activeVenues}
             onClose={() => setShowVenues(false)}
             onSendToPaper={(routing) => handleSendToPaper(routing)}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { VenueId } from '@oggregator/protocol';
-import { toVenueSymbol, NotSupportedVenueError } from './instrument-symbol.js';
+import { isChartSupportedVenue, toVenueSymbol, NotSupportedVenueError } from './instrument-symbol.js';
 
 describe('toVenueSymbol', () => {
   it('formats Deribit BTC call', () => {
@@ -105,5 +105,11 @@ describe('toVenueSymbol', () => {
     expect(() =>
       toVenueSymbol({ venue: 'deribit', underlying: 'BTC', expiry: 'not-a-date', strike: 70000, type: 'call' }),
     ).toThrow(/invalid expiry/);
+  });
+});
+
+describe('isChartSupportedVenue', () => {
+  it('includes paradex now that the server candle service sources /markets/klines', () => {
+    expect(isChartSupportedVenue('paradex')).toBe(true);
   });
 });

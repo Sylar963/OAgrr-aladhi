@@ -661,6 +661,166 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(res.markLine.map((m) => m.c)).toEqual([0.0005]);
   });
+
+  // Paradex: one public endpoint serves both series — GET /markets/klines
+  // with price_kind=last for trades and price_kind=mark for the venue mark.
+  // Rows are [time_ms, o, h, l, c, volume] as NUMBERS (the only Paradex
+  // endpoint that doesn't stringify). Probe-verified 2026-06-10: untraded
+  // strikes return {results:[]} for last while mark has full coverage;
+  // unknown symbols → HTTP 404 {"error":"MARKET_NOT_FOUND"}.
+  function mockParadexFetch(opts: { last?: unknown; mark?: unknown }) {
+    fetchSpy.mockImplementation(async (input: string) => {
+      const body = String(input).includes('price_kind=mark')
+        ? (opts.mark ?? { results: [] })
+        : (opts.last ?? { results: [] });
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+  }
+
+  it('serves Paradex candles from public klines: trade bars where printed, mark elsewhere', async () => {
+    const HOUR = 60 * MIN;
+    mockParadexFetch({
+      last: { results: [[BASE_TS, 100, 110, 95, 105, 3]] },
+      mark: {
+        results: [
+          [BASE_TS - HOUR, 98, 102, 97, 99, 0],
+          [BASE_TS, 101, 111, 96, 106, 0],
+        ],
+      },
+    });
+
+    const res = await svc.getCandles('paradex', 'BTC-USD-26JUN26-84000-P', '1h', '1d');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    for (const url of urls) {
+      expect(url).toContain('/markets/klines');
+      expect(url).toContain('symbol=BTC-USD-26JUN26-84000-P');
+      expect(url).toContain('resolution=60');
+    }
+    expect(urls.some((u) => u.includes('price_kind=last'))).toBe(true);
+    expect(urls.some((u) => u.includes('price_kind=mark'))).toBe(true);
+    // start_at/end_at are milliseconds.
+    const startAt = Number(new URL(urls[0]!).searchParams.get('start_at'));
+    const endAt = Number(new URL(urls[0]!).searchParams.get('end_at'));
+    expect(startAt).toBeGreaterThan(1e12);
+    expect(endAt).toBeGreaterThan(startAt);
+
+    expect(res.priceCurrency).toBe('USD');
+    expect(res.candles).toEqual([
+      { ts: BASE_TS - HOUR, o: 98, h: 102, l: 97, c: 99, vol: 0, synthetic: true },
+      { ts: BASE_TS, o: 100, h: 110, l: 95, c: 105, vol: 3, synthetic: false },
+    ]);
+    expect(res.markLine).toEqual([
+      { ts: BASE_TS - HOUR, c: 99 },
+      { ts: BASE_TS, c: 106 },
+    ]);
+  });
+
+  it('aggregates Paradex 4h bars from 60m klines (venue max resolution is 60)', async () => {
+    const HOUR = 60 * MIN;
+    const base4 = Math.floor(BASE_TS / (4 * HOUR)) * (4 * HOUR);
+    mockParadexFetch({
+      last: {
+        results: [
+          [base4 - 4 * HOUR, 10, 12, 9, 11, 2],
+          [base4 - 3 * HOUR, 11, 13, 10, 12, 1],
+        ],
+      },
+      mark: {
+        results: [
+          [base4 - 4 * HOUR, 10, 12, 9, 11, 0],
+          [base4 - 3 * HOUR, 11, 13, 10, 12, 0],
+          [base4 - 2 * HOUR, 12, 15, 11, 14, 0],
+          [base4 - 1 * HOUR, 14, 14, 8, 13, 0],
+          [base4, 13, 16, 12, 15, 0],
+        ],
+      },
+    });
+
+    const res = await svc.getCandles('paradex', 'BTC-USD-26JUN26-84000-P', '4h', '7d');
+
+    // Upstream is asked for 60m (its max), bucketing happens locally.
+    for (const call of fetchSpy.mock.calls) {
+      expect(String(call[0])).toContain('resolution=60');
+    }
+    // Trade rows aggregate o=first/c=last/extremes/vol-sum onto the 4h grid;
+    // the mark-only current bucket comes through synthetic.
+    expect(res.candles).toEqual([
+      { ts: base4 - 4 * HOUR, o: 10, h: 13, l: 9, c: 12, vol: 3, synthetic: false },
+      { ts: base4, o: 13, h: 16, l: 12, c: 15, vol: 0, synthetic: true },
+    ]);
+    expect(res.markLine).toEqual([
+      { ts: base4 - 4 * HOUR, c: 13 },
+      { ts: base4, c: 15 },
+    ]);
+  });
+
+  it('clamps Paradex windows to the venue 1440-bar cap instead of hard-failing', async () => {
+    // Probe-verified 2026-06-10: requests spanning >1440 bars are rejected
+    // whole with 400 INVALID_REQUEST_PARAMETER ("time range exceeds maximum
+    // allowed bars") — the venue never truncates. 1m+7d would be 10080 bars.
+    mockParadexFetch({});
+
+    await svc.getCandles('paradex', 'BTC-USD-26JUN26-84000-P', '1m', '7d');
+
+    for (const call of fetchSpy.mock.calls) {
+      const params = new URL(String(call[0])).searchParams;
+      const windowMs = Number(params.get('end_at')) - Number(params.get('start_at'));
+      expect(windowMs).toBe(1440 * MIN);
+    }
+  });
+
+  it('serves 1d bars from 60m klines: clamped to the bar cap, day-aligned, order-independent', async () => {
+    const HOUR = 60 * MIN;
+    const DAY = 24 * HOUR;
+    const baseDay = Math.floor(BASE_TS / DAY) * DAY;
+    // Rows arrive newest-first to pin the sort before o=first/c=last folding.
+    mockParadexFetch({
+      mark: {
+        results: [
+          [baseDay + 2 * HOUR, 22, 25, 21, 24, 0],
+          [baseDay + 1 * HOUR, 21, 23, 20, 22, 0],
+          [baseDay, 20, 21, 19, 21, 0],
+          [baseDay - DAY + 5 * HOUR, 11, 14, 10, 13, 0],
+          [baseDay - DAY + 3 * HOUR, 10, 12, 9, 11, 0],
+        ],
+      },
+    });
+
+    const res = await svc.getCandles('paradex', 'BTC-USD-26JUN26-84000-P', '1d', 'max');
+
+    for (const call of fetchSpy.mock.calls) {
+      const params = new URL(String(call[0])).searchParams;
+      expect(params.get('resolution')).toBe('60');
+      const startAt = Number(params.get('start_at'));
+      const windowMs = Number(params.get('end_at')) - startAt;
+      // 365d would be 8760 bars; the window is capped and the left edge is
+      // aligned up onto the day grid so the first bar aggregates a full day.
+      expect(windowMs).toBeLessThanOrEqual(1440 * HOUR);
+      expect(startAt % DAY).toBe(0);
+    }
+    expect(res.candles).toEqual([
+      { ts: baseDay - DAY, o: 10, h: 14, l: 9, c: 13, vol: 0, synthetic: true },
+      { ts: baseDay, o: 20, h: 25, l: 19, c: 24, vol: 0, synthetic: true },
+    ]);
+  });
+
+  it('maps Paradex 404 MARKET_NOT_FOUND to not_found', async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'MARKET_NOT_FOUND', message: 'Market not found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      svc.getCandles('paradex', 'BTC-USD-NOPE-C', '1h', '1d'),
+    ).rejects.toMatchObject({ name: 'InstrumentCandlesError', code: 'not_found' });
+  });
 });
 
 describe('bucketTicks', () => {

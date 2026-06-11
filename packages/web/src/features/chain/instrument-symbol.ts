@@ -11,9 +11,7 @@ export const CHART_SUPPORTED_VENUES: readonly VenueId[] = [
   'derive',
   'thalex',
   'coincall',
-  // NOTE: 'paradex' chart support is deferred — the server candle service
-  // (packages/core/src/services/instrument-candles.ts) has no paradex source yet.
-  // formatParadex() below is kept ready; re-add 'paradex' here when candles land.
+  'paradex',
 ];
 
 export function isChartSupportedVenue(v: VenueId): boolean {

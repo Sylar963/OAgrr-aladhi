@@ -1421,3 +1421,39 @@
 .ghostLegendPnl[data-profit='false'] {
   color: #cb3855;
 }
+
+.projControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.projToggle,
+.projSnapBtn,
+.projSnapDel {
+  padding: 3px 8px;
+  background: #101010;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  color: #9aa0a6;
+  cursor: pointer;
+}
+.projToggle[data-active='true'] {
+  color: #00e997;
+  border-color: #00e997;
+}
+.projSnapBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.projSnapSelect {
+  padding: 3px 6px;
+  background: #101010;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  color: #cdd2d6;
+  font-family: inherit;
+  font-size: 11px;
+}

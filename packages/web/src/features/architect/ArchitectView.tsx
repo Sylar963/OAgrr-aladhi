@@ -15,6 +15,13 @@ import {
   type Leg,
 } from './payoff';
 import { deriveTenorColumns } from './ladder-geometry';
+import { computeGhostPaths, buildPathCandles, type GhostPath } from './ghost-paths';
+import {
+  listSnapshots,
+  addSnapshot,
+  removeSnapshot,
+  type GhostSnapshot,
+} from './snapshots-store';
 import { repriceLeg } from './reprice';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
@@ -39,6 +46,15 @@ import StrategyTemplates, {
 } from './StrategyTemplates';
 import LegInput from './LegInput';
 import styles from './Architect.module.css';
+
+function formatAgo(ms: number): string {
+  const mins = Math.round((Date.now() - ms) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
 
 // ── Inline-editable leg row ──────────────────────────────────────────────────
 
@@ -490,6 +506,95 @@ export default function ArchitectView() {
   const hasVisibleSpotCandles = hasUsableSpotCandles(visibleSpotCandles);
   const spotCandlesUnavailable = spotCandlesIsError || (spotCandlesEmpty && !spotCandlesFetching);
 
+  const [showProjections, setShowProjections] = useState(true);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<GhostSnapshot[]>(() => listSnapshots(underlying));
+
+  useEffect(() => {
+    setSnapshots(listSnapshots(underlying));
+    setSelectedSnapshotId(null);
+  }, [underlying]);
+
+  // Anchor the projection at the last real candle's bucket (grid-aligned).
+  const lastBarMs = visibleSpotCandles?.candles.at(-1)?.timestamp ?? Date.now();
+
+  // Nearest-leg expiry → ms at 08:00 UTC (Deribit convention; 'YYYY-MM-DD'
+  // strings sort lexicographically, so the min string is the earliest date).
+  const nearestExpiryMs = useMemo(() => {
+    const expiries = pricedLegs.map((l) => l.expiry).filter(Boolean);
+    if (expiries.length === 0) return Number.NaN;
+    const earliest = expiries.reduce((a, b) => (a < b ? a : b));
+    return Date.parse(`${earliest}T08:00:00Z`);
+  }, [pricedLegs]);
+
+  const liveGhostPaths = useMemo(
+    () =>
+      computeGhostPaths(
+        pricedLegs,
+        spotPrice,
+        nearestExpiryMs,
+        lastBarMs,
+        candleSpec.resolutionSec,
+      ),
+    [pricedLegs, spotPrice, nearestExpiryMs, lastBarMs, candleSpec.resolutionSec],
+  );
+
+  const selectedSnapshot = useMemo(
+    () => snapshots.find((s) => s.id === selectedSnapshotId) ?? null,
+    [snapshots, selectedSnapshotId],
+  );
+
+  // Active set: a selected snapshot (rebuilt at its original anchor) or live.
+  const activeGhostPaths: GhostPath[] = useMemo(() => {
+    if (!selectedSnapshot) return liveGhostPaths;
+    return selectedSnapshot.paths.map((p) => ({
+      kind: p.kind,
+      isProfit: p.isProfit,
+      targetPrice: p.targetPrice,
+      pnlAtExpiry: p.pnlAtExpiry,
+      candles: buildPathCandles(
+        selectedSnapshot.spotAtSnapshot,
+        p.targetPrice,
+        selectedSnapshot.createdAt,
+        selectedSnapshot.expiryMs,
+        selectedSnapshot.resolutionSec,
+      ),
+    }));
+  }, [selectedSnapshot, liveGhostPaths]);
+
+  const snapshotMeta = useMemo(
+    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt) } : null),
+    [selectedSnapshot],
+  );
+
+  const handleSnapshot = useCallback(() => {
+    if (liveGhostPaths.length === 0 || !Number.isFinite(nearestExpiryMs)) return;
+    const snap: GhostSnapshot = {
+      id: crypto.randomUUID(),
+      createdAt: lastBarMs,
+      underlying,
+      structureLabel: detectStrategy(pricedLegs),
+      spotAtSnapshot: spotPrice,
+      expiryMs: nearestExpiryMs,
+      resolutionSec: candleSpec.resolutionSec,
+      paths: liveGhostPaths.map((p) => ({
+        kind: p.kind,
+        isProfit: p.isProfit,
+        targetPrice: p.targetPrice,
+        pnlAtExpiry: p.pnlAtExpiry,
+      })),
+    };
+    setSnapshots(addSnapshot(snap));
+  }, [
+    liveGhostPaths,
+    nearestExpiryMs,
+    lastBarMs,
+    underlying,
+    pricedLegs,
+    spotPrice,
+    candleSpec.resolutionSec,
+  ]);
+
   function handleCopyUrl() {
     const url = buildShareUrl(pricedLegs, underlying);
     navigator.clipboard.writeText(url);
@@ -813,6 +918,47 @@ export default function ArchitectView() {
                           }}
                         />
                       )}
+                      <div className={styles.projControls}>
+                        <button
+                          className={styles.projToggle}
+                          data-active={showProjections}
+                          onClick={() => setShowProjections((v) => !v)}
+                        >
+                          Projections {showProjections ? 'on' : 'off'}
+                        </button>
+                        <button
+                          className={styles.projSnapBtn}
+                          onClick={handleSnapshot}
+                          disabled={liveGhostPaths.length === 0}
+                        >
+                          ⎙ Snapshot
+                        </button>
+                        {snapshots.length > 0 && (
+                          <select
+                            className={styles.projSnapSelect}
+                            value={selectedSnapshotId ?? ''}
+                            onChange={(e) => setSelectedSnapshotId(e.target.value || null)}
+                          >
+                            <option value="">Live</option>
+                            {snapshots.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.structureLabel} · {formatAgo(s.createdAt)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {selectedSnapshot && (
+                          <button
+                            className={styles.projSnapDel}
+                            onClick={() => {
+                              setSnapshots(removeSnapshot(selectedSnapshot.id));
+                              setSelectedSnapshotId(null);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                       <PayoffChartV2
                         candles={visibleSpotCandles?.candles ?? []}
                         breakevens={metrics?.breakevens ?? []}
@@ -822,6 +968,10 @@ export default function ArchitectView() {
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}
+                        ghostPaths={activeGhostPaths}
+                        showProjections={showProjections}
+                        snapshotMeta={snapshotMeta}
+                        projectionKey={`${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleSpec.resolutionSec}`}
                       />
                     </>
                   ) : (

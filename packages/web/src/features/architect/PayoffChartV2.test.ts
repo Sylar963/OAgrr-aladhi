@@ -51,11 +51,11 @@ describe('pickCandleSpec', () => {
     });
   });
 
-  it('intraday picks 5m × 48 buckets', () => {
+  it('intraday picks 5m × 144 buckets (3× window for deep context)', () => {
     expect(pickCandleSpec([leg(expiryInDays(0))])).toEqual({
       resolutionSec: 300,
-      buckets: 48,
-      rangeLabel: '4H',
+      buckets: 144,
+      rangeLabel: '12H',
       intervalLabel: '5M',
       refetchIntervalMs: 15_000,
     });

@@ -54,11 +54,16 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   }
   const minDte = Math.max(0, Math.min(...legs.map((l) => dteDays(l.expiry))));
 
+  // Bucket counts are 3× the bars a tenor strictly needs so the chart carries
+  // deep historical context (e.g. ~2 months at a 30d structure, ~18 months at
+  // the longest expiry). Deribit/Hyperliquid windows are time-ranged, not
+  // bar-capped, and the /spot-candles route allows up to 3000 buckets, so the
+  // wider windows just return more bars (verified: 92d of 1h ≈ 2.2k ticks).
   if (minDte < 1) {
     return {
       resolutionSec: 300,
-      buckets: 48,
-      rangeLabel: '4H',
+      buckets: 144,
+      rangeLabel: '12H',
       intervalLabel: '5M',
       refetchIntervalMs: 15_000,
     };
@@ -66,8 +71,8 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   if (minDte < 3) {
     return {
       resolutionSec: 1800,
-      buckets: 96,
-      rangeLabel: '2D',
+      buckets: 288,
+      rangeLabel: '6D',
       intervalLabel: '30M',
       refetchIntervalMs: 30_000,
     };
@@ -75,8 +80,8 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   if (minDte < 14) {
     return {
       resolutionSec: 3600,
-      buckets: minDte < 7 ? 96 : 168,
-      rangeLabel: minDte < 7 ? '4D' : '7D',
+      buckets: minDte < 7 ? 288 : 504,
+      rangeLabel: minDte < 7 ? '12D' : '21D',
       intervalLabel: '1H',
       refetchIntervalMs: 60_000,
     };
@@ -84,16 +89,16 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   if (minDte < 60) {
     return {
       resolutionSec: 14400,
-      buckets: minDte < 30 ? 90 : 180,
-      rangeLabel: minDte < 30 ? '15D' : '30D',
+      buckets: minDte < 30 ? 270 : 540,
+      rangeLabel: minDte < 30 ? '45D' : '90D',
       intervalLabel: '4H',
       refetchIntervalMs: 120_000,
     };
   }
   return {
     resolutionSec: 86400,
-    buckets: minDte < 120 ? 90 : 180,
-    rangeLabel: minDte < 120 ? '90D' : '180D',
+    buckets: minDte < 120 ? 270 : 540,
+    rangeLabel: minDte < 120 ? '270D' : '540D',
     intervalLabel: '1D',
     refetchIntervalMs: 300_000,
   };

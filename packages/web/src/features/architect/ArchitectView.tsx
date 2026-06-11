@@ -568,7 +568,9 @@ export default function ArchitectView() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
             >
-              {legs.length === 0 ? (
+              {/* V3 stays mounted when empty: its ladder is the empty state
+                  (click a rung to place the first leg). V1/V2 keep the ghost. */}
+              {legs.length === 0 && variant !== 'v3' ? (
                 <div className={styles.chartEmpty}>
                   <svg
                     className={styles.ghostChart}

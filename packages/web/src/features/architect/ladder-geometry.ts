@@ -312,9 +312,13 @@ export function pickDecimals(span: number, useK: boolean): number {
   return 4;
 }
 
-/** Format a price-axis tick label, sub-$1 safe and k-suffixed for large values. */
-export function formatPriceTick(price: number, span: number): string {
-  const useK = shouldUseKFormat(price);
+/**
+ * Format a price-axis tick label, sub-$1 safe. k-format is decided from the
+ * axis max (V1-faithful) so every tick on an axis uses one format — deciding
+ * per tick would mix "950" and "1.1k" on a domain straddling 1000.
+ */
+export function formatPriceTick(price: number, span: number, axisMax: number): string {
+  const useK = shouldUseKFormat(axisMax);
   const dp = pickDecimals(span, useK);
   return useK ? `${(price / 1000).toFixed(dp)}k` : price.toFixed(dp);
 }

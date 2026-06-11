@@ -298,7 +298,7 @@ export default function PayoffChartV3({
             <g key={`rung-${k}`} className={s.rung}>
               <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border-subtle)" strokeWidth="1" />
               <text x={plotLeft - 4} y={y + 3} fill="var(--text-tertiary)" fontSize="9" textAnchor="end">
-                {formatPriceTick(k, span)}
+                {formatPriceTick(k, span, domain.priceMax)}
               </text>
             </g>
           );
@@ -312,7 +312,7 @@ export default function PayoffChartV3({
             <g key={`be-${i}`}>
               <line className={s.beLine} x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--lego-be)" strokeWidth="1.3" strokeDasharray="5 3" />
               <text x={plotLeft - 4} y={y + 3} fill="var(--lego-be)" fontSize="9" textAnchor="end">
-                {formatPriceTick(be, span)}
+                {formatPriceTick(be, span, domain.priceMax)}
               </text>
             </g>
           );
@@ -321,7 +321,7 @@ export default function PayoffChartV3({
         {/* Spot line */}
         <line x1={plotLeft} y1={spotY} x2={plotRight} y2={spotY} stroke="var(--accent-primary)" strokeWidth="1.5" />
         <text x={plotRight + 4} y={spotY + 3} fill="var(--accent-primary)" fontSize="9">
-          {formatPriceTick(spotPrice, span)}
+          {formatPriceTick(spotPrice, span, domain.priceMax)}
         </text>
 
         {/* Blocks — fused spreads + lone legs */}
@@ -409,7 +409,7 @@ export default function PayoffChartV3({
 
       {hoverY != null && hoverReadout != null && hoverLegId == null && hoverSpreadKey == null && (
         <div className={s.crosshairChip} data-testid="crosshair-chip" style={{ left: plotLeft + 6, top: hoverY }}>
-          @{formatPriceTick(hoverPrice as number, span)} → {fmtUsd(hoverReadout.pnl)}
+          @{formatPriceTick(hoverPrice as number, span, domain.priceMax)} → {fmtUsd(hoverReadout.pnl)}
           {hoverReadout.pct != null ? ` (${fmtPct(hoverReadout.pct, 0)})` : ''}
         </div>
       )}

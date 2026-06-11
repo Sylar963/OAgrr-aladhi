@@ -319,8 +319,14 @@ describe('netPnlReadout', () => {
 
 describe('formatPriceTick', () => {
   it('uses k-format above 1000 and decimals scaled to span', () => {
-    expect(formatPriceTick(64000, 4000)).toBe('64.0k');
-    expect(formatPriceTick(100, 40)).toBe('100');
-    expect(formatPriceTick(0.52, 0.3)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
+    expect(formatPriceTick(64000, 4000, 66000)).toBe('64.0k');
+    expect(formatPriceTick(100, 40, 120)).toBe('100');
+    expect(formatPriceTick(0.52, 0.3, 0.7)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
+  });
+
+  it('decides k-format from the axis max so ticks straddling 1000 stay consistent', () => {
+    // Same axis (max 1200): both sides of 1000 must use one format (V1-faithful).
+    expect(formatPriceTick(950, 400, 1200)).toBe('0.950k');
+    expect(formatPriceTick(1150, 400, 1200)).toBe('1.150k');
   });
 });

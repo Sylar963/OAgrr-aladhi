@@ -44,6 +44,52 @@ export function derivePriceDomain(
   return { priceMin: Math.max(0, spotPrice - half), priceMax: spotPrice + half };
 }
 
+export interface LadderDomain {
+  priceMin: number;
+  priceMax: number;
+  /** Available strikes inside the domain, sorted — drawn as the ladder's rungs. */
+  rungs: number[];
+}
+
+/**
+ * Tight, strike-anchored price domain for the V3 ladder. The payoff-curve range
+ * (derivePriceDomain) is deliberately ±30%+ of spot to keep break-evens inside the
+ * P&L curve — far too wide for a lego ladder, where it crushes every block to a
+ * sliver. This zooms to the strategy itself: spot, every block edge and break-even,
+ * widened by a context margin so blocks read as blocks. `rungs` are the available
+ * strikes inside that window (capped to the `maxRungs` nearest spot for dense chains).
+ */
+export function deriveLadderDomain(
+  blocks: LadderBlock[],
+  breakevens: number[],
+  spotPrice: number,
+  strikes: number[],
+  maxRungs = 40,
+): LadderDomain {
+  const action: number[] = [spotPrice];
+  for (const b of blocks) action.push(b.spanLowPrice, b.spanHighPrice);
+  for (const be of breakevens) if (Number.isFinite(be)) action.push(be);
+  let lo = Math.min(...action);
+  let hi = Math.max(...action);
+  const margin = Math.max((hi - lo) * 0.25, spotPrice * 0.06) || Math.max(spotPrice * 0.1, 1);
+  lo -= margin;
+  hi += margin;
+  let rungs = strikes.filter((k) => k >= lo && k <= hi).sort((a, b) => a - b);
+  if (rungs.length > maxRungs) {
+    rungs = rungs
+      .slice()
+      .sort((a, b) => Math.abs(a - spotPrice) - Math.abs(b - spotPrice))
+      .slice(0, maxRungs)
+      .sort((a, b) => a - b);
+  }
+  if (rungs.length > 0) {
+    lo = Math.min(lo, rungs[0]!);
+    hi = Math.max(hi, rungs[rungs.length - 1]!);
+  }
+  const pad = (hi - lo) * 0.04 || 1;
+  return { priceMin: Math.max(0, lo - pad), priceMax: hi + pad, rungs };
+}
+
 export interface LadderBlock {
   legId: string;
   type: 'call' | 'put';

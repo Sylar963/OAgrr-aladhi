@@ -4,7 +4,7 @@ import { fmtIv, fmtPct, fmtUsd } from '@lib/format';
 import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderZones,
-  derivePriceDomain,
+  deriveLadderDomain,
   formatPriceTick,
   legToBlock,
   makePriceScale,
@@ -35,6 +35,8 @@ const PAD = { top: 18, right: 64, bottom: 18, left: 48 };
 const BLOCK_W = 64;
 const LANE_STEP = BLOCK_W + 8;
 const MIN_BLOCK_PX = 6;
+/** Vertical room per strike rung; the ladder grows (and scrolls) with rung count. */
+const PX_PER_RUNG = 48;
 
 /** Map a price to a clamped pixel y inside the plot; ±Infinity → plot edges. */
 function clampY(price: number, yOf: (p: number) => number, plotTop: number, plotBottom: number): number {
@@ -49,7 +51,6 @@ function nearestStrike(price: number, strikes: number[]): number | null {
 }
 
 export default function PayoffChartV3({
-  points,
   breakevens,
   spotPrice,
   legs,
@@ -98,21 +99,11 @@ export default function PayoffChartV3({
     seenIds.current = new Set(legs.map((l) => l.id));
   });
 
-  const { w, h } = size;
-  const plotTop = PAD.top;
-  const plotBottom = h - PAD.bottom;
-  const plotH = Math.max(1, plotBottom - plotTop);
+  const { w, h: viewportH } = size;
   const plotLeft = PAD.left;
   const plotRight = w - PAD.right;
   const plotW = Math.max(1, plotRight - plotLeft);
   const centerX = plotLeft + plotW / 2;
-
-  const domain = useMemo(() => derivePriceDomain(points, spotPrice), [points, spotPrice]);
-  const scale = useMemo(
-    () => makePriceScale(domain.priceMin, domain.priceMax, plotTop, plotH),
-    [domain, plotTop, plotH],
-  );
-  const span = domain.priceMax - domain.priceMin || 1;
 
   const viewLegs = useMemo(
     () => (drag ? legs.map((l) => (l.id === drag.legId ? { ...l, strike: drag.strike } : l)) : legs),
@@ -122,8 +113,27 @@ export default function PayoffChartV3({
     () => (drag ? computeMetrics(viewLegs, spotPrice).breakevens : breakevens),
     [drag, viewLegs, spotPrice, breakevens],
   );
-
   const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
+
+  const domain = useMemo(
+    () => deriveLadderDomain(blocks, viewBreakevens, spotPrice, strikes),
+    [blocks, viewBreakevens, spotPrice, strikes],
+  );
+  const rungs = domain.rungs;
+  const span = domain.priceMax - domain.priceMin || 1;
+
+  // The ladder is taller than the viewport when there are many rungs — the
+  // container scrolls. price→y maps over this intrinsic content height, not the
+  // viewport, so blocks get real vertical room instead of being force-fit.
+  const plotTop = PAD.top;
+  const contentH = Math.max(viewportH, rungs.length * PX_PER_RUNG + PAD.top + PAD.bottom);
+  const plotBottom = contentH - PAD.bottom;
+  const plotH = Math.max(1, plotBottom - plotTop);
+  const scale = useMemo(
+    () => makePriceScale(domain.priceMin, domain.priceMax, plotTop, plotH),
+    [domain, plotTop, plotH],
+  );
+
   const lanes = useMemo(() => packLanes(blocks), [blocks]);
   const laneCount = useMemo(
     () => (lanes.size ? Math.max(...lanes.values()) + 1 : 1),
@@ -142,14 +152,30 @@ export default function PayoffChartV3({
 
   const spotY = clampY(spotPrice, scale.y, plotTop, plotBottom);
 
+  // When the ladder overflows the viewport, center it on spot once so the live
+  // action is in view; let the user scroll freely after that.
+  const didCenterRef = useRef(false);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (contentH <= viewportH) {
+      didCenterRef.current = false;
+      return;
+    }
+    if (didCenterRef.current) return;
+    el.scrollTop = Math.max(0, spotY - viewportH / 2);
+    didCenterRef.current = true;
+  }, [contentH, viewportH, spotY]);
+
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (drag && e.buttons === 0) {
       endDrag();
       return;
     }
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const y = e.clientY - rect.top;
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const y = e.clientY - rect.top + el.scrollTop;
     if (drag) {
       const price = scale.priceAt(Math.max(plotTop, Math.min(plotBottom, y)));
       const snapped = nearestStrike(price, strikes);
@@ -183,9 +209,9 @@ export default function PayoffChartV3({
     // not click); ignore clicks landing on a block so it can't open a picker over it
     // or double-fire with the remove control.
     if ((e.target as Element).closest('[data-leg-id]')) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const y = e.clientY - rect.top;
+    const el = containerRef.current;
+    if (!el) return;
+    const y = e.clientY - el.getBoundingClientRect().top + el.scrollTop;
     if (y < plotTop || y > plotBottom) return;
     const snapped = nearestStrike(scale.priceAt(y), strikes);
     if (snapped == null) return;
@@ -200,7 +226,8 @@ export default function PayoffChartV3({
     <div className={s.container} ref={containerRef}>
       <svg
         className={s.svg}
-        viewBox={`0 0 ${w} ${h}`}
+        style={{ height: contentH }}
+        viewBox={`0 0 ${w} ${contentH}`}
         preserveAspectRatio="none"
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
@@ -232,6 +259,20 @@ export default function PayoffChartV3({
               fill={z.profit ? 'var(--lego-profit)' : 'var(--lego-loss)'}
               opacity={0.09}
             />
+          );
+        })}
+
+        {/* Strike rungs — every strike on the ladder */}
+        {rungs.map((k) => {
+          const y = scale.y(k);
+          if (y < plotTop || y > plotBottom) return null;
+          return (
+            <g key={`rung-${k}`} className={s.rung}>
+              <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="var(--border-subtle)" strokeWidth="1" />
+              <text x={plotLeft - 4} y={y + 3} fill="var(--text-tertiary)" fontSize="9" textAnchor="end">
+                {formatPriceTick(k, span)}
+              </text>
+            </g>
           );
         })}
 

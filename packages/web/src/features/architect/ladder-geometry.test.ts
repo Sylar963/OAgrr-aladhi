@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Leg } from './payoff';
 import {
   buildLadderZones,
+  deriveLadderDomain,
   derivePriceDomain,
   formatPriceTick,
   legToBlock,
@@ -73,6 +74,58 @@ describe('derivePriceDomain', () => {
   it('never returns a negative priceMin', () => {
     const d = derivePriceDomain([], 0.5);
     expect(d.priceMin).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('deriveLadderDomain', () => {
+  const strikes = [80, 90, 95, 100, 105, 110, 120];
+
+  it('zooms far tighter than the wide payoff-curve range (de-compresses blocks)', () => {
+    const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));
+    const d = deriveLadderDomain([block], [103], 100, strikes);
+    // A long call's block [100,103] must be a healthy fraction of the domain,
+    // not a sliver inside a ±30% spot window (which would be ~[70,130]).
+    expect(d.priceMax - d.priceMin).toBeLessThan(40);
+    expect(d.priceMin).toBeLessThanOrEqual(100);
+    expect(d.priceMax).toBeGreaterThanOrEqual(103);
+  });
+
+  it('spans both break-evens of a straddle and keeps spot inside', () => {
+    const call = legToBlock(makeLeg({ id: 'c', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));
+    const put = legToBlock(makeLeg({ id: 'p', type: 'put', direction: 'buy', strike: 100, entryPrice: 3 }));
+    const d = deriveLadderDomain([call, put], [94, 106], 100, strikes);
+    expect(d.priceMin).toBeLessThan(94);
+    expect(d.priceMax).toBeGreaterThan(106);
+  });
+
+  it('returns nearby strikes as rungs and excludes far ones', () => {
+    const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));
+    const d = deriveLadderDomain([block], [103], 100, strikes);
+    expect(d.rungs).toContain(100);
+    expect(d.rungs).toContain(105);
+    expect(d.rungs).not.toContain(120);
+  });
+
+  it('falls back to a spot window with no legs but still surfaces nearby rungs', () => {
+    const d = deriveLadderDomain([], [], 100, strikes);
+    expect(d.priceMin).toBeLessThan(100);
+    expect(d.priceMax).toBeGreaterThan(100);
+    expect(d.rungs).toContain(100);
+  });
+
+  it('caps rung count for dense chains, keeping the ones nearest spot', () => {
+    const dense = Array.from({ length: 200 }, (_, i) => 100 + i); // 100..299
+    const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));
+    const d = deriveLadderDomain([block], [103], 100, dense, 10);
+    expect(d.rungs.length).toBeLessThanOrEqual(10);
+    expect(d.rungs).toContain(100);
+  });
+
+  it('sub-$1 underlying stays tight and positive', () => {
+    const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 0.5, entryPrice: 0.02 }));
+    const d = deriveLadderDomain([block], [0.52], 0.5, [0.45, 0.5, 0.55]);
+    expect(d.priceMin).toBeGreaterThanOrEqual(0);
+    expect(d.priceMax - d.priceMin).toBeLessThan(0.5);
   });
 });
 

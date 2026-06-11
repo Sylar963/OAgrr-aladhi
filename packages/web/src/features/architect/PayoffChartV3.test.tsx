@@ -61,6 +61,24 @@ describe('PayoffChartV3 (render)', () => {
     expect(container.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('canvas')).toBeNull();
   });
+
+  it('gives blocks real vertical height (tight ladder domain, not a sliver)', () => {
+    // Over the wide payoff-curve range this block collapsed to the 6px floor;
+    // the strike-anchored domain must make it a readable chunk of the plot.
+    const { container } = renderChart([
+      makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }),
+    ]);
+    const rect = container.querySelector('[data-leg-id="leg-1"] rect')!;
+    expect(Number(rect.getAttribute('height'))).toBeGreaterThan(40);
+  });
+
+  it('draws nearby strikes as labeled rungs', () => {
+    // 95 and 105 appear nowhere else (block is "+1 C 100", spot 100, BE 103),
+    // so their presence proves the strike rungs render.
+    const { container } = renderChart([makeLeg({ id: 'leg-1', strike: 100 })]);
+    expect(container.textContent).toContain('95');
+    expect(container.textContent).toContain('105');
+  });
 });
 
 import { fireEvent } from '@testing-library/react';

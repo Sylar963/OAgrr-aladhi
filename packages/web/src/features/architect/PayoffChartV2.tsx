@@ -13,9 +13,18 @@ import { Spinner } from '@components/ui';
 import type { Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import { dteDays } from '@lib/format';
+import { fmtUsd } from '@lib/format';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
+import type { GhostPath, GhostPathKind } from './ghost-paths';
 import styles from './Architect.module.css';
+
+const GHOST_RGB: Record<'profit' | 'loss', string> = {
+  profit: '0,233,151',
+  loss: '203,56,85',
+};
+const GHOST_LABEL: Record<GhostPathKind, string> = { up: '↑ up', down: '↓ down', theta: 'θ flat' };
+const rgba = (rgb: string, a: number) => `rgba(${rgb},${a})`;
 
 interface PayoffChartV2Props {
   candles: SpotCandle[];
@@ -26,6 +35,10 @@ interface PayoffChartV2Props {
   loading: boolean;
   available: boolean;
   onSwitchToV1: () => void;
+  ghostPaths: GhostPath[];
+  showProjections: boolean;
+  snapshotMeta: { agoLabel: string } | null;
+  projectionKey: string;
 }
 
 export interface CandleSpec {
@@ -143,6 +156,10 @@ export default function PayoffChartV2({
   loading,
   available,
   onSwitchToV1,
+  ghostPaths,
+  showProjections,
+  snapshotMeta,
+  projectionKey,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -150,6 +167,8 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
+  const ghostSeriesRef = useRef<ISeriesApi<'Candlestick'>[]>([]);
+  const lastGhostFitKeyRef = useRef<string>('');
 
   const zones = useMemo(
     () => buildZones(legs, breakevens, spotPrice),
@@ -223,6 +242,8 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
+      ghostSeriesRef.current = [];
+      lastGhostFitKeyRef.current = '';
     };
   }, []);
 
@@ -311,6 +332,52 @@ export default function PayoffChartV2({
     primitiveRef.current?.setZones(zones);
   }, [zones]);
 
+  // Render the projection paths as translucent candlestick series. Each series'
+  // future data points extend the shared time scale into the projection region.
+  useEffect(() => {
+    const chart = chartApiRef.current;
+    if (!chart) return;
+
+    for (const s of ghostSeriesRef.current) chart.removeSeries(s);
+    ghostSeriesRef.current = [];
+
+    if (!showProjections || ghostPaths.length === 0) return;
+
+    for (const path of ghostPaths) {
+      if (path.candles.length === 0) continue;
+      const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
+      const bodyAlpha = path.kind === 'theta' ? 0.18 : 0.3;
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: rgba(rgb, bodyAlpha),
+        downColor: rgba(rgb, bodyAlpha),
+        borderUpColor: rgba(rgb, 0.55),
+        borderDownColor: rgba(rgb, 0.55),
+        wickUpColor: rgba(rgb, 0.55),
+        wickDownColor: rgba(rgb, 0.55),
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      series.setData(
+        path.candles.map((c) => ({
+          time: Math.floor(c.timestamp / 1000) as number, // seconds — match the main series
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })) as never,
+      );
+      ghostSeriesRef.current.push(series);
+    }
+
+    // Bring the projection into view only when the projection identity changes
+    // (toggle on, snapshot switch, tenor/resolution change) — not on every tick,
+    // so the user's pan/zoom is preserved during rolling updates.
+    if (projectionKey !== lastGhostFitKeyRef.current) {
+      chart.timeScale().fitContent();
+      lastGhostFitKeyRef.current = projectionKey;
+    }
+  }, [ghostPaths, showProjections, projectionKey]);
+
   if (!available) {
     return (
       <div className={styles.chartV2EmptyState}>
@@ -332,6 +399,22 @@ export default function PayoffChartV2({
         {loading && (
           <div className={styles.chartV2Overlay}>
             <Spinner size="lg" />
+          </div>
+        )}
+        {showProjections && ghostPaths.length > 0 && (
+          <div className={styles.ghostLegend}>
+            {snapshotMeta && (
+              <div className={styles.ghostLegendSnap}>snapshot · {snapshotMeta.agoLabel}</div>
+            )}
+            {ghostPaths.map((p) => (
+              <div key={p.kind} className={styles.ghostLegendRow}>
+                <span className={styles.ghostLegendDot} data-profit={p.isProfit} />
+                <span className={styles.ghostLegendLabel}>{GHOST_LABEL[p.kind]}</span>
+                <span className={styles.ghostLegendPnl} data-profit={p.isProfit}>
+                  {fmtUsd(p.pnlAtExpiry)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

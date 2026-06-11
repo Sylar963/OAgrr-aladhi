@@ -1374,3 +1374,50 @@
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
+
+.ghostLegend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: rgba(10, 10, 10, 0.72);
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  pointer-events: none;
+}
+.ghostLegendSnap {
+  color: #f0b90b;
+  margin-bottom: 2px;
+}
+.ghostLegendRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ghostLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.ghostLegendDot[data-profit='true'] {
+  background: #00e997;
+}
+.ghostLegendDot[data-profit='false'] {
+  background: #cb3855;
+}
+.ghostLegendLabel {
+  color: #9aa0a6;
+  min-width: 44px;
+}
+.ghostLegendPnl[data-profit='true'] {
+  color: #00e997;
+}
+.ghostLegendPnl[data-profit='false'] {
+  color: #cb3855;
+}

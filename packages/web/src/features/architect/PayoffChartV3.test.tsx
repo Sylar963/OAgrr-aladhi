@@ -72,6 +72,25 @@ describe('PayoffChartV3 (render)', () => {
     expect(Number(rect.getAttribute('height'))).toBeGreaterThan(40);
   });
 
+  it('renders two lego studs per block, on the growth edge (call up, put down)', () => {
+    const { container } = renderChart([
+      makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }),
+      makeLeg({ id: 'leg-2', type: 'put', direction: 'buy', strike: 100, entryPrice: 3 }),
+    ]);
+    const callBody = container.querySelector('[data-leg-id="leg-1"] rect')!;
+    const callStuds = container.querySelectorAll('[data-leg-id="leg-1"] [data-stud]');
+    expect(callStuds.length).toBe(2);
+    // Call brick: studs protrude above the body's top edge.
+    expect(Number(callStuds[0]!.getAttribute('y'))).toBeLessThan(Number(callBody.getAttribute('y')));
+
+    const putBody = container.querySelector('[data-leg-id="leg-2"] rect')!;
+    const putStuds = container.querySelectorAll('[data-leg-id="leg-2"] [data-stud]');
+    expect(putStuds.length).toBe(2);
+    // Put brick: studs protrude below the body's bottom edge.
+    const putBottom = Number(putBody.getAttribute('y')) + Number(putBody.getAttribute('height'));
+    expect(Number(putStuds[0]!.getAttribute('y'))).toBeGreaterThanOrEqual(putBottom);
+  });
+
   it('draws nearby strikes as labeled rungs', () => {
     // 95 and 105 appear nowhere else (block is "+1 C 100", spot 100, BE 103),
     // so their presence proves the strike rungs render.

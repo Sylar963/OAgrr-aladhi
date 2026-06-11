@@ -38,6 +38,9 @@ const PAD = { top: 18, right: 64, bottom: 18, left: 48 };
 const BLOCK_W = 64;
 const LANE_STEP = BLOCK_W + 8;
 const MIN_BLOCK_PX = 6;
+/** Lego stud bump size (side view: small rounded rects on the brick's outward edge). */
+const STUD_W = 10;
+const STUD_H = 5;
 /** Vertical room per strike rung; the ladder grows (and scrolls) with rung count. */
 const PX_PER_RUNG = 48;
 
@@ -515,6 +518,13 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, ex
     : (isLong ? yTop + height : yTop + height - 2);
   const cx = x + BLOCK_W / 2;
 
+  const bodyFill = isLong ? hue : hatch;
+  const bodyOpacity = isLong ? 0.32 : 1;
+  // Lego studs on the outward (growth) edge: call bricks stud-up, put bricks
+  // stud-down. Placed at 30%/70% so the direction arrow rises through the gap.
+  const studY = isCall ? yTop - STUD_H : yTop + height;
+  const studXs = [x + BLOCK_W * 0.3 - STUD_W / 2, x + BLOCK_W * 0.7 - STUD_W / 2];
+
   return (
     <g
       ref={groupRef}
@@ -534,13 +544,33 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, ex
         y={yTop}
         width={BLOCK_W}
         height={height}
-        rx={6}
-        fill={isLong ? hue : hatch}
-        fillOpacity={isLong ? 0.32 : 1}
+        rx={2}
+        fill={bodyFill}
+        fillOpacity={bodyOpacity}
         stroke={hue}
         strokeWidth={1.5}
         strokeDasharray={isLong ? undefined : '4 3'}
       />
+      {/* Lego studs */}
+      {studXs.map((sx) => (
+        <rect
+          key={sx}
+          data-stud="true"
+          x={sx}
+          y={studY}
+          width={STUD_W}
+          height={STUD_H}
+          rx={1.5}
+          fill={bodyFill}
+          fillOpacity={bodyOpacity}
+          stroke={hue}
+          strokeWidth={1.2}
+        />
+      ))}
+      {/* Plastic shine under the top edge */}
+      {height >= 14 && (
+        <rect x={x + 2.5} y={yTop + 2.5} width={BLOCK_W - 5} height={3} rx={1.5} fill="#fff" opacity={0.12} pointerEvents="none" />
+      )}
       {/* Short: red cap bar on the break-even edge */}
       {!isLong && (
         <line x1={x} y1={beEdgeY} x2={x + BLOCK_W} y2={beEdgeY} stroke="var(--lego-loss)" strokeWidth="3.5" />

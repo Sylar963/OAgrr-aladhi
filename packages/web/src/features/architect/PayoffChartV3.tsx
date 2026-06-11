@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtIv, fmtPct, fmtUsd } from '@lib/format';
 import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
+  buildLadderUnits,
   buildLadderZones,
   deriveLadderDomain,
   formatPriceTick,
@@ -10,7 +11,9 @@ import {
   makePriceScale,
   netPnlReadout,
   packLanes,
+  spreadKey,
   type LadderBlock,
+  type LadderSpread,
 } from './ladder-geometry';
 import s from './PayoffChartV3.module.css';
 
@@ -66,6 +69,7 @@ export default function PayoffChartV3({
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 600, h: 400 });
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
+  const [hoverSpreadKey, setHoverSpreadKey] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
   const [picker, setPicker] = useState<{ y: number; strike: number } | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -134,7 +138,20 @@ export default function PayoffChartV3({
     [domain, plotTop, plotH],
   );
 
-  const lanes = useMemo(() => packLanes(blocks), [blocks]);
+  // Render units fuse clean verticals into one spread block; lanes pack by each
+  // unit's price span (a spread spans both strikes), so an overlapping unit gets
+  // its own horizontal offset.
+  const units = useMemo(() => buildLadderUnits(viewLegs), [viewLegs]);
+  const laneItems = useMemo(
+    () =>
+      units.map((u) =>
+        u.kind === 'spread'
+          ? { legId: spreadKey(u.spread), spanLowPrice: u.spread.lowStrike, spanHighPrice: u.spread.highStrike }
+          : { legId: u.block.legId, spanLowPrice: u.block.spanLowPrice, spanHighPrice: u.block.spanHighPrice },
+      ),
+    [units],
+  );
+  const lanes = useMemo(() => packLanes(laneItems), [laneItems]);
   const laneCount = useMemo(
     () => (lanes.size ? Math.max(...lanes.values()) + 1 : 1),
     [lanes],
@@ -144,8 +161,8 @@ export default function PayoffChartV3({
     [viewLegs, viewBreakevens, spotPrice],
   );
 
-  const blockX = (legId: string): number => {
-    const lane = lanes.get(legId) ?? 0;
+  const unitX = (key: string): number => {
+    const lane = lanes.get(key) ?? 0;
     const groupW = (laneCount - 1) * LANE_STEP;
     return centerX - groupW / 2 - BLOCK_W / 2 + lane * LANE_STEP;
   };
@@ -187,6 +204,7 @@ export default function PayoffChartV3({
   const handlePointerLeave = () => {
     setHoverY(null);
     setHoverLegId(null);
+    setHoverSpreadKey(null);
     setPicker(null);
   };
   const endDrag = () => {
@@ -205,10 +223,10 @@ export default function PayoffChartV3({
       return;
     }
     if (!onAddLegAtStrike || drag) return;
-    // Native `click` bubbles from leg blocks (whose stopPropagation is on pointerdown,
-    // not click); ignore clicks landing on a block so it can't open a picker over it
-    // or double-fire with the remove control.
-    if ((e.target as Element).closest('[data-leg-id]')) return;
+    // Native `click` bubbles from leg/spread blocks (whose stopPropagation is on
+    // pointerdown, not click); ignore clicks landing on a block so it can't open a
+    // picker over it or double-fire with the remove control.
+    if ((e.target as Element).closest('[data-leg-id], [data-spread-key]')) return;
     const el = containerRef.current;
     if (!el) return;
     const y = e.clientY - el.getBoundingClientRect().top + el.scrollTop;
@@ -221,6 +239,13 @@ export default function PayoffChartV3({
   const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
   const hoverReadout = hoverPrice != null ? netPnlReadout(legs, hoverPrice, netDebit) : null;
   const hoveredLeg = hoverLegId != null ? legs.find((l) => l.id === hoverLegId) ?? null : null;
+  const hoveredSpread = ((): LadderSpread | null => {
+    if (hoverSpreadKey == null) return null;
+    for (const u of units) {
+      if (u.kind === 'spread' && spreadKey(u.spread) === hoverSpreadKey) return u.spread;
+    }
+    return null;
+  })();
 
   return (
     <div className={s.container} ref={containerRef}>
@@ -296,32 +321,50 @@ export default function PayoffChartV3({
           {formatPriceTick(spotPrice, span)}
         </text>
 
-        {/* Blocks */}
-        {blocks.map((b) => (
-          <Block
-            key={b.legId}
-            block={b}
-            x={blockX(b.legId)}
-            yOf={scale.y}
-            plotTop={plotTop}
-            plotBottom={plotBottom}
-            active={hoverLegId === b.legId || drag?.legId === b.legId}
-            dragging={drag?.legId === b.legId}
-            isNew={!seenIds.current.has(b.legId)}
-            onEnter={() => setHoverLegId(b.legId)}
-            onLeave={() => setHoverLegId(null)}
-            onDragStart={() => setDrag({ legId: b.legId, strike: b.strike })}
-            onRemove={onRemoveLeg ? () => requestRemove(b.legId) : undefined}
-            exiting={removingId === b.legId}
-            onExitEnd={() => {
-              onRemoveLeg?.(b.legId);
-              setRemovingId(null);
-            }}
-          />
-        ))}
+        {/* Blocks — fused spreads + lone legs */}
+        {units.map((u) =>
+          u.kind === 'spread' ? (
+            <SpreadBlock
+              key={spreadKey(u.spread)}
+              spread={u.spread}
+              x={unitX(spreadKey(u.spread))}
+              yOf={scale.y}
+              plotTop={plotTop}
+              plotBottom={plotBottom}
+              active={hoverSpreadKey === spreadKey(u.spread) || drag?.legId === u.spread.longLegId || drag?.legId === u.spread.shortLegId}
+              dragLegId={drag?.legId ?? null}
+              isNew={!seenIds.current.has(u.spread.longLegId) || !seenIds.current.has(u.spread.shortLegId)}
+              onEnter={() => setHoverSpreadKey(spreadKey(u.spread))}
+              onLeave={() => setHoverSpreadKey(null)}
+              onEdgeDragStart={(legId, strike) => setDrag({ legId, strike })}
+              onEdgeRemove={onRemoveLeg ? (legId) => onRemoveLeg(legId) : undefined}
+            />
+          ) : (
+            <Block
+              key={u.block.legId}
+              block={u.block}
+              x={unitX(u.block.legId)}
+              yOf={scale.y}
+              plotTop={plotTop}
+              plotBottom={plotBottom}
+              active={hoverLegId === u.block.legId || drag?.legId === u.block.legId}
+              dragging={drag?.legId === u.block.legId}
+              isNew={!seenIds.current.has(u.block.legId)}
+              onEnter={() => setHoverLegId(u.block.legId)}
+              onLeave={() => setHoverLegId(null)}
+              onDragStart={() => setDrag({ legId: u.block.legId, strike: u.block.strike })}
+              onRemove={onRemoveLeg ? () => requestRemove(u.block.legId) : undefined}
+              exiting={removingId === u.block.legId}
+              onExitEnd={() => {
+                onRemoveLeg?.(u.block.legId);
+                setRemovingId(null);
+              }}
+            />
+          ),
+        )}
       </svg>
 
-      {hoverY != null && hoverReadout != null && hoverLegId == null && (
+      {hoverY != null && hoverReadout != null && hoverLegId == null && hoverSpreadKey == null && (
         <div className={s.crosshairChip} data-testid="crosshair-chip" style={{ left: plotLeft + 6, top: hoverY }}>
           @{formatPriceTick(hoverPrice as number, span)} → {fmtUsd(hoverReadout.pnl)}
           {hoverReadout.pct != null ? ` (${fmtPct(hoverReadout.pct, 0)})` : ''}
@@ -337,6 +380,26 @@ export default function PayoffChartV3({
           <div>P/L @spot {fmtUsd(netPnlReadout([hoveredLeg], spotPrice, hoveredLeg.entryPrice).pnl)}</div>
         </div>
       )}
+
+      {hoveredSpread != null &&
+        (() => {
+          const lLeg = legs.find((l) => l.id === hoveredSpread.longLegId);
+          const sLeg = legs.find((l) => l.id === hoveredSpread.shortLegId);
+          if (!lLeg || !sLeg) return null;
+          const m = computeMetrics([lLeg, sLeg], spotPrice);
+          const midY = scale.y((hoveredSpread.lowStrike + hoveredSpread.highStrike) / 2);
+          return (
+            <div className={s.card} style={{ left: centerX + BLOCK_W, top: midY - 48 }}>
+              <div className={s.cardTitle}>{hoveredSpread.label} spread</div>
+              <div>long +{lLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {lLeg.strike}</div>
+              <div>short −{sLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {sLeg.strike}</div>
+              <div>{m.netDebit < 0 ? 'debit' : 'credit'} {fmtUsd(Math.abs(m.netDebit))}</div>
+              <div>
+                max {m.maxProfit != null ? fmtUsd(m.maxProfit) : '∞'} / {m.maxLoss != null ? fmtUsd(m.maxLoss) : '∞'}
+              </div>
+            </div>
+          );
+        })()}
 
       {picker && onAddLegAtStrike && (
         <div className={s.picker} style={{ left: centerX - 70, top: picker.y }}>
@@ -454,6 +517,95 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, ex
           <text x={x + BLOCK_W - 4} y={yTop + 5} fill="var(--lego-loss)" fontSize="9" textAnchor="middle">×</text>
         </g>
       )}
+    </g>
+  );
+}
+
+interface SpreadBlockProps {
+  spread: LadderSpread;
+  x: number;
+  yOf: (price: number) => number;
+  plotTop: number;
+  plotBottom: number;
+  active: boolean;
+  dragLegId: string | null;
+  isNew: boolean;
+  onEnter: () => void;
+  onLeave: () => void;
+  onEdgeDragStart: (legId: string, strike: number) => void;
+  onEdgeRemove?: (legId: string) => void;
+}
+
+/**
+ * A fused vertical spread: one corridor block spanning both strikes. The long
+ * (owned) edge is a solid bar, the short (sold) edge a red cap — so a vertical
+ * reads as defined risk with a capped reward at a glance. Each edge is its own
+ * drag handle + remove control, preserving per-leg control.
+ */
+function SpreadBlock({
+  spread,
+  x,
+  yOf,
+  plotTop,
+  plotBottom,
+  active,
+  dragLegId,
+  isNew,
+  onEnter,
+  onLeave,
+  onEdgeDragStart,
+  onEdgeRemove,
+}: SpreadBlockProps) {
+  const isCall = spread.type === 'call';
+  const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
+  const yLong = Math.max(plotTop, Math.min(plotBottom, yOf(spread.longStrike)));
+  const yShort = Math.max(plotTop, Math.min(plotBottom, yOf(spread.shortStrike)));
+  const yTop = Math.min(yLong, yShort);
+  const yBottom = Math.max(yLong, yShort);
+  const height = Math.max(MIN_BLOCK_PX, yBottom - yTop);
+  const cx = x + BLOCK_W / 2;
+
+  const edge = (legId: string, strike: number, edgeY: number, color: string) => (
+    <g key={legId}>
+      {/* edge bar: solid hue (long, owned) vs red cap (short, sold) */}
+      <line x1={x} y1={edgeY} x2={x + BLOCK_W} y2={edgeY} stroke={color} strokeWidth={3.5} />
+      <rect
+        data-drag-leg={legId}
+        data-dragging={dragLegId === legId}
+        x={x}
+        y={edgeY - 8}
+        width={BLOCK_W}
+        height={16}
+        fill="transparent"
+        style={{ cursor: 'grab', pointerEvents: 'all' }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onEdgeDragStart(legId, strike);
+        }}
+      />
+      {onEdgeRemove && (
+        <g data-remove-leg={legId} style={{ cursor: 'pointer' }} onClick={() => onEdgeRemove(legId)}>
+          <circle cx={x + BLOCK_W - 4} cy={edgeY} r={7} fill="var(--bg-elevated)" stroke="var(--lego-loss)" />
+          <text x={x + BLOCK_W - 4} y={edgeY + 3} fill="var(--lego-loss)" fontSize="9" textAnchor="middle">×</text>
+        </g>
+      )}
+    </g>
+  );
+
+  return (
+    <g
+      className={`${s.spreadBlock} ${isNew ? s.blockEnter : ''}`}
+      data-spread-key={spreadKey(spread)}
+      data-active={active}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
+    >
+      <rect x={x} y={yTop} width={BLOCK_W} height={height} rx={6} fill={hue} fillOpacity={0.18} stroke={hue} strokeWidth={1.2} />
+      <text x={cx} y={(yTop + yBottom) / 2 + 3} fill="var(--text-primary)" fontSize="10" textAnchor="middle">
+        {spread.label}
+      </text>
+      {edge(spread.longLegId, spread.longStrike, yLong, hue)}
+      {edge(spread.shortLegId, spread.shortStrike, yShort, 'var(--lego-loss)')}
     </g>
   );
 }

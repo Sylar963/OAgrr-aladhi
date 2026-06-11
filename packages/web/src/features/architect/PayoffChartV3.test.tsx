@@ -291,6 +291,80 @@ describe('PayoffChartV3 (remove)', () => {
   });
 });
 
+describe('PayoffChartV3 (vertical spread snap)', () => {
+  const spreadLegs: Leg[] = [
+    makeLeg({ id: 'long', type: 'call', direction: 'buy', strike: 100, entryPrice: 4 }),
+    makeLeg({ id: 'short', type: 'call', direction: 'sell', strike: 110, entryPrice: 1.5 }),
+  ];
+  function renderSpread(extra: Record<string, unknown> = {}) {
+    return render(
+      <PayoffChartV3
+        points={[
+          { underlyingPrice: 70, pnl: -2.5 },
+          { underlyingPrice: 130, pnl: 7.5 },
+        ]}
+        breakevens={[102.5]}
+        spotPrice={100}
+        legs={spreadLegs}
+        netDebit={-2.5}
+        strikes={[90, 95, 100, 105, 110]}
+        {...extra}
+      />,
+    );
+  }
+
+  it('fuses a long+short call into ONE spread block (no separate leg blocks)', () => {
+    const { container } = renderSpread();
+    expect(container.querySelectorAll('[data-spread-key]').length).toBe(1);
+    expect(container.querySelectorAll('[data-leg-id]').length).toBe(0);
+    expect(container.textContent).toContain('C 100/110');
+  });
+
+  it('keeps both edges as independent drag handles', () => {
+    const { container } = renderSpread();
+    expect(container.querySelector('[data-drag-leg="long"]')).not.toBeNull();
+    expect(container.querySelector('[data-drag-leg="short"]')).not.toBeNull();
+  });
+
+  it('drags the long edge and fires onLegStrikeDrag for the long leg only', () => {
+    const onDrag = vi.fn();
+    const { container } = renderSpread({ onLegStrikeDrag: onDrag });
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-drag-leg="long"]')!, { clientX: 300, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 300, clientY: 360, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 300, clientY: 360 });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    const [legId, newStrike] = onDrag.mock.calls[0]!;
+    expect(legId).toBe('long');
+    expect(newStrike).toBeLessThan(100);
+  });
+
+  it('removes a single edge (un-snaps to the other leg) via its remove control', () => {
+    const onRemove = vi.fn();
+    const { container } = renderSpread({ onRemoveLeg: onRemove });
+    fireEvent.click(container.querySelector('[data-remove-leg="short"]')!);
+    expect(onRemove).toHaveBeenCalledWith('short');
+  });
+
+  it('leaves a naked short call as a per-leg block (not a spread)', () => {
+    const { container } = render(
+      <PayoffChartV3
+        points={[
+          { underlyingPrice: 70, pnl: 3 },
+          { underlyingPrice: 130, pnl: -27 },
+        ]}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'sc', type: 'call', direction: 'sell', strike: 100 })]}
+        netDebit={3}
+        strikes={[90, 95, 100, 105, 110]}
+      />,
+    );
+    expect(container.querySelector('[data-leg-id="sc"]')).not.toBeNull();
+    expect(container.querySelector('[data-spread-key]')).toBeNull();
+  });
+});
+
 describe('PayoffChartV3 (placement)', () => {
   it('opens a picker on rung click and fires onAddLegAtStrike', () => {
     const onAdd = vi.fn();

@@ -165,13 +165,20 @@ export function buildLadderZones(
   return zones;
 }
 
+/** Minimal shape packLanes needs — a keyed price interval. */
+export interface LaneItem {
+  legId: string;
+  spanLowPrice: number;
+  spanHighPrice: number;
+}
+
 /**
  * Greedy interval packing by price-span overlap. Blocks whose spans don't
  * overlap reuse a lane (touching edges, e.g. a straddle's two legs, count as
  * non-overlapping so they stay centered and tile). Overlapping blocks get
  * separate lanes for horizontal offset.
  */
-export function packLanes(blocks: LadderBlock[]): Map<string, number> {
+export function packLanes(blocks: LaneItem[]): Map<string, number> {
   const laneHighs: number[] = []; // laneHighs[i] = highest spanHighPrice placed in lane i
   const assignment = new Map<string, number>();
   const sorted = [...blocks].sort((a, b) => a.spanLowPrice - b.spanLowPrice);
@@ -191,6 +198,87 @@ export function packLanes(blocks: LadderBlock[]): Map<string, number> {
     }
   }
   return assignment;
+}
+
+/**
+ * A long+short of the same type fused into one connected "spread block" — the
+ * defined-risk corridor between two strikes (solid long edge, capped short edge).
+ */
+export interface LadderSpread {
+  type: 'call' | 'put';
+  longLegId: string;
+  shortLegId: string;
+  longStrike: number;
+  shortStrike: number;
+  /** Corridor bounds: min/max of the two strikes. */
+  lowStrike: number;
+  highStrike: number;
+  quantity: number;
+  label: string;
+}
+
+/** A render unit on the ladder: either a lone leg block or a fused spread. */
+export type LadderUnit =
+  | { kind: 'single'; block: LadderBlock }
+  | { kind: 'spread'; spread: LadderSpread };
+
+/** Stable key for a spread unit (used for lane packing / React keys). */
+export function spreadKey(sp: LadderSpread): string {
+  return `spread:${sp.longLegId}:${sp.shortLegId}`;
+}
+
+/**
+ * Group legs into render units. A clean vertical — same type, same expiry, equal
+ * quantity, opposite direction, different strikes — fuses into one spread block;
+ * everything else (ratios, butterflies, calendars, straddles, naked legs) stays a
+ * per-leg block. Pairing only changes rendering — domain, zones and break-evens
+ * are still computed from the underlying legs.
+ */
+export function buildLadderUnits(legs: Leg[]): LadderUnit[] {
+  const groups = new Map<string, Leg[]>();
+  for (const l of legs) {
+    const key = `${l.type}|${l.expiry}|${l.quantity}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(l);
+    else groups.set(key, [l]);
+  }
+
+  const spreads: LadderSpread[] = [];
+  const paired = new Set<string>();
+  for (const group of groups.values()) {
+    const longs = group.filter((l) => l.direction === 'buy').sort((a, b) => a.strike - b.strike);
+    const shorts = group.filter((l) => l.direction === 'sell').sort((a, b) => a.strike - b.strike);
+    const n = Math.min(longs.length, shorts.length);
+    for (let i = 0; i < n; i++) {
+      const lo = longs[i]!;
+      const sh = shorts[i]!;
+      if (lo.strike === sh.strike) continue; // degenerate — leave as singles
+      paired.add(lo.id);
+      paired.add(sh.id);
+      const typeChar = lo.type === 'call' ? 'C' : 'P';
+      const lowStrike = Math.min(lo.strike, sh.strike);
+      const highStrike = Math.max(lo.strike, sh.strike);
+      const qty = lo.quantity > 1 ? `${lo.quantity}× ` : '';
+      spreads.push({
+        type: lo.type,
+        longLegId: lo.id,
+        shortLegId: sh.id,
+        longStrike: lo.strike,
+        shortStrike: sh.strike,
+        lowStrike,
+        highStrike,
+        quantity: lo.quantity,
+        label: `${qty}${typeChar} ${lowStrike}/${highStrike}`,
+      });
+    }
+  }
+
+  // Preserve original leg order for the singles; spreads render first (behind).
+  const units: LadderUnit[] = spreads.map((spread) => ({ kind: 'spread', spread }));
+  for (const l of legs) {
+    if (!paired.has(l.id)) units.push({ kind: 'single', block: legToBlock(l) });
+  }
+  return units;
 }
 
 /** Net position P&L at a price, plus % of cost basis (|netDebit|). */

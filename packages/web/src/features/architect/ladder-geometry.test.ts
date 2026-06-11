@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Leg } from './payoff';
 import {
+  buildLadderUnits,
   buildLadderZones,
   deriveLadderDomain,
   derivePriceDomain,
@@ -229,6 +230,77 @@ describe('packLanes', () => {
     const lanes = packLanes(blocks);
     const used = new Set([lanes.get('leg-1'), lanes.get('leg-2')]);
     expect(used.size).toBe(2);
+  });
+});
+
+describe('buildLadderUnits', () => {
+  it('fuses a bull call spread into one spread unit (long lower, short higher)', () => {
+    const units = buildLadderUnits([
+      makeLeg({ id: 'long', type: 'call', direction: 'buy', strike: 100, entryPrice: 4 }),
+      makeLeg({ id: 'short', type: 'call', direction: 'sell', strike: 110, entryPrice: 1.5 }),
+    ]);
+    expect(units).toHaveLength(1);
+    const u = units[0]!;
+    if (u.kind !== 'spread') throw new Error('expected a spread unit');
+    expect(u.spread.longLegId).toBe('long');
+    expect(u.spread.shortLegId).toBe('short');
+    expect(u.spread.lowStrike).toBe(100);
+    expect(u.spread.highStrike).toBe(110);
+    expect(u.spread.label).toBe('C 100/110');
+  });
+
+  it('handles a bear call spread (short lower, long higher) — corridor still 100/110', () => {
+    const units = buildLadderUnits([
+      makeLeg({ id: 'short', type: 'call', direction: 'sell', strike: 100, entryPrice: 4 }),
+      makeLeg({ id: 'long', type: 'call', direction: 'buy', strike: 110, entryPrice: 1.5 }),
+    ]);
+    expect(units).toHaveLength(1);
+    const u = units[0]!;
+    if (u.kind !== 'spread') throw new Error('expected a spread unit');
+    expect(u.spread.longStrike).toBe(110);
+    expect(u.spread.shortStrike).toBe(100);
+  });
+
+  it('splits an iron condor into two spreads and no singles', () => {
+    const units = buildLadderUnits([
+      makeLeg({ id: 'lp', type: 'put', direction: 'buy', strike: 90, entryPrice: 1 }),
+      makeLeg({ id: 'sp', type: 'put', direction: 'sell', strike: 95, entryPrice: 2 }),
+      makeLeg({ id: 'sc', type: 'call', direction: 'sell', strike: 105, entryPrice: 2 }),
+      makeLeg({ id: 'lc', type: 'call', direction: 'buy', strike: 110, entryPrice: 1 }),
+    ]);
+    expect(units.filter((u) => u.kind === 'spread')).toHaveLength(2);
+    expect(units.filter((u) => u.kind === 'single')).toHaveLength(0);
+  });
+
+  it('does NOT fuse a straddle (same direction → no pair)', () => {
+    const units = buildLadderUnits([
+      makeLeg({ id: 'c', type: 'call', direction: 'buy', strike: 100 }),
+      makeLeg({ id: 'p', type: 'put', direction: 'buy', strike: 100 }),
+    ]);
+    expect(units.every((u) => u.kind === 'single')).toBe(true);
+    expect(units).toHaveLength(2);
+  });
+
+  it('does NOT fuse a calendar (different expiry) or a ratio (different qty)', () => {
+    const calendar = buildLadderUnits([
+      makeLeg({ id: 'a', type: 'call', direction: 'buy', strike: 100, expiry: '2026-09-25' }),
+      makeLeg({ id: 'b', type: 'call', direction: 'sell', strike: 100, expiry: '2026-12-25' }),
+    ]);
+    expect(calendar.every((u) => u.kind === 'single')).toBe(true);
+    const ratio = buildLadderUnits([
+      makeLeg({ id: 'a', type: 'call', direction: 'buy', strike: 100, quantity: 1 }),
+      makeLeg({ id: 'b', type: 'call', direction: 'sell', strike: 110, quantity: 2 }),
+    ]);
+    expect(ratio.every((u) => u.kind === 'single')).toBe(true);
+  });
+
+  it('leaves a naked short call as a single block', () => {
+    const units = buildLadderUnits([
+      makeLeg({ id: 'sc', type: 'call', direction: 'sell', strike: 100 }),
+    ]);
+    expect(units).toEqual([
+      expect.objectContaining({ kind: 'single' }),
+    ]);
   });
 });
 

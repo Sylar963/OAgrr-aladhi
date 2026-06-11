@@ -5,11 +5,14 @@ import {
   buildLadderZones,
   deriveLadderDomain,
   derivePriceDomain,
+  deriveTenorColumns,
   formatPriceTick,
   legToBlock,
   makePriceScale,
+  makeTenorScale,
   netPnlReadout,
   packLanes,
+  packLanesByTenor,
 } from './ladder-geometry';
 
 function makeLeg(over: Partial<Leg> = {}): Leg {
@@ -328,6 +331,81 @@ describe('netPnlReadout', () => {
   it('pct is null when there is no cost basis', () => {
     const legs = [makeLeg({ id: 'leg-1' })];
     expect(netPnlReadout(legs, 100, 0).pct).toBeNull();
+  });
+});
+
+describe('deriveTenorColumns', () => {
+  const all = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'];
+
+  it('windows forward from the anchor when there are no legs', () => {
+    expect(deriveTenorColumns(all, [], 'e3')).toEqual(['e3', 'e4', 'e5', 'e6', 'e7']);
+  });
+
+  it('extends backward when the anchor sits at the tail', () => {
+    expect(deriveTenorColumns(all, [], 'e8')).toEqual(['e4', 'e5', 'e6', 'e7', 'e8']);
+  });
+
+  it('keeps every leg expiry even when the range exceeds maxCols', () => {
+    // Legs span e1..e6 (6 tenors > maxCols 5) — all six stay visible.
+    expect(deriveTenorColumns(all, ['e1', 'e6'], 'e3')).toEqual([
+      'e1', 'e2', 'e3', 'e4', 'e5', 'e6',
+    ]);
+  });
+
+  it('appends a stale leg expiry the venue no longer lists', () => {
+    expect(deriveTenorColumns(['e1', 'e2', 'e3'], ['2099-01-01'], 'e1')).toEqual([
+      'e1', 'e2', 'e3', '2099-01-01',
+    ]);
+  });
+
+  it('falls back to the required set when there are no listed expiries', () => {
+    expect(deriveTenorColumns([], ['eA'], 'eB')).toEqual(['eB', 'eA']);
+  });
+
+  it('clamps to the listed expiries when fewer than maxCols exist', () => {
+    expect(deriveTenorColumns(['e1', 'e2'], [], 'e1')).toEqual(['e1', 'e2']);
+  });
+});
+
+describe('makeTenorScale', () => {
+  const scale = makeTenorScale(['a', 'b', 'c'], 48, 488); // colW ≈ 162.67
+
+  it('centers each tenor in its column', () => {
+    expect(scale.xCenter('a')).toBeCloseTo(48 + 488 / 6);
+    expect(scale.xCenter('b')).toBeCloseTo(48 + 488 / 2);
+    expect(scale.xCenter('c')).toBeCloseTo(48 + (5 * 488) / 6);
+  });
+
+  it('returns null for a tenor without a column', () => {
+    expect(scale.xCenter('nope')).toBeNull();
+  });
+
+  it('maps x back to the containing column, clamped at the edges', () => {
+    expect(scale.tenorAt(scale.xCenter('b')!)).toBe('b');
+    expect(scale.tenorAt(0)).toBe('a'); // left of the plot → first column
+    expect(scale.tenorAt(10_000)).toBe('c'); // right of the plot → last column
+  });
+
+  it('handles an empty tenor list', () => {
+    expect(makeTenorScale([], 48, 488).tenorAt(100)).toBeNull();
+  });
+});
+
+describe('packLanesByTenor', () => {
+  it('same-span blocks in different tenors do not contend for lanes', () => {
+    const near = legToBlock(makeLeg({ id: 'near', strike: 100, entryPrice: 5, expiry: 'e1' }));
+    const far = legToBlock(makeLeg({ id: 'far', strike: 100, entryPrice: 5, expiry: 'e2' }));
+    const lanes = packLanesByTenor([near, far]);
+    expect(lanes.get('near')).toEqual({ lane: 0, lanesInTenor: 1 });
+    expect(lanes.get('far')).toEqual({ lane: 0, lanesInTenor: 1 });
+  });
+
+  it('overlapping blocks in the SAME tenor still fan into separate lanes', () => {
+    const a = legToBlock(makeLeg({ id: 'a', direction: 'buy', strike: 100, entryPrice: 5 }));
+    const b = legToBlock(makeLeg({ id: 'b', direction: 'sell', strike: 100, entryPrice: 5 }));
+    const lanes = packLanesByTenor([a, b]);
+    expect(new Set([lanes.get('a')!.lane, lanes.get('b')!.lane]).size).toBe(2);
+    expect(lanes.get('a')!.lanesInTenor).toBe(2);
   });
 });
 

@@ -100,6 +100,8 @@ export interface LadderBlock {
   direction: 'buy' | 'sell';
   quantity: number;
   strike: number;
+  /** Leg expiry — the block's column on the tenor (horizontal) axis. */
+  expiry: string;
   /** This leg's own break-even: strike ± premium. */
   legBreakeven: number;
   /** Lower price edge of the block (= min(strike, legBreakeven)). */
@@ -125,6 +127,7 @@ export function legToBlock(leg: Leg): LadderBlock {
     direction: leg.direction,
     quantity: leg.quantity,
     strike: leg.strike,
+    expiry: leg.expiry,
     legBreakeven,
     spanLowPrice,
     spanHighPrice,
@@ -205,11 +208,103 @@ export function packLanes(blocks: LaneItem[]): Map<string, number> {
 }
 
 /**
+ * Tenor (expiry) columns for the ladder's horizontal axis. Always includes the
+ * anchor (the builder's live expiry) and every leg's expiry; pads with the
+ * chronologically adjacent listed expiries until `maxCols` columns. When the
+ * legs themselves span more than `maxCols` tenors, every tenor in that range is
+ * kept — a leg must never lose its column. Leg expiries no longer listed by the
+ * venue (stale) are appended at the end so their blocks stay visible.
+ */
+export function deriveTenorColumns(
+  allExpiries: string[],
+  legExpiries: string[],
+  anchorExpiry: string,
+  maxCols = 5,
+): string[] {
+  const required = new Set<string>();
+  if (anchorExpiry) required.add(anchorExpiry);
+  for (const e of legExpiries) if (e) required.add(e);
+
+  const known = allExpiries.filter((e) => required.has(e));
+  const unknown = [...required].filter((e) => !allExpiries.includes(e));
+  if (allExpiries.length === 0) return [...required];
+
+  let loIdx = known.length > 0 ? allExpiries.indexOf(known[0]!) : 0;
+  let hiIdx = known.length > 0 ? allExpiries.indexOf(known[known.length - 1]!) : -1;
+  if (hiIdx < loIdx) {
+    loIdx = 0;
+    hiIdx = Math.min(maxCols, allExpiries.length) - 1;
+  }
+  while (hiIdx - loIdx + 1 < maxCols && (hiIdx < allExpiries.length - 1 || loIdx > 0)) {
+    if (hiIdx < allExpiries.length - 1) hiIdx++;
+    else loIdx--;
+  }
+  return [...allExpiries.slice(loIdx, hiIdx + 1), ...unknown];
+}
+
+export interface TenorScale {
+  tenors: string[];
+  colW: number;
+  /** Center x of a tenor's column, or null when the tenor has no column. */
+  xCenter: (tenor: string) => number | null;
+  /** Tenor whose column contains pixel x (clamped to the edge columns). */
+  tenorAt: (xPx: number) => string | null;
+}
+
+/** Evenly split the plot width into one column per tenor. */
+export function makeTenorScale(tenors: string[], plotLeft: number, plotW: number): TenorScale {
+  const n = tenors.length;
+  const colW = n > 0 ? plotW / n : plotW;
+  return {
+    tenors,
+    colW,
+    xCenter: (tenor) => {
+      const i = tenors.indexOf(tenor);
+      return i === -1 ? null : plotLeft + (i + 0.5) * colW;
+    },
+    tenorAt: (xPx) => {
+      if (n === 0) return null;
+      const i = Math.max(0, Math.min(n - 1, Math.floor((xPx - plotLeft) / colW)));
+      return tenors[i]!;
+    },
+  };
+}
+
+export interface TenorLaneItem extends LaneItem {
+  expiry: string;
+}
+
+/**
+ * Lane packing scoped to each tenor column: blocks only contend for horizontal
+ * offset with overlapping blocks in the SAME column. Returns each key's lane
+ * plus the column's lane count so the caller can center the fan.
+ */
+export function packLanesByTenor(
+  items: TenorLaneItem[],
+): Map<string, { lane: number; lanesInTenor: number }> {
+  const byTenor = new Map<string, TenorLaneItem[]>();
+  for (const item of items) {
+    const group = byTenor.get(item.expiry);
+    if (group) group.push(item);
+    else byTenor.set(item.expiry, [item]);
+  }
+  const out = new Map<string, { lane: number; lanesInTenor: number }>();
+  for (const group of byTenor.values()) {
+    const lanes = packLanes(group);
+    const lanesInTenor = lanes.size > 0 ? Math.max(...lanes.values()) + 1 : 1;
+    for (const [key, lane] of lanes) out.set(key, { lane, lanesInTenor });
+  }
+  return out;
+}
+
+/**
  * A long+short of the same type fused into one connected "spread block" — the
  * defined-risk corridor between two strikes (solid long edge, capped short edge).
  */
 export interface LadderSpread {
   type: 'call' | 'put';
+  /** Shared expiry of both legs — the spread's column on the tenor axis. */
+  expiry: string;
   longLegId: string;
   shortLegId: string;
   longStrike: number;
@@ -268,6 +363,7 @@ export function buildLadderUnits(legs: Leg[]): LadderUnit[] {
       const qty = lo.quantity > 1 ? `${lo.quantity}× ` : '';
       spreads.push({
         type: lo.type,
+        expiry: lo.expiry,
         longLegId: lo.id,
         shortLegId: sh.id,
         longStrike: lo.strike,

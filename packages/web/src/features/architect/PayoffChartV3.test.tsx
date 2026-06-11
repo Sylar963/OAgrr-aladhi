@@ -438,6 +438,24 @@ describe('PayoffChartV3 (placement)', () => {
     expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
   });
 
+  it('passes no expiry from the picker when there is no tenor axis', () => {
+    const onAdd = vi.fn();
+    const { container } = render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={[]}
+        spotPrice={100}
+        legs={[]}
+        netDebit={0}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+      />,
+    );
+    fireEvent.click(container.querySelector('svg')!, { clientX: 300, clientY: 200 });
+    fireEvent.click(container.querySelector('[data-add="buy-call"]')!);
+    expect(onAdd.mock.calls[0]![4]).toBeUndefined();
+  });
+
   it('does not open a picker (no double-fire) when the remove control is clicked', () => {
     const onAdd = vi.fn();
     const onRemove = vi.fn();
@@ -463,5 +481,103 @@ describe('PayoffChartV3 (placement)', () => {
     expect(onRemove).toHaveBeenCalledWith('leg-1');
     expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
     expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('PayoffChartV3 (tenor columns)', () => {
+  // Default jsdom size 600×400 → plotLeft 48, plotW 488 → colW ≈ 162.7;
+  // column centers ≈ 129 / 292 / 455.
+  const TENORS = ['2026-06-26', '2026-07-31', '2026-09-25'];
+
+  function renderTenors(legs: Leg[], extra: Record<string, unknown> = {}) {
+    return render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={legs.length ? [103] : []}
+        spotPrice={100}
+        legs={legs}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+        tenors={TENORS}
+        activeTenor={TENORS[0]}
+        {...extra}
+      />,
+    );
+  }
+
+  it('renders a tenor header with one label per column, active tenor marked', () => {
+    const { container } = renderTenors([makeLeg({ expiry: TENORS[0] })]);
+    expect(container.textContent).toContain('26 JUN');
+    expect(container.textContent).toContain('31 JUL');
+    expect(container.textContent).toContain('25 SEP');
+    expect(container.querySelector(`[data-tenor="${TENORS[0]}"]`)!.getAttribute('data-active')).toBe('true');
+    expect(container.querySelector(`[data-tenor="${TENORS[1]}"]`)!.getAttribute('data-active')).toBe('false');
+  });
+
+  it('renders no tenor header without a tenors prop', () => {
+    const { container } = render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg()]}
+        netDebit={-3}
+        strikes={[90, 95, 100, 105, 110]}
+      />,
+    );
+    expect(container.querySelector('[data-tenor]')).toBeNull();
+  });
+
+  it('places calendar legs in their own tenor columns (distinct x)', () => {
+    const { container } = renderTenors([
+      makeLeg({ id: 'near', strike: 100, expiry: TENORS[0] }),
+      makeLeg({ id: 'far', direction: 'sell', strike: 100, expiry: TENORS[2] }),
+    ]);
+    const nearX = Number(container.querySelector('[data-leg-id="near"] rect')!.getAttribute('x'));
+    const farX = Number(container.querySelector('[data-leg-id="far"] rect')!.getAttribute('x'));
+    // colW ≈ 162.7 — two columns apart means >300px between the blocks.
+    expect(farX - nearX).toBeGreaterThan(300);
+  });
+
+  it('drags a block onto another tenor column and fires onLegTenorDrag', () => {
+    const onTenor = vi.fn();
+    const onStrike = vi.fn();
+    const { container } = renderTenors(
+      [makeLeg({ id: 'leg-1', strike: 100, expiry: TENORS[0] })],
+      { onLegTenorDrag: onTenor, onLegStrikeDrag: onStrike, strikes: [100] },
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 129, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 292, clientY: 200, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 292, clientY: 200 });
+    expect(onTenor).toHaveBeenCalledTimes(1);
+    expect(onTenor).toHaveBeenCalledWith('leg-1', TENORS[1], 100);
+    expect(onStrike).not.toHaveBeenCalled();
+  });
+
+  it('keeps a wobbly vertical drag on its home tenor (strike drag only)', () => {
+    const onTenor = vi.fn();
+    const onStrike = vi.fn();
+    const { container } = renderTenors(
+      [makeLeg({ id: 'leg-1', strike: 100, expiry: TENORS[0] })],
+      { onLegTenorDrag: onTenor, onLegStrikeDrag: onStrike },
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 129, clientY: 200 });
+    // 10px of x-wobble is under the engage threshold — must not hop columns.
+    fireEvent.pointerMove(svg, { clientX: 139, clientY: 360, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 139, clientY: 360 });
+    expect(onTenor).not.toHaveBeenCalled();
+    expect(onStrike).toHaveBeenCalledTimes(1);
+  });
+
+  it('click-to-add in a far column passes that column tenor to onAddLegAtStrike', () => {
+    const onAdd = vi.fn();
+    const { container } = renderTenors([], { onAddLegAtStrike: onAdd });
+    const svg = container.querySelector('svg')!;
+    fireEvent.click(svg, { clientX: 455, clientY: 200 });
+    fireEvent.click(container.querySelector('[data-add="buy-call"]')!);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onAdd.mock.calls[0]![4]).toBe(TENORS[2]);
   });
 });

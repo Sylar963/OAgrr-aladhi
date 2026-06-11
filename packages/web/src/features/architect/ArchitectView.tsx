@@ -376,6 +376,9 @@ export default function ArchitectView() {
       const repriced = repriceStrategyLeg(leg, { expiry: newExpiry, strike }, false);
       if (!repriced) return;
       updateLeg(legId, repriced);
+      // Follow the drop: the builder's selected tenor (expiry dropdown, live WS
+      // feed, highlighted column, rung grid) moves to where the leg landed.
+      setBuilderExpiry(newExpiry);
     },
     [legs, repriceStrategyLeg, updateLeg],
   );

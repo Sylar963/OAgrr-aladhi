@@ -12,8 +12,7 @@ import {
 import { Spinner } from '@components/ui';
 import type { Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
-import { dteDays } from '@lib/format';
-import { fmtUsd } from '@lib/format';
+import { dteDays, fmtUsd } from '@lib/format';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
 import type { GhostPath, GhostPathKind } from './ghost-paths';

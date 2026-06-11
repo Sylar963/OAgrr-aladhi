@@ -18,6 +18,7 @@ import { repriceLeg } from './reprice';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
+import PayoffChartV3 from './PayoffChartV3';
 import SnapshotBanner from './SnapshotBanner';
 import {
   hasUsableSpotCandles,
@@ -187,7 +188,7 @@ export default function ArchitectView() {
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
   const [routeVenue, setRouteVenue] = useState(BEST_ROUTE_VALUE);
-  const [variant, setVariant] = useState<'v1' | 'v2'>('v1');
+  const [variant, setVariant] = useState<'v1' | 'v2' | 'v3'>('v1');
   const [lastGoodSpotCandles, setLastGoodSpotCandles] = useState<{
     data: SpotCandlesResponse;
     dataUpdatedAt: number;
@@ -329,6 +330,23 @@ export default function ArchitectView() {
     },
     [handleLegUpdate],
   );
+
+  const handleAddLegAtStrike = useCallback(
+    (strike: number, type: 'call' | 'put', direction: 'buy' | 'sell', quantity: number) => {
+      if (!chain || !builderExpiry) return;
+      const repriced = repriceLeg(
+        chain,
+        pricingVenues,
+        { type, direction, strike, expiry: builderExpiry, quantity },
+        { exactStrike: false },
+      );
+      if (!repriced) return;
+      addLeg(repriced, underlying);
+    },
+    [chain, pricingVenues, builderExpiry, addLeg, underlying],
+  );
+
+  const handleRemoveLeg = useCallback((legId: string) => removeLeg(legId), [removeLeg]);
 
   const pricedLegs = useMemo(
     () =>
@@ -550,7 +568,9 @@ export default function ArchitectView() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
             >
-              {legs.length === 0 ? (
+              {/* V3 stays mounted when empty: its ladder is the empty state
+                  (click a rung to place the first leg). V1/V2 keep the ghost. */}
+              {legs.length === 0 && variant !== 'v3' ? (
                 <div className={styles.chartEmpty}>
                   <svg
                     className={styles.ghostChart}
@@ -625,7 +645,11 @@ export default function ArchitectView() {
                   <div className={styles.chartTitleRow}>
                     <div className={styles.chartTitleBlock}>
                       <div className={styles.chartTitle}>
-                        {variant === 'v1' ? 'P&L at Expiry' : 'Live Spot vs Break-even Zones'}
+                        {variant === 'v1'
+                          ? 'P&L at Expiry'
+                          : variant === 'v2'
+                            ? 'Live Spot vs Break-even Zones'
+                            : 'Lego Ladder'}
                       </div>
                       {variant === 'v2' && (
                         <div className={styles.chartTitleMeta}>
@@ -649,6 +673,14 @@ export default function ArchitectView() {
                         onClick={() => setVariant('v2')}
                       >
                         V2
+                      </button>
+                      <button
+                        className={styles.variantBtn}
+                        data-active={variant === 'v3'}
+                        data-variant="v3"
+                        onClick={() => setVariant('v3')}
+                      >
+                        V3
                       </button>
                     </div>
                   </div>
@@ -694,7 +726,7 @@ export default function ArchitectView() {
                         </div>
                       )}
                     </>
-                  ) : (
+                  ) : variant === 'v2' ? (
                     <>
                       {candleAvailable && (
                         <SnapshotBanner
@@ -723,6 +755,18 @@ export default function ArchitectView() {
                         onSwitchToV1={() => setVariant('v1')}
                       />
                     </>
+                  ) : (
+                    <PayoffChartV3
+                      points={payoffPoints}
+                      breakevens={metrics?.breakevens ?? []}
+                      spotPrice={spotPrice}
+                      legs={pricedLegs}
+                      netDebit={metrics?.netDebit ?? 0}
+                      strikes={availableStrikes}
+                      onLegStrikeDrag={handleLegStrikeDrag}
+                      onAddLegAtStrike={handleAddLegAtStrike}
+                      onRemoveLeg={handleRemoveLeg}
+                    />
                   )}
                 </>
               )}

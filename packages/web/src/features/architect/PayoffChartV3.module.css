@@ -1,0 +1,174 @@
+.container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: var(--font-mono);
+  --lego-call: var(--color-info);
+  --lego-put: var(--color-iv);
+  --lego-profit: var(--color-profit);
+  --lego-loss: var(--color-loss);
+  --lego-be: var(--color-warning);
+}
+
+/* Height is set inline (intrinsic content height) so the container can scroll
+   it — never force-fit to the viewport, which is what crushed the blocks. */
+.svg {
+  display: block;
+  width: 100%;
+  user-select: none;
+  touch-action: none;
+}
+
+.rung {
+  pointer-events: none;
+}
+
+/* Blocks: a group per leg. Lift + glow on hover/active. */
+.block {
+  cursor: grab;
+  transition:
+    transform var(--transition-fast),
+    filter var(--transition-fast),
+    opacity var(--transition-fast);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.block:hover,
+.block[data-active='true'] {
+  transform: translateY(-2px) scale(1.03);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+.block[data-dragging='true'] {
+  cursor: grabbing;
+}
+.block [data-remove-leg] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.block[data-active='true'] [data-remove-leg] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.blockEnter {
+  animation: legoDropIn var(--transition-base);
+}
+
+/* Fused vertical spread: faint defined-risk corridor connecting the two leg
+   blocks (each rendered as its own lego block). Tweens its geometry on re-flow. */
+.spreadCorridor {
+  transition: y var(--transition-fast), height var(--transition-fast);
+}
+.blockExit {
+  animation: legoRemove var(--transition-fast) forwards;
+}
+
+/* Zone washes and break-even lines tween their geometry on live re-flow. */
+.zone {
+  transition: y var(--transition-fast), height var(--transition-fast);
+}
+.beLine {
+  transition: y1 var(--transition-fast), y2 var(--transition-fast);
+}
+
+/* Hover detail card (DOM overlay positioned over the SVG). */
+.card {
+  position: absolute;
+  z-index: 4;
+  min-width: 130px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-active);
+  border-radius: 8px;
+  pointer-events: none;
+  animation: legoRise var(--transition-fast);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+}
+.cardTitle {
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+/* Price-scrub crosshair chip. */
+.crosshairChip {
+  position: absolute;
+  z-index: 3;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  background: var(--accent-primary-bg);
+  border: 1px solid var(--accent-primary);
+  border-radius: 5px;
+  color: var(--accent-primary);
+  pointer-events: none;
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}
+
+/* Click-rung placement picker (DOM overlay). */
+.picker {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-active);
+  border-radius: 8px;
+  animation: legoRise var(--transition-fast);
+}
+.pickerBtn {
+  padding: 3px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--bg-active);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  cursor: pointer;
+}
+.pickerBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+@keyframes legoDropIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes legoRemove {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.8); }
+}
+@keyframes legoRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block,
+  .blockEnter,
+  .blockExit,
+  .spreadCorridor,
+  .card,
+  .picker,
+  .zone,
+  .beLine {
+    animation: none;
+    transition: none;
+  }
+}

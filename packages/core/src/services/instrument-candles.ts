@@ -7,6 +7,7 @@ import {
   DERIVE_REST_BASE_URL,
   GATEIO_REST_BASE_URL,
   OKX_REST_BASE_URL,
+  PARADEX_REST_BASE_URL,
   THALEX_REST_URL,
 } from '../feeds/shared/endpoints.js';
 import { loadCoincallCredentials, signCoincallRequest } from '../feeds/coincall/rest-client.js';
@@ -893,8 +894,97 @@ export async function fetchCoincallKline(
   return candles.sort((a, b) => a.ts - b.ts);
 }
 
+// ── Paradex ────────────────────────────────────────────────────────
+// GET /v1/markets/klines — public, no auth. One endpoint serves both series
+// via price_kind: 'last' (trade OHLCV) and 'mark' (native option mark
+// candles, unlike Gate.io's signed equivalent). Resolution is minutes-only
+// (1,3,5,15,30,60 — no daily), so 4h/1d are aggregated locally from 60m
+// rows. Rows are [time_ms, o, h, l, c, volume] as NUMBERS — the only
+// Paradex endpoint that doesn't stringify (captured 2026-06-08,
+// references/options-docs/paradex/rest-klines.json). Probe-verified
+// 2026-06-10: untraded strikes return {results:[]} for price_kind=last
+// while mark has full coverage; unknown symbols → 404 MARKET_NOT_FOUND.
+const INTERVAL_TO_PARADEX: Record<InstrumentCandleInterval, string> = {
+  '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '60', '1d': '60',
+};
+
+// Probe-verified 2026-06-10: windows spanning more than 1440 bars of the
+// requested resolution are rejected whole with 400 INVALID_REQUEST_PARAMETER
+// ("time range exceeds maximum allowed bars") — the venue never truncates.
+// Clamp like other venues' silent caps (Binance limit=500, OKX limit=300)
+// so long ranges degrade to the newest 1440 bars instead of hard-failing;
+// at 60m that bounds 4h/1d charts to ~60 days of history.
+const PARADEX_MAX_KLINE_BARS = 1440;
+
+const ParadexKlineSchema = z.object({
+  results: z.array(z.array(z.number())),
+});
+
+// o=first / c=last / extremes / vol summed onto the epoch-aligned grid —
+// spot-candles' downsampleCandles shape, plus volume.
+function downsampleRawCandles(candles: readonly RawCandle[], bucketMs: number): RawCandle[] {
+  const byBucket = new Map<number, RawCandle>();
+  for (const c of [...candles].sort((a, b) => a.ts - b.ts)) {
+    const ts = Math.floor(c.ts / bucketMs) * bucketMs;
+    const bar = byBucket.get(ts);
+    if (!bar) {
+      byBucket.set(ts, { ts, o: c.o, h: c.h, l: c.l, c: c.c, vol: c.vol });
+    } else {
+      bar.h = Math.max(bar.h, c.h);
+      bar.l = Math.min(bar.l, c.l);
+      bar.c = c.c;
+      bar.vol += c.vol;
+    }
+  }
+  return [...byBucket.values()].sort((a, b) => a.ts - b.ts);
+}
+
+export async function fetchParadexKlines(
+  symbol: string,
+  interval: InstrumentCandleInterval,
+  range: InstrumentCandleRange,
+  priceKind: 'last' | 'mark',
+): Promise<RawCandle[]> {
+  const resolutionMs = Number(INTERVAL_TO_PARADEX[interval]) * 60_000;
+  const bucketMs = INTERVAL_TO_MS[interval];
+  const now = Date.now();
+  let start = Math.max(now - RANGE_TO_MS[range], now - PARADEX_MAX_KLINE_BARS * resolutionMs);
+  // When aggregating (4h/1d), align the left edge up onto the target grid:
+  // the venue returns 60m rows from the first whole hour ≥ start_at, so an
+  // unaligned start would build the leading bucket from a partial set of
+  // rows (wrong o/h/l/vol). Ceil never exceeds `now` and only shrinks the
+  // window, so the bar cap holds.
+  if (bucketMs > resolutionMs) start = Math.ceil(start / bucketMs) * bucketMs;
+  const params = new URLSearchParams({
+    symbol,
+    resolution: INTERVAL_TO_PARADEX[interval],
+    start_at: String(start),
+    end_at: String(now),
+    price_kind: priceKind,
+  });
+  const res = await fetch(
+    `${PARADEX_REST_BASE_URL}/markets/klines?${params}`,
+    { signal: AbortSignal.timeout(10_000), headers: { accept: 'application/json' } },
+  );
+  if (res.status === 404) throw new InstrumentCandlesError('not_found', `Paradex: ${symbol}`);
+  if (!res.ok) throw new InstrumentCandlesError('upstream', `Paradex ${res.status}`);
+  const result = ParadexKlineSchema.safeParse(await res.json());
+  if (!result.success) {
+    log.warn({ issues: result.error.issues, symbol }, 'paradex klines parse failed');
+    return [];
+  }
+  const candles: RawCandle[] = [];
+  for (const row of result.data.results) {
+    if (row.length < 6) continue;
+    candles.push({ ts: row[0]!, o: row[1]!, h: row[2]!, l: row[3]!, c: row[4]!, vol: row[5]! });
+  }
+  candles.sort((a, b) => a.ts - b.ts);
+  return bucketMs > resolutionMs ? downsampleRawCandles(candles, bucketMs) : candles;
+}
+
 // ── Venue capability map ──────────────────────────────────────────
-// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex, coincall.
+// Wired venues: deribit, binance, okx, gateio, bybit, derive, thalex,
+// coincall, paradex.
 //
 // Coincall reads chart data from its signed REST kline endpoint (see
 // fetchCoincallKline above). The live MarkHistoryBuffer is layered on top
@@ -914,7 +1004,7 @@ export async function fetchCoincallKline(
 // the chart still shows a live mark line for ordinary strikes the user has
 // open in the chain.
 const SUPPORTED_VENUES = new Set<VenueId>([
-  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex', 'coincall',
+  'deribit', 'binance', 'okx', 'gateio', 'bybit', 'derive', 'thalex', 'coincall', 'paradex',
 ]);
 
 const PRICE_CURRENCY: Record<string, string> = {
@@ -926,6 +1016,7 @@ const PRICE_CURRENCY: Record<string, string> = {
   derive: 'USDC',
   thalex: 'USD',
   coincall: 'USD',    // Coincall options are USD-quoted (e.g. BTCUSD-…)
+  paradex: 'USD',     // USD-quoted, USDC-settled
 };
 
 function priceCurrencyFor(venue: VenueId, symbol: string): string {
@@ -1201,6 +1292,11 @@ export class InstrumentCandleService {
         return Promise.all([
           Promise.resolve([] as RawCandle[]),
           fetchThalexMark(symbol, interval, range),
+        ]);
+      case 'paradex':
+        return Promise.all([
+          fetchParadexKlines(symbol, interval, range, 'last'),
+          fetchParadexKlines(symbol, interval, range, 'mark'),
         ]);
       default:
         throw new InstrumentCandlesError('unsupported_venue', `Venue ${venue} not yet supported`);

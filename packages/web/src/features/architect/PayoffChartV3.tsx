@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { fmtIv, fmtPct, fmtUsd } from '@lib/format';
+import { dteDays, fmtIv, fmtPct, fmtUsd, formatExpiry } from '@lib/format';
 import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderUnits,
@@ -9,8 +9,10 @@ import {
   formatPriceTick,
   legToBlock,
   makePriceScale,
+  makeTenorScale,
   netPnlReadout,
   packLanes,
+  packLanesByTenor,
   spreadKey,
   type LadderBlock,
   type LadderSpread,
@@ -24,12 +26,19 @@ interface PayoffChartV3Props {
   legs: Leg[];
   netDebit: number;
   strikes?: number[];
+  /** Expiry columns for the horizontal tenor axis; ≤1 → single-column layout. */
+  tenors?: string[];
+  /** The builder's live (WS-subscribed) expiry — its column gets highlighted. */
+  activeTenor?: string;
   onLegStrikeDrag?: (legId: string, newStrike: number) => void;
+  /** A block was dragged onto another tenor column (strike = dragged rung). */
+  onLegTenorDrag?: (legId: string, newExpiry: string, strike: number) => void;
   onAddLegAtStrike?: (
     strike: number,
     type: 'call' | 'put',
     direction: 'buy' | 'sell',
     quantity: number,
+    expiry?: string,
   ) => void;
   onRemoveLeg?: (legId: string) => void;
 }
@@ -43,6 +52,12 @@ const STUD_W = 10;
 const STUD_H = 5;
 /** Vertical room per strike rung; the ladder grows (and scrolls) with rung count. */
 const PX_PER_RUNG = 48;
+/** Horizontal offset between overlapping blocks fanned within one tenor column. */
+const FAN_STEP = 16;
+/** Height of the sticky tenor header strip (multi-tenor mode only). */
+const TENOR_HEADER_H = 24;
+/** Horizontal pointer travel before a drag can hop tenor columns. */
+const TENOR_DRAG_ENGAGE_PX = 20;
 
 /** Map a price to a clamped pixel y inside the plot; ±Infinity → plot edges. */
 function clampY(price: number, yOf: (p: number) => number, plotTop: number, plotBottom: number): number {
@@ -62,7 +77,10 @@ export default function PayoffChartV3({
   legs,
   netDebit,
   strikes = [],
+  tenors,
+  activeTenor,
   onLegStrikeDrag,
+  onLegTenorDrag,
   onAddLegAtStrike,
   onRemoveLeg,
 }: PayoffChartV3Props) {
@@ -73,8 +91,13 @@ export default function PayoffChartV3({
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
   const [hoverSpreadKey, setHoverSpreadKey] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ legId: string; strike: number } | null>(null);
-  const [picker, setPicker] = useState<{ y: number; strike: number } | null>(null);
+  const [drag, setDrag] = useState<{
+    legId: string;
+    strike: number;
+    expiry: string;
+    startClientX: number;
+  } | null>(null);
+  const [picker, setPicker] = useState<{ y: number; strike: number; expiry?: string } | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const justDraggedRef = useRef(false);
 
@@ -113,7 +136,12 @@ export default function PayoffChartV3({
   const centerX = plotLeft + plotW / 2;
 
   const viewLegs = useMemo(
-    () => (drag ? legs.map((l) => (l.id === drag.legId ? { ...l, strike: drag.strike } : l)) : legs),
+    () =>
+      drag
+        ? legs.map((l) =>
+            l.id === drag.legId ? { ...l, strike: drag.strike, expiry: drag.expiry } : l,
+          )
+        : legs,
     [legs, drag],
   );
   const viewBreakevens = useMemo(
@@ -141,31 +169,61 @@ export default function PayoffChartV3({
     [domain, plotTop, plotH],
   );
 
+  // Tenor (expiry) columns on the horizontal axis. Single/absent tenor list →
+  // null scale → the original centered single-column layout.
+  const tenorScale = useMemo(
+    () => (tenors && tenors.length > 1 ? makeTenorScale(tenors, plotLeft, plotW) : null),
+    [tenors, plotLeft, plotW],
+  );
+  const headerH = tenorScale ? TENOR_HEADER_H : 0;
+
   // Render units fuse clean verticals into one spread block; lanes pack by each
   // unit's price span (a spread spans both strikes), so an overlapping unit gets
-  // its own horizontal offset.
+  // its own horizontal offset. In tenor mode blocks only contend for lanes
+  // within their own column.
   const units = useMemo(() => buildLadderUnits(viewLegs), [viewLegs]);
   const laneItems = useMemo(
     () =>
       units.map((u) =>
         u.kind === 'spread'
-          ? { legId: spreadKey(u.spread), spanLowPrice: u.spread.lowStrike, spanHighPrice: u.spread.highStrike }
-          : { legId: u.block.legId, spanLowPrice: u.block.spanLowPrice, spanHighPrice: u.block.spanHighPrice },
+          ? {
+              legId: spreadKey(u.spread),
+              expiry: u.spread.expiry,
+              spanLowPrice: u.spread.lowStrike,
+              spanHighPrice: u.spread.highStrike,
+            }
+          : {
+              legId: u.block.legId,
+              expiry: u.block.expiry,
+              spanLowPrice: u.block.spanLowPrice,
+              spanHighPrice: u.block.spanHighPrice,
+            },
       ),
     [units],
   );
-  const lanes = useMemo(() => packLanes(laneItems), [laneItems]);
+  const lanes = useMemo(() => (tenorScale ? null : packLanes(laneItems)), [tenorScale, laneItems]);
   const laneCount = useMemo(
-    () => (lanes.size ? Math.max(...lanes.values()) + 1 : 1),
+    () => (lanes?.size ? Math.max(...lanes.values()) + 1 : 1),
     [lanes],
+  );
+  const tenorLanes = useMemo(
+    () => (tenorScale ? packLanesByTenor(laneItems) : null),
+    [tenorScale, laneItems],
   );
   const zones = useMemo(
     () => buildLadderZones(viewLegs, viewBreakevens, spotPrice),
     [viewLegs, viewBreakevens, spotPrice],
   );
 
-  const unitX = (key: string): number => {
-    const lane = lanes.get(key) ?? 0;
+  const unitX = (key: string, expiry: string): number => {
+    if (tenorScale) {
+      const cx = tenorScale.xCenter(expiry) ?? centerX;
+      const info = tenorLanes?.get(key);
+      const lane = info?.lane ?? 0;
+      const fan = info?.lanesInTenor ?? 1;
+      return cx - BLOCK_W / 2 + (lane - (fan - 1) / 2) * FAN_STEP;
+    }
+    const lane = lanes?.get(key) ?? 0;
     const groupW = (laneCount - 1) * LANE_STEP;
     return centerX - groupW / 2 - BLOCK_W / 2 + lane * LANE_STEP;
   };
@@ -183,23 +241,35 @@ export default function PayoffChartV3({
       return;
     }
     if (didCenterRef.current) return;
-    el.scrollTop = Math.max(0, spotY - viewportH / 2);
+    el.scrollTop = Math.max(0, spotY + headerH - viewportH / 2);
     didCenterRef.current = true;
-  }, [contentH, viewportH, spotY]);
+  }, [contentH, viewportH, spotY, headerH]);
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (drag && e.buttons === 0) {
       endDrag();
       return;
     }
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const y = e.clientY - rect.top + el.scrollTop;
+    // The SVG's own rect already accounts for scroll and the tenor header, so
+    // client coords map straight into SVG space.
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - svgRect.top;
     if (drag) {
       const price = scale.priceAt(Math.max(plotTop, Math.min(plotBottom, y)));
       const snapped = nearestStrike(price, strikes);
-      if (snapped != null && snapped !== drag.strike) setDrag({ ...drag, strike: snapped });
+      let next = drag;
+      if (snapped != null && snapped !== next.strike) next = { ...next, strike: snapped };
+      if (tenorScale && onLegTenorDrag) {
+        // Column hops engage only past a deliberate-gesture threshold so a
+        // wobbly vertical drag can't change tenor; inside it, stay home.
+        const engaged = Math.abs(e.clientX - drag.startClientX) > TENOR_DRAG_ENGAGE_PX;
+        const home = legs.find((l) => l.id === drag.legId)?.expiry ?? next.expiry;
+        const target = engaged
+          ? (tenorScale.tenorAt(e.clientX - svgRect.left) ?? next.expiry)
+          : home;
+        if (target !== next.expiry) next = { ...next, expiry: target };
+      }
+      if (next !== drag) setDrag(next);
       return;
     }
     setHoverY(y >= plotTop && y <= plotBottom ? y : null);
@@ -213,9 +283,15 @@ export default function PayoffChartV3({
   const endDrag = () => {
     if (drag) {
       justDraggedRef.current = true;
-      if (onLegStrikeDrag) {
-        const original = legs.find((l) => l.id === drag.legId);
-        if (original && original.strike !== drag.strike) onLegStrikeDrag(drag.legId, drag.strike);
+      const original = legs.find((l) => l.id === drag.legId);
+      if (original) {
+        // A tenor hop wins (it carries the dragged strike with it, so a
+        // diagonal move reprices both at once on the target tenor's grid).
+        if (onLegTenorDrag && drag.expiry !== original.expiry) {
+          onLegTenorDrag(drag.legId, drag.expiry, drag.strike);
+        } else if (onLegStrikeDrag && original.strike !== drag.strike) {
+          onLegStrikeDrag(drag.legId, drag.strike);
+        }
       }
     }
     setDrag(null);
@@ -230,13 +306,13 @@ export default function PayoffChartV3({
     // pointerdown, not click); ignore clicks landing on a block so it can't open a
     // picker over it or double-fire with the remove control.
     if ((e.target as Element).closest('[data-leg-id], [data-spread-key]')) return;
-    const el = containerRef.current;
-    if (!el) return;
-    const y = e.clientY - el.getBoundingClientRect().top + el.scrollTop;
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - svgRect.top;
     if (y < plotTop || y > plotBottom) return;
     const snapped = nearestStrike(scale.priceAt(y), strikes);
     if (snapped == null) return;
-    setPicker({ y, strike: snapped });
+    const expiry = tenorScale ? (tenorScale.tenorAt(e.clientX - svgRect.left) ?? undefined) : undefined;
+    setPicker({ y, strike: snapped, expiry });
   };
 
   const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
@@ -252,6 +328,23 @@ export default function PayoffChartV3({
 
   return (
     <div className={s.container} ref={containerRef}>
+      {tenorScale && (
+        <div className={s.tenorHeader} style={{ height: TENOR_HEADER_H }}>
+          {tenorScale.tenors.map((t) => (
+            <span
+              key={t}
+              className={s.tenorLabel}
+              data-tenor={t}
+              data-active={t === activeTenor}
+              style={{ left: tenorScale.xCenter(t) ?? 0 }}
+            >
+              {formatExpiry(t)}
+              <span className={s.tenorDte}>{dteDays(t)}d</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={s.plotWrap}>
       <svg
         className={s.svg}
         style={{ height: contentH }}
@@ -289,6 +382,40 @@ export default function PayoffChartV3({
             />
           );
         })}
+
+        {/* Tenor columns: active-column tint + boundary gridlines */}
+        {tenorScale &&
+          activeTenor &&
+          (() => {
+            const cx = tenorScale.xCenter(activeTenor);
+            return cx == null ? null : (
+              <rect
+                x={cx - tenorScale.colW / 2}
+                y={plotTop}
+                width={tenorScale.colW}
+                height={plotH}
+                fill="var(--accent-primary)"
+                opacity={0.03}
+                pointerEvents="none"
+              />
+            );
+          })()}
+        {tenorScale?.tenors.slice(1).map((t, i) => {
+            const x = plotLeft + (i + 1) * tenorScale.colW;
+            return (
+              <line
+                key={`tcol-${t}`}
+                x1={x}
+                y1={plotTop}
+                x2={x}
+                y2={plotBottom}
+                stroke="var(--border-subtle)"
+                strokeWidth="1"
+                strokeDasharray="2 5"
+                opacity={0.7}
+              />
+            );
+          })}
 
         {/* Strike rungs — every strike on the ladder */}
         {rungs.map((k) => {
@@ -329,7 +456,7 @@ export default function PayoffChartV3({
           if (u.kind === 'spread') {
             const sp = u.spread;
             const key = spreadKey(sp);
-            const x = unitX(key);
+            const x = unitX(key, sp.expiry);
             const spreadActive =
               hoverSpreadKey === key || drag?.legId === sp.longLegId || drag?.legId === sp.shortLegId;
             const cTop = clampY(sp.highStrike, scale.y, plotTop, plotBottom);
@@ -346,7 +473,9 @@ export default function PayoffChartV3({
                 active={spreadActive}
                 dragging={drag?.legId === legId}
                 isNew={!seenIds.current.has(legId)}
-                onDragStart={() => setDrag({ legId, strike: block.strike })}
+                onDragStart={(e) =>
+                  setDrag({ legId, strike: block.strike, expiry: block.expiry, startClientX: e.clientX })
+                }
                 onRemove={onRemoveLeg ? () => requestRemove(legId) : undefined}
                 exiting={removingId === legId}
                 onExitEnd={() => {
@@ -386,7 +515,7 @@ export default function PayoffChartV3({
             <Block
               key={u.block.legId}
               block={u.block}
-              x={unitX(u.block.legId)}
+              x={unitX(u.block.legId, u.block.expiry)}
               yOf={scale.y}
               plotTop={plotTop}
               plotBottom={plotBottom}
@@ -395,7 +524,14 @@ export default function PayoffChartV3({
               isNew={!seenIds.current.has(u.block.legId)}
               onEnter={() => setHoverLegId(u.block.legId)}
               onLeave={() => setHoverLegId(null)}
-              onDragStart={() => setDrag({ legId: u.block.legId, strike: u.block.strike })}
+              onDragStart={(e) =>
+                setDrag({
+                  legId: u.block.legId,
+                  strike: u.block.strike,
+                  expiry: u.block.expiry,
+                  startClientX: e.clientX,
+                })
+              }
               onRemove={onRemoveLeg ? () => requestRemove(u.block.legId) : undefined}
               exiting={removingId === u.block.legId}
               onExitEnd={() => {
@@ -415,7 +551,13 @@ export default function PayoffChartV3({
       )}
 
       {hoveredLeg != null && (
-        <div className={s.card} style={{ left: centerX + BLOCK_W, top: scale.y(hoveredLeg.strike) - 40 }}>
+        <div
+          className={s.card}
+          style={{
+            left: Math.min((tenorScale?.xCenter(hoveredLeg.expiry) ?? centerX) + BLOCK_W, w - 140),
+            top: scale.y(hoveredLeg.strike) - 40,
+          }}
+        >
           <div className={s.cardTitle}>{legToBlock(hoveredLeg).label}</div>
           <div>prem {fmtUsd(hoveredLeg.entryPrice)}</div>
           <div>IV {fmtIv(hoveredLeg.iv)}</div>
@@ -431,8 +573,12 @@ export default function PayoffChartV3({
           if (!lLeg || !sLeg) return null;
           const m = computeMetrics([lLeg, sLeg], spotPrice);
           const midY = scale.y((hoveredSpread.lowStrike + hoveredSpread.highStrike) / 2);
+          const cardLeft = Math.min(
+            (tenorScale?.xCenter(hoveredSpread.expiry) ?? centerX) + BLOCK_W,
+            w - 140,
+          );
           return (
-            <div className={s.card} style={{ left: centerX + BLOCK_W, top: midY - 48 }}>
+            <div className={s.card} style={{ left: cardLeft, top: midY - 48 }}>
               <div className={s.cardTitle}>{hoveredSpread.label} spread</div>
               <div>long +{lLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {lLeg.strike}</div>
               <div>short −{sLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {sLeg.strike}</div>
@@ -445,7 +591,19 @@ export default function PayoffChartV3({
         })()}
 
       {picker && onAddLegAtStrike && (
-        <div className={s.picker} style={{ left: centerX - 70, top: picker.y }}>
+        <div
+          className={s.picker}
+          style={{
+            left: Math.max(
+              4,
+              Math.min(
+                w - 210,
+                (picker.expiry != null ? (tenorScale?.xCenter(picker.expiry) ?? centerX) : centerX) - 70,
+              ),
+            ),
+            top: picker.y,
+          }}
+        >
           {(['buy', 'sell'] as const).flatMap((direction) =>
             (['call', 'put'] as const).map((type) => (
               <button
@@ -454,7 +612,7 @@ export default function PayoffChartV3({
                 data-add={`${direction}-${type}`}
                 className={s.pickerBtn}
                 onClick={() => {
-                  onAddLegAtStrike(picker.strike, type, direction, 1);
+                  onAddLegAtStrike(picker.strike, type, direction, 1, picker.expiry);
                   setPicker(null);
                 }}
               >
@@ -465,6 +623,7 @@ export default function PayoffChartV3({
           )}
         </div>
       )}
+      </div>
 
       {legs.length === 0 && <div className={s.empty}>Spot ladder — click a rung to add a leg</div>}
     </div>
@@ -483,7 +642,7 @@ interface BlockProps {
   exiting: boolean;
   onEnter?: () => void;
   onLeave?: () => void;
-  onDragStart: () => void;
+  onDragStart: (e: React.PointerEvent) => void;
   onRemove?: () => void;
   onExitEnd: () => void;
 }
@@ -536,7 +695,7 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, ex
       onPointerLeave={onLeave}
       onPointerDown={(e) => {
         e.stopPropagation();
-        onDragStart();
+        onDragStart(e);
       }}
     >
       <rect

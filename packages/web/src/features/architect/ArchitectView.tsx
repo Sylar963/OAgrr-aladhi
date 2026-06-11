@@ -14,6 +14,7 @@ import {
   detectStrategy,
   type Leg,
 } from './payoff';
+import { deriveTenorColumns } from './ladder-geometry';
 import { repriceLeg } from './reprice';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
@@ -23,6 +24,7 @@ import SnapshotBanner from './SnapshotBanner';
 import {
   hasUsableSpotCandles,
   isSpotCandleCurrency,
+  useChainsForExpiries,
   useSpotCandles,
   type SpotCandlesResponse,
 } from './queries';
@@ -147,7 +149,7 @@ export default function ArchitectView() {
   const globalExpiry = useAppStore((s) => s.expiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: expiriesData } = useExpiries(underlying);
-  const allExpiries = expiriesData?.expiries ?? [];
+  const allExpiries = useMemo(() => expiriesData?.expiries ?? [], [expiriesData]);
   const [builderExpiry, setBuilderExpiry] = useState('');
 
   useEffect(() => {
@@ -208,24 +210,53 @@ export default function ArchitectView() {
     [routeVenue, activeVenues],
   );
 
+  // ── Tenor axis (V3 lego ladder) ──────────────────────────────────────────
+  // Legs can live on different expiries; the ladder shows them as columns.
+  const legExpiries = useMemo(
+    () => Array.from(new Set(legs.map((l) => l.expiry).filter(Boolean))),
+    [legs],
+  );
+  const tenorColumns = useMemo(
+    () => deriveTenorColumns(allExpiries, legExpiries, builderExpiry),
+    [allExpiries, legExpiries, builderExpiry],
+  );
+  // Chains beyond the live builder expiry: every leg's own tenor (pricing
+  // correctness in all variants) plus, while V3 is up, the visible columns
+  // (so a block dropped on any column reprices instantly). REST-only — the
+  // WS subscription stays on builderExpiry.
+  const extraExpiries = useMemo(() => {
+    const wanted = new Set(legExpiries);
+    if (variant === 'v3') for (const tenor of tenorColumns) wanted.add(tenor);
+    wanted.delete(builderExpiry);
+    return [...wanted].filter((e) => allExpiries.includes(e));
+  }, [legExpiries, tenorColumns, builderExpiry, variant, allExpiries]);
+  const extraChains = useChainsForExpiries(underlying, extraExpiries, activeVenues);
+  const chainFor = useCallback(
+    (expiry: string) => (expiry === builderExpiry ? chain ?? null : extraChains[expiry] ?? null),
+    [builderExpiry, chain, extraChains],
+  );
+
   const unroutableLegs = useMemo(() => {
-    if (routeVenue === BEST_ROUTE_VALUE || !chain || legs.length === 0) return [];
-    return legs.filter(
-      (leg) =>
+    if (routeVenue === BEST_ROUTE_VALUE || legs.length === 0) return [];
+    return legs.filter((leg) => {
+      const tenorChain = chainFor(leg.expiry || builderExpiry);
+      if (!tenorChain) return false; // chain still loading — don't flag yet
+      return (
         repriceLeg(
-          chain,
+          tenorChain,
           [routeVenue],
           {
             type: leg.type,
             direction: leg.direction,
             strike: leg.strike,
-            expiry: builderExpiry,
+            expiry: leg.expiry || builderExpiry,
             quantity: leg.quantity,
           },
           { exactStrike: true },
-        ) == null,
-    );
-  }, [routeVenue, chain, legs, builderExpiry]);
+        ) == null
+      );
+    });
+  }, [routeVenue, legs, chainFor, builderExpiry]);
 
   const routeOptions = useMemo(
     () => [
@@ -293,22 +324,27 @@ export default function ArchitectView() {
 
   const repriceStrategyLeg = useCallback(
     (leg: Leg, patch: Partial<Leg> = {}, exactStrike = false) => {
-      if (!chain || !builderExpiry) return null;
+      // Each leg prices against its OWN tenor's chain — legs can live on
+      // different expiries now that the ladder has a tenor axis. A missing
+      // chain (still loading) returns null so the stored pricing holds.
+      const targetExpiry = patch.expiry ?? leg.expiry ?? builderExpiry;
+      const tenorChain = chainFor(targetExpiry);
+      if (!tenorChain || !targetExpiry) return null;
 
       return repriceLeg(
-        chain,
+        tenorChain,
         pricingVenues,
         {
           type: patch.type ?? leg.type,
           direction: patch.direction ?? leg.direction,
           strike: patch.strike ?? leg.strike,
-          expiry: builderExpiry,
+          expiry: targetExpiry,
           quantity: patch.quantity ?? leg.quantity,
         },
         { exactStrike },
       );
     },
-    [pricingVenues, builderExpiry, chain],
+    [pricingVenues, builderExpiry, chainFor],
   );
 
   const handleLegUpdate = useCallback(
@@ -331,19 +367,40 @@ export default function ArchitectView() {
     [handleLegUpdate],
   );
 
+  const handleLegTenorDrag = useCallback(
+    (legId: string, newExpiry: string, strike: number) => {
+      const leg = legs.find((entry) => entry.id === legId);
+      if (!leg) return;
+      // Strike grids differ across tenors — snap to the target tenor's nearest
+      // strike (exactStrike: false) while repricing on its chain.
+      const repriced = repriceStrategyLeg(leg, { expiry: newExpiry, strike }, false);
+      if (!repriced) return;
+      updateLeg(legId, repriced);
+    },
+    [legs, repriceStrategyLeg, updateLeg],
+  );
+
   const handleAddLegAtStrike = useCallback(
-    (strike: number, type: 'call' | 'put', direction: 'buy' | 'sell', quantity: number) => {
-      if (!chain || !builderExpiry) return;
+    (
+      strike: number,
+      type: 'call' | 'put',
+      direction: 'buy' | 'sell',
+      quantity: number,
+      expiry?: string,
+    ) => {
+      const targetExpiry = expiry ?? builderExpiry;
+      const tenorChain = chainFor(targetExpiry);
+      if (!tenorChain || !targetExpiry) return;
       const repriced = repriceLeg(
-        chain,
+        tenorChain,
         pricingVenues,
-        { type, direction, strike, expiry: builderExpiry, quantity },
+        { type, direction, strike, expiry: targetExpiry, quantity },
         { exactStrike: false },
       );
       if (!repriced) return;
       addLeg(repriced, underlying);
     },
-    [chain, pricingVenues, builderExpiry, addLeg, underlying],
+    [chainFor, pricingVenues, builderExpiry, addLeg, underlying],
   );
 
   const handleRemoveLeg = useCallback((legId: string) => removeLeg(legId), [removeLeg]);
@@ -763,7 +820,10 @@ export default function ArchitectView() {
                       legs={pricedLegs}
                       netDebit={metrics?.netDebit ?? 0}
                       strikes={availableStrikes}
+                      tenors={tenorColumns}
+                      activeTenor={builderExpiry}
                       onLegStrikeDrag={handleLegStrikeDrag}
+                      onLegTenorDrag={handleLegTenorDrag}
                       onAddLegAtStrike={handleAddLegAtStrike}
                       onRemoveLeg={handleRemoveLeg}
                     />

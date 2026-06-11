@@ -215,6 +215,9 @@ export interface LadderSpread {
   highStrike: number;
   quantity: number;
   label: string;
+  /** Each leg's own block geometry — rendered as a real lego block, not a bar. */
+  longBlock: LadderBlock;
+  shortBlock: LadderBlock;
 }
 
 /** A render unit on the ladder: either a lone leg block or a fused spread. */
@@ -269,6 +272,8 @@ export function buildLadderUnits(legs: Leg[]): LadderUnit[] {
         highStrike,
         quantity: lo.quantity,
         label: `${qty}${typeChar} ${lowStrike}/${highStrike}`,
+        longBlock: legToBlock(lo),
+        shortBlock: legToBlock(sh),
       });
     }
   }

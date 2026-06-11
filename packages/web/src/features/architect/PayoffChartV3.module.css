@@ -57,27 +57,10 @@
   animation: legoDropIn var(--transition-base);
 }
 
-/* Fused vertical spread: one corridor with two interactive edges. */
-.spreadBlock {
-  transition: filter var(--transition-fast);
-}
-.spreadBlock[data-active='true'] {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
-}
-.spreadBlock [data-drag-leg] {
-  cursor: grab;
-}
-.spreadBlock [data-drag-leg][data-dragging='true'] {
-  cursor: grabbing;
-}
-.spreadBlock [data-remove-leg] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-fast);
-}
-.spreadBlock[data-active='true'] [data-remove-leg] {
-  opacity: 1;
-  pointer-events: auto;
+/* Fused vertical spread: faint defined-risk corridor connecting the two leg
+   blocks (each rendered as its own lego block). Tweens its geometry on re-flow. */
+.spreadCorridor {
+  transition: y var(--transition-fast), height var(--transition-fast);
 }
 .blockExit {
   animation: legoRemove var(--transition-fast) forwards;
@@ -180,7 +163,7 @@
   .block,
   .blockEnter,
   .blockExit,
-  .spreadBlock,
+  .spreadCorridor,
   .card,
   .picker,
   .zone,

@@ -322,24 +322,64 @@ export default function PayoffChartV3({
         </text>
 
         {/* Blocks — fused spreads + lone legs */}
-        {units.map((u) =>
-          u.kind === 'spread' ? (
-            <SpreadBlock
-              key={spreadKey(u.spread)}
-              spread={u.spread}
-              x={unitX(spreadKey(u.spread))}
-              yOf={scale.y}
-              plotTop={plotTop}
-              plotBottom={plotBottom}
-              active={hoverSpreadKey === spreadKey(u.spread) || drag?.legId === u.spread.longLegId || drag?.legId === u.spread.shortLegId}
-              dragLegId={drag?.legId ?? null}
-              isNew={!seenIds.current.has(u.spread.longLegId) || !seenIds.current.has(u.spread.shortLegId)}
-              onEnter={() => setHoverSpreadKey(spreadKey(u.spread))}
-              onLeave={() => setHoverSpreadKey(null)}
-              onEdgeDragStart={(legId, strike) => setDrag({ legId, strike })}
-              onEdgeRemove={onRemoveLeg ? (legId) => onRemoveLeg(legId) : undefined}
-            />
-          ) : (
+        {units.map((u) => {
+          if (u.kind === 'spread') {
+            const sp = u.spread;
+            const key = spreadKey(sp);
+            const x = unitX(key);
+            const spreadActive =
+              hoverSpreadKey === key || drag?.legId === sp.longLegId || drag?.legId === sp.shortLegId;
+            const cTop = clampY(sp.highStrike, scale.y, plotTop, plotBottom);
+            const cBot = clampY(sp.lowStrike, scale.y, plotTop, plotBottom);
+            const hue = sp.type === 'call' ? 'var(--lego-call)' : 'var(--lego-put)';
+            const legBlock = (block: LadderBlock, legId: string) => (
+              <Block
+                key={legId}
+                block={block}
+                x={x}
+                yOf={scale.y}
+                plotTop={plotTop}
+                plotBottom={plotBottom}
+                active={spreadActive}
+                dragging={drag?.legId === legId}
+                isNew={!seenIds.current.has(legId)}
+                onDragStart={() => setDrag({ legId, strike: block.strike })}
+                onRemove={onRemoveLeg ? () => requestRemove(legId) : undefined}
+                exiting={removingId === legId}
+                onExitEnd={() => {
+                  onRemoveLeg?.(legId);
+                  setRemovingId(null);
+                }}
+              />
+            );
+            return (
+              <g
+                key={key}
+                data-spread-key={key}
+                data-active={spreadActive}
+                onPointerEnter={() => setHoverSpreadKey(key)}
+                onPointerLeave={() => setHoverSpreadKey(null)}
+              >
+                {/* defined-risk corridor connecting the two legs */}
+                <rect
+                  className={s.spreadCorridor}
+                  x={x}
+                  y={cTop}
+                  width={BLOCK_W}
+                  height={Math.max(0, cBot - cTop)}
+                  rx={6}
+                  fill={hue}
+                  fillOpacity={0.08}
+                  stroke={hue}
+                  strokeOpacity={0.4}
+                  strokeDasharray="2 3"
+                />
+                {legBlock(sp.longBlock, sp.longLegId)}
+                {legBlock(sp.shortBlock, sp.shortLegId)}
+              </g>
+            );
+          }
+          return (
             <Block
               key={u.block.legId}
               block={u.block}
@@ -360,8 +400,8 @@ export default function PayoffChartV3({
                 setRemovingId(null);
               }}
             />
-          ),
-        )}
+          );
+        })}
       </svg>
 
       {hoverY != null && hoverReadout != null && hoverLegId == null && hoverSpreadKey == null && (
@@ -438,8 +478,8 @@ interface BlockProps {
   dragging: boolean;
   isNew: boolean;
   exiting: boolean;
-  onEnter: () => void;
-  onLeave: () => void;
+  onEnter?: () => void;
+  onLeave?: () => void;
   onDragStart: () => void;
   onRemove?: () => void;
   onExitEnd: () => void;
@@ -521,91 +561,3 @@ function Block({ block, x, yOf, plotTop, plotBottom, active, dragging, isNew, ex
   );
 }
 
-interface SpreadBlockProps {
-  spread: LadderSpread;
-  x: number;
-  yOf: (price: number) => number;
-  plotTop: number;
-  plotBottom: number;
-  active: boolean;
-  dragLegId: string | null;
-  isNew: boolean;
-  onEnter: () => void;
-  onLeave: () => void;
-  onEdgeDragStart: (legId: string, strike: number) => void;
-  onEdgeRemove?: (legId: string) => void;
-}
-
-/**
- * A fused vertical spread: one corridor block spanning both strikes. The long
- * (owned) edge is a solid bar, the short (sold) edge a red cap — so a vertical
- * reads as defined risk with a capped reward at a glance. Each edge is its own
- * drag handle + remove control, preserving per-leg control.
- */
-function SpreadBlock({
-  spread,
-  x,
-  yOf,
-  plotTop,
-  plotBottom,
-  active,
-  dragLegId,
-  isNew,
-  onEnter,
-  onLeave,
-  onEdgeDragStart,
-  onEdgeRemove,
-}: SpreadBlockProps) {
-  const isCall = spread.type === 'call';
-  const hue = isCall ? 'var(--lego-call)' : 'var(--lego-put)';
-  const yLong = Math.max(plotTop, Math.min(plotBottom, yOf(spread.longStrike)));
-  const yShort = Math.max(plotTop, Math.min(plotBottom, yOf(spread.shortStrike)));
-  const yTop = Math.min(yLong, yShort);
-  const yBottom = Math.max(yLong, yShort);
-  const height = Math.max(MIN_BLOCK_PX, yBottom - yTop);
-  const cx = x + BLOCK_W / 2;
-
-  const edge = (legId: string, strike: number, edgeY: number, color: string) => (
-    <g key={legId}>
-      {/* edge bar: solid hue (long, owned) vs red cap (short, sold) */}
-      <line x1={x} y1={edgeY} x2={x + BLOCK_W} y2={edgeY} stroke={color} strokeWidth={3.5} />
-      <rect
-        data-drag-leg={legId}
-        data-dragging={dragLegId === legId}
-        x={x}
-        y={edgeY - 8}
-        width={BLOCK_W}
-        height={16}
-        fill="transparent"
-        style={{ cursor: 'grab', pointerEvents: 'all' }}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          onEdgeDragStart(legId, strike);
-        }}
-      />
-      {onEdgeRemove && (
-        <g data-remove-leg={legId} style={{ cursor: 'pointer' }} onClick={() => onEdgeRemove(legId)}>
-          <circle cx={x + BLOCK_W - 4} cy={edgeY} r={7} fill="var(--bg-elevated)" stroke="var(--lego-loss)" />
-          <text x={x + BLOCK_W - 4} y={edgeY + 3} fill="var(--lego-loss)" fontSize="9" textAnchor="middle">×</text>
-        </g>
-      )}
-    </g>
-  );
-
-  return (
-    <g
-      className={`${s.spreadBlock} ${isNew ? s.blockEnter : ''}`}
-      data-spread-key={spreadKey(spread)}
-      data-active={active}
-      onPointerEnter={onEnter}
-      onPointerLeave={onLeave}
-    >
-      <rect x={x} y={yTop} width={BLOCK_W} height={height} rx={6} fill={hue} fillOpacity={0.18} stroke={hue} strokeWidth={1.2} />
-      <text x={cx} y={(yTop + yBottom) / 2 + 3} fill="var(--text-primary)" fontSize="10" textAnchor="middle">
-        {spread.label}
-      </text>
-      {edge(spread.longLegId, spread.longStrike, yLong, hue)}
-      {edge(spread.shortLegId, spread.shortStrike, yShort, 'var(--lego-loss)')}
-    </g>
-  );
-}

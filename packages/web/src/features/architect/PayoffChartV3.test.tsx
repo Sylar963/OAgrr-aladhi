@@ -313,24 +313,28 @@ describe('PayoffChartV3 (vertical spread snap)', () => {
     );
   }
 
-  it('fuses a long+short call into ONE spread block (no separate leg blocks)', () => {
+  it('fuses both legs under one spread group, each still a real leg block', () => {
     const { container } = renderSpread();
+    const group = container.querySelector('[data-spread-key]')!;
+    expect(group).not.toBeNull();
     expect(container.querySelectorAll('[data-spread-key]').length).toBe(1);
-    expect(container.querySelectorAll('[data-leg-id]').length).toBe(0);
-    expect(container.textContent).toContain('C 100/110');
+    expect(group.querySelector('[data-leg-id="long"]')).not.toBeNull();
+    expect(group.querySelector('[data-leg-id="short"]')).not.toBeNull();
   });
 
-  it('keeps both edges as independent drag handles', () => {
+  it('renders the short leg with the standalone short look (hatched, not a bar)', () => {
     const { container } = renderSpread();
-    expect(container.querySelector('[data-drag-leg="long"]')).not.toBeNull();
-    expect(container.querySelector('[data-drag-leg="short"]')).not.toBeNull();
+    const shortRect = container.querySelector('[data-leg-id="short"] rect')!;
+    expect(shortRect.getAttribute('fill')).toContain('hatch');
+    const longRect = container.querySelector('[data-leg-id="long"] rect')!;
+    expect(longRect.getAttribute('fill')).toBe('var(--lego-call)');
   });
 
-  it('drags the long edge and fires onLegStrikeDrag for the long leg only', () => {
+  it('drags a leg block and fires onLegStrikeDrag for that leg only', () => {
     const onDrag = vi.fn();
     const { container } = renderSpread({ onLegStrikeDrag: onDrag });
     const svg = container.querySelector('svg')!;
-    fireEvent.pointerDown(container.querySelector('[data-drag-leg="long"]')!, { clientX: 300, clientY: 200 });
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="long"]')!, { clientX: 300, clientY: 200 });
     fireEvent.pointerMove(svg, { clientX: 300, clientY: 360, buttons: 1 });
     fireEvent.pointerUp(svg, { clientX: 300, clientY: 360 });
     expect(onDrag).toHaveBeenCalledTimes(1);
@@ -339,10 +343,11 @@ describe('PayoffChartV3 (vertical spread snap)', () => {
     expect(newStrike).toBeLessThan(100);
   });
 
-  it('removes a single edge (un-snaps to the other leg) via its remove control', () => {
+  it('removes a single leg (un-snaps to the other) via its remove control', () => {
     const onRemove = vi.fn();
     const { container } = renderSpread({ onRemoveLeg: onRemove });
     fireEvent.click(container.querySelector('[data-remove-leg="short"]')!);
+    fireEvent.animationEnd(container.querySelector('[data-leg-id="short"]')!);
     expect(onRemove).toHaveBeenCalledWith('short');
   });
 

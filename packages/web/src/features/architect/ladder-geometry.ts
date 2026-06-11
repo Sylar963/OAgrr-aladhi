@@ -75,6 +75,10 @@ export function deriveLadderDomain(
   lo -= margin;
   hi += margin;
   let rungs = strikes.filter((k) => k >= lo && k <= hi).sort((a, b) => a - b);
+  // Sparse/far grids: if no strike landed in the action window (e.g. empty state
+  // with all listed strikes >6% from spot), fall back to the full list — the cap
+  // below keeps the ones nearest spot, and lo/hi below extend to fit them.
+  if (rungs.length === 0) rungs = [...strikes].sort((a, b) => a - b);
   if (rungs.length > maxRungs) {
     rungs = rungs
       .slice()

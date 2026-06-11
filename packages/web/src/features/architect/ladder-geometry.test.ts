@@ -114,6 +114,20 @@ describe('deriveLadderDomain', () => {
     expect(d.rungs).toContain(100);
   });
 
+  it('falls back to nearest strikes when none land in the action window (sparse far grid)', () => {
+    // Empty state, all listed strikes >6% from spot: the window [94,106] misses
+    // them all — the ladder must still show rungs and stretch to include them.
+    const d = deriveLadderDomain([], [], 100, [150, 160, 170]);
+    expect(d.rungs).toEqual([150, 160, 170]);
+    expect(d.priceMax).toBeGreaterThanOrEqual(170);
+    expect(d.priceMin).toBeLessThanOrEqual(100); // spot stays in view too
+
+    // Dense far grid: fallback still respects the nearest-spot cap.
+    const dense = Array.from({ length: 100 }, (_, i) => 150 + i);
+    const capped = deriveLadderDomain([], [], 100, dense, 10);
+    expect(capped.rungs).toEqual(Array.from({ length: 10 }, (_, i) => 150 + i));
+  });
+
   it('caps rung count for dense chains, keeping the ones nearest spot', () => {
     const dense = Array.from({ length: 200 }, (_, i) => 100 + i); // 100..299
     const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));

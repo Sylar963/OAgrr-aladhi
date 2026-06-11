@@ -1205,16 +1205,24 @@
   color: var(--text-secondary);
 }
 
+/* Active variant pills share one treatment (the V2 look); only the hue
+   changes: V1 white, V2 red, V3 blue (--color-info, the app's blue). */
 .variantBtn[data-active="true"][data-variant="v1"] {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #FFFFFF 0%, #C7CCD6 100%);
+  color: #14161C;
+  box-shadow: 0 1px 6px rgba(255, 255, 255, 0.25);
 }
 
 .variantBtn[data-active="true"][data-variant="v2"] {
   background: linear-gradient(135deg, #CB3855 0%, #8B1E2E 100%);
   color: #FFFFFF;
   box-shadow: 0 1px 6px rgba(203, 56, 85, 0.35);
+}
+
+.variantBtn[data-active="true"][data-variant="v3"] {
+  background: linear-gradient(135deg, #88B6FF 0%, #2D5FB8 100%);
+  color: #FFFFFF;
+  box-shadow: 0 1px 6px rgba(136, 182, 255, 0.35);
 }
 
 .chartPanel[data-variant="v2"] {

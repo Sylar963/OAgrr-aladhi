@@ -8,6 +8,8 @@ const GhostPathSnapshotSchema = z.object({
   isProfit: z.boolean(),
   targetPrice: z.number(),
   pnlAtExpiry: z.number(),
+  // Optional so snapshots captured before fractal shapes existed still load.
+  shape: z.array(z.number()).optional(),
 });
 
 const GhostSnapshotSchema = z.object({

@@ -15,7 +15,12 @@ import {
   type Leg,
 } from './payoff';
 import { deriveTenorColumns } from './ladder-geometry';
-import { computeGhostPaths, buildPathCandles, type GhostPath } from './ghost-paths';
+import {
+  computeGhostPaths,
+  buildPathCandles,
+  buildFractalPathCandles,
+  type GhostPath,
+} from './ghost-paths';
 import {
   listSnapshots,
   addSnapshot,
@@ -535,8 +540,16 @@ export default function ArchitectView() {
         nearestExpiryMs,
         lastBarMs,
         candleSpec.resolutionSec,
+        visibleSpotCandles?.candles ?? [],
       ),
-    [pricedLegs, spotPrice, nearestExpiryMs, lastBarMs, candleSpec.resolutionSec],
+    [
+      pricedLegs,
+      spotPrice,
+      nearestExpiryMs,
+      lastBarMs,
+      candleSpec.resolutionSec,
+      visibleSpotCandles?.candles,
+    ],
   );
 
   const selectedSnapshot = useMemo(
@@ -552,13 +565,24 @@ export default function ArchitectView() {
       isProfit: p.isProfit,
       targetPrice: p.targetPrice,
       pnlAtExpiry: p.pnlAtExpiry,
-      candles: buildPathCandles(
-        selectedSnapshot.spotAtSnapshot,
-        p.targetPrice,
-        selectedSnapshot.createdAt,
-        selectedSnapshot.expiryMs,
-        selectedSnapshot.resolutionSec,
-      ),
+      shape: p.shape ?? [],
+      candles:
+        p.shape && p.shape.length > 0
+          ? buildFractalPathCandles(
+              selectedSnapshot.spotAtSnapshot,
+              p.targetPrice,
+              selectedSnapshot.createdAt,
+              selectedSnapshot.expiryMs,
+              selectedSnapshot.resolutionSec,
+              p.shape,
+            )
+          : buildPathCandles(
+              selectedSnapshot.spotAtSnapshot,
+              p.targetPrice,
+              selectedSnapshot.createdAt,
+              selectedSnapshot.expiryMs,
+              selectedSnapshot.resolutionSec,
+            ),
     }));
   }, [selectedSnapshot, liveGhostPaths]);
 
@@ -582,6 +606,7 @@ export default function ArchitectView() {
         isProfit: p.isProfit,
         targetPrice: p.targetPrice,
         pnlAtExpiry: p.pnlAtExpiry,
+        shape: p.shape,
       })),
     };
     setSnapshots(addSnapshot(snap));

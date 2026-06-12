@@ -57,4 +57,17 @@ describe('snapshots-store', () => {
     localStorage.setItem('oggregator.architect.ghostSnapshots', JSON.stringify([{ id: 1 }]));
     expect(listSnapshots()).toEqual([]);
   });
+
+  it('persists a per-path fractal shape and still loads paths without one', () => {
+    addSnapshot(
+      snap({
+        id: 'shaped',
+        paths: [
+          { kind: 'up', isProfit: true, targetPrice: 130, pnlAtExpiry: 25, shape: [0, 0.1, 0] },
+        ],
+      }),
+    );
+    expect(listSnapshots()[0]!.paths[0]!.shape).toEqual([0, 0.1, 0]);
+    expect(snap().paths[0]!.shape).toBeUndefined();
+  });
 });

@@ -438,6 +438,34 @@ describe('PayoffChartV3 (placement)', () => {
     expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
   });
 
+  it('keeps the picker open when the pointer crosses from the svg onto it', () => {
+    // The picker overlay is a sibling of the svg: moving the mouse onto it
+    // fires the svg's pointerleave. That must NOT dismiss the picker (it made
+    // the buttons unclickable in real browsers); leaving the whole chart does.
+    const onAdd = vi.fn();
+    const { container } = render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={[]}
+        spotPrice={100}
+        legs={[]}
+        netDebit={0}
+        strikes={[90, 95, 100, 105, 110]}
+        onAddLegAtStrike={onAdd}
+      />,
+    );
+    const svg = container.querySelector('svg')!;
+    fireEvent.click(svg, { clientX: 300, clientY: 200 });
+    const pickerBtn = container.querySelector('[data-add="buy-call"]')!;
+    expect(pickerBtn).not.toBeNull();
+    // Pointer crosses svg → picker (stays inside the chart container).
+    fireEvent.pointerLeave(svg, { relatedTarget: pickerBtn });
+    expect(container.querySelector('[data-add="buy-call"]')).not.toBeNull();
+    // Pointer leaves the chart entirely → picker closes.
+    fireEvent.pointerLeave(container.firstElementChild!, { relatedTarget: document.body });
+    expect(container.querySelector('[data-add="buy-call"]')).toBeNull();
+  });
+
   it('passes no expiry from the picker when there is no tenor axis', () => {
     const onAdd = vi.fn();
     const { container } = render(

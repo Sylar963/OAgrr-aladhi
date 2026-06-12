@@ -22,6 +22,8 @@ import styles from './VenueSlideover.module.css';
 interface VenueSlideoverProps {
   legs: Leg[];
   chain: EnrichedChainResponse | null;
+  /** Per-tenor chain resolver — legs can live on different expiries. */
+  chainFor?: (expiry: string) => EnrichedChainResponse | null;
   activeVenues: string[];
   onClose: () => void;
   onSendToPaper?: (routing: StrategyRouting) => void;
@@ -77,6 +79,7 @@ function fmtSize(v: number | null): string {
 export default function VenueSlideover({
   legs,
   chain,
+  chainFor,
   activeVenues,
   onClose,
   onSendToPaper,
@@ -87,18 +90,28 @@ export default function VenueSlideover({
 
   const legInputs = useMemo<LegInput[]>(() => {
     if (!chain) return [];
-    return legs.map((leg) => ({
-      legId: leg.id,
-      direction: leg.direction,
-      quantity: leg.quantity,
-      venues: activeVenues
-        .map((venueId) => {
-          const e = buildVenueExecution(chain, venueId, leg);
-          return e ? { venue: venueId, exec: e } : null;
-        })
-        .filter((v): v is { venue: string; exec: VenueExecution } => v != null),
-    }));
-  }, [chain, legs, activeVenues]);
+    return legs.map((leg) => {
+      // Quotes must come from the leg's own tenor — looking the strike up on
+      // the builder expiry's chain would price the wrong instrument (or drop
+      // the leg) for cross-tenor strategies. Tenor chain not loaded yet → no
+      // venues, which the routing badges surface as unroutable rather than
+      // silently mispriced from the wrong expiry.
+      const legChain = chainFor ? chainFor(leg.expiry) : chain;
+      return {
+        legId: leg.id,
+        direction: leg.direction,
+        quantity: leg.quantity,
+        venues: legChain
+          ? activeVenues
+              .map((venueId) => {
+                const e = buildVenueExecution(legChain, venueId, leg);
+                return e ? { venue: venueId, exec: e } : null;
+              })
+              .filter((v): v is { venue: string; exec: VenueExecution } => v != null)
+          : [],
+      };
+    });
+  }, [chain, chainFor, legs, activeVenues]);
 
   useEffect(() => {
     if (legInputs.length === 0) return;

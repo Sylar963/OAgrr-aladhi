@@ -235,6 +235,10 @@ export function deriveTenorColumns(
     loIdx = 0;
     hiIdx = Math.min(maxCols, allExpiries.length) - 1;
   }
+  // A wide leg-tenor span would otherwise pull in every listed expiry between
+  // the extremes (N columns → N chain polls and sliver-thin columns). Keep just
+  // the tenors that are actually required when the span overflows maxCols.
+  if (hiIdx - loIdx + 1 > maxCols) return [...known, ...unknown];
   while (hiIdx - loIdx + 1 < maxCols && (hiIdx < allExpiries.length - 1 || loIdx > 0)) {
     if (hiIdx < allExpiries.length - 1) hiIdx++;
     else loIdx--;

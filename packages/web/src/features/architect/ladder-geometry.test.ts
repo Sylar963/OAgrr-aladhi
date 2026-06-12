@@ -345,11 +345,11 @@ describe('deriveTenorColumns', () => {
     expect(deriveTenorColumns(all, [], 'e8')).toEqual(['e4', 'e5', 'e6', 'e7', 'e8']);
   });
 
-  it('keeps every leg expiry even when the range exceeds maxCols', () => {
-    // Legs span e1..e6 (6 tenors > maxCols 5) — all six stay visible.
-    expect(deriveTenorColumns(all, ['e1', 'e6'], 'e3')).toEqual([
-      'e1', 'e2', 'e3', 'e4', 'e5', 'e6',
-    ]);
+  it('keeps every leg expiry when the span exceeds maxCols, without filler tenors', () => {
+    // Legs span e1..e6 (6 tenors > maxCols 5): the required tenors stay
+    // visible, but the unrelated expiries between them are NOT pulled in
+    // (each column costs a chain poll and horizontal space).
+    expect(deriveTenorColumns(all, ['e1', 'e6'], 'e3')).toEqual(['e1', 'e3', 'e6']);
   });
 
   it('appends a stale leg expiry the venue no longer lists', () => {

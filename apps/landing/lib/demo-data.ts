@@ -36,6 +36,7 @@ export interface FaqItem {
 export interface Venue {
   slug: string;
   name: string;
+  logo: string;
 }
 
 export interface ShowcaseFrame {
@@ -263,14 +264,14 @@ export const testimonials = [
 ] as const;
 
 export const venues: Venue[] = [
-  { slug: 'deribit', name: 'Deribit' },
-  { slug: 'okx', name: 'OKX' },
-  { slug: 'binance', name: 'Binance' },
-  { slug: 'bybit', name: 'Bybit' },
-  { slug: 'thalex', name: 'Thalex' },
-  { slug: 'derive', name: 'Derive' },
-  { slug: 'coincall', name: 'Coincall' },
-  { slug: 'gate', name: 'Gate.io' },
+  { slug: 'deribit', name: 'Deribit', logo: '/venues/deribit.svg' },
+  { slug: 'okx', name: 'OKX', logo: '/venues/okx.svg' },
+  { slug: 'binance', name: 'Binance', logo: '/venues/binance.svg' },
+  { slug: 'bybit', name: 'Bybit', logo: '/venues/bybit.svg' },
+  { slug: 'thalex', name: 'Thalex', logo: '/venues/thalex.svg' },
+  { slug: 'derive', name: 'Derive', logo: '/venues/derive.svg' },
+  { slug: 'coincall', name: 'Coincall', logo: '/venues/coincall.png' },
+  { slug: 'gate', name: 'Gate.io', logo: '/venues/gateio.svg' },
 ] as const;
 
 export const showcaseFrames: ShowcaseFrame[] = [

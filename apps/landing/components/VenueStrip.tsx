@@ -3,24 +3,26 @@
 import { useState } from "react";
 
 import { landingCopy } from "@/lib/copy";
+import type { Venue } from "@/lib/demo-data";
 import { venues } from "@/lib/demo-data";
 
-function VenueLogo({ slug, name }: { slug: string; name: string }) {
+function VenueLogo({ venue }: { venue: Venue }) {
   const [errored, setErrored] = useState(false);
 
   if (errored) {
     return (
       <span className="font-[var(--font-heading)] text-base uppercase tracking-[0.18em] text-[var(--landing-muted-strong)] transition group-hover:text-[var(--landing-text-strong)]">
-        {name}
+        {venue.name}
       </span>
     );
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/venues/${slug}.svg`}
-      alt={name}
+      src={venue.logo}
+      alt={venue.name}
+      width={120}
+      height={28}
       onError={() => setErrored(true)}
       className="h-7 w-auto opacity-70 grayscale brightness-200 transition group-hover:opacity-100 sm:h-8"
     />
@@ -49,7 +51,7 @@ export function VenueStrip() {
             key={venue.slug}
             className="group flex items-center justify-center"
           >
-            <VenueLogo slug={venue.slug} name={venue.name} />
+            <VenueLogo venue={venue} />
           </li>
         ))}
       </ul>

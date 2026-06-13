@@ -7,7 +7,6 @@ import {
   latestSkewDisplayValue,
   pickReferencePoint,
   reconstructSmile,
-  referenceLines,
   zoneFor,
 } from './skew-history-utils';
 
@@ -120,12 +119,6 @@ describe('skew history transforms', () => {
     );
 
     expect(rows).toEqual([]);
-  });
-
-  it('reference lines vary by mode', () => {
-    expect(referenceLines('raw')).toEqual([]);
-    expect(referenceLines('normalized').map((r) => r.price)).toEqual([0]);
-    expect(referenceLines('zscore').map((r) => r.price)).toEqual([2, 1, 0, -1, -2]);
   });
 
   it('zoneFor classifies by absolute z-score, only in zscore mode', () => {

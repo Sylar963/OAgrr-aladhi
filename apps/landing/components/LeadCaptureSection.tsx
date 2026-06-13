@@ -4,11 +4,13 @@ import { useState, type FormEvent } from "react";
 
 import { landingCopy } from "@/lib/copy";
 import { leadSchema } from "@/lib/lead-schema";
+import { contactEmail } from "@/lib/links";
 
 const leadSource = "landing-hero";
 
 export function LeadCaptureSection() {
   const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -33,7 +35,7 @@ export function LeadCaptureSection() {
       const response = await fetch("/api/leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ ...parsed.data, website }),
       });
 
       if (!response.ok) {
@@ -134,7 +136,7 @@ export function LeadCaptureSection() {
                 </span>
                 <input
                   id="landing-email"
-                  type="text"
+                  type="email"
                   inputMode="email"
                   autoComplete="email"
                   value={email}
@@ -159,12 +161,25 @@ export function LeadCaptureSection() {
                 </span>
               </div>
 
+              <div aria-hidden="true" className="sr-only">
+                <label htmlFor="landing-website">Website</label>
+                <input
+                  id="landing-website"
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                />
+              </div>
+
               <button
                 type="submit"
                 className="mt-8 flex items-center justify-between gap-4 self-start border border-[var(--landing-accent)] bg-[var(--landing-accent)] px-8 py-5 font-[var(--font-mono)] text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--landing-bg)] transition hover:translate-x-1 hover:bg-[#ffffff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[var(--landing-accent)] disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isSubmitting}
               >
-                <span>{isSubmitting ? "Submitting" : landingCopy.cta.eyebrow}</span>
+                <span>{isSubmitting ? "Submitting" : landingCopy.cta.button}</span>
                 <span aria-hidden className="text-base">→</span>
               </button>
 
@@ -184,11 +199,23 @@ export function LeadCaptureSection() {
                 }
               >
                 {status === "success"
-                  ? "You are on the list. We will reach out with onboarding details and release updates."
+                  ? landingCopy.cta.success
                   : status === "error"
                     ? errorMessage
                     : "Desk-grade product updates, routed with restraint."}
               </p>
+
+              {contactEmail ? (
+                <p className="mt-4 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
+                  prefer email?{" "}
+                  <a
+                    className="text-[var(--landing-text-strong)] underline decoration-white/30 underline-offset-4"
+                    href={`mailto:${contactEmail}`}
+                  >
+                    {contactEmail}
+                  </a>
+                </p>
+              ) : null}
             </form>
           </div>
         </div>

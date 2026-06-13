@@ -48,6 +48,9 @@ export const landingCopy = {
     description: 'For desks, market makers, and execution teams.',
     placeholder: 'desk@fund.com',
     helper: 'Early access. No newsletter.',
+    button: 'Request Access',
+    success:
+      'You are on the list. Expect onboarding details from the desk — typically within a few days.',
     trust: ['Early access', 'Desk-grade support', 'Sub-second feeds'],
   },
   footer: {

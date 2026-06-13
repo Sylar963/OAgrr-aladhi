@@ -29,7 +29,7 @@ describe('POST /api/leads', () => {
         email: 'desk@example.com',
         source: 'landing-hero',
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.1' },
     });
 
     const response = await POST(request);
@@ -58,7 +58,7 @@ describe('POST /api/leads', () => {
         email: 'bad-email',
         source: 'landing-hero',
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.2' },
     });
 
     const response = await POST(request);
@@ -76,7 +76,7 @@ describe('POST /api/leads', () => {
     const request = new Request('http://localhost/api/leads', {
       method: 'POST',
       body: JSON.stringify({ email: 'desk@example.com', source: 'landing-hero' }),
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.3' },
     });
 
     const response = await POST(request);
@@ -98,7 +98,7 @@ describe('POST /api/leads', () => {
     const request = new Request('http://localhost/api/leads', {
       method: 'POST',
       body: JSON.stringify({ email: 'desk@example.com', source: 'landing-hero' }),
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.4' },
     });
 
     const response = await POST(request);
@@ -107,5 +107,36 @@ describe('POST /api/leads', () => {
     expect(fetchMock).toHaveBeenCalled();
     const stored = await readFile(leadFilePath, 'utf8');
     expect(stored).toContain('desk@example.com');
+  });
+
+  it('fakes success and stores nothing when the honeypot is filled', async () => {
+    const request = new Request('http://localhost/api/leads', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'bot@example.com',
+        source: 'landing-hero',
+        website: 'http://spam.example',
+      }),
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.5' },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    await expect(readFile(leadFilePath, 'utf8')).rejects.toThrow();
+  });
+
+  it('rate limits a single IP after 5 requests in the window', async () => {
+    const makeRequest = () =>
+      new Request('http://localhost/api/leads', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'desk@example.com', source: 'landing-hero' }),
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.0.0.6' },
+      });
+
+    for (let i = 0; i < 5; i += 1) {
+      expect((await POST(makeRequest())).status).toBe(201);
+    }
+    expect((await POST(makeRequest())).status).toBe(429);
   });
 });

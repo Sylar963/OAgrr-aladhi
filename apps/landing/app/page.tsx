@@ -42,7 +42,7 @@ export default async function HomePage() {
   const snapshot = await getMarketSnapshot();
 
   return (
-    <main className="landing-page min-h-screen bg-[var(--landing-bg)] text-[var(--landing-text)]">
+    <div className="landing-page min-h-screen bg-[var(--landing-bg)] text-[var(--landing-text)]">
       <script
         type="application/ld+json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD built from local constants
@@ -53,20 +53,28 @@ export default async function HomePage() {
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD built from local constants
         dangerouslySetInnerHTML={{ __html: toJsonLd(orgJsonLd) }}
       />
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:border focus:border-[var(--landing-border-strong)] focus:bg-[var(--landing-panel-strong)] focus:px-4 focus:py-2"
+      >
+        Skip to content
+      </a>
       <TopTicker spots={snapshot.spots} />
       <LandingHeader />
-      <HeroTerminalSection />
-      <TerminalShowcase />
-      <SectionReveal>
-        <HowItWorksSection />
-      </SectionReveal>
-      <SectionReveal>
-        <FeatureBentoSection />
-      </SectionReveal>
-      <FaqSection />
-      <LeadCaptureSection />
-      <VenueStrip />
+      <main id="main">
+        <HeroTerminalSection />
+        <TerminalShowcase />
+        <SectionReveal>
+          <HowItWorksSection />
+        </SectionReveal>
+        <SectionReveal>
+          <FeatureBentoSection />
+        </SectionReveal>
+        <FaqSection />
+        <LeadCaptureSection />
+        <VenueStrip />
+      </main>
       <Footer />
-    </main>
+    </div>
   );
 }

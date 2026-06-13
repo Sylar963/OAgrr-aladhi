@@ -41,9 +41,9 @@ export function VenueStrip() {
         <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
           ◢ {landingCopy.venues.eyebrow.toLowerCase()}
         </p>
-        <p className="max-w-md font-[var(--font-heading)] text-[clamp(1.4rem,2.4vw,2rem)] font-medium leading-[1.05] tracking-[-0.03em] text-[var(--landing-text-strong)]">
+        <h2 className="max-w-md font-[var(--font-heading)] text-[clamp(1.4rem,2.4vw,2rem)] font-medium leading-[1.05] tracking-[-0.03em] text-[var(--landing-text-strong)]">
           {landingCopy.venues.title}
-        </p>
+        </h2>
       </div>
 
       <ul className="mt-10 grid grid-cols-2 items-center gap-x-8 gap-y-10 sm:grid-cols-4 lg:grid-cols-8">

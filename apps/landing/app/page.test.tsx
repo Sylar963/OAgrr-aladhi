@@ -1,6 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach } from 'vitest';
 
 import HomePage from './page';
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('landing page', () => {
   it('renders the app-like landing architecture', async () => {
@@ -33,5 +38,17 @@ describe('landing page', () => {
 
     expect(scripts.some((s) => s['@type'] === 'FAQPage')).toBe(true);
     expect(scripts.some((s) => s['@type'] === 'Organization')).toBe(true);
+  });
+
+  it('exposes banner/main/contentinfo landmarks and a skip link', async () => {
+    render(await HomePage());
+
+    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toBeInTheDocument();
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /skip to content/i })).toHaveAttribute(
+      'href',
+      '#main',
+    );
   });
 });

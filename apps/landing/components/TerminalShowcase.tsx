@@ -206,6 +206,7 @@ export function TerminalShowcase() {
       style={{ height: `${total * 100}vh` }}
     >
       <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#080b0d]">
+        <h2 className="sr-only">{landingCopy.showcase.title}</h2>
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:148px_148px] opacity-25"

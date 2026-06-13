@@ -58,6 +58,7 @@ export function LeadCaptureSection() {
   return (
     <section
       id="access"
+      aria-label={landingCopy.cta.title}
       className="relative isolate scroll-mt-24 overflow-hidden border-y border-white/8 bg-[#0a0c0f]"
     >
       <div
@@ -70,7 +71,7 @@ export function LeadCaptureSection() {
       />
 
       <div className="landing-container relative px-6 py-24 sm:px-10 sm:py-32">
-        <header className="flex flex-col gap-6 border-b border-white/10 pb-10 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+        <div className="flex flex-col gap-6 border-b border-white/10 pb-10 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
           <div className="flex items-baseline gap-4">
             <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
               ◢ {landingCopy.cta.eyebrow.toLowerCase()}
@@ -87,7 +88,7 @@ export function LeadCaptureSection() {
               </span>
             ))}
           </div>
-        </header>
+        </div>
 
         <div className="mt-12 grid gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20">
           <div>

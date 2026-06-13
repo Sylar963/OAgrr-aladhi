@@ -14,6 +14,13 @@ import { getMarketSnapshot } from "@/lib/market-snapshot";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oggregator.xyz";
 
+// JSON.stringify does not escape "<", so a future FAQ string containing "</script>"
+// could break out of the script element. Escaping "<" closes that class of bug;
+// JSON parsers read < as "<" transparently.
+function toJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
 const faqJsonLd = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -39,12 +46,12 @@ export default async function HomePage() {
       <script
         type="application/ld+json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD built from local constants
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: toJsonLd(faqJsonLd) }}
       />
       <script
         type="application/ld+json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD built from local constants
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: toJsonLd(orgJsonLd) }}
       />
       <TopTicker spots={snapshot.spots} />
       <LandingHeader />

@@ -42,6 +42,13 @@ export const landingCopy = {
     title: 'Answers before the call.',
     description: 'What desks ask before onboarding.',
   },
+  trust: {
+    eyebrow: 'Engineering proof',
+    title: 'Built to be checked.',
+    description:
+      'No fabricated metrics. No anonymous quotes. The claims on this page are properties of the system — verify each one inside the terminal.',
+    contactLabel: 'Talk to the desk',
+  },
   cta: {
     eyebrow: 'Request access',
     title: 'One source of truth.',

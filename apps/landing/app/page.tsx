@@ -1,6 +1,7 @@
 import { Footer } from "@/components/Footer";
 import { FaqSection } from "@/components/FaqSection";
 import { FeatureBentoSection } from "@/components/FeatureBentoSection";
+import { TrustSection } from "@/components/TrustSection";
 import { HeroTerminalSection } from "@/components/HeroTerminalSection";
 import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { LandingHeader } from "@/components/LandingHeader";
@@ -70,6 +71,9 @@ export default async function HomePage() {
         </SectionReveal>
         <SectionReveal>
           <FeatureBentoSection />
+        </SectionReveal>
+        <SectionReveal>
+          <TrustSection />
         </SectionReveal>
         <FaqSection />
         <LeadCaptureSection />

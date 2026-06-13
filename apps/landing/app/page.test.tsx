@@ -23,4 +23,15 @@ describe('landing page', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /request access/i }).length).toBeGreaterThan(0);
   });
+
+  it('embeds FAQPage and Organization JSON-LD', async () => {
+    const { container } = render(await HomePage());
+
+    const scripts = Array.from(
+      container.querySelectorAll('script[type="application/ld+json"]'),
+    ).map((node) => JSON.parse(node.textContent ?? '{}'));
+
+    expect(scripts.some((s) => s['@type'] === 'FAQPage')).toBe(true);
+    expect(scripts.some((s) => s['@type'] === 'Organization')).toBe(true);
+  });
 });

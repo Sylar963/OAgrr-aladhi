@@ -1,10 +1,3 @@
-export interface TickerItem {
-  label: string;
-  value: string;
-  change: string;
-  direction: 'up' | 'down' | 'flat';
-}
-
 export interface WorkflowStep {
   id: string;
   label: string;
@@ -46,65 +39,6 @@ export interface ShowcaseFrame {
   title: string;
   detail: string;
 }
-
-export const tickerItems: TickerItem[] = [
-  { label: 'BTC 30D IV', value: '54.2%', change: '+1.8%', direction: 'up' },
-  { label: 'ETH 25D RR', value: '-3.6', change: '-0.4', direction: 'down' },
-  { label: 'Latency Budget', value: '420ms', change: 'stable', direction: 'flat' },
-  { label: 'Best Venue Edge', value: '14 bps', change: '+3 bps', direction: 'up' },
-  { label: 'Cross-Venue Depth', value: '$24.6M', change: '+2.2%', direction: 'up' },
-  { label: 'Feed Health', value: '99.98%', change: 'nominal', direction: 'flat' },
-];
-
-export const terminalMetrics = [
-  { label: 'Refresh', value: 'Sub-second', tone: 'accent' },
-  { label: 'Venues', value: '07 connected', tone: 'neutral' },
-  { label: 'Signals', value: '12 overlays', tone: 'accent' },
-] as const;
-
-export const terminalRows = [
-  {
-    symbol: 'BTC-27JUN26-120000-C',
-    midIv: '54.2%',
-    skew: '+1.4',
-    venue: 'Deribit',
-    edge: '+14 bps',
-  },
-  {
-    symbol: 'BTC-27JUN26-110000-P',
-    midIv: '57.8%',
-    skew: '-3.6',
-    venue: 'OKX',
-    edge: '+9 bps',
-  },
-  {
-    symbol: 'ETH-29AUG26-7000-C',
-    midIv: '63.1%',
-    skew: '+0.8',
-    venue: 'Binance',
-    edge: '+11 bps',
-  },
-  {
-    symbol: 'SOL-31JUL26-250-C',
-    midIv: '71.4%',
-    skew: '+2.2',
-    venue: 'Bybit',
-    edge: '+6 bps',
-  },
-] as const;
-
-export const routeCandidates = [
-  { venue: 'Deribit', fill: '42%', latency: '118ms', status: 'primary' },
-  { venue: 'OKX', fill: '31%', latency: '146ms', status: 'secondary' },
-  { venue: 'Binance', fill: '27%', latency: '156ms', status: 'secondary' },
-] as const;
-
-export const commandSequence = [
-  'load btc front-week skew',
-  'overlay internal-risk-signal',
-  'compare deribit okx binance',
-  'route best executable venue',
-] as const;
 
 export const workflowSteps: WorkflowStep[] = [
   {
@@ -228,20 +162,6 @@ export const marketContextRows = [
   { label: 'BNB OPEN INTEREST', value: '$184M', detail: 'cross-venue monitored' },
 ] as const;
 
-export const deskSnippet = [
-  "venue: 'deribit'",
-  "altVenue: 'okx'",
-  "bestVenueSelection: 'deribit'",
-  'edgeBps: 14',
-  'normalizedIv: 0.542',
-] as const;
-
-export const dataSnippet = [
-  "subscribe('BTC-27JUN26-120000-C')",
-  "fetch('/api/quotes?venue=okx')",
-  "mergeFeed('internal-risk-signal')",
-] as const;
-
 export const testimonials = [
   {
     quote:
@@ -303,11 +223,4 @@ export const showcaseFrames: ShowcaseFrame[] = [
     title: 'Venue-tagged tape.',
     detail: 'Quotes and fills stream with their source venue end-to-end.',
   },
-] as const;
-
-export const surfaceStats = [
-  { label: 'Data points', value: '91 deltas' },
-  { label: 'Venues', value: '7 venues' },
-  { label: 'Refresh', value: 'sub-second' },
-  { label: 'Interaction', value: 'interactive tenor map' },
 ] as const;

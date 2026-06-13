@@ -70,11 +70,3 @@ export const landingCopy = {
     ],
   },
 } as const;
-
-export const heroCopy = {
-  eyebrow: landingCopy.hero.eyebrow,
-  headlineA: 'The options terminal',
-  headlineB: 'for fragmented markets.',
-  cta: landingCopy.hero.primaryCta,
-  docs: landingCopy.nav.faq,
-} as const;

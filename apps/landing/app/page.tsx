@@ -63,8 +63,11 @@ export default async function HomePage() {
       <TopTicker spots={snapshot.spots} />
       <LandingHeader />
       <main id="main">
+        {/* Hero, showcase, and FAQ must stay unwrapped: a transformed ancestor kills their sticky positioning. */}
         <HeroTerminalSection />
-        <VenueStrip />
+        <SectionReveal>
+          <VenueStrip />
+        </SectionReveal>
         <TerminalShowcase />
         <SectionReveal>
           <HowItWorksSection />
@@ -76,7 +79,9 @@ export default async function HomePage() {
           <TrustSection />
         </SectionReveal>
         <FaqSection />
-        <LeadCaptureSection />
+        <SectionReveal>
+          <LeadCaptureSection />
+        </SectionReveal>
       </main>
       <Footer />
     </div>

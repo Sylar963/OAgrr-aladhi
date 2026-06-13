@@ -1,35 +1,36 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { useState, useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-export function SectionReveal({
-  children,
-}: Readonly<{ children: ReactNode }>) {
+const container = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.12, delayChildren: 0.05 } },
+} as const;
+
+const item = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
+} as const;
+
+// Rendered hidden from SSR and revealed in view — no mounted-gate, so the old
+// post-hydration disappear/reappear flash is gone. All wrapped sections sit
+// below the 240svh hero, so nothing visible ever starts hidden.
+export function SectionReveal({ children }: Readonly<{ children: ReactNode }>) {
   const prefersReducedMotion = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (
-    prefersReducedMotion ||
-    !mounted ||
-    typeof window === "undefined" ||
-    typeof window.IntersectionObserver === "undefined"
-  ) {
+  if (prefersReducedMotion) {
     return <>{children}</>;
   }
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial="hidden"
+      whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
+      variants={container}
     >
-      {children}
+      <motion.div variants={item}>{children}</motion.div>
     </motion.div>
   );
 }

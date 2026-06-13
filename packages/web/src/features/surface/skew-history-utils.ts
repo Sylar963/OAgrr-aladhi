@@ -116,3 +116,35 @@ export function zoneFor(value: number | null, mode: SkewDisplayMode): SkewZone |
   if (abs >= 1) return 'stretched';
   return 'normal';
 }
+
+export interface SmilePoint {
+  /** Delta-axis position in [0,1]: put |δ| on the left, 1−callδ on the right. */
+  x: number;
+  /** IV in vol points (fraction × 100). */
+  iv: number;
+  label: string;
+}
+
+const DELTA_X = { put10: 0.1, put25: 0.25, atm: 0.5, call25: 0.75, call10: 0.9 };
+
+export function reconstructSmile(point: IvHistoryPoint): SmilePoint[] {
+  const { atmIv, rr25d, bfly25d, rr10d, bfly10d } = point;
+  if (atmIv == null || !Number.isFinite(atmIv)) return [];
+  const pts: SmilePoint[] = [];
+  const has10 =
+    rr10d != null && Number.isFinite(rr10d) && bfly10d != null && Number.isFinite(bfly10d);
+  if (has10) {
+    pts.push({ x: DELTA_X.put10, iv: (atmIv + bfly10d! - rr10d! / 2) * 100, label: '10Δp' });
+  }
+  if (rr25d != null && Number.isFinite(rr25d) && bfly25d != null && Number.isFinite(bfly25d)) {
+    pts.push({ x: DELTA_X.put25, iv: (atmIv + bfly25d - rr25d / 2) * 100, label: '25Δp' });
+  }
+  pts.push({ x: DELTA_X.atm, iv: atmIv * 100, label: 'ATM' });
+  if (rr25d != null && Number.isFinite(rr25d) && bfly25d != null && Number.isFinite(bfly25d)) {
+    pts.push({ x: DELTA_X.call25, iv: (atmIv + bfly25d + rr25d / 2) * 100, label: '25Δc' });
+  }
+  if (has10) {
+    pts.push({ x: DELTA_X.call10, iv: (atmIv + bfly10d! + rr10d! / 2) * 100, label: '10Δc' });
+  }
+  return pts.sort((a, b) => a.x - b.x);
+}

@@ -4,6 +4,7 @@ import {
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
+  reconstructSmile,
   referenceLines,
   zoneFor,
 } from './skew-history-utils';
@@ -19,6 +20,34 @@ function point(ts: number, values: Partial<IvHistoryPoint>): IvHistoryPoint {
     ...values,
   };
 }
+
+describe('reconstructSmile', () => {
+  it('reconstructs 5 points when 10d wings are present', () => {
+    const pts = reconstructSmile({
+      ts: 1, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.015, rr10d: -0.1, bfly10d: 0.04,
+    });
+    expect(pts.map((p) => p.label)).toEqual(['10Δp', '25Δp', 'ATM', '25Δc', '10Δc']);
+    const atm = pts.find((p) => p.label === 'ATM')!;
+    const c25 = pts.find((p) => p.label === '25Δc')!;
+    const p25 = pts.find((p) => p.label === '25Δp')!;
+    expect(atm.iv).toBeCloseTo(40, 6);
+    expect(c25.iv).toBeCloseTo(38.5, 6);
+    expect(p25.iv).toBeCloseTo(44.5, 6);
+  });
+
+  it('reconstructs 3 points when 10d wings are missing', () => {
+    const pts = reconstructSmile({
+      ts: 1, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.015, rr10d: null, bfly10d: null,
+    });
+    expect(pts.map((p) => p.label)).toEqual(['25Δp', 'ATM', '25Δc']);
+  });
+
+  it('returns empty when atm is missing', () => {
+    expect(reconstructSmile({
+      ts: 1, atmIv: null, rr25d: -0.06, bfly25d: 0.015, rr10d: null, bfly10d: null,
+    })).toEqual([]);
+  });
+});
 
 describe('skew history transforms', () => {
   it('raw conversion preserves vol-point values', () => {

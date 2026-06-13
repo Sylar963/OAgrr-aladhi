@@ -63,7 +63,7 @@ export const landingCopy = {
   footer: {
     strapline: 'Cross-venue options aggregation.',
     links: [
-      { label: 'Terminal', href: '#how-it-works' },
+      { label: 'Terminal', href: '#showcase' },
       { label: 'Features', href: '#features' },
       { label: 'FAQ', href: '#faq' },
       { label: 'Access', href: '#access' },

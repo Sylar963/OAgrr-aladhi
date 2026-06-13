@@ -35,9 +35,9 @@ function buildTapeItems(spots: TickerSpots | undefined): TapeItem[] {
 function TapeRun({ items, hidden }: { items: TapeItem[]; hidden?: boolean }) {
   return (
     <div aria-hidden={hidden} className="flex min-w-max items-center gap-2">
-      {items.map((item, index) => (
+      {items.map((item) => (
         <div
-          key={`${item.label}-${index}`}
+          key={item.value}
           className="flex items-center gap-2 rounded-full border border-white/8 bg-[#0f1216] px-3 py-1.5"
         >
           <span className="text-zinc-500">{item.label}</span>

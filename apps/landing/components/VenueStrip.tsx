@@ -18,6 +18,7 @@ function VenueLogo({ venue }: { venue: Venue }) {
   }
 
   return (
+    // biome-ignore lint/performance/noImgElement: small static venue logos; next/image is unnecessary and width/height already prevent CLS
     <img
       src={venue.logo}
       alt={venue.name}

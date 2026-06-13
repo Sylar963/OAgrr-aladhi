@@ -14,7 +14,9 @@ export function SurfaceFallback() {
     <div aria-hidden className="absolute inset-0 bg-[#080b0d]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_55%,_rgba(30,64,175,0.25),_transparent_45%),_radial-gradient(circle_at_72%_40%,_rgba(234,88,12,0.18),_transparent_45%)]" />
 
+      {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative element; parent div is aria-hidden */}
       <svg
+        aria-hidden
         className="absolute inset-0 h-full w-full"
         preserveAspectRatio="xMidYMid slice"
         viewBox="0 0 640 420"

@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 
-import { faqItems } from "@/lib/demo-data";
+import { faqItems, venues } from "@/lib/demo-data";
 import { landingCopy } from "@/lib/copy";
 
 export function FaqSection() {
@@ -27,7 +27,7 @@ export function FaqSection() {
               ◢ {landingCopy.faq.eyebrow.toLowerCase()}
             </span>
             <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
-              06 entries
+              {`${String(faqItems.length).padStart(2, "0")} entries`}
             </span>
           </div>
           <h2 className="mt-7 font-[var(--font-heading)] text-[clamp(2.6rem,5vw,4.6rem)] font-medium leading-[0.94] tracking-[-0.05em] text-[var(--landing-text-strong)]">
@@ -39,16 +39,10 @@ export function FaqSection() {
 
           <dl className="mt-10 grid max-w-md grid-cols-2 gap-x-6 gap-y-4 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em]">
             <div>
-              <dt className="text-zinc-400">Latency budget</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">420 ms</dd>
-            </div>
-            <div>
-              <dt className="text-zinc-400">Feed health</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">99.98%</dd>
-            </div>
-            <div>
               <dt className="text-zinc-400">Venues</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">07 wired</dd>
+              <dd className="mt-2 text-[var(--landing-text-strong)]">
+                {`${String(venues.length).padStart(2, "0")} wired`}
+              </dd>
             </div>
             <div>
               <dt className="text-zinc-400">Refresh</dt>

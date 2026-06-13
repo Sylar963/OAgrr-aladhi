@@ -46,4 +46,13 @@ describe('proof sections', () => {
       screen.getByText(/sub-second across every venue/i),
     ).toBeInTheDocument();
   });
+
+  it('derives every count from data and ships no unverifiable stats', () => {
+    render(<FaqSection />);
+
+    expect(screen.getByText(/06 entries/i)).toBeInTheDocument();
+    expect(screen.getByText(/08 wired/i)).toBeInTheDocument();
+    expect(screen.queryByText(/420\s?ms/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/99\.98/)).not.toBeInTheDocument();
+  });
 });

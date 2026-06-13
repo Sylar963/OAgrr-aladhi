@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { landingCopy } from "@/lib/copy";
+import { venues } from "@/lib/demo-data";
 import { leadSchema } from "@/lib/lead-schema";
 import { contactEmail } from "@/lib/links";
 
@@ -101,7 +102,7 @@ export function LeadCaptureSection() {
             <div className="mt-10 grid max-w-xl grid-cols-3 gap-6 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em]">
               <div>
                 <p className="text-zinc-400">desk routing</p>
-                <p className="mt-2 text-[var(--landing-text-strong)]">07 venues</p>
+                <p className="mt-2 text-[var(--landing-text-strong)]">{`${String(venues.length).padStart(2, "0")} venues`}</p>
               </div>
               <div>
                 <p className="text-zinc-400">refresh</p>

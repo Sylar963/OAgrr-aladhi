@@ -14,8 +14,8 @@
   --landing-accent-soft: rgba(237, 244, 246, 0.10);
   --landing-border: rgba(40, 52, 60, 0.72);
   --landing-border-strong: rgba(67, 79, 88, 0.9);
-  --landing-success: #d3dadf;
-  --landing-loss: #76808a;
+  --landing-success: #86c7a4;
+  --landing-loss: #d08c8c;
   --landing-warning: #aab4bc;
   --font-heading: var(--font-display);
 }

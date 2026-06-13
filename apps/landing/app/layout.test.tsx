@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import RootLayout from "./layout";
+import RootLayout, { metadata, viewport } from "./layout";
 
 vi.mock("next/font/google", () => ({
   IBM_Plex_Mono: () => ({ variable: "font-mono" }),
@@ -29,5 +29,13 @@ describe("RootLayout", () => {
 
     expect(html).toContain('data-testid="analytics"');
     expect(html).toContain('data-testid="speed-insights"');
+  });
+
+  it("ships share/SEO metadata", () => {
+    expect(String(metadata.metadataBase)).toContain("oggregator");
+    expect(metadata.openGraph?.siteName).toBe("Oggregator");
+    expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
+    expect(metadata.alternates?.canonical).toBe("/");
+    expect(viewport.themeColor).toBe("#080b0d");
   });
 });

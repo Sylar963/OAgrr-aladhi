@@ -4,6 +4,7 @@ import {
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
+  pickReferencePoint,
   reconstructSmile,
   referenceLines,
   zoneFor,
@@ -20,6 +21,21 @@ function point(ts: number, values: Partial<IvHistoryPoint>): IvHistoryPoint {
     ...values,
   };
 }
+
+describe('pickReferencePoint', () => {
+  const series = [
+    { ts: 0, atmIv: 0.4, rr25d: -0.05, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 7 * 86_400_000, atmIv: 0.41, rr25d: -0.04, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 14 * 86_400_000, atmIv: 0.42, rr25d: -0.03, bfly25d: 0.01, rr10d: null, bfly10d: null },
+  ];
+  it('picks the point closest to nowTs − refDays', () => {
+    const ref = pickReferencePoint(series, 14 * 86_400_000, 7);
+    expect(ref?.ts).toBe(7 * 86_400_000);
+  });
+  it('returns null when no point is within half the horizon', () => {
+    expect(pickReferencePoint(series, 14 * 86_400_000, 60)).toBeNull();
+  });
+});
 
 describe('reconstructSmile', () => {
   it('reconstructs 5 points when 10d wings are present', () => {

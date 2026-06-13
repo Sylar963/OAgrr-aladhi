@@ -127,6 +127,29 @@ export interface SmilePoint {
 
 const DELTA_X = { put10: 0.1, put25: 0.25, atm: 0.5, call25: 0.75, call10: 0.9 };
 
+const MS_PER_DAY = 86_400_000;
+
+export function pickReferencePoint(
+  series: IvHistoryPoint[],
+  nowTs: number,
+  refDays: number,
+): IvHistoryPoint | null {
+  if (series.length === 0) return null;
+  const target = nowTs - refDays * MS_PER_DAY;
+  const tolerance = (refDays * MS_PER_DAY) / 2;
+  let best: IvHistoryPoint | null = null;
+  let bestDist = Infinity;
+  for (const point of series) {
+    if (point.atmIv == null) continue;
+    const dist = Math.abs(point.ts - target);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = point;
+    }
+  }
+  return best != null && bestDist <= tolerance ? best : null;
+}
+
 export function reconstructSmile(point: IvHistoryPoint): SmilePoint[] {
   const { atmIv, rr25d, bfly25d, rr10d, bfly10d } = point;
   if (atmIv == null || !Number.isFinite(atmIv)) return [];

@@ -378,6 +378,9 @@ describe('IvHistoryService', () => {
     const p = svc.getBuffer('BTC', '30d')[0]!;
     expect(p.rr10d).toBeNull();
     expect(p.bfly10d).toBeNull();
+    // 10Δ absence must not short-circuit the 25Δ computation.
+    expect(p.rr25d).toBeCloseTo(0.04, 6);
+    expect(p.bfly25d).toBeCloseTo(0.01, 6);
     svc.dispose();
   });
 

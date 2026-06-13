@@ -63,6 +63,7 @@ export default async function HomePage() {
       <LandingHeader />
       <main id="main">
         <HeroTerminalSection />
+        <VenueStrip />
         <TerminalShowcase />
         <SectionReveal>
           <HowItWorksSection />
@@ -72,7 +73,6 @@ export default async function HomePage() {
         </SectionReveal>
         <FaqSection />
         <LeadCaptureSection />
-        <VenueStrip />
       </main>
       <Footer />
     </div>

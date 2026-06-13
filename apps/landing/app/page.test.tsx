@@ -51,4 +51,14 @@ describe('landing page', () => {
       '#main',
     );
   });
+
+  it('places the venue strip directly after the hero', async () => {
+    render(await HomePage());
+
+    const main = screen.getByRole('main');
+    // Document order, depth-agnostic — SectionReveal nests sections inside motion divs.
+    const ids = Array.from(main.querySelectorAll('section[id]')).map((s) => s.id);
+
+    expect(ids.indexOf('venues')).toBe(ids.indexOf('hero') + 1);
+  });
 });

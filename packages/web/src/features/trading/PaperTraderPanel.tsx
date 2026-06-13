@@ -1,10 +1,4 @@
-import PayoffChart from '@features/architect/PayoffChart';
-import {
-  computeMetrics,
-  computePayoff,
-  computeScenarioPayoff,
-  type Leg as StrategyLeg,
-} from '@features/architect/payoff';
+import type { Leg as StrategyLeg } from '@features/architect/payoff';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import type { TabId } from '@lib/tabs';
@@ -39,8 +33,6 @@ export default function PaperTraderPanel({
   const [noteKind, setNoteKind] = useState<'thesis' | 'invalidation' | 'review' | 'note'>('note');
   const [noteContent, setNoteContent] = useState('');
   const [noteTags, setNoteTags] = useState('');
-  const [ivShift, setIvShift] = useState(0);
-  const [dteShift, setDteShift] = useState(0);
   const { data: selectedTrade } = useTrade(selectedTradeId);
   const addNote = useAddTradeNote();
   const closeTrade = useCloseTrade();
@@ -50,18 +42,12 @@ export default function PaperTraderPanel({
   const setUnderlying = useAppStore((state) => state.setUnderlying);
 
   useEffect(() => {
-    setIvShift(0);
-    setDteShift(0);
-  }, [selectedTradeId]);
-
-  useEffect(() => {
     const candidate = openTrades[0]?.id ?? closedTrades[0]?.id ?? null;
     const exists = [...openTrades, ...closedTrades].some((t) => t.id === selectedTradeId);
     if (!selectedTradeId || !exists) setSelectedTradeId(candidate);
   }, [closedTrades, openTrades, selectedTradeId, setSelectedTradeId]);
 
   const liveTrade = selectedTrade ?? null;
-  const scenario = liveTrade ? buildScenario(liveTrade, ivShift, dteShift) : null;
 
   return (
     <>
@@ -109,12 +95,6 @@ export default function PaperTraderPanel({
                       label="Spot"
                       value={fmtUsd(trade.currentSpotUsd ?? trade.entrySpotUsd)}
                     />
-                  </div>
-                  <div className={styles.tradeRiskRow}>
-                    <RiskPill label="Δ" value={fmtDelta(trade.risk.delta)} />
-                    <RiskPill label="Γ" value={fmtNum(trade.risk.gamma, 4)} />
-                    <RiskPill label="Θ" value={fmtUsd(trade.risk.theta)} />
-                    <RiskPill label="V" value={fmtUsd(trade.risk.vega)} />
                   </div>
                 </button>
               ))
@@ -202,10 +182,6 @@ export default function PaperTraderPanel({
                   value={fmtUsd(liveTrade.totalPnlUsd)}
                   tone={tone(liveTrade.totalPnlUsd)}
                 />
-                <MetricCard
-                  label="Spot"
-                  value={fmtUsd(liveTrade.currentSpotUsd ?? liveTrade.entrySpotUsd)}
-                />
               </div>
 
               <div className={styles.riskGrid}>
@@ -216,131 +192,44 @@ export default function PaperTraderPanel({
               </div>
             </div>
 
-            <div className={styles.twoColumn}>
-              <div className={styles.section}>
-                <div className={styles.sectionHeader}>Position risk</div>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Leg</th>
-                      <th className={styles.rightAlign}>Qty</th>
-                      <th className={styles.rightAlign}>Avg</th>
-                      <th className={styles.rightAlign}>Mark</th>
-                      <th className={styles.rightAlign}>DTE</th>
-                      <th className={styles.rightAlign}>IV</th>
-                      <th className={styles.rightAlign}>Delta</th>
-                      <th className={styles.rightAlign}>Theta</th>
-                      <th>Source</th>
-                      <th className={styles.rightAlign}>P&L</th>
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>Position risk</div>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Leg</th>
+                    <th className={styles.rightAlign}>Qty</th>
+                    <th className={styles.rightAlign}>Avg</th>
+                    <th className={styles.rightAlign}>Mark</th>
+                    <th className={styles.rightAlign}>DTE</th>
+                    <th className={styles.rightAlign}>IV</th>
+                    <th className={styles.rightAlign}>Delta</th>
+                    <th className={styles.rightAlign}>Theta</th>
+                    <th>Source</th>
+                    <th className={styles.rightAlign}>P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveTrade.legs.map((leg) => (
+                    <tr key={`${leg.expiry}-${leg.strike}-${leg.optionRight}`}>
+                      <td>{formatLegSymbol(leg)}</td>
+                      <td className={styles.rightAlign}>{fmtNum(leg.netQuantity, 2)}</td>
+                      <td className={styles.rightAlign}>{fmtUsd(leg.avgEntryPriceUsd)}</td>
+                      <td className={styles.rightAlign}>{fmtUsd(leg.markPriceUsd)}</td>
+                      <td className={styles.rightAlign}>{dteDays(leg.expiry)}d</td>
+                      <td className={styles.rightAlign}>{fmtIv(leg.markIv)}</td>
+                      <td className={styles.rightAlign}>{fmtDelta(leg.delta)}</td>
+                      <td className={styles.rightAlign}>{fmtUsd(leg.theta)}</td>
+                      <td>{leg.marketSourceLabel}</td>
+                      <td
+                        className={`${styles.rightAlign} ${toneClass(leg.unrealizedPnlUsd) ? styles[toneClass(leg.unrealizedPnlUsd)!] : ''}`}
+                      >
+                        {fmtUsd((leg.unrealizedPnlUsd ?? 0) + leg.realizedPnlUsd)}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {liveTrade.legs.map((leg) => (
-                      <tr key={`${leg.expiry}-${leg.strike}-${leg.optionRight}`}>
-                        <td>{formatLegSymbol(leg)}</td>
-                        <td className={styles.rightAlign}>{fmtNum(leg.netQuantity, 2)}</td>
-                        <td className={styles.rightAlign}>{fmtUsd(leg.avgEntryPriceUsd)}</td>
-                        <td className={styles.rightAlign}>{fmtUsd(leg.markPriceUsd)}</td>
-                        <td className={styles.rightAlign}>{dteDays(leg.expiry)}d</td>
-                        <td className={styles.rightAlign}>{fmtIv(leg.markIv)}</td>
-                        <td className={styles.rightAlign}>{fmtDelta(leg.delta)}</td>
-                        <td className={styles.rightAlign}>{fmtUsd(leg.theta)}</td>
-                        <td>{leg.marketSourceLabel}</td>
-                        <td
-                          className={`${styles.rightAlign} ${toneClass(leg.unrealizedPnlUsd) ? styles[toneClass(leg.unrealizedPnlUsd)!] : ''}`}
-                        >
-                          {fmtUsd((leg.unrealizedPnlUsd ?? 0) + leg.realizedPnlUsd)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className={styles.section}>
-                <div className={styles.sectionHeader}>Scenario payoff</div>
-                {scenario ? (
-                  <>
-                    <div className={styles.chartWrap}>
-                      <PayoffChart
-                        points={scenario.points}
-                        breakevens={scenario.metrics.breakevens}
-                        spotPrice={scenario.spotPrice}
-                        legs={scenario.legs}
-                        maxProfit={scenario.metrics.maxProfit}
-                        maxLoss={scenario.metrics.maxLoss}
-                        scenarioIvPoints={scenario.ivPoints}
-                        scenarioDtePoints={scenario.dtePoints}
-                      />
-                    </div>
-                    <div className={styles.metricGrid}>
-                      <MetricCard
-                        label="Max Profit"
-                        value={
-                          scenario.metrics.maxProfit != null
-                            ? fmtUsd(scenario.metrics.maxProfit)
-                            : 'Unlimited'
-                        }
-                      />
-                      <MetricCard
-                        label="Max Loss"
-                        value={
-                          scenario.metrics.maxLoss != null
-                            ? fmtUsd(scenario.metrics.maxLoss)
-                            : 'Unlimited'
-                        }
-                      />
-                      <MetricCard
-                        label="Breakeven"
-                        value={
-                          scenario.metrics.breakevens.length > 0
-                            ? scenario.metrics.breakevens
-                                .map((value) => `$${value.toLocaleString('en-US')}`)
-                                .join(', ')
-                            : '–'
-                        }
-                      />
-                      <MetricCard label="Base DTE" value={`${scenario.baseDte}d`} />
-                    </div>
-                    <div className={styles.sliderBlock}>
-                      <label className={styles.sliderRow}>
-                        <span>IV shift</span>
-                        <input
-                          type="range"
-                          min={-30}
-                          max={30}
-                          step={1}
-                          value={ivShift}
-                          onChange={(event) => setIvShift(Number(event.target.value))}
-                        />
-                        <span>
-                          {ivShift > 0 ? '+' : ''}
-                          {ivShift}%
-                        </span>
-                      </label>
-                      <label className={styles.sliderRow}>
-                        <span>DTE shift</span>
-                        <input
-                          type="range"
-                          min={-Math.min(scenario.baseDte, 60)}
-                          max={60}
-                          step={1}
-                          value={dteShift}
-                          onChange={(event) => setDteShift(Number(event.target.value))}
-                        />
-                        <span>
-                          {dteShift > 0 ? '+' : ''}
-                          {dteShift}d
-                        </span>
-                      </label>
-                    </div>
-                  </>
-                ) : (
-                  <div className={styles.empty}>
-                    Payoff is available while the trade still has open exposure.
-                  </div>
-                )}
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             <div className={styles.twoColumn}>
@@ -542,15 +431,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RiskPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.riskPill}>
-      <span>{label}</span>
-      <span>{value}</span>
-    </div>
-  );
-}
-
 function PremiumFlowBadge({ netPremiumUsd }: { netPremiumUsd: number }) {
   const kind = premiumFlowKind(netPremiumUsd);
   if (kind == null) return null;
@@ -566,43 +446,6 @@ function premiumFlowKind(netPremiumUsd: number): 'debit' | 'credit' | null {
   if (netPremiumUsd > 0) return 'debit';
   if (netPremiumUsd < 0) return 'credit';
   return null;
-}
-
-function buildScenario(trade: PaperTradeDetailDto, ivShift: number, dteShift: number) {
-  const legs = trade.legs
-    .filter((leg) => leg.netQuantity !== 0)
-    .map(
-      (leg, index): StrategyLeg => ({
-        id: `${trade.id}-${index}`,
-        type: leg.optionRight,
-        direction: leg.netQuantity > 0 ? 'buy' : 'sell',
-        strike: leg.strike,
-        expiry: leg.expiry,
-        quantity: Math.abs(leg.netQuantity),
-        entryPrice: leg.avgEntryPriceUsd,
-        venue: 'paper',
-        delta: leg.delta,
-        gamma: leg.gamma,
-        theta: leg.theta,
-        vega: leg.vega,
-        iv: leg.markIv,
-      }),
-    );
-
-  const spotPrice = trade.currentSpotUsd ?? trade.entrySpotUsd ?? 0;
-  if (legs.length === 0 || spotPrice <= 0) return null;
-  const baseDte = Math.min(...legs.map((leg) => dteDays(leg.expiry)));
-  const points = computePayoff(legs, spotPrice, 240);
-  const metrics = computeMetrics(legs, spotPrice);
-  return {
-    legs,
-    spotPrice,
-    baseDte,
-    points,
-    metrics,
-    ivPoints: computeScenarioPayoff(legs, spotPrice, ivShift / 100, 0, baseDte, 240),
-    dtePoints: computeScenarioPayoff(legs, spotPrice, 0, dteShift, baseDte, 240),
-  };
 }
 
 function executionEdge(fill: PaperFillDto): number | null {

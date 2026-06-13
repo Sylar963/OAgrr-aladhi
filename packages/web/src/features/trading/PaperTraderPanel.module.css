@@ -56,7 +56,6 @@
 
 .tradeCardTop,
 .tradeStatsRow,
-.tradeRiskRow,
 .detailHeader,
 .actionRow,
 .noteHeader,
@@ -67,8 +66,7 @@
   gap: 12px;
 }
 
-.tradeStatsRow,
-.tradeRiskRow {
+.tradeStatsRow {
   margin-top: 10px;
 }
 
@@ -188,18 +186,6 @@
   font-weight: 600;
 }
 
-.riskPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 9px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  background: var(--bg-base);
-}
-
 .twoColumn {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -238,33 +224,6 @@
 
 .rightAlign {
   text-align: right !important;
-}
-
-.chartWrap {
-  height: 320px;
-  padding: 14px;
-  display: flex;
-}
-
-.chartWrap > * {
-  flex: 1;
-  min-height: 0;
-}
-
-.sliderBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 14px 14px;
-}
-
-.sliderRow {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-dim);
 }
 
 .noteComposer {

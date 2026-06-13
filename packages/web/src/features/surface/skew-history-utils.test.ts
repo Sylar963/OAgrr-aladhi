@@ -14,6 +14,8 @@ function point(ts: number, values: Partial<IvHistoryPoint>): IvHistoryPoint {
     atmIv: 0.5,
     rr25d: null,
     bfly25d: null,
+    rr10d: null,
+    bfly10d: null,
     ...values,
   };
 }

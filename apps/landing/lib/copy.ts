@@ -21,12 +21,12 @@ export const landingCopy = {
   workflow: {
     eyebrow: 'The terminal',
     title: 'Surface. Chain. Portfolio.',
-    description: 'One workspace. Every screen the desk runs.',
+    description: 'Three depths of the same market: shape, price, and exposure.',
   },
   showcase: {
     eyebrow: 'Inside the terminal',
     title: 'Built for cross-venue flow.',
-    description: 'Every screen, one source of truth.',
+    description: 'Chain, portfolio, route, and tape — captured from the live terminal.',
   },
   features: {
     eyebrow: 'Built for desks',

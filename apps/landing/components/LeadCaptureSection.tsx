@@ -75,14 +75,14 @@ export function LeadCaptureSection() {
             <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
               ◢ {landingCopy.cta.eyebrow.toLowerCase()}
             </span>
-            <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-600">
+            <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
               channel · onboarding only
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400">
             {landingCopy.cta.trust.map((item, index) => (
               <span key={item} className="flex items-center gap-2">
-                <span className="text-zinc-600">{`0${index + 1}`}</span>
+                <span className="text-zinc-400">{`0${index + 1}`}</span>
                 <span className="text-zinc-300">{item}</span>
               </span>
             ))}
@@ -100,15 +100,15 @@ export function LeadCaptureSection() {
 
             <div className="mt-10 grid max-w-xl grid-cols-3 gap-6 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em]">
               <div>
-                <p className="text-zinc-600">desk routing</p>
+                <p className="text-zinc-400">desk routing</p>
                 <p className="mt-2 text-[var(--landing-text-strong)]">07 venues</p>
               </div>
               <div>
-                <p className="text-zinc-600">refresh</p>
+                <p className="text-zinc-400">refresh</p>
                 <p className="mt-2 text-[var(--landing-text-strong)]">sub-second</p>
               </div>
               <div>
-                <p className="text-zinc-600">support</p>
+                <p className="text-zinc-400">support</p>
                 <p className="mt-2 text-[var(--landing-text-strong)]">desk-grade</p>
               </div>
             </div>
@@ -121,7 +121,7 @@ export function LeadCaptureSection() {
               onSubmit={onSubmit}
             >
               <label
-                className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500"
+                className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400"
                 htmlFor="landing-email"
               >
                 ◢ work email
@@ -183,7 +183,7 @@ export function LeadCaptureSection() {
                 <span aria-hidden className="text-base">→</span>
               </button>
 
-              <p className="mt-6 max-w-md font-[var(--font-mono)] text-[10px] uppercase leading-5 tracking-[0.24em] text-zinc-500">
+              <p className="mt-6 max-w-md font-[var(--font-mono)] text-[10px] uppercase leading-5 tracking-[0.24em] text-zinc-400">
                 {landingCopy.cta.helper}
               </p>
 
@@ -195,7 +195,7 @@ export function LeadCaptureSection() {
                     ? "mt-6 font-[var(--font-mono)] text-[11px] uppercase tracking-[0.3em] text-[var(--landing-success)]"
                     : status === "error"
                       ? "mt-6 font-[var(--font-mono)] text-[11px] uppercase tracking-[0.3em] text-[var(--landing-loss)]"
-                      : "mt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em] text-zinc-600"
+                      : "mt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em] text-zinc-400"
                 }
               >
                 {status === "success"
@@ -220,7 +220,7 @@ export function LeadCaptureSection() {
           </div>
         </div>
 
-        <div className="mt-16 flex flex-wrap items-center justify-between gap-6 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-600">
+        <div className="mt-16 flex flex-wrap items-center justify-between gap-6 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400">
           <span>access.oggregator</span>
           <span>built for desks · market makers · execution teams</span>
         </div>

@@ -14,7 +14,7 @@ export function FeatureBentoSection() {
         <section className="landing-panel overflow-hidden rounded-[2rem] p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+              <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
                 Cross-venue lenses
               </p>
               <h3 className="landing-display-value mt-3 text-3xl">
@@ -52,7 +52,7 @@ export function FeatureBentoSection() {
         </section>
 
         <section className="landing-panel overflow-hidden rounded-[2rem] p-5 sm:p-6">
-          <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+          <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
             Cross-venue mechanics
           </p>
           <h3 className="landing-display-value mt-3 max-w-[14ch] text-3xl">

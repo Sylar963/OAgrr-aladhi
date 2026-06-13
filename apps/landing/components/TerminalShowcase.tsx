@@ -216,7 +216,7 @@ export function TerminalShowcase() {
           <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]/80">
             ◢ {landingCopy.showcase.eyebrow.toLowerCase()}
           </span>
-          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-500">
+          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
             {landingCopy.showcase.title.toLowerCase()}
           </span>
         </div>
@@ -249,7 +249,7 @@ export function TerminalShowcase() {
               style={{ transformOrigin: "0% 50%", scaleX: railProgress }}
             />
           </div>
-          <div className="mt-3 flex items-center justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500">
+          <div className="mt-3 flex items-center justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400">
             <span>scroll → step through the terminal</span>
             <span>{total.toString().padStart(2, "0")} screens</span>
           </div>

@@ -162,7 +162,7 @@ export function HeroTerminalSection() {
 
           <div
             aria-hidden
-            className="pointer-events-none absolute bottom-24 left-6 hidden flex-col gap-1 font-[var(--font-mono)] text-[9px] uppercase tracking-[0.28em] text-zinc-600 md:flex md:left-10"
+            className="pointer-events-none absolute bottom-24 left-6 hidden flex-col gap-1 font-[var(--font-mono)] text-[9px] uppercase tracking-[0.28em] text-zinc-400 md:flex md:left-10"
           >
             <span>x · delta</span>
             <span>y · tenor</span>
@@ -183,7 +183,7 @@ export function HeroTerminalSection() {
           <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]/80">
             ◢ surface.live
           </span>
-          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-500">
+          <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
             tenor · delta · venue
           </span>
         </div>
@@ -200,7 +200,7 @@ export function HeroTerminalSection() {
               }
             />
           </div>
-          <div className="mt-3 flex items-center justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500">
+          <div className="mt-3 flex items-center justify-between font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400">
             <motion.span
               {...(staticMode ? {} : { style: { opacity: scrollHintOpacity } })}
             >

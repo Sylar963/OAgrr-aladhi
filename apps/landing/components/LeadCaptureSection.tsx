@@ -58,7 +58,6 @@ export function LeadCaptureSection() {
   return (
     <section
       id="access"
-      aria-label={landingCopy.cta.title}
       className="relative isolate scroll-mt-24 overflow-hidden border-y border-white/8 bg-[#0a0c0f]"
     >
       <div

@@ -57,5 +57,14 @@ describe('hero shell', () => {
 
     expect(screen.getAllByRole('link', { name: /request access/i })[0]).toBeVisible();
     expect(screen.getByText(/not a screenshot/i)).not.toBeVisible();
+
+    // Pin the actual inertness mechanism: the scene wrapper must be visibility:hidden,
+    // not merely opacity:0 (opacity-0 elements stay clickable and tab-focusable).
+    let wrapper: HTMLElement | null = screen.getByText(/not a screenshot/i);
+    while (wrapper && wrapper.style.visibility === '') {
+      wrapper = wrapper.parentElement;
+    }
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.style.visibility).toBe('hidden');
   });
 });

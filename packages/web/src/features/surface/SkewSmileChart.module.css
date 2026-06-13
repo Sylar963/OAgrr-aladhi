@@ -1,0 +1,3 @@
+.wrap { border-top: 1px solid #15191d; margin-top: 6px; padding-top: 8px; }
+.caption { font-size: 10px; color: #5b656d; font-family: 'IBM Plex Mono', monospace; text-align: center; margin-top: 2px; }
+.empty { font-size: 11px; color: #4b5560; text-align: center; padding: 28px 0; font-family: 'IBM Plex Mono', monospace; }

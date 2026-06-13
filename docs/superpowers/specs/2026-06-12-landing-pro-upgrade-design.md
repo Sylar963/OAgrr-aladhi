@@ -87,9 +87,10 @@ Footer                     — real footer
 ```
 
 `SectionReveal` becomes a staggered per-card variant (`delayChildren`/`staggerChildren`),
-applied consistently to HowItWorks, FeatureBento, Trust, FAQ, LeadCapture, VenueStrip —
-**never** to the hero or showcase (sticky-pin rule). Fix its post-hydration
-disappear/reappear flash (`SectionReveal.tsx:12-31`).
+applied consistently to HowItWorks, FeatureBento, Trust, LeadCapture, VenueStrip —
+**never** to the hero, showcase, or FaqSection (sticky-pin rule: the hero/showcase stages
+and FaqSection's `lg:sticky` left column all break under a transformed ancestor). Fix its
+post-hydration disappear/reappear flash (`SectionReveal.tsx:12-31`).
 
 ### 2. Hero — scene re-beat + defect fixes
 

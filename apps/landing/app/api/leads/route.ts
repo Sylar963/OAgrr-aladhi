@@ -7,11 +7,19 @@ export const runtime = 'nodejs';
 
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_PER_WINDOW = 5;
+// Cap tracked IPs so one-shot clients can't grow the map without bound; once over
+// the cap we sweep expired entries before adding more.
+const MAX_TRACKED_IPS = 10_000;
 // Per-instance, in-memory. Good enough as a first abuse gate; not shared across instances.
 const hits = new Map<string, { count: number; resetAt: number }>();
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  if (hits.size > MAX_TRACKED_IPS) {
+    for (const [key, value] of hits) {
+      if (value.resetAt < now) hits.delete(key);
+    }
+  }
   const entry = hits.get(ip);
   if (!entry || now > entry.resetAt) {
     hits.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -28,8 +36,13 @@ function isHoneypotHit(payload: unknown): boolean {
 }
 
 export async function POST(request: Request) {
+  // Prefer the proxy-set client IP; x-real-ip is the single-IP header Vercel injects.
+  // 'unknown' is a deliberate fail-closed shared bucket — a per-request unique key would
+  // disable the limit entirely for header-less callers.
   const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip')?.trim() ??
+    'unknown';
 
   if (isRateLimited(ip)) {
     return NextResponse.json({ ok: false, error: 'Too many requests.' }, { status: 429 });

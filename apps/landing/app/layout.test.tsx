@@ -32,7 +32,10 @@ describe("RootLayout", () => {
   });
 
   it("ships share/SEO metadata", () => {
-    expect(String(metadata.metadataBase)).toContain("oggregator");
+    // Assert metadataBase is a valid absolute http(s) URL rather than matching a
+    // hardcoded hostname, so changing the default site URL doesn't break the test.
+    expect(metadata.metadataBase).toBeInstanceOf(URL);
+    expect(new URL(String(metadata.metadataBase)).protocol).toMatch(/^https?:$/);
     expect(metadata.openGraph?.siteName).toBe("Oggregator");
     expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
     expect(metadata.alternates?.canonical).toBe("/");

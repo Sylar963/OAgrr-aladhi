@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 
+import { faqItems, venues } from '@/lib/demo-data';
 import { FaqSection } from './FaqSection';
 import { FeatureBentoSection } from './FeatureBentoSection';
 import { HowItWorksSection } from './HowItWorksSection';
@@ -50,8 +51,12 @@ describe('proof sections', () => {
   it('derives every count from data and ships no unverifiable stats', () => {
     render(<FaqSection />);
 
-    expect(screen.getByText(/06 entries/i)).toBeInTheDocument();
-    expect(screen.getByText(/08 wired/i)).toBeInTheDocument();
+    // Expected counts come from the same source the component reads, so adding a
+    // venue or FAQ entry won't silently break this test.
+    const entries = `${String(faqItems.length).padStart(2, '0')} entries`;
+    const wired = `${String(venues.length).padStart(2, '0')} wired`;
+    expect(screen.getByText(entries)).toBeInTheDocument();
+    expect(screen.getByText(wired)).toBeInTheDocument();
     expect(screen.queryByText(/420\s?ms/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/99\.98/)).not.toBeInTheDocument();
   });

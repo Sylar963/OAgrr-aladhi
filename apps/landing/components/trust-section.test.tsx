@@ -11,7 +11,8 @@ describe('TrustSection', () => {
     expect(screen.getByText(/venue-tagged/i)).toBeInTheDocument();
     // No fabricated metrics, no anonymous quotes.
     expect(screen.queryByText(/99\.9/)).not.toBeInTheDocument();
-    // Contact path exists either as mailto (env set) or as the #access fallback.
-    expect(screen.getByRole('link', { name: /request access below|@/i })).toBeInTheDocument();
+    // Contact path: #access fallback when no env email, otherwise a mailto link.
+    const contactLink = screen.getByRole('link', { name: /request access below/i });
+    expect(contactLink.getAttribute('href')).toMatch(/^(mailto:|#access)/);
   });
 });

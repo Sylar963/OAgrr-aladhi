@@ -13,7 +13,7 @@ export function LandingHeader() {
         </a>
 
         <div className="hidden items-center gap-6 md:flex">
-          <a className="landing-nav-link" href="#how-it-works">
+          <a className="landing-nav-link" href="#showcase">
             {landingCopy.nav.workflow}
           </a>
           <a className="landing-nav-link" href="#features">

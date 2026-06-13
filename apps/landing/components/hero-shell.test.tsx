@@ -15,15 +15,18 @@ describe('hero shell', () => {
     );
 
     expect(screen.getAllByText(/Deribit · OKX · Binance · Bybit/).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: /^terminal$/i })).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /request access/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /see the terminal/i })).toHaveAttribute(
       'href',
-      'https://app.oggregator.xyz',
+      '#showcase',
     );
-    expect(screen.getByRole('link', { name: /launch terminal/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^sign in$/i })).toHaveAttribute(
       'href',
       'https://app.oggregator.xyz',
+    );
+    expect(screen.getByRole('link', { name: /^terminal$/i })).toHaveAttribute(
+      'href',
+      '#showcase',
     );
     expect(screen.getByText(/cross-venue options terminal/i)).toBeInTheDocument();
     expect(screen.getAllByLabelText(/interactive 3d volatility surface/i).length).toBeGreaterThan(

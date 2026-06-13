@@ -12,7 +12,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { landingCopy } from "@/lib/copy";
-import { appUrl } from "@/lib/links";
+import { venues } from "@/lib/demo-data";
 
 const VolSurfaceTheaterCanvas = dynamic(
   () => import("./three/VolSurfaceTheaterCanvas"),
@@ -214,23 +214,6 @@ export function HeroTerminalSection() {
           scrollYProgress={scrollYProgress}
           start={0}
           end={0.42}
-          staticVisible={false}
-        >
-          <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-3 border border-white/15 bg-white/[0.03] px-4 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--landing-accent)] shadow-[0_0_12px_rgba(237,244,246,0.55)]" />
-              surface.live · tick-by-tick
-            </span>
-            <p className="mt-12 max-w-xl font-[var(--font-mono)] text-[11px] uppercase leading-6 tracking-[0.32em] text-zinc-400">
-              a real volatility surface — not a screenshot. tilt, skew, term and venue context, recalculated tick-by-tick.
-            </p>
-          </div>
-        </HeroScene>
-
-        <HeroScene
-          scrollYProgress={scrollYProgress}
-          start={0.4}
-          end={1}
           staticVisible={staticMode}
           pointerEvents
         >
@@ -250,12 +233,37 @@ export function HeroTerminalSection() {
               <a href="#access" className="landing-button-primary">
                 {landingCopy.hero.primaryCta}
               </a>
-              <a href={appUrl} className="landing-button-secondary">
+              <a href="#showcase" className="landing-button-secondary">
                 {landingCopy.hero.secondaryCta}
               </a>
             </div>
           </div>
         </HeroScene>
+
+        {!staticMode && (
+          <HeroScene
+            scrollYProgress={scrollYProgress}
+            start={0.45}
+            end={1}
+            staticVisible={false}
+          >
+            <div className="max-w-3xl">
+              <span className="inline-flex items-center gap-3 border border-white/15 bg-white/[0.03] px-4 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--landing-accent)] shadow-[0_0_12px_rgba(237,244,246,0.55)]" />
+                surface.live · tick-by-tick
+              </span>
+              <p className="mt-12 max-w-xl font-[var(--font-mono)] text-[11px] uppercase leading-6 tracking-[0.32em] text-zinc-400">
+                {landingCopy.hero.surfaceNote}
+              </p>
+              <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+                <span className="text-zinc-500">{landingCopy.hero.proofLabel}</span>
+                {venues.map((venue) => (
+                  <span key={venue.slug}>{venue.name}</span>
+                ))}
+              </div>
+            </div>
+          </HeroScene>
+        )}
       </div>
     </section>
   );

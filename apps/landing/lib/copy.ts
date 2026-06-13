@@ -5,7 +5,7 @@ export const landingCopy = {
     features: 'Features',
     faq: 'FAQ',
     cta: 'Request Access',
-    launch: 'Launch terminal',
+    launch: 'Sign in',
   },
   hero: {
     eyebrow: 'Cross-venue options terminal',
@@ -14,8 +14,9 @@ export const landingCopy = {
       'Trade options across Deribit, OKX, Binance, Bybit, Thalex, Derive, Coincall, and Gate.io — from a single surface.',
     primaryCta: 'Request Access',
     secondaryCta: 'See the terminal',
+    surfaceNote:
+      'a real volatility surface — not a screenshot. tilt, skew, term and venue context, recalculated tick-by-tick.',
     proofLabel: 'Connected venues',
-    proofPoints: ['Deribit', 'OKX', 'Binance', 'Bybit'],
   },
   workflow: {
     eyebrow: 'The terminal',

@@ -88,6 +88,8 @@ export interface PersistedIvHistoryPoint {
   atmIv: number | null;
   rr25d: number | null;
   bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
   source: IvHistoryPointSource;
 }
 
@@ -197,7 +199,21 @@ export class IvHistoryService {
           c25 != null && p25 != null && interpAtm != null
             ? (c25 + p25) / 2 - interpAtm
             : null;
-        this.appendPoint(underlying, tenor, { ts: now, atmIv: atm, rr25d: rr, bfly25d: fly });
+        const c10 = interpTenor(surfaces, days, 'delta10c');
+        const p10 = interpTenor(surfaces, days, 'delta10p');
+        const rr10 = c10 != null && p10 != null ? c10 - p10 : null;
+        const fly10 =
+          c10 != null && p10 != null && interpAtm != null
+            ? (c10 + p10) / 2 - interpAtm
+            : null;
+        this.appendPoint(underlying, tenor, {
+          ts: now,
+          atmIv: atm,
+          rr25d: rr,
+          bfly25d: fly,
+          rr10d: rr10,
+          bfly10d: fly10,
+        });
         persisted.push({
           underlying,
           tenorDays: days,
@@ -205,6 +221,8 @@ export class IvHistoryService {
           atmIv: atm,
           rr25d: rr,
           bfly25d: fly,
+          rr10d: rr10,
+          bfly10d: fly10,
           source: 'live_surface',
         });
       }
@@ -245,6 +263,8 @@ export class IvHistoryService {
         atmIv: point.atmIv,
         rr25d: point.rr25d,
         bfly25d: point.bfly25d,
+        rr10d: point.rr10d,
+        bfly10d: point.bfly10d,
       });
     }
 
@@ -271,6 +291,8 @@ export class IvHistoryService {
         atmIv: c.close / 100,
         rr25d: null,
         bfly25d: null,
+        rr10d: null,
+        bfly10d: null,
       }));
       this.buffers.set(bufferKey(underlying, '30d'), seed.slice(-this.capacity));
       persisted.push(
@@ -281,6 +303,8 @@ export class IvHistoryService {
           atmIv: point.atmIv,
           rr25d: null,
           bfly25d: null,
+          rr10d: null,
+          bfly10d: null,
           source: 'deribit_dvol' as const,
         })),
       );
@@ -321,7 +345,7 @@ export class IvHistoryService {
     const latest =
       series.length > 0
         ? series[series.length - 1]!
-        : { ts: 0, atmIv: null, rr25d: null, bfly25d: null };
+        : { ts: 0, atmIv: null, rr25d: null, bfly25d: null, rr10d: null, bfly10d: null };
 
     const atmValues = series.map((p) => p.atmIv);
     const rrValues = series.map((p) => p.rr25d);

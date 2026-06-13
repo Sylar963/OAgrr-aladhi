@@ -1,11 +1,11 @@
-import { useState } from 'react';
-
 import InfoTip from '@components/ui/InfoTip';
 import { getTokenLogo } from '@lib/token-meta';
 import type { IvTenor } from '@shared/enriched';
+import { useState } from 'react';
 import { getHistoryCoverage } from './history-coverage';
-import { useIvHistory, type IvHistoryWindow } from './queries';
+import { type IvHistoryWindow, useIvHistory } from './queries';
 import SkewDensityStrip from './SkewDensityStrip';
+import styles from './SkewHistory.module.css';
 import SkewSmileChart from './SkewSmileChart';
 import {
   buildDistribution,
@@ -14,7 +14,6 @@ import {
   pickReferencePoint,
   reconstructSmile,
 } from './skew-history-utils';
-import styles from './SkewHistory.module.css';
 
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
 const RR_COLOR = '#50d2c1';
@@ -100,22 +99,43 @@ export default function SkewHistory({ underlying }: Props) {
           <span className={styles.toggleLabel}>TENOR</span>
           <div className={styles.toggleGroup}>
             {TENORS.map((t) => (
-              <button key={t} type="button" className={styles.toggleBtn}
-                data-active={tenor === t ? 'true' : undefined} onClick={() => setTenor(t)}>{t}</button>
+              <button
+                key={t}
+                type="button"
+                className={styles.toggleBtn}
+                data-active={tenor === t ? 'true' : undefined}
+                onClick={() => setTenor(t)}
+              >
+                {t}
+              </button>
             ))}
           </div>
           <span className={styles.toggleLabel}>WINDOW</span>
           <div className={styles.toggleGroup}>
             {(['30d', '90d'] as IvHistoryWindow[]).map((w) => (
-              <button key={w} type="button" className={styles.toggleBtn}
-                data-active={window === w ? 'true' : undefined} onClick={() => setWindow(w)}>{w}</button>
+              <button
+                key={w}
+                type="button"
+                className={styles.toggleBtn}
+                data-active={window === w ? 'true' : undefined}
+                onClick={() => setWindow(w)}
+              >
+                {w}
+              </button>
             ))}
           </div>
           <span className={styles.toggleLabel}>VS</span>
           <div className={styles.toggleGroup}>
             {VS_OPTIONS.map((o) => (
-              <button key={o.key} type="button" className={styles.toggleBtn}
-                data-active={vsKey === o.key ? 'true' : undefined} onClick={() => setVsKey(o.key)}>{o.label}</button>
+              <button
+                key={o.key}
+                type="button"
+                className={styles.toggleBtn}
+                data-active={vsKey === o.key ? 'true' : undefined}
+                onClick={() => setVsKey(o.key)}
+              >
+                {o.label}
+              </button>
             ))}
           </div>
         </div>
@@ -125,22 +145,40 @@ export default function SkewHistory({ underlying }: Props) {
         <span className={styles.legendItem}>
           <span className={styles.legendSwatch} style={{ background: RR_COLOR }} />
           25Δ RR (call − put)
-          <InfoTip label="25Δ RR" title="25Δ Risk-Reversal" align="start">{RR_TIP_BODY}</InfoTip>
+          <InfoTip label="25Δ RR" title="25Δ Risk-Reversal" align="start">
+            {RR_TIP_BODY}
+          </InfoTip>
         </span>
         <span className={styles.legendItem}>
           <span className={styles.legendSwatch} style={{ background: FLY_COLOR }} />
           25Δ Fly (wing − ATM)
-          <InfoTip label="25Δ Fly" title="25Δ Butterfly" align="start">{FLY_TIP_BODY}</InfoTip>
+          <InfoTip label="25Δ Fly" title="25Δ Butterfly" align="start">
+            {FLY_TIP_BODY}
+          </InfoTip>
         </span>
       </div>
 
-      <SkewDensityStrip label="25Δ RR" color={RR_COLOR} distribution={rrDist} atmText={rrAtm} spark={rrSpark} />
-      <SkewDensityStrip label="25Δ Fly" color={FLY_COLOR} distribution={flyDist} atmText={flyAtm} spark={flySpark} />
+      <SkewDensityStrip
+        label="25Δ RR"
+        color={RR_COLOR}
+        distribution={rrDist}
+        atmText={rrAtm}
+        spark={rrSpark}
+      />
+      <SkewDensityStrip
+        label="25Δ Fly"
+        color={FLY_COLOR}
+        distribution={flyDist}
+        atmText={flyAtm}
+        spark={flySpark}
+      />
 
       <SkewSmileChart now={nowSmile} reference={refSmile} referenceLabel={vs.label} />
 
       <div className={styles.foot}>
-        <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>{coverage.label}</span>
+        <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
+          {coverage.label}
+        </span>
         <span className={styles.takeaway}>
           {takeaway(result?.rrPercentile ?? null, result?.flyPercentile ?? null)}
         </span>

@@ -74,10 +74,7 @@ export function latestSkewDisplayValue(
   return rows.length > 0 ? rows[rows.length - 1]!.value : null;
 }
 
-export function formatSkewDisplayValue(
-  value: number | null,
-  mode: SkewDisplayMode,
-): string {
+export function formatSkewDisplayValue(value: number | null, mode: SkewDisplayMode): string {
   if (value == null || !Number.isFinite(value)) return '-';
   const sign = value > 0 ? '+' : '';
   if (mode === 'zscore') return `${sign}${value.toFixed(2)}σ`;

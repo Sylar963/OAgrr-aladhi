@@ -33,4 +33,22 @@ describe('hero shell', () => {
       0,
     );
   });
+
+  it('renders the connected-venues proof row in the late hero beat', () => {
+    render(<HeroTerminalSection />);
+
+    for (const name of [
+      'Deribit',
+      'OKX',
+      'Binance',
+      'Bybit',
+      'Thalex',
+      'Derive',
+      'Coincall',
+      'Gate.io',
+    ]) {
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText(/not a screenshot/i)).toBeInTheDocument();
+  });
 });

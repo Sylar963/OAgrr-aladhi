@@ -213,7 +213,7 @@ export function HeroTerminalSection() {
         <HeroScene
           scrollYProgress={scrollYProgress}
           start={0}
-          end={0.42}
+          end={0.35}
           staticVisible={staticMode}
           pointerEvents
         >
@@ -243,7 +243,7 @@ export function HeroTerminalSection() {
         {!staticMode && (
           <HeroScene
             scrollYProgress={scrollYProgress}
-            start={0.45}
+            start={0.55}
             end={1}
             staticVisible={false}
           >

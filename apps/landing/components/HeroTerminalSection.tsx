@@ -13,17 +13,13 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import { landingCopy } from "@/lib/copy";
 import { venues } from "@/lib/demo-data";
+import { SurfaceFallback } from "./three/SurfaceFallback";
 
 const VolSurfaceTheaterCanvas = dynamic(
   () => import("./three/VolSurfaceTheaterCanvas"),
   {
     ssr: false,
-    loading: () => (
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(circle_at_30%_52%,_rgba(64,128,255,0.18),_transparent_45%),_radial-gradient(circle_at_72%_42%,_rgba(251,146,60,0.22),_transparent_45%),_#0a0a0a]"
-      />
-    ),
+    loading: () => <SurfaceFallback />,
   },
 );
 

@@ -13,13 +13,15 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import { landingCopy } from "@/lib/copy";
 import { venues } from "@/lib/demo-data";
-import { SurfaceFallback } from "./three/SurfaceFallback";
 
 const VolSurfaceTheaterCanvas = dynamic(
   () => import("./three/VolSurfaceTheaterCanvas"),
   {
     ssr: false,
-    loading: () => <SurfaceFallback />,
+    // Plain dark layer (matches the container bg) while the chunk loads. The
+    // canvas paints from this same dark — no mismatched fallback-poster flash.
+    // SurfaceFallback still renders inside the canvas for degraded clients.
+    loading: () => <div aria-hidden className="absolute inset-0 bg-[#080b0d]" />,
   },
 );
 

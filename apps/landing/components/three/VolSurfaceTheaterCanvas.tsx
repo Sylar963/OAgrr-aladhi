@@ -19,7 +19,15 @@ export default function VolSurfaceTheaterCanvas({
 }: {
   scrollProgress: MotionValue<number>;
 }) {
-  const [canRenderCanvas, setCanRenderCanvas] = useState(false);
+  // Resolve capability synchronously on first render (the component is ssr:false,
+  // so window exists here). Defaulting to false would render SurfaceFallback for
+  // one paint before the effect flips it — a visible poster flicker on every load.
+  const [canRenderCanvas, setCanRenderCanvas] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      canRenderInteractiveSurface(),
+  );
   const [inView, setInView] = useState(true);
   const wrapperRef = useRef<HTMLDivElement>(null);
 

@@ -190,7 +190,7 @@ export function TerminalShowcase() {
         id="showcase"
         ref={sectionRef}
         aria-label={landingCopy.showcase.title}
-        className="relative"
+        className="relative scroll-mt-24"
       >
         <StaticGrid />
       </section>
@@ -202,7 +202,7 @@ export function TerminalShowcase() {
       id="showcase"
       ref={sectionRef}
       aria-label={landingCopy.showcase.title}
-      className="relative"
+      className="relative scroll-mt-24"
       style={{ height: `${total * 100}vh` }}
     >
       <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#080b0d]">

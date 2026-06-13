@@ -58,7 +58,7 @@ export function LeadCaptureSection() {
   return (
     <section
       id="access"
-      className="relative isolate overflow-hidden border-y border-white/8 bg-[#0a0c0f]"
+      className="relative isolate scroll-mt-24 overflow-hidden border-y border-white/8 bg-[#0a0c0f]"
     >
       <div
         aria-hidden

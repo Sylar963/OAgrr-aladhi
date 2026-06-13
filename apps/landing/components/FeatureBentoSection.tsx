@@ -3,7 +3,7 @@ import { landingCopy } from '@/lib/copy';
 
 export function FeatureBentoSection() {
   return (
-    <section id="features" className="landing-container px-6 py-20 sm:px-10 sm:py-24">
+    <section id="features" className="landing-container scroll-mt-24 px-6 py-20 sm:px-10 sm:py-24">
       <div className="max-w-3xl">
         <p className="landing-kicker">{landingCopy.features.eyebrow}</p>
         <h2 className="landing-section-title mt-4 max-w-[13ch]">{landingCopy.features.title}</h2>

@@ -34,7 +34,7 @@ export function VenueStrip() {
     <section
       id="venues"
       aria-label={landingCopy.venues.title}
-      className="landing-container px-6 py-16 sm:px-10 sm:py-20"
+      className="landing-container scroll-mt-24 px-6 py-16 sm:px-10 sm:py-20"
     >
       <div className="flex flex-col items-start gap-3 border-t border-white/8 pt-10 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
         <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">

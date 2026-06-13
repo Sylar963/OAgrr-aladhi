@@ -38,6 +38,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 .landing-page {
   position: relative;
   overflow: clip;
@@ -228,10 +234,6 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ticker-track {
-    animation: none;
-  }
-
   .landing-feed-tape-track {
     animation: none;
   }
@@ -239,9 +241,5 @@ a {
   .landing-button-primary,
   .landing-button-secondary {
     transition: none;
-  }
-
-  * {
-    scroll-behavior: auto;
   }
 }

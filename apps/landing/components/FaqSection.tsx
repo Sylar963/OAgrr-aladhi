@@ -13,7 +13,7 @@ export function FaqSection() {
   return (
     <section
       id="faq"
-      className="landing-container relative px-6 py-24 sm:px-10 sm:py-32"
+      className="landing-container relative scroll-mt-24 px-6 py-24 sm:px-10 sm:py-32"
     >
       <div
         aria-hidden

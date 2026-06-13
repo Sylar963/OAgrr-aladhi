@@ -1,6 +1,6 @@
 import type { Leg as StrategyLeg } from '@features/architect/payoff';
 import { useStrategyStore } from '@features/architect/strategy-store';
-import { dteDays, fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import { dteDays, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import type { TabId } from '@lib/tabs';
 import type { PaperFillDto, PaperTradeDetailDto, PaperTradeLegDto } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
@@ -183,13 +183,6 @@ export default function PaperTraderPanel({
                   tone={tone(liveTrade.totalPnlUsd)}
                 />
               </div>
-
-              <div className={styles.riskGrid}>
-                <MetricCard label="Delta" value={fmtDelta(liveTrade.risk.delta)} />
-                <MetricCard label="Gamma" value={fmtNum(liveTrade.risk.gamma, 5)} />
-                <MetricCard label="Theta" value={fmtUsd(liveTrade.risk.theta)} />
-                <MetricCard label="Vega" value={fmtUsd(liveTrade.risk.vega)} />
-              </div>
             </div>
 
             <div className={styles.section}>
@@ -203,8 +196,6 @@ export default function PaperTraderPanel({
                     <th className={styles.rightAlign}>Mark</th>
                     <th className={styles.rightAlign}>DTE</th>
                     <th className={styles.rightAlign}>IV</th>
-                    <th className={styles.rightAlign}>Delta</th>
-                    <th className={styles.rightAlign}>Theta</th>
                     <th>Source</th>
                     <th className={styles.rightAlign}>P&L</th>
                   </tr>
@@ -218,8 +209,6 @@ export default function PaperTraderPanel({
                       <td className={styles.rightAlign}>{fmtUsd(leg.markPriceUsd)}</td>
                       <td className={styles.rightAlign}>{dteDays(leg.expiry)}d</td>
                       <td className={styles.rightAlign}>{fmtIv(leg.markIv)}</td>
-                      <td className={styles.rightAlign}>{fmtDelta(leg.delta)}</td>
-                      <td className={styles.rightAlign}>{fmtUsd(leg.theta)}</td>
                       <td>{leg.marketSourceLabel}</td>
                       <td
                         className={`${styles.rightAlign} ${toneClass(leg.unrealizedPnlUsd) ? styles[toneClass(leg.unrealizedPnlUsd)!] : ''}`}

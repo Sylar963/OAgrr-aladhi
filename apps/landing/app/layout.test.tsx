@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import RootLayout from "./layout";
+import RootLayout, { metadata, viewport } from "./layout";
 
 vi.mock("next/font/google", () => ({
   IBM_Plex_Mono: () => ({ variable: "font-mono" }),
@@ -29,5 +29,16 @@ describe("RootLayout", () => {
 
     expect(html).toContain('data-testid="analytics"');
     expect(html).toContain('data-testid="speed-insights"');
+  });
+
+  it("ships share/SEO metadata", () => {
+    // Assert metadataBase is a valid absolute http(s) URL rather than matching a
+    // hardcoded hostname, so changing the default site URL doesn't break the test.
+    expect(metadata.metadataBase).toBeInstanceOf(URL);
+    expect(new URL(String(metadata.metadataBase)).protocol).toMatch(/^https?:$/);
+    expect(metadata.openGraph?.siteName).toBe("Oggregator");
+    expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
+    expect(metadata.alternates?.canonical).toBe("/");
+    expect(viewport.themeColor).toBe("#080b0d");
   });
 });

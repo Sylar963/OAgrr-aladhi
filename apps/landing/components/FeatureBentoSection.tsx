@@ -3,7 +3,7 @@ import { landingCopy } from '@/lib/copy';
 
 export function FeatureBentoSection() {
   return (
-    <section id="features" className="landing-container px-6 py-20 sm:px-10 sm:py-24">
+    <section id="features" className="landing-container scroll-mt-24 px-6 py-20 sm:px-10 sm:py-24">
       <div className="max-w-3xl">
         <p className="landing-kicker">{landingCopy.features.eyebrow}</p>
         <h2 className="landing-section-title mt-4 max-w-[13ch]">{landingCopy.features.title}</h2>
@@ -14,7 +14,7 @@ export function FeatureBentoSection() {
         <section className="landing-panel overflow-hidden rounded-[2rem] p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+              <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
                 Cross-venue lenses
               </p>
               <h3 className="landing-display-value mt-3 text-3xl">
@@ -42,7 +42,7 @@ export function FeatureBentoSection() {
                   <p className="text-base leading-7 text-[var(--landing-muted-strong)]">
                     {mode.description}
                   </p>
-                  <p className="rounded-[1rem] border border-white/8 bg-black/14 px-3 py-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                  <p className="rounded-[1rem] border border-white/8 bg-black/14 px-3 py-3 text-sm leading-6 text-[var(--landing-muted-strong)]">
                     {mode.emphasis}
                   </p>
                 </div>
@@ -52,7 +52,7 @@ export function FeatureBentoSection() {
         </section>
 
         <section className="landing-panel overflow-hidden rounded-[2rem] p-5 sm:p-6">
-          <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+          <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
             Cross-venue mechanics
           </p>
           <h3 className="landing-display-value mt-3 max-w-[14ch] text-3xl">

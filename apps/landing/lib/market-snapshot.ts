@@ -25,7 +25,7 @@ function formatChange(pct: number): string {
 
 // Maps the live /api/spots response into the TopTicker's BTC/ETH labels. On any
 // failure fetchSpots returns null and this yields empty spots, so the ticker
-// keeps its curated demo strings.
+// simply omits the spot rows.
 export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   const items = await fetchSpots();
   if (!items) return { spots: {} };

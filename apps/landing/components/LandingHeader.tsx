@@ -13,7 +13,7 @@ export function LandingHeader() {
         </a>
 
         <div className="hidden items-center gap-6 md:flex">
-          <a className="landing-nav-link" href="#how-it-works">
+          <a className="landing-nav-link" href="#showcase">
             {landingCopy.nav.workflow}
           </a>
           <a className="landing-nav-link" href="#features">
@@ -23,6 +23,29 @@ export function LandingHeader() {
             {landingCopy.nav.faq}
           </a>
         </div>
+
+        <details className="relative md:hidden">
+          <summary className="landing-nav-link flex cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
+            Menu
+          </summary>
+          <nav
+            aria-label="Mobile"
+            className="absolute right-0 top-full z-40 mt-3 flex w-52 flex-col gap-4 border border-[color:var(--landing-border)] bg-[var(--landing-panel-strong)] p-5 backdrop-blur-xl"
+          >
+            <a className="landing-nav-link" href="#showcase">
+              {landingCopy.nav.workflow}
+            </a>
+            <a className="landing-nav-link" href="#features">
+              {landingCopy.nav.features}
+            </a>
+            <a className="landing-nav-link" href="#faq">
+              {landingCopy.nav.faq}
+            </a>
+            <a className="landing-nav-link" href={appUrl}>
+              {landingCopy.nav.launch}
+            </a>
+          </nav>
+        </details>
 
         <div className="flex items-center gap-3">
           <span className="hidden rounded-full border border-[color:var(--landing-border)] bg-[rgba(237,244,246,0.06)] px-3 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-[var(--landing-accent)] sm:inline-flex">

@@ -4,6 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import type { MotionValue } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
+import { SurfaceFallback } from "./SurfaceFallback";
 import { TheaterSurfaceMesh } from "./TheaterSurfaceMesh";
 
 function canRenderInteractiveSurface() {
@@ -54,12 +55,7 @@ export default function VolSurfaceTheaterCanvas({
   }, []);
 
   if (!canRenderCanvas) {
-    return (
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(circle_at_30%_52%,_rgba(64,128,255,0.18),_transparent_45%),_radial-gradient(circle_at_72%_42%,_rgba(251,146,60,0.22),_transparent_45%),_#0a0a0a]"
-      />
-    );
+    return <SurfaceFallback />;
   }
 
   return (

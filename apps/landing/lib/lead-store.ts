@@ -1,12 +1,13 @@
 import { appendFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { LeadInput } from './lead-schema';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const defaultDataDir = path.resolve(here, '../.data');
-const defaultDataFile = path.join(defaultDataDir, 'landing-leads.jsonl');
+// /tmp is the only writable filesystem on Vercel. This keeps the fallback from
+// turning the page's only conversion into a 500 — it is best-effort, NOT durable;
+// the durable path is the core API via LANDING_API_BASE_URL.
+const defaultDataFile = path.join(tmpdir(), 'oggregator-landing', 'landing-leads.jsonl');
 
 function resolveLeadFilePath() {
   const configuredPath = process.env.LANDING_LEADS_FILE;
@@ -45,8 +46,8 @@ export async function persistLead(input: LeadInput): Promise<void> {
       });
       if (res.ok) return;
     } catch {
-      // Network error / timeout — fall through to the durable file fallback so a
-      // lead is never lost while the core API is unreachable.
+      // Network error / timeout — fall through to the best-effort file fallback so a
+      // lead has a chance to survive while the core API is unreachable.
     }
   }
 

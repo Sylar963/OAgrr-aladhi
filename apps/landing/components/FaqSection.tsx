@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 
-import { faqItems } from "@/lib/demo-data";
+import { faqItems, venues } from "@/lib/demo-data";
 import { landingCopy } from "@/lib/copy";
 
 export function FaqSection() {
@@ -13,7 +13,7 @@ export function FaqSection() {
   return (
     <section
       id="faq"
-      className="landing-container relative px-6 py-24 sm:px-10 sm:py-32"
+      className="landing-container relative scroll-mt-24 px-6 py-24 sm:px-10 sm:py-32"
     >
       <div
         aria-hidden
@@ -26,8 +26,8 @@ export function FaqSection() {
             <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
               ◢ {landingCopy.faq.eyebrow.toLowerCase()}
             </span>
-            <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-600">
-              06 entries
+            <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
+              {`${String(faqItems.length).padStart(2, "0")} entries`}
             </span>
           </div>
           <h2 className="mt-7 font-[var(--font-heading)] text-[clamp(2.6rem,5vw,4.6rem)] font-medium leading-[0.94] tracking-[-0.05em] text-[var(--landing-text-strong)]">
@@ -39,19 +39,13 @@ export function FaqSection() {
 
           <dl className="mt-10 grid max-w-md grid-cols-2 gap-x-6 gap-y-4 border-t border-white/8 pt-6 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.28em]">
             <div>
-              <dt className="text-zinc-600">Latency budget</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">420 ms</dd>
+              <dt className="text-zinc-400">Venues</dt>
+              <dd className="mt-2 text-[var(--landing-text-strong)]">
+                {`${String(venues.length).padStart(2, "0")} wired`}
+              </dd>
             </div>
             <div>
-              <dt className="text-zinc-600">Feed health</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">99.98%</dd>
-            </div>
-            <div>
-              <dt className="text-zinc-600">Venues</dt>
-              <dd className="mt-2 text-[var(--landing-text-strong)]">07 wired</dd>
-            </div>
-            <div>
-              <dt className="text-zinc-600">Refresh</dt>
+              <dt className="text-zinc-400">Refresh</dt>
               <dd className="mt-2 text-[var(--landing-text-strong)]">sub-second</dd>
             </div>
           </dl>
@@ -81,7 +75,7 @@ export function FaqSection() {
                     onClick={() => setOpenIndex(isOpen ? -1 : index)}
                     className="group relative flex w-full items-start gap-6 py-7 text-left transition sm:py-9"
                   >
-                    <span className="pt-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500 transition-colors group-hover:text-[var(--landing-accent)]">
+                    <span className="pt-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400 transition-colors group-hover:text-[var(--landing-accent)]">
                       {`0${index + 1}`.slice(-2)}
                     </span>
 
@@ -130,7 +124,7 @@ export function FaqSection() {
                           <p className="text-[1.05rem] leading-8 text-[var(--landing-muted-strong)]">
                             {item.answer}
                           </p>
-                          <div className="mt-5 flex items-center gap-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-500">
+                          <div className="mt-5 flex items-center gap-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.32em] text-zinc-400">
                             <span className="h-[6px] w-[6px] rotate-45 bg-[var(--landing-accent)]" />
                             <span>answered by the desk doc</span>
                           </div>

@@ -150,6 +150,97 @@ export function pickReferencePoint(
   return best != null && bestDist <= tolerance ? best : null;
 }
 
+export interface SkewDistribution {
+  bins: { x: number; density: number }[];
+  nowValue: number;
+  percentile: number | null;
+  sigma: number | null;
+  zone: SkewZone | null;
+  mean: number;
+  stddev: number;
+  rangeLo: number;
+  rangeHi: number;
+  min: number;
+  max: number;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 1) return sorted[0]!;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo]!;
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (pos - lo);
+}
+
+function gaussianKde(
+  values: number[],
+  lo: number,
+  hi: number,
+  samples = 32,
+): { x: number; density: number }[] {
+  const n = values.length;
+  const mean = values.reduce((s, v) => s + v, 0) / n;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+  const sd = Math.sqrt(variance) || 1;
+  const bw = Math.max(1.06 * sd * n ** -0.2, (hi - lo) / 64 || 1e-6);
+  const span = hi - lo || 1;
+  const out: { x: number; density: number }[] = [];
+  for (let i = 0; i < samples; i++) {
+    const x = lo + (span * i) / (samples - 1);
+    let density = 0;
+    for (const v of values) {
+      const u = (x - v) / bw;
+      density += Math.exp(-0.5 * u * u);
+    }
+    out.push({ x, density: density / (n * bw * Math.sqrt(2 * Math.PI)) });
+  }
+  return out;
+}
+
+export function buildDistribution(
+  series: IvHistoryPoint[],
+  key: SkewMetricKey,
+): SkewDistribution | null {
+  const values = series
+    .map((p) => p[key])
+    .filter((v): v is number => v != null && Number.isFinite(v))
+    .map((v) => v * 100);
+  if (values.length < 2) return null;
+
+  const nowValue = values[values.length - 1]!;
+  const sorted = [...values].sort((a, b) => a - b);
+  const min = sorted[0]!;
+  const max = sorted[sorted.length - 1]!;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  const stddev = Math.sqrt(variance);
+  const sigma = stddev > 0 ? (nowValue - mean) / stddev : null;
+  const leq = values.filter((v) => v <= nowValue).length;
+  const percentile = (leq / values.length) * 100;
+
+  let rangeLo = Math.min(quantile(sorted, 0.02), nowValue);
+  let rangeHi = Math.max(quantile(sorted, 0.98), nowValue);
+  if (rangeHi - rangeLo < 1e-6) {
+    rangeLo -= 1;
+    rangeHi += 1;
+  }
+
+  return {
+    bins: gaussianKde(values, rangeLo, rangeHi),
+    nowValue,
+    percentile,
+    sigma,
+    zone: zoneFor(sigma, 'zscore'),
+    mean,
+    stddev,
+    rangeLo,
+    rangeHi,
+    min,
+    max,
+  };
+}
+
 export function reconstructSmile(point: IvHistoryPoint): SmilePoint[] {
   const { atmIv, rr25d, bfly25d, rr10d, bfly10d } = point;
   if (atmIv == null || !Number.isFinite(atmIv)) return [];

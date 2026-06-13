@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { IvHistoryPoint } from '@shared/enriched';
 import {
+  buildDistribution,
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
@@ -155,5 +156,30 @@ describe('skew history transforms', () => {
     expect(
       formatSkewDisplayValue(latestSkewDisplayValue(series, 'rr25d', 'zscore'), 'zscore'),
     ).toBe('+1.22σ');
+  });
+});
+
+describe('buildDistribution', () => {
+  const series = [
+    { ts: 1, atmIv: 0.4, rr25d: -0.08, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 2, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 3, atmIv: 0.4, rr25d: -0.04, bfly25d: 0.01, rr10d: null, bfly10d: null },
+  ];
+
+  it('returns nowValue, percentile, sigma, and a density curve', () => {
+    const d = buildDistribution(series, 'rr25d')!;
+    expect(d.nowValue).toBeCloseTo(-4, 6);
+    expect(d.min).toBeCloseTo(-8, 6);
+    expect(d.max).toBeCloseTo(-4, 6);
+    expect(d.percentile).toBeCloseTo(100, 6);
+    expect(d.sigma).toBeGreaterThan(0);
+    expect(d.bins.length).toBeGreaterThan(8);
+    expect(d.bins.every((b) => b.density >= 0)).toBe(true);
+    expect(d.rangeLo).toBeLessThanOrEqual(d.nowValue);
+    expect(d.rangeHi).toBeGreaterThanOrEqual(d.nowValue);
+  });
+
+  it('returns null with fewer than 2 valid points', () => {
+    expect(buildDistribution([series[0]!], 'rr25d')).toBeNull();
   });
 });

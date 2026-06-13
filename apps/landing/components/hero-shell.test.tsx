@@ -20,14 +20,12 @@ describe('hero shell', () => {
       'href',
       '#showcase',
     );
-    expect(screen.getByRole('link', { name: /^sign in$/i })).toHaveAttribute(
-      'href',
-      'https://app.oggregator.xyz',
-    );
-    expect(screen.getByRole('link', { name: /^terminal$/i })).toHaveAttribute(
-      'href',
-      '#showcase',
-    );
+    for (const link of screen.getAllByRole('link', { name: /^sign in$/i })) {
+      expect(link).toHaveAttribute('href', 'https://app.oggregator.xyz');
+    }
+    for (const link of screen.getAllByRole('link', { name: /^terminal$/i })) {
+      expect(link).toHaveAttribute('href', '#showcase');
+    }
     expect(screen.getByText(/cross-venue options terminal/i)).toBeInTheDocument();
     expect(screen.getAllByLabelText(/interactive 3d volatility surface/i).length).toBeGreaterThan(
       0,

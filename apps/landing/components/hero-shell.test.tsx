@@ -14,12 +14,7 @@ describe('hero shell', () => {
       </>,
     );
 
-    expect(
-      screen.getAllByText(/coincall low fees \+ deep options liquidity/i).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(/thalex private feed synced to portfolio workspace/i).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Deribit · OKX · Binance · Bybit/).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /^terminal$/i })).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /request access/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /see the terminal/i })).toHaveAttribute(

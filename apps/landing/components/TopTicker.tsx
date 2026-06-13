@@ -1,5 +1,6 @@
 'use client';
 
+import { useReducedMotion } from 'framer-motion';
 import { useState } from 'react';
 
 type SpotQuote = { priceLabel: string; changeLabel: string };
@@ -50,6 +51,7 @@ function TapeRun({ items, hidden }: { items: TapeItem[]; hidden?: boolean }) {
 export function TopTicker({ spots }: { spots?: TickerSpots }) {
   const items = buildTapeItems(spots);
   const [paused, setPaused] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   return (
     <div className="overflow-hidden border-b border-[color:var(--landing-border)] bg-[rgba(10,10,10,0.92)] backdrop-blur-xl">
@@ -63,15 +65,17 @@ export function TopTicker({ spots }: { spots?: TickerSpots }) {
             <TapeRun items={items} hidden />
           </div>
         </div>
-        <button
-          type="button"
-          aria-label="Pause ticker"
-          aria-pressed={paused}
-          onClick={() => setPaused((value) => !value)}
-          className="shrink-0 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-zinc-400 transition hover:text-zinc-200"
-        >
-          {paused ? '▶' : '⏸'}
-        </button>
+        {prefersReducedMotion ? null : (
+          <button
+            type="button"
+            aria-label="Pause ticker"
+            aria-pressed={paused}
+            onClick={() => setPaused((value) => !value)}
+            className="shrink-0 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.18em] text-zinc-400 transition hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--landing-accent)]"
+          >
+            <span aria-hidden>{paused ? '▶' : '⏸'}</span>
+          </button>
+        )}
       </div>
     </div>
   );

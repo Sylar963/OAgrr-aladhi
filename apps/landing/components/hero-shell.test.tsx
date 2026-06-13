@@ -51,4 +51,11 @@ describe('hero shell', () => {
     }
     expect(screen.getByText(/not a screenshot/i)).toBeInTheDocument();
   });
+
+  it('keeps the late hero beat invisible AND inert at load', () => {
+    render(<HeroTerminalSection />);
+
+    expect(screen.getAllByRole('link', { name: /request access/i })[0]).toBeVisible();
+    expect(screen.getByText(/not a screenshot/i)).not.toBeVisible();
+  });
 });

@@ -64,13 +64,17 @@ function HeroScene({
     return local * -28;
   });
 
+  const visibility = useTransform(opacity, (value) =>
+    value < 0.01 ? ("hidden" as const) : ("visible" as const),
+  );
+
   return (
     <motion.div
       className={
         (pointerEvents ? "" : "pointer-events-none ") +
         "absolute inset-0 flex items-center px-6 sm:px-10"
       }
-      style={staticVisible ? { opacity: 1 } : { opacity, y }}
+      style={staticVisible ? { opacity: 1 } : { opacity, y, visibility }}
     >
       <div className="landing-container w-full">{children}</div>
     </motion.div>
@@ -108,13 +112,13 @@ export function HeroTerminalSection() {
       ref={sectionRef}
       aria-label="Hero · terminal-first options intelligence"
       className="relative"
-      style={{ height: staticMode ? "auto" : "240vh" }}
+      style={{ height: staticMode ? "auto" : "240svh" }}
     >
       <div
         className={
           staticMode
-            ? "relative w-full overflow-hidden bg-[#080b0d]"
-            : "sticky top-0 h-screen w-full overflow-hidden bg-[#080b0d]"
+            ? "relative min-h-svh w-full overflow-hidden bg-[#080b0d]"
+            : "sticky top-0 h-svh w-full overflow-hidden bg-[#080b0d]"
         }
       >
         <motion.div

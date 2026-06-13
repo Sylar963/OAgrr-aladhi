@@ -20,15 +20,9 @@ export function HowItWorksSection() {
               <div className="absolute inset-y-0 left-0 w-px bg-[linear-gradient(180deg,transparent,rgba(237,244,246,0.55),transparent)]" />
               <div className="grid gap-5 lg:grid-cols-[120px_1.1fr_0.8fr] lg:items-center">
                 <div>
-                  <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-zinc-400">
-                    Depth state
-                  </p>
-                  <div className="mt-3 inline-flex items-center gap-3 rounded-full border border-white/8 bg-black/16 px-3 py-2">
+                  <div className="inline-flex items-center gap-3 rounded-full border border-white/8 bg-black/16 px-3 py-2">
                     <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.24em] text-[var(--landing-accent)]">
                       {step.label}
-                    </span>
-                    <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
-                      {step.title}
                     </span>
                   </div>
                 </div>
@@ -42,7 +36,7 @@ export function HowItWorksSection() {
 
                 <div className="rounded-[1.2rem] border border-white/8 bg-black/14 px-4 py-4">
                   <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-400">
-                    Trigger
+                    On screen
                   </p>
                   <p className="mt-3 text-sm leading-6 text-zinc-200">{step.detail}</p>
                 </div>

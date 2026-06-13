@@ -42,7 +42,7 @@ export function FeatureBentoSection() {
                   <p className="text-base leading-7 text-[var(--landing-muted-strong)]">
                     {mode.description}
                   </p>
-                  <p className="rounded-[1rem] border border-white/8 bg-black/14 px-3 py-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.2em] text-zinc-300">
+                  <p className="rounded-[1rem] border border-white/8 bg-black/14 px-3 py-3 text-sm leading-6 text-[var(--landing-muted-strong)]">
                     {mode.emphasis}
                   </p>
                 </div>

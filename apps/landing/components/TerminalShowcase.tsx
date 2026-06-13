@@ -15,7 +15,7 @@ import { showcaseFrames, type ShowcaseFrame } from "@/lib/demo-data";
 
 const FRAME_WINDOW = 0.85;
 
-function FramePlate({ frame, priority }: { frame: ShowcaseFrame; priority: boolean }) {
+function FramePlate({ frame }: { frame: ShowcaseFrame }) {
   const [errored, setErrored] = useState(false);
 
   if (errored) {
@@ -41,7 +41,6 @@ function FramePlate({ frame, priority }: { frame: ShowcaseFrame; priority: boole
       fill
       sizes="(min-width: 1024px) 60vw, 100vw"
       className="object-contain"
-      priority={priority}
       onError={() => setErrored(true)}
     />
   );
@@ -61,19 +60,21 @@ function Frame({
   const slice = 1 / total;
   const center = (index + 0.5) * slice;
   const window = slice * FRAME_WINDOW;
+  const settle = (value: number) =>
+    Math.min(Math.max(value, slice * 0.5), 1 - slice * 0.5);
 
   const opacity = useTransform(progress, (value) => {
-    const distance = Math.abs(value - center);
+    const distance = Math.abs(settle(value) - center);
     if (distance > window) return 0;
     return 1 - distance / window;
   });
 
   const scale = useTransform(progress, (value) => {
-    const distance = (value - center) / slice;
+    const distance = (settle(value) - center) / slice;
     return 1 - Math.min(Math.abs(distance), 1) * 0.04;
   });
 
-  const y = useTransform(progress, (value) => (value - center) * 70);
+  const y = useTransform(progress, (value) => (settle(value) - center) * 70);
 
   return (
     <motion.div
@@ -81,7 +82,7 @@ function Frame({
       style={{ opacity, scale, y }}
     >
       <div className="relative aspect-[16/10] w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/40 shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]">
-        <FramePlate frame={frame} priority={index === 0} />
+        <FramePlate frame={frame} />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,11,13,0.0)_60%,rgba(8,11,13,0.6)_100%)]"
@@ -105,14 +106,16 @@ function FrameCaption({
   const slice = 1 / total;
   const center = (index + 0.5) * slice;
   const window = slice * 0.6;
+  const settle = (value: number) =>
+    Math.min(Math.max(value, slice * 0.5), 1 - slice * 0.5);
 
   const opacity = useTransform(progress, (value) => {
-    const distance = Math.abs(value - center);
+    const distance = Math.abs(settle(value) - center);
     if (distance > window) return 0;
     return 1 - distance / window;
   });
 
-  const y = useTransform(progress, (value) => (value - center) * -40);
+  const y = useTransform(progress, (value) => (settle(value) - center) * -40);
 
   return (
     <motion.div
@@ -153,7 +156,7 @@ function StaticGrid() {
             className="landing-panel overflow-hidden rounded-[1.5rem]"
           >
             <div className="relative aspect-[16/10] w-full overflow-hidden border-b border-white/8">
-              <FramePlate frame={frame} priority={false} />
+              <FramePlate frame={frame} />
             </div>
             <div className="p-5">
               <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">

@@ -22,6 +22,8 @@ afterEach(async () => {
 });
 
 describe('POST /api/leads', () => {
+  // The route's rate-limit map is module-global and not reset between tests,
+  // so every test below MUST use a unique x-forwarded-for IP (10.0.0.1..10.0.0.6).
   it('accepts a valid email payload', async () => {
     const request = new Request('http://localhost/api/leads', {
       method: 'POST',

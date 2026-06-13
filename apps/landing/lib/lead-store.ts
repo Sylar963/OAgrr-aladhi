@@ -46,8 +46,8 @@ export async function persistLead(input: LeadInput): Promise<void> {
       });
       if (res.ok) return;
     } catch {
-      // Network error / timeout — fall through to the durable file fallback so a
-      // lead is never lost while the core API is unreachable.
+      // Network error / timeout — fall through to the best-effort file fallback so a
+      // lead has a chance to survive while the core API is unreachable.
     }
   }
 

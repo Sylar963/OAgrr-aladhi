@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef, useState } from 'react';
+
 import styles from './SkewSmileChart.module.css';
 import type { SmilePoint } from './skew-history-utils';
 
@@ -7,7 +9,12 @@ interface Props {
   referenceLabel: string;
 }
 
-const W = 480;
+// Fallback viewBox width used until the container is measured (and in jsdom,
+// where layout/ResizeObserver are unavailable). The chart drives its real
+// viewBox width from the measured container so it fills the panel exactly —
+// the height stays fixed so the chart fits its slot in the (fixed-height)
+// surface panel without distorting the in-SVG axis text.
+const W_FALLBACK = 480;
 const H = 150;
 const PAD_L = 34;
 const PAD_R = 12;
@@ -15,8 +22,31 @@ const PAD_T = 14;
 const PAD_B = 26;
 
 export default function SkewSmileChart({ now, reference, referenceLabel }: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(W_FALLBACK);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setWidth(w);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const W = width;
+
   if (now.length === 0) {
-    return <div className={styles.empty}>insufficient data</div>;
+    return (
+      <div className={styles.wrap} ref={wrapRef}>
+        <div className={styles.empty}>insufficient data</div>
+      </div>
+    );
   }
 
   const all = [...now, ...(reference ?? [])];
@@ -38,7 +68,7 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
   const gridIvs = [hi, (hi + lo) / 2, lo];
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} ref={wrapRef}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"

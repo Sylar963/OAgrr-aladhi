@@ -16,6 +16,7 @@ import {
 } from './skew-history-utils';
 
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
+const WINDOWS: IvHistoryWindow[] = ['30d', '90d'];
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
 const VS_OPTIONS: { key: string; label: string; days: number | null }[] = [
@@ -112,7 +113,7 @@ export default function SkewHistory({ underlying }: Props) {
           </div>
           <span className={styles.toggleLabel}>WINDOW</span>
           <div className={styles.toggleGroup}>
-            {(['30d', '90d'] as IvHistoryWindow[]).map((w) => (
+            {WINDOWS.map((w) => (
               <button
                 key={w}
                 type="button"

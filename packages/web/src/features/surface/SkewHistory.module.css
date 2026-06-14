@@ -100,9 +100,9 @@
   border-top: 1px solid #15191d;
   font-family: 'IBM Plex Mono', monospace;
 }
-.coverage { font-size: 9px; color: #4b5560; }
+.coverage { font-size: 9px; color: var(--text-dim); }
 .coverage[data-short='true'] { color: #f59e0b; }
-.takeaway { font-size: 11px; color: #aeb6bc; }
+.takeaway { font-size: 11px; color: var(--text-secondary); }
 
 @media (max-width: 768px) {
   .header {

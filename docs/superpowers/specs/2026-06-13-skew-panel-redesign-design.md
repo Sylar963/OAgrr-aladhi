@@ -54,7 +54,7 @@ is it shifting?* (shape, support).
 
 A single vertical panel per underlying, replacing the two-chart stack:
 
-```
+```text
 ┌ BTC SKEW · logo ······ TENOR 7d [30d] 60d 90d · WINDOW [30d] 90d ┐
 │ 25Δ RR  +0.1σ [NORMAL]  56th · −6.0vp · −14.9%ATM      ╱╲╱ spark  │
 │ [══ density strip: distribution + %-below fill + ±1σ + now mark ═]│

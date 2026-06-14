@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { IvHistoryPoint } from '@shared/enriched';
 import {
+  buildDistribution,
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
-  referenceLines,
+  pickReferencePoint,
+  reconstructSmile,
   zoneFor,
 } from './skew-history-utils';
 
@@ -14,9 +16,54 @@ function point(ts: number, values: Partial<IvHistoryPoint>): IvHistoryPoint {
     atmIv: 0.5,
     rr25d: null,
     bfly25d: null,
+    rr10d: null,
+    bfly10d: null,
     ...values,
   };
 }
+
+describe('pickReferencePoint', () => {
+  const series = [
+    { ts: 0, atmIv: 0.4, rr25d: -0.05, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 7 * 86_400_000, atmIv: 0.41, rr25d: -0.04, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 14 * 86_400_000, atmIv: 0.42, rr25d: -0.03, bfly25d: 0.01, rr10d: null, bfly10d: null },
+  ];
+  it('picks the point closest to nowTs − refDays', () => {
+    const ref = pickReferencePoint(series, 14 * 86_400_000, 7);
+    expect(ref?.ts).toBe(7 * 86_400_000);
+  });
+  it('returns null when no point is within half the horizon', () => {
+    expect(pickReferencePoint(series, 14 * 86_400_000, 60)).toBeNull();
+  });
+});
+
+describe('reconstructSmile', () => {
+  it('reconstructs 5 points when 10d wings are present', () => {
+    const pts = reconstructSmile({
+      ts: 1, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.015, rr10d: -0.1, bfly10d: 0.04,
+    });
+    expect(pts.map((p) => p.label)).toEqual(['10Δp', '25Δp', 'ATM', '25Δc', '10Δc']);
+    const atm = pts.find((p) => p.label === 'ATM')!;
+    const c25 = pts.find((p) => p.label === '25Δc')!;
+    const p25 = pts.find((p) => p.label === '25Δp')!;
+    expect(atm.iv).toBeCloseTo(40, 6);
+    expect(c25.iv).toBeCloseTo(38.5, 6);
+    expect(p25.iv).toBeCloseTo(44.5, 6);
+  });
+
+  it('reconstructs 3 points when 10d wings are missing', () => {
+    const pts = reconstructSmile({
+      ts: 1, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.015, rr10d: null, bfly10d: null,
+    });
+    expect(pts.map((p) => p.label)).toEqual(['25Δp', 'ATM', '25Δc']);
+  });
+
+  it('returns empty when atm is missing', () => {
+    expect(reconstructSmile({
+      ts: 1, atmIv: null, rr25d: -0.06, bfly25d: 0.015, rr10d: null, bfly10d: null,
+    })).toEqual([]);
+  });
+});
 
 describe('skew history transforms', () => {
   it('raw conversion preserves vol-point values', () => {
@@ -74,12 +121,6 @@ describe('skew history transforms', () => {
     expect(rows).toEqual([]);
   });
 
-  it('reference lines vary by mode', () => {
-    expect(referenceLines('raw')).toEqual([]);
-    expect(referenceLines('normalized').map((r) => r.price)).toEqual([0]);
-    expect(referenceLines('zscore').map((r) => r.price)).toEqual([2, 1, 0, -1, -2]);
-  });
-
   it('zoneFor classifies by absolute z-score, only in zscore mode', () => {
     expect(zoneFor(0.4, 'zscore')).toBe('normal');
     expect(zoneFor(-1.2, 'zscore')).toBe('stretched');
@@ -108,5 +149,30 @@ describe('skew history transforms', () => {
     expect(
       formatSkewDisplayValue(latestSkewDisplayValue(series, 'rr25d', 'zscore'), 'zscore'),
     ).toBe('+1.22σ');
+  });
+});
+
+describe('buildDistribution', () => {
+  const series = [
+    { ts: 1, atmIv: 0.4, rr25d: -0.08, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 2, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.01, rr10d: null, bfly10d: null },
+    { ts: 3, atmIv: 0.4, rr25d: -0.04, bfly25d: 0.01, rr10d: null, bfly10d: null },
+  ];
+
+  it('returns nowValue, percentile, sigma, and a density curve', () => {
+    const d = buildDistribution(series, 'rr25d')!;
+    expect(d.nowValue).toBeCloseTo(-4, 6);
+    expect(d.min).toBeCloseTo(-8, 6);
+    expect(d.max).toBeCloseTo(-4, 6);
+    expect(d.percentile).toBeCloseTo(100, 6);
+    expect(d.sigma).toBeGreaterThan(0);
+    expect(d.bins.length).toBeGreaterThan(8);
+    expect(d.bins.every((b) => b.density >= 0)).toBe(true);
+    expect(d.rangeLo).toBeLessThanOrEqual(d.nowValue);
+    expect(d.rangeHi).toBeGreaterThanOrEqual(d.nowValue);
+  });
+
+  it('returns null with fewer than 2 valid points', () => {
+    expect(buildDistribution([series[0]!], 'rr25d')).toBeNull();
   });
 });

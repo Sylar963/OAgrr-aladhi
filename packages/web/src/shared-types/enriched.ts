@@ -112,6 +112,8 @@ export interface IvHistoryPoint {
   atmIv: number | null;
   rr25d: number | null;
   bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
 }
 
 export interface IvHistoryExtrema {

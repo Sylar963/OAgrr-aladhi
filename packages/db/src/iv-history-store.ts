@@ -12,6 +12,8 @@ export interface PersistedIvHistoryPoint {
   atmIv: number | null;
   rr25d: number | null;
   bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
   source: IvHistoryPointSource;
 }
 
@@ -82,7 +84,7 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
       const batch = points.slice(index, index + INSERT_BATCH_SIZE);
       const values: unknown[] = [];
       const placeholders = batch.map((point, batchIndex) => {
-        const offset = batchIndex * 7;
+        const offset = batchIndex * 9;
         values.push(
           point.underlying.toUpperCase(),
           point.tenorDays,
@@ -90,9 +92,11 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
           point.atmIv,
           point.rr25d,
           point.bfly25d,
+          point.rr10d,
+          point.bfly10d,
           point.source,
         );
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`;
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`;
       });
 
       await this.pool.query(
@@ -103,12 +107,16 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
           atm_iv,
           rr25d,
           bfly25d,
+          rr10d,
+          bfly10d,
           source
         ) VALUES ${placeholders.join(', ')}
         ON CONFLICT (underlying, tenor_days, ts) DO UPDATE SET
           atm_iv = EXCLUDED.atm_iv,
           rr25d = EXCLUDED.rr25d,
           bfly25d = EXCLUDED.bfly25d,
+          rr10d = EXCLUDED.rr10d,
+          bfly10d = EXCLUDED.bfly10d,
           source = EXCLUDED.source`,
         values,
       );
@@ -126,6 +134,8 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
         atm_iv,
         rr25d,
         bfly25d,
+        rr10d,
+        bfly10d,
         source
       FROM iv_history_points
       WHERE underlying = ANY($1::text[])
@@ -162,6 +172,8 @@ interface IvHistoryRow {
   atm_iv: number | string | null;
   rr25d: number | string | null;
   bfly25d: number | string | null;
+  rr10d: number | string | null;
+  bfly10d: number | string | null;
   source: IvHistoryPointSource;
 }
 
@@ -173,6 +185,8 @@ function mapRow(row: IvHistoryRow): PersistedIvHistoryPoint {
     atmIv: toNumber(row.atm_iv),
     rr25d: toNumber(row.rr25d),
     bfly25d: toNumber(row.bfly25d),
+    rr10d: toNumber(row.rr10d),
+    bfly10d: toNumber(row.bfly10d),
     source: row.source,
   };
 }

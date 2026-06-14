@@ -58,7 +58,13 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
   const lo = ivMin - padIv;
   const hi = ivMax + padIv;
 
-  const toX = (x: number) => PAD_L + x * (W - PAD_L - PAD_R);
+  // Map the actual delta range to the full plot width so the smile (and its
+  // axis labels) span edge-to-edge instead of sitting inset in the middle.
+  const xs = now.map((p) => p.x);
+  const xMin = Math.min(...xs);
+  const xMax = Math.max(...xs);
+  const xSpan = xMax - xMin || 1;
+  const toX = (x: number) => PAD_L + ((x - xMin) / xSpan) * (W - PAD_L - PAD_R);
   const toY = (iv: number) => PAD_T + (1 - (iv - lo) / (hi - lo)) * (H - PAD_T - PAD_B);
   const line = (pts: SmilePoint[]) =>
     pts
@@ -98,7 +104,7 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
         {now.map((p) => (
           <circle key={p.label} cx={toX(p.x)} cy={toY(p.iv)} r="3" fill="#50d2c1" />
         ))}
-        {now.map((p) => (
+        {now.map((p, i) => (
           <text
             key={`l-${p.label}`}
             x={toX(p.x)}
@@ -106,7 +112,7 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
             fill="#6b7280"
             fontSize="9"
             fontFamily="monospace"
-            textAnchor="middle"
+            textAnchor={i === 0 ? 'start' : i === now.length - 1 ? 'end' : 'middle'}
           >
             {p.label}
           </text>

@@ -46,7 +46,7 @@ OAuth2 refresh-token grant (`/oauth/token`) → 15-min access token → `/api-qu
 
 ## Deploy
 
-Runs on the Scaleway host (not Vercel — persistent process + WebSocket + in-memory store). See [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) for the systemd unit, nginx vhost, and the host checklist.
+Runs on the Scaleway host (not Vercel — persistent process + WebSocket + in-memory store). See [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) for the systemd unit, Caddy path proxy, and the host checklist.
 
 ## Notes
 

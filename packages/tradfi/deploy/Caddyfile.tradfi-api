@@ -1,0 +1,11 @@
+# Add this route before the catch-all reverse_proxy in the existing
+# api.oggregator.xyz block.
+
+handle_path /tradfi-api/* {
+    reverse_proxy 127.0.0.1:3200 {
+        transport http {
+            read_timeout 0
+            write_timeout 0
+        }
+    }
+}

@@ -3,11 +3,11 @@
 The TradFi service (`@oggregator/tradfi`) is a **persistent Fastify process** with a live
 DXLink WebSocket and an in-memory store. It does **not** fit Vercel's serverless model —
 it runs on the **Scaleway host**, exactly like the crypto API (`api.oggregator.xyz`).
-The web SPA stays on Vercel and reaches this service over HTTPS at a subdomain.
+The web SPA stays on Vercel and reaches this service through the existing API domain.
 
 ```
-app.oggregator.xyz (Vercel SPA)  ──HTTPS──▶  tradfi-api.oggregator.xyz
-                                                 │ (nginx on Scaleway)
+app.oggregator.xyz (Vercel SPA)  ──HTTPS──▶  api.oggregator.xyz/tradfi-api
+                                                 │ (Caddy on Scaleway)
                                                  ▼
                                           127.0.0.1:3200  (ogg-tradfi.service)
 ```
@@ -15,9 +15,9 @@ app.oggregator.xyz (Vercel SPA)  ──HTTPS──▶  tradfi-api.oggregator.xyz
 ## What is already done in this repo (local)
 
 - `ogg-tradfi.service` — user systemd unit (this folder)
-- `nginx-tradfi-api.conf` — reverse-proxy vhost (this folder)
+- `Caddyfile.tradfi-api` — reverse-proxy route for the existing API domain
 - `.env.example` (repo root) — the required `TASTYTRADE_*` / `TRADFI_*` keys
-- Honest readiness: `/health` (liveness) and `/ready` (readiness) routes; `/chains`
+- Readiness routes: `/health` (liveness) and `/ready` (readiness); `/chains`
   returns `503` while warming up (the web client already retries 503s).
 
 These are **templates committed to git**. An engineer applies them on the host below.
@@ -47,30 +47,29 @@ These are **templates committed to git**. An engineer applies them on the host b
    ```
 
 4. **Install + start the service**
-   ```bash
-   cp packages/tradfi/deploy/ogg-tradfi.service ~/.config/systemd/user/
-   # edit WorkingDirectory (and pnpm path if needed) in that file
-   systemctl --user daemon-reload
+    ```bash
+    cp packages/tradfi/deploy/ogg-tradfi.service ~/.config/systemd/user/
+    # edit WorkingDirectory and ensure ExecStart can find pnpm under user systemd
+    systemctl --user daemon-reload
    systemctl --user enable --now ogg-tradfi.service
    loginctl enable-linger "$USER"
    systemctl --user status ogg-tradfi.service     # expect: active (running)
    ```
 
-5. **DNS** — add an `A` record `tradfi-api.oggregator.xyz` → the Scaleway box IP
-   (wherever `oggregator.xyz` DNS is managed).
+5. **DNS** — no new record is required. Reuse the existing `api.oggregator.xyz` record.
 
-6. **nginx + TLS**
-   ```bash
-   sudo cp packages/tradfi/deploy/nginx-tradfi-api.conf /etc/nginx/sites-available/tradfi-api.oggregator.xyz
-   sudo ln -s /etc/nginx/sites-available/tradfi-api.oggregator.xyz /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d tradfi-api.oggregator.xyz
-   ```
+6. **Caddy path proxy**
+    ```bash
+    # Add packages/tradfi/deploy/Caddyfile.tradfi-api before the catch-all
+    # reverse_proxy in the api.oggregator.xyz block, then reload Caddy.
+    sudo caddy validate --config /etc/caddy/Caddyfile
+    sudo systemctl reload caddy
+    ```
 
 7. **Vercel (web)** — set the env var on the `oggregator-web` project, then redeploy:
-   ```
-   VITE_TRADFI_API_BASE = https://tradfi-api.oggregator.xyz
-   ```
+    ```
+    VITE_TRADFI_API_BASE = https://api.oggregator.xyz/tradfi-api
+    ```
    This both points the web at the backend **and** un-hides the TRADFI button
    (the button is gated on this var in production).
 
@@ -83,7 +82,7 @@ curl http://127.0.0.1:3200/underlyings    # ["SPX","NDX",...]
 curl "http://127.0.0.1:3200/expiries?underlying=AAPL"
 curl "http://127.0.0.1:3200/chains?underlying=AAPL&expiry=<real-expiry>"   # 200 once warm
 # then externally:
-curl https://tradfi-api.oggregator.xyz/ready
+curl https://api.oggregator.xyz/tradfi-api/ready
 ```
 
 ## Notes

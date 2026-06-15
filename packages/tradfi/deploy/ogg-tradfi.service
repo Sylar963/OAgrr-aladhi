@@ -27,6 +27,9 @@ WorkingDirectory=/home/REPLACE_ME/oggregator
 ExecStart=/usr/bin/env pnpm --filter @oggregator/tradfi start
 Environment=NODE_ENV=production
 Environment=LOG_LEVEL=info
+# User systemd does not load shell/NVM startup files. If Node/pnpm is installed
+# under NVM, add that bin directory here or replace ExecStart with an absolute pnpm path.
+# Environment=PATH=/home/REPLACE_ME/.nvm/versions/node/v22.x/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Restart=on-failure
 RestartSec=5
 # Give graceful shutdown (SIGTERM → feed.dispose + app.close) time to finish.

@@ -84,6 +84,7 @@ export type {
   StreamHandlers,
 } from './feeds/shared/types.js';
 export { BaseAdapter } from './feeds/shared/base.js';
+export { TopicWsClient, type TopicWsClientOptions } from './feeds/shared/topic-ws-client.js';
 
 // runtime
 export {

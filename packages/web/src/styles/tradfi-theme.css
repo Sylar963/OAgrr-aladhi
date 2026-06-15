@@ -1,0 +1,28 @@
+/* Bloomberg-style black + amber. Scoped to the TradFi mode wrapper so the
+   crypto theme is untouched. Reuses all existing component tokens. */
+[data-mode="tradfi"] {
+  --bg-base: #000000;
+  --bg-surface: #0a0905;
+  --bg-elevated: #14110a;
+  --bg-hover: #1c1810;
+  --bg-active: #261f10;
+  --bg-input: #100d07;
+  --bg-panel: #0a0905;
+
+  --text-primary: #ffd24a;
+  --text-secondary: #d8b24a;
+  --text-tertiary: #9c8030;
+  --text-dim: #6a5720;
+
+  --border-subtle: #2a2410;
+  --border-default: #3a3214;
+  --border-strong: #4d421c;
+  --border-focus: #ffb300;
+
+  --accent-primary: #ffb300;
+  --accent-primary-bg: #2a1f00;
+  --accent-primary-dim: rgba(255, 179, 0, 0.14);
+
+  --color-warning: #ffcc00;
+  /* profit/loss stay green/red for readability */
+}

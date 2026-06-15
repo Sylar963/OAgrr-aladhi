@@ -237,7 +237,7 @@ export default function StatStrip({
           <div className={styles.divider} />
           <StatCell
             label="IVP"
-            value={`${marketStats.dvol.ivp.toFixed(0)}`}
+            value={marketStats.dvol.ivp != null ? `${marketStats.dvol.ivp.toFixed(0)}` : '–'}
             sub={`52w: ${fmtIv(marketStats.dvol.low52w)}–${fmtIv(marketStats.dvol.high52w)}`}
             accent
             labelTooltip={IVP_TIP}
@@ -245,13 +245,19 @@ export default function StatStrip({
           <div className={styles.divider} />
           <StatCell
             label="IV Δ1d"
-            value={fmtPct(marketStats.dvol.ivChange1d * 100, 2)}
+            value={
+              marketStats.dvol.ivChange1d != null
+                ? fmtPct(marketStats.dvol.ivChange1d * 100, 2)
+                : '–'
+            }
             positive={
-              marketStats.dvol.ivChange1d > 0
-                ? true
-                : marketStats.dvol.ivChange1d < 0
-                  ? false
-                  : null
+              marketStats.dvol.ivChange1d == null
+                ? null
+                : marketStats.dvol.ivChange1d > 0
+                  ? true
+                  : marketStats.dvol.ivChange1d < 0
+                    ? false
+                    : null
             }
             labelTooltip={IV_CHANGE_TIP}
           />

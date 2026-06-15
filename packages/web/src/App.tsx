@@ -1,4 +1,5 @@
 import { AppShell } from '@components/layout';
+import { TradfiApp } from '@features/tradfi';
 import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
 import { ChainView, ChartPanelLayer, useUnderlyings } from '@features/chain';
 import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
@@ -60,7 +61,10 @@ export default function App() {
     }
   }, [setActiveTab]);
 
+  const assetMode = useAppStore((s) => s.assetMode);
   const activeLabel = TABS.find((t) => t.id === activeTab)?.label ?? activeTab;
+
+  if (assetMode === 'tradfi') return <TradfiApp />;
 
   return (
     <AppShell underlyings={underlyings} tabs={TABS}>

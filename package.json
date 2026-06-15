@@ -19,8 +19,8 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "check": "biome check .",
-    "typecheck": "pnpm -r --filter @oggregator/protocol build && pnpm -r typecheck",
-    "test": "pnpm -r --filter @oggregator/core --filter @oggregator/db --filter @oggregator/protocol build && pnpm -r test:run",
+    "typecheck": "pnpm -r --filter @oggregator/protocol --filter @oggregator/db --filter @oggregator/core --filter @oggregator/trading --filter @oggregator/funded build && pnpm -r typecheck",
+    "test": "pnpm -r --filter @oggregator/protocol --filter @oggregator/db --filter @oggregator/core --filter @oggregator/trading --filter @oggregator/funded build && pnpm -r test:run",
     "test:landing": "pnpm --filter @oggregator/landing test:run",
     "precommit": "pnpm typecheck && pnpm test"
   },

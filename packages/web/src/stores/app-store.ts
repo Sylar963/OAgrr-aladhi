@@ -84,6 +84,9 @@ interface AppState {
   underlying: string;
   expiry: string;
   activeTab: TabId;
+  assetMode: 'crypto' | 'tradfi';
+  tradfiUnderlying: string;
+  tradfiExpiry: string;
   activeVenues: string[];
   myIv: string;
   feedStatus: FeedStatus;
@@ -104,6 +107,9 @@ interface AppState {
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
   setActiveTab: (t: TabId) => void;
+  setAssetMode: (m: 'crypto' | 'tradfi') => void;
+  setTradfiUnderlying: (u: string) => void;
+  setTradfiExpiry: (e: string) => void;
   toggleVenue: (venueId: string) => void;
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;
@@ -130,6 +136,9 @@ export const useAppStore = create<AppState>((set) => ({
   underlying: 'BTC',
   expiry: '',
   activeTab: 'chain',
+  assetMode: 'crypto',
+  tradfiUnderlying: '',
+  tradfiExpiry: '',
   activeVenues: [...VENUE_IDS],
   myIv: '',
   feedStatus: {
@@ -156,6 +165,9 @@ export const useAppStore = create<AppState>((set) => ({
   setUnderlying: (underlying) => set({ underlying, expiry: '' }),
   setExpiry: (expiry) => set({ expiry }),
   setActiveTab: (activeTab) => set({ activeTab }),
+  setAssetMode: (assetMode) => set({ assetMode }),
+  setTradfiUnderlying: (tradfiUnderlying) => set({ tradfiUnderlying, tradfiExpiry: '' }),
+  setTradfiExpiry: (tradfiExpiry) => set({ tradfiExpiry }),
   toggleVenue: (venueId) =>
     set((s) => {
       const active = s.activeVenues.includes(venueId)

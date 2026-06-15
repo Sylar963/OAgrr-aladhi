@@ -37,6 +37,11 @@ export default defineConfig({
         target: 'ws://localhost:3100',
         ws: true,
       },
+      '/tradfi-api': {
+        target: 'http://localhost:3200',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/tradfi-api/, ''),
+      },
     },
   },
 

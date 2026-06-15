@@ -116,3 +116,15 @@ describe('system notification slices', () => {
     expect(useAppStore.getState().toasts).toHaveLength(0);
   });
 });
+
+it('toggles assetMode and tracks tradfi underlying/expiry', () => {
+  const s = useAppStore.getState();
+  expect(s.assetMode).toBe('crypto');
+  s.setAssetMode('tradfi');
+  expect(useAppStore.getState().assetMode).toBe('tradfi');
+  useAppStore.getState().setTradfiUnderlying('AAPL');
+  expect(useAppStore.getState().tradfiUnderlying).toBe('AAPL');
+  expect(useAppStore.getState().tradfiExpiry).toBe(''); // reset on underlying change
+  useAppStore.getState().setTradfiExpiry('2026-06-17');
+  expect(useAppStore.getState().tradfiExpiry).toBe('2026-06-17');
+});

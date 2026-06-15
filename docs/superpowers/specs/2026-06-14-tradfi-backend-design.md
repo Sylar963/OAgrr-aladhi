@@ -31,8 +31,9 @@ This spec is the backend data layer only.
 - **Frontend stays one app.** The eventual TRADFI button lives in the existing oggregator dashboard
   top section and points the SPA at this service. Same host.
 - **OAuth2 auth** (see §4) — username/password is not a supported path on the Open API.
-- **Delete the dead scaffolding** (see §10): the `/api/v2/*` routes, the asset-class split, and the
-  `feeds/tastytrade` stubs are superseded; migrate the useful Zod schemas, then remove the rest.
+- **Delete the dead additive scaffold** (see §10): the `/api/v2/*` routes and the `feeds/tastytrade`
+  stubs are superseded — migrate the useful Zod schemas first, then remove. The v1-route
+  asset-class filtering is **left vestigial with a comment** (crypto routes stay byte-unchanged).
 
 ## 3. Package layout
 
@@ -213,21 +214,32 @@ cash-settled European index options (the equity-world stand-ins for ES/NQ) with 
 SPY/QQQ/AAPL/NVDA/TSLA are American-style. Exercise/settlement captured per contract, so mixing is
 fine.
 
-## 10. Deletions / migration
+## 10. Deletions / migration — **Option A (leave v1 vestigial)**
 
-Migrate the useful Zod schemas + state shapes into `packages/tradfi`, then remove:
+Two buckets: delete the purely-additive dead files; leave the v1-route asset-class machinery in
+place as a vestigial no-op. Chosen for lowest risk — the working crypto routes stay byte-unchanged.
 
-- `packages/server/src/routes/v2/**` and its registration.
-- `packages/server/src/asset-class.ts`; revert asset-class filtering re-added to v1 routes
-  (`chains.ts`, `expiries.ts`, `surface.ts`, `underlyings.ts`, `venues.ts`) back to plain
-  `getAllAdapters()`. v1 crypto behavior must end up byte-equivalent.
-- `packages/core/src/feeds/tastytrade/**`, its `core/index.ts` exports, the `AssetClass` type +
-  `assetClass` field (`shared/types.ts`, `base.ts`), and the `tastytrade` entry in the
-  `sdk-base.ts` `FEE_CAP` map (the server/core parts of commit `d670b39`).
-- The `tastytrade` entry in protocol `VENUE_IDS` is minor: leave or remove during M0 (the TradFi
-  service defines its own venue identity). Decide for least churn.
+**Delete** (additive scaffold, zero risk to crypto):
+- `packages/server/src/routes/v2/**` and its registration in `app.ts`.
+- `packages/core/src/feeds/tastytrade/**` and its `core/index.ts` exports — but **first migrate** the
+  useful Zod schemas + state shapes into `packages/tradfi`.
 
-This is scoped cleanup of the superseded scaffold — not unrelated refactoring.
+**Keep, unchanged, as vestigial no-ops** (do NOT touch working v1 crypto routes):
+- The asset-class filtering in v1 routes (`chains.ts`, `expiries.ts`, `surface.ts`,
+  `underlyings.ts`, `venues.ts`) stays as `getAdaptersByAssetClass('crypto')`. With no tradfi
+  adapter ever registered in the crypto process, it returns all adapters — runtime-identical to the
+  pre-`d670b39` behavior. Crypto routes end up byte-unchanged.
+- `packages/server/src/asset-class.ts`, the `AssetClass` type + `assetClass` field
+  (`shared/types.ts`, `base.ts`), and the `tastytrade` entry in the `sdk-base.ts` `FEE_CAP` map
+  (required while `tastytrade` stays in `VENUE_IDS`).
+- The `tastytrade` entry in protocol `VENUE_IDS` — leave it (least churn; keeps `FEE_CAP` and shared
+  `VenueId` typing valid).
+
+**The only edit to crypto-side code:** add one comment at `asset-class.ts` (the abstraction's hub)
+noting it is vestigial after TradFi became a separate service — v1 always serves all (crypto)
+adapters; kept deliberately to avoid editing the working v1 routes.
+
+This is scoped handling of the superseded scaffold — not unrelated refactoring.
 
 ## 11. Data flow
 

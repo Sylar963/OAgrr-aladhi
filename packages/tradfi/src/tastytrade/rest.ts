@@ -33,7 +33,8 @@ export class TastytradeRest {
 
   private async get(path: string, search?: URLSearchParams): Promise<unknown> {
     const token = await this.auth.getAccessToken();
-    const url = `${this.cfg.baseUrl}${path}${search ? `?${search.toString()}` : ''}`;
+    const qs = search?.toString() ?? '';
+    const url = `${this.cfg.baseUrl}${path}${qs ? `?${qs}` : ''}`;
     const res = await this.fetchImpl(url, {
       headers: {
         Authorization: `Bearer ${token}`,

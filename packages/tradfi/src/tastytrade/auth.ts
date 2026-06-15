@@ -9,6 +9,7 @@ export interface OAuth2Config {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
+  userAgent?: string;
 }
 
 const EXPIRY_SKEW_MS = 60_000;
@@ -46,7 +47,7 @@ export class OAuth2TokenManager implements AccessTokenProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'oggregator-tradfi/0.1',
+        'User-Agent': this.cfg.userAgent ?? 'oggregator-tradfi/0.1',
       },
       body: body.toString(),
     });

@@ -24,4 +24,8 @@ describe('loadConfig', () => {
   it('throws when a required secret is missing', () => {
     expect(() => loadConfig({})).toThrow(/TASTYTRADE_CLIENT_ID/);
   });
+
+  it('throws on an invalid TRADFI_PORT', () => {
+    expect(() => loadConfig({ ...base, TRADFI_PORT: 'abc' })).toThrow(/TRADFI_PORT/);
+  });
 });

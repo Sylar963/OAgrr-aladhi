@@ -7,6 +7,10 @@ describe('instrument', () => {
     expect(buildCanonical('SPX', '2026-06-20', 5000, 'put')).toBe('SPX/USD:USD-260620-5000-P');
   });
 
+  it('renders fractional strikes in the canonical symbol', () => {
+    expect(buildCanonical('SPX', '2026-06-20', 5002.5, 'call')).toBe('SPX/USD:USD-260620-5002.5-C');
+  });
+
   it('flattens a nested chain into call+put instruments', () => {
     const data = {
       items: [{

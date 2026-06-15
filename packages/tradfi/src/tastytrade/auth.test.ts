@@ -36,4 +36,13 @@ describe('OAuth2TokenManager', () => {
     const mgr = new OAuth2TokenManager(cfg, fakeFetch({ error: 'invalid_grant' }, false));
     await expect(mgr.getAccessToken()).rejects.toThrow(/oauth/i);
   });
+
+  it('deduplicates concurrent calls into one fetch', async () => {
+    const fetchImpl = fakeFetch({ access_token: 'AT3', token_type: 'Bearer', expires_in: 900 });
+    const mgr = new OAuth2TokenManager(cfg, fetchImpl);
+    const [a, b] = await Promise.all([mgr.getAccessToken(), mgr.getAccessToken()]);
+    expect(a).toBe('AT3');
+    expect(b).toBe('AT3');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

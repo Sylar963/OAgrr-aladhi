@@ -24,8 +24,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): TradfiConfig {
     ? underlyingsRaw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
     : DEFAULT_UNDERLYINGS;
 
+  const port = env.TRADFI_PORT ? Number(env.TRADFI_PORT) : 3200;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid TRADFI_PORT: ${env.TRADFI_PORT}`);
+  }
+
   return {
-    port: env.TRADFI_PORT ? Number(env.TRADFI_PORT) : 3200,
+    port,
     baseUrl: env.TASTYTRADE_BASE_URL ?? 'https://api.tastyworks.com',
     clientId: required(env, 'TASTYTRADE_CLIENT_ID'),
     clientSecret: required(env, 'TASTYTRADE_CLIENT_SECRET'),

@@ -20,6 +20,7 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
+  const setAssetMode = useAppStore((s) => s.setAssetMode);
 
   return (
     <header className={styles.bar}>
@@ -51,6 +52,9 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
             <FreshnessLabel />
           </span>
         </div>
+        <button className={styles.tradfi} onClick={() => setAssetMode('tradfi')} title="TradFi (TastyTrade)">
+          TRADFI
+        </button>
         <button className={styles.cmdk} onClick={onOpenPalette}>
           ⌘K
         </button>

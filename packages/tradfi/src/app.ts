@@ -3,12 +3,14 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import type { TradfiStore } from './runtime/store.js';
 import type { TradfiReadiness } from './tastytrade/feed.js';
+import type { CandleClient } from './tastytrade/candle-client.js';
 import { venuesRoute } from './routes/venues.js';
 import { healthRoute } from './routes/health.js';
 import { underlyingsRoute } from './routes/underlyings.js';
 import { expiriesRoute } from './routes/expiries.js';
 import { chainsRoute } from './routes/chains.js';
 import { wsChainRoute } from './routes/ws-chain.js';
+import { candlesRoute } from './routes/candles.js';
 
 export interface FeedLike {
   readiness(): TradfiReadiness;
@@ -19,6 +21,7 @@ export interface FeedLike {
 export interface TradfiDeps {
   store: TradfiStore;
   feed: FeedLike;
+  candleClient?: CandleClient;
 }
 
 export function buildApp(deps: TradfiDeps): FastifyInstance {
@@ -31,5 +34,6 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(expiriesRoute(deps));
   void app.register(chainsRoute(deps));
   void app.register(wsChainRoute(deps));
+  void app.register(candlesRoute(deps));
   return app;
 }

@@ -91,102 +91,37 @@
   flex-shrink: 0;
 }
 
-.coverage {
-  margin-top: calc(var(--space-1) * -1);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
-.coverage[data-short='true'] {
-  color: var(--color-warning);
-}
-
-.chartArea {
-  flex: 1;
-  min-height: 260px;
+.foot {
   display: flex;
-}
-
-.chartStack {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-3);
-  width: 100%;
-  min-height: 0;
-}
-
-.miniChart {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-height: 0;
-}
-
-.metricHeader {
-  display: flex;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #15191d;
+  font-family: 'IBM Plex Mono', monospace;
 }
+.coverage { font-size: 9px; color: var(--text-dim); }
+.coverage[data-short='true'] { color: #f59e0b; }
+.takeaway { font-size: 11px; color: var(--text-secondary); }
 
-.metricName {
-  font-weight: 700;
-}
+@media (max-width: 768px) {
+  .header {
+    gap: var(--space-2);
+    row-gap: var(--space-1);
+  }
 
-.metricValue {
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-}
+  .toggles {
+    width: 100%;
+    gap: var(--space-2);
+    justify-content: flex-start;
+  }
 
-.metricValue[data-zone='normal'] {
-  color: var(--color-profit);
-  border-color: rgba(0, 233, 151, 0.25);
-  background: rgba(0, 233, 151, 0.06);
-}
+  .toggleLabel {
+    display: none;
+  }
 
-.metricValue[data-zone='stretched'] {
-  color: var(--color-warning);
-  border-color: rgba(254, 249, 160, 0.25);
-  background: rgba(254, 249, 160, 0.06);
-}
-
-.metricValue[data-zone='extreme'] {
-  color: var(--color-loss);
-  border-color: rgba(203, 56, 85, 0.35);
-  background: rgba(203, 56, 85, 0.08);
-}
-
-.chartWrap {
-  position: relative;
-  flex: 1;
-  min-height: 112px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.chartCanvas {
-  position: absolute;
-  inset: 0;
-}
-
-.empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  font-style: italic;
-  pointer-events: none;
+  .legend {
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+  }
 }

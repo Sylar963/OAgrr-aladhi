@@ -1,0 +1,33 @@
+.price {
+  display: inline-block;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 -2px;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+}
+
+.flash {
+  animation: priceFlash 220ms ease-out;
+}
+
+@keyframes priceFlash {
+  0% {
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+    color: var(--bg-base);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    animation: none;
+  }
+}

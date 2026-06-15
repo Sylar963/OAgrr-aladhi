@@ -1,18 +1,12 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
-import {
-  positionRepository,
-  quoteProvider,
-} from '../../trading-services.js';
+import type { FastifyInstance } from 'fastify';
+import { positionRepository, quoteProvider } from '../../trading-services.js';
 import { positionToDto } from './mappers.js';
-
-function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
+import { resolveScope } from './scope.js';
 
 export async function paperPositionsRoute(app: FastifyInstance) {
-  app.get('/paper/positions', async (req) => {
-    const accountId = getAccountId(req);
+  app.get('/paper/positions', async (req, reply) => {
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const positions = await positionRepository.listPositions(accountId);
     const open = positions.filter((p) => p.netQuantity !== 0);
     const marks = await Promise.all(

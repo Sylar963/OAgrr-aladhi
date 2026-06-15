@@ -4,11 +4,22 @@ import type { Leg } from './payoff';
 interface VenueQuote {
   ask: number | null;
   bid: number | null;
+  mid: number | null;
   delta: number | null;
   gamma: number | null;
   theta: number | null;
   vega: number | null;
   markIv: number | null;
+}
+
+function pickDirectionalPrice(
+  quote: VenueQuote,
+  direction: RepriceInput['direction'],
+): number | null {
+  const topOfBook = direction === 'buy' ? quote.ask : quote.bid;
+  if (topOfBook != null && topOfBook > 0) return topOfBook;
+  if (quote.mid != null && quote.mid > 0) return quote.mid;
+  return null;
 }
 
 type RepriceInput = Pick<Leg, 'type' | 'direction' | 'strike' | 'expiry' | 'quantity'>;
@@ -47,8 +58,8 @@ export function repriceLeg(
   for (const [venueId, quote] of Object.entries(side.venues)) {
     if (!quote || !activeVenues.includes(venueId)) continue;
 
-    const price = leg.direction === 'buy' ? quote.ask : quote.bid;
-    if (price == null || price <= 0) continue;
+    const price = pickDirectionalPrice(quote, leg.direction);
+    if (price == null) continue;
 
     if (
       bestPrice == null ||

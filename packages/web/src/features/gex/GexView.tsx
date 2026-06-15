@@ -1,11 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-
-import { useAppStore } from '@stores/app-store';
-import { AssetPickerButton, Spinner, EmptyState, VenuePickerButton } from '@components/ui';
-import { fmtUsd, dteDays, formatExpiry } from '@lib/format';
-import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { AssetPickerButton, EmptyState, Spinner, VenuePickerButton } from '@components/ui';
+import { useAllExpiriesGex, useChainQuery, useExpiries } from '@features/chain/queries';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
+import type { SpotCandleCurrency } from '@shared/common';
+import type { GexStrike } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef, useState } from 'react';
+import GexBandsChart from './GexBandsChart';
 import styles from './GexView.module.css';
+
+type Mode = 'all' | string;
+type Version = 'bars' | 'bands';
+
+// The bands chart draws on daily spot candles, which only exist for these.
+function isBandsCurrency(c: string): c is SpotCandleCurrency {
+  return c === 'BTC' || c === 'ETH' || c === 'HYPE';
+}
 
 export default function GexView() {
   const underlying = useAppStore((s) => s.underlying);
@@ -14,22 +24,41 @@ export default function GexView() {
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
 
-  // Default to 2nd expiry (more OI than the nearest 1d) or first if only one
-  const [expiry, setExpiry] = useState('');
+  // Default to 2nd expiry (more OI than the nearest 1d) — "all" mode is opt-in.
+  const [mode, setMode] = useState<Mode>('');
   useEffect(() => {
-    if (expiries.length > 0 && (!expiry || !expiries.includes(expiry))) {
-      setExpiry(expiries.length > 1 ? expiries[1]! : expiries[0]!);
+    if (mode === 'all') return;
+    if (expiries.length > 0 && (!mode || !expiries.includes(mode))) {
+      setMode(expiries.length > 1 ? expiries[1]! : expiries[0]!);
     }
-  }, [expiries, expiry]);
+  }, [expiries, mode]);
+
+  const isAll = mode === 'all';
 
   const isMobile = useIsMobile();
   const [showExplain, setShowExplain] = useState(false);
 
-  const { data: chain, isLoading } = useChainQuery(underlying, expiry, activeVenues);
-  const gex = chain?.gex ?? [];
-  const spotPrice = chain?.stats.forwardPriceUsd ?? null;
+  const [version, setVersion] = useState<Version>('bars');
+  const bandsAvailable = isBandsCurrency(underlying);
+  const effectiveVersion: Version = version === 'bands' && bandsAvailable ? 'bands' : 'bars';
+
+  const { data: chain, isLoading: chainLoading } = useChainQuery(
+    underlying,
+    isAll ? '' : mode,
+    activeVenues,
+    { enabled: !isAll },
+  );
+  const { data: allGex, isLoading: allLoading } = useAllExpiriesGex(underlying, activeVenues, {
+    enabled: isAll,
+  });
+
+  const gex: GexStrike[] = isAll ? (allGex?.gex ?? []) : (chain?.gex ?? []);
+  const spotPrice = isAll ? (allGex?.spotPrice ?? null) : (chain?.stats.forwardPriceUsd ?? null);
+  const isLoading = isAll ? allLoading : chainLoading;
+
   const barsRef = useRef<HTMLDivElement | null>(null);
   const spotRowRef = useRef<HTMLDivElement | null>(null);
+  const hasCenteredBarsRef = useRef(false);
 
   const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1);
   const sorted = [...gex].sort((a, b) => b.strike - a.strike);
@@ -41,15 +70,22 @@ export default function GexView() {
           return Math.abs(row.strike - spotPrice) < Math.abs(best - spotPrice) ? row.strike : best;
         }, null)
       : null;
+  const activeVenueKey = activeVenues.join(',');
 
   useEffect(() => {
+    hasCenteredBarsRef.current = false;
+  }, [activeVenueKey, mode, underlying]);
+
+  useEffect(() => {
+    if (hasCenteredBarsRef.current || effectiveVersion !== 'bars') return;
     if (!barsRef.current || !spotRowRef.current) return;
 
     const list = barsRef.current;
     const row = spotRowRef.current;
     const offset = row.offsetTop - list.offsetTop - list.clientHeight / 2 + row.clientHeight / 2;
     list.scrollTop = Math.max(0, offset);
-  }, [expiry, nonzero.length, spotStrike]);
+    hasCenteredBarsRef.current = true;
+  }, [activeVenueKey, effectiveVersion, mode, nonzero.length, spotStrike, underlying]);
 
   if (isLoading && gex.length === 0) {
     return (
@@ -67,22 +103,51 @@ export default function GexView() {
             <span className={styles.title}>Gamma Exposure (GEX)</span>
             <AssetPickerButton />
             <VenuePickerButton />
+            <div className={styles.gexModeToggle}>
+              <button
+                type="button"
+                className={styles.gexModeBtn}
+                data-active={effectiveVersion === 'bars' || undefined}
+                onClick={() => setVersion('bars')}
+              >
+                Bars
+              </button>
+              <button
+                type="button"
+                className={styles.gexModeBtn}
+                data-active={effectiveVersion === 'bands' || undefined}
+                onClick={() => bandsAvailable && setVersion('bands')}
+                disabled={!bandsAvailable}
+                title={bandsAvailable ? undefined : 'Gamma bands support BTC/ETH/HYPE only'}
+              >
+                Bands
+              </button>
+            </div>
           </div>
           <span className={styles.subtitle}>Dealer hedging pressure per strike in $M</span>
         </div>
         {spotPrice != null && <div className={styles.spotBadge}>Spot: {fmtUsd(spotPrice)}</div>}
       </div>
 
-      {/* Expiry picker */}
       <div className={styles.expiryPicker}>
+        <button
+          key="all"
+          className={styles.expiryBtn}
+          data-active={isAll}
+          onClick={() => setMode('all')}
+          title="Sum GEX across every listed expiry — closer to total dealer hedging pressure than a single tenor"
+        >
+          ALL
+          <span className={styles.dteBadge}>Σ</span>
+        </button>
         {expiries.map((e) => {
           const dte = dteDays(e);
           return (
             <button
               key={e}
               className={styles.expiryBtn}
-              data-active={e === expiry}
-              onClick={() => setExpiry(e)}
+              data-active={e === mode}
+              onClick={() => setMode(e)}
             >
               {formatExpiry(e)}
               <span className={styles.dteBadge} data-urgent={dte <= 1}>
@@ -96,8 +161,12 @@ export default function GexView() {
       {nonzero.length === 0 ? (
         <EmptyState
           icon="◈"
-          title="No GEX data for this expiry"
-          detail="Try a further-dated expiry with more open interest."
+          title={isAll ? 'No GEX data across listed expiries' : 'No GEX data for this expiry'}
+          detail={
+            isAll
+              ? 'Venues report no open interest yet. Try again once the runtimes have warmed.'
+              : 'Try a further-dated expiry with more open interest.'
+          }
         />
       ) : (
         <>
@@ -125,72 +194,86 @@ export default function GexView() {
                 bigger swings
               </span>
               <span className={styles.explainFormula}>
-                GEX per strike = OI × Gamma × Spot² × contract size. Calls contribute positive, puts
-                negative.
+                GEX per strike = dealer position × Gamma × Spot² × contract size, summed across
+                venues. Dealer position is reconstructed from net flow: open-interest changes are
+                signed by the aggressor side of trades (taker buys ⇒ dealer short).
+              </span>
+              <span className={styles.explainCaveat}>
+                Sign is inferred from observed flow, not the call/put assumption. Strikes with no
+                attributed flow yet fall back to the open-interest approximation. Treat GEX as a
+                directional indicator, not ground truth.
               </span>
             </div>
           )}
 
-          <div className={styles.chart}>
-            <div className={styles.axis}>
-              <div className={styles.axisLeft}>
-                <span className={styles.axisLabel}>← Negative (accelerator)</span>
+          {effectiveVersion === 'bands' ? (
+            <GexBandsChart
+              gex={gex}
+              spotPrice={spotPrice}
+              currency={underlying as SpotCandleCurrency}
+            />
+          ) : (
+            <div className={styles.chart}>
+              <div className={styles.axis}>
+                <div className={styles.axisLeft}>
+                  <span className={styles.axisLabel}>← Negative (accelerator)</span>
+                </div>
+                <div className={styles.axisCenter}>0</div>
+                <div className={styles.axisRight}>
+                  <span className={styles.axisLabel}>Positive (magnet) →</span>
+                </div>
               </div>
-              <div className={styles.axisCenter}>0</div>
-              <div className={styles.axisRight}>
-                <span className={styles.axisLabel}>Positive (magnet) →</span>
+
+              <div className={styles.bars} ref={barsRef}>
+                {sorted.map((g) => {
+                  const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
+                  const positive = g.gexUsdMillions >= 0;
+                  const isNearSpot = g.strike === spotStrike;
+
+                  return (
+                    <div
+                      key={g.strike}
+                      className={styles.barRow}
+                      data-near-spot={isNearSpot || undefined}
+                      ref={isNearSpot ? spotRowRef : undefined}
+                    >
+                      <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
+                        {g.strike.toLocaleString()}
+                        {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
+                      </div>
+                      <div className={styles.barTrack}>
+                        <div className={styles.leftHalf}>
+                          {!positive && (
+                            <div
+                              className={styles.bar}
+                              data-type="negative"
+                              style={{ width: `${pct}%` }}
+                              title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                            />
+                          )}
+                        </div>
+                        <div className={styles.spine} />
+                        <div className={styles.rightHalf}>
+                          {positive && (
+                            <div
+                              className={styles.bar}
+                              data-type="positive"
+                              style={{ width: `${pct}%` }}
+                              title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className={styles.valueLabel}>
+                        {positive ? '+' : ''}
+                        {g.gexUsdMillions.toFixed(1)}M
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            <div className={styles.bars} ref={barsRef}>
-              {sorted.map((g) => {
-                const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
-                const positive = g.gexUsdMillions >= 0;
-                const isNearSpot = g.strike === spotStrike;
-
-                return (
-                  <div
-                    key={g.strike}
-                    className={styles.barRow}
-                    data-near-spot={isNearSpot || undefined}
-                    ref={isNearSpot ? spotRowRef : undefined}
-                  >
-                    <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
-                      {g.strike.toLocaleString()}
-                      {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}
-                    </div>
-                    <div className={styles.barTrack}>
-                      <div className={styles.leftHalf}>
-                        {!positive && (
-                          <div
-                            className={styles.bar}
-                            data-type="negative"
-                            style={{ width: `${pct}%` }}
-                            title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
-                          />
-                        )}
-                      </div>
-                      <div className={styles.spine} />
-                      <div className={styles.rightHalf}>
-                        {positive && (
-                          <div
-                            className={styles.bar}
-                            data-type="positive"
-                            style={{ width: `${pct}%` }}
-                            title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <div className={styles.valueLabel}>
-                      {positive ? '+' : ''}
-                      {g.gexUsdMillions.toFixed(1)}M
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </>
       )}
     </div>

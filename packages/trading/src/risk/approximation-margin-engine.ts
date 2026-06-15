@@ -91,7 +91,7 @@ export class ApproximationMarginEngine implements MarginEngine {
 
   private async spotForLeg(
     key: QuoteKey,
-    venueFilter: import('@oggregator/protocol').PaperVenueId[],
+    venueFilter: import('@oggregator/core').VenueId[],
   ): Promise<number | null> {
     const books = await this.quotes.getBooks(key, venueFilter);
     for (const b of books) {
@@ -102,7 +102,7 @@ export class ApproximationMarginEngine implements MarginEngine {
 
   private async existingShortMargin(
     positions: Position[],
-    venueFilter: import('@oggregator/protocol').PaperVenueId[],
+    venueFilter: import('@oggregator/core').VenueId[],
   ): Promise<number> {
     let total = 0;
     for (const pos of positions) {

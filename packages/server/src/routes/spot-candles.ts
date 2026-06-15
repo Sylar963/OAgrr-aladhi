@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@oggregator/core';
 import { isSpotCandlesReady, spotCandleService } from '../services.js';
 
-const SUPPORTED_CURRENCIES: readonly SpotCandleCurrency[] = ['BTC', 'ETH'];
+const SUPPORTED_CURRENCIES: readonly SpotCandleCurrency[] = ['BTC', 'ETH', 'HYPE'];
 const SUPPORTED_RESOLUTIONS: readonly SpotCandleResolutionSec[] = [
-  60, 300, 1800, 3600, 14400, 86400,
+  60, 300, 900, 1800, 3600, 14400, 86400,
 ];
 const MAX_BUCKETS = 3000;
 
@@ -20,7 +20,7 @@ export async function spotCandlesRoute(app: FastifyInstance) {
     if (!SUPPORTED_CURRENCIES.includes(currency)) {
       return reply
         .status(400)
-        .send({ error: `Spot candles cover BTC and ETH only (got ${currency})` });
+        .send({ error: `Spot candles cover BTC, ETH, and HYPE only (got ${currency})` });
     }
 
     const resolution = Number(req.query.resolution ?? 3600) as SpotCandleResolutionSec;

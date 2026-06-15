@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { ExpiryBar, useChainQuery, useExpiries } from '@features/chain';
-import { useChainWs } from '@hooks/useChainWs';
-import { useOpenPalette } from '@components/layout';
+import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
+import { useSurface } from '@features/surface/queries';
+import { useOpenPalette } from '@components/layout/palette-context';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { Spinner, EmptyState } from '@components/ui';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
@@ -12,6 +12,9 @@ import SpreadBuilderPanel from './SpreadBuilderPanel';
 import SignalCard from './SignalCard';
 import VenueRouterTable from './VenueRouterTable';
 import VolSmileInset from './VolSmileInset';
+import VrpChip from './VrpChip';
+import { computeSviRichness } from './sviRichness';
+import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import styles from './AlphaView.module.css';
 
@@ -20,32 +23,13 @@ export default function AlphaView() {
   const expiry = useAppStore((s) => s.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
-  const setFeedStatus = useAppStore((s) => s.setFeedStatus);
   const openPalette = useOpenPalette();
 
   const { data: expiriesData } = useExpiries(underlying);
   const expiries = expiriesData?.expiries ?? [];
+  const prefetchChain = usePrefetchChain(underlying, activeVenues);
   const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
-  const { connectionState, staleMs, failedVenues } = useChainWs({
-    underlying,
-    expiry,
-    venues: activeVenues,
-  });
-
-  useEffect(() => {
-    const failedVenueIds = failedVenues.map((f) => f.venue);
-    setFeedStatus({
-      connectionState,
-      failedVenueCount: failedVenues.length,
-      failedVenueIds,
-      staleMs,
-      lastUpdateMs: connectionState === 'live' && staleMs != null ? Date.now() - staleMs : null,
-    });
-  }, [connectionState, failedVenues, staleMs, setFeedStatus]);
-
-  useEffect(() => {
-    if (expiries.length > 0 && !expiry) setExpiry(expiries[0]!);
-  }, [expiries, expiry, setExpiry]);
+  const { data: surface } = useSurface(underlying, activeVenues);
 
   const isMobile = useIsMobile();
   const [kind, setKind] = useState<SpreadKind>('call-credit');
@@ -94,13 +78,31 @@ export default function AlphaView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
 
+  // Real-world POP wiring: when surface RV is available, the gate switches
+  // from risk-neutral N(d₂) to physical-measure POP. Drift is 0 (no view) by
+  // default — a future directional-view toggle would set μ here.
+  const realWorld = useMemo(
+    () => (surface?.rv30d != null ? { drift: 0, sigmaRV: surface.rv30d } : undefined),
+    [surface?.rv30d],
+  );
+
+  const { data: regime } = useRegimeQuery(underlying);
+  const regimeDominant = regime?.dominant ?? null;
+
   const analysis = useVerticalSpreadAnalysis({
     chain,
     kind,
     shortStrike,
     longStrike,
     venues: activeVenues,
+    realWorld,
+    regimeDominant,
   });
+
+  const richness = useMemo(
+    () => computeSviRichness(analysis.smile, analysis.T),
+    [analysis.smile, analysis.T],
+  );
 
   const executableNet = useMemo(() => {
     const sn = analysis.analysis?.short.best?.netAfterFees;
@@ -157,7 +159,10 @@ export default function AlphaView() {
 
   const signalStack = (
     <>
-      <SignalCard signal={analysis.analysis?.combinedSignal ?? null} />
+      <SignalCard
+        signal={analysis.analysis?.combinedSignal ?? null}
+        regime={regime ?? null}
+      />
       <VenueRouterTable
         shortLeg={analysis.analysis?.short ?? null}
         longLeg={analysis.analysis?.long ?? null}
@@ -169,6 +174,8 @@ export default function AlphaView() {
         smile={analysis.smile}
         shortStrike={shortStrike}
         longStrike={longStrike}
+        richness={richness}
+        T={analysis.T}
       />
     </>
   );
@@ -184,8 +191,17 @@ export default function AlphaView() {
           selected={expiry}
           onSelect={setExpiry}
           onChangeAsset={openPalette}
+          onPrefetch={prefetchChain}
         />
       )}
+
+      <div className={styles.contextStrip}>
+        <VrpChip
+          atmIv30d={surface?.atmIv30d ?? null}
+          rv30d={surface?.rv30d ?? null}
+          vrp30d={surface?.vrp30d ?? null}
+        />
+      </div>
 
       {chain && chain.strikes.length === 0 && (
         <EmptyState

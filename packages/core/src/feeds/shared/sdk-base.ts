@@ -1,5 +1,8 @@
 import { BaseAdapter } from './base.js';
+import { feedLogger } from '../../utils/logger.js';
 import type { VenueCapabilities, StreamHandlers } from './types.js';
+
+const recorderLog = feedLogger('sdk-base');
 import type {
   ChainRequest,
   VenueOptionChain,
@@ -24,8 +27,23 @@ const FEE_CAP: Record<VenueId, number> = {
   derive: 0.125, // 12.5% of option premium
   coincall: 0.125, // 12.5% of option premium
   thalex: 0.125, // 12.5% of option premium
-  tastytrade: 0.125, // listed-options venue (placeholder; actual fees set during live wire-up)
+  gateio: 0.125, // venue-published price_limit_fee_rate on every options contract
+  paradex: 0.125, // fee_config.api_fee fee_cap = 0.125 on every options market (verified live 2026-06-08)
 };
+
+const FEED_WATCHDOG_INTERVAL_MS = 30_000;
+const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+const DEFAULT_QUOTE_FRESHNESS_MS = 5 * 60 * 1000;
+
+function splitUnderlyingFamily(underlying: string): { base: string; settle: string | null } {
+  const [base, settle] = underlying.split('_');
+  return { base: base ?? underlying, settle: settle ?? null };
+}
+
+interface FeedConnectionSnapshot {
+  connected: boolean;
+  lastActivityAt: number;
+}
 
 export interface CachedInstrument {
   symbol: string;
@@ -45,6 +63,15 @@ export interface CachedInstrument {
   makerFee: number | null;
   takerFee: number | null;
 }
+
+export interface QuoteRecorderEvent {
+  venue: VenueId;
+  exchangeSymbol: string;
+  ts: number;
+  markPrice: number;
+}
+
+export type QuoteRecorder = (event: QuoteRecorderEvent) => void;
 
 export interface LiveQuote {
   bidPrice: number | null;
@@ -81,6 +108,10 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   protected marketsLoaded = false;
   protected requestRefCounts = new Map<string, number>();
   protected handlerRefCounts = new Map<StreamHandlers, number>();
+  protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
+  protected quoteFreshnessMs = DEFAULT_QUOTE_FRESHNESS_MS;
+  private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private lastWatchdogReconnectAt = 0;
 
   protected abstract initClients(): void;
   protected abstract fetchInstruments(): Promise<CachedInstrument[]>;
@@ -113,6 +144,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     this.marketsLoaded = true;
 
     await this.eagerSubscribe();
+    this.startFeedWatchdog();
   }
 
   protected async eagerSubscribe(): Promise<void> {
@@ -137,10 +169,39 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return [...new Set(this.instruments.map((i) => i.base))].sort();
   }
 
+  private matchesRequestedUnderlying(requestUnderlying: string, instrumentBase: string): boolean {
+    if (requestUnderlying === instrumentBase) return true;
+
+    const request = splitUnderlyingFamily(requestUnderlying);
+    if (request.settle != null) return false;
+
+    const instrument = splitUnderlyingFamily(instrumentBase);
+    if (request.base !== instrument.base) return false;
+    if (this.instruments.some((entry) => entry.base === request.base)) return false;
+
+    const aliasBases = new Set(
+      this.instruments
+        .filter((entry) => splitUnderlyingFamily(entry.base).base === request.base)
+        .map((entry) => entry.base),
+    );
+    return aliasBases.size === 1 && aliasBases.has(instrumentBase);
+  }
+
+  private matchingInstruments(underlying: string, expiry: string): CachedInstrument[] {
+    return this.instruments.filter(
+      (instrument) =>
+        this.matchesRequestedUnderlying(underlying, instrument.base) && instrument.expiry === expiry,
+    );
+  }
+
+  private matchingEffectiveUnderlying(underlying: string, matching: CachedInstrument[]): string {
+    return matching[0]?.base ?? underlying;
+  }
+
   override async listExpiries(underlying: string): Promise<string[]> {
     const expiries = new Set<string>();
     for (const inst of this.instruments) {
-      if (inst.base === underlying) expiries.add(inst.expiry);
+      if (this.matchesRequestedUnderlying(underlying, inst.base)) expiries.add(inst.expiry);
     }
     return [...expiries].sort();
   }
@@ -150,7 +211,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   ): Promise<Array<{ expiry: string; expiryTs: number | null }>> {
     const byExpiry = new Map<string, number | null>();
     for (const inst of this.instruments) {
-      if (inst.base !== underlying) continue;
+      if (!this.matchesRequestedUnderlying(underlying, inst.base)) continue;
       const ts = inst.expirationTimestamp ?? null;
       const prev = byExpiry.get(inst.expiry);
       if (prev === undefined) {
@@ -165,13 +226,12 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   override fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
-    const matching = this.instruments.filter(
-      (i) => i.base === request.underlying && i.expiry === request.expiry,
-    );
+    const matching = this.matchingInstruments(request.underlying, request.expiry);
     const contracts: Record<string, NormalizedOptionContract> = {};
+    const now = Date.now();
 
     for (const inst of matching) {
-      const quote = this.quoteStore.get(inst.exchangeSymbol);
+      const quote = this.freshQuote(inst.exchangeSymbol, now);
       contracts[inst.symbol] = this.buildContract(inst, quote ?? null);
     }
 
@@ -185,10 +245,19 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   async subscribe(request: ChainRequest, handlers: StreamHandlers): Promise<() => Promise<void>> {
-    const matching = this.instruments.filter(
-      (i) => i.base === request.underlying && i.expiry === request.expiry,
-    );
-    const key = `${request.underlying}:${request.expiry}`;
+    const matching = this.matchingInstruments(request.underlying, request.expiry);
+    const effectiveUnderlying = this.matchingEffectiveUnderlying(request.underlying, matching);
+    const key = `${effectiveUnderlying}:${request.expiry}`;
+
+    if (matching.length === 0) {
+      handlers.onStatus({
+        venue: this.venue,
+        state: 'down',
+        ts: Date.now(),
+        message: 'no instruments for request',
+      });
+      return async () => {};
+    }
 
     handlers.onStatus({ venue: this.venue, state: 'connected', ts: Date.now() });
 
@@ -201,7 +270,19 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const requestRefCount = this.requestRefCounts.get(key) ?? 0;
     this.requestRefCounts.set(key, requestRefCount + 1);
     if (requestRefCount === 0) {
-      await this.subscribeChain(request.underlying, request.expiry, matching);
+      try {
+        await this.subscribeChain(effectiveUnderlying, request.expiry, matching);
+      } catch (error: unknown) {
+        const rolledBackHandlerRefCount = (this.handlerRefCounts.get(handlers) ?? 1) - 1;
+        if (rolledBackHandlerRefCount <= 0) {
+          this.handlerRefCounts.delete(handlers);
+          this.deltaHandlers.delete(handlers);
+        } else {
+          this.handlerRefCounts.set(handlers, rolledBackHandlerRefCount);
+        }
+        this.requestRefCounts.delete(key);
+        throw error;
+      }
     }
 
     let released = false;
@@ -221,7 +302,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       const nextRequestRefCount = (this.requestRefCounts.get(key) ?? 1) - 1;
       if (nextRequestRefCount <= 0) {
         this.requestRefCounts.delete(key);
-        await this.unsubscribeChain(request.underlying, request.expiry, matching);
+        await this.unsubscribeChain(effectiveUnderlying, request.expiry, matching);
         return;
       }
 
@@ -248,12 +329,55 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   async dispose(): Promise<void> {
+    if (this.feedWatchdogTimer != null) {
+      clearInterval(this.feedWatchdogTimer);
+      this.feedWatchdogTimer = null;
+    }
     await this.unsubscribeAll();
   }
+
+  getFeedDiagnostics(): {
+    connected: boolean;
+    lastActivityAt: number;
+    reconnectAttempts: number;
+    rateLimitUntil: number;
+  } | null {
+    const snap = this.getFeedConnectionSnapshot();
+    if (snap == null) return null;
+    return {
+      connected: snap.connected,
+      lastActivityAt: snap.lastActivityAt,
+      reconnectAttempts: 0,
+      rateLimitUntil: 0,
+    };
+  }
+
+  protected shouldWatchFeed(): boolean {
+    return this.marketsLoaded;
+  }
+
+  protected getFeedConnectionSnapshot(): FeedConnectionSnapshot | null {
+    return null;
+  }
+
+  protected restartFeedFromWatchdog(): void {}
 
   // ── internal helpers ──────────────────────────────────────────
 
   protected deltaHandlers = new Set<StreamHandlers>();
+  private quoteRecorders = new Set<QuoteRecorder>();
+
+  /**
+   * Register a recorder that observes every mark-price update emitted by this
+   * adapter. Used to feed the cross-venue MarkHistoryBuffer for venues without
+   * a REST mark-history endpoint (Derive). Returns an unsubscribe handle.
+   */
+  addQuoteRecorder(recorder: QuoteRecorder): () => void {
+    this.quoteRecorders.add(recorder);
+    return () => {
+      this.quoteRecorders.delete(recorder);
+    };
+  }
 
   /** Broadcast venue connection state to all registered handlers. */
   protected emitStatus(state: VenueConnectionState, message?: string): void {
@@ -272,7 +396,30 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const deltas: VenueDelta[] = [];
 
     for (const update of updates) {
+      if (Date.now() > this.lastWatchdogReconnectAt) {
+        this.lastWatchdogReconnectAt = 0;
+      }
+
       this.quoteStore.set(update.exchangeSymbol, update.quote);
+
+      if (this.quoteRecorders.size > 0 && update.quote.markPrice != null) {
+        const event: QuoteRecorderEvent = {
+          venue: this.venue,
+          exchangeSymbol: update.exchangeSymbol,
+          ts: update.quote.timestamp,
+          markPrice: update.quote.markPrice,
+        };
+        for (const recorder of this.quoteRecorders) {
+          try {
+            recorder(event);
+          } catch (err: unknown) {
+            recorderLog.warn(
+              { venue: event.venue, exchangeSymbol: event.exchangeSymbol, err: String(err) },
+              'quote recorder threw — continuing fanout',
+            );
+          }
+        }
+      }
 
       if (this.deltaHandlers.size === 0) continue;
 
@@ -317,6 +464,42 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     for (const h of this.deltaHandlers) {
       h.onDelta(deltas);
     }
+  }
+
+  private startFeedWatchdog(): void {
+    if (this.feedWatchdogTimer != null) {
+      clearInterval(this.feedWatchdogTimer);
+    }
+
+    this.feedWatchdogTimer = setInterval(() => {
+      this.checkFeedLiveness();
+    }, FEED_WATCHDOG_INTERVAL_MS);
+  }
+
+  private checkFeedLiveness(): void {
+    if (!this.shouldWatchFeed()) return;
+
+    const snapshot = this.getFeedConnectionSnapshot();
+    if (snapshot == null || !snapshot.connected || snapshot.lastActivityAt <= 0) return;
+
+    const staleMs = Date.now() - snapshot.lastActivityAt;
+    if (staleMs < this.feedStalenessThresholdMs) return;
+    if (snapshot.lastActivityAt <= this.lastWatchdogReconnectAt) return;
+
+    this.lastWatchdogReconnectAt = Date.now();
+    recorderLog.error(
+      { venue: this.venue, staleMs, thresholdMs: this.feedStalenessThresholdMs },
+      'feed stale, forcing reconnect',
+    );
+    this.emitStatus('reconnecting', `feed stale after ${Math.round(staleMs / 1000)}s`);
+    this.restartFeedFromWatchdog();
+  }
+
+  private freshQuote(exchangeSymbol: string, now: number): LiveQuote | null {
+    const quote = this.quoteStore.get(exchangeSymbol);
+    if (quote == null) return null;
+    if (quote.timestamp <= 0 || now - quote.timestamp > this.quoteFreshnessMs) return null;
+    return quote;
   }
 
   protected buildContract(
@@ -365,7 +548,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           q.underlyingPrice,
         ),
         timestamp: q.timestamp,
-        source: this.quoteStore.has(inst.exchangeSymbol) ? 'ws' : 'rest',
+        source: quote != null ? 'ws' : 'rest',
       },
     };
   }

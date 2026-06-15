@@ -19,7 +19,7 @@ interface Props {
 }
 
 function isHeatmapCurrency(c: string): c is SpotCandleCurrency {
-  return c === 'BTC' || c === 'ETH';
+  return c === 'BTC' || c === 'ETH' || c === 'HYPE';
 }
 
 export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
@@ -46,7 +46,7 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
               data-active={effectiveVersion === 'v2' || undefined}
               onClick={() => v2Available && setVersion('v2')}
               disabled={!v2Available}
-              title={v2Available ? undefined : 'V2 supports BTC/ETH only'}
+              title={v2Available ? undefined : 'V2 supports BTC/ETH/HYPE only'}
             >
               V2
             </button>
@@ -84,7 +84,7 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
                 Bands are still a <strong>live snapshot</strong>. Hover any
                 strike for an EM-zone classifier, per-expiry EM badge, and a
                 session OI sparkline (in-memory only — clears on refresh).
-                BTC and ETH only.
+                BTC, ETH, and HYPE only.
               </p>
             </InfoTip>
           )}

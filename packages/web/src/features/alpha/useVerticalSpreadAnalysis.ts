@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 
 import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
-import { routeVerticalSpread, type SpreadKind, type RoutedSpreadAnalysis } from '@lib/analytics/verticalSpread';
+import {
+  routeVerticalSpread,
+  type RegimeLabel,
+  type SpreadKind,
+  type RoutedSpreadAnalysis,
+  type RealWorldParams,
+} from '@lib/analytics/verticalSpread';
 import { extractSmile, interpAtStrike, type SmileCurve } from '@lib/analytics/smile';
 
 const DEFAULT_RISK_FREE_RATE = 0.05;
@@ -12,6 +18,8 @@ export interface AnalysisInput {
   shortStrike: number | null;
   longStrike: number | null;
   venues?: readonly string[];
+  realWorld?: RealWorldParams;
+  regimeDominant?: RegimeLabel | null;
 }
 
 export interface AnalysisOutput {
@@ -33,6 +41,8 @@ export function useVerticalSpreadAnalysis({
   shortStrike,
   longStrike,
   venues,
+  realWorld,
+  regimeDominant,
 }: AnalysisInput): AnalysisOutput {
   // Pre-index strikes by key so the router's lookups are O(1) per WS tick.
   // Separated from the analysis memo so the map only rebuilds when the
@@ -56,6 +66,7 @@ export function useVerticalSpreadAnalysis({
   // Stringify the venues filter so an inline-array prop from the caller
   // doesn't invalidate the analysis memo on every parent render.
   const venuesKey = venues ? venues.join(',') : '';
+  const rwKey = realWorld ? `${realWorld.drift}|${realWorld.sigmaRV}` : '';
 
   const analysis = useMemo(() => {
     if (
@@ -82,9 +93,11 @@ export function useVerticalSpreadAnalysis({
       r: DEFAULT_RISK_FREE_RATE,
       venues: venues as readonly import('@shared/enriched').VenueId[] | undefined,
       ivAtStrike,
+      realWorld,
+      regimeDominant,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey, smile]);
+  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey, smile, rwKey, regimeDominant]);
 
   return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
 }

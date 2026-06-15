@@ -13,9 +13,11 @@ import { describe, it, expect } from 'vitest';
 import {
   COINCALL_OPTION_SYMBOL_RE,
   CoincallBsInfoMessageSchema,
+  CoincallChainResponseSchema,
   CoincallHeartbeatAckSchema,
   CoincallInstrumentSchema,
   CoincallInstrumentsResponseSchema,
+  CoincallOptionDetailSchema,
   CoincallOrderBookMessageSchema,
   CoincallPublicConfigSchema,
   CoincallTOptionMessageSchema,
@@ -189,6 +191,20 @@ describe('Coincall types', () => {
     }
   });
 
+  it('accepts a bsInfo push with null numeric fields', () => {
+    // Coincall sends null for empty fields; null must not drop the instrument's
+    // mark/iv/greeks update.
+    const result = CoincallBsInfoMessageSchema.safeParse({
+      ...BSINFO_FIXTURE,
+      d: { ...BSINFO_FIXTURE.d, mp: null, iv: null, delta: null, oi: null },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.d.mp).toBeNull();
+      expect(result.data.d.iv).toBeNull();
+    }
+  });
+
   it('accepts a tOption push', () => {
     const result = CoincallTOptionMessageSchema.safeParse(TOPTION_FIXTURE);
     expect(result.success).toBe(true);
@@ -199,6 +215,50 @@ describe('Coincall types', () => {
       expect(first.ask).toBe(0);
       expect(first.biv).toBe(0.01);
       expect(first.aiv).toBe(0.01);
+    }
+  });
+
+  it('coerces numeric-string tOption fields', () => {
+    const result = CoincallTOptionMessageSchema.safeParse({
+      ...TOPTION_FIXTURE,
+      d: [
+        {
+          ...TOPTION_FIXTURE.d[0],
+          bid: '1',
+          ask: '0',
+          biv: '0.01',
+          aiv: '0.01',
+          ts: '1688452774463',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const first = result.data.d[0]!;
+      expect(first.bid).toBe(1);
+      expect(first.ask).toBe(0);
+      expect(first.biv).toBe(0.01);
+      expect(first.ts).toBe(1688452774463);
+    }
+  });
+
+  it('accepts null bid/ask/size/iv fields without dropping the whole batch', () => {
+    // Production sends `null` for empty quote sides. Because the push is an
+    // array, one entry rejecting null would drop every contract in the expiry.
+    const result = CoincallTOptionMessageSchema.safeParse({
+      ...TOPTION_FIXTURE,
+      d: [
+        { ...TOPTION_FIXTURE.d[0], bid: null, ask: null, bs: null, as: null, biv: null, aiv: null },
+        { ...TOPTION_FIXTURE.d[0], s: 'BTCUSD-4JUL23-28000-C' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.d).toHaveLength(2);
+      expect(result.data.d[0]?.bid).toBeNull();
+      expect(result.data.d[0]?.ask).toBeNull();
+      // The valid sibling entry still survives.
+      expect(result.data.d[1]?.bid).toBe(1);
     }
   });
 
@@ -251,5 +311,55 @@ describe('Coincall symbol regex', () => {
 
   it('rejects a missing right suffix', () => {
     expect(COINCALL_OPTION_SYMBOL_RE.exec('BTCUSD-14SEP23-22500')).toBeNull();
+  });
+});
+
+// ── REST: GET /open/option/get/v1/{index} (bulk chain) ─────────
+// Source: live capture 2026-06-01 (HYPEUSD, 26JUN26), envelope unwrapped to `data`.
+// The 30-put carried 1015 contracts of OI that the WS market feed reports as 0.
+describe('CoincallChainResponseSchema', () => {
+  it('parses call/put legs, coerces string numbers, tolerates a one-sided strike', () => {
+    const result = CoincallChainResponseSchema.safeParse([
+      {
+        strike: 30,
+        callOption: { symbol: 'HYPEUSD-26JUN26-30.0-C', openInterest: 0, volume: 0 },
+        putOption: { symbol: 'HYPEUSD-26JUN26-30.0-P', openInterest: '1015', volume: '3' },
+      },
+      {
+        strike: 90,
+        callOption: { symbol: 'HYPEUSD-26JUN26-90.0-C', openInterest: 15 },
+        putOption: null,
+      },
+    ]);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data[0]?.putOption?.openInterest).toBe(1015);
+      expect(result.data[0]?.callOption?.openInterest).toBe(0);
+      expect(result.data[1]?.putOption).toBeNull();
+      expect(result.data[1]?.callOption?.openInterest).toBe(15);
+    }
+  });
+});
+
+// ── REST: GET /open/option/detail/v1/{symbol} (per-contract) ──
+// Source: live capture 2026-06-01. The only endpoint carrying 24h volume.
+describe('CoincallOptionDetailSchema', () => {
+  it('parses OI, 24h volume (+USD), underlyingPrice and ignores extra fields', () => {
+    const result = CoincallOptionDetailSchema.safeParse({
+      symbol: 'HYPEUSD-26JUN26-72.0-P',
+      openInterest: 39,
+      volume24h: '17',
+      volumeUsd24h: 1246.308,
+      underlyingPrice: 74.39,
+      markPrice: 1.23,
+      delta: -0.5,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.openInterest).toBe(39);
+      expect(result.data.volume24h).toBe(17);
+      expect(result.data.volumeUsd24h).toBeCloseTo(1246.308, 3);
+      expect(result.data.underlyingPrice).toBe(74.39);
+    }
   });
 });

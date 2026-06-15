@@ -3,6 +3,7 @@ import type { CachedInstrument } from '../shared/sdk-base.js';
 import {
   buildBinanceChainStreams,
   buildBinanceInitialStreams,
+  buildBinanceMarkPriceStreams,
   confirmBinanceSubscribedStreams,
   createBinanceSubscriptionState,
   resetBinanceSubscriptionState,
@@ -41,6 +42,12 @@ describe('Binance planner', () => {
     expect(streams).toContain('btcusdt@openInterest@260328');
   });
 
+  it('builds mark-price streams from actual instrument settle currencies', () => {
+    expect(buildBinanceMarkPriceStreams([createInstrument('BTC-260328-60000-C')])).toEqual([
+      'btcusdt@optionMarkPrice',
+    ]);
+  });
+
   it('tracks only newly added streams until Binance confirms the subscribe', () => {
     const state = createBinanceSubscriptionState();
     const first = trackBinanceStreams(state, ['a', 'b']);
@@ -63,8 +70,12 @@ describe('Binance planner', () => {
   });
 
   it('builds chain streams for targeted subscriptions', () => {
-    const streams = buildBinanceChainStreams('BTC', [createInstrument('BTC-260328-60000-C')]);
+    const streams = buildBinanceChainStreams([createInstrument('BTC-260328-60000-C')]);
     expect(streams).toEqual(['btcusdt@optionMarkPrice', 'btcusdt@openInterest@260328']);
+  });
+
+  it('does not invent mark-price streams for empty instrument sets', () => {
+    expect(buildBinanceChainStreams([])).toEqual([]);
   });
 
   it('resets tracked streams', () => {

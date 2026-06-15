@@ -8,6 +8,7 @@ import {
 } from '../shared/endpoints.js';
 import { SdkBaseAdapter, type CachedInstrument } from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
+import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -23,6 +24,8 @@ import {
   buildBybitExpiredTopics,
   buildBybitSubscriptionTopics,
   createBybitSubscriptionState,
+  markBybitSubscribedTopics,
+  removeBybitSubscribedTopics,
   resetBybitSubscriptionState,
 } from './planner.js';
 import { buildBybitRestQuote, buildBybitWsQuote } from './state.js';
@@ -69,6 +72,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private readonly subscriptions = createBybitSubscriptionState();
+  private wsState: VenueConnectionState = 'down';
 
   protected initClients(): void {}
 
@@ -215,14 +219,26 @@ export class BybitWsAdapter extends SdkBaseAdapter {
         this.symbolIndex.set(inst.symbol, inst.exchangeSymbol);
       }
 
-      const newTopics = buildBybitSubscriptionTopics(this.subscriptions, newInstruments);
+      const plan = buildBybitSubscriptionTopics(this.subscriptions, newInstruments);
 
-      if (newTopics.length > 0 && this.wsClient?.isConnected) {
-        for (let i = 0; i < newTopics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-          this.sendJson({
-            op: 'subscribe',
-            args: newTopics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH),
-          });
+      if (plan.topics.length > 0) {
+        try {
+          await this.ensureConnected();
+
+          for (let i = 0; i < plan.topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
+            this.sendJson({
+              op: 'subscribe',
+              args: plan.topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH),
+            });
+          }
+
+          markBybitSubscribedTopics(this.subscriptions, plan.topics);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.warn(
+            { count: plan.topics.length, err: message },
+            'failed to subscribe refreshed instruments',
+          );
         }
       }
 
@@ -310,18 +326,20 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    const newTopics = buildBybitSubscriptionTopics(this.subscriptions, instruments);
+    const plan = buildBybitSubscriptionTopics(this.subscriptions, instruments);
 
-    if (newTopics.length === 0) return;
+    if (plan.topics.length === 0) return;
 
     await this.ensureConnected();
 
-    for (let i = 0; i < newTopics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-      const batch = newTopics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
+    for (let i = 0; i < plan.topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
+      const batch = plan.topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
       this.sendJson({ op: 'subscribe', args: batch });
     }
 
-    log.info({ count: newTopics.length }, 'subscribed to option tickers');
+    markBybitSubscribedTopics(this.subscriptions, plan.topics);
+
+    log.info({ count: plan.topics.length }, 'subscribed to option tickers');
   }
 
   protected override async unsubscribeChain(
@@ -329,31 +347,33 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    if (!this.wsClient?.isConnected) return;
-
     const topics = instruments
       .map((instrument) => `tickers.${instrument.exchangeSymbol}`)
       .filter((topic) => this.subscriptions.subscribedTopics.has(topic));
 
     if (topics.length === 0) return;
 
-    for (let i = 0; i < topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-      const batch = topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
-      this.sendJson({ op: 'unsubscribe', args: batch });
-      for (const topic of batch) {
-        this.subscriptions.subscribedTopics.delete(topic);
+    if (this.wsClient?.isConnected) {
+      for (let i = 0; i < topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
+        const batch = topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
+        this.sendJson({ op: 'unsubscribe', args: batch });
       }
     }
+
+    removeBybitSubscribedTopics(this.subscriptions, topics);
   }
 
   protected async unsubscribeAll(): Promise<void> {
-    if (this.subscriptions.subscribedTopics.size === 0 || !this.wsClient?.isConnected) return;
+    if (this.subscriptions.subscribedTopics.size === 0) return;
 
     const topics = [...this.subscriptions.subscribedTopics];
+    resetBybitSubscriptionState(this.subscriptions);
+
+    if (!this.wsClient?.isConnected) return;
+
     for (let i = 0; i < topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
       this.sendJson({ op: 'unsubscribe', args: topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH) });
     }
-    resetBybitSubscriptionState(this.subscriptions);
   }
 
   private async ensureConnected(): Promise<void> {
@@ -367,9 +387,9 @@ export class BybitWsAdapter extends SdkBaseAdapter {
         pingIntervalMs: BYBIT_PING_INTERVAL_MS,
         pingMessage: { op: 'ping' },
         onStatusChange: (state) => {
-          this.emitStatus(
-            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
-          );
+          this.wsState =
+            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting';
+          this.emitStatus(this.wsState);
         },
         getReplayMessages: () => {
           if (this.subscriptions.subscribedTopics.size === 0) return [];
@@ -398,10 +418,10 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       const url = new URL(BYBIT_SYSTEM_STATUS, BYBIT_REST_BASE_URL);
       const raw = await this.fetchJson(url);
       const parsed = parseBybitSystemStatusResponse(raw);
-      const health = deriveBybitHealth(parsed);
+      const health = deriveBybitHealth(parsed, undefined, this.wsState);
       this.emitStatus(health.status, health.message);
     } catch (error: unknown) {
-      const health = deriveBybitHealth(null, error);
+      const health = deriveBybitHealth(null, error, this.wsState);
       this.emitStatus(health.status, health.message);
     }
   }
@@ -419,6 +439,18 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     if (json == null || typeof json !== 'object') return;
     const obj = json as Record<string, unknown>;
+    if (obj['success'] === false) {
+      log.warn(
+        {
+          op: obj['op'],
+          retCode: obj['ret_code'],
+          retMsg: obj['ret_msg'],
+        },
+        'bybit control message failed',
+      );
+      return;
+    }
+
     if (obj['op'] === 'subscribe' || obj['op'] === 'pong' || obj['success'] !== undefined) return;
 
     const msg = parseBybitWsMessage(json);
@@ -444,6 +476,20 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
   private sendJson(payload: Record<string, unknown>): void {
     this.wsClient?.send(payload);
+  }
+
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
   }
 
   private sweepExpiredState(): void {

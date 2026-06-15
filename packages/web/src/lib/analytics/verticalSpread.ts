@@ -1,9 +1,20 @@
 import type { EnrichedStrike, VenueQuote, VenueId } from '@shared/enriched';
-import { blackScholesCall, blackScholesPut, normCdf, type OptionRight } from './blackScholes';
+import { blackScholesCall, blackScholesPut, normCdf, realWorldPop, type OptionRight } from './blackScholes';
 import { inferMissingIv } from './ivInference';
 
 export type SpreadKind = 'call-credit' | 'put-credit';
 export type TradingSignal = 'SELL' | 'AVOID' | 'HOLD';
+export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
+export type RegimeDirection = 'risk-on' | 'neutral' | 'risk-off';
+
+// Physical-measure inputs. When supplied, success probability is computed
+// against realized vol and the user's directional drift instead of the
+// risk-neutral measure — the EV gate then reflects the trade's *actual*
+// expected outcome, not a fair-value estimate.
+export interface RealWorldParams {
+  drift: number;
+  sigmaRV: number;
+}
 
 export interface SpreadInput {
   kind: SpreadKind;
@@ -24,6 +35,13 @@ export interface SpreadInput {
   // risk-neutral N(±d₂) at the breakeven strike. When omitted, falls back to a
   // coarse spot/breakeven heuristic.
   ivAtStrike?: (strike: number) => number | null;
+  // When provided, success probability and EV are computed from physical
+  // drift and realized vol instead of the risk-neutral surface IV.
+  realWorld?: RealWorldParams;
+  // When provided, the SELL gate's ROC threshold flexes with the macro
+  // regime: high-vol tightens the gate (less aggressive selling), low-vol loosens
+  // it. Drives `gateSignal` only; pricing/EV are unaffected.
+  regimeDominant?: RegimeLabel | null;
 }
 
 export interface VenueLegCandidate {
@@ -53,9 +71,14 @@ export interface SpreadSignal {
   breakeven: number;
   riskReward: number;
   successProbability: number;
+  // 'real-world'   = N(±d₂) at user's physical drift μ and realized σ_RV.
   // 'risk-neutral' = Black-Scholes N(±d₂) at breakeven IV.
   // 'heuristic'    = bucketed spot/breakeven ratio (fallback when no IV is available).
-  probabilityMethod: 'risk-neutral' | 'heuristic';
+  probabilityMethod: 'real-world' | 'risk-neutral' | 'heuristic';
+  // Expected value at expiry: pop × credit − (1 − pop) × maxLoss.
+  expectedValue: number;
+  // Return on capital: ev / maxLoss. The gate threshold for SELL is roc ≥ 0.10.
+  roc: number;
 }
 
 export interface RoutedSpreadAnalysis {
@@ -218,16 +241,17 @@ function pickBestBuy(cands: VenueLegCandidate[]): VenueLegCandidate | null {
 
 interface ProbabilityResult {
   prob: number;
-  method: 'risk-neutral' | 'heuristic';
+  method: 'real-world' | 'risk-neutral' | 'heuristic';
 }
 
-// Risk-neutral probability of finishing in the profit zone of a credit spread.
-// For a call-credit, profit ⇔ S_T < BE  → P = N(−d₂).
-// For a put-credit,  profit ⇔ S_T > BE  → P = N( d₂).
-// d₂ = [ln(S/BE) + (r − ½σ²)T] / (σ√T), σ = IV at the breakeven strike.
+// Probability of finishing in the profit zone of a credit spread.
+// For a call-credit, profit ⇔ S_T < BE.
+// For a put-credit,  profit ⇔ S_T > BE.
 //
-// Falls back to a coarse spot/BE bucket when σ or T is unavailable so the UI
-// keeps rendering a probability rather than going blank.
+// Resolution order (when each input is available):
+//   1. real-world     — physical drift μ and realized σ_RV (P-measure).
+//   2. risk-neutral   — Black-Scholes N(±d₂) at breakeven IV (Q-measure).
+//   3. heuristic      — coarse spot/BE bucket so the UI never goes blank.
 function successProbability(
   kind: SpreadKind,
   spot: number,
@@ -235,7 +259,14 @@ function successProbability(
   T: number,
   r: number,
   ivAtBreakeven: number | null,
+  realWorld: RealWorldParams | undefined,
 ): ProbabilityResult {
+  if (realWorld && T > 0 && spot > 0 && breakeven > 0 && realWorld.sigmaRV > 0) {
+    const direction = kind === 'call-credit' ? 'below' : 'above';
+    const prob = realWorldPop(direction, spot, breakeven, T, realWorld.drift, realWorld.sigmaRV);
+    if (Number.isFinite(prob)) return { prob, method: 'real-world' };
+  }
+
   if (ivAtBreakeven != null && ivAtBreakeven > 0 && T > 0 && spot > 0 && breakeven > 0) {
     const sigma = ivAtBreakeven;
     const d2 = (Math.log(spot / breakeven) + (r - 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
@@ -243,7 +274,6 @@ function successProbability(
     return { prob, method: 'risk-neutral' };
   }
 
-  // Heuristic fallback — same buckets as before.
   const ratio = spot / breakeven;
   if (kind === 'call-credit') {
     if (spot <= breakeven) {
@@ -261,6 +291,24 @@ function successProbability(
   return { prob: 0.35, method: 'heuristic' };
 }
 
+// Minimum return on capital required to fire a SELL signal. Below this even
+// a positive-EV trade isn't worth the buying-power tie-up. Sourced from
+// vol-seller practitioner targets (≈25–33%); we use 10% so the gate accepts
+// shorter-dated tickets where carry is mechanically smaller.
+const ROC_GATE_NEUTRAL = 0.10;
+const ROC_GATE_STRESS = 0.20;
+const ROC_GATE_BULL = 0.07;
+
+// Vol-level modulates the SELL gate. In high-vol the cost of being short
+// vol/short gamma is non-linear (tail blow-ups), so the gate doubles. In
+// low-vol the realized-vs-implied gap typically widens in the seller's favor,
+// so the gate eases. Mid-vol keeps the practitioner default.
+export function rocGateForRegime(regime: RegimeLabel | null | undefined): number {
+  if (regime === 'high-vol') return ROC_GATE_STRESS;
+  if (regime === 'low-vol') return ROC_GATE_BULL;
+  return ROC_GATE_NEUTRAL;
+}
+
 function gateSignal(
   kind: SpreadKind,
   shortStrike: number,
@@ -271,6 +319,8 @@ function gateSignal(
   T: number,
   r: number,
   ivAtStrike: ((strike: number) => number | null) | undefined,
+  realWorld: RealWorldParams | undefined,
+  regimeDominant: RegimeLabel | null | undefined,
 ): SpreadSignal | null {
   if (shortPremium == null || longPremium == null) return null;
 
@@ -290,16 +340,28 @@ function gateSignal(
   const breakeven = kind === 'call-credit' ? shortStrike + netCredit : shortStrike - netCredit;
   const riskReward = maxProfit > 0 ? Math.min(maxLoss / maxProfit, 999.99) : 999.99;
   const ivBE = ivAtStrike ? ivAtStrike(breakeven) : null;
-  const { prob, method } = successProbability(kind, spot, breakeven, T, r, ivBE);
+  const { prob, method } = successProbability(kind, spot, breakeven, T, r, ivBE, realWorld);
+
+  const expectedValue = prob * netCredit - (1 - prob) * maxLoss;
+  const roc = maxLoss > 0 ? expectedValue / maxLoss : 0;
+  const rocGate = rocGateForRegime(regimeDominant);
+  const regimeSuffix =
+    regimeDominant === 'high-vol'
+      ? ' [high-vol: gate 20%]'
+      : regimeDominant === 'low-vol'
+        ? ' [low-vol: gate 7%]'
+        : '';
 
   let signal: TradingSignal;
   let reasoning: string;
-  if (netCredit > 0 && riskReward <= 3 && prob >= 0.65) {
+  if (netCredit > 0 && expectedValue > 0 && roc >= rocGate) {
     signal = 'SELL';
-    reasoning = `Favorable: Net credit $${netCredit.toFixed(2)}, R/R ${riskReward.toFixed(2)}:1, Success ${Math.round(prob * 100)}%`;
+    reasoning = `Favorable: EV $${expectedValue.toFixed(2)}, ROC ${(roc * 100).toFixed(1)}%, Success ${Math.round(prob * 100)}%${regimeSuffix}`;
   } else if (netCredit > 0) {
     signal = 'AVOID';
-    reasoning = `Poor R/R: ${riskReward.toFixed(2)}:1 or Low success: ${Math.round(prob * 100)}%`;
+    reasoning = expectedValue <= 0
+      ? `Negative EV: $${expectedValue.toFixed(2)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
+      : `Low ROC: ${(roc * 100).toFixed(1)}% (gate ${(rocGate * 100).toFixed(0)}%)${regimeSuffix}`;
   } else {
     signal = 'HOLD';
     reasoning = `Negative credit: $${netCredit.toFixed(2)}`;
@@ -315,6 +377,8 @@ function gateSignal(
     riskReward,
     successProbability: prob,
     probabilityMethod: method,
+    expectedValue,
+    roc,
   };
 }
 
@@ -336,6 +400,22 @@ function blendedSideIv(
   return count > 0 ? sum / count : null;
 }
 
+// Restricts a venues map to the `allowed` set. Returns the original map when
+// no filter was provided so the surface signal still blends across everything
+// the chain has when the user hasn't narrowed venues.
+function filterVenues(
+  venues: Partial<Record<VenueId, VenueQuote>>,
+  allowed: readonly VenueId[],
+): Partial<Record<VenueId, VenueQuote>> {
+  if (allowed.length === 0) return venues;
+  const out: Partial<Record<VenueId, VenueQuote>> = {};
+  for (const v of allowed) {
+    const q = venues[v];
+    if (q) out[v] = q;
+  }
+  return out;
+}
+
 function computeSurfaceSignal(
   kind: SpreadKind,
   shortStrike: number,
@@ -346,11 +426,14 @@ function computeSurfaceSignal(
   T: number,
   r: number,
   ivAtStrike: ((strike: number) => number | null) | undefined,
+  realWorld: RealWorldParams | undefined,
+  venuesFilter: readonly VenueId[],
+  regimeDominant: RegimeLabel | null | undefined,
 ): SpreadSignal | null {
   if (!shortSide || !longSide) return null;
   const right = rightForKind(kind);
-  const shortVenues = sideForKind(shortSide, kind).venues;
-  const longVenues = sideForKind(longSide, kind).venues;
+  const shortVenues = filterVenues(sideForKind(shortSide, kind).venues, venuesFilter);
+  const longVenues = filterVenues(sideForKind(longSide, kind).venues, venuesFilter);
 
   const shortBidIv =
     blendedSideIv(shortVenues, (q) => q.bidIv) ?? blendedSideIv(shortVenues, (q) => q.markIv);
@@ -361,13 +444,13 @@ function computeSurfaceSignal(
 
   const shortPremium = priceAtIv(right, spot, shortStrike, T, r, shortBidIv);
   const longPremium = priceAtIv(right, spot, longStrike, T, r, longAskIv);
-  return gateSignal(kind, shortStrike, longStrike, shortPremium, longPremium, spot, T, r, ivAtStrike);
+  return gateSignal(kind, shortStrike, longStrike, shortPremium, longPremium, spot, T, r, ivAtStrike, realWorld, regimeDominant);
 }
 
 // ── Public API ─────────────────────────────────────────────────────
 
 export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
-  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues, strikeByKey, ivAtStrike } = input;
+  const { kind, shortStrike, longStrike, strikes, spot, T, r, venues, strikeByKey, ivAtStrike, realWorld, regimeDominant } = input;
   const right = rightForKind(kind);
   const shortRow = findStrike(strikes, shortStrike, strikeByKey);
   const longRow = findStrike(strikes, longStrike, strikeByKey);
@@ -389,6 +472,8 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
     T,
     r,
     ivAtStrike,
+    realWorld,
+    regimeDominant,
   );
 
   const surfaceSignal = computeSurfaceSignal(
@@ -401,6 +486,9 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
     T,
     r,
     ivAtStrike,
+    realWorld,
+    venueList,
+    regimeDominant,
   );
 
   return {

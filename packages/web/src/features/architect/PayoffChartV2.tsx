@@ -12,52 +12,108 @@ import {
 import { Spinner } from '@components/ui';
 import type { Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
-import { dteDays } from '@lib/format';
+import { dteDays, fmtUsd } from '@lib/format';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
+import type { GhostPath, GhostPathKind } from './ghost-paths';
 import styles from './Architect.module.css';
+
+const GHOST_RGB: Record<'profit' | 'loss', string> = {
+  profit: '0,233,151',
+  loss: '203,56,85',
+};
+const GHOST_LABEL: Record<GhostPathKind, string> = { up: '↑ up', down: '↓ down', theta: 'θ flat' };
+const rgba = (rgb: string, a: number) => `rgba(${rgb},${a})`;
 
 interface PayoffChartV2Props {
   candles: SpotCandle[];
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
+  resolutionSec: number;
   loading: boolean;
   available: boolean;
   onSwitchToV1: () => void;
+  ghostPaths: GhostPath[];
+  showProjections: boolean;
+  snapshotMeta: { agoLabel: string } | null;
+  projectionKey: string;
 }
 
 export interface CandleSpec {
   resolutionSec: number;
   buckets: number;
+  rangeLabel: string;
+  intervalLabel: string;
+  refetchIntervalMs: number;
 }
 
 /**
- * Pick a candle window that scales with the strategy's nearest-leg DTE so
- * the price-history view always reflects the chosen tenor. Bucket count
- * varies with DTE within each resolution tier — this guarantees that any
- * tenor change produces a new query key, so TanStack Query refetches.
+ * Pick a candle window that scales with the strategy's nearest-leg DTE.
+ * Bucket counts stay on fixed tiers so small tenor edits reuse the same query
+ * key. That keeps the history cache warm and avoids unnecessary upstream
+ * refetches while the user fine-tunes a structure.
  */
 export function pickCandleSpec(legs: Leg[]): CandleSpec {
-  if (legs.length === 0) return { resolutionSec: 3600, buckets: 24 };
+  if (legs.length === 0) {
+    return {
+      resolutionSec: 3600,
+      buckets: 24,
+      rangeLabel: '1D',
+      intervalLabel: '1H',
+      refetchIntervalMs: 60_000,
+    };
+  }
   const minDte = Math.max(0, Math.min(...legs.map((l) => dteDays(l.expiry))));
 
+  // Bucket counts are 3× the bars a tenor strictly needs so the chart carries
+  // deep historical context (e.g. ~2 months at a 30d structure, ~18 months at
+  // the longest expiry). Deribit/Hyperliquid windows are time-ranged, not
+  // bar-capped, and the /spot-candles route allows up to 3000 buckets, so the
+  // wider windows just return more bars (verified: 92d of 1h ≈ 2.2k ticks).
   if (minDte < 1) {
-    return { resolutionSec: 300, buckets: 48 };
+    return {
+      resolutionSec: 300,
+      buckets: 144,
+      rangeLabel: '12H',
+      intervalLabel: '5M',
+      refetchIntervalMs: 15_000,
+    };
   }
   if (minDte < 3) {
-    const buckets = Math.min(96, Math.max(24, Math.round(minDte * 48)));
-    return { resolutionSec: 1800, buckets };
+    return {
+      resolutionSec: 1800,
+      buckets: 288,
+      rangeLabel: '6D',
+      intervalLabel: '30M',
+      refetchIntervalMs: 30_000,
+    };
   }
   if (minDte < 14) {
-    const buckets = Math.min(168, Math.max(24, Math.round(minDte * 24)));
-    return { resolutionSec: 3600, buckets };
+    return {
+      resolutionSec: 3600,
+      buckets: minDte < 7 ? 288 : 504,
+      rangeLabel: minDte < 7 ? '12D' : '21D',
+      intervalLabel: '1H',
+      refetchIntervalMs: 60_000,
+    };
   }
   if (minDte < 60) {
-    const buckets = Math.min(180, Math.max(42, Math.round(minDte * 6)));
-    return { resolutionSec: 14400, buckets };
+    return {
+      resolutionSec: 14400,
+      buckets: minDte < 30 ? 270 : 540,
+      rangeLabel: minDte < 30 ? '45D' : '90D',
+      intervalLabel: '4H',
+      refetchIntervalMs: 120_000,
+    };
   }
-  return { resolutionSec: 86400, buckets: Math.min(180, Math.max(60, minDte)) };
+  return {
+    resolutionSec: 86400,
+    buckets: minDte < 120 ? 270 : 540,
+    rangeLabel: minDte < 120 ? '270D' : '540D',
+    intervalLabel: '1D',
+    refetchIntervalMs: 300_000,
+  };
 }
 
 function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {
@@ -95,9 +151,14 @@ export default function PayoffChartV2({
   breakevens,
   spotPrice,
   legs,
+  resolutionSec,
   loading,
   available,
   onSwitchToV1,
+  ghostPaths,
+  showProjections,
+  snapshotMeta,
+  projectionKey,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -105,6 +166,8 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
+  const ghostSeriesRef = useRef<ISeriesApi<'Candlestick'>[]>([]);
+  const lastGhostFitKeyRef = useRef<string>('');
 
   const zones = useMemo(
     () => buildZones(legs, breakevens, spotPrice),
@@ -178,12 +241,13 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
+      ghostSeriesRef.current = [];
+      lastGhostFitKeyRef.current = '';
     };
   }, []);
 
-  // Push candle data. Only fit-content when the underlying window changes
-  // (resolution / tenor swap) — incremental websocket updates must preserve
-  // any zoom or pan the user has applied.
+  // Only fit-content when the history window changes so refreshes preserve any
+  // zoom or pan the user has applied.
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartApiRef.current;
@@ -211,20 +275,21 @@ export default function PayoffChartV2({
     // in length or a backwards jump in the first timestamp; pure rolling
     // updates only nudge the first timestamp forward and grow length.
     const first = data[0]!.time as number;
-    const windowKey = `${first}:${data.length}`;
+    const windowKey = `${resolutionSec}:${first}:${data.length}`;
     const prev = lastWindowKeyRef.current;
     let isFresh = prev === '';
     if (!isFresh) {
-      const [prevFirstStr, prevLenStr] = prev.split(':');
+      const [prevResolutionStr, prevFirstStr, prevLenStr] = prev.split(':');
+      const prevResolution = Number(prevResolutionStr);
       const prevFirst = Number(prevFirstStr);
       const prevLen = Number(prevLenStr);
-      isFresh = first < prevFirst || data.length < prevLen;
+      isFresh = prevResolution !== resolutionSec || first < prevFirst || data.length < prevLen;
     }
     if (isFresh) {
       chart.timeScale().fitContent();
     }
     lastWindowKeyRef.current = windowKey;
-  }, [candles]);
+  }, [candles, resolutionSec, spotPrice]);
 
   // Apply break-even price lines.
   useEffect(() => {
@@ -266,10 +331,56 @@ export default function PayoffChartV2({
     primitiveRef.current?.setZones(zones);
   }, [zones]);
 
+  // Render the projection paths as translucent candlestick series. Each series'
+  // future data points extend the shared time scale into the projection region.
+  useEffect(() => {
+    const chart = chartApiRef.current;
+    if (!chart) return;
+
+    for (const s of ghostSeriesRef.current) chart.removeSeries(s);
+    ghostSeriesRef.current = [];
+
+    if (!showProjections || ghostPaths.length === 0) return;
+
+    for (const path of ghostPaths) {
+      if (path.candles.length === 0) continue;
+      const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
+      const bodyAlpha = path.kind === 'theta' ? 0.18 : 0.3;
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: rgba(rgb, bodyAlpha),
+        downColor: rgba(rgb, bodyAlpha),
+        borderUpColor: rgba(rgb, 0.55),
+        borderDownColor: rgba(rgb, 0.55),
+        wickUpColor: rgba(rgb, 0.55),
+        wickDownColor: rgba(rgb, 0.55),
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      series.setData(
+        path.candles.map((c) => ({
+          time: Math.floor(c.timestamp / 1000) as number, // seconds — match the main series
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })) as never,
+      );
+      ghostSeriesRef.current.push(series);
+    }
+
+    // Bring the projection into view only when the projection identity changes
+    // (toggle on, snapshot switch, tenor/resolution change) — not on every tick,
+    // so the user's pan/zoom is preserved during rolling updates.
+    if (projectionKey !== lastGhostFitKeyRef.current) {
+      chart.timeScale().fitContent();
+      lastGhostFitKeyRef.current = projectionKey;
+    }
+  }, [ghostPaths, showProjections, projectionKey]);
+
   if (!available) {
     return (
       <div className={styles.chartV2EmptyState}>
-        <div className={styles.chartV2EmptyTitle}>V2 candles cover BTC and ETH only</div>
+        <div className={styles.chartV2EmptyTitle}>V2 candles cover BTC, ETH, and HYPE only</div>
         <div className={styles.chartV2EmptyDetail}>
           SOL spot history isn’t available on Deribit. The V1 expiry view stays accurate.
         </div>
@@ -287,6 +398,22 @@ export default function PayoffChartV2({
         {loading && (
           <div className={styles.chartV2Overlay}>
             <Spinner size="lg" />
+          </div>
+        )}
+        {showProjections && ghostPaths.length > 0 && (
+          <div className={styles.ghostLegend}>
+            {snapshotMeta && (
+              <div className={styles.ghostLegendSnap}>snapshot · {snapshotMeta.agoLabel}</div>
+            )}
+            {ghostPaths.map((p) => (
+              <div key={p.kind} className={styles.ghostLegendRow}>
+                <span className={styles.ghostLegendDot} data-profit={p.isProfit} />
+                <span className={styles.ghostLegendLabel}>{GHOST_LABEL[p.kind]}</span>
+                <span className={styles.ghostLegendPnl} data-profit={p.isProfit}>
+                  {fmtUsd(p.pnlAtExpiry)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

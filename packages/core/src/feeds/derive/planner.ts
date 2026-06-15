@@ -7,6 +7,7 @@ export interface DeriveSubscriptionState {
 }
 
 export interface DeriveSubscriptionPlan {
+  exchangeSymbols: string[];
   channels: string[];
 }
 
@@ -20,15 +21,25 @@ export function buildDeriveSubscriptionPlan(
   state: DeriveSubscriptionState,
   instruments: CachedInstrument[],
 ): DeriveSubscriptionPlan {
+  const exchangeSymbols: string[] = [];
   const channels: string[] = [];
 
   for (const instrument of instruments) {
     if (state.subscribedTickers.has(instrument.exchangeSymbol)) continue;
+    exchangeSymbols.push(instrument.exchangeSymbol);
     channels.push(deriveTickerChannel(instrument.exchangeSymbol));
-    state.subscribedTickers.add(instrument.exchangeSymbol);
   }
 
-  return { channels };
+  return { exchangeSymbols, channels };
+}
+
+export function markDeriveSubscribedTickers(
+  state: DeriveSubscriptionState,
+  exchangeSymbols: string[],
+): void {
+  for (const exchangeSymbol of exchangeSymbols) {
+    state.subscribedTickers.add(exchangeSymbol);
+  }
 }
 
 export async function subscribeDeriveBatches(

@@ -4,6 +4,8 @@ import {
   COINCALL_CONFIG,
   COINCALL_INSTRUMENTS,
   COINCALL_MARKET_WS_URL,
+  COINCALL_OPTION_CHAIN,
+  COINCALL_OPTION_DETAIL,
   COINCALL_REST_BASE_URL,
   COINCALL_TIME,
 } from '../shared/endpoints.js';
@@ -13,7 +15,9 @@ import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
   parseCoincallBsInfoMessage,
+  parseCoincallChainResponse,
   parseCoincallInstruments,
+  parseCoincallOptionDetail,
   parseCoincallOrderBookMessage,
   parseCoincallPublicConfig,
   parseCoincallTOptionMessage,
@@ -39,23 +43,85 @@ import {
   resetCoincallSubscriptionState,
 } from './planner.js';
 import {
+  applyCoincallRestStats,
   buildCoincallInstrument,
   mergeCoincallBsInfo,
   mergeCoincallOrderBook,
   mergeCoincallTOption,
 } from './state.js';
-import type { CoincallOptionConfigEntry } from './types.js';
+import type {
+  CoincallChainResponse,
+  CoincallOptionConfigEntry,
+  CoincallOptionDetail,
+} from './types.js';
 
 const log = feedLogger('coincall');
+
+const ERROR_LOG_TTL_MS = 60_000;
+const MAX_UNIQUE_ERRORS = 100;
+
+interface ErrorLogEntry {
+  key: string;
+  lastLogged: number;
+}
+
+const errorLogCache: ErrorLogEntry[] = [];
+
+function shouldLogValidationError(key: string): boolean {
+  const now = Date.now();
+  const existing = errorLogCache.find((e) => e.key === key);
+  if (existing) {
+    if (now - existing.lastLogged > ERROR_LOG_TTL_MS) {
+      existing.lastLogged = now;
+      return true;
+    }
+    return false;
+  }
+  if (errorLogCache.length >= MAX_UNIQUE_ERRORS) {
+    errorLogCache.shift();
+  }
+  errorLogCache.push({ key, lastLogged: now });
+  return true;
+}
 
 // Coincall closes idle connections after 30s — heartbeat well within.
 const COINCALL_PING_INTERVAL_MS = 15_000;
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+// OI / 24h volume are REST-only on Coincall (the WS streams 0). They drift
+// slowly, so a 60s backfill keeps the by-venue analytics accurate without
+// hammering a small venue. One bulk chain call per subscribed expiry, plus a
+// per-symbol detail call for the few legs that actually carry activity.
+const OI_REFRESH_INTERVAL_MS = 60 * 1000;
 
-// Only subscribe options for underlyings that the app cares about. optionConfig
-// lists 21 pairs but most are long-tail; chain UI focuses on these.
-const SUPPORTED_UNDERLYINGS = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'] as const;
+// Full Coincall optionConfig (21 pairs). Long-tail pairs (ORDI/KAS/MNT/etc.)
+// will be CoinCall-only rows in cross-venue chains. The normalization pipeline
+// is generic (symbol regex matches any [A-Z]+USD, strike accepts decimals,
+// IV is fractions, multiplier defaults to 1), so adding pairs costs nothing
+// beyond bandwidth.
+const SUPPORTED_UNDERLYINGS = [
+  'BTC',
+  'ETH',
+  'SOL',
+  'BNB',
+  'DOGE',
+  'XRP',
+  'LTC',
+  'HYPE',
+  'SUI',
+  'XAUT',
+  'AAVE',
+  'TRX',
+  'MATIC',
+  'ORDI',
+  'MNT',
+  'WLFI',
+  'ENA',
+  'PENDLE',
+  'LIT',
+  'TRUMP',
+  'KAS',
+] as const;
 
 function payloadShape(value: unknown): Record<string, unknown> {
   if (Array.isArray(value)) {
@@ -71,6 +137,17 @@ function payloadShape(value: unknown): Record<string, unknown> {
     return { kind: 'object', keys: Object.keys(value as Record<string, unknown>) };
   }
   return { kind: typeof value };
+}
+
+function payloadShapeKey(value: unknown): string {
+  const shape = payloadShape(value);
+  if (shape['kind'] === 'array') {
+    return JSON.stringify({ kind: 'array', firstKeys: shape['firstKeys'] ?? [] });
+  }
+  if (shape['kind'] === 'object') {
+    return JSON.stringify({ kind: 'object', keys: shape['keys'] ?? [] });
+  }
+  return JSON.stringify(shape);
 }
 
 interface CoincallEnvelope {
@@ -111,6 +188,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   private wsClient: TopicWsClient | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private oiTimer: ReturnType<typeof setInterval> | null = null;
+  private oiRefreshInFlight = false;
 
   private readonly subscriptions = createCoincallSubscriptionState();
   private optionConfig: Record<string, CoincallOptionConfigEntry> = {};
@@ -120,6 +199,20 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   private connectPromise: Promise<void> | null = null;
 
   protected initClients(): void {}
+
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
     const apiKey = process.env['COINCALL_API_KEY'];
@@ -170,6 +263,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
       void this.refreshHealth();
     }, HEALTH_CHECK_INTERVAL_MS);
     void this.refreshHealth();
+
+    this.oiTimer = setInterval(() => {
+      void this.refreshOpenInterest();
+    }, OI_REFRESH_INTERVAL_MS);
 
     return instruments;
   }
@@ -349,9 +446,8 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   }
 
   private async connectWs(): Promise<void> {
-    const url = buildSignedWsUrl();
     if (this.wsClient == null) {
-      this.wsClient = new TopicWsClient(url, 'coincall-ws', {
+      this.wsClient = new TopicWsClient(() => buildSignedWsUrl(), 'coincall-ws', {
         pingIntervalMs: COINCALL_PING_INTERVAL_MS,
         pingMessage: { action: 'heartbeat' },
         onStatusChange: (state) => {
@@ -418,7 +514,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 3) {
       const msg = parseCoincallBsInfoMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
+        const errKey = `bsInfo:${payloadShapeKey(envelope['d'])}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall bsInfo validation failed');
+        }
         return;
       }
       const inst = this.instrumentMap.get(msg.d.s);
@@ -432,7 +531,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 4) {
       const msg = parseCoincallTOptionMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
+        const errKey = `tOption:${payloadShapeKey(envelope['d'])}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall tOption validation failed');
+        }
         return;
       }
       const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
@@ -459,7 +561,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (dt === 5) {
       const msg = parseCoincallOrderBookMessage(json);
       if (msg == null) {
-        log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall orderBook validation failed');
+        const errKey = `orderBook:${JSON.stringify(payloadShape(envelope['d']))}`;
+        if (shouldLogValidationError(errKey)) {
+          log.warn({ shape: payloadShape(envelope['d']) }, 'Coincall orderBook validation failed');
+        }
         return;
       }
       const inst = this.instrumentMap.get(msg.d.s);
@@ -501,6 +606,114 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     } catch (error: unknown) {
       const health = deriveCoincallHealth(null, null, error);
       this.emitStatus(health.status, health.message);
+    }
+  }
+
+  private async fetchCoincallChain(
+    pairRoot: string,
+    expiryTs: number,
+  ): Promise<CoincallChainResponse | null> {
+    const data = await this.fetchApi(`${COINCALL_OPTION_CHAIN}/${pairRoot}?endTime=${expiryTs}`);
+    return parseCoincallChainResponse(data);
+  }
+
+  private async fetchCoincallDetail(symbol: string): Promise<CoincallOptionDetail | null> {
+    const data = await this.fetchApi(`${COINCALL_OPTION_DETAIL}/${encodeURIComponent(symbol)}`);
+    return parseCoincallOptionDetail(data);
+  }
+
+  /**
+   * Coincall's WS market channels (bsInfo/tOption) stream 0 for open interest and
+   * 24h volume, so the live chain shows none. The bulk REST chain endpoint carries
+   * the real per-leg OI; the per-symbol detail endpoint additionally carries 24h
+   * volume. This periodically overlays both onto the subscribed quotes — a pure
+   * read-only enricher that never touches transport / subscription / health state.
+   */
+  private async refreshOpenInterest(): Promise<void> {
+    // A slow venue must not let the 60s cycles pile up on top of each other.
+    if (this.oiRefreshInFlight) return;
+    this.oiRefreshInFlight = true;
+    let chainFailures = 0;
+    let detailFailures = 0;
+    try {
+      for (const key of [...this.subscriptions.tOptionKeys]) {
+        const sep = key.lastIndexOf(':');
+        if (sep < 0) continue;
+        const pairRoot = key.slice(0, sep);
+        const expiryTs = Number(key.slice(sep + 1));
+        if (!Number.isFinite(expiryTs)) continue;
+
+        let rows: CoincallChainResponse | null;
+        try {
+          rows = await this.fetchCoincallChain(pairRoot, expiryTs);
+        } catch (err: unknown) {
+          chainFailures++;
+          log.debug({ pairRoot, expiryTs, err: String(err) }, 'OI backfill: chain fetch failed');
+          continue;
+        }
+        if (rows == null) continue;
+
+        const now = Date.now();
+        const updates: Array<{ exchangeSymbol: string; quote: LiveQuote }> = [];
+        const activeSymbols: string[] = [];
+
+        for (const row of rows) {
+          for (const leg of [row.callOption, row.putOption]) {
+            if (leg == null || !this.instrumentMap.has(leg.symbol)) continue;
+            const oi = leg.openInterest ?? null;
+            if ((oi ?? 0) > 0 || (leg.volume ?? 0) > 0) activeSymbols.push(leg.symbol);
+
+            const previous = this.quoteStore.get(leg.symbol);
+            // Skip unchanged OI so we don't re-emit deltas for the (many) empty legs.
+            if ((oi ?? 0) === (previous?.openInterest ?? 0)) continue;
+            updates.push({
+              exchangeSymbol: leg.symbol,
+              quote: applyCoincallRestStats(
+                { openInterest: oi, volume24h: null, volume24hUsd: null, underlyingPrice: null },
+                previous,
+                this.emptyQuote(),
+                now,
+              ),
+            });
+          }
+        }
+        if (updates.length > 0) this.emitQuoteUpdates(updates);
+
+        // 24h volume lives only on the per-symbol detail endpoint — fetch it for the
+        // handful of legs that actually have OI or recent trades.
+        for (const symbol of activeSymbols) {
+          let detail: CoincallOptionDetail | null;
+          try {
+            detail = await this.fetchCoincallDetail(symbol);
+          } catch (err: unknown) {
+            detailFailures++;
+            log.debug({ symbol, err: String(err) }, 'OI backfill: detail fetch failed');
+            continue;
+          }
+          if (detail == null || !this.instrumentMap.has(symbol)) continue;
+          this.emitQuoteUpdate(
+            symbol,
+            applyCoincallRestStats(
+              {
+                openInterest: detail.openInterest ?? null,
+                volume24h: detail.volume24h ?? null,
+                volume24hUsd: detail.volumeUsd24h ?? null,
+                underlyingPrice: detail.underlyingPrice ?? null,
+              },
+              this.quoteStore.get(symbol),
+              this.emptyQuote(),
+              Date.now(),
+            ),
+          );
+        }
+      }
+    } finally {
+      this.oiRefreshInFlight = false;
+    }
+    // One aggregated warn per cycle instead of one per failed expiry/symbol —
+    // a full Coincall REST outage would otherwise flood the log every 60s.
+    if (chainFailures > 0 || detailFailures > 0) {
+      log.warn({ chainFailures, detailFailures }, 'OI backfill: some REST fetches failed');
     }
   }
 
@@ -552,6 +765,10 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     if (this.healthTimer) {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
+    }
+    if (this.oiTimer) {
+      clearInterval(this.oiTimer);
+      this.oiTimer = null;
     }
     await this.unsubscribeAll();
     await this.wsClient?.disconnect();

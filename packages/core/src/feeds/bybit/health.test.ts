@@ -34,4 +34,21 @@ describe('Bybit health', () => {
       message: 'system status probe failed: Error: timeout',
     });
   });
+
+  it('does not report healthy while the websocket is reconnecting', () => {
+    expect(
+      deriveBybitHealth(
+        {
+          retCode: 0,
+          retMsg: 'OK',
+          result: { list: [{ state: 'completed' }] },
+        },
+        undefined,
+        'reconnecting',
+      ),
+    ).toEqual({
+      status: 'reconnecting',
+      message: 'ws reconnecting',
+    });
+  });
 });

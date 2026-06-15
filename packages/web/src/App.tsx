@@ -1,14 +1,14 @@
-import { lazy, Suspense, useEffect } from 'react';
-
 import { AppShell } from '@components/layout';
-import { ChainView, useUnderlyings } from '@features/chain';
 import { TradfiApp } from '@features/tradfi';
 import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
+import { ChainView, ChartPanelLayer, useUnderlyings } from '@features/chain';
+import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
 import { TABS } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
+import { lazy, Suspense, useEffect } from 'react';
 
 import styles from './App.module.css';
 
@@ -26,10 +26,10 @@ const ArchitectView = lazy(() =>
 const TradingView = lazy(() =>
   import('@features/trading').then((m) => ({ default: m.TradingView })),
 );
-const AlphaView = lazy(() =>
-  import('@features/alpha').then((m) => ({ default: m.AlphaView })),
+const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView })));
+const PortfolioView = lazy(() =>
+  import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
 );
-
 export default function App() {
   useServerVersion();
   useSessionTimeout();
@@ -38,12 +38,18 @@ export default function App() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
+  useGlobalFeedStatus(activeTab === 'chain');
 
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   useEffect(() => {
     if (underlyings.length > 0 && !underlyings.includes(underlying)) {
+      const baseFallback = underlying.split('_')[0];
+      if (baseFallback && underlyings.includes(baseFallback)) {
+        setUnderlying(baseFallback);
+        return;
+      }
       setUnderlying(underlyings[0]!);
     }
   }, [underlyings, underlying, setUnderlying]);
@@ -69,6 +75,7 @@ export default function App() {
             {activeTab === 'alpha' && <AlphaView />}
             {activeTab === 'architect' && <ArchitectView />}
             {activeTab === 'trading' && <TradingView />}
+            {activeTab === 'portfolio' && <PortfolioView />}
             {activeTab === 'surface' && <SurfaceView />}
             {activeTab === 'flow' && <FlowView />}
             {activeTab === 'analytics' && <AnalyticsView />}
@@ -77,6 +84,7 @@ export default function App() {
         </ErrorBoundary>
       </div>
       <SessionNotice />
+      <ChartPanelLayer />
     </AppShell>
   );
 }

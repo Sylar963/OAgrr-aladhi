@@ -7,19 +7,28 @@ import {
 } from './iv-history.js';
 import type { DvolService } from './dvol.js';
 
-function makeRow(expiry: string, dte: number, atm: number, skew: number, fly: number): IvSurfaceRow {
-  // skew = c25 − p25, fly = (c25+p25)/2 − atm → solve for c25, p25
-  // c25 = atm + fly + skew/2; p25 = atm + fly − skew/2.
+function makeRow(
+  expiry: string,
+  dte: number,
+  atm: number,
+  skew: number,
+  fly: number,
+  skew10: number | null = null,
+  fly10: number | null = null,
+): IvSurfaceRow {
+  // skew = c25 − p25, fly = (c25+p25)/2 − atm → c25 = atm+fly+skew/2; p25 = atm+fly−skew/2.
   const c25 = atm + fly + skew / 2;
   const p25 = atm + fly - skew / 2;
+  const c10 = skew10 != null && fly10 != null ? atm + fly10 + skew10 / 2 : null;
+  const p10 = skew10 != null && fly10 != null ? atm + fly10 - skew10 / 2 : null;
   return {
     expiry,
     dte,
-    delta10p: null,
+    delta10p: p10,
     delta25p: p25,
     atm,
     delta25c: c25,
-    delta10c: null,
+    delta10c: c10,
   };
 }
 
@@ -193,6 +202,8 @@ describe('IvHistoryService', () => {
           atmIv: 0.41,
           rr25d: -0.03,
           bfly25d: 0.01,
+          rr10d: null,
+          bfly10d: null,
           source: 'live_surface',
         },
       ],
@@ -340,6 +351,36 @@ describe('IvHistoryService', () => {
     expect(buf).toHaveLength(1);
     expect(buf[0]!.rr25d).toBeCloseTo(0.04, 6);
     expect(buf[0]!.bfly25d).toBeCloseTo(0.01, 6);
+    svc.dispose();
+  });
+
+  it('computes 10d RR and butterfly when wings are present', async () => {
+    const surfaces = [makeRow('e', 30, 0.5, 0.04, 0.01, 0.08, 0.03)];
+    const svc = new IvHistoryService(
+      { getSurfaceGrid: () => Promise.resolve(surfaces), dvol: mockDvol() },
+      { underlyings: ['BTC'] },
+    );
+    await svc.snapshotOnce(Date.now());
+    const p = svc.getBuffer('BTC', '30d')[0]!;
+    expect(p.rr25d).toBeCloseTo(0.04, 6);
+    expect(p.rr10d).toBeCloseTo(0.08, 6);
+    expect(p.bfly10d).toBeCloseTo(0.03, 6);
+    svc.dispose();
+  });
+
+  it('leaves 10d null when wings are absent', async () => {
+    const surfaces = [makeRow('e', 30, 0.5, 0.04, 0.01)];
+    const svc = new IvHistoryService(
+      { getSurfaceGrid: () => Promise.resolve(surfaces), dvol: mockDvol() },
+      { underlyings: ['BTC'] },
+    );
+    await svc.snapshotOnce(Date.now());
+    const p = svc.getBuffer('BTC', '30d')[0]!;
+    expect(p.rr10d).toBeNull();
+    expect(p.bfly10d).toBeNull();
+    // 10Δ absence must not short-circuit the 25Δ computation.
+    expect(p.rr25d).toBeCloseTo(0.04, 6);
+    expect(p.bfly25d).toBeCloseTo(0.01, 6);
     svc.dispose();
   });
 

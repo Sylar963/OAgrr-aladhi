@@ -2,16 +2,24 @@ import { memo } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
 import { fmtUsd } from '@lib/format';
-import type { SpreadSignal } from '@lib/analytics/verticalSpread';
+import type { RegimeLabel, SpreadSignal } from '@lib/analytics/verticalSpread';
 
+import type { RegimeResponse } from './useRegimeQuery';
 import styles from './SignalCard.module.css';
 
 interface Props {
   signal: SpreadSignal | null;
   label?: string;
+  regime?: RegimeResponse | null;
 }
 
-function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
+const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
+  'low-vol': '7%',
+  'mid-vol': '10%',
+  'high-vol': '20%',
+};
+
+function SignalCard({ signal, label = 'Executable (best routing)', regime }: Props) {
   if (!signal) {
     return (
       <div className={styles.card} data-empty="true">
@@ -20,7 +28,25 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
     );
   }
 
+  const dominant = regime?.dominant ?? null;
+  const direction = regime?.direction ?? null;
+  const confidencePct =
+    regime?.confidence != null ? Math.round(regime.confidence * 100) : null;
+  const gatePct = dominant ? REGIME_GATE_PCT[dominant] : null;
+
   const probPct = Math.round(signal.successProbability * 100);
+  const probMethodHint =
+    signal.probabilityMethod === 'real-world'
+      ? 'Real-world: physical drift μ + realized σ_RV.'
+      : signal.probabilityMethod === 'risk-neutral'
+        ? 'Risk-neutral: N(±d₂) using IV at the breakeven strike.'
+        : 'Heuristic: bucketed spot/breakeven ratio.';
+  const probMethodSuffix =
+    signal.probabilityMethod === 'real-world'
+      ? '· P-measure'
+      : signal.probabilityMethod === 'risk-neutral'
+        ? '· N(d₂)'
+        : '· heuristic';
 
   return (
     <div className={styles.card} data-signal={signal.signal}>
@@ -34,21 +60,21 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
           </p>
           <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
             <li><strong>Net credit &gt; 0</strong> — you actually get paid to put it on.</li>
-            <li><strong>R/R ≤ 3:1</strong> — max loss is at most 3× max profit.</li>
-            <li><strong>Success ≥ 65%</strong> — risk-neutral P(profit at expiry).</li>
+            <li><strong>EV &gt; 0</strong> — expected value at expiry: pop × credit − (1 − pop) × maxLoss.</li>
+            <li><strong>ROC ≥ 10%</strong> — return on capital (EV ÷ maxLoss). Below this even a winning trade isn&apos;t worth the buying-power tie-up.</li>
           </ul>
           <p style={{ marginTop: 6 }}>
-            <strong>AVOID</strong> = credit but R/R or probability fails the gate.
-            Usually means strikes are too wide or the spread is mispriced relative
-            to the smile. <strong>HOLD</strong> = the structure debits net — flip
-            the legs or the strategy kind.
+            <strong>AVOID</strong> = credit but EV is negative or ROC is too low.
+            Usually means the credit is too small for the risk, or the smile makes
+            the trade fair-value. <strong>HOLD</strong> = the structure debits net
+            — flip the legs or the strategy kind.
           </p>
           <p style={{ marginTop: 6 }}>
-            <strong>How to think about it:</strong> the gate is intentionally
-            conservative for credit spreads, where you collect a small premium
-            against a larger possible loss. Treat <em>SELL</em> as &quot;the math
-            doesn&apos;t reject this&quot; — not as edge. Always cross-check with
-            the vol smile (rich short-leg IV is the actual edge).
+            <strong>POP source:</strong> when realized vol and your directional
+            view are available, the gate uses real-world probability (P-measure).
+            Otherwise it falls back to risk-neutral N(±d₂) at breakeven IV.
+            Real-world POP is what actually pays you over a sample of trades —
+            risk-neutral POP is fair-value pricing only.
           </p>
         </InfoTip>
       </div>
@@ -59,6 +85,28 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
         </span>
         <span className={styles.reasoning}>{signal.reasoning}</span>
       </div>
+
+      {(dominant || direction) && (
+        <div className={styles.regimeRow}>
+          <span className={styles.regimeLabel}>Regime</span>
+          {dominant && (
+            <span className={styles.regimePill} data-regime={dominant}>
+              {dominant.toUpperCase()}
+            </span>
+          )}
+          {direction && (
+            <span className={styles.directionPill} data-direction={direction}>
+              {direction.toUpperCase()}
+            </span>
+          )}
+          {confidencePct != null && (
+            <span className={styles.regimeMeta}>{confidencePct}% confidence</span>
+          )}
+          {gatePct && (
+            <span className={styles.regimeMeta}>· ROC gate {gatePct}</span>
+          )}
+        </div>
+      )}
 
       <div className={styles.stats}>
         <div
@@ -77,12 +125,22 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
         </div>
         <div
           className={styles.stat}
-          title="Risk/Reward = max loss ÷ max profit. Lower is better. Gate requires ≤ 3:1. Tight spreads (close strikes) → low R/R but small credit; wide spreads → high R/R."
+          title="Expected value at expiry = pop × credit − (1 − pop) × maxLoss. Positive EV = the trade is +∑ over a large sample at the current pop estimate."
         >
-          <div className={styles.statLabel}>R/R</div>
-          <div className={styles.statValue}>
-            {signal.riskReward >= 999 ? '∞' : `${signal.riskReward.toFixed(2)}:1`}
+          <div className={styles.statLabel}>EV</div>
+          <div
+            className={styles.statValue}
+            data-kind={signal.expectedValue >= 0 ? 'credit' : 'loss'}
+          >
+            {fmtUsd(signal.expectedValue)}
           </div>
+        </div>
+        <div
+          className={styles.stat}
+          title="Return on capital = EV ÷ maxLoss. Gate requires ≥ 10%. R/R is shown for reference: maxLoss ÷ maxProfit."
+        >
+          <div className={styles.statLabel}>ROC</div>
+          <div className={styles.statValue}>{`${(signal.roc * 100).toFixed(1)}%`}</div>
         </div>
         <div
           className={styles.stat}
@@ -91,19 +149,21 @@ function SignalCard({ signal, label = 'Executable (best routing)' }: Props) {
           <div className={styles.statLabel}>Breakeven</div>
           <div className={styles.statValue}>{fmtUsd(signal.breakeven)}</div>
         </div>
+        <div
+          className={styles.stat}
+          title="R/R = max loss ÷ max profit. Reference metric only — the gate uses ROC."
+        >
+          <div className={styles.statLabel}>R/R</div>
+          <div className={styles.statValue}>
+            {signal.riskReward >= 999 ? '∞' : `${signal.riskReward.toFixed(2)}:1`}
+          </div>
+        </div>
       </div>
 
       <div className={styles.probBlock}>
         <div className={styles.probLabelRow}>
-          <span
-            className={styles.probLabel}
-            title={
-              signal.probabilityMethod === 'risk-neutral'
-                ? 'Risk-neutral P(profit at expiry) = N(±d₂) using IV at the breakeven strike (Black-Scholes).'
-                : 'Heuristic — bucketed spot/breakeven ratio. Used as fallback when smile IV is unavailable.'
-            }
-          >
-            Success probability {signal.probabilityMethod === 'risk-neutral' ? '· N(d₂)' : '· heuristic'}
+          <span className={styles.probLabel} title={probMethodHint}>
+            Success probability {probMethodSuffix}
           </span>
           <span className={styles.probPct}>{probPct}%</span>
         </div>

@@ -6,6 +6,13 @@ export interface OkxSubscriptionState {
   subscribedMarkPrice: Set<string>;
 }
 
+export interface OkxSubscriptionPlan {
+  families: string[];
+  tickers: string[];
+  markPrices: string[];
+  args: object[];
+}
+
 export function createOkxSubscriptionState(): OkxSubscriptionState {
   return {
     subscribedFamilies: new Set<string>(),
@@ -18,49 +25,77 @@ export function buildOkxChainSubscriptionArgs(
   state: OkxSubscriptionState,
   underlying: string,
   instruments: CachedInstrument[],
-): object[] {
+): OkxSubscriptionPlan {
+  if (instruments.length === 0) {
+    return { families: [], tickers: [], markPrices: [], args: [] };
+  }
+
   const args: object[] = [];
+  const families: string[] = [];
+  const tickers: string[] = [];
+  const markPrices: string[] = [];
   const family = `${underlying}-USD`;
 
   if (!state.subscribedFamilies.has(family)) {
+    families.push(family);
     args.push({ channel: 'opt-summary', instFamily: family });
-    state.subscribedFamilies.add(family);
   }
 
   for (const instrument of instruments) {
     if (!state.subscribedTickers.has(instrument.exchangeSymbol)) {
+      tickers.push(instrument.exchangeSymbol);
       args.push({ channel: 'tickers', instId: instrument.exchangeSymbol });
-      state.subscribedTickers.add(instrument.exchangeSymbol);
     }
 
     if (!state.subscribedMarkPrice.has(instrument.exchangeSymbol)) {
+      markPrices.push(instrument.exchangeSymbol);
       args.push({ channel: 'mark-price', instId: instrument.exchangeSymbol });
-      state.subscribedMarkPrice.add(instrument.exchangeSymbol);
     }
   }
 
-  return args;
+  return { families, tickers, markPrices, args };
 }
 
 export function buildOkxInstrumentSubscriptionArgs(
   state: OkxSubscriptionState,
   instruments: CachedInstrument[],
-): object[] {
+): OkxSubscriptionPlan {
   const args: object[] = [];
+  const tickers: string[] = [];
+  const markPrices: string[] = [];
 
   for (const instrument of instruments) {
     if (!state.subscribedTickers.has(instrument.exchangeSymbol)) {
+      tickers.push(instrument.exchangeSymbol);
       args.push({ channel: 'tickers', instId: instrument.exchangeSymbol });
-      state.subscribedTickers.add(instrument.exchangeSymbol);
     }
 
     if (!state.subscribedMarkPrice.has(instrument.exchangeSymbol)) {
+      markPrices.push(instrument.exchangeSymbol);
       args.push({ channel: 'mark-price', instId: instrument.exchangeSymbol });
-      state.subscribedMarkPrice.add(instrument.exchangeSymbol);
     }
   }
 
-  return args;
+  return { families: [], tickers, markPrices, args };
+}
+
+export function markOkxSubscribed(
+  state: OkxSubscriptionState,
+  plan: OkxSubscriptionPlan,
+): void {
+  for (const family of plan.families) {
+    state.subscribedFamilies.add(family);
+  }
+  for (const ticker of plan.tickers) {
+    state.subscribedTickers.add(ticker);
+  }
+  for (const markPrice of plan.markPrices) {
+    state.subscribedMarkPrice.add(markPrice);
+  }
+}
+
+export function removeOkxSubscribedFamily(state: OkxSubscriptionState, family: string): void {
+  state.subscribedFamilies.delete(family);
 }
 
 export function buildOkxReplayArgs(state: OkxSubscriptionState): object[] {

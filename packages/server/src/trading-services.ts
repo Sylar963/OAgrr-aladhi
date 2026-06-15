@@ -1,14 +1,19 @@
 import {
   NoopPaperTradingStore,
-  PostgresPaperTradingStore,
+  NoopUsersStore,
   type PaperAccountRow,
   type PaperTradingStore,
+  PostgresPaperTradingStore,
+  PostgresUsersStore,
+  type UsersStore,
 } from '@oggregator/db';
 import {
   ApproximationMarginEngine,
   DEFAULT_ACCOUNT_ID,
   DEFAULT_ACCOUNT_LABEL,
   DEFAULT_INITIAL_CASH_USD,
+  type FillModel,
+  type MarginEngine,
   NoopMarginEngine,
   OptimisticFillModel,
   OrderPlacementService,
@@ -19,14 +24,16 @@ import {
   RealisticFillModel,
   RuntimeQuoteProvider,
   SystemClock,
-  type FillModel,
-  type MarginEngine,
 } from '@oggregator/trading';
 import { chainEngines } from './chain-engines.js';
 
 export const paperTradingStore: PaperTradingStore = process.env['DATABASE_URL']
   ? PostgresPaperTradingStore.fromConnectionString(process.env['DATABASE_URL'])
   : new NoopPaperTradingStore();
+
+export const usersStore: UsersStore = process.env['DATABASE_URL']
+  ? PostgresUsersStore.fromConnectionString(process.env['DATABASE_URL'])
+  : new NoopUsersStore();
 
 const clock = new SystemClock();
 const quoteProvider = new RuntimeQuoteProvider(chainEngines);

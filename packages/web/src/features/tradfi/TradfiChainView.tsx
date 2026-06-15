@@ -74,6 +74,8 @@ export default function TradfiChainView() {
             indexPrice={chain.stats.indexPriceUsd}
             activeVenues={TRADFI_VENUES}
             myIv={null}
+            expiry={expiry}
+            underlying={underlying}
           />
         )}
       </div>

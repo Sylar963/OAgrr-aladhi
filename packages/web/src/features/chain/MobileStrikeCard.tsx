@@ -3,6 +3,8 @@ import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
+import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
+import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
 
 interface MobileStrikeCardProps {
@@ -12,6 +14,7 @@ interface MobileStrikeCardProps {
   activeVenues: string[];
   isExpanded: boolean;
   onToggle: () => void;
+  freshnessNow: number;
 }
 
 interface SideSummaryProps {
@@ -19,25 +22,12 @@ interface SideSummaryProps {
   type: 'call' | 'put';
   itm: boolean;
   venues: string[];
+  freshnessNow: number;
 }
 
-function bestBidAsk(
-  side: EnrichedSide,
-  venues: string[],
-): { bid: number | null; ask: number | null } {
-  let bestBid: number | null = null;
-  let bestAsk: number | null = null;
-  for (const [v, q] of Object.entries(side.venues)) {
-    if (!venues.includes(v) || !q) continue;
-    if (q.bid != null && (bestBid == null || q.bid > bestBid)) bestBid = q.bid;
-    if (q.ask != null && (bestAsk == null || q.ask < bestAsk)) bestAsk = q.ask;
-  }
-  return { bid: bestBid, ask: bestAsk };
-}
-
-function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
+function SideSummary({ side, type, itm, venues, freshnessNow }: SideSummaryProps) {
   const bestQ = side.bestVenue != null ? (side.venues[side.bestVenue] ?? null) : null;
-  const bba = bestBidAsk(side, venues);
+  const bba = bestBidAsk(side, new Set(venues), freshnessNow);
 
   return (
     <div className={styles.side} data-type={type} data-itm={itm}>
@@ -60,11 +50,15 @@ function SideSummary({ side, type, itm, venues }: SideSummaryProps) {
       <div className={styles.sideRow}>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>BID</span>
-          <span className={styles.metricBid}>{fmtUsd(bba.bid)}</span>
+          <FlashingPrice text={fmtUsd(bba.bid)} className={styles.metricBid} />
+        </div>
+        <div className={styles.sideMetric}>
+          <span className={styles.metricLabel}>SPR</span>
+          <SpreadPill spreadPct={crossVenueSpreadPct(bba)} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>ASK</span>
-          <span className={styles.metricAsk}>{fmtUsd(bba.ask)}</span>
+          <FlashingPrice text={fmtUsd(bba.ask)} className={styles.metricAsk} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>IV</span>
@@ -141,17 +135,22 @@ export default function MobileStrikeCard({
   activeVenues,
   isExpanded,
   onToggle,
+  freshnessNow,
 }: MobileStrikeCardProps) {
   const callItm = indexPrice != null && strike.strike < indexPrice;
   const putItm = indexPrice != null && strike.strike > indexPrice;
   const venues = Object.keys(strike.call.venues).filter((v) => activeVenues.includes(v));
+  const distLabel =
+    indexPrice != null && indexPrice !== 0
+      ? `${(strike.strike - indexPrice) / indexPrice >= 0 ? '+' : ''}${(((strike.strike - indexPrice) / indexPrice) * 100).toFixed(1)}%`
+      : null;
 
   return (
     <div className={styles.card} data-atm={isAtm} data-expanded={isExpanded}>
       <button className={styles.cardHeader} onClick={onToggle}>
         <div className={styles.strikeInfo}>
-          {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
         <span className={styles.chevron} data-expanded={isExpanded}>
           ›
@@ -159,8 +158,20 @@ export default function MobileStrikeCard({
       </button>
 
       <div className={styles.sides}>
-        <SideSummary side={strike.call} type="call" itm={callItm} venues={venues} />
-        <SideSummary side={strike.put} type="put" itm={putItm} venues={venues} />
+        <SideSummary
+          side={strike.call}
+          type="call"
+          itm={callItm}
+          venues={venues}
+          freshnessNow={freshnessNow}
+        />
+        <SideSummary
+          side={strike.put}
+          type="put"
+          itm={putItm}
+          venues={venues}
+          freshnessNow={freshnessNow}
+        />
       </div>
 
       {isExpanded && (

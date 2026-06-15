@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 
 export interface QuoteBookLevel {
   priceUsd: number;
@@ -6,10 +6,12 @@ export interface QuoteBookLevel {
 }
 
 export interface QuoteBook {
-  venue: PaperVenueId;
+  venue: VenueId;
   bidUsd: number | null;
   askUsd: number | null;
   markUsd: number | null;
+  /** Mark IV at quote time, when the venue publishes one. */
+  markIv: number | null;
   underlyingPriceUsd: number | null;
   /** Absolute USD taker fee per contract (not a rate). */
   feesTakerUsd: number;
@@ -36,7 +38,7 @@ export interface QuoteProvider {
    * Return the best quotes across the given venues for the option.
    * Missing venues are simply absent from the returned array.
    */
-  getBooks(key: QuoteKey, venues: PaperVenueId[]): Promise<QuoteBook[]>;
+  getBooks(key: QuoteKey, venues: VenueId[]): Promise<QuoteBook[]>;
 
   /** Current mark price in USD, best-effort across all venues. */
   getMark(key: QuoteKey): Promise<number | null>;

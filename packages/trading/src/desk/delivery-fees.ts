@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 
 interface DeliveryFeeSpec {
   rate: number;
@@ -13,7 +13,7 @@ interface DeliveryFeeSpec {
 //
 // Deribit's 0.015% delivery fee is documented; the other four are placeholders
 // pending a doc-driven pass against references/options-docs/{venue}/.
-const DELIVERY_FEES: Record<PaperVenueId, DeliveryFeeSpec> = {
+const DELIVERY_FEES: Record<VenueId, DeliveryFeeSpec> = {
   deribit: { rate: 0.00015, cap: 0.125 },
   okx: { rate: 0.0002, cap: 0.125 },
   binance: { rate: 0.00015, cap: 0.125 },
@@ -21,10 +21,18 @@ const DELIVERY_FEES: Record<PaperVenueId, DeliveryFeeSpec> = {
   derive: { rate: 0.0001, cap: 0.125 },
   coincall: { rate: 0.0002, cap: 0.125 },
   thalex: { rate: 0.00015, cap: 0.125 },
+  // Gate.io publishes settle_fee_rate="0" and settle_limit_fee_rate="0.125" on
+  // every active options contract (verified live 2026-05-13 via
+  // GET /api/v4/options/contracts). No notional-rate fee; intrinsic cap matches
+  // the standard 12.5% cap shared across venues.
+  gateio: { rate: 0, cap: 0.125 },
+  // Paradex publishes no separate settlement notional rate; fee_config.api_fee
+  // cap = 0.125 on every options market (verified live 2026-06-08). Mirrors Gate.io.
+  paradex: { rate: 0, cap: 0.125 },
 };
 
 export function deliveryFeeUsd(
-  venue: PaperVenueId,
+  venue: VenueId,
   underlyingSpotUsd: number,
   intrinsicUsd: number,
   quantity: number,

@@ -6,6 +6,10 @@ export interface BybitSubscriptionState {
   subscribedTopics: Set<string>;
 }
 
+export interface BybitSubscriptionPlan {
+  topics: string[];
+}
+
 export function createBybitSubscriptionState(): BybitSubscriptionState {
   return {
     subscribedTopics: new Set<string>(),
@@ -19,17 +23,34 @@ export function buildBybitTopic(topicSymbol: string): string {
 export function buildBybitSubscriptionTopics(
   state: BybitSubscriptionState,
   instruments: CachedInstrument[],
-): string[] {
+): BybitSubscriptionPlan {
   const topics: string[] = [];
 
   for (const instrument of instruments) {
     const topic = buildBybitTopic(instrument.exchangeSymbol);
     if (state.subscribedTopics.has(topic)) continue;
-    state.subscribedTopics.add(topic);
     topics.push(topic);
   }
 
-  return topics;
+  return { topics };
+}
+
+export function markBybitSubscribedTopics(
+  state: BybitSubscriptionState,
+  topics: string[],
+): void {
+  for (const topic of topics) {
+    state.subscribedTopics.add(topic);
+  }
+}
+
+export function removeBybitSubscribedTopics(
+  state: BybitSubscriptionState,
+  topics: string[],
+): void {
+  for (const topic of topics) {
+    state.subscribedTopics.delete(topic);
+  }
 }
 
 export function buildBybitExpiredTopics(

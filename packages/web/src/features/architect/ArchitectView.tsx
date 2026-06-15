@@ -3,6 +3,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
+import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useStrategyStore } from './strategy-store';
@@ -13,13 +14,34 @@ import {
   detectStrategy,
   type Leg,
 } from './payoff';
+import { deriveTenorColumns } from './ladder-geometry';
+import {
+  computeGhostPaths,
+  buildPathCandles,
+  buildFractalPathCandles,
+  type GhostPath,
+} from './ghost-paths';
+import {
+  listSnapshots,
+  addSnapshot,
+  removeSnapshot,
+  type GhostSnapshot,
+} from './snapshots-store';
 import { repriceLeg } from './reprice';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
+import PayoffChartV3 from './PayoffChartV3';
 import SnapshotBanner from './SnapshotBanner';
-import { isSpotCandleCurrency, useSpotCandles } from './queries';
+import {
+  hasUsableSpotCandles,
+  isSpotCandleCurrency,
+  useChainsForExpiries,
+  useSpotCandles,
+  type SpotCandlesResponse,
+} from './queries';
 import VenueSlideover from './VenueSlideover';
+import type { StrategyRouting } from '@features/builder/round-trip';
 import { legsToOrderRequest, useCreateTrade } from '@features/trading';
 import { useAppStore as _useAppStoreForTabSwitch } from '@stores/app-store';
 import StrategyTemplates, {
@@ -30,6 +52,15 @@ import StrategyTemplates, {
 import LegInput from './LegInput';
 import styles from './Architect.module.css';
 
+function formatAgo(ms: number): string {
+  const mins = Math.round((Date.now() - ms) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
 // ── Inline-editable leg row ──────────────────────────────────────────────────
 
 interface LegRowProps {
@@ -39,7 +70,7 @@ interface LegRowProps {
   onUpdate: (id: string, patch: Partial<Leg>) => void;
 }
 
-const ACTIVE_PAPER_VENUES_VALUE = '__active-venues__';
+const BEST_ROUTE_VALUE = '__best-route__';
 
 function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): string {
   if (preferredExpiry && expiries.includes(preferredExpiry)) return preferredExpiry;
@@ -139,7 +170,7 @@ export default function ArchitectView() {
   const globalExpiry = useAppStore((s) => s.expiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: expiriesData } = useExpiries(underlying);
-  const allExpiries = expiriesData?.expiries ?? [];
+  const allExpiries = useMemo(() => expiriesData?.expiries ?? [], [expiriesData]);
   const [builderExpiry, setBuilderExpiry] = useState('');
 
   useEffect(() => {
@@ -149,15 +180,20 @@ export default function ArchitectView() {
     }
   }, [allExpiries, builderExpiry, globalExpiry, underlying]);
 
+  const { connectionState: builderFeedState } = useChainWs({
+    underlying,
+    expiry: builderExpiry,
+    venues: activeVenues,
+    enabled: Boolean(builderExpiry),
+  });
   const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, {
-    refetchInterval: 10_000,
+    enabled: builderFeedState !== 'live',
   });
 
   const legs = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
   const removeLeg = useStrategyStore((s) => s.removeLeg);
   const updateLeg = useStrategyStore((s) => s.updateLeg);
-  const replaceLegs = useStrategyStore((s) => s.replaceLegs);
   const addLeg = useStrategyStore((s) => s.addLeg);
   const strategyUnderlying = useStrategyStore((s) => s.underlying);
 
@@ -174,23 +210,80 @@ export default function ArchitectView() {
   const [dragOver, setDragOver] = useState(false);
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
-  const [paperVenue, setPaperVenue] = useState(ACTIVE_PAPER_VENUES_VALUE);
-  const [variant, setVariant] = useState<'v1' | 'v2'>('v1');
+  const [routeVenue, setRouteVenue] = useState(BEST_ROUTE_VALUE);
+  const [variant, setVariant] = useState<'v1' | 'v2' | 'v3'>('v1');
+  const [lastGoodSpotCandles, setLastGoodSpotCandles] = useState<{
+    data: SpotCandlesResponse;
+    dataUpdatedAt: number;
+  } | null>(null);
 
   const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
   const createTrade = useCreateTrade();
 
   useEffect(() => {
-    if (paperVenue !== ACTIVE_PAPER_VENUES_VALUE && !activeVenues.includes(paperVenue)) {
-      setPaperVenue(ACTIVE_PAPER_VENUES_VALUE);
+    if (routeVenue !== BEST_ROUTE_VALUE && !activeVenues.includes(routeVenue)) {
+      setRouteVenue(BEST_ROUTE_VALUE);
     }
-  }, [activeVenues, paperVenue]);
+  }, [activeVenues, routeVenue]);
 
-  const paperVenueOptions = useMemo(
+  const pricingVenues = useMemo(
+    () => (routeVenue === BEST_ROUTE_VALUE ? activeVenues : [routeVenue]),
+    [routeVenue, activeVenues],
+  );
+
+  // ── Tenor axis (V3 lego ladder) ──────────────────────────────────────────
+  // Legs can live on different expiries; the ladder shows them as columns.
+  const legExpiries = useMemo(
+    () => Array.from(new Set(legs.map((l) => l.expiry).filter(Boolean))),
+    [legs],
+  );
+  const tenorColumns = useMemo(
+    () => deriveTenorColumns(allExpiries, legExpiries, builderExpiry),
+    [allExpiries, legExpiries, builderExpiry],
+  );
+  // Chains beyond the live builder expiry: every leg's own tenor (pricing
+  // correctness in all variants) plus, while V3 is up, the visible columns
+  // (so a block dropped on any column reprices instantly). REST-only — the
+  // WS subscription stays on builderExpiry.
+  const extraExpiries = useMemo(() => {
+    const wanted = new Set(legExpiries);
+    if (variant === 'v3') for (const tenor of tenorColumns) wanted.add(tenor);
+    wanted.delete(builderExpiry);
+    return [...wanted].filter((e) => allExpiries.includes(e));
+  }, [legExpiries, tenorColumns, builderExpiry, variant, allExpiries]);
+  const extraChains = useChainsForExpiries(underlying, extraExpiries, activeVenues);
+  const chainFor = useCallback(
+    (expiry: string) => (expiry === builderExpiry ? chain ?? null : extraChains[expiry] ?? null),
+    [builderExpiry, chain, extraChains],
+  );
+
+  const unroutableLegs = useMemo(() => {
+    if (routeVenue === BEST_ROUTE_VALUE || legs.length === 0) return [];
+    return legs.filter((leg) => {
+      const tenorChain = chainFor(leg.expiry || builderExpiry);
+      if (!tenorChain) return false; // chain still loading — don't flag yet
+      return (
+        repriceLeg(
+          tenorChain,
+          [routeVenue],
+          {
+            type: leg.type,
+            direction: leg.direction,
+            strike: leg.strike,
+            expiry: leg.expiry || builderExpiry,
+            quantity: leg.quantity,
+          },
+          { exactStrike: true },
+        ) == null
+      );
+    });
+  }, [routeVenue, legs, chainFor, builderExpiry]);
+
+  const routeOptions = useMemo(
     () => [
       {
-        value: ACTIVE_PAPER_VENUES_VALUE,
-        label: 'Active venues',
+        value: BEST_ROUTE_VALUE,
+        label: 'Best route',
         meta:
           activeVenues.length === 1
             ? VENUES[activeVenues[0] ?? '']?.label ?? '1 venue'
@@ -205,14 +298,12 @@ export default function ArchitectView() {
     [activeVenues],
   );
 
-  async function handleSendToPaper() {
-    if (legs.length === 0) return;
+  async function handleSendToPaper(routing?: StrategyRouting) {
+    if (pricedLegs.length === 0) return;
     setPaperStatus(null);
     try {
-      const venueFilter =
-        paperVenue === ACTIVE_PAPER_VENUES_VALUE ? activeVenues : [paperVenue];
-      const req = legsToOrderRequest(legs, underlying, venueFilter);
-      const strategyName = detectStrategy(legs);
+      const req = legsToOrderRequest(pricedLegs, underlying, pricingVenues, routing);
+      const strategyName = detectStrategy(pricedLegs);
       const result = await createTrade.mutateAsync({
         label: strategyName,
         strategyName,
@@ -224,6 +315,7 @@ export default function ArchitectView() {
           ? VENUES[filledVenues[0] ?? '']?.label ?? filledVenues[0]
           : `${filledVenues.length} venues`;
       setPaperStatus(`Filled on ${fillSummary} - switching to Paper tab`);
+      setShowVenues(false);
       setTimeout(() => setActiveTab('trading'), 400);
     } catch (err) {
       setPaperStatus(err instanceof Error ? err.message : 'Paper order failed');
@@ -253,22 +345,27 @@ export default function ArchitectView() {
 
   const repriceStrategyLeg = useCallback(
     (leg: Leg, patch: Partial<Leg> = {}, exactStrike = false) => {
-      if (!chain || !builderExpiry) return null;
+      // Each leg prices against its OWN tenor's chain — legs can live on
+      // different expiries now that the ladder has a tenor axis. A missing
+      // chain (still loading) returns null so the stored pricing holds.
+      const targetExpiry = patch.expiry ?? leg.expiry ?? builderExpiry;
+      const tenorChain = chainFor(targetExpiry);
+      if (!tenorChain || !targetExpiry) return null;
 
       return repriceLeg(
-        chain,
-        activeVenues,
+        tenorChain,
+        pricingVenues,
         {
           type: patch.type ?? leg.type,
           direction: patch.direction ?? leg.direction,
           strike: patch.strike ?? leg.strike,
-          expiry: builderExpiry,
+          expiry: targetExpiry,
           quantity: patch.quantity ?? leg.quantity,
         },
         { exactStrike },
       );
     },
-    [activeVenues, builderExpiry, chain],
+    [pricingVenues, builderExpiry, chainFor],
   );
 
   const handleLegUpdate = useCallback(
@@ -276,7 +373,12 @@ export default function ArchitectView() {
       const leg = legs.find((entry) => entry.id === legId);
       if (!leg) return;
 
-      const repriced = repriceStrategyLeg(leg, patch, patch.strike != null);
+      // exactStrike:false — strike edits originate from the BUILDER expiry's
+      // grid (ladder rungs, LegRow stepper) but commit against the leg's OWN
+      // tenor's chain; when the grids differ an exact lookup misses and the
+      // edit would silently revert. Nearest-snap is identical whenever the
+      // strike exists on the leg's grid.
+      const repriced = repriceStrategyLeg(leg, patch, false);
       if (!repriced) return;
 
       updateLeg(legId, repriced);
@@ -291,68 +393,235 @@ export default function ArchitectView() {
     [handleLegUpdate],
   );
 
-  useEffect(() => {
-    if (!chain || legs.length === 0) return;
-
-    const nextLegs = legs.map((leg) => {
-      const repriced = repriceStrategyLeg(leg);
-      return repriced ? { ...leg, ...repriced } : leg;
-    });
-
-    const changed = nextLegs.some((leg, index) => {
-      const prev = legs[index];
-      return (
-        prev != null &&
-        (leg.expiry !== prev.expiry ||
-          leg.strike !== prev.strike ||
-          leg.entryPrice !== prev.entryPrice ||
-          leg.venue !== prev.venue ||
-          leg.delta !== prev.delta ||
-          leg.gamma !== prev.gamma ||
-          leg.theta !== prev.theta ||
-          leg.vega !== prev.vega ||
-          leg.iv !== prev.iv)
-      );
-    });
-
-    if (changed) replaceLegs(nextLegs, underlying);
-  }, [chain, legs, replaceLegs, repriceStrategyLeg, underlying]);
-
-  const payoffPoints = useMemo(() => computePayoff(legs, spotPrice), [legs, spotPrice]);
-  const metrics = useMemo(
-    () => (legs.length > 0 ? computeMetrics(legs, spotPrice) : null),
-    [legs, spotPrice],
+  const handleLegTenorDrag = useCallback(
+    (legId: string, newExpiry: string, strike: number) => {
+      const leg = legs.find((entry) => entry.id === legId);
+      if (!leg) return;
+      // Strike grids differ across tenors — snap to the target tenor's nearest
+      // strike (exactStrike: false) while repricing on its chain.
+      const repriced = repriceStrategyLeg(leg, { expiry: newExpiry, strike }, false);
+      if (!repriced) return;
+      updateLeg(legId, repriced);
+      // Follow the drop: the builder's selected tenor (expiry dropdown, live WS
+      // feed, highlighted column, rung grid) moves to where the leg landed.
+      setBuilderExpiry(newExpiry);
+    },
+    [legs, repriceStrategyLeg, updateLeg],
   );
-  const strategyName = useMemo(() => detectStrategy(legs), [legs]);
+
+  const handleAddLegAtStrike = useCallback(
+    (
+      strike: number,
+      type: 'call' | 'put',
+      direction: 'buy' | 'sell',
+      quantity: number,
+      expiry?: string,
+    ) => {
+      const targetExpiry = expiry ?? builderExpiry;
+      const tenorChain = chainFor(targetExpiry);
+      if (!tenorChain || !targetExpiry) return;
+      const repriced = repriceLeg(
+        tenorChain,
+        pricingVenues,
+        { type, direction, strike, expiry: targetExpiry, quantity },
+        { exactStrike: false },
+      );
+      if (!repriced) return;
+      addLeg(repriced, underlying);
+    },
+    [chainFor, pricingVenues, builderExpiry, addLeg, underlying],
+  );
+
+  const handleRemoveLeg = useCallback((legId: string) => removeLeg(legId), [removeLeg]);
+
+  const pricedLegs = useMemo(
+    () =>
+      legs.map((leg) => {
+        const repriced = repriceStrategyLeg(leg);
+        return repriced ? { ...leg, ...repriced } : leg;
+      }),
+    [legs, repriceStrategyLeg],
+  );
+
+  const payoffPoints = useMemo(() => computePayoff(pricedLegs, spotPrice), [pricedLegs, spotPrice]);
+  const metrics = useMemo(
+    () => (pricedLegs.length > 0 ? computeMetrics(pricedLegs, spotPrice) : null),
+    [pricedLegs, spotPrice],
+  );
+  const strategyName = useMemo(() => detectStrategy(pricedLegs), [pricedLegs]);
 
   const baseDte = useMemo(() => {
-    if (legs.length === 0) return 30;
-    return dteDays(legs[0]!.expiry);
-  }, [legs]);
+    if (pricedLegs.length === 0) return 30;
+    return dteDays(pricedLegs[0]!.expiry);
+  }, [pricedLegs]);
 
   const scenarioIvPoints = useMemo(() => {
-    if (legs.length === 0 || ivShift === 0) return undefined;
-    return computeScenarioPayoff(legs, spotPrice, ivShift / 100, 0, baseDte);
-  }, [legs, spotPrice, ivShift, baseDte]);
+    if (pricedLegs.length === 0 || ivShift === 0) return undefined;
+    return computeScenarioPayoff(pricedLegs, spotPrice, ivShift / 100, 0, baseDte);
+  }, [pricedLegs, spotPrice, ivShift, baseDte]);
 
   const scenarioDtePoints = useMemo(() => {
-    if (legs.length === 0 || dteShift === 0) return undefined;
-    return computeScenarioPayoff(legs, spotPrice, 0, dteShift, baseDte);
-  }, [legs, spotPrice, dteShift, baseDte]);
+    if (pricedLegs.length === 0 || dteShift === 0) return undefined;
+    return computeScenarioPayoff(pricedLegs, spotPrice, 0, dteShift, baseDte);
+  }, [pricedLegs, spotPrice, dteShift, baseDte]);
 
   const hasScenarios = ivShift !== 0 || dteShift !== 0;
 
-  const candleSpec = useMemo(() => pickCandleSpec(legs), [legs]);
+  const candleSpec = useMemo(() => pickCandleSpec(pricedLegs), [pricedLegs]);
   const candleAvailable = isSpotCandleCurrency(underlying);
   const {
     data: spotCandlesData,
     dataUpdatedAt: spotCandlesUpdatedAt,
     isLoading: spotCandlesLoading,
     isFetching: spotCandlesFetching,
-  } = useSpotCandles(underlying, candleSpec.resolutionSec, candleSpec.buckets);
+    isPlaceholderData: spotCandlesIsPlaceholderData,
+    isError: spotCandlesIsError,
+    error: spotCandlesError,
+    refetch: refetchSpotCandles,
+  } = useSpotCandles(
+    underlying,
+    candleSpec.resolutionSec,
+    candleSpec.buckets,
+    candleSpec.refetchIntervalMs,
+  );
+  const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
+  const spotCandlesFailureMessage =
+    spotCandlesEmpty
+      ? 'upstream returned empty data'
+      : spotCandlesError instanceof Error
+        ? spotCandlesError.message
+        : null;
+
+  useEffect(() => {
+    if (hasUsableSpotCandles(spotCandlesData)) {
+      setLastGoodSpotCandles({ data: spotCandlesData, dataUpdatedAt: spotCandlesUpdatedAt });
+    }
+  }, [spotCandlesData, spotCandlesUpdatedAt]);
+
+  useEffect(() => {
+    setLastGoodSpotCandles(null);
+  }, [underlying]);
+
+  const visibleSpotCandles = hasUsableSpotCandles(spotCandlesData)
+    ? spotCandlesData
+    : lastGoodSpotCandles?.data ?? null;
+  const visibleSpotCandlesUpdatedAt = hasUsableSpotCandles(spotCandlesData)
+    ? spotCandlesUpdatedAt
+    : lastGoodSpotCandles?.dataUpdatedAt ?? 0;
+  const hasVisibleSpotCandles = hasUsableSpotCandles(visibleSpotCandles);
+  const spotCandlesUnavailable = spotCandlesIsError || (spotCandlesEmpty && !spotCandlesFetching);
+
+  const [showProjections, setShowProjections] = useState(true);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<GhostSnapshot[]>(() => listSnapshots(underlying));
+
+  useEffect(() => {
+    setSnapshots(listSnapshots(underlying));
+    setSelectedSnapshotId(null);
+  }, [underlying]);
+
+  // Anchor the projection at the last real candle's bucket (grid-aligned).
+  const lastBarMs = visibleSpotCandles?.candles.at(-1)?.timestamp ?? Date.now();
+
+  // Nearest-leg expiry → ms at 08:00 UTC (Deribit convention; 'YYYY-MM-DD'
+  // strings sort lexicographically, so the min string is the earliest date).
+  const nearestExpiryMs = useMemo(() => {
+    const expiries = pricedLegs.map((l) => l.expiry).filter(Boolean);
+    if (expiries.length === 0) return Number.NaN;
+    const earliest = expiries.reduce((a, b) => (a < b ? a : b));
+    return Date.parse(`${earliest}T08:00:00Z`);
+  }, [pricedLegs]);
+
+  const liveGhostPaths = useMemo(
+    () =>
+      computeGhostPaths(
+        pricedLegs,
+        spotPrice,
+        nearestExpiryMs,
+        lastBarMs,
+        candleSpec.resolutionSec,
+        visibleSpotCandles?.candles ?? [],
+      ),
+    [
+      pricedLegs,
+      spotPrice,
+      nearestExpiryMs,
+      lastBarMs,
+      candleSpec.resolutionSec,
+      visibleSpotCandles?.candles,
+    ],
+  );
+
+  const selectedSnapshot = useMemo(
+    () => snapshots.find((s) => s.id === selectedSnapshotId) ?? null,
+    [snapshots, selectedSnapshotId],
+  );
+
+  // Active set: a selected snapshot (rebuilt at its original anchor) or live.
+  const activeGhostPaths: GhostPath[] = useMemo(() => {
+    if (!selectedSnapshot) return liveGhostPaths;
+    return selectedSnapshot.paths.map((p) => ({
+      kind: p.kind,
+      isProfit: p.isProfit,
+      targetPrice: p.targetPrice,
+      pnlAtExpiry: p.pnlAtExpiry,
+      shape: p.shape ?? [],
+      candles:
+        p.shape && p.shape.length > 0
+          ? buildFractalPathCandles(
+              selectedSnapshot.spotAtSnapshot,
+              p.targetPrice,
+              selectedSnapshot.createdAt,
+              selectedSnapshot.expiryMs,
+              selectedSnapshot.resolutionSec,
+              p.shape,
+            )
+          : buildPathCandles(
+              selectedSnapshot.spotAtSnapshot,
+              p.targetPrice,
+              selectedSnapshot.createdAt,
+              selectedSnapshot.expiryMs,
+              selectedSnapshot.resolutionSec,
+            ),
+    }));
+  }, [selectedSnapshot, liveGhostPaths]);
+
+  const snapshotMeta = useMemo(
+    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt) } : null),
+    [selectedSnapshot],
+  );
+
+  const handleSnapshot = useCallback(() => {
+    if (liveGhostPaths.length === 0 || !Number.isFinite(nearestExpiryMs)) return;
+    const snap: GhostSnapshot = {
+      id: crypto.randomUUID(),
+      createdAt: lastBarMs,
+      underlying,
+      structureLabel: detectStrategy(pricedLegs),
+      spotAtSnapshot: spotPrice,
+      expiryMs: nearestExpiryMs,
+      resolutionSec: candleSpec.resolutionSec,
+      paths: liveGhostPaths.map((p) => ({
+        kind: p.kind,
+        isProfit: p.isProfit,
+        targetPrice: p.targetPrice,
+        pnlAtExpiry: p.pnlAtExpiry,
+        shape: p.shape,
+      })),
+    };
+    setSnapshots(addSnapshot(snap));
+  }, [
+    liveGhostPaths,
+    nearestExpiryMs,
+    lastBarMs,
+    underlying,
+    pricedLegs,
+    spotPrice,
+    candleSpec.resolutionSec,
+  ]);
 
   function handleCopyUrl() {
-    const url = buildShareUrl(legs, underlying);
+    const url = buildShareUrl(pricedLegs, underlying);
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -381,7 +650,9 @@ export default function ArchitectView() {
     }
 
     setBuilderError(null);
-    clearLegs();
+    // Drop appends — drags are how the user composes a custom multi-leg
+    // strategy (e.g. straddle + put spread). Click-to-apply on the card
+    // still replaces, since that gesture means "use this template".
     for (const leg of result.legs) addLeg(leg, underlying);
   }
 
@@ -406,7 +677,7 @@ export default function ArchitectView() {
 
         <div className={styles.splitBody}>
           <div className={styles.controlsCol}>
-            <LegInput expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
+            <LegInput chain={chain ?? null} expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
 
             {legs.length > 0 && (
               <div className={styles.legsSection}>
@@ -422,7 +693,11 @@ export default function ArchitectView() {
                     <LegRow
                       key={leg.id}
                       leg={leg}
-                      allStrikes={availableStrikes}
+                      // The leg's own tenor's grid — strikes differ per expiry,
+                      // and stepping along the wrong grid dead-ends the stepper.
+                      allStrikes={
+                        chainFor(leg.expiry)?.strikes.map((s) => s.strike) ?? availableStrikes
+                      }
                       onRemove={() => removeLeg(leg.id)}
                       onUpdate={handleLegUpdate}
                     />
@@ -439,19 +714,27 @@ export default function ArchitectView() {
 
             {legs.length > 0 && (
               <div className={styles.paperTradeControls}>
-                <span className={styles.paperTradeLabel}>Paper venue</span>
+                <span className={styles.paperTradeLabel}>Route</span>
                 <DropdownPicker
-                  options={paperVenueOptions}
-                  value={paperVenue}
-                  onChange={setPaperVenue}
+                  options={routeOptions}
+                  value={routeVenue}
+                  onChange={setRouteVenue}
                 />
+                {unroutableLegs.length > 0 && (
+                  <div className={styles.routeUnroutable}>
+                    {unroutableLegs.length === legs.length
+                      ? `No legs have a quote on ${VENUES[routeVenue]?.label ?? routeVenue}.`
+                      : `${unroutableLegs.length} of ${legs.length} legs have no quote on ${VENUES[routeVenue]?.label ?? routeVenue}.`}{' '}
+                    Pick another venue or switch to Best route.
+                  </div>
+                )}
               </div>
             )}
 
             {legs.length > 0 && (
               <button
                 className={styles.compareBtn}
-                onClick={handleSendToPaper}
+                onClick={() => handleSendToPaper()}
                 disabled={createTrade.isPending}
                 style={{ marginTop: 8 }}
               >
@@ -484,7 +767,9 @@ export default function ArchitectView() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
             >
-              {legs.length === 0 ? (
+              {/* V3 stays mounted when empty: its ladder is the empty state
+                  (click a rung to place the first leg). V1/V2 keep the ghost. */}
+              {legs.length === 0 && variant !== 'v3' ? (
                 <div className={styles.chartEmpty}>
                   <svg
                     className={styles.ghostChart}
@@ -557,8 +842,19 @@ export default function ArchitectView() {
               ) : (
                 <>
                   <div className={styles.chartTitleRow}>
-                    <div className={styles.chartTitle}>
-                      {variant === 'v1' ? 'P&L at Expiry' : 'Spot vs Break-even Zones'}
+                    <div className={styles.chartTitleBlock}>
+                      <div className={styles.chartTitle}>
+                        {variant === 'v1'
+                          ? 'P&L at Expiry'
+                          : variant === 'v2'
+                            ? 'Live Spot vs Break-even Zones'
+                            : 'Lego Ladder'}
+                      </div>
+                      {variant === 'v2' && (
+                        <div className={styles.chartTitleMeta}>
+                          {candleSpec.rangeLabel} window · {candleSpec.intervalLabel} candles · tenor-led
+                        </div>
+                      )}
                     </div>
                     <div className={styles.variantToggle}>
                       <button
@@ -577,6 +873,14 @@ export default function ArchitectView() {
                       >
                         V2
                       </button>
+                      <button
+                        className={styles.variantBtn}
+                        data-active={variant === 'v3'}
+                        data-variant="v3"
+                        onClick={() => setVariant('v3')}
+                      >
+                        V3
+                      </button>
                     </div>
                   </div>
 
@@ -586,7 +890,7 @@ export default function ArchitectView() {
                         points={payoffPoints}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={legs}
+                        legs={pricedLegs}
                         maxProfit={metrics?.maxProfit ?? null}
                         maxLoss={metrics?.maxLoss ?? null}
                         strikes={availableStrikes}
@@ -621,26 +925,95 @@ export default function ArchitectView() {
                         </div>
                       )}
                     </>
-                  ) : (
+                  ) : variant === 'v2' ? (
                     <>
                       {candleAvailable && (
                         <SnapshotBanner
-                          dataUpdatedAt={spotCandlesUpdatedAt}
-                          refreshIntervalMs={120_000}
-                          hasData={spotCandlesData != null}
+                          dataUpdatedAt={visibleSpotCandlesUpdatedAt}
+                          hasData={hasVisibleSpotCandles}
                           isFetching={spotCandlesFetching}
+                          windowLabel={candleSpec.rangeLabel}
+                          intervalLabel={candleSpec.intervalLabel}
+                          isSwitchingWindow={spotCandlesIsPlaceholderData && hasVisibleSpotCandles}
+                          isError={spotCandlesUnavailable}
+                          errorMessage={spotCandlesFailureMessage}
+                          isEmpty={spotCandlesEmpty && !hasVisibleSpotCandles}
+                          onRetry={() => {
+                            void refetchSpotCandles();
+                          }}
                         />
                       )}
+                      <div className={styles.projControls}>
+                        <button
+                          className={styles.projToggle}
+                          data-active={showProjections}
+                          onClick={() => setShowProjections((v) => !v)}
+                        >
+                          Projections {showProjections ? 'on' : 'off'}
+                        </button>
+                        <button
+                          className={styles.projSnapBtn}
+                          onClick={handleSnapshot}
+                          disabled={liveGhostPaths.length === 0}
+                        >
+                          ⎙ Snapshot
+                        </button>
+                        {snapshots.length > 0 && (
+                          <select
+                            className={styles.projSnapSelect}
+                            value={selectedSnapshotId ?? ''}
+                            onChange={(e) => setSelectedSnapshotId(e.target.value || null)}
+                          >
+                            <option value="">Live</option>
+                            {snapshots.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.structureLabel} · {formatAgo(s.createdAt)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {selectedSnapshot && (
+                          <button
+                            className={styles.projSnapDel}
+                            onClick={() => {
+                              setSnapshots(removeSnapshot(selectedSnapshot.id));
+                              setSelectedSnapshotId(null);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                       <PayoffChartV2
-                        candles={spotCandlesData?.candles ?? []}
+                        candles={visibleSpotCandles?.candles ?? []}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={legs}
+                        legs={pricedLegs}
+                        resolutionSec={candleSpec.resolutionSec}
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}
+                        ghostPaths={activeGhostPaths}
+                        showProjections={showProjections}
+                        snapshotMeta={snapshotMeta}
+                        projectionKey={`${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleSpec.resolutionSec}`}
                       />
                     </>
+                  ) : (
+                    <PayoffChartV3
+                      points={payoffPoints}
+                      breakevens={metrics?.breakevens ?? []}
+                      spotPrice={spotPrice}
+                      legs={pricedLegs}
+                      netDebit={metrics?.netDebit ?? 0}
+                      strikes={availableStrikes}
+                      tenors={tenorColumns}
+                      activeTenor={builderExpiry}
+                      onLegStrikeDrag={handleLegStrikeDrag}
+                      onLegTenorDrag={handleLegTenorDrag}
+                      onAddLegAtStrike={handleAddLegAtStrike}
+                      onRemoveLeg={handleRemoveLeg}
+                    />
                   )}
                 </>
               )}
@@ -691,7 +1064,7 @@ export default function ArchitectView() {
                   <span className={styles.metricCardLabel}>Breakeven</span>
                   <span className={styles.metricCardVal}>
                     {metrics && metrics.breakevens.length > 0
-                      ? metrics.breakevens.map((b) => `$${(b / 1000).toFixed(1)}k`).join(', ')
+                      ? metrics.breakevens.map((b) => fmtUsd(b)).join(', ')
                       : '–'}
                   </span>
                 </div>
@@ -801,9 +1174,11 @@ export default function ArchitectView() {
               <span className={styles.rightSectionTitle}>Share</span>
               <div className={styles.shareBar}>
                 <span className={styles.shareUrl}>
-                  {legs.length > 0 ? buildShareUrl(legs, underlying) : 'Build a strategy to share'}
+                  {pricedLegs.length > 0
+                    ? buildShareUrl(pricedLegs, underlying)
+                    : 'Build a strategy to share'}
                 </span>
-                {legs.length > 0 &&
+                {pricedLegs.length > 0 &&
                   (copied ? (
                     <span className={styles.shareCopied}>Copied</span>
                   ) : (
@@ -821,10 +1196,13 @@ export default function ArchitectView() {
         <>
           <div className={styles.backdrop} onClick={() => setShowVenues(false)} />
           <VenueSlideover
-            legs={legs}
+            legs={pricedLegs}
             chain={chain ?? null}
+            chainFor={chainFor}
             activeVenues={activeVenues}
             onClose={() => setShowVenues(false)}
+            onSendToPaper={(routing) => handleSendToPaper(routing)}
+            isSending={createTrade.isPending}
           />
         </>
       )}

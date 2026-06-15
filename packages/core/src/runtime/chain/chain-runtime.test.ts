@@ -24,6 +24,7 @@ vi.mock('../../core/registry.js', () => ({
 }));
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   fetchOptionChainMock.mockReset();
   getRegisteredVenuesMock.mockReset();
@@ -97,9 +98,50 @@ type ChainRuntimeInternals = {
     ) => void;
   };
   pendingBySymbol: Map<string, { version: number }>;
+  listeners: Set<{ onEvent: (event: unknown) => void }>;
 };
 
 describe('ChainRuntime', () => {
+  it('acquires all venues in parallel during initialize', async () => {
+    getRegisteredVenuesMock.mockReturnValue(['okx', 'deribit', 'binance']);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const gates = [deferred<void>(), deferred<void>(), deferred<void>()];
+    const acquireCalls: string[] = [];
+
+    const coordinator = {
+      acquire: vi.fn(async (venueId: string) => {
+        acquireCalls.push(venueId);
+        inFlight += 1;
+        if (inFlight > maxInFlight) maxInFlight = inFlight;
+        // Block until released — the test asserts on the in-flight count
+        // observed once every acquire has been dispatched.
+        await gates[acquireCalls.length - 1]!.promise;
+        inFlight -= 1;
+        return { release: async () => {} };
+      }),
+    };
+
+    const runtime = new ChainRuntime(
+      'test',
+      { underlying: 'BTC', expiry: '2026-03-27', venues: ['okx', 'deribit', 'binance'] },
+      { coordinator: coordinator as never },
+    );
+
+    const readyPromise = runtime.ready();
+    // Yield enough microtasks for all three acquire calls to dispatch.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(acquireCalls).toHaveLength(3);
+    expect(maxInFlight).toBe(3);
+
+    gates.forEach((g) => g.resolve());
+    await readyPromise;
+  });
+
   it('releases handles that resolve after runtime disposal', async () => {
     const acquireGate = deferred<{ release: () => Promise<void> }>();
     const release = vi.fn(async () => {});
@@ -164,6 +206,7 @@ describe('ChainRuntime', () => {
       };
     };
 
+    internals.listeners.add({ onEvent: () => {} });
     const build = internals.buildSnapshot();
     internals.venueListener.onDelta([
       {
@@ -179,5 +222,84 @@ describe('ChainRuntime', () => {
     await build;
 
     expect(internals.pendingBySymbol.size).toBe(1);
+  });
+
+  it('drops deltas while no listeners are attached (idle engines do not re-project)', async () => {
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    internals.venueListener.onDelta([
+      {
+        venue: 'okx',
+        symbol: 'BTC/USD:BTC-260327-70000-C',
+        ts: 2_000,
+        quote: { bid: { raw: 0.2, rawCurrency: 'BTC', usd: 300 } },
+      },
+    ]);
+
+    expect(internals.pendingBySymbol.size).toBe(0);
+    await runtime.dispose();
+  });
+
+  it('buffers deltas when a listener is attached and drops them when it detaches', async () => {
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    const unsubscribe = runtime.subscribe({ onEvent: () => {} });
+
+    const delta = {
+      venue: 'okx' as const,
+      symbol: 'BTC/USD:BTC-260327-70000-C',
+      ts: 2_000,
+      quote: { bid: { raw: 0.2, rawCurrency: 'BTC' as const, usd: 300 } },
+    };
+
+    internals.venueListener.onDelta([delta]);
+    expect(internals.pendingBySymbol.size).toBe(1);
+
+    unsubscribe();
+    expect(internals.pendingBySymbol.size).toBe(0);
+
+    await runtime.dispose();
+  });
+
+  it('batches live deltas on the push interval', async () => {
+    vi.useFakeTimers();
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const events: unknown[] = [];
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    runtime.subscribe({ onEvent: (event) => events.push(event) });
+    await Promise.resolve();
+
+    internals.venueListener.onDelta([
+      {
+        venue: 'okx',
+        symbol: 'BTC/USD:BTC-260327-70000-C',
+        ts: 2_000,
+        quote: { bid: { raw: 0.2, rawCurrency: 'BTC', usd: 300 } },
+      },
+    ]);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(events.filter((event) => (event as { type?: string }).type === 'delta')).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(events.filter((event) => (event as { type?: string }).type === 'delta')).toHaveLength(1);
+
+    await runtime.dispose();
+    vi.useRealTimers();
   });
 });

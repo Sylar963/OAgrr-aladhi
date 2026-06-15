@@ -1,5 +1,5 @@
 import type { PaperTradingStore, PaperOrderRow, PaperFillRow } from '@oggregator/db';
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 import type { AccountId } from '../book/account.js';
 import type { Fill } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
@@ -99,7 +99,7 @@ function fromFillRow(row: PaperFillRow): Fill {
     id: row.id,
     orderId: row.orderId,
     legIndex: row.legIndex,
-    venue: row.venue as PaperVenueId,
+    venue: row.venue as VenueId,
     side: row.side,
     optionRight: row.optionRight,
     underlying: row.underlying,
@@ -108,6 +108,10 @@ function fromFillRow(row: PaperFillRow): Fill {
     quantity: row.quantity,
     requestedQuantity: row.requestedQuantity,
     priceUsd: row.priceUsd,
+    // IV at fill time is not persisted on paper_fills (we keep the rolled-up
+    // avgEntryIv on the position instead). On replay, individual fill IVs
+    // are unrecoverable — that's by design.
+    iv: null,
     feesUsd: row.feesUsd,
     slippageUsd: row.slippageUsd,
     partialFill: row.partialFill,

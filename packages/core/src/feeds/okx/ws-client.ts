@@ -1,4 +1,5 @@
 import type WebSocket from 'ws';
+import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -25,13 +26,18 @@ import {
   parseOkxWsStatusMsg,
   parseOkxWsTickerMsg,
 } from './codec.js';
-import { deriveOkxNoticeHealth, deriveOkxStatusHealth } from './health.js';
+import {
+  deriveOkxNoticeHealth,
+  deriveOkxStatusHealthForConnection,
+} from './health.js';
 import {
   buildOkxChainSubscriptionArgs,
   buildOkxInstrumentSubscriptionArgs,
   buildOkxReplayArgs,
   buildOkxUnsubscribeArgs,
   createOkxSubscriptionState,
+  markOkxSubscribed,
+  removeOkxSubscribedFamily,
   removeOkxSubscribedInstruments,
   resetOkxSubscriptionState,
 } from './planner.js';
@@ -118,8 +124,23 @@ export class OkxWsAdapter extends SdkBaseAdapter {
   private wsClient: TopicWsClient | null = null;
   private refreshTimers: ReturnType<typeof setInterval>[] = [];
   private readonly subscriptions = createOkxSubscriptionState();
+  private wsState: VenueConnectionState = 'down';
 
   protected initClients(): void {}
+
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
 
   // ── instrument loading ────────────────────────────────────────
 
@@ -303,11 +324,12 @@ export class OkxWsAdapter extends SdkBaseAdapter {
   ): Promise<void> {
     await this.ensureConnected();
 
-    const args = buildOkxChainSubscriptionArgs(this.subscriptions, underlying, instruments);
+    const plan = buildOkxChainSubscriptionArgs(this.subscriptions, underlying, instruments);
 
-    if (args.length > 0) {
-      this.sendSubscribeBatched(args);
-      log.info({ count: args.length, underlying }, 'subscribed to channels');
+    if (plan.args.length > 0) {
+      this.sendSubscribeBatched(plan.args);
+      markOkxSubscribed(this.subscriptions, plan);
+      log.info({ count: plan.args.length, underlying }, 'subscribed to channels');
     }
   }
 
@@ -316,8 +338,6 @@ export class OkxWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    if (!this.wsClient?.isConnected) return;
-
     const args: object[] = [];
     for (const instrument of instruments) {
       if (this.subscriptions.subscribedTickers.has(instrument.exchangeSymbol)) {
@@ -332,27 +352,27 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       const family = `${underlying}-USD`;
       if (this.subscriptions.subscribedFamilies.has(family)) {
         args.push({ channel: 'opt-summary', instFamily: family });
-        this.subscriptions.subscribedFamilies.delete(family);
+        removeOkxSubscribedFamily(this.subscriptions, family);
       }
     }
 
-    if (args.length === 0) return;
-
-    this.sendSubscribeBatched(args, 'unsubscribe');
     removeOkxSubscribedInstruments(
       this.subscriptions,
       instruments.map((instrument) => instrument.exchangeSymbol),
     );
+
+    if (args.length === 0 || !this.wsClient?.isConnected) return;
+
+    this.sendSubscribeBatched(args, 'unsubscribe');
   }
 
   protected async unsubscribeAll(): Promise<void> {
+    const args = buildOkxUnsubscribeArgs(this.subscriptions);
+    resetOkxSubscriptionState(this.subscriptions);
+
     if (!this.wsClient?.isConnected) return;
 
-    const args = buildOkxUnsubscribeArgs(this.subscriptions);
-
     if (args.length > 0) this.sendSubscribeBatched(args, 'unsubscribe');
-
-    resetOkxSubscriptionState(this.subscriptions);
   }
 
   private async ensureConnected(): Promise<void> {
@@ -366,9 +386,9 @@ export class OkxWsAdapter extends SdkBaseAdapter {
         pingIntervalMs: OKX_PING_INTERVAL_MS,
         pingMessage: 'ping',
         onStatusChange: (state) => {
-          this.emitStatus(
-            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
-          );
+          this.wsState =
+            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting';
+          this.emitStatus(this.wsState);
         },
         getReplayMessages: () => {
           const args = buildOkxReplayArgs(this.subscriptions);
@@ -407,7 +427,12 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
     if (json == null || typeof json !== 'object') return;
     const obj = json as Record<string, unknown>;
-    if (obj['event'] === 'subscribe' || obj['event'] === 'unsubscribe' || obj['event'] === 'error')
+    if (obj['event'] === 'error') {
+      log.warn({ code: obj['code'], msg: obj['msg'] }, 'okx control message failed');
+      return;
+    }
+
+    if (obj['event'] === 'subscribe' || obj['event'] === 'unsubscribe')
       return;
 
     if (obj['event'] === 'notice') {
@@ -448,7 +473,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
     if (channel === 'status') {
       const msg = parseOkxWsStatusMsg(json);
       if (msg != null) {
-        const health = deriveOkxStatusHealth(msg);
+        const health = deriveOkxStatusHealthForConnection(msg, this.wsState);
         this.emitStatus(health.status, health.message);
       }
       return;
@@ -534,10 +559,11 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
     if (newInstruments.length === 0) return;
 
-    const args = buildOkxInstrumentSubscriptionArgs(this.subscriptions, newInstruments);
+    const plan = buildOkxInstrumentSubscriptionArgs(this.subscriptions, newInstruments);
 
-    if (args.length > 0 && this.wsClient?.isConnected) {
-      this.sendSubscribeBatched(args);
+    if (plan.args.length > 0 && this.wsClient?.isConnected) {
+      this.sendSubscribeBatched(plan.args);
+      markOkxSubscribed(this.subscriptions, plan);
     }
 
     log.info({ count: newInstruments.length }, 'added new instruments from instruments channel');

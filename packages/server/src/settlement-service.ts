@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { fetchGateioSettlement } from '@oggregator/core';
 import { paperTradingStore } from './trading-services.js';
 import { spotService } from './services.js';
 import { settleExpiredPositionsForAccount } from './routes/paper/workspace.js';
@@ -58,7 +59,15 @@ export async function runSettlementOnce(
   );
 }
 
-async function resolveSettlementSpot(
+// Settlement price resolution order:
+//   1. Cached row (any prior source) — already authoritative once written.
+//   2. Gate.io official /options/settlements — the venue's own settle_price
+//      that Gate.io used to settle its surface, identical across all strikes
+//      sharing the same underlying+expiry. Preferred over live spot because
+//      it's the price the contracts were actually settled against.
+//   3. Live spot snapshot — last-resort fallback when Gate.io has no row
+//      (e.g. underlying not listed there, or expiry not yet settled upstream).
+export async function resolveSettlementSpot(
   underlying: string,
   expiry: string,
   asOf: Date,
@@ -66,6 +75,22 @@ async function resolveSettlementSpot(
 ): Promise<number | null> {
   const cached = await paperTradingStore.getSettlementPrice(underlying, expiry);
   if (cached) return cached.priceUsd;
+
+  const gateio = await fetchGateioSettlement({ underlying, expiry });
+  if (gateio) {
+    await paperTradingStore.upsertSettlementPrice({
+      underlying,
+      expiry,
+      priceUsd: gateio.priceUsd,
+      source: 'gateio',
+      capturedAt: gateio.capturedAt,
+    });
+    log.info(
+      { underlying, expiry, priceUsd: gateio.priceUsd, source: 'gateio' },
+      'settlement price resolved from gateio',
+    );
+    return gateio.priceUsd;
+  }
 
   const snap = spotService.getSnapshot(underlying);
   if (!snap || !Number.isFinite(snap.lastPrice) || snap.lastPrice <= 0) {

@@ -1,6 +1,7 @@
 import { DERIBIT_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
 import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -13,6 +14,7 @@ import {
   buildDeribitSubscriptionPlan,
   createDeribitSubscriptionState,
   deribitIndexNameFor,
+  downgradeDeribitTickerSubscription,
   releaseDeribitTickerSubscription,
   resetDeribitSubscriptionState,
 } from './planner.js';
@@ -32,24 +34,51 @@ import {
   buildDeribitMarkPriceQuote,
   buildDeribitTickerQuote,
   createDeribitState,
+  deribitStaleReconnectCooldownMs,
   registerDeribitInstrument,
   removeDeribitInstrument,
+  shouldForceDeribitStaleReconnect,
+  summarizeDeribitSubscribedTickerStaleness,
 } from './state.js';
 
 const log = feedLogger('deribit');
 
-// Deribit charges 3k credits per subscribe call regardless of channel count,
-// and supports up to 500 channels per call. Batching large keeps call count low.
-const SUBSCRIBE_BATCH_SIZE = 500;
+// Deribit accepts larger batches, but active-chain ticker acks can stall under
+// load. Smaller batches keep control-plane retries bounded.
+const SUBSCRIBE_BATCH_SIZE = 50;
 
 // ~3.3 calls/sec sustained (30k credit pool, 3k per call).
 const SUBSCRIBE_BATCH_DELAY_MS = 300;
+const RESUBSCRIBE_BATCH_DELAY_MS = 500;
+// On reconnect, a 50-channel subscribe Deribit hasn't acked in this long means a
+// dead/half-open session (a healthy ack lands sub-second), not an oversized batch.
+// Detecting it fast — vs the shared 30s default — lets abortResubscribeOnTimeout
+// collapse the old 50→25→13→… timeout cascade into one wait + a flap-backed retry.
+const RESUBSCRIBE_BATCH_TIMEOUT_MS = 12_000;
+const EAGER_TICKER_EXPIRY_COUNT = 2;
+const EAGER_UNDERLYING_DELAY_MS = 750;
+const DERIBIT_REQUEST_TIMEOUT_MS = 60_000;
 
-// Eager subscriptions use agg2 (~1s aggregation) to reduce traffic.
-// On-demand subscriptions (user viewing a chain) use 100ms for tight updates.
+// Use agg2 for active chains too: hundreds of 100ms option tickers have caused
+// Deribit's data plane to go globally stale while the socket stays open.
 const EAGER_TICKER_INTERVAL = 'agg2';
-const ACTIVE_TICKER_INTERVAL = '100ms';
+const ACTIVE_TICKER_INTERVAL = EAGER_TICKER_INTERVAL;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+const DERIBIT_PUBLIC_STATUS_TIMEOUT_MS = 15_000;
+const DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS = 60_000;
+const DERIBIT_CHAIN_STALE_LOG_MS = 15_000;
+const DERIBIT_CHAIN_SAMPLE_SIZE = 5;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS = 90_000;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS = 30_000;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO = 0.9;
+const DERIBIT_SUBSCRIBED_TICKER_STALE_MIN = 10;
+
+type DeribitSubscriptionStateSnapshot = {
+  subscribedIndexes: string[];
+  subscribedPriceIndexes: string[];
+  subscribedTickers: string[];
+  tickerIntervals: Array<[string, string]>;
+};
 
 // At 08:00 UTC daily, Deribit bulk-lists/expires instruments, emitting hundreds
 // of `instrument.state` notifications in a burst. Firing a separate
@@ -61,6 +90,14 @@ const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 const INSTRUMENT_STATE_COALESCE_MS = 1_000;
 const INSTRUMENT_STATE_FETCH_CONCURRENCY = 8;
 const INSTRUMENT_STATE_FETCH_CHUNK_DELAY_MS = 250;
+
+function isDeribitPublicStatusTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('public/status timed out');
+}
+
+function isDeribitRequestTimeout(error: unknown): boolean {
+  return error instanceof Error && /timed out after \d+ms/.test(error.message);
+}
 
 /** Regex for Deribit instrument names, supporting decimal strikes (e.g. 420d5 → 420.5). */
 const INSTRUMENT_RE = /^(\w+)-(\w+)-(\d+(?:d\d+)?)-([CP])$/;
@@ -97,16 +134,33 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private readonly state = createDeribitState();
   private readonly subscriptions = createDeribitSubscriptionState();
   private readonly health = createDeribitHealthState();
+  private readonly chainDiagnosticsLastLoggedAt = new Map<string, number>();
+  private subscribedTickerStaleSince = 0;
+  private forcedStaleReconnectAt = 0;
+  private forcedStaleReconnectStreak = 0;
+  private publicStatusRefreshPromise: Promise<void> | null = null;
 
-  // All expiries get ticker subscriptions at boot so bid/ask and greeks are
-  // live from second one. agg2 (~1s aggregation) keeps traffic manageable.
-  // Rate budget: ~4300 instruments ÷ 500/batch = 9 calls × 3000 credits = 27k
-  // out of 30k pool (refills at 10k/sec).
+  // Keep bulk marks live for every underlying at boot, but reserve eager ticker
+  // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
+  // opens the chain, which cuts cold-start load without losing broad coverage.
   protected override async eagerSubscribe(): Promise<void> {
     const underlyings = await this.listUnderlyings();
+    const priority = underlyings.filter((underlying) =>
+      this.shouldEagerTickerUnderlying(underlying),
+    );
+    const deferred = underlyings.filter(
+      (underlying) => !this.shouldEagerTickerUnderlying(underlying),
+    );
 
-    for (const underlying of underlyings) {
-      const expiries = await this.listExpiries(underlying);
+    for (const underlying of [...priority, ...deferred]) {
+      await this.ensureBulkSubscriptions(underlying, 'eager');
+
+      if (!this.shouldEagerTickerUnderlying(underlying)) {
+        await this.delayBetweenEagerUnderlyings();
+        continue;
+      }
+
+      const expiries = this.eagerTickerExpiries(underlying);
 
       for (const expiry of expiries) {
         const matching = this.instruments.filter(
@@ -116,20 +170,58 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
           await this.subscribeWithInterval(underlying, matching, EAGER_TICKER_INTERVAL);
         }
       }
+
+      await this.delayBetweenEagerUnderlyings();
     }
+  }
+
+  protected override getFeedConnectionSnapshot() {
+    return {
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+    };
+  }
+
+  override getFeedDiagnostics() {
+    return {
+      connected: this.rpc.isConnected,
+      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+      reconnectAttempts: this.rpc.reconnectAttemptsCount,
+      rateLimitUntil: this.rpc.rateLimitUntilMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.rpc.terminate();
+  }
+
+  override async fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
+    const chain = await super.fetchOptionChain(request);
+    this.maybeLogChainDiagnostics(request, chain);
+    return chain;
   }
 
   protected initClients(): void {
     if (this.rpc) return;
     this.rpc = new JsonRpcWsClient(DERIBIT_WS_URL, 'deribit-ws', {
       heartbeatIntervalSec: 30,
-      requestTimeoutMs: 15_000,
+      // Far expiries can require large subscribe batches and Deribit's RPC ack
+      // can lag well past 15s under venue load. A short timeout causes false
+      // reconnect loops precisely when users switch into those tenors.
+      requestTimeoutMs: DERIBIT_REQUEST_TIMEOUT_MS,
       resubscribeBatchSize: SUBSCRIBE_BATCH_SIZE,
-      resubscribeBatchDelayMs: SUBSCRIBE_BATCH_DELAY_MS,
+      resubscribeBatchDelayMs: RESUBSCRIBE_BATCH_DELAY_MS,
+      resubscribeBatchTimeoutMs: RESUBSCRIBE_BATCH_TIMEOUT_MS,
+      // Reconnect replay aborts dead sessions quickly, but keeps a socket that is
+      // already delivering subscription data despite a delayed subscribe ack.
+      abortResubscribeOnTimeout: true,
+      continueResubscribeOnDataAfterTimeout: true,
+      rateLimitCooldownMs: 120_000,
       onStatusChange: (state) =>
         this.emitStatus(
           state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
         ),
+      onResubscribe: (channels) => this.restoreSubscriptionStateFromChannels(channels),
     });
 
     this.rpc.onSubscription((channel: string, data: unknown) => {
@@ -181,6 +273,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
 
     this.healthTimer = setInterval(() => {
       void this.refreshPublicStatus();
+      this.checkSubscribedTickerStaleness();
     }, HEALTH_CHECK_INTERVAL_MS);
     void this.refreshPublicStatus();
 
@@ -307,41 +400,46 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     interval: string,
     source = 'eager',
   ): Promise<void> {
-    const plan = buildDeribitSubscriptionPlan(
-      this.subscriptions,
-      underlying,
-      instruments,
-      interval,
-    );
+    if (source === 'eager' && !this.shouldEagerTickerUnderlying(underlying)) return;
 
-    if (!this.state.indexToInstruments.has(plan.indexName)) {
+    const previousState = this.snapshotSubscriptionState();
+    const indexName = deribitIndexNameFor(underlying);
+
+    if (!this.state.indexToInstruments.has(indexName)) {
       const symbols = new Set<string>();
       for (const inst of this.instruments) {
-        if (deribitIndexNameFor(inst.base) === plan.indexName) {
+        if (deribitIndexNameFor(inst.base) === indexName) {
           symbols.add(inst.exchangeSymbol);
         }
       }
-      this.state.indexToInstruments.set(plan.indexName, symbols);
+      this.state.indexToInstruments.set(indexName, symbols);
     }
 
-    if (plan.bulkChannels.length > 0) {
-      await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
-      log.info(
-        { count: plan.bulkChannels.length, underlying, source },
-        'subscribed to bulk index channels',
+    try {
+      await this.ensureBulkSubscriptions(underlying, source);
+
+      const plan = buildDeribitSubscriptionPlan(
+        this.subscriptions,
+        underlying,
+        instruments,
+        interval,
       );
-    }
 
-    if (plan.channelsToUnsubscribe.length > 0) {
-      await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
-    }
+      if (plan.tickerChannels.length > 0) {
+        await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
+        log.info(
+          { count: plan.tickerChannels.length, underlying, interval, source },
+          'subscribed to ticker channels',
+        );
+      }
 
-    if (plan.tickerChannels.length > 0) {
-      await this.subscribeBatched(plan.tickerChannels, `ticker-${source}`);
-      log.info(
-        { count: plan.tickerChannels.length, underlying, interval, source },
-        'subscribed to ticker channels',
-      );
+      if (plan.channelsToUnsubscribe.length > 0) {
+        await this.rpc.unsubscribe(plan.channelsToUnsubscribe);
+      }
+    } catch (error: unknown) {
+      this.restoreSubscriptionStateSnapshot(previousState);
+      this.rpc.terminate();
+      throw error;
     }
   }
 
@@ -353,11 +451,67 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private async subscribeBatched(channels: string[], source: string): Promise<void> {
     for (let i = 0; i < channels.length; i += SUBSCRIBE_BATCH_SIZE) {
       const batch = channels.slice(i, i + SUBSCRIBE_BATCH_SIZE);
-      await this.rpc.subscribe(batch, source);
+      await this.subscribeBatch(batch, source);
       if (i + SUBSCRIBE_BATCH_SIZE < channels.length) {
         await new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_BATCH_DELAY_MS));
       }
     }
+  }
+
+  private async subscribeBatch(channels: string[], source: string): Promise<void> {
+    try {
+      await this.rpc.subscribe(channels, source);
+      return;
+    } catch (error: unknown) {
+      if (!isDeribitRequestTimeout(error) || channels.length <= 1) throw error;
+
+      const nextBatchSize = Math.ceil(channels.length / 2);
+      log.warn(
+        { count: channels.length, nextBatchSize, source, err: String(error) },
+        'subscribe batch timed out, retrying smaller batches',
+      );
+
+      for (let i = 0; i < channels.length; i += nextBatchSize) {
+        await this.subscribeBatch(channels.slice(i, i + nextBatchSize), source);
+      }
+    }
+  }
+
+  private async ensureBulkSubscriptions(underlying: string, source: string): Promise<void> {
+    const plan = buildDeribitSubscriptionPlan(
+      this.subscriptions,
+      underlying,
+      [],
+      EAGER_TICKER_INTERVAL,
+    );
+    if (plan.bulkChannels.length === 0) return;
+
+    await this.rpc.subscribe(plan.bulkChannels, `bulk-${source}`);
+    log.info(
+      { count: plan.bulkChannels.length, underlying, source },
+      'subscribed to bulk index channels',
+    );
+  }
+
+  private async delayBetweenEagerUnderlyings(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, EAGER_UNDERLYING_DELAY_MS));
+  }
+
+  private shouldEagerTickerUnderlying(underlying: string): boolean {
+    return underlying === 'BTC' || underlying === 'ETH';
+  }
+
+  private eagerTickerExpiries(underlying: string): string[] {
+    return [...new Set(this.instruments.filter((i) => i.base === underlying).map((i) => i.expiry))]
+      .sort()
+      .slice(0, EAGER_TICKER_EXPIRY_COUNT);
+  }
+
+  private shouldEagerTickerInstrument(instrument: CachedInstrument): boolean {
+    return (
+      this.shouldEagerTickerUnderlying(instrument.base) &&
+      this.eagerTickerExpiries(instrument.base).includes(instrument.expiry)
+    );
   }
 
   protected override async unsubscribeChain(
@@ -365,36 +519,166 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     _expiry: string,
     instruments: CachedInstrument[],
   ): Promise<void> {
-    const channels: string[] = [];
+    const channelsToUnsubscribe: string[] = [];
+    const channelsToSubscribe: string[] = [];
 
     for (const instrument of instruments) {
+      if (this.shouldEagerTickerInstrument(instrument)) {
+        const downgrade = downgradeDeribitTickerSubscription(
+          this.subscriptions,
+          instrument.exchangeSymbol,
+          EAGER_TICKER_INTERVAL,
+        );
+        if (downgrade != null) {
+          channelsToUnsubscribe.push(downgrade.unsubscribeChannel);
+          channelsToSubscribe.push(downgrade.subscribeChannel);
+        }
+        continue;
+      }
+
       const channel = releaseDeribitTickerSubscription(
         this.subscriptions,
         instrument.exchangeSymbol,
       );
       if (channel != null) {
-        channels.push(channel);
+        channelsToUnsubscribe.push(channel);
       }
     }
 
-    if (this.activeRequestsForUnderlying(underlying) === 0) {
-      const indexName = deribitIndexNameFor(underlying);
-      if (this.subscriptions.subscribedIndexes.delete(indexName)) {
-        channels.push(`markprice.options.${indexName}`);
-      }
-      if (this.subscriptions.subscribedPriceIndexes.delete(indexName)) {
-        channels.push(`deribit_price_index.${indexName}`);
-      }
+    if (channelsToUnsubscribe.length > 0) {
+      await this.rpc.unsubscribe(channelsToUnsubscribe);
     }
-
-    if (channels.length > 0) {
-      await this.rpc.unsubscribe(channels);
+    if (channelsToSubscribe.length > 0) {
+      await this.subscribeBatched(channelsToSubscribe, 'ticker-downgrade');
+      log.info(
+        { count: channelsToSubscribe.length, underlying, interval: EAGER_TICKER_INTERVAL },
+        'downgraded ticker channels to eager interval',
+      );
     }
   }
 
   protected async unsubscribeAll(): Promise<void> {
     await this.rpc.unsubscribeAll();
     resetDeribitSubscriptionState(this.subscriptions);
+  }
+
+  private snapshotSubscriptionState(): DeribitSubscriptionStateSnapshot {
+    return {
+      subscribedIndexes: [...this.subscriptions.subscribedIndexes],
+      subscribedPriceIndexes: [...this.subscriptions.subscribedPriceIndexes],
+      subscribedTickers: [...this.subscriptions.subscribedTickers],
+      tickerIntervals: [...this.subscriptions.tickerIntervals],
+    };
+  }
+
+  private restoreSubscriptionStateSnapshot(snapshot: DeribitSubscriptionStateSnapshot): void {
+    this.subscriptions.subscribedIndexes = new Set(snapshot.subscribedIndexes);
+    this.subscriptions.subscribedPriceIndexes = new Set(snapshot.subscribedPriceIndexes);
+    this.subscriptions.subscribedTickers = new Set(snapshot.subscribedTickers);
+    this.subscriptions.tickerIntervals = new Map(snapshot.tickerIntervals);
+  }
+
+  private restoreSubscriptionStateFromChannels(channels: string[]): void {
+    resetDeribitSubscriptionState(this.subscriptions);
+
+    for (const channel of channels) {
+      if (channel.startsWith('markprice.options.')) {
+        this.subscriptions.subscribedIndexes.add(channel.slice('markprice.options.'.length));
+        continue;
+      }
+      if (channel.startsWith('deribit_price_index.')) {
+        this.subscriptions.subscribedPriceIndexes.add(
+          channel.slice('deribit_price_index.'.length),
+        );
+        continue;
+      }
+      if (!channel.startsWith('ticker.')) continue;
+
+      const parts = channel.split('.');
+      const interval = parts.at(-1);
+      const exchangeSymbol = parts.slice(1, -1).join('.');
+      if (exchangeSymbol.length === 0 || interval == null) continue;
+
+      this.subscriptions.subscribedTickers.add(exchangeSymbol);
+      this.subscriptions.tickerIntervals.set(exchangeSymbol, interval);
+    }
+  }
+
+  private maybeLogChainDiagnostics(request: ChainRequest, chain: VenueOptionChain): void {
+    const now = Date.now();
+    const diagnosticKey = `${request.underlying}:${request.expiry}`;
+    const lastLoggedAt = this.chainDiagnosticsLastLoggedAt.get(diagnosticKey) ?? 0;
+    if (now - lastLoggedAt < DERIBIT_CHAIN_DIAGNOSTIC_TTL_MS) return;
+
+    let contracts = 0;
+    let subscribedTickers = 0;
+    let quotesWithTs = 0;
+    let staleQuotes = 0;
+    let missingBidAsk = 0;
+    let oldestQuoteTs = 0;
+    let newestQuoteTs = 0;
+    const intervalCounts = new Map<string, number>();
+    const staleExamples: string[] = [];
+    const unsubscribedExamples: string[] = [];
+
+    for (const contract of Object.values(chain.contracts)) {
+      contracts += 1;
+
+      const interval = this.subscriptions.tickerIntervals.get(contract.exchangeSymbol) ?? 'none';
+      intervalCounts.set(interval, (intervalCounts.get(interval) ?? 0) + 1);
+      if (interval !== 'none') subscribedTickers += 1;
+      else if (unsubscribedExamples.length < DERIBIT_CHAIN_SAMPLE_SIZE) {
+        unsubscribedExamples.push(contract.exchangeSymbol);
+      }
+
+      if (contract.quote.bid.raw == null && contract.quote.ask.raw == null) {
+        missingBidAsk += 1;
+      }
+
+      const ts = contract.quote.timestamp ?? 0;
+      if (ts <= 0) continue;
+
+      quotesWithTs += 1;
+      if (oldestQuoteTs === 0 || ts < oldestQuoteTs) oldestQuoteTs = ts;
+      if (ts > newestQuoteTs) newestQuoteTs = ts;
+
+      if (now - ts > DERIBIT_CHAIN_STALE_LOG_MS) {
+        staleQuotes += 1;
+        if (staleExamples.length < DERIBIT_CHAIN_SAMPLE_SIZE) {
+          staleExamples.push(contract.exchangeSymbol);
+        }
+      }
+    }
+
+    const oldestQuoteAgeMs = oldestQuoteTs > 0 ? now - oldestQuoteTs : null;
+    const newestQuoteAgeMs = newestQuoteTs > 0 ? now - newestQuoteTs : null;
+    const hasFreshQuote = newestQuoteTs > 0 && now - newestQuoteTs <= DERIBIT_CHAIN_STALE_LOG_MS;
+    const noQuoteData = contracts > 0 && quotesWithTs === 0;
+    const staleSubscriptionCoverage = contracts > 0 && subscribedTickers < contracts && !hasFreshQuote;
+    const staleQuotedChain = quotesWithTs > 0 && staleQuotes === quotesWithTs;
+    const allQuotesMissingBidAsk = contracts > 0 && missingBidAsk === contracts && !hasFreshQuote;
+    const suspicious =
+      noQuoteData || staleSubscriptionCoverage || staleQuotedChain || allQuotesMissingBidAsk;
+    if (!suspicious) return;
+
+    this.chainDiagnosticsLastLoggedAt.set(diagnosticKey, now);
+    log.warn(
+      {
+        underlying: request.underlying,
+        expiry: request.expiry,
+        contracts,
+        subscribedTickers,
+        quotesWithTs,
+        staleQuotes,
+        missingBidAsk,
+        oldestQuoteAgeMs,
+        newestQuoteAgeMs,
+        intervalCounts: Object.fromEntries(intervalCounts),
+        staleExamples,
+        unsubscribedExamples,
+      },
+      'deribit chain diagnostics',
+    );
   }
 
   // ─── normalization override ───────────────────────────────────
@@ -520,16 +804,19 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     }
 
     for (const [underlying, list] of byUnderlying) {
+      const eagerList = list.filter((instrument) => this.shouldEagerTickerInstrument(instrument));
+      if (eagerList.length === 0) continue;
+
       try {
         await this.subscribeWithInterval(
           underlying,
-          list,
+          eagerList,
           EAGER_TICKER_INTERVAL,
           'instrument-state',
         );
       } catch (err: unknown) {
         log.warn(
-          { underlying, count: list.length, err: String(err) },
+          { underlying, count: eagerList.length, err: String(err) },
           'failed to subscribe new instruments',
         );
       }
@@ -573,7 +860,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       }
     }
 
-    log.info({ count: instrumentNames.length }, 'removed expired instruments from instrument.state');
+    log.info(
+      { count: instrumentNames.length },
+      'removed expired instruments from instrument.state',
+    );
   }
 
   private emitPlatformHealth(): void {
@@ -581,16 +871,181 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     this.emitStatus(health.status, health.message);
   }
 
-  private async refreshPublicStatus(): Promise<void> {
-    try {
-      const raw: unknown = await this.rpc.call('public/status', {});
-      const parsed = parseDeribitPublicStatus(raw);
-      const health = deriveDeribitPublicStatusHealth(this.health, parsed);
-      this.emitStatus(health.status, health.message);
-    } catch (error: unknown) {
-      const health = deriveDeribitPublicStatusHealth(this.health, null, error);
-      this.emitStatus(health.status, health.message);
+  private checkSubscribedTickerStaleness(): void {
+    if (!this.rpc.isConnected) {
+      this.subscribedTickerStaleSince = 0;
+      return;
     }
+
+    const now = Date.now();
+    const summary = summarizeDeribitSubscribedTickerStaleness(
+      this.subscriptions.subscribedTickers,
+      this.quoteStore,
+      now,
+      DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS,
+      DERIBIT_CHAIN_SAMPLE_SIZE,
+    );
+    if (summary == null || summary.subscribedTickers < DERIBIT_SUBSCRIBED_TICKER_STALE_MIN) {
+      this.subscribedTickerStaleSince = 0;
+      return;
+    }
+
+    const staleRatio = summary.staleSubscribedTickers / summary.subscribedTickers;
+    if (staleRatio < DERIBIT_SUBSCRIBED_TICKER_STALE_RATIO) {
+      // Quotes are flowing again — clear the stale window and reset the
+      // forced-reconnect backoff so the next outage gets an immediate kick.
+      this.subscribedTickerStaleSince = 0;
+      this.forcedStaleReconnectAt = 0;
+      this.forcedStaleReconnectStreak = 0;
+      return;
+    }
+
+    if (this.subscribedTickerStaleSince === 0) {
+      this.subscribedTickerStaleSince = now;
+      log.warn(
+        {
+          subscribedTickers: summary.subscribedTickers,
+          staleSubscribedTickers: summary.staleSubscribedTickers,
+          missingQuotes: summary.missingQuotes,
+          staleRatio,
+          oldestStaleAgeMs: summary.oldestStaleAgeMs,
+          newestStaleAgeMs: summary.newestStaleAgeMs,
+          staleExamples: summary.staleExamples,
+        },
+        'deribit subscribed tickers look globally stale',
+      );
+      return;
+    }
+
+    const staleWindowMs = now - this.subscribedTickerStaleSince;
+    const msSinceLastForcedReconnect =
+      this.forcedStaleReconnectAt === 0 ? null : now - this.forcedStaleReconnectAt;
+
+    if (
+      !shouldForceDeribitStaleReconnect({
+        staleWindowMs,
+        graceMs: DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS,
+        msSinceLastForcedReconnect,
+        forcedReconnectStreak: this.forcedStaleReconnectStreak,
+      })
+    ) {
+      // Past grace, but a recent forced reconnect already failed to restore the
+      // feed: it is dead venue-side, not socket-side. Forcing another full
+      // resubscribe would only block the event loop with a fresh snapshot burst.
+      // Stay degraded and let the backoff window elapse — organic transport
+      // reconnect or a resumed stream still recovers us.
+      if (staleWindowMs >= DERIBIT_SUBSCRIBED_TICKER_STALE_GRACE_MS) {
+        if (this.forcedStaleReconnectStreak > 0) {
+          log.warn(
+            {
+              forcedStaleReconnectStreak: this.forcedStaleReconnectStreak,
+              staleWindowMs,
+              msSinceLastForcedReconnect,
+              subscribedTickers: summary.subscribedTickers,
+              staleSubscribedTickers: summary.staleSubscribedTickers,
+              staleRatio,
+            },
+            'deribit stale reconnect streak active',
+          );
+        }
+        this.emitStatus(
+          'degraded',
+          `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`,
+        );
+      }
+      return;
+    }
+
+    this.subscribedTickerStaleSince = now;
+    this.forcedStaleReconnectAt = now;
+    this.forcedStaleReconnectStreak += 1;
+    log.error(
+      {
+        subscribedTickers: summary.subscribedTickers,
+        staleSubscribedTickers: summary.staleSubscribedTickers,
+        missingQuotes: summary.missingQuotes,
+        staleRatio,
+        staleWindowMs,
+        forcedStaleReconnectStreak: this.forcedStaleReconnectStreak,
+        oldestStaleAgeMs: summary.oldestStaleAgeMs,
+        newestStaleAgeMs: summary.newestStaleAgeMs,
+        staleExamples: summary.staleExamples,
+      },
+      'deribit subscribed tickers stayed stale, forcing reconnect',
+    );
+    this.emitStatus(
+      'reconnecting',
+      `deribit quotes stale for ${Math.round(staleWindowMs / 1000)}s`,
+    );
+    this.rpc.terminate();
+  }
+
+  private async refreshPublicStatus(): Promise<void> {
+    if (this.publicStatusRefreshPromise != null) {
+      await this.publicStatusRefreshPromise;
+      return;
+    }
+
+    this.publicStatusRefreshPromise = (async () => {
+      try {
+        const raw: unknown = await this.rpc.call(
+          'public/status',
+          {},
+          DERIBIT_PUBLIC_STATUS_TIMEOUT_MS,
+        );
+        const parsed = parseDeribitPublicStatus(raw);
+        const health = deriveDeribitPublicStatusHealth(this.health, parsed);
+        this.emitStatus(health.status, health.message);
+      } catch (error: unknown) {
+        const health = deriveDeribitPublicStatusHealth(this.health, null, error);
+        this.emitStatus(health.status, health.message);
+
+        if (isDeribitPublicStatusTimeout(error) && this.rpc.isConnected) {
+          const lastSubscriptionAt = this.rpc.lastSubscriptionAtMs;
+          const lastSubscriptionAgeMs =
+            lastSubscriptionAt > 0 ? Date.now() - lastSubscriptionAt : null;
+          if (
+            lastSubscriptionAgeMs != null &&
+            lastSubscriptionAgeMs < DERIBIT_SUBSCRIBED_TICKER_STALE_AFTER_MS
+          ) {
+            log.warn(
+              { lastSubscriptionAgeMs },
+              'deribit public/status timed out while subscription data is flowing',
+            );
+            return;
+          }
+
+          // Shares the staleness watchdog's backoff state so the two
+          // force-reconnect paths jointly throttle: a status probe that times out
+          // because the event loop is mid-resubscribe must not stack another
+          // terminate (and its full resubscribe burst) on top. The degraded
+          // status emitted above already reflects the failed probe.
+          const now = Date.now();
+          const cooldownMs = deribitStaleReconnectCooldownMs(this.forcedStaleReconnectStreak);
+          const withinBackoff =
+            this.forcedStaleReconnectAt > 0 && now - this.forcedStaleReconnectAt < cooldownMs;
+          if (!withinBackoff) {
+            this.forcedStaleReconnectAt = now;
+            this.forcedStaleReconnectStreak += 1;
+            log.warn(
+              { forcedStaleReconnectStreak: this.forcedStaleReconnectStreak, cooldownMs },
+              'deribit public/status timeout forcing reconnect',
+            );
+            this.emitStatus('reconnecting', 'deribit public/status timed out, reconnecting');
+            this.rpc.terminate();
+          } else if (this.forcedStaleReconnectStreak > 0) {
+            log.warn(
+              { forcedStaleReconnectStreak: this.forcedStaleReconnectStreak, cooldownMs },
+              'deribit public/status timeout within stale reconnect backoff',
+            );
+          }
+        }
+      }
+    })().finally(() => {
+      this.publicStatusRefreshPromise = null;
+    });
+
+    await this.publicStatusRefreshPromise;
   }
 
   private handlePlatformState(data: unknown): void {
@@ -649,7 +1104,9 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       parsed.timestamp ?? Date.now(),
     );
 
-    this.emitQuoteUpdates(updates);
+    for (const update of updates) {
+      this.quoteStore.set(update.exchangeSymbol, update.quote);
+    }
   }
 
   /**
@@ -685,6 +1142,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.publicStatusRefreshPromise = null;
     if (this.instrumentStateFlushTimer != null) {
       clearTimeout(this.instrumentStateFlushTimer);
       this.instrumentStateFlushTimer = null;

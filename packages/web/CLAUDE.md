@@ -1,6 +1,6 @@
 # @oggregator/web
 
-Vite 6 + React 19 + TypeScript SPA. Multi-venue crypto options dashboard.
+Vite 6 + React 19 + TypeScript SPA. Multi-venue crypto options dashboard, paper trading UI, and live portfolio analytics.
 
 ## Commands
 
@@ -18,7 +18,12 @@ src/
     chain/          Main view: cross-venue option chain with stats, expiry tabs
     surface/        Volatility tab: 3D surface, vol smile, ATM term structure, RV vs IV
     gex/            Gamma exposure bar chart per strike
+    portfolio/      Manual + venue-backed positions, pnl curve, greeks, scenarios
+    trading/        Paper trading accounts, orders, positions, activity, auth
     architect/      Builder view: templates, custom legs, payoff chart, venue comparison
+    alpha/          Relative-value and routing analysis views
+    analytics/      OI, put/call, cross-expiry, and summary analytics
+    dvol/           Standalone DVOL views and history
     flow/           Live flow + institutions mode
   components/
     ui/             IvChip, SpreadPill, VenueDot, CommandPalette, Tabs
@@ -36,11 +41,17 @@ src/
 
 - **Chain transport is already WS-first**: `hooks/useChainWs.ts` is the primary path for the chain view. Browser subscribes to `WS /ws/chain`, the server coalesces venue deltas into enriched snapshots every 200ms, and the hook writes those snapshots into the TanStack Query cache via `setQueryData(...)`. `useChainQuery()` remains as bootstrap / fallback while the socket is not live.
 
+- **Portfolio transport is split by workload**: REST handles explicit mutations and one-shot reads (`/api/portfolio/positions`, `/metrics`, `/scenarios`, `/venue-credentials`), while `WS /ws/portfolio` streams recomputed metrics and changed-leg updates. Keep optimistic UI local; treat portfolio metrics as server state.
+
 - **Shared types are manually synced**: `shared-types/enriched.ts` mirrors `core/enrichment.ts`. No package dependency between web and core — the types are duplicated intentionally to keep the web package independent.
+
+- **Protocol package is the source of truth for portfolio and trading contracts**: prefer importing shared schemas/types from `@oggregator/protocol` over recreating route DTOs locally. Local Zod wrappers are only for response parsing at the HTTP boundary.
 
 - **IV displayed as percentage**: `fmtIv()` does `value × 100`. Backend stores IV as fractions (0.50 = 50%). This means the value arriving from the API should always be a fraction.
 
 - **Path aliases synced in two places**: `tsconfig.json` paths AND `vite.config.ts` resolve.alias. If you add one, update both.
+
+- **System notifications are read-only consumers of feed state**: `components/notifications/SystemNotifications` renders the status banner / takeover (from the `/health` `announcement`) and feed toasts. `useFeedToasts` and the banner read the `feedStatus` store slice only — they never touch WS transport/subscription code.
 
 - **CSS Modules throughout**: every component has a `.module.css` file. Zero global class names except in `styles/`.
 

@@ -12,7 +12,11 @@ import { deltaTickLabel } from './smile-utils';
 import { useSurface } from './queries';
 import styles from './VolSurface3D.module.css';
 
+type TenorMode = 'listed' | 'cmm';
+
 // Drop expiries thinner than this — sparse rows render as spikes/holes.
+// Only applied to the listed/raw mode; smoothed and CMM rows are dense by
+// construction.
 const MIN_NON_NULL_PER_ROW = 3;
 
 const SURFACE_TIP_BODY = (
@@ -32,11 +36,17 @@ const SURFACE_TIP_BODY = (
       </li>
       <li>
         <strong>Z &amp; color</strong>: IV in %. Blue = low, white = mid, orange = high.
-        Color gaps = missing venue quotes.
+        Where listed strikes are sparse, the surface is filled by an SVI fit
+        (Gatheral 2004) per expiry, with linear interpolation as fallback.
       </li>
       <li>
         <strong>Venue picker</strong>: single-venue vs cross-venue Average.
         Average smooths venue quirks; single venue exposes microstructure.
+      </li>
+      <li>
+        <strong>Tenor mode</strong>: Listed = each row is a real expiry.
+        Constant Maturity = canonical 7/14/30/60/90/180/365d tenors,
+        interpolated in total variance between bracketing listed expiries.
       </li>
     </ul>
   </>
@@ -50,14 +60,21 @@ interface SurfaceGrid {
   text: string[][];
 }
 
-function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
-  const x = data.surfaceFineDeltas;
+function buildListedGrid(data: IvSurfaceResponse): SurfaceGrid | null {
+  const useSmoothed = !!data.surfaceFineSmoothed?.length;
+  const x = useSmoothed
+    ? data.surfaceFineDeltasDense ?? data.surfaceFineDeltas
+    : data.surfaceFineDeltas;
   if (!x || x.length === 0) return null;
 
-  const sorted = data.surfaceFine
+  const source = useSmoothed ? data.surfaceFineSmoothed : data.surfaceFine;
+  const sorted = source
     .filter((r) => r.dte > 0)
     .slice()
     .sort((a, b) => a.dte - b.dte);
+
+  const rawByDte = new Map<number, (number | null)[]>();
+  for (const r of data.surfaceFine) rawByDte.set(r.dte, r.ivs);
 
   // Y is the row's index, not its DTE. A linear-DTE axis collapsed weeklies
   // on top of each other in the 3D perspective; sqrt(T) helped but the front
@@ -70,16 +87,43 @@ function buildSurfaceGrid(data: IvSurfaceResponse): SurfaceGrid | null {
   const text: string[][] = [];
 
   for (const row of sorted) {
-    // Backend stores IV as fraction; chart renders percentage.
+    const rawRow = rawByDte.get(row.dte);
+    const rawNonNull = rawRow ? rawRow.filter((v) => v != null).length : 0;
+    if (rawNonNull < MIN_NON_NULL_PER_ROW) continue;
+
     const ivPct = row.ivs.map((v) => (v != null ? v * 100 : null));
-    const filled = ivPct.filter((v) => v != null).length;
-    if (filled < MIN_NON_NULL_PER_ROW) continue;
 
     const label = formatExpiry(row.expiry);
     y.push(y.length);
     yLabels.push(label);
     z.push(ivPct);
     text.push(x.map(() => `${label} (${row.dte}d)`));
+  }
+
+  if (z.length === 0) return null;
+  return { x, y, z, yLabels, text };
+}
+
+function buildCmmGrid(data: IvSurfaceResponse): SurfaceGrid | null {
+  const x = data.surfaceFineDeltasDense ?? data.surfaceFineDeltas;
+  if (!x || x.length === 0) return null;
+  const rows = data.surfaceFineCmm ?? [];
+  if (rows.length === 0) return null;
+
+  const sorted = rows.slice().sort((a, b) => a.tenorDays - b.tenorDays);
+
+  const y: number[] = [];
+  const yLabels: string[] = [];
+  const z: (number | null)[][] = [];
+  const text: string[][] = [];
+
+  for (const row of sorted) {
+    const ivPct = row.ivs.map((v) => (v != null ? v * 100 : null));
+    const label = `${row.tenorDays}d`;
+    y.push(y.length);
+    yLabels.push(label);
+    z.push(ivPct);
+    text.push(x.map(() => `${label} CMM`));
   }
 
   if (z.length === 0) return null;
@@ -93,6 +137,7 @@ interface Props {
 export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
   const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
   const [selectedVenue, setSelectedVenue] = useState('average');
+  const [tenorMode, setTenorMode] = useState<TenorMode>('listed');
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
@@ -100,7 +145,96 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
   const venues = selectedVenue === 'average' ? VENUE_IDS : [selectedVenue];
   const { data, isLoading } = useSurface(localUnderlying, venues);
 
-  const grid = useMemo(() => (data ? buildSurfaceGrid(data) : null), [data]);
+  const grid = useMemo(() => {
+    if (!data) return null;
+    return tenorMode === 'cmm' ? buildCmmGrid(data) : buildListedGrid(data);
+  }, [data, tenorMode]);
+
+  const plotData = useMemo<Partial<Plotly.PlotData>[] | null>(() => {
+    if (!grid) return null;
+    return [
+      {
+        type: 'surface' as const,
+        x: grid.x,
+        y: grid.y,
+        z: grid.z,
+        // Plotly's typings declare text as string | string[]; the runtime accepts
+        // the 2-D form for surface traces and that's required for hover labels
+        // to map to the right (delta, expiry) cell.
+        text: grid.text as unknown as string[],
+        colorscale: [
+          [0, '#1e40af'],
+          [0.35, '#60a5fa'],
+          [0.5, '#f5f5f5'],
+          [0.7, '#fb923c'],
+          [1, '#ea580c'],
+        ],
+        showscale: true,
+        colorbar: {
+          title: { text: 'IV %', font: { color: '#888', size: 11 } },
+          tickfont: { color: '#888', size: 10, family: "'IBM Plex Mono', monospace" },
+          bgcolor: 'rgba(0,0,0,0)',
+          thickness: 12,
+          len: 0.6,
+        },
+        hovertemplate:
+          'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
+        contours: {
+          z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
+        } as Plotly.PlotData['contours'],
+      },
+    ];
+  }, [grid]);
+
+  const layout = useMemo<Partial<Plotly.Layout> | null>(() => {
+    if (!grid) return null;
+
+    const tickLabels = grid.x.map(deltaTickLabel);
+
+    // Aim for ~10 X labels and ~8 Y labels regardless of grid density. Plotly
+    // shows every value otherwise, which collides into an unreadable smear at
+    // 91 deltas / 240 CMM tenors.
+    const xStride = Math.max(1, Math.floor(grid.x.length / 10));
+    const yStride = Math.max(1, Math.floor(grid.y.length / 8));
+    const xTickVals = grid.x.filter((_, i) => i % xStride === 0);
+    const xTickText = tickLabels.filter((_, i) => i % xStride === 0);
+    const yTickVals = grid.y.filter((_, i) => i % yStride === 0);
+    const yTickText = grid.yLabels.filter((_, i) => i % yStride === 0);
+
+    return {
+      autosize: true,
+      paper_bgcolor: '#0A0A0A',
+      plot_bgcolor: '#0A0A0A',
+      font: { family: "'IBM Plex Mono', monospace", size: 11, color: '#555B5E' },
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      scene: {
+        ...SCENE_DEFAULTS,
+        // Plotly resets scene.camera on every react() call unless uirevision
+        // stays stable. Keying on the user-facing selectors preserves rotation
+        // across the 15s surface refetch and only resets on explicit switch.
+        uirevision: `${localUnderlying}-${selectedVenue}-${tenorMode}`,
+        xaxis: {
+          ...SCENE_DEFAULTS.xaxis,
+          title: '' as never,
+          tickvals: xTickVals,
+          ticktext: xTickText,
+        },
+        yaxis: {
+          ...SCENE_DEFAULTS.yaxis,
+          title: '' as never,
+          tickvals: yTickVals,
+          ticktext: yTickText,
+        },
+        zaxis: {
+          ...SCENE_DEFAULTS.zaxis,
+          title: '' as never,
+          ticksuffix: '%',
+        },
+        camera: { eye: { x: 1.5, y: -1.5, z: 0.7 } },
+        aspectratio: { x: 1.4, y: 1.2, z: 0.8 },
+      },
+    };
+  }, [grid, localUnderlying, selectedVenue, tenorMode]);
 
   if (isLoading || !data) {
     return (
@@ -110,7 +244,7 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     );
   }
 
-  if (!grid) {
+  if (!grid || !plotData || !layout) {
     return <div className={styles.empty}>No surface data</div>;
   }
 
@@ -121,70 +255,10 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     ...VENUE_LIST.map((v) => ({ value: v.id, label: v.label })),
   ];
 
-  const tickLabels = grid.x.map(deltaTickLabel);
-
-  const plotData: Partial<Plotly.PlotData>[] = [
-    {
-      type: 'surface' as const,
-      x: grid.x,
-      y: grid.y,
-      z: grid.z,
-      // Plotly's typings declare text as string | string[]; the runtime accepts
-      // the 2-D form for surface traces and that's required for hover labels
-      // to map to the right (delta, expiry) cell.
-      text: grid.text as unknown as string[],
-      colorscale: [
-        [0, '#1e40af'],
-        [0.35, '#60a5fa'],
-        [0.5, '#f5f5f5'],
-        [0.7, '#fb923c'],
-        [1, '#ea580c'],
-      ],
-      showscale: true,
-      colorbar: {
-        title: { text: 'IV %', font: { color: '#888', size: 11 } },
-        tickfont: { color: '#888', size: 10, family: "'IBM Plex Mono', monospace" },
-        bgcolor: 'rgba(0,0,0,0)',
-        thickness: 12,
-        len: 0.6,
-      },
-      hovertemplate:
-        'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
-      contours: {
-        z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
-      } as Plotly.PlotData['contours'],
-    },
+  const tenorOptions: { value: TenorMode; label: string }[] = [
+    { value: 'listed', label: 'Listed' },
+    { value: 'cmm', label: 'Constant Maturity' },
   ];
-
-  const layout: Partial<Plotly.Layout> = {
-    autosize: true,
-    paper_bgcolor: '#0A0A0A',
-    plot_bgcolor: '#0A0A0A',
-    font: { family: "'IBM Plex Mono', monospace", size: 11, color: '#555B5E' },
-    margin: { l: 0, r: 0, t: 0, b: 0 },
-    scene: {
-      ...SCENE_DEFAULTS,
-      xaxis: {
-        ...SCENE_DEFAULTS.xaxis,
-        title: '' as never,
-        tickvals: grid.x.filter((_, i) => i % 2 === 0),
-        ticktext: tickLabels.filter((_, i) => i % 2 === 0),
-      },
-      yaxis: {
-        ...SCENE_DEFAULTS.yaxis,
-        title: '' as never,
-        tickvals: grid.y,
-        ticktext: grid.yLabels,
-      },
-      zaxis: {
-        ...SCENE_DEFAULTS.zaxis,
-        title: '' as never,
-        ticksuffix: '%',
-      },
-      camera: { eye: { x: 1.5, y: -1.5, z: 0.7 } },
-      aspectratio: { x: 1.4, y: 1.2, z: 0.8 },
-    },
-  };
 
   return (
     <div className={styles.wrap}>
@@ -205,6 +279,12 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
           value={selectedVenue}
           onChange={setSelectedVenue}
           options={venueOptions}
+        />
+        <DropdownPicker
+          size="sm"
+          value={tenorMode}
+          onChange={(v) => setTenorMode(v as TenorMode)}
+          options={tenorOptions}
         />
       </div>
       <div className={styles.chartArea}>

@@ -8,6 +8,7 @@ import { createElement, type ReactNode } from 'react';
 
 import { chainKeys } from '@features/chain/queries';
 import type { ServerWsMessage } from '@oggregator/protocol';
+import type { EnrichedStrike, VenueQuote } from '@shared/enriched';
 
 // ── Mock WebSocket — must be set up before hook import ────────
 
@@ -127,7 +128,6 @@ function deltaMsg(subId: string, seq: number): ServerWsMessage {
     seq,
     request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
     meta: { generatedAt: Date.now(), maxQuoteTs: Date.now() - 25, staleMs: 25 },
-    deltas: [{ venue: 'deribit', symbol: 'BTC/USD:USDC-260327-70000-C', ts: Date.now() }],
     patch: {
       stats: {
         forwardPriceUsd: 70500,
@@ -159,6 +159,46 @@ function statusMsg(subId: string, state: 'connected' | 'reconnecting' | 'down'):
     venue: 'deribit',
     state,
     ts: Date.now(),
+  };
+}
+
+function venueQuote(overrides: Partial<VenueQuote>): VenueQuote {
+  return {
+    bid: null,
+    ask: null,
+    mid: null,
+    midRaw: null,
+    bidSize: null,
+    askSize: null,
+    markIv: null,
+    bidIv: null,
+    askIv: null,
+    delta: null,
+    gamma: null,
+    theta: null,
+    vega: null,
+    spreadPct: null,
+    totalCost: null,
+    estimatedFees: null,
+    openInterest: null,
+    volume24h: null,
+    openInterestUsd: null,
+    volume24hUsd: null,
+    ...overrides,
+  };
+}
+
+function strikeWithDeribitQuote(asOfMs: number): EnrichedStrike {
+  return {
+    strike: 70000,
+    call: {
+      venues: {
+        deribit: venueQuote({ bid: 100, ask: 110, asOfMs }),
+      },
+      bestIv: 0.51,
+      bestVenue: 'deribit',
+    },
+    put: { venues: {}, bestIv: null, bestVenue: null },
   };
 }
 
@@ -201,6 +241,39 @@ describe('useChainWs', () => {
     expect(result.current.connectionState).not.toBe('closed');
   });
 
+  it('does not resend subscribe for equivalent request params', async () => {
+    const { rerender } = renderHook(
+      ({ venues }) =>
+        useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues }),
+      { wrapper, initialProps: { venues: ['deribit'] } },
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+    expect(ws.sent).toHaveLength(1);
+
+    rerender({ venues: ['deribit'] });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(ws.sent).toHaveLength(1);
+  });
+
+  it('resends subscribe when effective request params change', async () => {
+    const { rerender } = renderHook(
+      ({ venues }) =>
+        useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues }),
+      { wrapper, initialProps: { venues: ['deribit'] } },
+    );
+
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+
+    rerender({ venues: ['deribit', 'okx'] });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(ws.sent).toHaveLength(2);
+  });
+
   it('sets connectionState to live on subscribed message', async () => {
     const { hookResult, ws, subId } = await renderAndConnect();
     await act(() => {
@@ -220,6 +293,22 @@ describe('useChainWs', () => {
     expect(cached).toBeDefined();
     expect((cached as Record<string, unknown>)['underlying']).toBe('BTC');
     expect(hookResult.result.current.lastSeq).toBe(1);
+  });
+
+  it('writes snapshots under the requested venue key when the server filters venues', async () => {
+    const { ws, subId } = await renderAndConnect({
+      underlying: 'BTC',
+      expiry: '2026-03-27',
+      venues: ['deribit', 'gateio'],
+    });
+
+    await act(() => {
+      ws.pushMessage(snapshot(subId, 1));
+    });
+
+    const requestedKey = chainKeys.chain('BTC', '2026-03-27', ['deribit', 'gateio']);
+    const cached = queryClient.getQueryData(requestedKey);
+    expect(cached).toBeDefined();
   });
 
   it('ignores snapshot with stale subscriptionId', async () => {
@@ -269,6 +358,32 @@ describe('useChainWs', () => {
     expect(cached).toBeDefined();
     expect((cached?.['gex'] as Array<Record<string, unknown>>)[0]?.['gexUsdMillions']).toBe(12);
     expect(hookResult.result.current.lastSeq).toBe(2);
+  });
+
+  it('updates cached strikes when only quote freshness changes', async () => {
+    const { ws, subId } = await renderAndConnect();
+
+    const first = snapshot(subId, 1);
+    if (first.type !== 'snapshot') throw new Error('expected snapshot message');
+    first.data.strikes = [strikeWithDeribitQuote(1_000)];
+
+    await act(() => {
+      ws.pushMessage(first);
+    });
+
+    const next = deltaMsg(subId, 2);
+    if (next.type !== 'delta') throw new Error('expected delta message');
+    next.patch.strikes = [strikeWithDeribitQuote(2_000)];
+
+    await act(() => {
+      ws.pushMessage(next);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(30));
+
+    const key = chainKeys.chain('BTC', '2026-03-27', ['deribit']);
+    const cached = queryClient.getQueryData<{ strikes: EnrichedStrike[] }>(key);
+
+    expect(cached?.strikes[0]?.call.venues.deribit?.asOfMs).toBe(2_000);
   });
 
   it('captures failedVenues from subscribed message', async () => {

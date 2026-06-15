@@ -1,0 +1,108 @@
+import { describe, expect, it, vi } from 'vitest';
+import { TopicWsClient } from './topic-ws-client.js';
+
+type TopicWsClientInternals = {
+  reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  scheduleReconnect: () => void;
+  connect: () => Promise<void>;
+  ws: {
+    close: () => void;
+    removeAllListeners: () => void;
+  } | null;
+};
+
+describe('TopicWsClient', () => {
+  it('keeps retrying after the max reconnect attempt budget is exceeded', () => {
+    vi.useFakeTimers();
+
+    const client = new TopicWsClient('ws://localhost:1234', 'test', {
+      maxReconnectAttempts: 1,
+    });
+    const internals = client as unknown as TopicWsClientInternals;
+    const connect = vi.fn(async () => {});
+
+    internals.connect = connect;
+    internals.reconnectAttempts = 1;
+    internals.scheduleReconnect();
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('does not queue duplicate reconnect timers for the same outage', () => {
+    vi.useFakeTimers();
+
+    const client = new TopicWsClient('ws://localhost:1234', 'test', {
+      maxReconnectAttempts: 0,
+    });
+    const internals = client as unknown as TopicWsClientInternals;
+    const connect = vi.fn(async () => {});
+
+    internals.connect = connect;
+    internals.scheduleReconnect();
+    internals.scheduleReconnect();
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('schedules another reconnect when a reconnect attempt rejects before opening', async () => {
+    vi.useFakeTimers();
+
+    const client = new TopicWsClient('ws://localhost:1234', 'test', {
+      reconnectDelayMs: 1_000,
+    });
+    const internals = client as unknown as TopicWsClientInternals;
+    const connect = vi.fn(async () => {
+      throw new Error('connect failed');
+    });
+
+    internals.connect = connect;
+    internals.scheduleReconnect();
+
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(internals.reconnectTimer).not.toBeNull();
+
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('detaches socket listeners before closing on disconnect', async () => {
+    const client = new TopicWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as TopicWsClientInternals;
+    const socket = {
+      close: vi.fn(),
+      removeAllListeners: vi.fn(),
+    };
+
+    internals.ws = socket;
+    await client.disconnect();
+
+    expect(socket.removeAllListeners).toHaveBeenCalledOnce();
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(internals.ws).toBeNull();
+  });
+
+  it('resolves a fresh URL on each connect when constructed with a factory', () => {
+    let counter = 0;
+    const client = new TopicWsClient(() => `wss://signed/?ts=${counter++}`, 'test');
+    const internals = client as unknown as { resolveUrl: () => string };
+
+    expect(internals.resolveUrl()).toBe('wss://signed/?ts=0');
+    expect(internals.resolveUrl()).toBe('wss://signed/?ts=1');
+  });
+
+  it('returns the same static URL on each connect when constructed with a string', () => {
+    const client = new TopicWsClient('ws://localhost:1234', 'test');
+    const internals = client as unknown as { resolveUrl: () => string };
+
+    expect(internals.resolveUrl()).toBe('ws://localhost:1234');
+    expect(internals.resolveUrl()).toBe('ws://localhost:1234');
+  });
+});

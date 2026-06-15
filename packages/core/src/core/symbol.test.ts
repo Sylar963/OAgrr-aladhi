@@ -210,6 +210,39 @@ describe('parseOptionSymbol', () => {
   });
 });
 
+describe('parseOptionSymbol memoization', () => {
+  it('returns the identical cached object for repeated parses of the same symbol', () => {
+    // Arrange
+    const symbol = 'BTC/USD:BTC-250628-60000-C';
+
+    // Act
+    const first = parseOptionSymbol(symbol);
+    const second = parseOptionSymbol(symbol);
+
+    // Assert — second call is served from cache, same reference
+    expect(first).not.toBeNull();
+    expect(second).toBe(first);
+  });
+
+  it('caches the null result for symbols that do not match', () => {
+    // Arrange — invalid symbol parses to null both times
+    const symbol = 'BTC-USD-260321-70000-C';
+
+    // Act + Assert
+    expect(parseOptionSymbol(symbol)).toBeNull();
+    expect(parseOptionSymbol(symbol)).toBeNull();
+  });
+
+  it('freezes the returned object so the shared cache entry cannot be mutated', () => {
+    // Act
+    const result = parseOptionSymbol('ETH/USD:ETH-260328-2500-P');
+
+    // Assert
+    expect(result).not.toBeNull();
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // formatOptionSymbol
 // ---------------------------------------------------------------------------

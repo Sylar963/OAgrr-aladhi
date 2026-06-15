@@ -5,10 +5,12 @@ import {
   ColorType,
   LineStyle,
   createChart,
+  type CandlestickData,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
   type Time,
+  type WhitespaceData,
 } from 'lightweight-charts';
 
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -85,6 +87,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  // null = auto (nearest expiry with an EM); 'off' = hidden; else a chosen expiry.
+  const [coneExpiry, setConeExpiry] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -107,6 +111,32 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     () => new Map(sortedExpiries.map((exp, i) => [exp, EXPIRY_COLORS[i % EXPIRY_COLORS.length]!])),
     [sortedExpiries],
   );
+
+  // Candle bars plus future whitespace. lightweight-charts' timeToCoordinate
+  // only resolves a time that exactly matches a series data point, so the EM
+  // cone — which pinches at "now" and opens to a future expiry — needs (a)
+  // whitespace bars filling the visible future and (b) its times snapped onto
+  // that grid. `lastBarSec` is the cone's pinch anchor; `lastFutureSec` clamps
+  // the open end. Without this the cone's time lookups return null and nothing
+  // draws.
+  const seriesData = useMemo(() => {
+    const res = tfSpec.resolution;
+    const empty = { data: [] as (CandlestickData<Time> | WhitespaceData<Time>)[], lastBarSec: null as number | null, lastFutureSec: null as number | null, res };
+    if (!candleData || candleData.candles.length === 0) return empty;
+    const candles: CandlestickData<Time>[] = candleData.candles.map((c) => ({
+      time: Math.floor(c.timestamp / 1000) as Time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+    const lastBarSec = candles[candles.length - 1]!.time as number;
+    const endSec = Math.floor(Date.now() / 1000) + tfSpec.windowSec;
+    const whitespace: WhitespaceData<Time>[] = [];
+    for (let t = lastBarSec + res; t <= endSec; t += res) whitespace.push({ time: t as Time });
+    const lastFutureSec = whitespace.length > 0 ? (whitespace[whitespace.length - 1]!.time as number) : lastBarSec;
+    return { data: [...candles, ...whitespace], lastBarSec, lastFutureSec, res };
+  }, [candleData, tfSpec]);
 
   const emByExpiry = useMemo(() => {
     const map = new Map<string, ExpectedMove>();
@@ -141,23 +171,35 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [allRows, significantStrikes],
   );
 
+  // One cone at a time. Default to the nearest expiry that has an EM; the Cone
+  // dropdown overrides it ('off' hides it). Deliberately independent of the
+  // legend's per-expiry band hide/show so bands and cone don't fight.
+  const defaultConeExpiry = useMemo(
+    () => sortedExpiries.find((e) => emByExpiry.has(e)) ?? '',
+    [sortedExpiries, emByExpiry],
+  );
+  const effectiveConeExpiry = coneExpiry ?? defaultConeExpiry;
+
   const coneEntries = useMemo<EmConeEntry[]>(() => {
-    const entries: EmConeEntry[] = [];
-    for (const chain of chains) {
-      if (hiddenExpiries.has(chain.expiry)) continue;
-      if (chain.expiryTs == null) continue;
-      const em = emByExpiry.get(chain.expiry);
-      if (!em) continue;
-      entries.push({
-        expiry: chain.expiry,
-        expiryTimeSec: Math.floor(chain.expiryTs / 1000),
-        emValue: em.value,
-        color: expiryColorMap.get(chain.expiry) ?? '#888',
-        source: em.source,
-      });
-    }
-    return entries;
-  }, [chains, hiddenExpiries, emByExpiry, expiryColorMap]);
+    const { lastBarSec, lastFutureSec, res } = seriesData;
+    if (lastBarSec == null || lastFutureSec == null) return [];
+    if (effectiveConeExpiry === '' || effectiveConeExpiry === 'off') return [];
+    const chain = chains.find((c) => c.expiry === effectiveConeExpiry);
+    if (!chain || chain.expiryTs == null) return [];
+    const em = emByExpiry.get(chain.expiry);
+    if (!em) return [];
+    // Snap onto the whitespace grid (≥1 bar to the right of the anchor) and
+    // clamp into the visible future so timeToCoordinate resolves it.
+    const steps = Math.max(1, Math.round((chain.expiryTs / 1000 - lastBarSec) / res));
+    const expiryTimeSec = Math.min(lastBarSec + steps * res, lastFutureSec);
+    return [{
+      expiry: chain.expiry,
+      expiryTimeSec,
+      emValue: em.value,
+      color: expiryColorMap.get(chain.expiry) ?? '#888',
+      source: em.source,
+    }];
+  }, [chains, emByExpiry, expiryColorMap, seriesData, effectiveConeExpiry]);
 
   // Tooltip needs venue/expiry breakdown (re-uses V1 aggregation).
   const fullStrikeData = useMemo(
@@ -254,20 +296,16 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   // chart shows [now − window, now + window] symmetrically for the new TF.
   useEffect(() => { didFitRef.current = false; }, [currency, timeframe]);
 
+  // Re-default the cone when the underlying changes (its expiry set differs).
+  useEffect(() => { setConeExpiry(null); }, [currency]);
+
   // ── Push candle data + set symmetric visible range for the TF ─────
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartRef.current;
-    if (!series || !chart || !candleData) return;
-    const data = candleData.candles.map((c) => ({
-      time: Math.floor(c.timestamp / 1000) as Time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
-    series.setData(data);
-    if (data.length === 0) return;
+    if (!series || !chart) return;
+    series.setData(seriesData.data);
+    if (seriesData.lastBarSec == null) return;
 
     if (!didFitRef.current) {
       const nowSec = Math.floor(Date.now() / 1000);
@@ -277,7 +315,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       });
       didFitRef.current = true;
     }
-  }, [candleData, tfSpec]);
+  }, [seriesData, tfSpec]);
 
   // ── Push heat rows + cones to the primitives ────────────────────
   useEffect(() => {
@@ -285,9 +323,9 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   }, [heatRows]);
 
   useEffect(() => {
-    if (spotPrice == null) return;
-    conePrimitiveRef.current?.update(spotPrice, coneEntries);
-  }, [spotPrice, coneEntries]);
+    if (spotPrice == null || seriesData.lastBarSec == null) return;
+    conePrimitiveRef.current?.update(spotPrice, seriesData.lastBarSec, coneEntries);
+  }, [spotPrice, coneEntries, seriesData]);
 
   // ── Diff strike axis labels (avoid flicker) ─────────────────────
   useEffect(() => {
@@ -441,6 +479,30 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
             </button>
           ))}
         </div>
+
+        <label className={styles.coneSelect}>
+          <span
+            className={styles.coneSwatch}
+            style={{
+              background:
+                effectiveConeExpiry && effectiveConeExpiry !== 'off'
+                  ? expiryColorMap.get(effectiveConeExpiry) ?? '#888'
+                  : 'transparent',
+            }}
+          />
+          Cone
+          <select
+            value={effectiveConeExpiry === '' ? 'off' : effectiveConeExpiry}
+            onChange={(e) => setConeExpiry(e.target.value)}
+          >
+            <option value="off">Off</option>
+            {sortedExpiries.map((e) => (
+              <option key={e} value={e}>
+                {formatExpiry(e)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className={styles.curveLegend}>

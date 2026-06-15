@@ -7,6 +7,15 @@ export interface DeribitState {
   indexToInstruments: Map<string, Set<string>>;
 }
 
+export interface DeribitSubscribedTickerStaleness {
+  subscribedTickers: number;
+  staleSubscribedTickers: number;
+  missingQuotes: number;
+  oldestStaleAgeMs: number | null;
+  newestStaleAgeMs: number | null;
+  staleExamples: string[];
+}
+
 export function createDeribitState(): DeribitState {
   return {
     liveIndexPrices: new Map(),
@@ -187,4 +196,94 @@ export function buildDeribitTickerQuote(
     },
     timestamp: ticker.timestamp ?? Date.now(),
   };
+}
+
+export function summarizeDeribitSubscribedTickerStaleness(
+  subscribedTickers: ReadonlySet<string>,
+  quoteStore: ReadonlyMap<string, LiveQuote>,
+  now: number,
+  staleAfterMs: number,
+  sampleSize: number,
+): DeribitSubscribedTickerStaleness | null {
+  if (subscribedTickers.size === 0) return null;
+
+  let staleSubscribedTickers = 0;
+  let missingQuotes = 0;
+  let oldestStaleAgeMs: number | null = null;
+  let newestStaleAgeMs: number | null = null;
+  const staleExamples: string[] = [];
+
+  for (const exchangeSymbol of subscribedTickers) {
+    const timestamp = quoteStore.get(exchangeSymbol)?.timestamp ?? 0;
+    if (timestamp <= 0) {
+      staleSubscribedTickers += 1;
+      missingQuotes += 1;
+      if (staleExamples.length < sampleSize) {
+        staleExamples.push(exchangeSymbol);
+      }
+      continue;
+    }
+
+    const staleAgeMs = now - timestamp;
+    if (staleAgeMs <= staleAfterMs) continue;
+
+    staleSubscribedTickers += 1;
+    if (oldestStaleAgeMs == null || staleAgeMs > oldestStaleAgeMs) {
+      oldestStaleAgeMs = staleAgeMs;
+    }
+    if (newestStaleAgeMs == null || staleAgeMs < newestStaleAgeMs) {
+      newestStaleAgeMs = staleAgeMs;
+    }
+    if (staleExamples.length < sampleSize) {
+      staleExamples.push(exchangeSymbol);
+    }
+  }
+
+  return {
+    subscribedTickers: subscribedTickers.size,
+    staleSubscribedTickers,
+    missingQuotes,
+    oldestStaleAgeMs,
+    newestStaleAgeMs,
+    staleExamples,
+  };
+}
+
+const STALE_RECONNECT_BASE_COOLDOWN_MS = 60_000;
+const STALE_RECONNECT_MAX_COOLDOWN_MS = 5 * 60_000;
+
+/**
+ * Backoff between watchdog-forced reconnects once Deribit's whole subscription
+ * stream looks dead. The first forced reconnect is immediate — a one-off dead
+ * socket is worth a cheap kick — but each subsequent still-dead feed doubles the
+ * wait up to a ceiling. A venue-side outage cannot be fixed by reconnecting, and
+ * each forced reconnect re-subscribes the full channel set; without this cap the
+ * resulting snapshot bursts pile up and block the event loop.
+ */
+export function deribitStaleReconnectCooldownMs(forcedReconnectStreak: number): number {
+  if (forcedReconnectStreak <= 0) return 0;
+  const grown = STALE_RECONNECT_BASE_COOLDOWN_MS * 2 ** (forcedReconnectStreak - 1);
+  return Math.min(grown, STALE_RECONNECT_MAX_COOLDOWN_MS);
+}
+
+/**
+ * Decide whether the staleness watchdog should force a reconnect now. True only
+ * once the stale window clears the grace period AND we are past the backoff
+ * window from the previous forced reconnect (distinguishing a recoverable dead
+ * socket from a persistent venue-side dead feed).
+ */
+export function shouldForceDeribitStaleReconnect(input: {
+  staleWindowMs: number;
+  graceMs: number;
+  msSinceLastForcedReconnect: number | null;
+  forcedReconnectStreak: number;
+}): boolean {
+  if (input.staleWindowMs < input.graceMs) return false;
+  if (
+    input.msSinceLastForcedReconnect != null &&
+    input.msSinceLastForcedReconnect < deribitStaleReconnectCooldownMs(input.forcedReconnectStreak)
+  ) {
+    return false;
+  }
+  return true;
 }

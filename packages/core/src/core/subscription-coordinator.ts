@@ -1,5 +1,6 @@
 import type { OptionVenueAdapter, StreamHandlers } from '../feeds/shared/types.js';
 import { getAdapter } from './registry.js';
+import { parseOptionSymbol } from './symbol.js';
 import type { ChainRequest, VenueDelta, VenueStatus } from './types.js';
 import type { VenueId } from '../types/common.js';
 
@@ -28,32 +29,22 @@ interface SubscriptionCoordinatorOptions {
   getAdapter?: (venue: VenueId) => OptionVenueAdapter;
 }
 
+function isRequestScopedStatus(status: VenueStatus): boolean {
+  return status.message === 'no instruments for request';
+}
+
 function requestKey(request: ChainRequest): string {
   return `${request.underlying}:${request.expiry}`;
 }
 
-/** Extracts "BASE:YYYY-MM-DD" from canonical symbol format "BASE/QUOTE:CONTRACT-YYMMDD-..." */
-function symbolRequestKey(symbol: string): string | null {
-  const slashIndex = symbol.indexOf('/');
-  const colonIndex = symbol.indexOf(':');
-  if (slashIndex <= 0 || colonIndex <= slashIndex + 1) return null;
-
-  const base = symbol.slice(0, slashIndex);
-  const contract = symbol.slice(colonIndex + 1);
-  const firstDash = contract.indexOf('-');
-  const EXPIRY_CODE_LENGTH = 6; // YYMMDD
-  if (firstDash <= 0 || contract.length < firstDash + 1 + EXPIRY_CODE_LENGTH) return null;
-
-  const expiryCode = contract.slice(firstDash + 1, firstDash + 1 + EXPIRY_CODE_LENGTH);
-  for (const char of expiryCode) {
-    if (char < '0' || char > '9') return null;
-  }
-
-  // YYMMDD → 20YY-MM-DD
-  const yy = expiryCode.slice(0, 2);
-  const mm = expiryCode.slice(2, 4);
-  const dd = expiryCode.slice(4, 6);
-  return `${base}:20${yy}-${mm}-${dd}`;
+function symbolUnderlying(symbol: string): { underlying: string; base: string; expiry: string } | null {
+  const parsed = parseOptionSymbol(symbol);
+  if (parsed == null) return null;
+  return {
+    underlying: parsed.settle === parsed.base ? parsed.base : `${parsed.base}_${parsed.settle}`,
+    base: parsed.base,
+    expiry: parsed.expiry,
+  };
 }
 
 export class VenueSubscriptionCoordinator {
@@ -81,18 +72,38 @@ export class VenueSubscriptionCoordinator {
         return;
       }
 
-      const adapter = this.resolveAdapter(venue);
-      const upstreamRelease =
-        adapter.subscribe != null
-          ? await adapter.subscribe(request, entry.handlers)
-          : async () => {};
-
-      entry.requestEntries.set(key, {
+      const nextRequestEntry: CoordinatedRequestEntry = {
         request,
         refCount: 1,
         listeners: listener != null ? new Set([listener]) : new Set(),
-        upstreamRelease,
-      });
+        upstreamRelease: async () => {},
+      };
+      entry.requestEntries.set(key, nextRequestEntry);
+
+      const adapter = this.resolveAdapter(venue);
+      try {
+        nextRequestEntry.upstreamRelease =
+          adapter.subscribe != null
+            ? await adapter.subscribe(request, {
+                onDelta: entry.handlers.onDelta,
+                onStatus: (status: VenueStatus) => {
+                  if (isRequestScopedStatus(status)) {
+                    for (const currentListener of nextRequestEntry.listeners) {
+                      try {
+                        currentListener.onStatus?.(status);
+                      } catch {}
+                    }
+                    return;
+                  }
+
+                  entry.handlers.onStatus(status);
+                },
+              })
+            : async () => {};
+      } catch (error: unknown) {
+        entry.requestEntries.delete(key);
+        throw error;
+      }
     });
 
     let released = false;
@@ -163,21 +174,36 @@ export class VenueSubscriptionCoordinator {
           const currentEntry = this.venueEntries.get(venue);
           if (currentEntry == null) return;
 
-          const grouped = new Map<string, VenueDelta[]>();
-          for (const delta of deltas) {
-            const key = symbolRequestKey(delta.symbol);
-            if (key == null) continue;
-            const group = grouped.get(key);
+          // requestEntries is keyed by `${underlying}:${expiry}`, so routing is two
+          // O(1) lookups per delta instead of scanning every request: the exact
+          // underlying, plus a base-family fallback for alias symbols (e.g. BTC_USDC
+          // delta → "BTC" request) that only applies when no specific alias request
+          // has claimed that underlying.
+          const requestEntries = currentEntry.requestEntries;
+          const grouped = new Map<CoordinatedRequestEntry, VenueDelta[]>();
+          const route = (requestEntry: CoordinatedRequestEntry, delta: VenueDelta): void => {
+            const group = grouped.get(requestEntry);
             if (group != null) {
               group.push(delta);
             } else {
-              grouped.set(key, [delta]);
+              grouped.set(requestEntry, [delta]);
+            }
+          };
+
+          for (const delta of deltas) {
+            const parsed = symbolUnderlying(delta.symbol);
+            if (parsed == null) continue;
+
+            const exactEntry = requestEntries.get(`${parsed.underlying}:${parsed.expiry}`);
+            if (exactEntry != null) route(exactEntry, delta);
+
+            if (parsed.underlying !== parsed.base && exactEntry == null) {
+              const baseEntry = requestEntries.get(`${parsed.base}:${parsed.expiry}`);
+              if (baseEntry != null) route(baseEntry, delta);
             }
           }
 
-          for (const [key, matchedDeltas] of grouped) {
-            const requestEntry = currentEntry.requestEntries.get(key);
-            if (requestEntry == null) continue;
+          for (const [requestEntry, matchedDeltas] of grouped) {
             for (const currentListener of requestEntry.listeners) {
               try {
                 currentListener.onDelta?.(matchedDeltas);

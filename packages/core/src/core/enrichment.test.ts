@@ -7,10 +7,12 @@ import {
   computeIvSurfaceFine,
   computeSmile,
   computeTermStructure,
+  enrichComparisonRow,
   FINE_DELTA_GRID,
   type EnrichedStrike,
   type VenueQuote,
 } from './enrichment.js';
+import { EMPTY_GREEKS } from './types.js';
 import type { ComparisonRow, VenueOptionChain } from './types.js';
 
 function createVenueQuote(partial: Partial<VenueQuote> = {}): VenueQuote {
@@ -18,6 +20,7 @@ function createVenueQuote(partial: Partial<VenueQuote> = {}): VenueQuote {
     bid: null,
     ask: null,
     mid: null,
+    midRaw: null,
     bidSize: null,
     askSize: null,
     markIv: null,
@@ -808,5 +811,146 @@ describe('enrichment', () => {
     expect(smile.points[1]!.blendedIv).toBeCloseTo(0.7 * 0.62 + 0.3 * 0.68, 10);
     expect(smile.points[2]!.blendedIv).toBeCloseTo(0.5 * 0.6 + 0.5 * 0.66, 10);
     expect(smile.points[3]!.blendedIv).toBeCloseTo(0.3 * 0.59 + 0.7 * 0.65, 10);
+  });
+
+  it('exposes midRaw in raw currency for inverse contracts alongside USD mid', () => {
+    const row: ComparisonRow = {
+      strike: 70_000,
+      call: {
+        deribit: {
+          venue: 'deribit',
+          symbol: 'BTC-26MAY26-70000-C',
+          exchangeSymbol: 'BTC-26MAY26-70000-C',
+          base: 'BTC',
+          settle: 'BTC',
+          expiry: '2026-05-26',
+          expiryTs: null,
+          strike: 70_000,
+          right: 'call',
+          inverse: true,
+          contractSize: 1,
+          tickSize: null,
+          minQty: null,
+          makerFee: null,
+          takerFee: null,
+          greeks: EMPTY_GREEKS,
+          quote: {
+            bid: { raw: 0.04, rawCurrency: 'BTC', usd: 2800 },
+            ask: { raw: 0.06, rawCurrency: 'BTC', usd: 4200 },
+            mark: { raw: 0.05, rawCurrency: 'BTC', usd: 3500 },
+            last: null,
+            bidSize: 1,
+            askSize: 1,
+            underlyingPriceUsd: 70_000,
+            indexPriceUsd: 70_000,
+            volume24h: null,
+            openInterest: 10,
+            openInterestUsd: null,
+            volume24hUsd: null,
+            estimatedFees: null,
+            timestamp: 1,
+            source: 'ws',
+          },
+        },
+      },
+      put: {},
+    };
+    const q = enrichComparisonRow(row).call.venues.deribit!;
+    expect(q.mid).toBeCloseTo(3500, 6);
+    expect(q.midRaw).toBeCloseTo(0.05, 6);
+  });
+
+  it('falls midRaw back to mark.raw when bid/ask raw missing', () => {
+    const row: ComparisonRow = {
+      strike: 70_000,
+      call: {
+        deribit: {
+          venue: 'deribit',
+          symbol: 'BTC-26MAY26-70000-C',
+          exchangeSymbol: 'BTC-26MAY26-70000-C',
+          base: 'BTC',
+          settle: 'BTC',
+          expiry: '2026-05-26',
+          expiryTs: null,
+          strike: 70_000,
+          right: 'call',
+          inverse: true,
+          contractSize: 1,
+          tickSize: null,
+          minQty: null,
+          makerFee: null,
+          takerFee: null,
+          greeks: EMPTY_GREEKS,
+          quote: {
+            bid: { raw: null, rawCurrency: 'BTC', usd: null },
+            ask: { raw: null, rawCurrency: 'BTC', usd: null },
+            mark: { raw: 0.075, rawCurrency: 'BTC', usd: 5250 },
+            last: null,
+            bidSize: null,
+            askSize: null,
+            underlyingPriceUsd: 70_000,
+            indexPriceUsd: 70_000,
+            volume24h: null,
+            openInterest: null,
+            openInterestUsd: null,
+            volume24hUsd: null,
+            estimatedFees: null,
+            timestamp: 1,
+            source: 'ws',
+          },
+        },
+      },
+      put: {},
+    };
+    const q = enrichComparisonRow(row).call.venues.deribit!;
+    expect(q.mid).toBeCloseTo(5250, 6);
+    expect(q.midRaw).toBeCloseTo(0.075, 6);
+  });
+
+  it('midRaw equals USD mid for linear contracts', () => {
+    const row: ComparisonRow = {
+      strike: 60_000,
+      call: {
+        binance: {
+          venue: 'binance',
+          symbol: 'BTC-260328-60000-C',
+          exchangeSymbol: 'BTC-260328-60000-C',
+          base: 'BTC',
+          settle: 'USDT',
+          expiry: '2026-03-28',
+          expiryTs: null,
+          strike: 60_000,
+          right: 'call',
+          inverse: false,
+          contractSize: 1,
+          tickSize: 0.1,
+          minQty: 0.1,
+          makerFee: 0.0002,
+          takerFee: 0.0005,
+          greeks: EMPTY_GREEKS,
+          quote: {
+            bid: { raw: 100, rawCurrency: 'USDT', usd: 100 },
+            ask: { raw: 110, rawCurrency: 'USDT', usd: 110 },
+            mark: { raw: 105, rawCurrency: 'USDT', usd: 105 },
+            last: null,
+            bidSize: 1,
+            askSize: 1,
+            underlyingPriceUsd: 66_000,
+            indexPriceUsd: 65_500,
+            volume24h: 10,
+            openInterest: 20,
+            openInterestUsd: 1_310_000,
+            volume24hUsd: 655_000,
+            estimatedFees: null,
+            timestamp: 1,
+            source: 'ws',
+          },
+        },
+      },
+      put: {},
+    };
+    const q = enrichComparisonRow(row).call.venues.binance!;
+    expect(q.mid).toBe(105);
+    expect(q.midRaw).toBe(105);
   });
 });

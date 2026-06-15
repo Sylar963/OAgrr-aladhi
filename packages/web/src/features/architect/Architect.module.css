@@ -641,7 +641,7 @@
 
 .dragHint {
   position: absolute;
-  bottom: 6px;
+  top: 6px;
   right: 10px;
   font-family: var(--font-mono);
   font-size: 9px;
@@ -685,6 +685,15 @@
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.routeUnroutable {
+  font-size: 11px;
+  color: var(--color-loss);
+  padding: var(--space-1) var(--space-2);
+  background: color-mix(in srgb, var(--color-loss) 8%, transparent);
+  border-radius: var(--radius-sm);
+  margin-top: 6px;
 }
 
 .backdrop {
@@ -815,6 +824,8 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  /* allow breakeven card to wrap when listing up to 4 values */
+  min-width: 0;
 }
 
 .metricCardLabel {
@@ -831,6 +842,7 @@
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .metricCardVal[data-positive="true"] {
@@ -1076,9 +1088,15 @@
 /* ── Mobile ──────────────────────────────────────────── */
 
 @media (max-width: 768px) {
+  .view {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .mainArea {
     padding: var(--space-3);
     gap: var(--space-2);
+    overflow: visible;
+    flex: 0 0 auto;
   }
 
   .title {
@@ -1090,12 +1108,26 @@
 
   .splitBody {
     grid-template-columns: 1fr;
+    overflow: visible;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+  .controlsCol,
+  .rightCol {
+    overflow: visible;
+    min-height: 0;
+  }
+  .chartCol {
+    height: auto;
+    min-height: 0;
   }
   .rightCol {
     order: -1;
   }
   .chartPanel {
-    min-height: 300px;
+    flex: 0 0 auto;
+    height: 320px;
+    min-height: 320px;
   }
 
   .templateCard {
@@ -1129,6 +1161,21 @@
   flex-shrink: 0;
 }
 
+.chartTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chartTitleMeta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .variantToggle {
   display: flex;
   gap: 1px;
@@ -1158,16 +1205,24 @@
   color: var(--text-secondary);
 }
 
+/* Active variant pills share one treatment (the V2 look); only the hue
+   changes: V1 white, V2 red, V3 blue (--color-info, the app's blue). */
 .variantBtn[data-active="true"][data-variant="v1"] {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #FFFFFF 0%, #C7CCD6 100%);
+  color: #14161C;
+  box-shadow: 0 1px 6px rgba(255, 255, 255, 0.25);
 }
 
 .variantBtn[data-active="true"][data-variant="v2"] {
   background: linear-gradient(135deg, #CB3855 0%, #8B1E2E 100%);
   color: #FFFFFF;
   box-shadow: 0 1px 6px rgba(203, 56, 85, 0.35);
+}
+
+.variantBtn[data-active="true"][data-variant="v3"] {
+  background: linear-gradient(135deg, #88B6FF 0%, #2D5FB8 100%);
+  color: #FFFFFF;
+  box-shadow: 0 1px 6px rgba(136, 182, 255, 0.35);
 }
 
 .chartPanel[data-variant="v2"] {
@@ -1181,6 +1236,7 @@
 .snapshotBanner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: 6px 10px;
   background: rgba(203, 56, 85, 0.08);
@@ -1213,6 +1269,30 @@
 
 .snapshotBanner[data-state="loading"] .snapshotDot {
   animation: snapshotPulse 1.4s ease-in-out infinite;
+}
+
+.snapshotBanner[data-state="error"] {
+  background: rgba(203, 56, 85, 0.14);
+  border-color: rgba(203, 56, 85, 0.45);
+}
+
+.snapshotBanner[data-state="error"] .snapshotDot {
+  background: #CB3855;
+  box-shadow: 0 0 8px rgba(203, 56, 85, 0.9);
+}
+
+.snapshotRetry {
+  background: rgba(203, 56, 85, 0.18);
+  color: #F0A0B0;
+  border: 1px solid rgba(203, 56, 85, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.snapshotRetry:hover {
+  background: rgba(203, 56, 85, 0.28);
 }
 
 @keyframes snapshotPulse {
@@ -1293,4 +1373,87 @@
 .chartV2EmptyBtn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+.ghostLegend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: rgba(10, 10, 10, 0.72);
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  pointer-events: none;
+}
+.ghostLegendSnap {
+  color: #f0b90b;
+  margin-bottom: 2px;
+}
+.ghostLegendRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ghostLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.ghostLegendDot[data-profit='true'] {
+  background: #00e997;
+}
+.ghostLegendDot[data-profit='false'] {
+  background: #cb3855;
+}
+.ghostLegendLabel {
+  color: #9aa0a6;
+  min-width: 44px;
+}
+.ghostLegendPnl[data-profit='true'] {
+  color: #00e997;
+}
+.ghostLegendPnl[data-profit='false'] {
+  color: #cb3855;
+}
+
+.projControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.projToggle,
+.projSnapBtn,
+.projSnapDel {
+  padding: 3px 8px;
+  background: #101010;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  color: #9aa0a6;
+  cursor: pointer;
+}
+.projToggle[data-active='true'] {
+  color: #00e997;
+  border-color: #00e997;
+}
+.projSnapBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.projSnapSelect {
+  padding: 3px 6px;
+  background: #101010;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  color: #cdd2d6;
+  font-family: inherit;
+  font-size: 11px;
 }

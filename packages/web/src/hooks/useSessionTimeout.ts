@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react';
-
 import { useAppStore } from '@stores/app-store';
+import { useEffect, useRef } from 'react';
 
 const IDLE_LOGOUT_MS = 10 * 60 * 1000;
 const IDLE_WARNING_MS = 9 * 60 * 1000;
@@ -8,7 +7,7 @@ const IDLE_WARNING_MS = 9 * 60 * 1000;
 /**
  * Tracks how long the tab has been hidden or unfocused, then escalates:
  *   9 minutes  → idle-warning notice (with 60s countdown)
- *   10 minutes → clears paper-trading auth + idle-logout notice
+ *   10 minutes → clears the paper account id + idle-logout notice
  *
  * Applies to every user (paper-trading and anonymous) to curb idle public
  * sessions. Timers start on `visibilitychange → hidden` and are cancelled when
@@ -17,14 +16,14 @@ const IDLE_WARNING_MS = 9 * 60 * 1000;
  */
 export function useSessionTimeout() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
-  const clearAuth = useAppStore((s) => s.clearAuth);
+  const clearAccount = useAppStore((s) => s.clearAccount);
   const extendToken = useAppStore((s) => s.sessionExtendToken);
 
   // Refs avoid re-running the effect on every store change.
   const setSessionNoticeRef = useRef(setSessionNotice);
-  const clearAuthRef = useRef(clearAuth);
+  const clearAccountRef = useRef(clearAccount);
   setSessionNoticeRef.current = setSessionNotice;
-  clearAuthRef.current = clearAuth;
+  clearAccountRef.current = clearAccount;
 
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,7 +49,7 @@ export function useSessionTimeout() {
 
     const fireLogout = () => {
       logoutTimerRef.current = null;
-      clearAuthRef.current();
+      clearAccountRef.current();
       setSessionNoticeRef.current({ kind: 'idle-logout' });
     };
 

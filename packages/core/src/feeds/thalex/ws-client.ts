@@ -73,6 +73,20 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
 
   protected initClients(): void {}
 
+  protected override getFeedConnectionSnapshot() {
+    const client = this.wsClient;
+    if (client == null) return null;
+
+    return {
+      connected: client.isConnected,
+      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+    };
+  }
+
+  protected override restartFeedFromWatchdog(): void {
+    this.wsClient?.terminate();
+  }
+
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
     const raw = await this.fetchApi(THALEX_INSTRUMENTS);
     const parsed = parseThalexInstruments(raw);

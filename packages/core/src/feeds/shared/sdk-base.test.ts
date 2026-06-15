@@ -20,6 +20,18 @@ class TestSdkAdapter extends SdkBaseAdapter {
   protected async subscribeChain(): Promise<void> {}
   protected async unsubscribeAll(): Promise<void> {}
 
+  getRequestRefCount(underlying: string, expiry: string): number {
+    return this.requestRefCounts.get(`${underlying}:${expiry}`) ?? 0;
+  }
+
+  getHandlerRefCount(handlers: StreamHandlers): number {
+    return this.handlerRefCounts.get(handlers) ?? 0;
+  }
+
+  hasHandler(handlers: StreamHandlers): boolean {
+    return this.deltaHandlers.has(handlers);
+  }
+
   addInstrument(instrument: CachedInstrument): void {
     this.instruments.push(instrument);
     this.instrumentMap.set(instrument.exchangeSymbol, instrument);
@@ -46,8 +58,8 @@ class TestSdkAdapter extends SdkBaseAdapter {
     return [...this.instruments];
   }
 
-  override async fetchOptionChain(_request: ChainRequest): Promise<VenueOptionChain> {
-    throw new Error('not implemented');
+  override async fetchOptionChain(request: ChainRequest): Promise<VenueOptionChain> {
+    return super.fetchOptionChain(request);
   }
 }
 
@@ -110,6 +122,118 @@ describe('SdkBaseAdapter', () => {
     expect(onDelta).toHaveBeenCalledTimes(1);
     const [deltas] = onDelta.mock.calls[0] ?? [];
     expect(deltas).toHaveLength(2);
+  });
+
+  it('reports unsupported requests immediately when no instruments match', async () => {
+    const adapter = new TestSdkAdapter();
+    const onStatus = vi.fn();
+
+    const release = await adapter.subscribe(
+      { underlying: 'AVAX_USDC', expiry: '2026-05-29' },
+      { onDelta: vi.fn(), onStatus },
+    );
+
+    expect(onStatus).toHaveBeenCalledWith({
+      venue: 'binance',
+      state: 'down',
+      ts: expect.any(Number),
+      message: 'no instruments for request',
+    });
+
+    await expect(release()).resolves.toBeUndefined();
+  });
+
+  it('rolls back refcounts when the first upstream subscribe fails', async () => {
+    const adapter = new TestSdkAdapter();
+    const handlers = { onDelta: vi.fn(), onStatus: vi.fn() };
+    adapter.addInstrument(createInstrument('BTC-260327-70000-C', 70_000));
+    vi.spyOn(
+      adapter as unknown as { subscribeChain: (...args: unknown[]) => Promise<void> },
+      'subscribeChain',
+    ).mockRejectedValue(new Error('subscribe failed'));
+
+    await expect(
+      adapter.subscribe({ underlying: 'BTC', expiry: '2026-03-27' }, handlers),
+    ).rejects.toThrow('subscribe failed');
+
+    expect(adapter.getRequestRefCount('BTC', '2026-03-27')).toBe(0);
+    expect(adapter.getHandlerRefCount(handlers)).toBe(0);
+    expect(adapter.hasHandler(handlers)).toBe(false);
+  });
+
+  it('maps a base request to the only alias family on that venue', async () => {
+    const adapter = new TestSdkAdapter();
+    const subscribeChain = vi
+      .spyOn(
+        adapter as unknown as { subscribeChain: (...args: unknown[]) => Promise<void> },
+        'subscribeChain',
+      )
+      .mockResolvedValue(undefined);
+
+    adapter.addInstrument({
+      ...createInstrument('AVAX_USDC-260327-9-C', 9),
+      symbol: 'AVAX/USD:USDC-260327-9-C',
+      base: 'AVAX_USDC',
+      quote: 'USD',
+      settle: 'USDC',
+    });
+
+    expect(await adapter.listExpiries('AVAX')).toEqual(['2026-03-27']);
+
+    const release = await adapter.subscribe(
+      { underlying: 'AVAX', expiry: '2026-03-27' },
+      { onDelta: vi.fn(), onStatus: vi.fn() },
+    );
+
+    expect(subscribeChain).toHaveBeenCalledWith(
+      'AVAX_USDC',
+      '2026-03-27',
+      expect.arrayContaining([expect.objectContaining({ base: 'AVAX_USDC' })]),
+    );
+
+    await release();
+  });
+
+  it('keeps sibling base and alias families separate on the same venue', async () => {
+    const adapter = new TestSdkAdapter();
+    adapter.addInstrument(createInstrument('BTC-260327-70000-C', 70_000));
+    adapter.addInstrument({
+      ...createInstrument('BTC_USDC-260327-70000-C', 70_000),
+      symbol: 'BTC/USD:USDC-260327-70000-C',
+      base: 'BTC_USDC',
+      quote: 'USD',
+      settle: 'USDC',
+    });
+
+    expect(await adapter.fetchOptionChain({ underlying: 'BTC', expiry: '2026-03-27' })).toMatchObject({
+      contracts: { 'BTC/USD:USDT-260327-70000-C': expect.any(Object) },
+    });
+    expect(await adapter.fetchOptionChain({ underlying: 'BTC_USDC', expiry: '2026-03-27' })).toMatchObject({
+      contracts: { 'BTC/USD:USDC-260327-70000-C': expect.any(Object) },
+    });
+  });
+
+  it('does not surface stale websocket quotes as live chain data', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-01T00:10:01.000Z'));
+
+    try {
+      const adapter = new TestSdkAdapter();
+      const instrument = createInstrument('BTC-260327-70000-C', 70_000);
+      adapter.addInstrument(instrument);
+      adapter.publish([{ exchangeSymbol: instrument.exchangeSymbol, quote: createQuote(Date.now() - 300_001) }]);
+
+      const chain = await adapter.fetchOptionChain({ underlying: 'BTC', expiry: '2026-03-27' });
+      const contract = chain.contracts[instrument.symbol];
+
+      expect(contract?.quote.bid.raw).toBeNull();
+      expect(contract?.quote.ask.raw).toBeNull();
+      expect(contract?.quote.mark.raw).toBeNull();
+      expect(contract?.quote.timestamp).toBe(0);
+      expect(contract?.quote.source).toBe('rest');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe('sweepExpiredInstruments', () => {

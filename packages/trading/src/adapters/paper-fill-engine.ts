@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 import { newFillId, type Fill } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
 import { NoLiquidityError } from '../book/errors.js';
@@ -19,10 +19,10 @@ export class PaperFillEngine implements FillEngine {
     this.fillModel = fillModel ?? new OptimisticFillModel();
   }
 
-  async executeOrder(order: Order, venueFilter: PaperVenueId[]): Promise<Fill[]> {
+  async executeOrder(order: Order, venueFilter: VenueId[]): Promise<Fill[]> {
     const plans: Array<{
       leg: OrderLeg;
-      venue: PaperVenueId;
+      venue: VenueId;
       priceUsd: number;
       filledQuantity: number;
       slippageUsd: number;
@@ -31,6 +31,7 @@ export class PaperFillEngine implements FillEngine {
       benchmarkBidUsd: number | null;
       benchmarkAskUsd: number | null;
       benchmarkMidUsd: number | null;
+      iv: number | null;
       underlyingSpotUsd: number | null;
     }> = [];
 
@@ -79,6 +80,7 @@ export class PaperFillEngine implements FillEngine {
         benchmarkBidUsd: chosen.book.bidUsd,
         benchmarkAskUsd: chosen.book.askUsd,
         benchmarkMidUsd: chosen.book.markUsd,
+        iv: chosen.book.markIv,
         underlyingSpotUsd: chosen.book.underlyingPriceUsd,
       });
     }
@@ -98,6 +100,7 @@ export class PaperFillEngine implements FillEngine {
         quantity: p.filledQuantity,
         requestedQuantity: p.leg.quantity,
         priceUsd: p.priceUsd,
+        iv: p.iv,
         feesUsd: p.feesUsd,
         slippageUsd: p.slippageUsd,
         partialFill: p.partialFill,

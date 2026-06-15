@@ -1,9 +1,11 @@
-import { useAppStore } from '@stores/app-store';
+import { HelpMenu } from '@components/onboarding';
 
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
+import { useAppStore } from '@stores/app-store';
+import AccountChip from './AccountChip';
 import FreshnessLabel from './FreshnessLabel';
-import VenueStatusRow from './VenueStatusRow';
 import styles from './TopBar.module.css';
+import VenueStatusRow from './VenueStatusRow';
 
 interface Tab {
   id: string;
@@ -14,9 +16,10 @@ interface Tab {
 interface TopBarProps {
   tabs: readonly Tab[];
   onOpenPalette: () => void;
+  onOpenShortcuts: () => void;
 }
 
-export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
+export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarProps) {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
@@ -32,7 +35,7 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
         <img src="/oggregator-logo.svg" alt="oggregator" />
       </a>
 
-      <div className={styles.pillGroup} role="tablist">
+      <div className={styles.pillGroup} role="tablist" data-tour="views">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -50,7 +53,7 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
 
       <div className={styles.right}>
         <ExpiryCountdown />
-        <div className={styles.status} data-state={connectionState}>
+        <div className={styles.status} data-state={connectionState} data-tour="venue-status">
           <VenueStatusRow />
           <span className={styles.freshness}>
             <FreshnessLabel />
@@ -61,7 +64,9 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
             TRADFI
           </button>
         )}
-        <button className={styles.cmdk} onClick={onOpenPalette}>
+        <AccountChip />
+        <HelpMenu onOpenShortcuts={onOpenShortcuts} />
+        <button className={styles.cmdk} onClick={onOpenPalette} data-tour="asset-picker">
           ⌘K
         </button>
       </div>

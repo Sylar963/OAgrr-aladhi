@@ -25,11 +25,19 @@ export interface IvSurfaceRow {
   delta10c: number | null;
 }
 
-// Fine-grained per-expiry IV grid for the 3D surface view. ivs is aligned to
-// IvSurfaceResponse.surfaceFineDeltas (mirrors core FINE_DELTA_GRID).
+// Fine-grained per-expiry IV grid for the 3D surface view. ivs[] aligns to
+// surfaceFineDeltas (raw rows) or surfaceFineDeltasDense (smoothed rows) —
+// shape and length depend on which list the row came from.
 export interface IvSurfaceFineRow {
   expiry: string;
   dte: number;
+  ivs: (number | null)[];
+}
+
+// Constant-maturity row produced by total-variance interpolation between
+// listed expiries. tenorDays is one of the canonical CMM buckets.
+export interface CmmIvSurfaceRow {
+  tenorDays: number;
   ivs: (number | null)[];
 }
 
@@ -62,11 +70,36 @@ export interface IvSurfaceResponse {
   underlying: string;
   surface: IvSurfaceRow[];
   surfaceFine: IvSurfaceFineRow[];
-  // Delta tick values aligned 1:1 with each row's ivs[] (typically 0.05–0.95
-  // step 0.05). Frontend should render against these instead of hard-coding.
+  // SVI-fitted (or linearly-filled) variant of surfaceFine. Same shape, same
+  // delta alignment — populated where the fit succeeds, falling back to
+  // linear interpolation across the row otherwise.
+  surfaceFineSmoothed: IvSurfaceFineRow[];
+  // Constant-maturity grid: one row per canonical tenor (7/14/30/60/90/180/
+  // 365d) within the listed-expiry range. Interpolated in total variance.
+  surfaceFineCmm: CmmIvSurfaceRow[];
+  // Delta tick values aligned 1:1 with each surfaceFine row's ivs[] (raw
+  // observed grid: 0.05–0.95 step 0.05, 19 buckets).
   surfaceFineDeltas: number[];
+  // Dense delta grid (0.05–0.95 step 0.01, 91 buckets) aligned 1:1 with
+  // surfaceFineSmoothed and surfaceFineCmm row ivs[]. Used to render the
+  // smooth surface variants. Smoothed/CMM are continuous outputs of the SVI
+  // fit and total-variance interpolator, so they sample cheaply at any grid.
+  surfaceFineDeltasDense: number[];
   termStructure: TermStructure;
   venueAtm: Record<string, VenueAtmPoint[]>;
+  // Per-venue fine surface (raw 19-pt grid, smoothed 91-pt grid, CMM dense).
+  // Each value is the same shape as the cross-venue counterpart but built
+  // from a single venue's quotes. Optional for backward compatibility.
+  venueSurfaceFine?: Partial<Record<string, IvSurfaceFineRow[]>>;
+  venueSurfaceFineSmoothed?: Partial<Record<string, IvSurfaceFineRow[]>>;
+  venueSurfaceFineCmm?: Partial<Record<string, CmmIvSurfaceRow[]>>;
+  // Constant-maturity 30d ATM IV (fraction). Source: IvHistoryService.
+  atmIv30d: number | null;
+  // Trailing 30d close-to-close annualized RV (fraction). Source: spot candles.
+  rv30d: number | null;
+  // VRP30d = atmIv30d − rv30d. Positive → IV pricing above realized → option
+  // sellers are paid for tail risk. Negative → IV cheap vs realized → caution.
+  vrp30d: number | null;
 }
 
 // IV history — constant-maturity ATM IV, 25Δ RR, 25Δ butterfly.
@@ -79,6 +112,8 @@ export interface IvHistoryPoint {
   atmIv: number | null;
   rr25d: number | null;
   bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
 }
 
 export interface IvHistoryExtrema {

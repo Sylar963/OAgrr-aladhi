@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { OptionVenueAdapter } from '@oggregator/core';
-import { getAdaptersByAssetClass } from '../asset-class.js';
+import { getAllAdapters, type OptionVenueAdapter } from '@oggregator/core';
 
 export async function expiriesRoute(app: FastifyInstance) {
   app.get<{ Querystring: { underlying: string } }>('/expiries', async (req, reply) => {
@@ -9,7 +8,7 @@ export async function expiriesRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'underlying query param required' });
     }
 
-    const adapters = getAdaptersByAssetClass('crypto');
+    const adapters = getAllAdapters();
     const results = await Promise.all(
       adapters.map(async (a: OptionVenueAdapter) => ({
         venue: a.venue,

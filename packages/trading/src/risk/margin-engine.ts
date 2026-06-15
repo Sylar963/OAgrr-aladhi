@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 import type { UsdAmount } from '../book/money.js';
 import type { OptionRight, OrderSide } from '../book/order.js';
 import type { Position } from '../book/position.js';
@@ -11,7 +11,7 @@ export interface MarginEstimateLeg {
   expiry: string;
   strike: number;
   quantity: number;
-  preferredVenues: PaperVenueId[] | null;
+  preferredVenues: VenueId[] | null;
 }
 
 export interface MarginPerLegBreakdown {
@@ -24,7 +24,7 @@ export interface MarginEstimateInput {
   prospectiveLegs: MarginEstimateLeg[];
   existingPositions: Position[];
   equityUsd: UsdAmount;
-  venueFilter: PaperVenueId[];
+  venueFilter: VenueId[];
 }
 
 export interface MarginEstimateResult {

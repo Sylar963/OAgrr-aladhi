@@ -3,6 +3,7 @@ import type { CachedInstrument } from '../shared/sdk-base.js';
 import {
   buildDeriveSubscriptionPlan,
   createDeriveSubscriptionState,
+  markDeriveSubscribedTickers,
   resetDeriveSubscriptionState,
   subscribeDeriveBatches,
 } from './planner.js';
@@ -38,16 +39,29 @@ describe('Derive planner', () => {
       'ticker_slim.BTC-20260328-60000-C.1000',
       'ticker_slim.BTC-20260328-65000-C.1000',
     ]);
+    expect(plan.exchangeSymbols).toEqual([
+      'BTC-20260328-60000-C',
+      'BTC-20260328-65000-C',
+    ]);
+    expect(state.subscribedTickers.size).toBe(0);
   });
 
   it('skips already-subscribed tickers', () => {
     const state = createDeriveSubscriptionState();
     const instrument = createInstrument('BTC-20260328-60000-C');
 
-    buildDeriveSubscriptionPlan(state, [instrument]);
+    markDeriveSubscribedTickers(state, [instrument.exchangeSymbol]);
     const plan = buildDeriveSubscriptionPlan(state, [instrument]);
 
     expect(plan.channels).toEqual([]);
+  });
+
+  it('marks subscribed tickers after a successful subscribe', () => {
+    const state = createDeriveSubscriptionState();
+
+    markDeriveSubscribedTickers(state, ['BTC-20260328-60000-C']);
+
+    expect(state.subscribedTickers.has('BTC-20260328-60000-C')).toBe(true);
   });
 
   it('subscribes in batches of 100 channels', async () => {

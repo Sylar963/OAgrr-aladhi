@@ -4,6 +4,7 @@ import {
   buildDeribitSubscriptionPlan,
   createDeribitSubscriptionState,
   deribitIndexNameFor,
+  downgradeDeribitTickerSubscription,
   releaseDeribitTickerSubscription,
   resetDeribitSubscriptionState,
 } from './planner.js';
@@ -65,6 +66,32 @@ describe('Deribit planner', () => {
     expect(channel).toBe('ticker.BTC-1JAN26-100-C.100ms');
     expect(state.subscribedTickers.has(instrument.exchangeSymbol)).toBe(false);
     expect(state.tickerIntervals.has(instrument.exchangeSymbol)).toBe(false);
+  });
+
+  it('downgrades a live ticker back to eager interval', () => {
+    const state = createDeribitSubscriptionState();
+    const instrument = createInstrument('BTC-1JAN26-100-C');
+
+    buildDeribitSubscriptionPlan(state, 'BTC', [instrument], 'agg2');
+    buildDeribitSubscriptionPlan(state, 'BTC', [instrument], '100ms');
+    const downgrade = downgradeDeribitTickerSubscription(state, instrument.exchangeSymbol, 'agg2');
+
+    expect(downgrade).toEqual({
+      unsubscribeChannel: 'ticker.BTC-1JAN26-100-C.100ms',
+      subscribeChannel: 'ticker.BTC-1JAN26-100-C.agg2',
+    });
+    expect(state.subscribedTickers.has(instrument.exchangeSymbol)).toBe(true);
+    expect(state.tickerIntervals.get(instrument.exchangeSymbol)).toBe('agg2');
+  });
+
+  it('keeps eager ticker subscription when already at fallback interval', () => {
+    const state = createDeribitSubscriptionState();
+    const instrument = createInstrument('BTC-1JAN26-100-C');
+
+    buildDeribitSubscriptionPlan(state, 'BTC', [instrument], 'agg2');
+
+    expect(downgradeDeribitTickerSubscription(state, instrument.exchangeSymbol, 'agg2')).toBeNull();
+    expect(state.tickerIntervals.get(instrument.exchangeSymbol)).toBe('agg2');
   });
 
   it('resets all tracked subscriptions on full teardown', () => {

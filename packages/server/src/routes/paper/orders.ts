@@ -1,6 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { PlaceOrderRequestSchema } from '@oggregator/protocol';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import type { OrderLeg } from '@oggregator/trading';
 import {
   InsufficientMarginError,
@@ -9,21 +7,21 @@ import {
   NoLiquidityError,
   TradingError,
 } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import {
   ensureDefaultAccount,
   orderPlacementService,
   orderRepository,
   paperTradingStore,
 } from '../../trading-services.js';
-import { fillToDto, orderToDto } from './mappers.js';
 import { paperEvents } from './events.js';
-
-function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
+import { fillToDto, orderToDto } from './mappers.js';
+import { resolveScope } from './scope.js';
 
 export async function paperOrdersRoute(app: FastifyInstance) {
-  app.post('/paper/orders', async (req, reply) => {
+  app.post<{
+    Body: unknown;
+  }>('/paper/orders', async (req, reply) => {
     if (!paperTradingStore.enabled) {
       return reply
         .status(503)
@@ -35,7 +33,8 @@ export async function paperOrdersRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     await ensureDefaultAccount();
 
     try {
@@ -97,8 +96,9 @@ export async function paperOrdersRoute(app: FastifyInstance) {
 
   app.get<{
     Querystring: { limit?: string };
-  }>('/paper/orders', async (req) => {
-    const accountId = getAccountId(req);
+  }>('/paper/orders', async (req, reply) => {
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const limit = Math.min(Number(req.query.limit ?? '50') || 50, 500);
     const orders = await orderRepository.listOrders(accountId, limit);
     return { orders: orders.map(orderToDto) };

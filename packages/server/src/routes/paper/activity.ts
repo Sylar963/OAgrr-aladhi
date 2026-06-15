@@ -1,11 +1,7 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import { paperTradingStore } from '../../trading-services.js';
+import { resolveScope } from './scope.js';
 import { listTradeActivities } from './workspace.js';
-
-function getAccountId(req: FastifyRequest): string {
-  return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
 
 export async function paperActivityRoute(app: FastifyInstance) {
   app.get<{
@@ -16,7 +12,8 @@ export async function paperActivityRoute(app: FastifyInstance) {
         .status(503)
         .send({ error: 'persistence_unavailable', message: 'DATABASE_URL not set' });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const limit = Math.min(Number(req.query.limit ?? '100') || 100, 500);
     return { activity: await listTradeActivities(limit, req.query.tradeId, accountId) };
   });

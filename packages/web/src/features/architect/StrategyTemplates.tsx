@@ -82,6 +82,9 @@ function getBestPrice(
   let bestPrice: number | null = null;
   let bestVenueId = '';
   let bestQuote: {
+    ask?: number | null;
+    bid?: number | null;
+    mid?: number | null;
     delta: number | null;
     gamma: number | null;
     theta: number | null;
@@ -89,10 +92,17 @@ function getBestPrice(
     markIv: number | null;
   } | null = null;
 
+  function pickPrice(quote: NonNullable<typeof bestQuote>): number | null {
+    const topOfBook = direction === 'buy' ? quote.ask : quote.bid;
+    if (topOfBook != null && topOfBook > 0) return topOfBook;
+    if (quote.mid != null && quote.mid > 0) return quote.mid;
+    return null;
+  }
+
   for (const [venueId, quote] of Object.entries(side.venues)) {
     if (!quote) continue;
-    const price = direction === 'buy' ? quote.ask : quote.bid;
-    if (price == null || price <= 0) continue;
+    const price = pickPrice(quote);
+    if (price == null) continue;
 
     if (
       bestPrice == null ||

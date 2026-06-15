@@ -38,6 +38,13 @@ export type CoincallInstrumentsResponse = z.infer<typeof CoincallInstrumentsResp
 
 const NumericLike = z.union([z.number(), z.string().transform((s) => Number(s))]);
 
+// Coincall's live WS pushes send explicit `null` (not just an absent key) for
+// empty numeric fields. The bare NumericLike union rejects null, which silently
+// drops the update — and for an array push (tOption) one null entry sinks the
+// whole batch. Optional WS numeric fields use this nullable variant; the merges
+// in state.ts treat null as "no fresh value — keep the previous".
+const NullableNumericLike = NumericLike.nullable();
+
 export const CoincallOptionConfigEntrySchema = z.object({
   symbol: z.string(),
   base: z.string(),
@@ -67,29 +74,32 @@ export type CoincallPublicConfig = z.infer<typeof CoincallPublicConfigSchema>;
 // Envelope: { dt: 3, c: 20, d: { ... fields below ... } }
 // bsInfo does NOT include bid/ask — that lives in tOption.
 
+// Coincall changed their API — numeric fields now arrive as strings.
+// Same pattern as NumericLike in config.
+
 export const CoincallBsInfoDataSchema = z.object({
   s: z.string(),
-  mp: z.number().optional(),
-  lp: z.number().optional(),
-  ip: z.number().optional(),
-  iv: z.number().optional(),
-  delta: z.number().optional(),
-  gamma: z.number().optional(),
-  theta: z.number().optional(),
-  vega: z.number().optional(),
-  up: z.number().optional(),
-  oi: z.number().optional(),
-  v: z.number().optional(),
-  v24: z.number().optional(),
-  uv: z.number().optional(),
-  uv24: z.number().optional(),
-  h: z.number().optional(),
-  l: z.number().optional(),
-  cp: z.number().optional(),
-  cr: z.number().optional(),
-  pr0: z.number().optional(),
-  rt: z.number().optional(),
-  ts: z.number(),
+  mp: NullableNumericLike.optional(),
+  lp: NullableNumericLike.optional(),
+  ip: NullableNumericLike.optional(),
+  iv: NullableNumericLike.optional(),
+  delta: NullableNumericLike.optional(),
+  gamma: NullableNumericLike.optional(),
+  theta: NullableNumericLike.optional(),
+  vega: NullableNumericLike.optional(),
+  up: NullableNumericLike.optional(),
+  oi: NullableNumericLike.optional(),
+  v: NullableNumericLike.optional(),
+  v24: NullableNumericLike.optional(),
+  uv: NullableNumericLike.optional(),
+  uv24: NullableNumericLike.optional(),
+  h: NullableNumericLike.optional(),
+  l: NullableNumericLike.optional(),
+  cp: NullableNumericLike.optional(),
+  cr: NullableNumericLike.optional(),
+  pr0: NullableNumericLike.optional(),
+  rt: NullableNumericLike.optional(),
+  ts: NumericLike,
 });
 export type CoincallBsInfoData = z.infer<typeof CoincallBsInfoDataSchema>;
 
@@ -107,26 +117,26 @@ export type CoincallBsInfoMessage = z.infer<typeof CoincallBsInfoMessageSchema>;
 
 export const CoincallTOptionEntrySchema = z.object({
   s: z.string(),
-  mp: z.number().optional(),
-  lp: z.number().optional(),
-  bid: z.number().optional(),
-  ask: z.number().optional(),
-  bs: z.number().optional(),
-  as: z.number().optional(),
-  biv: z.number().optional(),
-  aiv: z.number().optional(),
-  delta: z.number().optional(),
-  gamma: z.number().optional(),
-  theta: z.number().optional(),
-  vega: z.number().optional(),
-  up: z.number().optional(),
-  upv: z.number().optional(),
-  oi: z.number().optional(),
-  v: z.number().optional(),
-  v24: z.number().optional(),
-  cp: z.number().optional(),
-  cr: z.number().optional(),
-  ts: z.number(),
+  mp: NullableNumericLike.optional(),
+  lp: NullableNumericLike.optional(),
+  bid: NullableNumericLike.optional(),
+  ask: NullableNumericLike.optional(),
+  bs: NullableNumericLike.optional(),
+  as: NullableNumericLike.optional(),
+  biv: NullableNumericLike.optional(),
+  aiv: NullableNumericLike.optional(),
+  delta: NullableNumericLike.optional(),
+  gamma: NullableNumericLike.optional(),
+  theta: NullableNumericLike.optional(),
+  vega: NullableNumericLike.optional(),
+  up: NullableNumericLike.optional(),
+  upv: NullableNumericLike.optional(),
+  oi: NullableNumericLike.optional(),
+  v: NullableNumericLike.optional(),
+  v24: NullableNumericLike.optional(),
+  cp: NullableNumericLike.optional(),
+  cr: NullableNumericLike.optional(),
+  ts: NumericLike,
 });
 export type CoincallTOptionEntry = z.infer<typeof CoincallTOptionEntrySchema>;
 
@@ -170,6 +180,39 @@ export const CoincallHeartbeatAckSchema = z.object({
   rc: z.number(),
 });
 export type CoincallHeartbeatAck = z.infer<typeof CoincallHeartbeatAckSchema>;
+
+// ── REST: GET /open/option/get/v1/{index}?endTime={ms} (bulk chain) ──
+// Fixture: option_en.md (## Get Option). Envelope unwrapped to `data`: rows of
+// { strike, callOption, putOption }. Each leg carries openInterest (in the base
+// currency) and a cumulative `volume`. OI is the field of record for analytics:
+// the WS market channels stream 0 for it, so this is the authoritative source.
+export const CoincallRestLegSchema = z.object({
+  symbol: z.string(),
+  openInterest: NullableNumericLike.optional(),
+  volume: NullableNumericLike.optional(),
+});
+export type CoincallRestLeg = z.infer<typeof CoincallRestLegSchema>;
+
+export const CoincallChainRowSchema = z.object({
+  strike: NullableNumericLike.optional(),
+  callOption: CoincallRestLegSchema.nullish(),
+  putOption: CoincallRestLegSchema.nullish(),
+});
+export const CoincallChainResponseSchema = z.array(CoincallChainRowSchema);
+export type CoincallChainResponse = z.infer<typeof CoincallChainResponseSchema>;
+
+// ── REST: GET /open/option/detail/v1/{symbol} (per-contract) ──
+// Fixture: option_en.md (## Get Option Details). The only Coincall endpoint that
+// exposes 24h volume and its USD value (volumeUsd24h); also returns underlyingPrice
+// so OI→USD has a fallback when the WS underlying tick hasn't landed yet.
+export const CoincallOptionDetailSchema = z.object({
+  symbol: z.string(),
+  openInterest: NullableNumericLike.optional(),
+  volume24h: NullableNumericLike.optional(),
+  volumeUsd24h: NullableNumericLike.optional(),
+  underlyingPrice: NullableNumericLike.optional(),
+});
+export type CoincallOptionDetail = z.infer<typeof CoincallOptionDetailSchema>;
 
 // ── Native symbol regex ────────────────────────────────────────
 // Coincall options symbols: {base}USD-{DDMMMYY}-{strike}-{C|P}

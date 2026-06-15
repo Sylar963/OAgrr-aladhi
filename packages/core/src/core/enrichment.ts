@@ -5,6 +5,7 @@ import type {
   ComparisonRow,
   EstimatedFees,
 } from './types.js';
+import type { BookLookup } from './dealer-book.js';
 
 // 2 vol points — avoids noise-driven flips on nearly-flat surfaces
 const TERM_STRUCTURE_THRESHOLD = 0.02;
@@ -15,6 +16,11 @@ export interface VenueQuote {
   bid: number | null;
   ask: number | null;
   mid: number | null;
+  // Mid in the venue's quote currency (BTC/ETH for inverse venues, settlement
+  // stable for linear venues). Equal to `mid` for linear venues; differs by
+  // the underlying multiplier for inverse. Use this when overlaying charts
+  // whose REST candles are denominated in the venue's raw currency.
+  midRaw: number | null;
   bidSize: number | null;
   askSize: number | null;
   markIv: number | null;
@@ -31,6 +37,13 @@ export interface VenueQuote {
   volume24h: number | null;
   openInterestUsd: number | null;
   volume24hUsd: number | null;
+  // Per-quote staleness + the per-venue underlying that was applied during USD
+  // normalization. Consumers that aggregate USD prices across venues need both
+  // to (a) drop stale venues from the median and (b) renormalize inverse-venue
+  // USD mids against a canonical underlying instead of each venue's own.
+  asOfMs?: number | null;
+  underlyingPriceUsd?: number | null;
+  inverse?: boolean;
 }
 
 export interface EnrichedSide {
@@ -62,6 +75,16 @@ export const FINE_DELTA_GRID: readonly number[] = [
   0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
   0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
 ];
+
+// Dense delta grid (0.05 → 0.95 step 0.01, 91 points) used to render smoothed
+// and constant-maturity surfaces. Raw observed rows still use FINE_DELTA_GRID
+// because rounding more strikes into more buckets just creates more empty
+// cells; the SVI fit and CMM interpolator are continuous and resample cheaply.
+export const ULTRA_FINE_DELTA_GRID: readonly number[] = (() => {
+  const out: number[] = [];
+  for (let i = 5; i <= 95; i++) out.push(i / 100);
+  return out;
+})();
 
 export interface IvSurfaceFineRow {
   expiry: string;
@@ -104,6 +127,8 @@ export interface IvHistoryPoint {
   atmIv: number | null;
   rr25d: number | null;
   bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
 }
 
 export interface IvHistoryExtrema {
@@ -174,6 +199,15 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
   // Prefer computed mid from live bid/ask; fall back to exchange mark price.
   const mid = bid !== null && ask !== null ? (bid + ask) / 2 : markMid;
 
+  // Parallel mid in the venue's raw quote currency. Inverse-venue option
+  // charts (Deribit BTC/ETH, OKX BTC-USD-…) draw candles in base currency,
+  // so a USD-only live tick produces a unit-mismatch spike on the active
+  // bar. Carrying both lets the chart pick the value matching its axis.
+  const bidRaw = contract.quote.bid.raw;
+  const askRaw = contract.quote.ask.raw;
+  const markMidRaw = contract.quote.mark.raw;
+  const midRaw = bidRaw !== null && askRaw !== null ? (bidRaw + askRaw) / 2 : markMidRaw;
+
   // One-sided markets (bid=0 or ask=0) and Derive's inverted quotes (bid > ask)
   // both produce ±200% or negative spread via the formula — return null so the
   // UI renders '–' rather than a misleading red percentage.
@@ -190,6 +224,7 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
     bid,
     ask,
     mid,
+    midRaw,
     bidSize: contract.quote.bidSize,
     askSize: contract.quote.askSize,
     markIv: contract.greeks.markIv,
@@ -212,6 +247,9 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
       (contract.quote.volume24h != null && contract.quote.underlyingPriceUsd != null
         ? contract.quote.volume24h * contract.quote.underlyingPriceUsd
         : null),
+    asOfMs: contract.quote.timestamp,
+    underlyingPriceUsd: contract.quote.underlyingPriceUsd,
+    inverse: contract.inverse,
   };
 }
 
@@ -491,6 +529,7 @@ export function computeGex(
   rows: ComparisonRow[],
   strikes: EnrichedStrike[],
   fallbackSpotPrice: number,
+  bookLookup?: BookLookup,
 ): GexStrike[] {
   const result: GexStrike[] = [];
 
@@ -510,7 +549,10 @@ export function computeGex(
       const size = original?.contractSize ?? 1;
       const venueSpot =
         original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      callGex += (vq.openInterest * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
+      // Calls: dealerContracts is already +long-gamma. Naive prior = +OI.
+      const qty = pos ? pos.dealerContracts : vq.openInterest;
+      callGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
     }
 
     for (const venueKey of Object.keys(s.put.venues) as VenueId[]) {
@@ -522,13 +564,39 @@ export function computeGex(
       const size = original?.contractSize ?? 1;
       const venueSpot =
         original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      putGex += (vq.openInterest * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
+      // putGex is SUBTRACTED below. dealerContracts means "+ = dealer long the
+      // option (long gamma)", so negate it here to keep that meaning. Naive
+      // prior = +OI (→ subtracted → −OI contribution), preserving call−put.
+      const qty = pos ? -pos.dealerContracts : vq.openInterest;
+      putGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
     }
 
     result.push({ strike: s.strike, gexUsdMillions: callGex - putGex });
   }
 
   return result;
+}
+
+/**
+ * Sums per-expiry GEX into a single strike profile.
+ *
+ * Dealer hedging in reality is the sum across all listed expiries — a per-
+ * expiry view shows only one slice. Use this to render an "all expiries"
+ * profile. Strikes that exist in some expiries but not others are unioned;
+ * strikes shared across expiries have their gexUsdMillions added (signs
+ * preserved). Output is sorted ascending by strike.
+ */
+export function combineGex(perExpiryGex: GexStrike[][]): GexStrike[] {
+  const byStrike = new Map<number, number>();
+  for (const list of perExpiryGex) {
+    for (const row of list) {
+      byStrike.set(row.strike, (byStrike.get(row.strike) ?? 0) + row.gexUsdMillions);
+    }
+  }
+  return [...byStrike.entries()]
+    .map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }))
+    .sort((left, right) => left.strike - right.strike);
 }
 
 /**
@@ -626,6 +694,7 @@ export function computeIvSurfaceFine(
   expiry: string,
   dte: number,
   strikes: EnrichedStrike[],
+  venueId?: VenueId,
 ): IvSurfaceFineRow {
   const buckets = new Map<number, { sum: number; count: number }>();
 
@@ -636,16 +705,21 @@ export function computeIvSurfaceFine(
     else buckets.set(rounded, { sum: iv, count: 1 });
   };
 
+  const ivOf = (side: EnrichedSide): number | null =>
+    venueId ? side.venues[venueId]?.markIv ?? null : averageSideIv(side);
+  const deltaOf = (side: EnrichedSide): number | null =>
+    venueId ? side.venues[venueId]?.delta ?? null : averageSideDelta(side);
+
   for (const s of strikes) {
-    const putIv = averageSideIv(s.put);
-    const putDelta = averageSideDelta(s.put);
+    const putIv = ivOf(s.put);
+    const putDelta = deltaOf(s.put);
     if (isValidIv(putIv) && putDelta != null) {
       const key = deltaToFineKey(putDelta, 'put');
       if (key != null) add(key, putIv);
     }
 
-    const callIv = averageSideIv(s.call);
-    const callDelta = averageSideDelta(s.call);
+    const callIv = ivOf(s.call);
+    const callDelta = deltaOf(s.call);
     if (isValidIv(callIv) && callDelta != null) {
       const key = deltaToFineKey(callDelta, 'call');
       if (key != null) add(key, callIv);
@@ -816,6 +890,7 @@ export function buildEnrichedChain(
   expiry: string,
   rows: ComparisonRow[],
   venueChains: VenueOptionChain[],
+  bookLookup?: BookLookup,
 ): EnrichedChainResponse {
   const strikes = rows.map(enrichComparisonRow);
   const stats = computeChainStats(strikes, venueChains);
@@ -823,7 +898,7 @@ export function buildEnrichedChain(
   const dte = computeDte(expiry, expiryTs);
 
   const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-  const gex = computeGex(rows, strikes, spotPrice);
+  const gex = computeGex(rows, strikes, spotPrice, bookLookup);
 
   return {
     underlying,

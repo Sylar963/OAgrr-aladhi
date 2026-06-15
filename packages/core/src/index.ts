@@ -2,6 +2,8 @@
 export type { VenueId, OptionRight, DataSource } from './types/common.js';
 export { VENUE_IDS } from './types/common.js';
 
+export { logger, feedLogger } from './utils/logger.js';
+
 // core — canonical types, aggregator, registry, symbol utils
 export type {
   OptionGreeks,
@@ -50,12 +52,25 @@ export {
   enrichComparisonRow,
   computeChainStats,
   computeGex,
+  combineGex,
   interpTenor,
   FINE_DELTA_GRID,
+  ULTRA_FINE_DELTA_GRID,
 } from './core/enrichment.js';
 
 export { buildIvSurfaceGrid } from './core/surface-grid.js';
 export type { SurfaceGridEntry, BuildSurfaceGridOptions } from './core/surface-grid.js';
+
+export {
+  computeCmmIvSurface,
+  fillRowLinear,
+  fitRowFromStrikesSvi,
+  liftRowToGrid,
+  smoothFineSurfaceRow,
+  DEFAULT_CMM_TENORS,
+  DENSE_CMM_TENORS,
+  type CmmIvSurfaceRow,
+} from './core/iv-surface-smoothing.js';
 
 export type {
   EnrichedChainResponse,
@@ -76,15 +91,23 @@ export type {
   IvHistoryResponse,
 } from './core/enrichment.js';
 
+export {
+  OI_EPSILON,
+  bootstrapNaivePosition,
+  signOiDelta,
+  applyBookInterval,
+} from './core/dealer-book.js';
+export type { DealerPosition, OiSnapshotInput, BookLookup } from './core/dealer-book.js';
+
 // feeds/shared — adapter interfaces
 export type {
-  AssetClass,
   OptionVenueAdapter,
   VenueCapabilities,
   StreamHandlers,
 } from './feeds/shared/types.js';
 export { BaseAdapter } from './feeds/shared/base.js';
 export { TopicWsClient, type TopicWsClientOptions } from './feeds/shared/topic-ws-client.js';
+export type { QuoteRecorder, QuoteRecorderEvent } from './feeds/shared/sdk-base.js';
 
 // runtime
 export {
@@ -112,7 +135,31 @@ export {
   type SpotSnapshot,
 } from './runtime/spot/index.js';
 
+export {
+  IndexPriceRuntime,
+  type IndexPriceRuntimeStartOptions,
+} from './runtime/index-price/index-price-runtime.js';
+
+export { toGateioRestBase, fromGateioRestBase } from './feeds/gateio/aliases.js';
+export {
+  fetchGateioSettlement,
+  type FetchGateioSettlementArgs,
+  type GateioSettlementResult,
+} from './feeds/gateio/settlement.js';
+
 // services
+export {
+  InstrumentCandleService,
+  instrumentCandleService,
+  InstrumentCandlesError,
+  type InstrumentCandleServiceOptions,
+} from './services/instrument-candles.js';
+export {
+  MarkHistoryBuffer,
+  mergeBaseBuckets,
+  type MarkHistoryBufferOptions,
+  type RawCandle,
+} from './services/mark-history-buffer.js';
 export { DvolService, type DvolSnapshot, type DvolCandle, type HvPoint } from './services/dvol.js';
 export {
   SpotCandleService,
@@ -120,6 +167,49 @@ export {
   type SpotCandleCurrency,
   type SpotCandleResolutionSec,
 } from './services/spot-candles.js';
+export { realizedVol } from './services/realized-vol.js';
+export {
+  backward,
+  fitGaussianHmm,
+  forward,
+  gaussianLogPdf,
+  logSumExp,
+  smoothedPosteriors,
+  viterbi,
+  type BackwardResult,
+  type FitOptions,
+  type FitResult,
+  type ForwardResult,
+  type HmmModel,
+  type ViterbiResult,
+} from './services/regime-hmm.js';
+export {
+  applyStandardization,
+  deriveDirection,
+  fitStandardization,
+  interpBasisToTenor,
+  labelStatesByVolLevel,
+  normalizeLegacyLabel,
+  RegimeService,
+  type BasisPoint,
+  type RegimeDirection,
+  type RegimeInputs,
+  type RegimeLabel,
+  type RegimePersistedModel,
+  type RegimePersistedObservation,
+  type RegimePersistence,
+  type RegimeQueryResult,
+  type RegimeServiceDeps,
+  type RegimeServiceOptions,
+  type StandardizationParams,
+} from './services/regime.js';
+export {
+  fitSvi,
+  sviIv,
+  sviTotalVariance,
+  type SviParams,
+  type FitPoint as SviFitPoint,
+} from './services/svi-fit.js';
 export {
   IvHistoryService,
   type IvHistoryDeps,
@@ -154,6 +244,77 @@ export {
   type TradeAmounts,
 } from './trade-persistence.js';
 
+// Black-76 helpers (re-exported for downstream Greek work)
+export {
+  d1,
+  pdf,
+  cdf,
+  price76,
+  vega76,
+  delta76,
+  gamma76,
+  solveIv,
+  thetaPerDay,
+  yearsToExpiry,
+} from './feeds/thalex/bs-solver.js';
+
+// portfolio module
+export type {
+  PositionLeg,
+  MarkContext,
+  MarkProvider,
+  PositionStore,
+  PositionStoreEvent,
+  PositionStoreListener,
+  PortfolioPersistence,
+} from './portfolio/index.js';
+export {
+  InMemoryPositionStore,
+  generateLegId,
+  vanna76,
+  volga76,
+  aggregateGreeksByStrike,
+  aggregateGreeksByExpiry,
+  breakEvenIvCurve,
+  buildPortfolioPnlCurve,
+  computeTotals,
+  attachMarks,
+  legMarkFromShockedIv,
+  applyVolShock,
+  computeShockPnl,
+  computeShockGrid,
+  foldManualLeg,
+  findExistingForInput,
+  naturalKeyOf,
+  type FoldContext,
+  detectStrategyGroups,
+} from './portfolio/index.js';
+export {
+  PortfolioRuntime,
+  type ChainSurfaceProvider,
+  type PortfolioRuntimeEvent,
+  type PortfolioRuntimeListener,
+  type PortfolioRuntimeOptions,
+  type PortfolioSnapshotEvent,
+  type PortfolioDeltaEvent,
+  type PortfolioErrorEvent,
+} from './runtime/portfolio/index.js';
+
+// private (per-user, authenticated) venue adapters
+export {
+  DerivePrivateClient,
+  type DerivePrivateCreds,
+  type DerivePositionsListener,
+  signLoginMessage as signDeriveLoginMessage,
+  recoverSignerAddress as recoverDeriveSignerAddress,
+} from './feeds/derive-private/index.js';
+export {
+  ThalexPrivateClient,
+  type ThalexPrivateCreds,
+  type ThalexPositionsListener,
+  mintAuthToken as mintThalexAuthToken,
+} from './feeds/thalex-private/index.js';
+
 // feeds — venue adapters
 export { DeribitWsAdapter } from './feeds/deribit/index.js';
 export { OkxWsAdapter } from './feeds/okx/index.js';
@@ -162,3 +323,5 @@ export { BybitWsAdapter } from './feeds/bybit/index.js';
 export { DeriveWsAdapter } from './feeds/derive/index.js';
 export { CoincallWsAdapter } from './feeds/coincall/index.js';
 export { ThalexWsAdapter } from './feeds/thalex/index.js';
+export { GateioWsAdapter } from './feeds/gateio/index.js';
+export { ParadexWsAdapter } from './feeds/paradex/index.js';

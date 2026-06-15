@@ -1,15 +1,24 @@
+import {
+  buildComparisonChain,
+  buildEnrichedChain,
+  getAdapter,
+  getAllAdapters,
+  VENUE_IDS,
+  type VenueId,
+  type VenueOptionChain,
+} from '@oggregator/core';
 import type { FastifyInstance } from 'fastify';
-import { VENUE_IDS, type VenueId } from '@oggregator/core';
 import { chainEngines } from '../chain-engines.js';
-import { getAdaptersByAssetClass } from '../asset-class.js';
+import { bookLookup } from '../dealer-book-lookup.js';
+import { ResponseCache } from '../response-cache.js';
+
+const CHAIN_RESPONSE_CACHE_TTL_MS = 5_000;
+const chainResponseCache = new ResponseCache(CHAIN_RESPONSE_CACHE_TTL_MS);
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
-  const cryptoVenues = getAdaptersByAssetClass('crypto').map((a) => a.venue);
   return venuesParam
-    ? (venuesParam
-        .split(',')
-        .filter((venue) => VENUE_IDS.includes(venue as VenueId) && cryptoVenues.includes(venue as VenueId)) as VenueId[])
-    : cryptoVenues;
+    ? (venuesParam.split(',').filter((venue) => VENUE_IDS.includes(venue as VenueId)) as VenueId[])
+    : getAllAdapters().map((adapter) => adapter.venue);
 }
 
 export async function chainsRoute(app: FastifyInstance) {
@@ -29,16 +38,21 @@ export async function chainsRoute(app: FastifyInstance) {
     }
 
     const requestedVenues = parseVenues(venuesParam);
-    const { runtime, release } = await chainEngines.acquire({
-      underlying,
-      expiry,
-      venues: requestedVenues,
+    const cacheKey = `${underlying}:${expiry}:${requestedVenues.slice().sort().join(',')}`;
+    return chainResponseCache.get(cacheKey, async () => {
+      const chains = (
+        await Promise.all(
+          requestedVenues.map(async (venue): Promise<VenueOptionChain | null> => {
+            try {
+              return await getAdapter(venue).fetchOptionChain({ underlying, expiry });
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((chain): chain is VenueOptionChain => chain != null);
+      const comparison = buildComparisonChain(underlying, expiry, chains);
+      return buildEnrichedChain(underlying, expiry, comparison.rows, chains, bookLookup);
     });
-
-    try {
-      return await runtime.fetchSnapshotData();
-    } finally {
-      await release();
-    }
   });
 }

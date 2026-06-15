@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { EnrichedChainResponse, EnrichedStrike } from '@shared/enriched';
+import type {
+  EnrichedChainResponse,
+  EnrichedSide,
+  EnrichedStrike,
+  VenueQuote,
+} from '@shared/enriched';
 import type { WsConnectionState, VenueFailure } from '@oggregator/protocol';
 import { ServerWsMessageSchema } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain/queries';
+import { wsUrl } from '@lib/http';
 
 interface UseChainWsOptions {
   underlying: string;
@@ -18,6 +24,7 @@ interface UseChainWsResult {
   staleMs: number | null;
   lastSeq: number;
   failedVenues: VenueFailure[];
+  venueStates: Record<string, WsConnectionState>;
 }
 
 type StatusSnapshot = UseChainWsResult;
@@ -27,6 +34,7 @@ const INITIAL_SNAPSHOT: StatusSnapshot = {
   staleMs: null,
   lastSeq: 0,
   failedVenues: [],
+  venueStates: {},
 };
 
 /**
@@ -45,7 +53,8 @@ function createStatusStore() {
         merged.connectionState === snap.connectionState &&
         merged.staleMs === snap.staleMs &&
         merged.lastSeq === snap.lastSeq &&
-        merged.failedVenues === snap.failedVenues
+        merged.failedVenues === snap.failedVenues &&
+        merged.venueStates === snap.venueStates
       ) {
         return;
       }
@@ -64,12 +73,70 @@ function nextSubId(): string {
   return `sub-${++subIdCounter}-${Date.now()}`;
 }
 
-const MAX_RETRIES = 5;
+function requestKey(underlying: string, expiry: string, venues: string[]): string {
+  return `${underlying}\u0000${expiry}\u0000${[...venues].sort().join(',')}`;
+}
 
 function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 15_000);
 }
 
+// Structural equality on a single venue quote. Two refs that read equal here
+// can be treated as the same value — letting React.memo skip the row render.
+function quotesEqual(a: VenueQuote | null | undefined, b: VenueQuote | null | undefined): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+  return (
+    a.bid === b.bid &&
+    a.ask === b.ask &&
+    a.mid === b.mid &&
+    a.bidSize === b.bidSize &&
+    a.askSize === b.askSize &&
+    a.markIv === b.markIv &&
+    a.bidIv === b.bidIv &&
+    a.askIv === b.askIv &&
+    a.delta === b.delta &&
+    a.gamma === b.gamma &&
+    a.theta === b.theta &&
+    a.vega === b.vega &&
+    a.spreadPct === b.spreadPct &&
+    a.totalCost === b.totalCost &&
+    a.openInterest === b.openInterest &&
+    a.volume24h === b.volume24h &&
+    a.openInterestUsd === b.openInterestUsd &&
+    a.volume24hUsd === b.volume24hUsd &&
+    a.asOfMs === b.asOfMs &&
+    (a.estimatedFees == null
+      ? b.estimatedFees == null
+      : b.estimatedFees != null &&
+        a.estimatedFees.maker === b.estimatedFees.maker &&
+        a.estimatedFees.taker === b.estimatedFees.taker)
+  );
+}
+
+function sidesEqual(a: EnrichedSide, b: EnrichedSide): boolean {
+  if (a === b) return true;
+  if (a.bestIv !== b.bestIv || a.bestVenue !== b.bestVenue) return false;
+  const aKeys = Object.keys(a.venues);
+  const bKeys = Object.keys(b.venues);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (!quotesEqual(a.venues[k as keyof typeof a.venues], b.venues[k as keyof typeof b.venues])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function strikesEqual(a: EnrichedStrike, b: EnrichedStrike): boolean {
+  return (
+    a === b || (a.strike === b.strike && sidesEqual(a.call, b.call) && sidesEqual(a.put, b.put))
+  );
+}
+
+// Delta path: incoming carries only the strikes that changed. Keep every
+// existing entry; overlay changed ones, reusing the prior ref when the new
+// strike happens to be content-equal so memo'd rows don't re-render.
 function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): EnrichedStrike[] {
   const byStrike = new Map<number, EnrichedStrike>();
 
@@ -77,16 +144,60 @@ function mergeStrikes(existing: EnrichedStrike[], incoming: EnrichedStrike[]): E
     byStrike.set(strike.strike, strike);
   }
   for (const strike of incoming) {
-    byStrike.set(strike.strike, strike);
+    const prev = byStrike.get(strike.strike);
+    byStrike.set(strike.strike, prev && strikesEqual(prev, strike) ? prev : strike);
   }
 
   return [...byStrike.values()].sort((left, right) => left.strike - right.strike);
 }
 
-type DeltaMsg = Extract<
-  ReturnType<typeof ServerWsMessageSchema.parse>,
-  { type: 'delta' }
->;
+// Snapshot path: incoming defines the complete strike set for the tenor. Any
+// strike not present in `incoming` must be dropped (so a resync removes
+// stale entries). For strikes present in both, reuse the existing ref when
+// content matches — this is what makes a resync snapshot not re-render the
+// whole table.
+function reconcileSnapshotStrikes(
+  existing: EnrichedStrike[],
+  incoming: EnrichedStrike[],
+): EnrichedStrike[] {
+  if (existing.length === 0) return incoming;
+  const existingByStrike = new Map<number, EnrichedStrike>();
+  for (const s of existing) existingByStrike.set(s.strike, s);
+  return incoming.map((next) => {
+    const prev = existingByStrike.get(next.strike);
+    return prev && strikesEqual(prev, next) ? prev : next;
+  });
+}
+
+type DeltaMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'delta' }>;
+
+type StatusMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'status' }>;
+
+const CONNECTION_STATE_ORDER: WsConnectionState[] = ['live', 'reconnecting', 'stale', 'error'];
+
+function mapServerStateToWsConnectionState(state: StatusMsg['state']): WsConnectionState {
+  switch (state) {
+    case 'connected':
+      return 'live';
+    case 'reconnecting':
+    case 'polling':
+      return 'reconnecting';
+    case 'degraded':
+      return 'stale';
+    case 'down':
+      return 'error';
+    default:
+      return 'live';
+  }
+}
+
+function worstConnectionState(states: Iterable<WsConnectionState>): WsConnectionState {
+  let worst: WsConnectionState = 'live';
+  for (const s of states) {
+    if (CONNECTION_STATE_ORDER.indexOf(s) > CONNECTION_STATE_ORDER.indexOf(worst)) worst = s;
+  }
+  return worst;
+}
 
 interface PendingDelta {
   key: ReturnType<typeof chainKeys.chain>;
@@ -113,6 +224,7 @@ export function useChainWs({
   const attemptRef = useRef(0);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSubIdRef = useRef<string | null>(null);
+  const lastSubscribeRequestKeyRef = useRef<string | null>(null);
 
   const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
   storeRef.current ??= createStatusStore();
@@ -121,8 +233,14 @@ export function useChainWs({
   const pendingRef = useRef<PendingDelta[]>([]);
   const rafRef = useRef<number | null>(null);
 
-  const paramsRef = useRef({ underlying, expiry, venues });
-  paramsRef.current = { underlying, expiry, venues };
+  // Last received snapshot across all cache keys. Used as a reconciliation
+  // baseline on tenor change so strikes whose content happens to match
+  // (deep OTM, all-null venues) keep their ref instead of getting a fresh one.
+  const lastSnapshotRef = useRef<EnrichedChainResponse | null>(null);
+
+  const currentRequestKey = requestKey(underlying, expiry, venues);
+  const paramsRef = useRef({ underlying, expiry, venues, requestKey: currentRequestKey });
+  paramsRef.current = { underlying, expiry, venues, requestKey: currentRequestKey };
 
   const flushDeltas = useCallback(() => {
     rafRef.current = null;
@@ -151,7 +269,7 @@ export function useChainWs({
           ...current,
           stats: last.patch.stats,
           strikes,
-          gex: last.patch.gex,
+          gex: last.patch.gex ?? current.gex,
         };
       });
     }
@@ -170,8 +288,9 @@ export function useChainWs({
   }, [flushDeltas]);
 
   const sendSubscribe = useCallback((ws: WebSocket) => {
-    const { underlying: u, expiry: e, venues: v } = paramsRef.current;
+    const { underlying: u, expiry: e, venues: v, requestKey: key } = paramsRef.current;
     if (!u || !e) return;
+    if (lastSubscribeRequestKeyRef.current === key) return;
 
     const subId = nextSubId();
     activeSubIdRef.current = subId;
@@ -183,6 +302,7 @@ export function useChainWs({
         request: { underlying: u, expiry: e, venues: v },
       }),
     );
+    lastSubscribeRequestKeyRef.current = key;
   }, []);
 
   const handleMessage = useCallback(
@@ -203,28 +323,68 @@ export function useChainWs({
 
       switch (msg.type) {
         case 'snapshot': {
-          const key = chainKeys.chain(
+          const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
-          qc.setQueryData(key, msg.data);
+          const requestedKey = chainKeys.chain(
+            paramsRef.current.underlying,
+            paramsRef.current.expiry,
+            paramsRef.current.venues,
+          );
+          const writeSnapshot = (key: ReturnType<typeof chainKeys.chain>) => {
+            qc.setQueryData(key, (current: EnrichedChainResponse | undefined) => {
+              // Reconcile against the cache for this exact key first (resync
+              // within same tenor); fall back to the most recent snapshot from
+              // any tenor so cross-tenor switches still benefit from content-
+              // equal strikes keeping their refs.
+              const baseline = current ?? lastSnapshotRef.current ?? undefined;
+              if (baseline == null) return msg.data;
+              return {
+                ...msg.data,
+                strikes: reconcileSnapshotStrikes(baseline.strikes, msg.data.strikes),
+              };
+            });
+          };
+
+          writeSnapshot(serverKey);
+          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+            writeSnapshot(requestedKey);
+          }
+          lastSnapshotRef.current =
+            qc.getQueryData<EnrichedChainResponse>(requestedKey) ??
+            qc.getQueryData<EnrichedChainResponse>(serverKey) ??
+            msg.data;
           store.set({ connectionState: 'live', staleMs: msg.meta.staleMs, lastSeq: msg.seq });
           break;
         }
 
         case 'delta': {
-          const key = chainKeys.chain(
+          const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
             msg.request.venues,
           );
+          const requestedKey = chainKeys.chain(
+            paramsRef.current.underlying,
+            paramsRef.current.expiry,
+            paramsRef.current.venues,
+          );
           pendingRef.current.push({
-            key,
+            key: serverKey,
             patch: msg.patch,
             seq: msg.seq,
             staleMs: msg.meta.staleMs,
           });
+          if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
+            pendingRef.current.push({
+              key: requestedKey,
+              patch: msg.patch,
+              seq: msg.seq,
+              staleMs: msg.meta.staleMs,
+            });
+          }
           scheduleFlush();
           break;
         }
@@ -233,23 +393,22 @@ export function useChainWs({
           store.set({ connectionState: 'live', failedVenues: msg.failedVenues ?? [] });
           break;
 
-        case 'status':
-          switch (msg.state) {
-            case 'connected':
-              store.set({ connectionState: 'live' });
-              break;
-            case 'reconnecting':
-            case 'polling':
-              store.set({ connectionState: 'reconnecting' });
-              break;
-            case 'degraded':
-              store.set({ connectionState: 'stale' });
-              break;
-            case 'down':
-              store.set({ connectionState: 'error' });
-              break;
-          }
+        case 'status': {
+          const mapped = mapServerStateToWsConnectionState(msg.state);
+          const prev = store.get();
+          // Skip the spread + store.set when nothing changed — preserves
+          // reference equality so useSyncExternalStore doesn't re-render.
+          if (prev.venueStates[msg.venue] === mapped) break;
+          const venueStates: Record<string, WsConnectionState> = {
+            ...prev.venueStates,
+            [msg.venue]: mapped,
+          };
+          store.set({
+            connectionState: worstConnectionState(Object.values(venueStates)),
+            venueStates,
+          });
           break;
+        }
 
         case 'error':
           if (!msg.retryable) store.set({ connectionState: 'error' });
@@ -268,12 +427,11 @@ export function useChainWs({
     }
 
     const envWsBase = import.meta.env.VITE_WS_URL;
-    const wsUrl = envWsBase
-      ? `${envWsBase.replace(/\/$/, '')}/ws/chain`
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chain`;
+    const chainWsUrl = envWsBase ? `${envWsBase.replace(/\/$/, '')}/ws/chain` : wsUrl('/ws/chain');
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(chainWsUrl);
     wsRef.current = ws;
+    lastSubscribeRequestKeyRef.current = null;
     store.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
@@ -289,17 +447,13 @@ export function useChainWs({
       scheduleReconnect();
     };
 
-    ws.onerror = () => {
-      store.set({ connectionState: 'error' });
-    };
+    // onerror usually precedes onclose for transient transport failures.
+    // Keep reconnect logic centralized in onclose so retries remain unbounded.
+    ws.onerror = () => {};
   }, [sendSubscribe, handleMessage, store]);
 
   const scheduleReconnect = useCallback(() => {
     if (reconnectRef.current) return;
-    if (attemptRef.current >= MAX_RETRIES) {
-      store.set({ connectionState: 'error' });
-      return;
-    }
     const delay = backoffMs(attemptRef.current);
     attemptRef.current++;
     reconnectRef.current = setTimeout(() => {
@@ -324,6 +478,7 @@ export function useChainWs({
     pendingRef.current = [];
     attemptRef.current = 0;
     activeSubIdRef.current = null;
+    lastSubscribeRequestKeyRef.current = null;
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close(1000, 'unmount');
@@ -357,7 +512,7 @@ export function useChainWs({
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !underlying || !expiry) return;
     sendSubscribe(ws);
-  }, [underlying, expiry, venues, sendSubscribe]);
+  }, [underlying, expiry, currentRequestKey, sendSubscribe]);
 
   const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get);
 
@@ -367,6 +522,7 @@ export function useChainWs({
       staleMs: snapshot.staleMs,
       lastSeq: snapshot.lastSeq,
       failedVenues: snapshot.failedVenues,
+      venueStates: snapshot.venueStates,
     }),
     [snapshot],
   );

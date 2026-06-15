@@ -193,6 +193,26 @@ describe('WS /ws/chain route (injectWS)', () => {
     ws.terminate();
   });
 
+  it('keeps the same runtime for duplicate requests on one socket', async () => {
+    const ws = await app.injectWS('/ws/chain');
+
+    subscribe(ws, 'dup-1');
+    await collectMessages(ws, 3, 1000);
+    const fetchCallsAfterFirstSubscribe = fakeAdapter.fetchCalls;
+
+    subscribe(ws, 'dup-2');
+    const msgs = await collectMessages(ws, 2, 1000);
+
+    const subscribed = msgs.find((m) => m['type'] === 'subscribed');
+    expect(subscribed?.['subscriptionId']).toBe('dup-2');
+
+    const snapshot = msgs.find((m) => m['type'] === 'snapshot');
+    expect(snapshot?.['subscriptionId']).toBe('dup-2');
+    expect(fakeAdapter.fetchCalls).toBe(fetchCallsAfterFirstSubscribe);
+
+    ws.terminate();
+  });
+
   it('sends error for malformed subscribe message', async () => {
     const ws = await app.injectWS('/ws/chain');
 

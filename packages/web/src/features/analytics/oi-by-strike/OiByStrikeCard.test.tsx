@@ -92,6 +92,14 @@ describe('OiByStrikeCard', () => {
     expect(screen.getByRole('button', { name: '30d' }).hasAttribute('data-active')).toBe(false);
   });
 
+  it('exposes the single-cone selector (Cone dropdown, Off available) in V2', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
+    fireEvent.click(screen.getByRole('button', { name: 'V2' }));
+    expect(screen.getByText('Cone')).toBeTruthy();
+    expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Off' })).toBeTruthy();
+  });
+
   it('switches back to V1 when V1 is clicked', () => {
     render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="BTC" />));
     fireEvent.click(screen.getByRole('button', { name: 'V2' }));
@@ -107,5 +115,13 @@ describe('OiByStrikeCard', () => {
     // Clicking the disabled button must NOT swap to V2
     fireEvent.click(v2Button);
     expect(screen.queryByRole('button', { name: 'Calls' })).toBeNull();
+  });
+
+  it('enables the V2 toggle for HYPE', () => {
+    render(wrap(<OiByStrikeCard chains={[]} spotPrice={null} currency="HYPE" />));
+    const v2Button = screen.getByRole('button', { name: 'V2' });
+    expect(v2Button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(v2Button);
+    expect(screen.getByRole('button', { name: 'Calls' })).toBeTruthy();
   });
 });

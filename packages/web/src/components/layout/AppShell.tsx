@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
-import type { ReactNode } from 'react';
-
+import { SystemNotifications } from '@components/notifications';
+import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
-import { useAppStore } from '@stores/app-store';
-
 import { useIsMobile } from '@hooks/useIsMobile';
-
-import TopBar from './TopBar';
+import type { TabId } from '@lib/tabs';
+import { useAppStore } from '@stores/app-store';
+import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import styles from './AppShell.module.css';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
-import styles from './AppShell.module.css';
-
-type TabId = 'chain' | 'alpha' | 'architect' | 'trading' | 'surface' | 'flow' | 'analytics' | 'gex';
+import { NewsTicker } from './NewsTicker';
+import { PaletteContext } from './palette-context';
+import TopBar from './TopBar';
 
 // Second key of a `g <x>` chord maps to a tab.
 const GOTO_MAP: Record<string, TabId> = {
@@ -43,19 +43,17 @@ interface AppShellProps {
   tabs: readonly Tab[];
 }
 
-const PaletteContext = createContext<() => void>(() => {});
-
-export function useOpenPalette() {
-  return useContext(PaletteContext);
-}
-
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
+
+  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set(['trading', 'portfolio', 'analytics']);
+  const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -116,8 +114,15 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   return (
     <PaletteContext.Provider value={() => setPaletteOpen(true)}>
       <div className={styles.shell}>
-        <TopBar tabs={tabs} onOpenPalette={() => setPaletteOpen(true)} />
-        {isMobile && <MobileToolbar />}
+        <NewsTicker />
+        <TopBar
+          tabs={tabs}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenShortcuts={() => setHelpOpen(true)}
+        />
+        <SystemNotifications />
+        <Onboarding />
+        {showToolbar && <MobileToolbar />}
         <main className={styles.main}>{children}</main>
         <MobileNav />
 

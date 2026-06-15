@@ -9,6 +9,7 @@ export default function VenueStatusRow() {
   const activeVenues = useAppStore((s) => s.activeVenues);
   const failedVenueIds = useAppStore((s) => s.feedStatus.failedVenueIds);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
+  const venueStates = useAppStore((s) => s.feedStatus.venueStates);
 
   const activeSet = new Set(activeVenues);
   const failedSet = new Set(failedVenueIds);
@@ -19,16 +20,25 @@ export default function VenueStatusRow() {
       {VENUE_LIST.map((venue) => {
         const isActive = activeSet.has(venue.id);
         const isFailed = failedSet.has(venue.id);
+        const venueLiveState = venueStates[venue.id];
+        // Live status event wins. When undefined (no status received yet),
+        // fall through to the subscribe-time failure list / global feed state.
         const state: DotState = !isActive
           ? 'inactive'
-          : isFailed || !feedIsLive
-            ? 'failed'
-            : 'live';
+          : venueLiveState === 'live'
+            ? 'live'
+            : venueLiveState === 'reconnecting' || venueLiveState === 'stale' || venueLiveState === 'error'
+              ? 'failed'
+              : isFailed || !feedIsLive
+                ? 'failed'
+                : 'live';
         const title = !isActive
           ? `${venue.label} · off`
-          : state === 'live'
-            ? `${venue.label} · live`
-            : `${venue.label} · disconnected`;
+          : venueLiveState === 'reconnecting'
+            ? `${venue.label} · reconnecting`
+            : state === 'live'
+              ? `${venue.label} · live`
+              : `${venue.label} · disconnected`;
         return <span key={venue.id} className={styles.dot} data-state={state} title={title} />;
       })}
     </div>

@@ -1,4 +1,5 @@
 import { getAdapter, getRegisteredVenues } from '../../core/registry.js';
+import type { BookLookup } from '../../core/dealer-book.js';
 import type { EnrichedChainResponse } from '../../core/enrichment.js';
 import type {
   SnapshotMeta,
@@ -15,8 +16,9 @@ import type { VenueId } from '../../types/common.js';
 import { ChainProjection } from './projection.js';
 import { VenueHealthManager } from './health.js';
 
-const PUSH_INTERVAL_MS = 200;
+const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
+const GEX_DELTA_MIN_INTERVAL_MS = 2_000;
 
 interface FailedVenue {
   venue: VenueId;
@@ -51,7 +53,7 @@ export interface ChainRuntimeDeltaEvent {
   patch: {
     stats: EnrichedChainResponse['stats'];
     strikes: EnrichedChainResponse['strikes'];
-    gex: EnrichedChainResponse['gex'];
+    gex?: EnrichedChainResponse['gex'];
   };
 }
 
@@ -75,6 +77,7 @@ export interface ChainRuntimeOptions {
   log?: {
     warn: (obj: object, msg: string) => void;
   };
+  bookLookup?: BookLookup;
 }
 
 function mergeDelta(left: VenueDelta | undefined, right: VenueDelta): VenueDelta {
@@ -132,6 +135,7 @@ export class ChainRuntime {
   private disposed = false;
   private pendingDeltaVersion = 0;
   private snapshotBuildVersion = 0;
+  private lastGexComputedAt = 0;
 
   constructor(
     readonly key: string,
@@ -139,12 +143,15 @@ export class ChainRuntime {
     options: ChainRuntimeOptions = {},
   ) {
     this.activeRequest = request;
-    this.projection = new ChainProjection(request.underlying, request.expiry);
+    this.projection = new ChainProjection(request.underlying, request.expiry, options.bookLookup);
     this.coordinator = options.coordinator ?? new VenueSubscriptionCoordinator();
     this.venueHealth = options.venueHealth ?? new VenueHealthManager();
     this.log = options.log ?? { warn: () => {} };
     this.venueListener = {
       onDelta: (deltas) => {
+        // Drop ticks while no listener is attached — otherwise an idle engine
+        // keeps buffering + re-projecting for the full idle-TTL window.
+        if (this.listeners.size === 0) return;
         const firstDelta = deltas[0];
         if (firstDelta != null) {
           const lastDeltaTs = deltas.reduce((latest, delta) => Math.max(latest, delta.ts), 0);
@@ -168,8 +175,8 @@ export class ChainRuntime {
       },
       onStatus: (status) => {
         if (this.disposed) return;
-        const effective =
-          this.venueHealth.ingest(status) ?? this.venueHealth.get(status.venue) ?? status;
+        const effective = this.venueHealth.ingest(status);
+        if (effective == null) return;
         this.broadcast({ type: 'status', status: effective });
       },
     };
@@ -188,8 +195,10 @@ export class ChainRuntime {
 
   subscribe(listener: ChainRuntimeListener): () => void {
     this.listeners.add(listener);
+    this.ensurePushTimer();
     return () => {
       this.listeners.delete(listener);
+      if (this.listeners.size === 0) this.pausePushTimer();
     };
   }
 
@@ -245,29 +254,57 @@ export class ChainRuntime {
 
     this.activeRequest = { ...this.request, venues: liveVenues };
 
-    for (const venueId of liveVenues) {
-      if (this.disposed) return;
-      try {
-        const handle = await this.coordinator.acquire(
+    // Acquire all venues concurrently — each call may do a WS subscribe
+    // round-trip, and serializing them stacks the cold-start latency. The
+    // coordinator's per-venue operation queue still serializes against any
+    // single venue (different runtimes acquiring the same venue), so this
+    // does not slam an upstream socket.
+    const acquired = await Promise.allSettled(
+      liveVenues.map((venueId) =>
+        this.coordinator.acquire(
           venueId,
           { underlying: this.request.underlying, expiry: this.request.expiry },
           this.venueListener,
-        );
-        if (this.disposed) {
-          await handle.release();
-          return;
-        }
-        this.handles.push(handle);
-      } catch (error: unknown) {
-        const reason = error instanceof Error ? error.message : String(error);
+        ),
+      ),
+    );
+
+    // Release anything that resolved after dispose() — same guarantee the
+    // sequential version provided.
+    if (this.disposed) {
+      await Promise.allSettled(
+        acquired
+          .filter(
+            (r): r is PromiseFulfilledResult<VenueSubscriptionHandle> =>
+              r.status === 'fulfilled',
+          )
+          .map(async (r) => r.value.release()),
+      );
+      return;
+    }
+
+    acquired.forEach((result, idx) => {
+      const venueId = liveVenues[idx]!;
+      if (result.status === 'fulfilled') {
+        this.handles.push(result.value);
+      } else {
+        const reason =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
         this.failedVenues.push({ venue: venueId, reason });
         this.log.warn({ venue: venueId, err: reason }, 'venue subscribe failed');
       }
-    }
-
-    if (this.disposed) return;
+    });
 
     await this.buildSnapshot();
+    // Re-projection starts only when a listener subscribes (ensurePushTimer);
+    // an engine with no consumers stays idle instead of looping every 100ms.
+  }
+
+  private ensurePushTimer(): void {
+    if (this.pushTimer != null || this.disposed || this.listeners.size === 0) return;
+    // Resuming after idle: ticks were dropped while paused, so refresh from the
+    // venue quote stores before streaming live patches.
+    void this.buildSnapshot();
     this.pushTimer = setInterval(() => {
       if (this.disposed) return;
       if (this.needsResync) {
@@ -279,6 +316,14 @@ export class ChainRuntime {
         this.pushDelta();
       }
     }, PUSH_INTERVAL_MS);
+  }
+
+  private pausePushTimer(): void {
+    if (this.pushTimer != null) {
+      clearInterval(this.pushTimer);
+      this.pushTimer = null;
+    }
+    this.pendingBySymbol.clear();
   }
 
   private async buildSnapshot(): Promise<void> {
@@ -307,6 +352,7 @@ export class ChainRuntime {
     this.needsResync = false;
     const enriched = this.projection.loadSnapshot(result.chains.filter((chain) => chain != null));
     this.seq += 1;
+    this.lastGexComputedAt = Date.now();
 
     const snapshot: ChainRuntimeSnapshotEvent = {
       type: 'snapshot',
@@ -352,7 +398,9 @@ export class ChainRuntime {
         this.pendingBySymbol.delete(key);
       }
     }
-    const patch = this.projection.applyDeltas(deltas);
+    const now = Date.now();
+    const includeGex = now - this.lastGexComputedAt >= GEX_DELTA_MIN_INTERVAL_MS;
+    const patch = this.projection.applyDeltas(deltas, { includeGex });
 
     if (patch == null) {
       void this.buildSnapshot().catch((error: unknown) => {
@@ -360,6 +408,7 @@ export class ChainRuntime {
       });
       return;
     }
+    if (patch.patch.gex != null) this.lastGexComputedAt = now;
 
     this.seq += 1;
     const snapshot = this.currentSnapshot;
@@ -384,7 +433,7 @@ export class ChainRuntime {
               ...snapshot.data,
               stats: patch.patch.stats,
               strikes: mergeStrikes(snapshot.data.strikes, patch.patch.strikes),
-              gex: patch.patch.gex,
+              gex: patch.patch.gex ?? snapshot.data.gex,
             },
           };
 

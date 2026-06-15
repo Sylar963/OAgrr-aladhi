@@ -1,0 +1,9 @@
+.block { margin-bottom: 12px; }
+.header { display: flex; align-items: center; gap: 9px; font-family: 'IBM Plex Mono', monospace; margin-bottom: 4px; }
+.name { font-size: 12px; font-weight: 600; }
+.sigma { font-size: 18px; font-weight: 600; }
+.chip { font-size: 8px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; border: 1px solid currentColor; opacity: 0.85; }
+.sub { font-size: 10px; color: #6b7280; }
+.spark { margin-left: auto; }
+.muted { font-size: 11px; color: #4b5560; margin-left: auto; }
+.ends { display: flex; justify-content: space-between; font-size: 9px; color: #4b5560; margin-top: 1px; font-family: 'IBM Plex Mono', monospace; }

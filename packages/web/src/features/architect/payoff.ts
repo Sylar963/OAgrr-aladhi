@@ -58,6 +58,41 @@ function legPnlAtExpiry(leg: Leg, underlyingPrice: number): number {
   return sign * (intrinsicValue - leg.entryPrice) * leg.quantity;
 }
 
+/**
+ * Half-width of the price grid used by computePayoff / computeScenarioPayoff.
+ *
+ * The grid must cover every theoretical break-even, otherwise findBreakevens
+ * silently drops the ones that fall outside it and the V2 zone shading paints
+ * a single (-∞, upperBE) region that probes positive in the actual profit
+ * tail — turning the whole loss zone green. A long straddle at a near-the-
+ * money strike with rich premium hits this case (BEs at strike ± Σpremium,
+ * which can sit ~30% outside spot for long-DTE ATM contracts).
+ *
+ * Σ|entryPrice × qty| is an upper bound on how far any BE can be from the
+ * nearest strike, so anchoring the half-width on (max strike-to-spot distance
+ * + Σ premium × margin) guarantees both BEs land inside with room to spare.
+ */
+function computeRangeHalf(
+  legs: Leg[],
+  spotPrice: number,
+  minStrike: number,
+  maxStrike: number,
+): number {
+  const totalPremium = legs.reduce(
+    (s, l) => s + Math.abs(l.entryPrice) * l.quantity,
+    0,
+  );
+  const maxStrikeDistFromSpot = Math.max(
+    Math.abs(maxStrike - spotPrice),
+    Math.abs(minStrike - spotPrice),
+  );
+  return Math.max(
+    (maxStrike - minStrike) * 1.5,
+    spotPrice * 0.3,
+    maxStrikeDistFromSpot + totalPremium * 1.5,
+  );
+}
+
 /** Compute total strategy P&L across a range of underlying prices. */
 export function computePayoff(legs: Leg[], spotPrice: number, numPoints = 200): PayoffPoint[] {
   if (legs.length === 0) return [];
@@ -66,9 +101,8 @@ export function computePayoff(legs: Leg[], spotPrice: number, numPoints = 200): 
   const minStrike = Math.min(...strikes);
   const maxStrike = Math.max(...strikes);
 
-  // Range: ±30% around the strike range, centered on spot
   const rangeCenter = spotPrice;
-  const rangeHalf = Math.max((maxStrike - minStrike) * 1.5, spotPrice * 0.3);
+  const rangeHalf = computeRangeHalf(legs, spotPrice, minStrike, maxStrike);
   const low = Math.max(0, rangeCenter - rangeHalf);
   const high = rangeCenter + rangeHalf;
   const step = (high - low) / numPoints;
@@ -93,10 +127,13 @@ function findBreakevens(points: PayoffPoint[]): number[] {
     const prev = points[i - 1]!;
     const curr = points[i]!;
     if ((prev.pnl <= 0 && curr.pnl >= 0) || (prev.pnl >= 0 && curr.pnl <= 0)) {
-      // Linear interpolation
+      // Linear interpolation. Keep full precision — rounding to whole dollars
+      // here is fine for BTC/ETH but destroys sub-$100 altcoin break-evens (a
+      // $0.42 BE rounds to 0, which fmtUsd then renders as "–"). Display-layer
+      // formatters (fmtUsd, the chart) handle precision per underlying scale.
       const ratio = Math.abs(prev.pnl) / (Math.abs(prev.pnl) + Math.abs(curr.pnl));
       const be = prev.underlyingPrice + ratio * (curr.underlyingPrice - prev.underlyingPrice);
-      breakevens.push(Math.round(be));
+      breakevens.push(be);
     }
   }
   return breakevens;
@@ -116,7 +153,13 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
   const n = pnls.length;
   const highSlope = (pnls[n - 1] ?? 0) - (pnls[n - 2] ?? 0);
   const lowSlope = (pnls[1] ?? 0) - (pnls[0] ?? 0);
-  const FLAT_EPS = 1;
+  // Threshold must scale with the strategy's P&L magnitude. A flat $1 reads as
+  // "still sloping" for a BTC position but as "flat" for a sub-$1k altcoin, so
+  // low-priced underlyings had their unbounded tails (e.g. a long straddle's
+  // infinite upside) misreported as a small finite max profit/loss. Gauge the
+  // edge slope against the total P&L span instead — a genuinely capped edge is
+  // ≈0 relative to the span at any price scale.
+  const FLAT_EPS = Math.max((maxPnl - minPnl) * 1e-4, Number.EPSILON);
   const profitUnbounded = highSlope > FLAT_EPS || lowSlope < -FLAT_EPS;
   const lossUnbounded = highSlope < -FLAT_EPS || lowSlope > FLAT_EPS;
   const maxProfit = profitUnbounded ? null : maxPnl;
@@ -209,7 +252,7 @@ export function computeScenarioPayoff(
   const minStrike = Math.min(...strikes);
   const maxStrike = Math.max(...strikes);
   const rangeCenter = spotPrice;
-  const rangeHalf = Math.max((maxStrike - minStrike) * 1.5, spotPrice * 0.3);
+  const rangeHalf = computeRangeHalf(legs, spotPrice, minStrike, maxStrike);
   const low = Math.max(0, rangeCenter - rangeHalf);
   const high = rangeCenter + rangeHalf;
   const step = (high - low) / numPoints;
@@ -290,7 +333,6 @@ export function detectStrategy(legs: Leg[]): string {
     const calls = sorted.filter((l) => l.type === 'call');
     const puts = sorted.filter((l) => l.type === 'put');
 
-    // Iron condor: buy put, sell put, sell call, buy call
     if (calls.length === 2 && puts.length === 2) {
       const buyPuts = puts.filter((l) => l.direction === 'buy');
       const sellPuts = puts.filter((l) => l.direction === 'sell');
@@ -303,7 +345,31 @@ export function detectStrategy(legs: Leg[]): string {
         buyCalls.length === 1 &&
         sellCalls.length === 1
       ) {
-        return 'Iron Condor';
+        const bp = buyPuts[0]!.strike;
+        const sp = sellPuts[0]!.strike;
+        const sc = sellCalls[0]!.strike;
+        const bc = buyCalls[0]!.strike;
+
+        // Iron Condor: shorts in middle, longs as wings, no strike overlap.
+        // Layout: long put < short put < short call < long call.
+        if (bp < sp && sp < sc && sc < bc) return 'Iron Condor';
+
+        // Iron Butterfly: short straddle at the body, long strangle wings.
+        // Layout: long put < short put == short call < long call.
+        if (bp < sp && sp === sc && sc < bc) return 'Iron Butterfly';
+
+        // Reverse Iron Condor: longs in middle, shorts as wings.
+        if (sp < bp && bp < bc && bc < sc) return 'Reverse Iron Condor';
+
+        // Reverse Iron Butterfly: long straddle body, short strangle wings.
+        if (sp < bp && bp === bc && bc < sc) return 'Reverse Iron Butterfly';
+
+        // Straddle Spread: long straddle at one strike, short straddle at the
+        // other. Two unique strikes, both options at each strike share a
+        // direction. Bullish if the long straddle is at the lower strike.
+        if (bp === bc && sp === sc && bp !== sp) {
+          return bp < sp ? 'Long Straddle Spread' : 'Short Straddle Spread';
+        }
       }
     }
   }

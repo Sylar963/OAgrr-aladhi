@@ -31,7 +31,9 @@
 .logos {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
+  min-width: 0;
 }
 
 .logo {
@@ -69,6 +71,7 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
+  max-width: min(760px, calc(100vw - 32px));
   padding: 4px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -78,6 +81,8 @@
 
 .grid {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 3px;
 }
 

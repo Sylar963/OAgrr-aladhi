@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ── Venue primitives ──────────────────────────────────────────────
 
-export const VENUE_IDS = ['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex', 'tastytrade'] as const;
+export const VENUE_IDS = ['deribit', 'okx', 'bybit', 'binance', 'derive', 'coincall', 'thalex', 'gateio', 'paradex'] as const;
 export type VenueId = (typeof VENUE_IDS)[number];
 
 export const VenueIdSchema = z.enum(VENUE_IDS);
@@ -84,6 +84,11 @@ export interface VenueQuote {
   bid: number | null;
   ask: number | null;
   mid: number | null;
+  // Mid in the venue's quote currency (BTC/ETH on inverse venues, settlement
+  // stable on linear venues). Equal to `mid` for linear; differs by underlying
+  // multiplier for inverse. Charts whose REST candles are in raw currency
+  // overlay this value on the active bar.
+  midRaw: number | null;
   bidSize: number | null;
   askSize: number | null;
   markIv: number | null;
@@ -100,6 +105,11 @@ export interface VenueQuote {
   volume24h: number | null;
   openInterestUsd: number | null;
   volume24hUsd: number | null;
+  asOfMs?: number | null;
+  // True when the venue quotes this contract in the base coin (BTC/ETH) rather
+  // than USD/USDC/USDT. Surfaced so the UI can distinguish inverse venues
+  // (Deribit/OKX BTC-USD-…) from linear venues at a glance.
+  inverse?: boolean;
 }
 
 export interface EnrichedSide {
@@ -186,6 +196,8 @@ const VenueQuoteSchema = z.object({
   bid: NullableNumberSchema,
   ask: NullableNumberSchema,
   mid: NullableNumberSchema,
+  midRaw: NullableNumberSchema,
+  inverse: z.boolean().optional(),
   bidSize: NullableNumberSchema,
   askSize: NullableNumberSchema,
   markIv: NullableNumberSchema,
@@ -202,6 +214,7 @@ const VenueQuoteSchema = z.object({
   volume24h: NullableNumberSchema,
   openInterestUsd: NullableNumberSchema,
   volume24hUsd: NullableNumberSchema,
+  asOfMs: NullableNumberSchema.optional(),
 });
 
 const EnrichedSideSchema = z.object({
@@ -291,7 +304,7 @@ export const VenueDeltaSchema = z.object({
 export const DeltaPatchSchema = z.object({
   stats: ChainStatsSchema,
   strikes: z.array(EnrichedStrikeSchema),
-  gex: z.array(GexStrikeSchema),
+  gex: z.array(GexStrikeSchema).optional(),
 });
 
 export const ServerWsMessageSchema = z.discriminatedUnion('type', [
@@ -316,7 +329,6 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
     seq: z.number(),
     request: WsSubscriptionRequestSchema,
     meta: SnapshotMetaSchema,
-    deltas: z.array(VenueDeltaSchema),
     patch: DeltaPatchSchema,
   }),
   z.object({

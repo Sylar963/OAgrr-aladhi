@@ -1,15 +1,16 @@
-import type { FastifyInstance } from 'fastify';
 import type { PaperWsServerMessage } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
+import { fundedStore } from '../../funded-services.js';
 import {
+  paperTradingStore,
   pnlService,
   positionRepository,
   quoteProvider,
-  paperTradingStore,
 } from '../../trading-services.js';
-import { getUserByApiKey } from '../../user-service.js';
-import { pnlToDto, positionToDto } from './mappers.js';
+import { getUserByToken } from '../../user-service.js';
 import { paperEvents } from './events.js';
+import { pnlToDto, positionToDto } from './mappers.js';
 
 const WS_OPEN = 1;
 const PUSH_INTERVAL_MS = 1000;
@@ -26,14 +27,42 @@ function send(
 export async function paperWsRoute(app: FastifyInstance) {
   app.get('/ws/paper', { websocket: true }, async (socket, req) => {
     let disposed = false;
-    let accountId = DEFAULT_ACCOUNT_ID;
 
-    const apiKey = new URL(req.url, 'http://localhost').searchParams.get('apiKey');
-    if (apiKey && paperTradingStore.enabled) {
-      const user = await getUserByApiKey(apiKey);
-      if (user) {
-        accountId = user.accountId;
+    const token = new URL(req.url, 'http://localhost').searchParams.get('token');
+    let accountId: string;
+    if (paperTradingStore.enabled) {
+      if (!token) {
+        send(socket, {
+          type: 'error',
+          code: 'unauthorized',
+          message: 'token query parameter required',
+        });
+        socket.close(1008, 'Unauthorized');
+        return;
       }
+      const user = await getUserByToken(token);
+      if (!user) {
+        send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid token' });
+        socket.close(1008, 'Unauthorized');
+        return;
+      }
+      accountId = user.accountId;
+
+      const requested = new URL(req.url, 'http://localhost').searchParams.get('accountId');
+      if (requested && requested !== user.accountId) {
+        const owned =
+          fundedStore.enabled &&
+          (await fundedStore.listRunsForUser(user.id)).some((r) => r.paperAccountId === requested);
+        if (owned) {
+          accountId = requested;
+        } else {
+          send(socket, { type: 'error', code: 'forbidden', message: 'Account not authorized' });
+          socket.close(1008, 'Forbidden');
+          return;
+        }
+      }
+    } else {
+      accountId = DEFAULT_ACCOUNT_ID;
     }
 
     send(socket, {

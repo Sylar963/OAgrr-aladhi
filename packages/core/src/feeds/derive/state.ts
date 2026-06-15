@@ -78,15 +78,16 @@ export function registerDeriveInstrument(
 export function buildDeriveQuote(
   ticker: DeriveTicker,
   safeNum: (value: unknown) => number | null,
+  positiveOrNull: (value: unknown) => number | null,
 ): LiveQuote {
   const optionPricing = ticker.option_pricing;
   const stats = ticker.stats;
 
   return {
-    bidPrice: safeNum(ticker.b ?? ticker.best_bid_price),
-    askPrice: safeNum(ticker.a ?? ticker.best_ask_price),
-    bidSize: safeNum(ticker.B ?? ticker.best_bid_amount),
-    askSize: safeNum(ticker.A ?? ticker.best_ask_amount),
+    bidPrice: positiveOrNull(ticker.b ?? ticker.best_bid_price),
+    askPrice: positiveOrNull(ticker.a ?? ticker.best_ask_price),
+    bidSize: positiveOrNull(ticker.B ?? ticker.best_bid_amount),
+    askSize: positiveOrNull(ticker.A ?? ticker.best_ask_amount),
     markPrice: safeNum(optionPricing?.m ?? ticker.M ?? ticker.mark_price),
     lastPrice: null,
     underlyingPrice: safeNum(ticker.I ?? ticker.index_price),
@@ -104,8 +105,8 @@ export function buildDeriveQuote(
             vega: safeNum(optionPricing.v ?? optionPricing.vega),
             rho: safeNum(optionPricing.r ?? optionPricing.rho),
             markIv: safeNum(optionPricing.i ?? optionPricing.iv),
-            bidIv: safeNum(optionPricing.bi ?? optionPricing.bid_iv),
-            askIv: safeNum(optionPricing.ai ?? optionPricing.ask_iv),
+            bidIv: positiveOrNull(optionPricing.bi ?? optionPricing.bid_iv),
+            askIv: positiveOrNull(optionPricing.ai ?? optionPricing.ask_iv),
           }
         : { ...EMPTY_GREEKS },
     timestamp: Number(ticker.t ?? ticker.timestamp) || Date.now(),

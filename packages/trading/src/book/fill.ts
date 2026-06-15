@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 import type { UsdAmount } from './money.js';
 import type { OptionRight, OrderId, OrderSide } from './order.js';
 
@@ -9,7 +9,7 @@ export interface Fill {
   id: FillId;
   orderId: OrderId;
   legIndex: number;
-  venue: PaperVenueId;
+  venue: VenueId;
   side: OrderSide;
   optionRight: OptionRight;
   underlying: string;
@@ -21,6 +21,10 @@ export interface Fill {
   // full fills; persisted so partial-fill diagnostics survive a restart.
   requestedQuantity: number;
   priceUsd: UsdAmount;
+  // Implied vol at fill time, when the venue published a mark IV. Folded
+  // into avgEntryIv on Position so paper books keep an entry-IV history
+  // through multiple averaging fills.
+  iv: number | null;
   feesUsd: UsdAmount;
   // Per-contract slippage vs L1 reference (ask for buy, bid for sell). 0 under
   // OptimisticFillModel; positive when RealisticFillModel walked depth or paid

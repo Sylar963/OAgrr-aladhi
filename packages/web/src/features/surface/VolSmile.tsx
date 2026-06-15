@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import {
   createChart,
   LineSeries,
@@ -105,6 +105,31 @@ export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
 
   const { data: chains } = useAllExpiriesSmile(localUnderlying, true);
 
+  // Only Deribit/OKX/Thalex carry BTC+ETH; SOL/DOGE/AAVE/LIT/etc. live on
+  // bybit/coincall/binance/derive/gateio. Without this, picking e.g. SOL while
+  // the venue dropdown is still on Deribit (the default) filters the smile
+  // points down to zero and the chart silently goes blank.
+  const venuesForUnderlying = useMemo(() => {
+    const byVenue = underlyingsData?.byVenue;
+    if (!byVenue) return null;
+    return new Set(
+      byVenue
+        .filter((bv) => bv.underlyings.includes(localUnderlying))
+        .map((bv) => bv.venue),
+    );
+  }, [underlyingsData, localUnderlying]);
+
+  useEffect(() => {
+    if (
+      selectedVenue !== 'average' &&
+      venuesForUnderlying != null &&
+      venuesForUnderlying.size > 0 &&
+      !venuesForUnderlying.has(selectedVenue)
+    ) {
+      setSelectedVenue('average');
+    }
+  }, [selectedVenue, venuesForUnderlying]);
+
   const expiryColors = new Map(expiries.map((e, i) => [e, EXPIRY_COLORS[i % EXPIRY_COLORS.length]!]));
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -132,7 +157,9 @@ export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
 
   const venueOptions = [
     { value: 'average', label: 'Average' },
-    ...VENUE_LIST.map((v) => ({ value: v.id, label: v.label })),
+    ...VENUE_LIST.filter((v) => venuesForUnderlying == null || venuesForUnderlying.has(v.id)).map(
+      (v) => ({ value: v.id, label: v.label }),
+    ),
   ];
 
   return (

@@ -9,22 +9,26 @@ import { IvChip, SpreadPill, EmptyState } from '@components/ui';
 import { fmtUsd, fmtDelta } from '@lib/format';
 import { useIsMobile } from '@hooks/useIsMobile';
 import ExpandedRow from './ExpandedRow';
+import { FlashingPrice } from './FlashingPrice';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
 import { computeAtmConsensus } from './forward-analysis';
+import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
 import styles from './ChainTable.module.css';
 
 const GAMMA_TIP =
-  'Γ GAMMA — rate of change of Δ per $1 move in spot.\n\n' +
+  'Γ GAMMA — change in Δ for a 1% move in spot.\n\n' +
   '• Highest at-the-money and near expiry; near-zero deep OTM.\n' +
   '• Long options are long gamma — Δ moves in your favor as spot moves.\n' +
-  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.';
+  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.\n' +
+  '• Scale-invariant display: gamma × spot / 100. Comparable across BTC, ETH, $LIT, etc.';
 
 const VEGA_TIP =
-  'ν VEGA — option price change in USD per 1 vol-point move in IV (0.01 of IV).\n\n' +
+  'ν VEGA — option price change as % of spot per 1% IV move.\n\n' +
   '• Long options are long vega (gain when IV rises); short options are short vega.\n' +
   '• Largest on long-dated ATM options; tiny on short-dated deep OTM.\n' +
-  '• Your exposure to IV re-pricing, independent of spot moves.';
+  '• Your exposure to IV re-pricing, independent of spot moves.\n' +
+  '• Scale-invariant display: vega / spot × 100. Comparable across underlyings.';
 
 const DELTA_TIP =
   'Δ DELTA — price sensitivity of the option to the underlying.\n\n' +
@@ -38,16 +42,22 @@ interface NewChainTableProps {
   indexPrice: number | null;
   activeVenues: string[];
   myIv: number | null;
+  expiry: string;
+  underlying: string;
 }
 
-function fmtGamma(v: number | null): string {
-  if (v == null) return '–';
-  return `${Math.round(v * 1e6)}`;
+// Scale-invariant Greek display: delta-change per 1% spot move.
+// Equivalent to gamma × spot × 0.01. Reads the same across BTC ($60K) and $LIT ($0.06).
+function fmtGamma(v: number | null, spot: number | null): string {
+  if (v == null || spot == null || spot === 0) return '–';
+  return (v * spot * 0.01).toFixed(3);
 }
 
-function fmtVega(v: number | null): string {
-  if (v == null) return '–';
-  return `${Math.round(v)}`;
+// Scale-invariant Greek display: option-price change as % of spot per 1% IV move.
+// Coincall vega is dollars per 1-vol-point IV move; divide by spot to remove the price-scale dependency.
+function fmtVega(v: number | null, spot: number | null): string {
+  if (v == null || spot == null || spot === 0) return '–';
+  return `${((v / spot) * 100).toFixed(3)}%`;
 }
 
 // ── Venue column ──────────────────────────────────────────────────────────────
@@ -81,36 +91,6 @@ function VenueColumn({ side, align, activeSet }: VenueColumnProps) {
   );
 }
 
-interface BestBidAskResult {
-  bid: number | null;
-  ask: number | null;
-  bidVenue: string | null;
-  askVenue: string | null;
-}
-
-function bestBidAsk(side: EnrichedSide, activeSet: ReadonlySet<string>): BestBidAskResult {
-  let bestBid: number | null = null;
-  let bestAsk: number | null = null;
-  let bestBidVenue: string | null = null;
-  let bestAskVenue: string | null = null;
-
-  for (const [venueId, quote] of Object.entries(side.venues)) {
-    if (!activeSet.has(venueId) || !quote) continue;
-
-    if (quote.bid != null && (bestBid == null || quote.bid > bestBid)) {
-      bestBid = quote.bid;
-      bestBidVenue = venueId;
-    }
-
-    if (quote.ask != null && (bestAsk == null || quote.ask < bestAsk)) {
-      bestAsk = quote.ask;
-      bestAskVenue = venueId;
-    }
-  }
-
-  return { bid: bestBid, ask: bestAsk, bidVenue: bestBidVenue, askVenue: bestAskVenue };
-}
-
 // ── Strike row ────────────────────────────────────────────────────────────────
 
 interface QuickTradeInfo {
@@ -137,7 +117,7 @@ function PriceCell({
 
   return (
     <span className={className} onClick={onClick} role="button" title={title}>
-      <span>{fmtUsd(value)}</span>
+      <FlashingPrice text={fmtUsd(value)} />
       {meta?.logo ? <img src={meta.logo} alt="" className={styles.priceVenueLogo} /> : null}
     </span>
   );
@@ -155,6 +135,17 @@ interface StrikeRowProps {
   onQuickTrade: (info: QuickTradeInfo) => void;
   atmStrike: number | null;
   atmConsensusForward: number | null;
+  indexPrice: number | null;
+  underlying: string;
+  expiry: string;
+  freshnessNow: number;
+}
+
+function fmtDistPct(strike: number, indexPrice: number | null): string | null {
+  if (indexPrice == null || indexPrice === 0) return null;
+  const pct = ((strike - indexPrice) / indexPrice) * 100;
+  const sign = pct >= 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
 }
 
 interface StrikeRowItemPropsInternal extends Omit<StrikeRowProps, 'activeVenues'> {
@@ -175,13 +166,24 @@ const StrikeRowItem = memo(function StrikeRowItem({
   onQuickTrade,
   atmStrike,
   atmConsensusForward,
+  indexPrice,
+  underlying,
+  expiry,
+  freshnessNow,
 }: StrikeRowItemPropsInternal) {
+  const distLabel = fmtDistPct(strike.strike, indexPrice);
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
   const putQ =
     strike.put.bestVenue != null ? (strike.put.venues[strike.put.bestVenue] ?? null) : null;
-  const callBba = useMemo(() => bestBidAsk(strike.call, activeSet), [strike.call, activeSet]);
-  const putBba = useMemo(() => bestBidAsk(strike.put, activeSet), [strike.put, activeSet]);
+  const callBba = useMemo(
+    () => bestBidAsk(strike.call, activeSet, freshnessNow),
+    [strike.call, activeSet, freshnessNow],
+  );
+  const putBba = useMemo(
+    () => bestBidAsk(strike.put, activeSet, freshnessNow),
+    [strike.put, activeSet, freshnessNow],
+  );
   const handleToggle = useCallback(() => onToggle(strike.strike), [onToggle, strike.strike]);
 
   return (
@@ -202,19 +204,16 @@ const StrikeRowItem = memo(function StrikeRowItem({
       >
         <VenueColumn side={strike.call} align="left" activeSet={activeSet} />
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ''}`}>
-          {fmtGamma(callQ?.gamma ?? null)}
+          {fmtGamma(callQ?.gamma ?? null, indexPrice)}
         </span>
         <span className={`${styles.greekCell} ${callItm ? styles.itmCall : ''}`}>
-          {fmtVega(callQ?.vega ?? null)}
+          {fmtVega(callQ?.vega ?? null, indexPrice)}
         </span>
         <span className={`${styles.deltaCell} ${callItm ? styles.itmCall : ''}`}>
           {fmtDelta(callQ?.delta ?? null)}
         </span>
         <div className={`${styles.ivCell} ${callItm ? styles.itmCall : ''}`}>
           <IvChip iv={strike.call.bestIv} size="sm" />
-        </div>
-        <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
-          <SpreadPill spreadPct={callQ?.spreadPct ?? null} />
         </div>
         <PriceCell
           value={callBba.bid}
@@ -231,6 +230,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Sell call at best bid"
         />
+        <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
+          <SpreadPill spreadPct={crossVenueSpreadPct(callBba)} />
+        </div>
         <PriceCell
           value={callBba.ask}
           venueId={callBba.askVenue}
@@ -254,8 +256,8 @@ const StrikeRowItem = memo(function StrikeRowItem({
             isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'
           }
         >
-          {isAtm && <span className={styles.atmBadge}>ATM</span>}
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
+          {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
 
         <PriceCell
@@ -273,6 +275,9 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Sell put at best bid"
         />
+        <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
+          <SpreadPill spreadPct={crossVenueSpreadPct(putBba)} />
+        </div>
         <PriceCell
           value={putBba.ask}
           venueId={putBba.askVenue}
@@ -288,9 +293,6 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Buy put at best ask"
         />
-        <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
-          <SpreadPill spreadPct={putQ?.spreadPct ?? null} />
-        </div>
         <div className={`${styles.ivCell} ${putItm ? styles.itmPut : ''}`}>
           <IvChip iv={strike.put.bestIv} size="sm" />
         </div>
@@ -298,10 +300,10 @@ const StrikeRowItem = memo(function StrikeRowItem({
           {fmtDelta(putQ?.delta ?? null)}
         </span>
         <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ''}`}>
-          {fmtVega(putQ?.vega ?? null)}
+          {fmtVega(putQ?.vega ?? null, indexPrice)}
         </span>
         <span className={`${styles.greekCell} ${styles.alignRight} ${putItm ? styles.itmPut : ''}`}>
-          {fmtGamma(putQ?.gamma ?? null)}
+          {fmtGamma(putQ?.gamma ?? null, indexPrice)}
         </span>
         <VenueColumn side={strike.put} align="right" activeSet={activeSet} />
       </div>
@@ -315,6 +317,8 @@ const StrikeRowItem = memo(function StrikeRowItem({
           activeVenues={activeVenues}
           atmStrike={atmStrike}
           atmConsensusForward={atmConsensusForward}
+          underlying={underlying}
+          expiry={expiry}
         />
       )}
     </div>
@@ -329,6 +333,8 @@ export default function NewChainTable({
   indexPrice,
   activeVenues,
   myIv,
+  expiry,
+  underlying,
 }: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
@@ -336,6 +342,7 @@ export default function NewChainTable({
   const listRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
   const isMobile = useIsMobile();
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
 
   const toggleRow = useCallback((s: number) => {
     setExpanded((prev) => {
@@ -347,6 +354,11 @@ export default function NewChainTable({
   }, []);
 
   const activeSet = useMemo<ReadonlySet<string>>(() => new Set(activeVenues), [activeVenues]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setFreshnessNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const strikeIndexMap = useMemo(() => {
     const m = new Map<number, number>();
@@ -372,12 +384,12 @@ export default function NewChainTable({
     getItemKey: (i) => strikes[i]?.strike ?? i,
   });
 
-  // Reset scroll flag when the strike set changes (expiry switch)
-  const strikeCount = strikes.length;
-  const firstStrike = strikes[0]?.strike;
+  // Reset scroll flag only on tenor switch — not on every live delta that
+  // adds/changes a strike, and not when a venue toggle reshapes the strike
+  // set. Otherwise the table re-scrolls to ATM mid-session.
   useEffect(() => {
     hasScrolledRef.current = false;
-  }, [strikeCount, firstStrike]);
+  }, [expiry]);
 
   // Scroll to ATM once per strike set, not on every live price tick
   useEffect(() => {
@@ -427,6 +439,7 @@ export default function NewChainTable({
                   activeVenues={activeVenues}
                   isExpanded={expanded.has(s.strike)}
                   onToggle={() => toggleRow(s.strike)}
+                  freshnessNow={freshnessNow}
                 />
               </div>
             );
@@ -438,90 +451,112 @@ export default function NewChainTable({
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.header}>
-        <span className={styles.hdrLabel}>VENUES</span>
-        <span className={styles.hdrLabel} title={GAMMA_TIP}>γ</span>
-        <span className={styles.hdrLabel} title={VEGA_TIP}>ν</span>
-        <span className={styles.hdrLabel} title={DELTA_TIP}>Δ</span>
-        <span className={styles.hdrLabel}>IV</span>
-        <span className={styles.hdrLabel}>SPREAD</span>
-        <span className={styles.hdrLabel} data-align="right">
-          BID
-        </span>
-        <span className={styles.hdrLabel} data-align="right">
-          ASK
-        </span>
-        <span className={styles.hdrLabel} data-align="center">
-          STRIKE
-        </span>
-        <span className={styles.hdrLabel}>BID</span>
-        <span className={styles.hdrLabel}>ASK</span>
-        <span className={styles.hdrLabel}>SPREAD</span>
-        <span className={styles.hdrLabel}>IV</span>
-        <span className={styles.hdrLabel} data-align="right" title={DELTA_TIP}>
-          Δ
-        </span>
-        <span className={styles.hdrLabel} data-align="right" title={VEGA_TIP}>
-          ν
-        </span>
-        <span className={styles.hdrLabel} data-align="right" title={GAMMA_TIP}>
-          γ
-        </span>
-        <span className={styles.hdrLabel} data-align="right">
-          VENUES
-        </span>
-      </div>
+      <div className={styles.tableScroll}>
+        <div className={styles.table}>
+          <div className={styles.header}>
+            <span className={styles.hdrLabel}>VENUES</span>
+            <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
+              γ
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
+              ν
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
+              Δ
+            </span>
+            <span className={styles.hdrLabel} data-align="center">
+              IV
+            </span>
+            <span className={styles.hdrLabel} data-align="right">
+              BID
+            </span>
+            <span className={styles.hdrLabel} data-align="center">
+              SPREAD
+            </span>
+            <span className={styles.hdrLabel} data-align="right">
+              ASK
+            </span>
+            <span className={styles.hdrLabel} data-align="center">
+              STRIKE
+            </span>
+            <span className={styles.hdrLabel}>BID</span>
+            <span className={styles.hdrLabel} data-align="center">
+              SPREAD
+            </span>
+            <span className={styles.hdrLabel}>ASK</span>
+            <span className={styles.hdrLabel} data-align="center">
+              IV
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
+              Δ
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
+              ν
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
+              γ
+            </span>
+            <span className={styles.hdrLabel} data-align="right">
+              VENUES
+            </span>
+          </div>
 
-      <div className={styles.list} ref={listRef}>
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {rowVirtualizer.getVirtualItems().map((vItem) => {
-            const s = strikes[vItem.index]!;
-            const isAtm = s.strike === atmStrike;
-            return (
-              <div
-                key={vItem.key}
-                data-index={vItem.index}
-                ref={rowVirtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${vItem.start}px)`,
-                }}
-              >
-                {isAtm && indexPrice != null && (
-                  <div className={styles.atmMarker}>
-                    <div className={styles.atmLine} />
-                    <div className={styles.atmPill}>
-                      <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
-                    </div>
-                    <div className={styles.atmLine} />
+          <div className={styles.list} ref={listRef}>
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((vItem) => {
+                const s = strikes[vItem.index]!;
+                const isAtm = s.strike === atmStrike;
+                return (
+                  <div
+                    key={vItem.key}
+                    data-index={vItem.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${vItem.start}px)`,
+                    }}
+                  >
+                    {isAtm && indexPrice != null && (
+                      <div className={styles.atmMarker}>
+                        <div className={styles.atmLine} />
+                        <div className={styles.atmPill}>
+                          <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
+                        </div>
+                        <div className={styles.atmLine} />
+                      </div>
+                    )}
+                    <StrikeRowItem
+                      strike={s}
+                      isAtm={isAtm}
+                      isExpanded={expanded.has(s.strike)}
+                      callItm={indexPrice != null && s.strike < indexPrice}
+                      putItm={indexPrice != null && s.strike > indexPrice}
+                      onToggle={toggleRow}
+                      activeVenues={activeVenues}
+                      activeSet={activeSet}
+                      myIv={myIv}
+                      onQuickTrade={setQuickTrade}
+                      atmStrike={atmStrike}
+                      atmConsensusForward={atmConsensusForward}
+                      indexPrice={indexPrice}
+                      underlying={underlying}
+                      expiry={expiry}
+                      freshnessNow={freshnessNow}
+                    />
                   </div>
-                )}
-                <StrikeRowItem
-                  strike={s}
-                  isAtm={isAtm}
-                  isExpanded={expanded.has(s.strike)}
-                  callItm={indexPrice != null && s.strike < indexPrice}
-                  putItm={indexPrice != null && s.strike > indexPrice}
-                  onToggle={toggleRow}
-                  activeVenues={activeVenues}
-                  activeSet={activeSet}
-                  myIv={myIv}
-                  onQuickTrade={setQuickTrade}
-                  atmStrike={atmStrike}
-                  atmConsensusForward={atmConsensusForward}
-                />
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 

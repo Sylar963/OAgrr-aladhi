@@ -5,6 +5,8 @@ import {
   buildBybitSubscriptionTopics,
   buildBybitTopic,
   createBybitSubscriptionState,
+  markBybitSubscribedTopics,
+  removeBybitSubscribedTopics,
   resetBybitSubscriptionState,
 } from './planner.js';
 
@@ -30,24 +32,25 @@ function createInstrument(exchangeSymbol: string): CachedInstrument {
 describe('Bybit planner', () => {
   it('builds per-instrument ticker topics', () => {
     const state = createBybitSubscriptionState();
-    const topics = buildBybitSubscriptionTopics(state, [
+    const plan = buildBybitSubscriptionTopics(state, [
       createInstrument('BTC-25DEC26-67000-C-USDT'),
     ]);
 
-    expect(topics).toEqual(['tickers.BTC-25DEC26-67000-C-USDT']);
+    expect(plan.topics).toEqual(['tickers.BTC-25DEC26-67000-C-USDT']);
+    expect(state.subscribedTopics.size).toBe(0);
   });
 
   it('skips topics that are already subscribed', () => {
     const state = createBybitSubscriptionState();
     const instrument = createInstrument('BTC-25DEC26-67000-C-USDT');
 
-    buildBybitSubscriptionTopics(state, [instrument]);
-    expect(buildBybitSubscriptionTopics(state, [instrument])).toEqual([]);
+    markBybitSubscribedTopics(state, ['tickers.BTC-25DEC26-67000-C-USDT']);
+    expect(buildBybitSubscriptionTopics(state, [instrument]).topics).toEqual([]);
   });
 
   it('removes expired topics from tracking state', () => {
     const state = createBybitSubscriptionState();
-    buildBybitSubscriptionTopics(state, [createInstrument('BTC-25DEC26-67000-C-USDT')]);
+    markBybitSubscribedTopics(state, ['tickers.BTC-25DEC26-67000-C-USDT']);
 
     const topics = buildBybitExpiredTopics(state, ['BTC-25DEC26-67000-C-USDT']);
 
@@ -57,9 +60,28 @@ describe('Bybit planner', () => {
 
   it('resets tracked topics', () => {
     const state = createBybitSubscriptionState();
-    buildBybitSubscriptionTopics(state, [createInstrument('BTC-25DEC26-67000-C-USDT')]);
+    markBybitSubscribedTopics(state, ['tickers.BTC-25DEC26-67000-C-USDT']);
     resetBybitSubscriptionState(state);
     expect(state.subscribedTopics.size).toBe(0);
+  });
+
+  it('marks topics only after subscribe succeeds', () => {
+    const state = createBybitSubscriptionState();
+    const topic = 'tickers.BTC-25DEC26-67000-C-USDT';
+
+    markBybitSubscribedTopics(state, [topic]);
+
+    expect(state.subscribedTopics.has(topic)).toBe(true);
+  });
+
+  it('removes tracked topics even without a live unsubscribe', () => {
+    const state = createBybitSubscriptionState();
+    const topic = 'tickers.BTC-25DEC26-67000-C-USDT';
+    markBybitSubscribedTopics(state, [topic]);
+
+    removeBybitSubscribedTopics(state, [topic]);
+
+    expect(state.subscribedTopics.has(topic)).toBe(false);
   });
 
   it('uses the canonical bybit topic format', () => {

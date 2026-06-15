@@ -9,9 +9,8 @@ import type {
   PaperTradeOrderLinkDto,
   PaperTradeSummaryDto,
   PlaceOrderRequest,
-  PaperVenueId,
 } from '@oggregator/protocol';
-import { PAPER_VENUE_IDS } from '@oggregator/protocol';
+import { VENUE_IDS, type VenueId } from '@oggregator/core';
 import type {
   PaperTradePositionRow,
   PaperTradeRow,
@@ -403,7 +402,7 @@ async function buildTradeDetail(
 async function enrichTradeLegs(
   rows: PaperTradePositionRow[],
   cache: Map<string, EnrichedChainResponse | null>,
-  legMarketVenues: Map<string, PaperVenueId>,
+  legMarketVenues: Map<string, VenueId>,
 ): Promise<PaperTradeLegDto[]> {
   return Promise.all(
     rows.map(async (row) => {
@@ -439,7 +438,7 @@ async function enrichTradeLegs(
 async function getLegMarketData(
   row: PaperTradePositionRow,
   cache: Map<string, EnrichedChainResponse | null>,
-  marketVenue: PaperVenueId | null,
+  marketVenue: VenueId | null,
 ): Promise<LegMarketData> {
   if (marketVenue) {
     const venueSnapshot = await getSnapshot(row.underlying, row.expiry, cache, [marketVenue]);
@@ -454,7 +453,7 @@ async function getLegMarketData(
     }
   }
 
-  const snapshot = await getSnapshot(row.underlying, row.expiry, cache, [...PAPER_VENUE_IDS]);
+  const snapshot = await getSnapshot(row.underlying, row.expiry, cache, [...VENUE_IDS]);
   if (!snapshot) {
     return emptyMarketData(marketVenue);
   }
@@ -485,7 +484,7 @@ async function getSnapshot(
   underlying: string,
   expiry: string,
   cache: Map<string, EnrichedChainResponse | null>,
-  venues = [...PAPER_VENUE_IDS],
+  venues = [...VENUE_IDS],
 ): Promise<EnrichedChainResponse | null> {
   const key = `${underlying}:${expiry}:${[...venues].sort().join(',')}`;
   if (cache.has(key)) {
@@ -517,8 +516,8 @@ export function computeNetPremiumUsd(fills: Fill[]): number {
   return fills.reduce((sum, fill) => sum - fillCashDelta(fill), 0);
 }
 
-function latestFillVenueByContract(fills: Fill[]): Map<string, PaperVenueId> {
-  const map = new Map<string, PaperVenueId>();
+function latestFillVenueByContract(fills: Fill[]): Map<string, VenueId> {
+  const map = new Map<string, VenueId>();
   for (const fill of fills) {
     const key = contractKey(fill);
     if (!map.has(key)) {
@@ -540,7 +539,7 @@ function contractKey(input: {
 function getVenueQuote(
   snapshot: EnrichedChainResponse,
   row: PaperTradePositionRow,
-  venue: PaperVenueId,
+  venue: VenueId,
 ): VenueQuote | null {
   const strike = snapshot.strikes.find((item) => item.strike === row.strike);
   if (!strike) return null;
@@ -557,7 +556,7 @@ function hasQuoteData(quote: VenueQuote): boolean {
 function quoteToMarketData(
   quote: VenueQuote,
   underlyingPriceUsd: number | null,
-  marketSourceVenue: PaperVenueId,
+  marketSourceVenue: VenueId,
   marketSourceLabel: string,
 ): LegMarketData {
   return {
@@ -573,7 +572,7 @@ function quoteToMarketData(
   };
 }
 
-function emptyMarketData(marketVenue: PaperVenueId | null): LegMarketData {
+function emptyMarketData(marketVenue: VenueId | null): LegMarketData {
   return {
     markPriceUsd: null,
     delta: null,
@@ -587,7 +586,7 @@ function emptyMarketData(marketVenue: PaperVenueId | null): LegMarketData {
   };
 }
 
-function formatMarketSourceLabel(value: PaperVenueId): string {
+function formatMarketSourceLabel(value: VenueId): string {
   return value.toUpperCase();
 }
 
@@ -628,6 +627,7 @@ async function applyFillsToTrade(tradeId: string, fills: Fill[]): Promise<void> 
       optionRight: next.key.optionRight,
       netQuantity: next.netQuantity,
       avgEntryPriceUsd: next.avgEntryPriceUsd,
+      avgEntryIv: next.avgEntryIv,
       realizedPnlUsd: next.realizedPnlUsd,
       openedAt: next.openedAt,
       lastFillAt: next.lastFillAt,
@@ -694,6 +694,7 @@ function tradeRowToPosition(row: PaperTradePositionRow): Position {
     },
     netQuantity: row.netQuantity,
     avgEntryPriceUsd: row.avgEntryPriceUsd,
+    avgEntryIv: row.avgEntryIv,
     realizedPnlUsd: row.realizedPnlUsd,
     openedAt: row.openedAt,
     lastFillAt: row.lastFillAt,
@@ -833,6 +834,7 @@ export async function settleExpiredPositionsForAccount(
         },
         netQuantity: tradeRow.netQuantity,
         avgEntryPriceUsd: tradeRow.avgEntryPriceUsd,
+        avgEntryIv: null,
         realizedPnlUsd: tradeRow.realizedPnlUsd,
         openedAt: tradeRow.openedAt,
         lastFillAt: tradeRow.lastFillAt,
@@ -989,7 +991,7 @@ async function listTradeRowsForLeg(
 async function pickAttributionVenue(
   accountId: string,
   pos: PaperPositionRow,
-): Promise<PaperVenueId> {
+): Promise<VenueId> {
   const fills = await orderRepository.listFills(accountId, 1_000);
   const match = fills.find(
     (f) =>
@@ -1012,6 +1014,7 @@ function positionRowToBookPosition(row: PaperPositionRow): Position {
     },
     netQuantity: row.netQuantity,
     avgEntryPriceUsd: row.avgEntryPriceUsd,
+    avgEntryIv: row.avgEntryIv,
     realizedPnlUsd: row.realizedPnlUsd,
     openedAt: row.openedAt,
     lastFillAt: row.lastFillAt,

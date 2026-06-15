@@ -8,6 +8,7 @@ const BLANK_SIDE = (markIv: number | null): EnrichedSide => {
     bid: null,
     ask: null,
     mid: null,
+    midRaw: null,
     bidSize: null,
     askSize: null,
     markIv,

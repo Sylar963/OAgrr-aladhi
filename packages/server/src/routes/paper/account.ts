@@ -1,30 +1,17 @@
+import { InitPaperAccountRequestSchema, type PaperAccountDto } from '@oggregator/protocol';
+import { DEFAULT_ACCOUNT_LABEL, DEFAULT_INITIAL_CASH_USD } from '@oggregator/trading';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  InitPaperAccountRequestSchema,
-  type PaperAccountDto,
-} from '@oggregator/protocol';
-import {
-  DEFAULT_ACCOUNT_ID,
-  DEFAULT_ACCOUNT_LABEL,
-  DEFAULT_INITIAL_CASH_USD,
-} from '@oggregator/trading';
-import {
-  getAccount,
-  paperTradingStore,
-  resetAccount,
-} from '../../trading-services.js';
+import { getAccount, paperTradingStore, resetAccount } from '../../trading-services.js';
+import { resolveScope } from './scope.js';
 
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
 }
 
-// Every authenticated user has their own `acct_<uuid>` row (see createUser in
-// user-service.ts). Anonymous requests fall back to the shared default account.
-function accountScope(req: FastifyRequest): { id: string; label: string } {
-  if (req.user) {
-    return { id: req.user.accountId, label: `${req.user.label}'s Account` };
-  }
-  return { id: DEFAULT_ACCOUNT_ID, label: DEFAULT_ACCOUNT_LABEL };
+// Label fallback used only when no persisted account row exists yet (toDto).
+// On a scoped funded-run account the label comes from the persisted row.
+function fallbackLabel(req: FastifyRequest): string {
+  return req.user ? `${req.user.label}'s Account` : DEFAULT_ACCOUNT_LABEL;
 }
 
 export async function paperAccountRoute(app: FastifyInstance) {
@@ -32,9 +19,10 @@ export async function paperAccountRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const { id, label } = accountScope(req);
+    const id = await resolveScope(req, reply);
+    if (id === null) return reply;
     const account = await getAccount(id);
-    return toDto(account, id, label);
+    return toDto(account, id, fallbackLabel(req));
   });
 
   app.post('/paper/account/init', async (req, reply) => {
@@ -45,7 +33,9 @@ export async function paperAccountRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const { id, label } = accountScope(req);
+    const id = await resolveScope(req, reply);
+    if (id === null) return reply;
+    const label = fallbackLabel(req);
     const account = await resetAccount(id, label, parsed.data.initialCashUsd);
     return toDto(account, id, label);
   });

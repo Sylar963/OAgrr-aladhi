@@ -1,0 +1,88 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  animation: bannerIn var(--transition-base);
+}
+
+.banner[data-severity="info"] {
+  background: rgba(136, 182, 255, 0.1);
+  border-bottom-color: rgba(136, 182, 255, 0.35);
+  color: var(--color-info);
+}
+.banner[data-severity="notice"] {
+  background: rgba(254, 249, 160, 0.1);
+  border-bottom-color: rgba(254, 249, 160, 0.35);
+  color: var(--color-warning);
+}
+.banner[data-severity="degraded"] {
+  background: rgba(203, 56, 85, 0.12);
+  border-bottom-color: rgba(203, 56, 85, 0.4);
+  color: var(--color-loss);
+}
+.banner[data-severity="outage"] {
+  background: rgba(203, 56, 85, 0.18);
+  border-bottom-color: var(--color-loss);
+  color: var(--color-loss);
+}
+
+.icon {
+  flex: 0 0 auto;
+}
+
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-weight: 600;
+}
+.message {
+  color: var(--text-tertiary);
+}
+.countdown {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.close {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: currentColor;
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: var(--text-2xs);
+  padding: 0 var(--space-1);
+}
+.close:hover {
+  opacity: 1;
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+}

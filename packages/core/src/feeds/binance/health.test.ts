@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveBinanceHealth } from './health.js';
+import { deriveBinanceHealth, deriveBinanceHealthForConnection } from './health.js';
 
 describe('Binance health', () => {
   it('reports healthy when server time and symbols are present', () => {
@@ -20,6 +20,15 @@ describe('Binance health', () => {
     expect(deriveBinanceHealth(null, null, new Error('timeout'))).toEqual({
       status: 'degraded',
       message: 'rest probe failed: Error: timeout',
+    });
+  });
+
+  it('does not report healthy while the websocket is reconnecting', () => {
+    expect(
+      deriveBinanceHealthForConnection(123, { optionSymbols: [{}] }, 'reconnecting'),
+    ).toEqual({
+      status: 'reconnecting',
+      message: 'ws reconnecting',
     });
   });
 });

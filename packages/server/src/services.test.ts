@@ -38,6 +38,9 @@ vi.mock('@oggregator/core', async (importOriginal) => {
         return startResolves.flow ? Promise.resolve() : Promise.reject(new Error('flow boom'));
       }
       dispose() {}
+      acquire() {
+        return Promise.resolve(() => {});
+      }
       getTrades() {
         return [];
       }

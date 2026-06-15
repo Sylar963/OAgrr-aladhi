@@ -1,13 +1,13 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CreatePaperTradeNoteRequestSchema,
   CreatePaperTradeRequestSchema,
   ReducePaperTradeRequestSchema,
 } from '@oggregator/protocol';
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
 import { paperTradingStore } from '../../trading-services.js';
 import { paperEvents } from './events.js';
 import { fillToDto, orderToDto } from './mappers.js';
+import { resolveScope } from './scope.js';
 import {
   addTradeNote,
   closeTrade,
@@ -17,10 +17,6 @@ import {
   listTradeSummaries,
   reduceTrade,
 } from './workspace.js';
-
-function getAccountId(request: FastifyRequest): string {
-  return request.user?.accountId ?? DEFAULT_ACCOUNT_ID;
-}
 
 function persistenceUnavailable() {
   return { error: 'persistence_unavailable', message: 'DATABASE_URL not set' };
@@ -38,7 +34,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
         ? req.query.status
         : 'all';
     const limit = Math.min(Number(req.query.limit ?? '100') || 100, 500);
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     return { trades: await listTradeSummaries(status, limit, accountId) };
   });
 
@@ -48,7 +45,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       return await getTradeDetailOrThrow(req.params.tradeId, accountId);
     } catch (err) {
@@ -63,7 +61,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     return getPaperOverview(accountId);
   });
 
@@ -75,7 +74,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     const result = await createTrade(parsed.data, accountId);
     paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
     paperEvents.emitTrade(result.trade);
@@ -99,7 +99,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const trade = await addTradeNote(req.params.tradeId, parsed.data, accountId);
       paperEvents.emitTrade(trade);
@@ -121,7 +122,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!paperTradingStore.enabled) {
       return reply.status(503).send(persistenceUnavailable());
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const result = await closeTrade(req.params.tradeId, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
@@ -131,7 +133,10 @@ export async function paperTradesRoute(app: FastifyInstance) {
       }
       return result.trade;
     } catch (err) {
-      if (err instanceof Error && (err.message === 'Trade not found' || err.message === 'Trade is already flat')) {
+      if (
+        err instanceof Error &&
+        (err.message === 'Trade not found' || err.message === 'Trade is already flat')
+      ) {
         return reply.status(404).send({ error: 'not_found', message: err.message });
       }
       throw err;
@@ -148,7 +153,8 @@ export async function paperTradesRoute(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
-    const accountId = getAccountId(req);
+    const accountId = await resolveScope(req, reply);
+    if (accountId === null) return reply;
     try {
       const result = await reduceTrade(req.params.tradeId, parsed.data.fraction, accountId);
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
@@ -158,7 +164,10 @@ export async function paperTradesRoute(app: FastifyInstance) {
       }
       return result.trade;
     } catch (err) {
-      if (err instanceof Error && (err.message === 'Trade not found' || err.message === 'Trade is already flat')) {
+      if (
+        err instanceof Error &&
+        (err.message === 'Trade not found' || err.message === 'Trade is already flat')
+      ) {
         return reply.status(404).send({ error: 'not_found', message: err.message });
       }
       throw err;

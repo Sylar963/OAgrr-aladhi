@@ -1,4 +1,4 @@
-import type { PaperVenueId } from '@oggregator/protocol';
+import type { VenueId } from '@oggregator/core';
 import { newFillId, type Fill } from '../book/fill.js';
 import { newOrderId } from '../book/order.js';
 import type { Position } from '../book/position.js';
@@ -6,7 +6,7 @@ import { deliveryFeeUsd } from './delivery-fees.js';
 
 export interface SettlementInput {
   position: Position;
-  venue: PaperVenueId;
+  venue: VenueId;
   settlementSpotUsd: number;
   asOf: Date;
 }
@@ -42,6 +42,7 @@ export function buildSettlementFill(input: SettlementInput): Fill | null {
     quantity: qty,
     requestedQuantity: qty,
     priceUsd: intrinsic,
+    iv: null,
     feesUsd: fees,
     slippageUsd: 0,
     partialFill: false,

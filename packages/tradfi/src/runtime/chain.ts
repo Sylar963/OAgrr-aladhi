@@ -5,11 +5,18 @@ import {
   type EnrichedChainResponse,
   type NormalizedOptionContract,
   type PremiumValue,
+  type VenueId,
   type VenueOptionChain,
 } from '@oggregator/core';
 import type { TradfiStore, TradfiLiveQuote } from './store.js';
 import { emptyQuote } from './store.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
+
+// TradFi is a separate service; the shared core chain/enrichment types are keyed
+// by the crypto VenueId union. We widen "tastytrade" to VenueId at this single
+// boundary — enrichment stores it in Partial<Record<VenueId>> maps keyed by this
+// string, so it flows through to the response as `venues.tastytrade` unchanged.
+const TASTYTRADE_VENUE = 'tastytrade' as VenueId;
 
 function premium(value: number | null): PremiumValue {
   return { raw: value, rawCurrency: 'USD', usd: value };
@@ -22,7 +29,7 @@ function toContract(
   source: 'ws' | 'rest',
 ): NormalizedOptionContract {
   return {
-    venue: 'tastytrade',
+    venue: TASTYTRADE_VENUE,
     symbol: inst.canonical,
     exchangeSymbol: inst.streamerSymbol,
     base: inst.underlying,
@@ -82,7 +89,7 @@ export function buildChain(
   }
 
   const venueChain: VenueOptionChain = {
-    venue: 'tastytrade',
+    venue: TASTYTRADE_VENUE,
     underlying,
     expiry,
     asOf: Date.now(),

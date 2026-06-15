@@ -35,10 +35,18 @@ Logs "tradfi service listening" then "markets loaded + streaming" once bootstrap
 | GET | `/expiries?underlying=AAPL` | Expiry dates for an underlying |
 | GET | `/chains?underlying=AAPL&expiry=2026-04-17` | Enriched option chain snapshot |
 | WS | `/ws/chain?underlying=AAPL&expiry=2026-04-17` | Live 200ms push of enriched chain |
+| GET | `/health` | Liveness — always 200; reports uptime, market-open, readiness |
+| GET | `/ready` | Readiness — 200 once catalog loaded + data flowing, else 503 |
+
+`/chains` returns `503 { error: 'catalog not loaded' }` before the chain catalog loads, `503 { error: 'no market data yet' }` while warming up (the web client retries 503s), and `200` with an empty `strikes` array when an expiry genuinely has no instruments.
 
 ## Auth / token chain
 
-OAuth2 refresh-token grant (`/oauth/token`) → 15-min access token → `/api-quote-tokens` → DXLink quote token (24h) → DXLink WebSocket. The feed proactively reconnects ~1h before the quote token expires.
+OAuth2 refresh-token grant (`/oauth/token`) → 15-min access token → `/api-quote-tokens` → DXLink quote token (24h) → DXLink WebSocket. The feed refreshes the quote token a margin (~5 min) before its real `expires-at` (falling back to ~23h if the API omits it), and re-auths immediately with a fresh token if DXLink rejects the current one.
+
+## Deploy
+
+Runs on the Scaleway host (not Vercel — persistent process + WebSocket + in-memory store). See [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) for the systemd unit, nginx vhost, and the host checklist.
 
 ## Notes
 

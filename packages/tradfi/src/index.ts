@@ -17,10 +17,29 @@ async function main() {
   await app.listen({ port: cfg.port, host: '0.0.0.0' });
   logger.info({ port: cfg.port }, 'tradfi service listening');
 
-  feed.loadMarkets()
+  void feed.loadMarkets()
     .then(() => feed.startStreaming())
     .then(() => logger.info('markets loaded + streaming'))
     .catch((err: unknown) => logger.error({ err: String(err) }, 'bootstrap failed'));
+
+  let shuttingDown = false;
+  const shutdown = (sig: string): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ sig }, 'shutting down');
+    void (async () => {
+      try {
+        await feed.dispose();
+        await app.close();
+      } catch (err: unknown) {
+        logger.error({ err: String(err) }, 'shutdown error');
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 main().catch((err: unknown) => {

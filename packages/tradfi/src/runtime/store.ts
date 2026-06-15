@@ -67,6 +67,15 @@ export class TradfiStore {
     return this.quotes.get(streamerSymbol);
   }
 
+  /** True if any instrument in this chain has received at least one quote. */
+  hasQuotesFor(underlying: string, expiry: string): boolean {
+    for (const inst of this.instrumentsFor(underlying, expiry)) {
+      const q = this.quotes.get(inst.streamerSymbol);
+      if (q != null && q.ts > 0) return true;
+    }
+    return false;
+  }
+
   setSpot(underlying: string, price: number): void {
     this.spot.set(underlying, price);
   }

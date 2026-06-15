@@ -36,4 +36,29 @@ describe('DxLinkProtocol state machine', () => {
     proto.onMessage({ type: 'FEED_DATA', channel: 3, data: ['Trade', ['Trade', 'AAPL', 1, 2, 3]] });
     expect(onData).toHaveBeenCalledTimes(1);
   });
+
+  it('fires onAuthError when the token is rejected (UNAUTHORIZED after AUTH)', () => {
+    const onAuthError = vi.fn();
+    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    proto.onOpen();
+    proto.onMessage({ type: 'AUTH_STATE', state: 'UNAUTHORIZED' }); // first → sends AUTH
+    expect(onAuthError).not.toHaveBeenCalled();
+    proto.onMessage({ type: 'AUTH_STATE', state: 'UNAUTHORIZED' }); // re-prompt → token rejected
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onAuthError on an UNAUTHORIZED ERROR frame', () => {
+    const onAuthError = vi.fn();
+    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    proto.onMessage({ type: 'ERROR', error: 'UNAUTHORIZED', message: 'bad token' });
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT reconnect on non-auth ERROR frames (no storm)', () => {
+    const onAuthError = vi.fn();
+    const proto = new DxLinkProtocol({ channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [], onAuthError });
+    proto.onMessage({ type: 'ERROR', error: 'INVALID_MESSAGE' });
+    proto.onMessage({ type: 'ERROR', error: 'TIMEOUT' });
+    expect(onAuthError).not.toHaveBeenCalled();
+  });
 });

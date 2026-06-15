@@ -14,10 +14,13 @@ export interface DxLinkProtocolOptions {
   send: (msg: unknown) => void;
   onData: (events: DxEvent[]) => void;
   desiredSubs: () => DxSub[];
+  /** Fired when the server rejects our token or reports a protocol error. */
+  onAuthError?: (() => void) | undefined;
 }
 
 export class DxLinkProtocol {
   private ready = false;
+  private sentAuth = false;
   constructor(private readonly o: DxLinkProtocolOptions) {}
 
   isReady(): boolean {
@@ -26,16 +29,34 @@ export class DxLinkProtocol {
 
   onOpen(): void {
     this.ready = false;
+    this.sentAuth = false;
     this.o.send(buildSetup());
   }
 
   onMessage(msg: unknown): void {
     if (typeof msg !== 'object' || msg == null) return;
-    const m = msg as { type?: string; state?: string };
+    const m = msg as { type?: string; state?: string; error?: string };
     switch (m.type) {
       case 'AUTH_STATE':
-        if (m.state === 'UNAUTHORIZED') this.o.send(buildAuth(this.o.token));
-        else if (m.state === 'AUTHORIZED') this.o.send(buildChannelRequest(this.o.channel));
+        if (m.state === 'UNAUTHORIZED') {
+          // A second UNAUTHORIZED after we already sent AUTH means the token was rejected.
+          if (this.sentAuth) { this.o.onAuthError?.(); return; }
+          this.sentAuth = true;
+          this.o.send(buildAuth(this.o.token));
+        } else if (m.state === 'AUTHORIZED') {
+          this.sentAuth = false;
+          this.o.send(buildChannelRequest(this.o.channel));
+        }
+        return;
+      case 'ERROR':
+        // Only a token rejection warrants a token-refresh reconnect. Other errors
+        // (INVALID_MESSAGE, TIMEOUT, …) are logged — reconnecting on them storms.
+        if (m.error === 'UNAUTHORIZED') {
+          log.warn({ error: m.error }, 'dxlink auth error');
+          this.o.onAuthError?.();
+        } else {
+          log.warn({ error: m.error }, 'dxlink protocol error');
+        }
         return;
       case 'CHANNEL_OPENED':
         this.o.send(buildFeedSetup(this.o.channel));
@@ -70,6 +91,7 @@ export interface DxLinkClientOptions {
   token: string;
   onData: (events: DxEvent[]) => void;
   desiredSubs: () => DxSub[];
+  onAuthError?: (() => void) | undefined;
 }
 
 const CHANNEL = 3;
@@ -87,6 +109,7 @@ export class DxLinkClient {
       send: (m) => this.ws?.send(m as Record<string, unknown>),
       onData: this.o.onData,
       desiredSubs: this.o.desiredSubs,
+      onAuthError: this.o.onAuthError,
     });
     this.proto = proto;
 
@@ -104,6 +127,10 @@ export class DxLinkClient {
       onStatusChange: (state) => log.info({ state }, 'dxlink status'),
     });
     await this.ws.connect();
+  }
+
+  isStreaming(): boolean {
+    return this.proto?.isReady() ?? false;
   }
 
   subscribe(subs: DxSub[]): void {

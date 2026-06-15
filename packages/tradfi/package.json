@@ -8,9 +8,9 @@
     "build": "tsc",
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "lint": "biome lint .",
-    "typecheck": "pnpm --filter @oggregator/core build && tsc --noEmit",
+    "typecheck": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && tsc --noEmit",
     "test": "vitest",
-    "test:run": "pnpm --filter @oggregator/core build && vitest run"
+    "test:run": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

@@ -140,20 +140,26 @@ export default function StatStrip({
           <div className={styles.divider} />
           <StatCell
             label="IVR"
-            value={`${marketStats.dvol.ivr.toFixed(0)}`}
+            value={marketStats.dvol.ivr != null ? `${marketStats.dvol.ivr.toFixed(0)}` : '–'}
             sub={`52w: ${fmtIv(marketStats.dvol.low52w)}–${fmtIv(marketStats.dvol.high52w)}`}
             accent
           />
           <div className={styles.divider} />
           <StatCell
             label="IV Δ1d"
-            value={fmtPct(marketStats.dvol.ivChange1d * 100, 2)}
+            value={
+              marketStats.dvol.ivChange1d != null
+                ? fmtPct(marketStats.dvol.ivChange1d * 100, 2)
+                : '–'
+            }
             positive={
-              marketStats.dvol.ivChange1d > 0
-                ? true
-                : marketStats.dvol.ivChange1d < 0
-                  ? false
-                  : null
+              marketStats.dvol.ivChange1d == null
+                ? null
+                : marketStats.dvol.ivChange1d > 0
+                  ? true
+                  : marketStats.dvol.ivChange1d < 0
+                    ? false
+                    : null
             }
           />
         </>

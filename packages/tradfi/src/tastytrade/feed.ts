@@ -21,6 +21,14 @@ const MIN_TOKEN_TTL_MS = 60 * 1000;
 // fetch/connect storm. The scheduled (expiry) refresh fires far outside this window.
 const MIN_RECONNECT_INTERVAL_MS = 60 * 1000;
 
+// Exponential backoff for connect failures: a failed (re)connect retries until it
+// succeeds rather than silently leaving the feed dead.
+const BASE_RECONNECT_BACKOFF_MS = 2 * 1000;
+const MAX_RECONNECT_BACKOFF_MS = 60 * 1000;
+
+// Per-chain REST-refresh throttle, so repeated /chains polls can't hammer REST.
+const REFRESH_THROTTLE_MS = 15 * 1000;
+
 const INDEX_UNDERLYINGS = new Set(['SPX', 'NDX', 'RUT', 'VIX']);
 
 /** Compute ms until the quote token should be refreshed, given its expiry timestamp. */
@@ -56,8 +64,11 @@ export class TradfiFeed {
   private desired: DxSub[] = [];
   private subscribedChains = new Set<string>();
   private tokenTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnecting = false;
   private lastReconnectAt = 0;
+  private retryAttempts = 0;
+  private lastRefreshAt = new Map<string, number>();
 
   constructor(
     private readonly rest: TastytradeRest,
@@ -106,6 +117,11 @@ export class TradfiFeed {
   }
 
   async startStreaming(): Promise<void> {
+    await this.reconnectStreaming('initial');
+  }
+
+  /** Open a fresh DXLink stream (new quote token + connection). Throws on failure. */
+  private async openStream(): Promise<void> {
     // Double-connect guard: tear down any existing connection and clear the token timer.
     if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
     await this.dx?.disconnect();
@@ -162,22 +178,37 @@ export class TradfiFeed {
     log.info({ underlying, expiry, subs: subs.length }, 'chain subscription added');
   }
 
+  /**
+   * Resilient (re)connect: single-flight, an auth-error storm cooldown, and an
+   * exponential backoff retry on failure so a failed connect never leaves the
+   * feed silently dead — it keeps retrying until a stream is established.
+   */
   private async reconnectStreaming(reason: string): Promise<void> {
     if (this.reconnecting) return;
-    const now = Date.now();
-    if (now - this.lastReconnectAt < MIN_RECONNECT_INTERVAL_MS) {
+    // Cooldown applies only to repeated auth-error triggers (storm guard). The
+    // initial connect, scheduled token refresh, and backoff retries are exempt.
+    if (reason === 'auth-error' && Date.now() - this.lastReconnectAt < MIN_RECONNECT_INTERVAL_MS) {
       log.warn({ reason }, 'dxlink reconnect throttled');
       return;
     }
+    if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     this.reconnecting = true;
-    this.lastReconnectAt = now;
+    this.lastReconnectAt = Date.now();
     try {
-      await this.dx?.disconnect();
-      this.dx = null;
-      await this.startStreaming();
-      log.info({ reason }, 'dxlink reconnected');
+      await this.openStream();
+      this.retryAttempts = 0;
+      if (reason !== 'initial') log.info({ reason }, 'dxlink reconnected');
     } catch (err: unknown) {
-      log.warn({ reason, err: String(err) }, 'dxlink reconnect failed');
+      this.retryAttempts += 1;
+      const backoff = Math.min(
+        MAX_RECONNECT_BACKOFF_MS,
+        BASE_RECONNECT_BACKOFF_MS * 2 ** (this.retryAttempts - 1),
+      );
+      log.warn(
+        { reason, attempt: this.retryAttempts, backoffMs: backoff, err: String(err) },
+        'dxlink connect failed; retrying',
+      );
+      this.retryTimer = setTimeout(() => { void this.reconnectStreaming('retry'); }, backoff);
     } finally {
       this.reconnecting = false;
     }
@@ -185,6 +216,7 @@ export class TradfiFeed {
 
   async dispose(): Promise<void> {
     if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
+    if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     await this.dx?.disconnect();
     this.dx = null;
   }
@@ -197,6 +229,13 @@ export class TradfiFeed {
   async refreshChainQuotes(underlying: string, expiry: string): Promise<number> {
     const insts = this.store.instrumentsFor(underlying, expiry);
     if (insts.length === 0) return 0;
+
+    // Throttle per chain so repeated polls (and a 403-entitlement account) don't
+    // hammer REST — at most one attempt per REFRESH_THROTTLE_MS per (underlying,expiry).
+    const key = `${underlying}|${expiry}`;
+    const nowMs = Date.now();
+    if (nowMs - (this.lastRefreshAt.get(key) ?? 0) < REFRESH_THROTTLE_MS) return 0;
+    this.lastRefreshAt.set(key, nowMs);
 
     let merged = 0;
     const occSymbols = insts.map((i) => i.occSymbol);

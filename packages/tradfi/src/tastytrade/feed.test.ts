@@ -102,6 +102,35 @@ describe('TradfiFeed (REST)', () => {
     expect(fakeDx.subscribe).not.toHaveBeenCalled();
     await feed.dispose();
   });
+
+  it('retries with backoff after a failed connection (never dies silently)', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new TradfiStore();
+      const rest = stubRest();
+      rest.getQuoteToken = vi.fn(async () => ({ token: 'QT', dxlinkUrl: 'wss://x', expiresAt: null }));
+      let connects = 0;
+      const factory = () => ({
+        connect: vi.fn(async () => { connects += 1; if (connects === 1) throw new Error('connect failed'); }),
+        subscribe: vi.fn(), unsubscribe: vi.fn(), disconnect: vi.fn(async () => {}),
+        isStreaming: vi.fn(() => connects > 1),
+      }) as never;
+      const feed = new TradfiFeed(rest as never, store, ['AAPL'], factory);
+      await feed.loadMarkets();
+
+      await feed.startStreaming(); // attempt 1 throws → backoff retry scheduled, does not rethrow
+      expect(connects).toBe(1);
+      expect(feed.readiness().streaming).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(2_000); // BASE backoff fires → attempt 2 succeeds
+      expect(connects).toBe(2);
+      expect(feed.readiness().streaming).toBe(true);
+
+      await feed.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('computeQuoteTokenTtl', () => {

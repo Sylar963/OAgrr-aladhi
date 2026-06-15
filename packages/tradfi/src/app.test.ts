@@ -121,15 +121,25 @@ describe('tradfi app', () => {
     await app.close();
   });
 
-  it('GET /ready is 503 until catalog + data, then 200', async () => {
+  it('GET /ready is 503 until catalog + fresh data, then 200', async () => {
     const notReady = buildApp({ store: new TradfiStore(), feed: makeFeed({ catalogLoaded: false, lastDataTs: 0, streaming: false }) });
     expect((await notReady.inject({ method: 'GET', url: '/ready' })).statusCode).toBe(503);
     await notReady.close();
 
-    const ready = buildApp({ store: new TradfiStore(), feed: makeFeed() });
+    // streaming + a fresh tick → ready regardless of market hours.
+    const ready = buildApp({ store: new TradfiStore(), feed: makeFeed({ streaming: true, lastDataTs: Date.now() }) });
     const res = await ready.inject({ method: 'GET', url: '/ready' });
     expect(res.statusCode).toBe(200);
     expect(res.json().ready).toBe(true);
     await ready.close();
+  });
+
+  it('GET /ready is 503 when the stream is down, even if data was once received', async () => {
+    // lastDataTs > 0 must NOT mean "ready forever" — a dead stream is not ready.
+    const app = buildApp({ store: new TradfiStore(), feed: makeFeed({ streaming: false, lastDataTs: Date.now() }) });
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().ready).toBe(false);
+    await app.close();
   });
 });

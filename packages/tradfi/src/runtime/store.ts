@@ -69,11 +69,17 @@ export class TradfiStore {
 
   /** True if any instrument in this chain has received at least one quote. */
   hasQuotesFor(underlying: string, expiry: string): boolean {
+    return this.newestQuoteTs(underlying, expiry) > 0;
+  }
+
+  /** Newest quote timestamp across this chain (0 if none) — for staleness checks. */
+  newestQuoteTs(underlying: string, expiry: string): number {
+    let newest = 0;
     for (const inst of this.instrumentsFor(underlying, expiry)) {
       const q = this.quotes.get(inst.streamerSymbol);
-      if (q != null && q.ts > 0) return true;
+      if (q != null && q.ts > newest) newest = q.ts;
     }
-    return false;
+    return newest;
   }
 
   setSpot(underlying: string, price: number): void {

@@ -36,6 +36,17 @@ describe('TradfiStore', () => {
     expect(s.getSpot('AAPL')).toBe(198.5);
   });
 
+  it('reports newest quote ts / hasQuotesFor for staleness checks', () => {
+    const s = new TradfiStore();
+    s.setInstruments([inst]);
+    expect(s.newestQuoteTs('AAPL', '2026-04-17')).toBe(0);
+    expect(s.hasQuotesFor('AAPL', '2026-04-17')).toBe(false);
+    s.mergeQuote('.AAPL260417C200', { bid: 5.1, ts: 1000 });
+    s.mergeQuote('.AAPL260417C200', { ask: 5.3, ts: 4000 });
+    expect(s.newestQuoteTs('AAPL', '2026-04-17')).toBe(4000);
+    expect(s.hasQuotesFor('AAPL', '2026-04-17')).toBe(true);
+  });
+
   it('emptyQuote has all-null fields', () => {
     expect(emptyQuote().bid).toBeNull();
     expect(emptyQuote().iv).toBeNull();

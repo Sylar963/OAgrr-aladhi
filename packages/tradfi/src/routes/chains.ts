@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { TradfiDeps } from '../app.js';
 import { buildChain } from '../runtime/chain.js';
+import { isUsEquityMarketOpen, QUOTE_STALE_MS } from '../tastytrade/health.js';
 import { feedLogger } from '../logger.js';
 
 const log = feedLogger('tradfi-chains');
@@ -26,12 +27,16 @@ export function chainsRoute(deps: TradfiDeps) {
           return buildChain(deps.store, underlying, expiry, 'ws');
         }
 
-        // Start streaming this chain (idempotent) so subsequent polls/WS pushes fill in.
+        // Keep this chain streaming (idempotent) so WS holds it fresh.
         deps.feed.ensureChainSubscribed(underlying, expiry);
 
-        // Cold start: the WS store has produced nothing yet. Try a best-effort REST
-        // snapshot for just this chain (no-op when the account lacks the entitlement).
-        if (r.lastDataTs === 0 && !deps.store.hasQuotesFor(underlying, expiry)) {
+        // Best-effort REST backfill when this chain has no data yet OR has gone
+        // stale while the market is open (the WS feed lagged/dropped for it).
+        // refreshChainQuotes self-throttles, so repeated polls don't hammer REST.
+        const now = Date.now();
+        const newest = deps.store.newestQuoteTs(underlying, expiry);
+        const stale = newest === 0 || (isUsEquityMarketOpen(now) && now - newest > QUOTE_STALE_MS);
+        if (stale) {
           try {
             await deps.feed.refreshChainQuotes(underlying, expiry);
           } catch (err: unknown) {
@@ -40,12 +45,11 @@ export function chainsRoute(deps: TradfiDeps) {
         }
 
         // Up, with instruments, but no data from either path → honest "warming up".
-        if (r.lastDataTs === 0 && !deps.store.hasQuotesFor(underlying, expiry)) {
+        if (deps.store.newestQuoteTs(underlying, expiry) === 0) {
           return reply.status(503).send({ error: 'no market data yet', readiness: deps.feed.readiness() });
         }
 
-        const source = deps.store.hasQuotesFor(underlying, expiry) && r.lastDataTs === 0 ? 'rest' : 'ws';
-        return buildChain(deps.store, underlying, expiry, source);
+        return buildChain(deps.store, underlying, expiry, 'ws');
       },
     );
   };

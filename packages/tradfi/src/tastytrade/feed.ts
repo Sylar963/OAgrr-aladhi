@@ -11,11 +11,14 @@ import { DxLinkClient as RealDxLinkClient } from './dxlink-client.js';
 const log = feedLogger('tradfi-feed');
 const MARKET_DATA_BATCH = 90; // under the 100-symbol cap, leaving room for the underlying
 
+const QUOTE_TOKEN_TTL_MS = 23 * 60 * 60 * 1000; // re-auth ~1h before the 24h expiry
+
 export class TradfiFeed {
   private occIndex = new Map<string, TradfiInstrument>();
   private loaded = false;
   private dx: DxLinkClient | null = null;
   private desired: DxSub[] = [];
+  private tokenTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly rest: TastytradeRest,
@@ -50,6 +53,11 @@ export class TradfiFeed {
   }
 
   async startStreaming(): Promise<void> {
+    // Double-connect guard: tear down any existing connection and clear the token timer.
+    if (this.tokenTimer) { clearInterval(this.tokenTimer); this.tokenTimer = null; }
+    await this.dx?.disconnect();
+    this.dx = null;
+
     const qt = await this.rest.getQuoteToken();
     const symbols = this.store.allInstruments().map((i) => i.streamerSymbol);
     this.desired = [...chainSubscriptions(symbols), ...underlyingSubscriptions(this.underlyings)];
@@ -65,9 +73,23 @@ export class TradfiFeed {
     });
     await this.dx.connect();
     log.info({ subs: this.desired.length }, 'dxlink streaming started');
+
+    this.tokenTimer = setInterval(() => {
+      void this.reconnectStreaming();
+    }, QUOTE_TOKEN_TTL_MS);
+  }
+
+  private async reconnectStreaming(): Promise<void> {
+    try {
+      await this.dx?.disconnect();
+      await this.startStreaming();
+    } catch (err: unknown) {
+      log.warn({ err: String(err) }, 'dxlink token-refresh reconnect failed');
+    }
   }
 
   async dispose(): Promise<void> {
+    if (this.tokenTimer) { clearInterval(this.tokenTimer); this.tokenTimer = null; }
     await this.dx?.disconnect();
     this.dx = null;
   }

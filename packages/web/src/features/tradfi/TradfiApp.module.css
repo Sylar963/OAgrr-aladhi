@@ -1,5 +1,9 @@
 .root {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -9,6 +13,7 @@
   align-items: center;
   gap: var(--space-4);
   height: 48px;
+  flex-shrink: 0;
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-surface);
@@ -42,5 +47,9 @@
   color: var(--text-tertiary);
 }
 .main {
-  padding: var(--space-3);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }

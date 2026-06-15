@@ -1,0 +1,44 @@
+/* Mirrors crypto ChainView's bounded-height flex column so ChainTable's
+   virtualized list (.list, flex:1, overflow-y:scroll) is actually scrollable
+   and its scroll-to-ATM lands correctly. Without a bounded-height ancestor the
+   list grows to full content height, scrollToIndex is a no-op, and the chain
+   stays parked on the lowest (deep-ITM) strikes. */
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tabBar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+
+.tabBtn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary, #9aa0a6);
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: -1px;
+  padding: 4px 10px;
+}
+
+.tabBtn[data-active='true'] {
+  border-bottom-color: var(--accent-primary, #00e997);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.tableArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

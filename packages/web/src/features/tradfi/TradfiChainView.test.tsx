@@ -1,8 +1,9 @@
 import { it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
+
 vi.mock('./queries', () => ({
   useTradfiUnderlyings: () => ({ data: { underlyings: ['AAPL'] } }),
   useTradfiExpiries: () => ({ data: { underlying: 'AAPL', expiries: ['2026-06-17'] } }),
@@ -28,15 +29,73 @@ vi.mock('./queries', () => ({
   }),
 }));
 
+// lightweight-charts createChart does not work in jsdom — stub InstrumentChart
+vi.mock('@features/chain/InstrumentChart', () => ({
+  default: () => <div data-testid="instrument-chart" />,
+}));
+
+// Stub useTradfiCandles so TradfiPriceChart doesn't make real fetch calls
+vi.mock('./use-tradfi-candles', () => ({
+  useTradfiCandles: () => ({ data: undefined, isLoading: false }),
+  parseTradfiCandles: (raw: unknown) => raw,
+}));
+
 import TradfiChainView from './TradfiChainView';
 
-it('renders a null-heavy tradfi chain without crashing', () => {
+function wrap() {
   const qc = new QueryClient();
-  expect(() =>
-    render(
-      <QueryClientProvider client={qc}>
-        <TradfiChainView />
-      </QueryClientProvider>,
-    ),
-  ).not.toThrow();
+  return render(
+    <QueryClientProvider client={qc}>
+      <TradfiChainView />
+    </QueryClientProvider>,
+  );
+}
+
+it('renders a null-heavy tradfi chain without crashing', () => {
+  expect(() => wrap()).not.toThrow();
+});
+
+it('shows Chain and Price tab buttons', () => {
+  const { container } = wrap();
+  const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
+  expect(buttons).toContain('Chain');
+  expect(buttons).toContain('Price');
+});
+
+it('Chain tab is active by default', () => {
+  const { container } = wrap();
+  const chainBtn = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent === 'Chain',
+  ) as HTMLButtonElement;
+  expect(chainBtn.dataset['active']).toBe('true');
+});
+
+it('clicking Price tab renders the price chart container', () => {
+  const { container } = wrap();
+  const priceBtn = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent === 'Price',
+  )!;
+  fireEvent.click(priceBtn);
+  // TradfiPriceChart renders a panel with controls; assert the panel is present
+  // by checking for the strike selector or any button for call/put toggle
+  const afterClick = container.querySelectorAll('button');
+  const labels = Array.from(afterClick).map((b) => b.textContent);
+  // CALL/PUT buttons are rendered by TradfiPriceChart
+  expect(labels).toContain('CALL');
+  expect(labels).toContain('PUT');
+});
+
+it('switching back to Chain tab shows chain content again', () => {
+  const { container } = wrap();
+  const priceBtn = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent === 'Price',
+  )!;
+  fireEvent.click(priceBtn);
+  const chainBtn = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent === 'Chain',
+  )!;
+  fireEvent.click(chainBtn);
+  // CALL/PUT from TradfiPriceChart should be gone
+  const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
+  expect(labels).not.toContain('CALL');
 });

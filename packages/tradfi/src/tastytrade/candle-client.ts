@@ -9,6 +9,7 @@ const log = feedLogger('tradfi-candles');
 
 export interface CandleSocket {
   send(msg: unknown): void;
+  onOpen(cb: () => void): void;
   onMessage(cb: (msg: unknown) => void): void;
   onClose(cb: () => void): void;
   close(): void;
@@ -52,7 +53,8 @@ export class CandleClient {
     this.sock = sock;
     sock.onMessage((m) => this.onMessage(m));
     sock.onClose(() => { this.ready = false; });
-    sock.send(buildSetup());
+    // Send SETUP only once the socket is open — sending on a CONNECTING ws throws.
+    sock.onOpen(() => sock.send(buildSetup()));
   }
 
   isReady(): boolean { return this.ready; }

@@ -16,6 +16,7 @@ function wsCandleSocket(url: string): CandleSocket {
   }, 20_000);
   return {
     send: (m: unknown) => ws.send(JSON.stringify(m)),
+    onOpen: (cb: () => void) => ws.on('open', cb),
     onMessage: (cb: (m: unknown) => void) => ws.on('message', (raw) => {
       try { cb(JSON.parse(raw.toString())); } catch { /* ignore bad frames */ }
     }),

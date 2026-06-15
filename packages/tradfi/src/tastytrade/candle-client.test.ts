@@ -4,14 +4,18 @@ import type { CandleSocket } from './candle-client.js';
 
 function fakeSocket() {
   let onMsg: (m: unknown) => void = () => {};
+  let onOpen: () => void = () => {};
+  let open = false;
   const sent: unknown[] = [];
   const sock: CandleSocket = {
-    send: (m) => { sent.push(m); },
+    // Model the real ws: sending before the socket is open throws.
+    send: (m) => { if (!open) throw new Error('WebSocket is not open'); sent.push(m); },
+    onOpen: (cb) => { onOpen = cb; },
     onMessage: (cb) => { onMsg = cb; },
     onClose: () => {},
     close: () => {},
   };
-  return { sock, sent, emit: (m: unknown) => onMsg(m) };
+  return { sock, sent, emit: (m: unknown) => onMsg(m), emitOpen: () => { open = true; onOpen(); } };
 }
 
 describe('CandleClient', () => {
@@ -23,6 +27,7 @@ describe('CandleClient', () => {
       now: () => 1_700_000_000_000,
     });
     await client.connect();
+    fs.emitOpen(); // socket opens -> SETUP is sent
     fs.emit({ type: 'AUTH_STATE', state: 'UNAUTHORIZED' });
     fs.emit({ type: 'AUTH_STATE', state: 'AUTHORIZED' });
     fs.emit({ type: 'CHANNEL_OPENED', channel: 1 });
@@ -51,6 +56,7 @@ describe('CandleClient', () => {
       socketFactory: () => fs.sock, now: () => 1_700_000_000_000, requestTimeoutMs: 1000,
     });
     await client.connect();
+    fs.emitOpen(); // socket opens -> SETUP is sent
     fs.emit({ type: 'FEED_CONFIG', channel: 1 });
     const p = client.getCandles('SPY', '5m', 1);
     fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPY{=5m}', 0, 1781553000000, 1, 1, 1, 1, 9]] });

@@ -4,6 +4,7 @@ import { useAppStore } from '@stores/app-store';
 import { Spinner, EmptyState } from '@components/ui';
 import { ExpiryBar, StatStrip, ChainTable } from '@features/chain';
 import { useTradfiUnderlyings, useTradfiExpiries, useTradfiChain } from './queries';
+import styles from './TradfiChainView.module.css';
 
 const TRADFI_VENUES = ['tastytrade'];
 
@@ -32,7 +33,7 @@ export default function TradfiChainView() {
   }, [expiries, expiry, setExpiry]);
 
   return (
-    <div>
+    <div className={styles.view}>
       <ExpiryBar
         underlying={underlying || '—'}
         spotPrice={chain?.stats.indexPriceUsd ?? undefined}
@@ -55,7 +56,7 @@ export default function TradfiChainView() {
         />
       )}
 
-      <div>
+      <div className={styles.tableArea}>
         {isLoading && !chain && <Spinner size="lg" label="Loading TradFi chain…" />}
         {error && !chain && (
           <EmptyState

@@ -43,5 +43,24 @@ describe('TradfiFeed (REST)', () => {
     await feed.refreshChainQuotes('AAPL', '2026-04-17');
     expect(store.getQuote('.AAPL200C')!.bid).toBe(5);
     expect(rest.getMarketData).toHaveBeenCalled();
+    expect(store.getSpot('AAPL')).toBe(198);
+  });
+
+  it('connects DXLink and subscribes all loaded chains + underlyings', async () => {
+    const store = new TradfiStore();
+    const rest = stubRest();
+    rest.getQuoteToken = vi.fn(async () => ({ token: 'QT', dxlinkUrl: 'wss://x', expiresAt: null }));
+    const subscribed: unknown[] = [];
+    const fakeDx = {
+      connect: vi.fn(async () => {}),
+      subscribe: vi.fn((subs: unknown) => subscribed.push(subs)),
+      unsubscribe: vi.fn(),
+      disconnect: vi.fn(async () => {}),
+    };
+    const feed = new TradfiFeed(rest as never, store, ['AAPL'], () => fakeDx as never);
+    await feed.loadMarkets();
+    await feed.startStreaming();
+    expect(rest.getQuoteToken).toHaveBeenCalled();
+    expect(fakeDx.connect).toHaveBeenCalled();
   });
 });

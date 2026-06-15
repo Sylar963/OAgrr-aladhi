@@ -2,6 +2,11 @@ import type { TastytradeRest } from './rest.js';
 import { nestedChainToInstruments, type TradfiInstrument } from './instrument.js';
 import type { TradfiStore } from '../runtime/store.js';
 import { feedLogger } from '../logger.js';
+import { applyEvent } from './state.js';
+import { chainSubscriptions, underlyingSubscriptions } from './planner.js';
+import type { DxEvent, DxSub } from './codec.js';
+import type { DxLinkClient } from './dxlink-client.js';
+import { DxLinkClient as RealDxLinkClient } from './dxlink-client.js';
 
 const log = feedLogger('tradfi-feed');
 const MARKET_DATA_BATCH = 90; // under the 100-symbol cap, leaving room for the underlying
@@ -9,11 +14,17 @@ const MARKET_DATA_BATCH = 90; // under the 100-symbol cap, leaving room for the 
 export class TradfiFeed {
   private occIndex = new Map<string, TradfiInstrument>();
   private loaded = false;
+  private dx: DxLinkClient | null = null;
+  private desired: DxSub[] = [];
 
   constructor(
     private readonly rest: TastytradeRest,
     private readonly store: TradfiStore,
     private readonly underlyings: string[],
+    private readonly dxFactory: (opts: {
+      url: string; token: string;
+      onData: (e: DxEvent[]) => void; desiredSubs: () => DxSub[];
+    }) => DxLinkClient = (opts) => new RealDxLinkClient(opts),
   ) {}
 
   async loadMarkets(): Promise<void> {
@@ -36,6 +47,29 @@ export class TradfiFeed {
 
   isLoaded(): boolean {
     return this.loaded;
+  }
+
+  async startStreaming(): Promise<void> {
+    const qt = await this.rest.getQuoteToken();
+    const symbols = this.store.allInstruments().map((i) => i.streamerSymbol);
+    this.desired = [...chainSubscriptions(symbols), ...underlyingSubscriptions(this.underlyings)];
+
+    this.dx = this.dxFactory({
+      url: qt.dxlinkUrl,
+      token: qt.token,
+      onData: (events) => {
+        const ts = Date.now();
+        for (const ev of events) applyEvent(this.store, ev, ts);
+      },
+      desiredSubs: () => this.desired,
+    });
+    await this.dx.connect();
+    log.info({ subs: this.desired.length }, 'dxlink streaming started');
+  }
+
+  async dispose(): Promise<void> {
+    await this.dx?.disconnect();
+    this.dx = null;
   }
 
   /** REST snapshot: fetch quotes for one chain via /market-data/by-type. */

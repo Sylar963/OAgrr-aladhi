@@ -8,7 +8,6 @@ import { chainsRoute } from './routes/chains.js';
 
 export interface FeedLike {
   isLoaded(): boolean;
-  refreshChainQuotes(underlying: string, expiry: string): Promise<void>;
 }
 
 export interface TradfiDeps {

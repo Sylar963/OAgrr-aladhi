@@ -17,10 +17,10 @@ async function main() {
   await app.listen({ port: cfg.port, host: '0.0.0.0' });
   logger.info({ port: cfg.port }, 'tradfi service listening');
 
-  feed.loadMarkets().then(
-    () => logger.info('markets loaded'),
-    (err: unknown) => logger.error({ err: String(err) }, 'loadMarkets failed'),
-  );
+  feed.loadMarkets()
+    .then(() => feed.startStreaming())
+    .then(() => logger.info('markets loaded + streaming'))
+    .catch((err: unknown) => logger.error({ err: String(err) }, 'bootstrap failed'));
 }
 
 main().catch((err: unknown) => {

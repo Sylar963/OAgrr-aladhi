@@ -14,8 +14,7 @@ export function chainsRoute(deps: TradfiDeps) {
         if (!deps.feed.isLoaded()) {
           return reply.status(503).send({ error: 'not ready' });
         }
-        await deps.feed.refreshChainQuotes(underlying, expiry);
-        return buildChain(deps.store, underlying, expiry, 'rest');
+        return buildChain(deps.store, underlying, expiry, 'ws');
       },
     );
   };

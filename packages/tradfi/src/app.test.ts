@@ -14,7 +14,7 @@ function seededDeps() {
   store.setInstruments([inst]);
   store.setSpot('AAPL', 198);
   store.mergeQuote('.AAPL200C', { bid: 5, ask: 5.2, mark: 5.1, iv: 0.4, ts: 1 });
-  const feed = { isLoaded: () => true, refreshChainQuotes: async () => {} };
+  const feed = { isLoaded: () => true };
   return { store, feed: feed as never };
 }
 
@@ -47,6 +47,14 @@ describe('tradfi app', () => {
     const app = buildApp(seededDeps());
     const res = await app.inject({ method: 'GET', url: '/chains' });
     expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('GET /chains 503 when feed not loaded', async () => {
+    const store = new TradfiStore();
+    const app = buildApp({ store, feed: { isLoaded: () => false } as never });
+    const res = await app.inject({ method: 'GET', url: '/chains?underlying=AAPL&expiry=2026-04-17' });
+    expect(res.statusCode).toBe(503);
     await app.close();
   });
 });

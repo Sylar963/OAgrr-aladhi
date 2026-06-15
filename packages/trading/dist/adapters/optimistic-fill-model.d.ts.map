@@ -1,0 +1,1 @@
+{"version":3,"file":"optimistic-fill-model.d.ts","sourceRoot":"","sources":["../../src/adapters/optimistic-fill-model.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,SAAS,EAAE,cAAc,EAAE,cAAc,EAAE,MAAM,2BAA2B,CAAC;AAK3F,qBAAa,mBAAoB,YAAW,SAAS;IACnD,KAAK,CAAC,KAAK,EAAE,cAAc,GAAG,cAAc;CAa7C"}

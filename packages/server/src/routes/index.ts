@@ -15,7 +15,6 @@ import { ivHistoryRoute } from './iv-history.js';
 import { wsChainRoute } from './ws-chain.js';
 import { paperRoutes, paperWsRoute } from './paper/index.js';
 import { paperAuthRoute } from './paper/auth.js';
-import { v2Routes, v2WsChainRoute } from './v2/index.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (_req, reply) => {
@@ -47,6 +46,4 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(paperAuthRoute, { prefix: '/api' });
   app.register(wsChainRoute);
   app.register(paperWsRoute);
-  app.register(v2Routes, { prefix: '/api' });
-  app.register(v2WsChainRoute);
 }

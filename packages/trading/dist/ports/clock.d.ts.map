@@ -1,0 +1,1 @@
+{"version":3,"file":"clock.d.ts","sourceRoot":"","sources":["../../src/ports/clock.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,KAAK;IACpB,GAAG,IAAI,IAAI,CAAC;CACb;AAED,qBAAa,WAAY,YAAW,KAAK;IACvC,GAAG,IAAI,IAAI;CAGZ;AAED,qBAAa,UAAW,YAAW,KAAK;IAC1B,OAAO,CAAC,QAAQ,CAAC,IAAI;gBAAJ,IAAI,EAAE,IAAI;IACvC,GAAG,IAAI,IAAI;CAGZ"}

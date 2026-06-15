@@ -46,6 +46,10 @@ export class CandleClient {
 
   async connect(): Promise<void> {
     const { token, dxlinkUrl } = await this.deps.getToken();
+    // Re-entrancy guard: tear down any prior socket so a repeat connect() (e.g. a
+    // future reconnect) can't orphan it or leave stale ready-waiters queued.
+    this.sock?.close();
+    this.readyWaiters = [];
     this.token = token;
     this.ready = false;
     this.sentAuth = false;
@@ -136,6 +140,11 @@ export class CandleClient {
   }
 
   dispose(): void {
+    // Settle in-flight requests (empty, per the degradation contract) and clear
+    // their timers so shutdown doesn't hang on a pending snapshot timeout.
+    for (const req of this.pending.values()) { clearTimeout(req.timer); req.resolve([]); }
+    this.pending.clear();
+    this.readyWaiters = [];
     this.sock?.close();
     this.sock = null;
     this.ready = false;

@@ -3,6 +3,8 @@ import { buildApp, type FeedLike } from './app.js';
 import { TradfiStore } from './runtime/store.js';
 import type { TradfiReadiness } from './tastytrade/feed.js';
 import type { TradfiInstrument } from './tastytrade/instrument.js';
+import type { CandleClient } from './tastytrade/candle-client.js';
+import type { RawCandle } from './tastytrade/candle-codec.js';
 
 const inst: TradfiInstrument = {
   underlying: 'AAPL', expiry: '2026-04-17', strike: 200, right: 'call',
@@ -32,6 +34,12 @@ function seededDeps() {
   store.mergeQuote('.AAPL200C', { bid: 5, ask: 5.2, mark: 5.1, iv: 0.4, ts: 1 });
   return { store, feed: makeFeed() };
 }
+
+function makeCandleClient(bars: RawCandle[] = [], ready = true): CandleClient {
+  return { isReady: () => ready, getCandles: async () => bars } as unknown as CandleClient;
+}
+
+const CANDLES_URL = '/candles?underlying=AAPL&expiry=2026-04-17&strike=200&right=call&interval=5m&range=7d';
 
 describe('tradfi app', () => {
   it('GET /underlyings', async () => {
@@ -108,6 +116,39 @@ describe('tradfi app', () => {
     const res = await app.inject({ method: 'GET', url: '/chains?underlying=AAPL&expiry=2026-04-17' });
     expect(res.statusCode).toBe(200);
     expect(res.json().underlying).toBe('AAPL');
+    await app.close();
+  });
+
+  it('GET /candles 400 on a non-numeric strike', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient() });
+    const res = await app.inject({ method: 'GET', url: CANDLES_URL.replace('strike=200', 'strike=abc') });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('GET /candles 503 when the candle client is absent', async () => {
+    const app = buildApp(seededDeps());
+    const res = await app.inject({ method: 'GET', url: CANDLES_URL });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('GET /candles 404 for an unknown strike', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient() });
+    const res = await app.inject({ method: 'GET', url: CANDLES_URL.replace('strike=200', 'strike=999') });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('GET /candles 200 maps snapshot bars for a known instrument', async () => {
+    const bars: RawCandle[] = [{ symbol: '.AAPL200C{=5m}', flags: 0, time: 1781553000000, o: 5, h: 5.2, l: 4.9, c: 5.1, v: 3 }];
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient(bars) });
+    const res = await app.inject({ method: 'GET', url: CANDLES_URL });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().symbol).toBe('.AAPL200C');
+    expect(res.json().candles).toEqual([
+      { ts: 1781553000000, o: 5, h: 5.2, l: 4.9, c: 5.1, vol: 3, synthetic: false },
+    ]);
     await app.close();
   });
 

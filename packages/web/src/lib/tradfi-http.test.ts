@@ -11,7 +11,7 @@ describe('tradfiFetchJson', () => {
     vi.stubGlobal('fetch', fetchMock);
     const r = await tradfiFetchJson<{ ok: number }>('/underlyings');
     expect(r.ok).toBe(1);
-    expect((fetchMock.mock.calls[0]![0] as string)).toContain('/underlyings');
+    expect(((fetchMock.mock.calls as unknown as [string[]])[0]![0])).toContain('/underlyings');
   });
 
   it('throws on non-ok', async () => {

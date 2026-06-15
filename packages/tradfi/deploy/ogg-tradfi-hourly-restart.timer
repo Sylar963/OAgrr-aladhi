@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart ogg-tradfi.service every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -49,12 +49,15 @@ These are **templates committed to git**. An engineer applies them on the host b
 4. **Install + start the service**
     ```bash
     cp packages/tradfi/deploy/ogg-tradfi.service ~/.config/systemd/user/
+    cp packages/tradfi/deploy/ogg-tradfi-hourly-restart.* ~/.config/systemd/user/
     # edit WorkingDirectory and ensure ExecStart can find pnpm under user systemd
     systemctl --user daemon-reload
-   systemctl --user enable --now ogg-tradfi.service
-   loginctl enable-linger "$USER"
-   systemctl --user status ogg-tradfi.service     # expect: active (running)
-   ```
+    systemctl --user enable --now ogg-tradfi.service
+    systemctl --user enable --now ogg-tradfi-hourly-restart.timer
+    loginctl enable-linger "$USER"
+    systemctl --user status ogg-tradfi.service     # expect: active (running)
+    systemctl --user list-timers ogg-tradfi-hourly-restart.timer
+    ```
 
 5. **DNS** — no new record is required. Reuse the existing `api.oggregator.xyz` record.
 

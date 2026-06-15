@@ -1,0 +1,6 @@
+[Unit]
+Description=Hourly restart of ogg-tradfi.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user restart ogg-tradfi.service

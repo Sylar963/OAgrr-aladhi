@@ -22,6 +22,10 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const setAssetMode = useAppStore((s) => s.setAssetMode);
 
+  // Show the TradFi entry only when its backend is reachable: always in dev
+  // (the /tradfi-api proxy), and in prod only once VITE_TRADFI_API_BASE is set.
+  const tradfiEnabled = import.meta.env.DEV || Boolean(import.meta.env.VITE_TRADFI_API_BASE);
+
   return (
     <header className={styles.bar}>
       <a href="#" className={styles.logo} aria-label="oggregator">
@@ -52,9 +56,11 @@ export default function TopBar({ tabs, onOpenPalette }: TopBarProps) {
             <FreshnessLabel />
           </span>
         </div>
-        <button className={styles.tradfi} onClick={() => setAssetMode('tradfi')} title="TradFi (TastyTrade)">
-          TRADFI
-        </button>
+        {tradfiEnabled && (
+          <button className={styles.tradfi} onClick={() => setAssetMode('tradfi')} title="TradFi (TastyTrade)">
+            TRADFI
+          </button>
+        )}
         <button className={styles.cmdk} onClick={onOpenPalette}>
           ⌘K
         </button>

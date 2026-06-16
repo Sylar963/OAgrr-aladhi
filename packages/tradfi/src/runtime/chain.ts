@@ -22,6 +22,13 @@ function premium(value: number | null): PremiumValue {
   return { raw: value, rawCurrency: 'USD', usd: value };
 }
 
+// USD notional for OI/volume: contracts × shares-per-contract × underlying spot.
+// Mirrors core's normalizeOpenInterestUsd so TradFi aggregates (totalOiUsd,
+// put/call OI ratio) populate instead of summing nulls to zero.
+function notionalUsd(qty: number | null, multiplier: number, spot: number | null): number | null {
+  return qty != null && spot != null ? qty * multiplier * spot : null;
+}
+
 function toContract(
   inst: TradfiInstrument,
   quote: TradfiLiveQuote,
@@ -64,8 +71,8 @@ function toContract(
       indexPriceUsd: spot,
       volume24h: quote.volume,
       openInterest: quote.openInterest,
-      openInterestUsd: null,
-      volume24hUsd: null,
+      openInterestUsd: notionalUsd(quote.openInterest, inst.multiplier, spot),
+      volume24hUsd: notionalUsd(quote.volume, inst.multiplier, spot),
       estimatedFees: null,
       timestamp: quote.ts || null,
       source,

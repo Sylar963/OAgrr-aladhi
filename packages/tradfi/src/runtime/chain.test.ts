@@ -27,4 +27,19 @@ describe('buildChain', () => {
     expect(enriched.expiry).toBe('2026-04-17');
     expect(enriched.strikes.length).toBe(1);
   });
+
+  it('rolls per-strike OI into USD-notional stats (totalOiUsd, put/call ratio)', () => {
+    const store = new TradfiStore();
+    const c = inst('call', 200);
+    const p = inst('put', 200);
+    store.setInstruments([c, p]);
+    store.setSpot('AAPL', 198);
+    store.mergeQuote(c.streamerSymbol, { mark: 5.1, openInterest: 10, ts: 1 });
+    store.mergeQuote(p.streamerSymbol, { mark: 6.1, openInterest: 4, ts: 1 });
+
+    const enriched = buildChain(store, 'AAPL', '2026-04-17');
+    // OI notional = contracts × multiplier(100) × spot(198); was 0 when openInterestUsd was left null.
+    expect(enriched.stats.totalOiUsd).toBe((10 + 4) * 100 * 198);
+    expect(enriched.stats.putCallOiRatio).toBeCloseTo(4 / 10);
+  });
 });

@@ -55,12 +55,17 @@ export function useTabUrlSync(): void {
     return () => window.removeEventListener('hashchange', apply);
   }, [setActiveTab, setAssetMode, setUnderlying, setTradfiUnderlying, setTradfiPage]);
 
-  // Store → hash.
+  // Store → hash. Reads the live store via getState() rather than the closure
+  // selector values, so a React StrictMode double-mount (which re-runs this
+  // effect before the store-driven re-render commits) still sees what the
+  // Hash→store effect just wrote and won't clobber an incoming deep link with
+  // stale initial values.
   useEffect(() => {
+    const s = useAppStore.getState();
     const route: RouteState =
-      assetMode === 'tradfi'
-        ? { mode: 'tradfi', page: tradfiPage, ticker: tradfiUnderlying || null }
-        : { mode: 'crypto', tab: activeTab, ticker: underlying || null };
+      s.assetMode === 'tradfi'
+        ? { mode: 'tradfi', page: s.tradfiPage, ticker: s.tradfiUnderlying || null }
+        : { mode: 'crypto', tab: s.activeTab, ticker: s.underlying || null };
     const desired = buildHash(route);
     const key = viewKey(route);
 

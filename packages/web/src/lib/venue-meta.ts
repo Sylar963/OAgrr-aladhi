@@ -7,7 +7,7 @@ import coincallLogo from '@/assets/venues/coincall.png';
 import thalexLogo from '@/assets/venues/Thalex.svg';
 import gateioLogo from '@/assets/venues/gateio.svg';
 import paradexLogo from '@/assets/venues/paradex.svg';
-import tastyLogo from '@/assets/venues/tasty.jpg';
+import tastyLogo from '@/assets/venues/tasty.svg';
 
 export interface VenueMeta {
   id: string;

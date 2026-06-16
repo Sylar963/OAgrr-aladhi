@@ -8,6 +8,10 @@ interface RegimeChipProps {
   skew25d: number | null;
   ivChange1d: number | null | undefined;
   putCallOiRatio: number | null;
+  // Venues with no day-over-day IV feed (e.g. TradFi, which has no DVOL
+  // equivalent) hide the Basis × IV dot rather than show a permanent
+  // "No IV Δ data" placeholder. Default true keeps the crypto chain unchanged.
+  showIvSignal?: boolean;
 }
 
 const BASIS_FLAT = 0.01;
@@ -72,6 +76,7 @@ export default function RegimeChip({
   skew25d,
   ivChange1d,
   putCallOiRatio,
+  showIvSignal = true,
 }: RegimeChipProps) {
   const b = sign(basisPct, BASIS_FLAT);
   const s = sign(skew25d, SKEW_FLAT);
@@ -94,13 +99,15 @@ export default function RegimeChip({
         </div>
       </div>
 
-      <div className={styles.tipRow}>
-        <span className={styles.tipBadge} data-tone={biv.tone} />
-        <div>
-          <div className={styles.tipPair}>Basis × IV Δ1d</div>
-          <div className={styles.tipNow}>{biv.label}</div>
+      {showIvSignal && (
+        <div className={styles.tipRow}>
+          <span className={styles.tipBadge} data-tone={biv.tone} />
+          <div>
+            <div className={styles.tipPair}>Basis × IV Δ1d</div>
+            <div className={styles.tipNow}>{biv.label}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={styles.tipRow}>
         <span className={styles.tipBadge} data-tone={bpc.tone} />
@@ -163,10 +170,16 @@ export default function RegimeChip({
       <span className={styles.label}>Regime</span>
       <div className={styles.dots}>
         <span className={styles.dot} data-tone={bs.tone} aria-label={`Basis × Skew: ${bs.label}`} />
-        <span className={styles.dot} data-tone={biv.tone} aria-label={`Basis × IV Δ1d: ${biv.label}`} />
+        {showIvSignal && (
+          <span
+            className={styles.dot}
+            data-tone={biv.tone}
+            aria-label={`Basis × IV Δ1d: ${biv.label}`}
+          />
+        )}
         <span className={styles.dot} data-tone={bpc.tone} aria-label={`Basis × P/C OI: ${bpc.label}`} />
       </div>
-      <span className={styles.sub}>B×S · B×IV · B×OI</span>
+      <span className={styles.sub}>{showIvSignal ? 'B×S · B×IV · B×OI' : 'B×S · B×OI'}</span>
     </HoverTooltip>
   );
 }

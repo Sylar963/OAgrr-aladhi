@@ -57,4 +57,20 @@ describe('GET /gex-all-expiries', () => {
     expect(res.statusCode).toBe(400);
     await app.close();
   });
+
+  it('503s when the catalog has not loaded', async () => {
+    const readiness: TradfiReadiness = {
+      catalogLoaded: false, quoteTokenAcquired: false, streaming: false,
+      lastDataTs: 0, underlyings: 0, instruments: 0,
+    };
+    const feed = {
+      readiness: () => readiness,
+      ensureChainSubscribed: () => {},
+      refreshChainQuotes: async () => 0,
+    };
+    const app = buildApp({ store: new TradfiStore(), feed });
+    const res = await app.inject({ method: 'GET', url: '/gex-all-expiries?underlying=SPX' });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
 });

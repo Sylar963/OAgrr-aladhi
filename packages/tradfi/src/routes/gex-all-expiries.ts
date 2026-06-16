@@ -14,7 +14,7 @@ export function gexAllExpiriesRoute(deps: TradfiDeps) {
   return async function (app: FastifyInstance) {
     app.get<{ Querystring: { underlying?: string } }>(
       '/gex-all-expiries',
-      async (req, reply): Promise<TradfiAllExpiriesGexResponse | { error: string }> => {
+      async (req, reply) => {
         const { underlying } = req.query;
         if (!underlying) {
           return reply.status(400).send({ error: 'underlying query param required' });

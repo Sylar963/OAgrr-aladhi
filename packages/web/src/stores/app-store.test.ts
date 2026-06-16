@@ -117,21 +117,31 @@ describe('system notification slices', () => {
   });
 });
 
-it('toggles assetMode and tracks tradfi underlying/expiry', () => {
-  const s = useAppStore.getState();
-  expect(s.assetMode).toBe('crypto');
-  s.setAssetMode('tradfi');
-  expect(useAppStore.getState().assetMode).toBe('tradfi');
-  useAppStore.getState().setTradfiUnderlying('AAPL');
-  expect(useAppStore.getState().tradfiUnderlying).toBe('AAPL');
-  expect(useAppStore.getState().tradfiExpiry).toBe(''); // reset on underlying change
-  useAppStore.getState().setTradfiExpiry('2026-06-17');
-  expect(useAppStore.getState().tradfiExpiry).toBe('2026-06-17');
-});
+describe('tradfi state slice', () => {
+  afterEach(() => {
+    useAppStore.setState({
+      assetMode: 'crypto',
+      tradfiUnderlying: '',
+      tradfiExpiry: '',
+      tradfiPage: 'chain',
+    });
+  });
 
-it('tradfiPage defaults to chain and can switch to gex', () => {
-  expect(useAppStore.getState().tradfiPage).toBe('chain');
-  useAppStore.getState().setTradfiPage('gex');
-  expect(useAppStore.getState().tradfiPage).toBe('gex');
-  useAppStore.getState().setTradfiPage('chain'); // reset for other tests
+  it('toggles assetMode and tracks tradfi underlying/expiry', () => {
+    const s = useAppStore.getState();
+    expect(s.assetMode).toBe('crypto');
+    s.setAssetMode('tradfi');
+    expect(useAppStore.getState().assetMode).toBe('tradfi');
+    useAppStore.getState().setTradfiUnderlying('AAPL');
+    expect(useAppStore.getState().tradfiUnderlying).toBe('AAPL');
+    expect(useAppStore.getState().tradfiExpiry).toBe(''); // reset on underlying change
+    useAppStore.getState().setTradfiExpiry('2026-06-17');
+    expect(useAppStore.getState().tradfiExpiry).toBe('2026-06-17');
+  });
+
+  it('tradfiPage defaults to chain and can switch to gex', () => {
+    expect(useAppStore.getState().tradfiPage).toBe('chain');
+    useAppStore.getState().setTradfiPage('gex');
+    expect(useAppStore.getState().tradfiPage).toBe('gex');
+  });
 });

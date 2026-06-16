@@ -15,6 +15,7 @@ export const tradfiKeys = {
   underlyings: () => ['tradfi-underlyings'] as const,
   expiries: (underlying: string) => ['tradfi-expiries', underlying] as const,
   chain: (underlying: string, expiry: string) => ['tradfi-chain', underlying, expiry] as const,
+  gexAll: (underlying: string) => ['tradfi-gex-all', underlying] as const,
 };
 
 export function fetchTradfiChain(underlying: string, expiry: string) {
@@ -60,7 +61,7 @@ export interface TradfiAllExpiriesGexResponse {
 
 export function useTradfiAllExpiriesGex(underlying: string, enabled = true) {
   return useQuery({
-    queryKey: ['tradfi-gex-all', underlying] as const,
+    queryKey: tradfiKeys.gexAll(underlying),
     queryFn: () =>
       tradfiFetchJson<TradfiAllExpiriesGexResponse>(
         `/gex-all-expiries?underlying=${encodeURIComponent(underlying)}`,

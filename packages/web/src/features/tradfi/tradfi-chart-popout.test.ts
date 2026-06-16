@@ -34,4 +34,14 @@ describe('tradfi popout params round-trip', () => {
       ),
     ).toBeNull();
   });
+
+  it('returns null on a non-positive strike', () => {
+    for (const strike of ['0', '-100']) {
+      expect(
+        parseTradfiPopoutParams(
+          `?popout=1&provider=tradfi&underlying=SPY&expiry=2026-06-19&strike=${strike}&type=call`,
+        ),
+      ).toBeNull();
+    }
+  });
 });

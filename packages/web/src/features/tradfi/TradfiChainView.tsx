@@ -36,6 +36,16 @@ export default function TradfiChainView() {
     if (expiries.length > 0 && !expiry) setExpiry(expiries[0]!);
   }, [expiries, expiry, setExpiry]);
 
+  // Close the mobile chart modal on Escape (standard dialog behaviour).
+  useEffect(() => {
+    if (!modal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [modal]);
+
   // Per-strike chart: desktop opens a popout window, mobile an in-page modal.
   function openChart(target: {
     underlying: string;
@@ -112,7 +122,9 @@ export default function TradfiChainView() {
           <div
             className={styles.modalCard}
             onClick={(e) => e.stopPropagation()}
-            role="presentation"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${modal.underlying} ${modal.strike} ${modal.type.toUpperCase()} chart`}
           >
             <TradfiChartPanel
               data={modal}

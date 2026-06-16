@@ -36,7 +36,7 @@ export function parseTradfiPopoutParams(search: string): TradfiPopoutParams | nu
   const type = p.get('type');
   if (!underlying || !expiry || !strikeStr || (type !== 'call' && type !== 'put')) return null;
   const strike = Number(strikeStr);
-  if (!Number.isFinite(strike)) return null;
+  if (!Number.isFinite(strike) || strike <= 0) return null;
   const mode = p.get('mode') === 'attribution' ? 'attribution' : 'price';
   return {
     underlying,

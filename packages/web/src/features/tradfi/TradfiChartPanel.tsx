@@ -68,6 +68,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
         <div className={styles.modes}>
           <button
             type="button"
+            aria-pressed={chartMode === 'price'}
             data-active={chartMode === 'price' || undefined}
             onClick={() => onPatch({ chartMode: 'price' })}
           >
@@ -75,6 +76,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
           </button>
           <button
             type="button"
+            aria-pressed={chartMode === 'attribution'}
             data-active={chartMode === 'attribution' || undefined}
             onClick={() => onPatch({ chartMode: 'attribution' })}
           >
@@ -86,6 +88,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
             <button
               key={i}
               type="button"
+              aria-pressed={interval === i}
               data-active={interval === i || undefined}
               onClick={() => onPatch({ interval: i })}
             >
@@ -98,6 +101,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
             <button
               key={r}
               type="button"
+              aria-pressed={range === r}
               data-active={range === r || undefined}
               onClick={() => onPatch({ range: r })}
             >

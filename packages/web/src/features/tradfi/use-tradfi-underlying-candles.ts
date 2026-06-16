@@ -15,7 +15,15 @@ const CandleSchema = z.object({
   synthetic: z.boolean(),
 });
 
-const PayloadSchema = z.object({ candles: z.array(CandleSchema), markLine: z.array(z.unknown()) });
+const MarkPointSchema = z.object({
+  ts: z.number().int().nonnegative(),
+  c: z.number().nonnegative(),
+});
+
+const PayloadSchema = z.object({
+  candles: z.array(CandleSchema),
+  markLine: z.array(MarkPointSchema),
+});
 
 export function parseTradfiUnderlyingCandles(raw: unknown) {
   const p = PayloadSchema.safeParse(raw);

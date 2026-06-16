@@ -55,6 +55,8 @@ src/
 
 - **CSS Modules throughout**: every component has a `.module.css` file. Zero global class names except in `styles/`.
 
+- **URL hash carries view + ticker**: `lib/route-hash.ts` is the source of truth for the hash grammar — `#<tab>/<TICKER>` (crypto) and `#tradfi/<page>/<TICKER>` (TradFi). `hooks/useTabUrlSync.ts` is the only reader/writer of `location.hash`; it parses the hash into the store on load and writes it back on change (push on a view change, replace on a ticker-only change). Ticker is uppercased; expiry is intentionally not encoded.
+
 ## Don't
 
 - Don't use `process.env` — use `import.meta.env.VITE_*`

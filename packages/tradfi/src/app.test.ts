@@ -152,6 +152,32 @@ describe('tradfi app', () => {
     await app.close();
   });
 
+  it('GET /underlying-candles 400 without underlying', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient() });
+    const res = await app.inject({ method: 'GET', url: '/underlying-candles?interval=1h&range=7d' });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('GET /underlying-candles 503 when the candle feed is not ready', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient([], false) });
+    const res = await app.inject({ method: 'GET', url: '/underlying-candles?underlying=AAPL&interval=1h&range=7d' });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('GET /underlying-candles 200 maps bars for a known underlying', async () => {
+    const bars: RawCandle[] = [{ symbol: 'AAPL{=1h}', flags: 0, time: 1781553000000, o: 198, h: 199, l: 197, c: 198.5, v: 1000 }];
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient(bars) });
+    const res = await app.inject({ method: 'GET', url: '/underlying-candles?underlying=AAPL&interval=1h&range=7d' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().symbol).toBe('AAPL');
+    expect(res.json().candles).toEqual([
+      { ts: 1781553000000, o: 198, h: 199, l: 197, c: 198.5, vol: 1000, synthetic: false },
+    ]);
+    await app.close();
+  });
+
   it('GET /health is always 200', async () => {
     const store = new TradfiStore();
     const app = buildApp({ store, feed: makeFeed({ catalogLoaded: false }) });

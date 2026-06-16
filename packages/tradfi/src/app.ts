@@ -11,6 +11,7 @@ import { expiriesRoute } from './routes/expiries.js';
 import { chainsRoute } from './routes/chains.js';
 import { wsChainRoute } from './routes/ws-chain.js';
 import { candlesRoute } from './routes/candles.js';
+import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 
 export interface FeedLike {
   readiness(): TradfiReadiness;
@@ -35,5 +36,6 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(chainsRoute(deps));
   void app.register(wsChainRoute(deps));
   void app.register(candlesRoute(deps));
+  void app.register(underlyingCandlesRoute(deps));
   return app;
 }

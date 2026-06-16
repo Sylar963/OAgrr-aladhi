@@ -244,6 +244,26 @@ describe('tradfi app', () => {
     await app.close();
   });
 
+  it('GET /underlying-candles 400 on an invalid interval', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient() });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/underlying-candles?underlying=AAPL&interval=invalid&range=7d',
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('GET /underlying-candles 400 on an invalid range', async () => {
+    const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient() });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/underlying-candles?underlying=AAPL&interval=1h&range=invalid',
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
   it('GET /health is always 200', async () => {
     const store = new TradfiStore();
     const app = buildApp({ store, feed: makeFeed({ catalogLoaded: false }) });

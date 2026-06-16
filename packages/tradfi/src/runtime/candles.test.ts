@@ -101,10 +101,10 @@ describe('buildUnderlyingCandlesResponse', () => {
   ];
 
   it('fetches candles for the plain underlying symbol and maps them to USD', async () => {
-    const calls: Array<{ symbol: string; period: string }> = [];
+    const calls: Array<{ symbol: string; period: string; fromTimeSec: number }> = [];
     const client = {
-      getCandles: async (symbol: string, period: string) => {
-        calls.push({ symbol, period });
+      getCandles: async (symbol: string, period: string, fromTimeSec: number) => {
+        calls.push({ symbol, period, fromTimeSec });
         return rawBars;
       },
     };
@@ -112,7 +112,8 @@ describe('buildUnderlyingCandlesResponse', () => {
       client as Parameters<typeof buildUnderlyingCandlesResponse>[0],
       { underlying: 'SPY', interval: '1h', range: '7d', nowMs: 1_700_004_000_000 },
     );
-    expect(calls).toEqual([{ symbol: 'SPY', period: '1h' }]);
+    // fromTimeSec = floor((nowMs − 7d) / 1000) = floor((1_700_004_000_000 − 604_800_000)/1000).
+    expect(calls).toEqual([{ symbol: 'SPY', period: '1h', fromTimeSec: 1_699_399_200 }]);
     expect(res.symbol).toBe('SPY');
     expect(res.priceCurrency).toBe('USD');
     expect(res.candles).toHaveLength(2);
@@ -128,11 +129,13 @@ describe('buildUnderlyingCandlesResponse', () => {
     expect(res.markLine).toEqual([]);
   });
 
-  it('drops bars with non-finite OHLC', async () => {
+  it('drops bars with non-finite OHLC or ts, and clamps negative volume', async () => {
     const client = {
       getCandles: async () => [
-        { symbol: 'SPY{=1h}', flags: 0, time: 1, o: NaN, h: 1, l: 1, c: 1, v: 0 },
-        { symbol: 'SPY{=1h}', flags: 0, time: 2, o: 1, h: 1, l: 1, c: 1, v: 0 },
+        { symbol: 'SPY{=1h}', flags: 0, time: 1, o: NaN, h: 1, l: 1, c: 1, v: 0 }, // bad OHLC → dropped
+        { symbol: 'SPY{=1h}', flags: 0, time: NaN, o: 1, h: 1, l: 1, c: 1, v: 0 }, // bad ts → dropped
+        { symbol: 'SPY{=1h}', flags: 0, time: -5, o: 1, h: 1, l: 1, c: 1, v: 0 }, // negative ts → dropped
+        { symbol: 'SPY{=1h}', flags: 0, time: 2, o: 1, h: 1, l: 1, c: 1, v: -3 }, // negative vol → clamped
       ],
     };
     const res = await buildUnderlyingCandlesResponse(
@@ -141,5 +144,6 @@ describe('buildUnderlyingCandlesResponse', () => {
     );
     expect(res.candles).toHaveLength(1);
     expect(res.candles[0]!.ts).toBe(2);
+    expect(res.candles[0]!.vol).toBe(0);
   });
 });

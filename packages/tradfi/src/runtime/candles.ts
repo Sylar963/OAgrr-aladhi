@@ -41,6 +41,8 @@ function mapRawCandles(raw: RawCandle[]): TradfiCandlesResponse['candles'] {
   return raw
     .filter(
       (b) =>
+        Number.isFinite(b.time) &&
+        b.time >= 0 &&
         Number.isFinite(b.o) &&
         Number.isFinite(b.h) &&
         Number.isFinite(b.l) &&
@@ -52,7 +54,9 @@ function mapRawCandles(raw: RawCandle[]): TradfiCandlesResponse['candles'] {
       h: b.h,
       l: b.l,
       c: b.c,
-      vol: Number.isFinite(b.v) ? b.v : 0,
+      // Clamp to the downstream schema's non-negative contract; a malformed bar
+      // must not fail the whole response parse on the web side.
+      vol: Number.isFinite(b.v) && b.v >= 0 ? b.v : 0,
       synthetic: false,
     }));
 }

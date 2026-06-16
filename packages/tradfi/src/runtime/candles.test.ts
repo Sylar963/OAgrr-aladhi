@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCandlesResponse } from './candles.js';
+import { buildCandlesResponse, buildUnderlyingCandlesResponse } from './candles.js';
 import { TradfiStore } from './store.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
 
@@ -33,5 +33,47 @@ describe('buildCandlesResponse', () => {
       underlying: 'SPX', expiry: '2026-06-23', strike: 9999, right: 'call', interval: '5m', range: '7d', nowMs: 1,
     });
     expect(res).toBeNull();
+  });
+});
+
+describe('buildUnderlyingCandlesResponse', () => {
+  const rawBars = [
+    { symbol: 'SPY{=1h}', flags: 0, time: 1_700_000_000_000, o: 500, h: 505, l: 499, c: 503, v: 10 },
+    { symbol: 'SPY{=1h}', flags: 0, time: 1_700_003_600_000, o: 503, h: 507, l: 502, c: 506, v: 12 },
+  ];
+
+  it('fetches candles for the plain underlying symbol and maps them to USD', async () => {
+    const calls: Array<{ symbol: string; period: string }> = [];
+    const client = {
+      getCandles: async (symbol: string, period: string) => {
+        calls.push({ symbol, period });
+        return rawBars;
+      },
+    };
+    const res = await buildUnderlyingCandlesResponse(
+      client as Parameters<typeof buildUnderlyingCandlesResponse>[0],
+      { underlying: 'SPY', interval: '1h', range: '7d', nowMs: 1_700_004_000_000 },
+    );
+    expect(calls).toEqual([{ symbol: 'SPY', period: '1h' }]);
+    expect(res.symbol).toBe('SPY');
+    expect(res.priceCurrency).toBe('USD');
+    expect(res.candles).toHaveLength(2);
+    expect(res.candles[0]).toMatchObject({ ts: 1_700_000_000_000, o: 500, h: 505, l: 499, c: 503, vol: 10, synthetic: false });
+    expect(res.markLine).toEqual([]);
+  });
+
+  it('drops bars with non-finite OHLC', async () => {
+    const client = {
+      getCandles: async () => [
+        { symbol: 'SPY{=1h}', flags: 0, time: 1, o: NaN, h: 1, l: 1, c: 1, v: 0 },
+        { symbol: 'SPY{=1h}', flags: 0, time: 2, o: 1, h: 1, l: 1, c: 1, v: 0 },
+      ],
+    };
+    const res = await buildUnderlyingCandlesResponse(
+      client as Parameters<typeof buildUnderlyingCandlesResponse>[0],
+      { underlying: 'SPY', interval: '1h', range: '1d', nowMs: 1000 },
+    );
+    expect(res.candles).toHaveLength(1);
+    expect(res.candles[0]!.ts).toBe(2);
   });
 });

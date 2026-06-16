@@ -46,6 +46,16 @@ describe('parseHash', () => {
     expect(parseHash('')).toEqual({ mode: 'crypto', tab: DEFAULT_TAB, ticker: null });
     expect(parseHash('#')).toEqual({ mode: 'crypto', tab: DEFAULT_TAB, ticker: null });
   });
+
+  it('ignores trailing and doubled slashes', () => {
+    expect(parseHash('#chain/BTC/')).toEqual({ mode: 'crypto', tab: 'chain', ticker: 'BTC' });
+    expect(parseHash('#tradfi/gex/')).toEqual({ mode: 'tradfi', page: 'gex', ticker: null });
+    expect(parseHash('#tradfi//gex//AAPL')).toEqual({
+      mode: 'tradfi',
+      page: 'gex',
+      ticker: 'AAPL',
+    });
+  });
 });
 
 describe('buildHash', () => {
@@ -76,5 +86,11 @@ describe('round-trip', () => {
     for (const state of states) {
       expect(parseHash(buildHash(state))).toEqual(state);
     }
+  });
+
+  it('parseHash → buildHash is idempotent in canonical form', () => {
+    const canonical = buildHash(parseHash('#chain/btc'));
+    expect(canonical).toBe('#chain/BTC');
+    expect(buildHash(parseHash(canonical))).toBe(canonical);
   });
 });

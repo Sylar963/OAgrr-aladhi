@@ -2,7 +2,10 @@ import { DEFAULT_TAB, slugFromTabId, tabIdFromSlug, type TabId } from '@lib/tabs
 import type { TradfiPage } from '@stores/app-store';
 
 const TRADFI_PREFIX = 'tradfi';
-const TRADFI_PAGES: readonly TradfiPage[] = ['chain', 'gex'];
+// Listing every TradfiPage as a Record key forces exhaustiveness: adding a
+// page to the union without adding it here becomes a compile error instead of
+// a silent parse failure.
+const TRADFI_PAGES: Record<TradfiPage, true> = { chain: true, gex: true };
 
 // Hash route state, discriminated by asset mode. `ticker` is null when no
 // ticker is encoded (e.g. a legacy `#chain` link or TradFi before selection).
@@ -11,10 +14,10 @@ export type RouteState =
   | { mode: 'tradfi'; page: TradfiPage; ticker: string | null };
 
 function isTradfiPage(value: string): value is TradfiPage {
-  return (TRADFI_PAGES as readonly string[]).includes(value);
+  return Object.hasOwn(TRADFI_PAGES, value);
 }
 
-function normalizeTicker(raw: string | undefined): string | null {
+function normalizeTicker(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const ticker = raw.trim().toUpperCase();
   return ticker.length > 0 ? ticker : null;
@@ -44,7 +47,7 @@ export function parseHash(rawHash: string): RouteState {
 
 // Build the canonical `location.hash` (including the leading `#`) for a state.
 export function buildHash(state: RouteState): string {
-  const ticker = normalizeTicker(state.ticker ?? undefined);
+  const ticker = normalizeTicker(state.ticker);
   const base =
     state.mode === 'tradfi' ? `${TRADFI_PREFIX}/${state.page}` : slugFromTabId(state.tab);
   return `#${ticker ? `${base}/${ticker}` : base}`;

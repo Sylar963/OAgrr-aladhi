@@ -447,6 +447,9 @@ export default function NewChainTable({
                   isExpanded={expanded.has(s.strike)}
                   onToggle={() => toggleRow(s.strike)}
                   freshnessNow={freshnessNow}
+                  underlying={underlying}
+                  expiry={expiry}
+                  chartOverride={chartOverride}
                 />
               </div>
             );

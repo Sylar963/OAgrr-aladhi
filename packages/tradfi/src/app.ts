@@ -9,6 +9,7 @@ import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 import { underlyingsRoute } from './routes/underlyings.js';
 import { venuesRoute } from './routes/venues.js';
 import { wsChainRoute } from './routes/ws-chain.js';
+import type { TradfiFlowBook } from './runtime/flow-book.js';
 import type { TradfiStore } from './runtime/store.js';
 import type { CandleClient } from './tastytrade/candle-client.js';
 import type { TradfiReadiness } from './tastytrade/feed.js';
@@ -23,6 +24,7 @@ export interface TradfiDeps {
   store: TradfiStore;
   feed: FeedLike;
   candleClient?: CandleClient;
+  flowBook?: TradfiFlowBook;
 }
 
 export function buildApp(deps: TradfiDeps): FastifyInstance {

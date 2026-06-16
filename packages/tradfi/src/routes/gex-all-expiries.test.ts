@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import { buildChain } from '../runtime/chain.js';
 import { TradfiStore } from '../runtime/store.js';
 import type { TradfiReadiness } from '../tastytrade/feed.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
@@ -43,6 +44,10 @@ describe('GET /gex-all-expiries', () => {
     expect(body.spotPrice).toBe(5000);
     const at5000 = body.gex.find((g) => g.strike === 5000)!;
     expect(at5000.gexUsdMillions).toBeGreaterThan(0);
+    // Prove the two expiries were actually summed (not just the first returned).
+    const gexA = buildChain(store, 'SPX', '2026-06-18', 'ws').gex.find((g) => g.strike === 5000)!;
+    const gexB = buildChain(store, 'SPX', '2026-06-19', 'ws').gex.find((g) => g.strike === 5000)!;
+    expect(at5000.gexUsdMillions).toBeCloseTo(gexA.gexUsdMillions + gexB.gexUsdMillions, 6);
     await app.close();
   });
 

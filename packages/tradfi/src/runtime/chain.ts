@@ -1,6 +1,8 @@
 import {
   buildComparisonChain,
   buildEnrichedChain,
+  type BookLookup,
+  type DealerPosition,
   EMPTY_GREEKS,
   type EnrichedChainResponse,
   type NormalizedOptionContract,
@@ -11,6 +13,7 @@ import {
 import type { TradfiStore, TradfiLiveQuote } from './store.js';
 import { emptyQuote } from './store.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
+import type { TradfiFlowBook } from './flow-book.js';
 
 // TradFi is a separate service; the shared core chain/enrichment types are keyed
 // by the crypto VenueId union. We widen "tastytrade" to VenueId at this single
@@ -132,6 +135,7 @@ export function buildChain(
   underlying: string,
   expiry: string,
   source: 'ws' | 'rest' = 'ws',
+  flowBook?: TradfiFlowBook,
 ): EnrichedChainResponse {
   const insts = store.instrumentsFor(underlying, expiry);
   const spot = store.getSpot(underlying);
@@ -151,6 +155,31 @@ export function buildChain(
     contracts,
   };
 
+  // Live-signed dealer book: magnitude from current OI, sign refined by net taker
+  // flow. dealerContracts = naiveBase − netFlow, where naiveBase = ±OI. At zero
+  // flow this reproduces the naive GEX exactly (computeGex negates puts itself).
+  const lookup: BookLookup | undefined = flowBook
+    ? (_venue, symbol) => {
+        const c = contracts[symbol];
+        if (c == null) return undefined;
+        const oi = c.quote.openInterest;
+        if (oi == null) return undefined;
+        const naiveBase = c.right === 'call' ? oi : -oi;
+        const pos: DealerPosition = {
+          venue: TASTYTRADE_VENUE,
+          symbol,
+          underlying,
+          expiry,
+          strike: c.strike,
+          optionType: c.right,
+          dealerContracts: naiveBase - flowBook.netFlowFor(symbol),
+          lastOi: oi,
+          lastSnapshotTs: c.quote.timestamp ?? Date.now(),
+        };
+        return pos;
+      }
+    : undefined;
+
   const comparison = buildComparisonChain(underlying, expiry, [venueChain]);
-  return buildEnrichedChain(underlying, expiry, comparison.rows, [venueChain]);
+  return buildEnrichedChain(underlying, expiry, comparison.rows, [venueChain], lookup);
 }

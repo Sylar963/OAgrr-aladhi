@@ -1,17 +1,17 @@
-import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
-import type { TradfiStore } from './runtime/store.js';
-import type { TradfiReadiness } from './tastytrade/feed.js';
-import type { CandleClient } from './tastytrade/candle-client.js';
-import { venuesRoute } from './routes/venues.js';
-import { healthRoute } from './routes/health.js';
-import { underlyingsRoute } from './routes/underlyings.js';
-import { expiriesRoute } from './routes/expiries.js';
-import { chainsRoute } from './routes/chains.js';
-import { wsChainRoute } from './routes/ws-chain.js';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { candlesRoute } from './routes/candles.js';
+import { chainsRoute } from './routes/chains.js';
+import { expiriesRoute } from './routes/expiries.js';
+import { healthRoute } from './routes/health.js';
 import { underlyingCandlesRoute } from './routes/underlying-candles.js';
+import { underlyingsRoute } from './routes/underlyings.js';
+import { venuesRoute } from './routes/venues.js';
+import { wsChainRoute } from './routes/ws-chain.js';
+import type { TradfiStore } from './runtime/store.js';
+import type { CandleClient } from './tastytrade/candle-client.js';
+import type { TradfiReadiness } from './tastytrade/feed.js';
 
 export interface FeedLike {
   readiness(): TradfiReadiness;

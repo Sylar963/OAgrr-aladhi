@@ -7,5 +7,7 @@
 .error {
   padding: 40px;
   color: #f87171;
-  font: 13px 'IBM Plex Mono', monospace;
+  font:
+    13px "IBM Plex Mono",
+    monospace;
 }

@@ -1,6 +1,11 @@
-import { useMemo } from 'react';
+import {
+  type AttributionBar,
+  type AttributionResult,
+  attributePnL,
+  type OptionRight,
+} from '@features/chain';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
-import { attributePnL, type AttributionBar, type AttributionResult, type OptionRight } from '@features/chain';
+import { useMemo } from 'react';
 import { useTradfiCandles } from './use-tradfi-candles';
 import { useTradfiUnderlyingCandles } from './use-tradfi-underlying-candles';
 
@@ -11,7 +16,10 @@ interface CloseBar {
 
 // Join option closes to underlying closes by exact bucket timestamp. Bars without
 // a forward match are dropped — attribution needs both legs at the same instant.
-export function alignTradfiBars(option: readonly CloseBar[], underlying: readonly CloseBar[]): AttributionBar[] {
+export function alignTradfiBars(
+  option: readonly CloseBar[],
+  underlying: readonly CloseBar[],
+): AttributionBar[] {
   const fwd = new Map<number, number>();
   for (const u of underlying) fwd.set(u.ts, u.c);
   const out: AttributionBar[] = [];

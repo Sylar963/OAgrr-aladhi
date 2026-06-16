@@ -1,11 +1,10 @@
-import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
-
-import { VENUES } from '@lib/venue-meta';
 import { IvChip, SpreadPill } from '@components/ui';
-import { fmtUsd, fmtDelta } from '@lib/format';
-import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
+import { fmtDelta, fmtUsd } from '@lib/format';
+import { VENUES } from '@lib/venue-meta';
+import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
 import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
+import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
 
 interface MobileStrikeCardProps {
   strike: EnrichedStrike;
@@ -19,7 +18,12 @@ interface MobileStrikeCardProps {
   expiry?: string;
   // When provided, an expanded card shows per-side chart buttons that route to a
   // venue-owned chart surface (TradFi). Absent for crypto → no buttons, unchanged.
-  chartOverride?: (target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => void;
+  chartOverride?: (target: {
+    underlying: string;
+    expiry: string;
+    strike: number;
+    type: 'call' | 'put';
+  }) => void;
 }
 
 interface SideSummaryProps {
@@ -189,14 +193,18 @@ export default function MobileStrikeCard({
               <button
                 type="button"
                 className={styles.chartBtn}
-                onClick={() => chartOverride({ underlying, expiry, strike: strike.strike, type: 'call' })}
+                onClick={() =>
+                  chartOverride({ underlying, expiry, strike: strike.strike, type: 'call' })
+                }
               >
                 Call chart
               </button>
               <button
                 type="button"
                 className={styles.chartBtn}
-                onClick={() => chartOverride({ underlying, expiry, strike: strike.strike, type: 'put' })}
+                onClick={() =>
+                  chartOverride({ underlying, expiry, strike: strike.strike, type: 'put' })
+                }
               >
                 Put chart
               </button>

@@ -1,20 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-
-import type { EnrichedStrike, EnrichedSide } from '@shared/enriched';
-
-import { VENUES } from '@lib/venue-meta';
-import { venueColor } from '@lib/colors';
-import { IvChip, SpreadPill, EmptyState } from '@components/ui';
-import { fmtUsd, fmtDelta } from '@lib/format';
+import { EmptyState, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { venueColor } from '@lib/colors';
+import { fmtDelta, fmtUsd } from '@lib/format';
+import { VENUES } from '@lib/venue-meta';
+import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './ChainTable.module.css';
 import ExpandedRow from './ExpandedRow';
 import { FlashingPrice } from './FlashingPrice';
+import { computeAtmConsensus } from './forward-analysis';
 import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
-import { computeAtmConsensus } from './forward-analysis';
 import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
-import styles from './ChainTable.module.css';
 
 const GAMMA_TIP =
   'Γ GAMMA — change in Δ for a 1% move in spot.\n\n' +
@@ -46,7 +44,12 @@ interface NewChainTableProps {
   underlying: string;
   // Optional override for the per-strike Chart button (see ExpandedRow). Lets a
   // non-crypto venue route charts to its own surface. Crypto omits it → unchanged.
-  chartOverride?: (target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => void;
+  chartOverride?: (target: {
+    underlying: string;
+    expiry: string;
+    strike: number;
+    type: 'call' | 'put';
+  }) => void;
 }
 
 // Scale-invariant Greek display: delta-change per 1% spot move.
@@ -142,7 +145,12 @@ interface StrikeRowProps {
   underlying: string;
   expiry: string;
   freshnessNow: number;
-  chartOverride?: (target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => void;
+  chartOverride?: (target: {
+    underlying: string;
+    expiry: string;
+    strike: number;
+    type: 'call' | 'put';
+  }) => void;
 }
 
 function fmtDistPct(strike: number, indexPrice: number | null): string | null {
@@ -257,9 +265,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
         <div
           className={styles.strikeCenter}
           data-atm={isAtm}
-          data-moneyness={
-            isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'
-          }
+          data-moneyness={isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'}
         >
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}

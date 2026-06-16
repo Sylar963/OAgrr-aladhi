@@ -13,7 +13,9 @@
   justify-content: space-between;
   padding: 6px 10px;
   border-bottom: 1px solid #1a1a1a;
-  font: 600 12px 'IBM Plex Mono', monospace;
+  font:
+    600 12px "IBM Plex Mono",
+    monospace;
 }
 
 .titlebar button {
@@ -53,7 +55,9 @@
   border: 1px solid #232327;
   border-radius: 4px;
   padding: 2px 8px;
-  font: 11px 'IBM Plex Mono', monospace;
+  font:
+    11px "IBM Plex Mono",
+    monospace;
   cursor: pointer;
 }
 
@@ -74,7 +78,9 @@
 .empty {
   margin: auto;
   color: #7a7f87;
-  font: 12px 'IBM Plex Mono', monospace;
+  font:
+    12px "IBM Plex Mono",
+    monospace;
   padding: 24px;
   text-align: center;
 }

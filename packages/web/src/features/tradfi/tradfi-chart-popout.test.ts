@@ -1,11 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildTradfiPopoutSearch, parseTradfiPopoutParams } from './tradfi-chart-popout';
 
 describe('tradfi popout params round-trip', () => {
   it('builds and re-parses', () => {
-    const search = buildTradfiPopoutSearch({ underlying: 'SPY', expiry: '2026-06-19', strike: 500, type: 'call' });
+    const search = buildTradfiPopoutSearch({
+      underlying: 'SPY',
+      expiry: '2026-06-19',
+      strike: 500,
+      type: 'call',
+    });
     const parsed = parseTradfiPopoutParams(`?${search}`);
-    expect(parsed).toMatchObject({ underlying: 'SPY', expiry: '2026-06-19', strike: 500, type: 'call', mode: 'price' });
+    expect(parsed).toMatchObject({
+      underlying: 'SPY',
+      expiry: '2026-06-19',
+      strike: 500,
+      type: 'call',
+      mode: 'price',
+    });
   });
 
   it('returns null when provider is not tradfi', () => {
@@ -18,7 +29,9 @@ describe('tradfi popout params round-trip', () => {
 
   it('returns null on an invalid type', () => {
     expect(
-      parseTradfiPopoutParams('?popout=1&provider=tradfi&underlying=SPY&expiry=2026-06-19&strike=500&type=straddle'),
+      parseTradfiPopoutParams(
+        '?popout=1&provider=tradfi&underlying=SPY&expiry=2026-06-19&strike=500&type=straddle',
+      ),
     ).toBeNull();
   });
 });

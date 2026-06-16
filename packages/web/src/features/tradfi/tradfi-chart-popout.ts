@@ -38,7 +38,15 @@ export function parseTradfiPopoutParams(search: string): TradfiPopoutParams | nu
   const strike = Number(strikeStr);
   if (!Number.isFinite(strike)) return null;
   const mode = p.get('mode') === 'attribution' ? 'attribution' : 'price';
-  return { underlying, expiry, strike, type, interval: p.get('interval') ?? '1h', range: p.get('range') ?? '7d', mode };
+  return {
+    underlying,
+    expiry,
+    strike,
+    type,
+    interval: p.get('interval') ?? '1h',
+    range: p.get('range') ?? '7d',
+    mode,
+  };
 }
 
 // Stable per-(underlying, expiry, strike, type) window name: clicking Chart again

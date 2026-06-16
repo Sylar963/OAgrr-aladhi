@@ -1,15 +1,18 @@
-import { useMemo } from 'react';
-import type { EnrichedSide, VenueQuote, VenueId } from '@shared/enriched';
-
-import { VENUES } from '@lib/venue-meta';
-import { IvChip, SpreadPill, ForwardDeltaPill } from '@components/ui';
-import { fmtUsd, fmtDelta, fmtNum, fmtIv } from '@lib/format';
-import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
-import { useChartPanelsStore } from './chart-panels-store.js';
-import { toVenueSymbol, NotSupportedVenueError, isChartSupportedVenue } from './instrument-symbol.js';
-import { openChartPopout } from './chart-popout-url.js';
+import { ForwardDeltaPill, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import { VENUES } from '@lib/venue-meta';
+import type { EnrichedSide, VenueId, VenueQuote } from '@shared/enriched';
+import { useMemo } from 'react';
+import { useChartPanelsStore } from './chart-panels-store.js';
+import { openChartPopout } from './chart-popout-url.js';
 import styles from './ExpandedRow.module.css';
+import { computeImpliedForward, computeImpliedForwardBand } from './forward-analysis';
+import {
+  isChartSupportedVenue,
+  NotSupportedVenueError,
+  toVenueSymbol,
+} from './instrument-symbol.js';
 
 interface ForwardCell {
   fImplied: number | null;
@@ -420,14 +423,23 @@ interface ChartButtonProps {
 }
 
 function pickPrimaryVenue(side: EnrichedSide, active: readonly VenueId[]): VenueId | null {
-  const entries = (Object.entries(side.venues) as [VenueId, VenueQuote][])
-    .filter(([v]) => active.includes(v) && isChartSupportedVenue(v));
+  const entries = (Object.entries(side.venues) as [VenueId, VenueQuote][]).filter(
+    ([v]) => active.includes(v) && isChartSupportedVenue(v),
+  );
   if (entries.length === 0) return null;
   entries.sort((a, b) => (b[1].openInterest ?? 0) - (a[1].openInterest ?? 0));
   return entries[0]?.[0] ?? null;
 }
 
-function ChartButton({ underlying, expiry, strike, type, side, activeVenues, chartOverride }: ChartButtonProps) {
+function ChartButton({
+  underlying,
+  expiry,
+  strike,
+  type,
+  side,
+  activeVenues,
+  chartOverride,
+}: ChartButtonProps) {
   const openPanel = useChartPanelsStore((s) => s.openPanel);
   const isMobile = useIsMobile();
   const venue = pickPrimaryVenue(side, activeVenues);
@@ -439,7 +451,9 @@ function ChartButton({ underlying, expiry, strike, type, side, activeVenues, cha
       type="button"
       className={styles.chartBtn}
       disabled={disabled}
-      title={disabled ? 'No venue available for this strike' : `Open chart for ${type.toUpperCase()}`}
+      title={
+        disabled ? 'No venue available for this strike' : `Open chart for ${type.toUpperCase()}`
+      }
       onClick={() => {
         if (chartOverride) {
           chartOverride({ underlying, expiry, strike, type });

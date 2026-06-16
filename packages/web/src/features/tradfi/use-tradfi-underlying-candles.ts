@@ -1,7 +1,7 @@
+import { tradfiFetchJson } from '@lib/tradfi-http';
+import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
-import { tradfiFetchJson } from '@lib/tradfi-http';
 
 // Local Zod v4 schemas — mirrors use-tradfi-candles.ts. Do NOT use the protocol's
 // Zod v3 schemas: they fail at runtime when composed inside a Zod v4 z.object().

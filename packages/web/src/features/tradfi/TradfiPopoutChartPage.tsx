@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
+import { useEffect, useMemo, useState } from 'react';
 import TradfiChartPanel, { type TradfiChartPanelData } from './TradfiChartPanel';
-import { parseTradfiPopoutParams } from './tradfi-chart-popout';
 import styles from './TradfiPopoutChartPage.module.css';
+import { parseTradfiPopoutParams } from './tradfi-chart-popout';
 
 const INTERVALS: InstrumentCandleInterval[] = ['5m', '15m', '1h', '1d'];
 const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
@@ -16,21 +16,29 @@ export default function TradfiPopoutChartPage() {
           expiry: initial.expiry,
           strike: initial.strike,
           type: initial.type,
-          interval: (INTERVALS as string[]).includes(initial.interval) ? (initial.interval as InstrumentCandleInterval) : '1h',
-          range: (RANGES as string[]).includes(initial.range) ? (initial.range as InstrumentCandleRange) : '7d',
+          interval: (INTERVALS as string[]).includes(initial.interval)
+            ? (initial.interval as InstrumentCandleInterval)
+            : '1h',
+          range: (RANGES as string[]).includes(initial.range)
+            ? (initial.range as InstrumentCandleRange)
+            : '7d',
           chartMode: initial.mode,
         }
       : null,
   );
 
   useEffect(() => {
-    if (data) document.title = `${data.underlying} ${data.strike} ${data.type.toUpperCase()} · TradFi`;
+    if (data)
+      document.title = `${data.underlying} ${data.strike} ${data.type.toUpperCase()} · TradFi`;
   }, [data]);
 
   if (!data) return <div className={styles.error}>Invalid TradFi popout URL.</div>;
   return (
     <div className={styles.root}>
-      <TradfiChartPanel data={data} onPatch={(patch) => setData((d) => (d ? { ...d, ...patch } : d))} />
+      <TradfiChartPanel
+        data={data}
+        onPatch={(patch) => setData((d) => (d ? { ...d, ...patch } : d))}
+      />
     </div>
   );
 }

@@ -1,10 +1,10 @@
+import { InstrumentCandleIntervalSchema, InstrumentCandleRangeSchema } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
 import type { TradfiDeps } from '../app.js';
 import { buildUnderlyingCandlesResponse } from '../runtime/candles.js';
-import { InstrumentCandleIntervalSchema, InstrumentCandleRangeSchema } from '@oggregator/protocol';
 
 export function underlyingCandlesRoute(deps: TradfiDeps) {
-  return async function (app: FastifyInstance) {
+  return async (app: FastifyInstance) => {
     app.get<{ Querystring: Record<string, string> }>('/underlying-candles', async (req, reply) => {
       const { underlying, interval, range } = req.query;
       const i = InstrumentCandleIntervalSchema.safeParse(interval);
@@ -16,7 +16,10 @@ export function underlyingCandlesRoute(deps: TradfiDeps) {
         return reply.status(503).send({ error: 'candle feed not ready' });
       }
       return buildUnderlyingCandlesResponse(deps.candleClient, {
-        underlying, interval: i.data, range: r.data, nowMs: Date.now(),
+        underlying,
+        interval: i.data,
+        range: r.data,
+        nowMs: Date.now(),
       });
     });
   };

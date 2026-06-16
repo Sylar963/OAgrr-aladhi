@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Stub the chart leaves (lightweight-charts createChart does not work in jsdom).
 vi.mock('@features/chain', () => ({
@@ -18,7 +18,13 @@ vi.mock('./use-tradfi-candles', () => ({
 }));
 
 vi.mock('./use-tradfi-attribution', () => ({
-  useTradfiAttribution: () => ({ result: null, isLoading: false, error: null, insufficientData: true, displayCurrency: 'USD' }),
+  useTradfiAttribution: () => ({
+    result: null,
+    isLoading: false,
+    error: null,
+    insufficientData: true,
+    displayCurrency: 'USD',
+  }),
 }));
 
 import TradfiChartPanel from './TradfiChartPanel';
@@ -28,7 +34,15 @@ function renderPanel(mode: 'price' | 'attribution') {
   return render(
     <QueryClientProvider client={qc}>
       <TradfiChartPanel
-        data={{ underlying: 'SPY', expiry: '2026-06-19', strike: 500, type: 'call', interval: '1h', range: '7d', chartMode: mode }}
+        data={{
+          underlying: 'SPY',
+          expiry: '2026-06-19',
+          strike: 500,
+          type: 'call',
+          interval: '1h',
+          range: '7d',
+          chartMode: mode,
+        }}
         onPatch={() => {}}
       />
     </QueryClientProvider>,

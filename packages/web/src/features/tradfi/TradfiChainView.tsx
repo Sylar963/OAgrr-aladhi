@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react';
-
-import { useAppStore } from '@stores/app-store';
-import { Spinner, EmptyState } from '@components/ui';
+import { EmptyState, Spinner } from '@components/ui';
+import { ChainTable, ExpiryBar, StatStrip } from '@features/chain';
 import { useIsMobile } from '@hooks/useIsMobile';
-import { ExpiryBar, StatStrip, ChainTable } from '@features/chain';
-import { useTradfiUnderlyings, useTradfiExpiries, useTradfiChain } from './queries';
+import { useAppStore } from '@stores/app-store';
+import { useEffect, useState } from 'react';
+import { useTradfiChain, useTradfiExpiries, useTradfiUnderlyings } from './queries';
+import styles from './TradfiChainView.module.css';
 import TradfiChartPanel, { type TradfiChartPanelData } from './TradfiChartPanel';
 import { openTradfiChartPopout } from './tradfi-chart-popout';
-import styles from './TradfiChainView.module.css';
 
 const TRADFI_VENUES = ['tastytrade'];
 
@@ -38,7 +37,12 @@ export default function TradfiChainView() {
   }, [expiries, expiry, setExpiry]);
 
   // Per-strike chart: desktop opens a popout window, mobile an in-page modal.
-  function openChart(target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) {
+  function openChart(target: {
+    underlying: string;
+    expiry: string;
+    strike: number;
+    type: 'call' | 'put';
+  }) {
     if (isMobile) {
       setModal({ ...target, interval: '1h', range: '7d', chartMode: 'price' });
     } else {
@@ -77,11 +81,17 @@ export default function TradfiChainView() {
           <EmptyState
             icon="⚠"
             title="Failed to load TradFi chain"
-            detail={error instanceof Error ? error.message : 'Is the TradFi service running on :3200?'}
+            detail={
+              error instanceof Error ? error.message : 'Is the TradFi service running on :3200?'
+            }
           />
         )}
         {chain && chain.strikes.length === 0 && (
-          <EmptyState icon="∅" title="No options data" detail={`No data for ${underlying} ${expiry}.`} />
+          <EmptyState
+            icon="∅"
+            title="No options data"
+            detail={`No data for ${underlying} ${expiry}.`}
+          />
         )}
         {chain && chain.strikes.length > 0 && (
           <ChainTable
@@ -99,7 +109,11 @@ export default function TradfiChainView() {
 
       {modal && (
         <div className={styles.modalBackdrop} onClick={() => setModal(null)} role="presentation">
-          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()} role="presentation">
+          <div
+            className={styles.modalCard}
+            onClick={(e) => e.stopPropagation()}
+            role="presentation"
+          >
             <TradfiChartPanel
               data={modal}
               onPatch={(patch) => setModal((m) => (m ? { ...m, ...patch } : m))}

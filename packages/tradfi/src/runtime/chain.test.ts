@@ -115,9 +115,23 @@ function seedStore(): TradfiStore {
       settlementType: 'cash',
       expirationType: 'Regular',
     } satisfies TradfiInstrument,
+    {
+      canonical: 'SPX/USD:USD-260618-4900-P',
+      streamerSymbol: '.P',
+      underlying: 'SPX',
+      expiry: '2026-06-18',
+      strike: 4900,
+      right: 'put',
+      multiplier: 100,
+      occSymbol: 'SPX   260618P04900000',
+      rootSymbol: 'SPX',
+      settlementType: 'cash',
+      expirationType: 'Regular',
+    } satisfies TradfiInstrument,
   ]);
   store.setSpot('SPX', 5000);
   store.mergeQuote('.C', { ts: 1, bid: 1, ask: 2, mark: 1.5, gamma: 0.001, openInterest: 1000 });
+  store.mergeQuote('.P', { ts: 1, bid: 1, ask: 2, mark: 1.5, gamma: 0.001, openInterest: 800 });
   return store;
 }
 

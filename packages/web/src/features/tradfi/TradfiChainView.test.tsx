@@ -1,5 +1,5 @@
-import { it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { it, expect, vi, afterEach } from 'vitest';
+import { render, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
@@ -29,18 +29,16 @@ vi.mock('./queries', () => ({
   }),
 }));
 
-// lightweight-charts createChart does not work in jsdom — stub InstrumentChart
-vi.mock('@features/chain/InstrumentChart', () => ({
-  default: () => <div data-testid="instrument-chart" />,
-}));
-
-// Stub useTradfiCandles so TradfiPriceChart doesn't make real fetch calls
+// lightweight-charts createChart does not work in jsdom — stub the chart leaf.
+vi.mock('@features/chain/InstrumentChart', () => ({ default: () => <div data-testid="instrument-chart" /> }));
 vi.mock('./use-tradfi-candles', () => ({
   useTradfiCandles: () => ({ data: undefined, isLoading: false }),
   parseTradfiCandles: (raw: unknown) => raw,
 }));
 
 import TradfiChainView from './TradfiChainView';
+
+afterEach(() => cleanup());
 
 function wrap() {
   const qc = new QueryClient();
@@ -55,47 +53,9 @@ it('renders a null-heavy tradfi chain without crashing', () => {
   expect(() => wrap()).not.toThrow();
 });
 
-it('shows Chain and Price tab buttons', () => {
+it('no longer renders Chain/Price tab buttons (Price tab replaced by per-strike Chart)', () => {
   const { container } = wrap();
-  const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
-  expect(buttons).toContain('Chain');
-  expect(buttons).toContain('Price');
-});
-
-it('Chain tab is active by default', () => {
-  const { container } = wrap();
-  const chainBtn = Array.from(container.querySelectorAll('button')).find(
-    (b) => b.textContent === 'Chain',
-  ) as HTMLButtonElement;
-  expect(chainBtn.dataset['active']).toBe('true');
-});
-
-it('clicking Price tab renders the price chart container', () => {
-  const { container } = wrap();
-  const priceBtn = Array.from(container.querySelectorAll('button')).find(
-    (b) => b.textContent === 'Price',
-  )!;
-  fireEvent.click(priceBtn);
-  // TradfiPriceChart renders a panel with controls; assert the panel is present
-  // by checking for the strike selector or any button for call/put toggle
-  const afterClick = container.querySelectorAll('button');
-  const labels = Array.from(afterClick).map((b) => b.textContent);
-  // CALL/PUT buttons are rendered by TradfiPriceChart
-  expect(labels).toContain('CALL');
-  expect(labels).toContain('PUT');
-});
-
-it('switching back to Chain tab shows chain content again', () => {
-  const { container } = wrap();
-  const priceBtn = Array.from(container.querySelectorAll('button')).find(
-    (b) => b.textContent === 'Price',
-  )!;
-  fireEvent.click(priceBtn);
-  const chainBtn = Array.from(container.querySelectorAll('button')).find(
-    (b) => b.textContent === 'Chain',
-  )!;
-  fireEvent.click(chainBtn);
-  // CALL/PUT from TradfiPriceChart should be gone
   const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
-  expect(labels).not.toContain('CALL');
+  expect(labels).not.toContain('Price');
+  expect(labels).not.toContain('Chain');
 });

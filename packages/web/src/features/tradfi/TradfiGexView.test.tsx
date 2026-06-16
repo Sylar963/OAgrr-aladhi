@@ -14,6 +14,7 @@ vi.mock('./queries', () => ({
   useTradfiAllExpiriesGex: () => ({ data: { gex: [], spotPrice: 5000 }, isLoading: false }),
 }));
 vi.mock('@stores/app-store', () => ({ useAppStore: (sel: (s: unknown) => unknown) => sel({ tradfiUnderlying: 'SPX' }) }));
+vi.mock('./TradfiGexBandsChart', () => ({ default: () => null }));
 
 import TradfiGexView from './TradfiGexView';
 

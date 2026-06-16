@@ -3,7 +3,7 @@ import styles from '@features/gex/GexView.module.css';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
 import type { GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTradfiAllExpiriesGex, useTradfiChain, useTradfiExpiries } from './queries';
 import TradfiGexBandsChart from './TradfiGexBandsChart';
 
@@ -46,6 +46,24 @@ export default function TradfiGexView() {
           return Math.abs(row.strike - spotPrice) < Math.abs(best - spotPrice) ? row.strike : best;
         }, null)
       : null;
+
+  const barsRef = useRef<HTMLDivElement | null>(null);
+  const spotRowRef = useRef<HTMLDivElement | null>(null);
+  const hasCenteredBarsRef = useRef(false);
+
+  useEffect(() => {
+    hasCenteredBarsRef.current = false;
+  }, [mode, underlying]);
+
+  useEffect(() => {
+    if (hasCenteredBarsRef.current || version !== 'bars') return;
+    if (!barsRef.current || !spotRowRef.current) return;
+    const list = barsRef.current;
+    const row = spotRowRef.current;
+    const offset = row.offsetTop - list.offsetTop - list.clientHeight / 2 + row.clientHeight / 2;
+    list.scrollTop = Math.max(0, offset);
+    hasCenteredBarsRef.current = true;
+  }, [version, mode, nonzero.length, spotStrike, underlying]);
 
   if (isLoading && gex.length === 0) {
     return (
@@ -133,13 +151,18 @@ export default function TradfiGexView() {
               <span className={styles.axisLabel}>Positive (magnet) →</span>
             </div>
           </div>
-          <div className={styles.bars}>
+          <div className={styles.bars} ref={barsRef}>
             {sorted.map((g) => {
               const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
               const positive = g.gexUsdMillions >= 0;
               const isNearSpot = g.strike === spotStrike;
               return (
-                <div key={g.strike} className={styles.barRow} data-near-spot={isNearSpot || undefined}>
+                <div
+                  key={g.strike}
+                  className={styles.barRow}
+                  data-near-spot={isNearSpot || undefined}
+                  ref={isNearSpot ? spotRowRef : undefined}
+                >
                   <div className={styles.strikeLabel} data-near-spot={isNearSpot}>
                     {g.strike.toLocaleString()}
                     {isNearSpot && <span className={styles.spotMarker}>◄ SPOT</span>}

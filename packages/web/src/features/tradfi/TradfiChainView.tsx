@@ -57,6 +57,7 @@ export default function TradfiChainView() {
           underlying={chain.underlying}
           dte={chain.dte}
           marketStats={null}
+          showRegimeIv={false}
         />
       )}
 

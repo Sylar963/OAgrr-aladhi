@@ -44,6 +44,9 @@ interface NewChainTableProps {
   myIv: number | null;
   expiry: string;
   underlying: string;
+  // Optional override for the per-strike Chart button (see ExpandedRow). Lets a
+  // non-crypto venue route charts to its own surface. Crypto omits it → unchanged.
+  chartOverride?: (target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => void;
 }
 
 // Scale-invariant Greek display: delta-change per 1% spot move.
@@ -139,6 +142,7 @@ interface StrikeRowProps {
   underlying: string;
   expiry: string;
   freshnessNow: number;
+  chartOverride?: (target: { underlying: string; expiry: string; strike: number; type: 'call' | 'put' }) => void;
 }
 
 function fmtDistPct(strike: number, indexPrice: number | null): string | null {
@@ -170,6 +174,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
   underlying,
   expiry,
   freshnessNow,
+  chartOverride,
 }: StrikeRowItemPropsInternal) {
   const distLabel = fmtDistPct(strike.strike, indexPrice);
   const callQ =
@@ -319,6 +324,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           atmConsensusForward={atmConsensusForward}
           underlying={underlying}
           expiry={expiry}
+          chartOverride={chartOverride}
         />
       )}
     </div>
@@ -335,6 +341,7 @@ export default function NewChainTable({
   myIv,
   expiry,
   underlying,
+  chartOverride,
 }: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
@@ -551,6 +558,7 @@ export default function NewChainTable({
                       underlying={underlying}
                       expiry={expiry}
                       freshnessNow={freshnessNow}
+                      chartOverride={chartOverride}
                     />
                   </div>
                 );

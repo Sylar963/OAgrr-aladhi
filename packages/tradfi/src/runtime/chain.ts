@@ -29,9 +29,53 @@ function notionalUsd(qty: number | null, multiplier: number, spot: number | null
   return qty != null && spot != null ? qty * multiplier * spot : null;
 }
 
+function quoteMark(q: TradfiLiveQuote): number | null {
+  if (q.mark != null) return q.mark;
+  if (q.bid != null && q.ask != null) return (q.bid + q.ask) / 2;
+  return null;
+}
+
+// Synthetic forward from put-call parity at the strike nearest spot that has
+// both a call and put mark: F = K + (callMark − putMark). Undiscounted — for
+// the short equity tenors shown here the discount factor sits inside the basis
+// chip's flat band, and we have no clean per-name rate to discount with.
+// Returns null when no usable ATM pair exists so the caller falls back to spot
+// (which yields basis 0 — the prior behavior, now confined to warming chains).
+function deriveForward(
+  insts: TradfiInstrument[],
+  store: TradfiStore,
+  spot: number | null,
+): number | null {
+  if (spot == null) return null;
+  const byStrike = new Map<number, { strike: number; call: number | null; put: number | null }>();
+  for (const inst of insts) {
+    const q = store.getQuote(inst.streamerSymbol);
+    if (q == null) continue;
+    const mark = quoteMark(q);
+    if (mark == null) continue;
+    const pair = byStrike.get(inst.strike) ?? { strike: inst.strike, call: null, put: null };
+    if (inst.right === 'call') pair.call = mark;
+    else pair.put = mark;
+    byStrike.set(inst.strike, pair);
+  }
+
+  let best: { strike: number; call: number; put: number } | null = null;
+  let bestDist = Infinity;
+  for (const pair of byStrike.values()) {
+    if (pair.call == null || pair.put == null) continue;
+    const dist = Math.abs(pair.strike - spot);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = { strike: pair.strike, call: pair.call, put: pair.put };
+    }
+  }
+  return best == null ? null : best.strike + (best.call - best.put);
+}
+
 function toContract(
   inst: TradfiInstrument,
   quote: TradfiLiveQuote,
+  forward: number | null,
   spot: number | null,
   source: 'ws' | 'rest',
 ): NormalizedOptionContract {
@@ -67,7 +111,10 @@ function toContract(
       last: quote.last != null ? premium(quote.last) : null,
       bidSize: quote.bidSize,
       askSize: quote.askSize,
-      underlyingPriceUsd: spot,
+      // underlyingPriceUsd is the forward-to-expiry (matches Deribit
+      // underlying_price / OKX fwdPx); indexPriceUsd is spot. Core derives the
+      // basis from their difference, so these MUST differ for the regime chip.
+      underlyingPriceUsd: forward,
       indexPriceUsd: spot,
       volume24h: quote.volume,
       openInterest: quote.openInterest,
@@ -88,11 +135,12 @@ export function buildChain(
 ): EnrichedChainResponse {
   const insts = store.instrumentsFor(underlying, expiry);
   const spot = store.getSpot(underlying);
+  const forward = deriveForward(insts, store, spot) ?? spot;
   const contracts: Record<string, NormalizedOptionContract> = {};
 
   for (const inst of insts) {
     const quote = store.getQuote(inst.streamerSymbol) ?? emptyQuote();
-    contracts[inst.canonical] = toContract(inst, quote, spot, source);
+    contracts[inst.canonical] = toContract(inst, quote, forward, spot, source);
   }
 
   const venueChain: VenueOptionChain = {

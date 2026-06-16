@@ -42,4 +42,34 @@ describe('buildChain', () => {
     expect(enriched.stats.totalOiUsd).toBe((10 + 4) * 100 * 198);
     expect(enriched.stats.putCallOiRatio).toBeCloseTo(4 / 10);
   });
+
+  it('derives a put-call-parity forward so basis is non-zero', () => {
+    const store = new TradfiStore();
+    const c = inst('call', 200);
+    const p = inst('put', 200);
+    store.setInstruments([c, p]);
+    store.setSpot('AAPL', 198);
+    // ATM strike 200 (closest to spot). Call richer than put → synthetic forward > spot.
+    store.mergeQuote(c.streamerSymbol, { mark: 7, ts: 1 });
+    store.mergeQuote(p.streamerSymbol, { mark: 4, ts: 1 });
+
+    const enriched = buildChain(store, 'AAPL', '2026-04-17');
+    // F = K + (callMark − putMark) = 200 + (7 − 4) = 203.
+    expect(enriched.stats.forwardPriceUsd).toBeCloseTo(203);
+    expect(enriched.stats.basisPct).toBeCloseTo(((203 - 198) / 198) * 100);
+    expect(enriched.stats.basisPct).not.toBe(0);
+  });
+
+  it('falls back to spot (basis 0) when ATM marks are missing', () => {
+    const store = new TradfiStore();
+    const c = inst('call', 200);
+    const p = inst('put', 200);
+    store.setInstruments([c, p]);
+    store.setSpot('AAPL', 198);
+    store.mergeQuote(c.streamerSymbol, { openInterest: 5, ts: 1 });
+    store.mergeQuote(p.streamerSymbol, { openInterest: 5, ts: 1 });
+
+    const enriched = buildChain(store, 'AAPL', '2026-04-17');
+    expect(enriched.stats.basisPct).toBe(0);
+  });
 });

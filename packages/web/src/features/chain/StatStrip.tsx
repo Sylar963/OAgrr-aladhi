@@ -16,6 +16,9 @@ interface StatStripProps {
   dte: number;
   connectionState?: WsConnectionState;
   marketStats?: StatsResponse | null;
+  // Hide the regime chip's Basis × IV dot for venues with no day-over-day IV
+  // feed (TradFi). Default true preserves crypto behavior.
+  showRegimeIv?: boolean;
 }
 
 interface StatCellProps {
@@ -185,6 +188,7 @@ export default function StatStrip({
   dte,
   connectionState,
   marketStats,
+  showRegimeIv = true,
 }: StatStripProps) {
   const basisSub = stats.basisPct != null ? fmtPct(stats.basisPct, 3) : undefined;
   const basisPositive =
@@ -269,6 +273,7 @@ export default function StatStrip({
         skew25d={stats.skew25d}
         ivChange1d={marketStats?.dvol?.ivChange1d ?? null}
         putCallOiRatio={stats.putCallOiRatio}
+        showIvSignal={showRegimeIv}
       />
       {connectionState && (
         <>

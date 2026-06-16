@@ -17,6 +17,13 @@ interface ForwardCell {
   withinConsensusBand: boolean | null;
 }
 
+interface ChartTarget {
+  underlying: string;
+  expiry: string;
+  strike: number;
+  type: 'call' | 'put';
+}
+
 interface ExpandedRowProps {
   strike: number;
   callSide: EnrichedSide;
@@ -27,6 +34,11 @@ interface ExpandedRowProps {
   atmConsensusForward: number | null;
   underlying: string;
   expiry: string;
+  // When provided, the per-strike Chart button bypasses VenueId-based gating and
+  // calls this instead of the crypto popout/panel. Lets a non-crypto venue (e.g.
+  // TradFi/tastytrade, which is not a VenueId) drive its own chart surface. Absent
+  // for the crypto chain → behaviour is unchanged.
+  chartOverride?: (target: ChartTarget) => void;
 }
 
 interface VenueRowProps {
@@ -290,6 +302,7 @@ export default function ExpandedRow({
   atmConsensusForward,
   underlying,
   expiry,
+  chartOverride,
 }: ExpandedRowProps) {
   const forwardsByVenue = useMemo<Map<VenueId, ForwardCell>>(() => {
     const map = new Map<VenueId, ForwardCell>();
@@ -341,6 +354,7 @@ export default function ExpandedRow({
               type="call"
               side={callSide}
               activeVenues={activeVenues as VenueId[]}
+              chartOverride={chartOverride}
             />
           </div>
           <div className={styles.sideScroll}>
@@ -374,6 +388,7 @@ export default function ExpandedRow({
               type="put"
               side={putSide}
               activeVenues={activeVenues as VenueId[]}
+              chartOverride={chartOverride}
             />
             <span className={styles.sideLabel}>PUTS</span>
           </div>
@@ -401,6 +416,7 @@ interface ChartButtonProps {
   type: 'call' | 'put';
   side: EnrichedSide;
   activeVenues: readonly VenueId[];
+  chartOverride?: (target: ChartTarget) => void;
 }
 
 function pickPrimaryVenue(side: EnrichedSide, active: readonly VenueId[]): VenueId | null {
@@ -411,11 +427,13 @@ function pickPrimaryVenue(side: EnrichedSide, active: readonly VenueId[]): Venue
   return entries[0]?.[0] ?? null;
 }
 
-function ChartButton({ underlying, expiry, strike, type, side, activeVenues }: ChartButtonProps) {
+function ChartButton({ underlying, expiry, strike, type, side, activeVenues, chartOverride }: ChartButtonProps) {
   const openPanel = useChartPanelsStore((s) => s.openPanel);
   const isMobile = useIsMobile();
   const venue = pickPrimaryVenue(side, activeVenues);
-  const disabled = venue == null;
+  // An override owns chart routing for its venue (TradFi has no VenueId), so it
+  // is always enabled. Otherwise the crypto path gates on a chart-supported venue.
+  const disabled = chartOverride ? false : venue == null;
   return (
     <button
       type="button"
@@ -423,6 +441,10 @@ function ChartButton({ underlying, expiry, strike, type, side, activeVenues }: C
       disabled={disabled}
       title={disabled ? 'No venue available for this strike' : `Open chart for ${type.toUpperCase()}`}
       onClick={() => {
+        if (chartOverride) {
+          chartOverride({ underlying, expiry, strike, type });
+          return;
+        }
         if (!venue) return;
         try {
           const symbol = toVenueSymbol({ venue, underlying, expiry, strike, type });

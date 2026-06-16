@@ -37,7 +37,7 @@ async function main() {
     socketFactory: wsCandleSocket,
   });
 
-  const app = buildApp({ store, feed, candleClient });
+  const app = buildApp({ store, feed, candleClient, flowBook: feed.flowBook });
   await app.listen({ port: cfg.port, host: '0.0.0.0' });
   logger.info({ port: cfg.port }, 'tradfi service listening');
 

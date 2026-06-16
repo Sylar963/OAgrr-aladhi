@@ -53,3 +53,22 @@
   flex-direction: column;
   overflow: hidden;
 }
+.pageNav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+.pageTab {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.pageTab[data-active] {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-bg);
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TradfiStore } from './store.js';
+import { TradfiFlowBook } from './flow-book.js';
 import { buildChain } from './chain.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
 
@@ -95,5 +96,61 @@ describe('buildChain', () => {
     expect(stats.skew25d).toBeCloseTo(-0.07);
     expect(Math.abs(stats.skew25d!)).toBeGreaterThan(0.005); // not 'flat' for B×S
     expect(stats.putCallOiRatio).toBeGreaterThan(1.1); // 'high' bucket for B×OI
+  });
+});
+
+function seedStore(): TradfiStore {
+  const store = new TradfiStore();
+  store.setInstruments([
+    {
+      canonical: 'SPX/USD:USD-260618-5000-C',
+      streamerSymbol: '.C',
+      underlying: 'SPX',
+      expiry: '2026-06-18',
+      strike: 5000,
+      right: 'call',
+      multiplier: 100,
+      occSymbol: 'SPX   260618C05000000',
+      rootSymbol: 'SPX',
+      settlementType: 'cash',
+      expirationType: 'Regular',
+    } satisfies TradfiInstrument,
+    {
+      canonical: 'SPX/USD:USD-260618-4900-P',
+      streamerSymbol: '.P',
+      underlying: 'SPX',
+      expiry: '2026-06-18',
+      strike: 4900,
+      right: 'put',
+      multiplier: 100,
+      occSymbol: 'SPX   260618P04900000',
+      rootSymbol: 'SPX',
+      settlementType: 'cash',
+      expirationType: 'Regular',
+    } satisfies TradfiInstrument,
+  ]);
+  store.setSpot('SPX', 5000);
+  store.mergeQuote('.C', { ts: 1, bid: 1, ask: 2, mark: 1.5, gamma: 0.001, openInterest: 1000 });
+  store.mergeQuote('.P', { ts: 1, bid: 1, ask: 2, mark: 1.5, gamma: 0.001, openInterest: 800 });
+  return store;
+}
+
+describe('buildChain signed GEX', () => {
+  it('with no flow book, GEX equals the naive path (unchanged behavior)', () => {
+    const a = buildChain(seedStore(), 'SPX', '2026-06-18', 'ws');
+    const b = buildChain(seedStore(), 'SPX', '2026-06-18', 'ws', new TradfiFlowBook());
+    expect(b.gex).toEqual(a.gex); // empty book ⇒ dealerContracts = +OI ⇒ identical
+  });
+
+  it('net customer buying of a call lowers its GEX vs naive', () => {
+    const store = seedStore();
+    const flow = new TradfiFlowBook();
+    flow.recordTrade('SPX/USD:USD-260618-5000-C', 1.9, 400, 1, 2, Date.now()); // +400 buys
+    const naive = buildChain(seedStore(), 'SPX', '2026-06-18', 'ws').gex;
+    const signed = buildChain(store, 'SPX', '2026-06-18', 'ws', flow).gex;
+    const k = 5000;
+    const naiveAt = naive.find((g) => g.strike === k)!.gexUsdMillions;
+    const signedAt = signed.find((g) => g.strike === k)!.gexUsdMillions;
+    expect(signedAt).toBeLessThan(naiveAt); // dealers less long ⇒ less positive GEX
   });
 });

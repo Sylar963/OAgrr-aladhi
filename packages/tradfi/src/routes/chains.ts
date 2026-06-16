@@ -24,7 +24,7 @@ export function chainsRoute(deps: TradfiDeps) {
         // No instruments for this expiry is a genuinely empty chain, not a fault.
         const insts = deps.store.instrumentsFor(underlying, expiry);
         if (insts.length === 0) {
-          return buildChain(deps.store, underlying, expiry, 'ws');
+          return buildChain(deps.store, underlying, expiry, 'ws', deps.flowBook);
         }
 
         // Keep this chain streaming (idempotent) so WS holds it fresh.
@@ -49,7 +49,7 @@ export function chainsRoute(deps: TradfiDeps) {
           return reply.status(503).send({ error: 'no market data yet', readiness: deps.feed.readiness() });
         }
 
-        return buildChain(deps.store, underlying, expiry, 'ws');
+        return buildChain(deps.store, underlying, expiry, 'ws', deps.flowBook);
       },
     );
   };

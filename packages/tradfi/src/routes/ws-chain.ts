@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { TradfiDeps } from '../app.js';
+import type { TradfiFlowBook } from '../runtime/flow-book.js';
 import type { TradfiStore } from '../runtime/store.js';
 import { buildChain } from '../runtime/chain.js';
 
@@ -12,11 +13,14 @@ export class ChainPusher {
     private readonly send: (data: string) => void,
     private readonly underlying: string,
     private readonly expiry: string,
+    private readonly flowBook?: TradfiFlowBook,
   ) {}
 
   tick(): void {
     if (this.disposed) return;
-    this.send(JSON.stringify(buildChain(this.store, this.underlying, this.expiry, 'ws')));
+    this.send(
+      JSON.stringify(buildChain(this.store, this.underlying, this.expiry, 'ws', this.flowBook)),
+    );
   }
 
   dispose(): void {
@@ -37,7 +41,7 @@ export function wsChainRoute(deps: TradfiDeps) {
           return;
         }
         deps.feed.ensureChainSubscribed(underlying, expiry);
-        const pusher = new ChainPusher(deps.store, (d) => socket.send(d), underlying, expiry);
+        const pusher = new ChainPusher(deps.store, (d) => socket.send(d), underlying, expiry, deps.flowBook);
         const timer = setInterval(() => pusher.tick(), PUSH_INTERVAL_MS);
         pusher.tick();
         socket.on('close', () => {

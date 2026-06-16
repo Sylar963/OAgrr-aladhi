@@ -3,6 +3,7 @@ import { nestedChainToInstruments, type TradfiInstrument } from './instrument.js
 import type { TradfiStore } from '../runtime/store.js';
 import { feedLogger } from '../logger.js';
 import { applyEvent } from './state.js';
+import { TradfiFlowBook } from '../runtime/flow-book.js';
 import { chainSubscriptions, underlyingSubscriptions } from './planner.js';
 import type { DxEvent, DxSub } from './codec.js';
 import type { DxLinkClient } from './dxlink-client.js';
@@ -56,6 +57,7 @@ export interface TradfiReadiness {
 }
 
 export class TradfiFeed {
+  readonly flowBook = new TradfiFlowBook();
   private occIndex = new Map<string, TradfiInstrument>();
   private catalogLoaded = false;
   private quoteTokenAcquired = false;
@@ -139,7 +141,7 @@ export class TradfiFeed {
       token: qt.token,
       onData: (events) => {
         const ts = Date.now();
-        for (const ev of events) applyEvent(this.store, ev, ts);
+        for (const ev of events) applyEvent(this.store, ev, ts, this.flowBook);
         this.lastDataTs = ts;
       },
       desiredSubs: () => this.desired,

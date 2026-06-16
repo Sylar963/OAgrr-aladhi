@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { tradfiFetchJson } from '@lib/tradfi-http';
-import type { EnrichedChainResponse } from '@shared/enriched';
+import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
 
 interface TradfiUnderlyingsResponse {
   underlyings: string[];
@@ -15,6 +15,7 @@ export const tradfiKeys = {
   underlyings: () => ['tradfi-underlyings'] as const,
   expiries: (underlying: string) => ['tradfi-expiries', underlying] as const,
   chain: (underlying: string, expiry: string) => ['tradfi-chain', underlying, expiry] as const,
+  gexAll: (underlying: string) => ['tradfi-gex-all', underlying] as const,
 };
 
 export function fetchTradfiChain(underlying: string, expiry: string) {
@@ -48,5 +49,25 @@ export function useTradfiChain(underlying: string, expiry: string) {
     enabled: Boolean(underlying && expiry),
     placeholderData: (prev: EnrichedChainResponse | undefined) => prev,
     refetchInterval: 5000,
+  });
+}
+
+export interface TradfiAllExpiriesGexResponse {
+  underlying: string;
+  expiries: string[];
+  spotPrice: number | null;
+  gex: GexStrike[];
+}
+
+export function useTradfiAllExpiriesGex(underlying: string, enabled = true) {
+  return useQuery({
+    queryKey: tradfiKeys.gexAll(underlying),
+    queryFn: () =>
+      tradfiFetchJson<TradfiAllExpiriesGexResponse>(
+        `/gex-all-expiries?underlying=${encodeURIComponent(underlying)}`,
+      ),
+    enabled: enabled && Boolean(underlying),
+    refetchInterval: 5000,
+    placeholderData: (prev: TradfiAllExpiriesGexResponse | undefined) => prev,
   });
 }

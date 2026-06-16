@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import type { EnrichedSide } from '@shared/enriched';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ExpandedRow from './ExpandedRow';
 
 // jsdom has no matchMedia — useIsMobile would throw.
@@ -30,7 +30,12 @@ describe('ExpandedRow chartOverride', () => {
     const btns = screen.getAllByRole('button', { name: /chart/i });
     expect((btns[0] as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(btns[0]!);
-    expect(onChart).toHaveBeenCalledWith({ underlying: 'SPY', expiry: '2026-06-19', strike: 500, type: 'call' });
+    expect(onChart).toHaveBeenCalledWith({
+      underlying: 'SPY',
+      expiry: '2026-06-19',
+      strike: 500,
+      type: 'call',
+    });
   });
 
   it('keeps the Chart button disabled (crypto path unchanged) when no override and no chart venue', () => {

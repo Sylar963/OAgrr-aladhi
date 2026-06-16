@@ -283,3 +283,21 @@
   color: var(--color-iv);
   font-weight: 600;
 }
+
+.chartActions {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.chartBtn {
+  flex: 1;
+  background: var(--bg-surface);
+  color: var(--color-iv, #94b3fd);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}

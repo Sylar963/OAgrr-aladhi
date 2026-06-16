@@ -1,0 +1,13 @@
+.root {
+  position: fixed;
+  inset: 0;
+  background: #0b0b0c;
+}
+
+.error {
+  padding: 40px;
+  color: #f87171;
+  font:
+    13px "IBM Plex Mono",
+    monospace;
+}

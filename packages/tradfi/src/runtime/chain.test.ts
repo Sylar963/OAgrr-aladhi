@@ -72,4 +72,28 @@ describe('buildChain', () => {
     const enriched = buildChain(store, 'AAPL', '2026-04-17');
     expect(enriched.stats.basisPct).toBe(0);
   });
+
+  it('realistic chain: both basis-gated regime inputs come out NON-flat', () => {
+    // Mirrors the chip's flat bands (RegimeChip BASIS_FLAT 0.01, SKEW_FLAT 0.005)
+    // so this proves B×S and B×OI cannot read "flat" given real quotes.
+    const store = new TradfiStore();
+    const strikes = [90, 95, 100, 105, 110];
+    const insts = strikes.flatMap((k) => [inst('call', k), inst('put', k)]);
+    store.setInstruments(insts);
+    store.setSpot('AAPL', 100);
+
+    // ATM (100): call−put mark = 0.5 → synthetic forward 100.5 → basis +0.5%.
+    store.mergeQuote('.AAPL100c', { mark: 3.0, delta: 0.52, iv: 0.22, openInterest: 50, ts: 1 });
+    store.mergeQuote('.AAPL100p', { mark: 2.5, delta: -0.48, iv: 0.22, openInterest: 80, ts: 1 });
+    // 25Δ wings: put IV (0.27) > call IV (0.20) → skew −0.07 (put-skew, non-flat).
+    store.mergeQuote('.AAPL110c', { mark: 0.6, delta: 0.25, iv: 0.2, openInterest: 40, ts: 1 });
+    store.mergeQuote('.AAPL90p', { mark: 0.5, delta: -0.25, iv: 0.27, openInterest: 90, ts: 1 });
+
+    const { stats } = buildChain(store, 'AAPL', '2026-04-17');
+    expect(stats.basisPct).toBeCloseTo(0.5);
+    expect(Math.abs(stats.basisPct!)).toBeGreaterThan(0.01); // not 'flat' for B×S/B×OI
+    expect(stats.skew25d).toBeCloseTo(-0.07);
+    expect(Math.abs(stats.skew25d!)).toBeGreaterThan(0.005); // not 'flat' for B×S
+    expect(stats.putCallOiRatio).toBeGreaterThan(1.1); // 'high' bucket for B×OI
+  });
 });

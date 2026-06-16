@@ -7,6 +7,7 @@ import coincallLogo from '@/assets/venues/coincall.png';
 import thalexLogo from '@/assets/venues/Thalex.svg';
 import gateioLogo from '@/assets/venues/gateio.svg';
 import paradexLogo from '@/assets/venues/paradex.svg';
+import tastyLogo from '@/assets/venues/tasty.svg';
 
 export interface VenueMeta {
   id: string;
@@ -70,7 +71,18 @@ export const VENUES: Record<string, VenueMeta> = {
     logo: paradexLogo,
     color: '#A78BFA',
   },
+  // TradFi (TastyTrade) — metadata only (logo/label lookup). Intentionally kept
+  // OUT of VENUE_LIST/VENUE_IDS below so it never leaks into crypto venue queries,
+  // the venue picker, or the default active-venues set.
+  tastytrade: {
+    id: 'tastytrade',
+    label: 'tastytrade',
+    shortLabel: 'TAS',
+    logo: tastyLogo,
+    color: '#E2231A',
+  },
 };
 
-export const VENUE_LIST = Object.values(VENUES);
-export const VENUE_IDS = Object.keys(VENUES);
+const NON_CRYPTO_VENUES = new Set(['tastytrade']);
+export const VENUE_LIST = Object.values(VENUES).filter((v) => !NON_CRYPTO_VENUES.has(v.id));
+export const VENUE_IDS = VENUE_LIST.map((v) => v.id);

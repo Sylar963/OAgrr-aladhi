@@ -568,6 +568,9 @@ export default function NewChainTable({
             type={quickTrade.type}
             direction={quickTrade.direction}
             side={quickTrade.side}
+            activeVenues={activeVenues}
+            underlying={underlying}
+            expiry={expiry}
             onClose={() => setQuickTrade(null)}
           />
         </>

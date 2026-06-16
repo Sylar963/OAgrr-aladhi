@@ -10,16 +10,27 @@ interface QuickTradeProps {
   type: 'call' | 'put';
   direction: 'buy' | 'sell';
   side: EnrichedSide;
+  // Context comes from the host ChainTable, not the global crypto store — otherwise
+  // single-venue hosts (e.g. TradFi's 'tastytrade') get filtered out as "no quotes".
+  activeVenues: string[];
+  underlying: string;
+  expiry: string;
   onClose: () => void;
 }
 
-export default function QuickTrade({ strike, type, direction, side, onClose }: QuickTradeProps) {
+export default function QuickTrade({
+  strike,
+  type,
+  direction,
+  side,
+  activeVenues,
+  underlying,
+  expiry,
+  onClose,
+}: QuickTradeProps) {
   const addLeg = useStrategyStore((s) => s.addLeg);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
-  const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
 
   const venues = Object.entries(side.venues)
     .filter(([v]) => activeVenues.includes(v))

@@ -53,3 +53,22 @@
   flex-direction: column;
   overflow: hidden;
 }
+.pageNav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+.pageTab {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  color: #9aa0a6;
+  font: inherit;
+  cursor: pointer;
+}
+.pageTab[data-active] {
+  color: #e6e6e6;
+  border-color: #50d2c1;
+  background: #0e3333;
+}

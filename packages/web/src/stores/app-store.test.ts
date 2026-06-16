@@ -128,3 +128,10 @@ it('toggles assetMode and tracks tradfi underlying/expiry', () => {
   useAppStore.getState().setTradfiExpiry('2026-06-17');
   expect(useAppStore.getState().tradfiExpiry).toBe('2026-06-17');
 });
+
+it('tradfiPage defaults to chain and can switch to gex', () => {
+  expect(useAppStore.getState().tradfiPage).toBe('chain');
+  useAppStore.getState().setTradfiPage('gex');
+  expect(useAppStore.getState().tradfiPage).toBe('gex');
+  useAppStore.getState().setTradfiPage('chain'); // reset for other tests
+});

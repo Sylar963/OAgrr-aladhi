@@ -21,7 +21,7 @@ export function classifyTrade(
   lastPrice: number | null,
   lastDir: 1 | -1,
 ): 1 | -1 {
-  if (bid != null && ask != null) {
+  if (bid != null && ask != null && bid <= ask) {
     const mid = (bid + ask) / 2;
     if (price > mid) return 1;
     if (price < mid) return -1;
@@ -63,10 +63,10 @@ export class TradfiFlowBook {
       this.flow.clear();
       this.sessionDayKey = day;
     }
-    const st = this.flow.get(canonical) ?? {
+    const st: FlowState = this.flow.get(canonical) ?? {
       netFlow: 0,
       lastTradePrice: null,
-      lastTickDir: 1 as 1 | -1,
+      lastTickDir: 1,
     };
     const dir = classifyTrade(price, bid, ask, st.lastTradePrice, st.lastTickDir);
     st.netFlow += dir * size;

@@ -53,4 +53,20 @@ describe('TradfiFlowBook', () => {
   it('etDayKey returns an ET calendar day', () => {
     expect(etDayKey(DAY1)).toBe('2026-06-16');
   });
+
+  it('carries last tick direction across zero-tick trades at mid', () => {
+    const book = new TradfiFlowBook();
+    book.recordTrade('Z', 1.5, 5, 1.0, 2.0, DAY1); // at mid, no prior tick → default +1 buy
+    book.recordTrade('Z', 1.5, 5, 1.0, 2.0, DAY1); // at mid, zero tick → inherits +1
+    expect(book.netFlowFor('Z')).toBe(10);
+  });
+
+  it('resetSession clears flow and size', () => {
+    const book = new TradfiFlowBook();
+    book.recordTrade('A', 1.8, 5, 1.0, 2.0, DAY1);
+    expect(book.size()).toBe(1);
+    book.resetSession();
+    expect(book.netFlowFor('A')).toBe(0);
+    expect(book.size()).toBe(0);
+  });
 });

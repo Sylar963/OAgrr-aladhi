@@ -10,6 +10,7 @@ import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 import { underlyingsRoute } from './routes/underlyings.js';
 import { venuesRoute } from './routes/venues.js';
 import { wsChainRoute } from './routes/ws-chain.js';
+import { wsUnderlyingCandlesRoute } from './routes/ws-underlying-candles.js';
 import type { TradfiFlowBook } from './runtime/flow-book.js';
 import type { TradfiStore } from './runtime/store.js';
 import type { CandleClient } from './tastytrade/candle-client.js';
@@ -38,6 +39,7 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(expiriesRoute(deps));
   void app.register(chainsRoute(deps));
   void app.register(wsChainRoute(deps));
+  void app.register(wsUnderlyingCandlesRoute(deps));
   void app.register(candlesRoute(deps));
   void app.register(underlyingCandlesRoute(deps));
   void app.register(gexAllExpiriesRoute(deps));

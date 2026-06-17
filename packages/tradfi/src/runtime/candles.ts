@@ -37,28 +37,34 @@ export interface TradfiCandlesResponse {
   markLine: { ts: number; c: number }[];
 }
 
+export type CandleDto = TradfiCandlesResponse['candles'][number];
+
+export function mapRawCandle(b: RawCandle): CandleDto | null {
+  if (
+    !Number.isFinite(b.time) ||
+    b.time < 0 ||
+    !Number.isFinite(b.o) ||
+    !Number.isFinite(b.h) ||
+    !Number.isFinite(b.l) ||
+    !Number.isFinite(b.c)
+  ) {
+    return null;
+  }
+  return {
+    ts: b.time,
+    o: b.o,
+    h: b.h,
+    l: b.l,
+    c: b.c,
+    // Clamp to the downstream schema's non-negative contract; a malformed bar
+    // must not fail the whole response parse on the web side.
+    vol: Number.isFinite(b.v) && b.v >= 0 ? b.v : 0,
+    synthetic: false,
+  };
+}
+
 function mapRawCandles(raw: RawCandle[]): TradfiCandlesResponse['candles'] {
-  return raw
-    .filter(
-      (b) =>
-        Number.isFinite(b.time) &&
-        b.time >= 0 &&
-        Number.isFinite(b.o) &&
-        Number.isFinite(b.h) &&
-        Number.isFinite(b.l) &&
-        Number.isFinite(b.c),
-    )
-    .map((b) => ({
-      ts: b.time,
-      o: b.o,
-      h: b.h,
-      l: b.l,
-      c: b.c,
-      // Clamp to the downstream schema's non-negative contract; a malformed bar
-      // must not fail the whole response parse on the web side.
-      vol: Number.isFinite(b.v) && b.v >= 0 ? b.v : 0,
-      synthetic: false,
-    }));
+  return raw.map(mapRawCandle).filter((c): c is CandleDto => c !== null);
 }
 
 export async function buildCandlesResponse(

@@ -118,6 +118,9 @@ export class CandleClient {
   private maybeUnsubscribe(candleSymbol: string): void {
     if (this.pending.has(candleSymbol)) return;
     if ((this.live.get(candleSymbol)?.size ?? 0) > 0) return;
+    // Not ready → nothing was subscribed on the wire yet (subscribes are gated
+    // on `ready`/queued), and send() on a CONNECTING socket throws.
+    if (!this.ready) return;
     this.sock?.send(buildCandleUnsubscribe(CANDLE_CHANNEL, candleSymbol));
   }
 

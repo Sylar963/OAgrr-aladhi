@@ -155,6 +155,19 @@ describe('CandleClient live', () => {
     expect(adds(fs.sent)).toHaveLength(1);
   });
 
+  it('unsubscribing before the feed is ready sends no subscribe or unsubscribe', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen(); // open but NOT ready (no FEED_CONFIG)
+
+    const off = client.subscribeLive('SPX', '5m', 1, () => {});
+    off(); // leave before the feed is ready
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    expect(adds(fs.sent)).toHaveLength(0);
+    expect(removes(fs.sent)).toHaveLength(0);
+  });
+
   it('dispose clears live consumers', async () => {
     const { fs, client } = ready();
     await client.connect();

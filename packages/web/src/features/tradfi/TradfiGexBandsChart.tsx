@@ -12,8 +12,10 @@ import {
   LineStyle,
   type Time,
 } from 'lightweight-charts';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { liveBarToCandle, tsToSec } from './live-candle';
 import { useTradfiUnderlyingCandles } from './use-tradfi-underlying-candles';
+import { useTradfiUnderlyingCandlesLive } from './use-tradfi-underlying-candles-live';
 
 const CALL_WALL_COLOR = '#00E997';
 const PUT_WALL_COLOR = '#CB3855';
@@ -27,10 +29,6 @@ const RANGES: Array<{ range: InstrumentCandleRange; interval: InstrumentCandleIn
   { range: '30d', interval: '4h', label: '30d' },
   { range: 'max', interval: '1d', label: 'max' },
 ];
-
-function tsToSec(ts: number): number {
-  return ts > 1e12 ? Math.floor(ts / 1000) : ts;
-}
 
 interface Props {
   underlying: string;
@@ -146,25 +144,43 @@ export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Prop
     sync(flipLineRef, walls.gammaFlip, FLIP_COLOR, 'FLIP', true);
   }, [walls]);
 
-  // Spot line.
-  useEffect(() => {
+  const applySpotLine = useCallback((price: number | null) => {
     const series = seriesRef.current;
     if (!series) return;
     if (spotLineRef.current) {
       series.removePriceLine(spotLineRef.current);
       spotLineRef.current = null;
     }
-    if (spotPrice != null) {
+    if (price != null) {
       spotLineRef.current = series.createPriceLine({
-        price: spotPrice,
+        price,
         color: SPOT_COLOR,
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `${Math.round(spotPrice).toLocaleString()} SPOT`,
+        title: `${Math.round(price).toLocaleString()} SPOT`,
       });
     }
-  }, [spotPrice]);
+  }, []);
+
+  useEffect(() => {
+    applySpotLine(spotPrice);
+  }, [spotPrice, applySpotLine]);
+
+  // Live tail: merge the forming bar (lightweight-charts updates-or-appends by
+  // time) and let the spot line ride the live close. REST history above is the
+  // first paint + fallback; walls/GEX stay on the 5s poll.
+  const handleLiveBar = useCallback(
+    (bar: { ts: number; o: number; h: number; l: number; c: number; vol: number }) => {
+      const series = seriesRef.current;
+      if (!series) return;
+      series.update(liveBarToCandle(bar));
+      applySpotLine(bar.c);
+    },
+    [applySpotLine],
+  );
+
+  useTradfiUnderlyingCandlesLive({ underlying, interval: sel.interval, onBar: handleLiveBar });
 
   return (
     <div>

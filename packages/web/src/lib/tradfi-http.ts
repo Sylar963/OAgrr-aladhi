@@ -25,3 +25,18 @@ export async function tradfiFetchJson<T>(path: string): Promise<T> {
   }
   throw new Error('Max retries exceeded');
 }
+
+export function tradfiWsUrl(path: string): string {
+  const wsOverride = import.meta.env.VITE_TRADFI_WS_URL;
+  if (wsOverride) return `${wsOverride.replace(/\/$/, '')}${path}`;
+  const raw = import.meta.env.VITE_TRADFI_API_BASE;
+  if (raw && /^https?:\/\//i.test(raw)) {
+    const u = new URL(raw);
+    const proto = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    const basePath = u.pathname.replace(/\/$/, '');
+    return `${proto}//${u.host}${basePath}${path}`;
+  }
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const base = (raw || '/tradfi-api').replace(/\/$/, '');
+  return `${proto}//${window.location.host}${base}${path}`;
+}

@@ -65,3 +65,119 @@ describe('CandleClient', () => {
     vi.useRealTimers();
   });
 });
+
+describe('CandleClient live', () => {
+  function ready() {
+    const fs = fakeSocket();
+    const client = new CandleClient({
+      getToken: async () => ({ token: 'T', dxlinkUrl: 'wss://x' }),
+      socketFactory: () => fs.sock,
+      now: () => 1_700_000_000_000,
+    });
+    return { fs, client };
+  }
+  function adds(sent: unknown[]): unknown[] {
+    return sent.filter((m) => (m as { type?: string; add?: unknown }).type === 'FEED_SUBSCRIPTION' && (m as { add?: unknown }).add);
+  }
+  function removes(sent: unknown[]): unknown[] {
+    return sent.filter((m) => (m as { type?: string; remove?: unknown }).type === 'FEED_SUBSCRIPTION' && (m as { remove?: unknown }).remove);
+  }
+
+  it('subscribes and forwards finite live bars to the consumer', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen();
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    const seen: number[] = [];
+    client.subscribeLive('SPX', '5m', 1, (bar) => seen.push(bar.c));
+    expect(adds(fs.sent)).toHaveLength(1);
+
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 2, 0, 1.5, 9]] });
+    // a terminal SNAPSHOT_END (NaN) bar must NOT tear the live subscription down
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x0a, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN']] });
+
+    expect(seen).toEqual([1.5]);
+    expect(removes(fs.sent)).toHaveLength(0);
+  });
+
+  it('ref-counts: one add for two consumers, removes only after the last leaves', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen();
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    const a: number[] = [];
+    const b: number[] = [];
+    const offA = client.subscribeLive('SPX', '5m', 1, (bar) => a.push(bar.c));
+    const offB = client.subscribeLive('SPX', '5m', 1, (bar) => b.push(bar.c));
+    expect(adds(fs.sent)).toHaveLength(1); // second consumer rides the same wire sub
+
+    offA();
+    expect(removes(fs.sent)).toHaveLength(0);
+
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 2, 1]] });
+    expect(a).toEqual([]); // A unsubscribed
+    expect(b).toEqual([2]);
+
+    offB();
+    expect(removes(fs.sent)).toHaveLength(1);
+  });
+
+  it('does not unsubscribe while a one-shot is still pending for the same symbol, and vice-versa', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen();
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    const off = client.subscribeLive('SPX', '5m', 1, () => {});
+    const p = client.getCandles('SPX', '5m', 1); // one-shot for the same symbol
+
+    // one-shot completes -> must NOT remove (live still present)
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x08, 1781553000000, 1, 1, 1, 1, 1]] });
+    await p;
+    expect(removes(fs.sent)).toHaveLength(0);
+
+    // now drop the live consumer -> remove fires (nothing left)
+    off();
+    expect(removes(fs.sent)).toHaveLength(1);
+  });
+
+  it('queues the subscribe until the feed is ready', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen(); // open but NOT ready (no FEED_CONFIG)
+
+    client.subscribeLive('SPX', '5m', 1, () => {});
+    expect(adds(fs.sent)).toHaveLength(0);
+
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+    expect(adds(fs.sent)).toHaveLength(1);
+  });
+
+  it('unsubscribing before the feed is ready sends no subscribe or unsubscribe', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen(); // open but NOT ready (no FEED_CONFIG)
+
+    const off = client.subscribeLive('SPX', '5m', 1, () => {});
+    off(); // leave before the feed is ready
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    expect(adds(fs.sent)).toHaveLength(0);
+    expect(removes(fs.sent)).toHaveLength(0);
+  });
+
+  it('dispose clears live consumers', async () => {
+    const { fs, client } = ready();
+    await client.connect();
+    fs.emitOpen();
+    fs.emit({ type: 'FEED_CONFIG', channel: 1 });
+
+    const seen: number[] = [];
+    client.subscribeLive('SPX', '5m', 1, (bar) => seen.push(bar.c));
+    client.dispose();
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 9, 1]] });
+    expect(seen).toEqual([]);
+  });
+});

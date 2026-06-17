@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
-import { buildCandlesResponse, buildUnderlyingCandlesResponse } from './candles.js';
+import { buildCandlesResponse, buildUnderlyingCandlesResponse, mapRawCandle } from './candles.js';
+import type { RawCandle } from '../tastytrade/candle-codec.js';
 import { TradfiStore } from './store.js';
 
 const inst: TradfiInstrument = {
@@ -145,5 +146,22 @@ describe('buildUnderlyingCandlesResponse', () => {
     expect(res.candles).toHaveLength(1);
     expect(res.candles[0]!.ts).toBe(2);
     expect(res.candles[0]!.vol).toBe(0);
+  });
+});
+
+function raw(over: Partial<RawCandle> = {}): RawCandle {
+  return { symbol: 'SPX{=5m}', flags: 0, time: 1781553000000, o: 55.9, h: 56.1, l: 55.8, c: 56.0, v: 3, ...over };
+}
+
+describe('mapRawCandle', () => {
+  it('maps a finite bar to a DTO', () => {
+    expect(mapRawCandle(raw())).toEqual({ ts: 1781553000000, o: 55.9, h: 56.1, l: 55.8, c: 56.0, vol: 3, synthetic: false });
+  });
+  it('returns null for a non-finite close', () => {
+    expect(mapRawCandle(raw({ c: Number.NaN }))).toBeNull();
+  });
+  it('clamps a negative/NaN volume to 0', () => {
+    expect(mapRawCandle(raw({ v: Number.NaN }))?.vol).toBe(0);
+    expect(mapRawCandle(raw({ v: -5 }))?.vol).toBe(0);
   });
 });

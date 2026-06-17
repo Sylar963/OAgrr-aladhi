@@ -48,5 +48,9 @@ export function useTradfiUnderlyingCandles(args: {
       ),
     enabled: enabled && !!underlying,
     staleTime: 60_000,
+    // This feeds a live-streamed chart (WS bars merge via series.update).
+    // A focus refetch would re-run setData and clobber the live forming bar —
+    // REST candles are first paint + fallback only.
+    refetchOnWindowFocus: false,
   });
 }

@@ -36,6 +36,7 @@ export class CandleClient {
   private token = '';
   private readyWaiters: Array<() => void> = [];
   private pending = new Map<string, Pending>(); // keyed by candle symbol "SYM{=period}"
+  private live = new Map<string, Set<(bar: RawCandle) => void>>(); // keyed by candle symbol "SYM{=period}"
   private readonly now: () => number;
   private readonly timeoutMs: number;
 
@@ -92,12 +93,15 @@ export class CandleClient {
 
   private onData(bars: RawCandle[]): void {
     for (const bar of bars) {
-      // bar.symbol is the full candle symbol ("SYM{=period}") — match the pending
-      // request exactly so concurrent same-strike/different-interval requests don't cross.
       const req = this.pending.get(bar.symbol);
-      if (req === undefined) continue;
-      if (Number.isFinite(bar.c) && Number.isFinite(bar.time)) req.buffer.push(bar);
-      if (isSnapshotComplete(bar.flags)) this.finish(bar.symbol);
+      if (req !== undefined) {
+        if (Number.isFinite(bar.c) && Number.isFinite(bar.time)) req.buffer.push(bar);
+        if (isSnapshotComplete(bar.flags)) this.finish(bar.symbol);
+      }
+      const subs = this.live.get(bar.symbol);
+      if (subs !== undefined && Number.isFinite(bar.c) && Number.isFinite(bar.time)) {
+        for (const cb of subs) cb(bar);
+      }
     }
   }
 
@@ -106,9 +110,50 @@ export class CandleClient {
     if (!req) return;
     clearTimeout(req.timer);
     this.pending.delete(candleSymbol);
-    this.sock?.send(buildCandleUnsubscribe(CANDLE_CHANNEL, candleSymbol));
+    this.maybeUnsubscribe(candleSymbol);
     req.buffer.sort((a, b) => a.time - b.time);
     req.resolve(req.buffer);
+  }
+
+  private maybeUnsubscribe(candleSymbol: string): void {
+    if (this.pending.has(candleSymbol)) return;
+    if ((this.live.get(candleSymbol)?.size ?? 0) > 0) return;
+    this.sock?.send(buildCandleUnsubscribe(CANDLE_CHANNEL, candleSymbol));
+  }
+
+  subscribeLive(
+    streamerSymbol: string,
+    period: string,
+    fromTimeSec: number,
+    onBar: (bar: RawCandle) => void,
+  ): () => void {
+    const candleSymbol = `${streamerSymbol}{=${period}}`;
+    let subs = this.live.get(candleSymbol);
+    const firstForSymbol = subs === undefined || subs.size === 0;
+    if (subs === undefined) {
+      subs = new Set();
+      this.live.set(candleSymbol, subs);
+    }
+    subs.add(onBar);
+    if (firstForSymbol) {
+      const sendSub = () => {
+        if ((this.live.get(candleSymbol)?.size ?? 0) > 0) {
+          this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeSec));
+        }
+      };
+      if (this.ready) sendSub();
+      else this.readyWaiters.push(sendSub);
+    }
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      const set = this.live.get(candleSymbol);
+      if (!set) return;
+      set.delete(onBar);
+      if (set.size === 0) this.live.delete(candleSymbol);
+      this.maybeUnsubscribe(candleSymbol);
+    };
   }
 
   getCandles(streamerSymbol: string, period: string, fromTimeSec: number): Promise<RawCandle[]> {
@@ -144,6 +189,7 @@ export class CandleClient {
     // their timers so shutdown doesn't hang on a pending snapshot timeout.
     for (const req of this.pending.values()) { clearTimeout(req.timer); req.resolve([]); }
     this.pending.clear();
+    this.live.clear();
     this.readyWaiters = [];
     this.sock?.close();
     this.sock = null;

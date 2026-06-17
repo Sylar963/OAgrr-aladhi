@@ -95,7 +95,12 @@ export function useTradfiUnderlyingCandlesLive(args: {
     }
     attemptRef.current = 0;
     if (wsRef.current) {
+      // Null every handler before closing — a queued onmessage/onopen can still
+      // fire after close() and would push a stale bar or flip connection state.
       wsRef.current.onclose = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onopen = null;
+      wsRef.current.onerror = null;
       wsRef.current.close(1000, 'unmount');
       wsRef.current = null;
     }

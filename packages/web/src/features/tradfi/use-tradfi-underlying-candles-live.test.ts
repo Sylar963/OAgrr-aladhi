@@ -23,7 +23,7 @@ class MockWebSocket {
     }, 0);
   }
   send(data: string) { this.sent.push(data); }
-  close() { this.readyState = 3; }
+  close() { this.readyState = 3; this.onclose?.(); }
   pushMessage(msg: unknown) { this.onmessage?.({ data: JSON.stringify(msg) }); }
   static reset() { MockWebSocket.instances = []; }
 }
@@ -83,6 +83,22 @@ describe('useTradfiUnderlyingCandlesLive', () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     unmount();
     await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it('drops queued socket events after unmount (handlers nulled)', async () => {
+    const seen: number[] = [];
+    const { unmount } = renderHook(() =>
+      useTradfiUnderlyingCandlesLive({ underlying: 'SPX', interval: '5m', onBar: (b) => seen.push(b.c) }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const ws = MockWebSocket.instances[0]!;
+    unmount();
+    // Late events from the old socket must not reach onBar or trigger a reconnect.
+    ws.onmessage?.({ data: JSON.stringify(bar(1781553000000, 99)) });
+    ws.onopen?.();
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(seen).toEqual([]);
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 });

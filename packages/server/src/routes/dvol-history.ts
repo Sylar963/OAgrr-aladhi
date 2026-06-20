@@ -14,7 +14,6 @@ const RV_RESOLUTION_SEC = 3_600; // hourly: Deribit HV is computed from hourly r
 const RV_WINDOW_HOURS = 360; // trailing 15 days (15 × 24)
 const RV_HOURLY_BUCKETS = 5_000; // Deribit caps hourly history at ~5000 points (~208d) per call
 const HOURS_IN_YEAR = 365 * 24;
-const DAY_MS = 86_400_000;
 
 async function realizedVolSeries(
   currency: string,
@@ -24,15 +23,13 @@ async function realizedVolSeries(
   if (currency !== 'BTC' && currency !== 'ETH') return [];
   try {
     const candles = await spotCandleService.getCandles(currency, RV_RESOLUTION_SEC, RV_HOURLY_BUCKETS);
-    // Collapse the hourly RV to one point per UTC day (last hour wins). Each
-    // value still derives from the trailing 360 hourly returns — so it matches
-    // Deribit — but the payload and line stay daily-clean. ×100 → percentage,
-    // matching the DVOL candle close convention the chart plots.
-    const byDay = new Map<number, { timestamp: number; value: number }>();
-    for (const p of rollingRealizedVol(candles, RV_WINDOW_HOURS, HOURS_IN_YEAR)) {
-      byDay.set(Math.floor(p.timestamp / DAY_MS), { timestamp: p.timestamp, value: p.value * 100 });
-    }
-    return [...byDay.values()];
+    // Emit hourly RV so the HV line stays granular across the whole window, not
+    // just the recent 30 days. ×100 → percentage, matching the DVOL candle
+    // close convention the chart plots.
+    return rollingRealizedVol(candles, RV_WINDOW_HOURS, HOURS_IN_YEAR).map((p) => ({
+      timestamp: p.timestamp,
+      value: p.value * 100,
+    }));
   } catch (err: unknown) {
     log.warn({ err: String(err), currency }, 'dvol-history: realized-vol series failed');
     return [];

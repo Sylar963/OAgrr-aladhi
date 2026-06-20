@@ -27,3 +27,31 @@ export function realizedVol(closes: readonly number[], periodsPerYear: number): 
   if (n === 0) return null;
   return Math.sqrt(sumSq / n) * Math.sqrt(periodsPerYear);
 }
+
+export interface RealizedVolPoint {
+  timestamp: number;
+  value: number;
+}
+
+// Rolling trailing-window realized volatility series from ascending candles.
+// Each output point is the annualized RV over the trailing `windowDays`
+// log-returns (a window of windowDays+1 closes), stamped at the closing
+// candle's timestamp. A 30-day RV line versus 30-day DVOL is the apples-to-
+// apples implied-vs-realized comparison. Windows that can't be computed
+// (non-positive/non-finite close) are dropped rather than emitted as NaN.
+export function rollingRealizedVol(
+  candles: readonly { timestamp: number; close: number }[],
+  windowDays: number,
+  periodsPerYear: number,
+): RealizedVolPoint[] {
+  if (windowDays < 1) return [];
+
+  const out: RealizedVolPoint[] = [];
+  for (let i = windowDays; i < candles.length; i++) {
+    const closes: number[] = [];
+    for (let j = i - windowDays; j <= i; j++) closes.push(candles[j]!.close);
+    const rv = realizedVol(closes, periodsPerYear);
+    if (rv != null) out.push({ timestamp: candles[i]!.timestamp, value: rv });
+  }
+  return out;
+}

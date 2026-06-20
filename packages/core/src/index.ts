@@ -167,7 +167,7 @@ export {
   type SpotCandleCurrency,
   type SpotCandleResolutionSec,
 } from './services/spot-candles.js';
-export { realizedVol } from './services/realized-vol.js';
+export { realizedVol, rollingRealizedVol, type RealizedVolPoint } from './services/realized-vol.js';
 export {
   backward,
   fitGaussianHmm,

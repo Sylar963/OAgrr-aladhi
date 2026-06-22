@@ -14,6 +14,8 @@ const RV_RESOLUTION_SEC = 3_600; // hourly: Deribit HV is computed from hourly r
 const RV_WINDOW_HOURS = 360; // trailing 15 days (15 × 24)
 const RV_HOURLY_BUCKETS = 5_000; // Deribit caps hourly history at ~5000 points (~208d) per call
 const HOURS_IN_YEAR = 365 * 24;
+const DAY_MS = 86_400_000;
+const RV_HOURLY_WINDOW_MS = 30 * DAY_MS; // match DVOL's hourly window (dvol.ts thirtyDaysAgo)
 
 async function realizedVolSeries(
   currency: string,
@@ -23,13 +25,26 @@ async function realizedVolSeries(
   if (currency !== 'BTC' && currency !== 'ETH') return [];
   try {
     const candles = await spotCandleService.getCandles(currency, RV_RESOLUTION_SEC, RV_HOURLY_BUCKETS);
-    // Emit hourly RV so the HV line stays granular across the whole window, not
-    // just the recent 30 days. ×100 → percentage, matching the DVOL candle
-    // close convention the chart plots.
-    return rollingRealizedVol(candles, RV_WINDOW_HOURS, HOURS_IN_YEAR).map((p) => ({
-      timestamp: p.timestamp,
-      value: p.value * 100,
-    }));
+    // Mirror DVOL's own cadence so both lines share the chart's categorical time
+    // axis without distortion: hourly within the last 30 days (where DVOL is
+    // hourly), daily before (on the 00:00 grid, where DVOL is daily). now-30d
+    // always sits inside DVOL's hourly window, so HV is never denser than DVOL —
+    // emitting hourly HV where DVOL is daily stretches the daily bars (see
+    // dvol.ts fetchHistory). Each value derives from the trailing 360 hourly
+    // returns, so it matches Deribit. ×100 → percentage.
+    const hourlyCutoff = Date.now() - RV_HOURLY_WINDOW_MS;
+    const older = new Map<number, { timestamp: number; value: number }>();
+    const recent: Array<{ timestamp: number; value: number }> = [];
+    for (const p of rollingRealizedVol(candles, RV_WINDOW_HOURS, HOURS_IN_YEAR)) {
+      const value = p.value * 100;
+      if (p.timestamp >= hourlyCutoff) {
+        recent.push({ timestamp: p.timestamp, value });
+      } else {
+        const dayStart = Math.floor(p.timestamp / DAY_MS) * DAY_MS;
+        older.set(dayStart, { timestamp: dayStart, value });
+      }
+    }
+    return [...older.values(), ...recent];
   } catch (err: unknown) {
     log.warn({ err: String(err), currency }, 'dvol-history: realized-vol series failed');
     return [];

@@ -10,7 +10,7 @@ import {
   normalizeTradeUnderlying,
 } from './trade-runtime.js';
 import { TRADE_RUNTIME_BUFFER_SIZE } from './retention.js';
-import type { TradeEvent } from './types.js';
+import type { TradeEvent, VenueStream } from './types.js';
 
 function makeTrade(underlying: string, price = 70_000, size = 1): TradeEvent {
   return {
@@ -399,18 +399,18 @@ describe('TradeRuntime — periodic reseed', () => {
     expect(reseedSpy).not.toHaveBeenCalled();
 
     // Advance one interval — should fire one reseed per venue with seed
-    // (currently coincall + gateio) for the single subscribed underlying.
+    // (coincall + gateio + paradex) for the single subscribed underlying.
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     const venues = reseedSpy.mock.calls
       .map((call) => (call[0] as { venue: string }).venue)
       .sort();
-    expect(venues).toEqual(['coincall', 'gateio']);
+    expect(venues).toEqual(['coincall', 'gateio', 'paradex']);
     for (const call of reseedSpy.mock.calls) {
       expect(call[1]).toBe('BTC');
     }
     const callsAfterFirst = reseedSpy.mock.calls.length;
 
-    // Advance a second interval — both venues fire again.
+    // Advance a second interval — every venue fires again.
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     expect(reseedSpy.mock.calls.length).toBe(callsAfterFirst * 2);
 
@@ -541,10 +541,12 @@ describe('TradeRuntime — coincall instrument cache TTL', () => {
 });
 
 describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
-  function getGateioStream() {
+  // Gate.io is a live-socket venue — narrow parse to non-optional (the interface
+  // lets REST-seed-only venues omit it) so the call sites stay clean.
+  function getGateioStream(): VenueStream & { parse: NonNullable<VenueStream['parse']> } {
     const stream = VENUE_STREAMS.find((s) => s.venue === 'gateio');
-    if (!stream) throw new Error('gateio stream not registered');
-    return stream;
+    if (stream?.parse == null) throw new Error('gateio stream not registered');
+    return stream as VenueStream & { parse: NonNullable<VenueStream['parse']> };
   }
 
   it('parses a signed-size trade frame as side=sell with magnitude size', () => {
@@ -721,5 +723,137 @@ describe('TradeRuntime — gateio VENUE_STREAMS entry', () => {
 
     await expect(stream.seed!('AVAX')).resolves.toEqual([]);
     fetchSpy.mockRestore();
+  });
+});
+
+describe('TradeRuntime — Paradex REST-seed-only venue', () => {
+  function getParadexStream() {
+    const stream = VENUE_STREAMS.find((s) => s.venue === 'paradex');
+    if (stream == null) throw new Error('paradex VENUE_STREAMS entry missing');
+    return stream;
+  }
+
+  it('is REST-seed-only: declares seed + reseedIntervalMs and opens no socket', () => {
+    const stream = getParadexStream();
+    expect(stream.seed).toBeDefined();
+    expect(stream.reseedIntervalMs).toBe(10 * 60 * 1000);
+    // No url/connect/parse — WS trades.{symbol} delivers nothing and a silent
+    // socket would trip the 5-min staleness watchdog into a reconnect loop.
+    expect(stream.url).toBeUndefined();
+    expect(stream.connect).toBeUndefined();
+    expect(stream.parse).toBeUndefined();
+  });
+
+  it('seeds only active BTC option contracts and maps taker side + block flag', async () => {
+    const summary = {
+      results: [
+        { symbol: 'BTC-USD-31JUL26-58000-P', open_interest: '0', last_traded_price: '2279.52' }, // ever traded
+        { symbol: 'BTC-USD-31JUL26-90000-C', open_interest: '5', last_traded_price: '' }, // has OI
+        { symbol: 'BTC-USD-31JUL26-40000-P', open_interest: '0', last_traded_price: '' }, // dead → skip
+        { symbol: 'BTC-USD-PERP', open_interest: '100', last_traded_price: '63000' }, // perp → skip
+      ],
+    };
+    const tradesBySymbol: Record<string, unknown> = {
+      'BTC-USD-31JUL26-58000-P': {
+        results: [
+          {
+            id: 't1',
+            market: 'BTC-USD-31JUL26-58000-P',
+            side: 'SELL',
+            size: '0.1',
+            price: '2279.52',
+            created_at: 1780562498436,
+            trade_type: 'RPI',
+          },
+        ],
+      },
+      'BTC-USD-31JUL26-90000-C': {
+        results: [
+          {
+            id: 't2',
+            market: 'BTC-USD-31JUL26-90000-C',
+            side: 'BUY',
+            size: '0.2',
+            price: '120.5',
+            created_at: 1780562499000,
+            trade_type: 'BLOCK_TRADE',
+          },
+        ],
+      },
+    };
+
+    const fetchSpy = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/markets/summary')) {
+        return new Response(JSON.stringify(summary), { status: 200 });
+      }
+      const symbol = decodeURIComponent(url.match(/market=([^&]+)/)?.[1] ?? '');
+      return new Response(JSON.stringify(tradesBySymbol[symbol] ?? { results: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const trades = await getParadexStream().seed!('BTC');
+    vi.unstubAllGlobals();
+
+    expect(trades).toHaveLength(2);
+    expect(trades.every((t) => t.venue === 'paradex' && t.underlying === 'BTC')).toBe(true);
+
+    const sell = trades.find((t) => t.tradeId === 't1')!;
+    expect(sell.side).toBe('sell'); // explicit taker side
+    expect(sell.price).toBe(2279.52); // string coerced to number
+    expect(sell.size).toBe(0.1);
+    expect(sell.isBlock).toBe(false);
+    expect(sell.instrument).toBe('BTC-USD-31JUL26-58000-P');
+    expect(sell.timestamp).toBe(1780562498436);
+
+    const block = trades.find((t) => t.tradeId === 't2')!;
+    expect(block.side).toBe('buy');
+    expect(block.isBlock).toBe(true); // trade_type BLOCK_TRADE → isBlock
+
+    // Only the two active option symbols were polled — dead + perp markets skipped.
+    const tradeUrls = fetchSpy.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes('/trades?market='));
+    expect(tradeUrls).toHaveLength(2);
+    expect(tradeUrls.some((u) => u.includes('40000-P'))).toBe(false);
+    expect(tradeUrls.some((u) => u.includes('PERP'))).toBe(false);
+  });
+
+  it('returns [] for unsupported underlyings without any REST call (BTC-only)', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(getParadexStream().seed!('ETH')).resolves.toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('start() enables Paradex via the seed path without a socket or connectStream', async () => {
+    vi.useFakeTimers();
+    const runtime = new TradeRuntime();
+    const connectSpy = vi
+      .spyOn(runtime as unknown as { connectStream(...a: unknown[]): void }, 'connectStream')
+      .mockImplementation(() => {});
+    vi.spyOn(
+      runtime as unknown as { seedFromRest(u: string): Promise<void> },
+      'seedFromRest',
+    ).mockResolvedValue(undefined);
+
+    await runtime.start(['BTC', 'ETH']);
+
+    const internals = runtime as unknown as {
+      streamState: Map<string, { connected: boolean }>;
+      reseedTimers: Map<string, unknown>;
+    };
+
+    // Paradex never routes through connectStream — it carries no live socket.
+    const connectedVenues = connectSpy.mock.calls.map((c) => (c[0] as { venue: string }).venue);
+    expect(connectedVenues).not.toContain('paradex');
+    // Marked enabled (BTC) with a reseed timer; ETH is gated out (BTC-only venue).
+    expect(internals.streamState.get('paradex:BTC')?.connected).toBe(true);
+    expect(internals.reseedTimers.has('paradex:BTC')).toBe(true);
+    expect(internals.reseedTimers.has('paradex:ETH')).toBe(false);
+
+    runtime.dispose();
+    vi.useRealTimers();
   });
 });

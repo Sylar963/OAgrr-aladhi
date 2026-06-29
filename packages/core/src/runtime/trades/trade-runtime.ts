@@ -22,6 +22,7 @@ import {
 import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
 import { toGateioRestBase } from '../../feeds/gateio/aliases.js';
 import { GateioWsEnvelopeSchema, GateioWsTradeSchema } from '../../feeds/gateio/types.js';
+import { fetchParadexSummaryAll, fetchParadexTrades } from '../../feeds/paradex/rest.js';
 import type { VenueId } from '../../types/common.js';
 import { startEventLoopLagMonitor } from '../../utils/event-loop-lag.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -134,6 +135,17 @@ export class TradeRuntime {
           this.streamKey(stream.venue, normalizedUnderlying),
           this.streamState.get(this.streamKey(stream.venue, normalizedUnderlying)) ?? createTradeStreamState(),
         );
+
+        // REST-seed-only venue (no live socket): the seed/reseed timers carry the
+        // tape. Mark it enabled so health reads honestly; the staleness watchdog
+        // only inspects open sockets, so there is nothing here for it to churn.
+        if (stream.connect == null) {
+          this.updateStreamState(stream.venue, normalizedUnderlying, {
+            connected: true,
+            lastStatusAt: Date.now(),
+          });
+          continue;
+        }
 
         const connectionKey = this.connectionKey(stream, normalizedUnderlying);
         const alreadyRegistered =
@@ -420,8 +432,15 @@ export class TradeRuntime {
     const key = this.connectionKey(stream, underlying);
     if (this.connections.has(key) || this.reconnectTimers.has(key)) return;
 
+    // Seed-only venues carry no socket; ensureUnderlying never routes them here,
+    // but guard anyway so the optional url/connect/parse narrow to non-null.
+    if (stream.url == null || stream.connect == null || stream.parse == null) return;
+    const connect = stream.connect;
+    const parse = stream.parse;
+
     const subscribedUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-    const url = typeof stream.url === 'function' ? stream.url() : stream.url;
+    const urlSource = stream.url;
+    const url = typeof urlSource === 'function' ? urlSource() : urlSource;
     const ws = new WebSocket(url);
     let didOpen = false;
     let openedAt = 0;
@@ -453,7 +472,7 @@ export class TradeRuntime {
         { venue: stream.venue, underlying: activeUnderlyings.join(',') },
         'trade stream connected',
       );
-      stream.connect(ws, activeUnderlyings);
+      connect(ws, activeUnderlyings);
 
       if (stream.startKeepalive) {
         const timer = stream.startKeepalive(ws);
@@ -470,7 +489,7 @@ export class TradeRuntime {
         const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
         this.updateStreamStates(stream.venue, activeUnderlyings, { lastMessageAt: now });
 
-        const trades = stream.parse(msg, activeUnderlyings);
+        const trades = parse(msg, activeUnderlyings);
         if (trades.length === 0) return;
 
         const tradesByUnderlying = new Map<string, TradeEvent[]>();
@@ -595,6 +614,9 @@ export class TradeRuntime {
       return false;
     }
     if (stream.venue === 'thalex' && !isThalexTradeUnderlyingSupported(underlying)) {
+      return false;
+    }
+    if (stream.venue === 'paradex' && !isParadexTradeUnderlyingSupported(underlying)) {
       return false;
     }
     return true;
@@ -850,6 +872,15 @@ const COINCALL_TRADE_UNDERLYINGS = new Set([
 // Thalex lists only BTC + ETH options. Matches feeds/thalex/ws-client.ts.
 const THALEX_TRADE_UNDERLYINGS = new Set(['BTC', 'ETH']);
 
+// Paradex lists BTC options only (ETH/HYPE documented but not yet listed as of
+// 2026-06-08). Add them here when the venue lists them.
+const PARADEX_TRADE_UNDERLYINGS = new Set(['BTC']);
+// Paradex per-symbol trade reseed cadence — sparse venue (87/480 ever traded),
+// so a rolling REST slice keeps recent prints visible. Mirrors Coincall's 10min.
+const PARADEX_RESEED_INTERVAL_MS = 10 * 60 * 1000;
+const PARADEX_TRADES_PAGE_SIZE = 100;
+const PARADEX_SEED_CONCURRENCY = 10;
+
 const GateioTradeListSchema = GateioWsTradeSchema.array();
 const GATEIO_TRADE_BATCH = 50;
 const GATEIO_PING_INTERVAL_MS = 15_000;
@@ -943,6 +974,23 @@ const ThalexTradeTupleSchema = z.tuple([
 
 function isThalexTradeUnderlyingSupported(underlying: string): boolean {
   return THALEX_TRADE_UNDERLYINGS.has(normalizeTradeUnderlying(underlying));
+}
+
+function isParadexTradeUnderlyingSupported(underlying: string): boolean {
+  return PARADEX_TRADE_UNDERLYINGS.has(normalizeTradeUnderlying(underlying));
+}
+
+// Paradex options are `{BASE}-USD-{expiry}-{strike}-{C|P}`; perps/spot never end
+// in -C/-P. Used to pick option markets out of the bulk summary firehose.
+function isParadexOptionSymbol(symbol: string, base: string): boolean {
+  return symbol.startsWith(`${base}-`) && (symbol.endsWith('-C') || symbol.endsWith('-P'));
+}
+
+// Every Paradex numeric is a string; '' / null / non-positive means "no value".
+function paradexPositive(value: string | null | undefined): boolean {
+  if (value == null || value === '') return false;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
 }
 
 // lastTrade payload (dt:6): { q, sd, pr, s, ts }. `sd` is tradeSide: 1=buy, 2=sell.
@@ -1881,6 +1929,69 @@ export const VENUE_STREAMS: VenueStream[] = [
       if (!list.success) return [];
 
       return gateioRowsToTradeEvents(list.data, underlyings[0] ?? '');
+    },
+  },
+  {
+    // Paradex is REST-seed-only: its WS trades.{symbol} ACKs but delivers no
+    // frames (verified 2026-06-08), and a trades-only socket has nothing to
+    // refresh lastMessageAt — the staleness watchdog would force-reconnect it
+    // every ~5min. So no url/connect/parse: the seed/reseed timers carry the
+    // tape via REST /trades?market={symbol} (the bulk baseAsset form returns
+    // HTTP 400). Sparse venue — treat like Coincall (REST reseed, big buffer).
+    venue: 'paradex',
+    reseedIntervalMs: PARADEX_RESEED_INTERVAL_MS,
+    async seed(underlying) {
+      if (!isParadexTradeUnderlyingSupported(underlying)) return [];
+      const base = normalizeTradeUnderlying(underlying);
+
+      // One bulk call gives OI + last-traded for the whole chain; keep only the
+      // active option contracts (has OI or has ever traded) so we don't fan out
+      // hundreds of empty per-symbol requests for the never-traded majority.
+      const summaries = await fetchParadexSummaryAll();
+      const symbols = summaries
+        .filter(
+          (s) =>
+            isParadexOptionSymbol(s.symbol, base) &&
+            (paradexPositive(s.open_interest) || paradexPositive(s.last_traded_price)),
+        )
+        .map((s) => s.symbol);
+      if (symbols.length === 0) return [];
+
+      const trades: TradeEvent[] = [];
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < symbols.length) {
+          const symbol = symbols[cursor++];
+          if (symbol == null) continue;
+          try {
+            for (const row of await fetchParadexTrades(symbol, PARADEX_TRADES_PAGE_SIZE)) {
+              const price = Number(row.price);
+              const size = Number(row.size);
+              if (!Number.isFinite(price) || !Number.isFinite(size)) continue;
+              trades.push({
+                venue: 'paradex',
+                tradeId: row.id,
+                instrument: symbol,
+                underlying: base,
+                side: row.side === 'BUY' ? 'buy' : 'sell',
+                price,
+                size,
+                iv: null,
+                markPrice: null,
+                indexPrice: null,
+                isBlock: row.trade_type === 'BLOCK_TRADE',
+                timestamp: row.created_at,
+              });
+            }
+          } catch {
+            // Per-symbol failures (timeouts, sparse data) are expected — skip.
+          }
+        }
+      };
+
+      const concurrency = Math.min(PARADEX_SEED_CONCURRENCY, symbols.length);
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      return trades;
     },
   },
 ];

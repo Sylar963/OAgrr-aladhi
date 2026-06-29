@@ -66,3 +66,21 @@ export type ParadexSummary = z.infer<typeof ParadexSummarySchema>;
 
 export const ParadexMarketsResponseSchema = z.object({ results: z.array(ParadexMarketSchema) });
 export const ParadexSummaryResponseSchema = z.object({ results: z.array(ParadexSummarySchema) });
+
+// Trade tape (FLOW) row. `side` is the explicit taker side (NOT sign-of-size);
+// price/size are strings like every Paradex numeric; created_at is unix ms.
+// trade_type ∈ FILL | LIQUIDATION | TRANSFER | SETTLE_MARKET | RPI | BLOCK_TRADE.
+export const ParadexTradeSchema = z
+  .object({
+    id: z.string(),
+    market: z.string(),
+    side: z.enum(['BUY', 'SELL']),
+    size: z.string(),
+    price: z.string(),
+    created_at: z.number(), // unix ms
+    trade_type: z.string(),
+  })
+  .passthrough();
+export type ParadexTrade = z.infer<typeof ParadexTradeSchema>;
+
+export const ParadexTradesResponseSchema = z.object({ results: z.array(ParadexTradeSchema) });

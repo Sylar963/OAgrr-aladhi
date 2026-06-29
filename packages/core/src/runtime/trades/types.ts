@@ -41,13 +41,17 @@ export interface TradeStreamState {
 
 export interface VenueStream {
   venue: VenueId;
+  // Live-socket venues set url/connect/parse. REST-seed-only venues (e.g.
+  // Paradex, whose WS trades.{symbol} ACKs but never delivers and would trip the
+  // staleness watchdog into a reconnect loop) omit all three and carry the tape
+  // entirely through seed + reseedIntervalMs — the runtime opens no socket.
   // Some venues (Coincall) require a freshly-signed URL per connect — a bare
   // string is stale after the first timestamped signature. Allow a thunk.
-  url: string | (() => string);
+  url?: string | (() => string);
   connectionKey?: (underlyings: string[]) => string;
-  connect: (ws: WebSocket, underlyings: string[]) => void;
+  connect?: (ws: WebSocket, underlyings: string[]) => void;
   subscribe?: (ws: WebSocket, underlyings: string[]) => void;
-  parse: (msg: unknown, underlyings: string[]) => TradeEvent[];
+  parse?: (msg: unknown, underlyings: string[]) => TradeEvent[];
   seed?: (underlying: string) => Promise<TradeEvent[]>;
   // Set on venues whose WS stream alone produces sparse history (e.g. Coincall
   // has per-symbol prints with no bulk history endpoint). The runtime invokes

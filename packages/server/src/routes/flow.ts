@@ -405,7 +405,8 @@ function toVenueId(value: string): TradeEvent['venue'] | null {
     value === 'derive' ||
     value === 'coincall' ||
     value === 'thalex' ||
-    value === 'gateio'
+    value === 'gateio' ||
+    value === 'paradex'
   ) {
     return value;
   }

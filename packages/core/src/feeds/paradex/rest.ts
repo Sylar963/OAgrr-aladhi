@@ -4,9 +4,11 @@ import {
   PARADEX_MARKETS_SUMMARY,
   PARADEX_REST_BASE_URL,
   PARADEX_SYSTEM_TIME,
+  PARADEX_TRADES,
 } from '../shared/endpoints.js';
 import { parseParadexMarkets, parseParadexSummaries } from './codec.js';
-import type { ParadexMarket, ParadexSummary } from './types.js';
+import { ParadexTradesResponseSchema } from './types.js';
+import type { ParadexMarket, ParadexSummary, ParadexTrade } from './types.js';
 
 const PARADEX_REST_TIMEOUT_MS = 10_000;
 
@@ -27,6 +29,17 @@ export async function fetchParadexMarkets(): Promise<ParadexMarket[]> {
 /** Bulk dynamic data for every market in one call. */
 export async function fetchParadexSummaryAll(): Promise<ParadexSummary[]> {
   return parseParadexSummaries(await getJson(`${PARADEX_MARKETS_SUMMARY}?market=ALL`));
+}
+
+/**
+ * Per-symbol trade tape for the FLOW page. Paradex's WS `trades.{symbol}` ACKs
+ * but delivers no frames (verified 2026-06-08), so FLOW seeds/polls via REST
+ * like the other sparse venues. Newest-first; returns [] on a malformed payload.
+ */
+export async function fetchParadexTrades(market: string, pageSize = 100): Promise<ParadexTrade[]> {
+  const path = `${PARADEX_TRADES}?market=${encodeURIComponent(market)}&page_size=${pageSize}`;
+  const parsed = ParadexTradesResponseSchema.safeParse(await getJson(path));
+  return parsed.success ? parsed.data.results : [];
 }
 
 const ServerTimeSchema = z.object({ server_time: z.string().optional() });

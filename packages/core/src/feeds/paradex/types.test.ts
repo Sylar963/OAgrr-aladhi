@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ParadexMarketsResponseSchema, ParadexSummaryResponseSchema } from './types.js';
+import {
+  ParadexMarketsResponseSchema,
+  ParadexSummaryResponseSchema,
+  ParadexTradesResponseSchema,
+} from './types.js';
 
 // Verbatim from references/options-docs/paradex/rest-markets-option.json
 const MARKET = {
@@ -60,5 +64,24 @@ describe('paradex schemas', () => {
     expect(s.greeks?.delta).toBe('0.24458572');
     expect(s.last_traded_price).toBe(''); // empty string, not null — coerced later
     expect(s.open_interest).toBe('0');
+  });
+
+  // Verbatim from references/options-docs/paradex/rest-trades.json
+  it('parses a /trades option entry with explicit taker side', () => {
+    const TRADE = {
+      id: '1780562498430201709229980001',
+      market: 'BTC-USD-31JUL26-58000-P',
+      side: 'SELL',
+      size: '0.1',
+      price: '2279.52',
+      created_at: 1780562498436,
+      trade_type: 'RPI',
+    };
+    const parsed = ParadexTradesResponseSchema.parse({ results: [TRADE] });
+    const t = parsed.results[0]!;
+    expect(t.side).toBe('SELL'); // explicit taker side, not sign-of-size
+    expect(t.price).toBe('2279.52'); // string — coerced downstream
+    expect(t.created_at).toBe(1780562498436); // unix ms
+    expect(t.trade_type).toBe('RPI');
   });
 });

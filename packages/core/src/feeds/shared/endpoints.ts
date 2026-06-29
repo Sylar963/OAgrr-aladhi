@@ -94,3 +94,6 @@ export const PARADEX_REST_BASE_URL = 'https://api.prod.paradex.trade/v1';
 export const PARADEX_MARKETS = '/markets';
 export const PARADEX_MARKETS_SUMMARY = '/markets/summary';
 export const PARADEX_SYSTEM_TIME = '/system/time';
+// Per-symbol trade tape (FLOW). The documented `baseAsset` bulk form returns
+// HTTP 400 in prod — must query per `market={symbol}`.
+export const PARADEX_TRADES = '/trades';

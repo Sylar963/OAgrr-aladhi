@@ -114,6 +114,10 @@ export class DealerBookService {
   async dispose(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await Promise.allSettled([
+      this.opts.oiSnapshotStore.dispose(),
+      this.opts.dealerBookStore.dispose(),
+    ]);
   }
 
   private async warmFromStore(): Promise<void> {

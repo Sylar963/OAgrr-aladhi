@@ -42,6 +42,7 @@ import {
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
 import { DealerBookService, type IntervalFlow } from './dealer-book-service.js';
+import { DeferredDealerBookStore, DeferredOiSnapshotStore } from './deferred-persistence.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 
@@ -63,6 +64,22 @@ export const indexPriceService = new IndexPriceRuntime();
 export let newsService: NewsRuntime | null = null;
 const FLOW_ALWAYS_ON_UNDERLYINGS = ['BTC', 'ETH', 'SOL'] as const;
 const databaseUrl = process.env['DATABASE_URL'];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dealerBookDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['DEALER_BOOK_DB_FLUSH_INTERVAL_MS'],
+  DAY_MS,
+  'DEALER_BOOK_DB_FLUSH_INTERVAL_MS',
+);
+const dealerBookOiCacheMaxRows = parsePositiveInteger(
+  process.env['DEALER_BOOK_OI_CACHE_MAX_ROWS'],
+  5_000_000,
+  'DEALER_BOOK_OI_CACHE_MAX_ROWS',
+);
+const dealerBookCacheMaxRows = parsePositiveInteger(
+  process.env['DEALER_BOOK_CACHE_MAX_ROWS'],
+  100_000,
+  'DEALER_BOOK_CACHE_MAX_ROWS',
+);
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(process.env['IV_HISTORY_SIZE_WARN_BYTES']);
 export const ivHistoryStore: IvHistoryStore = databaseUrl
   ? PostgresIvHistoryStore.fromConnectionString(databaseUrl, ivHistorySizeWarnBytes)
@@ -84,11 +101,11 @@ export const leadsStore: LeadsStore = databaseUrl
   : new NoopLeadsStore();
 
 export const oiSnapshotStore: OiSnapshotStore = databaseUrl
-  ? PostgresOiSnapshotStore.fromConnectionString(databaseUrl)
+  ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
 
 export const dealerBookStore: DealerBookStore = databaseUrl
-  ? PostgresDealerBookStore.fromConnectionString(databaseUrl)
+  ? createDealerBookStore(databaseUrl)
   : new NoopDealerBookStore();
 
 export const dealerBookService = new DealerBookService({
@@ -450,6 +467,53 @@ export function disposeServiceStores(): void {
   regimeService.dispose();
   newsService?.dispose();
   disposeSettlementJob();
+}
+
+function createOiSnapshotStore(connectionString: string): OiSnapshotStore {
+  const postgres = PostgresOiSnapshotStore.fromConnectionString(connectionString);
+  if (dealerBookDbFlushIntervalMs === 0) return postgres;
+  return new DeferredOiSnapshotStore(
+    postgres,
+    {
+      flushIntervalMs: dealerBookDbFlushIntervalMs,
+      cachePath:
+        process.env['DEALER_BOOK_OI_CACHE_PATH'] ?? '.cache/dealer-book-oi-snapshots.ndjson',
+      maxPendingRows: dealerBookOiCacheMaxRows,
+    },
+    console,
+  );
+}
+
+function createDealerBookStore(connectionString: string): DealerBookStore {
+  const postgres = PostgresDealerBookStore.fromConnectionString(connectionString);
+  if (dealerBookDbFlushIntervalMs === 0) return postgres;
+  return new DeferredDealerBookStore(
+    postgres,
+    {
+      flushIntervalMs: dealerBookDbFlushIntervalMs,
+      cachePath: process.env['DEALER_BOOK_CACHE_PATH'] ?? '.cache/dealer-book-latest.ndjson',
+      maxPendingRows: dealerBookCacheMaxRows,
+    },
+    console,
+  );
+}
+
+function parseNonNegativeMs(value: string | undefined, fallback: number, envName: string): number {
+  if (value == null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${envName} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number, envName: string): number {
+  if (value == null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be a positive integer`);
+  }
+  return parsed;
 }
 
 function parseIvHistoryWarnBytes(value: string | undefined): number {

@@ -17,6 +17,7 @@ import {
   type TradeEvent,
 } from '@oggregator/core';
 import {
+  DeferredTradeStore,
   NoopTradeStore,
   PostgresTradeStore,
   type PersistedTradeLeg,
@@ -104,6 +105,9 @@ const MAX_FLUSH_BACKOFF_MS = 30_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 const DEFAULT_TRADE_RETENTION_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+const DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS = DAY_MS;
+const DEFAULT_TRADE_CACHE_MAX_ROWS = 5_000_000;
+const DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE = 10_000;
 const OPS_LOG_INTERVAL_MS = 60_000;
 const PARTITION_TOPUP_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const PARTITION_MONTHS_AHEAD = 3;
@@ -111,9 +115,7 @@ const RETENTION_PRUNE_INTERVAL_MS = 15 * 60 * 1000;
 
 async function main(): Promise<void> {
   const databaseUrl = process.env['DATABASE_URL'];
-  const tradeStore: TradeStore = databaseUrl
-    ? PostgresTradeStore.fromConnectionString(databaseUrl)
-    : new NoopTradeStore();
+  const tradeStore = createTradeStore(databaseUrl);
   const alerts = new OpsAlerter(process.env['INGEST_ALERT_WEBHOOK_URL'] ?? null);
   const retentionDays = parseTradeRetentionDays(process.env['TRADE_RETENTION_DAYS']);
 
@@ -495,6 +497,59 @@ function parseTradeRetentionDays(value: string | undefined): number {
   }
 
   return parsed;
+}
+
+function createTradeStore(databaseUrl: string | undefined): TradeStore {
+  if (!databaseUrl) return new NoopTradeStore();
+  const postgres = PostgresTradeStore.fromConnectionString(databaseUrl);
+  const flushIntervalMs = parseNonNegativeMs(
+    process.env['TRADE_DB_FLUSH_INTERVAL_MS'],
+    DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS,
+    'TRADE_DB_FLUSH_INTERVAL_MS',
+  );
+  if (flushIntervalMs === 0) return postgres;
+
+  return new DeferredTradeStore(
+    postgres,
+    {
+      flushIntervalMs,
+      cachePath: process.env['TRADE_CACHE_PATH'] ?? '.cache/ingest-trades.ndjson',
+      maxPendingRows: parsePositiveInteger(
+        process.env['TRADE_CACHE_MAX_ROWS'],
+        DEFAULT_TRADE_CACHE_MAX_ROWS,
+        'TRADE_CACHE_MAX_ROWS',
+      ),
+      flushBatchSize: parsePositiveInteger(
+        process.env['TRADE_DB_FLUSH_BATCH_SIZE'],
+        DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE,
+        'TRADE_DB_FLUSH_BATCH_SIZE',
+      ),
+      flushOnDispose: parseBoolean(process.env['TRADE_DB_FLUSH_ON_DISPOSE']),
+    },
+    log,
+  );
+}
+
+function parseNonNegativeMs(value: string | undefined, fallback: number, envName: string): number {
+  if (value == null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${envName} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number, envName: string): number {
+  if (value == null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function parseBoolean(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true';
 }
 
 function stringifyError(error: unknown): string {

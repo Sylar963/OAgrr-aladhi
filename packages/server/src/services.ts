@@ -42,7 +42,12 @@ import {
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
 import { DealerBookService, type IntervalFlow } from './dealer-book-service.js';
-import { DeferredDealerBookStore, DeferredOiSnapshotStore } from './deferred-persistence.js';
+import {
+  DeferredDealerBookStore,
+  DeferredIvHistoryStore,
+  DeferredOiSnapshotStore,
+  DeferredRegimeStore,
+} from './deferred-persistence.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 
@@ -65,10 +70,25 @@ export let newsService: NewsRuntime | null = null;
 const FLOW_ALWAYS_ON_UNDERLYINGS = ['BTC', 'ETH', 'SOL'] as const;
 const databaseUrl = process.env['DATABASE_URL'];
 const DAY_MS = 24 * 60 * 60 * 1000;
+const marketDataDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['MARKET_DATA_DB_FLUSH_INTERVAL_MS'],
+  DAY_MS,
+  'MARKET_DATA_DB_FLUSH_INTERVAL_MS',
+);
 const dealerBookDbFlushIntervalMs = parseNonNegativeMs(
   process.env['DEALER_BOOK_DB_FLUSH_INTERVAL_MS'],
-  DAY_MS,
+  marketDataDbFlushIntervalMs,
   'DEALER_BOOK_DB_FLUSH_INTERVAL_MS',
+);
+const ivHistoryDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['IV_HISTORY_DB_FLUSH_INTERVAL_MS'],
+  marketDataDbFlushIntervalMs,
+  'IV_HISTORY_DB_FLUSH_INTERVAL_MS',
+);
+const regimeDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['REGIME_DB_FLUSH_INTERVAL_MS'],
+  marketDataDbFlushIntervalMs,
+  'REGIME_DB_FLUSH_INTERVAL_MS',
 );
 const dealerBookOiCacheMaxRows = parsePositiveInteger(
   process.env['DEALER_BOOK_OI_CACHE_MAX_ROWS'],
@@ -80,9 +100,19 @@ const dealerBookCacheMaxRows = parsePositiveInteger(
   100_000,
   'DEALER_BOOK_CACHE_MAX_ROWS',
 );
+const ivHistoryCacheMaxRows = parsePositiveInteger(
+  process.env['IV_HISTORY_CACHE_MAX_ROWS'],
+  200_000,
+  'IV_HISTORY_CACHE_MAX_ROWS',
+);
+const regimeObservationsCacheMaxRows = parsePositiveInteger(
+  process.env['REGIME_OBSERVATIONS_CACHE_MAX_ROWS'],
+  200_000,
+  'REGIME_OBSERVATIONS_CACHE_MAX_ROWS',
+);
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(process.env['IV_HISTORY_SIZE_WARN_BYTES']);
 export const ivHistoryStore: IvHistoryStore = databaseUrl
-  ? PostgresIvHistoryStore.fromConnectionString(databaseUrl, ivHistorySizeWarnBytes)
+  ? createIvHistoryStore(databaseUrl)
   : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
 export const ivHistoryService = new IvHistoryService({
   dvol: dvolService,
@@ -167,7 +197,7 @@ export const dealerBookService = new DealerBookService({
 registerBookLookup(dealerBookService.lookup);
 
 export const regimeStore: RegimeStore = databaseUrl
-  ? PostgresRegimeStore.fromConnectionString(databaseUrl)
+  ? createRegimeStore(databaseUrl)
   : new NoopRegimeStore();
 
 const regimePersistence: RegimePersistence = {
@@ -479,6 +509,7 @@ function createOiSnapshotStore(connectionString: string): OiSnapshotStore {
       cachePath:
         process.env['DEALER_BOOK_OI_CACHE_PATH'] ?? '.cache/dealer-book-oi-snapshots.ndjson',
       maxPendingRows: dealerBookOiCacheMaxRows,
+      flushOnDispose: parseBoolean(process.env['DEALER_BOOK_DB_FLUSH_ON_DISPOSE']),
     },
     console,
   );
@@ -493,6 +524,43 @@ function createDealerBookStore(connectionString: string): DealerBookStore {
       flushIntervalMs: dealerBookDbFlushIntervalMs,
       cachePath: process.env['DEALER_BOOK_CACHE_PATH'] ?? '.cache/dealer-book-latest.ndjson',
       maxPendingRows: dealerBookCacheMaxRows,
+      flushOnDispose: parseBoolean(process.env['DEALER_BOOK_DB_FLUSH_ON_DISPOSE']),
+    },
+    console,
+  );
+}
+
+function createIvHistoryStore(connectionString: string): IvHistoryStore {
+  const postgres = PostgresIvHistoryStore.fromConnectionString(
+    connectionString,
+    ivHistorySizeWarnBytes,
+  );
+  if (ivHistoryDbFlushIntervalMs === 0) return postgres;
+  return new DeferredIvHistoryStore(
+    postgres,
+    {
+      flushIntervalMs: ivHistoryDbFlushIntervalMs,
+      cachePath: process.env['IV_HISTORY_CACHE_PATH'] ?? '.cache/iv-history-points.ndjson',
+      maxPendingRows: ivHistoryCacheMaxRows,
+      thresholdBytes: ivHistorySizeWarnBytes,
+      flushOnDispose: parseBoolean(process.env['IV_HISTORY_DB_FLUSH_ON_DISPOSE']),
+    },
+    console,
+  );
+}
+
+function createRegimeStore(connectionString: string): RegimeStore {
+  const postgres = PostgresRegimeStore.fromConnectionString(connectionString);
+  if (regimeDbFlushIntervalMs === 0) return postgres;
+  return new DeferredRegimeStore(
+    postgres,
+    {
+      flushIntervalMs: regimeDbFlushIntervalMs,
+      observationsCachePath:
+        process.env['REGIME_OBSERVATIONS_CACHE_PATH'] ?? '.cache/regime-observations.ndjson',
+      modelsCachePath: process.env['REGIME_MODELS_CACHE_PATH'] ?? '.cache/regime-models.ndjson',
+      maxPendingRows: regimeObservationsCacheMaxRows,
+      flushOnDispose: parseBoolean(process.env['REGIME_DB_FLUSH_ON_DISPOSE']),
     },
     console,
   );
@@ -507,13 +575,21 @@ function parseNonNegativeMs(value: string | undefined, fallback: number, envName
   return parsed;
 }
 
-function parsePositiveInteger(value: string | undefined, fallback: number, envName: string): number {
+function parsePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+  envName: string,
+): number {
   if (value == null || value.trim() === '') return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(`${envName} must be a positive integer`);
   }
   return parsed;
+}
+
+function parseBoolean(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true';
 }
 
 function parseIvHistoryWarnBytes(value: string | undefined): number {

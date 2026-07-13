@@ -23,6 +23,7 @@ import { surfaceRoute } from './surface.js';
 import { underlyingsRoute } from './underlyings.js';
 import { venuesRoute } from './venues.js';
 import { wsChainRoute } from './ws-chain.js';
+import { wsInstrumentTradesRoute } from './ws-instrument-trades.js';
 
 export function shouldBlockApiRequestWhileBootstrapping(url: string): boolean {
   if (!url.startsWith('/api/')) return false;
@@ -61,6 +62,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(portfolioRoutes, { prefix: '/api' });
   app.register(fundedRoutes, { prefix: '/api' });
   app.register(wsChainRoute);
+  app.register(wsInstrumentTradesRoute);
   app.register(paperWsRoute);
   app.register(portfolioWsRoute);
 }

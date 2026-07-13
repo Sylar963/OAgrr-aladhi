@@ -1,26 +1,9 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-
 import { fetchJson } from '@lib/http';
+import type { FlowTrade, FlowTradeHistoryCursor } from '@oggregator/protocol';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
-export interface TradeEvent {
-  venue: string;
-  tradeUid: string;
-  tradeId?: string | null;
-  instrument: string;
-  underlying: string;
-  side: 'buy' | 'sell';
-  price: number;
-  size: number;
-  iv: number | null;
-  markPrice: number | null;
-  indexPrice: number | null;
-  premiumUsd: number | null;
-  notionalUsd: number | null;
-  referencePriceUsd: number | null;
-  isBlock: boolean;
-  timestamp: number;
-}
+export type TradeEvent = FlowTrade;
 
 interface FlowResponse {
   underlying: string;
@@ -28,10 +11,7 @@ interface FlowResponse {
   trades: TradeEvent[];
 }
 
-export interface TradeHistoryCursor {
-  beforeTs: string;
-  beforeUid: string;
-}
+export type TradeHistoryCursor = FlowTradeHistoryCursor;
 
 interface FlowHistoryResponse {
   available: boolean;

@@ -28,6 +28,9 @@ pnpm start        # node dist/index.js
 | `NODE_ENV` | Use `production` outside local development |
 | `TRADE_DB_FLUSH_INTERVAL_MS` | Milliseconds between Postgres flushes; default `86400000`, set `0` for direct writes |
 | `TRADE_CACHE_PATH` | Local NDJSON trade spool path; default `.cache/ingest-trades.ndjson` |
-| `TRADE_CACHE_MAX_ROWS` | Maximum rows retained in the local spool before trimming oldest rows; default `5000000` |
+| `TRADE_CACHE_MAX_ROWS` | Pending-row warning threshold for the local spool; all rows are retained; default `5000000` |
 | `TRADE_DB_FLUSH_BATCH_SIZE` | Rows passed to the underlying DB store per flush batch; default `10000` |
 | `TRADE_DB_FLUSH_ON_DISPOSE` | Set `true` or `1` to flush the local spool during graceful shutdown |
+| `TRADE_RETENTION_DAYS` | Postgres history retention in days; default `0` disables automatic pruning |
+
+`TRADE_CACHE_PATH` must be on persistent storage. Replacing a container or filesystem that holds the spool discards trades that have not reached Postgres yet.

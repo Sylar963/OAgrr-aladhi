@@ -1,5 +1,3 @@
-import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 import {
   buildLiveTradeUid,
   computeLiveTradeAmounts,
@@ -7,14 +5,18 @@ import {
   type TradeEvent,
 } from '@oggregator/core';
 import type { PersistedTradeRecord, TradeHistoryQuery } from '@oggregator/db';
-import { flowService, indexPriceService, isFlowReady, spotService, tradeStore } from '../services.js';
+import type { FlowTrade } from '@oggregator/protocol';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import {
+  flowService,
+  indexPriceService,
+  isFlowReady,
+  spotService,
+  tradeStore,
+} from '../services.js';
 
-interface EnrichedTradeEvent extends TradeEvent {
-  tradeUid: string;
-  premiumUsd: number | null;
-  notionalUsd: number | null;
-  referencePriceUsd: number | null;
-}
+type EnrichedTradeEvent = FlowTrade;
 
 interface TradeHistoryCursor {
   beforeTs: string;
@@ -244,7 +246,7 @@ export async function flowRoute(app: FastifyInstance) {
   });
 }
 
-function enrichLiveTrade(trade: TradeEvent): EnrichedTradeEvent {
+export function enrichLiveTrade(trade: TradeEvent): EnrichedTradeEvent {
   const referencePriceUsd =
     trade.indexPrice ??
     getSpotPriceUsd(trade.underlying) ??

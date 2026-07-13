@@ -1,30 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { AssetPickerButton, EmptyState, Spinner } from '@components/ui';
+import { fmtIv } from '@lib/format';
+import { VENUE_IDS, VENUES } from '@lib/venue-meta';
+import { useAppStore } from '@stores/app-store';
 import {
+  ColorType,
   createChart,
-  LineSeries,
   type IChartApi,
   type ISeriesApi,
+  LineSeries,
   type MouseEventHandler,
   type Time,
-  ColorType,
 } from 'lightweight-charts';
-
-import { Spinner, EmptyState, AssetPickerButton } from '@components/ui';
-import { VENUES, VENUE_IDS } from '@lib/venue-meta';
-import { fmtIv } from '@lib/format';
-import { useAppStore } from '@stores/app-store';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { type TradeBubble, TradeBubblePrimitive, tierForNotional } from './chart-bubble-primitive';
 import { useInstrumentList, useInstrumentTrades } from './chart-queries';
-import { InstrumentPicker } from './InstrumentPicker';
-import {
-  TradeBubblePrimitive,
-  tierForNotional,
-  type TradeBubble,
-} from './chart-bubble-primitive';
-import type { HistoryRange, TradeEvent } from './queries';
-import { HistoryControls, type HistoryPreset } from './HistoryControls';
 import { getCustomRangeFromBounds } from './DateRangePicker';
-import { useFlowHistorySummary } from './queries';
 import styles from './FlowChartsView.module.css';
+import { HistoryControls, type HistoryPreset } from './HistoryControls';
+import { InstrumentPicker } from './InstrumentPicker';
+import type { HistoryRange, TradeEvent } from './queries';
+import { useFlowHistorySummary } from './queries';
+import { mergeInstrumentTrades, useInstrumentTradesLive } from './use-instrument-trades-live';
 
 function optionTypeFromInstrument(instrument: string): 'C' | 'P' | null {
   const match = instrument.match(/-([CP])(?:-|$)/);
@@ -104,8 +100,21 @@ export default function FlowChartsView({
     },
     Boolean(selectedInstrument),
   );
+  const liveTrades = useInstrumentTradesLive(
+    {
+      underlying,
+      venue: selectedVenue,
+      instrument: selectedInstrument ?? '',
+    },
+    Boolean(selectedInstrument) && historyPreset !== 'yesterday' && historyPreset !== 'custom',
+  );
 
-  const historyBounds = useFlowHistorySummary(underlying, [selectedVenue], { start: null, end: null }, true);
+  const historyBounds = useFlowHistorySummary(
+    underlying,
+    [selectedVenue],
+    { start: null, end: null },
+    true,
+  );
   const historySummary = useFlowHistorySummary(underlying, [selectedVenue], historyRange, true);
 
   useEffect(() => {
@@ -134,6 +143,7 @@ export default function FlowChartsView({
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const primitiveRef = useRef<TradeBubblePrimitive | null>(null);
   const tradeIndexRef = useRef<Map<string, TradeEvent>>(new Map());
+  const fittedDataKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!chartContainer) return;
@@ -207,12 +217,17 @@ export default function FlowChartsView({
     };
   }, [chartContainer]);
 
-  const trades = tradesQuery.data?.trades ?? [];
+  const trades = useMemo(
+    () => mergeInstrumentTrades(tradesQuery.data?.trades ?? [], liveTrades.trades),
+    [liveTrades.trades, tradesQuery.data?.trades],
+  );
+  const chartDataKey = `${underlying}\u0000${selectedVenue}\u0000${selectedInstrument ?? ''}\u0000${historyRange.start ?? ''}\u0000${historyRange.end ?? ''}`;
   const bubbles = useMemo(
-    () => trades.flatMap((trade) => {
-      const bubble = tradeToBubble(trade);
-      return bubble ? [bubble] : [];
-    }),
+    () =>
+      trades.flatMap((trade) => {
+        const bubble = tradeToBubble(trade);
+        return bubble ? [bubble] : [];
+      }),
     [trades],
   );
 
@@ -234,8 +249,11 @@ export default function FlowChartsView({
 
     seriesRef.current.setData(linePoints as never);
     primitiveRef.current.update(bubbles);
-    chartApiRef.current?.timeScale().fitContent();
-  }, [bubbles, trades, chartContainer]);
+    if (bubbles.length > 0 && fittedDataKeyRef.current !== chartDataKey) {
+      chartApiRef.current?.timeScale().fitContent();
+      fittedDataKeyRef.current = chartDataKey;
+    }
+  }, [bubbles, chartDataKey, trades, chartContainer]);
 
   const stats = useMemo(() => {
     if (!trades.length) return null;
@@ -324,7 +342,10 @@ export default function FlowChartsView({
           detail="Try a wider window or a different venue."
         />
       ) : !selectedInstrument ? (
-        <EmptyState title="Pick an instrument" detail="Use the picker above to choose an option contract." />
+        <EmptyState
+          title="Pick an instrument"
+          detail="Use the picker above to choose an option contract."
+        />
       ) : (
         <div className={styles.chartCard}>
           <div className={styles.chartHeader}>
@@ -337,7 +358,9 @@ export default function FlowChartsView({
                 </div>
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>Notional</span>
-                  <span className={styles.statValue}>${Math.round(stats.totalNotional).toLocaleString()}</span>
+                  <span className={styles.statValue}>
+                    ${Math.round(stats.totalNotional).toLocaleString()}
+                  </span>
                 </div>
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>Last</span>
@@ -361,7 +384,9 @@ export default function FlowChartsView({
                 </div>
                 <div className={styles.stat}>
                   <span className={styles.statLabel}>C/P</span>
-                  <span className={styles.statValue}>{stats.calls} / {stats.puts}</span>
+                  <span className={styles.statValue}>
+                    {stats.calls} / {stats.puts}
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -408,7 +433,9 @@ export default function FlowChartsView({
                   <span className={styles.tooltipValue}>
                     {(() => {
                       const p = optionPremiumUsd(hoverTrade);
-                      return p != null ? `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '–';
+                      return p != null
+                        ? `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        : '–';
                     })()}
                   </span>
                 </div>

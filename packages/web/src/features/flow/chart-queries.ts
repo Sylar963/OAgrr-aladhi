@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
-
 import { fetchJson } from '@lib/http';
-import type { HistoryRange, TradeEvent, TradeHistoryCursor } from './queries';
+import { InstrumentTradesResponseSchema } from '@oggregator/protocol';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { z } from 'zod';
+import type { HistoryRange } from './queries';
 
 const InstrumentRowSchema = z.object({
   instrument: z.string(),
@@ -22,36 +22,6 @@ const InstrumentListResponseSchema = z.object({
   instruments: z.array(InstrumentRowSchema),
 });
 
-const TradeEventSchema: z.ZodType<TradeEvent> = z.object({
-  venue: z.string(),
-  tradeUid: z.string(),
-  tradeId: z.string().nullable().optional(),
-  instrument: z.string(),
-  underlying: z.string(),
-  side: z.enum(['buy', 'sell']),
-  price: z.number(),
-  size: z.number(),
-  iv: z.number().nullable(),
-  markPrice: z.number().nullable(),
-  indexPrice: z.number().nullable(),
-  premiumUsd: z.number().nullable(),
-  notionalUsd: z.number().nullable(),
-  referencePriceUsd: z.number().nullable(),
-  isBlock: z.boolean(),
-  timestamp: z.number(),
-}) as z.ZodType<TradeEvent>;
-
-const TradeHistoryCursorSchema: z.ZodType<TradeHistoryCursor> = z.object({
-  beforeTs: z.string(),
-  beforeUid: z.string(),
-});
-
-const InstrumentTradesResponseSchema = z.object({
-  available: z.boolean(),
-  trades: z.array(TradeEventSchema),
-  nextCursor: TradeHistoryCursorSchema.nullable(),
-});
-
 export interface InstrumentListQueryArgs {
   underlying: string;
   venue: string;
@@ -67,7 +37,13 @@ export interface InstrumentTradesQueryArgs {
   limit?: number;
 }
 
-async function fetchAndValidate<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+interface ResponseSchema<T> {
+  safeParse(
+    value: unknown,
+  ): { success: true; data: T } | { success: false; error: { message: string } };
+}
+
+async function fetchAndValidate<T>(path: string, schema: ResponseSchema<T>): Promise<T> {
   const raw = await fetchJson<unknown>(path);
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
@@ -129,6 +105,9 @@ export function useInstrumentTrades(args: InstrumentTradesQueryArgs, enabled = t
         InstrumentTradesResponseSchema,
       ),
     enabled: Boolean(args.underlying && args.venue && args.instrument) && enabled,
-    refetchInterval: 2_000,
+    refetchInterval: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }

@@ -1,4 +1,14 @@
 export {
+  type FlowTrade,
+  type FlowTradeHistoryCursor,
+  FlowTradeHistoryCursorSchema,
+  FlowTradeSchema,
+  type InstrumentTradesResponse,
+  InstrumentTradesResponseSchema,
+  type InstrumentTradeWsServerMessage,
+  InstrumentTradeWsServerMessageSchema,
+} from './flow.js';
+export {
   type FundedRouteType,
   FundedRouteTypeSchema,
   type FundedRunDetailDto,

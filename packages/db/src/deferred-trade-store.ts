@@ -5,7 +5,6 @@ import {
   readFileSync,
   renameSync,
   unlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -32,21 +31,32 @@ interface DeferredTradeStoreOptions {
 interface SerializedTradeRecord extends Omit<PersistedTradeRecord, 'tradeTs' | 'ingestedAt'> {
   tradeTs: string;
   ingestedAt: string;
+  _queuedAt?: number;
+}
+
+interface CachedTradeRecord {
+  record: PersistedTradeRecord;
+  queuedAt: number | null;
 }
 
 type DeferredTradeLog = { warn: (obj: object, msg: string) => void };
 
 const DEFAULT_FLUSH_BATCH_SIZE = 10_000;
+const MAX_RETRY_DELAY_MS = 60_000;
 
 export class DeferredTradeStore implements TradeStore {
   readonly enabled: boolean;
   private readonly flushingPath: string;
   private readonly flushBatchSize: number;
   private pendingCount = 0;
+  private oldestPendingAt: number | null = null;
+  private capacityWarningEmitted = false;
   private ensureMonthsAhead: number | null = null;
   private pruneBefore: Date | null = null;
-  private flushing = false;
-  private readonly timer: ReturnType<typeof setInterval>;
+  private flushPromise: Promise<void> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private maintenanceDueAt: number;
+  private disposed = false;
 
   constructor(
     private readonly delegate: TradeStore,
@@ -56,28 +66,30 @@ export class DeferredTradeStore implements TradeStore {
     this.enabled = delegate.enabled;
     this.flushingPath = `${options.cachePath}.flushing`;
     this.flushBatchSize = options.flushBatchSize ?? DEFAULT_FLUSH_BATCH_SIZE;
+    this.maintenanceDueAt = Date.now() + options.flushIntervalMs;
     this.recoverInterruptedFlush();
-    this.pendingCount = countCachedRows(options.cachePath);
-    this.timer = setInterval(() => {
-      void this.flush().catch((err: unknown) => {
-        this.log.warn({ err: String(err), pending: this.pendingCount }, 'deferred trade flush failed');
-      });
-    }, options.flushIntervalMs);
-    this.timer.unref?.();
+    this.refreshPendingState();
+    this.scheduleNextFlush();
   }
 
   async writeMany(records: PersistedTradeRecord[]): Promise<void> {
     if (records.length === 0) return;
-    appendJsonLines(this.options.cachePath, records, encodeTradeRecord);
+    const queuedAt = Date.now();
+    appendJsonLines(this.options.cachePath, records, (record) =>
+      encodeTradeRecord(record, queuedAt),
+    );
+    if (this.oldestPendingAt == null) this.oldestPendingAt = queuedAt;
     this.pendingCount += records.length;
 
-    if (this.pendingCount > this.options.maxPendingRows) {
-      const rows = readJsonLines(this.options.cachePath, decodeTradeRecord).slice(
-        -this.options.maxPendingRows,
+    if (this.pendingCount > this.options.maxPendingRows && !this.capacityWarningEmitted) {
+      this.capacityWarningEmitted = true;
+      this.log.warn(
+        { pending: this.pendingCount, warningThreshold: this.options.maxPendingRows },
+        'deferred trade spool exceeded warning threshold; retaining all rows',
       );
-      rewriteJsonLines(this.options.cachePath, rows, encodeTradeRecord);
-      this.pendingCount = rows.length;
     }
+
+    if (this.flushPromise == null) this.scheduleNextFlush();
   }
 
   async loadRecent(query: RecentTradeQuery): Promise<PersistedTradeRecord[]> {
@@ -108,43 +120,74 @@ export class DeferredTradeStore implements TradeStore {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing) return;
+    if (this.flushPromise != null) return this.flushPromise;
+
+    if (this.timer != null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+
+    let failed = false;
+    const flushPromise = this.performFlush().catch((error: unknown) => {
+      failed = true;
+      throw error;
+    });
+    this.flushPromise = flushPromise;
+
+    try {
+      await flushPromise;
+    } finally {
+      if (this.flushPromise === flushPromise) this.flushPromise = null;
+      this.scheduleNextFlush(failed ? Date.now() + this.retryDelayMs() : undefined);
+    }
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    if (this.timer != null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.options.flushOnDispose === true) await this.flush();
+    else if (this.flushPromise != null) await this.flushPromise;
+    await this.delegate.dispose();
+  }
+
+  private async performFlush(): Promise<void> {
     const shouldFlushRows = existsSync(this.options.cachePath);
     const shouldFlushMaintenance = this.ensureMonthsAhead != null || this.pruneBefore != null;
-    if (!shouldFlushRows && !shouldFlushMaintenance) return;
+    if (!shouldFlushRows && !shouldFlushMaintenance) {
+      this.maintenanceDueAt = Date.now() + this.options.flushIntervalMs;
+      return;
+    }
 
-    this.flushing = true;
     const ensureMonthsAhead = this.ensureMonthsAhead;
     const pruneBefore = this.pruneBefore;
+    const flushingOldestPendingAt = this.oldestPendingAt;
     this.ensureMonthsAhead = null;
     this.pruneBefore = null;
 
     try {
       if (shouldFlushRows) renameSync(this.options.cachePath, this.flushingPath);
-      this.pendingCount = countCachedRows(this.options.cachePath);
+      this.pendingCount = 0;
+      this.oldestPendingAt = null;
+      this.capacityWarningEmitted = false;
       if (ensureMonthsAhead != null) await this.delegate.ensureForwardPartitions(ensureMonthsAhead);
       if (existsSync(this.flushingPath)) await this.flushFile(this.flushingPath);
       if (pruneBefore != null) await this.delegate.pruneHistory(pruneBefore);
       if (existsSync(this.flushingPath)) unlinkSync(this.flushingPath);
+      this.maintenanceDueAt = Date.now() + this.options.flushIntervalMs;
     } catch (err) {
       this.ensureMonthsAhead = ensureMonthsAhead;
       this.pruneBefore = pruneBefore;
       this.restoreFlushingFile();
-      this.pendingCount = countCachedRows(this.options.cachePath);
+      this.refreshPendingState(flushingOldestPendingAt);
       throw err;
-    } finally {
-      this.flushing = false;
     }
   }
 
-  async dispose(): Promise<void> {
-    clearInterval(this.timer);
-    if (this.options.flushOnDispose === true) await this.flush();
-    await this.delegate.dispose();
-  }
-
   private async flushFile(path: string): Promise<void> {
-    const rows = readJsonLines(path, decodeTradeRecord);
+    const rows = readJsonLines(path, decodeCachedTradeRecord).map(({ record }) => record);
     for (let index = 0; index < rows.length; index += this.flushBatchSize) {
       await this.delegate.writeMany(rows.slice(index, index + this.flushBatchSize));
     }
@@ -163,6 +206,42 @@ export class DeferredTradeStore implements TradeStore {
     }
     ensureCacheDir(this.options.cachePath);
     renameSync(this.flushingPath, this.options.cachePath);
+  }
+
+  private refreshPendingState(fallbackOldestPendingAt: number | null = null): void {
+    const cached = readJsonLines(this.options.cachePath, decodeCachedTradeRecord);
+    this.pendingCount = cached.length;
+    this.oldestPendingAt = getOldestQueuedAt(cached) ?? fallbackOldestPendingAt;
+    if (this.pendingCount > 0 && this.oldestPendingAt == null) {
+      this.oldestPendingAt = Date.now() - this.options.flushIntervalMs;
+    }
+    this.capacityWarningEmitted = this.pendingCount > this.options.maxPendingRows;
+  }
+
+  private scheduleNextFlush(notBefore?: number): void {
+    if (this.disposed || this.flushPromise != null) return;
+    if (this.timer != null) clearTimeout(this.timer);
+
+    const pendingDueAt =
+      this.oldestPendingAt == null
+        ? Number.POSITIVE_INFINITY
+        : this.oldestPendingAt + this.options.flushIntervalMs;
+    const dueAt = Math.max(notBefore ?? 0, Math.min(pendingDueAt, this.maintenanceDueAt));
+    const delay = Math.max(0, dueAt - Date.now());
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.flush().catch((err: unknown) => {
+        this.log.warn(
+          { err: String(err), pending: this.pendingCount },
+          'deferred trade flush failed',
+        );
+      });
+    }, delay);
+    this.timer.unref?.();
+  }
+
+  private retryDelayMs(): number {
+    return Math.min(this.options.flushIntervalMs, MAX_RETRY_DELAY_MS);
   }
 }
 
@@ -185,29 +264,33 @@ function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown
   appendFileSync(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
 }
 
-function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
-  ensureCacheDir(path);
-  if (rows.length === 0) {
-    if (existsSync(path)) unlinkSync(path);
-    return;
-  }
-  writeFileSync(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
-}
-
-function countCachedRows(path: string): number {
-  if (!existsSync(path)) return 0;
-  return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').length;
-}
-
-function decodeTradeRecord(value: unknown): PersistedTradeRecord {
+function decodeCachedTradeRecord(value: unknown): CachedTradeRecord {
   const row = value as SerializedTradeRecord;
-  return { ...row, tradeTs: new Date(row.tradeTs), ingestedAt: new Date(row.ingestedAt) };
+  const { _queuedAt, ...record } = row;
+  return {
+    record: {
+      ...record,
+      tradeTs: new Date(record.tradeTs),
+      ingestedAt: new Date(record.ingestedAt),
+    },
+    queuedAt: typeof _queuedAt === 'number' && Number.isFinite(_queuedAt) ? _queuedAt : null,
+  };
 }
 
-function encodeTradeRecord(row: PersistedTradeRecord): SerializedTradeRecord {
+function encodeTradeRecord(row: PersistedTradeRecord, queuedAt: number): SerializedTradeRecord {
   return {
     ...row,
     tradeTs: row.tradeTs.toISOString(),
     ingestedAt: row.ingestedAt.toISOString(),
+    _queuedAt: queuedAt,
   };
+}
+
+function getOldestQueuedAt(rows: CachedTradeRecord[]): number | null {
+  let oldest: number | null = null;
+  for (const row of rows) {
+    if (row.queuedAt == null) return null;
+    if (oldest == null || row.queuedAt < oldest) oldest = row.queuedAt;
+  }
+  return oldest;
 }

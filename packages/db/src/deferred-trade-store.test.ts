@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DeferredTradeStore } from './deferred-trade-store.js';
 import type {
@@ -28,6 +28,7 @@ function tempPath(file: string): string {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
   dirs = [];
 });
@@ -195,5 +196,57 @@ describe('DeferredTradeStore', () => {
     expect(delegate.writes[0]?.[0]?.tradeUid).toBe('deribit:failed');
     expect(existsSync(cachePath)).toBe(false);
     await store.dispose();
+  });
+
+  it('retains every row after the spool warning threshold is exceeded', async () => {
+    const cachePath = tempPath('threshold.ndjson');
+    const delegate = new FakeTradeStore();
+    const warn = vi.fn();
+    const store = new DeferredTradeStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 2 },
+      { warn },
+    );
+    const rows = [
+      trade({ tradeUid: 'deribit:threshold-1' }),
+      trade({ tradeUid: 'deribit:threshold-2' }),
+      trade({ tradeUid: 'deribit:threshold-3' }),
+    ];
+
+    await store.writeMany(rows);
+    await store.flush();
+
+    expect(delegate.writes.flat()).toEqual(rows);
+    expect(warn).toHaveBeenCalledOnce();
+    await store.dispose();
+  });
+
+  it('preserves the oldest row flush deadline across restart', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const cachePath = tempPath('deadline.ndjson');
+    const intervalMs = 1_000;
+    const first = new DeferredTradeStore(
+      new FakeTradeStore(),
+      { cachePath, flushIntervalMs: intervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await first.writeMany([trade({ tradeUid: 'deribit:deadline' })]);
+    await first.dispose();
+
+    vi.setSystemTime(900);
+    const delegate = new FakeTradeStore();
+    const restarted = new DeferredTradeStore(
+      delegate,
+      { cachePath, flushIntervalMs: intervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(delegate.writes).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(delegate.writes.flat().map((row) => row.tradeUid)).toEqual(['deribit:deadline']);
+    await restarted.dispose();
   });
 });

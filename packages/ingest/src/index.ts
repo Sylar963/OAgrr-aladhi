@@ -2,28 +2,28 @@ import { setDefaultResultOrder } from 'node:dns';
 
 setDefaultResultOrder('ipv4first');
 
-import { config as loadEnv } from 'dotenv';
 import {
+  type BlockTradeEvent,
   BlockTradeRuntime,
-  IndexPriceRuntime,
-  SpotRuntime,
-  TradeRuntime,
   buildBlockTradeUid,
   buildLiveTradeUid,
   computeBlockTradeAmounts,
   computeLiveTradeAmounts,
+  IndexPriceRuntime,
   parseTradeInstrument,
-  type BlockTradeEvent,
+  SpotRuntime,
   type TradeEvent,
+  TradeRuntime,
 } from '@oggregator/core';
 import {
   DeferredTradeStore,
   NoopTradeStore,
-  PostgresTradeStore,
   type PersistedTradeLeg,
   type PersistedTradeRecord,
+  PostgresTradeStore,
   type TradeStore,
 } from '@oggregator/db';
+import { config as loadEnv } from 'dotenv';
 import pino from 'pino';
 
 loadEnv();
@@ -100,10 +100,10 @@ const SPOT_SYMBOLS = [
 ] as const;
 const FLUSH_INTERVAL_MS = 250;
 const FLUSH_BATCH_SIZE = 250;
-const MAX_PENDING_RECORDS = 10_000;
+const PENDING_RECORDS_WARNING_THRESHOLD = 10_000;
 const MAX_FLUSH_BACKOFF_MS = 30_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
-const DEFAULT_TRADE_RETENTION_DAYS = 3;
+const DEFAULT_TRADE_RETENTION_DAYS = 0;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS = DAY_MS;
 const DEFAULT_TRADE_CACHE_MAX_ROWS = 5_000_000;
@@ -131,7 +131,10 @@ async function main(): Promise<void> {
     try {
       await pruneTradeHistory(tradeStore, retentionDays, 'startup');
     } catch (error) {
-      log.warn({ err: stringifyError(error), retentionDays }, 'trade history prune failed at startup');
+      log.warn(
+        { err: stringifyError(error), retentionDays },
+        'trade history prune failed at startup',
+      );
     }
   }
 
@@ -227,10 +230,10 @@ async function main(): Promise<void> {
       clearInterval(opsTimer);
       if (partitionTimer != null) clearInterval(partitionTimer);
       if (retentionTimer != null) clearInterval(retentionTimer);
-      writer.dispose();
-      await writer.flushAll();
       tradeRuntime.dispose();
       blockTradeRuntime.dispose();
+      writer.dispose();
+      await writer.flushAll();
       spotRuntime.dispose();
       indexPriceRuntime.dispose();
       await tradeStore.dispose();
@@ -252,14 +255,14 @@ async function main(): Promise<void> {
 class BufferedTradeWriter {
   private queue: PersistedTradeRecord[] = [];
   private flushTimer: ReturnType<typeof setInterval>;
-  private flushing = false;
+  private flushPromise: Promise<void> | null = null;
   private consecutiveFailures = 0;
   private nextFlushAt = 0;
   private lastFlushAt: number | null = null;
   private lastFlushCount = 0;
   private lastFlushError: string | null = null;
-  private lastDropAt: number | null = null;
-  private totalDropped = 0;
+  private lastQueueWarningAt: number | null = null;
+  private queueWarningActive = false;
   private totalWriteFailures = 0;
   private totalWritten = 0;
 
@@ -275,21 +278,19 @@ class BufferedTradeWriter {
   push(record: PersistedTradeRecord): void {
     this.queue.push(record);
 
-    if (this.queue.length > MAX_PENDING_RECORDS) {
-      const dropped = this.queue.splice(0, this.queue.length - MAX_PENDING_RECORDS);
-      this.totalDropped += dropped.length;
-      this.lastDropAt = Date.now();
+    if (this.queue.length > PENDING_RECORDS_WARNING_THRESHOLD && !this.queueWarningActive) {
+      this.queueWarningActive = true;
+      this.lastQueueWarningAt = Date.now();
       const details = {
-        dropped: dropped.length,
         queued: this.queue.length,
-        totalDropped: this.totalDropped,
+        warningThreshold: PENDING_RECORDS_WARNING_THRESHOLD,
         lastFlushError: this.lastFlushError,
       };
-      log.error(details, 'trade queue overflow, dropping oldest records');
+      log.error(details, 'trade queue exceeded warning threshold; retaining all records');
       void this.alerts.send(
         'trade_queue_overflow',
         'error',
-        'Trade ingest is dropping live records because persistence cannot keep up',
+        'Trade ingest queue is growing because persistence cannot keep up',
         details,
       );
     }
@@ -299,70 +300,81 @@ class BufferedTradeWriter {
     }
   }
 
-  async flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0 || Date.now() < this.nextFlushAt) return;
+  async flush(force = false): Promise<void> {
+    if (this.flushPromise != null) return this.flushPromise;
+    if (this.queue.length === 0 || (!force && Date.now() < this.nextFlushAt)) return;
 
-    this.flushing = true;
     const batch = this.queue.splice(0, FLUSH_BATCH_SIZE);
-
-    try {
-      await this.tradeStore.writeMany(batch);
-      const recoveredAfterFailures = this.consecutiveFailures > 0;
-      this.consecutiveFailures = 0;
-      this.nextFlushAt = 0;
-      this.lastFlushAt = Date.now();
-      this.lastFlushCount = batch.length;
-      this.lastFlushError = null;
-      this.totalWritten += batch.length;
-      if (recoveredAfterFailures) {
+    const flushPromise = (async () => {
+      try {
+        await this.tradeStore.writeMany(batch);
+        const recoveredAfterFailures = this.consecutiveFailures > 0;
+        this.consecutiveFailures = 0;
+        this.nextFlushAt = 0;
+        this.lastFlushAt = Date.now();
+        this.lastFlushCount = batch.length;
+        this.lastFlushError = null;
+        this.totalWritten += batch.length;
+        if (this.queue.length <= PENDING_RECORDS_WARNING_THRESHOLD) this.queueWarningActive = false;
+        if (recoveredAfterFailures) {
+          const details = {
+            written: batch.length,
+            queued: this.queue.length,
+            totalWritten: this.totalWritten,
+          };
+          log.info(details, 'trade persistence recovered');
+          void this.alerts.send(
+            'trade_store_recovered',
+            'info',
+            'Trade persistence recovered after prior write failures',
+            details,
+          );
+        }
+      } catch (error) {
+        this.consecutiveFailures += 1;
+        this.totalWriteFailures += 1;
+        this.queue.unshift(...batch);
+        const backoffMs = Math.min(
+          1_000 * 2 ** (this.consecutiveFailures - 1),
+          MAX_FLUSH_BACKOFF_MS,
+        );
+        this.nextFlushAt = Date.now() + backoffMs;
+        const err = stringifyError(error);
+        this.lastFlushError = err;
         const details = {
-          written: batch.length,
+          err,
+          count: batch.length,
           queued: this.queue.length,
-          totalWritten: this.totalWritten,
+          backoffMs,
+          consecutiveFailures: this.consecutiveFailures,
+          totalWriteFailures: this.totalWriteFailures,
+          storageQuotaExceeded: isStorageQuotaError(error),
         };
-        log.info(details, 'trade persistence recovered');
+        log.error(details, 'trade batch write failed');
         void this.alerts.send(
-          'trade_store_recovered',
-          'info',
-          'Trade persistence recovered after prior write failures',
+          'trade_store_write_failed',
+          'error',
+          details.storageQuotaExceeded
+            ? 'Trade persistence stopped because the database storage quota is full'
+            : 'Trade persistence write failed',
           details,
         );
       }
-    } catch (error) {
-      this.consecutiveFailures += 1;
-      this.totalWriteFailures += 1;
-      this.queue.unshift(...batch);
-      const backoffMs = Math.min(1_000 * 2 ** (this.consecutiveFailures - 1), MAX_FLUSH_BACKOFF_MS);
-      this.nextFlushAt = Date.now() + backoffMs;
-      const err = stringifyError(error);
-      this.lastFlushError = err;
-      const details = {
-        err,
-        count: batch.length,
-        queued: this.queue.length,
-        backoffMs,
-        consecutiveFailures: this.consecutiveFailures,
-        totalWriteFailures: this.totalWriteFailures,
-        storageQuotaExceeded: isStorageQuotaError(error),
-      };
-      log.error(details, 'trade batch write failed');
-      void this.alerts.send(
-        'trade_store_write_failed',
-        'error',
-        details.storageQuotaExceeded
-          ? 'Trade persistence stopped because the database storage quota is full'
-          : 'Trade persistence write failed',
-        details,
-      );
+    })();
+    this.flushPromise = flushPromise;
+
+    try {
+      await flushPromise;
     } finally {
-      this.flushing = false;
+      if (this.flushPromise === flushPromise) this.flushPromise = null;
     }
   }
 
   async flushAll(): Promise<void> {
+    if (this.flushPromise != null) await this.flushPromise;
     while (this.queue.length > 0) {
       const queuedBeforeFlush = this.queue.length;
-      await this.flush();
+      await this.flush(true);
       if (this.queue.length >= queuedBeforeFlush) {
         break;
       }
@@ -372,14 +384,13 @@ class BufferedTradeWriter {
   getStats() {
     return {
       queued: this.queue.length,
-      flushing: this.flushing,
+      flushing: this.flushPromise != null,
       consecutiveFailures: this.consecutiveFailures,
       nextFlushAt: this.nextFlushAt || null,
       lastFlushAt: this.lastFlushAt,
       lastFlushCount: this.lastFlushCount,
       lastFlushError: this.lastFlushError,
-      lastDropAt: this.lastDropAt,
-      totalDropped: this.totalDropped,
+      lastQueueWarningAt: this.lastQueueWarningAt,
       totalWriteFailures: this.totalWriteFailures,
       totalWritten: this.totalWritten,
     };
@@ -539,7 +550,11 @@ function parseNonNegativeMs(value: string | undefined, fallback: number, envName
   return parsed;
 }
 
-function parsePositiveInteger(value: string | undefined, fallback: number, envName: string): number {
+function parsePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+  envName: string,
+): number {
   if (value == null || value.trim() === '') return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {

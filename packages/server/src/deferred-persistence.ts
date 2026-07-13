@@ -22,9 +22,12 @@ import type {
   PersistedOiSnapshot,
   PersistedRegimeModel,
   PersistedRegimeObservation,
+  PersistedShortStraddleSnapshot,
   RegimeObservationLoadQuery,
   RegimeStore,
+  ShortStraddleSnapshotStore,
 } from '@oggregator/db';
+import { z } from 'zod';
 
 interface DeferredPersistenceOptions {
   flushIntervalMs: number;
@@ -40,6 +43,12 @@ interface DeferredRegimePersistenceOptions {
   modelsCachePath: string;
   maxPendingRows: number;
   flushOnDispose?: boolean;
+}
+
+interface DeferredShortStraddlePersistenceOptions {
+  flushIntervalMs: number;
+  cachePath?: string;
+  maxPendingRows?: number;
 }
 
 interface SerializedOiSnapshot extends Omit<PersistedOiSnapshot, 'snapshotTs'> {
@@ -62,10 +71,68 @@ interface SerializedRegimeModel extends Omit<PersistedRegimeModel, 'fittedAt'> {
   fittedAt: string;
 }
 
+interface SerializedShortStraddleSnapshot
+  extends Omit<
+    PersistedShortStraddleSnapshot,
+    'sampleSlotTs' | 'capturedAt' | 'expiryTs' | 'callQuoteTs' | 'putQuoteTs'
+  > {
+  sampleSlotTs: string;
+  capturedAt: string;
+  expiryTs: string;
+  callQuoteTs: string;
+  putQuoteTs: string;
+}
+
 type DeferredLog = { warn: (obj: object, msg: string) => void };
 
 const IO_CHUNK_BYTES = 64 * 1024;
 const WRITE_BUFFER_CHARACTERS = 1024 * 1024;
+const DEFAULT_SHORT_STRADDLE_CACHE_PATH = '.cache/short-straddle-snapshots.ndjson';
+const DEFAULT_SHORT_STRADDLE_MAX_PENDING_ROWS = 100_000;
+const FiniteNumberSchema = z.number().finite();
+const IsoDateSchema = z
+  .string()
+  .refine((value) => {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.toISOString() === value;
+  })
+  .transform((value) => new Date(value));
+
+const ShortStraddleSnapshotSchema = z
+  .object({
+    venue: z.string().min(1),
+    underlying: z.string().min(1),
+    sampleSlotTs: IsoDateSchema,
+    capturedAt: IsoDateSchema,
+    expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    expiryTs: IsoDateSchema,
+    strike: FiniteNumberSchema,
+    spotPriceUsd: FiniteNumberSchema,
+    forwardPriceUsd: FiniteNumberSchema,
+    callBidUsd: FiniteNumberSchema,
+    callAskUsd: FiniteNumberSchema,
+    callBidSize: FiniteNumberSchema,
+    callAskSize: FiniteNumberSchema,
+    callMarkIv: FiniteNumberSchema,
+    callDelta: FiniteNumberSchema,
+    callVega: FiniteNumberSchema,
+    callOpenInterest: FiniteNumberSchema,
+    callMakerFeeUsd: FiniteNumberSchema,
+    callTakerFeeUsd: FiniteNumberSchema,
+    callQuoteTs: IsoDateSchema,
+    putBidUsd: FiniteNumberSchema,
+    putAskUsd: FiniteNumberSchema,
+    putBidSize: FiniteNumberSchema,
+    putAskSize: FiniteNumberSchema,
+    putMarkIv: FiniteNumberSchema,
+    putDelta: FiniteNumberSchema,
+    putVega: FiniteNumberSchema,
+    putOpenInterest: FiniteNumberSchema,
+    putMakerFeeUsd: FiniteNumberSchema,
+    putTakerFeeUsd: FiniteNumberSchema,
+    putQuoteTs: IsoDateSchema,
+  })
+  .strict();
 
 function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -213,6 +280,23 @@ function decodeRegimeModel(value: unknown): PersistedRegimeModel {
 
 function encodeRegimeModel(row: PersistedRegimeModel): SerializedRegimeModel {
   return { ...row, fittedAt: row.fittedAt.toISOString() };
+}
+
+function decodeShortStraddleSnapshot(value: unknown): PersistedShortStraddleSnapshot {
+  return ShortStraddleSnapshotSchema.parse(value);
+}
+
+function encodeShortStraddleSnapshot(
+  row: PersistedShortStraddleSnapshot,
+): SerializedShortStraddleSnapshot {
+  return {
+    ...row,
+    sampleSlotTs: row.sampleSlotTs.toISOString(),
+    capturedAt: row.capturedAt.toISOString(),
+    expiryTs: row.expiryTs.toISOString(),
+    callQuoteTs: row.callQuoteTs.toISOString(),
+    putQuoteTs: row.putQuoteTs.toISOString(),
+  };
 }
 
 function fileSize(path: string): number {
@@ -507,6 +591,90 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     clearInterval(this.timer);
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
+  }
+}
+
+export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshotStore {
+  readonly enabled: boolean;
+  private readonly cachePath: string;
+  private readonly maxPendingRows: number;
+  private pending: PersistedShortStraddleSnapshot[];
+  private flushPromise: Promise<void> | null = null;
+  private warned = false;
+  private readonly timer: ReturnType<typeof setInterval> | null;
+
+  constructor(
+    private readonly delegate: ShortStraddleSnapshotStore,
+    options: DeferredShortStraddlePersistenceOptions,
+    private readonly log: DeferredLog,
+  ) {
+    this.enabled = delegate.enabled;
+    this.cachePath = options.cachePath ?? DEFAULT_SHORT_STRADDLE_CACHE_PATH;
+    this.maxPendingRows = options.maxPendingRows ?? DEFAULT_SHORT_STRADDLE_MAX_PENDING_ROWS;
+    this.pending = readJsonLines(this.cachePath, decodeShortStraddleSnapshot);
+    this.timer =
+      options.flushIntervalMs > 0
+        ? setInterval(() => {
+            void this.flush().catch((err: unknown) => {
+              this.log.warn(
+                { err: String(err), pending: this.pending.length },
+                'deferred short-straddle snapshot flush failed',
+              );
+            });
+          }, options.flushIntervalMs)
+        : null;
+    this.timer?.unref?.();
+    this.warnIfOverThreshold();
+  }
+
+  async writeMany(rows: PersistedShortStraddleSnapshot[]): Promise<void> {
+    if (rows.length === 0) return;
+    appendJsonLines(this.cachePath, rows, encodeShortStraddleSnapshot);
+    this.pending.push(...rows);
+    this.warnIfOverThreshold();
+  }
+
+  async flush(): Promise<void> {
+    if (this.flushPromise != null) return this.flushPromise;
+    if (this.pending.length === 0) return;
+
+    const batchSize = this.pending.length;
+    const batch = this.pending.slice(0, batchSize);
+    const flushPromise = this.flushBatch(batch, batchSize);
+    this.flushPromise = flushPromise;
+    try {
+      await flushPromise;
+    } finally {
+      if (this.flushPromise === flushPromise) this.flushPromise = null;
+    }
+  }
+
+  async dispose(): Promise<void> {
+    if (this.timer != null) clearInterval(this.timer);
+    try {
+      if (this.flushPromise != null) await this.flushPromise;
+    } finally {
+      await this.delegate.dispose();
+    }
+  }
+
+  private async flushBatch(
+    batch: PersistedShortStraddleSnapshot[],
+    batchSize: number,
+  ): Promise<void> {
+    await this.delegate.writeMany(batch);
+    this.pending = this.pending.slice(batchSize);
+    rewriteJsonLines(this.cachePath, this.pending, encodeShortStraddleSnapshot);
+    if (this.pending.length <= this.maxPendingRows) this.warned = false;
+  }
+
+  private warnIfOverThreshold(): void {
+    if (this.warned || this.pending.length <= this.maxPendingRows) return;
+    this.warned = true;
+    this.log.warn(
+      { pending: this.pending.length, threshold: this.maxPendingRows },
+      'short-straddle snapshot cache exceeds warning threshold',
+    );
   }
 }
 

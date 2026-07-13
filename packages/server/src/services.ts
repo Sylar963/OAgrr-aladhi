@@ -35,8 +35,10 @@ import {
   PostgresLeadsStore,
   PostgresOiSnapshotStore,
   PostgresRegimeStore,
+  PostgresShortStraddleSnapshotStore,
   PostgresTradeStore,
   type RegimeStore,
+  type ShortStraddleSnapshotStore,
   type TradeStore,
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
@@ -47,9 +49,11 @@ import {
   DeferredIvHistoryStore,
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
+  DeferredShortStraddleSnapshotStore,
 } from './deferred-persistence.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
+import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
@@ -111,6 +115,22 @@ const regimeObservationsCacheMaxRows = parsePositiveInteger(
   'REGIME_OBSERVATIONS_CACHE_MAX_ROWS',
 );
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(process.env['IV_HISTORY_SIZE_WARN_BYTES']);
+const shortStraddleSnapshotsEnabled = parseBoolean(process.env['SHORT_STRADDLE_SNAPSHOTS_ENABLED']);
+const shortStraddleQuoteMaxAgeMs = parseNonNegativeMs(
+  process.env['SHORT_STRADDLE_QUOTE_MAX_AGE_MS'],
+  60_000,
+  'SHORT_STRADDLE_QUOTE_MAX_AGE_MS',
+);
+export const shortStraddleSnapshotStore: ShortStraddleSnapshotStore | null =
+  shortStraddleSnapshotsEnabled && databaseUrl
+    ? createShortStraddleSnapshotStore(databaseUrl)
+    : null;
+export const shortStraddleSnapshotService = shortStraddleSnapshotStore
+  ? new ShortStraddleSnapshotService(shortStraddleSnapshotStore, {
+      quoteMaxAgeMs: shortStraddleQuoteMaxAgeMs,
+    })
+  : null;
+let shortStraddleLog: { warn: (obj: object, msg: string) => void } = console;
 export const ivHistoryStore: IvHistoryStore = databaseUrl
   ? createIvHistoryStore(databaseUrl)
   : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
@@ -119,6 +139,17 @@ export const ivHistoryService = new IvHistoryService({
   store: ivHistoryStore,
   getSurfaceGrid: async (underlying: string) => {
     const entries = await buildIvSurfaceGrid({ underlying });
+    if (underlying.toUpperCase() === 'BTC' && shortStraddleSnapshotService != null) {
+      try {
+        const spotPriceUsd = spotService.getSnapshot('BTC')?.lastPrice ?? Number.NaN;
+        await shortStraddleSnapshotService.collect(entries, spotPriceUsd);
+      } catch (err: unknown) {
+        shortStraddleLog.warn(
+          { err: String(err) },
+          'short-straddle snapshot collector failed during IV history',
+        );
+      }
+    }
     return entries.map((e) => e.surfaceRow);
   },
 });
@@ -166,10 +197,7 @@ export const dealerBookService = new DealerBookService({
     if (tape.length === 0 || tape[0]!.timestamp > fromTs) {
       return { netFlow: 0, hasFlow: false };
     }
-    const buffered = tape
-      .filter(
-        (trade) => trade.timestamp > fromTs && trade.timestamp <= toTs,
-      );
+    const buffered = tape.filter((trade) => trade.timestamp > fromTs && trade.timestamp <= toTs);
     if (buffered.length === 0) return { netFlow: 0, hasFlow: false };
     const net = buffered.reduce((acc, t) => acc + (t.side === 'buy' ? t.size : -t.size), 0);
     return { netFlow: net, hasFlow: true };
@@ -341,6 +369,11 @@ function loadIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
 
 export async function bootstrapServices(log: FastifyBaseLogger) {
   const start = Date.now();
+  shortStraddleLog = log;
+  shortStraddleSnapshotService?.setLogger(log);
+  if (shortStraddleSnapshotsEnabled && !databaseUrl) {
+    log.warn({ reason: 'DATABASE_URL missing' }, 'short-straddle snapshot collection disabled');
+  }
 
   // DVOL only exists for BTC and ETH on Deribit — no index for other assets.
   // Flow and spot cover every asset that has options on at least one venue.
@@ -540,6 +573,22 @@ function createRegimeStore(connectionString: string): RegimeStore {
   );
 }
 
+function createShortStraddleSnapshotStore(
+  connectionString: string,
+): DeferredShortStraddleSnapshotStore {
+  const postgres = PostgresShortStraddleSnapshotStore.fromConnectionString(connectionString);
+  return new DeferredShortStraddleSnapshotStore(
+    postgres,
+    {
+      flushIntervalMs: marketDataDbFlushIntervalMs,
+      cachePath:
+        process.env['SHORT_STRADDLE_SNAPSHOT_CACHE_PATH'] ??
+        '.cache/short-straddle-snapshots.ndjson',
+    },
+    console,
+  );
+}
+
 function parseNonNegativeMs(value: string | undefined, fallback: number, envName: string): number {
   if (value == null || value.trim() === '') return fallback;
   const parsed = Number(value);
@@ -590,11 +639,8 @@ function startIvHistoryStorageAlarm(log: FastifyBaseLogger): void {
   };
 
   void check();
-  ivHistoryStorageAlarmTimer = setInterval(
-    () => {
-      void check();
-    },
-    DAY_MS,
-  );
+  ivHistoryStorageAlarmTimer = setInterval(() => {
+    void check();
+  }, DAY_MS);
   ivHistoryStorageAlarmTimer.unref?.();
 }

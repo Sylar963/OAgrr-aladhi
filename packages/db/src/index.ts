@@ -55,6 +55,14 @@ export type {
 } from './regime-store.js';
 export { NoopRegimeStore, PostgresRegimeStore } from './regime-store.js';
 export type {
+  PersistedShortStraddleSnapshot,
+  ShortStraddleSnapshotStore,
+} from './short-straddle-snapshot-store.js';
+export {
+  NoopShortStraddleSnapshotStore,
+  PostgresShortStraddleSnapshotStore,
+} from './short-straddle-snapshot-store.js';
+export type {
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,

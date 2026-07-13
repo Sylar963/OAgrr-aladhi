@@ -27,6 +27,7 @@ import {
   markHistoryBuffer,
   spotCandleService,
   spotService,
+  shortStraddleSnapshotStore,
   tradeStore,
 } from './services.js';
 import { paperTradingStore } from './trading-services.js';
@@ -169,6 +170,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     dvolService.dispose();
     indexPriceService.dispose();
     ivHistoryService.dispose();
+    await shortStraddleSnapshotStore?.dispose();
     disposeFundedSettlementJob();
     disposeServiceStores();
     await disposeChainWarmup();

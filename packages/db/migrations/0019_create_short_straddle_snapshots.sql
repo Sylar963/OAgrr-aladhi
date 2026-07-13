@@ -1,0 +1,37 @@
+CREATE TABLE IF NOT EXISTS short_straddle_snapshots (
+  venue TEXT NOT NULL,
+  underlying TEXT NOT NULL,
+  sample_slot_ts TIMESTAMPTZ NOT NULL,
+  captured_at TIMESTAMPTZ NOT NULL,
+  expiry DATE NOT NULL,
+  expiry_ts TIMESTAMPTZ NOT NULL,
+  strike DOUBLE PRECISION NOT NULL,
+  spot_price_usd DOUBLE PRECISION NOT NULL,
+  forward_price_usd DOUBLE PRECISION NOT NULL,
+
+  call_bid_usd DOUBLE PRECISION NOT NULL,
+  call_ask_usd DOUBLE PRECISION NOT NULL,
+  call_bid_size DOUBLE PRECISION NOT NULL,
+  call_ask_size DOUBLE PRECISION NOT NULL,
+  call_mark_iv DOUBLE PRECISION NOT NULL,
+  call_delta DOUBLE PRECISION NOT NULL,
+  call_vega DOUBLE PRECISION NOT NULL,
+  call_open_interest DOUBLE PRECISION NOT NULL,
+  call_maker_fee_usd DOUBLE PRECISION NOT NULL,
+  call_taker_fee_usd DOUBLE PRECISION NOT NULL,
+  call_quote_ts TIMESTAMPTZ NOT NULL,
+
+  put_bid_usd DOUBLE PRECISION NOT NULL,
+  put_ask_usd DOUBLE PRECISION NOT NULL,
+  put_bid_size DOUBLE PRECISION NOT NULL,
+  put_ask_size DOUBLE PRECISION NOT NULL,
+  put_mark_iv DOUBLE PRECISION NOT NULL,
+  put_delta DOUBLE PRECISION NOT NULL,
+  put_vega DOUBLE PRECISION NOT NULL,
+  put_open_interest DOUBLE PRECISION NOT NULL,
+  put_maker_fee_usd DOUBLE PRECISION NOT NULL,
+  put_taker_fee_usd DOUBLE PRECISION NOT NULL,
+  put_quote_ts TIMESTAMPTZ NOT NULL,
+
+  PRIMARY KEY (venue, underlying, sample_slot_ts)
+);

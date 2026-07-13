@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -12,8 +12,10 @@ import type {
   PersistedOiSnapshot,
   PersistedRegimeModel,
   PersistedRegimeObservation,
+  PersistedShortStraddleSnapshot,
   RegimeObservationLoadQuery,
   RegimeStore,
+  ShortStraddleSnapshotStore,
 } from '@oggregator/db';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -21,6 +23,7 @@ import {
   DeferredIvHistoryStore,
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
+  DeferredShortStraddleSnapshotStore,
 } from './deferred-persistence.js';
 
 const noopLog = { warn: () => {} };
@@ -89,6 +92,40 @@ const regimeModel: PersistedRegimeModel = {
   hmm: { nStates: 3 },
   standardization: { means: [0], stds: [1] },
   stateLabels: ['low-vol', 'mid-vol', 'high-vol'],
+};
+
+const shortStraddleSnapshot: PersistedShortStraddleSnapshot = {
+  venue: 'deribit',
+  underlying: 'BTC',
+  sampleSlotTs: new Date('2026-07-13T10:00:00.000Z'),
+  capturedAt: new Date('2026-07-13T10:05:00.000Z'),
+  expiry: '2026-07-20',
+  expiryTs: new Date('2026-07-20T08:00:00.000Z'),
+  strike: 60_000,
+  spotPriceUsd: 60_100,
+  forwardPriceUsd: 60_200,
+  callBidUsd: 1_000,
+  callAskUsd: 1_020,
+  callBidSize: 2,
+  callAskSize: 3,
+  callMarkIv: 0.5,
+  callDelta: 0.51,
+  callVega: 120,
+  callOpenInterest: 500,
+  callMakerFeeUsd: 2,
+  callTakerFeeUsd: 3,
+  callQuoteTs: new Date('2026-07-13T10:04:55.000Z'),
+  putBidUsd: 900,
+  putAskUsd: 930,
+  putBidSize: 4,
+  putAskSize: 5,
+  putMarkIv: 0.52,
+  putDelta: -0.49,
+  putVega: 121,
+  putOpenInterest: 600,
+  putMakerFeeUsd: 2.1,
+  putTakerFeeUsd: 3.1,
+  putQuoteTs: new Date('2026-07-13T10:04:56.000Z'),
 };
 
 class FakeOiStore implements OiSnapshotStore {
@@ -192,6 +229,24 @@ class FakeRegimeStore implements RegimeStore {
 
   async saveObservation(row: PersistedRegimeObservation): Promise<void> {
     this.observations.push(row);
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+  }
+}
+
+class FakeShortStraddleSnapshotStore implements ShortStraddleSnapshotStore {
+  readonly enabled = true;
+  readonly writes: PersistedShortStraddleSnapshot[][] = [];
+  disposed = false;
+  fail = false;
+  block: Promise<void> | null = null;
+
+  async writeMany(rows: PersistedShortStraddleSnapshot[]): Promise<void> {
+    if (this.fail) throw new Error('database unavailable');
+    if (this.block != null) await this.block;
+    this.writes.push(rows);
   }
 
   async dispose(): Promise<void> {
@@ -337,6 +392,174 @@ describe('DeferredIvHistoryStore', () => {
     await store.flush();
 
     expect(delegate.writes).toEqual([[ivPoint]]);
+    await store.dispose();
+  });
+});
+
+describe('DeferredShortStraddleSnapshotStore', () => {
+  it('rejects invalid records when decoding the local NDJSON boundary', () => {
+    const cachePath = tempPath('short-straddle-invalid.ndjson');
+    writeFileSync(cachePath, `${JSON.stringify({ ...shortStraddleSnapshot, capturedAt: null })}\n`);
+
+    expect(
+      () =>
+        new DeferredShortStraddleSnapshotStore(
+          new FakeShortStraddleSnapshotStore(),
+          { cachePath, flushIntervalMs, maxPendingRows: 100 },
+          noopLog,
+        ),
+    ).toThrow();
+  });
+
+  it('appends locally without calling the database', async () => {
+    const cachePath = tempPath('short-straddle.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+
+    await store.writeMany([shortStraddleSnapshot]);
+
+    expect(delegate.writes).toEqual([]);
+    expect(existsSync(cachePath)).toBe(true);
+    await store.dispose();
+  });
+
+  it('recovers pending snapshots from NDJSON after restart', async () => {
+    const cachePath = tempPath('short-straddle-restart.ndjson');
+    const first = new DeferredShortStraddleSnapshotStore(
+      new FakeShortStraddleSnapshotStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await first.writeMany([shortStraddleSnapshot]);
+    await first.dispose();
+    const delegate = new FakeShortStraddleSnapshotStore();
+    const restarted = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+
+    await restarted.flush();
+
+    expect(delegate.writes).toEqual([[shortStraddleSnapshot]]);
+    expect(existsSync(cachePath)).toBe(false);
+    await restarted.dispose();
+  });
+
+  it('preserves every pending snapshot after a database failure', async () => {
+    const cachePath = tempPath('short-straddle-failure.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    delegate.fail = true;
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([shortStraddleSnapshot]);
+
+    await expect(store.flush()).rejects.toThrow('database unavailable');
+    delegate.fail = false;
+    await store.flush();
+
+    expect(delegate.writes).toEqual([[shortStraddleSnapshot]]);
+    expect(existsSync(cachePath)).toBe(false);
+    await store.dispose();
+  });
+
+  it('keeps writes that arrive during a flush pending', async () => {
+    const cachePath = tempPath('short-straddle-concurrent.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    let release: (() => void) | undefined;
+    delegate.block = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([shortStraddleSnapshot]);
+    const flush = store.flush();
+    const next = {
+      ...shortStraddleSnapshot,
+      sampleSlotTs: new Date('2026-07-13T11:00:00.000Z'),
+      capturedAt: new Date('2026-07-13T11:05:00.000Z'),
+    };
+
+    await store.writeMany([next]);
+    release?.();
+    await flush;
+    delegate.block = null;
+    await store.flush();
+
+    expect(delegate.writes).toEqual([[shortStraddleSnapshot], [next]]);
+    await store.dispose();
+  });
+
+  it('does not force a database flush during shutdown', async () => {
+    const cachePath = tempPath('short-straddle-shutdown.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([shortStraddleSnapshot]);
+
+    await store.dispose();
+
+    expect(delegate.writes).toEqual([]);
+    expect(delegate.disposed).toBe(true);
+    expect(existsSync(cachePath)).toBe(true);
+  });
+
+  it('awaits an active flush before disposing the database store', async () => {
+    const cachePath = tempPath('short-straddle-active-shutdown.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    let release: (() => void) | undefined;
+    delegate.block = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([shortStraddleSnapshot]);
+    void store.flush();
+
+    const dispose = store.dispose();
+    expect(delegate.disposed).toBe(false);
+    release?.();
+    await dispose;
+
+    expect(delegate.writes).toEqual([[shortStraddleSnapshot]]);
+    expect(delegate.disposed).toBe(true);
+  });
+
+  it('warns without truncating rows above the configured threshold', async () => {
+    const cachePath = tempPath('short-straddle-threshold.ndjson');
+    const delegate = new FakeShortStraddleSnapshotStore();
+    const warnings: object[] = [];
+    const store = new DeferredShortStraddleSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 1 },
+      { warn: (obj) => warnings.push(obj) },
+    );
+    const next = {
+      ...shortStraddleSnapshot,
+      sampleSlotTs: new Date('2026-07-13T11:00:00.000Z'),
+    };
+
+    await store.writeMany([shortStraddleSnapshot, next]);
+    await store.flush();
+
+    expect(warnings).toHaveLength(1);
+    expect(delegate.writes).toEqual([[shortStraddleSnapshot, next]]);
     await store.dispose();
   });
 });

@@ -247,6 +247,34 @@ describe('DeferredOiSnapshotStore', () => {
     expect(existsSync(cachePath)).toBe(false);
     await restarted.dispose();
   });
+
+  it('bootstraps a rewritten cache across read and write chunk boundaries', async () => {
+    const cachePath = tempPath('oi-chunked-restart.ndjson');
+    const snapshots = Array.from({ length: 6 }, (_, index) => ({
+      ...oiRow,
+      instrumentName: `BTC-${index}-${'X'.repeat(256 * 1024)}`,
+      snapshotTs: new Date(1_000 + index),
+    }));
+    const first = new DeferredOiSnapshotStore(
+      new FakeOiStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 5 },
+      noopLog,
+    );
+
+    await first.writeMany(snapshots);
+    await first.dispose();
+
+    const delegate = new FakeOiStore();
+    const restarted = new DeferredOiSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 5 },
+      noopLog,
+    );
+    await restarted.flush();
+
+    expect(delegate.writes).toEqual([snapshots.slice(1)]);
+    await restarted.dispose();
+  });
 });
 
 describe('DeferredDealerBookStore', () => {

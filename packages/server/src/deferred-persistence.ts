@@ -1,14 +1,16 @@
 import {
-  appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
-  readFileSync,
+  openSync,
+  readSync,
   renameSync,
   statSync,
   unlinkSync,
-  writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import type {
   DealerBookStore,
   IvHistoryLoadQuery,
@@ -62,23 +64,56 @@ interface SerializedRegimeModel extends Omit<PersistedRegimeModel, 'fittedAt'> {
 
 type DeferredLog = { warn: (obj: object, msg: string) => void };
 
+const IO_CHUNK_BYTES = 64 * 1024;
+const WRITE_BUFFER_CHARACTERS = 1024 * 1024;
+
 function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
 }
 
 function readJsonLines<T>(path: string, decode: (value: unknown) => T): T[] {
   if (!existsSync(path)) return [];
-  const body = readFileSync(path, 'utf8');
-  return body
-    .split('\n')
-    .filter((line) => line.trim() !== '')
-    .map((line) => decode(JSON.parse(line)));
+  const rows: T[] = [];
+  const descriptor = openSync(path, 'r');
+  const buffer = Buffer.allocUnsafe(IO_CHUNK_BYTES);
+  const decoder = new StringDecoder('utf8');
+  let remainder = '';
+
+  try {
+    let bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      const body = remainder + decoder.write(buffer.subarray(0, bytesRead));
+      let lineStart = 0;
+      let newline = body.indexOf('\n', lineStart);
+      while (newline !== -1) {
+        decodeJsonLine(body.slice(lineStart, newline), decode, rows);
+        lineStart = newline + 1;
+        newline = body.indexOf('\n', lineStart);
+      }
+      remainder = body.slice(lineStart);
+      bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    }
+    decodeJsonLine(remainder + decoder.end(), decode, rows);
+  } finally {
+    closeSync(descriptor);
+  }
+
+  return rows;
+}
+
+function decodeJsonLine<T>(line: string, decode: (value: unknown) => T, rows: T[]): void {
+  if (line.trim() !== '') rows.push(decode(JSON.parse(line)));
 }
 
 function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   if (rows.length === 0) return;
   ensureCacheDir(path);
-  appendFileSync(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+  const descriptor = openSync(path, 'a');
+  try {
+    writeJsonLines(descriptor, rows, encode);
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
@@ -87,19 +122,48 @@ function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknow
     if (existsSync(path)) unlinkSync(path);
     return;
   }
-  writeAtomically(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+  writeJsonLinesAtomically(path, rows, encode);
 }
 
 function rewriteOutbox<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
-  const body = rows.map((row) => JSON.stringify(encode(row))).join('\n');
-  writeAtomically(path, rows.length > 0 ? `${body}\n` : '');
+  writeJsonLinesAtomically(path, rows, encode);
 }
 
-function writeAtomically(path: string, body: string): void {
+function writeJsonLinesAtomically<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   ensureCacheDir(path);
   const temporaryPath = `${path}.tmp`;
-  writeFileSync(temporaryPath, body);
+  const descriptor = openSync(temporaryPath, 'w');
+  try {
+    writeJsonLines(descriptor, rows, encode);
+  } finally {
+    closeSync(descriptor);
+  }
   renameSync(temporaryPath, path);
+}
+
+function writeJsonLines<T>(descriptor: number, rows: T[], encode: (row: T) => unknown): void {
+  let body = '';
+  for (const row of rows) {
+    const line = `${JSON.stringify(encode(row))}\n`;
+    if (body.length > 0 && body.length + line.length > WRITE_BUFFER_CHARACTERS) {
+      writeString(descriptor, body);
+      body = '';
+    }
+    if (line.length > WRITE_BUFFER_CHARACTERS) {
+      writeString(descriptor, line);
+    } else {
+      body += line;
+    }
+  }
+  if (body.length > 0) writeString(descriptor, body);
+}
+
+function writeString(descriptor: number, value: string): void {
+  const buffer = Buffer.from(value);
+  let offset = 0;
+  while (offset < buffer.length) {
+    offset += writeSync(descriptor, buffer, offset, buffer.length - offset);
+  }
 }
 
 function decodeOiSnapshot(value: unknown): PersistedOiSnapshot {
@@ -547,10 +611,7 @@ export class DeferredRegimeStore implements RegimeStore {
   }
 
   async flush(): Promise<void> {
-    if (
-      this.flushing ||
-      (this.pendingObservations.length === 0 && this.pendingModels.size === 0)
-    ) {
+    if (this.flushing || (this.pendingObservations.length === 0 && this.pendingModels.size === 0)) {
       return;
     }
     this.flushing = true;
@@ -579,11 +640,7 @@ export class DeferredRegimeStore implements RegimeStore {
   }
 
   private rewritePending(): void {
-    rewriteOutbox(
-      this.pendingObservationsPath,
-      this.pendingObservations,
-      encodeRegimeObservation,
-    );
+    rewriteOutbox(this.pendingObservationsPath, this.pendingObservations, encodeRegimeObservation);
     rewriteOutbox(this.pendingModelsPath, [...this.pendingModels.values()], encodeRegimeModel);
   }
 }

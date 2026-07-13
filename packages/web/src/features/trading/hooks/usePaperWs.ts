@@ -1,6 +1,6 @@
 import { getClerkToken } from '@lib/clerk-token';
 import { wsUrl } from '@lib/http';
-import type { PaperWsServerMessage } from '@oggregator/protocol';
+import type { PaperOverviewDto, PaperWsServerMessage } from '@oggregator/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
@@ -16,7 +16,6 @@ export function usePaperWs(accountScope?: string | null, enabled = true): PaperC
   const qc = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTradeRefreshRef = useRef(0);
   const retryCountRef = useRef(0);
   const [state, setState] = useState<PaperConnectionState>('closed');
 
@@ -58,12 +57,9 @@ export function usePaperWs(accountScope?: string | null, enabled = true): PaperC
             break;
           case 'pnl':
             qc.setQueryData(QKEY.pnl, message.pnl);
-            qc.invalidateQueries({ queryKey: QKEY.overview });
-            if (Date.now() - lastTradeRefreshRef.current >= 5_000) {
-              lastTradeRefreshRef.current = Date.now();
-              qc.invalidateQueries({ queryKey: QKEY.trades });
-              qc.invalidateQueries({ queryKey: QKEY.trade });
-            }
+            qc.setQueryData<PaperOverviewDto>(QKEY.overview, (current) =>
+              current == null ? current : { ...current, pnl: message.pnl },
+            );
             break;
           case 'order':
             qc.invalidateQueries({ queryKey: QKEY.orders });

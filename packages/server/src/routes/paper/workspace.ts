@@ -933,7 +933,7 @@ async function persistSettlementFill(
   });
 
   paperEvents.emitOrder(orderToDto({ ...order, status: 'filled' }), [fillToDto(fill)]);
-  paperEvents.emitActivity(activityToDto(activity));
+  paperEvents.emitActivity(accountId, activityToDto(activity));
   if (tradeId) {
     try {
       const detail = await getTradeDetailOrThrow(tradeId, accountId);

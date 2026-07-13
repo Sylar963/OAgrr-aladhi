@@ -276,6 +276,8 @@ describe('DeferredDealerBookStore', () => {
 
     expect(delegate.upserts).toHaveLength(1);
     expect(existsSync(cachePath)).toBe(true);
+    await restarted.flush();
+    expect(delegate.upserts).toHaveLength(1);
     await restarted.dispose();
   });
 });
@@ -303,6 +305,10 @@ describe('DeferredIvHistoryStore', () => {
 
     expect(delegate.writes).toEqual([[ivPoint]]);
     expect(existsSync(cachePath)).toBe(true);
+
+    await store.flush();
+
+    expect(delegate.writes).toEqual([[ivPoint]]);
     await store.dispose();
   });
 });
@@ -334,6 +340,11 @@ describe('DeferredRegimeStore', () => {
     expect(delegate.models).toEqual([regimeModel]);
     expect(existsSync(observationsCachePath)).toBe(true);
     expect(existsSync(modelsCachePath)).toBe(true);
+
+    await store.flush();
+
+    expect(delegate.observations).toEqual([regimeObservation]);
+    expect(delegate.models).toEqual([regimeModel]);
     await store.dispose();
   });
 });

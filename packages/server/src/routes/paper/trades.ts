@@ -80,7 +80,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
     paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
     paperEvents.emitTrade(result.trade);
     if (result.trade.activity[0]) {
-      paperEvents.emitActivity(result.trade.activity[0]);
+      paperEvents.emitActivity(accountId, result.trade.activity[0]);
     }
     return {
       trade: result.trade,
@@ -105,7 +105,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
       const trade = await addTradeNote(req.params.tradeId, parsed.data, accountId);
       paperEvents.emitTrade(trade);
       if (trade.activity[0]) {
-        paperEvents.emitActivity(trade.activity[0]);
+        paperEvents.emitActivity(accountId, trade.activity[0]);
       }
       return trade;
     } catch (err) {
@@ -129,7 +129,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
       paperEvents.emitTrade(result.trade);
       if (result.trade.activity[0]) {
-        paperEvents.emitActivity(result.trade.activity[0]);
+        paperEvents.emitActivity(accountId, result.trade.activity[0]);
       }
       return result.trade;
     } catch (err) {
@@ -160,7 +160,7 @@ export async function paperTradesRoute(app: FastifyInstance) {
       paperEvents.emitOrder(orderToDto(result.order), result.fills.map(fillToDto));
       paperEvents.emitTrade(result.trade);
       if (result.trade.activity[0]) {
-        paperEvents.emitActivity(result.trade.activity[0]);
+        paperEvents.emitActivity(accountId, result.trade.activity[0]);
       }
       return result.trade;
     } catch (err) {

@@ -2,23 +2,19 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 
-const { storeMock, getUserByTokenMock } = vi.hoisted(() => ({
+const { storeMock, getUserByTokenMock, listPositionsMock, getCashBalanceMock } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
   getUserByTokenMock: vi.fn(),
+  listPositionsMock: vi.fn().mockResolvedValue([]),
+  getCashBalanceMock: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
-  pnlService: {
-    snapshot: vi.fn().mockResolvedValue({
-      cashUsd: 0,
-      realizedUsd: 0,
-      unrealizedUsd: 0,
-      equityUsd: 0,
-      totalReturnPct: 0,
-    }),
+  positionRepository: {
+    listPositions: listPositionsMock,
+    getCashBalance: getCashBalanceMock,
   },
-  positionRepository: { listPositions: vi.fn().mockResolvedValue([]) },
   quoteProvider: { getMark: vi.fn().mockResolvedValue(null) },
 }));
 
@@ -64,6 +60,8 @@ describe('WS /ws/paper auth gate', () => {
   beforeEach(() => {
     storeMock.enabled = false;
     getUserByTokenMock.mockReset();
+    listPositionsMock.mockClear();
+    getCashBalanceMock.mockClear();
   });
 
   it('closes the connection without a hello when anonymous and persistence is enabled', async () => {
@@ -105,5 +103,25 @@ describe('WS /ws/paper auth gate', () => {
     expect(ws.readyState).not.toBe(WS_CLOSED);
     expect(getUserByTokenMock).not.toHaveBeenCalled();
     ws.terminate();
+  });
+
+  it('reuses cached account state for periodic snapshots', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const ws = await app.injectWS('/ws/paper');
+
+    try {
+      await vi.waitFor(() => {
+        expect(listPositionsMock).toHaveBeenCalledOnce();
+        expect(getCashBalanceMock).toHaveBeenCalledOnce();
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(listPositionsMock).toHaveBeenCalledOnce();
+      expect(getCashBalanceMock).toHaveBeenCalledOnce();
+    } finally {
+      ws.terminate();
+      vi.useRealTimers();
+    }
   });
 });

@@ -37,7 +37,6 @@ export function usePositions() {
   return useQuery({
     queryKey: QKEY.positions,
     queryFn: getPositions,
-    refetchInterval: 5_000,
   });
 }
 
@@ -52,7 +51,6 @@ export function usePnl() {
   return useQuery({
     queryKey: QKEY.pnl,
     queryFn: getPnl,
-    refetchInterval: 5_000,
   });
 }
 
@@ -60,7 +58,6 @@ export function useOrders(limit = 50) {
   return useQuery({
     queryKey: [...QKEY.orders, limit],
     queryFn: () => getOrders(limit),
-    refetchInterval: 10_000,
   });
 }
 
@@ -68,7 +65,6 @@ export function useOverview() {
   return useQuery({
     queryKey: QKEY.overview,
     queryFn: getOverview,
-    refetchInterval: 15_000,
   });
 }
 
@@ -76,7 +72,6 @@ export function useTrades(status: 'open' | 'closed' | 'all' = 'all', limit = 100
   return useQuery({
     queryKey: [...QKEY.trades, status, limit],
     queryFn: () => getTrades(status, limit),
-    refetchInterval: 15_000,
   });
 }
 
@@ -85,7 +80,6 @@ export function useTrade(tradeId: string | null) {
     queryKey: [...QKEY.trade, tradeId],
     queryFn: () => getTrade(tradeId!),
     enabled: tradeId != null,
-    refetchInterval: 15_000,
   });
 }
 
@@ -93,7 +87,6 @@ export function useActivity(limit = 100, tradeId?: string) {
   return useQuery({
     queryKey: [...QKEY.activity, limit, tradeId ?? 'all'],
     queryFn: () => getActivity(limit, tradeId),
-    refetchInterval: 15_000,
   });
 }
 
@@ -101,7 +94,6 @@ export function useFills(limit = 100, tradeId?: string) {
   return useQuery({
     queryKey: [...QKEY.fills, limit, tradeId ?? 'all'],
     queryFn: () => getFills(limit, tradeId),
-    refetchInterval: 15_000,
   });
 }
 

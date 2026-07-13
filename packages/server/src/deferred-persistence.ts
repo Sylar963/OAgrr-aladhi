@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -86,7 +87,19 @@ function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknow
     if (existsSync(path)) unlinkSync(path);
     return;
   }
-  writeFileSync(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+  writeAtomically(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+}
+
+function rewriteOutbox<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
+  const body = rows.map((row) => JSON.stringify(encode(row))).join('\n');
+  writeAtomically(path, rows.length > 0 ? `${body}\n` : '');
+}
+
+function writeAtomically(path: string, body: string): void {
+  ensureCacheDir(path);
+  const temporaryPath = `${path}.tmp`;
+  writeFileSync(temporaryPath, body);
+  renameSync(temporaryPath, path);
 }
 
 function decodeOiSnapshot(value: unknown): PersistedOiSnapshot {
@@ -227,7 +240,9 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
 
 export class DeferredDealerBookStore implements DealerBookStore {
   readonly enabled: boolean;
+  private readonly cache: Map<string, PersistedDealerPosition>;
   private pending: Map<string, PersistedDealerPosition>;
+  private readonly pendingPath: string;
   private pruneBeforeExpiry: string | null = null;
   private flushing = false;
   private readonly timer: ReturnType<typeof setInterval>;
@@ -238,9 +253,15 @@ export class DeferredDealerBookStore implements DealerBookStore {
     private readonly log: DeferredLog,
   ) {
     this.enabled = delegate.enabled;
-    this.pending = new Map(
+    this.pendingPath = `${options.cachePath}.pending`;
+    this.cache = new Map(
       readJsonLines(options.cachePath, decodeDealerPosition).map((row) => [dealerKey(row), row]),
     );
+    this.pending = existsSync(this.pendingPath)
+      ? new Map(
+          readJsonLines(this.pendingPath, decodeDealerPosition).map((row) => [dealerKey(row), row]),
+        )
+      : new Map(this.cache);
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
@@ -254,33 +275,40 @@ export class DeferredDealerBookStore implements DealerBookStore {
 
   async loadAll(underlyings: string[]): Promise<PersistedDealerPosition[]> {
     const allowed = new Set(underlyings.map((underlying) => underlying.toUpperCase()));
-    if (this.pending.size > 0) {
-      return [...this.pending.values()].filter((row) => allowed.has(row.underlying.toUpperCase()));
+    if (this.cache.size > 0) {
+      return [...this.cache.values()].filter((row) => allowed.has(row.underlying.toUpperCase()));
     }
 
     const rows = new Map(
       (await this.delegate.loadAll(underlyings)).map((row) => [dealerKey(row), row]),
     );
-    for (const row of this.pending.values()) {
-      if (allowed.has(row.underlying.toUpperCase())) rows.set(dealerKey(row), row);
-    }
+    for (const [key, row] of rows) this.cache.set(key, row);
+    this.rewriteCache();
+    this.rewritePending();
     return [...rows.values()];
   }
 
   async upsertMany(positions: PersistedDealerPosition[]): Promise<void> {
-    for (const position of positions) this.pending.set(dealerKey(position), position);
-    while (this.pending.size > this.options.maxPendingRows) {
-      const first = this.pending.keys().next().value;
+    for (const position of positions) {
+      const key = dealerKey(position);
+      this.cache.set(key, position);
+      this.pending.set(key, position);
+    }
+    while (this.cache.size > this.options.maxPendingRows) {
+      const first = this.cache.keys().next().value;
       if (first == null) break;
+      this.cache.delete(first);
       this.pending.delete(first);
     }
+    this.rewriteCache();
     this.rewritePending();
   }
 
   async pruneExpired(beforeExpiry: string): Promise<number> {
     let pruned = 0;
-    for (const [key, row] of this.pending) {
+    for (const [key, row] of this.cache) {
       if (row.expiry != null && row.expiry < beforeExpiry) {
+        this.cache.delete(key);
         this.pending.delete(key);
         pruned += 1;
       }
@@ -288,6 +316,7 @@ export class DeferredDealerBookStore implements DealerBookStore {
     if (this.pruneBeforeExpiry == null || beforeExpiry > this.pruneBeforeExpiry) {
       this.pruneBeforeExpiry = beforeExpiry;
     }
+    this.rewriteCache();
     this.rewritePending();
     return pruned;
   }
@@ -302,6 +331,10 @@ export class DeferredDealerBookStore implements DealerBookStore {
     try {
       await this.delegate.upsertMany(batch);
       if (pruneBeforeExpiry != null) await this.delegate.pruneExpired(pruneBeforeExpiry);
+      for (const row of batch) {
+        const key = dealerKey(row);
+        if (this.pending.get(key) === row) this.pending.delete(key);
+      }
       this.rewritePending();
     } catch (err) {
       this.pruneBeforeExpiry = pruneBeforeExpiry;
@@ -319,13 +352,19 @@ export class DeferredDealerBookStore implements DealerBookStore {
   }
 
   private rewritePending(): void {
-    rewriteJsonLines(this.options.cachePath, [...this.pending.values()], encodeDealerPosition);
+    rewriteOutbox(this.pendingPath, [...this.pending.values()], encodeDealerPosition);
+  }
+
+  private rewriteCache(): void {
+    rewriteJsonLines(this.options.cachePath, [...this.cache.values()], encodeDealerPosition);
   }
 }
 
 export class DeferredIvHistoryStore implements IvHistoryStore {
   readonly enabled: boolean;
+  private cache: PersistedIvHistoryPoint[];
   private pending: PersistedIvHistoryPoint[];
+  private readonly pendingPath: string;
   private flushing = false;
   private readonly timer: ReturnType<typeof setInterval>;
 
@@ -335,7 +374,11 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     private readonly log: DeferredLog,
   ) {
     this.enabled = delegate.enabled;
-    this.pending = readJsonLines(options.cachePath, decodeIvHistoryPoint);
+    this.pendingPath = `${options.cachePath}.pending`;
+    this.cache = readJsonLines(options.cachePath, decodeIvHistoryPoint);
+    this.pending = existsSync(this.pendingPath)
+      ? readJsonLines(this.pendingPath, decodeIvHistoryPoint)
+      : [...this.cache];
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
@@ -349,17 +392,24 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
 
   async writeMany(points: PersistedIvHistoryPoint[]): Promise<void> {
     if (points.length === 0) return;
+    this.cache.push(...points);
     this.pending.push(...points);
+    if (this.cache.length > this.options.maxPendingRows) {
+      this.cache.splice(0, this.cache.length - this.options.maxPendingRows);
+      rewriteJsonLines(this.options.cachePath, this.cache, encodeIvHistoryPoint);
+    } else {
+      appendJsonLines(this.options.cachePath, points, encodeIvHistoryPoint);
+    }
     if (this.pending.length > this.options.maxPendingRows) {
       this.pending.splice(0, this.pending.length - this.options.maxPendingRows);
-      rewriteJsonLines(this.options.cachePath, this.pending, encodeIvHistoryPoint);
-      return;
+      rewriteOutbox(this.pendingPath, this.pending, encodeIvHistoryPoint);
+    } else {
+      appendJsonLines(this.pendingPath, points, encodeIvHistoryPoint);
     }
-    appendJsonLines(this.options.cachePath, points, encodeIvHistoryPoint);
   }
 
   async loadSince(query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]> {
-    const rows = this.pending.filter((row) => matchesIvHistoryQuery(row, query));
+    const rows = this.cache.filter((row) => matchesIvHistoryQuery(row, query));
     if (rows.length > 0) return rows.sort((a, b) => a.ts.getTime() - b.ts.getTime());
     return this.delegate.loadSince(query);
   }
@@ -378,8 +428,12 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   async flush(): Promise<void> {
     if (this.flushing || this.pending.length === 0) return;
     this.flushing = true;
+    const batch = [...this.pending];
     try {
-      await this.delegate.writeMany(this.pending);
+      await this.delegate.writeMany(batch);
+      const flushed = new Set(batch);
+      this.pending = this.pending.filter((row) => !flushed.has(row));
+      rewriteOutbox(this.pendingPath, this.pending, encodeIvHistoryPoint);
     } finally {
       this.flushing = false;
     }
@@ -395,7 +449,11 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
 export class DeferredRegimeStore implements RegimeStore {
   readonly enabled: boolean;
   private observations: PersistedRegimeObservation[];
+  private pendingObservations: PersistedRegimeObservation[];
   private readonly models: Map<string, PersistedRegimeModel>;
+  private pendingModels: Map<string, PersistedRegimeModel>;
+  private readonly pendingObservationsPath: string;
+  private readonly pendingModelsPath: string;
   private flushing = false;
   private readonly timer: ReturnType<typeof setInterval>;
 
@@ -405,6 +463,8 @@ export class DeferredRegimeStore implements RegimeStore {
     private readonly log: DeferredLog,
   ) {
     this.enabled = delegate.enabled;
+    this.pendingObservationsPath = `${options.observationsCachePath}.pending`;
+    this.pendingModelsPath = `${options.modelsCachePath}.pending`;
     this.observations = readJsonLines(options.observationsCachePath, decodeRegimeObservation);
     this.models = new Map(
       readJsonLines(options.modelsCachePath, decodeRegimeModel).map((model) => [
@@ -412,10 +472,25 @@ export class DeferredRegimeStore implements RegimeStore {
         model,
       ]),
     );
+    this.pendingObservations = existsSync(this.pendingObservationsPath)
+      ? readJsonLines(this.pendingObservationsPath, decodeRegimeObservation)
+      : [...this.observations];
+    this.pendingModels = existsSync(this.pendingModelsPath)
+      ? new Map(
+          readJsonLines(this.pendingModelsPath, decodeRegimeModel).map((model) => [
+            model.underlying.toUpperCase(),
+            model,
+          ]),
+        )
+      : new Map(this.models);
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
-          { err: String(err), observations: this.observations.length, models: this.models.size },
+          {
+            err: String(err),
+            observations: this.pendingObservations.length,
+            models: this.pendingModels.size,
+          },
           'deferred regime flush failed',
         );
       });
@@ -428,8 +503,11 @@ export class DeferredRegimeStore implements RegimeStore {
   }
 
   async saveModel(model: PersistedRegimeModel): Promise<void> {
-    this.models.set(model.underlying.toUpperCase(), model);
+    const key = model.underlying.toUpperCase();
+    this.models.set(key, model);
+    this.pendingModels.set(key, model);
     rewriteJsonLines(this.options.modelsCachePath, [...this.models.values()], encodeRegimeModel);
+    rewriteOutbox(this.pendingModelsPath, [...this.pendingModels.values()], encodeRegimeModel);
   }
 
   async loadObservationsSince(
@@ -442,6 +520,7 @@ export class DeferredRegimeStore implements RegimeStore {
 
   async saveObservation(row: PersistedRegimeObservation): Promise<void> {
     this.observations.push(row);
+    this.pendingObservations.push(row);
     if (this.observations.length > this.options.maxPendingRows) {
       this.observations.splice(0, this.observations.length - this.options.maxPendingRows);
       rewriteJsonLines(
@@ -449,17 +528,45 @@ export class DeferredRegimeStore implements RegimeStore {
         this.observations,
         encodeRegimeObservation,
       );
-      return;
+    } else {
+      appendJsonLines(this.options.observationsCachePath, [row], encodeRegimeObservation);
     }
-    appendJsonLines(this.options.observationsCachePath, [row], encodeRegimeObservation);
+    if (this.pendingObservations.length > this.options.maxPendingRows) {
+      this.pendingObservations.splice(
+        0,
+        this.pendingObservations.length - this.options.maxPendingRows,
+      );
+      rewriteOutbox(
+        this.pendingObservationsPath,
+        this.pendingObservations,
+        encodeRegimeObservation,
+      );
+    } else {
+      appendJsonLines(this.pendingObservationsPath, [row], encodeRegimeObservation);
+    }
   }
 
   async flush(): Promise<void> {
-    if (this.flushing || (this.observations.length === 0 && this.models.size === 0)) return;
+    if (
+      this.flushing ||
+      (this.pendingObservations.length === 0 && this.pendingModels.size === 0)
+    ) {
+      return;
+    }
     this.flushing = true;
+    const observations = [...this.pendingObservations];
+    const models = new Map(this.pendingModels);
     try {
-      for (const model of this.models.values()) await this.delegate.saveModel(model);
-      for (const observation of this.observations) await this.delegate.saveObservation(observation);
+      for (const model of models.values()) await this.delegate.saveModel(model);
+      for (const observation of observations) await this.delegate.saveObservation(observation);
+      const flushedObservations = new Set(observations);
+      this.pendingObservations = this.pendingObservations.filter(
+        (observation) => !flushedObservations.has(observation),
+      );
+      for (const [key, model] of models) {
+        if (this.pendingModels.get(key) === model) this.pendingModels.delete(key);
+      }
+      this.rewritePending();
     } finally {
       this.flushing = false;
     }
@@ -469,5 +576,14 @@ export class DeferredRegimeStore implements RegimeStore {
     clearInterval(this.timer);
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
+  }
+
+  private rewritePending(): void {
+    rewriteOutbox(
+      this.pendingObservationsPath,
+      this.pendingObservations,
+      encodeRegimeObservation,
+    );
+    rewriteOutbox(this.pendingModelsPath, [...this.pendingModels.values()], encodeRegimeModel);
   }
 }

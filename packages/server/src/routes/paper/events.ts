@@ -6,7 +6,7 @@ import type {
   PaperWsServerMessage,
 } from '@oggregator/protocol';
 
-export type PaperEventListener = (msg: PaperWsServerMessage) => void;
+export type PaperEventListener = (accountId: string, msg: PaperWsServerMessage) => void;
 
 class PaperEventBus {
   private readonly listeners = new Set<PaperEventListener>();
@@ -19,21 +19,21 @@ class PaperEventBus {
   }
 
   emitOrder(order: PaperOrderDto, fills: PaperFillDto[]): void {
-    this.broadcast({ type: 'order', order, fills });
+    this.broadcast(order.accountId, { type: 'order', order, fills });
   }
 
   emitTrade(trade: PaperTradeDetailDto): void {
-    this.broadcast({ type: 'trade', trade });
+    this.broadcast(trade.accountId, { type: 'trade', trade });
   }
 
-  emitActivity(activity: PaperActivityDto): void {
-    this.broadcast({ type: 'activity', activity });
+  emitActivity(accountId: string, activity: PaperActivityDto): void {
+    this.broadcast(accountId, { type: 'activity', activity });
   }
 
-  private broadcast(msg: PaperWsServerMessage): void {
+  private broadcast(accountId: string, msg: PaperWsServerMessage): void {
     for (const listener of this.listeners) {
       try {
-        listener(msg);
+        listener(accountId, msg);
       } catch {}
     }
   }

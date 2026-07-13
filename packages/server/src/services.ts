@@ -160,33 +160,15 @@ export const dealerBookService = new DealerBookService({
     // Attribute ΔOI from the lit/live tape only. Block ('institutional') flow is
     // deliberately excluded — block-trade aggressor sign is ambiguous — so
     // block-driven OI changes fall through to the naive-prior sign in the book.
-    if (tradeStore.enabled) {
-      const rows = await tradeStore.loadHistory({
-        mode: 'live',
-        underlying,
-        venues: [venue],
-        instrumentName: symbol,
-        startTs: new Date(fromTs),
-        endTs: new Date(toTs),
-        limit: 5000,
-      });
-      if (rows.length > 0) {
-        const net = rows.reduce(
-          (acc, r) => acc + (r.direction === 'buy' ? r.contracts : -r.contracts),
-          0,
-        );
-        return { netFlow: net, hasFlow: true };
-      }
-    }
-    const buffered = flowService
+    const tape = flowService
       .getTrades(underlying)
+      .filter((trade) => !trade.isBlock && trade.venue === venue && trade.instrument === symbol);
+    if (tape.length === 0 || tape[0]!.timestamp > fromTs) {
+      return { netFlow: 0, hasFlow: false };
+    }
+    const buffered = tape
       .filter(
-        (t) =>
-          !t.isBlock &&
-          t.venue === venue &&
-          t.instrument === symbol &&
-          t.timestamp > fromTs &&
-          t.timestamp <= toTs,
+        (trade) => trade.timestamp > fromTs && trade.timestamp <= toTs,
       );
     if (buffered.length === 0) return { netFlow: 0, hasFlow: false };
     const net = buffered.reduce((acc, t) => acc + (t.side === 'buy' ? t.size : -t.size), 0);
@@ -341,28 +323,20 @@ export function isNewsReady(): boolean {
   return serviceHealth.news;
 }
 
-// Cached so /health doesn't pay a Postgres round-trip
-// (`pg_total_relation_size('iv_history_points')`) on every probe. The value
-// changes glacially — the background alarm below also recomputes every 5 min.
-const IV_HISTORY_STORAGE_STATS_TTL_MS = 30_000;
-let ivHistoryStorageStatsCache: {
-  expiresAt: number;
-  promise: Promise<IvHistoryStorageStats>;
-} | null = null;
+let ivHistoryStorageStatsCache: Promise<IvHistoryStorageStats> | null = null;
 
 export function getIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
-  const now = Date.now();
-  if (ivHistoryStorageStatsCache != null && ivHistoryStorageStatsCache.expiresAt > now) {
-    return ivHistoryStorageStatsCache.promise;
-  }
-  const promise = ivHistoryStore.getStorageStats().catch(() => ({
+  ivHistoryStorageStatsCache ??= loadIvHistoryStorageStats();
+  return ivHistoryStorageStatsCache;
+}
+
+function loadIvHistoryStorageStats(): Promise<IvHistoryStorageStats> {
+  return ivHistoryStore.getStorageStats().catch(() => ({
     enabled: ivHistoryStore.enabled,
     bytes: null,
     thresholdBytes: ivHistorySizeWarnBytes,
     warning: false,
   }));
-  ivHistoryStorageStatsCache = { expiresAt: now + IV_HISTORY_STORAGE_STATS_TTL_MS, promise };
-  return promise;
 }
 
 export async function bootstrapServices(log: FastifyBaseLogger) {
@@ -603,7 +577,8 @@ function startIvHistoryStorageAlarm(log: FastifyBaseLogger): void {
 
   const check = async () => {
     try {
-      const stats = await ivHistoryStore.getStorageStats();
+      ivHistoryStorageStatsCache = loadIvHistoryStorageStats();
+      const stats = await ivHistoryStorageStatsCache;
       if (!stats.warning || stats.bytes == null) return;
       log.warn(
         { bytes: stats.bytes, thresholdBytes: stats.thresholdBytes },
@@ -619,7 +594,7 @@ function startIvHistoryStorageAlarm(log: FastifyBaseLogger): void {
     () => {
       void check();
     },
-    5 * 60 * 1000,
+    DAY_MS,
   );
   ivHistoryStorageAlarmTimer.unref?.();
 }

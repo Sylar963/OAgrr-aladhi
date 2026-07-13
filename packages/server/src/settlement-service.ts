@@ -11,7 +11,6 @@ let settlementTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startSettlementJob(log: FastifyBaseLogger): void {
   if (!paperTradingStore.enabled) return;
-  void runSettlementSafely(log, 'boot');
   scheduleNext(log);
 }
 

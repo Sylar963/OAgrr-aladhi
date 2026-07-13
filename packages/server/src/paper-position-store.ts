@@ -9,8 +9,6 @@ import type { Position } from '@oggregator/trading';
 import { positionRepository } from './trading-services.js';
 import { paperEvents } from './routes/paper/events.js';
 
-const POLL_INTERVAL_MS = 1000;
-
 function paperToLeg(p: Position): PositionLeg {
   return {
     legId: naturalKeyOf({
@@ -38,12 +36,19 @@ export class PaperPositionStore implements PositionStore {
   private readonly cache = new Map<string, Map<string, PositionLeg>>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly tracked = new Set<string>();
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly refreshScheduled = new Set<string>();
+  private readonly refreshQueued = new Set<string>();
+  private readonly refreshPromises = new Map<string, Promise<void>>();
   private busEventUnsubscribe: (() => void) | null = null;
 
   constructor() {
-    this.busEventUnsubscribe = paperEvents.subscribe(() => {
-      void this.refreshAll();
+    this.busEventUnsubscribe = paperEvents.subscribe((accountId) => {
+      if (!this.tracked.has(accountId) || this.refreshScheduled.has(accountId)) return;
+      this.refreshScheduled.add(accountId);
+      queueMicrotask(() => {
+        this.refreshScheduled.delete(accountId);
+        void this.refreshAccount(accountId);
+      });
     });
   }
 
@@ -51,12 +56,6 @@ export class PaperPositionStore implements PositionStore {
     if (this.tracked.has(accountId)) return;
     this.tracked.add(accountId);
     void this.refreshAccount(accountId);
-    if (this.pollTimer == null) {
-      this.pollTimer = setInterval(() => {
-        void this.refreshAll();
-      }, POLL_INTERVAL_MS);
-      this.pollTimer.unref?.();
-    }
   }
 
   list(accountId: string): PositionLeg[] {
@@ -85,22 +84,33 @@ export class PaperPositionStore implements PositionStore {
   }
 
   dispose(): void {
-    if (this.pollTimer != null) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
     this.busEventUnsubscribe?.();
     this.busEventUnsubscribe = null;
     this.cache.clear();
     this.tracked.clear();
+    this.refreshScheduled.clear();
+    this.refreshQueued.clear();
+    this.refreshPromises.clear();
     this.listeners.clear();
   }
 
-  private async refreshAll(): Promise<void> {
-    await Promise.allSettled([...this.tracked].map((id) => this.refreshAccount(id)));
+  private async refreshAccount(accountId: string): Promise<void> {
+    this.refreshQueued.add(accountId);
+    const active = this.refreshPromises.get(accountId);
+    if (active != null) return active;
+
+    const refresh = this.refreshAccountUntilCurrent(accountId).finally(() => {
+      this.refreshPromises.delete(accountId);
+    });
+    this.refreshPromises.set(accountId, refresh);
+    return refresh;
   }
 
-  private async refreshAccount(accountId: string): Promise<void> {
+  private async refreshAccountUntilCurrent(accountId: string): Promise<void> {
+    while (this.refreshQueued.delete(accountId)) await this.loadAccount(accountId);
+  }
+
+  private async loadAccount(accountId: string): Promise<void> {
     let positions: Position[];
     try {
       positions = await positionRepository.listPositions(accountId);

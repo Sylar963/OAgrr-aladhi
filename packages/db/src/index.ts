@@ -36,6 +36,7 @@ export type {
   PaperFillRow,
   PaperOrderRow,
   PaperPositionRow,
+  PaperSettlementPriceRow,
   PaperTradeActivityRow,
   PaperTradeNoteRow,
   PaperTradeOrderRow,

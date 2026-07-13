@@ -351,10 +351,7 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       label: string;
       initial_cash_usd: string;
       created_at: Date;
-    }>(
-      `SELECT id, label, initial_cash_usd, created_at FROM paper_accounts WHERE id = $1`,
-      [id],
-    );
+    }>(`SELECT id, label, initial_cash_usd, created_at FROM paper_accounts WHERE id = $1`, [id]);
     const row = res.rows[0];
     if (!row) return null;
     return {
@@ -400,10 +397,7 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
   }
 
   async getOrder(id: string): Promise<PaperOrderRow | null> {
-    const res = await this.pool.query<OrderRowDb>(
-      `SELECT * FROM paper_orders WHERE id = $1`,
-      [id],
-    );
+    const res = await this.pool.query<OrderRowDb>(`SELECT * FROM paper_orders WHERE id = $1`, [id]);
     const row = res.rows[0];
     return row ? mapOrderRow(row) : null;
   }
@@ -520,15 +514,12 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
     return res.rows.map((r) => r.account_id);
   }
 
-  async listExpiredOpenPositions(
-    accountId: string,
-    asOf: Date,
-  ): Promise<PaperPositionRow[]> {
+  async listExpiredOpenPositions(accountId: string, asOf: Date): Promise<PaperPositionRow[]> {
     const res = await this.pool.query<PositionRowDb>(
       `SELECT * FROM paper_positions
        WHERE account_id = $1
          AND net_quantity <> 0
-         AND expiry < $2::date`,
+         AND expiry + TIME '08:00:00' <= ($2::timestamptz AT TIME ZONE 'UTC')`,
       [accountId, asOf],
     );
     return res.rows.map(mapPositionRow);
@@ -562,11 +553,15 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
   }
 
   async upsertSettlementPrice(row: PaperSettlementPriceRow): Promise<void> {
-    // First write wins — once a settlement price is captured, re-runs reuse it.
     await this.pool.query(
       `INSERT INTO paper_settlement_prices (underlying, expiry, price_usd, source, captured_at)
        VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (underlying, expiry) DO NOTHING`,
+       ON CONFLICT (underlying, expiry) DO UPDATE SET
+         price_usd = EXCLUDED.price_usd,
+         source = EXCLUDED.source,
+         captured_at = EXCLUDED.captured_at
+       WHERE paper_settlement_prices.source = 'spot-runtime'
+         AND EXCLUDED.source <> 'spot-runtime'`,
       [row.underlying, row.expiry, row.priceUsd, row.source, row.capturedAt],
     );
   }
@@ -731,7 +726,14 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       `INSERT INTO paper_trade_activity (account_id, trade_id, kind, summary, payload, ts)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6)
        RETURNING *`,
-      [row.accountId, row.tradeId, row.kind, row.summary, JSON.stringify(row.payload ?? null), row.ts],
+      [
+        row.accountId,
+        row.tradeId,
+        row.kind,
+        row.summary,
+        JSON.stringify(row.payload ?? null),
+        row.ts,
+      ],
     );
     return mapTradeActivityRow(res.rows[0]!);
   }
@@ -767,10 +769,9 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       account_id: string;
       label: string;
       created_at: Date;
-    }>(
-      `SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE api_key = $1`,
-      [apiKey],
-    );
+    }>(`SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE api_key = $1`, [
+      apiKey,
+    ]);
     const row = res.rows[0];
     if (!row) return null;
     return {
@@ -789,10 +790,7 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       account_id: string;
       label: string;
       created_at: Date;
-    }>(
-      `SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE id = $1`,
-      [id],
-    );
+    }>(`SELECT id, api_key, account_id, label, created_at FROM paper_users WHERE id = $1`, [id]);
     const row = res.rows[0];
     if (!row) return null;
     return {
@@ -943,8 +941,7 @@ function mapFillRow(row: FillRowDb): PaperFillRow {
     expiry: typeof row.expiry === 'string' ? row.expiry : toIsoDate(row.expiry),
     strike: Number(row.strike),
     quantity,
-    requestedQuantity:
-      row.requested_quantity != null ? Number(row.requested_quantity) : quantity,
+    requestedQuantity: row.requested_quantity != null ? Number(row.requested_quantity) : quantity,
     priceUsd: Number(row.price_usd),
     feesUsd: Number(row.fees_usd),
     slippageUsd: row.slippage_usd != null ? Number(row.slippage_usd) : 0,
@@ -1004,7 +1001,9 @@ function mapTradeNoteRow(row: TradeNoteRowDb): PaperTradeNoteRow {
     tradeId: row.trade_id,
     kind: row.kind,
     content: row.content,
-    tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+    tags: Array.isArray(row.tags)
+      ? row.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
     createdAt: row.created_at,
   };
 }

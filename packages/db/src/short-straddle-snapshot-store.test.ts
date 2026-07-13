@@ -23,7 +23,7 @@ const row: PersistedShortStraddleSnapshot = {
   callAskSize: 3,
   callMarkIv: 0.5,
   callDelta: 0.51,
-  callVega: 120,
+  callVegaUsdPerVolPoint: 120,
   callOpenInterest: 500,
   callMakerFeeUsd: 2,
   callTakerFeeUsd: 3,
@@ -34,7 +34,7 @@ const row: PersistedShortStraddleSnapshot = {
   putAskSize: 5,
   putMarkIv: 0.52,
   putDelta: -0.49,
-  putVega: 121,
+  putVegaUsdPerVolPoint: 121,
   putOpenInterest: 600,
   putMakerFeeUsd: 2.1,
   putTakerFeeUsd: 3.1,
@@ -56,6 +56,8 @@ describe('short-straddle snapshot migration', () => {
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS short_straddle_snapshots');
     expect(sql).toContain('PRIMARY KEY (venue, underlying, sample_slot_ts)');
+    expect(sql).toContain('call_vega_usd_per_vol_point DOUBLE PRECISION NOT NULL');
+    expect(sql).toContain('put_vega_usd_per_vol_point DOUBLE PRECISION NOT NULL');
     expect(sql).not.toContain('PARTITION BY');
     expect(sql).not.toContain('CREATE INDEX');
   });
@@ -100,7 +102,7 @@ describe('PostgresShortStraddleSnapshotStore', () => {
       row.callAskSize,
       row.callMarkIv,
       row.callDelta,
-      row.callVega,
+      row.callVegaUsdPerVolPoint,
       row.callOpenInterest,
       row.callMakerFeeUsd,
       row.callTakerFeeUsd,
@@ -111,7 +113,7 @@ describe('PostgresShortStraddleSnapshotStore', () => {
       row.putAskSize,
       row.putMarkIv,
       row.putDelta,
-      row.putVega,
+      row.putVegaUsdPerVolPoint,
       row.putOpenInterest,
       row.putMakerFeeUsd,
       row.putTakerFeeUsd,

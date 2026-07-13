@@ -221,13 +221,13 @@ describe('selectShortStraddleSnapshot', () => {
     expect(snapshot?.callAskUsd).toBe(2_000);
   });
 
-  it('preserves fractional IV and canonical venue vega units', () => {
+  it('stores fractional IV and Deribit vega in USD per vol point without conversion', () => {
     const snapshot = selected([
       entry('2026-07-20', [strike(SPOT, quote({ markIv: 0.6543, vega: 17.25 }))]),
     ]);
 
     expect(snapshot?.callMarkIv).toBe(0.6543);
-    expect(snapshot?.callVega).toBe(17.25);
+    expect(snapshot?.callVegaUsdPerVolPoint).toBe(17.25);
   });
 
   it('stores spot and the selected Deribit forward separately', () => {

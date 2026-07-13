@@ -1,8 +1,8 @@
-import type { FastifyBaseLogger } from 'fastify';
 import { fetchGateioSettlement } from '@oggregator/core';
-import { paperTradingStore } from './trading-services.js';
-import { spotService } from './services.js';
+import type { FastifyBaseLogger } from 'fastify';
 import { settleExpiredPositionsForAccount } from './routes/paper/workspace.js';
+import { spotService } from './services.js';
+import { paperTradingStore } from './trading-services.js';
 
 const SETTLEMENT_HOUR_UTC = 8;
 const SETTLEMENT_MINUTE_UTC = 5;
@@ -59,13 +59,12 @@ export async function runSettlementOnce(
 }
 
 // Settlement price resolution order:
-//   1. Cached row (any prior source) — already authoritative once written.
+//   1. Cached official row.
 //   2. Gate.io official /options/settlements — the venue's own settle_price
 //      that Gate.io used to settle its surface, identical across all strikes
 //      sharing the same underlying+expiry. Preferred over live spot because
 //      it's the price the contracts were actually settled against.
-//   3. Live spot snapshot — last-resort fallback when Gate.io has no row
-//      (e.g. underlying not listed there, or expiry not yet settled upstream).
+//   3. Cached spot approximation, then current spot as a last resort.
 export async function resolveSettlementSpot(
   underlying: string,
   expiry: string,
@@ -73,7 +72,7 @@ export async function resolveSettlementSpot(
   log: FastifyBaseLogger,
 ): Promise<number | null> {
   const cached = await paperTradingStore.getSettlementPrice(underlying, expiry);
-  if (cached) return cached.priceUsd;
+  if (cached != null && cached.source !== 'spot-runtime') return cached.priceUsd;
 
   const gateio = await fetchGateioSettlement({ underlying, expiry });
   if (gateio) {
@@ -90,6 +89,8 @@ export async function resolveSettlementSpot(
     );
     return gateio.priceUsd;
   }
+
+  if (cached != null) return cached.priceUsd;
 
   const snap = spotService.getSnapshot(underlying);
   if (!snap || !Number.isFinite(snap.lastPrice) || snap.lastPrice <= 0) {

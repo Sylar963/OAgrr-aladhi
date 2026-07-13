@@ -19,7 +19,7 @@ export interface PersistedShortStraddleSnapshot {
   callAskSize: number;
   callMarkIv: number;
   callDelta: number;
-  callVega: number;
+  callVegaUsdPerVolPoint: number;
   callOpenInterest: number;
   callMakerFeeUsd: number;
   callTakerFeeUsd: number;
@@ -30,7 +30,7 @@ export interface PersistedShortStraddleSnapshot {
   putAskSize: number;
   putMarkIv: number;
   putDelta: number;
-  putVega: number;
+  putVegaUsdPerVolPoint: number;
   putOpenInterest: number;
   putMakerFeeUsd: number;
   putTakerFeeUsd: number;
@@ -93,7 +93,7 @@ export class PostgresShortStraddleSnapshotStore implements ShortStraddleSnapshot
           row.callAskSize,
           row.callMarkIv,
           row.callDelta,
-          row.callVega,
+          row.callVegaUsdPerVolPoint,
           row.callOpenInterest,
           row.callMakerFeeUsd,
           row.callTakerFeeUsd,
@@ -104,7 +104,7 @@ export class PostgresShortStraddleSnapshotStore implements ShortStraddleSnapshot
           row.putAskSize,
           row.putMarkIv,
           row.putDelta,
-          row.putVega,
+          row.putVegaUsdPerVolPoint,
           row.putOpenInterest,
           row.putMakerFeeUsd,
           row.putTakerFeeUsd,
@@ -118,10 +118,10 @@ export class PostgresShortStraddleSnapshotStore implements ShortStraddleSnapshot
           venue, underlying, sample_slot_ts, captured_at, expiry, expiry_ts, strike,
           spot_price_usd, forward_price_usd,
           call_bid_usd, call_ask_usd, call_bid_size, call_ask_size, call_mark_iv,
-          call_delta, call_vega, call_open_interest, call_maker_fee_usd,
+          call_delta, call_vega_usd_per_vol_point, call_open_interest, call_maker_fee_usd,
           call_taker_fee_usd, call_quote_ts,
           put_bid_usd, put_ask_usd, put_bid_size, put_ask_size, put_mark_iv,
-          put_delta, put_vega, put_open_interest, put_maker_fee_usd,
+          put_delta, put_vega_usd_per_vol_point, put_open_interest, put_maker_fee_usd,
           put_taker_fee_usd, put_quote_ts
         ) VALUES ${placeholders.join(', ')}
         ON CONFLICT (venue, underlying, sample_slot_ts) DO NOTHING`,

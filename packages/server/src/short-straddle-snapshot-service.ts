@@ -24,7 +24,7 @@ interface ExecutableLeg {
   askSize: number;
   markIv: number;
   delta: number;
-  vega: number;
+  vegaUsdPerVolPoint: number;
   openInterest: number;
   makerFeeUsd: number;
   takerFeeUsd: number;
@@ -125,7 +125,7 @@ export function selectShortStraddleSnapshot(
       callAskSize: selected.call.askSize,
       callMarkIv: selected.call.markIv,
       callDelta: selected.call.delta,
-      callVega: selected.call.vega,
+      callVegaUsdPerVolPoint: selected.call.vegaUsdPerVolPoint,
       callOpenInterest: selected.call.openInterest,
       callMakerFeeUsd: selected.call.makerFeeUsd,
       callTakerFeeUsd: selected.call.takerFeeUsd,
@@ -136,7 +136,7 @@ export function selectShortStraddleSnapshot(
       putAskSize: selected.put.askSize,
       putMarkIv: selected.put.markIv,
       putDelta: selected.put.delta,
-      putVega: selected.put.vega,
+      putVegaUsdPerVolPoint: selected.put.vegaUsdPerVolPoint,
       putOpenInterest: selected.put.openInterest,
       putMakerFeeUsd: selected.put.makerFeeUsd,
       putTakerFeeUsd: selected.put.takerFeeUsd,
@@ -235,7 +235,7 @@ function executableLeg(
   const askSize = quote.askSize;
   const markIv = quote.markIv;
   const delta = quote.delta;
-  const vega = quote.vega;
+  const vegaUsdPerVolPoint = quote.vega;
   const openInterest = quote.openInterest;
   const fees = quote.estimatedFees;
   const quoteTs = quote.asOfMs;
@@ -247,7 +247,7 @@ function executableLeg(
     !isPositiveFinite(askSize) ||
     !isFiniteNumber(markIv) ||
     !isFiniteNumber(delta) ||
-    !isFiniteNumber(vega) ||
+    !isFiniteNumber(vegaUsdPerVolPoint) ||
     !isFiniteNumber(openInterest) ||
     fees == null ||
     !isFiniteNumber(fees.maker) ||
@@ -266,7 +266,7 @@ function executableLeg(
     askSize,
     markIv,
     delta,
-    vega,
+    vegaUsdPerVolPoint,
     openInterest,
     makerFeeUsd: fees.maker,
     takerFeeUsd: fees.taker,

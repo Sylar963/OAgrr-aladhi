@@ -17,7 +17,6 @@ import {
 } from '@oggregator/core';
 import {
   DeferredTradeStore,
-  NoopTradeStore,
   type PersistedTradeLeg,
   type PersistedTradeRecord,
   PostgresTradeStore,
@@ -105,7 +104,7 @@ const MAX_FLUSH_BACKOFF_MS = 30_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 const DEFAULT_TRADE_RETENTION_DAYS = 0;
 const DAY_MS = 24 * 60 * 60 * 1_000;
-const DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS = DAY_MS;
+const DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS = 25 * 60 * 60 * 1_000;
 const DEFAULT_TRADE_CACHE_MAX_ROWS = 5_000_000;
 const DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE = 10_000;
 const OPS_LOG_INTERVAL_MS = 60_000;
@@ -115,9 +114,10 @@ const RETENTION_PRUNE_INTERVAL_MS = 15 * 60 * 1000;
 
 async function main(): Promise<void> {
   const databaseUrl = process.env['DATABASE_URL'];
-  const tradeStore = createTradeStore(databaseUrl);
-  const alerts = new OpsAlerter(process.env['INGEST_ALERT_WEBHOOK_URL'] ?? null);
+  if (!databaseUrl) throw new Error('DATABASE_URL is required for lossless trade ingestion');
   const retentionDays = parseTradeRetentionDays(process.env['TRADE_RETENTION_DAYS']);
+  const tradeStore = createTradeStore(databaseUrl, retentionDays);
+  const alerts = new OpsAlerter(process.env['INGEST_ALERT_WEBHOOK_URL'] ?? null);
 
   if (!tradeStore.enabled) {
     log.warn('DATABASE_URL not set, ingest worker is running without persistence');
@@ -209,13 +209,14 @@ async function main(): Promise<void> {
       }, PARTITION_TOPUP_INTERVAL_MS)
     : null;
 
-  const retentionTimer = tradeStore.enabled
-    ? setInterval(() => {
-        void pruneTradeHistory(tradeStore, retentionDays, 'interval').catch((error) => {
-          log.warn({ err: stringifyError(error), retentionDays }, 'trade history prune failed');
-        });
-      }, RETENTION_PRUNE_INTERVAL_MS)
-    : null;
+  const retentionTimer =
+    tradeStore.enabled && retentionDays > 0
+      ? setInterval(() => {
+          void pruneTradeHistory(tradeStore, retentionDays, 'interval').catch((error) => {
+            log.warn({ err: stringifyError(error), retentionDays }, 'trade history prune failed');
+          });
+        }, RETENTION_PRUNE_INTERVAL_MS)
+      : null;
 
   let shutdownPromise: Promise<void> | null = null;
 
@@ -510,32 +511,52 @@ function parseTradeRetentionDays(value: string | undefined): number {
   return parsed;
 }
 
-function createTradeStore(databaseUrl: string | undefined): TradeStore {
-  if (!databaseUrl) return new NoopTradeStore();
+function createTradeStore(databaseUrl: string, retentionDays: number): TradeStore {
   const postgres = PostgresTradeStore.fromConnectionString(databaseUrl);
   const flushIntervalMs = parseNonNegativeMs(
     process.env['TRADE_DB_FLUSH_INTERVAL_MS'],
     DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS,
     'TRADE_DB_FLUSH_INTERVAL_MS',
   );
-  if (flushIntervalMs === 0) return postgres;
+  if (flushIntervalMs === 0) {
+    log.info({ mode: 'direct', retentionDays }, 'trade persistence configured');
+    return postgres;
+  }
+
+  const cachePath = process.env['TRADE_CACHE_PATH'] ?? '.cache/ingest-trades.ndjson';
+  const flushBatchSize = parsePositiveInteger(
+    process.env['TRADE_DB_FLUSH_BATCH_SIZE'],
+    DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE,
+    'TRADE_DB_FLUSH_BATCH_SIZE',
+  );
+  const maxPendingRows = parsePositiveInteger(
+    process.env['TRADE_CACHE_MAX_ROWS'],
+    DEFAULT_TRADE_CACHE_MAX_ROWS,
+    'TRADE_CACHE_MAX_ROWS',
+  );
+  const flushOnDispose = parseBoolean(process.env['TRADE_DB_FLUSH_ON_DISPOSE']);
+
+  log.info(
+    {
+      mode: 'deferred',
+      retentionDays,
+      flushIntervalMs,
+      flushBatchSize,
+      cachePath,
+      maxPendingRows,
+      flushOnDispose,
+    },
+    'trade persistence configured',
+  );
 
   return new DeferredTradeStore(
     postgres,
     {
       flushIntervalMs,
-      cachePath: process.env['TRADE_CACHE_PATH'] ?? '.cache/ingest-trades.ndjson',
-      maxPendingRows: parsePositiveInteger(
-        process.env['TRADE_CACHE_MAX_ROWS'],
-        DEFAULT_TRADE_CACHE_MAX_ROWS,
-        'TRADE_CACHE_MAX_ROWS',
-      ),
-      flushBatchSize: parsePositiveInteger(
-        process.env['TRADE_DB_FLUSH_BATCH_SIZE'],
-        DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE,
-        'TRADE_DB_FLUSH_BATCH_SIZE',
-      ),
-      flushOnDispose: parseBoolean(process.env['TRADE_DB_FLUSH_ON_DISPOSE']),
+      cachePath,
+      maxPendingRows,
+      flushBatchSize,
+      flushOnDispose,
     },
     log,
   );

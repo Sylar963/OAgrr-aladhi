@@ -1,12 +1,16 @@
 import {
-  appendFileSync,
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
-  readFileSync,
+  openSync,
+  readSync,
   renameSync,
   unlinkSync,
+  writeSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 import type {
   InstrumentListQuery,
@@ -42,7 +46,7 @@ interface CachedTradeRecord {
 type DeferredTradeLog = { warn: (obj: object, msg: string) => void };
 
 const DEFAULT_FLUSH_BATCH_SIZE = 10_000;
-const MAX_RETRY_DELAY_MS = 60_000;
+const IO_CHUNK_BYTES = 64 * 1024;
 
 export class DeferredTradeStore implements TradeStore {
   readonly enabled: boolean;
@@ -187,10 +191,15 @@ export class DeferredTradeStore implements TradeStore {
   }
 
   private async flushFile(path: string): Promise<void> {
-    const rows = readJsonLines(path, decodeCachedTradeRecord).map(({ record }) => record);
-    for (let index = 0; index < rows.length; index += this.flushBatchSize) {
-      await this.delegate.writeMany(rows.slice(index, index + this.flushBatchSize));
+    let batch: PersistedTradeRecord[] = [];
+    for (const { record } of readJsonLines(path, decodeCachedTradeRecord)) {
+      batch.push(record);
+      if (batch.length === this.flushBatchSize) {
+        await this.delegate.writeMany(batch);
+        batch = [];
+      }
     }
+    if (batch.length > 0) await this.delegate.writeMany(batch);
   }
 
   private recoverInterruptedFlush(): void {
@@ -201,7 +210,7 @@ export class DeferredTradeStore implements TradeStore {
   private restoreFlushingFile(): void {
     if (!existsSync(this.flushingPath)) return;
     if (existsSync(this.options.cachePath)) {
-      appendFileSync(this.flushingPath, readFileSync(this.options.cachePath));
+      appendFileContentsSync(this.options.cachePath, this.flushingPath);
       unlinkSync(this.options.cachePath);
     }
     ensureCacheDir(this.options.cachePath);
@@ -209,9 +218,19 @@ export class DeferredTradeStore implements TradeStore {
   }
 
   private refreshPendingState(fallbackOldestPendingAt: number | null = null): void {
-    const cached = readJsonLines(this.options.cachePath, decodeCachedTradeRecord);
-    this.pendingCount = cached.length;
-    this.oldestPendingAt = getOldestQueuedAt(cached) ?? fallbackOldestPendingAt;
+    let pendingCount = 0;
+    let oldestQueuedAt: number | null = null;
+    let hasMissingQueuedAt = false;
+    for (const cached of readJsonLines(this.options.cachePath, decodeCachedTradeRecord)) {
+      pendingCount += 1;
+      if (cached.queuedAt == null) hasMissingQueuedAt = true;
+      else if (oldestQueuedAt == null || cached.queuedAt < oldestQueuedAt) {
+        oldestQueuedAt = cached.queuedAt;
+      }
+    }
+
+    this.pendingCount = pendingCount;
+    this.oldestPendingAt = hasMissingQueuedAt ? fallbackOldestPendingAt : oldestQueuedAt;
     if (this.pendingCount > 0 && this.oldestPendingAt == null) {
       this.oldestPendingAt = Date.now() - this.options.flushIntervalMs;
     }
@@ -241,7 +260,7 @@ export class DeferredTradeStore implements TradeStore {
   }
 
   private retryDelayMs(): number {
-    return Math.min(this.options.flushIntervalMs, MAX_RETRY_DELAY_MS);
+    return this.options.flushIntervalMs;
   }
 }
 
@@ -249,19 +268,70 @@ function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
 }
 
-function readJsonLines<T>(path: string, decode: (value: unknown) => T): T[] {
-  if (!existsSync(path)) return [];
-  const body = readFileSync(path, 'utf8');
-  return body
-    .split('\n')
-    .filter((line) => line.trim() !== '')
-    .map((line) => decode(JSON.parse(line)));
+function* readJsonLines<T>(path: string, decode: (value: unknown) => T): Generator<T> {
+  if (!existsSync(path)) return;
+  const descriptor = openSync(path, 'r');
+  const buffer = Buffer.allocUnsafe(IO_CHUNK_BYTES);
+  const decoder = new StringDecoder('utf8');
+  let remainder = '';
+
+  try {
+    let bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      const body = remainder + decoder.write(buffer.subarray(0, bytesRead));
+      let lineStart = 0;
+      let newline = body.indexOf('\n', lineStart);
+      while (newline !== -1) {
+        const line = body.slice(lineStart, newline);
+        if (line.trim() !== '') yield decode(JSON.parse(line));
+        lineStart = newline + 1;
+        newline = body.indexOf('\n', lineStart);
+      }
+      remainder = body.slice(lineStart);
+      bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    }
+    const finalLine = remainder + decoder.end();
+    if (finalLine.trim() !== '') yield decode(JSON.parse(finalLine));
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   if (rows.length === 0) return;
   ensureCacheDir(path);
-  appendFileSync(path, rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+  const descriptor = openSync(path, 'a');
+  const buffer = Buffer.from(rows.map((row) => JSON.stringify(encode(row))).join('\n') + '\n');
+  try {
+    let offset = 0;
+    while (offset < buffer.length) {
+      offset += writeSync(descriptor, buffer, offset, buffer.length - offset);
+    }
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function appendFileContentsSync(sourcePath: string, destinationPath: string): void {
+  const source = openSync(sourcePath, 'r');
+  const destination = openSync(destinationPath, 'a');
+  const buffer = Buffer.allocUnsafe(IO_CHUNK_BYTES);
+
+  try {
+    let bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      let offset = 0;
+      while (offset < bytesRead) {
+        offset += writeSync(destination, buffer, offset, bytesRead - offset);
+      }
+      bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    }
+    fsyncSync(destination);
+  } finally {
+    closeSync(destination);
+    closeSync(source);
+  }
 }
 
 function decodeCachedTradeRecord(value: unknown): CachedTradeRecord {
@@ -284,13 +354,4 @@ function encodeTradeRecord(row: PersistedTradeRecord, queuedAt: number): Seriali
     ingestedAt: row.ingestedAt.toISOString(),
     _queuedAt: queuedAt,
   };
-}
-
-function getOldestQueuedAt(rows: CachedTradeRecord[]): number | null {
-  let oldest: number | null = null;
-  for (const row of rows) {
-    if (row.queuedAt == null) return null;
-    if (oldest == null || row.queuedAt < oldest) oldest = row.queuedAt;
-  }
-  return oldest;
 }

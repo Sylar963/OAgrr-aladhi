@@ -138,7 +138,7 @@ function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
 }
 
-function readJsonLines<T>(path: string, decode: (value: unknown) => T): T[] {
+function readJsonLines<T>(path: string, decode: (value: unknown) => T, log: DeferredLog): T[] {
   if (!existsSync(path)) return [];
   const rows: T[] = [];
   const descriptor = openSync(path, 'r');
@@ -153,14 +153,14 @@ function readJsonLines<T>(path: string, decode: (value: unknown) => T): T[] {
       let lineStart = 0;
       let newline = body.indexOf('\n', lineStart);
       while (newline !== -1) {
-        decodeJsonLine(body.slice(lineStart, newline), decode, rows);
+        decodeJsonLine(body.slice(lineStart, newline), decode, rows, path, log);
         lineStart = newline + 1;
         newline = body.indexOf('\n', lineStart);
       }
       remainder = body.slice(lineStart);
       bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
     }
-    decodeJsonLine(remainder + decoder.end(), decode, rows);
+    decodeJsonLine(remainder + decoder.end(), decode, rows, path, log);
   } finally {
     closeSync(descriptor);
   }
@@ -168,8 +168,19 @@ function readJsonLines<T>(path: string, decode: (value: unknown) => T): T[] {
   return rows;
 }
 
-function decodeJsonLine<T>(line: string, decode: (value: unknown) => T, rows: T[]): void {
-  if (line.trim() !== '') rows.push(decode(JSON.parse(line)));
+function decodeJsonLine<T>(
+  line: string,
+  decode: (value: unknown) => T,
+  rows: T[],
+  path: string,
+  log: DeferredLog,
+): void {
+  if (line.trim() === '') return;
+  try {
+    rows.push(decode(JSON.parse(line)));
+  } catch (error: unknown) {
+    log.warn({ err: String(error), path }, 'skipping malformed deferred cache line');
+  }
 }
 
 function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
@@ -329,7 +340,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
     private readonly log: DeferredLog,
   ) {
     this.enabled = delegate.enabled;
-    this.pending = readJsonLines(options.cachePath, decodeOiSnapshot);
+    this.pending = readJsonLines(options.cachePath, decodeOiSnapshot, log);
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
@@ -403,11 +414,17 @@ export class DeferredDealerBookStore implements DealerBookStore {
     this.enabled = delegate.enabled;
     this.pendingPath = `${options.cachePath}.pending`;
     this.cache = new Map(
-      readJsonLines(options.cachePath, decodeDealerPosition).map((row) => [dealerKey(row), row]),
+      readJsonLines(options.cachePath, decodeDealerPosition, log).map((row) => [
+        dealerKey(row),
+        row,
+      ]),
     );
     this.pending = existsSync(this.pendingPath)
       ? new Map(
-          readJsonLines(this.pendingPath, decodeDealerPosition).map((row) => [dealerKey(row), row]),
+          readJsonLines(this.pendingPath, decodeDealerPosition, log).map((row) => [
+            dealerKey(row),
+            row,
+          ]),
         )
       : new Map(this.cache);
     this.timer = setInterval(() => {
@@ -523,9 +540,9 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   ) {
     this.enabled = delegate.enabled;
     this.pendingPath = `${options.cachePath}.pending`;
-    this.cache = readJsonLines(options.cachePath, decodeIvHistoryPoint);
+    this.cache = readJsonLines(options.cachePath, decodeIvHistoryPoint, log);
     this.pending = existsSync(this.pendingPath)
-      ? readJsonLines(this.pendingPath, decodeIvHistoryPoint)
+      ? readJsonLines(this.pendingPath, decodeIvHistoryPoint, log)
       : [...this.cache];
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
@@ -697,19 +714,19 @@ export class DeferredRegimeStore implements RegimeStore {
     this.enabled = delegate.enabled;
     this.pendingObservationsPath = `${options.observationsCachePath}.pending`;
     this.pendingModelsPath = `${options.modelsCachePath}.pending`;
-    this.observations = readJsonLines(options.observationsCachePath, decodeRegimeObservation);
+    this.observations = readJsonLines(options.observationsCachePath, decodeRegimeObservation, log);
     this.models = new Map(
-      readJsonLines(options.modelsCachePath, decodeRegimeModel).map((model) => [
+      readJsonLines(options.modelsCachePath, decodeRegimeModel, log).map((model) => [
         model.underlying.toUpperCase(),
         model,
       ]),
     );
     this.pendingObservations = existsSync(this.pendingObservationsPath)
-      ? readJsonLines(this.pendingObservationsPath, decodeRegimeObservation)
+      ? readJsonLines(this.pendingObservationsPath, decodeRegimeObservation, log)
       : [...this.observations];
     this.pendingModels = existsSync(this.pendingModelsPath)
       ? new Map(
-          readJsonLines(this.pendingModelsPath, decodeRegimeModel).map((model) => [
+          readJsonLines(this.pendingModelsPath, decodeRegimeModel, log).map((model) => [
             model.underlying.toUpperCase(),
             model,
           ]),

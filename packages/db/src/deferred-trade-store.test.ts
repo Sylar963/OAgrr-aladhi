@@ -221,6 +221,26 @@ describe('DeferredTradeStore', () => {
     await store.dispose();
   });
 
+  it('streams the spool to the delegate in bounded batches', async () => {
+    const cachePath = tempPath('batches.ndjson');
+    const delegate = new FakeTradeStore();
+    const store = new DeferredTradeStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100, flushBatchSize: 2 },
+      noopLog,
+    );
+    const rows = Array.from({ length: 5 }, (_, index) =>
+      trade({ tradeUid: `deribit:batch-${index}` }),
+    );
+
+    await store.writeMany(rows);
+    await store.flush();
+
+    expect(delegate.writes.map((batch) => batch.length)).toEqual([2, 2, 1]);
+    expect(delegate.writes.flat()).toEqual(rows);
+    await store.dispose();
+  });
+
   it('preserves the oldest row flush deadline across restart', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

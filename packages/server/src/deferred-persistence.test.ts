@@ -17,7 +17,7 @@ import type {
   RegimeStore,
   ShortStraddleSnapshotStore,
 } from '@oggregator/db';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DeferredDealerBookStore,
   DeferredIvHistoryStore,
@@ -392,6 +392,29 @@ describe('DeferredIvHistoryStore', () => {
     await store.flush();
 
     expect(delegate.writes).toEqual([[ivPoint]]);
+    await store.dispose();
+  });
+
+  it('skips malformed cache lines and reports them', async () => {
+    const cachePath = tempPath('iv-malformed.ndjson');
+    writeFileSync(
+      cachePath,
+      `not-json\n${JSON.stringify({ ...ivPoint, ts: ivPoint.ts.toISOString() })}\n`,
+    );
+    const warn = vi.fn();
+    const store = new DeferredIvHistoryStore(
+      new FakeIvHistoryStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100, thresholdBytes: 1_000_000 },
+      { warn },
+    );
+
+    await expect(store.loadSince({ underlyings: ['BTC'], since: new Date(0) })).resolves.toEqual([
+      ivPoint,
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ path: cachePath }),
+      'skipping malformed deferred cache line',
+    );
     await store.dispose();
   });
 });

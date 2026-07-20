@@ -198,6 +198,33 @@ describe('DeferredTradeStore', () => {
     await store.dispose();
   });
 
+  it('keeps the retry deadline when new trades arrive after a failed flush', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const cachePath = tempPath('retry-deadline.ndjson');
+    const intervalMs = 1_000;
+    const delegate = new FakeTradeStore();
+    const writeMany = vi.spyOn(delegate, 'writeMany');
+    const store = new DeferredTradeStore(
+      delegate,
+      { cachePath, flushIntervalMs: intervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    delegate.failWrites = true;
+    await store.writeMany([trade({ tradeUid: 'deribit:first' })]);
+
+    await vi.advanceTimersByTimeAsync(intervalMs);
+    expect(writeMany).toHaveBeenCalledOnce();
+
+    await store.writeMany([trade({ tradeUid: 'deribit:second' })]);
+    await vi.advanceTimersByTimeAsync(intervalMs - 1);
+    expect(writeMany).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(writeMany).toHaveBeenCalledTimes(2);
+    await store.dispose();
+  });
+
   it('retains every row after the spool warning threshold is exceeded', async () => {
     const cachePath = tempPath('threshold.ndjson');
     const delegate = new FakeTradeStore();

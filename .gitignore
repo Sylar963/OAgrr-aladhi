@@ -32,7 +32,7 @@ coverage/
 
 # pnpm
 .pnpm-debug.log
-
+.cache
 # Turbo
 .turbo/
 ROADMAP.md

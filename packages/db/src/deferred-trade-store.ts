@@ -59,6 +59,7 @@ export class DeferredTradeStore implements TradeStore {
   private pruneBefore: Date | null = null;
   private flushPromise: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private retryNotBefore = 0;
   private maintenanceDueAt: number;
   private disposed = false;
 
@@ -142,7 +143,8 @@ export class DeferredTradeStore implements TradeStore {
       await flushPromise;
     } finally {
       if (this.flushPromise === flushPromise) this.flushPromise = null;
-      this.scheduleNextFlush(failed ? Date.now() + this.retryDelayMs() : undefined);
+      this.retryNotBefore = failed ? Date.now() + this.retryDelayMs() : 0;
+      this.scheduleNextFlush();
     }
   }
 
@@ -237,7 +239,7 @@ export class DeferredTradeStore implements TradeStore {
     this.capacityWarningEmitted = this.pendingCount > this.options.maxPendingRows;
   }
 
-  private scheduleNextFlush(notBefore?: number): void {
+  private scheduleNextFlush(): void {
     if (this.disposed || this.flushPromise != null) return;
     if (this.timer != null) clearTimeout(this.timer);
 
@@ -245,7 +247,7 @@ export class DeferredTradeStore implements TradeStore {
       this.oldestPendingAt == null
         ? Number.POSITIVE_INFINITY
         : this.oldestPendingAt + this.options.flushIntervalMs;
-    const dueAt = Math.max(notBefore ?? 0, Math.min(pendingDueAt, this.maintenanceDueAt));
+    const dueAt = Math.max(this.retryNotBefore, Math.min(pendingDueAt, this.maintenanceDueAt));
     const delay = Math.max(0, dueAt - Date.now());
     this.timer = setTimeout(() => {
       this.timer = null;

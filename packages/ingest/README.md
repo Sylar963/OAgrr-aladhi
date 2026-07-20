@@ -26,7 +26,7 @@ pnpm start        # node dist/index.js
 |----------|-------------|
 | `DATABASE_URL` | Required Postgres connection string |
 | `NODE_ENV` | Use `production` outside local development |
-| `TRADE_DB_FLUSH_INTERVAL_MS` | Milliseconds between Postgres flushes; default `90000000` (25 hours), set `0` for direct writes |
+| `TRADE_DB_FLUSH_INTERVAL_MS` | Milliseconds between Postgres flushes; default `604800000` (7 days), set `0` for direct writes |
 | `TRADE_CACHE_PATH` | Local NDJSON trade spool path; default `.cache/ingest-trades.ndjson` |
 | `TRADE_CACHE_MAX_ROWS` | Pending-row warning threshold for the local spool; all rows are retained; default `5000000` |
 | `TRADE_DB_FLUSH_BATCH_SIZE` | Rows passed to the underlying DB store per flush batch; default `10000` |

@@ -13,10 +13,11 @@ import type {
 } from './trade-store.js';
 import type { PersistedTradeRecord } from './types.js';
 
-const INSERT_BATCH_SIZE = 100;
+const INSERT_BATCH_SIZE = 1_000;
 
 export class PostgresTradeStore implements TradeStore {
   readonly enabled = true;
+  private readonly ensuredPartitionMonths = new Set<string>();
 
   constructor(private readonly pool: Pool) {}
 
@@ -33,6 +34,7 @@ export class PostgresTradeStore implements TradeStore {
 
   async writeMany(records: PersistedTradeRecord[]): Promise<void> {
     if (records.length === 0) return;
+    await this.ensureRecordPartitions(records);
 
     for (let index = 0; index < records.length; index += INSERT_BATCH_SIZE) {
       const batch = records.slice(index, index + INSERT_BATCH_SIZE);
@@ -247,6 +249,23 @@ export class PostgresTradeStore implements TradeStore {
 
   async dispose(): Promise<void> {
     await this.pool.end();
+  }
+
+  private async ensureRecordPartitions(records: PersistedTradeRecord[]): Promise<void> {
+    const months = new Map<string, Date>();
+    for (const record of records) {
+      const year = record.tradeTs.getUTCFullYear();
+      const month = record.tradeTs.getUTCMonth();
+      const key = `${year}-${month}`;
+      if (!this.ensuredPartitionMonths.has(key)) {
+        months.set(key, new Date(Date.UTC(year, month, 1)));
+      }
+    }
+
+    for (const [key, month] of months) {
+      await this.pool.query('SELECT flow_trades_ensure_month_partition($1::timestamptz)', [month]);
+      this.ensuredPartitionMonths.add(key);
+    }
   }
 }
 

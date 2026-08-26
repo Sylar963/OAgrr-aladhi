@@ -420,18 +420,22 @@ describe('DeferredIvHistoryStore', () => {
 });
 
 describe('DeferredShortStraddleSnapshotStore', () => {
-  it('rejects invalid records when decoding the local NDJSON boundary', () => {
+  it('skips invalid records when decoding the local NDJSON boundary', async () => {
     const cachePath = tempPath('short-straddle-invalid.ndjson');
     writeFileSync(cachePath, `${JSON.stringify({ ...shortStraddleSnapshot, capturedAt: null })}\n`);
+    const warn = vi.fn();
 
-    expect(
-      () =>
-        new DeferredShortStraddleSnapshotStore(
-          new FakeShortStraddleSnapshotStore(),
-          { cachePath, flushIntervalMs, maxPendingRows: 100 },
-          noopLog,
-        ),
-    ).toThrow();
+    const store = new DeferredShortStraddleSnapshotStore(
+      new FakeShortStraddleSnapshotStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      { warn },
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ path: cachePath }),
+      'skipping malformed deferred cache line',
+    );
+    await store.dispose();
   });
 
   it('appends locally without calling the database', async () => {

@@ -628,7 +628,7 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
     this.enabled = delegate.enabled;
     this.cachePath = options.cachePath ?? DEFAULT_SHORT_STRADDLE_CACHE_PATH;
     this.maxPendingRows = options.maxPendingRows ?? DEFAULT_SHORT_STRADDLE_MAX_PENDING_ROWS;
-    this.pending = readJsonLines(this.cachePath, decodeShortStraddleSnapshot);
+    this.pending = readJsonLines(this.cachePath, decodeShortStraddleSnapshot, log);
     this.timer =
       options.flushIntervalMs > 0
         ? setInterval(() => {

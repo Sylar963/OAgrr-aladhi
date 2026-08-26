@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { Pool } from 'pg';
 
 import type {
@@ -8,6 +10,7 @@ import type {
   TradeHistoryQuery,
   TradeHistorySummary,
   TradePruneResult,
+  TradeRecordKey,
   TradeStore,
   TradeVenueSummary,
 } from './trade-store.js';
@@ -18,6 +21,7 @@ const INSERT_BATCH_SIZE = 1_000;
 export class PostgresTradeStore implements TradeStore {
   readonly enabled = true;
   private readonly ensuredPartitionMonths = new Set<string>();
+  private readonly snapshotClient = new AsyncLocalStorage<PoolClient>();
 
   constructor(private readonly pool: Pool) {}
 
@@ -30,6 +34,22 @@ export class PostgresTradeStore implements TradeStore {
         query_timeout: 15_000,
       }),
     );
+  }
+
+  async withReadSnapshot<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.snapshotClient.getStore() != null) return operation();
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const result = await this.snapshotClient.run(client, operation);
+      await client.query('COMMIT');
+      return result;
+    } catch (error: unknown) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async writeMany(records: PersistedTradeRecord[]): Promise<void> {
@@ -68,7 +88,7 @@ export class PostgresTradeStore implements TradeStore {
         return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19}, $${offset + 20}, $${offset + 21}::jsonb, $${offset + 22}::jsonb)`;
       });
 
-      await this.pool.query(
+      await this.query(
         `INSERT INTO flow_trades (
           trade_uid,
           mode,
@@ -103,9 +123,9 @@ export class PostgresTradeStore implements TradeStore {
     const built = buildWhere(query);
     built.values.push(query.limit);
 
-    const result = await this.pool.query<StoredRow>(
+    const result = await this.query<StoredRow>(
       `${buildSelectSql(built)}
-      ORDER BY trade_ts DESC, trade_uid DESC
+      ORDER BY trade_ts DESC, trade_uid COLLATE "C" DESC
       LIMIT $${built.values.length}`,
       built.values,
     );
@@ -123,7 +143,7 @@ export class PostgresTradeStore implements TradeStore {
       if (query.beforeUid) {
         built.values.push(query.beforeUid);
         const uidParam = `$${built.values.length}`;
-        built.clauses.push(`(trade_ts, trade_uid) < (${tsParam}, ${uidParam})`);
+        built.clauses.push(`(trade_ts, trade_uid COLLATE "C") < (${tsParam}, ${uidParam})`);
       } else {
         built.clauses.push(`trade_ts < ${tsParam}`);
       }
@@ -131,13 +151,28 @@ export class PostgresTradeStore implements TradeStore {
 
     built.values.push(query.limit);
 
-    const result = await this.pool.query<StoredRow>(
+    const result = await this.query<StoredRow>(
       `${buildSelectSql(built)}
-      ORDER BY trade_ts DESC, trade_uid DESC
+      ORDER BY trade_ts DESC, trade_uid COLLATE "C" DESC
       LIMIT $${built.values.length}`,
       built.values,
     );
 
+    return result.rows.map(mapRow);
+  }
+
+  async loadByKeys(
+    query: TradeFilterQuery,
+    keys: TradeRecordKey[],
+  ): Promise<PersistedTradeRecord[]> {
+    if (keys.length === 0) return [];
+    const built = buildWhere(query);
+    const placeholders = keys.map((key) => {
+      built.values.push(key.tradeUid, key.tradeTs);
+      return `($${built.values.length - 1}, $${built.values.length})`;
+    });
+    built.clauses.push(`(trade_uid, trade_ts) IN (${placeholders.join(', ')})`);
+    const result = await this.query<StoredRow>(buildSelectSql(built), built.values);
     return result.rows.map(mapRow);
   }
 
@@ -146,7 +181,7 @@ export class PostgresTradeStore implements TradeStore {
   ): Promise<TradeHistorySummary> {
     const built = buildWhere(query);
 
-    const summaryResult = await this.pool.query<SummaryRow>(
+    const summaryResult = await this.query<SummaryRow>(
       `SELECT
         COUNT(*)::bigint AS count,
         COALESCE(SUM(premium_usd), 0)::text AS premium_usd,
@@ -158,7 +193,7 @@ export class PostgresTradeStore implements TradeStore {
       built.values,
     );
 
-    const venuesResult = await this.pool.query<VenueSummaryRow>(
+    const venuesResult = await this.query<VenueSummaryRow>(
       `SELECT
         venue,
         COUNT(*)::bigint AS count,
@@ -185,25 +220,50 @@ export class PostgresTradeStore implements TradeStore {
 
   async listInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]> {
     const built = buildWhere(query);
-    built.values.push(query.limit);
-    const limitParam = `$${built.values.length}`;
+    return this.loadInstrumentSummaries(built, query.limit);
+  }
 
-    const result = await this.pool.query<InstrumentSummaryRow>(
+  async listInstrumentsByNames(
+    query: TradeFilterQuery & { mode: PersistedTradeRecord['mode'] },
+    instrumentNames: string[],
+  ): Promise<InstrumentSummary[]> {
+    if (instrumentNames.length === 0) return [];
+    const built = buildWhere(query);
+    built.values.push(instrumentNames);
+    built.clauses.push(`instrument_name = ANY($${built.values.length}::text[])`);
+    return this.loadInstrumentSummaries(built);
+  }
+
+  private async loadInstrumentSummaries(
+    built: BuiltWhere,
+    limit?: number,
+  ): Promise<InstrumentSummary[]> {
+    let limitSql = '';
+    if (limit != null) {
+      built.values.push(limit);
+      limitSql = `LIMIT $${built.values.length}`;
+    }
+
+    const result = await this.query<InstrumentSummaryRow>(
       `WITH filtered AS (
         SELECT
           instrument_name,
           trade_ts,
+          trade_uid,
           price,
           reference_price_usd,
           option_type,
           strike,
           expiry,
-          ROW_NUMBER() OVER (PARTITION BY instrument_name ORDER BY trade_ts DESC, trade_uid DESC) AS rn
+          ROW_NUMBER() OVER (
+            PARTITION BY instrument_name
+            ORDER BY trade_ts DESC, trade_uid COLLATE "C" DESC
+          ) AS rn
         FROM flow_trades
         ${buildWhereSql(built)}
       ),
       latest AS (
-        SELECT instrument_name, price, reference_price_usd, option_type, strike, expiry, trade_ts
+        SELECT instrument_name, price, reference_price_usd, option_type, strike, expiry, trade_ts, trade_uid
         FROM filtered
         WHERE rn = 1
       ),
@@ -216,6 +276,7 @@ export class PostgresTradeStore implements TradeStore {
         latest.instrument_name,
         counts.count,
         latest.trade_ts,
+        latest.trade_uid,
         latest.price,
         latest.reference_price_usd,
         latest.option_type,
@@ -223,8 +284,8 @@ export class PostgresTradeStore implements TradeStore {
         latest.expiry
       FROM latest
       JOIN counts USING (instrument_name)
-      ORDER BY counts.count DESC, latest.trade_ts DESC
-      LIMIT ${limitParam}`,
+      ORDER BY counts.count DESC, latest.trade_ts DESC, latest.instrument_name COLLATE "C" ASC
+      ${limitSql}`,
       built.values,
     );
 
@@ -232,7 +293,7 @@ export class PostgresTradeStore implements TradeStore {
   }
 
   async pruneHistory(beforeTs: Date): Promise<TradePruneResult> {
-    const result = await this.pool.query('DELETE FROM flow_trades WHERE trade_ts < $1', [beforeTs]);
+    const result = await this.query('DELETE FROM flow_trades WHERE trade_ts < $1', [beforeTs]);
     return { deleted: result.rowCount ?? 0 };
   }
 
@@ -240,7 +301,7 @@ export class PostgresTradeStore implements TradeStore {
     // Also create the previous month — venues sometimes replay recent trades
     // with timestamps a few hours/days behind on resubscribe.
     for (let i = -1; i <= monthsAhead; i += 1) {
-      await this.pool.query(
+      await this.query(
         `SELECT flow_trades_ensure_month_partition(now() + ($1 || ' months')::INTERVAL)`,
         [i],
       );
@@ -249,6 +310,15 @@ export class PostgresTradeStore implements TradeStore {
 
   async dispose(): Promise<void> {
     await this.pool.end();
+  }
+
+  private query<Row extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ): Promise<QueryResult<Row>> {
+    return (
+      this.snapshotClient.getStore()?.query<Row>(text, values) ?? this.pool.query<Row>(text, values)
+    );
   }
 
   private async ensureRecordPartitions(records: PersistedTradeRecord[]): Promise<void> {
@@ -263,7 +333,7 @@ export class PostgresTradeStore implements TradeStore {
     }
 
     for (const [key, month] of months) {
-      await this.pool.query('SELECT flow_trades_ensure_month_partition($1::timestamptz)', [month]);
+      await this.query('SELECT flow_trades_ensure_month_partition($1::timestamptz)', [month]);
       this.ensuredPartitionMonths.add(key);
     }
   }
@@ -422,6 +492,7 @@ interface InstrumentSummaryRow {
   instrument_name: string;
   count: string;
   trade_ts: Date;
+  trade_uid: string;
   price: string | null;
   reference_price_usd: string | null;
   option_type: 'call' | 'put' | null;
@@ -434,6 +505,7 @@ function mapInstrumentRow(row: InstrumentSummaryRow): InstrumentSummary {
     instrument: row.instrument_name,
     count: Number(row.count),
     lastTs: row.trade_ts,
+    lastTradeUid: row.trade_uid,
     lastPrice: toNumber(row.price),
     lastReferencePriceUsd: toNumber(row.reference_price_usd),
     optionType: row.option_type,

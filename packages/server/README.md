@@ -42,4 +42,5 @@ pnpm test:run     # vitest
 |----------|---------|-------------|
 | `PORT` | `3100` | Server listen port |
 | `NODE_ENV` | | Set to `production` to serve static SPA |
-| `DATABASE_URL` | | Optional. Not used by the live server routes yet, but available for future DB-backed history work |
+| `DATABASE_URL` | | Optional Postgres source for older trade history and server persistence |
+| `TRADE_SQLITE_PATH` | `.cache/ingest-trades.sqlite` | Read-only local source for pending trade history; must match ingest on shared persistent storage |

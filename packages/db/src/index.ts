@@ -27,6 +27,7 @@ export {
 } from './iv-history-store.js';
 export type { CaptureLeadInput, LeadRow, LeadsStore } from './leads-store.js';
 export { NoopLeadsStore, PostgresLeadsStore } from './leads-store.js';
+export { MergedTradeStore } from './merged-trade-store.js';
 export { NoopTradeStore } from './noop-trade-store.js';
 export type { OiSnapshotStore, PersistedOiSnapshot } from './oi-snapshot-store.js';
 export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-store.js';
@@ -63,12 +64,19 @@ export {
   NoopShortStraddleSnapshotStore,
   PostgresShortStraddleSnapshotStore,
 } from './short-straddle-snapshot-store.js';
+export { SqliteTradeStore } from './sqlite-trade-store.js';
 export type {
   InstrumentListQuery,
   InstrumentSummary,
+  MergeableTradeHistoryReader,
   RecentTradeQuery,
+  TradeFilterQuery,
   TradeHistoryQuery,
+  TradeHistoryReader,
+  TradeHistorySummary,
+  TradeRecordKey,
   TradeStore,
+  TradeVenueSummary,
 } from './trade-store.js';
 export type { PersistedTradeLeg, PersistedTradeMode, PersistedTradeRecord } from './types.js';
 

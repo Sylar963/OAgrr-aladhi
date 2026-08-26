@@ -23,12 +23,12 @@ import {
   type IvHistoryStorageStats,
   type IvHistoryStore,
   type LeadsStore,
+  MergedTradeStore,
   NoopDealerBookStore,
   NoopIvHistoryStore,
   NoopLeadsStore,
   NoopOiSnapshotStore,
   NoopRegimeStore,
-  NoopTradeStore,
   type OiSnapshotStore,
   PostgresDealerBookStore,
   PostgresIvHistoryStore,
@@ -39,7 +39,8 @@ import {
   PostgresTradeStore,
   type RegimeStore,
   type ShortStraddleSnapshotStore,
-  type TradeStore,
+  SqliteTradeStore,
+  type TradeHistoryReader,
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
@@ -153,9 +154,14 @@ export const ivHistoryService = new IvHistoryService({
     return entries.map((e) => e.surfaceRow);
   },
 });
-export const tradeStore: TradeStore = databaseUrl
-  ? PostgresTradeStore.fromConnectionString(databaseUrl)
-  : new NoopTradeStore();
+const localTradeStore = new SqliteTradeStore(
+  process.env['TRADE_SQLITE_PATH'] ?? '.cache/ingest-trades.sqlite',
+  { readOnly: true },
+);
+export const tradeStore: TradeHistoryReader = new MergedTradeStore(
+  localTradeStore,
+  databaseUrl ? PostgresTradeStore.fromConnectionString(databaseUrl) : null,
+);
 
 export const leadsStore: LeadsStore = databaseUrl
   ? PostgresLeadsStore.fromConnectionString(databaseUrl)

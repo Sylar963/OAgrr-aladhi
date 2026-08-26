@@ -518,12 +518,8 @@ function createTradeStore(databaseUrl: string, retentionDays: number): TradeStor
     DEFAULT_TRADE_DB_FLUSH_INTERVAL_MS,
     'TRADE_DB_FLUSH_INTERVAL_MS',
   );
-  if (flushIntervalMs === 0) {
-    log.info({ mode: 'direct', retentionDays }, 'trade persistence configured');
-    return postgres;
-  }
-
-  const cachePath = process.env['TRADE_CACHE_PATH'] ?? '.cache/ingest-trades.ndjson';
+  const sqlitePath = process.env['TRADE_SQLITE_PATH'] ?? '.cache/ingest-trades.sqlite';
+  const legacyCachePath = process.env['TRADE_CACHE_PATH'] ?? '.cache/ingest-trades.ndjson';
   const flushBatchSize = parsePositiveInteger(
     process.env['TRADE_DB_FLUSH_BATCH_SIZE'],
     DEFAULT_TRADE_DB_FLUSH_BATCH_SIZE,
@@ -538,11 +534,12 @@ function createTradeStore(databaseUrl: string, retentionDays: number): TradeStor
 
   log.info(
     {
-      mode: 'deferred',
+      mode: flushIntervalMs === 0 ? 'direct' : 'deferred',
       retentionDays,
-      flushIntervalMs,
+      flushIntervalMs: Math.max(1, flushIntervalMs),
       flushBatchSize,
-      cachePath,
+      sqlitePath,
+      legacyCachePath,
       maxPendingRows,
       flushOnDispose,
     },
@@ -552,8 +549,11 @@ function createTradeStore(databaseUrl: string, retentionDays: number): TradeStor
   return new DeferredTradeStore(
     postgres,
     {
-      flushIntervalMs,
-      cachePath,
+      flushIntervalMs: Math.max(1, flushIntervalMs),
+      retryDelayMs: flushIntervalMs === 0 ? MAX_FLUSH_BACKOFF_MS : flushIntervalMs,
+      maintenanceIntervalMs: flushIntervalMs === 0 ? PARTITION_TOPUP_INTERVAL_MS : flushIntervalMs,
+      sqlitePath,
+      legacyCachePaths: [legacyCachePath, `${legacyCachePath}.flushing`],
       maxPendingRows,
       flushBatchSize,
       flushOnDispose,

@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PostgresTradeStore } from './postgres-trade-store.js';
@@ -74,5 +74,33 @@ describe('PostgresTradeStore', () => {
       String(sql).includes('INSERT INTO flow_trades'),
     );
     expect(insertCalls).toHaveLength(2);
+    expect(insertCalls.map(([, values]) => (Array.isArray(values) ? values.length : 0))).toEqual([
+      22_000, 22,
+    ]);
+  });
+
+  it('runs merged read operations in one repeatable-read snapshot', async () => {
+    const clientQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
+    const client = { query: clientQuery, release: vi.fn() } as unknown as PoolClient;
+    const poolQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
+    const pool = {
+      connect: vi.fn().mockResolvedValue(client),
+      query: poolQuery,
+      end: vi.fn(),
+    } as unknown as Pool;
+    const store = new PostgresTradeStore(pool);
+
+    await store.withReadSnapshot(async () => {
+      await store.loadRecent({ mode: 'live', limit: 10 });
+      await store.loadByKeys({ mode: 'live' }, []);
+    });
+
+    expect(clientQuery.mock.calls.map(([sql]) => String(sql).trim().split('\n')[0])).toEqual([
+      'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      'SELECT',
+      'COMMIT',
+    ]);
+    expect(poolQuery).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledOnce();
   });
 });

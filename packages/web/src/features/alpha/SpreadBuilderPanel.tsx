@@ -188,6 +188,6 @@ function legOrderHint(kind: SpreadKind): string {
 
 function kindHint(kind: SpreadKind): string {
   return kind === 'call-credit'
-    ? 'Bearish/neutral. Sell lower strike call, buy higher strike call. Profit if BTC stays below short strike.'
-    : 'Bullish/neutral. Sell higher strike put, buy lower strike put. Profit if BTC stays above short strike.';
+    ? 'Bearish/neutral. Sell lower strike call, buy higher strike call. Profit if spot stays below the short strike.'
+    : 'Bullish/neutral. Sell higher strike put, buy lower strike put. Profit if spot stays above the short strike.';
 }

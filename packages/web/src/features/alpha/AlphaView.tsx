@@ -9,15 +9,24 @@ import { Spinner, EmptyState } from '@components/ui';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 
 import SpreadBuilderPanel from './SpreadBuilderPanel';
+import AlphaContextStrip from './AlphaContextStrip';
 import LottoScannerPanel from './LottoScannerPanel';
 import SignalCard from './SignalCard';
 import VenueRouterTable from './VenueRouterTable';
 import VolSmileInset from './VolSmileInset';
-import VrpChip from './VrpChip';
 import { computeSviRichness } from './sviRichness';
+import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import styles from './AlphaView.module.css';
+
+type AlphaStrategy = SpreadKind | 'long-call';
+
+const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
+  { id: 'call-credit', label: 'Call Credit' },
+  { id: 'put-credit', label: 'Put Credit' },
+  { id: 'long-call', label: 'Long Call' },
+];
 
 export default function AlphaView() {
   const underlying = useAppStore((s) => s.underlying);
@@ -33,7 +42,8 @@ export default function AlphaView() {
   const { data: surface } = useSurface(underlying, activeVenues);
 
   const isMobile = useIsMobile();
-  const [kind, setKind] = useState<SpreadKind>('call-credit');
+  const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
+  const kind: SpreadKind = strategy === 'long-call' ? 'call-credit' : strategy;
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
 
@@ -88,6 +98,7 @@ export default function AlphaView() {
   );
 
   const { data: regime } = useRegimeQuery(underlying);
+  const marketContext = useAlphaMarketContext(underlying);
   const regimeDominant = regime?.dominant ?? null;
 
   const analysis = useVerticalSpreadAnalysis({
@@ -112,33 +123,13 @@ export default function AlphaView() {
     return sn - ln;
   }, [analysis]);
 
-  if (isLoading && !chain) {
-    return (
-      <div className={styles.view}>
-        <Spinner size="lg" label="Loading chain data…" />
-      </div>
-    );
-  }
-
-  if (error && !chain) {
-    return (
-      <div className={styles.view}>
-        <EmptyState
-          icon="⚠"
-          title="Failed to load chain"
-          detail={error instanceof Error ? error.message : 'Check your connection and try again.'}
-        />
-      </div>
-    );
-  }
-
   const builder = chain && (
     <SpreadBuilderPanel
       kind={kind}
       onKindChange={(k) => {
         if (k === kind) return;
         const d = defaultsFor(k);
-        setKind(k);
+        setStrategy(k);
         if (d) {
           setShortStrike(d.shortStrike);
           setLongStrike(d.longStrike);
@@ -164,7 +155,6 @@ export default function AlphaView() {
         signal={analysis.analysis?.combinedSignal ?? null}
         regime={regime ?? null}
       />
-      {underlying === 'BTC' && <LottoScannerPanel />}
       <VenueRouterTable
         shortLeg={analysis.analysis?.short ?? null}
         longLeg={analysis.analysis?.long ?? null}
@@ -184,8 +174,41 @@ export default function AlphaView() {
 
   return (
     <div className={styles.view}>
-      {/* MobileToolbar already exposes the expiry picker on mobile — don't double up. */}
-      {!isMobile && (
+      <div className={styles.strategyBar}>
+        <button type="button" className={styles.assetButton} onClick={openPalette}>
+          <span>ALPHA</span>
+          <strong>{underlying}</strong>
+        </button>
+        <div className={styles.strategyTabs} role="tablist" aria-label="Alpha strategy">
+          {STRATEGIES.map((item) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={strategy === item.id}
+              data-active={strategy === item.id}
+              key={item.id}
+              onClick={() => {
+                if (item.id === strategy) return;
+                if (item.id === 'long-call') {
+                  setStrategy(item.id);
+                  return;
+                }
+                const defaults = defaultsFor(item.id);
+                setStrategy(item.id);
+                if (defaults) {
+                  setShortStrike(defaults.shortStrike);
+                  setLongStrike(defaults.longStrike);
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span className={styles.venueScope}>{activeVenues.length} ACTIVE VENUES</span>
+      </div>
+
+      {!isMobile && strategy !== 'long-call' && (
         <ExpiryBar
           underlying={underlying}
           spotPrice={chain?.stats.forwardPriceUsd}
@@ -197,15 +220,35 @@ export default function AlphaView() {
         />
       )}
 
-      <div className={styles.contextStrip}>
-        <VrpChip
-          atmIv30d={surface?.atmIv30d ?? null}
-          rv30d={surface?.rv30d ?? null}
-          vrp30d={surface?.vrp30d ?? null}
-        />
-      </div>
+      <AlphaContextStrip
+        context={marketContext.data ?? null}
+        strategy={strategy}
+        loading={marketContext.isLoading}
+      />
 
-      {chain && chain.strikes.length === 0 && (
+      {strategy === 'long-call' && (
+        <div className={styles.scannerWorkspace}>
+          <LottoScannerPanel underlying={underlying} venues={activeVenues} />
+        </div>
+      )}
+
+      {strategy !== 'long-call' && isLoading && !chain && (
+        <div className={styles.state}>
+          <Spinner size="lg" label="Loading chain data…" />
+        </div>
+      )}
+
+      {strategy !== 'long-call' && error && !chain && (
+        <div className={styles.state}>
+          <EmptyState
+            icon="⚠"
+            title="Failed to load chain"
+            detail={error instanceof Error ? error.message : 'Check your connection and try again.'}
+          />
+        </div>
+      )}
+
+      {strategy !== 'long-call' && chain && chain.strikes.length === 0 && (
         <EmptyState
           icon="∅"
           title="No options data"
@@ -213,7 +256,7 @@ export default function AlphaView() {
         />
       )}
 
-      {chain && chain.strikes.length > 0 && (
+      {strategy !== 'long-call' && chain && chain.strikes.length > 0 && (
         isMobile ? (
           // On mobile: signal first (what users come for), then router + smile,
           // then the strike builder at the bottom (less central on small screens).

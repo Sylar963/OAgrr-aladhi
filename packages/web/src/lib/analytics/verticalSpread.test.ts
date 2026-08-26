@@ -492,7 +492,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
 
   it('rocGateForRegime maps regime label to the right ROC threshold', () => {
     expect(rocGateForRegime('high-vol')).toBeCloseTo(0.20, 6);
-    expect(rocGateForRegime('low-vol')).toBeCloseTo(0.07, 6);
+    expect(rocGateForRegime('low-vol')).toBeCloseTo(0.10, 6);
     expect(rocGateForRegime('mid-vol')).toBeCloseTo(0.10, 6);
     expect(rocGateForRegime(null)).toBeCloseTo(0.10, 6);
     expect(rocGateForRegime(undefined)).toBeCloseTo(0.10, 6);
@@ -554,7 +554,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
     expect(highVol.combinedSignal!.reasoning).toContain('high-vol');
     expect(highVol.combinedSignal!.reasoning).toContain('20%');
     expect(lowVol.combinedSignal!.reasoning).toContain('low-vol');
-    expect(lowVol.combinedSignal!.reasoning).toContain('7%');
+    expect(lowVol.combinedSignal!.reasoning).toContain('10%');
   });
 
   it('gate AVOIDs a low-ROC trade even with positive credit and high pop', () => {

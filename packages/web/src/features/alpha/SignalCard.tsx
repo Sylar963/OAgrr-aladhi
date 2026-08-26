@@ -14,7 +14,7 @@ interface Props {
 }
 
 const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
-  'low-vol': '7%',
+  'low-vol': '10%',
   'mid-vol': '10%',
   'high-vol': '20%',
 };

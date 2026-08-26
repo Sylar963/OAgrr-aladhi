@@ -1,9 +1,21 @@
 import { z } from 'zod';
 
+import { VenueIdSchema } from './ws.js';
+
 const NullableNumberSchema = z.number().nullable();
+
+const VenueListSchema = z.preprocess(
+  (value) =>
+    typeof value === 'string'
+      ? value.split(',').map((venue) => venue.trim()).filter(Boolean)
+      : value,
+  z.array(VenueIdSchema).min(1).default(['thalex']),
+);
 
 export const AlphaLottoScannerQuerySchema = z
   .object({
+    underlying: z.string().trim().min(2).max(20).default('BTC').transform((value) => value.toUpperCase()),
+    venues: VenueListSchema,
     premiumCap: z.coerce.number().positive().max(10_000).default(400),
     minDte: z.coerce.number().min(0).max(365).default(4),
     maxDte: z.coerce.number().min(0).max(365).default(14),
@@ -28,17 +40,18 @@ export type AlphaLottoScannerQuery = z.infer<typeof AlphaLottoScannerQuerySchema
 export const AlphaLottoTargetSchema = z.object({
   multiple: z.number(),
   targetMark: z.number(),
-  intrinsicBtcPrice: z.number(),
+  intrinsicUnderlyingPrice: z.number(),
   intrinsicMovePct: z.number(),
-  black76BtcPrice: NullableNumberSchema,
-  black76MovePct: NullableNumberSchema,
+  modelUnderlyingPrice: NullableNumberSchema,
+  modelMovePct: NullableNumberSchema,
+  impliedMoveMultiple: NullableNumberSchema,
 });
 
 export type AlphaLottoTarget = z.infer<typeof AlphaLottoTargetSchema>;
 
 export const AlphaLottoShockSchema = z.object({
   movePct: z.number(),
-  btcPrice: z.number(),
+  underlyingPrice: z.number(),
   intrinsicValue: z.number(),
   intrinsicMultiple: z.number(),
 });
@@ -46,11 +59,23 @@ export const AlphaLottoShockSchema = z.object({
 export type AlphaLottoShock = z.infer<typeof AlphaLottoShockSchema>;
 
 export const AlphaLottoCandidateSchema = z.object({
+  venue: VenueIdSchema,
+  underlying: z.string(),
   instrument: z.string(),
+  settle: z.string(),
+  inverse: z.boolean(),
+  contractSize: z.number(),
+  minQty: z.number(),
   expiry: z.string(),
   expiryTs: z.number(),
   dte: z.number(),
   strike: z.number(),
+  indexPrice: z.number(),
+  forwardPrice: z.number(),
+  referenceSource: z.enum(['venue-forward', 'spot-proxy']),
+  atmIv: NullableNumberSchema,
+  expectedMoveUsd: NullableNumberSchema,
+  expectedMovePct: NullableNumberSchema,
   mark: z.number(),
   bid: z.number(),
   ask: z.number(),
@@ -62,9 +87,10 @@ export const AlphaLottoCandidateSchema = z.object({
   otmPct: z.number(),
   breakEvenPrice: z.number(),
   breakEvenMovePct: z.number(),
-  contractsAtMark: z.number(),
-  contractsAtAsk: z.number(),
-  conservativeContracts: z.number(),
+  minimumOrderCost: z.number(),
+  quantityAtMark: z.number(),
+  quantityAtAsk: z.number(),
+  conservativeQuantity: z.number(),
   targets: z.array(AlphaLottoTargetSchema),
   shocks: z.array(AlphaLottoShockSchema),
   asOfMs: z.number(),
@@ -74,11 +100,17 @@ export type AlphaLottoCandidate = z.infer<typeof AlphaLottoCandidateSchema>;
 
 export const AlphaLottoScannerResponseSchema = z.object({
   generatedAt: z.number(),
-  venue: z.literal('thalex'),
-  underlying: z.literal('BTC'),
+  venues: z.array(VenueIdSchema),
+  underlying: z.string(),
   indexPrice: NullableNumberSchema,
   forwardPrice: NullableNumberSchema,
   eligibleExpiries: z.array(z.string()),
+  venueStatus: z.array(z.object({
+    venue: VenueIdSchema,
+    eligibleExpiries: z.number(),
+    scannedContracts: z.number(),
+    error: z.string().nullable(),
+  })),
   config: AlphaLottoScannerQuerySchema,
   candidates: z.array(AlphaLottoCandidateSchema),
   skipped: z.record(z.number()),

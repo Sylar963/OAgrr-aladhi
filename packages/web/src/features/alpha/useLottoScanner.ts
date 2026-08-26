@@ -6,8 +6,10 @@ import {
 
 import { fetchJson } from '@lib/http';
 
-export function useLottoScanner(config: AlphaLottoScannerQuery) {
+export function useLottoScanner(config: AlphaLottoScannerQuery, enabled = true) {
   const params = new URLSearchParams({
+    underlying: config.underlying,
+    venues: config.venues.join(','),
     premiumCap: String(config.premiumCap),
     minDte: String(config.minDte),
     maxDte: String(config.maxDte),
@@ -25,6 +27,7 @@ export function useLottoScanner(config: AlphaLottoScannerQuery) {
       const payload = await fetchJson<unknown>(`/alpha/lotto-scanner?${params.toString()}`);
       return AlphaLottoScannerResponseSchema.parse(payload);
     },
+    enabled,
     refetchInterval: 10_000,
     staleTime: 5_000,
   });

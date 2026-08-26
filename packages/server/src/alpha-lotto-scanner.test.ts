@@ -2,7 +2,11 @@ import type { NormalizedOptionContract } from '@oggregator/core';
 import { AlphaLottoScannerQuerySchema } from '@oggregator/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { computeLottoCandidate, rankLottoCandidates } from './alpha-lotto-scanner.js';
+import {
+  addLegacyLottoAliases,
+  computeLottoCandidate,
+  rankLottoCandidates,
+} from './alpha-lotto-scanner.js';
 
 const NOW_MS = 1_800_000_000_000;
 const config = AlphaLottoScannerQuerySchema.parse({});
@@ -58,6 +62,8 @@ function contract(overrides: Partial<NormalizedOptionContract> = {}): Normalized
 const market = {
   indexPrice: 78_000,
   forwardPrice: 78_140,
+  referenceSource: 'venue-forward' as const,
+  atmIv: 0.4,
   nowMs: NOW_MS,
 };
 
@@ -70,18 +76,20 @@ describe('computeLottoCandidate', () => {
     expect(result.candidate.otmPct).toBeCloseTo(15.3846, 3);
     expect(result.candidate.breakEvenPrice).toBe(90_100);
     expect(result.candidate.breakEvenMovePct).toBeCloseTo(15.5128, 3);
-    expect(result.candidate.contractsAtMark).toBe(24);
-    expect(result.candidate.contractsAtAsk).toBe(21);
-    expect(result.candidate.conservativeContracts).toBe(18);
+    expect(result.candidate.quantityAtMark).toBe(24);
+    expect(result.candidate.quantityAtAsk).toBe(21.81);
+    expect(result.candidate.conservativeQuantity).toBe(18.18);
+    expect(result.candidate.minimumOrderCost).toBe(1.1);
 
     const tenX = result.candidate.targets.find((target) => target.multiple === 10);
     expect(tenX?.targetMark).toBe(1_000);
-    expect(tenX?.intrinsicBtcPrice).toBe(91_000);
-    expect(tenX?.black76BtcPrice).not.toBeNull();
-    expect(tenX!.black76BtcPrice!).toBeLessThan(tenX!.intrinsicBtcPrice);
+    expect(tenX?.intrinsicUnderlyingPrice).toBe(91_000);
+    expect(tenX?.modelUnderlyingPrice).not.toBeNull();
+    expect(tenX!.modelUnderlyingPrice!).toBeLessThan(tenX!.intrinsicUnderlyingPrice);
+    expect(tenX?.impliedMoveMultiple).toBeGreaterThan(0);
 
     const twentyPct = result.candidate.shocks.find((shock) => shock.movePct === 20);
-    expect(twentyPct?.btcPrice).toBe(93_600);
+    expect(twentyPct?.underlyingPrice).toBe(93_600);
     expect(twentyPct?.intrinsicValue).toBe(3_600);
     expect(twentyPct?.intrinsicMultiple).toBe(36);
   });
@@ -101,10 +109,38 @@ describe('computeLottoCandidate', () => {
     });
     expect(computeLottoCandidate(wide, market, config).skipReason).toBe('wide_spread');
   });
+
+  it('normalizes inverse premiums and non-unit contract sizing', () => {
+    const inverse = contract({
+      venue: 'okx',
+      inverse: true,
+      contractSize: 0.01,
+      minQty: 1,
+      quote: {
+        ...contract().quote,
+        bid: { raw: 0.09, rawCurrency: 'BTC', usd: 7_020 },
+        ask: { raw: 0.11, rawCurrency: 'BTC', usd: 8_580 },
+        mark: { raw: 0.1, rawCurrency: 'BTC', usd: 7_800 },
+      },
+    });
+
+    const result = computeLottoCandidate(inverse, market, config);
+    expect(result.skipReason).toBeNull();
+    if (result.candidate == null) throw new Error('expected candidate');
+    expect(result.candidate.mark).toBeCloseTo(78.14, 6);
+    expect(result.candidate.ask).toBeCloseTo(85.954, 6);
+    expect(result.candidate.breakEvenPrice).toBeCloseTo(97_814, 6);
+    expect(result.candidate.quantityAtAsk).toBe(27);
+  });
+
+  it('rejects contracts without quantity economics', () => {
+    const result = computeLottoCandidate(contract({ contractSize: null }), market, config);
+    expect(result.skipReason).toBe('missing_contract_economics');
+  });
 });
 
 describe('rankLottoCandidates', () => {
-  it('ranks mark first and spread as a later tie-breaker', () => {
+  it('ranks the required 10x move in implied-move units before mark', () => {
     const first = computeLottoCandidate(contract(), market, config);
     const cheaper = computeLottoCandidate(
       contract({
@@ -123,6 +159,55 @@ describe('rankLottoCandidates', () => {
     if (first.candidate == null || cheaper.candidate == null) throw new Error('expected candidates');
 
     const ranked = rankLottoCandidates([first.candidate, cheaper.candidate]);
-    expect(ranked.map((candidate) => candidate.mark)).toEqual([50, 100]);
+    expect(ranked.map((candidate) => candidate.mark)).toEqual([100, 50]);
+    const ratios = ranked.map(
+      (candidate) => candidate.targets.find((target) => target.multiple === 10)!.impliedMoveMultiple!,
+    );
+    expect(ratios[0]).toBeLessThan(ratios[1]);
+  });
+});
+
+describe('addLegacyLottoAliases', () => {
+  it('keeps renamed scanner fields readable by an already-open legacy client', () => {
+    const result = computeLottoCandidate(contract(), market, config);
+    if (result.candidate == null) throw new Error('expected candidate');
+
+    const response = addLegacyLottoAliases({
+      generatedAt: NOW_MS,
+      venues: ['thalex'],
+      underlying: 'BTC',
+      indexPrice: market.indexPrice,
+      forwardPrice: market.forwardPrice,
+      eligibleExpiries: [result.candidate.expiry],
+      venueStatus: [{
+        venue: 'thalex',
+        eligibleExpiries: 1,
+        scannedContracts: 1,
+        error: null,
+      }],
+      config,
+      candidates: [result.candidate],
+      skipped: {},
+    });
+    const candidate = response.candidates[0];
+    if (candidate == null) throw new Error('expected legacy candidate');
+    const target = candidate.targets[0];
+    const shock = candidate.shocks[0];
+    if (target == null || shock == null) throw new Error('expected legacy scenarios');
+
+    expect(response.venue).toBe('thalex');
+    expect(candidate).toMatchObject({
+      contractsAtMark: 24,
+      contractsAtAsk: 21,
+      conservativeContracts: 18,
+    });
+    expect(target).toMatchObject({
+      intrinsicBtcPrice: target.intrinsicUnderlyingPrice,
+      black76BtcPrice: target.modelUnderlyingPrice,
+      black76MovePct: target.modelMovePct,
+    });
+    expect(shock).toMatchObject({
+      btcPrice: shock.underlyingPrice,
+    });
   });
 });

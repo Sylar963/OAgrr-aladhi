@@ -5,6 +5,81 @@
   overflow: hidden;
 }
 
+.strategyBar {
+  display: flex;
+  align-items: stretch;
+  min-height: 46px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.assetButton {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0 var(--space-4);
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.assetButton strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.strategyTabs {
+  display: flex;
+  align-items: stretch;
+}
+
+.strategyTabs button {
+  position: relative;
+  padding: 0 var(--space-4);
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.strategyTabs button::after {
+  content: '';
+  position: absolute;
+  right: var(--space-4);
+  bottom: 0;
+  left: var(--space-4);
+  height: 2px;
+  background: transparent;
+}
+
+.strategyTabs button[data-active='true'] {
+  color: var(--accent-primary);
+}
+
+.strategyTabs button[data-active='true']::after {
+  background: var(--accent-primary);
+}
+
+.venueScope {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding-inline: var(--space-4);
+  color: var(--text-dim);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(280px, 320px) 1fr;
@@ -15,12 +90,17 @@
   align-items: start;
 }
 
-.contextStrip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
+.scannerWorkspace {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.state {
+  flex: 1;
+  display: grid;
+  place-items: center;
 }
 
 .rightColumn {
@@ -43,5 +123,30 @@
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .strategyBar {
+    min-height: 42px;
+    overflow-x: auto;
+  }
+
+  .assetButton {
+    display: none;
+  }
+
+  .strategyTabs button {
+    padding-inline: var(--space-3);
+    white-space: nowrap;
+  }
+
+  .venueScope {
+    padding-inline: var(--space-3);
+    white-space: nowrap;
+  }
+
+  .scannerWorkspace {
+    padding: var(--space-3);
   }
 }

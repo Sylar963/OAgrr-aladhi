@@ -1,4 +1,14 @@
 export {
+  type AlphaExpectedMove,
+  AlphaExpectedMoveSchema,
+  type AlphaMarketContextQuery,
+  AlphaMarketContextQuerySchema,
+  type AlphaMarketContextResponse,
+  AlphaMarketContextResponseSchema,
+  type AlphaRegime,
+  AlphaRegimeSchema,
+} from './alpha-market-context.js';
+export {
   type AlphaLottoCandidate,
   AlphaLottoCandidateSchema,
   type AlphaLottoScannerQuery,

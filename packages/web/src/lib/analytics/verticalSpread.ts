@@ -39,8 +39,8 @@ export interface SpreadInput {
   // drift and realized vol instead of the risk-neutral surface IV.
   realWorld?: RealWorldParams;
   // When provided, the SELL gate's ROC threshold flexes with the macro
-  // regime: high-vol tightens the gate (less aggressive selling), low-vol loosens
-  // it. Drives `gateSignal` only; pricing/EV are unaffected.
+  // regime: high-vol tightens the gate to account for nonlinear tail risk.
+  // Drives `gateSignal` only; pricing/EV are unaffected.
   regimeDominant?: RegimeLabel | null;
 }
 
@@ -297,15 +297,9 @@ function successProbability(
 // shorter-dated tickets where carry is mechanically smaller.
 const ROC_GATE_NEUTRAL = 0.10;
 const ROC_GATE_STRESS = 0.20;
-const ROC_GATE_BULL = 0.07;
 
-// Vol-level modulates the SELL gate. In high-vol the cost of being short
-// vol/short gamma is non-linear (tail blow-ups), so the gate doubles. In
-// low-vol the realized-vs-implied gap typically widens in the seller's favor,
-// so the gate eases. Mid-vol keeps the practitioner default.
 export function rocGateForRegime(regime: RegimeLabel | null | undefined): number {
   if (regime === 'high-vol') return ROC_GATE_STRESS;
-  if (regime === 'low-vol') return ROC_GATE_BULL;
   return ROC_GATE_NEUTRAL;
 }
 
@@ -349,7 +343,7 @@ function gateSignal(
     regimeDominant === 'high-vol'
       ? ' [high-vol: gate 20%]'
       : regimeDominant === 'low-vol'
-        ? ' [low-vol: gate 7%]'
+        ? ' [low-vol: gate 10%]'
         : '';
 
   let signal: TradingSignal;

@@ -128,7 +128,8 @@ describe('mergeThalexTicker', () => {
     expect(q.askSize).toBe(0.25);
     expect(q.markPrice).toBeCloseTo(53.2179, 3);
     expect(q.lastPrice).toBe(345);
-    expect(q.underlyingPrice).toBeCloseTo(76283.26, 1);
+    expect(q.underlyingPrice).toBeCloseTo(76276.4, 1);
+    expect(q.indexPrice).toBeCloseTo(76283.26, 1);
     expect(q.greeks.markIv).toBeCloseTo(0.3692, 3);
     expect(q.greeks.delta).toBeCloseTo(-0.1063, 3);
     expect(q.volume24h).toBe(0.28);

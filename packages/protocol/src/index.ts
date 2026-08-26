@@ -1,4 +1,16 @@
 export {
+  type AlphaLottoCandidate,
+  AlphaLottoCandidateSchema,
+  type AlphaLottoScannerQuery,
+  AlphaLottoScannerQuerySchema,
+  type AlphaLottoScannerResponse,
+  AlphaLottoScannerResponseSchema,
+  type AlphaLottoShock,
+  AlphaLottoShockSchema,
+  type AlphaLottoTarget,
+  AlphaLottoTargetSchema,
+} from './alpha-lotto.js';
+export {
   type FlowTrade,
   type FlowTradeHistoryCursor,
   FlowTradeHistoryCursorSchema,

@@ -1,0 +1,461 @@
+.panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-warning), var(--accent-primary), transparent 76%);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.eyebrow {
+  margin-bottom: 5px;
+  color: var(--color-warning);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.description {
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scanOnly,
+.exportButton {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.scanOnly {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 25%, var(--border-subtle));
+}
+
+.exportButton {
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+}
+
+.exportButton:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.exportButton:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: auto auto minmax(130px, 0.7fr) 1fr;
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-surface);
+  border-block: 1px solid var(--border-subtle);
+}
+
+.controlGroup {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.controlGroup legend,
+.budgetControl > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.presetRow {
+  display: flex;
+}
+
+.presetRow button {
+  height: 30px;
+  padding: 0 9px;
+  color: var(--text-tertiary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-right: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.presetRow button:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.presetRow button:last-child {
+  border-right: 1px solid var(--border-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.presetRow button[data-active='true'] {
+  position: relative;
+  color: var(--bg-base);
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.budgetControl {
+  min-width: 0;
+}
+
+.inputShell {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.inputShell:focus-within {
+  border-color: var(--border-focus);
+}
+
+.inputShell input {
+  width: 100%;
+  min-width: 70px;
+  padding: 0 0 0 4px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+}
+
+.fixedRules {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fixedRules span {
+  padding: 5px 7px;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.loading,
+.message {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.message[data-tone='error'] {
+  color: var(--color-loss);
+}
+
+.marketStrip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 34px;
+  padding: 0 var(--space-5);
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.marketStrip strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.refreshing {
+  margin-left: auto;
+  color: var(--accent-primary);
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  min-width: 1020px;
+}
+
+.tableHeader,
+.row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) 0.8fr 0.62fr 0.7fr 0.7fr 0.8fr 0.92fr 0.8fr 1.05fr;
+  gap: var(--space-2);
+  align-items: center;
+  padding-inline: var(--space-5);
+}
+
+.tableHeader {
+  min-height: 32px;
+  color: var(--text-dim);
+  border-bottom: 1px dashed var(--border-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tableHeader > div:not(:first-child) {
+  text-align: right;
+}
+
+.row {
+  min-height: 62px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--transition-fast);
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--color-warning) 3%, var(--bg-hover));
+}
+
+.contractCell,
+.numericCell,
+.capacityCell,
+.targetCell,
+.shockCell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.contractCell strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contractCell span,
+.numericCell span,
+.capacityCell span,
+.targetCell span {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.numericCell,
+.capacityCell,
+.targetCell,
+.shockCell {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.numericCell strong,
+.capacityCell strong,
+.targetCell strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.targetCell small {
+  max-width: 96px;
+  color: var(--color-warning);
+  font-size: 8px;
+  line-height: 1.15;
+}
+
+.shockCell {
+  gap: 2px;
+}
+
+.shockCell span {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.shockCell strong {
+  color: var(--text-secondary);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--space-3) var(--space-5);
+  color: var(--text-dim);
+  background: var(--bg-surface);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .header {
+    padding: var(--space-4);
+  }
+
+  .description {
+    max-width: 250px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr 1fr;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .budgetControl,
+  .fixedRules {
+    grid-column: 1 / -1;
+  }
+
+  .fixedRules {
+    justify-content: flex-start;
+  }
+
+  .marketStrip {
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+    overflow-x: auto;
+  }
+
+  .tableScroll {
+    overflow: visible;
+  }
+
+  .table {
+    min-width: 0;
+  }
+
+  .tableHeader {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3) var(--space-2);
+    padding: var(--space-4);
+  }
+
+  .contractCell {
+    grid-column: 1 / 3;
+  }
+
+  .numericCell,
+  .capacityCell,
+  .targetCell,
+  .shockCell {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .row > .numericCell:nth-child(2) {
+    grid-column: 3 / 5;
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .targetCell,
+  .shockCell {
+    padding-top: var(--space-2);
+    border-top: 1px dashed var(--border-subtle);
+  }
+
+  .shockCell {
+    grid-column: span 1;
+  }
+
+  .footer {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (max-width: 430px) {
+  .scanOnly {
+    display: none;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .budgetControl,
+  .fixedRules {
+    grid-column: auto;
+  }
+
+  .row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .contractCell,
+  .row > .numericCell:nth-child(2) {
+    grid-column: span 1;
+  }
+
+  .shockCell {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}

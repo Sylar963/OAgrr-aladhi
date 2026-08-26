@@ -10,6 +10,7 @@ React 19 + Vite + TypeScript dashboard for cross-venue crypto options data. Mobi
 - **Flow** — Live options trade flow with whale detection (🐋 $100K+) plus an institutional RFQ / block trade mode
 - **Analytics** — OI by venue, call/put summary, put/call ratio by expiry, DVOL chart with HV overlay, OI by strike, and cross-expiry curves
 - **GEX** — Gamma exposure by strike showing dealer positioning (magnet vs accelerator)
+- **Alpha** — Credit-spread analysis plus a Thalex BTC short-dated OTM call scanner
 
 ## Mobile
 
@@ -20,6 +21,18 @@ Fully responsive with:
 - Card-based chain layout replacing the 15-column desktop grid
 - Touch-optimized tap targets (44px minimum)
 - PWA ready (manifest, safe areas, homescreen install)
+
+## Alpha lotto scanner
+
+Open `#alpha/BTC` to scan liquid Thalex BTC calls with 4–14 DTE. The panel shows mark and
+ask, OTM and expiry breakeven moves, mark/ask/conservative capacity for the configured buying
+power, constant-IV Black-76 estimates for 5x/10x/25x, and expiry intrinsic outcomes after
+10%/15%/20% BTC moves. Premium cap, minimum OTM, and buying power are configurable; results
+can be downloaded as CSV.
+
+Scanner values are estimates, not executable orders. Most short-dated OTM options expire
+worthless, and the UI does not assume that API orders satisfy funded-account or Strategy
+Builder eligibility rules.
 
 ## Commands
 

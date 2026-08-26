@@ -9,6 +9,7 @@ import { Spinner, EmptyState } from '@components/ui';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 
 import SpreadBuilderPanel from './SpreadBuilderPanel';
+import LottoScannerPanel from './LottoScannerPanel';
 import SignalCard from './SignalCard';
 import VenueRouterTable from './VenueRouterTable';
 import VolSmileInset from './VolSmileInset';
@@ -163,6 +164,7 @@ export default function AlphaView() {
         signal={analysis.analysis?.combinedSignal ?? null}
         regime={regime ?? null}
       />
+      {underlying === 'BTC' && <LottoScannerPanel />}
       <VenueRouterTable
         shortLeg={analysis.analysis?.short ?? null}
         longLeg={analysis.analysis?.long ?? null}

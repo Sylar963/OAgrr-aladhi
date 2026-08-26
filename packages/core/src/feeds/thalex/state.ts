@@ -18,8 +18,8 @@ function mergeNumber(next: number | undefined | null, previous: number | null): 
  *   best_bid_price / best_bid_amount → bidPrice / bidSize
  *   best_ask_price / best_ask_amount → askPrice / askSize
  *   mark_price / last_price          → markPrice / lastPrice
- *   index                            → underlyingPrice
- *   forward                          → (used as BS forward)
+ *   index                            → indexPrice
+ *   forward                          → underlyingPrice (forward reference)
  *   volume_24h / open_interest       → volume24h / openInterest
  *   iv   → greeks.markIv             (native fraction; no ivToFraction)
  *   delta → greeks.delta
@@ -68,7 +68,7 @@ export function mergeThalexTicker(
     askSize: mergeNumber(ticker.best_ask_amount, base.askSize),
     markPrice: mergeNumber(ticker.mark_price, base.markPrice),
     lastPrice: mergeNumber(ticker.last_price, base.lastPrice),
-    underlyingPrice: mergeNumber(ticker.index, base.underlyingPrice),
+    underlyingPrice: mergeNumber(ticker.forward ?? ticker.index, base.underlyingPrice),
     indexPrice: mergeNumber(ticker.index, base.indexPrice),
     volume24h: mergeNumber(ticker.volume_24h, base.volume24h),
     openInterest: mergeNumber(ticker.open_interest, base.openInterest),

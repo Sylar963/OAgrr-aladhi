@@ -8,7 +8,8 @@ import {
 } from '@oggregator/protocol';
 
 import { Spinner } from '@components/ui';
-import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact } from '@lib/format';
+import HoverTooltip from '@components/ui/HoverTooltip';
+import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 
 import { useLottoScanner } from './useLottoScanner';
@@ -16,6 +17,20 @@ import styles from './LottoScannerPanel.module.css';
 
 const PREMIUM_PRESETS = [100, 200, 400, 500] as const;
 const OTM_PRESETS = [5, 8, 10, 15] as const;
+
+const CONTROL_TIPS = {
+  mark: 'The sticker price used to filter the board. Your real buy-in is the ask, which can be higher.',
+  otm: 'How far the market must climb just to touch the strike. Farther out means a cheaper long shot, but a harder hit.',
+  bankroll: 'Your total bankroll for sizing. The scanner shows what fits; it never places an order.',
+} as const;
+
+const COLUMN_TIPS = {
+  price: 'MARK is the table estimate. ASK is what a seller currently wants you to pay.',
+  volatility: 'IV is how much movement the option market is pricing in. Higher IV usually means a more expensive bet.',
+  breakeven: 'OTM is the climb to the strike. BE shown here uses mark; the real buyer line at the ask is slightly higher and appears in the poker read.',
+  target: 'A model of the market move that could make the option mark worth 10×. It is not a probability or guarantee.',
+  capacity: 'How many contracts your bankroll can cover at the ask. Reserved uses a safety buffer.',
+} as const;
 
 interface LottoScannerPanelProps {
   underlying: string;
@@ -112,6 +127,70 @@ function formatQuantity(value: number): string {
   return value >= 100 ? value.toFixed(0) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+interface MetricTipProps {
+  label: string;
+  tip: string;
+  placement?: 'bottom-start' | 'bottom-end';
+}
+
+function MetricTip({ label, tip, placement = 'bottom-start' }: MetricTipProps) {
+  return (
+    <HoverTooltip
+      className={styles.tipTrigger}
+      placement={placement}
+      content={<div className={styles.metricTip}>{tip}</div>}
+    >
+      <span>{label}</span>
+      <span className={styles.tipMark} aria-hidden="true">?</span>
+    </HoverTooltip>
+  );
+}
+
+function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
+  const tenX = targetFor(candidate, 10);
+  const askBreakEvenPrice = candidate.strike + candidate.ask / candidate.contractSize;
+  const askBreakEvenMovePct = ((askBreakEvenPrice - candidate.indexPrice) / candidate.indexPrice) * 100;
+  const expiry = formatExpiry(candidate.expiry);
+
+  return (
+    <div className={styles.betTooltip}>
+      <div className={styles.betTooltipHeader}>
+        <span>THE HAND · LONG CALL</span>
+        <strong>{candidate.underlying} UP BEFORE {expiry.toUpperCase()}</strong>
+      </div>
+      <p>
+        You are paying for a shot at a fast upside run. Like drawing to a big hand, your buy-in is capped,
+        but the clock can fold you even when you guessed the direction right.
+      </p>
+      <div className={styles.betLines}>
+        <div data-tone="stake">
+          <span>BUY-IN</span>
+          <strong>{fmtUsd(candidate.ask)} at the ask</strong>
+          <small>Venue minimum costs {fmtUsd(candidate.minimumOrderCost)}.</small>
+        </div>
+        <div data-tone="win">
+          <span>PROFIT LINE AT EXPIRY</span>
+          <strong>{candidate.underlying} above {fmtUsdCompact(askBreakEvenPrice)}</strong>
+          <small>That is a {fmtPct(askBreakEvenMovePct, 1)} climb from now.</small>
+        </div>
+        <div data-tone="bust">
+          <span>BUST LINE AT EXPIRY</span>
+          <strong>{candidate.underlying} at or below {fmtUsdCompact(candidate.strike)}</strong>
+          <small>The call expires worth $0 and the full buy-in is lost.</small>
+        </div>
+      </div>
+      <div className={styles.betFootnote}>
+        <strong>10× OUT:</strong>{' '}
+        {tenX?.modelUnderlyingPrice == null
+          ? 'The model cannot price this scenario.'
+          : `${candidate.underlying} near ${fmtUsdCompact(tenX.modelUnderlyingPrice)} (${fmtPct(tenX.modelMovePct, 1)}).`}{' '}
+        Assumes IV and time stay unchanged; this is not odds and not an expiry payout.
+      </div>
+      <div className={styles.maxLoss}>MAX LOSS: 100% OF WHAT YOU PAY · NO LOSS BEYOND THE PREMIUM</div>
+    </div>
+  );
+}
+
 export default function LottoScannerPanel({ underlying, venues }: LottoScannerPanelProps) {
   const [premiumCap, setPremiumCap] = useState(400);
   const [minOtmPct, setMinOtmPct] = useState(5);
@@ -154,7 +233,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           </div>
           <h2 className={styles.title}>Lotto radar</h2>
           <p className={styles.description}>
-            Ranked by the 10× move relative to each expiry&apos;s ATM implied move, then liquidity.
+            Ranked by the 10× move relative to each expiry&apos;s ATM implied move. Hover a contract for the poker read.
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -172,7 +251,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
 
       <div className={styles.controls}>
         <fieldset className={styles.controlGroup}>
-          <legend>Max contract mark</legend>
+          <legend><MetricTip label="Max contract mark" tip={CONTROL_TIPS.mark} /></legend>
           <div className={styles.presetRow}>
             {PREMIUM_PRESETS.map((value) => (
               <button
@@ -187,7 +266,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           </div>
         </fieldset>
         <fieldset className={styles.controlGroup}>
-          <legend>Min OTM</legend>
+          <legend><MetricTip label="Min OTM" tip={CONTROL_TIPS.otm} /></legend>
           <div className={styles.presetRow}>
             {OTM_PRESETS.map((value) => (
               <button
@@ -202,7 +281,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           </div>
         </fieldset>
         <label className={styles.budgetControl}>
-          <span>Buying power</span>
+          <span><MetricTip label="Buying power" tip={CONTROL_TIPS.bankroll} /></span>
           <div className={styles.inputShell}>
             <span>$</span>
             <input
@@ -268,22 +347,24 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                 <div className={styles.table}>
                   <div className={styles.tableHeader}>
                     <div>Venue / contract</div>
-                    <div>Mark / ask</div>
-                    <div>IV / implied</div>
-                    <div>OTM / BE</div>
-                    <div>10× move</div>
-                    <div>Capacity</div>
+                    <div><MetricTip label="Mark / ask" tip={COLUMN_TIPS.price} /></div>
+                    <div><MetricTip label="IV / implied" tip={COLUMN_TIPS.volatility} /></div>
+                    <div><MetricTip label="OTM / BE" tip={COLUMN_TIPS.breakeven} /></div>
+                    <div><MetricTip label="10× move" tip={COLUMN_TIPS.target} /></div>
+                    <div><MetricTip label="Capacity" tip={COLUMN_TIPS.capacity} placement="bottom-end" /></div>
                   </div>
                   {data.candidates.map((candidate) => {
                     const key = `${candidate.venue}:${candidate.instrument}`;
                     const tenX = targetFor(candidate, 10);
                     return (
-                      <button
-                        type="button"
+                      <HoverTooltip
+                        as="button"
                         className={styles.row}
-                        data-selected={selected != null && key === `${selected.venue}:${selected.instrument}`}
+                        dataSelected={selected != null && key === `${selected.venue}:${selected.instrument}` ? 'true' : 'false'}
+                        ariaLabel={`Select ${candidate.instrument} and show its plain-language bet explanation`}
+                        content={<CallBetTooltip candidate={candidate} />}
                         key={key}
-                        onClick={() => setSelectedKey(key)}
+                        onActivate={() => setSelectedKey(key)}
                       >
                         <div className={styles.contractCell}>
                           <span className={styles.venue}>{VENUES[candidate.venue]?.label ?? candidate.venue}</span>
@@ -311,7 +392,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                           <strong>{formatQuantity(candidate.quantityAtAsk)}</strong>
                           <span>{formatQuantity(candidate.conservativeQuantity)} reserved</span>
                         </div>
-                      </button>
+                      </HoverTooltip>
                     );
                   })}
                 </div>

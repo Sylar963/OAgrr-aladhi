@@ -21,12 +21,15 @@ interface HoverTooltipProps {
   placement?: Placement;
   className?: string;
   /** Tag for the trigger wrapper. Defaults to 'span' for inline use. */
-  as?: 'span' | 'div';
+  as?: 'span' | 'div' | 'button';
   /** Inline style for the trigger wrapper (e.g. cursor). */
   style?: CSSProperties;
+  ariaLabel?: string;
+  onActivate?: () => void;
   /** Forwarded data attribute used for CSS hooks on the trigger. */
   dataPositive?: 'true' | 'false';
   dataInteractive?: 'true';
+  dataSelected?: 'true' | 'false';
 }
 
 interface Pos {
@@ -45,8 +48,11 @@ export default function HoverTooltip({
   className,
   as = 'span',
   style,
+  ariaLabel,
+  onActivate,
   dataPositive,
   dataInteractive,
+  dataSelected,
 }: HoverTooltipProps) {
   const [open, setOpen] = useState<OpenState>(false);
   const [pos, setPos] = useState<Pos | null>(null);
@@ -124,6 +130,7 @@ export default function HoverTooltip({
 
   function handleClick(e: ReactMouseEvent) {
     e.stopPropagation();
+    onActivate?.();
     setOpen((s) => (s === 'pinned' ? false : 'pinned'));
   }
 
@@ -133,10 +140,13 @@ export default function HoverTooltip({
     <>
       <Tag
         ref={triggerRef as never}
+        type={as === 'button' ? 'button' : undefined}
         className={className}
         style={style}
+        aria-label={ariaLabel}
         data-positive={dataPositive}
         data-interactive={dataInteractive}
+        data-selected={dataSelected}
         data-open={open ? 'true' : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

@@ -7,8 +7,10 @@ export interface Leg {
   strike: number;
   expiry: string;
   quantity: number;
-  /** Entry price per contract in USD */
+  /** Quoted premium in USD */
   entryPrice: number;
+  /** Underlying units represented by one contract. Defaults to 1. */
+  contractMultiplier?: number;
   /** Best venue for this leg */
   venue: string;
   /** Greeks at entry */
@@ -55,7 +57,9 @@ function legPnlAtExpiry(leg: Leg, underlyingPrice: number): number {
     intrinsicValue = Math.max(0, leg.strike - underlyingPrice);
   }
 
-  return sign * (intrinsicValue - leg.entryPrice) * leg.quantity;
+  return (
+    sign * (intrinsicValue - leg.entryPrice) * leg.quantity * (leg.contractMultiplier ?? 1)
+  );
 }
 
 /**
@@ -167,7 +171,7 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
 
   const netDebit = legs.reduce((sum, leg) => {
     const sign = leg.direction === 'buy' ? -1 : 1;
-    return sum + sign * leg.entryPrice * leg.quantity;
+    return sum + sign * leg.entryPrice * leg.quantity * (leg.contractMultiplier ?? 1);
   }, 0);
 
   const sumGreek = (
@@ -184,7 +188,7 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
       }
       reported++;
       const sign = leg.direction === 'buy' ? 1 : -1;
-      total += sign * val * leg.quantity;
+      total += sign * val * leg.quantity * (leg.contractMultiplier ?? 1);
     }
     return { value: reported > 0 ? total : null, missing };
   };
@@ -267,7 +271,11 @@ export function computeScenarioPayoff(
       const sign = leg.direction === 'buy' ? 1 : -1;
       const iv = (leg.iv ?? 0.5) + ivShift;
       const optionVal = bsApprox(leg.type, price, leg.strike, Math.max(0.01, iv), targetDte);
-      totalPnl += sign * (optionVal - leg.entryPrice) * leg.quantity;
+      totalPnl +=
+        sign *
+        (optionVal - leg.entryPrice) *
+        leg.quantity *
+        (leg.contractMultiplier ?? 1);
     }
     points.push({ underlyingPrice: price, pnl: totalPnl });
   }

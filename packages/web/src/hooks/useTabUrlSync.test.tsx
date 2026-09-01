@@ -36,6 +36,15 @@ describe('useTabUrlSync', () => {
     expect(window.location.hash).toBe('#tradfi/gex/AAPL');
   });
 
+  it('adopts a TradFi Builder deep link', () => {
+    window.location.hash = '#tradfi/builder/SPY';
+    renderHook(() => useTabUrlSync(), { wrapper: StrictMode });
+    const state = useAppStore.getState();
+    expect(state.assetMode).toBe('tradfi');
+    expect(state.tradfiPage).toBe('builder');
+    expect(state.tradfiUnderlying).toBe('SPY');
+  });
+
   it('adopts a crypto deep link (tab + ticker)', () => {
     window.location.hash = '#volatility/ETH';
     renderHook(() => useTabUrlSync(), { wrapper: StrictMode });

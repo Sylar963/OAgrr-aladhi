@@ -134,10 +134,10 @@ export const STRATEGY_PARAM_KEYS = ['strategy', 'u', 'v', 'e', 'legs'] as const;
  * hand so `:`, `@`, `!`, and `,` stay unencoded — browsers accept and display
  * them fine, and the URL stays human-readable.
  */
-export function buildShareUrl(legs: Leg[], underlying: string): string {
+export function buildShareUrl(legs: Leg[], underlying: string, hash = ''): string {
   const params = encodeStrategy(legs, underlying);
   if (!params) return window.location.href;
   const parts: string[] = [];
   for (const [k, v] of params) parts.push(`${k}=${v}`);
-  return `${window.location.origin}/?${parts.join('&')}`;
+  return `${window.location.origin}/?${parts.join('&')}${hash}`;
 }

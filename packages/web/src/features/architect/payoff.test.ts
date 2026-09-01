@@ -49,6 +49,25 @@ describe('computeMetrics', () => {
     expect(m.maxLoss).toBeNull();
   });
 
+  it('scales premium and greeks by the contract multiplier', () => {
+    const metrics = computeMetrics(
+      [
+        leg({
+          type: 'put',
+          direction: 'sell',
+          strike: 380,
+          entryPrice: 4.2,
+          contractMultiplier: 100,
+          delta: -0.31,
+        }),
+      ],
+      390,
+    );
+
+    expect(metrics.netDebit).toBeCloseTo(420);
+    expect(metrics.netDelta).toBeCloseTo(31);
+  });
+
   it('iron condor is bounded on both sides', () => {
     const legs: Leg[] = [
       leg({ type: 'put', direction: 'buy', strike: 70_000, entryPrice: 200 }),

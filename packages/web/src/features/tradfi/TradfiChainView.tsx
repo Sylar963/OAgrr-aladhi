@@ -112,6 +112,7 @@ export default function TradfiChainView() {
             myIv={null}
             expiry={expiry}
             underlying={underlying}
+            builderMode="tradfi"
             chartOverride={openChart}
           />
         )}

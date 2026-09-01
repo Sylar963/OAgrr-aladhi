@@ -3,9 +3,17 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
+import {
+  useTradfiChain,
+  useTradfiChainsForExpiries,
+  useTradfiExpiries,
+  useTradfiUnderlyings,
+} from '@features/tradfi/queries';
+import { useTradfiUnderlyingCandles } from '@features/tradfi/use-tradfi-underlying-candles';
 import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
-import { VENUE_LIST, VENUES } from '@lib/venue-meta';
+import { VENUES } from '@lib/venue-meta';
+import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 import { useStrategyStore } from './strategy-store';
 import {
   computePayoff,
@@ -43,7 +51,6 @@ import {
 import VenueSlideover from './VenueSlideover';
 import type { StrategyRouting } from '@features/builder/round-trip';
 import { legsToOrderRequest, useCreateTrade } from '@features/trading';
-import { useAppStore as _useAppStoreForTabSwitch } from '@stores/app-store';
 import StrategyTemplates, {
   buildTemplateVariant,
   clearActiveTemplateDrag,
@@ -71,6 +78,36 @@ interface LegRowProps {
 }
 
 const BEST_ROUTE_VALUE = '__best-route__';
+const TRADFI_VENUES = ['tastytrade'];
+
+function tradfiCandleWindow(resolutionSec: number, buckets: number): {
+  interval: InstrumentCandleInterval;
+  range: InstrumentCandleRange;
+  resolutionSec: number;
+} {
+  const interval: InstrumentCandleInterval =
+    resolutionSec <= 300
+      ? '5m'
+      : resolutionSec <= 1_800
+        ? '15m'
+        : resolutionSec <= 3_600
+          ? '1h'
+          : resolutionSec <= 14_400
+            ? '4h'
+            : '1d';
+  const days = (resolutionSec * buckets) / 86_400;
+  const range: InstrumentCandleRange =
+    days <= 1 ? '1d' : days <= 7 ? '7d' : days <= 30 ? '30d' : 'max';
+  const effectiveResolutionSec: Record<InstrumentCandleInterval, number> = {
+    '1m': 60,
+    '5m': 300,
+    '15m': 900,
+    '1h': 3_600,
+    '4h': 14_400,
+    '1d': 86_400,
+  };
+  return { interval, range, resolutionSec: effectiveResolutionSec[interval] };
+}
 
 function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): string {
   if (preferredExpiry && expiries.includes(preferredExpiry)) return preferredExpiry;
@@ -165,13 +202,42 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
 
 // ── Main view ────────────────────────────────────────────────────────────────
 
-export default function ArchitectView() {
-  const underlying = useAppStore((s) => s.underlying);
-  const globalExpiry = useAppStore((s) => s.expiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
-  const { data: expiriesData } = useExpiries(underlying);
-  const allExpiries = useMemo(() => expiriesData?.expiries ?? [], [expiriesData]);
+interface ArchitectViewProps {
+  market?: 'crypto' | 'tradfi';
+}
+
+export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps) {
+  const cryptoUnderlying = useAppStore((s) => s.underlying);
+  const cryptoExpiry = useAppStore((s) => s.expiry);
+  const cryptoVenues = useAppStore((s) => s.activeVenues);
+  const tradfiUnderlying = useAppStore((s) => s.tradfiUnderlying);
+  const tradfiExpiry = useAppStore((s) => s.tradfiExpiry);
+  const setTradfiUnderlying = useAppStore((s) => s.setTradfiUnderlying);
+  const underlying = market === 'tradfi' ? tradfiUnderlying : cryptoUnderlying;
+  const globalExpiry = market === 'tradfi' ? tradfiExpiry : cryptoExpiry;
+  const activeVenues = market === 'tradfi' ? TRADFI_VENUES : cryptoVenues;
+  const { data: cryptoExpiriesData } = useExpiries(market === 'crypto' ? underlying : '');
+  const { data: tradfiExpiriesData } = useTradfiExpiries(market === 'tradfi' ? underlying : '');
+  const { data: tradfiUnderlyingsData } = useTradfiUnderlyings(market === 'tradfi');
+  const allExpiries = useMemo(
+    () =>
+      market === 'tradfi'
+        ? (tradfiExpiriesData?.expiries ?? [])
+        : (cryptoExpiriesData?.expiries ?? []),
+    [cryptoExpiriesData, market, tradfiExpiriesData],
+  );
+  const tradfiUnderlyings = tradfiUnderlyingsData?.underlyings ?? [];
   const [builderExpiry, setBuilderExpiry] = useState('');
+
+  useEffect(() => {
+    if (
+      market === 'tradfi' &&
+      tradfiUnderlyings.length > 0 &&
+      !tradfiUnderlyings.includes(underlying)
+    ) {
+      setTradfiUnderlying(tradfiUnderlyings[0]!);
+    }
+  }, [market, setTradfiUnderlying, tradfiUnderlyings, underlying]);
 
   useEffect(() => {
     const nextExpiry = resolveBuilderExpiry(builderExpiry || globalExpiry, allExpiries);
@@ -184,11 +250,16 @@ export default function ArchitectView() {
     underlying,
     expiry: builderExpiry,
     venues: activeVenues,
-    enabled: Boolean(builderExpiry),
+    enabled: market === 'crypto' && Boolean(builderExpiry),
   });
-  const { data: chain } = useChainQuery(underlying, builderExpiry, activeVenues, {
-    enabled: builderFeedState !== 'live',
+  const { data: cryptoChain } = useChainQuery(underlying, builderExpiry, activeVenues, {
+    enabled: market === 'crypto' && builderFeedState !== 'live',
   });
+  const { data: tradfiChain } = useTradfiChain(
+    market === 'tradfi' ? underlying : '',
+    market === 'tradfi' ? builderExpiry : '',
+  );
+  const chain = market === 'tradfi' ? tradfiChain : cryptoChain;
 
   const legs = useStrategyStore((s) => s.legs);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
@@ -217,7 +288,7 @@ export default function ArchitectView() {
     dataUpdatedAt: number;
   } | null>(null);
 
-  const setActiveTab = _useAppStoreForTabSwitch((s) => s.setActiveTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const createTrade = useCreateTrade();
 
   useEffect(() => {
@@ -251,7 +322,16 @@ export default function ArchitectView() {
     wanted.delete(builderExpiry);
     return [...wanted].filter((e) => allExpiries.includes(e));
   }, [legExpiries, tenorColumns, builderExpiry, variant, allExpiries]);
-  const extraChains = useChainsForExpiries(underlying, extraExpiries, activeVenues);
+  const cryptoExtraChains = useChainsForExpiries(
+    underlying,
+    market === 'crypto' ? extraExpiries : [],
+    activeVenues,
+  );
+  const tradfiExtraChains = useTradfiChainsForExpiries(
+    underlying,
+    market === 'tradfi' ? extraExpiries : [],
+  );
+  const extraChains = market === 'tradfi' ? tradfiExtraChains : cryptoExtraChains;
   const chainFor = useCallback(
     (expiry: string) => (expiry === builderExpiry ? chain ?? null : extraChains[expiry] ?? null),
     [builderExpiry, chain, extraChains],
@@ -289,17 +369,16 @@ export default function ArchitectView() {
             ? VENUES[activeVenues[0] ?? '']?.label ?? '1 venue'
             : `${activeVenues.length} venues`,
       },
-      ...VENUE_LIST.filter((venue) => activeVenues.includes(venue.id)).map((venue) => ({
-        value: venue.id,
-        label: venue.label,
-        meta: 'Only',
-      })),
+      ...activeVenues.flatMap((venueId) => {
+        const venue = VENUES[venueId];
+        return venue ? [{ value: venue.id, label: venue.label, meta: 'Only' }] : [];
+      }),
     ],
     [activeVenues],
   );
 
   async function handleSendToPaper(routing?: StrategyRouting) {
-    if (pricedLegs.length === 0) return;
+    if (market === 'tradfi' || pricedLegs.length === 0) return;
     setPaperStatus(null);
     try {
       const req = legsToOrderRequest(pricedLegs, underlying, pricingVenues, routing);
@@ -442,11 +521,21 @@ export default function ArchitectView() {
       }),
     [legs, repriceStrategyLeg],
   );
+  const analyticsLegs = useMemo(
+    () =>
+      market === 'tradfi'
+        ? pricedLegs.map((leg) => ({ ...leg, contractMultiplier: 100 }))
+        : pricedLegs,
+    [market, pricedLegs],
+  );
 
-  const payoffPoints = useMemo(() => computePayoff(pricedLegs, spotPrice), [pricedLegs, spotPrice]);
+  const payoffPoints = useMemo(
+    () => computePayoff(analyticsLegs, spotPrice),
+    [analyticsLegs, spotPrice],
+  );
   const metrics = useMemo(
-    () => (pricedLegs.length > 0 ? computeMetrics(pricedLegs, spotPrice) : null),
-    [pricedLegs, spotPrice],
+    () => (analyticsLegs.length > 0 ? computeMetrics(analyticsLegs, spotPrice) : null),
+    [analyticsLegs, spotPrice],
   );
   const strategyName = useMemo(() => detectStrategy(pricedLegs), [pricedLegs]);
 
@@ -456,34 +545,73 @@ export default function ArchitectView() {
   }, [pricedLegs]);
 
   const scenarioIvPoints = useMemo(() => {
-    if (pricedLegs.length === 0 || ivShift === 0) return undefined;
-    return computeScenarioPayoff(pricedLegs, spotPrice, ivShift / 100, 0, baseDte);
-  }, [pricedLegs, spotPrice, ivShift, baseDte]);
+    if (analyticsLegs.length === 0 || ivShift === 0) return undefined;
+    return computeScenarioPayoff(analyticsLegs, spotPrice, ivShift / 100, 0, baseDte);
+  }, [analyticsLegs, baseDte, ivShift, spotPrice]);
 
   const scenarioDtePoints = useMemo(() => {
-    if (pricedLegs.length === 0 || dteShift === 0) return undefined;
-    return computeScenarioPayoff(pricedLegs, spotPrice, 0, dteShift, baseDte);
-  }, [pricedLegs, spotPrice, dteShift, baseDte]);
+    if (analyticsLegs.length === 0 || dteShift === 0) return undefined;
+    return computeScenarioPayoff(analyticsLegs, spotPrice, 0, dteShift, baseDte);
+  }, [analyticsLegs, baseDte, dteShift, spotPrice]);
 
   const hasScenarios = ivShift !== 0 || dteShift !== 0;
 
   const candleSpec = useMemo(() => pickCandleSpec(pricedLegs), [pricedLegs]);
-  const candleAvailable = isSpotCandleCurrency(underlying);
-  const {
-    data: spotCandlesData,
-    dataUpdatedAt: spotCandlesUpdatedAt,
-    isLoading: spotCandlesLoading,
-    isFetching: spotCandlesFetching,
-    isPlaceholderData: spotCandlesIsPlaceholderData,
-    isError: spotCandlesIsError,
-    error: spotCandlesError,
-    refetch: refetchSpotCandles,
-  } = useSpotCandles(
-    underlying,
+  const tradfiCandleSpec = useMemo(
+    () => tradfiCandleWindow(candleSpec.resolutionSec, candleSpec.buckets),
+    [candleSpec.buckets, candleSpec.resolutionSec],
+  );
+  const cryptoSpotCandles = useSpotCandles(
+    market === 'crypto' ? underlying : '',
     candleSpec.resolutionSec,
     candleSpec.buckets,
     candleSpec.refetchIntervalMs,
   );
+  const tradfiSpotCandles = useTradfiUnderlyingCandles({
+    underlying,
+    interval: tradfiCandleSpec.interval,
+    range: tradfiCandleSpec.range,
+    enabled: market === 'tradfi',
+  });
+  const normalizedTradfiSpotCandles = useMemo<SpotCandlesResponse | undefined>(() => {
+    if (!tradfiSpotCandles.data) return undefined;
+    return {
+      currency: underlying,
+      resolution: tradfiCandleSpec.resolutionSec,
+      count: tradfiSpotCandles.data.candles.length,
+      candles: tradfiSpotCandles.data.candles.map((candle) => ({
+        timestamp: candle.ts,
+        open: candle.o,
+        high: candle.h,
+        low: candle.l,
+        close: candle.c,
+      })),
+    };
+  }, [tradfiCandleSpec.resolutionSec, tradfiSpotCandles.data, underlying]);
+  const spotCandlesData =
+    market === 'tradfi' ? normalizedTradfiSpotCandles : cryptoSpotCandles.data;
+  const spotCandlesUpdatedAt =
+    market === 'tradfi' ? tradfiSpotCandles.dataUpdatedAt : cryptoSpotCandles.dataUpdatedAt;
+  const spotCandlesLoading =
+    market === 'tradfi' ? tradfiSpotCandles.isLoading : cryptoSpotCandles.isLoading;
+  const spotCandlesFetching =
+    market === 'tradfi' ? tradfiSpotCandles.isFetching : cryptoSpotCandles.isFetching;
+  const spotCandlesIsPlaceholderData =
+    market === 'tradfi'
+      ? tradfiSpotCandles.isPlaceholderData
+      : cryptoSpotCandles.isPlaceholderData;
+  const spotCandlesIsError =
+    market === 'tradfi' ? tradfiSpotCandles.isError : cryptoSpotCandles.isError;
+  const spotCandlesError = market === 'tradfi' ? tradfiSpotCandles.error : cryptoSpotCandles.error;
+  const refetchSpotCandles =
+    market === 'tradfi' ? tradfiSpotCandles.refetch : cryptoSpotCandles.refetch;
+  const candleAvailable = market === 'tradfi' || isSpotCandleCurrency(underlying);
+  const candleResolutionSec =
+    market === 'tradfi' ? tradfiCandleSpec.resolutionSec : candleSpec.resolutionSec;
+  const candleRangeLabel =
+    market === 'tradfi' ? tradfiCandleSpec.range.toUpperCase() : candleSpec.rangeLabel;
+  const candleIntervalLabel =
+    market === 'tradfi' ? tradfiCandleSpec.interval.toUpperCase() : candleSpec.intervalLabel;
   const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
   const spotCandlesFailureMessage =
     spotCandlesEmpty
@@ -523,31 +651,29 @@ export default function ArchitectView() {
   // Anchor the projection at the last real candle's bucket (grid-aligned).
   const lastBarMs = visibleSpotCandles?.candles.at(-1)?.timestamp ?? Date.now();
 
-  // Nearest-leg expiry → ms at 08:00 UTC (Deribit convention; 'YYYY-MM-DD'
-  // strings sort lexicographically, so the min string is the earliest date).
   const nearestExpiryMs = useMemo(() => {
     const expiries = pricedLegs.map((l) => l.expiry).filter(Boolean);
     if (expiries.length === 0) return Number.NaN;
     const earliest = expiries.reduce((a, b) => (a < b ? a : b));
-    return Date.parse(`${earliest}T08:00:00Z`);
-  }, [pricedLegs]);
+    return Date.parse(`${earliest}T${market === 'tradfi' ? '21' : '08'}:00:00Z`);
+  }, [market, pricedLegs]);
 
   const liveGhostPaths = useMemo(
     () =>
       computeGhostPaths(
-        pricedLegs,
+        analyticsLegs,
         spotPrice,
         nearestExpiryMs,
         lastBarMs,
-        candleSpec.resolutionSec,
+        candleResolutionSec,
         visibleSpotCandles?.candles ?? [],
       ),
     [
-      pricedLegs,
+      analyticsLegs,
       spotPrice,
       nearestExpiryMs,
       lastBarMs,
-      candleSpec.resolutionSec,
+      candleResolutionSec,
       visibleSpotCandles?.candles,
     ],
   );
@@ -600,7 +726,7 @@ export default function ArchitectView() {
       structureLabel: detectStrategy(pricedLegs),
       spotAtSnapshot: spotPrice,
       expiryMs: nearestExpiryMs,
-      resolutionSec: candleSpec.resolutionSec,
+      resolutionSec: candleResolutionSec,
       paths: liveGhostPaths.map((p) => ({
         kind: p.kind,
         isProfit: p.isProfit,
@@ -617,11 +743,15 @@ export default function ArchitectView() {
     underlying,
     pricedLegs,
     spotPrice,
-    candleSpec.resolutionSec,
+    candleResolutionSec,
   ]);
 
   function handleCopyUrl() {
-    const url = buildShareUrl(pricedLegs, underlying);
+    const url = buildShareUrl(
+      pricedLegs,
+      underlying,
+      market === 'tradfi' ? `#tradfi/builder/${underlying}` : `#builder/${underlying}`,
+    );
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -657,13 +787,35 @@ export default function ArchitectView() {
   }
 
   return (
-    <div className={styles.view}>
+    <div className={styles.view} data-market={market}>
       <div className={styles.mainArea}>
         <div className={styles.header}>
           <div className={styles.titleRow}>
             <span className={styles.title}>Builder</span>
-            <AssetPickerButton />
-            <VenuePickerButton />
+            {market === 'tradfi' ? (
+              <DropdownPicker
+                size="sm"
+                value={underlying}
+                onChange={setTradfiUnderlying}
+                options={tradfiUnderlyings.map((ticker) => ({
+                  value: ticker,
+                  label: ticker,
+                  meta: 'US',
+                }))}
+              />
+            ) : (
+              <AssetPickerButton />
+            )}
+            <VenuePickerButton
+              {...(market === 'tradfi'
+                ? {
+                    venueIds: TRADFI_VENUES,
+                    activeVenueIds: TRADFI_VENUES,
+                    label: 'Tastytrade',
+                    readOnly: true,
+                  }
+                : {})}
+            />
           </div>
         </div>
 
@@ -677,7 +829,14 @@ export default function ArchitectView() {
 
         <div className={styles.splitBody}>
           <div className={styles.controlsCol}>
-            <LegInput chain={chain ?? null} expiry={builderExpiry} onExpiryChange={setBuilderExpiry} />
+            <LegInput
+              chain={chain ?? null}
+              expiry={builderExpiry}
+              expiries={allExpiries}
+              underlying={underlying}
+              activeVenues={activeVenues}
+              onExpiryChange={setBuilderExpiry}
+            />
 
             {legs.length > 0 && (
               <div className={styles.legsSection}>
@@ -735,7 +894,12 @@ export default function ArchitectView() {
               <button
                 className={styles.compareBtn}
                 onClick={() => handleSendToPaper()}
-                disabled={createTrade.isPending}
+                disabled={market === 'tradfi' || createTrade.isPending}
+                title={
+                  market === 'tradfi'
+                    ? 'TradFi paper execution is not connected yet'
+                    : undefined
+                }
                 style={{ marginTop: 8 }}
               >
                 {createTrade.isPending ? 'Sending…' : 'Send to paper'}
@@ -852,7 +1016,7 @@ export default function ArchitectView() {
                       </div>
                       {variant === 'v2' && (
                         <div className={styles.chartTitleMeta}>
-                          {candleSpec.rangeLabel} window · {candleSpec.intervalLabel} candles · tenor-led
+                          {candleRangeLabel} window · {candleIntervalLabel} candles · tenor-led
                         </div>
                       )}
                     </div>
@@ -890,7 +1054,7 @@ export default function ArchitectView() {
                         points={payoffPoints}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={pricedLegs}
+                        legs={analyticsLegs}
                         maxProfit={metrics?.maxProfit ?? null}
                         maxLoss={metrics?.maxLoss ?? null}
                         strikes={availableStrikes}
@@ -932,8 +1096,8 @@ export default function ArchitectView() {
                           dataUpdatedAt={visibleSpotCandlesUpdatedAt}
                           hasData={hasVisibleSpotCandles}
                           isFetching={spotCandlesFetching}
-                          windowLabel={candleSpec.rangeLabel}
-                          intervalLabel={candleSpec.intervalLabel}
+                          windowLabel={candleRangeLabel}
+                          intervalLabel={candleIntervalLabel}
                           isSwitchingWindow={spotCandlesIsPlaceholderData && hasVisibleSpotCandles}
                           isError={spotCandlesUnavailable}
                           errorMessage={spotCandlesFailureMessage}
@@ -988,15 +1152,15 @@ export default function ArchitectView() {
                         candles={visibleSpotCandles?.candles ?? []}
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
-                        legs={pricedLegs}
-                        resolutionSec={candleSpec.resolutionSec}
+                        legs={analyticsLegs}
+                        resolutionSec={candleResolutionSec}
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}
                         ghostPaths={activeGhostPaths}
                         showProjections={showProjections}
                         snapshotMeta={snapshotMeta}
-                        projectionKey={`${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleSpec.resolutionSec}`}
+                        projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
                       />
                     </>
                   ) : (
@@ -1175,7 +1339,13 @@ export default function ArchitectView() {
               <div className={styles.shareBar}>
                 <span className={styles.shareUrl}>
                   {pricedLegs.length > 0
-                    ? buildShareUrl(pricedLegs, underlying)
+                    ? buildShareUrl(
+                        pricedLegs,
+                        underlying,
+                        market === 'tradfi'
+                          ? `#tradfi/builder/${underlying}`
+                          : `#builder/${underlying}`,
+                      )
                     : 'Build a strategy to share'}
                 </span>
                 {pricedLegs.length > 0 &&
@@ -1201,7 +1371,9 @@ export default function ArchitectView() {
             chainFor={chainFor}
             activeVenues={activeVenues}
             onClose={() => setShowVenues(false)}
-            onSendToPaper={(routing) => handleSendToPaper(routing)}
+            {...(market === 'crypto'
+              ? { onSendToPaper: (routing: StrategyRouting) => handleSendToPaper(routing) }
+              : {})}
             isSending={createTrade.isPending}
           />
         </>

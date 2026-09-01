@@ -42,6 +42,7 @@ interface NewChainTableProps {
   myIv: number | null;
   expiry: string;
   underlying: string;
+  builderMode?: 'crypto' | 'tradfi';
   // Optional override for the per-strike Chart button (see ExpandedRow). Lets a
   // non-crypto venue route charts to its own surface. Crypto omits it → unchanged.
   chartOverride?: (target: {
@@ -347,6 +348,7 @@ export default function NewChainTable({
   myIv,
   expiry,
   underlying,
+  builderMode = 'crypto',
   chartOverride,
 }: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -588,6 +590,7 @@ export default function NewChainTable({
             activeVenues={activeVenues}
             underlying={underlying}
             expiry={expiry}
+            builderMode={builderMode}
             onClose={() => setQuickTrade(null)}
           />
         </>

@@ -1,8 +1,14 @@
+import { Spinner } from '@components/ui';
 import { useAppStore } from '@stores/app-store';
+import { lazy, Suspense } from 'react';
 import { useTradfiUnderlyings } from './queries';
 import TradfiChainView from './TradfiChainView';
 import TradfiGexView from './TradfiGexView';
 import styles from './TradfiApp.module.css';
+
+const ArchitectView = lazy(() =>
+  import('@features/architect').then((module) => ({ default: module.ArchitectView })),
+);
 
 export default function TradfiApp() {
   const setAssetMode = useAppStore((s) => s.setAssetMode);
@@ -32,6 +38,14 @@ export default function TradfiApp() {
           <button
             type="button"
             className={styles.pageTab}
+            data-active={page === 'builder' || undefined}
+            onClick={() => setPage('builder')}
+          >
+            Builder
+          </button>
+          <button
+            type="button"
+            className={styles.pageTab}
             data-active={page === 'gex' || undefined}
             onClick={() => setPage('gex')}
           >
@@ -51,7 +65,17 @@ export default function TradfiApp() {
         </select>
         <span className={styles.delayed}>15-min delayed</span>
       </header>
-      <main className={styles.main}>{page === 'gex' ? <TradfiGexView /> : <TradfiChainView />}</main>
+      <main className={styles.main}>
+        {page === 'builder' ? (
+          <Suspense fallback={<Spinner size="lg" label="Loading TradFi Builder…" />}>
+            <ArchitectView market="tradfi" />
+          </Suspense>
+        ) : page === 'gex' ? (
+          <TradfiGexView />
+        ) : (
+          <TradfiChainView />
+        )}
+      </main>
     </div>
   );
 }

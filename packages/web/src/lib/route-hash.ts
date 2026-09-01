@@ -5,7 +5,7 @@ const TRADFI_PREFIX = 'tradfi';
 // Listing every TradfiPage as a Record key forces exhaustiveness: adding a
 // page to the union without adding it here becomes a compile error instead of
 // a silent parse failure.
-const TRADFI_PAGES: Record<TradfiPage, true> = { chain: true, gex: true };
+const TRADFI_PAGES: Record<TradfiPage, true> = { chain: true, builder: true, gex: true };
 
 // Hash route state, discriminated by asset mode. `ticker` is null when no
 // ticker is encoded (e.g. a legacy `#chain` link or TradFi before selection).

@@ -1226,7 +1226,6 @@
 }
 
 .chartPanel[data-variant="v2"] {
-  border-color: transparent;
   background:
     linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
     linear-gradient(135deg, rgba(203, 56, 85, 0.6), rgba(139, 30, 46, 0.2)) border-box;
@@ -1456,4 +1455,36 @@
   color: #cdd2d6;
   font-family: inherit;
   font-size: 11px;
+}
+
+.view[data-market="tradfi"] {
+  background:
+    radial-gradient(circle at 72% 0%, rgba(255, 179, 0, 0.045), transparent 34%),
+    var(--bg-base);
+}
+
+.view[data-market="tradfi"] .chartPanel[data-variant="v2"] {
+  background:
+    linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box,
+    linear-gradient(135deg, rgba(255, 179, 0, 0.72), rgba(106, 87, 32, 0.22)) border-box;
+}
+
+.view[data-market="tradfi"] .variantBtn[data-active="true"] {
+  background: linear-gradient(135deg, #ffd24a 0%, #b97800 100%);
+  color: #100d07;
+  box-shadow: 0 1px 8px rgba(255, 179, 0, 0.3);
+}
+
+.view[data-market="tradfi"] .snapshotBanner {
+  background: rgba(255, 179, 0, 0.08);
+  border-color: rgba(255, 179, 0, 0.28);
+}
+
+.view[data-market="tradfi"] .snapshotDot {
+  background: var(--accent-primary);
+  box-shadow: 0 0 6px rgba(255, 179, 0, 0.7);
+}
+
+.view[data-market="tradfi"] .snapshotPrimary {
+  color: var(--text-primary);
 }

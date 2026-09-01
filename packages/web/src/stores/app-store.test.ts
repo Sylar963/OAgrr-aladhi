@@ -139,8 +139,10 @@ describe('tradfi state slice', () => {
     expect(useAppStore.getState().tradfiExpiry).toBe('2026-06-17');
   });
 
-  it('tradfiPage defaults to chain and can switch to gex', () => {
+  it('tradfiPage defaults to chain and can switch pages', () => {
     expect(useAppStore.getState().tradfiPage).toBe('chain');
+    useAppStore.getState().setTradfiPage('builder');
+    expect(useAppStore.getState().tradfiPage).toBe('builder');
     useAppStore.getState().setTradfiPage('gex');
     expect(useAppStore.getState().tradfiPage).toBe('gex');
   });

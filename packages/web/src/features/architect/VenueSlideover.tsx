@@ -50,7 +50,7 @@ function buildVenueExecution(
     askSize: q.askSize,
     iv: q.markIv,
     delta: q.delta,
-    contractSize: 1,
+    contractSize: venueId === 'tastytrade' ? 100 : 1,
     tickSize: 0.01,
     minQty: 0.01,
     makerFee: q.estimatedFees && q.mid ? q.estimatedFees.maker / q.mid : 0.0003,

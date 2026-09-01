@@ -31,6 +31,11 @@ describe('parseHash', () => {
       page: 'chain',
       ticker: 'TSLA',
     });
+    expect(parseHash('#tradfi/builder/SPY')).toEqual({
+      mode: 'tradfi',
+      page: 'builder',
+      ticker: 'SPY',
+    });
   });
 
   it('back-compat: bare #tradfi → chain page, no ticker', () => {
@@ -71,6 +76,9 @@ describe('buildHash', () => {
 
   it('builds tradfi hashes with page + ticker', () => {
     expect(buildHash({ mode: 'tradfi', page: 'gex', ticker: 'AAPL' })).toBe('#tradfi/gex/AAPL');
+    expect(buildHash({ mode: 'tradfi', page: 'builder', ticker: 'SPY' })).toBe(
+      '#tradfi/builder/SPY',
+    );
   });
 });
 
@@ -82,6 +90,7 @@ describe('round-trip', () => {
       { mode: 'crypto', tab: 'gex', ticker: null },
       { mode: 'tradfi', page: 'chain', ticker: 'AAPL' },
       { mode: 'tradfi', page: 'gex', ticker: null },
+      { mode: 'tradfi', page: 'builder', ticker: 'SPY' },
     ];
     for (const state of states) {
       expect(parseHash(buildHash(state))).toEqual(state);

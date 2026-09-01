@@ -15,6 +15,7 @@ interface QuickTradeProps {
   activeVenues: string[];
   underlying: string;
   expiry: string;
+  builderMode: 'crypto' | 'tradfi';
   onClose: () => void;
 }
 
@@ -26,11 +27,14 @@ export default function QuickTrade({
   activeVenues,
   underlying,
   expiry,
+  builderMode,
   onClose,
 }: QuickTradeProps) {
   const addLeg = useStrategyStore((s) => s.addLeg);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setTradfiPage = useAppStore((s) => s.setTradfiPage);
   const activeTab = useAppStore((s) => s.activeTab);
+  const tradfiPage = useAppStore((s) => s.tradfiPage);
 
   const venues = Object.entries(side.venues)
     .filter(([v]) => activeVenues.includes(v))
@@ -81,7 +85,8 @@ export default function QuickTrade({
       return best;
     }, null)?.id ?? null;
 
-  const isOnArchitect = activeTab === 'architect';
+  const isOnBuilder =
+    builderMode === 'tradfi' ? tradfiPage === 'builder' : activeTab === 'architect';
 
   function handleAdd(v: (typeof venues)[0]) {
     addLeg(
@@ -101,7 +106,11 @@ export default function QuickTrade({
       },
       underlying,
     );
-    if (!isOnArchitect) setActiveTab('architect');
+    if (builderMode === 'tradfi') {
+      if (!isOnBuilder) setTradfiPage('builder');
+    } else if (!isOnBuilder) {
+      setActiveTab('architect');
+    }
     onClose();
   }
 
@@ -150,7 +159,7 @@ export default function QuickTrade({
               details={[detail]}
               tags={tags}
               action={{
-                label: isOnArchitect ? '+ Add Leg' : '+ Builder',
+                label: isOnBuilder ? '+ Add Leg' : '+ Builder',
                 onClick: () => handleAdd(v),
               }}
             />

@@ -25,7 +25,7 @@ function readStorage(key: string): string | null {
 
 export type ActiveContext = { kind: 'paper' | 'challenge' | 'thalex'; runId?: string };
 
-export type TradfiPage = 'chain' | 'gex';
+export type TradfiPage = 'chain' | 'builder' | 'gex';
 
 function readActiveContext(): ActiveContext {
   const raw = readStorage('activeContext');

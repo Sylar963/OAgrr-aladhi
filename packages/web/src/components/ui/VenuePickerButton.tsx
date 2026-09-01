@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
-import { VENUE_LIST } from '@lib/venue-meta';
+import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import styles from './VenuePickerButton.module.css';
 
@@ -22,10 +22,32 @@ function setOpen(next: boolean | ((prev: boolean) => boolean)) {
   for (const cb of _listeners) cb();
 }
 
-export default function VenuePickerButton() {
-  const activeVenues = useAppStore((s) => s.activeVenues);
-  const toggleVenue = useAppStore((s) => s.toggleVenue);
-  const allActive = activeVenues.length === VENUE_LIST.length;
+interface VenuePickerButtonProps {
+  venueIds?: string[];
+  activeVenueIds?: string[];
+  onToggleVenue?: (venueId: string) => void;
+  label?: string;
+  readOnly?: boolean;
+}
+
+export default function VenuePickerButton({
+  venueIds,
+  activeVenueIds,
+  onToggleVenue,
+  label,
+  readOnly = false,
+}: VenuePickerButtonProps = {}) {
+  const storeActiveVenues = useAppStore((s) => s.activeVenues);
+  const storeToggleVenue = useAppStore((s) => s.toggleVenue);
+  const venues = venueIds
+    ? venueIds.flatMap((venueId) => {
+        const venue = VENUES[venueId];
+        return venue ? [venue] : [];
+      })
+    : VENUE_LIST;
+  const activeVenues = activeVenueIds ?? storeActiveVenues;
+  const toggleVenue = onToggleVenue ?? storeToggleVenue;
+  const allActive = activeVenues.length === venues.length;
   const open = useSyncExternalStore(subscribe, getSnapshot);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,7 +75,7 @@ export default function VenuePickerButton() {
     <div className={styles.picker} data-open={open || undefined} ref={rootRef}>
       <button type="button" className={styles.trigger} aria-expanded={open} onClick={handleToggle}>
         <span className={styles.logos}>
-          {VENUE_LIST.map((venue) => (
+          {venues.map((venue) => (
             <img
               key={venue.id}
               src={venue.logo}
@@ -64,7 +86,9 @@ export default function VenuePickerButton() {
             />
           ))}
         </span>
-        <span className={styles.count}>{allActive ? 'All' : activeVenues.length.toString()}</span>
+        <span className={styles.count}>
+          {label ?? (allActive ? 'All' : activeVenues.length.toString())}
+        </span>
         <span className={styles.chevron} data-open={open || undefined}>
           ▾
         </span>
@@ -73,7 +97,7 @@ export default function VenuePickerButton() {
       {open ? (
         <div className={styles.panel}>
           <div className={styles.grid}>
-            {VENUE_LIST.map((venue) => {
+            {venues.map((venue) => {
               const active = activeVenues.includes(venue.id);
               return (
                 <button
@@ -81,7 +105,9 @@ export default function VenuePickerButton() {
                   type="button"
                   className={styles.option}
                   data-active={active || undefined}
-                  onClick={() => toggleVenue(venue.id)}
+                  onClick={() => {
+                    if (!readOnly) toggleVenue(venue.id);
+                  }}
                 >
                   <img src={venue.logo} alt="" className={styles.optionLogo} />
                   <span className={styles.optionName}>{venue.label}</span>

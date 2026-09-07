@@ -33,15 +33,15 @@ export function isSnapshotComplete(flags: number): boolean {
 }
 
 const INTERVAL_TO_PERIOD: Record<InstrumentCandleInterval, string> = {
-  '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d',
+  '1m': 'm', '5m': '5m', '15m': '15m', '1h': 'h', '4h': '4h', '1d': 'd',
 };
 export function intervalToPeriod(i: InstrumentCandleInterval): string { return INTERVAL_TO_PERIOD[i]; }
 
 const RANGE_TO_MS: Record<InstrumentCandleRange, number> = {
   '1d': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000, max: 365 * 86_400_000,
 };
-export function rangeToFromTimeSec(r: InstrumentCandleRange, nowMs: number): number {
-  return Math.floor((nowMs - RANGE_TO_MS[r]) / 1000);
+export function rangeToFromTimeMs(r: InstrumentCandleRange, nowMs: number): number {
+  return nowMs - RANGE_TO_MS[r];
 }
 
 export function buildCandleFeedSetup(channel: number) {

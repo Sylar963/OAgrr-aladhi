@@ -2,13 +2,13 @@ import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregato
 import {
   intervalToPeriod,
   type RawCandle,
-  rangeToFromTimeSec,
+  rangeToFromTimeMs,
 } from '../tastytrade/candle-codec.js';
 import type { OptionRight } from '../tastytrade/instrument.js';
 import type { TradfiStore } from './store.js';
 
 export interface CandleSource {
-  getCandles(symbol: string, period: string, fromTimeSec: number): Promise<RawCandle[]>;
+  getCandles(symbol: string, period: string, fromTimeMs: number): Promise<RawCandle[]>;
 }
 
 export interface CandlesQuery {
@@ -77,7 +77,7 @@ export async function buildCandlesResponse(
     .find((i) => i.strike === q.strike && i.right === q.right);
   if (!inst) return null;
   const period = intervalToPeriod(q.interval);
-  const fromTime = rangeToFromTimeSec(q.range, q.nowMs);
+  const fromTime = rangeToFromTimeMs(q.range, q.nowMs);
   const raw = await client.getCandles(inst.streamerSymbol, period, fromTime);
   return {
     symbol: inst.streamerSymbol,
@@ -103,7 +103,7 @@ export async function buildUnderlyingCandlesResponse(
   q: UnderlyingCandlesQuery,
 ): Promise<TradfiCandlesResponse> {
   const period = intervalToPeriod(q.interval);
-  const fromTime = rangeToFromTimeSec(q.range, q.nowMs);
+  const fromTime = rangeToFromTimeMs(q.range, q.nowMs);
   const raw = await client.getCandles(q.underlying, period, fromTime);
   return {
     symbol: q.underlying,

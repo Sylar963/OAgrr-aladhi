@@ -127,7 +127,7 @@ export class CandleClient {
   subscribeLive(
     streamerSymbol: string,
     period: string,
-    fromTimeSec: number,
+    fromTimeMs: number,
     onBar: (bar: RawCandle) => void,
   ): () => void {
     const candleSymbol = `${streamerSymbol}{=${period}}`;
@@ -141,7 +141,7 @@ export class CandleClient {
     if (firstForSymbol) {
       const sendSub = () => {
         if ((this.live.get(candleSymbol)?.size ?? 0) > 0) {
-          this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeSec));
+          this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeMs));
         }
       };
       if (this.ready) sendSub();
@@ -159,7 +159,7 @@ export class CandleClient {
     };
   }
 
-  getCandles(streamerSymbol: string, period: string, fromTimeSec: number): Promise<RawCandle[]> {
+  getCandles(streamerSymbol: string, period: string, fromTimeMs: number): Promise<RawCandle[]> {
     const candleSymbol = `${streamerSymbol}{=${period}}`;
     if (this.pending.has(candleSymbol)) {
       // dedupe in-flight: return a promise that resolves when the existing request finishes
@@ -176,11 +176,11 @@ export class CandleClient {
       // pending entry is in place before any inbound data can arrive.
       // If not yet ready, wait — the subscribe will be sent once FEED_CONFIG arrives.
       if (this.ready) {
-        this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeSec));
+        this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeMs));
       } else {
         this.readyWaiters.push(() => {
           if (this.pending.has(candleSymbol)) {
-            this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeSec));
+            this.sock?.send(buildCandleSubscribe(CANDLE_CHANNEL, candleSymbol, fromTimeMs));
           }
         });
       }

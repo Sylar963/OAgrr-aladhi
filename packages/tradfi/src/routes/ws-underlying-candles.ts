@@ -1,4 +1,7 @@
-import { InstrumentCandleIntervalSchema } from '@oggregator/protocol';
+import {
+  InstrumentCandleIntervalSchema,
+  type InstrumentCandleInterval,
+} from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
 import type { TradfiDeps } from '../app.js';
 import { mapRawCandle } from '../runtime/candles.js';
@@ -9,9 +12,18 @@ const FLUSH_INTERVAL_MS = 200;
 // Recent window the live subscription replays before streaming; scaled to the
 // interval so it always includes the current forming bar. The full history
 // still comes from the REST /underlying-candles snapshot.
-const INTERVAL_TO_SECONDS: Record<string, number> = {
-  '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
+const INTERVAL_TO_MS: Record<InstrumentCandleInterval, number> = {
+  '1m': 60_000,
+  '5m': 300_000,
+  '15m': 900_000,
+  '1h': 3_600_000,
+  '4h': 14_400_000,
+  '1d': 86_400_000,
 };
+
+export function liveReplayFromTimeMs(interval: InstrumentCandleInterval, nowMs: number): number {
+  return nowMs - INTERVAL_TO_MS[interval] * 3;
+}
 
 interface LiveBarMessage { type: 'bar'; ts: number; o: number; h: number; l: number; c: number; vol: number }
 
@@ -42,7 +54,7 @@ export class CandleStreamer {
 }
 
 export function wsUnderlyingCandlesRoute(deps: TradfiDeps) {
-  return async function (app: FastifyInstance) {
+  return async (app: FastifyInstance) => {
     app.get<{ Querystring: { underlying?: string; interval?: string } }>(
       '/ws/underlying-candles',
       { websocket: true },
@@ -54,14 +66,13 @@ export function wsUnderlyingCandlesRoute(deps: TradfiDeps) {
           socket.close();
           return;
         }
-        if (!deps.candleClient || !deps.candleClient.isReady()) {
+        if (!deps.candleClient?.isReady()) {
           socket.send(JSON.stringify({ type: 'error', message: 'candle feed not ready' }));
           socket.close();
           return;
         }
         const period = intervalToPeriod(i.data);
-        const windowSec = (INTERVAL_TO_SECONDS[i.data] ?? 300) * 3;
-        const fromTime = Math.floor(Date.now() / 1000) - windowSec;
+        const fromTime = liveReplayFromTimeMs(i.data, Date.now());
         const streamer = new CandleStreamer((d) => socket.send(d));
         const unsub = deps.candleClient.subscribeLive(underlying, period, fromTime, (bar) => streamer.onBar(bar));
         const timer = setInterval(() => streamer.flush(), FLUSH_INTERVAL_MS);

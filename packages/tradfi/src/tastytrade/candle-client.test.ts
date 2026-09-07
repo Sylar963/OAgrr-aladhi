@@ -33,7 +33,7 @@ describe('CandleClient', () => {
     fs.emit({ type: 'CHANNEL_OPENED', channel: 1 });
     fs.emit({ type: 'FEED_CONFIG', channel: 1 });
 
-    const p = client.getCandles('.SPXW260623C7555', '5m', 123);
+    const p = client.getCandles('.SPXW260623C7555', '5m', 1_700_000_000_000);
     // server streams a snapshot: one real bar, then a terminal SNAPSHOT_END record
     fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', [
       'Candle', '.SPXW260623C7555{=5m}', 4, 1781553000000, 55.9, 56.1, 55.8, 56.0, 3,
@@ -45,7 +45,17 @@ describe('CandleClient', () => {
     expect(bars).toHaveLength(1);
     expect(bars[0]).toMatchObject({ time: 1781553000000, o: 55.9, c: 56.0 });
     expect(fs.sent.some((m) => (m as { type?: string }).type === 'AUTH')).toBe(true);
-    expect(fs.sent.some((m) => (m as { type?: string; add?: unknown }).type === 'FEED_SUBSCRIPTION' && (m as { add?: unknown }).add)).toBe(true);
+    expect(fs.sent).toContainEqual({
+      type: 'FEED_SUBSCRIPTION',
+      channel: 1,
+      add: [
+        {
+          type: 'Candle',
+          symbol: '.SPXW260623C7555{=5m}',
+          fromTime: 1_700_000_000_000,
+        },
+      ],
+    });
   });
 
   it('resolves with collected bars on timeout when no terminal flag arrives', async () => {

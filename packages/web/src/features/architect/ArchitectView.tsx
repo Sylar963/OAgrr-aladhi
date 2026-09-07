@@ -9,7 +9,12 @@ import {
   useTradfiExpiries,
   useTradfiUnderlyings,
 } from '@features/tradfi/queries';
+import { mergeLiveBars } from '@features/tradfi/live-candle';
 import { useTradfiUnderlyingCandles } from '@features/tradfi/use-tradfi-underlying-candles';
+import {
+  useTradfiUnderlyingCandlesLive,
+  type LiveBar,
+} from '@features/tradfi/use-tradfi-underlying-candles-live';
 import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
@@ -573,25 +578,56 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     range: tradfiCandleSpec.range,
     enabled: market === 'tradfi',
   });
+  const tradfiLiveKey = `${underlying}:${tradfiCandleSpec.interval}`;
+  const [tradfiLiveState, setTradfiLiveState] = useState<{
+    key: string;
+    bars: LiveBar[];
+    updatedAt: number;
+  }>({ key: '', bars: [], updatedAt: 0 });
+  const handleTradfiLiveBar = useCallback(
+    (bar: LiveBar) => {
+      setTradfiLiveState((previous) => {
+        const bars = previous.key === tradfiLiveKey ? previous.bars : [];
+        const next = [...bars.filter((candidate) => candidate.ts !== bar.ts), bar]
+          .sort((a, b) => a.ts - b.ts)
+          .slice(-4);
+        return { key: tradfiLiveKey, bars: next, updatedAt: Date.now() };
+      });
+    },
+    [tradfiLiveKey],
+  );
+  useTradfiUnderlyingCandlesLive({
+    underlying,
+    interval: tradfiCandleSpec.interval,
+    enabled: market === 'tradfi' && variant === 'v2',
+    onBar: handleTradfiLiveBar,
+  });
+  const activeTradfiLiveBars =
+    tradfiLiveState.key === tradfiLiveKey ? tradfiLiveState.bars : [];
   const normalizedTradfiSpotCandles = useMemo<SpotCandlesResponse | undefined>(() => {
-    if (!tradfiSpotCandles.data) return undefined;
-    return {
-      currency: underlying,
-      resolution: tradfiCandleSpec.resolutionSec,
-      count: tradfiSpotCandles.data.candles.length,
-      candles: tradfiSpotCandles.data.candles.map((candle) => ({
+    if (!tradfiSpotCandles.data && activeTradfiLiveBars.length === 0) return undefined;
+    const history =
+      tradfiSpotCandles.data?.candles.map((candle) => ({
         timestamp: candle.ts,
         open: candle.o,
         high: candle.h,
         low: candle.l,
         close: candle.c,
-      })),
+      })) ?? [];
+    const candles = mergeLiveBars(history, activeTradfiLiveBars);
+    return {
+      currency: underlying,
+      resolution: tradfiCandleSpec.resolutionSec,
+      count: candles.length,
+      candles,
     };
-  }, [tradfiCandleSpec.resolutionSec, tradfiSpotCandles.data, underlying]);
+  }, [activeTradfiLiveBars, tradfiCandleSpec.resolutionSec, tradfiSpotCandles.data, underlying]);
   const spotCandlesData =
     market === 'tradfi' ? normalizedTradfiSpotCandles : cryptoSpotCandles.data;
   const spotCandlesUpdatedAt =
-    market === 'tradfi' ? tradfiSpotCandles.dataUpdatedAt : cryptoSpotCandles.dataUpdatedAt;
+    market === 'tradfi'
+      ? Math.max(tradfiSpotCandles.dataUpdatedAt, tradfiLiveState.updatedAt)
+      : cryptoSpotCandles.dataUpdatedAt;
   const spotCandlesLoading =
     market === 'tradfi' ? tradfiSpotCandles.isLoading : cryptoSpotCandles.isLoading;
   const spotCandlesFetching =

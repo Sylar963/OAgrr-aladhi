@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CandleStreamer } from './ws-underlying-candles.js';
+import { CandleStreamer, liveReplayFromTimeMs } from './ws-underlying-candles.js';
 import type { RawCandle } from '../tastytrade/candle-codec.js';
 
 function bar(time: number, c: number, over: Partial<RawCandle> = {}): RawCandle {
@@ -41,5 +41,11 @@ describe('CandleStreamer', () => {
     s.onBar(bar(1781553000000, 56));
     s.flush();
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('liveReplayFromTimeMs', () => {
+  it('requests three hourly bars using epoch milliseconds', () => {
+    expect(liveReplayFromTimeMs('1h', 1_700_000_000_000)).toBe(1_699_989_200_000);
   });
 });

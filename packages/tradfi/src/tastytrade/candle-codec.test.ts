@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseCandleFrame, isSnapshotComplete, intervalToPeriod, rangeToFromTimeSec, buildCandleSubscribe,
+  parseCandleFrame, isSnapshotComplete, intervalToPeriod, rangeToFromTimeMs, buildCandleSubscribe,
 } from './candle-codec.js';
 
 describe('parseCandleFrame', () => {
@@ -30,12 +30,16 @@ describe('isSnapshotComplete', () => {
 
 describe('mappings', () => {
   it('maps interval to a DXFeed candle period', () => {
+    expect(intervalToPeriod('1m')).toBe('m');
     expect(intervalToPeriod('5m')).toBe('5m');
-    expect(intervalToPeriod('1d')).toBe('1d');
+    expect(intervalToPeriod('15m')).toBe('15m');
+    expect(intervalToPeriod('1h')).toBe('h');
+    expect(intervalToPeriod('4h')).toBe('4h');
+    expect(intervalToPeriod('1d')).toBe('d');
   });
-  it('computes fromTime seconds from a range', () => {
+  it('computes fromTime milliseconds from a range', () => {
     const now = 1_700_000_000_000;
-    expect(rangeToFromTimeSec('1d', now)).toBe(Math.floor((now - 86_400_000) / 1000));
+    expect(rangeToFromTimeMs('1d', now)).toBe(1_699_913_600_000);
   });
   it('builds a Candle subscribe with fromTime', () => {
     expect(buildCandleSubscribe(1, 'SPY{=5m}', 123)).toEqual({

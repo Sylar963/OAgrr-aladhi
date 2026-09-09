@@ -27,6 +27,11 @@ packages/ingest/    Optional persistence worker that records live + institutiona
 references/         Official API docs per venue
 ```
 
+Before changing paper execution, order-book depth, matching, simulator accounting, or simulator
+risk, read `docs/superpowers/specs/2026-09-09-enterprise-options-simulator-design.md` and
+`docs/superpowers/SIMULATOR_CONTROLS.md`. Simulator work is milestone-gated and requires changelog
+entries in `docs/superpowers/SIMULATOR_CHANGELOG.md`.
+
 When touching venue adapters or adding a new venue, read `packages/core/CLAUDE.md` first. It contains the venue-onboarding checklist and exchange-specific gotchas that used to live in `agent_docs/`.
 
 Structural changes to core/server/ingest should preserve the runtime-first architecture: `@oggregator/core` owns reusable live-data runtimes, while server, ingest, bots, and external apps are consumers.

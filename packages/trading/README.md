@@ -98,12 +98,16 @@ Position folding (`applyFillToPosition` in `book/position.ts`) handles the four 
 `PnlService.snapshot(accountId)` pulls open positions and current cash, fetches a cross-venue average mark for each open position in parallel, and returns:
 
 ```
-equityUsd      = cashUsd + sum(unrealizedUsd)
+equityUsd      = cashUsd + sum(netQuantity * markPriceUsd)           for positions with mark
 unrealizedUsd  = sum( netQuantity × (mark − avgEntryPriceUsd) )    for positions with mark
 realizedUsd    = sum(realizedPnlUsd)                                accrued through closes
 ```
 
 Unrealized PnL for a position is `null` when no venue has a current mark — this is surfaced to the client rather than silently zeroed.
+
+Aggregate equity omits unpriced inventory; it is incomplete when any open position lacks a mark
+and can overstate equity for unpriced shorts. Cash already includes premium flows and fees, so
+neither realized nor unrealized PnL is added again to signed marked inventory.
 
 ### Persistence
 

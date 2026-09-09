@@ -50,12 +50,13 @@ export function computeSnapshot(
   });
   const unrealized = rows.reduce((sum, r) => sum + (r.unrealizedUsd ?? 0), 0);
   const realized = rows.reduce((sum, r) => sum + r.realizedUsd, 0);
+  const inventoryValue = rows.reduce((sum, r) => sum + r.netQuantity * (r.markPriceUsd ?? 0), 0);
   return {
     positions: rows,
     cashUsd,
     realizedUsd: realized,
     unrealizedUsd: unrealized,
-    equityUsd: cashUsd + unrealized,
+    equityUsd: cashUsd + inventoryValue,
     generatedAt: now,
   };
 }

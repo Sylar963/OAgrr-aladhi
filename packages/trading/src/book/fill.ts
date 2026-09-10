@@ -1,6 +1,6 @@
 import type { VenueId } from '@oggregator/core';
 import type { UsdAmount } from './money.js';
-import type { OptionRight, OrderId, OrderSide } from './order.js';
+import type { OptionRight, OrderId, OrderSide, QuantityUnit } from './order.js';
 
 export type FillId = string;
 export type FillSource = 'paper' | 'live' | 'settlement';
@@ -20,13 +20,20 @@ export interface Fill {
   // Quantity originally requested by the order leg. Equal to `quantity` for
   // full fills; persisted so partial-fill diagnostics survive a restart.
   requestedQuantity: number;
+  quantityUnit: QuantityUnit;
+  contractMultiplierBase: number | null;
+  nativeQuantity: number | null;
+  requestedNativeQuantity: number | null;
+  nativeMinQuantity: number | null;
+  nativeQuantityStep: number | null;
+  nativePriceTick: number | null;
   priceUsd: UsdAmount;
   // Implied vol at fill time, when the venue published a mark IV. Folded
   // into avgEntryIv on Position so paper books keep an entry-IV history
   // through multiple averaging fills.
   iv: number | null;
   feesUsd: UsdAmount;
-  // Per-contract slippage vs L1 reference (ask for buy, bid for sell). 0 under
+  // USD-per-base slippage vs L1 reference (ask for buy, bid for sell). 0 under
   // OptimisticFillModel; positive when RealisticFillModel walked depth or paid
   // a spread penalty.
   slippageUsd: UsdAmount;

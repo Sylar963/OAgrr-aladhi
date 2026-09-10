@@ -1,36 +1,46 @@
 import type { NormalizedOptionContract } from '@shared/common';
 import type { VenueExecution } from './types';
 
-// Fallback fee rates for venues that don't expose fees in their instrument API
-const DEFAULT_FEES: Record<string, { maker: number; taker: number }> = {
-  okx: { maker: 0.0002, taker: 0.0005 },
-  binance: { maker: 0.0002, taker: 0.0005 },
-  bybit: { maker: 0.0002, taker: 0.0005 },
-};
-
 export function contractToExecution(
   contract: NormalizedOptionContract,
   underlyingPrice: number,
-): VenueExecution {
-  const defaults = DEFAULT_FEES[contract.venue];
-  const bidPrice = contract.quote.bid.usd;
-  const askPrice = contract.quote.ask.usd;
+): VenueExecution | null {
+  const multiplier = contract.contractMultiplierBase;
+  const nativeMin = contract.minQty;
+  const nativeStep = contract.lotSize;
+  const bidFees = contract.quote.estimatedBidFees;
+  const askFees = contract.quote.estimatedAskFees;
+  if (
+    multiplier == null ||
+    !Number.isFinite(multiplier) ||
+    multiplier <= 0 ||
+    nativeMin == null ||
+    nativeStep == null ||
+    bidFees == null ||
+    askFees == null
+  ) {
+    return null;
+  }
+  const bidPrice = contract.quote.bid.usdPerBase ?? null;
+  const askPrice = contract.quote.ask.usdPerBase ?? null;
 
   return {
     venue: contract.venue,
     available: (bidPrice != null && bidPrice > 0) || (askPrice != null && askPrice > 0),
     bidPrice,
     askPrice,
-    markPrice: contract.quote.mark.usd,
-    bidSize: contract.quote.bidSize,
-    askSize: contract.quote.askSize,
+    markPrice: contract.quote.mark.usdPerBase ?? null,
+    bidSize: contract.quote.bidSize == null ? null : contract.quote.bidSize * multiplier,
+    askSize: contract.quote.askSize == null ? null : contract.quote.askSize * multiplier,
     iv: contract.greeks.markIv,
     delta: contract.greeks.delta,
-    contractSize: contract.contractSize ?? 1,
-    tickSize: contract.tickSize ?? 1,
-    minQty: contract.minQty ?? 0.01,
-    makerFee: contract.makerFee ?? defaults?.maker ?? 0.0005,
-    takerFee: contract.takerFee ?? defaults?.taker ?? 0.0005,
+    contractSize: 1,
+    tickSize: contract.tickSize ?? 0,
+    minQty: nativeMin * multiplier,
+    bidMakerFeeUsd: bidFees.maker / multiplier,
+    bidTakerFeeUsd: bidFees.taker / multiplier,
+    askMakerFeeUsd: askFees.maker / multiplier,
+    askTakerFeeUsd: askFees.taker / multiplier,
     settleCurrency: contract.inverse ? 'BTC' : 'USD',
     inverse: contract.inverse,
     underlyingPrice,

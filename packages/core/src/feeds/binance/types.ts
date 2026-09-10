@@ -33,6 +33,9 @@ export const BinancePriceFilterSchema = z.object({
   tickSize: z.string().optional(),
   minPrice: z.string().optional(),
   maxPrice: z.string().optional(),
+  minQty: z.string().optional(),
+  maxQty: z.string().optional(),
+  stepSize: z.string().optional(),
 });
 export type BinancePriceFilter = z.infer<typeof BinancePriceFilterSchema>;
 

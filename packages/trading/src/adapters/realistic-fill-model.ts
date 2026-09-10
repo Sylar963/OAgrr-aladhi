@@ -67,7 +67,7 @@ export class RealisticFillModel implements FillModel {
   private resolveTopSize(side: 'buy' | 'sell', book: QuoteBook): number {
     const raw = side === 'buy' ? book.askSize : book.bidSize;
     if (raw != null && raw > 0) return raw;
-    return this.opts.assumedTopSizeWhenMissing;
+    return this.opts.assumedTopSizeWhenMissing * book.contractMultiplierBase;
   }
 
   private walkLadder(

@@ -24,8 +24,10 @@ function exec(overrides: Partial<VenueExecution> & Pick<VenueExecution, 'venue'>
     contractSize: 1,
     tickSize: 0.01,
     minQty: 0.01,
-    makerFee: 0.0003,
-    takerFee: 0.0005,
+    bidMakerFeeUsd: 0.03,
+    bidTakerFeeUsd: 0.05,
+    askMakerFeeUsd: 0.0306,
+    askTakerFeeUsd: 0.051,
     settleCurrency: 'USD',
     inverse: false,
     underlyingPrice: 100_000,
@@ -56,7 +58,7 @@ describe('classifyPerLeg', () => {
 });
 
 describe('classifyStrategy', () => {
-  it('scales linearly by total quantity (per-contract classification)', () => {
+  it('scales linearly by total quantity for per-base classification', () => {
     expect(classifyStrategy(4, 2, 2)).toBe('ok');
     expect(classifyStrategy(4.01, 2, 2)).toBe('elevated');
     expect(classifyStrategy(10, 2, 2)).toBe('elevated');
@@ -79,7 +81,7 @@ describe('classifyStrategy', () => {
 
 describe('computeQuoteCost', () => {
   it('computes round-trip for buy leg crossing ask, exiting at bid', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, takerFee: 0 });
+    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
 
     expect(cost.entryPrice).toBe(102);
@@ -90,14 +92,14 @@ describe('computeQuoteCost', () => {
   });
 
   it('round-trip is symmetric for sell direction', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, takerFee: 0 });
+    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
     const buy = computeQuoteCost(v, 'buy', 1, 'leg1');
     const sell = computeQuoteCost(v, 'sell', 1, 'leg1');
     expect(buy.roundTripUsd).toBe(sell.roundTripUsd);
   });
 
   it('includes entry and exit fees in round-trip', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, takerFee: 0.001 });
+    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0.1, askTakerFeeUsd: 0.102 });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
     // spread 2 + entryFee 0.102 + exitFee 0.100 = 2.202
     expect(cost.entryFeeUsd).toBeCloseTo(0.102, 5);
@@ -105,12 +107,12 @@ describe('computeQuoteCost', () => {
     expect(cost.roundTripUsd).toBeCloseTo(2.202, 5);
   });
 
-  it('scales with quantity but classification stays per-contract', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, takerFee: 0 });
+  it('scales with quantity but classification stays per base unit', () => {
+    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
     const single = computeQuoteCost(v, 'buy', 1, 'leg1');
     const ten = computeQuoteCost(v, 'buy', 10, 'leg1');
     expect(ten.roundTripUsd).toBe(single.roundTripUsd! * 10);
-    expect(ten.roundTripPerContract).toBe(single.roundTripPerContract);
+    expect(ten.roundTripPerBase).toBe(single.roundTripPerBase);
     expect(ten.classification).toBe(single.classification);
   });
 
@@ -145,9 +147,9 @@ describe('computeQuoteCost', () => {
   });
 
   it('classifies wide spread as excessive', () => {
-    const v = exec({ venue: 'okx', bidPrice: 100, askPrice: 110, takerFee: 0 });
+    const v = exec({ venue: 'okx', bidPrice: 100, askPrice: 110, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
-    expect(cost.roundTripPerContract).toBe(10);
+    expect(cost.roundTripPerBase).toBe(10);
     expect(cost.classification).toBe('excessive');
   });
 });
@@ -184,10 +186,10 @@ describe('computeStrategyRoundTrip', () => {
   it('aggregates per-leg round-trips and classifies the strategy', () => {
     const legs: LegInput[] = [
       legInput('l1', 'buy', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 645, bidPrice: 640, takerFee: 0 }) },
+        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 645, bidPrice: 640, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }) },
       ]),
       legInput('l2', 'sell', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 280, bidPrice: 277, takerFee: 0 }) },
+        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 280, bidPrice: 277, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }) },
       ]),
     ];
     const routing = deriveAutoRouting(legs);
@@ -214,8 +216,8 @@ describe('computeStrategyRoundTrip', () => {
   it('promotes strategy badge to worst leg when total averages down', () => {
     // 4 cheap legs + 1 toxic leg: linear-scaled total might be OK,
     // but the toxic leg should bubble up to the strategy verdict.
-    const cheap = exec({ venue: 'deribit', askPrice: 100, bidPrice: 99.5, takerFee: 0 }); // $0.50/contract
-    const toxic = exec({ venue: 'okx', askPrice: 100, bidPrice: 90, takerFee: 0 }); // $10/contract → excessive
+    const cheap = exec({ venue: 'deribit', askPrice: 100, bidPrice: 99.5, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }); // $0.50/base unit
+    const toxic = exec({ venue: 'okx', askPrice: 100, bidPrice: 90, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }); // $10/base unit → excessive
 
     const legs: LegInput[] = [
       legInput('a', 'buy', 1, [{ venue: 'deribit', exec: cheap }]),

@@ -20,10 +20,10 @@ const validLeg = {
 } as const;
 
 describe('PaperOrderLegSchema', () => {
-  it('round-trips a valid leg unchanged', () => {
+  it('applies defaults to a valid leg', () => {
     const result = PaperOrderLegSchema.safeParse(validLeg);
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data).toEqual(validLeg);
+    if (result.success) expect(result.data).toEqual({ ...validLeg, quantityUnit: 'base' });
   });
 
   it('accepts a null preferredVenues', () => {
@@ -40,6 +40,19 @@ describe('PaperOrderLegSchema', () => {
 
   it('rejects a non-positive quantity', () => {
     expect(PaperOrderLegSchema.safeParse({ ...validLeg, quantity: -1 }).success).toBe(false);
+  });
+
+  it('defaults the quantity unit to base exposure', () => {
+    const result = PaperOrderLegSchema.safeParse(validLeg);
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.quantityUnit).toBe('base');
+  });
+
+  it('rejects a non-finite quantity', () => {
+    expect(PaperOrderLegSchema.safeParse({ ...validLeg, quantity: Number.POSITIVE_INFINITY }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an unknown venue in preferredVenues', () => {

@@ -66,7 +66,7 @@ export class ApproximationMarginEngine implements MarginEngine {
           'spot_unavailable',
         );
       }
-      const required = perContractShortMargin(leg.optionRight, leg.strike, spot, this.opts) * leg.quantity;
+      const required = perBaseShortMargin(leg.optionRight, leg.strike, spot, this.opts) * leg.quantity;
       prospectiveTotal += required;
       perLeg.push({ legIndex: leg.index, requiredUsd: required, reason: 'short_approx' });
     }
@@ -122,14 +122,14 @@ export class ApproximationMarginEngine implements MarginEngine {
       // is briefly down.
       const fallbackSpot = pos.key.strike;
       const useSpot = spot ?? fallbackSpot;
-      const perContract = perContractShortMargin(pos.key.optionRight, pos.key.strike, useSpot, this.opts);
-      total += perContract * Math.abs(pos.netQuantity);
+      const perBase = perBaseShortMargin(pos.key.optionRight, pos.key.strike, useSpot, this.opts);
+      total += perBase * Math.abs(pos.netQuantity);
     }
     return total;
   }
 }
 
-function perContractShortMargin(
+function perBaseShortMargin(
   optionRight: OptionRight,
   strike: number,
   spot: number,

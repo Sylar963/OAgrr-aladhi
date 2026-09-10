@@ -10,21 +10,22 @@ export function computeExecutionCost(
   const price = orderSide === 'buy' ? venue.askPrice : venue.bidPrice;
   const oppositePrice = orderSide === 'buy' ? venue.bidPrice : venue.askPrice;
   const sizeAtPrice = orderSide === 'buy' ? venue.askSize : venue.bidSize;
+  const feePerBase = orderSide === 'buy' ? venue.askTakerFeeUsd : venue.bidTakerFeeUsd;
 
-  if (price == null || price <= 0) return null;
+  if (price == null || price <= 0 || feePerBase == null) return null;
 
   // Prices are already in USD — core normalization handles inverse conversion
   const priceUsd = price;
 
-  const premiumUsd = priceUsd * quantity * venue.contractSize;
+  const premiumUsd = priceUsd * quantity;
 
   let spreadCostUsd = 0;
   if (price != null && oppositePrice != null) {
     const spreadUsd = Math.abs(price - oppositePrice);
-    spreadCostUsd = (spreadUsd / 2) * quantity * venue.contractSize;
+    spreadCostUsd = (spreadUsd / 2) * quantity;
   }
 
-  const feeUsd = premiumUsd * venue.takerFee;
+  const feeUsd = feePerBase * quantity;
 
   const totalCostUsd = premiumUsd + feeUsd;
 

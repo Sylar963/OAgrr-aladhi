@@ -100,7 +100,7 @@ export default function LegInput({
           type="text"
           inputMode="decimal"
           className={styles.legInputField}
-          placeholder="Qty"
+          placeholder="Base qty"
           value={qty}
           onChange={(e) => {
             const cleaned = e.target.value.replace(/[^\d.]/g, '');
@@ -111,7 +111,7 @@ export default function LegInput({
                 : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
             setQty(normalized);
           }}
-          style={{ width: 60 }}
+          style={{ width: 76 }}
         />
 
         <div className={styles.strikeInputWrap} ref={strikeRef}>

@@ -6,12 +6,23 @@ import { RealisticFillModel } from './realistic-fill-model.js';
 function bookOf(overrides: Partial<QuoteBook>): QuoteBook {
   return {
     venue: 'deribit' as VenueId,
+    exchangeSymbol: 'BTC-29MAY26-78000-C',
+    settleCurrency: 'BTC',
+    inverse: true,
+    quantityUnit: 'base',
+    contractMultiplierBase: 1,
+    nativeMinQuantity: 0.1,
+    nativeQuantityStep: 0.1,
+    nativePriceTick: 0.0001,
+    minQuantity: 0.1,
+    quantityStep: 0.1,
     bidUsd: 99,
     askUsd: 101,
     markUsd: 100,
     markIv: null,
     underlyingPriceUsd: 78_000,
-    feesTakerUsd: 0,
+    bidTakerFeeUsd: 0,
+    askTakerFeeUsd: 0,
     bidSize: null,
     askSize: null,
     ...overrides,
@@ -124,5 +135,21 @@ describe('RealisticFillModel', () => {
     });
     expect(r.slippageUsd).toBe(0);
     expect(r.priceUsd).toBe(101);
+  });
+
+  it('converts missing-size contract assumptions into base quantity', () => {
+    const model = new RealisticFillModel({
+      assumedTopSizeWhenMissing: 1,
+      spreadPenaltyK: 1,
+      maxSlippagePct: 0.5,
+    });
+    const r = model.quote({
+      side: 'buy',
+      requestedQuantity: 0.02,
+      book: bookOf({ contractMultiplierBase: 0.01, askSize: null }),
+    });
+
+    expect(r.slippageUsd).toBe(2);
+    expect(r.priceUsd).toBe(103);
   });
 });

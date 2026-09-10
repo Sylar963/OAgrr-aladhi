@@ -8,7 +8,8 @@ export const PaperOrderLegSchema = z.object({
   underlying: z.string().min(1),
   expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   strike: z.number().positive(),
-  quantity: z.number().positive(),
+  quantity: z.number().finite().positive(),
+  quantityUnit: z.literal('base').default('base'),
   preferredVenues: z.array(VenueIdSchema).nullable(),
 });
 
@@ -91,6 +92,13 @@ export interface PaperFillDto {
   strike: number;
   quantity: number;
   requestedQuantity: number;
+  quantityUnit: 'base';
+  contractMultiplierBase: number | null;
+  nativeQuantity: number | null;
+  requestedNativeQuantity: number | null;
+  nativeMinQuantity: number | null;
+  nativeQuantityStep: number | null;
+  nativePriceTick: number | null;
   priceUsd: number;
   feesUsd: number;
   slippageUsd: number;
@@ -108,6 +116,7 @@ export interface PaperPositionDto {
   strike: number;
   optionRight: 'call' | 'put';
   netQuantity: number;
+  quantityUnit: 'base';
   avgEntryPriceUsd: number;
   realizedPnlUsd: number;
   feesUsd: number;

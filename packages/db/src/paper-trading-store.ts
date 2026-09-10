@@ -41,6 +41,13 @@ export interface PaperFillRow {
   strike: number;
   quantity: number;
   requestedQuantity: number;
+  quantityUnit: 'base';
+  contractMultiplierBase: number | null;
+  nativeQuantity: number | null;
+  requestedNativeQuantity: number | null;
+  nativeMinQuantity: number | null;
+  nativeQuantityStep: number | null;
+  nativePriceTick: number | null;
   priceUsd: number;
   feesUsd: number;
   slippageUsd: number;
@@ -432,7 +439,7 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
 
   async insertFills(rows: PaperFillRow[]): Promise<void> {
     if (rows.length === 0) return;
-    const COLS = 21;
+    const COLS = 28;
     const values: unknown[] = [];
     const placeholders = rows.map((row, i) => {
       const o = i * COLS;
@@ -448,6 +455,13 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
         row.strike,
         row.quantity,
         row.requestedQuantity,
+        row.quantityUnit,
+        row.contractMultiplierBase,
+        row.nativeQuantity,
+        row.requestedNativeQuantity,
+        row.nativeMinQuantity,
+        row.nativeQuantityStep,
+        row.nativePriceTick,
         row.priceUsd,
         row.feesUsd,
         row.slippageUsd,
@@ -466,6 +480,8 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
       `INSERT INTO paper_fills (
         id, order_id, leg_index, venue, side, option_right,
         underlying, expiry, strike, quantity, requested_quantity,
+        quantity_unit, contract_multiplier_base, native_quantity, requested_native_quantity,
+        native_min_quantity, native_quantity_step, native_price_tick,
         price_usd, fees_usd, slippage_usd, partial_fill,
         benchmark_bid_usd, benchmark_ask_usd, benchmark_mid_usd, underlying_spot_usd,
         source, filled_at
@@ -882,6 +898,13 @@ interface FillRowDb {
   strike: string;
   quantity: string;
   requested_quantity: string | null;
+  quantity_unit: 'base' | null;
+  contract_multiplier_base: string | null;
+  native_quantity: string | null;
+  requested_native_quantity: string | null;
+  native_min_quantity: string | null;
+  native_quantity_step: string | null;
+  native_price_tick: string | null;
   price_usd: string;
   fees_usd: string;
   slippage_usd: string | null;
@@ -1000,6 +1023,16 @@ function mapFillRow(row: FillRowDb): PaperFillRow {
     strike: Number(row.strike),
     quantity,
     requestedQuantity: row.requested_quantity != null ? Number(row.requested_quantity) : quantity,
+    quantityUnit: row.quantity_unit ?? 'base',
+    contractMultiplierBase:
+      row.contract_multiplier_base != null ? Number(row.contract_multiplier_base) : null,
+    nativeQuantity: row.native_quantity != null ? Number(row.native_quantity) : null,
+    requestedNativeQuantity:
+      row.requested_native_quantity != null ? Number(row.requested_native_quantity) : null,
+    nativeMinQuantity: row.native_min_quantity != null ? Number(row.native_min_quantity) : null,
+    nativeQuantityStep:
+      row.native_quantity_step != null ? Number(row.native_quantity_step) : null,
+    nativePriceTick: row.native_price_tick != null ? Number(row.native_price_tick) : null,
     priceUsd: Number(row.price_usd),
     feesUsd: Number(row.fees_usd),
     slippageUsd: row.slippage_usd != null ? Number(row.slippage_usd) : 0,

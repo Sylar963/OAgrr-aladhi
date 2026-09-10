@@ -192,7 +192,7 @@ export default function PaperTraderPanel({
                 <thead>
                   <tr>
                     <th>Leg</th>
-                    <th className={styles.rightAlign}>Qty</th>
+                    <th className={styles.rightAlign}>Base Qty</th>
                     <th className={styles.rightAlign}>Avg</th>
                     <th className={styles.rightAlign}>Mark</th>
                     <th className={styles.rightAlign}>DTE</th>
@@ -205,7 +205,7 @@ export default function PaperTraderPanel({
                   {liveTrade.legs.map((leg) => (
                     <tr key={`${leg.expiry}-${leg.strike}-${leg.optionRight}`}>
                       <td>{formatLegSymbol(leg)}</td>
-                      <td className={styles.rightAlign}>{fmtNum(leg.netQuantity, 2)}</td>
+                      <td className={styles.rightAlign}>{fmtNum(leg.netQuantity, 4)}</td>
                       <td className={styles.rightAlign}>{fmtUsd(leg.avgEntryPriceUsd)}</td>
                       <td className={styles.rightAlign}>{fmtUsd(leg.markPriceUsd)}</td>
                       <td className={styles.rightAlign}>{dteDays(leg.expiry)}d</td>
@@ -483,7 +483,7 @@ function formatLegSymbol(leg: PaperTradeLegDto): string {
 }
 
 function formatFillSymbol(fill: PaperFillDto): string {
-  return `${fill.side === 'buy' ? '+' : '-'}${fmtNum(fill.quantity, 2)} ${fill.underlying} ${fill.strike}${fill.optionRight === 'call' ? 'C' : 'P'}`;
+  return `${fill.side === 'buy' ? '+' : '-'}${fmtNum(fill.quantity, 4)} ${fill.underlying} ${fill.strike}${fill.optionRight === 'call' ? 'C' : 'P'}`;
 }
 
 function formatTs(value: string | null | undefined): string {

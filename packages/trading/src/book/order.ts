@@ -8,6 +8,7 @@ export type OptionRight = 'call' | 'put';
 export type OrderKind = 'market';
 export type OrderStatus = 'accepted' | 'filled' | 'rejected' | 'cancelled';
 export type OrderMode = 'paper' | 'live';
+export type QuantityUnit = 'base';
 
 export interface OrderLeg {
   index: number;
@@ -17,6 +18,7 @@ export interface OrderLeg {
   expiry: string;
   strike: number;
   quantity: number;
+  quantityUnit: QuantityUnit;
   preferredVenues: VenueId[] | null;
 }
 

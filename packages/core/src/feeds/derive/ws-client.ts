@@ -194,9 +194,11 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
       right: details.right,
       inverse: false,
       contractSize: 1,
+      contractMultiplierBase: 1,
       contractValueCurrency: details.base,
       tickSize: this.safeNum(inst.tick_size),
       minQty: this.safeNum(inst.minimum_amount),
+      lotSize: this.safeNum(inst.amount_step),
       makerFee: this.safeNum(inst.maker_fee_rate),
       takerFee: this.safeNum(inst.taker_fee_rate),
     };

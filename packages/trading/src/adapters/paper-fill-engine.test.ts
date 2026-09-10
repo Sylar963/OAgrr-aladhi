@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { VenueId } from '@oggregator/core';
+import { fillCashDelta } from '../book/fill.js';
 import type { Order, OrderLeg } from '../book/order.js';
+import { applyFillToPosition } from '../book/position.js';
 import { FixedClock } from '../gateways/clock.js';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
 import { PaperFillEngine } from './paper-fill-engine.js';
@@ -19,12 +21,23 @@ class StubQuotes implements QuoteProvider {
 function book(overrides: Partial<QuoteBook>): QuoteBook {
   return {
     venue: 'deribit' as VenueId,
+    exchangeSymbol: 'BTC-29MAY26-78000-C',
+    settleCurrency: 'BTC',
+    inverse: true,
+    quantityUnit: 'base',
+    contractMultiplierBase: 1,
+    nativeMinQuantity: 0.1,
+    nativeQuantityStep: 0.1,
+    nativePriceTick: 0.0001,
+    minQuantity: 0.1,
+    quantityStep: 0.1,
     bidUsd: 100,
     askUsd: 110,
     markUsd: 105,
     markIv: 0.6,
     underlyingPriceUsd: 78_000,
-    feesTakerUsd: 0,
+    bidTakerFeeUsd: 0,
+    askTakerFeeUsd: 0,
     bidSize: null,
     askSize: null,
     asOfMs: Date.parse('2026-04-23T00:00:00Z'),
@@ -38,7 +51,7 @@ function single(byStrike: Map<number, QuoteBook>): StubQuotes {
   return new StubQuotes(wrapped);
 }
 
-function order(legs: Array<Omit<OrderLeg, 'index'>>): Order {
+function order(legs: Array<Omit<OrderLeg, 'index' | 'quantityUnit'>>): Order {
   return {
     id: 'ord_test',
     clientOrderId: 'cid_test',
@@ -46,7 +59,7 @@ function order(legs: Array<Omit<OrderLeg, 'index'>>): Order {
     mode: 'paper',
     kind: 'market',
     status: 'accepted',
-    legs: legs.map((leg, index) => ({ ...leg, index })),
+    legs: legs.map((leg, index) => ({ ...leg, index, quantityUnit: 'base' })),
     submittedAt: new Date('2026-04-23T00:00:00Z'),
     filledAt: null,
     rejectionReason: null,
@@ -146,9 +159,9 @@ describe('PaperFillEngine', () => {
     expect(fills[0]?.priceUsd).toBe(100);
   });
 
-  it('applies fees as USD-per-contract × quantity, not price × rate', async () => {
+  it('applies fees as USD-per-base-unit multiplied by base quantity', async () => {
     const quotes = single(
-      new Map([[78_000, book({ bidUsd: 3_000, askUsd: 3_095, feesTakerUsd: 23.4 })]]),
+      new Map([[78_000, book({ bidUsd: 3_000, askUsd: 3_095, askTakerFeeUsd: 23.4 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(
@@ -172,7 +185,7 @@ describe('PaperFillEngine', () => {
 
   it('scales fees by quantity', async () => {
     const quotes = single(
-      new Map([[78_000, book({ askUsd: 500, feesTakerUsd: 10 })]]),
+      new Map([[78_000, book({ askUsd: 500, askTakerFeeUsd: 10 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(
@@ -192,9 +205,250 @@ describe('PaperFillEngine', () => {
     expect(fills[0]!.feesUsd).toBeCloseTo(50, 6);
   });
 
+  it('rejects a base quantity below the venue minimum', async () => {
+    const quotes = single(new Map([[78_000, book({ minQuantity: 0.1, quantityStep: 0.1 })]]));
+    const engine = new PaperFillEngine(quotes, clock);
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 0.05,
+            preferredVenues: null,
+          },
+        ]),
+        [],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('rejects a base quantity that is off the venue step', async () => {
+    const quotes = single(new Map([[78_000, book({ minQuantity: 0.1, quantityStep: 0.1 })]]));
+    const engine = new PaperFillEngine(quotes, clock);
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 0.15,
+            preferredVenues: null,
+          },
+        ]),
+        [],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('routes by fee-inclusive cost for equal base exposure', async () => {
+    const quotes = new StubQuotes(
+      new Map([
+        [
+          78_000,
+          [
+            book({ venue: 'okx', askUsd: 90, askTakerFeeUsd: 20 }),
+            book({ venue: 'deribit', askUsd: 100, askTakerFeeUsd: 1 }),
+          ],
+        ],
+      ]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 1,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]?.venue).toBe('deribit');
+  });
+
+  it('skips a cheaper venue with a non-positive executable price', async () => {
+    const quotes = new StubQuotes(
+      new Map([
+        [
+          78_000,
+          [
+            book({ venue: 'okx', askUsd: -1 }),
+            book({ venue: 'deribit', askUsd: 100 }),
+          ],
+        ],
+      ]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 1,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]?.venue).toBe('deribit');
+  });
+
+  it('rejects when every permitted venue has an invalid executable price', async () => {
+    const engine = new PaperFillEngine(
+      single(new Map([[78_000, book({ askUsd: Number.NaN })]])),
+      clock,
+    );
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 1,
+            preferredVenues: null,
+          },
+        ]),
+        [],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('uses venue ID as the deterministic all-in cost tie-break', async () => {
+    const quotes = new StubQuotes(
+      new Map([
+        [
+          78_000,
+          [
+            book({ venue: 'okx', askUsd: 100, askTakerFeeUsd: 1 }),
+            book({ venue: 'deribit', askUsd: 100, askTakerFeeUsd: 1 }),
+          ],
+        ],
+      ]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 1,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]?.venue).toBe('deribit');
+  });
+
+  it('does not let preferred venues escape the order venue filter', async () => {
+    const quotes = new StubQuotes(
+      new Map([[78_000, [book({ venue: 'okx' }), book({ venue: 'deribit' })]]]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 1,
+            preferredVenues: ['okx'],
+          },
+        ]),
+        ['deribit'],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('records native context without multiplying base accounting twice', async () => {
+    const quotes = single(
+      new Map([
+        [
+          78_000,
+          book({
+            venue: 'okx',
+            contractMultiplierBase: 0.01,
+            nativeMinQuantity: 1,
+            nativeQuantityStep: 1,
+            minQuantity: 0.01,
+            quantityStep: 0.01,
+            askUsd: 4_200,
+            askTakerFeeUsd: 21,
+          }),
+        ],
+      ]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 0.05,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]).toMatchObject({
+      quantity: 0.05,
+      requestedQuantity: 0.05,
+      quantityUnit: 'base',
+      contractMultiplierBase: 0.01,
+      nativeQuantity: 5,
+      requestedNativeQuantity: 5,
+      nativeMinQuantity: 1,
+      nativeQuantityStep: 1,
+      nativePriceTick: 0.0001,
+      feesUsd: 1.05,
+    });
+    const fill = fills[0];
+    if (!fill) throw new Error('missing fill');
+    expect(applyFillToPosition(null, fill).netQuantity).toBe(0.05);
+    expect(fillCashDelta(fill)).toBe(-211.05);
+  });
+
   it('propagates the venue mark IV onto the produced Fill', async () => {
     const quotes = single(
-      new Map([[78_000, book({ askUsd: 3_095, markIv: 0.4275, feesTakerUsd: 0 })]]),
+      new Map([[78_000, book({ askUsd: 3_095, markIv: 0.4275, askTakerFeeUsd: 0 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(
@@ -216,7 +470,7 @@ describe('PaperFillEngine', () => {
 
   it('passes through a null venue mark IV as Fill.iv = null', async () => {
     const quotes = single(
-      new Map([[78_000, book({ askUsd: 3_095, markIv: null, feesTakerUsd: 0 })]]),
+      new Map([[78_000, book({ askUsd: 3_095, markIv: null, askTakerFeeUsd: 0 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(
@@ -238,7 +492,7 @@ describe('PaperFillEngine', () => {
 
   it('defaults to zero fees when venue provides no estimate', async () => {
     const quotes = single(
-      new Map([[78_000, book({ askUsd: 3_095, feesTakerUsd: 0 })]]),
+      new Map([[78_000, book({ askUsd: 3_095, askTakerFeeUsd: 0 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(
@@ -261,8 +515,8 @@ describe('PaperFillEngine', () => {
   it('bull call spread: two-leg fill produces separate fees per leg', async () => {
     const quotes = single(
       new Map([
-        [78_000, book({ bidUsd: 4_000, askUsd: 4_005, feesTakerUsd: 23 })],
-        [79_000, book({ bidUsd: 3_520, askUsd: 3_530, feesTakerUsd: 23 })],
+        [78_000, book({ bidUsd: 4_000, askUsd: 4_005, askTakerFeeUsd: 23 })],
+        [79_000, book({ bidUsd: 3_520, askUsd: 3_530, bidTakerFeeUsd: 23 })],
       ]),
     );
     const engine = new PaperFillEngine(quotes, clock);
@@ -298,7 +552,7 @@ describe('PaperFillEngine', () => {
 
   it('optimistic mode: zero slippage, no partial fills, even when oversized', async () => {
     const quotes = single(
-      new Map([[78_000, book({ askUsd: 100, askSize: 1, feesTakerUsd: 0 })]]),
+      new Map([[78_000, book({ askUsd: 100, askSize: 1, askTakerFeeUsd: 0 })]]),
     );
     const engine = new PaperFillEngine(quotes, clock);
     const fills = await engine.executeOrder(

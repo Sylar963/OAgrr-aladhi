@@ -124,6 +124,33 @@ describe('SdkBaseAdapter', () => {
     expect(deltas).toHaveLength(2);
   });
 
+  it('keeps per-base prices and side-specific fees identical in snapshots and deltas', async () => {
+    const adapter = new TestSdkAdapter();
+    const instrument = {
+      ...createInstrument('BTC-260327-70000-C', 70_000),
+      contractSize: 0.01,
+      contractMultiplierBase: 0.01,
+      minQty: 1,
+      lotSize: 1,
+    };
+    const onDelta = vi.fn<(deltas: unknown[]) => void>();
+    adapter.addInstrument(instrument);
+    adapter.addHandler({ onDelta, onStatus: vi.fn() });
+
+    adapter.publish([{ exchangeSymbol: instrument.exchangeSymbol, quote: createQuote(Date.now()) }]);
+    const chain = await adapter.fetchOptionChain({ underlying: 'BTC', expiry: '2026-03-27' });
+    const snapshotQuote = chain.contracts[instrument.symbol]?.quote;
+    const [deltas] = onDelta.mock.calls[0] ?? [];
+    const deltaQuote = (deltas as Array<{ quote?: typeof snapshotQuote }>)[0]?.quote;
+
+    expect(snapshotQuote?.bid.usdPerBase).toBe(100);
+    expect(snapshotQuote?.estimatedBidFees).toEqual({ maker: 0.1, taker: 0.1 });
+    expect(snapshotQuote?.estimatedAskFees).toEqual({ maker: 0.11, taker: 0.11 });
+    expect(deltaQuote?.bid).toEqual(snapshotQuote?.bid);
+    expect(deltaQuote?.estimatedBidFees).toEqual(snapshotQuote?.estimatedBidFees);
+    expect(deltaQuote?.estimatedAskFees).toEqual(snapshotQuote?.estimatedAskFees);
+  });
+
   it('reports unsupported requests immediately when no instruments match', async () => {
     const adapter = new TestSdkAdapter();
     const onStatus = vi.fn();

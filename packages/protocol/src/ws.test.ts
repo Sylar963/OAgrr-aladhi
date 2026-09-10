@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { ClientWsMessageSchema, ServerWsMessageSchema, WsSubscriptionRequestSchema } from './ws.js';
+import {
+  ClientWsMessageSchema,
+  ServerWsMessageSchema,
+  VenueDeltaSchema,
+  VenueExecutionQuoteSchema,
+  WsSubscriptionRequestSchema,
+} from './ws.js';
 
 describe('WsSubscriptionRequestSchema', () => {
   it('accepts valid request', () => {
@@ -80,6 +86,57 @@ describe('ClientWsMessageSchema', () => {
     expect(ClientWsMessageSchema.safeParse(null).success).toBe(false);
     expect(ClientWsMessageSchema.safeParse('hello').success).toBe(false);
     expect(ClientWsMessageSchema.safeParse(42).success).toBe(false);
+  });
+});
+
+describe('execution schemas', () => {
+  const execution = {
+    exchangeSymbol: 'BTC-USD-260327-70000-C',
+    settleCurrency: 'BTC',
+    inverse: true,
+    quantityUnit: 'base' as const,
+    contractMultiplierBase: 0.01,
+    nativeMinQuantity: 1,
+    nativeQuantityStep: 1,
+    nativePriceTick: 0.0001,
+    minQuantity: 0.01,
+    quantityStep: 0.01,
+    bidSize: 0.1,
+    askSize: 0.2,
+    bidUsd: 2_800,
+    askUsd: 4_200,
+    markUsd: 3_500,
+    bidMakerFeeUsd: 14,
+    bidTakerFeeUsd: 21,
+    askMakerFeeUsd: 14,
+    askTakerFeeUsd: 21,
+  };
+
+  it('accepts finite canonical execution metadata', () => {
+    expect(VenueExecutionQuoteSchema.safeParse(execution).success).toBe(true);
+  });
+
+  it('rejects non-finite derived execution metadata', () => {
+    expect(
+      VenueExecutionQuoteSchema.safeParse({ ...execution, quantityStep: Number.POSITIVE_INFINITY })
+        .success,
+    ).toBe(false);
+  });
+
+  it('preserves per-base delta prices and side-specific fees', () => {
+    const result = VenueDeltaSchema.safeParse({
+      venue: 'okx',
+      symbol: execution.exchangeSymbol,
+      ts: 1,
+      quote: {
+        bid: { raw: 0.04, rawCurrency: 'BTC', usd: 28, usdPerBase: 2_800 },
+        estimatedBidFees: { maker: 0.14, taker: 0.21 },
+        estimatedAskFees: { maker: 0.14, taker: 0.21 },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.quote?.bid?.usdPerBase).toBe(2_800);
   });
 });
 

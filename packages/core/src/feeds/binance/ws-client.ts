@@ -121,7 +121,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
     const parsed = parseBinanceInstrument(item);
     if (parsed == null) return null;
 
-    const { symbol: sym, status, quoteAsset, unit, minQty, filters } = parsed;
+    const { symbol: sym, status, quoteAsset, unit, filters } = parsed;
     if (status && status !== 'TRADING') return null;
 
     // Symbol format: BTC-YYMMDD-STRIKE-C/P
@@ -149,6 +149,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
         : this.parseExpiry(parts[2]!);
 
     const priceFilter = filters?.find((f) => f.filterType === 'PRICE_FILTER');
+    const lotSizeFilter = filters?.find((f) => f.filterType === 'LOT_SIZE');
 
     return {
       symbol: this.buildCanonicalSymbol(base, settle, expiry, strike, right),
@@ -161,10 +162,12 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
       strike,
       right,
       inverse: false,
-      contractSize: this.safeNum(unit) ?? 1,
+      contractSize: this.safeNum(unit),
+      contractMultiplierBase: quoteAsset != null ? this.safeNum(unit) : null,
       contractValueCurrency: base,
       tickSize: this.safeNum(priceFilter?.tickSize),
-      minQty: this.safeNum(minQty),
+      minQty: this.safeNum(lotSizeFilter?.minQty),
+      lotSize: this.safeNum(lotSizeFilter?.stepSize),
       makerFee: BINANCE_DEFAULT_MAKER_FEE,
       takerFee: BINANCE_DEFAULT_TAKER_FEE,
     };

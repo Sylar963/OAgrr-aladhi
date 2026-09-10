@@ -14,8 +14,10 @@ export interface VenueExecution {
   contractSize: number;
   tickSize: number;
   minQty: number;
-  makerFee: number;
-  takerFee: number;
+  bidMakerFeeUsd: number | null;
+  bidTakerFeeUsd: number | null;
+  askMakerFeeUsd: number | null;
+  askTakerFeeUsd: number | null;
   settleCurrency: string;
   inverse: boolean;
   underlyingPrice: number;

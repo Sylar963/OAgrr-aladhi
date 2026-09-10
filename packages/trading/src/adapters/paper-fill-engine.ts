@@ -25,6 +25,7 @@ export class PaperFillEngine implements FillEngine {
     const decisionAtMs = this.clock.now().getTime();
     const plans: Array<{
       leg: OrderLeg;
+      book: QuoteBook;
       venue: VenueId;
       priceUsd: number;
       filledQuantity: number;
@@ -39,7 +40,10 @@ export class PaperFillEngine implements FillEngine {
     }> = [];
 
     for (const leg of order.legs) {
-      const venues = leg.preferredVenues ?? venueFilter;
+      const venues = resolveVenues(leg.preferredVenues, venueFilter);
+      if (venues == null) {
+        throw new NoLiquidityError(`No permitted venue for leg ${leg.index}`, leg.index);
+      }
       const books = await this.quotes.getBooks(
         {
           underlying: leg.underlying,
@@ -50,7 +54,7 @@ export class PaperFillEngine implements FillEngine {
         venues,
       );
 
-      const chosen = pickBestBook(books, leg.side, decisionAtMs);
+      const chosen = pickBestBook(books, leg.side, leg.quantity, decisionAtMs);
       if (!chosen) {
         throw new NoLiquidityError(
           `No ${leg.side === 'buy' ? 'ask' : 'bid'} available for leg ${leg.index}`,
@@ -70,10 +74,14 @@ export class PaperFillEngine implements FillEngine {
         );
       }
 
-      const feesUsd = chosen.book.feesTakerUsd * quote.filledQuantity;
+      const feePerBase = leg.side === 'buy'
+        ? chosen.book.askTakerFeeUsd
+        : chosen.book.bidTakerFeeUsd;
+      const feesUsd = feePerBase! * quote.filledQuantity;
 
       plans.push({
         leg,
+        book: chosen.book,
         venue: chosen.book.venue,
         priceUsd: quote.priceUsd,
         filledQuantity: quote.filledQuantity,
@@ -102,6 +110,13 @@ export class PaperFillEngine implements FillEngine {
         strike: p.leg.strike,
         quantity: p.filledQuantity,
         requestedQuantity: p.leg.quantity,
+        quantityUnit: 'base',
+        contractMultiplierBase: p.book.contractMultiplierBase,
+        nativeQuantity: p.filledQuantity / p.book.contractMultiplierBase,
+        requestedNativeQuantity: p.leg.quantity / p.book.contractMultiplierBase,
+        nativeMinQuantity: p.book.nativeMinQuantity,
+        nativeQuantityStep: p.book.nativeQuantityStep,
+        nativePriceTick: p.book.nativePriceTick,
         priceUsd: p.priceUsd,
         iv: p.iv,
         feesUsd: p.feesUsd,
@@ -121,19 +136,56 @@ export class PaperFillEngine implements FillEngine {
 function pickBestBook(
   books: QuoteBook[],
   side: 'buy' | 'sell',
+  quantity: number,
   decisionAtMs: number,
 ): { book: QuoteBook } | null {
   const priced = books.filter(
-    (book) =>
-      isFresh(book, decisionAtMs) && (side === 'buy' ? book.askUsd != null : book.bidUsd != null),
+    (book) => {
+      const price = side === 'buy' ? book.askUsd : book.bidUsd;
+      const fee = side === 'buy' ? book.askTakerFeeUsd : book.bidTakerFeeUsd;
+      return (
+        isFresh(book, decisionAtMs) &&
+        isValidQuantity(book, quantity) &&
+        price != null &&
+        Number.isFinite(price) &&
+        price > 0 &&
+        fee != null &&
+        Number.isFinite(fee) &&
+        fee >= 0
+      );
+    },
   );
   if (priced.length === 0) return null;
   const sorted = [...priced].sort((a, b) => {
-    const priceA = side === 'buy' ? a.askUsd! : -a.bidUsd!;
-    const priceB = side === 'buy' ? b.askUsd! : -b.bidUsd!;
-    return priceA - priceB;
+    const priceA = side === 'buy'
+      ? a.askUsd! + a.askTakerFeeUsd!
+      : a.bidUsd! - a.bidTakerFeeUsd!;
+    const priceB = side === 'buy'
+      ? b.askUsd! + b.askTakerFeeUsd!
+      : b.bidUsd! - b.bidTakerFeeUsd!;
+    const priceOrder = side === 'buy' ? priceA - priceB : priceB - priceA;
+    return priceOrder || a.venue.localeCompare(b.venue);
   });
   return { book: sorted[0]! };
+}
+
+function resolveVenues(
+  preferredVenues: VenueId[] | null,
+  venueFilter: VenueId[],
+): VenueId[] | null {
+  if (preferredVenues == null) return venueFilter;
+  if (preferredVenues.length === 0) return null;
+  if (venueFilter.length === 0) return [...new Set(preferredVenues)];
+  const allowed = new Set(venueFilter);
+  const intersection = [...new Set(preferredVenues)].filter((venue) => allowed.has(venue));
+  return intersection.length > 0 ? intersection : null;
+}
+
+function isValidQuantity(book: QuoteBook, quantity: number): boolean {
+  if (!Number.isFinite(quantity) || quantity < book.minQuantity) return false;
+  const steps = quantity / book.quantityStep;
+  const nearest = Math.round(steps);
+  return Math.abs(steps - nearest) <= 1e-9 * Math.max(1, Math.abs(steps));
 }
 
 function isFresh(book: QuoteBook, decisionAtMs: number): boolean {

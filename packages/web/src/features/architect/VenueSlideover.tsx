@@ -39,24 +39,29 @@ function buildVenueExecution(
   if (!strike) return null;
   const side = leg.type === 'call' ? strike.call : strike.put;
   const q = side.venues[venueId as VenueId];
-  if (!q) return null;
+  const execution = q?.execution;
+  if (!q || !execution) return null;
   return {
     venue: venueId,
-    available: (q.bid != null && q.bid > 0) || (q.ask != null && q.ask > 0),
-    bidPrice: q.bid,
-    askPrice: q.ask,
-    markPrice: q.mid,
-    bidSize: q.bidSize,
-    askSize: q.askSize,
+    available:
+      (execution.bidUsd != null && execution.bidUsd > 0) ||
+      (execution.askUsd != null && execution.askUsd > 0),
+    bidPrice: execution.bidUsd,
+    askPrice: execution.askUsd,
+    markPrice: execution.markUsd,
+    bidSize: execution.bidSize,
+    askSize: execution.askSize,
     iv: q.markIv,
     delta: q.delta,
-    contractSize: venueId === 'tastytrade' ? 100 : 1,
-    tickSize: 0.01,
-    minQty: 0.01,
-    makerFee: q.estimatedFees && q.mid ? q.estimatedFees.maker / q.mid : 0.0003,
-    takerFee: q.estimatedFees && q.mid ? q.estimatedFees.taker / q.mid : 0.0005,
-    settleCurrency: 'USD',
-    inverse: false,
+    contractSize: 1,
+    tickSize: execution.nativePriceTick,
+    minQty: execution.minQuantity,
+    bidMakerFeeUsd: execution.bidMakerFeeUsd,
+    bidTakerFeeUsd: execution.bidTakerFeeUsd,
+    askMakerFeeUsd: execution.askMakerFeeUsd,
+    askTakerFeeUsd: execution.askTakerFeeUsd,
+    settleCurrency: execution.settleCurrency,
+    inverse: execution.inverse,
     underlyingPrice: chain.stats.forwardPriceUsd ?? chain.stats.indexPriceUsd ?? 0,
   };
 }
@@ -264,7 +269,7 @@ export default function VenueSlideover({
                   return `${wl.direction === 'buy' ? 'B' : 'S'} ${wl.strike.toLocaleString()} ${wl.type === 'call' ? 'C' : 'P'} / ${VENUES[strategy.worstLeg.venue]?.label ?? strategy.worstLeg.venue}`;
                 })()}
               </span>{' '}
-              = {fmtUsd(strategy.worstLeg.roundTripPerContract ?? 0)}/contract{' '}
+              = {fmtUsd(strategy.worstLeg.roundTripPerBase ?? 0)}/base unit{' '}
               <span data-class={strategy.worstLeg.classification} className={styles.worstLegBadge}>
                 {BADGE_LABEL[strategy.worstLeg.classification]}
               </span>
@@ -366,7 +371,7 @@ export default function VenueSlideover({
                 <span data-direction={leg.direction} className={styles.legBlockDir}>
                   {leg.direction === 'buy' ? 'BUY' : 'SELL'}
                 </span>
-                <span className={styles.legBlockQty}>{leg.quantity}×</span>
+                <span className={styles.legBlockQty}>{leg.quantity} base</span>
                 <span className={styles.legBlockStrike}>{leg.strike.toLocaleString()}</span>
                 <span data-type={leg.type} className={styles.legBlockType}>
                   {leg.type === 'call' ? 'C' : 'P'}

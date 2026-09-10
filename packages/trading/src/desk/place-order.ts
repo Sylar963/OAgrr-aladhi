@@ -25,7 +25,7 @@ import type { PnlService } from './compute-pnl.js';
 export interface PlaceOrderInput {
   accountId: AccountId;
   clientOrderId?: string;
-  legs: Array<Omit<OrderLeg, 'index'>>;
+  legs: Array<Omit<OrderLeg, 'index' | 'quantityUnit'>>;
   venueFilter: VenueId[];
 }
 
@@ -59,13 +59,17 @@ export class OrderPlacementService {
       throw new InvalidOrderError('Order must have at least one leg');
     }
     input.legs.forEach((leg, idx) => {
-      if (leg.quantity <= 0) {
+      if (!Number.isFinite(leg.quantity) || leg.quantity <= 0) {
         throw new InvalidOrderError(`Leg quantity must be positive (leg ${idx})`);
       }
     });
 
     const now = this.clock.now();
-    const legs: OrderLeg[] = input.legs.map((leg, index) => ({ ...leg, index }));
+    const legs: OrderLeg[] = input.legs.map((leg, index) => ({
+      ...leg,
+      index,
+      quantityUnit: 'base',
+    }));
     const order: Order = {
       id: newOrderId(),
       clientOrderId: input.clientOrderId ?? newClientOrderId(),
@@ -80,24 +84,17 @@ export class OrderPlacementService {
       totalDebitUsd: null,
     };
 
-    await this.orders.saveOrder(order);
-
-    await this.checkMargin(order, input.venueFilter);
-
     let fills: Fill[];
     try {
       fills = await this.fillEngine.executeOrder(order, input.venueFilter);
     } catch (err) {
       const reason = err instanceof TradingError ? err.message : 'Fill failed';
-      const rejected: Order = {
-        ...order,
-        status: 'rejected',
-        rejectionReason: reason,
-      };
-      await this.orders.updateOrderStatus(rejected);
       if (err instanceof NoLiquidityError) throw err;
       throw new TradingError(reason, 'FILL_FAILED');
     }
+
+    await this.orders.saveOrder(order);
+    await this.checkMargin(order, input.venueFilter);
 
     await this.orders.saveFills(fills);
     for (const fill of fills) {

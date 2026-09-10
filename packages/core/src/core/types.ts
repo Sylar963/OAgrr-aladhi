@@ -31,6 +31,7 @@ export interface PremiumValue {
   raw: number | null;
   rawCurrency: string;
   usd: number | null;
+  usdPerBase?: number | null;
 }
 
 export interface EstimatedFees {
@@ -52,6 +53,8 @@ export interface NormalizedQuote {
   openInterestUsd: number | null;
   volume24hUsd: number | null;
   estimatedFees: EstimatedFees | null;
+  estimatedBidFees?: EstimatedFees | null;
+  estimatedAskFees?: EstimatedFees | null;
   timestamp: number | null;
   source: DataSource;
 }
@@ -70,8 +73,10 @@ export interface NormalizedOptionContract {
   right: OptionRight;
   inverse: boolean;
   contractSize: number | null;
+  contractMultiplierBase?: number | null;
   tickSize: number | null;
   minQty: number | null;
+  lotSize?: number | null;
   makerFee: number | null;
   takerFee: number | null;
   greeks: OptionGreeks;

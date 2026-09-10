@@ -273,9 +273,11 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       right,
       inverse: false,
       contractSize: 1,
+      contractMultiplierBase: 1,
       contractValueCurrency: base,
       tickSize: this.safeNum(item.priceFilter.tickSize),
       minQty: this.safeNum(item.lotSizeFilter.minOrderQty),
+      lotSize: this.safeNum(item.lotSizeFilter.qtyStep),
       makerFee: BYBIT_DEFAULT_MAKER_FEE,
       takerFee: BYBIT_DEFAULT_TAKER_FEE,
     };

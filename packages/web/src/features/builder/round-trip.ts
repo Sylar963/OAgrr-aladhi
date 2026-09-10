@@ -37,7 +37,7 @@ export interface PerLegRoundTripQuote {
   entryFeeUsd: number | null;
   exitFeeUsd: number | null;
   roundTripUsd: number | null;
-  roundTripPerContract: number | null;
+  roundTripPerBase: number | null;
   fillable: boolean;
   slippageWarning: boolean;
   classification: PerLegBadge | null;
@@ -64,10 +64,10 @@ const PER_LEG_THRESHOLDS = {
   high: 7,
 } as const;
 
-export function classifyPerLeg(roundTripPerContract: number): PerLegBadge {
-  if (roundTripPerContract <= PER_LEG_THRESHOLDS.ok) return 'ok';
-  if (roundTripPerContract <= PER_LEG_THRESHOLDS.elevated) return 'elevated';
-  if (roundTripPerContract <= PER_LEG_THRESHOLDS.high) return 'high';
+export function classifyPerLeg(roundTripPerBase: number): PerLegBadge {
+  if (roundTripPerBase <= PER_LEG_THRESHOLDS.ok) return 'ok';
+  if (roundTripPerBase <= PER_LEG_THRESHOLDS.elevated) return 'elevated';
+  if (roundTripPerBase <= PER_LEG_THRESHOLDS.high) return 'high';
   return 'excessive';
 }
 
@@ -77,8 +77,8 @@ export function classifyStrategy(
   totalQty: number,
 ): PerLegBadge {
   if (legCount <= 0 || totalQty <= 0) return 'ok';
-  const perContract = totalRoundTripUsd / totalQty;
-  return classifyPerLeg(perContract);
+  const perBase = totalRoundTripUsd / totalQty;
+  return classifyPerLeg(perBase);
 }
 
 const BADGE_RANK: Record<PerLegBadge, number> = {
@@ -100,13 +100,22 @@ export function computeQuoteCost(
   quantity: number,
   legId: string,
 ): PerLegRoundTripQuote {
-  const { bidPrice, askPrice, bidSize, askSize, takerFee, contractSize } = exec;
+  const { bidPrice, askPrice, bidSize, askSize } = exec;
 
   const entryPrice = direction === 'buy' ? askPrice : bidPrice;
   const exitPrice = direction === 'buy' ? bidPrice : askPrice;
+  const entryFee = direction === 'buy' ? exec.askTakerFeeUsd : exec.bidTakerFeeUsd;
+  const exitFee = direction === 'buy' ? exec.bidTakerFeeUsd : exec.askTakerFeeUsd;
   const sizeAtEntry = direction === 'buy' ? askSize : bidSize;
 
-  if (entryPrice == null || entryPrice <= 0 || exitPrice == null || exitPrice <= 0) {
+  if (
+    entryPrice == null ||
+    entryPrice <= 0 ||
+    exitPrice == null ||
+    exitPrice <= 0 ||
+    entryFee == null ||
+    exitFee == null
+  ) {
     return {
       legId,
       venue: exec.venue,
@@ -120,7 +129,7 @@ export function computeQuoteCost(
       entryFeeUsd: null,
       exitFeeUsd: null,
       roundTripUsd: null,
-      roundTripPerContract: null,
+      roundTripPerBase: null,
       fillable: false,
       slippageWarning: false,
       classification: null,
@@ -128,11 +137,11 @@ export function computeQuoteCost(
   }
 
   const spreadRaw = entryPrice - exitPrice;
-  const spreadAbs = Math.abs(spreadRaw) * quantity * contractSize;
-  const entryFeeUsd = entryPrice * quantity * contractSize * takerFee;
-  const exitFeeUsd = exitPrice * quantity * contractSize * takerFee;
+  const spreadAbs = Math.abs(spreadRaw) * quantity;
+  const entryFeeUsd = entryFee * quantity;
+  const exitFeeUsd = exitFee * quantity;
   const roundTripUsd = spreadAbs + entryFeeUsd + exitFeeUsd;
-  const roundTripPerContract = quantity > 0 ? roundTripUsd / quantity : 0;
+  const roundTripPerBase = quantity > 0 ? roundTripUsd / quantity : 0;
 
   const fillable = sizeAtEntry == null ? true : quantity <= sizeAtEntry;
   const slippageWarning =
@@ -151,10 +160,10 @@ export function computeQuoteCost(
     entryFeeUsd,
     exitFeeUsd,
     roundTripUsd,
-    roundTripPerContract,
+    roundTripPerBase,
     fillable,
     slippageWarning,
-    classification: classifyPerLeg(roundTripPerContract),
+    classification: classifyPerLeg(roundTripPerBase),
   };
 }
 
@@ -234,7 +243,7 @@ export function computeStrategyRoundTrip(
         entryFeeUsd: null,
         exitFeeUsd: null,
         roundTripUsd: null,
-        roundTripPerContract: null,
+        roundTripPerBase: null,
         fillable: false,
         slippageWarning: false,
         classification: null,
@@ -259,7 +268,7 @@ export function computeStrategyRoundTrip(
         entryFeeUsd: null,
         exitFeeUsd: null,
         roundTripUsd: null,
-        roundTripPerContract: null,
+        roundTripPerBase: null,
         fillable: false,
         slippageWarning: false,
         classification: null,

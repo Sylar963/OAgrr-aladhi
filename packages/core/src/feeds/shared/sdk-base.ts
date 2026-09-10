@@ -57,9 +57,11 @@ export interface CachedInstrument {
   right: OptionRight;
   inverse: boolean;
   contractSize: number | null;
+  contractMultiplierBase?: number | null;
   contractValueCurrency?: string | null;
   tickSize: number | null;
   minQty: number | null;
+  lotSize?: number | null;
   makerFee: number | null;
   takerFee: number | null;
 }
@@ -431,9 +433,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
         symbol: inst.symbol,
         ts: update.quote.timestamp,
         quote: {
-          bid: this.normPrice(update.quote.bidPrice, inst),
-          ask: this.normPrice(update.quote.askPrice, inst),
-          mark: this.normPrice(update.quote.markPrice, inst),
+          bid: this.executionPrice(update.quote.bidPrice, inst),
+          ask: this.executionPrice(update.quote.askPrice, inst),
+          mark: this.executionPrice(update.quote.markPrice, inst),
           bidSize: update.quote.bidSize,
           askSize: update.quote.askSize,
           underlyingPriceUsd: update.quote.underlyingPrice,
@@ -449,7 +451,17 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           volume24hUsd: update.quote.volume24hUsd,
           estimatedFees: this.estimateFees(
             inst,
-            this.normPrice(update.quote.markPrice, inst).usd,
+            this.normPricePerBase(update.quote.markPrice, inst),
+            update.quote.underlyingPrice,
+          ),
+          estimatedBidFees: this.estimateFees(
+            inst,
+            this.normPricePerBase(update.quote.bidPrice, inst),
+            update.quote.underlyingPrice,
+          ),
+          estimatedAskFees: this.estimateFees(
+            inst,
+            this.normPricePerBase(update.quote.askPrice, inst),
             update.quote.underlyingPrice,
           ),
           timestamp: update.quote.timestamp,
@@ -519,16 +531,18 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       right: inst.right,
       inverse: inst.inverse,
       contractSize: inst.contractSize,
+      contractMultiplierBase: inst.contractMultiplierBase ?? null,
       tickSize: inst.tickSize,
       minQty: inst.minQty,
+      lotSize: inst.lotSize ?? null,
       makerFee: inst.makerFee,
       takerFee: inst.takerFee,
       greeks: q.greeks,
       quote: {
-        bid: this.normPrice(q.bidPrice, inst),
-        ask: this.normPrice(q.askPrice, inst),
-        mark: this.normPrice(q.markPrice, inst),
-        last: q.lastPrice != null ? this.normPrice(q.lastPrice, inst) : null,
+        bid: this.executionPrice(q.bidPrice, inst),
+        ask: this.executionPrice(q.askPrice, inst),
+        mark: this.executionPrice(q.markPrice, inst),
+        last: q.lastPrice != null ? this.executionPrice(q.lastPrice, inst) : null,
         bidSize: q.bidSize,
         askSize: q.askSize,
         underlyingPriceUsd: q.underlyingPrice,
@@ -544,7 +558,17 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
         volume24hUsd: q.volume24hUsd,
         estimatedFees: this.estimateFees(
           inst,
-          this.normPrice(q.markPrice, inst).usd,
+          this.normPricePerBase(q.markPrice, inst),
+          q.underlyingPrice,
+        ),
+        estimatedBidFees: this.estimateFees(
+          inst,
+          this.normPricePerBase(q.bidPrice, inst),
+          q.underlyingPrice,
+        ),
+        estimatedAskFees: this.estimateFees(
+          inst,
+          this.normPricePerBase(q.askPrice, inst),
           q.underlyingPrice,
         ),
         timestamp: q.timestamp,
@@ -570,9 +594,20 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return { raw, rawCurrency: currency, usd: raw };
   }
 
+  protected normPricePerBase(raw: number | null, inst: CachedInstrument): number | null {
+    return this.normPrice(raw, inst).usd;
+  }
+
+  private executionPrice(raw: number | null, inst: CachedInstrument) {
+    return {
+      ...this.normPrice(raw, inst),
+      usdPerBase: this.normPricePerBase(raw, inst),
+    };
+  }
+
   /**
    * Estimate per-contract fees using the venue's fee formula:
-   *   fee = min(rate × underlyingPrice × contractSize, cap × optionPriceUsd)
+   *   fee = min(rate × underlyingPrice × contractSize, cap × optionPriceUsd × contractSize)
    *
    * The cap prevents absurdly high fees on cheap OTM options. For example,
    * without cap: 0.03% × $70K = $21 on a $5 option (420% of premium).
@@ -620,7 +655,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
     const makerBase = inst.makerFee * underlyingPriceUsd * size;
     const takerBase = inst.takerFee * underlyingPriceUsd * size;
-    const capLimit = cap * optionPriceUsd;
+    const capLimit = cap * optionPriceUsd * size;
 
     return {
       maker: Math.min(makerBase, capLimit),

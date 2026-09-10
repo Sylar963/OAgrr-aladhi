@@ -200,6 +200,14 @@ export class OkxWsAdapter extends SdkBaseAdapter {
     const strike = item.stk != null ? Number(item.stk) : Number(match[4]);
 
     const expTimeMs = item.expTime != null ? Number(item.expTime) : null;
+    const contractValue = this.safeNum(item.ctVal);
+    const contractMultiplier = this.safeNum(item.ctMult);
+    const contractSize =
+      contractValue != null && contractMultiplier != null
+        ? contractValue * contractMultiplier
+        : null;
+    const contractMultiplierBase =
+      item.settleCcy != null && item.ctValCcy === base ? contractSize : null;
 
     return {
       symbol: this.buildCanonicalSymbol(base, settle, expiry, strike, right),
@@ -212,10 +220,12 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       strike,
       right,
       inverse: settle === base,
-      contractSize: this.safeNum(item.ctMult) ?? this.safeNum(item.ctVal) ?? 1,
+      contractSize,
+      contractMultiplierBase,
       contractValueCurrency: item.ctValCcy ?? settle,
       tickSize: this.safeNum(item.tickSz),
       minQty: this.safeNum(item.minSz),
+      lotSize: this.safeNum(item.lotSz),
       makerFee: OKX_DEFAULT_MAKER_FEE,
       takerFee: OKX_DEFAULT_TAKER_FEE,
     };

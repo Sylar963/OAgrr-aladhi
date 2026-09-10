@@ -317,6 +317,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     const expiry = this.parseExpiry(expiryRaw);
     const settle = inst.settlement_currency ?? base;
     const isInverse = inst.instrument_type === 'reversed';
+    const contractSize = this.safeNum(inst.contract_size);
+    const hasExplicitContractSemantics =
+      inst.settlement_currency != null &&
+      inst.quote_currency != null &&
+      (inst.instrument_type === 'reversed' || inst.instrument_type === 'linear');
 
     // quote_currency from the API: "BTC" for inverse BTC, "ETH" for inverse ETH,
     // "USDC" for all linear options. Hardcoding "USD" was always wrong.
@@ -333,10 +338,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       strike,
       right,
       inverse: isInverse,
-      contractSize: this.safeNum(inst.contract_size) ?? 1,
+      contractSize,
+      contractMultiplierBase: hasExplicitContractSemantics ? contractSize : null,
       contractValueCurrency: base,
       tickSize: this.safeNum(inst.tick_size),
       minQty: this.safeNum(inst.min_trade_amount),
+      lotSize: this.safeNum(inst.min_trade_amount),
       makerFee: this.safeNum(inst.maker_commission),
       takerFee: this.safeNum(inst.taker_commission),
     };
@@ -703,6 +710,10 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       return { raw, rawCurrency: currency, usd: raw * (inst.contractSize ?? 1) };
     }
     return super.normPrice(raw, inst);
+  }
+
+  protected override normPricePerBase(raw: number | null, inst: CachedInstrument): number | null {
+    return super.normPrice(raw, inst).usd;
   }
 
   // ─── WS message handlers ─────────────────────────────────────

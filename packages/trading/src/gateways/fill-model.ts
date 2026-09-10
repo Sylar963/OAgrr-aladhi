@@ -7,7 +7,7 @@ export interface FillModelInput {
 }
 
 export interface FillModelQuote {
-  // Effective per-contract price after slippage. Always set when filledQuantity > 0.
+  // Effective USD-per-base price after slippage. Always set when filledQuantity > 0.
   priceUsd: number;
   // Quantity actually fillable from this venue's book at this point in time.
   // May equal requestedQuantity (full fill) or be smaller (partial).

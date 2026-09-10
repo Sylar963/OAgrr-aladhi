@@ -13,6 +13,7 @@ export interface PositionKey {
 export interface Position {
   key: PositionKey;
   netQuantity: number;
+  quantityUnit: 'base';
   avgEntryPriceUsd: UsdAmount;
   // Qty-weighted average of fill IVs for the currently-open slice. Null
   // when no fill in the open slice provided an IV.
@@ -62,6 +63,7 @@ export function applyFillToPosition(prior: Position | null, fill: Fill): Positio
     return {
       key,
       netQuantity: signedQty,
+      quantityUnit: 'base',
       avgEntryPriceUsd: fill.priceUsd,
       avgEntryIv: fill.iv,
       realizedPnlUsd: 0,
@@ -86,6 +88,7 @@ export function applyFillToPosition(prior: Position | null, fill: Fill): Positio
     return {
       key: prior.key,
       netQuantity: newNet,
+      quantityUnit: 'base',
       avgEntryPriceUsd: weightedAvg,
       avgEntryIv: weightedIv,
       realizedPnlUsd: prior.realizedPnlUsd,
@@ -104,6 +107,7 @@ export function applyFillToPosition(prior: Position | null, fill: Fill): Positio
     return {
       key: prior.key,
       netQuantity: 0,
+      quantityUnit: 'base',
       avgEntryPriceUsd: 0,
       avgEntryIv: null,
       realizedPnlUsd: prior.realizedPnlUsd + realizedDelta,
@@ -118,6 +122,7 @@ export function applyFillToPosition(prior: Position | null, fill: Fill): Positio
     return {
       key: prior.key,
       netQuantity: newNet,
+      quantityUnit: 'base',
       avgEntryPriceUsd: prior.avgEntryPriceUsd,
       avgEntryIv: prior.avgEntryIv,
       realizedPnlUsd: prior.realizedPnlUsd + realizedDelta,
@@ -129,6 +134,7 @@ export function applyFillToPosition(prior: Position | null, fill: Fill): Positio
   return {
     key: prior.key,
     netQuantity: newNet,
+    quantityUnit: 'base',
     avgEntryPriceUsd: fill.priceUsd,
     avgEntryIv: fill.iv,
     realizedPnlUsd: prior.realizedPnlUsd + realizedDelta,

@@ -72,6 +72,7 @@ function fromRow(row: PaperPositionRow): Position {
       optionRight: row.optionRight,
     },
     netQuantity: row.netQuantity,
+    quantityUnit: 'base',
     avgEntryPriceUsd: row.avgEntryPriceUsd,
     avgEntryIv: row.avgEntryIv ?? null,
     realizedPnlUsd: row.realizedPnlUsd,

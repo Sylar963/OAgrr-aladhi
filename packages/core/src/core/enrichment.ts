@@ -44,6 +44,29 @@ export interface VenueQuote {
   asOfMs?: number | null;
   underlyingPriceUsd?: number | null;
   inverse?: boolean;
+  execution?: VenueExecutionQuote | null;
+}
+
+export interface VenueExecutionQuote {
+  exchangeSymbol: string;
+  settleCurrency: string;
+  inverse: boolean;
+  quantityUnit: 'base';
+  contractMultiplierBase: number;
+  nativeMinQuantity: number;
+  nativeQuantityStep: number;
+  nativePriceTick: number;
+  minQuantity: number;
+  quantityStep: number;
+  bidSize: number | null;
+  askSize: number | null;
+  bidUsd: number | null;
+  askUsd: number | null;
+  markUsd: number | null;
+  bidMakerFeeUsd: number | null;
+  bidTakerFeeUsd: number | null;
+  askMakerFeeUsd: number | null;
+  askTakerFeeUsd: number | null;
 }
 
 export interface EnrichedSide {
@@ -250,7 +273,88 @@ function contractToVenueQuote(contract: NormalizedOptionContract): VenueQuote {
     asOfMs: contract.quote.timestamp,
     underlyingPriceUsd: contract.quote.underlyingPriceUsd,
     inverse: contract.inverse,
+    execution: buildVenueExecutionQuote(contract),
   };
+}
+
+function buildVenueExecutionQuote(
+  contract: NormalizedOptionContract,
+): VenueExecutionQuote | null {
+  const multiplier = positiveFinite(contract.contractMultiplierBase);
+  const nativeMin = positiveFinite(contract.minQty);
+  const nativeStep = positiveFinite(contract.lotSize);
+  const nativeTick = positiveFinite(contract.tickSize);
+  if (
+    multiplier == null ||
+    nativeMin == null ||
+    nativeStep == null ||
+    nativeTick == null ||
+    contract.makerFee == null ||
+    contract.takerFee == null ||
+    !isNonnegativeFinite(contract.makerFee) ||
+    !isNonnegativeFinite(contract.takerFee)
+  ) {
+    return null;
+  }
+
+  const minQuantity = nativeMin * multiplier;
+  const quantityStep = nativeStep * multiplier;
+  const bidFees = feesPerBase(contract.quote.estimatedBidFees, multiplier);
+  const askFees = feesPerBase(contract.quote.estimatedAskFees, multiplier);
+  if (
+    positiveFinite(minQuantity) == null ||
+    positiveFinite(quantityStep) == null ||
+    (contract.quote.estimatedBidFees != null && bidFees == null) ||
+    (contract.quote.estimatedAskFees != null && askFees == null)
+  ) {
+    return null;
+  }
+
+  return {
+    exchangeSymbol: contract.exchangeSymbol,
+    settleCurrency: contract.settle,
+    inverse: contract.inverse,
+    quantityUnit: 'base',
+    contractMultiplierBase: multiplier,
+    nativeMinQuantity: nativeMin,
+    nativeQuantityStep: nativeStep,
+    nativePriceTick: nativeTick,
+    minQuantity,
+    quantityStep,
+    bidSize: toBaseSize(contract.quote.bidSize, multiplier),
+    askSize: toBaseSize(contract.quote.askSize, multiplier),
+    bidUsd: positiveFinite(contract.quote.bid.usdPerBase),
+    askUsd: positiveFinite(contract.quote.ask.usdPerBase),
+    markUsd: positiveFinite(contract.quote.mark.usdPerBase),
+    bidMakerFeeUsd: bidFees?.maker ?? null,
+    bidTakerFeeUsd: bidFees?.taker ?? null,
+    askMakerFeeUsd: askFees?.maker ?? null,
+    askTakerFeeUsd: askFees?.taker ?? null,
+  };
+}
+
+function positiveFinite(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function isNonnegativeFinite(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function feesPerBase(
+  fees: { maker: number; taker: number } | null | undefined,
+  multiplier: number,
+): { maker: number; taker: number } | null {
+  if (fees == null) return null;
+  const maker = fees.maker / multiplier;
+  const taker = fees.taker / multiplier;
+  return isNonnegativeFinite(maker) && isNonnegativeFinite(taker) ? { maker, taker } : null;
+}
+
+function toBaseSize(value: number | null, multiplier: number): number | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  const baseSize = value * multiplier;
+  return Number.isFinite(baseSize) ? baseSize : null;
 }
 
 /**

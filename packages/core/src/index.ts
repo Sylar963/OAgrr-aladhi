@@ -77,6 +77,7 @@ export type {
   EnrichedStrike,
   EnrichedSide,
   VenueQuote,
+  VenueExecutionQuote,
   IvSurfaceRow,
   IvSurfaceFineRow,
   SmilePoint,

@@ -1,4 +1,4 @@
-import type { PlaceOrderRequest } from '@oggregator/protocol';
+import { type PlaceOrderRequest, VenueIdSchema } from '@oggregator/protocol';
 import type { Leg } from '@features/architect/payoff';
 import type { StrategyRouting } from '@features/builder/round-trip';
 
@@ -12,7 +12,7 @@ export function legsToOrderRequest(
 ): PlaceOrderRequest {
   return {
     legs: legs.map((leg) => {
-      const pinned = routing?.legs[leg.id]?.venue;
+      const pinned = VenueIdSchema.safeParse(routing?.legs[leg.id]?.venue);
       return {
         side: leg.direction,
         optionRight: leg.type,
@@ -20,9 +20,8 @@ export function legsToOrderRequest(
         expiry: leg.expiry,
         strike: leg.strike,
         quantity: leg.quantity,
-        preferredVenues: pinned
-          ? ([pinned] as unknown as PreferredVenuesEntry)
-          : null,
+        quantityUnit: 'base',
+        preferredVenues: pinned.success ? ([pinned.data] satisfies PreferredVenuesEntry) : null,
       };
     }),
     venueFilter: venueFilter as PlaceOrderRequest['venueFilter'],

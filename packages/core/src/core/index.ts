@@ -49,6 +49,7 @@ export type {
   EnrichedStrike,
   EnrichedSide,
   VenueQuote,
+  VenueExecutionQuote,
   IvSurfaceRow,
   SmilePoint,
   SmileCurve,

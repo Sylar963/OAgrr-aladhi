@@ -5,7 +5,7 @@ import type { NormalizedOptionContract } from '@shared/common';
 
 import { contractToExecution } from './build-execution';
 import { computeExecutionCost, rankExecutions } from './compute-execution';
-import type { OrderSide, OptionSide, ExecutionCost } from './types';
+import type { OrderSide, OptionSide, ExecutionCost, VenueExecution } from './types';
 import styles from './OptionBuilder.module.css';
 
 interface OptionBuilderProps {
@@ -129,7 +129,9 @@ export default function OptionBuilder({
 
   const contracts = optionSide === 'call' ? callContracts : putContracts;
 
-  const executions = Object.values(contracts).map((c) => contractToExecution(c, underlyingPrice));
+  const executions = Object.values(contracts)
+    .map((contract) => contractToExecution(contract, underlyingPrice))
+    .filter((execution): execution is VenueExecution => execution != null);
 
   const costs = executions.map((ve) => computeExecutionCost(ve, orderSide, quantity));
   const ranked = rankExecutions(costs);

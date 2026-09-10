@@ -4,7 +4,7 @@ import type { Fill } from '../book/fill.js';
 import type { Order, OrderId, OrderLeg } from '../book/order.js';
 import type { Position } from '../book/position.js';
 import { applyFillToPosition } from '../book/position.js';
-import { InsufficientMarginError } from '../book/errors.js';
+import { InsufficientMarginError, NoLiquidityError } from '../book/errors.js';
 import { FixedClock } from '../gateways/clock.js';
 import type { FillEngine } from '../gateways/fill-engine.js';
 import type { OrderRepository } from '../gateways/order-repository.js';
@@ -84,7 +84,8 @@ class StubQuotes implements QuoteProvider {
         markUsd: 105,
         markIv: null,
         underlyingPriceUsd: this.spot,
-        feesTakerUsd: 0,
+        bidTakerFeeUsd: 0,
+        askTakerFeeUsd: 0,
         bidSize: null,
         askSize: null,
       },
@@ -110,6 +111,13 @@ class FixedFillEngine implements FillEngine {
         strike: leg.strike,
         quantity: leg.quantity,
         requestedQuantity: leg.quantity,
+        quantityUnit: 'base',
+        contractMultiplierBase: 1,
+        nativeQuantity: leg.quantity,
+        requestedNativeQuantity: leg.quantity,
+        nativeMinQuantity: 0.1,
+        nativeQuantityStep: 0.1,
+        nativePriceTick: 0.0001,
         priceUsd: 100,
         feesUsd: 0,
         slippageUsd: 0,
@@ -140,6 +148,36 @@ function shortCallLeg(qty: number): Omit<OrderLeg, 'index'> {
 }
 
 describe('OrderPlacementService — margin gate', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects non-finite base quantity %s before persistence',
+    async (quantity) => {
+      const orders = new InMemoryOrders();
+      const positions = new InMemoryPositions();
+      const svc = new OrderPlacementService(orders, positions, new FixedFillEngine(), clock);
+
+      await expect(
+        svc.place({ accountId: 'acc', legs: [shortCallLeg(quantity)], venueFilter: [] }),
+      ).rejects.toMatchObject({ code: 'INVALID_ORDER' });
+      expect(orders.orders.size).toBe(0);
+    },
+  );
+
+  it('does not persist an order that fails execution eligibility', async () => {
+    const orders = new InMemoryOrders();
+    const positions = new InMemoryPositions();
+    const fillEngine: FillEngine = {
+      async executeOrder() {
+        throw new NoLiquidityError('Quantity is below the venue minimum', 0);
+      },
+    };
+    const svc = new OrderPlacementService(orders, positions, fillEngine, clock);
+
+    await expect(
+      svc.place({ accountId: 'acc', legs: [shortCallLeg(0.05)], venueFilter: [] }),
+    ).rejects.toBeInstanceOf(NoLiquidityError);
+    expect(orders.orders.size).toBe(0);
+  });
+
   it('rejects short-call order when equity is below required margin', async () => {
     const orders = new InMemoryOrders();
     const positions = new InMemoryPositions();
@@ -222,8 +260,15 @@ describe('OrderPlacementService — margin gate', () => {
       underlying: 'BTC',
       expiry: '2026-05-29',
       strike: 80_000,
-      quantity: 8, // 8 short calls × 12k = 96k
+      quantity: 8,
       requestedQuantity: 8,
+      quantityUnit: 'base',
+      contractMultiplierBase: 1,
+      nativeQuantity: 8,
+      requestedNativeQuantity: 8,
+      nativeMinQuantity: 0.1,
+      nativeQuantityStep: 0.1,
+      nativePriceTick: 0.0001,
       priceUsd: 100,
       feesUsd: 0,
       slippageUsd: 0,

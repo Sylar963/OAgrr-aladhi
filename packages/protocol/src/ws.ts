@@ -110,6 +110,29 @@ export interface VenueQuote {
   // than USD/USDC/USDT. Surfaced so the UI can distinguish inverse venues
   // (Deribit/OKX BTC-USD-…) from linear venues at a glance.
   inverse?: boolean;
+  execution?: VenueExecutionQuote | null;
+}
+
+export interface VenueExecutionQuote {
+  exchangeSymbol: string;
+  settleCurrency: string;
+  inverse: boolean;
+  quantityUnit: 'base';
+  contractMultiplierBase: number;
+  nativeMinQuantity: number;
+  nativeQuantityStep: number;
+  nativePriceTick: number;
+  minQuantity: number;
+  quantityStep: number;
+  bidSize: number | null;
+  askSize: number | null;
+  bidUsd: number | null;
+  askUsd: number | null;
+  markUsd: number | null;
+  bidMakerFeeUsd: number | null;
+  bidTakerFeeUsd: number | null;
+  askMakerFeeUsd: number | null;
+  askTakerFeeUsd: number | null;
 }
 
 export interface EnrichedSide {
@@ -159,10 +182,10 @@ export interface VenueDelta {
   symbol: string;
   ts: number;
   quote?: {
-    bid?: { raw?: number | null; rawCurrency?: string; usd?: number | null };
-    ask?: { raw?: number | null; rawCurrency?: string; usd?: number | null };
-    mark?: { raw?: number | null; rawCurrency?: string; usd?: number | null };
-    last?: { raw?: number | null; rawCurrency?: string; usd?: number | null } | null;
+    bid?: { raw?: number | null; rawCurrency?: string; usd?: number | null; usdPerBase?: number | null };
+    ask?: { raw?: number | null; rawCurrency?: string; usd?: number | null; usdPerBase?: number | null };
+    mark?: { raw?: number | null; rawCurrency?: string; usd?: number | null; usdPerBase?: number | null };
+    last?: { raw?: number | null; rawCurrency?: string; usd?: number | null; usdPerBase?: number | null } | null;
     bidSize?: number | null;
     askSize?: number | null;
     underlyingPriceUsd?: number | null;
@@ -172,6 +195,8 @@ export interface VenueDelta {
     openInterestUsd?: number | null;
     volume24hUsd?: number | null;
     estimatedFees?: EstimatedFees | null;
+    estimatedBidFees?: EstimatedFees | null;
+    estimatedAskFees?: EstimatedFees | null;
     timestamp?: number | null;
     source?: string;
   };
@@ -190,6 +215,28 @@ export interface VenueDelta {
 const EstimatedFeesSchema = z.object({
   maker: z.number(),
   taker: z.number(),
+});
+
+export const VenueExecutionQuoteSchema = z.object({
+  exchangeSymbol: z.string().min(1),
+  settleCurrency: z.string().min(1),
+  inverse: z.boolean(),
+  quantityUnit: z.literal('base'),
+  contractMultiplierBase: z.number().finite().positive(),
+  nativeMinQuantity: z.number().finite().positive(),
+  nativeQuantityStep: z.number().finite().positive(),
+  nativePriceTick: z.number().finite().positive(),
+  minQuantity: z.number().finite().positive(),
+  quantityStep: z.number().finite().positive(),
+  bidSize: z.number().finite().nonnegative().nullable(),
+  askSize: z.number().finite().nonnegative().nullable(),
+  bidUsd: z.number().finite().positive().nullable(),
+  askUsd: z.number().finite().positive().nullable(),
+  markUsd: z.number().finite().positive().nullable(),
+  bidMakerFeeUsd: z.number().finite().nonnegative().nullable(),
+  bidTakerFeeUsd: z.number().finite().nonnegative().nullable(),
+  askMakerFeeUsd: z.number().finite().nonnegative().nullable(),
+  askTakerFeeUsd: z.number().finite().nonnegative().nullable(),
 });
 
 const VenueQuoteSchema = z.object({
@@ -215,6 +262,7 @@ const VenueQuoteSchema = z.object({
   openInterestUsd: NullableNumberSchema,
   volume24hUsd: NullableNumberSchema,
   asOfMs: NullableNumberSchema.optional(),
+  execution: VenueExecutionQuoteSchema.nullable().optional(),
 });
 
 const EnrichedSideSchema = z.object({
@@ -260,6 +308,7 @@ const PremiumValueSchema = z.object({
   raw: z.number().nullable().optional(),
   rawCurrency: z.string().optional(),
   usd: z.number().nullable().optional(),
+  usdPerBase: z.number().nullable().optional(),
 });
 
 export const VenueDeltaSchema = z.object({
@@ -281,6 +330,8 @@ export const VenueDeltaSchema = z.object({
       openInterestUsd: NullableNumberSchema.optional(),
       volume24hUsd: NullableNumberSchema.optional(),
       estimatedFees: EstimatedFeesSchema.nullable().optional(),
+      estimatedBidFees: EstimatedFeesSchema.nullable().optional(),
+      estimatedAskFees: EstimatedFeesSchema.nullable().optional(),
       timestamp: NullableNumberSchema.optional(),
       source: z.string().optional(),
     })

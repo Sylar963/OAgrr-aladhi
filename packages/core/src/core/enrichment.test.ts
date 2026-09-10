@@ -953,4 +953,128 @@ describe('enrichment', () => {
     expect(q.mid).toBe(105);
     expect(q.midRaw).toBe(105);
   });
+
+  it('projects native venue economics into canonical base exposure', () => {
+    const row: ComparisonRow = {
+      strike: 70_000,
+      call: {
+        okx: {
+          venue: 'okx',
+          symbol: 'BTC-USD-260626-70000-C',
+          exchangeSymbol: 'BTC-USD-260626-70000-C',
+          base: 'BTC',
+          settle: 'BTC',
+          expiry: '2026-06-26',
+          expiryTs: null,
+          strike: 70_000,
+          right: 'call',
+          inverse: true,
+          contractSize: 0.01,
+          contractMultiplierBase: 0.01,
+          tickSize: 0.0001,
+          minQty: 1,
+          lotSize: 1,
+          makerFee: 0.0002,
+          takerFee: 0.0003,
+          greeks: EMPTY_GREEKS,
+          quote: {
+            bid: { raw: 0.04, rawCurrency: 'BTC', usd: 2_800, usdPerBase: 2_800 },
+            ask: { raw: 0.06, rawCurrency: 'BTC', usd: 4_200, usdPerBase: 4_200 },
+            mark: { raw: 0.05, rawCurrency: 'BTC', usd: 3_500, usdPerBase: 3_500 },
+            last: null,
+            bidSize: 20,
+            askSize: 30,
+            underlyingPriceUsd: 70_000,
+            indexPriceUsd: 70_000,
+            volume24h: null,
+            openInterest: null,
+            openInterestUsd: null,
+            volume24hUsd: null,
+            estimatedFees: { maker: 0.14, taker: 0.21 },
+            estimatedBidFees: { maker: 0.14, taker: 0.21 },
+            estimatedAskFees: { maker: 0.14, taker: 0.21 },
+            timestamp: 1,
+            source: 'ws',
+          },
+        },
+      },
+      put: {},
+    };
+
+    const execution = enrichComparisonRow(row).call.venues.okx?.execution;
+
+    expect(execution).toEqual({
+      exchangeSymbol: 'BTC-USD-260626-70000-C',
+      settleCurrency: 'BTC',
+      inverse: true,
+      quantityUnit: 'base',
+      contractMultiplierBase: 0.01,
+      nativeMinQuantity: 1,
+      nativeQuantityStep: 1,
+      nativePriceTick: 0.0001,
+      minQuantity: 0.01,
+      quantityStep: 0.01,
+      bidSize: 0.2,
+      askSize: 0.3,
+      bidUsd: 2_800,
+      askUsd: 4_200,
+      markUsd: 3_500,
+      bidMakerFeeUsd: expect.closeTo(14, 10),
+      bidTakerFeeUsd: 21,
+      askMakerFeeUsd: expect.closeTo(14, 10),
+      askTakerFeeUsd: 21,
+    });
+
+    const contract = row.call.okx;
+    if (!contract) throw new Error('missing OKX fixture');
+    contract.contractMultiplierBase = Number.MAX_VALUE;
+    contract.minQty = 2;
+    expect(enrichComparisonRow(row).call.venues.okx?.execution).toBeNull();
+  });
+
+  it('omits execution metadata when the native quantity step is unknown', () => {
+    const row: ComparisonRow = {
+      strike: 70_000,
+      call: {
+        gateio: {
+          venue: 'gateio',
+          symbol: 'BTC_USDT-20260626-70000-C',
+          exchangeSymbol: 'BTC_USDT-20260626-70000-C',
+          base: 'BTC',
+          settle: 'USDT',
+          expiry: '2026-06-26',
+          expiryTs: null,
+          strike: 70_000,
+          right: 'call',
+          inverse: false,
+          contractSize: 0.01,
+          tickSize: 1,
+          minQty: 1,
+          makerFee: 0,
+          takerFee: 0.0003,
+          greeks: EMPTY_GREEKS,
+          quote: {
+            bid: { raw: 100, rawCurrency: 'USDT', usd: 100, usdPerBase: 100 },
+            ask: { raw: 110, rawCurrency: 'USDT', usd: 110, usdPerBase: 110 },
+            mark: { raw: 105, rawCurrency: 'USDT', usd: 105, usdPerBase: 105 },
+            last: null,
+            bidSize: 20,
+            askSize: 30,
+            underlyingPriceUsd: 70_000,
+            indexPriceUsd: 70_000,
+            volume24h: null,
+            openInterest: null,
+            openInterestUsd: null,
+            volume24hUsd: null,
+            estimatedFees: { maker: 0, taker: 0.21 },
+            timestamp: 1,
+            source: 'ws',
+          },
+        },
+      },
+      put: {},
+    };
+
+    expect(enrichComparisonRow(row).call.venues.gateio?.execution).toBeNull();
+  });
 });

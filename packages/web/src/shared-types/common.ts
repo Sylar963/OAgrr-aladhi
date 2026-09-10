@@ -1,12 +1,14 @@
 export interface OptionQuote {
-  bid: { usd: number | null };
-  ask: { usd: number | null };
-  mark: { usd: number | null };
+  bid: { usd: number | null; usdPerBase?: number | null };
+  ask: { usd: number | null; usdPerBase?: number | null };
+  mark: { usd: number | null; usdPerBase?: number | null };
   bidSize: number | null;
   askSize: number | null;
   underlyingPriceUsd: number | null;
   volume24h: number | null;
   openInterest: number | null;
+  estimatedBidFees?: { maker: number; taker: number } | null;
+  estimatedAskFees?: { maker: number; taker: number } | null;
 }
 
 export interface OptionGreeks {
@@ -20,8 +22,10 @@ export interface NormalizedOptionContract {
   right: string;
   inverse: boolean;
   contractSize: number | null;
+  contractMultiplierBase?: number | null;
   tickSize: number | null;
   minQty: number | null;
+  lotSize?: number | null;
   makerFee: number | null;
   takerFee: number | null;
   greeks: OptionGreeks;

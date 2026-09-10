@@ -2,8 +2,6 @@ import type { VenueId } from '@oggregator/core';
 import { type ChainRuntimeRegistry, VENUE_IDS } from '@oggregator/core';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
 
-const DEFAULT_FEES_TAKER_USD = 0;
-
 export class RuntimeQuoteProvider implements QuoteProvider {
   constructor(private readonly registry: ChainRuntimeRegistry) {}
 
@@ -23,18 +21,30 @@ export class RuntimeQuoteProvider implements QuoteProvider {
       for (const [venueId, quote] of Object.entries(side.venues)) {
         const venue = venueId as VenueId;
         if (!requestedVenues.includes(venue)) continue;
-        if (!quote) continue;
+        const execution = quote?.execution;
+        if (!execution) continue;
         books.push({
           venue,
-          bidUsd: quote.bid,
-          askUsd: quote.ask,
-          markUsd: quote.mid,
+          exchangeSymbol: execution.exchangeSymbol,
+          settleCurrency: execution.settleCurrency,
+          inverse: execution.inverse,
+          quantityUnit: execution.quantityUnit,
+          contractMultiplierBase: execution.contractMultiplierBase,
+          nativeMinQuantity: execution.nativeMinQuantity,
+          nativeQuantityStep: execution.nativeQuantityStep,
+          nativePriceTick: execution.nativePriceTick,
+          minQuantity: execution.minQuantity,
+          quantityStep: execution.quantityStep,
+          bidUsd: execution.bidUsd,
+          askUsd: execution.askUsd,
+          markUsd: execution.markUsd,
           markIv: quote.markIv,
           underlyingPriceUsd: snapshot.stats.forwardPriceUsd ?? snapshot.stats.indexPriceUsd,
-          feesTakerUsd: quote.estimatedFees?.taker ?? DEFAULT_FEES_TAKER_USD,
+          bidTakerFeeUsd: execution.bidTakerFeeUsd,
+          askTakerFeeUsd: execution.askTakerFeeUsd,
           asOfMs: quote.asOfMs ?? null,
-          bidSize: quote.bidSize,
-          askSize: quote.askSize,
+          bidSize: execution.bidSize,
+          askSize: execution.askSize,
         });
       }
       return books;

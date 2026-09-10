@@ -67,17 +67,14 @@ export class PaperFillEngine implements FillEngine {
         requestedQuantity: leg.quantity,
         book: chosen.book,
       });
-      if (quote.filledQuantity <= 0) {
+      if (!isValidFillQuote(chosen.book, quote, leg.quantity)) {
         throw new NoLiquidityError(
-          `Fill model returned zero size for leg ${leg.index}`,
+          `Fill model returned an invalid fill for leg ${leg.index}`,
           leg.index,
         );
       }
 
-      const feePerBase = leg.side === 'buy'
-        ? chosen.book.askTakerFeeUsd
-        : chosen.book.bidTakerFeeUsd;
-      const feesUsd = feePerBase! * quote.filledQuantity;
+      const feesUsd = chosen.feePerBase * quote.filledQuantity;
 
       plans.push({
         leg,
@@ -138,35 +135,33 @@ function pickBestBook(
   side: 'buy' | 'sell',
   quantity: number,
   decisionAtMs: number,
-): { book: QuoteBook } | null {
-  const priced = books.filter(
-    (book) => {
-      const price = side === 'buy' ? book.askUsd : book.bidUsd;
-      const fee = side === 'buy' ? book.askTakerFeeUsd : book.bidTakerFeeUsd;
-      return (
-        isFresh(book, decisionAtMs) &&
-        isValidQuantity(book, quantity) &&
-        price != null &&
-        Number.isFinite(price) &&
-        price > 0 &&
-        fee != null &&
-        Number.isFinite(fee) &&
-        fee >= 0
-      );
-    },
-  );
-  if (priced.length === 0) return null;
-  const sorted = [...priced].sort((a, b) => {
-    const priceA = side === 'buy'
-      ? a.askUsd! + a.askTakerFeeUsd!
-      : a.bidUsd! - a.bidTakerFeeUsd!;
-    const priceB = side === 'buy'
-      ? b.askUsd! + b.askTakerFeeUsd!
-      : b.bidUsd! - b.bidTakerFeeUsd!;
-    const priceOrder = side === 'buy' ? priceA - priceB : priceB - priceA;
-    return priceOrder || a.venue.localeCompare(b.venue);
+): { book: QuoteBook; feePerBase: number } | null {
+  const candidates: Array<{ book: QuoteBook; feePerBase: number; allInUsd: number }> = [];
+  for (const book of books) {
+    const price = side === 'buy' ? book.askUsd : book.bidUsd;
+    const fee = side === 'buy' ? book.askTakerFeeUsd : book.bidTakerFeeUsd;
+    if (
+      !isFresh(book, decisionAtMs) ||
+      !isValidQuantity(book, quantity) ||
+      price == null ||
+      !Number.isFinite(price) ||
+      price <= 0 ||
+      fee == null ||
+      !Number.isFinite(fee) ||
+      fee < 0
+    ) {
+      continue;
+    }
+    const allInUsd = side === 'buy' ? price + fee : price - fee;
+    if (!Number.isFinite(allInUsd)) continue;
+    candidates.push({ book, feePerBase: fee, allInUsd });
+  }
+  candidates.sort((a, b) => {
+    const priceOrder = side === 'buy' ? a.allInUsd - b.allInUsd : b.allInUsd - a.allInUsd;
+    return priceOrder || a.book.venue.localeCompare(b.book.venue);
   });
-  return { book: sorted[0]! };
+  const chosen = candidates[0];
+  return chosen ? { book: chosen.book, feePerBase: chosen.feePerBase } : null;
 }
 
 function resolveVenues(
@@ -182,7 +177,19 @@ function resolveVenues(
 }
 
 function isValidQuantity(book: QuoteBook, quantity: number): boolean {
-  if (!Number.isFinite(quantity) || quantity < book.minQuantity) return false;
+  if (
+    book.quantityUnit !== 'base' ||
+    !Number.isFinite(book.contractMultiplierBase) ||
+    book.contractMultiplierBase <= 0 ||
+    !Number.isFinite(book.minQuantity) ||
+    book.minQuantity <= 0 ||
+    !Number.isFinite(book.quantityStep) ||
+    book.quantityStep <= 0 ||
+    !Number.isFinite(quantity) ||
+    quantity < book.minQuantity
+  ) {
+    return false;
+  }
   const steps = quantity / book.quantityStep;
   const nearest = Math.round(steps);
   return Math.abs(steps - nearest) <= 1e-9 * Math.max(1, Math.abs(steps));
@@ -196,5 +203,23 @@ function isFresh(book: QuoteBook, decisionAtMs: number): boolean {
     asOfMs > 0 &&
     asOfMs <= decisionAtMs &&
     decisionAtMs - asOfMs <= MAX_QUOTE_AGE_MS
+  );
+}
+
+function isValidFillQuote(
+  book: QuoteBook,
+  quote: { priceUsd: number; filledQuantity: number; slippageUsd: number },
+  requestedQuantity: number,
+): boolean {
+  const tolerance = 1e-9 * Math.max(1, requestedQuantity);
+  return (
+    Number.isFinite(quote.priceUsd) &&
+    quote.priceUsd > 0 &&
+    Number.isFinite(quote.filledQuantity) &&
+    quote.filledQuantity >= book.minQuantity &&
+    quote.filledQuantity <= requestedQuantity + tolerance &&
+    isValidQuantity(book, quote.filledQuantity) &&
+    Number.isFinite(quote.slippageUsd) &&
+    quote.slippageUsd >= 0
   );
 }

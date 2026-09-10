@@ -5,6 +5,7 @@ import type { Order, OrderLeg } from '../book/order.js';
 import { applyFillToPosition } from '../book/position.js';
 import { FixedClock } from '../gateways/clock.js';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
+import type { FillModel } from '../gateways/fill-model.js';
 import { PaperFillEngine } from './paper-fill-engine.js';
 import { RealisticFillModel } from './realistic-fill-model.js';
 
@@ -317,6 +318,39 @@ describe('PaperFillEngine', () => {
     const engine = new PaperFillEngine(
       single(new Map([[78_000, book({ askUsd: Number.NaN })]])),
       clock,
+    );
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 1,
+            preferredVenues: null,
+          },
+        ]),
+        [],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('rejects malformed fill-model output before producing fills', async () => {
+    const fillModel: FillModel = {
+      quote: () => ({
+        priceUsd: Number.NaN,
+        filledQuantity: 2,
+        slippageUsd: -1,
+        partial: false,
+      }),
+    };
+    const engine = new PaperFillEngine(
+      single(new Map([[78_000, book({ askUsd: 100 })]])),
+      clock,
+      fillModel,
     );
 
     await expect(

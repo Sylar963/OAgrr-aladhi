@@ -213,8 +213,8 @@ export interface VenueDelta {
 }
 
 const EstimatedFeesSchema = z.object({
-  maker: z.number(),
-  taker: z.number(),
+  maker: z.number().finite(),
+  taker: z.number().finite(),
 });
 
 export const VenueExecutionQuoteSchema = z.object({
@@ -305,10 +305,10 @@ export const EnrichedChainResponseSchema = z.object({
 });
 
 const PremiumValueSchema = z.object({
-  raw: z.number().nullable().optional(),
+  raw: z.number().finite().nullable().optional(),
   rawCurrency: z.string().optional(),
-  usd: z.number().nullable().optional(),
-  usdPerBase: z.number().nullable().optional(),
+  usd: z.number().finite().nullable().optional(),
+  usdPerBase: z.number().finite().nullable().optional(),
 });
 
 export const VenueDeltaSchema = z.object({

@@ -10,21 +10,22 @@ This document describes what the package **actually does** and, equally importan
 
 ### For the strategic trader (plain-language summary)
 
-You submit an order. The simulator looks at the best bid (for sells) or best ask (for buys) currently quoted across the five aggregated venues for that specific option. It fills your entire quantity at that single price, charges a taker fee proportional to notional, and books the resulting position. It does this **immediately** — there is no queue, no delay, no partial fill.
+You submit an order in base-underlying exposure, such as `0.05 BTC`. The simulator compares executable bids or asks for that same exposure, including venue taker fees, and books the fill immediately. Venues without verified multiplier, minimum, step, tick, price, and fee metadata remain visible for analytics but cannot receive paper orders.
 
 The realism it gives you:
 
 - **Prices are live.** They come from the same WebSocket feeds the dashboard shows you. If the market moves, the quote you would have filled at moves with it.
-- **Venue selection is real.** If you restrict to Deribit, you pay Deribit's spread and Deribit's fees. If you leave it open, the simulator picks the best cross-venue price.
-- **Fees are venue-specific.** The taker rate comes from the venue's own fee schedule via the enrichment pipeline, not a flat assumption.
+- **Venue selection is fee-aware.** If you restrict to Deribit, you pay Deribit's spread and fees. If you leave it open, buys minimize ask plus fee and sells maximize bid minus fee.
+- **Contract conventions are normalized.** Native contract quantity, size, minimum, step, price, and fee are converted to base exposure exactly once. Native values remain attached to fills for audit.
+- **Fees are venue-specific.** The enrichment pipeline applies the venue fee formula and premium cap to the executable side; there is no execution fallback fee.
 - **PnL is honest.** Realized PnL accrues as positions are closed against weighted-average entry; unrealized PnL marks every open leg to the cross-venue mid.
 
 The realism it does **not** give you — be aware of this when judging a strategy:
 
-- **No slippage beyond the top level.** A 1-contract fill and a 1,000-contract fill execute at the same price. The simulator does not walk the book because the aggregator's snapshot does not carry depth beyond top-of-book.
+- **No persistent liquidity consumption.** Repeated paper orders can use the same displayed liquidity. The realistic fill model uses reported L1/L2 size when available and a spread penalty otherwise, but does not mutate a shared simulated book.
 - **No latency.** The fill timestamp is `clock.now()` at submission. In a live venue, your order would race the tape.
 - **No queue position.** Limit orders, stops, and iceberg orders are not supported at all — the only order kind is a market order that fills instantly.
-- **No margin, no liquidation, no circuit breakers.** The only balance check is cash accounting through the ledger; nothing rejects a trade for risk reasons.
+- **No liquidation or circuit breakers.** An approximation margin engine can reject underfunded orders, but it is not venue risk parity and there is no liquidation lifecycle.
 
 If your strategy's edge depends on any of those missing behaviors, this simulator will overstate it.
 
@@ -43,7 +44,7 @@ src/
   gateways/       Ports (interfaces) — Clock, QuoteProvider, FillEngine,
                   OrderRepository, PositionRepository
   adapters/       Concrete implementations
-    paper-fill-engine.ts       The "matching engine" — 100 lines
+    paper-fill-engine.ts       Quote selection and fill planning
     runtime-quote-provider.ts  Reads from ChainRuntimeRegistry (live aggregator)
     postgres-order-repository.ts
     postgres-position-repository.ts
@@ -62,35 +63,37 @@ executeOrder(order, venueFilter):
   for each leg in order.legs:
     venues = leg.preferredVenues ?? venueFilter
     books  = quoteProvider.getBooks(legKey, venues)   # top-of-book per venue
-    chosen = pickBestFreshBook(books, leg.side)       # lowest ask / highest bid
+    chosen = pickBestEligibleBook(books, leg.side)    # fee-inclusive equal-base routing
     if chosen is null: throw NoLiquidityError(legIndex)
     priceUsd = chosen.ask (if buy) | chosen.bid (if sell)
-    feesUsd  = priceUsd * quantity * chosen.feesTakerRate
+    feesUsd  = chosen.sideTakerFeeUsdPerBase * quantity
     plan.push({leg, venue, priceUsd, feesUsd, benchmarks, underlyingSpot})
   return plan.map(toFill(filledAt = clock.now()))
 ```
 
 Semantics worth knowing:
 
-- **All-or-nothing across legs.** If any leg has no quotable side on any permitted venue, the whole order throws `NoLiquidityError` and nothing is persisted. `OrderPlacementService` marks the order `rejected` and returns the error to the caller.
+- **All-or-nothing planning across legs.** If any leg has no fresh, valid, quantity-compatible quote on a permitted venue, the whole order throws `NoLiquidityError` before the order is persisted.
 - **Per-leg venue selection is independent.** Each leg picks its own best venue. A two-leg order may fill one leg on Deribit and the other on OKX, with per-leg `benchmarkBid/Ask/Mid` and `underlyingSpotUsd` recorded for later reconciliation.
-- **Fees.** `feesTakerRate` is per-venue per-quote, supplied by enrichment. Default fallback is `0.0003` (see `runtime-quote-provider.ts`). The fee is charged on notional premium, not on contracts.
+- **Quantities.** Order, fill, and position quantities are base-underlying exposure. Venue-native requested and filled quantities are persisted separately when execution metadata exists.
+- **Fees.** Bid and ask fee estimates are absolute USD per base unit, supplied by enrichment and multiplied by filled base quantity.
 - **Freshness.** Quote source timestamps must be valid, not in the future, and at most 60 seconds old at one decision time shared by all legs. Invalid or stale venues are excluded before price selection.
 - **Timestamping.** A single later `clock.now()` is used for all fills in an order. `SystemClock` is the production implementation; `FixedClock` is used in tests. Source quote time is checked for execution but is not yet persisted on fills, and venue-side acknowledgment delay is not modeled.
 
 ### Quote provider
 
-`RuntimeQuoteProvider` calls into `ChainRuntimeRegistry` from `@oggregator/core`, acquires a chain runtime for `(underlying, expiry, venues)`, rebuilds the projection from venue quote stores, and extracts the `(strike, optionRight)` row with each venue's source timestamp. It returns the set of `QuoteBook` entries for venues that have a quote at that strike; the fill engine applies its stricter execution-time freshness check. Missing venues are simply omitted, not errored. `getMark()` averages the per-venue mids across all venues.
+`RuntimeQuoteProvider` calls into `ChainRuntimeRegistry` from `@oggregator/core`, acquires a chain runtime for `(underlying, expiry, venues)`, and extracts the `(strike, optionRight)` execution projection. Quotes without complete execution metadata are omitted. `getMark()` averages finite USD-per-base marks from executable venues.
 
 ### Order placement service
 
 `OrderPlacementService.place()` is the single entry point:
 
 1. Validate legs (non-empty, positive quantity) — else `InvalidOrderError`.
-2. Build the `Order` (status: `accepted`, mode: `paper`, kind: `market`) and persist it.
-3. Call `FillEngine.executeOrder()`. On failure, update the order to `rejected` with the reason and rethrow.
-4. On success: `saveFills()`, then `applyFill()` per fill (position fold + cash ledger entry).
-5. Update the order to `filled` with `totalDebitUsd = -sum(fillCashDelta)`.
+2. Build the `Order` with every quantity labeled `base`.
+3. Plan execution. Invalid, below-minimum, off-step, stale, or unquotable orders fail before persistence.
+4. Persist the accepted order and run the margin check. Margin failures persist as rejected orders.
+5. On success: `saveFills()`, then `applyFill()` per fill (position fold + cash ledger entry).
+6. Update the order to `filled` with `totalDebitUsd = -sum(fillCashDelta)`.
 
 Position folding (`applyFillToPosition` in `book/position.ts`) handles the four cases explicitly: opening from flat, adding same-direction (weighted-average entry), partial close (realized delta = closedQty × (fillPrice − avgEntry) × priorSign), and flip (close full prior, reopen at fill price). Tests in `book/position.test.ts` cover these paths.
 
@@ -118,7 +121,7 @@ neither realized nor unrealized PnL is added again to signed marked inventory.
 
 ### Persistence
 
-Postgres-backed when `DATABASE_URL` is set; a `NoopPaperTradingStore` stands in otherwise (routes return `503 persistence_unavailable` in that mode). Schema lives in `packages/db/migrations/0003_create_paper_trading.sql` and `0004_expand_paper_trading_workspace.sql`. The cash balance is derived from the `cash_ledger` table — every fill writes a `deltaUsd` entry alongside the position upsert.
+Postgres-backed when `DATABASE_URL` is set; a `NoopPaperTradingStore` stands in otherwise (routes return `503 persistence_unavailable` in that mode). Migration `0020_paper_fill_quantity_context.sql` adds base-unit labels and nullable native conversion context to fills. Existing rows default to base semantics. The cash balance is derived from the `cash_ledger` table; every fill writes a `deltaUsd` entry alongside the position upsert.
 
 ### Transport
 
@@ -134,10 +137,10 @@ These are design decisions, not missing features. Listed so no one has to re-der
 | Capability | Status |
 | --- | --- |
 | Limit, stop, stop-limit, iceberg, post-only, FOK, IOC orders | Not implemented. `OrderKind = 'market'` is the only value in the type. |
-| Order book depth walking, size-dependent slippage | Not implemented. Quote provider surfaces only top-of-book. |
-| Partial fills | Not implemented. Each leg fills fully or the order is rejected. |
+| Persistent simulated order-book consumption | Not implemented. Reported depth informs a fill but is not depleted across orders. |
+| Full venue L2 parity | Not implemented. The realistic model walks an optional L2 ladder and otherwise applies a bounded spread penalty. |
 | Latency / queue position modeling | Not implemented. `filledAt = clock.now()` at submission. |
-| Margin, initial/maintenance, liquidation, circuit breakers | Not implemented. Only cash balance is tracked. The two risk DTO fields (`PaperRiskDto`, `computePortfolioGreeks`) are stubs returning zero. |
+| Venue-exact portfolio margin, liquidation, circuit breakers | Not implemented. The current margin engine is an approximation and has no liquidation lifecycle. |
 | Multiple accounts | Not implemented in transport. `DEFAULT_ACCOUNT_ID = 'paper-default'` is hardcoded in `trading-services.ts`. The domain supports account IDs; the routes do not expose them. |
 | Cross-process WS fan-out | Not implemented. `PaperEventBus` is an in-process `Set<Listener>`. |
 | Order cancellation / amendment | Not implemented. Fills are synchronous within `place()`, so there is no resting state to cancel. |

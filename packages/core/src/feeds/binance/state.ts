@@ -52,7 +52,6 @@ export function mergeBinanceOiEvent(
     ...previous,
     openInterest: safeNum(item.o),
     openInterestUsd: safeNum(item.h),
-    timestamp: Date.now(),
   };
 }
 
@@ -65,7 +64,6 @@ export function mergeBinanceRestTicker(
     ...previous,
     volume24h: ticker.volume != null ? safeNum(ticker.volume) : previous.volume24h,
     lastPrice: ticker.lastPrice != null ? safeNum(ticker.lastPrice) : previous.lastPrice,
-    timestamp: Date.now(),
   };
 }
 
@@ -78,7 +76,6 @@ export function mergeBinanceRestOpenInterest(
     ...previous,
     openInterest: safeNum(item.sumOpenInterest),
     openInterestUsd: safeNum(item.sumOpenInterestUsd),
-    timestamp: Date.now(),
   };
 }
 

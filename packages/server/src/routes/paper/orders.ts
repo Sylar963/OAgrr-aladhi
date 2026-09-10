@@ -45,6 +45,7 @@ export async function paperOrdersRoute(app: FastifyInstance) {
         expiry: leg.expiry,
         strike: leg.strike,
         quantity: leg.quantity,
+        quantityUnit: 'base',
         preferredVenues: leg.preferredVenues ?? null,
       }));
       const result = await orderPlacementService.place({

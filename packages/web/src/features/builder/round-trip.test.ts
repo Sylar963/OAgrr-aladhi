@@ -24,6 +24,7 @@ function exec(overrides: Partial<VenueExecution> & Pick<VenueExecution, 'venue'>
     contractSize: 1,
     tickSize: 0.01,
     minQty: 0.01,
+    quantityStep: 0.01,
     bidMakerFeeUsd: 0.03,
     bidTakerFeeUsd: 0.05,
     askMakerFeeUsd: 0.0306,
@@ -161,7 +162,7 @@ describe('autoPickVenue', () => {
       { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 101, bidPrice: 99, askSize: 0.1 }) },
     ]);
     const quotes = buildLegQuotes(leg);
-    expect(autoPickVenue(quotes)).toBe('deribit');
+    expect(autoPickVenue(quotes, 'buy', 1)).toBe('deribit');
   });
 
   it('falls back to best-effort when no venue is fillable', () => {
@@ -170,7 +171,7 @@ describe('autoPickVenue', () => {
       { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 105, bidPrice: 100, askSize: 1 }) },
     ]);
     const quotes = buildLegQuotes(leg);
-    expect(autoPickVenue(quotes)).toBe('okx');
+    expect(autoPickVenue(quotes, 'buy', 100)).toBe('okx');
   });
 
   it('returns null when no venue has a quote', () => {
@@ -178,7 +179,7 @@ describe('autoPickVenue', () => {
       { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: null, bidPrice: null }) },
     ]);
     const quotes = buildLegQuotes(leg);
-    expect(autoPickVenue(quotes)).toBeNull();
+    expect(autoPickVenue(quotes, 'buy', 1)).toBeNull();
   });
 });
 

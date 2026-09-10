@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { Leg } from './payoff';
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -30,7 +30,7 @@ interface VenueSlideoverProps {
   isSending?: boolean;
 }
 
-function buildVenueExecution(
+export function buildVenueExecution(
   chain: EnrichedChainResponse,
   venueId: string,
   leg: Leg,
@@ -56,6 +56,7 @@ function buildVenueExecution(
     contractSize: 1,
     tickSize: execution.nativePriceTick,
     minQty: execution.minQuantity,
+    quantityStep: execution.quantityStep,
     bidMakerFeeUsd: execution.bidMakerFeeUsd,
     bidTakerFeeUsd: execution.bidTakerFeeUsd,
     askMakerFeeUsd: execution.askMakerFeeUsd,
@@ -118,27 +119,17 @@ export default function VenueSlideover({
     });
   }, [chain, chainFor, legs, activeVenues]);
 
-  useEffect(() => {
-    if (legInputs.length === 0) return;
-    setRouting((prev) => {
-      const auto = deriveAutoRouting(legInputs);
-      const merged: StrategyRouting = { legs: { ...auto.legs } };
-      for (const [legId, pin] of Object.entries(prev.legs)) {
-        const legIn = legInputs.find((l) => l.legId === legId);
-        if (legIn && legIn.venues.some((v) => v.venue === pin.venue)) {
-          merged.legs[legId] = pin;
-        }
-      }
-      return merged;
-    });
-  }, [legInputs]);
+  const effectiveRouting = useMemo(() => {
+    const auto = deriveAutoRouting(legInputs);
+    return { legs: { ...auto.legs, ...routing.legs } };
+  }, [legInputs, routing]);
 
   const strategy = useMemo(
     () =>
       legInputs.length > 0
-        ? computeStrategyRoundTrip(legInputs, routing)
+        ? computeStrategyRoundTrip(legInputs, effectiveRouting)
         : null,
-    [legInputs, routing],
+    [effectiveRouting, legInputs],
   );
 
   // Per-venue summary: cost if every leg routes through this venue
@@ -201,12 +192,19 @@ export default function VenueSlideover({
   }
 
   function resetToAuto() {
-    setRouting(deriveAutoRouting(legInputs));
+    setRouting({ legs: {} });
   }
 
   function handleSendToPaper() {
     if (!onSendToPaper || !strategy?.routable) return;
-    onSendToPaper(routing);
+    const explicitRouting: StrategyRouting = { legs: {} };
+    for (const [legId, pin] of Object.entries(routing.legs)) {
+      const input = legInputs.find((leg) => leg.legId === legId);
+      if (input?.venues.some((venue) => venue.venue === pin.venue)) {
+        explicitRouting.legs[legId] = pin;
+      }
+    }
+    onSendToPaper(explicitRouting);
   }
 
   if (!chain || legs.length === 0) return null;
@@ -362,7 +360,7 @@ export default function VenueSlideover({
           const legIn = legInputs.find((l) => l.legId === leg.id);
           if (!legIn) return null;
           const quotes = buildLegQuotes(legIn);
-          const pin = routing.legs[leg.id];
+          const pin = effectiveRouting.legs[leg.id];
           const crossedSide: 'bid' | 'ask' = leg.direction === 'buy' ? 'ask' : 'bid';
 
           return (

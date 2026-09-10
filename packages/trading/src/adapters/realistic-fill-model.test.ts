@@ -115,6 +115,36 @@ describe('RealisticFillModel', () => {
     expect(r.partial).toBe(true);
   });
 
+  it('does not substitute assumed liquidity for an explicit zero size', () => {
+    const model = new RealisticFillModel();
+    const r = model.quote({
+      side: 'buy',
+      requestedQuantity: 0.1,
+      book: bookOf({ askSize: 0 }),
+    });
+
+    expect(r.filledQuantity).toBe(0);
+    expect(r.partial).toBe(true);
+  });
+
+  it('ignores malformed L2 levels', () => {
+    const model = new RealisticFillModel();
+    const r = model.quote({
+      side: 'buy',
+      requestedQuantity: 1,
+      book: bookOf({
+        askSize: 0.1,
+        askLevels: [
+          { priceUsd: Number.NaN, size: 1 },
+          { priceUsd: 102, size: -1 },
+        ],
+      }),
+    });
+
+    expect(r.filledQuantity).toBe(0);
+    expect(r.partial).toBe(true);
+  });
+
   it('sell side mirrors buy: penalty pushes price below bid', () => {
     const model = new RealisticFillModel({ spreadPenaltyK: 1, maxSlippagePct: 0.5 });
     const r = model.quote({

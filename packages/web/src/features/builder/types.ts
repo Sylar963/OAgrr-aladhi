@@ -14,6 +14,7 @@ export interface VenueExecution {
   contractSize: number;
   tickSize: number;
   minQty: number;
+  quantityStep: number;
   bidMakerFeeUsd: number | null;
   bidTakerFeeUsd: number | null;
   askMakerFeeUsd: number | null;

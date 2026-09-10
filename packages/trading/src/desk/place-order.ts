@@ -25,7 +25,7 @@ import type { PnlService } from './compute-pnl.js';
 export interface PlaceOrderInput {
   accountId: AccountId;
   clientOrderId?: string;
-  legs: Array<Omit<OrderLeg, 'index' | 'quantityUnit'>>;
+  legs: Array<Omit<OrderLeg, 'index'>>;
   venueFilter: VenueId[];
 }
 
@@ -59,6 +59,9 @@ export class OrderPlacementService {
       throw new InvalidOrderError('Order must have at least one leg');
     }
     input.legs.forEach((leg, idx) => {
+      if (leg.quantityUnit !== 'base') {
+        throw new InvalidOrderError(`Leg quantity unit must be base (leg ${idx})`);
+      }
       if (!Number.isFinite(leg.quantity) || leg.quantity <= 0) {
         throw new InvalidOrderError(`Leg quantity must be positive (leg ${idx})`);
       }
@@ -94,7 +97,17 @@ export class OrderPlacementService {
     }
 
     await this.orders.saveOrder(order);
-    await this.checkMargin(order, input.venueFilter);
+    try {
+      await this.checkMargin(order, input.venueFilter);
+    } catch (err) {
+      const rejected: Order = {
+        ...order,
+        status: 'rejected',
+        rejectionReason: err instanceof Error ? err.message : 'Margin check failed',
+      };
+      await this.orders.updateOrderStatus(rejected);
+      throw err;
+    }
 
     await this.orders.saveFills(fills);
     for (const fill of fills) {
@@ -139,12 +152,6 @@ export class OrderPlacementService {
     if (result.ok) return;
 
     const reason = result.reason ?? 'Margin requirement exceeded';
-    const rejected: Order = {
-      ...order,
-      status: 'rejected',
-      rejectionReason: reason,
-    };
-    await this.orders.updateOrderStatus(rejected);
     throw new InsufficientMarginError(
       reason,
       result.requiredUsd,

@@ -1405,7 +1405,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
             legs={pricedLegs}
             chain={chain ?? null}
             chainFor={chainFor}
-            activeVenues={activeVenues}
+            activeVenues={pricingVenues}
             onClose={() => setShowVenues(false)}
             {...(market === 'crypto'
               ? { onSendToPaper: (routing: StrategyRouting) => handleSendToPaper(routing) }

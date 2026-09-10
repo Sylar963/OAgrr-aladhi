@@ -4,7 +4,11 @@ import type { Fill } from '../book/fill.js';
 import type { Order, OrderId, OrderLeg } from '../book/order.js';
 import type { Position } from '../book/position.js';
 import { applyFillToPosition } from '../book/position.js';
-import { InsufficientMarginError, NoLiquidityError } from '../book/errors.js';
+import {
+  InsufficientMarginError,
+  MarginCheckUnavailableError,
+  NoLiquidityError,
+} from '../book/errors.js';
 import { FixedClock } from '../gateways/clock.js';
 import type { FillEngine } from '../gateways/fill-engine.js';
 import type { OrderRepository } from '../gateways/order-repository.js';
@@ -14,6 +18,7 @@ import type {
 } from '../gateways/position-repository.js';
 import type { QuoteBook, QuoteKey, QuoteProvider } from '../gateways/quote-provider.js';
 import { ApproximationMarginEngine } from '../risk/approximation-margin-engine.js';
+import type { MarginEngine } from '../risk/margin-engine.js';
 import { OrderPlacementService } from './place-order.js';
 
 class InMemoryOrders implements OrderRepository {
@@ -143,6 +148,7 @@ function shortCallLeg(qty: number): Omit<OrderLeg, 'index'> {
     expiry: '2026-05-29',
     strike: 80_000,
     quantity: qty,
+    quantityUnit: 'base',
     preferredVenues: null,
   };
 }
@@ -204,6 +210,31 @@ describe('OrderPlacementService — margin gate', () => {
     expect(recorded[0]!.rejectionReason).toContain('exceeds available');
     expect(orders.fills).toHaveLength(0);
     expect(positions.positions).toHaveLength(0);
+  });
+
+  it('marks a persisted order rejected when the margin check is unavailable', async () => {
+    const orders = new InMemoryOrders();
+    const positions = new InMemoryPositions();
+    const marginEngine: MarginEngine = {
+      async estimate() {
+        throw new MarginCheckUnavailableError('No current underlying price', 0, 'missing_spot');
+      },
+    };
+    const svc = new OrderPlacementService(
+      orders,
+      positions,
+      new FixedFillEngine(),
+      clock,
+      { marginEngine },
+    );
+
+    await expect(
+      svc.place({ accountId: 'acc', legs: [shortCallLeg(1)], venueFilter: [] }),
+    ).rejects.toBeInstanceOf(MarginCheckUnavailableError);
+    expect([...orders.orders.values()][0]).toMatchObject({
+      status: 'rejected',
+      rejectionReason: 'No current underlying price',
+    });
   });
 
   it('accepts the same order when equity covers margin', async () => {

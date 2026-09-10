@@ -107,14 +107,21 @@ export function computeQuoteCost(
   const entryFee = direction === 'buy' ? exec.askTakerFeeUsd : exec.bidTakerFeeUsd;
   const exitFee = direction === 'buy' ? exec.bidTakerFeeUsd : exec.askTakerFeeUsd;
   const sizeAtEntry = direction === 'buy' ? askSize : bidSize;
+  const steps = quantity / exec.quantityStep;
+  const quantityValid =
+    Number.isFinite(quantity) &&
+    quantity >= exec.minQty &&
+    Number.isFinite(steps) &&
+    Math.abs(steps - Math.round(steps)) <= 1e-9 * Math.max(1, Math.abs(steps));
 
   if (
+    !quantityValid ||
     entryPrice == null ||
+    !Number.isFinite(entryPrice) ||
     entryPrice <= 0 ||
-    exitPrice == null ||
-    exitPrice <= 0 ||
     entryFee == null ||
-    exitFee == null
+    !Number.isFinite(entryFee) ||
+    entryFee < 0
   ) {
     return {
       legId,
@@ -136,16 +143,43 @@ export function computeQuoteCost(
     };
   }
 
-  const spreadRaw = entryPrice - exitPrice;
-  const spreadAbs = Math.abs(spreadRaw) * quantity;
   const entryFeeUsd = entryFee * quantity;
-  const exitFeeUsd = exitFee * quantity;
-  const roundTripUsd = spreadAbs + entryFeeUsd + exitFeeUsd;
-  const roundTripPerBase = quantity > 0 ? roundTripUsd / quantity : 0;
-
   const fillable = sizeAtEntry == null ? true : quantity <= sizeAtEntry;
   const slippageWarning =
     sizeAtEntry != null && sizeAtEntry > 0 && quantity > sizeAtEntry * 0.8;
+  if (
+    exitPrice == null ||
+    !Number.isFinite(exitPrice) ||
+    exitPrice <= 0 ||
+    exitFee == null ||
+    !Number.isFinite(exitFee) ||
+    exitFee < 0
+  ) {
+    return {
+      legId,
+      venue: exec.venue,
+      bidPrice,
+      askPrice,
+      bidSize,
+      askSize,
+      entryPrice,
+      exitPrice,
+      spreadCostUsd: null,
+      entryFeeUsd,
+      exitFeeUsd: null,
+      roundTripUsd: null,
+      roundTripPerBase: null,
+      fillable,
+      slippageWarning,
+      classification: null,
+    };
+  }
+
+  const spreadRaw = entryPrice - exitPrice;
+  const spreadAbs = Math.abs(spreadRaw) * quantity;
+  const exitFeeUsd = exitFee * quantity;
+  const roundTripUsd = spreadAbs + entryFeeUsd + exitFeeUsd;
+  const roundTripPerBase = quantity > 0 ? roundTripUsd / quantity : 0;
 
   return {
     legId,
@@ -171,8 +205,12 @@ export function buildLegQuotes(leg: LegInput): PerLegRoundTripQuote[] {
   return leg.venues.map((v) => computeQuoteCost(v.exec, leg.direction, leg.quantity, leg.legId));
 }
 
-export function autoPickVenue(quotes: PerLegRoundTripQuote[]): string | null {
-  const valid = quotes.filter((q) => q.entryPrice != null && q.roundTripUsd != null);
+export function autoPickVenue(
+  quotes: PerLegRoundTripQuote[],
+  direction: OrderSide,
+  quantity: number,
+): string | null {
+  const valid = quotes.filter((q) => q.entryPrice != null && q.entryFeeUsd != null);
   if (valid.length === 0) return null;
 
   const fillable = valid.filter((q) => q.fillable);
@@ -180,7 +218,12 @@ export function autoPickVenue(quotes: PerLegRoundTripQuote[]): string | null {
 
   let best = pool[0]!;
   for (const q of pool) {
-    if (q.roundTripUsd! < best.roundTripUsd!) best = q;
+    const qScore =
+      q.entryPrice! * quantity + (direction === 'buy' ? q.entryFeeUsd! : -q.entryFeeUsd!);
+    const bestScore =
+      best.entryPrice! * quantity +
+      (direction === 'buy' ? best.entryFeeUsd! : -best.entryFeeUsd!);
+    if (direction === 'buy' ? qScore < bestScore : qScore > bestScore) best = q;
   }
   return best.venue;
 }
@@ -197,7 +240,7 @@ function findRoutingPin(
       continue;
     }
     const quotes = buildLegQuotes(leg);
-    const venue = autoPickVenue(quotes);
+    const venue = autoPickVenue(quotes, leg.direction, leg.quantity);
     if (venue) {
       out[leg.legId] = {
         venue,
@@ -222,6 +265,7 @@ export function computeStrategyRoundTrip(
   let totalExitFeesUsd = 0;
   let totalQty = 0;
   let routable = true;
+  let roundTripComplete = true;
 
   const perLeg: PerLegRoundTrip[] = [];
 
@@ -278,17 +322,21 @@ export function computeStrategyRoundTrip(
     }
 
     const cost = computeQuoteCost(venueQuote.exec, leg.direction, leg.quantity, leg.legId);
-    if (cost.roundTripUsd == null || cost.entryPrice == null) {
+    if (cost.entryPrice == null || cost.entryFeeUsd == null) {
       routable = false;
     } else {
       const signedEntry =
         leg.direction === 'buy'
-          ? -cost.entryPrice * leg.quantity * venueQuote.exec.contractSize
-          : cost.entryPrice * leg.quantity * venueQuote.exec.contractSize;
+          ? -cost.entryPrice * leg.quantity
+          : cost.entryPrice * leg.quantity;
       netEntryUsd += signedEntry;
-      totalRoundTripUsd += cost.roundTripUsd;
-      totalEntryFeesUsd += cost.entryFeeUsd ?? 0;
-      totalExitFeesUsd += cost.exitFeeUsd ?? 0;
+      totalEntryFeesUsd += cost.entryFeeUsd;
+      if (cost.roundTripUsd == null || cost.exitFeeUsd == null) {
+        roundTripComplete = false;
+      } else {
+        totalRoundTripUsd += cost.roundTripUsd;
+        totalExitFeesUsd += cost.exitFeeUsd;
+      }
     }
     perLeg.push({ ...cost, pinned: true });
   }
@@ -303,7 +351,7 @@ export function computeStrategyRoundTrip(
     }
   }
 
-  const strategyClassification: StrategyBadge = !routable
+  const strategyClassification: StrategyBadge = !routable || !roundTripComplete
     ? 'unroutable'
     : classifyStrategy(totalRoundTripUsd, legs.length, totalQty);
 

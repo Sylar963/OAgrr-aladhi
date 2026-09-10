@@ -47,6 +47,9 @@ export class RealisticFillModel implements FillModel {
     }
 
     const topSize = this.resolveTopSize(side, book);
+    if (topSize <= 0) {
+      return { priceUsd: 0, filledQuantity: 0, slippageUsd: 0, partial: true };
+    }
     if (requestedQuantity <= topSize) {
       return {
         priceUsd: reference,
@@ -66,7 +69,7 @@ export class RealisticFillModel implements FillModel {
 
   private resolveTopSize(side: 'buy' | 'sell', book: QuoteBook): number {
     const raw = side === 'buy' ? book.askSize : book.bidSize;
-    if (raw != null && raw > 0) return raw;
+    if (raw != null) return Number.isFinite(raw) && raw > 0 ? raw : 0;
     return this.opts.assumedTopSizeWhenMissing * book.contractMultiplierBase;
   }
 
@@ -83,6 +86,14 @@ export class RealisticFillModel implements FillModel {
     let notional = 0;
     let filled = 0;
     for (const level of sorted) {
+      if (
+        !Number.isFinite(level.priceUsd) ||
+        level.priceUsd <= 0 ||
+        !Number.isFinite(level.size) ||
+        level.size <= 0
+      ) {
+        continue;
+      }
       if (remaining <= 0) break;
       const take = Math.min(remaining, level.size);
       notional += take * level.priceUsd;

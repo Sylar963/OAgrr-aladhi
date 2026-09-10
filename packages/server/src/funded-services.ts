@@ -40,6 +40,7 @@ async function closeAllFundedPositions(accountId: string): Promise<void> {
       expiry: pos.key.expiry,
       strike: pos.key.strike,
       quantity: Math.abs(pos.netQuantity),
+      quantityUnit: 'base',
       preferredVenues: null,
     }));
   if (legs.length === 0) return;

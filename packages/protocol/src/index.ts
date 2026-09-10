@@ -183,6 +183,7 @@ export {
   VenueIdSchema,
   type VenueQuote,
   type VenueExecutionQuote,
+  VenueExecutionQuoteSchema,
   type WsConnectionState,
   type WsSubscriptionRequest,
   WsSubscriptionRequestSchema,

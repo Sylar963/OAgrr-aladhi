@@ -96,13 +96,19 @@ Position folding (`applyFillToPosition` in `book/position.ts`) handles the four 
 
 ### PnL service
 
-`PnlService.snapshot(accountId)` pulls open positions and current cash, fetches a cross-venue average mark for each open position in parallel, and returns:
+`PnlService.snapshot(accountId)` pulls positions, fill economics, and current cash, fetches a cross-venue average mark for each non-flat position in parallel, and returns:
 
 ```
 equityUsd      = cashUsd + sum(netQuantity * markPriceUsd)           for positions with mark
 unrealizedUsd  = sum( netQuantity × (mark − avgEntryPriceUsd) )    for positions with mark
-realizedUsd    = sum(realizedPnlUsd)                                accrued through closes
+grossRealized  = sum(signed premium cash flow + netQuantity * avgEntryPriceUsd)
+realizedUsd    = grossRealized - feesUsd
+totalUsd       = realizedUsd + unrealizedUsd
 ```
+
+Fill history is authoritative for cumulative realized PnL and fees, including closed and reopened
+instruments. A position without fill history falls back to its persisted realized value with zero
+reconstructed fees.
 
 Unrealized PnL for a position is `null` when no venue has a current mark — this is surfaced to the client rather than silently zeroed.
 

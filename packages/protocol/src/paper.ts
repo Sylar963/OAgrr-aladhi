@@ -110,8 +110,10 @@ export interface PaperPositionDto {
   netQuantity: number;
   avgEntryPriceUsd: number;
   realizedPnlUsd: number;
+  feesUsd: number;
   markPriceUsd: number | null;
   unrealizedPnlUsd: number | null;
+  totalPnlUsd: number | null;
   openedAt: string;
   lastFillAt: string;
 }
@@ -120,6 +122,8 @@ export interface PaperPnlDto {
   cashUsd: number;
   realizedUsd: number;
   unrealizedUsd: number;
+  feesUsd: number;
+  totalUsd: number;
   equityUsd: number;
   generatedAt: string;
 }
@@ -188,6 +192,7 @@ export interface PaperTradeSummaryDto {
   realizedPnlUsd: number;
   unrealizedPnlUsd: number;
   totalPnlUsd: number;
+  feesUsd: number;
   openLegs: number;
   risk: PaperRiskDto;
 }

@@ -1,5 +1,10 @@
+import { instrumentKey } from '@oggregator/trading';
 import type { FastifyInstance } from 'fastify';
-import { positionRepository, quoteProvider } from '../../trading-services.js';
+import {
+  fillEconomicsRepository,
+  positionRepository,
+  quoteProvider,
+} from '../../trading-services.js';
 import { positionToDto } from './mappers.js';
 import { resolveScope } from './scope.js';
 
@@ -7,7 +12,11 @@ export async function paperPositionsRoute(app: FastifyInstance) {
   app.get('/paper/positions', async (req, reply) => {
     const accountId = await resolveScope(req, reply);
     if (accountId === null) return reply;
-    const positions = await positionRepository.listPositions(accountId);
+    const [positions, economics] = await Promise.all([
+      positionRepository.listPositions(accountId),
+      fillEconomicsRepository.listFillEconomics(accountId),
+    ]);
+    const economicsByInstrument = new Map(economics.map((row) => [instrumentKey(row), row]));
     const open = positions.filter((p) => p.netQuantity !== 0);
     const marks = await Promise.all(
       open.map(async (p) =>
@@ -20,7 +29,9 @@ export async function paperPositionsRoute(app: FastifyInstance) {
       ),
     );
     return {
-      positions: open.map((pos, idx) => positionToDto(pos, marks[idx] ?? null)),
+      positions: open.map((pos, idx) =>
+        positionToDto(pos, marks[idx] ?? null, economicsByInstrument.get(instrumentKey(pos.key))),
+      ),
     };
   });
 }

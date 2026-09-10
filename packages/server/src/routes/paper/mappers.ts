@@ -1,3 +1,4 @@
+import type { PaperTradeActivityRow, PaperTradeNoteRow } from '@oggregator/db';
 import type {
   PaperActivityDto,
   PaperFillDto,
@@ -6,8 +7,14 @@ import type {
   PaperPositionDto,
   PaperTradeNoteDto,
 } from '@oggregator/protocol';
-import type { PaperTradeActivityRow, PaperTradeNoteRow } from '@oggregator/db';
-import type { Fill, Order, PnlSnapshot, Position } from '@oggregator/trading';
+import {
+  computePositionPnl,
+  type Fill,
+  type FillEconomics,
+  type Order,
+  type PnlSnapshot,
+  type Position,
+} from '@oggregator/trading';
 
 export function orderToDto(order: Order): PaperOrderDto {
   return {
@@ -51,11 +58,9 @@ export function fillToDto(fill: Fill): PaperFillDto {
 export function positionToDto(
   pos: Position,
   markPriceUsd: number | null,
+  economics?: FillEconomics,
 ): PaperPositionDto {
-  const unrealized =
-    markPriceUsd != null
-      ? pos.netQuantity * (markPriceUsd - pos.avgEntryPriceUsd)
-      : null;
+  const pnl = computePositionPnl(pos, markPriceUsd, economics);
   return {
     underlying: pos.key.underlying,
     expiry: pos.key.expiry,
@@ -63,9 +68,11 @@ export function positionToDto(
     optionRight: pos.key.optionRight,
     netQuantity: pos.netQuantity,
     avgEntryPriceUsd: pos.avgEntryPriceUsd,
-    realizedPnlUsd: pos.realizedPnlUsd,
+    realizedPnlUsd: pnl.realizedUsd,
+    feesUsd: pnl.feesUsd,
     markPriceUsd,
-    unrealizedPnlUsd: unrealized,
+    unrealizedPnlUsd: pnl.unrealizedUsd,
+    totalPnlUsd: pnl.totalUsd,
     openedAt: pos.openedAt.toISOString(),
     lastFillAt: pos.lastFillAt.toISOString(),
   };
@@ -76,6 +83,8 @@ export function pnlToDto(snap: PnlSnapshot): PaperPnlDto {
     cashUsd: snap.cashUsd,
     realizedUsd: snap.realizedUsd,
     unrealizedUsd: snap.unrealizedUsd,
+    feesUsd: snap.feesUsd,
+    totalUsd: snap.totalUsd,
     equityUsd: snap.equityUsd,
     generatedAt: snap.generatedAt.toISOString(),
   };

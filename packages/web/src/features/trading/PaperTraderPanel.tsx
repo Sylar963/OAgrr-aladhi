@@ -167,8 +167,9 @@ export default function PaperTraderPanel({
               <div className={styles.metricGrid}>
                 <MetricCard label="Status" value={liveTrade.status.toUpperCase()} />
                 <MetricCard label="Net Premium" value={fmtUsd(liveTrade.netPremiumUsd)} />
+                <MetricCard label="Fees" value={fmtUsd(liveTrade.feesUsd)} />
                 <MetricCard
-                  label="Realized"
+                  label="Realized (net)"
                   value={fmtUsd(liveTrade.realizedPnlUsd)}
                   tone={tone(liveTrade.realizedPnlUsd)}
                 />
@@ -213,7 +214,7 @@ export default function PaperTraderPanel({
                       <td
                         className={`${styles.rightAlign} ${toneClass(leg.unrealizedPnlUsd) ? styles[toneClass(leg.unrealizedPnlUsd)!] : ''}`}
                       >
-                        {fmtUsd((leg.unrealizedPnlUsd ?? 0) + leg.realizedPnlUsd)}
+                        {fmtUsd(leg.totalPnlUsd)}
                       </td>
                     </tr>
                   ))}
@@ -363,7 +364,8 @@ export default function PaperTraderPanel({
                   <th>Opened</th>
                   <th>Closed</th>
                   <th className={styles.rightAlign}>Premium</th>
-                  <th className={styles.rightAlign}>Realized</th>
+                  <th className={styles.rightAlign}>Fees</th>
+                  <th className={styles.rightAlign}>Realized (net)</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,6 +380,7 @@ export default function PaperTraderPanel({
                     <td>{formatTs(trade.openedAt)}</td>
                     <td>{formatTs(trade.closedAt)}</td>
                     <td className={styles.rightAlign}>{fmtUsd(trade.netPremiumUsd)}</td>
+                    <td className={styles.rightAlign}>{fmtUsd(trade.feesUsd)}</td>
                     <td
                       className={`${styles.rightAlign} ${toneClass(trade.realizedPnlUsd) ? styles[toneClass(trade.realizedPnlUsd)!] : ''}`}
                     >

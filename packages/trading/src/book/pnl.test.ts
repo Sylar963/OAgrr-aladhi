@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computePositionPnl, computeSnapshot } from './pnl.js';
+import type { Fill } from './fill.js';
+import { aggregateFillEconomics, computePositionPnl, computeSnapshot } from './pnl.js';
 import type { Position } from './position.js';
 
 const BASE_KEY: Position['key'] = {
@@ -19,6 +20,33 @@ function makePos(netQuantity: number, avg: number, realized = 0): Position {
     realizedPnlUsd: realized,
     openedAt: new Date('2026-04-17T00:00:00Z'),
     lastFillAt: new Date('2026-04-17T00:00:00Z'),
+  };
+}
+
+function makeFill(side: Fill['side'], priceUsd: number, feesUsd: number): Fill {
+  return {
+    id: `${side}-${priceUsd}`,
+    orderId: 'ord',
+    legIndex: 0,
+    venue: 'deribit',
+    side,
+    optionRight: 'call',
+    underlying: 'BTC',
+    expiry: '2026-06-26',
+    strike: 70_000,
+    quantity: 1,
+    requestedQuantity: 1,
+    priceUsd,
+    iv: null,
+    feesUsd,
+    slippageUsd: 0,
+    partialFill: false,
+    benchmarkBidUsd: null,
+    benchmarkAskUsd: null,
+    benchmarkMidUsd: null,
+    underlyingSpotUsd: null,
+    source: 'paper',
+    filledAt: new Date('2026-04-17T00:00:00Z'),
   };
 }
 
@@ -46,6 +74,128 @@ describe('computePositionPnl', () => {
 });
 
 describe('computeSnapshot', () => {
+  it('aggregates signed premium cash flow and fees by instrument', () => {
+    const economics = aggregateFillEconomics([
+      makeFill('buy', 100, 5),
+      makeFill('sell', 120, 3),
+    ]);
+
+    expect(economics).toEqual([
+      {
+        underlying: 'BTC',
+        expiry: '2026-06-26',
+        strike: 70_000,
+        optionRight: 'call',
+        premiumCashFlowUsd: 20,
+        feesUsd: 8,
+      },
+    ]);
+  });
+
+  it('reports an opening fee as net realized and total PnL at an unchanged long mark', () => {
+    const snap = computeSnapshot(
+      [makePos(1, 100)],
+      new Map([['BTC|2026-06-26|70000|call', 100]]),
+      895,
+      new Date('2026-04-17'),
+      [
+        {
+          underlying: 'BTC',
+          expiry: '2026-06-26',
+          strike: 70_000,
+          optionRight: 'call',
+          premiumCashFlowUsd: -100,
+          feesUsd: 5,
+        },
+      ],
+    );
+
+    expect(snap.positions[0]).toMatchObject({
+      realizedUsd: -5,
+      unrealizedUsd: 0,
+      feesUsd: 5,
+      totalUsd: -5,
+    });
+    expect(snap).toMatchObject({
+      realizedUsd: -5,
+      unrealizedUsd: 0,
+      feesUsd: 5,
+      totalUsd: -5,
+      equityUsd: 995,
+    });
+  });
+
+  it('reports an opening fee at an unchanged short mark without changing equity twice', () => {
+    const snap = computeSnapshot(
+      [makePos(-1, 100)],
+      new Map([['BTC|2026-06-26|70000|call', 100]]),
+      1095,
+      new Date('2026-04-17'),
+      [
+        {
+          underlying: 'BTC',
+          expiry: '2026-06-26',
+          strike: 70_000,
+          optionRight: 'call',
+          premiumCashFlowUsd: 100,
+          feesUsd: 5,
+        },
+      ],
+    );
+
+    expect(snap).toMatchObject({ realizedUsd: -5, totalUsd: -5, equityUsd: 995 });
+  });
+
+  it('reconstructs net realized PnL for a partial close', () => {
+    const snap = computeSnapshot(
+      [makePos(1, 100, 20)],
+      new Map([['BTC|2026-06-26|70000|call', 120]]),
+      912,
+      new Date('2026-04-17'),
+      [
+        {
+          underlying: 'BTC',
+          expiry: '2026-06-26',
+          strike: 70_000,
+          optionRight: 'call',
+          premiumCashFlowUsd: -80,
+          feesUsd: 8,
+        },
+      ],
+    );
+
+    expect(snap.positions[0]).toMatchObject({ realizedUsd: 12, unrealizedUsd: 20, totalUsd: 32 });
+    expect(snap).toMatchObject({
+      realizedUsd: 12,
+      unrealizedUsd: 20,
+      feesUsd: 8,
+      totalUsd: 32,
+      equityUsd: 1032,
+    });
+  });
+
+  it('preserves lifetime realized PnL after a flat instrument is reopened', () => {
+    const snap = computeSnapshot(
+      [makePos(1, 90, 0)],
+      new Map([['BTC|2026-06-26|70000|call', 90]]),
+      924,
+      new Date('2026-04-17'),
+      [
+        {
+          underlying: 'BTC',
+          expiry: '2026-06-26',
+          strike: 70_000,
+          optionRight: 'call',
+          premiumCashFlowUsd: -70,
+          feesUsd: 6,
+        },
+      ],
+    );
+
+    expect(snap.positions[0]).toMatchObject({ realizedUsd: 14, feesUsd: 6, totalUsd: 14 });
+    expect(snap.equityUsd).toBe(1014);
+  });
+
   it('adds signed marked inventory to cash without adding realized PnL again', () => {
     const longPos = makePos(2, 1000, 50);
     const shortPos = { ...makePos(-1, 500), key: { ...BASE_KEY, strike: 80000 } };

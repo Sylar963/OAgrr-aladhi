@@ -1,6 +1,7 @@
 import type { AccountId } from '../book/account.js';
 import { computeSnapshot, type PnlSnapshot } from '../book/pnl.js';
 import type { Clock } from '../gateways/clock.js';
+import type { FillEconomicsRepository } from '../gateways/fill-economics-repository.js';
 import type { PositionRepository } from '../gateways/position-repository.js';
 import type { QuoteProvider } from '../gateways/quote-provider.js';
 
@@ -9,12 +10,14 @@ export class PnlService {
     private readonly positions: PositionRepository,
     private readonly quotes: QuoteProvider,
     private readonly clock: Clock,
+    private readonly economics: FillEconomicsRepository,
   ) {}
 
   async snapshot(accountId: AccountId): Promise<PnlSnapshot> {
-    const [open, cash] = await Promise.all([
+    const [open, cash, economics] = await Promise.all([
       this.positions.listPositions(accountId),
       this.positions.getCashBalance(accountId),
+      this.economics.listFillEconomics(accountId),
     ]);
 
     const marks = new Map<string, number | null>();
@@ -32,6 +35,6 @@ export class PnlService {
       }),
     );
 
-    return computeSnapshot(open, marks, cash, this.clock.now());
+    return computeSnapshot(open, marks, cash, this.clock.now(), economics);
   }
 }

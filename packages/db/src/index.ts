@@ -34,6 +34,7 @@ export { NoopOiSnapshotStore, PostgresOiSnapshotStore } from './oi-snapshot-stor
 export type {
   PaperAccountRow,
   PaperCashLedgerRow,
+  PaperFillEconomicsRow,
   PaperFillRow,
   PaperOrderRow,
   PaperPositionRow,

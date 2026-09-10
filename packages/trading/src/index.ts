@@ -26,8 +26,13 @@ export { fillCashDelta, newFillId } from './book/fill.js';
 export type { Position, PositionKey } from './book/position.js';
 export { applyFillToPosition, keyFromFill, positionKeyId } from './book/position.js';
 
-export type { PnlSnapshot, PositionMark, PositionPnl } from './book/pnl.js';
-export { computePositionPnl, computeSnapshot } from './book/pnl.js';
+export type { FillEconomics, PnlSnapshot, PositionMark, PositionPnl } from './book/pnl.js';
+export {
+  aggregateFillEconomics,
+  computePositionPnl,
+  computeSnapshot,
+  instrumentKey,
+} from './book/pnl.js';
 
 export {
   InsufficientCashError,
@@ -48,6 +53,7 @@ export type {
   QuoteProvider,
 } from './gateways/quote-provider.js';
 export type { FillEngine, LegFillPlan } from './gateways/fill-engine.js';
+export type { FillEconomicsRepository } from './gateways/fill-economics-repository.js';
 export type { FillModel, FillModelInput, FillModelQuote } from './gateways/fill-model.js';
 export type { OrderRepository } from './gateways/order-repository.js';
 export type { CashLedgerEntry, PositionRepository } from './gateways/position-repository.js';
@@ -87,4 +93,5 @@ export {
   type ApproximationMarginEngineOptions,
 } from './risk/approximation-margin-engine.js';
 export { PostgresOrderRepository } from './adapters/postgres-order-repository.js';
+export { PostgresFillEconomicsRepository } from './adapters/postgres-fill-economics-repository.js';
 export { PostgresPositionRepository } from './adapters/postgres-position-repository.js';

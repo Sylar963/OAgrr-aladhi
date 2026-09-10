@@ -19,6 +19,7 @@ import {
   OrderPlacementService,
   PaperFillEngine,
   PnlService,
+  PostgresFillEconomicsRepository,
   PostgresOrderRepository,
   PostgresPositionRepository,
   RealisticFillModel,
@@ -39,6 +40,7 @@ const clock = new SystemClock();
 const quoteProvider = new RuntimeQuoteProvider(chainEngines);
 const orderRepository = new PostgresOrderRepository(paperTradingStore);
 const positionRepository = new PostgresPositionRepository(paperTradingStore);
+const fillEconomicsRepository = new PostgresFillEconomicsRepository(paperTradingStore);
 
 // PAPER_FILL_MODE selects the slippage model. Default is 'realistic' so paper
 // fills experience depth/spread degradation similar to live execution. Set
@@ -60,7 +62,12 @@ const marginEngine: MarginEngine =
     ? new ApproximationMarginEngine(quoteProvider)
     : new NoopMarginEngine();
 
-export const pnlService = new PnlService(positionRepository, quoteProvider, clock);
+export const pnlService = new PnlService(
+  positionRepository,
+  quoteProvider,
+  clock,
+  fillEconomicsRepository,
+);
 
 export const orderPlacementService = new OrderPlacementService(
   orderRepository,
@@ -70,7 +77,7 @@ export const orderPlacementService = new OrderPlacementService(
   { marginEngine, pnlService },
 );
 
-export { orderRepository, positionRepository, quoteProvider };
+export { fillEconomicsRepository, orderRepository, positionRepository, quoteProvider };
 
 let ensured = false;
 

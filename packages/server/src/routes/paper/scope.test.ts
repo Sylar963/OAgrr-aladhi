@@ -7,18 +7,21 @@ const {
   fundedStoreMock,
   verifyClerkTokenMock,
   listTradeActivitiesMock,
+  listFillEconomicsMock,
 } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
   usersStoreMock: { getByClerkId: vi.fn(), upsertByClerkId: vi.fn() },
   fundedStoreMock: { enabled: true as boolean, listRunsForUser: vi.fn() },
   verifyClerkTokenMock: vi.fn(),
   listTradeActivitiesMock: vi.fn(),
+  listFillEconomicsMock: vi.fn(),
 }));
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
   usersStore: usersStoreMock,
   positionRepository: { listPositions: vi.fn().mockResolvedValue([]) },
+  fillEconomicsRepository: { listFillEconomics: listFillEconomicsMock },
   quoteProvider: { getMark: vi.fn().mockResolvedValue(null) },
 }));
 
@@ -61,6 +64,8 @@ describe('Paper account scoping (X-Paper-Account header)', () => {
     verifyClerkTokenMock.mockReset();
     listTradeActivitiesMock.mockReset();
     listTradeActivitiesMock.mockResolvedValue([]);
+    listFillEconomicsMock.mockReset();
+    listFillEconomicsMock.mockResolvedValue([]);
   });
 
   function authAs(userId: string, accountId: string): void {

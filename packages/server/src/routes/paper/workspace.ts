@@ -12,16 +12,19 @@ import type {
 } from '@oggregator/protocol';
 import { VENUE_IDS, type VenueId } from '@oggregator/core';
 import type {
+  PaperFillRow,
   PaperTradePositionRow,
   PaperTradeRow,
 } from '@oggregator/db';
 import type { EnrichedChainResponse, VenueQuote } from '@oggregator/protocol';
-import type { Fill, Order, Position } from '@oggregator/trading';
+import type { Fill, FillEconomics, Order, Position } from '@oggregator/trading';
 import {
   DEFAULT_ACCOUNT_ID,
+  aggregateFillEconomics,
   applyFill,
   applyFillToPosition,
   buildSettlementFill,
+  computePositionPnl,
   fillCashDelta,
   newClientOrderId,
   type OrderLeg,
@@ -228,6 +231,8 @@ export async function getPaperOverview(accountId?: string): Promise<PaperOvervie
       cashUsd: pnl.cashUsd,
       realizedUsd: pnl.realizedUsd,
       unrealizedUsd: pnl.unrealizedUsd,
+      feesUsd: pnl.feesUsd,
+      totalUsd: pnl.totalUsd,
       equityUsd: pnl.equityUsd,
       generatedAt: pnl.generatedAt.toISOString(),
     },
@@ -331,16 +336,15 @@ async function buildTradeDetail(
 ): Promise<PaperTradeDetailDto> {
   const includeActivity = options?.includeActivity ?? true;
   const includeNotes = options?.includeNotes ?? true;
-  const [tradePositions, linkedOrders, notes, activity, allFills] = await Promise.all([
+  const [tradePositions, linkedOrders, notes, activity, tradeFills] = await Promise.all([
     paperTradingStore.listTradePositions(trade.id),
     paperTradingStore.listTradeOrders(trade.id),
     includeNotes ? paperTradingStore.listTradeNotes(trade.id) : Promise.resolve([]),
     includeActivity
       ? paperTradingStore.listTradeActivities(trade.accountId, 50, trade.id)
       : Promise.resolve([]),
-    orderRepository.listFills(trade.accountId, 2_000),
+    paperTradingStore.listTradeFills(trade.id),
   ]);
-  const orderIds = linkedOrders.map((row) => row.orderId);
   const orders = await Promise.all(
     linkedOrders.map(async (row): Promise<PaperTradeOrderLinkDto | null> => {
       const order = await orderRepository.getOrder(row.orderId);
@@ -348,14 +352,22 @@ async function buildTradeDetail(
       return { intent: row.intent, order: orderToDto(order) };
     }),
   );
-  const tradeFills = allFills.filter((fill) => orderIds.includes(fill.orderId));
-  const fills = tradeFills.map(fillToDto);
-  const legMarketVenues = latestFillVenueByContract(tradeFills);
-  const legs = await enrichTradeLegs(tradePositions, cache, legMarketVenues);
-  const realizedPnlUsd = tradePositions.reduce((sum, leg) => sum + leg.realizedPnlUsd, 0);
+  const domainTradeFills = tradeFills.map(fillRowToFill);
+  const fills = domainTradeFills.map(fillToDto);
+  const legMarketVenues = latestFillVenueByContract(domainTradeFills);
+  const economics = aggregateFillEconomics(domainTradeFills);
+  const economicsByInstrument = new Map(economics.map((row) => [contractKey(row), row]));
+  const legs = await enrichTradeLegs(
+    tradePositions,
+    cache,
+    legMarketVenues,
+    economicsByInstrument,
+  );
+  const realizedPnlUsd = legs.reduce((sum, leg) => sum + leg.realizedPnlUsd, 0);
   const unrealizedPnlUsd = legs.reduce((sum, leg) => sum + (leg.unrealizedPnlUsd ?? 0), 0);
   const totalPnlUsd = realizedPnlUsd + unrealizedPnlUsd;
-  const netPremiumUsd = computeNetPremiumUsd(tradeFills);
+  const feesUsd = economics.reduce((sum, row) => sum + row.feesUsd, 0);
+  const netPremiumUsd = computeNetPremiumUsd(domainTradeFills);
   const currentSpotUsd = avg(
     legs
       .filter((leg) => leg.netQuantity !== 0)
@@ -389,6 +401,7 @@ async function buildTradeDetail(
     realizedPnlUsd,
     unrealizedPnlUsd,
     totalPnlUsd,
+    feesUsd,
     openLegs: legs.filter((leg) => leg.netQuantity !== 0).length,
     risk,
     legs,
@@ -403,10 +416,16 @@ async function enrichTradeLegs(
   rows: PaperTradePositionRow[],
   cache: Map<string, EnrichedChainResponse | null>,
   legMarketVenues: Map<string, VenueId>,
+  economicsByInstrument: Map<string, FillEconomics>,
 ): Promise<PaperTradeLegDto[]> {
   return Promise.all(
     rows.map(async (row) => {
       const market = await getLegMarketData(row, cache, legMarketVenues.get(contractKey(row)) ?? null);
+      const pnl = computePositionPnl(
+        tradeRowToPosition(row),
+        market.markPriceUsd,
+        economicsByInstrument.get(contractKey(row)),
+      );
       return {
         underlying: row.underlying,
         expiry: row.expiry,
@@ -414,12 +433,11 @@ async function enrichTradeLegs(
         optionRight: row.optionRight,
         netQuantity: row.netQuantity,
         avgEntryPriceUsd: row.avgEntryPriceUsd,
-        realizedPnlUsd: row.realizedPnlUsd,
+        realizedPnlUsd: pnl.realizedUsd,
+        feesUsd: pnl.feesUsd,
         markPriceUsd: market.markPriceUsd,
-        unrealizedPnlUsd:
-          market.markPriceUsd != null
-            ? row.netQuantity * (market.markPriceUsd - row.avgEntryPriceUsd)
-            : null,
+        unrealizedPnlUsd: pnl.unrealizedUsd,
+        totalPnlUsd: pnl.totalUsd,
         openedAt: row.openedAt.toISOString(),
         lastFillAt: row.lastFillAt.toISOString(),
         delta: market.delta,
@@ -514,6 +532,33 @@ async function getSnapshot(
 // and is not retroactively healed. Sign: positive = debit, negative = credit.
 export function computeNetPremiumUsd(fills: Fill[]): number {
   return fills.reduce((sum, fill) => sum - fillCashDelta(fill), 0);
+}
+
+function fillRowToFill(row: PaperFillRow): Fill {
+  return {
+    id: row.id,
+    orderId: row.orderId,
+    legIndex: row.legIndex,
+    venue: row.venue as VenueId,
+    side: row.side,
+    optionRight: row.optionRight,
+    underlying: row.underlying,
+    expiry: row.expiry,
+    strike: row.strike,
+    quantity: row.quantity,
+    requestedQuantity: row.requestedQuantity,
+    priceUsd: row.priceUsd,
+    iv: null,
+    feesUsd: row.feesUsd,
+    slippageUsd: row.slippageUsd,
+    partialFill: row.partialFill,
+    benchmarkBidUsd: row.benchmarkBidUsd,
+    benchmarkAskUsd: row.benchmarkAskUsd,
+    benchmarkMidUsd: row.benchmarkMidUsd,
+    underlyingSpotUsd: row.underlyingSpotUsd,
+    source: row.source,
+    filledAt: row.filledAt,
+  };
 }
 
 function latestFillVenueByContract(fills: Fill[]): Map<string, VenueId> {

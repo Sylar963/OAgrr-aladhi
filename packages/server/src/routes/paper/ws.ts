@@ -1,8 +1,19 @@
 import type { PaperWsServerMessage } from '@oggregator/protocol';
-import { computeSnapshot, DEFAULT_ACCOUNT_ID, type Position } from '@oggregator/trading';
+import {
+  computeSnapshot,
+  DEFAULT_ACCOUNT_ID,
+  type FillEconomics,
+  instrumentKey,
+  type Position,
+} from '@oggregator/trading';
 import type { FastifyInstance } from 'fastify';
 import { fundedStore } from '../../funded-services.js';
-import { paperTradingStore, positionRepository, quoteProvider } from '../../trading-services.js';
+import {
+  fillEconomicsRepository,
+  paperTradingStore,
+  positionRepository,
+  quoteProvider,
+} from '../../trading-services.js';
 import { getUserByToken } from '../../user-service.js';
 import { paperEvents } from './events.js';
 import { pnlToDto, positionToDto } from './mappers.js';
@@ -24,6 +35,7 @@ export async function paperWsRoute(app: FastifyInstance) {
   app.get('/ws/paper', { websocket: true }, async (socket, req) => {
     let disposed = false;
     let positions: Position[] = [];
+    let fillEconomics: FillEconomics[] = [];
     let cashBalance = 0;
     let accountStateLoaded = false;
     let refreshPromise: Promise<void> | null = null;
@@ -105,12 +117,14 @@ export async function paperWsRoute(app: FastifyInstance) {
           try {
             while (refreshQueued && !disposed) {
               refreshQueued = false;
-              const [nextPositions, nextCashBalance] = await Promise.all([
+              const [nextPositions, nextCashBalance, nextFillEconomics] = await Promise.all([
                 positionRepository.listPositions(accountId),
                 positionRepository.getCashBalance(accountId),
+                fillEconomicsRepository.listFillEconomics(accountId),
               ]);
               positions = nextPositions;
               cashBalance = nextCashBalance;
+              fillEconomics = nextFillEconomics;
               accountStateLoaded = true;
               refreshRetryAt = 0;
             }
@@ -131,6 +145,7 @@ export async function paperWsRoute(app: FastifyInstance) {
       pushing = true;
       const snapshotPositions = positions;
       const snapshotCashBalance = cashBalance;
+      const snapshotFillEconomics = fillEconomics;
       try {
         const open = snapshotPositions.filter((p) => p.netQuantity !== 0);
         const markValues = await Promise.all(
@@ -144,16 +159,29 @@ export async function paperWsRoute(app: FastifyInstance) {
           ),
         );
         const marks = new Map<string, number | null>();
+        const economicsByInstrument = new Map(
+          snapshotFillEconomics.map((row) => [instrumentKey(row), row]),
+        );
         for (const [index, position] of open.entries()) {
           marks.set(positionKey(position), markValues[index] ?? null);
         }
         send(socket, {
           type: 'positions',
           positions: open.map((position) =>
-            positionToDto(position, marks.get(positionKey(position)) ?? null),
+            positionToDto(
+              position,
+              marks.get(positionKey(position)) ?? null,
+              economicsByInstrument.get(instrumentKey(position.key)),
+            ),
           ),
         });
-        const pnl = computeSnapshot(snapshotPositions, marks, snapshotCashBalance, new Date());
+        const pnl = computeSnapshot(
+          snapshotPositions,
+          marks,
+          snapshotCashBalance,
+          new Date(),
+          snapshotFillEconomics,
+        );
         send(socket, { type: 'pnl', pnl: pnlToDto(pnl) });
       } catch {
       } finally {

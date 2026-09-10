@@ -47,7 +47,12 @@ export default function TradingView() {
         <HeaderStat label="Equity" value={fmtUsd(overview?.pnl.equityUsd ?? null)} />
         <HeaderStat label="Cash" value={fmtUsd(overview?.pnl.cashUsd ?? null)} />
         <HeaderStat
-          label="Realized PnL"
+          label="Total PnL"
+          value={fmtUsd(overview?.pnl.totalUsd ?? null)}
+          tone={tone(overview?.pnl.totalUsd)}
+        />
+        <HeaderStat
+          label="Realized (net)"
           value={fmtUsd(overview?.pnl.realizedUsd ?? null)}
           tone={tone(overview?.pnl.realizedUsd)}
         />
@@ -56,6 +61,7 @@ export default function TradingView() {
           value={fmtUsd(overview?.pnl.unrealizedUsd ?? null)}
           tone={tone(overview?.pnl.unrealizedUsd)}
         />
+        <HeaderStat label="Fees" value={fmtUsd(overview?.pnl.feesUsd ?? null)} />
         <HeaderStat label="Delta" value={fmtDelta(overview?.risk.delta ?? null)} />
         <HeaderStat label="Gamma" value={fmtNum(overview?.risk.gamma ?? null, 4)} />
         <HeaderStat label="Theta" value={fmtUsd(overview?.risk.theta ?? null)} />

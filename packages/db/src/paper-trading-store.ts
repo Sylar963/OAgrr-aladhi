@@ -53,6 +53,15 @@ export interface PaperFillRow {
   filledAt: Date;
 }
 
+export interface PaperFillEconomicsRow {
+  underlying: string;
+  expiry: string;
+  strike: number;
+  optionRight: 'call' | 'put';
+  premiumCashFlowUsd: number;
+  feesUsd: number;
+}
+
 export interface PaperSettlementPriceRow {
   underlying: string;
   expiry: string;
@@ -149,6 +158,8 @@ export interface PaperTradingStore {
 
   insertFills(rows: PaperFillRow[]): Promise<void>;
   listFills(accountId: string, limit: number): Promise<PaperFillRow[]>;
+  listFillEconomics(accountId: string): Promise<PaperFillEconomicsRow[]>;
+  listTradeFills(tradeId: string): Promise<PaperFillRow[]>;
 
   upsertPosition(row: PaperPositionRow): Promise<void>;
   listPositions(accountId: string): Promise<PaperPositionRow[]>;
@@ -205,6 +216,12 @@ export class NoopPaperTradingStore implements PaperTradingStore {
   }
   async insertFills(): Promise<void> {}
   async listFills(): Promise<PaperFillRow[]> {
+    return [];
+  }
+  async listFillEconomics(): Promise<PaperFillEconomicsRow[]> {
+    return [];
+  }
+  async listTradeFills(): Promise<PaperFillRow[]> {
     return [];
   }
   async upsertPosition(): Promise<void> {}
@@ -465,6 +482,38 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
        ORDER BY f.filled_at DESC
        LIMIT $2`,
       [accountId, limit],
+    );
+    return res.rows.map(mapFillRow);
+  }
+
+  async listFillEconomics(accountId: string): Promise<PaperFillEconomicsRow[]> {
+    const res = await this.pool.query<FillEconomicsRowDb>(
+      `SELECT
+         f.underlying,
+         f.expiry,
+         f.strike,
+         f.option_right,
+         SUM(CASE WHEN f.side = 'sell'
+           THEN f.price_usd * f.quantity
+           ELSE -f.price_usd * f.quantity
+         END)::text AS premium_cash_flow_usd,
+         SUM(f.fees_usd)::text AS fees_usd
+       FROM paper_fills f
+       JOIN paper_orders o ON o.id = f.order_id
+       WHERE o.account_id = $1
+       GROUP BY f.underlying, f.expiry, f.strike, f.option_right`,
+      [accountId],
+    );
+    return res.rows.map(mapFillEconomicsRow);
+  }
+
+  async listTradeFills(tradeId: string): Promise<PaperFillRow[]> {
+    const res = await this.pool.query<FillRowDb>(
+      `SELECT f.* FROM paper_fills f
+       JOIN paper_trade_orders t ON t.order_id = f.order_id
+       WHERE t.trade_id = $1
+       ORDER BY f.filled_at DESC`,
+      [tradeId],
     );
     return res.rows.map(mapFillRow);
   }
@@ -841,8 +890,17 @@ interface FillRowDb {
   benchmark_ask_usd: string | null;
   benchmark_mid_usd: string | null;
   underlying_spot_usd: string | null;
-  source: 'paper' | 'live';
+  source: 'paper' | 'live' | 'settlement';
   filled_at: Date;
+}
+
+interface FillEconomicsRowDb {
+  underlying: string;
+  expiry: Date | string;
+  strike: string;
+  option_right: 'call' | 'put';
+  premium_cash_flow_usd: string;
+  fees_usd: string;
 }
 
 interface TradeRowDb {
@@ -952,6 +1010,17 @@ function mapFillRow(row: FillRowDb): PaperFillRow {
     underlyingSpotUsd: row.underlying_spot_usd != null ? Number(row.underlying_spot_usd) : null,
     source: row.source,
     filledAt: row.filled_at,
+  };
+}
+
+function mapFillEconomicsRow(row: FillEconomicsRowDb): PaperFillEconomicsRow {
+  return {
+    underlying: row.underlying,
+    expiry: typeof row.expiry === 'string' ? row.expiry : toIsoDate(row.expiry),
+    strike: Number(row.strike),
+    optionRight: row.option_right,
+    premiumCashFlowUsd: Number(row.premium_cash_flow_usd),
+    feesUsd: Number(row.fees_usd),
   };
 }
 

@@ -186,6 +186,23 @@ describe('ChainRuntime', () => {
     expect(runtime.getSnapshot()?.data.strikes[0]?.call.venues.okx?.bid).toBe(200);
   });
 
+  it('rebuilds the projection for each explicit snapshot fetch', async () => {
+    fetchOptionChainMock
+      .mockResolvedValueOnce(makeChain(1_000, 100))
+      .mockResolvedValueOnce(makeChain(2_000, 200));
+
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const snapshot = await runtime.fetchSnapshotData();
+
+    expect(fetchOptionChainMock).toHaveBeenCalledTimes(2);
+    expect(snapshot.strikes[0]?.call.venues.okx?.bid).toBe(200);
+    await runtime.dispose();
+  });
+
   it('preserves deltas that arrive while a snapshot rebuild is in flight', async () => {
     const snapshotGate = deferred<VenueOptionChain>();
     fetchOptionChainMock.mockImplementationOnce(async () => snapshotGate.promise);

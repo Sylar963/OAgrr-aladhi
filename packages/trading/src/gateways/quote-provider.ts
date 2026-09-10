@@ -15,6 +15,7 @@ export interface QuoteBook {
   underlyingPriceUsd: number | null;
   /** Absolute USD taker fee per contract (not a rate). */
   feesTakerUsd: number;
+  asOfMs?: number | null;
   // Top-of-book sizes in contracts. Null when the venue feed does not surface
   // L1 depth (e.g. Deribit/OKX option tickers do not include sizes).
   bidSize: number | null;

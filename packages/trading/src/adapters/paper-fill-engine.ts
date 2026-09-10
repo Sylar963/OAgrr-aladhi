@@ -8,6 +8,8 @@ import type { FillModel } from '../gateways/fill-model.js';
 import type { QuoteBook, QuoteProvider } from '../gateways/quote-provider.js';
 import { OptimisticFillModel } from './optimistic-fill-model.js';
 
+const MAX_QUOTE_AGE_MS = 60_000;
+
 export class PaperFillEngine implements FillEngine {
   private readonly fillModel: FillModel;
 
@@ -20,6 +22,7 @@ export class PaperFillEngine implements FillEngine {
   }
 
   async executeOrder(order: Order, venueFilter: VenueId[]): Promise<Fill[]> {
+    const decisionAtMs = this.clock.now().getTime();
     const plans: Array<{
       leg: OrderLeg;
       venue: VenueId;
@@ -47,7 +50,7 @@ export class PaperFillEngine implements FillEngine {
         venues,
       );
 
-      const chosen = pickBestBook(books, leg.side);
+      const chosen = pickBestBook(books, leg.side, decisionAtMs);
       if (!chosen) {
         throw new NoLiquidityError(
           `No ${leg.side === 'buy' ? 'ask' : 'bid'} available for leg ${leg.index}`,
@@ -118,8 +121,12 @@ export class PaperFillEngine implements FillEngine {
 function pickBestBook(
   books: QuoteBook[],
   side: 'buy' | 'sell',
+  decisionAtMs: number,
 ): { book: QuoteBook } | null {
-  const priced = books.filter((b) => (side === 'buy' ? b.askUsd != null : b.bidUsd != null));
+  const priced = books.filter(
+    (book) =>
+      isFresh(book, decisionAtMs) && (side === 'buy' ? book.askUsd != null : book.bidUsd != null),
+  );
   if (priced.length === 0) return null;
   const sorted = [...priced].sort((a, b) => {
     const priceA = side === 'buy' ? a.askUsd! : -a.bidUsd!;
@@ -127,4 +134,15 @@ function pickBestBook(
     return priceA - priceB;
   });
   return { book: sorted[0]! };
+}
+
+function isFresh(book: QuoteBook, decisionAtMs: number): boolean {
+  const asOfMs = book.asOfMs;
+  return (
+    asOfMs != null &&
+    Number.isFinite(asOfMs) &&
+    asOfMs > 0 &&
+    asOfMs <= decisionAtMs &&
+    decisionAtMs - asOfMs <= MAX_QUOTE_AGE_MS
+  );
 }

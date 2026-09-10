@@ -62,7 +62,7 @@ executeOrder(order, venueFilter):
   for each leg in order.legs:
     venues = leg.preferredVenues ?? venueFilter
     books  = quoteProvider.getBooks(legKey, venues)   # top-of-book per venue
-    chosen = pickBestBook(books, leg.side)            # lowest ask / highest bid
+    chosen = pickBestFreshBook(books, leg.side)       # lowest ask / highest bid
     if chosen is null: throw NoLiquidityError(legIndex)
     priceUsd = chosen.ask (if buy) | chosen.bid (if sell)
     feesUsd  = priceUsd * quantity * chosen.feesTakerRate
@@ -75,11 +75,12 @@ Semantics worth knowing:
 - **All-or-nothing across legs.** If any leg has no quotable side on any permitted venue, the whole order throws `NoLiquidityError` and nothing is persisted. `OrderPlacementService` marks the order `rejected` and returns the error to the caller.
 - **Per-leg venue selection is independent.** Each leg picks its own best venue. A two-leg order may fill one leg on Deribit and the other on OKX, with per-leg `benchmarkBid/Ask/Mid` and `underlyingSpotUsd` recorded for later reconciliation.
 - **Fees.** `feesTakerRate` is per-venue per-quote, supplied by enrichment. Default fallback is `0.0003` (see `runtime-quote-provider.ts`). The fee is charged on notional premium, not on contracts.
-- **Timestamping.** A single `clock.now()` is used for all fills in an order. `SystemClock` is the production implementation; `FixedClock` is used in tests. There is no event-time vs. wall-time distinction and no attempt to model venue-side acknowledgment delay.
+- **Freshness.** Quote source timestamps must be valid, not in the future, and at most 60 seconds old at one decision time shared by all legs. Invalid or stale venues are excluded before price selection.
+- **Timestamping.** A single later `clock.now()` is used for all fills in an order. `SystemClock` is the production implementation; `FixedClock` is used in tests. Source quote time is checked for execution but is not yet persisted on fills, and venue-side acknowledgment delay is not modeled.
 
 ### Quote provider
 
-`RuntimeQuoteProvider` calls into `ChainRuntimeRegistry` from `@oggregator/core`, acquires a chain runtime for `(underlying, expiry, venues)`, reads the current snapshot, and extracts the `(strike, optionRight)` row. It returns the set of `QuoteBook` entries for venues that have a live quote at that strike — missing venues are simply omitted, not errored. `getMark()` averages the per-venue mids across all five venues.
+`RuntimeQuoteProvider` calls into `ChainRuntimeRegistry` from `@oggregator/core`, acquires a chain runtime for `(underlying, expiry, venues)`, rebuilds the projection from venue quote stores, and extracts the `(strike, optionRight)` row with each venue's source timestamp. It returns the set of `QuoteBook` entries for venues that have a quote at that strike; the fill engine applies its stricter execution-time freshness check. Missing venues are simply omitted, not errored. `getMark()` averages the per-venue mids across all venues.
 
 ### Order placement service
 

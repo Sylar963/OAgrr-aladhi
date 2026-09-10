@@ -220,9 +220,6 @@ export class ChainRuntime {
 
   async fetchSnapshotData(): Promise<EnrichedChainResponse> {
     await this.ready();
-    const current = this.currentSnapshot;
-    if (current != null) return current.data;
-
     await this.buildSnapshot();
     const refreshed = this.currentSnapshot;
     return refreshed != null ? refreshed.data : this.projection.loadSnapshot([]);

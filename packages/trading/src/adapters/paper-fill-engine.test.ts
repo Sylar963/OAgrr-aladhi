@@ -27,6 +27,7 @@ function book(overrides: Partial<QuoteBook>): QuoteBook {
     feesTakerUsd: 0,
     bidSize: null,
     askSize: null,
+    asOfMs: Date.parse('2026-04-23T00:00:00Z'),
     ...overrides,
   };
 }
@@ -56,6 +57,95 @@ function order(legs: Array<Omit<OrderLeg, 'index'>>): Order {
 const clock = new FixedClock(new Date('2026-04-23T00:00:00Z'));
 
 describe('PaperFillEngine', () => {
+  it.each([
+    ['missing', null],
+    ['zero', 0],
+    ['non-finite', Number.NaN],
+    ['future', Date.parse('2026-04-23T00:00:00.001Z')],
+    ['stale', Date.parse('2026-04-22T23:58:59.999Z')],
+  ])('rejects a quote with a %s source timestamp', async (_case, asOfMs) => {
+    const quotes = single(new Map([[78_000, book({ askUsd: 100, asOfMs })]]));
+    const engine = new PaperFillEngine(quotes, clock);
+
+    await expect(
+      engine.executeOrder(
+        order([
+          {
+            side: 'buy',
+            optionRight: 'call',
+            underlying: 'BTC',
+            expiry: '2026-05-29',
+            strike: 78_000,
+            quantity: 1,
+            preferredVenues: null,
+          },
+        ]),
+        [],
+      ),
+    ).rejects.toMatchObject({ code: 'NO_LIQUIDITY', legIndex: 0 });
+  });
+
+  it('accepts a quote exactly at the maximum age', async () => {
+    const quotes = single(
+      new Map([[78_000, book({ askUsd: 100, asOfMs: Date.parse('2026-04-22T23:59:00.000Z') })]]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 1,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]?.priceUsd).toBe(100);
+  });
+
+  it('selects a fresh venue instead of a better-priced stale venue', async () => {
+    const quotes = new StubQuotes(
+      new Map([
+        [
+          78_000,
+          [
+            book({
+              venue: 'okx' as VenueId,
+              askUsd: 90,
+              asOfMs: Date.parse('2026-04-22T23:58:59.999Z'),
+            }),
+            book({ venue: 'deribit' as VenueId, askUsd: 100 }),
+          ],
+        ],
+      ]),
+    );
+    const engine = new PaperFillEngine(quotes, clock);
+
+    const fills = await engine.executeOrder(
+      order([
+        {
+          side: 'buy',
+          optionRight: 'call',
+          underlying: 'BTC',
+          expiry: '2026-05-29',
+          strike: 78_000,
+          quantity: 1,
+          preferredVenues: null,
+        },
+      ]),
+      [],
+    );
+
+    expect(fills[0]?.venue).toBe('deribit');
+    expect(fills[0]?.priceUsd).toBe(100);
+  });
+
   it('applies fees as USD-per-contract × quantity, not price × rate', async () => {
     const quotes = single(
       new Map([[78_000, book({ bidUsd: 3_000, askUsd: 3_095, feesTakerUsd: 23.4 })]]),

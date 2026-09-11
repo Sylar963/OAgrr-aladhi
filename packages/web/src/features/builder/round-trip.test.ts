@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { VenueExecution, OrderSide } from './types';
 import {
+  autoPickVenue,
+  buildLegQuotes,
   classifyPerLeg,
   classifyStrategy,
   computeQuoteCost,
   computeStrategyRoundTrip,
   deriveAutoRouting,
-  autoPickVenue,
-  buildLegQuotes,
   type LegInput,
 } from './round-trip';
+import type { OrderSide, VenueExecution } from './types';
 
 function exec(overrides: Partial<VenueExecution> & Pick<VenueExecution, 'venue'>): VenueExecution {
   return {
@@ -82,7 +82,13 @@ describe('classifyStrategy', () => {
 
 describe('computeQuoteCost', () => {
   it('computes round-trip for buy leg crossing ask, exiting at bid', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
+    const v = exec({
+      venue: 'deribit',
+      bidPrice: 100,
+      askPrice: 102,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
 
     expect(cost.entryPrice).toBe(102);
@@ -93,14 +99,26 @@ describe('computeQuoteCost', () => {
   });
 
   it('round-trip is symmetric for sell direction', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
+    const v = exec({
+      venue: 'deribit',
+      bidPrice: 100,
+      askPrice: 102,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    });
     const buy = computeQuoteCost(v, 'buy', 1, 'leg1');
     const sell = computeQuoteCost(v, 'sell', 1, 'leg1');
     expect(buy.roundTripUsd).toBe(sell.roundTripUsd);
   });
 
   it('includes entry and exit fees in round-trip', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0.1, askTakerFeeUsd: 0.102 });
+    const v = exec({
+      venue: 'deribit',
+      bidPrice: 100,
+      askPrice: 102,
+      bidTakerFeeUsd: 0.1,
+      askTakerFeeUsd: 0.102,
+    });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
     // spread 2 + entryFee 0.102 + exitFee 0.100 = 2.202
     expect(cost.entryFeeUsd).toBeCloseTo(0.102, 5);
@@ -109,7 +127,13 @@ describe('computeQuoteCost', () => {
   });
 
   it('scales with quantity but classification stays per base unit', () => {
-    const v = exec({ venue: 'deribit', bidPrice: 100, askPrice: 102, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
+    const v = exec({
+      venue: 'deribit',
+      bidPrice: 100,
+      askPrice: 102,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    });
     const single = computeQuoteCost(v, 'buy', 1, 'leg1');
     const ten = computeQuoteCost(v, 'buy', 10, 'leg1');
     expect(ten.roundTripUsd).toBe(single.roundTripUsd! * 10);
@@ -148,17 +172,46 @@ describe('computeQuoteCost', () => {
   });
 
   it('classifies wide spread as excessive', () => {
-    const v = exec({ venue: 'okx', bidPrice: 100, askPrice: 110, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 });
+    const v = exec({
+      venue: 'okx',
+      bidPrice: 100,
+      askPrice: 110,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    });
     const cost = computeQuoteCost(v, 'buy', 1, 'leg1');
     expect(cost.roundTripPerBase).toBe(10);
     expect(cost.classification).toBe('excessive');
+  });
+
+  it('rejects below-minimum and off-step base quantities', () => {
+    const venue = exec({ venue: 'okx', minQty: 0.01, quantityStep: 0.01 });
+
+    expect(computeQuoteCost(venue, 'buy', 0.005, 'leg1').entryFeeUsd).toBeNull();
+    expect(computeQuoteCost(venue, 'buy', 0.015, 'leg1').entryFeeUsd).toBeNull();
+  });
+
+  it('retains an executable entry when the opposite quote is unavailable', () => {
+    const cost = computeQuoteCost(
+      exec({ venue: 'okx', bidPrice: null, bidTakerFeeUsd: null }),
+      'buy',
+      0.05,
+      'leg1',
+    );
+
+    expect(cost.entryPrice).toBe(102);
+    expect(cost.entryFeeUsd).not.toBeNull();
+    expect(cost.roundTripUsd).toBeNull();
   });
 });
 
 describe('autoPickVenue', () => {
   it('prefers fillable cheapest round-trip', () => {
     const leg = legInput('l1', 'buy', 1, [
-      { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 102, bidPrice: 100, askSize: 5 }) },
+      {
+        venue: 'deribit',
+        exec: exec({ venue: 'deribit', askPrice: 102, bidPrice: 100, askSize: 5 }),
+      },
       { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 101, bidPrice: 99, askSize: 0.1 }) },
     ]);
     const quotes = buildLegQuotes(leg);
@@ -167,7 +220,10 @@ describe('autoPickVenue', () => {
 
   it('falls back to best-effort when no venue is fillable', () => {
     const leg = legInput('l1', 'buy', 100, [
-      { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 110, bidPrice: 100, askSize: 1 }) },
+      {
+        venue: 'deribit',
+        exec: exec({ venue: 'deribit', askPrice: 110, bidPrice: 100, askSize: 1 }),
+      },
       { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 105, bidPrice: 100, askSize: 1 }) },
     ]);
     const quotes = buildLegQuotes(leg);
@@ -181,16 +237,58 @@ describe('autoPickVenue', () => {
     const quotes = buildLegQuotes(leg);
     expect(autoPickVenue(quotes, 'buy', 1)).toBeNull();
   });
+
+  it('ranks entry quotes by fee-inclusive cost', () => {
+    const leg = legInput('l1', 'buy', 1, [
+      {
+        venue: 'okx',
+        exec: exec({ venue: 'okx', askPrice: 100, askTakerFeeUsd: 10 }),
+      },
+      {
+        venue: 'deribit',
+        exec: exec({ venue: 'deribit', askPrice: 105, askTakerFeeUsd: 0 }),
+      },
+    ]);
+
+    expect(autoPickVenue(buildLegQuotes(leg), 'buy', 1)).toBe('deribit');
+  });
+
+  it('breaks equal-cost ties by venue ID', () => {
+    const leg = legInput('l1', 'buy', 1, [
+      { venue: 'okx', exec: exec({ venue: 'okx' }) },
+      { venue: 'deribit', exec: exec({ venue: 'deribit' }) },
+    ]);
+
+    expect(autoPickVenue(buildLegQuotes(leg), 'buy', 1)).toBe('deribit');
+  });
 });
 
 describe('computeStrategyRoundTrip', () => {
   it('aggregates per-leg round-trips and classifies the strategy', () => {
     const legs: LegInput[] = [
       legInput('l1', 'buy', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 645, bidPrice: 640, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }) },
+        {
+          venue: 'deribit',
+          exec: exec({
+            venue: 'deribit',
+            askPrice: 645,
+            bidPrice: 640,
+            bidTakerFeeUsd: 0,
+            askTakerFeeUsd: 0,
+          }),
+        },
       ]),
       legInput('l2', 'sell', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 280, bidPrice: 277, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }) },
+        {
+          venue: 'deribit',
+          exec: exec({
+            venue: 'deribit',
+            askPrice: 280,
+            bidPrice: 277,
+            bidTakerFeeUsd: 0,
+            askTakerFeeUsd: 0,
+          }),
+        },
       ]),
     ];
     const routing = deriveAutoRouting(legs);
@@ -198,7 +296,7 @@ describe('computeStrategyRoundTrip', () => {
 
     expect(result.routable).toBe(true);
     expect(result.totalRoundTripUsd).toBeCloseTo(8, 5); // 5 + 3
-    expect(result.strategyClassification).toBe('elevated'); // $5/contract worst leg is at ELEVATED upper bound
+    expect(result.strategyClassification).toBe('elevated');
     expect(result.worstLeg?.legId).toBe('l1');
   });
 
@@ -214,11 +312,38 @@ describe('computeStrategyRoundTrip', () => {
     expect(result.strategyClassification).toBe('unroutable');
   });
 
+  it('keeps a one-sided entry routable while marking round-trip data incomplete', () => {
+    const legs = [
+      legInput('l1', 'buy', 0.05, [
+        {
+          venue: 'okx',
+          exec: exec({ venue: 'okx', bidPrice: null, bidTakerFeeUsd: null }),
+        },
+      ]),
+    ];
+    const result = computeStrategyRoundTrip(legs, deriveAutoRouting(legs));
+
+    expect(result.routable).toBe(true);
+    expect(result.roundTripComplete).toBe(false);
+  });
+
   it('promotes strategy badge to worst leg when total averages down', () => {
     // 4 cheap legs + 1 toxic leg: linear-scaled total might be OK,
     // but the toxic leg should bubble up to the strategy verdict.
-    const cheap = exec({ venue: 'deribit', askPrice: 100, bidPrice: 99.5, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }); // $0.50/base unit
-    const toxic = exec({ venue: 'okx', askPrice: 100, bidPrice: 90, bidTakerFeeUsd: 0, askTakerFeeUsd: 0 }); // $10/base unit → excessive
+    const cheap = exec({
+      venue: 'deribit',
+      askPrice: 100,
+      bidPrice: 99.5,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    }); // $0.50/base unit
+    const toxic = exec({
+      venue: 'okx',
+      askPrice: 100,
+      bidPrice: 90,
+      bidTakerFeeUsd: 0,
+      askTakerFeeUsd: 0,
+    }); // $10/base unit → excessive
 
     const legs: LegInput[] = [
       legInput('a', 'buy', 1, [{ venue: 'deribit', exec: cheap }]),
@@ -230,7 +355,7 @@ describe('computeStrategyRoundTrip', () => {
     const routing = deriveAutoRouting(legs);
     const result = computeStrategyRoundTrip(legs, routing);
 
-    // Total per contract: (0.5*4 + 10) / 5 = 2.4 → would classify as elevated linearly,
+    // Total per base unit: (0.5*4 + 10) / 5 = 2.4 would classify as elevated,
     // but worst leg is excessive → must bubble up.
     expect(result.strategyClassification).toBe('excessive');
     expect(result.worstLeg?.legId).toBe('e');
@@ -255,11 +380,17 @@ describe('deriveAutoRouting', () => {
   it('picks best-fillable venue for each leg', () => {
     const legs: LegInput[] = [
       legInput('l1', 'buy', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 102, bidPrice: 100, askSize: 5 }) },
+        {
+          venue: 'deribit',
+          exec: exec({ venue: 'deribit', askPrice: 102, bidPrice: 100, askSize: 5 }),
+        },
         { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 101, bidPrice: 100, askSize: 0.1 }) },
       ]),
       legInput('l2', 'sell', 1, [
-        { venue: 'deribit', exec: exec({ venue: 'deribit', askPrice: 50, bidPrice: 48, bidSize: 5 }) },
+        {
+          venue: 'deribit',
+          exec: exec({ venue: 'deribit', askPrice: 50, bidPrice: 48, bidSize: 5 }),
+        },
         { venue: 'okx', exec: exec({ venue: 'okx', askPrice: 50, bidPrice: 49, bidSize: 5 }) },
       ]),
     ];

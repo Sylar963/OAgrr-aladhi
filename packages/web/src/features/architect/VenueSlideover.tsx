@@ -1,21 +1,20 @@
-import { useMemo, useState } from 'react';
-
-import type { Leg } from './payoff';
-import type { EnrichedChainResponse } from '@shared/enriched';
-import type { VenueId } from '@oggregator/protocol';
-import { VENUES } from '@lib/venue-meta';
-import { fmtUsd, formatExpiry } from '@lib/format';
-import type { VenueExecution } from '@features/builder/types';
 import {
+  buildLegQuotes,
   computeStrategyRoundTrip,
   deriveAutoRouting,
-  buildLegQuotes,
   type LegInput,
-  type StrategyRouting,
   type PerLegBadge,
-  type StrategyBadge,
   type PerLegRoundTripQuote,
+  type StrategyBadge,
+  type StrategyRouting,
 } from '@features/builder/round-trip';
+import type { VenueExecution } from '@features/builder/types';
+import { fmtUsd, formatExpiry } from '@lib/format';
+import { VENUES } from '@lib/venue-meta';
+import type { VenueId } from '@oggregator/protocol';
+import type { EnrichedChainResponse } from '@shared/enriched';
+import { useMemo, useState } from 'react';
+import type { Leg } from './payoff';
 import { detectStrategy } from './payoff';
 import styles from './VenueSlideover.module.css';
 
@@ -125,10 +124,7 @@ export default function VenueSlideover({
   }, [legInputs, routing]);
 
   const strategy = useMemo(
-    () =>
-      legInputs.length > 0
-        ? computeStrategyRoundTrip(legInputs, effectiveRouting)
-        : null,
+    () => (legInputs.length > 0 ? computeStrategyRoundTrip(legInputs, effectiveRouting) : null),
     [effectiveRouting, legInputs],
   );
 
@@ -141,7 +137,10 @@ export default function VenueSlideover({
         legs: Object.fromEntries(
           legInputs.map((leg) => [
             leg.legId,
-            { venue: venueId, pickedSide: leg.direction === 'buy' ? ('ask' as const) : ('bid' as const) },
+            {
+              venue: venueId,
+              pickedSide: leg.direction === 'buy' ? ('ask' as const) : ('bid' as const),
+            },
           ]),
         ),
       };
@@ -154,6 +153,7 @@ export default function VenueSlideover({
         totalEntryFeesUsd: r.totalEntryFeesUsd,
         totalExitFeesUsd: r.totalExitFeesUsd,
         classification: r.strategyClassification,
+        roundTripComplete: r.roundTripComplete,
       };
     });
   }, [activeVenues, legInputs]);
@@ -161,6 +161,7 @@ export default function VenueSlideover({
   const sortedVenues = useMemo(() => {
     return [...venueRanking].sort((a, b) => {
       if (a.available !== b.available) return a.available ? -1 : 1;
+      if (a.roundTripComplete !== b.roundTripComplete) return a.roundTripComplete ? -1 : 1;
       return a.totalRoundTripUsd - b.totalRoundTripUsd;
     });
   }, [venueRanking]);
@@ -228,10 +229,7 @@ export default function VenueSlideover({
       </div>
 
       {strategy && (
-        <div
-          className={styles.summary}
-          data-class={strategy.strategyClassification}
-        >
+        <div className={styles.summary} data-class={strategy.strategyClassification}>
           <div className={styles.summaryTopRow}>
             <div className={styles.summaryCol}>
               <span className={styles.summaryLabel}>Net entry</span>
@@ -247,17 +245,16 @@ export default function VenueSlideover({
             <div className={styles.summaryCol}>
               <span className={styles.summaryLabel}>Round-trip</span>
               <span className={styles.summaryVal} data-rt-class={strategy.strategyClassification}>
-                {fmtUsd(strategy.totalRoundTripUsd)}
+                {strategy.roundTripComplete ? fmtUsd(strategy.totalRoundTripUsd) : 'N/A'}
               </span>
             </div>
-            <span
-              className={styles.viabilityBadge}
-              data-class={strategy.strategyClassification}
-            >
-              {BADGE_LABEL[strategy.strategyClassification]}
+            <span className={styles.viabilityBadge} data-class={strategy.strategyClassification}>
+              {strategy.roundTripComplete
+                ? BADGE_LABEL[strategy.strategyClassification]
+                : 'ENTRY ONLY'}
             </span>
           </div>
-          {strategy.worstLeg && strategy.worstLeg.classification && legs.length > 1 && (
+          {strategy.worstLeg?.classification && legs.length > 1 && (
             <div className={styles.worstLegRow}>
               Worst leg:{' '}
               <span className={styles.worstLegMeta}>
@@ -275,8 +272,8 @@ export default function VenueSlideover({
           )}
           {!strategy.routable && (
             <div className={styles.unroutableNote}>
-              One or more legs have no quote on the pinned venue. Pick another venue or check
-              market data.
+              One or more legs have no quote on the pinned venue. Pick another venue or check market
+              data.
             </div>
           )}
         </div>
@@ -314,7 +311,7 @@ export default function VenueSlideover({
                   {vc.available ? (
                     <>
                       <span className={styles.venueRt} data-class={vc.classification}>
-                        RT {fmtUsd(vc.totalRoundTripUsd)}
+                        RT {vc.roundTripComplete ? fmtUsd(vc.totalRoundTripUsd) : 'N/A'}
                       </span>
                       <span className={styles.venueSub}>
                         entry {fmtUsd(vc.netEntryUsd)} · fees{' '}
@@ -338,13 +335,15 @@ export default function VenueSlideover({
       {expandedVenueSummary?.available && (
         <div className={styles.listAction}>
           <span className={styles.listActionLabel}>
-            Selected single-route venue: {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+            Selected single-route venue:{' '}
+            {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
           </span>
           <button
             className={styles.useAllBtn}
             onClick={() => pinAllToVenue(expandedVenueSummary.venue)}
           >
-            Pin every leg to {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+            Pin every leg to{' '}
+            {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
           </button>
         </div>
       )}
@@ -393,7 +392,7 @@ export default function VenueSlideover({
                 {quotes.map((q) => {
                   const meta = VENUES[q.venue];
                   const pinned = pin?.venue === q.venue;
-                  const unavailable = q.entryPrice == null;
+                  const unavailable = q.entryPrice == null || q.entryFeeUsd == null;
                   return (
                     <button
                       key={q.venue}
@@ -428,10 +427,7 @@ export default function VenueSlideover({
                         {fmtSize(q.askSize)}
                         {q.slippageWarning && <span className={styles.slipFlag}>⚠</span>}
                       </span>
-                      <span
-                        className={styles.legCellRt}
-                        data-class={q.classification ?? undefined}
-                      >
+                      <span className={styles.legCellRt} data-class={q.classification ?? undefined}>
                         {q.roundTripUsd != null ? fmtUsd(q.roundTripUsd) : '—'}
                       </span>
                     </button>
@@ -461,4 +457,4 @@ export default function VenueSlideover({
   );
 }
 
-export type { PerLegBadge, StrategyBadge, PerLegRoundTripQuote };
+export type { PerLegBadge, PerLegRoundTripQuote, StrategyBadge };

@@ -1,4 +1,4 @@
-import type { VenueExecution, OrderSide } from './types';
+import type { OrderSide, VenueExecution } from './types';
 
 export type PerLegBadge = 'ok' | 'elevated' | 'high' | 'excessive';
 export type StrategyBadge = PerLegBadge | 'unroutable';
@@ -56,6 +56,7 @@ export interface StrategyRoundTrip {
   worstLeg: PerLegRoundTrip | null;
   strategyClassification: StrategyBadge;
   routable: boolean;
+  roundTripComplete: boolean;
 }
 
 const PER_LEG_THRESHOLDS = {
@@ -110,6 +111,11 @@ export function computeQuoteCost(
   const steps = quantity / exec.quantityStep;
   const quantityValid =
     Number.isFinite(quantity) &&
+    quantity > 0 &&
+    Number.isFinite(exec.minQty) &&
+    exec.minQty > 0 &&
+    Number.isFinite(exec.quantityStep) &&
+    exec.quantityStep > 0 &&
     quantity >= exec.minQty &&
     Number.isFinite(steps) &&
     Math.abs(steps - Math.round(steps)) <= 1e-9 * Math.max(1, Math.abs(steps));
@@ -145,8 +151,7 @@ export function computeQuoteCost(
 
   const entryFeeUsd = entryFee * quantity;
   const fillable = sizeAtEntry == null ? true : quantity <= sizeAtEntry;
-  const slippageWarning =
-    sizeAtEntry != null && sizeAtEntry > 0 && quantity > sizeAtEntry * 0.8;
+  const slippageWarning = sizeAtEntry != null && sizeAtEntry > 0 && quantity > sizeAtEntry * 0.8;
   if (
     exitPrice == null ||
     !Number.isFinite(exitPrice) ||
@@ -221,17 +226,14 @@ export function autoPickVenue(
     const qScore =
       q.entryPrice! * quantity + (direction === 'buy' ? q.entryFeeUsd! : -q.entryFeeUsd!);
     const bestScore =
-      best.entryPrice! * quantity +
-      (direction === 'buy' ? best.entryFeeUsd! : -best.entryFeeUsd!);
-    if (direction === 'buy' ? qScore < bestScore : qScore > bestScore) best = q;
+      best.entryPrice! * quantity + (direction === 'buy' ? best.entryFeeUsd! : -best.entryFeeUsd!);
+    const betterPrice = direction === 'buy' ? qScore < bestScore : qScore > bestScore;
+    if (betterPrice || (qScore === bestScore && q.venue.localeCompare(best.venue) < 0)) best = q;
   }
   return best.venue;
 }
 
-function findRoutingPin(
-  legs: LegInput[],
-  routing: StrategyRouting,
-): Record<string, RoutingPin> {
+function findRoutingPin(legs: LegInput[], routing: StrategyRouting): Record<string, RoutingPin> {
   const out: Record<string, RoutingPin> = {};
   for (const leg of legs) {
     const existing = routing.legs[leg.legId];
@@ -326,9 +328,7 @@ export function computeStrategyRoundTrip(
       routable = false;
     } else {
       const signedEntry =
-        leg.direction === 'buy'
-          ? -cost.entryPrice * leg.quantity
-          : cost.entryPrice * leg.quantity;
+        leg.direction === 'buy' ? -cost.entryPrice * leg.quantity : cost.entryPrice * leg.quantity;
       netEntryUsd += signedEntry;
       totalEntryFeesUsd += cost.entryFeeUsd;
       if (cost.roundTripUsd == null || cost.exitFeeUsd == null) {
@@ -351,9 +351,10 @@ export function computeStrategyRoundTrip(
     }
   }
 
-  const strategyClassification: StrategyBadge = !routable || !roundTripComplete
-    ? 'unroutable'
-    : classifyStrategy(totalRoundTripUsd, legs.length, totalQty);
+  const strategyClassification: StrategyBadge =
+    !routable || !roundTripComplete
+      ? 'unroutable'
+      : classifyStrategy(totalRoundTripUsd, legs.length, totalQty);
 
   // The strategy's verdict should be the worse of (linear-scaled total) and (worst leg)
   // so a single toxic leg cannot be averaged away by cheap legs.
@@ -373,5 +374,6 @@ export function computeStrategyRoundTrip(
     worstLeg,
     strategyClassification: finalClass,
     routable,
+    roundTripComplete,
   };
 }

@@ -1,7 +1,7 @@
 import type { VenueId } from '@oggregator/core';
-import { newFillId, type Fill } from '../book/fill.js';
-import type { Order, OrderLeg } from '../book/order.js';
 import { NoLiquidityError } from '../book/errors.js';
+import { type Fill, newFillId } from '../book/fill.js';
+import type { Order, OrderLeg } from '../book/order.js';
 import type { Clock } from '../gateways/clock.js';
 import type { FillEngine } from '../gateways/fill-engine.js';
 import type { FillModel } from '../gateways/fill-model.js';
@@ -83,7 +83,7 @@ export class PaperFillEngine implements FillEngine {
         priceUsd: quote.priceUsd,
         filledQuantity: quote.filledQuantity,
         slippageUsd: quote.slippageUsd,
-        partialFill: quote.partial,
+        partialFill: quote.filledQuantity < leg.quantity - 1e-9 * Math.max(1, leg.quantity),
         feesUsd,
         benchmarkBidUsd: chosen.book.bidUsd,
         benchmarkAskUsd: chosen.book.askUsd,

@@ -16,12 +16,29 @@ export function contractToExecution(
     !isPositiveFinite(nativeMin) ||
     !isPositiveFinite(nativeStep) ||
     !isPositiveFinite(nativeTick) ||
+    !contract.settle ||
     bidFees == null ||
     askFees == null ||
     !isNonnegativeFinite(bidFees.maker) ||
     !isNonnegativeFinite(bidFees.taker) ||
     !isNonnegativeFinite(askFees.maker) ||
     !isNonnegativeFinite(askFees.taker)
+  ) {
+    return null;
+  }
+  const minQuantity = nativeMin * multiplier;
+  const quantityStep = nativeStep * multiplier;
+  const bidMakerFeeUsd = bidFees.maker / multiplier;
+  const bidTakerFeeUsd = bidFees.taker / multiplier;
+  const askMakerFeeUsd = askFees.maker / multiplier;
+  const askTakerFeeUsd = askFees.taker / multiplier;
+  if (
+    !isPositiveFinite(minQuantity) ||
+    !isPositiveFinite(quantityStep) ||
+    !isNonnegativeFinite(bidMakerFeeUsd) ||
+    !isNonnegativeFinite(bidTakerFeeUsd) ||
+    !isNonnegativeFinite(askMakerFeeUsd) ||
+    !isNonnegativeFinite(askTakerFeeUsd)
   ) {
     return null;
   }
@@ -40,13 +57,13 @@ export function contractToExecution(
     delta: contract.greeks.delta,
     contractSize: 1,
     tickSize: nativeTick,
-    minQty: nativeMin * multiplier,
-    quantityStep: nativeStep * multiplier,
-    bidMakerFeeUsd: bidFees.maker / multiplier,
-    bidTakerFeeUsd: bidFees.taker / multiplier,
-    askMakerFeeUsd: askFees.maker / multiplier,
-    askTakerFeeUsd: askFees.taker / multiplier,
-    settleCurrency: contract.inverse ? 'BTC' : 'USD',
+    minQty: minQuantity,
+    quantityStep,
+    bidMakerFeeUsd,
+    bidTakerFeeUsd,
+    askMakerFeeUsd,
+    askTakerFeeUsd,
+    settleCurrency: contract.settle,
     inverse: contract.inverse,
     underlyingPrice,
   };

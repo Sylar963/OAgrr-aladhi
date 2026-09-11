@@ -18,6 +18,7 @@ export interface OptionGreeks {
 
 export interface NormalizedOptionContract {
   venue: string;
+  settle?: string;
   strike: number;
   right: string;
   inverse: boolean;

@@ -3,14 +3,11 @@ import { blackScholesCall, blackScholesPut, normCdf, realWorldPop, type OptionRi
 import { inferMissingIv } from './ivInference';
 
 export type SpreadKind = 'call-credit' | 'put-credit';
-export type TradingSignal = 'SELL' | 'AVOID' | 'HOLD';
+export type TradingSignal = 'SELL' | 'AVOID';
 export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
 export type RegimeDirection = 'risk-on' | 'neutral' | 'risk-off';
 
-// Physical-measure inputs. When supplied, success probability is computed
-// against realized vol and the user's directional drift instead of the
-// risk-neutral measure — the EV gate then reflects the trade's *actual*
-// expected outcome, not a fair-value estimate.
+// Physical-measure assumptions replace risk-neutral inputs for POP and EV.
 export interface RealWorldParams {
   drift: number;
   sigmaRV: number;
@@ -31,9 +28,7 @@ export interface SpreadInput {
   // once per snapshot and pass it in; otherwise the pricer does O(n) on the
   // strike list twice per invocation.
   strikeByKey?: ReadonlyMap<number, EnrichedStrike>;
-  // Optional smile interpolator. When provided, success probability is the
-  // risk-neutral N(±d₂) at the breakeven strike. When omitted, falls back to a
-  // coarse spot/breakeven heuristic.
+  // Optional smile interpolator for risk-neutral probability at breakeven.
   ivAtStrike?: (strike: number) => number | null;
   // When provided, success probability and EV are computed from physical
   // drift and realized vol instead of the risk-neutral surface IV.
@@ -71,11 +66,10 @@ export interface SpreadSignal {
   breakeven: number;
   riskReward: number;
   successProbability: number;
-  // 'real-world'   = N(±d₂) at user's physical drift μ and realized σ_RV.
+  // 'real-world'   = N(±d₂) at the configured physical drift μ and realized σ_RV.
   // 'risk-neutral' = Black-Scholes N(±d₂) at breakeven IV.
-  // 'heuristic'    = bucketed spot/breakeven ratio (fallback when no IV is available).
-  probabilityMethod: 'real-world' | 'risk-neutral' | 'heuristic';
-  // Expected value at expiry: pop × credit − (1 − pop) × maxLoss.
+  probabilityMethod: 'real-world' | 'risk-neutral';
+  // Present value of premium received minus the modeled continuous spread payoff.
   expectedValue: number;
   // Return on capital: ev / maxLoss. The gate threshold for SELL is roc ≥ 0.10.
   roc: number;
@@ -189,21 +183,22 @@ function buildLegCandidates(
       }
     }
 
-    const executablePrice = leg === 'sell' ? raw.bid : raw.ask;
-    const size = leg === 'sell' ? raw.bidSize : raw.askSize;
-    const takerFee = raw.estimatedFees?.taker ?? null;
-
-    // Fallback when bid/ask price is missing: fall back to model-priced IV.
-    // This keeps Thalex-like venues present in the router rather than dropped.
-    const modeledPrice = iv != null ? priceAtIv(right, spot, strikeValue, T, r, iv) : null;
-    const priceForNet = executablePrice != null && executablePrice > 0 ? executablePrice : modeledPrice;
-
-    const netAfterFees =
-      priceForNet != null
-        ? leg === 'sell'
-          ? priceForNet - (takerFee ?? 0)
-          : priceForNet + (takerFee ?? 0)
-        : null;
+    const execution = raw.execution;
+    const executablePrice = leg === 'sell'
+      ? execution?.bidUsd ?? raw.bid
+      : execution?.askUsd ?? raw.ask;
+    const size = leg === 'sell'
+      ? execution?.bidSize ?? null
+      : execution?.askSize ?? null;
+    const takerFee = leg === 'sell'
+      ? execution?.bidTakerFeeUsd ?? null
+      : execution?.askTakerFeeUsd ?? null;
+    const hasExecutableQuote = executablePrice != null && executablePrice > 0;
+    const netAfterFees = hasExecutableQuote && takerFee != null
+      ? leg === 'sell'
+        ? executablePrice - takerFee
+        : executablePrice + takerFee
+      : null;
 
     candidates.push({
       venue: venueId,
@@ -241,7 +236,9 @@ function pickBestBuy(cands: VenueLegCandidate[]): VenueLegCandidate | null {
 
 interface ProbabilityResult {
   prob: number;
-  method: 'real-world' | 'risk-neutral' | 'heuristic';
+  method: 'real-world' | 'risk-neutral';
+  drift: number;
+  sigma: number;
 }
 
 // Probability of finishing in the profit zone of a credit spread.
@@ -251,7 +248,6 @@ interface ProbabilityResult {
 // Resolution order (when each input is available):
 //   1. real-world     — physical drift μ and realized σ_RV (P-measure).
 //   2. risk-neutral   — Black-Scholes N(±d₂) at breakeven IV (Q-measure).
-//   3. heuristic      — coarse spot/BE bucket so the UI never goes blank.
 function successProbability(
   kind: SpreadKind,
   spot: number,
@@ -260,35 +256,73 @@ function successProbability(
   r: number,
   ivAtBreakeven: number | null,
   realWorld: RealWorldParams | undefined,
-): ProbabilityResult {
+): ProbabilityResult | null {
   if (realWorld && T > 0 && spot > 0 && breakeven > 0 && realWorld.sigmaRV > 0) {
     const direction = kind === 'call-credit' ? 'below' : 'above';
     const prob = realWorldPop(direction, spot, breakeven, T, realWorld.drift, realWorld.sigmaRV);
-    if (Number.isFinite(prob)) return { prob, method: 'real-world' };
+    if (Number.isFinite(prob)) {
+      return { prob, method: 'real-world', drift: realWorld.drift, sigma: realWorld.sigmaRV };
+    }
   }
 
   if (ivAtBreakeven != null && ivAtBreakeven > 0 && T > 0 && spot > 0 && breakeven > 0) {
     const sigma = ivAtBreakeven;
     const d2 = (Math.log(spot / breakeven) + (r - 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
     const prob = kind === 'call-credit' ? normCdf(-d2) : normCdf(d2);
-    return { prob, method: 'risk-neutral' };
+    return { prob, method: 'risk-neutral', drift: r, sigma };
   }
+  return null;
+}
 
-  const ratio = spot / breakeven;
-  if (kind === 'call-credit') {
-    if (spot <= breakeven) {
-      if (ratio < 0.95) return { prob: 0.75, method: 'heuristic' };
-      if (ratio < 0.98) return { prob: 0.65, method: 'heuristic' };
-      return { prob: 0.55, method: 'heuristic' };
-    }
-    return { prob: 0.35, method: 'heuristic' };
-  }
-  if (spot >= breakeven) {
-    if (ratio > 1.05) return { prob: 0.75, method: 'heuristic' };
-    if (ratio > 1.02) return { prob: 0.65, method: 'heuristic' };
-    return { prob: 0.55, method: 'heuristic' };
-  }
-  return { prob: 0.35, method: 'heuristic' };
+function optionPayoffPresentValue(
+  right: OptionRight,
+  spot: number,
+  strike: number,
+  T: number,
+  discountRate: number,
+  drift: number,
+  sigma: number,
+): number {
+  const sqrtT = Math.sqrt(T);
+  const d1 = (Math.log(spot / strike) + (drift + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
+  const d2 = d1 - sigma * sqrtT;
+  const expectedSpot = spot * Math.exp(drift * T);
+  const undiscounted = right === 'call'
+    ? expectedSpot * normCdf(d1) - strike * normCdf(d2)
+    : strike * normCdf(-d2) - expectedSpot * normCdf(-d1);
+  return Math.exp(-discountRate * T) * undiscounted;
+}
+
+function expectedSpreadLiability(
+  kind: SpreadKind,
+  spot: number,
+  shortStrike: number,
+  longStrike: number,
+  T: number,
+  discountRate: number,
+  drift: number,
+  sigma: number,
+): number {
+  const right = rightForKind(kind);
+  const shortOption = optionPayoffPresentValue(
+    right,
+    spot,
+    shortStrike,
+    T,
+    discountRate,
+    drift,
+    sigma,
+  );
+  const longOption = optionPayoffPresentValue(
+    right,
+    spot,
+    longStrike,
+    T,
+    discountRate,
+    drift,
+    sigma,
+  );
+  return Math.max(0, shortOption - longOption);
 }
 
 // Minimum return on capital required to fire a SELL signal. Below this even
@@ -317,26 +351,34 @@ function gateSignal(
   regimeDominant: RegimeLabel | null | undefined,
 ): SpreadSignal | null {
   if (shortPremium == null || longPremium == null) return null;
+  const validStrikeOrder = kind === 'call-credit'
+    ? longStrike > shortStrike
+    : longStrike < shortStrike;
+  if (!validStrikeOrder) return null;
 
   const netCredit = shortPremium - longPremium;
   const spreadWidth = Math.abs(longStrike - shortStrike);
-
-  let maxProfit: number;
-  let maxLoss: number;
-  if (netCredit >= 0) {
-    maxProfit = netCredit;
-    maxLoss = spreadWidth - netCredit;
-  } else {
-    maxProfit = spreadWidth - Math.abs(netCredit);
-    maxLoss = Math.abs(netCredit);
-  }
+  if (netCredit <= 0 || netCredit >= spreadWidth) return null;
+  const maxProfit = netCredit;
+  const maxLoss = spreadWidth - netCredit;
 
   const breakeven = kind === 'call-credit' ? shortStrike + netCredit : shortStrike - netCredit;
   const riskReward = maxProfit > 0 ? Math.min(maxLoss / maxProfit, 999.99) : 999.99;
   const ivBE = ivAtStrike ? ivAtStrike(breakeven) : null;
-  const { prob, method } = successProbability(kind, spot, breakeven, T, r, ivBE, realWorld);
-
-  const expectedValue = prob * netCredit - (1 - prob) * maxLoss;
+  const probability = successProbability(kind, spot, breakeven, T, r, ivBE, realWorld);
+  if (probability == null) return null;
+  const { prob, method, drift, sigma } = probability;
+  const liability = expectedSpreadLiability(
+    kind,
+    spot,
+    shortStrike,
+    longStrike,
+    T,
+    r,
+    drift,
+    sigma,
+  );
+  const expectedValue = netCredit - liability;
   const roc = maxLoss > 0 ? expectedValue / maxLoss : 0;
   const rocGate = rocGateForRegime(regimeDominant);
   const regimeSuffix =
@@ -351,14 +393,11 @@ function gateSignal(
   if (netCredit > 0 && expectedValue > 0 && roc >= rocGate) {
     signal = 'SELL';
     reasoning = `Favorable: EV $${expectedValue.toFixed(2)}, ROC ${(roc * 100).toFixed(1)}%, Success ${Math.round(prob * 100)}%${regimeSuffix}`;
-  } else if (netCredit > 0) {
+  } else {
     signal = 'AVOID';
     reasoning = expectedValue <= 0
       ? `Negative EV: $${expectedValue.toFixed(2)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
       : `Low ROC: ${(roc * 100).toFixed(1)}% (gate ${(rocGate * 100).toFixed(0)}%)${regimeSuffix}`;
-  } else {
-    signal = 'HOLD';
-    reasoning = `Negative credit: $${netCredit.toFixed(2)}`;
   }
 
   return {
@@ -438,7 +477,20 @@ function computeSurfaceSignal(
 
   const shortPremium = priceAtIv(right, spot, shortStrike, T, r, shortBidIv);
   const longPremium = priceAtIv(right, spot, longStrike, T, r, longAskIv);
-  return gateSignal(kind, shortStrike, longStrike, shortPremium, longPremium, spot, T, r, ivAtStrike, realWorld, regimeDominant);
+  const fallbackIv = (shortBidIv + longAskIv) / 2;
+  return gateSignal(
+    kind,
+    shortStrike,
+    longStrike,
+    shortPremium,
+    longPremium,
+    spot,
+    T,
+    r,
+    ivAtStrike ?? (() => fallbackIv),
+    realWorld,
+    regimeDominant,
+  );
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -456,6 +508,12 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
   const shortBest = pickBestSell(shortCandidates);
   const longBest = pickBestBuy(longCandidates);
 
+  const bestIvValues = [shortBest?.iv, longBest?.iv].filter(
+    (value): value is number => value != null && value > 0,
+  );
+  const combinedFallbackIv = bestIvValues.length > 0
+    ? bestIvValues.reduce((sum, value) => sum + value, 0) / bestIvValues.length
+    : null;
   const combinedSignal = gateSignal(
     kind,
     shortStrike,
@@ -465,7 +523,7 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
     spot,
     T,
     r,
-    ivAtStrike,
+    ivAtStrike ?? (combinedFallbackIv == null ? undefined : () => combinedFallbackIv),
     realWorld,
     regimeDominant,
   );

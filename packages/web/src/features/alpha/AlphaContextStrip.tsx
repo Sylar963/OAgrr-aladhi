@@ -55,7 +55,7 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
       <div>
         <span>SPOT STATE</span>
         <strong>{context?.spotState.state.replaceAll('-', ' ').toUpperCase() ?? '—'}</strong>
-        <small>{context?.sources.ivScope === 'cross-venue' ? 'cross-venue IV' : ''}</small>
+        <small>{context?.sources.ivScope === 'mixed' ? '30D DVOL + venue IV' : 'cross-venue IV'}</small>
       </div>
     </div>
   );

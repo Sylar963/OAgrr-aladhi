@@ -66,7 +66,7 @@ export const AlphaMarketContextResponseSchema = z.object({
     ivHistory: z.boolean(),
     spotHistory: z.boolean(),
     regime: z.boolean(),
-    ivScope: z.literal('cross-venue'),
+    ivScope: z.enum(['cross-venue', 'mixed']),
   }),
 });
 

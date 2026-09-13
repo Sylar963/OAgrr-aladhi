@@ -8,6 +8,7 @@ export type {
   VenueConnectionState,
   VenueFailure,
   VenueId,
+  VenueExecutionQuote,
   VenueQuote,
   ServerWsMessage,
   SnapshotMeta,

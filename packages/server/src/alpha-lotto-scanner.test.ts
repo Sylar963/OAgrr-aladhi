@@ -52,6 +52,7 @@ function contract(overrides: Partial<NormalizedOptionContract> = {}): Normalized
       openInterestUsd: 0,
       volume24hUsd: 0,
       estimatedFees: null,
+      estimatedAskFees: { maker: 0, taker: 10 },
       timestamp: NOW_MS - 1_000,
       source: 'ws',
     },
@@ -74,16 +75,18 @@ describe('computeLottoCandidate', () => {
     if (result.candidate == null) throw new Error('expected candidate');
 
     expect(result.candidate.otmPct).toBeCloseTo(15.3846, 3);
-    expect(result.candidate.breakEvenPrice).toBe(90_100);
-    expect(result.candidate.breakEvenMovePct).toBeCloseTo(15.5128, 3);
+    expect(result.candidate.takerFee).toBe(10);
+    expect(result.candidate.entryCost).toBe(120);
+    expect(result.candidate.breakEvenPrice).toBe(90_120);
+    expect(result.candidate.breakEvenMovePct).toBeCloseTo(15.5385, 3);
     expect(result.candidate.quantityAtMark).toBe(24);
-    expect(result.candidate.quantityAtAsk).toBe(21.81);
-    expect(result.candidate.conservativeQuantity).toBe(18.18);
-    expect(result.candidate.minimumOrderCost).toBe(1.1);
+    expect(result.candidate.quantityAtAsk).toBe(2);
+    expect(result.candidate.conservativeQuantity).toBe(2);
+    expect(result.candidate.minimumOrderCost).toBe(1.2);
 
     const tenX = result.candidate.targets.find((target) => target.multiple === 10);
-    expect(tenX?.targetMark).toBe(1_000);
-    expect(tenX?.intrinsicUnderlyingPrice).toBe(91_000);
+    expect(tenX?.targetMark).toBe(1_200);
+    expect(tenX?.intrinsicUnderlyingPrice).toBe(91_200);
     expect(tenX?.modelUnderlyingPrice).not.toBeNull();
     expect(tenX!.modelUnderlyingPrice!).toBeLessThan(tenX!.intrinsicUnderlyingPrice);
     expect(tenX?.impliedMoveMultiple).toBeGreaterThan(0);
@@ -91,7 +94,7 @@ describe('computeLottoCandidate', () => {
     const twentyPct = result.candidate.shocks.find((shock) => shock.movePct === 20);
     expect(twentyPct?.underlyingPrice).toBe(93_600);
     expect(twentyPct?.intrinsicValue).toBe(3_600);
-    expect(twentyPct?.intrinsicMultiple).toBe(36);
+    expect(twentyPct?.intrinsicMultiple).toBe(30);
   });
 
   it('rejects missing and excessively wide markets', () => {
@@ -129,8 +132,8 @@ describe('computeLottoCandidate', () => {
     if (result.candidate == null) throw new Error('expected candidate');
     expect(result.candidate.mark).toBeCloseTo(78.14, 6);
     expect(result.candidate.ask).toBeCloseTo(85.954, 6);
-    expect(result.candidate.breakEvenPrice).toBeCloseTo(97_814, 6);
-    expect(result.candidate.quantityAtAsk).toBe(27);
+    expect(result.candidate.breakEvenPrice).toBeCloseTo(99_595.4, 6);
+    expect(result.candidate.quantityAtAsk).toBe(2);
   });
 
   it('rejects contracts without quantity economics', () => {
@@ -198,8 +201,8 @@ describe('addLegacyLottoAliases', () => {
     expect(response.venue).toBe('thalex');
     expect(candidate).toMatchObject({
       contractsAtMark: 24,
-      contractsAtAsk: 21,
-      conservativeContracts: 18,
+      contractsAtAsk: 2,
+      conservativeContracts: 2,
     });
     expect(target).toMatchObject({
       intrinsicBtcPrice: target.intrinsicUnderlyingPrice,

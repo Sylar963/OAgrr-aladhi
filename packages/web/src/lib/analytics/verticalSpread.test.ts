@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
-import type { EnrichedStrike, VenueId, VenueQuote } from '@shared/enriched';
+import type { EnrichedStrike, VenueExecutionQuote, VenueId, VenueQuote } from '@shared/enriched';
 import { blackScholesCall, blackScholesPut } from './blackScholes';
 import { rocGateForRegime, routeVerticalSpread } from './verticalSpread';
 
 function quote(partial: Partial<VenueQuote>): VenueQuote {
-  return {
+  const merged: VenueQuote = {
     bid: null,
     ask: null,
     mid: null,
@@ -28,6 +28,30 @@ function quote(partial: Partial<VenueQuote>): VenueQuote {
     volume24hUsd: null,
     ...partial,
   };
+  if (partial.execution !== undefined) return merged;
+  const takerFee = merged.estimatedFees?.taker ?? null;
+  const execution: VenueExecutionQuote = {
+    exchangeSymbol: 'TEST',
+    settleCurrency: 'USD',
+    inverse: false,
+    quantityUnit: 'base',
+    contractMultiplierBase: 1,
+    nativeMinQuantity: 1,
+    nativeQuantityStep: 1,
+    nativePriceTick: 0.01,
+    minQuantity: 1,
+    quantityStep: 1,
+    bidSize: merged.bidSize,
+    askSize: merged.askSize,
+    bidUsd: merged.bid != null && merged.bid > 0 ? merged.bid : null,
+    askUsd: merged.ask != null && merged.ask > 0 ? merged.ask : null,
+    markUsd: merged.mid != null && merged.mid > 0 ? merged.mid : null,
+    bidMakerFeeUsd: 0,
+    bidTakerFeeUsd: takerFee,
+    askMakerFeeUsd: 0,
+    askTakerFeeUsd: takerFee,
+  };
+  return { ...merged, execution };
 }
 
 describe('routeVerticalSpread — call credit spread', () => {
@@ -461,11 +485,12 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
     },
   ];
 
-  it('populates expectedValue and roc on the combined signal', () => {
+  it('values the continuous payoff between strikes when computing EV and ROC', () => {
     const result = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, T, r });
     const sig = result.combinedSignal!;
-    // EV = pop * credit - (1 - pop) * maxLoss
-    const expected = sig.successProbability * sig.netCredit - (1 - sig.successProbability) * sig.maxLoss;
+    const spreadValue = blackScholesCall(spot, shortStrike, T, r, iv)
+      - blackScholesCall(spot, longStrike, T, r, iv);
+    const expected = sig.netCredit - spreadValue;
     expect(sig.expectedValue).toBeCloseTo(expected, 8);
     expect(sig.roc).toBeCloseTo(sig.expectedValue / sig.maxLoss, 8);
   });
@@ -485,8 +510,9 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
     });
     expect(withRv.combinedSignal!.probabilityMethod).toBe('real-world');
     expect(baseline.combinedSignal!.probabilityMethod).not.toBe('real-world');
-    expect(withRv.combinedSignal!.successProbability).toBeGreaterThan(
+    expect(withRv.combinedSignal!.successProbability).not.toBeCloseTo(
       baseline.combinedSignal!.successProbability,
+      6,
     );
   });
 
@@ -623,7 +649,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   });
 });
 
-describe('routeVerticalSpread — HOLD and signal gate', () => {
+describe('routeVerticalSpread — executable quote gate', () => {
   const spot = 100;
   const T = 0.25;
   const r = 0.05;
@@ -664,7 +690,7 @@ describe('routeVerticalSpread — HOLD and signal gate', () => {
     },
   ];
 
-  it('returns a signal using modeled fallback when bid is zero', () => {
+  it('does not manufacture an executable signal when the sell bid is zero', () => {
     const result = routeVerticalSpread({
       kind: 'call-credit',
       shortStrike: 95,
@@ -674,7 +700,64 @@ describe('routeVerticalSpread — HOLD and signal gate', () => {
       T,
       r,
     });
-    // Even with zero bid, fallback to mark-priced IV gives a signal.
-    expect(result.combinedSignal).not.toBeNull();
+    expect(result.short.best).toBeNull();
+    expect(result.combinedSignal).toBeNull();
+  });
+
+  it('uses normalized side-specific execution fees instead of generic contract fees', () => {
+    const normalizedStrikes = strikes.map((row) => ({
+      ...row,
+      call: {
+        ...row.call,
+        venues: Object.fromEntries(
+          Object.entries(row.call.venues).map(([venue, venueQuote]) => [
+            venue,
+            venueQuote == null
+              ? venueQuote
+              : quote({
+                  ...venueQuote,
+                  bid: row.strike === 95 ? 5 : 1,
+                  ask: row.strike === 95 ? 5.5 : 2,
+                  estimatedFees: { maker: 0, taker: 0.01 },
+                  execution: {
+                    exchangeSymbol: 'TEST',
+                    settleCurrency: 'USD',
+                    inverse: false,
+                    quantityUnit: 'base',
+                    contractMultiplierBase: 0.01,
+                    nativeMinQuantity: 1,
+                    nativeQuantityStep: 1,
+                    nativePriceTick: 0.01,
+                    minQuantity: 0.01,
+                    quantityStep: 0.01,
+                    bidSize: 1,
+                    askSize: 1,
+                    bidUsd: row.strike === 95 ? 5 : 1,
+                    askUsd: row.strike === 95 ? 5.5 : 2,
+                    markUsd: 3,
+                    bidMakerFeeUsd: 0,
+                    bidTakerFeeUsd: 1,
+                    askMakerFeeUsd: 0,
+                    askTakerFeeUsd: 1.5,
+                  },
+                }),
+          ]),
+        ),
+      },
+    }));
+    const result = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 95,
+      longStrike: 105,
+      strikes: normalizedStrikes,
+      spot,
+      T,
+      r,
+    });
+
+    expect(result.short.best?.takerFee).toBe(1);
+    expect(result.short.best?.netAfterFees).toBe(4);
+    expect(result.long.best?.takerFee).toBe(1.5);
+    expect(result.long.best?.netAfterFees).toBe(3.5);
   });
 });

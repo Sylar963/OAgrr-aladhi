@@ -109,14 +109,14 @@ function solveForwardForCallPrice(
 
 function buildTargets(
   strike: number,
-  mark: number,
+  entryPrice: number,
   contractSize: number,
   markIv: number | null,
   tYears: number,
   market: ScannerMarketContext,
 ): AlphaLottoTarget[] {
   return TARGET_MULTIPLES.map((multiple) => {
-    const targetMark = multiple * mark;
+    const targetMark = multiple * entryPrice;
     const targetUnitPrice = targetMark / contractSize;
     const intrinsicUnderlyingPrice = strike + targetUnitPrice;
     const solvedForward =
@@ -150,7 +150,7 @@ function buildTargets(
 
 function buildShocks(
   strike: number,
-  mark: number,
+  entryPrice: number,
   contractSize: number,
   indexPrice: number,
 ): AlphaLottoShock[] {
@@ -161,7 +161,7 @@ function buildShocks(
       movePct,
       underlyingPrice,
       intrinsicValue,
-      intrinsicMultiple: intrinsicValue / mark,
+      intrinsicMultiple: intrinsicValue / entryPrice,
     };
   });
 }
@@ -179,6 +179,11 @@ function premiumUsd(
 function floorToIncrement(value: number, increment: number): number {
   const units = Math.floor((value + Number.EPSILON) / increment);
   return Number((units * increment).toFixed(8));
+}
+
+function capToAskSize(quantity: number, askSize: number | null, increment: number): number {
+  if (askSize == null || askSize <= 0) return 0;
+  return floorToIncrement(Math.min(quantity, askSize), increment);
 }
 
 export function computeLottoCandidate(
@@ -227,7 +232,9 @@ export function computeLottoCandidate(
   }
 
   const tYears = (contract.expiryTs - market.nowMs) / YEAR_MS;
-  const breakEvenPrice = contract.strike + mark / contractSize;
+  const takerFee = contract.quote.estimatedAskFees?.taker ?? null;
+  const entryCost = ask + (takerFee ?? 0);
+  const breakEvenPrice = contract.strike + entryCost / contractSize;
   const expectedMovePct =
     market.atmIv == null ? null : market.atmIv * Math.sqrt(tYears) * 100;
   const expectedMoveUsd =
@@ -254,6 +261,8 @@ export function computeLottoCandidate(
       mark,
       bid,
       ask,
+      takerFee,
+      entryCost,
       bidSize: contract.quote.bidSize,
       askSize: contract.quote.askSize,
       delta: contract.greeks.delta,
@@ -262,22 +271,23 @@ export function computeLottoCandidate(
       otmPct,
       breakEvenPrice,
       breakEvenMovePct: ((breakEvenPrice - market.indexPrice) / market.indexPrice) * 100,
-      minimumOrderCost: ask * minQty,
+      minimumOrderCost: entryCost * minQty,
       quantityAtMark: floorToIncrement(config.buyingPower / mark, minQty),
-      quantityAtAsk: floorToIncrement(config.buyingPower / ask, minQty),
-      conservativeQuantity: floorToIncrement(
-        config.buyingPower / (ask * config.marginHaircut),
+      quantityAtAsk: capToAskSize(config.buyingPower / entryCost, contract.quote.askSize, minQty),
+      conservativeQuantity: capToAskSize(
+        config.buyingPower / (entryCost * config.marginHaircut),
+        contract.quote.askSize,
         minQty,
       ),
       targets: buildTargets(
         contract.strike,
-        mark,
+        entryCost,
         contractSize,
         contract.greeks.markIv,
         tYears,
         market,
       ),
-      shocks: buildShocks(contract.strike, mark, contractSize, market.indexPrice),
+      shocks: buildShocks(contract.strike, entryCost, contractSize, market.indexPrice),
       asOfMs,
     },
     skipReason: null,

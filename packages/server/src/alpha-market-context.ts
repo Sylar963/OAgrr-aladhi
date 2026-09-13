@@ -117,12 +117,13 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
   const longCall =
     volatilityState === 'unavailable' || rangeState === 'unavailable'
       ? 'unavailable'
-      : volatilityState === 'bid' || spotState.state === 'extended'
-        ? 'expensive'
-        : volatilityState === 'compressed' &&
-            (rangeState === 'coiled' || spotState.state === 'breaking-out')
-          ? 'favorable'
-          : 'watch';
+        : volatilityState === 'bid' || spotState.state === 'extended'
+          ? 'expensive'
+          : volatilityState === 'compressed' &&
+              spotState.direction !== 'down' &&
+              (rangeState === 'coiled' || spotState.state === 'breaking-out')
+            ? 'favorable'
+            : 'watch';
   const creditSpread =
     vrp30d == null
       ? 'unavailable'
@@ -168,7 +169,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
       ivHistory: atmIv7d != null || atmIv30d != null,
       spotHistory: input.candles.length > 0,
       regime: input.regime != null,
-      ivScope: 'cross-venue',
+      ivScope: input.underlying === 'BTC' || input.underlying === 'ETH' ? 'mixed' : 'cross-venue',
     },
   };
 }

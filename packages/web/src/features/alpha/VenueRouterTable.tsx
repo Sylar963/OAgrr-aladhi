@@ -43,21 +43,21 @@ function VenueRouterTable({
                 to pay the least.
               </li>
               <li>
-                Fees use venue-specific cap formulas
+                Fees use normalized, side-specific venue cap formulas
                 (<code>min(rate × underlying, cap × optionPrice)</code>) so they
                 stay realistic on cheap OTM strikes.
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
               <strong>How to think about it:</strong> the highlighted row is the
-              best <em>quoted</em> venue, not a guaranteed fill — size, spread,
+              best <em>quoted</em> venue with a known taker fee, not a guaranteed fill — size, spread,
               and your account permissions all matter. The <code>inf</code> badge
               means IV was inferred from price (venue didn&apos;t publish bid/ask
               IV), so treat that IV as best-effort.
             </p>
           </InfoTip>
         </span>
-        <span className={styles.subtitle}>Best execution per leg</span>
+        <span className={styles.subtitle}>Best quoted price per leg</span>
       </div>
 
       <LegTable
@@ -74,7 +74,7 @@ function VenueRouterTable({
       />
 
       <div className={styles.sum}>
-        <span className={styles.sumLabel}>Executable net credit (after fees)</span>
+        <span className={styles.sumLabel}>Quoted net credit (after known fees)</span>
         <span className={styles.sumValue} data-kind="credit">
           {fmtUsd(executableNetCredit)}
         </span>

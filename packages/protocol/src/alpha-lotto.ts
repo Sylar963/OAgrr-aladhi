@@ -79,6 +79,8 @@ export const AlphaLottoCandidateSchema = z.object({
   mark: z.number(),
   bid: z.number(),
   ask: z.number(),
+  takerFee: NullableNumberSchema,
+  entryCost: z.number(),
   bidSize: NullableNumberSchema,
   askSize: NullableNumberSchema,
   delta: NullableNumberSchema,

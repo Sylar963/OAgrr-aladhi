@@ -83,7 +83,7 @@ describe('buildAlphaMarketContext', () => {
     expect(result.range.state).toBe('coiled');
     expect(result.expectedMoves[0]!.movePct).toBeCloseTo(4.847, 3);
     expect(result.setup.longCall).toBe('favorable');
-    expect(result.sources.ivScope).toBe('cross-venue');
+    expect(result.sources.ivScope).toBe('mixed');
   });
 
   it('reports unavailable context without inventing historical values', () => {
@@ -100,5 +100,21 @@ describe('buildAlphaMarketContext', () => {
     expect(result.range.state).toBe('unavailable');
     expect(result.setup.longCall).toBe('unavailable');
     expect(result.setup.creditSpread).toBe('unavailable');
+  });
+
+  it('does not call a downside breakout favorable for a long call', () => {
+    const result = buildAlphaMarketContext({
+      underlying: 'BTC',
+      nowMs: NOW_MS,
+      spotPrice: 98,
+      ivHistory: ivHistory(0.35, 0.4),
+      candles: quietCandles(),
+      regime: null,
+    });
+
+    expect(result.volatility.state).toBe('compressed');
+    expect(result.spotState.state).toBe('breaking-out');
+    expect(result.spotState.direction).toBe('down');
+    expect(result.setup.longCall).toBe('watch');
   });
 });

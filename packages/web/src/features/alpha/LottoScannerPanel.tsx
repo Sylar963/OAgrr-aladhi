@@ -25,11 +25,11 @@ const CONTROL_TIPS = {
 } as const;
 
 const COLUMN_TIPS = {
-  price: 'MARK is the table estimate. ASK is what a seller currently wants you to pay.',
+  price: 'MARK is the table estimate. ASK is the quoted price before taker fees.',
   volatility: 'IV is how much movement the option market is pricing in. Higher IV usually means a more expensive bet.',
-  breakeven: 'OTM is the climb to the strike. BE shown here uses mark; the real buyer line at the ask is slightly higher and appears in the poker read.',
-  target: 'A model of the market move that could make the option mark worth 10×. It is not a probability or guarantee.',
-  capacity: 'How many contracts your bankroll can cover at the ask. Reserved uses a safety buffer.',
+  breakeven: 'OTM is the climb to the strike. BE uses the current ask plus the estimated taker fee when available.',
+  target: 'A model of the market move that could make the option worth 10× your ask-paid entry cost. It is not a probability or guarantee.',
+  capacity: 'How many contracts your bankroll can cover at fee-adjusted ask, capped by quoted ask size. Reserved also uses a safety buffer.',
 } as const;
 
 interface LottoScannerPanelProps {
@@ -77,6 +77,8 @@ function downloadCsv(data: AlphaLottoScannerResponse): void {
     'mark_usd',
     'bid_usd',
     'ask_usd',
+    'taker_fee_usd',
+    'entry_cost_usd',
     'mark_iv',
     'atm_iv',
     'expected_move_pct',
@@ -103,6 +105,8 @@ function downloadCsv(data: AlphaLottoScannerResponse): void {
       candidate.mark,
       candidate.bid,
       candidate.ask,
+      candidate.takerFee,
+      candidate.entryCost,
       candidate.markIv,
       candidate.atmIv,
       candidate.expectedMovePct,
@@ -148,8 +152,6 @@ function MetricTip({ label, tip, placement = 'bottom-start' }: MetricTipProps) {
 
 function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
   const tenX = targetFor(candidate, 10);
-  const askBreakEvenPrice = candidate.strike + candidate.ask / candidate.contractSize;
-  const askBreakEvenMovePct = ((askBreakEvenPrice - candidate.indexPrice) / candidate.indexPrice) * 100;
   const expiry = formatExpiry(candidate.expiry);
 
   return (
@@ -165,13 +167,18 @@ function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
       <div className={styles.betLines}>
         <div data-tone="stake">
           <span>BUY-IN</span>
-          <strong>{fmtUsd(candidate.ask)} at the ask</strong>
+          <strong>{fmtUsd(candidate.entryCost)} estimated entry</strong>
+          <small>
+            {candidate.takerFee == null
+              ? `${fmtUsd(candidate.ask)} ask; fee unavailable and excluded.`
+              : `${fmtUsd(candidate.ask)} ask + ${fmtUsd(candidate.takerFee)} taker fee.`}
+          </small>
           <small>Venue minimum costs {fmtUsd(candidate.minimumOrderCost)}.</small>
         </div>
         <div data-tone="win">
           <span>PROFIT LINE AT EXPIRY</span>
-          <strong>{candidate.underlying} above {fmtUsdCompact(askBreakEvenPrice)}</strong>
-          <small>That is a {fmtPct(askBreakEvenMovePct, 1)} climb from now.</small>
+          <strong>{candidate.underlying} above {fmtUsdCompact(candidate.breakEvenPrice)}</strong>
+          <small>That is a {fmtPct(candidate.breakEvenMovePct, 1)} climb from now.</small>
         </div>
         <div data-tone="bust">
           <span>BUST LINE AT EXPIRY</span>
@@ -325,10 +332,10 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
         <>
           <div className={styles.marketStrip}>
             <span>INDEX <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
-            <span>FORWARD <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
+            <span>AVG FORWARD <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
             <span>EXPIRIES <strong>{data.eligibleExpiries.length}</strong></span>
             <span>MATCHES <strong>{data.candidates.length}</strong></span>
-            <span>LIVE VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+            <span>SCANNED VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
             {query.isFetching && <span className={styles.refreshing}>REFRESHING</span>}
           </div>
           {unavailableVenues.length > 0 && (
@@ -404,8 +411,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       )}
 
       <footer className={styles.footer}>
-        <span>Capacity is quantity affordable at ask; reserve quantity includes the 1.2× buffer.</span>
-        <span>Targets hold current contract IV and time constant. Implied move uses expiry ATM IV.</span>
+        <span>Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.</span>
+        <span>Targets measure return on estimated entry cost and hold current IV and time constant.</span>
         <span>No order is sent. Most short-dated OTM calls expire worthless.</span>
       </footer>
     </section>
@@ -430,7 +437,7 @@ function CandidateInspector({ candidate }: { candidate: AlphaLottoCandidate }) {
       <div className={styles.targetGrid}>
         {candidate.targets.map((target) => (
           <div key={target.multiple}>
-            <span>{target.multiple}× MARK</span>
+            <span>{target.multiple}× ASK</span>
             <strong>{fmtUsdCompact(target.modelUnderlyingPrice)}</strong>
             <small>
               {fmtPct(target.modelMovePct, 1)} · {target.impliedMoveMultiple == null ? '—' : `${target.impliedMoveMultiple.toFixed(2)} implied`}

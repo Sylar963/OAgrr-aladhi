@@ -19,11 +19,11 @@ const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
   'high-vol': '20%',
 };
 
-function SignalCard({ signal, label = 'Executable (best routing)', regime }: Props) {
+function SignalCard({ signal, label = 'Model screen (best quoted routing)', regime }: Props) {
   if (!signal) {
     return (
       <div className={styles.card} data-empty="true">
-        <div className={styles.emptyText}>Select short and long strikes to analyze.</div>
+        <div className={styles.emptyText}>No valid executable spread analysis is available.</div>
       </div>
     );
   }
@@ -38,15 +38,11 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
   const probMethodHint =
     signal.probabilityMethod === 'real-world'
       ? 'Real-world: physical drift μ + realized σ_RV.'
-      : signal.probabilityMethod === 'risk-neutral'
-        ? 'Risk-neutral: N(±d₂) using IV at the breakeven strike.'
-        : 'Heuristic: bucketed spot/breakeven ratio.';
+      : 'Risk-neutral: N(±d₂) using IV at the breakeven strike.';
   const probMethodSuffix =
     signal.probabilityMethod === 'real-world'
       ? '· P-measure'
-      : signal.probabilityMethod === 'risk-neutral'
-        ? '· N(d₂)'
-        : '· heuristic';
+      : '· N(d₂)';
 
   return (
     <div className={styles.card} data-signal={signal.signal}>
@@ -60,21 +56,18 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
           </p>
           <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
             <li><strong>Net credit &gt; 0</strong> — you actually get paid to put it on.</li>
-            <li><strong>EV &gt; 0</strong> — expected value at expiry: pop × credit − (1 − pop) × maxLoss.</li>
+            <li><strong>EV &gt; 0</strong> — credit exceeds the modeled value of the full continuous spread payoff.</li>
             <li><strong>ROC ≥ 10%</strong> — return on capital (EV ÷ maxLoss). Below this even a winning trade isn&apos;t worth the buying-power tie-up.</li>
           </ul>
           <p style={{ marginTop: 6 }}>
             <strong>AVOID</strong> = credit but EV is negative or ROC is too low.
             Usually means the credit is too small for the risk, or the smile makes
-            the trade fair-value. <strong>HOLD</strong> = the structure debits net
-            — flip the legs or the strategy kind.
+            the trade fair-value.
           </p>
           <p style={{ marginTop: 6 }}>
-            <strong>POP source:</strong> when realized vol and your directional
-            view are available, the gate uses real-world probability (P-measure).
-            Otherwise it falls back to risk-neutral N(±d₂) at breakeven IV.
-            Real-world POP is what actually pays you over a sample of trades —
-            risk-neutral POP is fair-value pricing only.
+            <strong>POP source:</strong> the default is risk-neutral N(±d₂) at
+            breakeven IV. A physical scenario is used only when explicitly
+            supplied. This is a model estimate, not a historical win rate or forecast.
           </p>
         </InfoTip>
       </div>
@@ -125,7 +118,7 @@ function SignalCard({ signal, label = 'Executable (best routing)', regime }: Pro
         </div>
         <div
           className={styles.stat}
-          title="Expected value at expiry = pop × credit − (1 − pop) × maxLoss. Positive EV = the trade is +∑ over a large sample at the current pop estimate."
+          title="Model EV = net credit minus the discounted expected spread payoff, including partial losses between strikes."
         >
           <div className={styles.statLabel}>EV</div>
           <div

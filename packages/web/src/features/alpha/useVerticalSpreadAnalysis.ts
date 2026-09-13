@@ -30,7 +30,16 @@ export interface AnalysisOutput {
   r: number;
 }
 
-function computeTFromDte(dte: number | null | undefined): number | null {
+export function computeTimeToExpiry(
+  expiryTs: number | null | undefined,
+  dte: number | null | undefined,
+  nowMs = Date.now(),
+): number | null {
+  if (expiryTs != null) {
+    const remainingMs = expiryTs - nowMs;
+    if (remainingMs <= 0) return null;
+    return remainingMs / (365.25 * 86_400_000);
+  }
   if (dte == null || dte <= 0) return null;
   return dte / 365.25;
 }
@@ -54,7 +63,7 @@ export function useVerticalSpreadAnalysis({
   }, [chain?.strikes]);
 
   const spot = chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? null;
-  const T = computeTFromDte(chain?.dte);
+  const T = computeTimeToExpiry(chain?.expiryTs, chain?.dte);
 
   // Smile only depends on strikes + spot. Lifting it out of the main memo
   // keeps the SVG inset stable when the user only changes strikes/kind.

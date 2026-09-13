@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
-import { useSurface } from '@features/surface/queries';
 import { useOpenPalette } from '@components/layout/palette-context';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { Spinner, EmptyState } from '@components/ui';
@@ -39,7 +38,6 @@ export default function AlphaView() {
   const expiries = expiriesData?.expiries ?? [];
   const prefetchChain = usePrefetchChain(underlying, activeVenues);
   const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
-  const { data: surface } = useSurface(underlying, activeVenues);
 
   const isMobile = useIsMobile();
   const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
@@ -89,14 +87,6 @@ export default function AlphaView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
 
-  // Real-world POP wiring: when surface RV is available, the gate switches
-  // from risk-neutral N(d₂) to physical-measure POP. Drift is 0 (no view) by
-  // default — a future directional-view toggle would set μ here.
-  const realWorld = useMemo(
-    () => (surface?.rv30d != null ? { drift: 0, sigmaRV: surface.rv30d } : undefined),
-    [surface?.rv30d],
-  );
-
   const { data: regime } = useRegimeQuery(underlying);
   const marketContext = useAlphaMarketContext(underlying);
   const regimeDominant = regime?.dominant ?? null;
@@ -107,7 +97,6 @@ export default function AlphaView() {
     shortStrike,
     longStrike,
     venues: activeVenues,
-    realWorld,
     regimeDominant,
   });
 

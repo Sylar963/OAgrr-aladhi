@@ -38,7 +38,7 @@ export default function App() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
-  useGlobalFeedStatus(activeTab === 'chain');
+  useGlobalFeedStatus(activeTab === 'chain' || activeTab === 'alpha');
 
   const underlying = useAppStore((s) => s.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);

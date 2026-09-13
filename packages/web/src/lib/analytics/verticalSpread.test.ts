@@ -10,8 +10,8 @@ function quote(partial: Partial<VenueQuote>): VenueQuote {
     ask: null,
     mid: null,
     midRaw: null,
-    bidSize: null,
-    askSize: null,
+    bidSize: 1,
+    askSize: 1,
     markIv: null,
     bidIv: null,
     askIv: null,
@@ -26,6 +26,7 @@ function quote(partial: Partial<VenueQuote>): VenueQuote {
     volume24h: null,
     openInterestUsd: null,
     volume24hUsd: null,
+    asOfMs: Date.now(),
     ...partial,
   };
   if (partial.execution !== undefined) return merged;
@@ -57,7 +58,7 @@ function quote(partial: Partial<VenueQuote>): VenueQuote {
 describe('routeVerticalSpread — call credit spread', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
+  const r = 0;
 
   // ITM-ish call short (K=95), OTM call long (K=105). Short collects premium,
   // long caps risk. High prob of staying sub-short in 90 days at neutral vol.
@@ -130,7 +131,7 @@ describe('routeVerticalSpread — call credit spread', () => {
     },
   ];
 
-  it('routes short leg to highest-bid venue and long leg to lowest-ask venue', () => {
+  it('routes both legs through the best synchronized same-venue pair', () => {
     const r1 = routeVerticalSpread({
       kind: 'call-credit',
       shortStrike,
@@ -138,10 +139,12 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
-    expect(r1.short.best?.venue).toBe(venueA); // higher bid IV = more credit when selling
-    expect(r1.long.best?.venue).toBe(venueB); // lower ask IV = cheaper hedge
+    expect(r1.routeVenue).toBe(venueA);
+    expect(r1.short.best?.venue).toBe(venueA);
+    expect(r1.long.best?.venue).toBe(venueA);
+    expect(r1.theoreticalIndependentNetCredit).toBeGreaterThan(r1.combinedSignal!.netCredit);
     expect(r1.short.candidates).toHaveLength(2);
     expect(r1.long.candidates).toHaveLength(2);
   });
@@ -154,7 +157,7 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.combinedSignal).not.toBeNull();
     expect(result.combinedSignal!.netCredit).toBeGreaterThan(0);
@@ -163,7 +166,7 @@ describe('routeVerticalSpread — call credit spread', () => {
     expect(['SELL', 'AVOID']).toContain(result.combinedSignal!.signal);
   });
 
-  it('combined signal credit ≥ surface signal credit (router edge)', () => {
+  it('keeps independently optimized leg credit theoretical rather than executable', () => {
     const result = routeVerticalSpread({
       kind: 'call-credit',
       shortStrike,
@@ -171,12 +174,12 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.combinedSignal).not.toBeNull();
-    expect(result.surfaceSignal).not.toBeNull();
-    expect(result.combinedSignal!.netCredit).toBeGreaterThanOrEqual(
-      result.surfaceSignal!.netCredit - 1e-6,
+    expect(result.theoreticalIndependentNetCredit).not.toBeNull();
+    expect(result.combinedSignal!.netCredit).toBeLessThan(
+      result.theoreticalIndependentNetCredit!,
     );
   });
 
@@ -188,7 +191,7 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
       venues: [venueB],
     });
     expect(result.short.candidates.map((c) => c.venue)).toEqual([venueB]);
@@ -205,7 +208,7 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     const onlyB = routeVerticalSpread({
       kind: 'call-credit',
@@ -214,7 +217,7 @@ describe('routeVerticalSpread — call credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
       venues: [venueB],
     });
     expect(both.surfaceSignal).not.toBeNull();
@@ -227,7 +230,7 @@ describe('routeVerticalSpread — call credit spread', () => {
 describe('routeVerticalSpread — put credit spread', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
+  const r = 0;
   const shortStrike = 95; // short put below spot
   const longStrike = 85; // long put further OTM
 
@@ -278,7 +281,7 @@ describe('routeVerticalSpread — put credit spread', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.combinedSignal).not.toBeNull();
     const expectedBreakeven = shortStrike - result.combinedSignal!.netCredit;
@@ -289,7 +292,7 @@ describe('routeVerticalSpread — put credit spread', () => {
 describe('routeVerticalSpread — IV inference fallback', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
+  const r = 0;
 
   // Thalex-style quote: bid/ask prices but NO bidIv/askIv. Router should
   // still include it, using inferred IV from inverting BS on the price.
@@ -336,7 +339,7 @@ describe('routeVerticalSpread — IV inference fallback', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.short.best?.venue).toBe('thalex');
     expect(result.long.best?.venue).toBe('thalex');
@@ -352,7 +355,7 @@ describe('routeVerticalSpread — IV inference fallback', () => {
 describe('routeVerticalSpread — strikeByKey parity', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
+  const r = 0;
 
   const strikes: EnrichedStrike[] = [
     {
@@ -401,7 +404,7 @@ describe('routeVerticalSpread — strikeByKey parity', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     const byKey = new Map(strikes.map((s) => [s.strike, s]));
     const indexed = routeVerticalSpread({
@@ -412,7 +415,7 @@ describe('routeVerticalSpread — strikeByKey parity', () => {
       strikeByKey: byKey,
       spot,
       T,
-      r,
+      forward: spot,
     });
 
     expect(indexed.combinedSignal?.netCredit).toBe(baseline.combinedSignal?.netCredit);
@@ -431,7 +434,7 @@ describe('routeVerticalSpread — strikeByKey parity', () => {
       strikeByKey: byKey,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.short.candidates).toHaveLength(0);
     expect(result.short.best).toBeNull();
@@ -441,7 +444,7 @@ describe('routeVerticalSpread — strikeByKey parity', () => {
 describe('routeVerticalSpread — EV / ROC fields', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
+  const r = 0;
   const shortStrike = 95;
   const longStrike = 105;
   const iv = 0.55;
@@ -486,7 +489,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   ];
 
   it('values the continuous payoff between strikes when computing EV and ROC', () => {
-    const result = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, T, r });
+    const result = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, forward: spot, T });
     const sig = result.combinedSignal!;
     const spreadValue = blackScholesCall(spot, shortStrike, T, r, iv)
       - blackScholesCall(spot, longStrike, T, r, iv);
@@ -496,7 +499,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   });
 
   it('uses real-world POP when realWorld is supplied (drift/sigmaRV)', () => {
-    const baseline = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, T, r });
+    const baseline = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, forward: spot, T });
     const withRv = routeVerticalSpread({
       kind: 'call-credit',
       shortStrike,
@@ -504,7 +507,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
       // RV well below IV → real-world POP should be HIGHER than risk-neutral.
       realWorld: { drift: 0, sigmaRV: 0.30 },
     });
@@ -572,7 +575,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       strikes,
       spot: 100,
       T: 30 / 365.25,
-      r: 0.05,
+      forward: 100,
       realWorld: { drift: 0, sigmaRV: 0.10 },
     };
     const highVol = routeVerticalSpread({ ...base, regimeDominant: 'high-vol' });
@@ -633,7 +636,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       strikes: tinyCreditStrikes,
       spot,
       T,
-      r,
+      forward: spot,
       // Drive POP deterministically via the real-world measure: low σ_RV +
       // breakeven well below spot ⇒ probability of profit near 1.
       realWorld: { drift: 0, sigmaRV: 0.10 },
@@ -652,7 +655,6 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
 describe('routeVerticalSpread — executable quote gate', () => {
   const spot = 100;
   const T = 0.25;
-  const r = 0.05;
 
   // Short leg with ZERO bid (no liquidity) → no executable premium → no signal.
   const strikes: EnrichedStrike[] = [
@@ -698,7 +700,7 @@ describe('routeVerticalSpread — executable quote gate', () => {
       strikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
     expect(result.short.best).toBeNull();
     expect(result.combinedSignal).toBeNull();
@@ -752,12 +754,82 @@ describe('routeVerticalSpread — executable quote gate', () => {
       strikes: normalizedStrikes,
       spot,
       T,
-      r,
+      forward: spot,
     });
 
     expect(result.short.best?.takerFee).toBe(1);
     expect(result.short.best?.netAfterFees).toBe(4);
     expect(result.long.best?.takerFee).toBe(1.5);
     expect(result.long.best?.netAfterFees).toBe(3.5);
+  });
+
+  it('rejects legs whose quote timestamps are not synchronized', () => {
+    const timestamped = strikes.map((row) => ({
+      ...row,
+      call: {
+        ...row.call,
+        venues: {
+          deribit: quote({
+            ...row.call.venues.deribit,
+            bid: row.strike === 95 ? 5 : 1,
+            ask: row.strike === 95 ? 5.5 : 2,
+            estimatedFees: { maker: 0, taker: 0.1 },
+            asOfMs: row.strike === 95 ? Date.now() - 3_000 : Date.now(),
+          }),
+        },
+      },
+    }));
+
+    const result = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 95,
+      longStrike: 105,
+      strikes: timestamped,
+      spot,
+      forward: spot,
+      T,
+    });
+    expect(result.routeVenue).toBeNull();
+    expect(result.combinedSignal).toBeNull();
+  });
+
+  it('rejects a pair without enough displayed size for the venue minimum', () => {
+    const sizeLimited = strikes.map((row) => {
+      const venueQuote = row.call.venues.deribit!;
+      return {
+        ...row,
+        call: {
+          ...row.call,
+          venues: {
+            deribit: quote({
+              ...venueQuote,
+              bid: row.strike === 95 ? 5 : 1,
+              ask: row.strike === 95 ? 5.5 : 2,
+              estimatedFees: { maker: 0, taker: 0.1 },
+              execution: venueQuote.execution
+                ? {
+                    ...venueQuote.execution,
+                    bidSize: 0.5,
+                    askSize: 0.5,
+                    minQuantity: 1,
+                  }
+                : null,
+            }),
+          },
+        },
+      };
+    });
+
+    const result = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike: 95,
+      longStrike: 105,
+      strikes: sizeLimited,
+      spot,
+      forward: spot,
+      T,
+    });
+    expect(result.maxQuantity).toBeNull();
+    expect(result.combinedSignal).toBeNull();
   });
 });

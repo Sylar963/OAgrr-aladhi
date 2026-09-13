@@ -161,7 +161,7 @@ describe('bootstrapServices — readiness transitions', () => {
     expect((summaryCall![0] as { ms: number }).ms).toBeGreaterThanOrEqual(0);
   });
 
-  it('does not create or invoke a collector when snapshots are disabled', async () => {
+  it('does not create a collector without DATABASE_URL', async () => {
     const { shortStraddleSnapshotService } = await import('./services.js');
 
     expect(shortStraddleSnapshotService).toBeNull();

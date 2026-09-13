@@ -116,7 +116,15 @@ const regimeObservationsCacheMaxRows = parsePositiveInteger(
   'REGIME_OBSERVATIONS_CACHE_MAX_ROWS',
 );
 const ivHistorySizeWarnBytes = parseIvHistoryWarnBytes(process.env['IV_HISTORY_SIZE_WARN_BYTES']);
-const shortStraddleSnapshotsEnabled = parseBoolean(process.env['SHORT_STRADDLE_SNAPSHOTS_ENABLED']);
+const shortStraddleSnapshotsEnabled = parseBoolean(
+  process.env['SHORT_STRADDLE_SNAPSHOTS_ENABLED'],
+  true,
+);
+const shortStraddleDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['SHORT_STRADDLE_DB_FLUSH_INTERVAL_MS'],
+  5 * 60_000,
+  'SHORT_STRADDLE_DB_FLUSH_INTERVAL_MS',
+);
 const shortStraddleQuoteMaxAgeMs = parseNonNegativeMs(
   process.env['SHORT_STRADDLE_QUOTE_MAX_AGE_MS'],
   60_000,
@@ -140,10 +148,11 @@ export const ivHistoryService = new IvHistoryService({
   store: ivHistoryStore,
   getSurfaceGrid: async (underlying: string) => {
     const entries = await buildIvSurfaceGrid({ underlying });
-    if (underlying.toUpperCase() === 'BTC' && shortStraddleSnapshotService != null) {
+    if (shortStraddleSnapshotService != null) {
       try {
-        const spotPriceUsd = spotService.getSnapshot('BTC')?.lastPrice ?? Number.NaN;
-        await shortStraddleSnapshotService.collect(entries, spotPriceUsd);
+        const normalizedUnderlying = underlying.toUpperCase();
+        const spotPriceUsd = spotService.getSnapshot(normalizedUnderlying)?.lastPrice ?? Number.NaN;
+        await shortStraddleSnapshotService.collect(entries, normalizedUnderlying, spotPriceUsd);
       } catch (err: unknown) {
         shortStraddleLog.warn(
           { err: String(err) },
@@ -586,7 +595,7 @@ function createShortStraddleSnapshotStore(
   return new DeferredShortStraddleSnapshotStore(
     postgres,
     {
-      flushIntervalMs: marketDataDbFlushIntervalMs,
+      flushIntervalMs: shortStraddleDbFlushIntervalMs,
       cachePath:
         process.env['SHORT_STRADDLE_SNAPSHOT_CACHE_PATH'] ??
         '.cache/short-straddle-snapshots.ndjson',
@@ -617,8 +626,9 @@ function parsePositiveInteger(
   return parsed;
 }
 
-function parseBoolean(value: string | undefined): boolean {
-  return value === '1' || value?.toLowerCase() === 'true';
+function parseBoolean(value: string | undefined, fallback = false): boolean {
+  if (value == null || value.trim() === '') return fallback;
+  return value === '1' || value.toLowerCase() === 'true';
 }
 
 function parseIvHistoryWarnBytes(value: string | undefined): number {

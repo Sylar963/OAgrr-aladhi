@@ -1,4 +1,9 @@
-import type { EnrichedStrike, SurfaceGridEntry, VenueQuote } from '@oggregator/core';
+import type {
+  EnrichedStrike,
+  SurfaceGridEntry,
+  VenueExecutionQuote,
+  VenueQuote,
+} from '@oggregator/core';
 import type { PersistedShortStraddleSnapshot, ShortStraddleSnapshotStore } from '@oggregator/db';
 import { describe, expect, it } from 'vitest';
 import {
@@ -11,7 +16,7 @@ const NOW = Date.parse('2026-07-13T08:05:00.000Z');
 const SPOT = 60_000;
 
 function quote(overrides: Partial<VenueQuote> = {}): VenueQuote {
-  return {
+  const merged: VenueQuote = {
     bid: 1_000,
     ask: 1_020,
     mid: 1_010,
@@ -37,6 +42,29 @@ function quote(overrides: Partial<VenueQuote> = {}): VenueQuote {
     inverse: true,
     ...overrides,
   };
+  if (overrides.execution !== undefined) return merged;
+  const execution: VenueExecutionQuote = {
+    exchangeSymbol: 'TEST',
+    settleCurrency: 'BTC',
+    inverse: true,
+    quantityUnit: 'base',
+    contractMultiplierBase: 1,
+    nativeMinQuantity: 0.1,
+    nativeQuantityStep: 0.1,
+    nativePriceTick: 0.0001,
+    minQuantity: 0.1,
+    quantityStep: 0.1,
+    bidSize: merged.bidSize,
+    askSize: merged.askSize,
+    bidUsd: merged.bid,
+    askUsd: merged.ask,
+    markUsd: merged.mid,
+    bidMakerFeeUsd: merged.estimatedFees?.maker ?? null,
+    bidTakerFeeUsd: merged.estimatedFees?.taker ?? null,
+    askMakerFeeUsd: merged.estimatedFees?.maker ?? null,
+    askTakerFeeUsd: merged.estimatedFees?.taker ?? null,
+  };
+  return { ...merged, execution };
 }
 
 function strike(
@@ -88,7 +116,7 @@ function selected(
   now = NOW,
   quoteMaxAgeMs = 60_000,
 ): PersistedShortStraddleSnapshot | null {
-  return selectShortStraddleSnapshot(entries, spotPriceUsd, now, quoteMaxAgeMs).snapshot;
+  return selectShortStraddleSnapshot(entries, 'BTC', spotPriceUsd, now, quoteMaxAgeMs).snapshot;
 }
 
 class FakeStore implements ShortStraddleSnapshotStore {
@@ -128,7 +156,12 @@ describe('selectShortStraddleSnapshot', () => {
   });
 
   it('rejects the nearest expiry outside the two-day window', () => {
-    const result = selectShortStraddleSnapshot([entry('2026-07-23', [strike(SPOT)])], SPOT, NOW);
+    const result = selectShortStraddleSnapshot(
+      [entry('2026-07-23', [strike(SPOT)])],
+      'BTC',
+      SPOT,
+      NOW,
+    );
 
     expect(result).toEqual({ snapshot: null, reason: 'expiry_outside_window' });
   });
@@ -141,13 +174,14 @@ describe('selectShortStraddleSnapshot', () => {
     expect(snapshot).toBeNull();
   });
 
-  it('selects only paired Deribit quotes', () => {
+  it('selects only call and put quotes paired on the same venue', () => {
     const okxOnly = strike(SPOT, null, null);
     okxOnly.call.venues.okx = quote();
     okxOnly.put.venues.okx = quote({ delta: -0.5 });
     const snapshot = selected([entry('2026-07-20', [okxOnly, strike(61_000)])]);
 
-    expect(snapshot?.strike).toBe(61_000);
+    expect(snapshot?.strike).toBe(SPOT);
+    expect(snapshot?.venue).toBe('okx');
   });
 
   it.each([
@@ -249,9 +283,9 @@ describe('ShortStraddleSnapshotService', () => {
     });
     const entries = [entry('2026-07-20', [strike(SPOT)])];
 
-    await service.collect(entries, SPOT, NOW);
-    await service.collect(entries, SPOT, NOW + 5 * 60_000);
-    await service.collect(entries, SPOT, NOW + 3_600_000);
+    await service.collect(entries, 'BTC', SPOT, NOW);
+    await service.collect(entries, 'BTC', SPOT, NOW + 5 * 60_000);
+    await service.collect(entries, 'BTC', SPOT, NOW + 3_600_000);
 
     expect(store.writes).toHaveLength(2);
     expect(store.writes[0]?.[0]?.sampleSlotTs).toEqual(new Date('2026-07-13T08:00:00.000Z'));
@@ -264,11 +298,37 @@ describe('ShortStraddleSnapshotService', () => {
     const service = new ShortStraddleSnapshotService(store, { log: console });
     const entries = [entry('2026-07-20', [strike(SPOT)])];
 
-    const failed = await service.collect(entries, SPOT, NOW);
-    const retried = await service.collect(entries, SPOT, NOW + 5_000);
+    const failed = await service.collect(entries, 'BTC', SPOT, NOW);
+    const retried = await service.collect(entries, 'BTC', SPOT, NOW + 5_000);
 
     expect(failed).toBe(false);
     expect(retried).toBe(true);
     expect(store.writes).toHaveLength(1);
+  });
+
+  it('captures each underlying independently within the same hourly slot', async () => {
+    const store = new FakeStore();
+    const service = new ShortStraddleSnapshotService(store, {
+      log: console,
+      quoteMaxAgeMs: 2 * 3_600_000,
+    });
+    const entries = [entry('2026-07-20', [strike(SPOT)])];
+
+    await service.collect(entries, 'BTC', SPOT, NOW);
+    await service.collect(entries, 'ETH', SPOT, NOW);
+
+    expect(store.writes.map((batch) => batch[0]?.underlying)).toEqual(['BTC', 'ETH']);
+  });
+
+  it('writes one near-ATM snapshot for each venue with a valid paired market', async () => {
+    const store = new FakeStore();
+    const service = new ShortStraddleSnapshotService(store, { log: console });
+    const paired = strike(SPOT);
+    paired.call.venues.okx = quote();
+    paired.put.venues.okx = quote({ delta: -0.5 });
+
+    await service.collect([entry('2026-07-20', [paired])], 'BTC', SPOT, NOW);
+
+    expect(store.writes[0]?.map((snapshot) => snapshot.venue)).toEqual(['deribit', 'okx']);
   });
 });

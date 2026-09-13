@@ -9,12 +9,14 @@ function makeSmile(points: { strike: number; iv: number }[], spot: number): Smil
     callIv: p.iv,
     putIv: p.iv,
     blendedIv: p.iv,
+    executableBidIv: p.iv - 0.005,
+    executableAskIv: p.iv + 0.005,
   }));
-  return { spot, points: smilePoints, atmIv: null, skew: null };
+  return { forward: spot, points: smilePoints, atmIv: null, skew: null };
 }
 
 describe('computeSviRichness', () => {
-  it('returns empty richness when fewer than 5 usable points', () => {
+  it('returns empty richness when fewer than 6 usable points', () => {
     const smile = makeSmile(
       [
         { strike: 90, iv: 0.6 },
@@ -61,5 +63,25 @@ describe('computeSviRichness', () => {
     for (const p of others) {
       expect(Math.abs(p.zScore!)).toBeLessThan(Math.abs(outlier.zScore!));
     }
+  });
+
+  it('scores each strike against a fit that excludes that strike', () => {
+    const smile = makeSmile(
+      [
+        { strike: 80, iv: 0.66 },
+        { strike: 90, iv: 0.60 },
+        { strike: 95, iv: 0.58 },
+        { strike: 100, iv: 0.57 },
+        { strike: 105, iv: 0.64 },
+        { strike: 110, iv: 0.60 },
+        { strike: 120, iv: 0.66 },
+      ],
+      100,
+    );
+
+    const result = computeSviRichness(smile, 30 / 365);
+    const outlier = result.points.find((point) => point.strike === 105);
+    expect(outlier?.ivSvi).not.toBeNull();
+    expect(outlier?.residual).toBeGreaterThan(0.02);
   });
 });

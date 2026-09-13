@@ -13,7 +13,7 @@ interface Props {
   longStrike: number | null;
   onShortChange: (s: number | null) => void;
   onLongChange: (s: number | null) => void;
-  riskFreeRate: number;
+  forward: number | null;
   T: number | null;
 }
 
@@ -38,7 +38,7 @@ export default function SpreadBuilderPanel({
   longStrike,
   onShortChange,
   onLongChange,
-  riskFreeRate,
+  forward,
   T,
 }: Props) {
   const orderedStrikes = [...strikes]
@@ -130,10 +130,12 @@ export default function SpreadBuilderPanel({
 
       {shortError && <div className={styles.error}>{shortError}</div>}
 
-      <div className={styles.paramRow}>
-        <div className={styles.paramLabel}>r</div>
-        <div className={styles.paramValue}>{(riskFreeRate * 100).toFixed(0)}%</div>
-      </div>
+      {forward != null && (
+        <div className={styles.paramRow}>
+          <div className={styles.paramLabel}>F</div>
+          <div className={styles.paramValue}>{forward.toLocaleString()}</div>
+        </div>
+      )}
       {T != null && (
         <div className={styles.paramRow}>
           <div className={styles.paramLabel}>T</div>

@@ -1,4 +1,4 @@
-import type { EnrichedStrike, EnrichedSide, SmileCurve, SmilePoint } from '@shared/enriched';
+import type { EnrichedStrike, EnrichedSide, SmileCurve, SmilePoint, VenueQuote } from '@shared/enriched';
 
 export type { SmileCurve, SmilePoint };
 
@@ -7,28 +7,50 @@ export type { SmileCurve, SmilePoint };
 // server starts emitting it, swap consumers to read response.smile and delete
 // this module.
 
-// Half-width of the put/call seam smoothing window, as a fraction of spot.
-// Inside [spot·(1−W), spot·(1+W)] we linearly mix put-side and call-side IVs
-// instead of hard-switching at K=spot. W=0.025 spans ~3 strikes either side of
-// spot on typical BTC/ETH grids — enough to remove the discontinuity that
+// Half-width of the put/call seam smoothing window, as a fraction of the forward.
+// Inside [forward·(1−W), forward·(1+W)] we linearly mix put-side and call-side IVs
+// instead of hard-switching at K=forward. W=0.025 spans ~3 strikes either side of
+// the forward on typical BTC/ETH grids — enough to remove the discontinuity that
 // would otherwise jump the breakeven-IV reading by a few tenths of a percent
-// when a tight ATM spread's breakeven crosses spot.
+// when a tight ATM spread's breakeven crosses the forward.
 const ATM_BLEND_HALF_WIDTH = 0.025;
 
-function avgIv(side: EnrichedSide): number | null {
+function avgIv(side: EnrichedSide, pick: (quote: VenueQuote) => number | null): number | null {
   let sum = 0;
   let count = 0;
   for (const quote of Object.values(side.venues)) {
-    if (!quote || quote.markIv == null) continue;
-    sum += quote.markIv;
+    if (!quote) continue;
+    const iv = pick(quote);
+    if (iv == null || !Number.isFinite(iv) || iv <= 0) continue;
+    sum += iv;
     count += 1;
   }
   return count > 0 ? sum / count : null;
 }
 
+function executableIv(quote: VenueQuote, leg: 'sell' | 'buy'): number | null {
+  const execution = quote.execution;
+  if (leg === 'sell') {
+    return execution?.bidUsd != null &&
+      execution.bidUsd > 0 &&
+      execution.bidSize != null &&
+      execution.bidSize > 0 &&
+      execution.bidTakerFeeUsd != null
+      ? quote.bidIv
+      : null;
+  }
+  return execution?.askUsd != null &&
+    execution.askUsd > 0 &&
+    execution.askSize != null &&
+    execution.askSize > 0 &&
+    execution.askTakerFeeUsd != null
+    ? quote.askIv
+    : null;
+}
+
 function blendOtmIv(
   strike: number,
-  spot: number,
+  forward: number,
   callIv: number | null,
   putIv: number | null,
 ): number | null {
@@ -36,8 +58,8 @@ function blendOtmIv(
   if (callIv == null) return putIv;
   if (putIv == null) return callIv;
 
-  const lo = spot * (1 - ATM_BLEND_HALF_WIDTH);
-  const hi = spot * (1 + ATM_BLEND_HALF_WIDTH);
+  const lo = forward * (1 - ATM_BLEND_HALF_WIDTH);
+  const hi = forward * (1 + ATM_BLEND_HALF_WIDTH);
   if (strike <= lo) return putIv;
   if (strike >= hi) return callIv;
   const w = (strike - lo) / (hi - lo);
@@ -65,27 +87,33 @@ export function interpAtStrike(points: readonly SmilePoint[], targetStrike: numb
   return null;
 }
 
-export function extractSmile(strikes: readonly EnrichedStrike[], spot: number): SmileCurve {
+export function extractSmile(strikes: readonly EnrichedStrike[], forward: number): SmileCurve {
   const points: SmilePoint[] = strikes.map((s) => {
-    const callIv = avgIv(s.call);
-    const putIv = avgIv(s.put);
-    const blended = blendOtmIv(s.strike, spot, callIv, putIv);
+    const callIv = avgIv(s.call, (quote) => quote.markIv);
+    const putIv = avgIv(s.put, (quote) => quote.markIv);
+    const callBidIv = avgIv(s.call, (quote) => executableIv(quote, 'sell'));
+    const putBidIv = avgIv(s.put, (quote) => executableIv(quote, 'sell'));
+    const callAskIv = avgIv(s.call, (quote) => executableIv(quote, 'buy'));
+    const putAskIv = avgIv(s.put, (quote) => executableIv(quote, 'buy'));
+    const blended = blendOtmIv(s.strike, forward, callIv, putIv);
     return {
       strike: s.strike,
-      moneyness: spot > 0 ? s.strike / spot : 0,
+      moneyness: forward > 0 ? s.strike / forward : 0,
       callIv,
       putIv,
       blendedIv: blended,
+      executableBidIv: blendOtmIv(s.strike, forward, callBidIv, putBidIv),
+      executableAskIv: blendOtmIv(s.strike, forward, callAskIv, putAskIv),
     };
   });
 
-  const atmIv = interpAtStrike(points, spot);
-  const lowWing = interpAtStrike(points, spot * 0.9);
-  const highWing = interpAtStrike(points, spot * 1.1);
+  const atmIv = interpAtStrike(points, forward);
+  const lowWing = interpAtStrike(points, forward * 0.9);
+  const highWing = interpAtStrike(points, forward * 1.1);
   const skew =
     atmIv != null && atmIv > 0 && lowWing != null && highWing != null
       ? (lowWing - highWing) / atmIv
       : null;
 
-  return { spot, points, atmIv, skew };
+  return { forward, points, atmIv, skew };
 }

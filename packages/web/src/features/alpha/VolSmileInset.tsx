@@ -44,7 +44,15 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
 
   const layout = useMemo(() => {
     if (!smile || smile.points.length === 0) return null;
-    const pts = smile.points.filter((p) => p.blendedIv != null);
+    const executableIvByStrike = new Map(
+      richness?.points.map((point) => [point.strike, point.ivMarket]) ?? [],
+    );
+    const sourcePoints = richness?.params == null
+      ? smile.points
+      : smile.points
+          .filter((point) => executableIvByStrike.has(point.strike))
+          .map((point) => ({ ...point, blendedIv: executableIvByStrike.get(point.strike)! }));
+    const pts = sourcePoints.filter((p) => p.blendedIv != null);
     if (pts.length === 0) return null;
 
     const xs = pts.map((p) => p.strike);
@@ -66,12 +74,12 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
     const path = catmullRomPath(screen);
 
     let sviPath: string | null = null;
-    if (richness?.params != null && T != null && T > 0 && smile.spot > 0) {
+    if (richness?.params != null && T != null && T > 0 && smile.forward > 0) {
       const samples: { x: number; y: number }[] = [];
       const SAMPLES = 80;
       for (let i = 0; i <= SAMPLES; i++) {
         const strike = xMin + ((xMax - xMin) * i) / SAMPLES;
-        const k = Math.log(strike / smile.spot);
+        const k = Math.log(strike / smile.forward);
         const iv = sviIv(richness.params, k, T);
         if (Number.isFinite(iv) && iv > 0) {
           samples.push({ x: sx(strike), y: sy(iv) });
@@ -117,11 +125,11 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
     <div className={styles.wrap}>
       <div className={styles.title}>
         <span>
-          Vol smile · OTM IV blend
+          Vol smile · {richness?.params == null ? 'OTM mark IV' : 'executable IV midpoint'}
           <InfoTip label="How to read the smile" title="Reading the vol smile" align="start">
             <p>
               For each strike, IV is averaged across venues using the OTM side
-              (puts below spot, calls above) — the side that actually trades and
+              (puts below the forward, calls above) — the side that actually trades and
               reflects the wing premium the market is paying.
             </p>
             <p style={{ marginTop: 6 }}>
@@ -143,15 +151,16 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
-              <strong>Skew</strong> = (IV at 0.9·spot − IV at 1.1·spot) / ATM IV.
+              <strong>Skew</strong> = (IV at 0.9·forward − IV at 1.1·forward) / ATM IV.
               Positive skew → downside puts richer than upside calls (downside
               fear). In BTC/ETH, mildly positive is normal; spikes often precede
               directional regimes. Use it to pick the side: rich put skew makes
               put-credit spreads structurally more attractive.
             </p>
             <p style={{ marginTop: 6 }}>
-              <strong>Dashed line</strong> is the arbitrage-free SVI fit (Gatheral
-              raw, Zeliade calibration). Dot color = richness vs. fit:{' '}
+              <strong>Dashed line</strong> is the SVI fit to executable bid/ask IV
+              midpoints. Dot color uses a leave-one-out residual, so each strike
+              is scored against a fit that excluded it:{' '}
               <span style={{ color: 'var(--accent-primary)' }}>rich</span> at
               z &gt; +1σ (good for sellers),{' '}
               <span style={{ color: 'var(--color-loss)' }}>cheap</span> at z &lt;
@@ -166,7 +175,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
             </span>
           )}
           {smile?.skew != null && (
-            <span className={styles.stat} title="(IV at 0.9·spot − IV at 1.1·spot) / ATM IV. Positive = downside puts richer than upside calls.">
+            <span className={styles.stat} title="(IV at 0.9·forward − IV at 1.1·forward) / ATM IV. Positive = downside puts richer than upside calls.">
               Skew{' '}
               <strong data-sign={smile.skew >= 0 ? 'pos' : 'neg'}>
                 {smile.skew >= 0 ? '+' : ''}
@@ -176,7 +185,9 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
           )}
         </span>
         <span className={styles.subtitle}>
-          per-strike avg markIv across venues — puts below spot, calls above
+          {richness?.params == null
+            ? 'mark IV fallback — puts below forward, calls above'
+            : 'bid/ask IV midpoint with leave-one-out SVI scoring'}
         </span>
       </div>
       <svg
@@ -271,9 +282,9 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
 
         {smile && (
           <line
-            x1={layout.sx(smile.spot)}
+            x1={layout.sx(smile.forward)}
             y1={PAD_T}
-            x2={layout.sx(smile.spot)}
+            x2={layout.sx(smile.forward)}
             y2={H - PAD_B}
             stroke="var(--text-dim)"
             strokeDasharray="3 3"

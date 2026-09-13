@@ -3,12 +3,15 @@ import { describe, it, expect } from 'vitest';
 import {
   blackScholesCall,
   blackScholesPut,
+  black76Price,
+  black76Probability,
   delta,
   gamma,
   vega,
   theta,
   rho,
   impliedVolNewtonRaphson,
+  impliedVolBlack76,
   normCdf,
   normPdf,
   erf,
@@ -55,6 +58,36 @@ describe('blackScholesCall / blackScholesPut', () => {
     expect(blackScholesCall(90, 100, 0, 0.05, 0.2)).toBe(0);
     expect(blackScholesPut(90, 100, 0, 0.05, 0.2)).toBe(10);
     expect(blackScholesPut(110, 100, 0, 0.05, 0.2)).toBe(0);
+  });
+});
+
+describe('Black-76', () => {
+  it('satisfies discounted forward put-call parity', () => {
+    const forward = 105;
+    const strike = 100;
+    const discountFactor = 0.97;
+    const call = black76Price('call', forward, strike, 0.5, 0.4, discountFactor);
+    const put = black76Price('put', forward, strike, 0.5, 0.4, discountFactor);
+    expect(call - put).toBeCloseTo(discountFactor * (forward - strike), 8);
+  });
+
+  it('round-trips implied volatility from an expiry-forward price', () => {
+    const price = black76Price('put', 98, 105, 0.4, 0.62);
+    const iv = impliedVolBlack76({
+      marketPrice: price,
+      forward: 98,
+      strike: 105,
+      T: 0.4,
+      right: 'put',
+    });
+    expect(iv).toBeCloseTo(0.62, 6);
+  });
+
+  it('uses the forward for risk-neutral threshold probability', () => {
+    const above = black76Probability('above', 105, 100, 1, 0.2);
+    const below = black76Probability('below', 105, 100, 1, 0.2);
+    expect(above + below).toBeCloseTo(1, 8);
+    expect(above).toBeGreaterThan(0.5);
   });
 });
 

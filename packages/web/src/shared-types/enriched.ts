@@ -50,10 +50,12 @@ export interface SmilePoint {
   callIv: number | null;
   putIv: number | null;
   blendedIv: number | null;
+  executableBidIv: number | null;
+  executableAskIv: number | null;
 }
 
 export interface SmileCurve {
-  spot: number;
+  forward: number;
   points: SmilePoint[];
   atmIv: number | null;
   skew: number | null;

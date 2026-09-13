@@ -1,4 +1,4 @@
-import type { SurfaceGridEntry, VenueQuote } from '@oggregator/core';
+import type { SurfaceGridEntry, VenueId, VenueQuote } from '@oggregator/core';
 import type { PersistedShortStraddleSnapshot, ShortStraddleSnapshotStore } from '@oggregator/db';
 
 const HOUR_MS = 3_600_000;
@@ -9,7 +9,7 @@ const DEFAULT_QUOTE_MAX_AGE_MS = 60_000;
 
 type SelectionFailureReason =
   | 'invalid_spot'
-  | 'no_deribit_expiry'
+  | 'no_listed_expiry'
   | 'expiry_outside_window'
   | 'no_valid_paired_strike';
 
@@ -32,6 +32,7 @@ interface ExecutableLeg {
 }
 
 interface StrikeCandidate {
+  venue: VenueId;
   strike: number;
   forwardPriceUsd: number;
   combinedSpreadPct: number;
@@ -55,16 +56,37 @@ export function utcHourlySlotMs(now: number): number {
 
 export function selectShortStraddleSnapshot(
   entries: SurfaceGridEntry[],
+  underlying: string,
   spotPriceUsd: number,
   now: number,
   quoteMaxAgeMs: number = DEFAULT_QUOTE_MAX_AGE_MS,
 ): ShortStraddleSnapshotSelection {
-  if (!isPositiveFinite(spotPriceUsd)) return { snapshot: null, reason: 'invalid_spot' };
+  const selection = selectShortStraddleSnapshots(
+    entries,
+    underlying,
+    spotPriceUsd,
+    now,
+    quoteMaxAgeMs,
+  );
+  const snapshot = selection.snapshots[0] ?? null;
+  return snapshot == null
+    ? { snapshot: null, reason: selection.reason ?? 'no_valid_paired_strike' }
+    : { snapshot, reason: null };
+}
+
+function selectShortStraddleSnapshots(
+  entries: SurfaceGridEntry[],
+  underlying: string,
+  spotPriceUsd: number,
+  now: number,
+  quoteMaxAgeMs: number,
+): { snapshots: PersistedShortStraddleSnapshot[]; reason: SelectionFailureReason | null } {
+  if (!isPositiveFinite(spotPriceUsd)) return { snapshots: [], reason: 'invalid_spot' };
 
   const targetExpiryTs = now + TARGET_DTE_MS;
   const expiries = entries
-    .filter(hasDeribitQuote)
-    .map((entry) => ({ entry, expiryTs: deribitExpiryTimestamp(entry.expiry) }))
+    .filter(hasVenueQuote)
+    .map((entry) => ({ entry, expiryTs: expiryTimestamp(entry.expiry) }))
     .filter(
       (candidate): candidate is { entry: SurfaceGridEntry; expiryTs: number } =>
         candidate.expiryTs != null,
@@ -75,43 +97,51 @@ export function selectShortStraddleSnapshot(
       return distance !== 0 ? distance : a.expiryTs - b.expiryTs;
     });
   const selectedExpiry = expiries[0];
-  if (selectedExpiry == null) return { snapshot: null, reason: 'no_deribit_expiry' };
+  if (selectedExpiry == null) return { snapshots: [], reason: 'no_listed_expiry' };
   if (Math.abs(selectedExpiry.expiryTs - targetExpiryTs) > MAX_EXPIRY_DISTANCE_MS) {
-    return { snapshot: null, reason: 'expiry_outside_window' };
+    return { snapshots: [], reason: 'expiry_outside_window' };
   }
 
   const candidates = selectedExpiry.entry.strikes
-    .map((strike) => {
-      const callQuote = strike.call.venues.deribit;
-      const putQuote = strike.put.venues.deribit;
-      if (callQuote == null || putQuote == null) return null;
-      const call = executableLeg(callQuote, now, quoteMaxAgeMs);
-      const put = executableLeg(putQuote, now, quoteMaxAgeMs);
-      const forwardPriceUsd = callQuote.underlyingPriceUsd;
-      if (call == null || put == null || !isPositiveFinite(forwardPriceUsd)) return null;
-      return {
-        strike: strike.strike,
-        forwardPriceUsd,
-        combinedSpreadPct: spreadPct(call) + spreadPct(put),
-        call,
-        put,
-      } satisfies StrikeCandidate;
+    .flatMap((strike) => {
+      const venues = Object.keys(strike.call.venues) as VenueId[];
+      return venues.flatMap((venue) => {
+        const callQuote = strike.call.venues[venue];
+        const putQuote = strike.put.venues[venue];
+        if (callQuote == null || putQuote == null) return [];
+        const call = executableLeg(callQuote, now, quoteMaxAgeMs);
+        const put = executableLeg(putQuote, now, quoteMaxAgeMs);
+        const forwardPriceUsd = callQuote.underlyingPriceUsd ?? putQuote.underlyingPriceUsd;
+        if (call == null || put == null || !isPositiveFinite(forwardPriceUsd)) return [];
+        return [{
+          venue,
+          strike: strike.strike,
+          forwardPriceUsd,
+          combinedSpreadPct: spreadPct(call) + spreadPct(put),
+          call,
+          put,
+        } satisfies StrikeCandidate];
+      });
     })
-    .filter((candidate): candidate is StrikeCandidate => candidate != null)
     .sort((a, b) => {
       const distance = Math.abs(a.strike - spotPriceUsd) - Math.abs(b.strike - spotPriceUsd);
       if (distance !== 0) return distance;
       const spread = a.combinedSpreadPct - b.combinedSpreadPct;
-      return spread !== 0 ? spread : a.strike - b.strike;
+      if (spread !== 0) return spread;
+      const strike = a.strike - b.strike;
+      return strike !== 0 ? strike : a.venue.localeCompare(b.venue);
     });
-  const selected = candidates[0];
-  if (selected == null) return { snapshot: null, reason: 'no_valid_paired_strike' };
+  const selectedByVenue = new Map<VenueId, StrikeCandidate>();
+  for (const candidate of candidates) {
+    if (!selectedByVenue.has(candidate.venue)) selectedByVenue.set(candidate.venue, candidate);
+  }
+  if (selectedByVenue.size === 0) return { snapshots: [], reason: 'no_valid_paired_strike' };
 
   return {
     reason: null,
-    snapshot: {
-      venue: 'deribit',
-      underlying: 'BTC',
+    snapshots: [...selectedByVenue.values()].map((selected) => ({
+      venue: selected.venue,
+      underlying: underlying.toUpperCase(),
       sampleSlotTs: new Date(utcHourlySlotMs(now)),
       capturedAt: new Date(now),
       expiry: selectedExpiry.entry.expiry,
@@ -141,13 +171,13 @@ export function selectShortStraddleSnapshot(
       putMakerFeeUsd: selected.put.makerFeeUsd,
       putTakerFeeUsd: selected.put.takerFeeUsd,
       putQuoteTs: new Date(selected.put.quoteTs),
-    },
+    })),
   };
 }
 
 export class ShortStraddleSnapshotService {
-  private readonly completedSlots = new Set<number>();
-  private readonly inFlightSlots = new Set<number>();
+  private readonly completedSlots = new Set<string>();
+  private readonly inFlightSlots = new Set<string>();
   private readonly quoteMaxAgeMs: number;
   private log: SnapshotLog;
 
@@ -165,11 +195,13 @@ export class ShortStraddleSnapshotService {
 
   async collect(
     entries: SurfaceGridEntry[],
+    underlying: string,
     spotPriceUsd: number,
     now = Date.now(),
   ): Promise<boolean> {
     const sampleSlotMs = utcHourlySlotMs(now);
-    if (this.completedSlots.has(sampleSlotMs) || this.inFlightSlots.has(sampleSlotMs)) {
+    const slotKey = `${underlying.toUpperCase()}:${sampleSlotMs}`;
+    if (this.completedSlots.has(slotKey) || this.inFlightSlots.has(slotKey)) {
       this.log.debug?.(
         { sampleSlotMs, reason: 'slot_complete' },
         'short-straddle snapshot skipped',
@@ -177,10 +209,16 @@ export class ShortStraddleSnapshotService {
       return false;
     }
 
-    this.inFlightSlots.add(sampleSlotMs);
+    this.inFlightSlots.add(slotKey);
     try {
-      const selection = selectShortStraddleSnapshot(entries, spotPriceUsd, now, this.quoteMaxAgeMs);
-      if (selection.snapshot == null) {
+      const selection = selectShortStraddleSnapshots(
+        entries,
+        underlying,
+        spotPriceUsd,
+        now,
+        this.quoteMaxAgeMs,
+      );
+      if (selection.snapshots.length === 0) {
         this.log.debug?.(
           { sampleSlotMs, reason: selection.reason },
           'short-straddle snapshot skipped',
@@ -188,13 +226,13 @@ export class ShortStraddleSnapshotService {
         return false;
       }
 
-      await this.store.writeMany([selection.snapshot]);
-      this.completedSlots.add(sampleSlotMs);
+      await this.store.writeMany(selection.snapshots);
+      this.completedSlots.add(slotKey);
       this.log.debug?.(
         {
           sampleSlotMs,
-          expiry: selection.snapshot.expiry,
-          strike: selection.snapshot.strike,
+          snapshots: selection.snapshots.length,
+          venues: selection.snapshots.map((snapshot) => snapshot.venue),
         },
         'short-straddle snapshot captured',
       );
@@ -206,18 +244,18 @@ export class ShortStraddleSnapshotService {
       );
       return false;
     } finally {
-      this.inFlightSlots.delete(sampleSlotMs);
+      this.inFlightSlots.delete(slotKey);
     }
   }
 }
 
-function hasDeribitQuote(entry: SurfaceGridEntry): boolean {
+function hasVenueQuote(entry: SurfaceGridEntry): boolean {
   return entry.strikes.some(
-    (strike) => strike.call.venues.deribit != null || strike.put.venues.deribit != null,
+    (strike) => Object.keys(strike.call.venues).length > 0 || Object.keys(strike.put.venues).length > 0,
   );
 }
 
-function deribitExpiryTimestamp(expiry: string): number | null {
+function expiryTimestamp(expiry: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return null;
   const timestamp = Date.parse(`${expiry}T08:00:00.000Z`);
   if (!Number.isFinite(timestamp)) return null;
@@ -229,15 +267,17 @@ function executableLeg(
   now: number,
   quoteMaxAgeMs: number,
 ): ExecutableLeg | null {
-  const bidUsd = quote.bid;
-  const askUsd = quote.ask;
-  const bidSize = quote.bidSize;
-  const askSize = quote.askSize;
+  const execution = quote.execution;
+  const bidUsd = execution?.bidUsd;
+  const askUsd = execution?.askUsd;
+  const bidSize = execution?.bidSize;
+  const askSize = execution?.askSize;
   const markIv = quote.markIv;
   const delta = quote.delta;
   const vegaUsdPerVolPoint = quote.vega;
   const openInterest = quote.openInterest;
-  const fees = quote.estimatedFees;
+  const makerFeeUsd = execution?.bidMakerFeeUsd;
+  const takerFeeUsd = execution?.bidTakerFeeUsd;
   const quoteTs = quote.asOfMs;
   if (
     !isPositiveFinite(bidUsd) ||
@@ -249,9 +289,8 @@ function executableLeg(
     !isFiniteNumber(delta) ||
     !isFiniteNumber(vegaUsdPerVolPoint) ||
     !isFiniteNumber(openInterest) ||
-    fees == null ||
-    !isFiniteNumber(fees.maker) ||
-    !isFiniteNumber(fees.taker) ||
+    !isFiniteNumber(makerFeeUsd) ||
+    !isFiniteNumber(takerFeeUsd) ||
     !isFiniteNumber(quoteTs) ||
     quoteTs > now ||
     now - quoteTs > quoteMaxAgeMs
@@ -268,8 +307,8 @@ function executableLeg(
     delta,
     vegaUsdPerVolPoint,
     openInterest,
-    makerFeeUsd: fees.maker,
-    takerFeeUsd: fees.taker,
+    makerFeeUsd,
+    takerFeeUsd,
     quoteTs,
   };
 }

@@ -37,6 +37,44 @@ function d1(spot: number, strike: number, T: number, r: number, sigma: number): 
   return (Math.log(spot / strike) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
 }
 
+function black76D1(forward: number, strike: number, T: number, sigma: number): number {
+  return (Math.log(forward / strike) + 0.5 * sigma * sigma * T) / (sigma * Math.sqrt(T));
+}
+
+export function black76Price(
+  right: OptionRight,
+  forward: number,
+  strike: number,
+  T: number,
+  sigma: number,
+  discountFactor = 1,
+): number {
+  if (T <= 0) {
+    const intrinsic = right === 'call'
+      ? Math.max(forward - strike, 0)
+      : Math.max(strike - forward, 0);
+    return discountFactor * intrinsic;
+  }
+  if (forward <= 0 || strike <= 0 || sigma <= 0 || discountFactor <= 0) return NaN;
+  const d1v = black76D1(forward, strike, T, sigma);
+  const d2 = d1v - sigma * Math.sqrt(T);
+  return right === 'call'
+    ? discountFactor * (forward * normCdf(d1v) - strike * normCdf(d2))
+    : discountFactor * (strike * normCdf(-d2) - forward * normCdf(-d1v));
+}
+
+export function black76Probability(
+  direction: ProfitDirection,
+  forward: number,
+  threshold: number,
+  T: number,
+  sigma: number,
+): number {
+  if (T <= 0 || sigma <= 0 || forward <= 0 || threshold <= 0) return NaN;
+  const d2 = black76D1(forward, threshold, T, sigma) - sigma * Math.sqrt(T);
+  return direction === 'above' ? normCdf(d2) : normCdf(-d2);
+}
+
 export function blackScholesCall(
   spot: number,
   strike: number,
@@ -149,6 +187,57 @@ export interface ImpliedVolArgs {
   initialGuess?: number;
   maxIter?: number;
   tol?: number;
+}
+
+export interface Black76ImpliedVolArgs {
+  marketPrice: number;
+  forward: number;
+  strike: number;
+  T: number;
+  right: OptionRight;
+  discountFactor?: number;
+  initialGuess?: number;
+  maxIter?: number;
+  tol?: number;
+}
+
+export function impliedVolBlack76(args: Black76ImpliedVolArgs): number | null {
+  const {
+    marketPrice,
+    forward,
+    strike,
+    T,
+    right,
+    discountFactor = 1,
+    initialGuess = 0.5,
+    maxIter = 100,
+    tol = 1e-6,
+  } = args;
+  if (
+    marketPrice <= 0 ||
+    forward <= 0 ||
+    strike <= 0 ||
+    T <= 0 ||
+    discountFactor <= 0
+  ) {
+    return null;
+  }
+
+  const upperBound = discountFactor * (right === 'call' ? forward : strike);
+  if (marketPrice >= upperBound) return null;
+
+  let sigma = initialGuess;
+  for (let i = 0; i < maxIter; i++) {
+    const d1v = black76D1(forward, strike, T, sigma);
+    const price = black76Price(right, forward, strike, T, sigma, discountFactor);
+    const vega = discountFactor * forward * normPdf(d1v) * Math.sqrt(T);
+    if (!Number.isFinite(price) || vega < 1e-10) return null;
+    const diff = price - marketPrice;
+    if (Math.abs(diff) < tol) return sigma;
+    sigma -= diff / vega;
+    if (sigma <= 0 || sigma > 5) return null;
+  }
+  return null;
 }
 
 // Newton-Raphson. Returns null on divergence (vega too small, σ escapes [0, 5], or

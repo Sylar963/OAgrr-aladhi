@@ -10,8 +10,6 @@ import {
 } from '@lib/analytics/verticalSpread';
 import { extractSmile, interpAtStrike, type SmileCurve } from '@lib/analytics/smile';
 
-const DEFAULT_RISK_FREE_RATE = 0.05;
-
 export interface AnalysisInput {
   chain: EnrichedChainResponse | undefined;
   kind: SpreadKind;
@@ -27,7 +25,7 @@ export interface AnalysisOutput {
   smile: SmileCurve | null;
   analysis: RoutedSpreadAnalysis | null;
   T: number | null;
-  r: number;
+  forward: number | null;
 }
 
 export function computeTimeToExpiry(
@@ -63,13 +61,14 @@ export function useVerticalSpreadAnalysis({
   }, [chain?.strikes]);
 
   const spot = chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? null;
+  const forward = chain?.stats.forwardPriceUsd ?? spot;
   const T = computeTimeToExpiry(chain?.expiryTs, chain?.dte);
 
   // Smile only depends on strikes + spot. Lifting it out of the main memo
   // keeps the SVG inset stable when the user only changes strikes/kind.
   const smile = useMemo(
-    () => (spot != null && spot > 0 ? extractSmile(chain?.strikes ?? [], spot) : null),
-    [chain?.strikes, spot],
+    () => (forward != null && forward > 0 ? extractSmile(chain?.strikes ?? [], forward) : null),
+    [chain?.strikes, forward],
   );
 
   // Stringify the venues filter so an inline-array prop from the caller
@@ -82,6 +81,8 @@ export function useVerticalSpreadAnalysis({
       !chain ||
       spot == null ||
       spot <= 0 ||
+      forward == null ||
+      forward <= 0 ||
       T == null ||
       shortStrike == null ||
       longStrike == null ||
@@ -98,15 +99,15 @@ export function useVerticalSpreadAnalysis({
       strikes: chain.strikes,
       strikeByKey,
       spot,
+      forward,
       T,
-      r: DEFAULT_RISK_FREE_RATE,
       venues: venues as readonly import('@shared/enriched').VenueId[] | undefined,
       ivAtStrike,
       realWorld,
       regimeDominant,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain?.strikes, kind, shortStrike, longStrike, spot, T, strikeByKey, venuesKey, smile, rwKey, regimeDominant]);
+  }, [chain?.strikes, kind, shortStrike, longStrike, spot, forward, T, strikeByKey, venuesKey, smile, rwKey, regimeDominant]);
 
-  return { spot, smile, analysis, T, r: DEFAULT_RISK_FREE_RATE };
+  return { spot, forward, smile, analysis, T };
 }

@@ -14,6 +14,10 @@ interface Props {
   shortStrike: number | null;
   longStrike: number | null;
   executableNetCredit: number | null;
+  routeVenue: string | null;
+  maxQuantity: number | null;
+  quoteSkewMs: number | null;
+  theoreticalIndependentNetCredit: number | null;
 }
 
 function VenueRouterTable({
@@ -22,16 +26,21 @@ function VenueRouterTable({
   shortStrike,
   longStrike,
   executableNetCredit,
+  routeVenue,
+  maxQuantity,
+  quoteSkewMs,
+  theoreticalIndependentNetCredit,
 }: Props) {
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>
-          Cross-venue routing
-          <InfoTip label="How routing is computed" title="Cross-venue routing" align="start">
+          Same-venue execution
+          <InfoTip label="How routing is computed" title="Same-venue execution" align="start">
             <p>
-              Each leg is priced independently across all venues that quote the
-              strike, then ranked by <strong>net after taker fees</strong>:
+              The executable spread uses both legs from one venue, with matching
+              settlement, quote timestamps within two seconds, known taker fees,
+              and enough displayed size for a common tradable quantity.
             </p>
             <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
               <li>
@@ -49,15 +58,20 @@ function VenueRouterTable({
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
-              <strong>How to think about it:</strong> the highlighted row is the
-              best <em>quoted</em> venue with a known taker fee, not a guaranteed fill — size, spread,
-              and your account permissions all matter. The <code>inf</code> badge
+              <strong>Independent-leg best</strong> is non-atomic and theoretical.
+              It may require accounts and collateral on multiple venues and can
+              leave one leg unfilled. Highlighted rows form the safer same-venue
+              route, but displayed size still does not guarantee a fill. The <code>inf</code> badge
               means IV was inferred from price (venue didn&apos;t publish bid/ask
               IV), so treat that IV as best-effort.
             </p>
           </InfoTip>
         </span>
-        <span className={styles.subtitle}>Best quoted price per leg</span>
+        <span className={styles.subtitle}>
+          {routeVenue == null
+            ? 'No synchronized size-valid pair'
+            : `${VENUES[routeVenue as keyof typeof VENUES]?.label ?? routeVenue} · max ${fmtCompact(maxQuantity)} · skew ${fmtCompact(quoteSkewMs)}ms`}
+        </span>
       </div>
 
       <LegTable
@@ -74,10 +88,14 @@ function VenueRouterTable({
       />
 
       <div className={styles.sum}>
-        <span className={styles.sumLabel}>Quoted net credit (after known fees)</span>
+        <span className={styles.sumLabel}>Same-venue net credit (after known fees)</span>
         <span className={styles.sumValue} data-kind="credit">
           {fmtUsd(executableNetCredit)}
         </span>
+      </div>
+      <div className={styles.sum}>
+        <span className={styles.sumLabel}>Independent-leg theoretical credit (non-atomic)</span>
+        <span className={styles.sumValue}>{fmtUsd(theoreticalIndependentNetCredit)}</span>
       </div>
     </div>
   );

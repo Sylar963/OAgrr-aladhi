@@ -133,7 +133,7 @@ export default function AlphaView() {
       longStrike={longStrike}
       onShortChange={setShortStrike}
       onLongChange={setLongStrike}
-      riskFreeRate={analysis.r}
+      forward={analysis.forward}
       T={analysis.T}
     />
   );
@@ -150,6 +150,10 @@ export default function AlphaView() {
         shortStrike={shortStrike}
         longStrike={longStrike}
         executableNetCredit={executableNet}
+        routeVenue={analysis.analysis?.routeVenue ?? null}
+        maxQuantity={analysis.analysis?.maxQuantity ?? null}
+        quoteSkewMs={analysis.analysis?.quoteSkewMs ?? null}
+        theoreticalIndependentNetCredit={analysis.analysis?.theoreticalIndependentNetCredit ?? null}
       />
       <VolSmileInset
         smile={analysis.smile}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { VenueQuote } from '@shared/enriched';
-import { blackScholesCall, blackScholesPut } from './blackScholes';
+import { black76Price } from './blackScholes';
 import { inferMissingIv } from './ivInference';
 
 const BASE_QUOTE: VenueQuote = {
@@ -29,11 +29,10 @@ const BASE_QUOTE: VenueQuote = {
 
 describe('inferMissingIv', () => {
   it('round-trips σ=0.3 from bid/ask prices (call)', () => {
-    const spot = 100;
+    const forward = 102;
     const strike = 95;
     const T = 0.25;
-    const r = 0.05;
-    const priceAtSigma = (s: number) => blackScholesCall(spot, strike, T, r, s);
+    const priceAtSigma = (sigma: number) => black76Price('call', forward, strike, T, sigma);
     const quote: VenueQuote = {
       ...BASE_QUOTE,
       bid: priceAtSigma(0.3),
@@ -41,7 +40,7 @@ describe('inferMissingIv', () => {
       mid: priceAtSigma(0.31),
     };
 
-    const patched = inferMissingIv(quote, { spot, strike, T, r, right: 'call' });
+    const patched = inferMissingIv(quote, { forward, strike, T, right: 'call' });
 
     expect(patched.bidIv).not.toBeNull();
     expect(patched.askIv).not.toBeNull();
@@ -52,12 +51,11 @@ describe('inferMissingIv', () => {
   });
 
   it('round-trips σ=0.45 from bid/ask prices (put)', () => {
-    const spot = 100;
+    const forward = 98;
     const strike = 105;
     const T = 0.5;
-    const r = 0.03;
-    const bid = blackScholesPut(spot, strike, T, r, 0.45);
-    const ask = blackScholesPut(spot, strike, T, r, 0.47);
+    const bid = black76Price('put', forward, strike, T, 0.45);
+    const ask = black76Price('put', forward, strike, T, 0.47);
     const quote: VenueQuote = {
       ...BASE_QUOTE,
       bid,
@@ -65,7 +63,7 @@ describe('inferMissingIv', () => {
       mid: (bid + ask) / 2,
     };
 
-    const patched = inferMissingIv(quote, { spot, strike, T, r, right: 'put' });
+    const patched = inferMissingIv(quote, { forward, strike, T, right: 'put' });
 
     expect(patched.bidIv!).toBeCloseTo(0.45, 4);
     expect(patched.askIv!).toBeCloseTo(0.47, 4);
@@ -82,10 +80,9 @@ describe('inferMissingIv', () => {
       markIv: 0.52,
     };
     const patched = inferMissingIv(quote, {
-      spot: 100,
+      forward: 100,
       strike: 100,
       T: 1,
-      r: 0.05,
       right: 'call',
     });
     expect(patched.bidIv).toBe(0.5);
@@ -96,10 +93,9 @@ describe('inferMissingIv', () => {
   it('leaves IV null when the corresponding price is null or zero', () => {
     const quote: VenueQuote = { ...BASE_QUOTE, bid: 0, ask: null, mid: null };
     const patched = inferMissingIv(quote, {
-      spot: 100,
+      forward: 100,
       strike: 100,
       T: 1,
-      r: 0.05,
       right: 'call',
     });
     expect(patched.bidIv).toBeNull();
@@ -110,10 +106,9 @@ describe('inferMissingIv', () => {
   it('does not mutate the input quote', () => {
     const quote: VenueQuote = { ...BASE_QUOTE, bid: 5, mid: 5 };
     const patched = inferMissingIv(quote, {
-      spot: 100,
+      forward: 100,
       strike: 100,
       T: 1,
-      r: 0.05,
       right: 'call',
     });
     expect(quote.bidIv).toBeNull();

@@ -19,7 +19,7 @@ const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
   'high-vol': '20%',
 };
 
-function SignalCard({ signal, label = 'Model screen (best quoted routing)', regime }: Props) {
+function SignalCard({ signal, label = 'Model screen (same-venue executable quote)', regime }: Props) {
   if (!signal) {
     return (
       <div className={styles.card} data-empty="true">
@@ -38,7 +38,7 @@ function SignalCard({ signal, label = 'Model screen (best quoted routing)', regi
   const probMethodHint =
     signal.probabilityMethod === 'real-world'
       ? 'Real-world: physical drift μ + realized σ_RV.'
-      : 'Risk-neutral: N(±d₂) using IV at the breakeven strike.';
+      : 'Risk-neutral: Black-76 N(±d₂) using the expiry forward and IV at breakeven.';
   const probMethodSuffix =
     signal.probabilityMethod === 'real-world'
       ? '· P-measure'
@@ -65,8 +65,8 @@ function SignalCard({ signal, label = 'Model screen (best quoted routing)', regi
             the trade fair-value.
           </p>
           <p style={{ marginTop: 6 }}>
-            <strong>POP source:</strong> the default is risk-neutral N(±d₂) at
-            breakeven IV. A physical scenario is used only when explicitly
+            <strong>Model probability source:</strong> the default is risk-neutral
+            Black-76 N(±d₂) at breakeven IV and the expiry forward. A physical scenario is used only when explicitly
             supplied. This is a model estimate, not a historical win rate or forecast.
           </p>
         </InfoTip>
@@ -118,7 +118,7 @@ function SignalCard({ signal, label = 'Model screen (best quoted routing)', regi
         </div>
         <div
           className={styles.stat}
-          title="Model EV = net credit minus the discounted expected spread payoff, including partial losses between strikes."
+          title="Model EV = net credit minus the Black-76 value of the continuous spread payoff, including partial losses between strikes."
         >
           <div className={styles.statLabel}>EV</div>
           <div
@@ -156,7 +156,7 @@ function SignalCard({ signal, label = 'Model screen (best quoted routing)', regi
       <div className={styles.probBlock}>
         <div className={styles.probLabelRow}>
           <span className={styles.probLabel} title={probMethodHint}>
-            Success probability {probMethodSuffix}
+            Model probability of profit {probMethodSuffix}
           </span>
           <span className={styles.probPct}>{probPct}%</span>
         </div>

@@ -1,18 +1,17 @@
 import type { VenueQuote } from '@shared/enriched';
-import { impliedVolNewtonRaphson, type OptionRight } from './blackScholes';
+import { impliedVolBlack76, type OptionRight } from './blackScholes';
 
 export interface IvInferenceContext {
-  spot: number;
+  forward: number;
   strike: number;
   T: number;
-  r: number;
   right: OptionRight;
 }
 
 // Venues differ in what IV they publish. Thalex sends only markIv. Coincall
 // and some others publish bid/ask prices but no matching bid/ask IV. Rather
 // than dropping those venues from cross-venue routing (a real aggregator
-// loss — Thalex liquidity is meaningful), we invert Black-Scholes on the
+// loss — Thalex liquidity is meaningful), we invert Black-76 on the
 // price the venue does send to recover the IV it implicitly quotes.
 //
 // Pure function — returns a new VenueQuote with null IV fields patched where
@@ -22,34 +21,31 @@ export function inferMissingIv(quote: VenueQuote, ctx: IvInferenceContext): Venu
   const patched: VenueQuote = { ...quote };
 
   if (patched.bidIv == null && isValidPrice(quote.bid)) {
-    patched.bidIv = impliedVolNewtonRaphson({
+    patched.bidIv = impliedVolBlack76({
       marketPrice: quote.bid,
-      spot: ctx.spot,
+      forward: ctx.forward,
       strike: ctx.strike,
       T: ctx.T,
-      r: ctx.r,
       right: ctx.right,
     });
   }
 
   if (patched.askIv == null && isValidPrice(quote.ask)) {
-    patched.askIv = impliedVolNewtonRaphson({
+    patched.askIv = impliedVolBlack76({
       marketPrice: quote.ask,
-      spot: ctx.spot,
+      forward: ctx.forward,
       strike: ctx.strike,
       T: ctx.T,
-      r: ctx.r,
       right: ctx.right,
     });
   }
 
   if (patched.markIv == null && isValidPrice(quote.mid)) {
-    patched.markIv = impliedVolNewtonRaphson({
+    patched.markIv = impliedVolBlack76({
       marketPrice: quote.mid,
-      spot: ctx.spot,
+      forward: ctx.forward,
       strike: ctx.strike,
       T: ctx.T,
-      r: ctx.r,
       right: ctx.right,
     });
   }

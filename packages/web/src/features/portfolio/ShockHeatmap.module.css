@@ -1,7 +1,12 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .title {
@@ -10,6 +15,14 @@
   color: #888;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.title span {
+  margin-left: 8px;
+  color: #59615f;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .grid {

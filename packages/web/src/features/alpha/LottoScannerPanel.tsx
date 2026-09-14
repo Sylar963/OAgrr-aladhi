@@ -12,11 +12,13 @@ import HoverTooltip from '@components/ui/HoverTooltip';
 import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 
+import LottoOutcomeBuilder from './LottoOutcomeBuilder';
 import { useLottoScanner } from './useLottoScanner';
 import styles from './LottoScannerPanel.module.css';
 
 const PREMIUM_PRESETS = [100, 200, 400, 500] as const;
 const OTM_PRESETS = [5, 8, 10, 15] as const;
+type ScannerView = 'guided' | 'advanced';
 
 const CONTROL_TIPS = {
   mark: 'The sticker price used to filter the board. Your real buy-in is the ask, which can be higher.',
@@ -199,13 +201,25 @@ function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
 }
 
 export default function LottoScannerPanel({ underlying, venues }: LottoScannerPanelProps) {
+  const [view, setView] = useState<ScannerView>('guided');
+  const [advancedLimit, setAdvancedLimit] = useState(20);
   const [premiumCap, setPremiumCap] = useState(400);
   const [minOtmPct, setMinOtmPct] = useState(5);
   const [buyingPowerInput, setBuyingPowerInput] = useState('2400');
+  const [riskBudgetInput, setRiskBudgetInput] = useState('250');
+  const [targetPriceInput, setTargetPriceInput] = useState('');
+  const [outcomeExpiry, setOutcomeExpiry] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const buyingPower = Number(buyingPowerInput);
-  const validBuyingPower = Number.isFinite(buyingPower) && buyingPower > 0 ? buyingPower : 2_400;
-  const deferredBuyingPower = useDeferredValue(validBuyingPower);
+  const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
+  const validBuyingPower = buyingPowerIsValid ? buyingPower : 2_400;
+  const riskBudget = Number(riskBudgetInput);
+  const validRiskBudget = Number.isFinite(riskBudget) && riskBudget > 0 && riskBudget <= 10_000_000
+    ? riskBudget
+    : 250;
+  const deferredRiskBudget = useDeferredValue(validRiskBudget);
+  const deferredAdvancedBuyingPower = useDeferredValue(validBuyingPower);
+  const queryBuyingPower = view === 'guided' ? deferredRiskBudget : deferredAdvancedBuyingPower;
   const activeVenues = scannerVenues(venues);
 
   const query = useLottoScanner(
@@ -217,12 +231,12 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       maxDte: 14,
       minOtmPct,
       maxOtmPct: 50,
-      buyingPower: deferredBuyingPower,
+      buyingPower: queryBuyingPower,
       marginHaircut: 1.2,
       maxSpreadPct: 50,
-      limit: 20,
+      limit: view === 'guided' ? 50 : advancedLimit,
     },
-    activeVenues.length > 0,
+    activeVenues.length > 0 && (view === 'guided' || buyingPowerIsValid),
   );
   const data = query.data;
   const selected =
@@ -238,75 +252,113 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           <div className={styles.eyebrow}>
             {underlying} · {activeVenues.length} ACTIVE VENUES · LONG CALLS
           </div>
-          <h2 className={styles.title}>Lotto radar</h2>
+          <h2 className={styles.title}>{view === 'guided' ? 'Own the upside' : 'Lotto radar'}</h2>
           <p className={styles.description}>
-            Ranked by the 10× move relative to each expiry&apos;s ATM implied move. Hover a contract for the poker read.
+            {view === 'guided'
+              ? 'Define one possible future, cap what you can lose, and compare ways to own it.'
+              : 'Ranked by the 10× move relative to each expiry’s ATM implied move. Hover a contract for the poker read.'}
           </p>
         </div>
         <div className={styles.headerActions}>
+          <div className={styles.viewSwitch} role="group" aria-label="Lotto radar view">
+            <button
+              type="button"
+              data-active={view === 'guided'}
+              aria-pressed={view === 'guided'}
+              onClick={() => setView('guided')}
+            >
+              Guided
+            </button>
+            <button
+              type="button"
+              data-active={view === 'advanced'}
+              aria-pressed={view === 'advanced'}
+              onClick={() => {
+                setAdvancedLimit(20);
+                setView('advanced');
+              }}
+            >
+              Advanced radar
+            </button>
+          </div>
           <span className={styles.scanOnly}>SCAN ONLY</span>
-          <button
-            type="button"
-            className={styles.exportButton}
-            disabled={!data || data.candidates.length === 0}
-            onClick={() => data && downloadCsv(data)}
-          >
-            CSV
-          </button>
+          {view === 'advanced' && (
+            <button
+              type="button"
+              className={styles.exportButton}
+              disabled={!data || data.candidates.length === 0}
+              onClick={() => data && downloadCsv(data)}
+            >
+              CSV
+            </button>
+          )}
         </div>
       </header>
 
-      <div className={styles.controls}>
-        <fieldset className={styles.controlGroup}>
-          <legend><MetricTip label="Max contract mark" tip={CONTROL_TIPS.mark} /></legend>
-          <div className={styles.presetRow}>
-            {PREMIUM_PRESETS.map((value) => (
-              <button
-                type="button"
-                key={value}
-                data-active={premiumCap === value}
-                onClick={() => setPremiumCap(value)}
-              >
-                ${value}
-              </button>
-            ))}
+      {view === 'advanced' && (
+        <div className={styles.controls}>
+          <fieldset className={styles.controlGroup}>
+            <legend><MetricTip label="Max contract mark" tip={CONTROL_TIPS.mark} /></legend>
+            <div className={styles.presetRow}>
+              {PREMIUM_PRESETS.map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  data-active={premiumCap === value}
+                  onClick={() => setPremiumCap(value)}
+                >
+                  ${value}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className={styles.controlGroup}>
+            <legend><MetricTip label="Min OTM" tip={CONTROL_TIPS.otm} /></legend>
+            <div className={styles.presetRow}>
+              {OTM_PRESETS.map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  data-active={minOtmPct === value}
+                  onClick={() => setMinOtmPct(value)}
+                >
+                  {value}%
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <label className={styles.budgetControl} data-invalid={!buyingPowerIsValid || undefined}>
+            <span><MetricTip label="Buying power" tip={CONTROL_TIPS.bankroll} /></span>
+            <div className={styles.inputShell}>
+              <span>$</span>
+              <input
+                inputMode="decimal"
+                value={buyingPowerInput}
+                aria-label="Scanner buying power"
+                aria-invalid={!buyingPowerIsValid}
+                aria-errormessage={!buyingPowerIsValid ? 'lotto-advanced-budget-error' : undefined}
+                onChange={(event) => setBuyingPowerInput(event.target.value)}
+              />
+            </div>
+            {!buyingPowerIsValid && (
+              <small id="lotto-advanced-budget-error" className={styles.controlError} role="alert">
+                Enter $1 to $10,000,000.
+              </small>
+            )}
+          </label>
+          <div className={styles.fixedRules}>
+            <span>4–14 DTE</span>
+            <span>≤50% spread</span>
+            <span>1.2× reserve</span>
           </div>
-        </fieldset>
-        <fieldset className={styles.controlGroup}>
-          <legend><MetricTip label="Min OTM" tip={CONTROL_TIPS.otm} /></legend>
-          <div className={styles.presetRow}>
-            {OTM_PRESETS.map((value) => (
-              <button
-                type="button"
-                key={value}
-                data-active={minOtmPct === value}
-                onClick={() => setMinOtmPct(value)}
-              >
-                {value}%
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <label className={styles.budgetControl}>
-          <span><MetricTip label="Buying power" tip={CONTROL_TIPS.bankroll} /></span>
-          <div className={styles.inputShell}>
-            <span>$</span>
-            <input
-              inputMode="decimal"
-              value={buyingPowerInput}
-              aria-label="Scanner buying power"
-              onChange={(event) => setBuyingPowerInput(event.target.value)}
-            />
-          </div>
-        </label>
-        <div className={styles.fixedRules}>
-          <span>4–14 DTE</span>
-          <span>≤50% spread</span>
-          <span>1.2× reserve</span>
         </div>
-      </div>
+      )}
 
-      {query.isLoading && !data && (
+      {view === 'advanced' && !buyingPowerIsValid && (
+        <div className={styles.message}>Enter valid buying power to run the advanced scan.</div>
+      )}
+
+      {query.isLoading && !data && (view === 'guided' || buyingPowerIsValid) && (
         <div className={styles.loading}>
           <Spinner size="sm" label={`Scanning ${activeVenues.length} venues…`} />
         </div>
@@ -328,14 +380,25 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
         </div>
       )}
 
-      {data && (
+      {data && (view === 'guided' || buyingPowerIsValid) && (
         <>
           <div className={styles.marketStrip}>
-            <span>INDEX <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
-            <span>AVG FORWARD <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
-            <span>EXPIRIES <strong>{data.eligibleExpiries.length}</strong></span>
-            <span>MATCHES <strong>{data.candidates.length}</strong></span>
-            <span>SCANNED VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+            {view === 'guided' ? (
+              <>
+                <span>{underlying} NOW <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
+                <span>LIVE CALLS <strong>{data.candidates.length}</strong></span>
+                <span>AVAILABLE DATES <strong>{data.eligibleExpiries.length}</strong></span>
+                <span>LIVE VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+              </>
+            ) : (
+              <>
+                <span>INDEX <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
+                <span>AVG FORWARD <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
+                <span>EXPIRIES <strong>{data.eligibleExpiries.length}</strong></span>
+                <span>MATCHES <strong>{data.candidates.length}</strong></span>
+                <span>SCANNED VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+              </>
+            )}
             {query.isFetching && <span className={styles.refreshing}>REFRESHING</span>}
           </div>
           {unavailableVenues.length > 0 && (
@@ -344,7 +407,22 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             </div>
           )}
 
-          {data.candidates.length === 0 ? (
+          {view === 'guided' ? (
+            <LottoOutcomeBuilder
+              data={data}
+              targetPriceInput={targetPriceInput}
+              expiry={outcomeExpiry}
+              riskBudgetInput={riskBudgetInput}
+              onTargetPriceChange={setTargetPriceInput}
+              onExpiryChange={setOutcomeExpiry}
+              onRiskBudgetChange={setRiskBudgetInput}
+              onInspect={(candidate) => {
+                setSelectedKey(`${candidate.venue}:${candidate.instrument}`);
+                setAdvancedLimit(50);
+                setView('advanced');
+              }}
+            />
+          ) : data.candidates.length === 0 ? (
             <div className={styles.message}>
               No liquid {underlying} calls match these mark, moneyness, DTE, and venue limits.
             </div>
@@ -411,8 +489,15 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       )}
 
       <footer className={styles.footer}>
-        <span>Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.</span>
-        <span>Targets measure return on estimated entry cost and hold current IV and time constant.</span>
+        {view === 'advanced' && (
+          <>
+            <span>Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.</span>
+            <span>Targets measure return on estimated entry cost and hold current IV and time constant.</span>
+          </>
+        )}
+        {view === 'guided' && (
+          <span>Guided payouts use intrinsic value at expiry; unknown venue fees are excluded and selling earlier can produce a different result.</span>
+        )}
         <span>No order is sent. Most short-dated OTM calls expire worthless.</span>
       </footer>
     </section>

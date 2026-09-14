@@ -13,9 +13,9 @@ import PortfolioPnlCurve from './PortfolioPnlCurve';
 import PortfolioVegaCurve from './PortfolioVegaCurve';
 import PositionForm from './PositionForm';
 import PositionsTable from './PositionsTable';
+import RiskCockpit from './RiskCockpit';
 import ShockHeatmap from './ShockHeatmap';
 import StrategyGroupsPanel from './StrategyGroups';
-import { fmtNum, fmtUsdSigned } from './format';
 import { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
@@ -224,7 +224,10 @@ export default function PortfolioView() {
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Portfolio</h2>
+        <div className={styles.titleBlock}>
+          <h2 className={styles.title}>Portfolio</h2>
+          <span className={styles.subtitle}>Volatility, convexity and carry translated for delta-one traders</span>
+        </div>
         <div className={styles.statusGroup}>
           <div className={styles.toggleGroup} role="radiogroup" aria-label="Source">
             {sourceOptions.map((opt) => (
@@ -287,41 +290,13 @@ export default function PortfolioView() {
         </div>
       )}
 
-      <div className={styles.totalsRow}>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Net Vega</span>
-          <span className={styles.totalValue}>{fmtUsdSigned(metrics?.totals.netVegaUsd)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Net Delta</span>
-          <span className={styles.totalValue}>{fmtNum(metrics?.totals.netDeltaUsd)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Net Gamma</span>
-          <span className={styles.totalValue}>{fmtNum(metrics?.totals.netGammaUsd, 4)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Theta/day</span>
-          <span className={styles.totalValue}>{fmtUsdSigned(metrics?.totals.netThetaUsd)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Net Vanna</span>
-          <span className={styles.totalValue}>{fmtNum(metrics?.totals.netVannaUsd, 4)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Net Volga</span>
-          <span className={styles.totalValue}>{fmtNum(metrics?.totals.netVolgaUsd, 4)}</span>
-        </div>
-        <div className={styles.totalCard}>
-          <span className={styles.totalLabel}>Unrealized P&amp;L</span>
-          <span className={styles.totalValue}>{fmtUsdSigned(metrics?.totals.unrealizedPnlUsd)}</span>
-        </div>
-      </div>
+      <RiskCockpit metrics={metrics} positions={positions} />
 
       <div className={styles.bodyGrid}>
         <div className={styles.mainCol}>
           <PortfolioPnlCurve curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE} forwardDays={forwardDays} />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
+          <ShockHeatmap grid={metrics?.shockGrid ?? []} />
           <PortfolioVegaCurve byStrike={metrics?.byStrike ?? []} breakEven={metrics?.breakEven ?? []} />
           <div className={styles.tableWrap}>
             <PositionsTable
@@ -345,7 +320,6 @@ export default function PortfolioView() {
               from your private WS feed. Trade on the venue directly to change the book.
             </div>
           )}
-          <ShockHeatmap grid={metrics?.shockGrid ?? []} />
           <ExpiryBuckets rows={metrics?.byExpiry ?? []} />
         </div>
       </div>

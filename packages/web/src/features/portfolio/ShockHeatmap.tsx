@@ -40,7 +40,7 @@ export default function ShockHeatmap({ grid }: Props) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.title}>Vol-shock P&amp;L (ATM vs skew)</div>
+      <div className={styles.title}>Vol repricing matrix <span>What if IV and skew move now?</span></div>
       <table className={styles.grid}>
         <thead>
           <tr>
@@ -71,7 +71,7 @@ export default function ShockHeatmap({ grid }: Props) {
         </tbody>
       </table>
       <div className={styles.legend}>
-        Rows: ATM vol-pt shift • Cols: skew (per log-K) • Hover for exact P&amp;L
+        Rows: ATM vol-point shift · columns: skew per log-K · values: immediate P&amp;L
       </div>
     </div>
   );

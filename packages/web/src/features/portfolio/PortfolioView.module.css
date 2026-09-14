@@ -22,6 +22,19 @@
   margin: 0;
 }
 
+.titleBlock {
+  display: flex;
+  min-width: 220px;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.subtitle {
+  color: #68706e;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
 .statusGroup {
   display: flex;
   align-items: center;
@@ -120,36 +133,6 @@
   margin-right: 4px;
 }
 
-.totalsRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.totalCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 6px;
-  border: 1px solid #1a1a1a;
-}
-
-.totalLabel {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.totalValue {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
-  color: #e0e0e0;
-}
-
 .bodyGrid {
   display: grid;
   grid-template-columns: 1fr 360px;
@@ -202,13 +185,6 @@
     gap: 12px;
   }
 
-  .totalsRow {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  }
-
-  .totalValue {
-    font-size: 13px;
-  }
 }
 
 @media (min-width: 1600px) {
@@ -222,10 +198,6 @@
     gap: 20px;
   }
 
-  .totalsRow {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-  }
 }
 
 @media (min-width: 2200px) {
@@ -240,19 +212,6 @@
   .bodyGrid {
     grid-template-columns: minmax(0, 1fr) 480px;
     gap: 24px;
-  }
-
-  .totalsRow {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
-  }
-
-  .totalLabel {
-    font-size: 11px;
-  }
-
-  .totalValue {
-    font-size: 16px;
   }
 
   .title {
@@ -296,14 +255,6 @@
   .toggle {
     flex: 0 0 auto;
     white-space: nowrap;
-  }
-
-  .totalsRow {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .totalValue {
-    font-size: 13px;
   }
 
   .tableWrap {

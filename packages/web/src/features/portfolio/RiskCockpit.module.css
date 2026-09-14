@@ -1,0 +1,356 @@
+.cockpit {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #27312f;
+  border-radius: 8px;
+  background:
+    linear-gradient(105deg, rgba(80, 210, 193, 0.045), transparent 38%),
+    #0d0f0f;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.posture {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.5fr) minmax(330px, 1fr);
+  gap: 24px;
+  padding: 20px;
+  border-bottom: 1px solid #202625;
+  position: relative;
+}
+
+.posture::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent-primary);
+}
+
+.posture[data-mode='long_vol']::before {
+  background: var(--color-iv);
+}
+
+.posture[data-mode='short_vol']::before {
+  background: var(--color-warning);
+}
+
+.postureCopy {
+  min-width: 0;
+}
+
+.kicker,
+.metricLabel,
+.metricFoot,
+.exposureName,
+.greek,
+.exposureState,
+.exposureCard p,
+.secondaryGreeks,
+.stressCard span,
+.stressCard small {
+  font-family: var(--font-mono);
+}
+
+.kicker {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.modeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 7px;
+}
+
+.mode {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: clamp(22px, 2.1vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+}
+
+.pressure {
+  padding: 4px 7px;
+  border: 1px solid #343b39;
+  border-radius: 3px;
+  color: #b8c1bf;
+  background: rgba(255, 255, 255, 0.025);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.summary {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: #9ca6a4;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.headlineMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.headlineMetric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px;
+  border-left: 1px solid #2b3331;
+}
+
+.metricLabel {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pnl,
+.ivEdge {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.pnl[data-sign='positive'],
+.ivEdge[data-sign='positive'],
+.stressCard strong[data-sign='positive'] {
+  color: var(--color-profit);
+}
+
+.pnl[data-sign='negative'],
+.ivEdge[data-sign='negative'],
+.stressCard strong[data-sign='negative'] {
+  color: #ef6177;
+}
+
+.metricFoot {
+  overflow: hidden;
+  margin-top: 3px;
+  color: #68706e;
+  font-size: 9px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exposureGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.exposureCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 14px 16px 16px;
+  border-right: 1px solid #202625;
+  position: relative;
+}
+
+.exposureCard:last-child {
+  border-right: 0;
+}
+
+.exposureCard::after {
+  content: '';
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  left: 16px;
+  height: 2px;
+  opacity: 0.7;
+}
+
+.exposureCard[data-accent='delta']::after {
+  background: var(--color-info);
+}
+
+.exposureCard[data-accent='vega']::after {
+  background: var(--color-iv);
+}
+
+.exposureCard[data-accent='gamma']::after {
+  background: var(--accent-primary);
+}
+
+.exposureCard[data-accent='theta']::after {
+  background: var(--color-warning);
+}
+
+.exposureHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exposureName {
+  color: #c9d1cf;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.greek {
+  color: #59615f;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.exposureValue {
+  margin-top: 10px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.exposureState {
+  margin-top: 3px;
+  color: #929c99;
+  font-size: 10px;
+}
+
+.exposureCard p {
+  margin: 9px 0 0;
+  color: #626b69;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.stressSection {
+  padding: 14px 16px 16px;
+  border-top: 1px solid #202625;
+}
+
+.sectionLead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 9px;
+}
+
+.secondaryGreeks {
+  color: #68706e;
+  font-size: 9px;
+}
+
+.stressGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.stressCard {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 3px 8px;
+  padding: 9px 10px;
+  border: 1px solid #222927;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.stressCard span {
+  color: #a4adab;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.stressCard strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.stressCard small {
+  grid-column: 1 / -1;
+  color: #555e5c;
+  font-size: 8px;
+}
+
+@media (max-width: 1100px) {
+  .posture {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .headlineMetric {
+    border-top: 1px solid #2b3331;
+    border-left: 0;
+  }
+
+  .stressGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .posture {
+    padding: 16px;
+  }
+
+  .modeRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .headlineMetrics,
+  .exposureGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .exposureCard:nth-child(2) {
+    border-right: 0;
+  }
+
+  .exposureCard:nth-child(-n + 2) {
+    border-bottom: 1px solid #202625;
+  }
+
+  .sectionLead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .stressGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .headlineMetrics,
+  .exposureGrid,
+  .stressGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .exposureCard {
+    border-right: 0;
+    border-bottom: 1px solid #202625;
+  }
+
+  .exposureCard:last-child {
+    border-bottom: 0;
+  }
+}

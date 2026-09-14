@@ -317,6 +317,30 @@ export function rankLottoCandidatesAcrossExpiries(
     byExpiry.set(candidate.expiry, expiryCandidates);
   }
 
+  for (const [expiry, expiryCandidates] of byExpiry) {
+    const bySafety = [...expiryCandidates].sort(
+      (a, b) =>
+        a.breakEvenMovePct - b.breakEvenMovePct ||
+        a.minimumOrderCost - b.minimumOrderCost ||
+        a.spreadPct - b.spreadPct,
+    );
+    const mixed: AlphaLottoCandidate[] = [];
+    const selected = new Set<AlphaLottoCandidate>();
+    for (let index = 0; mixed.length < expiryCandidates.length; index += 1) {
+      const safer = bySafety[index];
+      if (safer != null && !selected.has(safer)) {
+        mixed.push(safer);
+        selected.add(safer);
+      }
+      const convex = expiryCandidates[index];
+      if (convex != null && !selected.has(convex)) {
+        mixed.push(convex);
+        selected.add(convex);
+      }
+    }
+    byExpiry.set(expiry, mixed);
+  }
+
   const selected: AlphaLottoCandidate[] = [];
   for (let depth = 0; selected.length < limit; depth += 1) {
     let foundCandidate = false;

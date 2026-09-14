@@ -24,6 +24,7 @@ const OTM_PRESETS = [5, 8, 10, 15] as const;
 const GUIDED_MIN_DTE = 15;
 const GUIDED_MAX_DTE = 75;
 const GUIDED_PREMIUM_CAP = 10_000;
+const GUIDED_SCANNER_BUYING_POWER = 2_400;
 type ScannerView = 'guided' | 'advanced';
 
 const CONTROL_TIPS = {
@@ -223,13 +224,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
   const buyingPower = Number(buyingPowerInput);
   const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
   const validBuyingPower = buyingPowerIsValid ? buyingPower : 2_400;
-  const riskBudget = Number(riskBudgetInput);
-  const validRiskBudget = Number.isFinite(riskBudget) && riskBudget > 0 && riskBudget <= 10_000_000
-    ? riskBudget
-    : 250;
-  const deferredRiskBudget = useDeferredValue(validRiskBudget);
   const deferredAdvancedBuyingPower = useDeferredValue(validBuyingPower);
-  const queryBuyingPower = view === 'guided' ? deferredRiskBudget : deferredAdvancedBuyingPower;
+  const queryBuyingPower = view === 'guided' ? GUIDED_SCANNER_BUYING_POWER : deferredAdvancedBuyingPower;
   const activeVenues = scannerVenues(venues);
 
   const query = useLottoScanner(

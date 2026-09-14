@@ -196,6 +196,28 @@ describe('rankLottoCandidates', () => {
       ['2026-10-02', 2],
     ]);
   });
+
+  it('reserves both safer and high-convexity contracts within each expiry', () => {
+    const result = computeLottoCandidate(contract(), market, config);
+    if (result.candidate == null) throw new Error('expected candidate');
+    const baseCandidate = result.candidate;
+    const candidates = [
+      { instrument: 'moonshot', breakEvenMovePct: 30, rank: 1 },
+      { instrument: 'middle', breakEvenMovePct: 15, rank: 2 },
+      { instrument: 'safer', breakEvenMovePct: 6, rank: 99 },
+    ].map((overrides) => ({
+      ...baseCandidate,
+      instrument: overrides.instrument,
+      breakEvenMovePct: overrides.breakEvenMovePct,
+      targets: baseCandidate.targets.map((target) => target.multiple === 10
+        ? { ...target, impliedMoveMultiple: overrides.rank }
+        : target),
+    }));
+
+    const ranked = rankLottoCandidatesAcrossExpiries(candidates, 2);
+
+    expect(ranked.map((candidate) => candidate.instrument)).toEqual(['safer', 'moonshot']);
+  });
 });
 
 describe('addLegacyLottoAliases', () => {

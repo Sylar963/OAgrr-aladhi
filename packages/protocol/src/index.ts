@@ -138,6 +138,18 @@ export {
 } from './portfolio.js';
 
 export {
+  type ShortStraddleEvaluationQuery,
+  ShortStraddleEvaluationQuerySchema,
+  type ShortStraddleEvaluationResponse,
+  ShortStraddleEvaluationResponseSchema,
+  type ShortStraddleEvaluationSegment,
+  ShortStraddleEvaluationSegmentSchema,
+  type ShortStraddleEdgeAssessment,
+  ShortStraddleEdgeAssessmentSchema,
+  type ShortStraddleEvidenceStatus,
+  ShortStraddleEvidenceStatusSchema,
+} from './short-straddle-evaluation.js';
+export {
   type SystemAnnouncement,
   SystemAnnouncementSchema,
   type SystemAnnouncementSeverity,

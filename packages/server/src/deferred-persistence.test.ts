@@ -97,6 +97,8 @@ const regimeModel: PersistedRegimeModel = {
 const shortStraddleSnapshot: PersistedShortStraddleSnapshot = {
   venue: 'deribit',
   underlying: 'BTC',
+  cohortSlotTs: new Date('2026-07-13T10:00:00.000Z'),
+  horizonHours: 0,
   sampleSlotTs: new Date('2026-07-13T10:00:00.000Z'),
   capturedAt: new Date('2026-07-13T10:05:00.000Z'),
   expiry: '2026-07-20',
@@ -114,6 +116,8 @@ const shortStraddleSnapshot: PersistedShortStraddleSnapshot = {
   callOpenInterest: 500,
   callMakerFeeUsd: 2,
   callTakerFeeUsd: 3,
+  callAskMakerFeeUsd: 2.2,
+  callAskTakerFeeUsd: 3.2,
   callQuoteTs: new Date('2026-07-13T10:04:55.000Z'),
   putBidUsd: 900,
   putAskUsd: 930,
@@ -125,6 +129,8 @@ const shortStraddleSnapshot: PersistedShortStraddleSnapshot = {
   putOpenInterest: 600,
   putMakerFeeUsd: 2.1,
   putTakerFeeUsd: 3.1,
+  putAskMakerFeeUsd: 2.3,
+  putAskTakerFeeUsd: 3.3,
   putQuoteTs: new Date('2026-07-13T10:04:56.000Z'),
 };
 
@@ -247,6 +253,10 @@ class FakeShortStraddleSnapshotStore implements ShortStraddleSnapshotStore {
     if (this.fail) throw new Error('database unavailable');
     if (this.block != null) await this.block;
     this.writes.push(rows);
+  }
+
+  async loadSince(): Promise<PersistedShortStraddleSnapshot[]> {
+    return this.writes.flat();
   }
 
   async dispose(): Promise<void> {
@@ -454,6 +464,24 @@ describe('DeferredShortStraddleSnapshotStore', () => {
     await store.dispose();
   });
 
+  it('makes pending snapshots available to follow-up selection before a database flush', async () => {
+    const cachePath = tempPath('short-straddle-pending-read.ndjson');
+    const store = new DeferredShortStraddleSnapshotStore(
+      new FakeShortStraddleSnapshotStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([shortStraddleSnapshot]);
+
+    const loaded = await store.loadSince({
+      underlying: 'btc',
+      since: new Date('2026-07-13T09:00:00.000Z'),
+    });
+
+    expect(loaded).toEqual([shortStraddleSnapshot]);
+    await store.dispose();
+  });
+
   it('recovers pending snapshots from NDJSON after restart', async () => {
     const cachePath = tempPath('short-straddle-restart.ndjson');
     const first = new DeferredShortStraddleSnapshotStore(
@@ -513,6 +541,7 @@ describe('DeferredShortStraddleSnapshotStore', () => {
     const flush = store.flush();
     const next = {
       ...shortStraddleSnapshot,
+      cohortSlotTs: new Date('2026-07-13T11:00:00.000Z'),
       sampleSlotTs: new Date('2026-07-13T11:00:00.000Z'),
       capturedAt: new Date('2026-07-13T11:05:00.000Z'),
     };
@@ -579,6 +608,7 @@ describe('DeferredShortStraddleSnapshotStore', () => {
     );
     const next = {
       ...shortStraddleSnapshot,
+      cohortSlotTs: new Date('2026-07-13T11:00:00.000Z'),
       sampleSlotTs: new Date('2026-07-13T11:00:00.000Z'),
     };
 

@@ -132,6 +132,10 @@ class FakeStore implements ShortStraddleSnapshotStore {
     this.writes.push(rows);
   }
 
+  async loadSince(): Promise<PersistedShortStraddleSnapshot[]> {
+    return this.writes.flat();
+  }
+
   async dispose(): Promise<void> {}
 }
 
@@ -155,9 +159,9 @@ describe('selectShortStraddleSnapshot', () => {
     expect(snapshot?.expiryTs).toEqual(new Date('2026-07-20T08:00:00.000Z'));
   });
 
-  it('rejects the nearest expiry outside the two-day window', () => {
+  it('rejects the nearest expiry outside the four-day window', () => {
     const result = selectShortStraddleSnapshot(
-      [entry('2026-07-23', [strike(SPOT)])],
+      [entry('2026-07-25', [strike(SPOT)])],
       'BTC',
       SPOT,
       NOW,
@@ -192,6 +196,16 @@ describe('selectShortStraddleSnapshot', () => {
     [string, Partial<VenueQuote>]
   >)('rejects a quote with %s', (_name, overrides) => {
     const snapshot = selected([entry('2026-07-20', [strike(SPOT, quote(overrides))])]);
+
+    expect(snapshot).toBeNull();
+  });
+
+  it('rejects call and put quotes more than two seconds apart', () => {
+    const snapshot = selected([
+      entry('2026-07-20', [
+        strike(SPOT, quote({ asOfMs: NOW - 500 }), quote({ asOfMs: NOW - 2_501 })),
+      ]),
+    ]);
 
     expect(snapshot).toBeNull();
   });
@@ -264,6 +278,17 @@ describe('selectShortStraddleSnapshot', () => {
     expect(snapshot?.callVegaUsdPerVolPoint).toBe(17.25);
   });
 
+  it('stores ask-side fees separately for closing-cost evaluation', () => {
+    const call = quote();
+    if (call.execution == null) throw new Error('execution fixture missing');
+    call.execution.askMakerFeeUsd = 4;
+    call.execution.askTakerFeeUsd = 5;
+    const snapshot = selected([entry('2026-07-20', [strike(SPOT, call)])]);
+
+    expect(snapshot?.callAskMakerFeeUsd).toBe(4);
+    expect(snapshot?.callAskTakerFeeUsd).toBe(5);
+  });
+
   it('stores spot and the selected Deribit forward separately', () => {
     const snapshot = selected([
       entry('2026-07-20', [strike(SPOT, quote({ underlyingPriceUsd: 60_250 }))]),
@@ -330,5 +355,55 @@ describe('ShortStraddleSnapshotService', () => {
     await service.collect([entry('2026-07-20', [paired])], 'BTC', SPOT, NOW);
 
     expect(store.writes[0]?.map((snapshot) => snapshot.venue)).toEqual(['deribit', 'okx']);
+  });
+
+  it('marks the original fixed contract at the one-hour horizon', async () => {
+    const store = new FakeStore();
+    const service = new ShortStraddleSnapshotService(store, { log: console });
+    await service.collect([entry('2026-07-20', [strike(60_000)])], 'BTC', 60_000, NOW);
+
+    const markNow = NOW + 3_600_000;
+    await service.collect(
+      [
+        entry('2026-07-20', [
+          strike(
+            60_000,
+            quote({ asOfMs: markNow - 1_000, bid: 780, ask: 800 }),
+            quote({ asOfMs: markNow - 1_000, bid: 680, ask: 700, delta: -0.4 }),
+          ),
+          strike(
+            61_000,
+            quote({ asOfMs: markNow - 1_000 }),
+            quote({ asOfMs: markNow - 1_000, delta: -0.5 }),
+          ),
+        ]),
+      ],
+      'BTC',
+      61_000,
+      markNow,
+    );
+
+    const followUp = store.writes.flat().find((snapshot) => snapshot.horizonHours === 1);
+    expect(followUp).toMatchObject({
+      cohortSlotTs: new Date('2026-07-13T08:00:00.000Z'),
+      sampleSlotTs: new Date('2026-07-13T09:00:00.000Z'),
+      strike: 60_000,
+      spotPriceUsd: 61_000,
+      callAskUsd: 800,
+      putAskUsd: 700,
+    });
+  });
+
+  it('leaves a missed horizon absent instead of backfilling it late', async () => {
+    const store = new FakeStore();
+    const service = new ShortStraddleSnapshotService(store, {
+      log: console,
+      quoteMaxAgeMs: 3 * 3_600_000,
+    });
+    const entries = [entry('2026-07-20', [strike(SPOT)])];
+    await service.collect(entries, 'BTC', SPOT, NOW);
+    await service.collect(entries, 'BTC', SPOT, NOW + 2 * 3_600_000);
+
+    expect(store.writes.flat().some((snapshot) => snapshot.horizonHours === 1)).toBe(false);
   });
 });

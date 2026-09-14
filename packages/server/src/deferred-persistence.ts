@@ -25,6 +25,7 @@ import type {
   PersistedShortStraddleSnapshot,
   RegimeObservationLoadQuery,
   RegimeStore,
+  ShortStraddleSnapshotLoadQuery,
   ShortStraddleSnapshotStore,
 } from '@oggregator/db';
 import { z } from 'zod';
@@ -74,8 +75,14 @@ interface SerializedRegimeModel extends Omit<PersistedRegimeModel, 'fittedAt'> {
 interface SerializedShortStraddleSnapshot
   extends Omit<
     PersistedShortStraddleSnapshot,
-    'sampleSlotTs' | 'capturedAt' | 'expiryTs' | 'callQuoteTs' | 'putQuoteTs'
+    | 'cohortSlotTs'
+    | 'sampleSlotTs'
+    | 'capturedAt'
+    | 'expiryTs'
+    | 'callQuoteTs'
+    | 'putQuoteTs'
   > {
+  cohortSlotTs: string;
   sampleSlotTs: string;
   capturedAt: string;
   expiryTs: string;
@@ -102,6 +109,8 @@ const ShortStraddleSnapshotSchema = z
   .object({
     venue: z.string().min(1),
     underlying: z.string().min(1),
+    cohortSlotTs: IsoDateSchema,
+    horizonHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(24), z.literal(72)]),
     sampleSlotTs: IsoDateSchema,
     capturedAt: IsoDateSchema,
     expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -119,6 +128,8 @@ const ShortStraddleSnapshotSchema = z
     callOpenInterest: FiniteNumberSchema,
     callMakerFeeUsd: FiniteNumberSchema,
     callTakerFeeUsd: FiniteNumberSchema,
+    callAskMakerFeeUsd: FiniteNumberSchema,
+    callAskTakerFeeUsd: FiniteNumberSchema,
     callQuoteTs: IsoDateSchema,
     putBidUsd: FiniteNumberSchema,
     putAskUsd: FiniteNumberSchema,
@@ -130,6 +141,8 @@ const ShortStraddleSnapshotSchema = z
     putOpenInterest: FiniteNumberSchema,
     putMakerFeeUsd: FiniteNumberSchema,
     putTakerFeeUsd: FiniteNumberSchema,
+    putAskMakerFeeUsd: FiniteNumberSchema,
+    putAskTakerFeeUsd: FiniteNumberSchema,
     putQuoteTs: IsoDateSchema,
   })
   .strict();
@@ -302,6 +315,7 @@ function encodeShortStraddleSnapshot(
 ): SerializedShortStraddleSnapshot {
   return {
     ...row,
+    cohortSlotTs: row.cohortSlotTs.toISOString(),
     sampleSlotTs: row.sampleSlotTs.toISOString(),
     capturedAt: row.capturedAt.toISOString(),
     expiryTs: row.expiryTs.toISOString(),
@@ -651,6 +665,29 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
     this.warnIfOverThreshold();
   }
 
+  async loadSince(
+    query: ShortStraddleSnapshotLoadQuery,
+  ): Promise<PersistedShortStraddleSnapshot[]> {
+    let persisted: PersistedShortStraddleSnapshot[] = [];
+    try {
+      persisted = await this.delegate.loadSince(query);
+    } catch (err: unknown) {
+      this.log.warn({ err: String(err) }, 'short-straddle snapshot history load failed');
+    }
+    const underlying = query.underlying.toUpperCase();
+    const combined = new Map<string, PersistedShortStraddleSnapshot>();
+    for (const row of [...persisted, ...this.pending]) {
+      if (row.underlying.toUpperCase() !== underlying || row.cohortSlotTs < query.since) continue;
+      combined.set(shortStraddleSnapshotKey(row), row);
+    }
+    return [...combined.values()].sort(
+      (a, b) =>
+        a.cohortSlotTs.getTime() - b.cohortSlotTs.getTime() ||
+        a.horizonHours - b.horizonHours ||
+        a.venue.localeCompare(b.venue),
+    );
+  }
+
   async flush(): Promise<void> {
     if (this.flushPromise != null) return this.flushPromise;
     if (this.pending.length === 0) return;
@@ -693,6 +730,10 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
       'short-straddle snapshot cache exceeds warning threshold',
     );
   }
+}
+
+function shortStraddleSnapshotKey(row: PersistedShortStraddleSnapshot): string {
+  return `${row.venue}:${row.underlying.toUpperCase()}:${row.cohortSlotTs.getTime()}:${row.horizonHours}`;
 }
 
 export class DeferredRegimeStore implements RegimeStore {

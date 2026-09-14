@@ -7,6 +7,17 @@ describe('route bootstrap gate', () => {
     expect(shouldBlockApiRequestWhileBootstrapping('/api/ready')).toBe(false);
   });
 
+  it('keeps venue credential connections available during bootstrap', () => {
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/portfolio/venue-credentials/thalex')).toBe(
+      false,
+    );
+    expect(
+      shouldBlockApiRequestWhileBootstrapping(
+        '/api/portfolio/venue-credentials/thalex/status',
+      ),
+    ).toBe(false);
+  });
+
   it('blocks non-readiness api routes during bootstrap', () => {
     expect(shouldBlockApiRequestWhileBootstrapping('/api/chains')).toBe(true);
     expect(shouldBlockApiRequestWhileBootstrapping('/api/spots')).toBe(true);

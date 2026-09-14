@@ -45,6 +45,7 @@ import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
 import PayoffChartV3 from './PayoffChartV3';
+import { computeLongCallProfitFrontiers } from './profit-frontiers';
 import SnapshotBanner from './SnapshotBanner';
 import {
   hasUsableSpotCandles,
@@ -714,6 +715,18 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     ],
   );
 
+  const profitFrontiers = useMemo(
+    () =>
+      computeLongCallProfitFrontiers(
+        analyticsLegs,
+        lastBarMs,
+        nearestExpiryMs,
+        candleResolutionSec,
+        ivShift,
+      ),
+    [analyticsLegs, candleResolutionSec, ivShift, lastBarMs, nearestExpiryMs],
+  );
+
   const selectedSnapshot = useMemo(
     () => snapshots.find((s) => s.id === selectedSnapshotId) ?? null,
     [snapshots, selectedSnapshotId],
@@ -1197,6 +1210,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         showProjections={showProjections}
                         snapshotMeta={snapshotMeta}
                         projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
+                        profitFrontiers={profitFrontiers}
                       />
                     </>
                   ) : (
@@ -1348,26 +1362,33 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                 </span>
               </div>
 
-              <div className={styles.sliderRow}>
-                <span className={styles.sliderLabel}>DTE</span>
-                <div className={styles.sliderWrap}>
-                  <input
-                    type="range"
-                    className={styles.sliderInput}
-                    data-kind="dte"
-                    min={-Math.min(baseDte, 60)}
-                    max={60}
-                    step={1}
-                    value={dteShift}
-                    onChange={(e) => setDteShift(Number(e.target.value))}
-                    disabled={legs.length === 0}
-                  />
+              {variant === 'v2' ? (
+                <div className={styles.frontierHint}>
+                  Move IV to draw a blue comparison path. Time decay runs left to right; both paths
+                  meet the expiry break-even.
                 </div>
-                <span className={styles.sliderValue}>
-                  {dteShift > 0 ? '+' : ''}
-                  {dteShift}d
-                </span>
-              </div>
+              ) : (
+                <div className={styles.sliderRow}>
+                  <span className={styles.sliderLabel}>DTE</span>
+                  <div className={styles.sliderWrap}>
+                    <input
+                      type="range"
+                      className={styles.sliderInput}
+                      data-kind="dte"
+                      min={-Math.min(baseDte, 60)}
+                      max={60}
+                      step={1}
+                      value={dteShift}
+                      onChange={(e) => setDteShift(Number(e.target.value))}
+                      disabled={legs.length === 0}
+                    />
+                  </div>
+                  <span className={styles.sliderValue}>
+                    {dteShift > 0 ? '+' : ''}
+                    {dteShift}d
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className={styles.rightSection}>

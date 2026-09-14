@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
   LineStyle,
   ColorType,
   type IChartApi,
@@ -16,6 +17,7 @@ import { dteDays, fmtUsd } from '@lib/format';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
 import type { GhostPath, GhostPathKind } from './ghost-paths';
+import type { ProfitFrontier } from './profit-frontiers';
 import styles from './Architect.module.css';
 
 const GHOST_RGB: Record<'profit' | 'loss', string> = {
@@ -38,6 +40,7 @@ interface PayoffChartV2Props {
   showProjections: boolean;
   snapshotMeta: { agoLabel: string } | null;
   projectionKey: string;
+  profitFrontiers: ProfitFrontier[];
 }
 
 export interface CandleSpec {
@@ -159,6 +162,7 @@ export default function PayoffChartV2({
   showProjections,
   snapshotMeta,
   projectionKey,
+  profitFrontiers,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -167,6 +171,7 @@ export default function PayoffChartV2({
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
   const ghostSeriesRef = useRef<ISeriesApi<'Candlestick'>[]>([]);
+  const frontierSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const lastGhostFitKeyRef = useRef<string>('');
 
   const zones = useMemo(
@@ -242,6 +247,7 @@ export default function PayoffChartV2({
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
       ghostSeriesRef.current = [];
+      frontierSeriesRef.current = [];
       lastGhostFitKeyRef.current = '';
     };
   }, []);
@@ -377,6 +383,36 @@ export default function PayoffChartV2({
     }
   }, [ghostPaths, showProjections, projectionKey]);
 
+  useEffect(() => {
+    const chart = chartApiRef.current;
+    if (!chart) return;
+
+    for (const series of frontierSeriesRef.current) chart.removeSeries(series);
+    frontierSeriesRef.current = [];
+
+    if (!showProjections) return;
+
+    for (const frontier of profitFrontiers) {
+      const scenario = frontier.kind === 'scenario';
+      const series = chart.addSeries(LineSeries, {
+        color: scenario ? '#53A7FF' : '#F0B90B',
+        lineWidth: 2,
+        lineStyle: scenario ? LineStyle.Dashed : LineStyle.Solid,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 3,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      series.setData(
+        frontier.points.map((point) => ({
+          time: Math.floor(point.timestamp / 1000) as number,
+          value: point.price,
+        })) as never,
+      );
+      frontierSeriesRef.current.push(series);
+    }
+  }, [profitFrontiers, showProjections]);
+
   if (!available) {
     return (
       <div className={styles.chartV2EmptyState}>
@@ -414,6 +450,22 @@ export default function PayoffChartV2({
                 </span>
               </div>
             ))}
+          </div>
+        )}
+        {showProjections && profitFrontiers.length > 0 && (
+          <div className={styles.frontierLegend}>
+            <strong>PROFIT FRONTIER</strong>
+            {profitFrontiers.map((frontier) => (
+              <div key={frontier.kind} className={styles.frontierLegendRow}>
+                <span data-kind={frontier.kind} />
+                <span>
+                  {frontier.kind === 'base'
+                    ? `IV ${Math.round(frontier.iv * 100)}%`
+                    : `IV ${Math.round(frontier.iv * 100)}% (${frontier.ivShiftPct > 0 ? '+' : ''}${frontier.ivShiftPct} pts)`}
+                </span>
+              </div>
+            ))}
+            <small>Above the line = modeled profit</small>
           </div>
         )}
       </div>

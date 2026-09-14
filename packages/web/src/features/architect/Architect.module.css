@@ -1421,6 +1421,62 @@
   color: #cb3855;
 }
 
+.frontierLegend {
+  position: absolute;
+  top: 8px;
+  right: 70px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  color: #9aa0a6;
+  background: rgba(10, 10, 10, 0.78);
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.frontierLegend > strong {
+  color: #f0b90b;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.frontierLegendRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.frontierLegendRow > span:first-child {
+  width: 16px;
+  height: 2px;
+  background: #f0b90b;
+}
+
+.frontierLegendRow > span:first-child[data-kind='scenario'] {
+  background: repeating-linear-gradient(90deg, #53a7ff 0 4px, transparent 4px 6px);
+}
+
+.frontierLegend small {
+  color: #73797d;
+  font-size: 8px;
+}
+
+.frontierHint {
+  padding: 8px 9px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, #53a7ff 5%, transparent);
+  border: 1px solid color-mix(in srgb, #53a7ff 20%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
 .projControls {
   display: flex;
   align-items: center;

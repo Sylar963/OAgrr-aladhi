@@ -687,7 +687,10 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   }, [underlying]);
 
   // Anchor the projection at the last real candle's bucket (grid-aligned).
-  const lastBarMs = visibleSpotCandles?.candles.at(-1)?.timestamp ?? Date.now();
+  const projectionBucketMs = candleResolutionSec * 1000;
+  const lastBarMs =
+    visibleSpotCandles?.candles.at(-1)?.timestamp ??
+    Math.floor(Date.now() / projectionBucketMs) * projectionBucketMs;
 
   const nearestExpiryMs = useMemo(() => {
     const expiries = pricedLegs.map((l) => l.expiry).filter(Boolean);
@@ -699,7 +702,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const liveGhostPaths = useMemo(
     () =>
       computeGhostPaths(
-        analyticsLegs,
+        legs,
         spotPrice,
         nearestExpiryMs,
         lastBarMs,
@@ -725,7 +728,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
         candleResolutionSec,
         ivShift,
       ),
-    [analyticsLegs, candleResolutionSec, ivShift, lastBarMs, nearestExpiryMs],
+    [legs, candleResolutionSec, ivShift, lastBarMs, nearestExpiryMs],
   );
 
   const selectedSnapshot = useMemo(

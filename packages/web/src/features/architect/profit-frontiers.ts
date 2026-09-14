@@ -3,7 +3,7 @@ import { black76Price } from '@lib/analytics/blackScholes';
 import type { Leg } from './payoff';
 
 const DEFAULT_IV = 0.5;
-const MAX_FRONTIER_POINTS = 240;
+const MAX_FRONTIER_POINTS = 120;
 const MIN_IV = 0.01;
 const MS_PER_YEAR = 365 * 24 * 60 * 60 * 1000;
 
@@ -26,7 +26,7 @@ function solveCallBreakEven(strike: number, premium: number, iv: number, tYears:
   let high = Math.max(strike + premium, strike * 1.25);
   while (black76Price('call', high, strike, tYears, iv) < premium) high *= 2;
 
-  for (let iteration = 0; iteration < 64; iteration++) {
+  for (let iteration = 0; iteration < 40; iteration++) {
     const mid = (low + high) / 2;
     if (black76Price('call', mid, strike, tYears, iv) < premium) low = mid;
     else high = mid;

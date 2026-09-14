@@ -171,7 +171,7 @@ export default function PayoffChartV2({
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
   const ghostSeriesRef = useRef<ISeriesApi<'Candlestick'>[]>([]);
-  const frontierSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
+  const frontierSeriesRef = useRef(new Map<ProfitFrontier['kind'], ISeriesApi<'Line'>>());
   const lastGhostFitKeyRef = useRef<string>('');
 
   const zones = useMemo(
@@ -247,7 +247,7 @@ export default function PayoffChartV2({
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
       ghostSeriesRef.current = [];
-      frontierSeriesRef.current = [];
+      frontierSeriesRef.current.clear();
       lastGhostFitKeyRef.current = '';
     };
   }, []);
@@ -295,7 +295,7 @@ export default function PayoffChartV2({
       chart.timeScale().fitContent();
     }
     lastWindowKeyRef.current = windowKey;
-  }, [candles, resolutionSec, spotPrice]);
+  }, [candles, resolutionSec]);
 
   // Apply break-even price lines.
   useEffect(() => {
@@ -387,29 +387,37 @@ export default function PayoffChartV2({
     const chart = chartApiRef.current;
     if (!chart) return;
 
-    for (const series of frontierSeriesRef.current) chart.removeSeries(series);
-    frontierSeriesRef.current = [];
+    if (!showProjections) {
+      for (const series of frontierSeriesRef.current.values()) series.setData([]);
+      return;
+    }
 
-    if (!showProjections) return;
-
+    const activeKinds = new Set<ProfitFrontier['kind']>();
     for (const frontier of profitFrontiers) {
       const scenario = frontier.kind === 'scenario';
-      const series = chart.addSeries(LineSeries, {
-        color: scenario ? '#53A7FF' : '#F0B90B',
-        lineWidth: 2,
-        lineStyle: scenario ? LineStyle.Dashed : LineStyle.Solid,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 3,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
+      let series = frontierSeriesRef.current.get(frontier.kind);
+      if (!series) {
+        series = chart.addSeries(LineSeries, {
+          color: scenario ? '#53A7FF' : '#F0B90B',
+          lineWidth: 2,
+          lineStyle: scenario ? LineStyle.Dashed : LineStyle.Solid,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 3,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        frontierSeriesRef.current.set(frontier.kind, series);
+      }
       series.setData(
         frontier.points.map((point) => ({
           time: Math.floor(point.timestamp / 1000) as number,
           value: point.price,
         })) as never,
       );
-      frontierSeriesRef.current.push(series);
+      activeKinds.add(frontier.kind);
+    }
+    for (const [kind, series] of frontierSeriesRef.current) {
+      if (!activeKinds.has(kind)) series.setData([]);
     }
   }, [profitFrontiers, showProjections]);
 

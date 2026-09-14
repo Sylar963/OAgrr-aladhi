@@ -70,6 +70,18 @@ describe('computeLongCallProfitFrontiers', () => {
     expect(lowerIv!.points[0]!.price).toBeGreaterThan(base!.points[0]!.price);
   });
 
+  it('caps dense intraday paths to bounded chart work', () => {
+    const [frontier] = computeLongCallProfitFrontiers(
+      [longCall()],
+      0,
+      365 * DAY_MS,
+      60,
+      0,
+    );
+
+    expect(frontier!.points).toHaveLength(121);
+  });
+
   it('only returns frontiers for one long call with a future expiry', () => {
     expect(
       computeLongCallProfitFrontiers(

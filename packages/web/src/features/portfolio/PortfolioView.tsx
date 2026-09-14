@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
-import { PRIVATE_ADAPTER_SPECS, VENUE_IDS, type PortfolioPnlCurve as PortfolioPnlCurveData, type VenueId } from '@oggregator/protocol';
+import {
+  PRIVATE_ADAPTER_SPECS,
+  VENUE_IDS,
+  type PortfolioPnlCurve as PortfolioPnlCurveData,
+  type VenueId,
+} from '@oggregator/protocol';
 
 import { useAppStore } from '@stores/app-store';
 import { VENUES } from '@lib/venue-meta';
@@ -114,8 +119,10 @@ export default function PortfolioView() {
   const underlyingParam = underlyingFilter === 'all' ? undefined : underlyingFilter;
   const { connectionState, lastSeq, lastError } = usePortfolioWs(source, underlyingParam);
   const wsLive = connectionState === 'open' && lastSeq > 0;
-  const positionsOpts = underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
-  const metricsOpts = underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
+  const positionsOpts =
+    underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
+  const metricsOpts =
+    underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
   const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
   const [venueConnectError, setVenueConnectError] = useState<string | null>(null);
@@ -183,7 +190,12 @@ export default function PortfolioView() {
           const walletAddress = creds.fields.walletAddress;
           const signerPrivateKey = creds.fields.privateKeyPem;
           const subaccountId = Number(creds.fields.subaccountId);
-          if (!walletAddress || !signerPrivateKey || !Number.isFinite(subaccountId) || subaccountId <= 0) {
+          if (
+            !walletAddress ||
+            !signerPrivateKey ||
+            !Number.isFinite(subaccountId) ||
+            subaccountId <= 0
+          ) {
             return;
           }
           await connectVenue('derive', {
@@ -226,7 +238,9 @@ export default function PortfolioView() {
       <div className={styles.header}>
         <div className={styles.titleBlock}>
           <h2 className={styles.title}>Portfolio</h2>
-          <span className={styles.subtitle}>Volatility, convexity and carry translated for delta-one traders</span>
+          <span className={styles.subtitle}>
+            Volatility, convexity and carry translated for delta-one traders
+          </span>
         </div>
         <div className={styles.statusGroup}>
           <div className={styles.toggleGroup} role="radiogroup" aria-label="Source">
@@ -294,7 +308,10 @@ export default function PortfolioView() {
 
       <div className={styles.bodyGrid}>
         <div className={styles.mainCol}>
-          <PortfolioPnlCurve curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE} forwardDays={forwardDays} />
+          <PortfolioPnlCurve
+            curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
+            forwardDays={forwardDays}
+          />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
           <ShockHeatmap grid={metrics?.shockGrid ?? []} />
           <PortfolioVegaCurve
@@ -317,7 +334,8 @@ export default function PortfolioView() {
             <PositionForm defaultUnderlying={underlying} />
           ) : source === 'paper' ? (
             <div className={styles.readOnlyNote}>
-              Showing live paper-trading positions. Add or close legs from the <strong>Paper</strong> tab.
+              Showing live paper-trading positions. Add or close legs from the{' '}
+              <strong>Paper</strong> tab.
             </div>
           ) : (
             <div className={styles.readOnlyNote}>

@@ -26,6 +26,7 @@ function readStorage(key: string): string | null {
 export type ActiveContext = { kind: 'paper' | 'challenge' | 'thalex'; runId?: string };
 
 export type TradfiPage = 'chain' | 'builder' | 'gex';
+export type BuilderVariant = 'v1' | 'v2' | 'v3';
 
 function readActiveContext(): ActiveContext {
   const raw = readStorage('activeContext');
@@ -90,6 +91,7 @@ interface AppState {
   tradfiUnderlying: string;
   tradfiExpiry: string;
   tradfiPage: TradfiPage;
+  builderVariant: BuilderVariant;
   activeVenues: string[];
   myIv: string;
   feedStatus: FeedStatus;
@@ -114,6 +116,7 @@ interface AppState {
   setTradfiUnderlying: (u: string) => void;
   setTradfiExpiry: (e: string) => void;
   setTradfiPage: (p: TradfiPage) => void;
+  setBuilderVariant: (variant: BuilderVariant) => void;
   toggleVenue: (venueId: string) => void;
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;
@@ -144,6 +147,7 @@ export const useAppStore = create<AppState>((set) => ({
   tradfiUnderlying: '',
   tradfiExpiry: '',
   tradfiPage: 'chain',
+  builderVariant: 'v1',
   activeVenues: [...VENUE_IDS],
   myIv: '',
   feedStatus: {
@@ -174,6 +178,7 @@ export const useAppStore = create<AppState>((set) => ({
   setTradfiUnderlying: (tradfiUnderlying) => set({ tradfiUnderlying, tradfiExpiry: '' }),
   setTradfiExpiry: (tradfiExpiry) => set({ tradfiExpiry }),
   setTradfiPage: (tradfiPage) => set({ tradfiPage }),
+  setBuilderVariant: (builderVariant) => set({ builderVariant }),
   toggleVenue: (venueId) =>
     set((s) => {
       const active = s.activeVenues.includes(venueId)

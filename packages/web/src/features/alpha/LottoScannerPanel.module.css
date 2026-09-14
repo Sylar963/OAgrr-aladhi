@@ -622,6 +622,38 @@
   padding-top: var(--space-3);
 }
 
+.builderButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  margin-top: var(--space-3);
+  padding: 0 11px;
+  color: #9fc7ff;
+  background: color-mix(in srgb, #53a7ff 8%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, #53a7ff 38%, var(--border-default));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.builderButton:hover {
+  color: #d8e9ff;
+  background: color-mix(in srgb, #53a7ff 14%, var(--bg-elevated));
+  border-color: #53a7ff;
+}
+
+.builderButton:focus-visible {
+  outline: 1px solid #53a7ff;
+  outline-offset: 2px;
+}
+
 .footer {
   display: flex;
   flex-direction: column;

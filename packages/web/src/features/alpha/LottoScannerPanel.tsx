@@ -9,10 +9,13 @@ import {
 
 import { Spinner } from '@components/ui';
 import HoverTooltip from '@components/ui/HoverTooltip';
+import { useStrategyStore } from '@features/architect/strategy-store';
 import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
+import { useAppStore } from '@stores/app-store';
 
 import LottoOutcomeBuilder from './LottoOutcomeBuilder';
+import { candidateToBuilderLeg } from './radar-builder';
 import { useLottoScanner } from './useLottoScanner';
 import styles from './LottoScannerPanel.module.css';
 
@@ -213,6 +216,10 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
   const [targetPriceInput, setTargetPriceInput] = useState('');
   const [outcomeExpiry, setOutcomeExpiry] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const replaceLegs = useStrategyStore((state) => state.replaceLegs);
+  const setActiveTab = useAppStore((state) => state.setActiveTab);
+  const setBuilderVariant = useAppStore((state) => state.setBuilderVariant);
+  const setExpiry = useAppStore((state) => state.setExpiry);
   const buyingPower = Number(buyingPowerInput);
   const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
   const validBuyingPower = buyingPowerIsValid ? buyingPower : 2_400;
@@ -248,6 +255,13 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
     data?.candidates[0] ??
     null;
   const unavailableVenues = data?.venueStatus.filter((status) => status.error != null) ?? [];
+
+  function openInBuilderV2(candidate: AlphaLottoCandidate): void {
+    replaceLegs([candidateToBuilderLeg(candidate)], candidate.underlying);
+    setExpiry(candidate.expiry);
+    setBuilderVariant('v2');
+    setActiveTab('architect');
+  }
 
   return (
     <section className={styles.panel}>
@@ -390,8 +404,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             {view === 'guided' ? (
               <>
                 <span>{underlying} NOW <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
-                <span>LIVE CALLS <strong>{data.candidates.length}</strong></span>
                 <span>HORIZON <strong>15–75 DAYS</strong></span>
+                <span>LIVE CALLS <strong>{data.candidates.length}</strong></span>
                 <span>AVAILABLE DATES <strong>{data.eligibleExpiries.length}</strong></span>
                 <span>LIVE VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
               </>
@@ -487,7 +501,9 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                   })}
                 </div>
               </div>
-              {selected && <CandidateInspector candidate={selected} />}
+              {selected && (
+                <CandidateInspector candidate={selected} onOpenBuilder={openInBuilderV2} />
+              )}
             </div>
           )}
         </>
@@ -509,7 +525,12 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
   );
 }
 
-function CandidateInspector({ candidate }: { candidate: AlphaLottoCandidate }) {
+interface CandidateInspectorProps {
+  candidate: AlphaLottoCandidate;
+  onOpenBuilder: (candidate: AlphaLottoCandidate) => void;
+}
+
+function CandidateInspector({ candidate, onOpenBuilder }: CandidateInspectorProps) {
   return (
     <aside className={styles.inspector}>
       <div className={styles.inspectorHeader}>
@@ -551,6 +572,14 @@ function CandidateInspector({ candidate }: { candidate: AlphaLottoCandidate }) {
         <span>IV {fmtIv(candidate.markIv)}</span>
         <span>ASK SIZE {candidate.askSize ?? '—'}</span>
       </div>
+      <button
+        type="button"
+        className={styles.builderButton}
+        onClick={() => onOpenBuilder(candidate)}
+      >
+        <span>Open in Builder V2</span>
+        <span aria-hidden="true">↗</span>
+      </button>
     </aside>
   );
 }

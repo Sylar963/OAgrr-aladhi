@@ -42,7 +42,7 @@ function buildFrontier(
   ivShiftPct: number,
   kind: ProfitFrontier['kind'],
 ): ProfitFrontier {
-  const baseIv = leg.iv != null && leg.iv > 0 ? leg.iv : DEFAULT_IV;
+  const baseIv = leg.iv != null && Number.isFinite(leg.iv) && leg.iv > 0 ? leg.iv : DEFAULT_IV;
   const iv = Math.max(MIN_IV, baseIv + ivShiftPct / 100);
   const spanMs = expiryTimeMs - anchorTimeMs;
   const requestedPoints = Math.ceil(spanMs / (resolutionSec * 1000));
@@ -73,6 +73,8 @@ export function computeLongCallProfitFrontiers(
     leg == null ||
     leg.type !== 'call' ||
     leg.direction !== 'buy' ||
+    !Number.isFinite(leg.strike) ||
+    !Number.isFinite(leg.entryPrice) ||
     leg.strike <= 0 ||
     leg.entryPrice <= 0 ||
     resolutionSec <= 0 ||

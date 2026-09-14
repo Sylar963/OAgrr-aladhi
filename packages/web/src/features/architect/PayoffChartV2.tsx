@@ -465,7 +465,7 @@ export default function PayoffChartV2({
                 </span>
               </div>
             ))}
-            <small>Above the line = modeled profit</small>
+            <small>Above = modeled profit before exit costs</small>
           </div>
         )}
       </div>

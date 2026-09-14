@@ -1477,6 +1477,14 @@
   line-height: 1.5;
 }
 
+@media (max-width: 760px) {
+  .frontierLegend {
+    top: auto;
+    right: 56px;
+    bottom: 8px;
+  }
+}
+
 .projControls {
   display: flex;
   align-items: center;

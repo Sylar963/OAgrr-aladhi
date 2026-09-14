@@ -288,7 +288,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [paperStatus, setPaperStatus] = useState<string | null>(null);
   const [routeVenue, setRouteVenue] = useState(BEST_ROUTE_VALUE);
-  const [variant, setVariant] = useState<'v1' | 'v2' | 'v3'>('v1');
+  const variant = useAppStore((s) => s.builderVariant);
+  const setVariant = useAppStore((s) => s.setBuilderVariant);
   const [lastGoodSpotCandles, setLastGoodSpotCandles] = useState<{
     data: SpotCandlesResponse;
     dataUpdatedAt: number;

@@ -18,6 +18,11 @@ describe('Alpha scanner contracts', () => {
     expect(() => AlphaLottoScannerQuerySchema.parse({ venues: 'deribit,unknown' })).toThrow();
   });
 
+  it('parses expiry diversification from HTTP query strings', () => {
+    expect(AlphaLottoScannerQuerySchema.parse({ diversifyExpiries: 'true' }).diversifyExpiries).toBe(true);
+    expect(AlphaLottoScannerQuerySchema.parse({ diversifyExpiries: 'false' }).diversifyExpiries).toBe(false);
+  });
+
   it('normalizes the market-context underlying', () => {
     expect(AlphaMarketContextQuerySchema.parse({ underlying: 'btc' }).underlying).toBe('BTC');
   });

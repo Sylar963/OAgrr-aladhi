@@ -18,6 +18,9 @@ import styles from './LottoScannerPanel.module.css';
 
 const PREMIUM_PRESETS = [100, 200, 400, 500] as const;
 const OTM_PRESETS = [5, 8, 10, 15] as const;
+const GUIDED_MIN_DTE = 15;
+const GUIDED_MAX_DTE = 75;
+const GUIDED_PREMIUM_CAP = 10_000;
 type ScannerView = 'guided' | 'advanced';
 
 const CONTROL_TIPS = {
@@ -226,15 +229,16 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
     {
       underlying,
       venues: activeVenues,
-      premiumCap,
-      minDte: 4,
-      maxDte: 14,
+      premiumCap: view === 'guided' ? GUIDED_PREMIUM_CAP : premiumCap,
+      minDte: view === 'guided' ? GUIDED_MIN_DTE : 4,
+      maxDte: view === 'guided' ? GUIDED_MAX_DTE : 14,
       minOtmPct,
       maxOtmPct: 50,
       buyingPower: queryBuyingPower,
       marginHaircut: 1.2,
       maxSpreadPct: 50,
       limit: view === 'guided' ? 50 : advancedLimit,
+      diversifyExpiries: view === 'guided',
     },
     activeVenues.length > 0 && (view === 'guided' || buyingPowerIsValid),
   );
@@ -387,6 +391,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
               <>
                 <span>{underlying} NOW <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
                 <span>LIVE CALLS <strong>{data.candidates.length}</strong></span>
+                <span>HORIZON <strong>15–75 DAYS</strong></span>
                 <span>AVAILABLE DATES <strong>{data.eligibleExpiries.length}</strong></span>
                 <span>LIVE VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
               </>
@@ -496,7 +501,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           </>
         )}
         {view === 'guided' && (
-          <span>Guided payouts use intrinsic value at expiry; unknown venue fees are excluded and selling earlier can produce a different result.</span>
+          <span>Guided scans 15–75 DTE for one-month and two-month calls. Payouts use intrinsic value at expiry; unknown venue fees are excluded.</span>
         )}
         <span>No order is sent. Most short-dated OTM calls expire worthless.</span>
       </footer>

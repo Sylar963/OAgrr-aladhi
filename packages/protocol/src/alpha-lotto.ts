@@ -12,6 +12,11 @@ const VenueListSchema = z.preprocess(
   z.array(VenueIdSchema).min(1).default(['thalex']),
 );
 
+const QueryBooleanSchema = z.preprocess(
+  (value) => value === 'true' ? true : value === 'false' ? false : value,
+  z.boolean().default(false),
+);
+
 export const AlphaLottoScannerQuerySchema = z
   .object({
     underlying: z.string().trim().min(2).max(20).default('BTC').transform((value) => value.toUpperCase()),
@@ -25,6 +30,7 @@ export const AlphaLottoScannerQuerySchema = z
     marginHaircut: z.coerce.number().min(1).max(3).default(1.2),
     maxSpreadPct: z.coerce.number().positive().max(500).default(50),
     limit: z.coerce.number().int().min(1).max(50).default(10),
+    diversifyExpiries: QueryBooleanSchema,
   })
   .refine((value) => value.maxDte >= value.minDte, {
     message: 'maxDte must be greater than or equal to minDte',

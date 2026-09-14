@@ -19,6 +19,7 @@ export function useLottoScanner(config: AlphaLottoScannerQuery, enabled = true) 
     marginHaircut: String(config.marginHaircut),
     maxSpreadPct: String(config.maxSpreadPct),
     limit: String(config.limit),
+    diversifyExpiries: String(config.diversifyExpiries),
   });
 
   return useQuery({

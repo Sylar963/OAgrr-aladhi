@@ -16,6 +16,7 @@ import {
   addLegacyLottoAliases,
   computeLottoCandidate,
   rankLottoCandidates,
+  rankLottoCandidatesAcrossExpiries,
   type ScannerMarketContext,
   type ScannerSkipReason,
 } from '../alpha-lotto-scanner.js';
@@ -278,7 +279,9 @@ export async function alphaLottoScannerRoute(app: FastifyInstance) {
           }
         }
 
-        const ranked = rankLottoCandidates(candidates).slice(0, config.limit);
+        const ranked = config.diversifyExpiries
+          ? rankLottoCandidatesAcrossExpiries(candidates, config.limit)
+          : rankLottoCandidates(candidates).slice(0, config.limit);
         const eligibleExpiries = [...new Set(plans.flatMap((plan) => plan.expiries))].sort();
         const venueStatus = plans.map((plan) => ({
           venue: plan.venue,

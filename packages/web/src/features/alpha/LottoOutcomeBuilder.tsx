@@ -61,6 +61,19 @@ function formatQuantity(value: number): string {
   return value >= 100 ? value.toFixed(0) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function expiryDte(expiry: string, data: AlphaLottoScannerResponse): number | null {
+  const candidate = data.candidates.find((entry) => entry.expiry === expiry);
+  if (candidate != null) return candidate.dte;
+  const expiryTs = Date.parse(`${expiry}T08:00:00Z`);
+  if (!Number.isFinite(expiryTs)) return null;
+  return (expiryTs - data.generatedAt) / 86_400_000;
+}
+
+function expiryOptionLabel(expiry: string, data: AlphaLottoScannerResponse): string {
+  const dte = expiryDte(expiry, data);
+  return dte == null ? formatExpiry(expiry) : `${formatExpiry(expiry)} · ${Math.max(0, Math.round(dte))} days`;
+}
+
 function OutcomeCard({ outcome, targetPrice, onInspect }: {
   outcome: LottoOutcome;
   targetPrice: number;
@@ -245,10 +258,11 @@ export default function LottoOutcomeBuilder({
               >
                 {availableExpiries.map((candidateExpiry) => (
                   <option key={candidateExpiry} value={candidateExpiry}>
-                    {formatExpiry(candidateExpiry)}
+                    {expiryOptionLabel(candidateExpiry, data)}
                   </option>
                 ))}
               </select>
+              <small className={styles.inputHint}>15–75 days · includes 1M and 2M calls</small>
             </div>
           </label>
 

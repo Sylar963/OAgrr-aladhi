@@ -304,3 +304,30 @@ export function rankLottoCandidates(candidates: AlphaLottoCandidate[]): AlphaLot
     return a.strike - b.strike;
   });
 }
+
+export function rankLottoCandidatesAcrossExpiries(
+  candidates: AlphaLottoCandidate[],
+  limit: number,
+): AlphaLottoCandidate[] {
+  const ranked = rankLottoCandidates(candidates);
+  const byExpiry = new Map<string, AlphaLottoCandidate[]>();
+  for (const candidate of ranked) {
+    const expiryCandidates = byExpiry.get(candidate.expiry) ?? [];
+    expiryCandidates.push(candidate);
+    byExpiry.set(candidate.expiry, expiryCandidates);
+  }
+
+  const selected: AlphaLottoCandidate[] = [];
+  for (let depth = 0; selected.length < limit; depth += 1) {
+    let foundCandidate = false;
+    for (const expiryCandidates of byExpiry.values()) {
+      const candidate = expiryCandidates[depth];
+      if (candidate == null) continue;
+      selected.push(candidate);
+      foundCandidate = true;
+      if (selected.length === limit) break;
+    }
+    if (!foundCandidate) break;
+  }
+  return selected;
+}

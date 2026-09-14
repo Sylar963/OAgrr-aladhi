@@ -148,6 +148,12 @@
   font-size: 8px;
 }
 
+.inputHint {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
 .builderInput select {
   min-height: 31px;
   border-bottom: 1px solid var(--border-default);

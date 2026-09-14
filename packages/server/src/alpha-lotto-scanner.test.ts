@@ -6,6 +6,7 @@ import {
   addLegacyLottoAliases,
   computeLottoCandidate,
   rankLottoCandidates,
+  rankLottoCandidatesAcrossExpiries,
 } from './alpha-lotto-scanner.js';
 
 const NOW_MS = 1_800_000_000_000;
@@ -167,6 +168,33 @@ describe('rankLottoCandidates', () => {
       (candidate) => candidate.targets.find((target) => target.multiple === 10)!.impliedMoveMultiple!,
     );
     expect(ratios[0]).toBeLessThan(ratios[1]);
+  });
+
+  it('reserves ranked slots across available expiries', () => {
+    const result = computeLottoCandidate(contract(), market, config);
+    if (result.candidate == null) throw new Error('expected candidate');
+    const baseCandidate = result.candidate;
+    const candidates = [
+      ['2026-10-02', 1],
+      ['2026-10-02', 2],
+      ['2026-11-06', 3],
+      ['2026-10-02', 4],
+    ].map(([expiry, rank]) => ({
+      ...baseCandidate,
+      expiry: String(expiry),
+      mark: Number(rank),
+      targets: baseCandidate.targets.map((target) => target.multiple === 10
+        ? { ...target, impliedMoveMultiple: Number(rank) }
+        : target),
+    }));
+
+    const ranked = rankLottoCandidatesAcrossExpiries(candidates, 3);
+
+    expect(ranked.map((candidate) => [candidate.expiry, candidate.mark])).toEqual([
+      ['2026-10-02', 1],
+      ['2026-11-06', 3],
+      ['2026-10-02', 2],
+    ]);
   });
 });
 

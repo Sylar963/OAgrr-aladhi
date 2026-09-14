@@ -297,7 +297,12 @@ export default function PortfolioView() {
           <PortfolioPnlCurve curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE} forwardDays={forwardDays} />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
           <ShockHeatmap grid={metrics?.shockGrid ?? []} />
-          <PortfolioVegaCurve byStrike={metrics?.byStrike ?? []} breakEven={metrics?.breakEven ?? []} />
+          <PortfolioVegaCurve
+            byStrike={metrics?.byStrike ?? []}
+            breakEven={metrics?.breakEven ?? []}
+            spotUsd={metrics?.pnlCurve.currentSpotUsd ?? null}
+            underlying={metrics?.pnlCurve.underlying ?? underlyingFilter}
+          />
           <div className={styles.tableWrap}>
             <PositionsTable
               positions={positions}

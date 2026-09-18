@@ -311,6 +311,7 @@ export default function PortfolioView() {
           <PortfolioPnlCurve
             curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
             forwardDays={forwardDays}
+            mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
           />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
           <ShockHeatmap grid={metrics?.shockGrid ?? []} />

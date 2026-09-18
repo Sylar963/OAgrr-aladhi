@@ -1,170 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-
+import { useState } from 'react';
 import { useAppStore } from '@stores/app-store';
-import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
 import { useOpenPalette } from '@components/layout/palette-context';
-import { useIsMobile } from '@hooks/useIsMobile';
-import { Spinner, EmptyState } from '@components/ui';
-import type { SpreadKind } from '@lib/analytics/verticalSpread';
-
-import SpreadBuilderPanel from './SpreadBuilderPanel';
 import AlphaContextStrip from './AlphaContextStrip';
 import LottoScannerPanel from './LottoScannerPanel';
-import SignalCard from './SignalCard';
-import VenueRouterTable from './VenueRouterTable';
-import VolSmileInset from './VolSmileInset';
-import { computeSviRichness } from './sviRichness';
+import SpreadDesk from './SpreadDesk';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
-import { useRegimeQuery } from './useRegimeQuery';
-import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import styles from './AlphaView.module.css';
-
-type AlphaStrategy = SpreadKind | 'long-call';
-
-const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
-  { id: 'call-credit', label: 'Call Credit' },
-  { id: 'put-credit', label: 'Put Credit' },
-  { id: 'long-call', label: 'Long Call' },
-];
 
 export default function AlphaView() {
   const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
-  const setExpiry = useAppStore((s) => s.setExpiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const openPalette = useOpenPalette();
-
-  const { data: expiriesData } = useExpiries(underlying);
-  const expiries = expiriesData?.expiries ?? [];
-  const prefetchChain = usePrefetchChain(underlying, activeVenues);
-  const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
-
-  const isMobile = useIsMobile();
-  const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
-  const kind: SpreadKind = strategy === 'long-call' ? 'call-credit' : strategy;
-  const [shortStrike, setShortStrike] = useState<number | null>(null);
-  const [longStrike, setLongStrike] = useState<number | null>(null);
-
-  const atmStrike = chain?.stats.atmStrike ?? null;
-
-  const sortedStrikes = useMemo(() => {
-    if (!chain) return null;
-    return [...chain.strikes].map((s) => s.strike).sort((a, b) => a - b);
-  }, [chain]);
-
-  // Compute reasonable defaults for a given spread kind: for call-credit, short
-  // ≈ ATM, long ≈ first strike above that. For put-credit, mirror image.
-  const defaultsFor = (k: SpreadKind): { shortStrike: number; longStrike: number } | null => {
-    if (!sortedStrikes || sortedStrikes.length < 2 || atmStrike == null) return null;
-    const atmIdx = nearestIndex(sortedStrikes, atmStrike);
-    if (k === 'call-credit') {
-      const shortIdx = Math.min(atmIdx + 1, sortedStrikes.length - 2);
-      return { shortStrike: sortedStrikes[shortIdx]!, longStrike: sortedStrikes[shortIdx + 1]! };
-    }
-    const shortIdx = Math.max(atmIdx - 1, 1);
-    return { shortStrike: sortedStrikes[shortIdx]!, longStrike: sortedStrikes[shortIdx - 1]! };
-  };
-
-  // Seed (or re-seed) leg defaults whenever the current selection isn't valid
-  // for the current chain. This covers initial load AND tenor/underlying
-  // changes — at the moment the *new* chain arrives, if the prior strikes
-  // don't exist on it we atomically swap to fresh defaults, avoiding any
-  // render where strikes are null while old data is still on screen.
-  useEffect(() => {
-    if (!sortedStrikes || sortedStrikes.length < 2) return;
-    const strikeSet = new Set(sortedStrikes);
-    const valid =
-      shortStrike != null &&
-      longStrike != null &&
-      strikeSet.has(shortStrike) &&
-      strikeSet.has(longStrike);
-    if (valid) return;
-    const d = defaultsFor(kind);
-    if (!d) return;
-    setShortStrike(d.shortStrike);
-    setLongStrike(d.longStrike);
-    // defaultsFor is stable per (sortedStrikes, atmStrike); listing those is sufficient.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
-
-  const { data: regime } = useRegimeQuery(underlying);
-  const marketContext = useAlphaMarketContext(underlying);
-  const regimeDominant = regime?.dominant ?? null;
-
-  const analysis = useVerticalSpreadAnalysis({
-    chain,
-    kind,
-    shortStrike,
-    longStrike,
-    venues: activeVenues,
-    regimeDominant,
-  });
-
-  const richness = useMemo(
-    () => computeSviRichness(analysis.smile, analysis.T),
-    [analysis.smile, analysis.T],
-  );
-
-  const executableNet = useMemo(() => {
-    const sn = analysis.analysis?.short.best?.netAfterFees;
-    const ln = analysis.analysis?.long.best?.netAfterFees;
-    if (sn == null || ln == null) return null;
-    return sn - ln;
-  }, [analysis]);
-
-  const builder = chain && (
-    <SpreadBuilderPanel
-      kind={kind}
-      onKindChange={(k) => {
-        if (k === kind) return;
-        const d = defaultsFor(k);
-        setStrategy(k);
-        if (d) {
-          setShortStrike(d.shortStrike);
-          setLongStrike(d.longStrike);
-        } else {
-          setShortStrike(null);
-          setLongStrike(null);
-        }
-      }}
-      strikes={chain.strikes}
-      atmStrike={atmStrike}
-      shortStrike={shortStrike}
-      longStrike={longStrike}
-      onShortChange={setShortStrike}
-      onLongChange={setLongStrike}
-      forward={analysis.forward}
-      T={analysis.T}
-    />
-  );
-
-  const signalStack = (
-    <>
-      <SignalCard
-        signal={analysis.analysis?.combinedSignal ?? null}
-        regime={regime ?? null}
-      />
-      <VenueRouterTable
-        shortLeg={analysis.analysis?.short ?? null}
-        longLeg={analysis.analysis?.long ?? null}
-        shortStrike={shortStrike}
-        longStrike={longStrike}
-        executableNetCredit={executableNet}
-        routeVenue={analysis.analysis?.routeVenue ?? null}
-        maxQuantity={analysis.analysis?.maxQuantity ?? null}
-        quoteSkewMs={analysis.analysis?.quoteSkewMs ?? null}
-        theoreticalIndependentNetCredit={analysis.analysis?.theoreticalIndependentNetCredit ?? null}
-      />
-      <VolSmileInset
-        smile={analysis.smile}
-        shortStrike={shortStrike}
-        longStrike={longStrike}
-        richness={richness}
-        T={analysis.T}
-      />
-    </>
-  );
-
+  const [strategy, setStrategy] = useState<'spreads' | 'long-call'>('spreads');
+  const context = useAlphaMarketContext(underlying);
   return (
     <div className={styles.view}>
       <div className={styles.strategyBar}>
@@ -172,111 +20,40 @@ export default function AlphaView() {
           <span>ALPHA</span>
           <strong>{underlying}</strong>
         </button>
-        <div className={styles.strategyTabs} role="tablist" aria-label="Alpha strategy">
-          {STRATEGIES.map((item) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={strategy === item.id}
-              data-active={strategy === item.id}
-              key={item.id}
-              onClick={() => {
-                if (item.id === strategy) return;
-                if (item.id === 'long-call') {
-                  setStrategy(item.id);
-                  return;
-                }
-                const defaults = defaultsFor(item.id);
-                setStrategy(item.id);
-                if (defaults) {
-                  setShortStrike(defaults.shortStrike);
-                  setLongStrike(defaults.longStrike);
-                }
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className={styles.strategyTabs} role="tablist" aria-label="Alpha workspace">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={strategy === 'spreads'}
+            data-active={strategy === 'spreads'}
+            onClick={() => setStrategy('spreads')}
+          >
+            Spread scanner
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={strategy === 'long-call'}
+            data-active={strategy === 'long-call'}
+            onClick={() => setStrategy('long-call')}
+          >
+            Long calls
+          </button>
         </div>
-        <span className={styles.venueScope}>{activeVenues.length} ACTIVE VENUES</span>
+        <span className={styles.venueScope}>RESEARCH → REVIEW → VENUE</span>
       </div>
-
-      {!isMobile && strategy !== 'long-call' && (
-        <ExpiryBar
-          underlying={underlying}
-          spotPrice={chain?.stats.forwardPriceUsd}
-          expiries={expiries}
-          selected={expiry}
-          onSelect={setExpiry}
-          onChangeAsset={openPalette}
-          onPrefetch={prefetchChain}
-        />
-      )}
-
       <AlphaContextStrip
-        context={marketContext.data ?? null}
+        context={context.data ?? null}
         strategy={strategy}
-        loading={marketContext.isLoading}
+        loading={context.isLoading}
       />
-
-      {strategy === 'long-call' && (
-        <div className={styles.scannerWorkspace}>
-          <LottoScannerPanel underlying={underlying} venues={activeVenues} />
-        </div>
-      )}
-
-      {strategy !== 'long-call' && isLoading && !chain && (
-        <div className={styles.state}>
-          <Spinner size="lg" label="Loading chain data…" />
-        </div>
-      )}
-
-      {strategy !== 'long-call' && error && !chain && (
-        <div className={styles.state}>
-          <EmptyState
-            icon="⚠"
-            title="Failed to load chain"
-            detail={error instanceof Error ? error.message : 'Check your connection and try again.'}
-          />
-        </div>
-      )}
-
-      {strategy !== 'long-call' && chain && chain.strikes.length === 0 && (
-        <EmptyState
-          icon="∅"
-          title="No options data"
-          detail={`No venues returned data for ${underlying} ${expiry}.`}
-        />
-      )}
-
-      {strategy !== 'long-call' && chain && chain.strikes.length > 0 && (
-        isMobile ? (
-          // On mobile: signal first (what users come for), then router + smile,
-          // then the strike builder at the bottom (less central on small screens).
-          <div className={styles.mobileStack}>
-            {signalStack}
-            {builder}
-          </div>
+      <div className={styles.scannerWorkspace}>
+        {strategy === 'spreads' ? (
+          <SpreadDesk underlying={underlying} />
         ) : (
-          <div className={styles.grid}>
-            {builder}
-            <div className={styles.rightColumn}>{signalStack}</div>
-          </div>
-        )
-      )}
+          <LottoScannerPanel underlying={underlying} venues={activeVenues} />
+        )}
+      </div>
     </div>
   );
-}
-
-function nearestIndex(strikes: number[], target: number): number {
-  let bestIdx = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < strikes.length; i++) {
-    const d = Math.abs(strikes[i]! - target);
-    if (d < bestDist) {
-      bestDist = d;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
 }

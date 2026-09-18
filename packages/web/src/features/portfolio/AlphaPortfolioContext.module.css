@@ -1,0 +1,43 @@
+.wrap {
+  border: 1px solid var(--border-default);
+  padding: 16px;
+  background: var(--bg-surface);
+  border-radius: 5px;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent-primary);
+  font-size: 12px;
+}
+.heading button {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  border-top: 1px solid var(--border-subtle);
+  padding: 10px 0;
+  font-size: 12px;
+}
+.wrap p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 12px 0 0;
+}

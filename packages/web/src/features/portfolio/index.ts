@@ -4,3 +4,4 @@ export { connectVenue, disconnectVenue, venueStatus } from './api';
 export { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 export { usePortfolioWs } from './hooks/usePortfolioWs';
 export { default as PortfolioView } from './PortfolioView';
+export { default as AlphaPortfolioContext } from './AlphaPortfolioContext';

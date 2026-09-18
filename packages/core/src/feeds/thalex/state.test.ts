@@ -59,6 +59,7 @@ describe('buildThalexInstrument', () => {
       strike_price: 75000,
       tick_size: 5,
       min_order_amount: 0.01,
+      volume_tick_size: 0.01,
     };
     const inst = buildThalexInstrument(row, deps);
     expect(inst).not.toBeNull();
@@ -77,8 +78,10 @@ describe('buildThalexInstrument', () => {
       contractValueCurrency: 'BTC',
       tickSize: 5,
       minQty: 0.01,
-      makerFee: null,
-      takerFee: null,
+      contractMultiplierBase: 1,
+      lotSize: 0.01,
+      makerFee: 0.00015,
+      takerFee: 0.00015,
     });
     // seconds → ms
     expect(inst?.expirationTimestamp).toBe(1776758400 * 1000);
@@ -104,6 +107,15 @@ describe('buildThalexInstrument', () => {
 });
 
 describe('mergeThalexTicker', () => {
+  it('clears explicitly withdrawn quotes while preserving omitted fields', () => {
+    const previous = { ...emptyQuote(), bidPrice: 100, askPrice: 120, bidSize: 1, askSize: 2 };
+    const q = mergeThalexTicker({ mark_timestamp: 1, best_bid_price: null, best_bid_amount: null }, previous, emptyQuote());
+    expect(q.bidPrice).toBeNull();
+    expect(q.bidSize).toBeNull();
+    expect(q.askPrice).toBe(120);
+    expect(q.askSize).toBe(2);
+  });
+
   it('fills bid/ask/mark/iv/delta and converts mark_timestamp s→ms', () => {
     const t: ThalexTicker = {
       mark_price: 53.21791443839902,

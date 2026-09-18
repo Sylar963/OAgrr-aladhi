@@ -39,8 +39,8 @@ export function mergeThalexTicker(
 ): LiveQuote {
   const base = previous ?? empty;
   const markIv = mergeNumber(ticker.iv, base.greeks.markIv);
-  const bidPrice = mergeNumber(ticker.best_bid_price, base.bidPrice);
-  const askPrice = mergeNumber(ticker.best_ask_price, base.askPrice);
+  const bidPrice = ticker.best_bid_price === undefined ? base.bidPrice : ticker.best_bid_price;
+  const askPrice = ticker.best_ask_price === undefined ? base.askPrice : ticker.best_ask_price;
 
   let bidIv = base.greeks.bidIv;
   let askIv = base.greeks.askIv;
@@ -64,8 +64,8 @@ export function mergeThalexTicker(
   return {
     bidPrice,
     askPrice,
-    bidSize: mergeNumber(ticker.best_bid_amount, base.bidSize),
-    askSize: mergeNumber(ticker.best_ask_amount, base.askSize),
+    bidSize: ticker.best_bid_amount === undefined ? base.bidSize : ticker.best_bid_amount,
+    askSize: ticker.best_ask_amount === undefined ? base.askSize : ticker.best_ask_amount,
     markPrice: mergeNumber(ticker.mark_price, base.markPrice),
     lastPrice: mergeNumber(ticker.last_price, base.lastPrice),
     underlyingPrice: mergeNumber(ticker.forward ?? ticker.index, base.underlyingPrice),
@@ -152,6 +152,8 @@ export function buildThalexInstrument(
     right,
     inverse: false,
     contractSize: 1,
+    contractMultiplierBase: 1,
+    lotSize: item.volume_tick_size ?? null,
     // Thalex BTC/ETH options: 1 contract = 1 unit of base (BTC or ETH), same
     // shape as Deribit. Premium settles in stablecoin (linear), but the
     // contract itself is sized in base currency — so openInterest / volume24h
@@ -161,8 +163,9 @@ export function buildThalexInstrument(
     contractValueCurrency: base,
     tickSize: item.tick_size ?? null,
     minQty: item.min_order_amount ?? item.volume_tick_size ?? null,
-    // Thalex fees are tiered per account — FEE_CAP is the safety net.
-    makerFee: null,
-    takerFee: null,
+    // Public Tier 1 estimate; account discounts and combo reductions apply at execution.
+    // https://thalex.com/trading-information/fees (verified 2026-09-18)
+    makerFee: 0.00015,
+    takerFee: 0.00015,
   };
 }

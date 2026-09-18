@@ -7,6 +7,7 @@ import styles from './PortfolioPnlCurve.module.css';
 interface Props {
   curve: PortfolioPnlCurveData;
   forwardDays: number;
+  mixedExpiries?: boolean;
 }
 
 const WIDTH = 720;
@@ -59,7 +60,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status']): string {
   return 'No P/L curve available.';
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false }: Props) {
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
 
   useEffect(() => {
@@ -139,11 +140,12 @@ export default function PortfolioPnlCurve({ curve, forwardDays }: Props) {
           BE {displayCurve.breakEvenPricesUsd.length === 0 ? '—' : displayCurve.breakEvenPricesUsd.map((value) => fmtPrice(value)).join(' / ')}
         </span>
         {displayCurve.maxProfitUsd != null && <span className={styles.metricPill}>max gain {fmtUsd(displayCurve.maxProfitUsd)}</span>}
-        {displayCurve.maxLossUsd != null && <span className={styles.metricPill}>max loss {fmtUsd(displayCurve.maxLossUsd)}</span>}
+        {displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{mixedExpiries ? 'same-price scenario low' : 'expiry curve low'} {fmtUsd(displayCurve.maxLossUsd)}</span>}
         {isStale && <span className={styles.stalePill}>stale · waiting for live marks</span>}
       </div>
 
       <div className={styles.chartWrap}>
+        {mixedExpiries && <p className={styles.subtitle}>Multiple expiries: the expiry curve assumes the same settlement price at every date. Its low point is not a portfolio-wide maximum-loss or margin guarantee. Review each expiry separately.</p>}
         {chart == null ? (
           <div className={styles.empty}>{emptyMessage(curve.status)}</div>
         ) : (

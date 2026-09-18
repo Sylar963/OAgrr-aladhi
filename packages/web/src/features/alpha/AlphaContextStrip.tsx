@@ -6,7 +6,7 @@ import styles from './AlphaContextStrip.module.css';
 
 interface AlphaContextStripProps {
   context: AlphaMarketContextResponse | null;
-  strategy: 'call-credit' | 'put-credit' | 'long-call';
+  strategy: 'call-credit' | 'put-credit' | 'long-call' | 'spreads';
   loading: boolean;
 }
 
@@ -15,6 +15,7 @@ function setupLabel(
   strategy: AlphaContextStripProps['strategy'],
 ): string {
   if (context == null) return 'UNAVAILABLE';
+  if (strategy === 'spreads') return context.realized.vrp30d == null ? 'NO IV / RV DATA' : context.realized.vrp30d > 0 ? 'IV ABOVE PAST RV' : 'IV BELOW PAST RV';
   return strategy === 'long-call'
     ? context.setup.longCall.toUpperCase()
     : context.setup.creditSpread.toUpperCase();
@@ -26,7 +27,7 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
   return (
     <div className={styles.strip} aria-label="Alpha market context">
       <div className={styles.setup} data-fit={setupLabel(context, strategy).toLowerCase()}>
-        <span>Setup</span>
+        <span>{strategy === 'spreads' ? '30D context · not a signal' : 'Setup heuristic'}</span>
         <strong>{loading ? 'LOADING' : setupLabel(context, strategy)}</strong>
       </div>
       <div>

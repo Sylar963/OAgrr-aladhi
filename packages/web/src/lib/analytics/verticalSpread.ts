@@ -1,8 +1,14 @@
 import type { EnrichedStrike, VenueQuote, VenueId } from '@shared/enriched';
-import { black76Price, black76Probability, normCdf, realWorldPop, type OptionRight } from './blackScholes';
+import {
+  black76Price,
+  black76Probability,
+  normCdf,
+  realWorldPop,
+  type OptionRight,
+} from './blackScholes';
 import { inferMissingIv } from './ivInference';
 
-export type SpreadKind = 'call-credit' | 'put-credit';
+export type SpreadKind = 'call-credit' | 'put-credit' | 'call-debit' | 'put-debit';
 export type TradingSignal = 'SELL' | 'AVOID';
 export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
 export type RegimeDirection = 'risk-on' | 'neutral' | 'risk-off';
@@ -111,11 +117,11 @@ function findStrike(
 }
 
 function rightForKind(kind: SpreadKind): OptionRight {
-  return kind === 'call-credit' ? 'call' : 'put';
+  return kind.startsWith('call') ? 'call' : 'put';
 }
 
 function sideForKind(strike: EnrichedStrike, kind: SpreadKind) {
-  return kind === 'call-credit' ? strike.call : strike.put;
+  return kind.startsWith('call') ? strike.call : strike.put;
 }
 
 function venueSet(
@@ -191,21 +197,18 @@ function buildLegCandidates(
     }
 
     const execution = raw.execution;
-    const executablePrice = leg === 'sell'
-      ? execution?.bidUsd ?? raw.bid
-      : execution?.askUsd ?? raw.ask;
-    const size = leg === 'sell'
-      ? execution?.bidSize ?? null
-      : execution?.askSize ?? null;
-    const takerFee = leg === 'sell'
-      ? execution?.bidTakerFeeUsd ?? null
-      : execution?.askTakerFeeUsd ?? null;
+    const executablePrice =
+      leg === 'sell' ? (execution?.bidUsd ?? raw.bid) : (execution?.askUsd ?? raw.ask);
+    const size = leg === 'sell' ? (execution?.bidSize ?? null) : (execution?.askSize ?? null);
+    const takerFee =
+      leg === 'sell' ? (execution?.bidTakerFeeUsd ?? null) : (execution?.askTakerFeeUsd ?? null);
     const hasExecutableQuote = executablePrice != null && executablePrice > 0;
-    const netAfterFees = hasExecutableQuote && takerFee != null
-      ? leg === 'sell'
-        ? executablePrice - takerFee
-        : executablePrice + takerFee
-      : null;
+    const netAfterFees =
+      hasExecutableQuote && takerFee != null
+        ? leg === 'sell'
+          ? executablePrice - takerFee
+          : executablePrice + takerFee
+        : null;
 
     candidates.push({
       venue: venueId,
@@ -339,7 +342,7 @@ function successProbability(
   realWorld: RealWorldParams | undefined,
 ): ProbabilityResult | null {
   if (realWorld && T > 0 && spot > 0 && breakeven > 0 && realWorld.sigmaRV > 0) {
-    const direction = kind === 'call-credit' ? 'below' : 'above';
+    const direction = kind === 'call-credit' || kind === 'put-debit' ? 'below' : 'above';
     const prob = realWorldPop(direction, spot, breakeven, T, realWorld.drift, realWorld.sigmaRV);
     if (Number.isFinite(prob)) {
       return { prob, method: 'real-world', drift: realWorld.drift, sigma: realWorld.sigmaRV };
@@ -348,7 +351,7 @@ function successProbability(
 
   if (ivAtBreakeven != null && ivAtBreakeven > 0 && T > 0 && forward > 0 && breakeven > 0) {
     const sigma = ivAtBreakeven;
-    const direction = kind === 'call-credit' ? 'below' : 'above';
+    const direction = kind === 'call-credit' || kind === 'put-debit' ? 'below' : 'above';
     const prob = black76Probability(direction, forward, breakeven, T, sigma);
     return { prob, method: 'risk-neutral', drift: null, sigma };
   }
@@ -384,21 +387,23 @@ function expectedSpreadLiability(
   sigma: number,
 ): number {
   const right = rightForKind(kind);
-  const shortOption = method === 'risk-neutral'
-    ? black76Price(right, forward, shortStrike, T, sigma)
-    : expectedOptionPayoff(right, spot, shortStrike, T, drift ?? 0, sigma);
-  const longOption = method === 'risk-neutral'
-    ? black76Price(right, forward, longStrike, T, sigma)
-    : expectedOptionPayoff(right, spot, longStrike, T, drift ?? 0, sigma);
-  return Math.max(0, shortOption - longOption);
+  const shortOption =
+    method === 'risk-neutral'
+      ? black76Price(right, forward, shortStrike, T, sigma)
+      : expectedOptionPayoff(right, spot, shortStrike, T, drift ?? 0, sigma);
+  const longOption =
+    method === 'risk-neutral'
+      ? black76Price(right, forward, longStrike, T, sigma)
+      : expectedOptionPayoff(right, spot, longStrike, T, drift ?? 0, sigma);
+  return shortOption - longOption;
 }
 
 // Minimum return on capital required to fire a SELL signal. Below this even
 // a positive-EV trade isn't worth the buying-power tie-up. Sourced from
 // vol-seller practitioner targets (≈25–33%); we use 10% so the gate accepts
 // shorter-dated tickets where carry is mechanically smaller.
-const ROC_GATE_NEUTRAL = 0.10;
-const ROC_GATE_STRESS = 0.20;
+const ROC_GATE_NEUTRAL = 0.1;
+const ROC_GATE_STRESS = 0.2;
 
 export function rocGateForRegime(regime: RegimeLabel | null | undefined): number {
   if (regime === 'high-vol') return ROC_GATE_STRESS;
@@ -419,18 +424,25 @@ function gateSignal(
   regimeDominant: RegimeLabel | null | undefined,
 ): SpreadSignal | null {
   if (shortPremium == null || longPremium == null) return null;
-  const validStrikeOrder = kind === 'call-credit'
-    ? longStrike > shortStrike
-    : longStrike < shortStrike;
+  const debit = kind.endsWith('debit');
+  const validStrikeOrder =
+    kind === 'call-credit' || kind === 'put-debit'
+      ? longStrike > shortStrike
+      : longStrike < shortStrike;
   if (!validStrikeOrder) return null;
 
   const netCredit = shortPremium - longPremium;
   const spreadWidth = Math.abs(longStrike - shortStrike);
-  if (netCredit <= 0 || netCredit >= spreadWidth) return null;
-  const maxProfit = netCredit;
-  const maxLoss = spreadWidth - netCredit;
+  if (
+    debit ? netCredit >= 0 || -netCredit >= spreadWidth : netCredit <= 0 || netCredit >= spreadWidth
+  )
+    return null;
+  const maxProfit = debit ? spreadWidth + netCredit : netCredit;
+  const maxLoss = debit ? -netCredit : spreadWidth - netCredit;
 
-  const breakeven = kind === 'call-credit' ? shortStrike + netCredit : shortStrike - netCredit;
+  const breakeven =
+    (debit ? longStrike : shortStrike) +
+    (kind.startsWith('call') ? 1 : -1) * (debit ? -netCredit : netCredit);
   const riskReward = maxProfit > 0 ? Math.min(maxLoss / maxProfit, 999.99) : 999.99;
   const ivBE = ivAtStrike ? ivAtStrike(breakeven) : null;
   const probability = successProbability(kind, spot, forward, breakeven, T, ivBE, realWorld);
@@ -464,9 +476,10 @@ function gateSignal(
     reasoning = `Favorable: EV $${expectedValue.toFixed(2)}, ROC ${(roc * 100).toFixed(1)}%, Success ${Math.round(prob * 100)}%${regimeSuffix}`;
   } else {
     signal = 'AVOID';
-    reasoning = expectedValue <= 0
-      ? `Negative EV: $${expectedValue.toFixed(2)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
-      : `Low ROC: ${(roc * 100).toFixed(1)}% (gate ${(rocGate * 100).toFixed(0)}%)${regimeSuffix}`;
+    reasoning =
+      expectedValue <= 0
+        ? `Negative EV: $${expectedValue.toFixed(2)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
+        : `Low ROC: ${(roc * 100).toFixed(1)}% (gate ${(rocGate * 100).toFixed(0)}%)${regimeSuffix}`;
   }
 
   return {
@@ -565,14 +578,44 @@ function computeSurfaceSignal(
 // ── Public API ─────────────────────────────────────────────────────
 
 export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
-  const { kind, shortStrike, longStrike, strikes, spot, forward, T, venues, strikeByKey, ivAtStrike, realWorld, regimeDominant, nowMs = Date.now() } = input;
+  const {
+    kind,
+    shortStrike,
+    longStrike,
+    strikes,
+    spot,
+    forward,
+    T,
+    venues,
+    strikeByKey,
+    ivAtStrike,
+    realWorld,
+    regimeDominant,
+    nowMs = Date.now(),
+  } = input;
   const right = rightForKind(kind);
   const shortRow = findStrike(strikes, shortStrike, strikeByKey);
   const longRow = findStrike(strikes, longStrike, strikeByKey);
   const venueList = venueSet(shortRow, longRow, kind, venues);
 
-  const shortCandidates = buildLegCandidates(shortRow, shortStrike, 'sell', kind, forward, T, venueList);
-  const longCandidates = buildLegCandidates(longRow, longStrike, 'buy', kind, forward, T, venueList);
+  const shortCandidates = buildLegCandidates(
+    shortRow,
+    shortStrike,
+    'sell',
+    kind,
+    forward,
+    T,
+    venueList,
+  );
+  const longCandidates = buildLegCandidates(
+    longRow,
+    longStrike,
+    'buy',
+    kind,
+    forward,
+    T,
+    venueList,
+  );
 
   const theoreticalShortBest = pickBestSell(shortCandidates);
   const theoreticalLongBest = pickBestBuy(longCandidates);
@@ -587,9 +630,10 @@ export function routeVerticalSpread(input: SpreadInput): RoutedSpreadAnalysis {
   const bestIvValues = [shortBest?.iv, longBest?.iv].filter(
     (value): value is number => value != null && value > 0,
   );
-  const combinedFallbackIv = bestIvValues.length > 0
-    ? bestIvValues.reduce((sum, value) => sum + value, 0) / bestIvValues.length
-    : null;
+  const combinedFallbackIv =
+    bestIvValues.length > 0
+      ? bestIvValues.reduce((sum, value) => sum + value, 0) / bestIvValues.length
+      : null;
   const combinedSignal = gateSignal(
     kind,
     shortStrike,

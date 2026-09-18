@@ -4,6 +4,49 @@ import type { EnrichedStrike, VenueExecutionQuote, VenueId, VenueQuote } from '@
 import { blackScholesCall, blackScholesPut } from './blackScholes';
 import { rocGateForRegime, routeVerticalSpread } from './verticalSpread';
 
+describe('debit routing in the original spread builder', () => {
+  it.each([
+    'call-debit',
+    'put-debit',
+  ] as const)('uses the correct right and bounded payoff for %s', (kind) => {
+    const call = kind === 'call-debit';
+    const strikes: EnrichedStrike[] = [95, 105].map((strike) => {
+      const premium = (call ? strike === 95 : strike === 105) ? 8 : 2;
+      const side = {
+        bestIv: 0.4,
+        bestVenue: 'thalex' as const,
+        venues: {
+          thalex: quote({
+            bid: premium,
+            ask: premium,
+            markIv: 0.4,
+            estimatedFees: { maker: 0, taker: 0 },
+          }),
+        },
+      };
+      const empty = { bestIv: null, bestVenue: null, venues: {} };
+      return { strike, call: call ? side : empty, put: call ? empty : side };
+    });
+    const result = routeVerticalSpread({
+      kind,
+      strikes,
+      shortStrike: call ? 105 : 95,
+      longStrike: call ? 95 : 105,
+      spot: 100,
+      forward: 100,
+      T: 0.25,
+      ivAtStrike: () => 0.4,
+    });
+    expect(result.right).toBe(call ? 'call' : 'put');
+    expect(result.routeVenue).toBe('thalex');
+    expect(result.combinedSignal?.maxLoss).toBeCloseTo(6);
+    expect(result.combinedSignal?.maxProfit).toBeCloseTo(4);
+    expect(result.combinedSignal?.breakeven).toBeCloseTo(call ? 101 : 99);
+    expect(result.combinedSignal?.expectedValue).toBeGreaterThanOrEqual(-6);
+    expect(result.combinedSignal?.expectedValue).toBeLessThanOrEqual(4);
+  });
+});
+
 function quote(partial: Partial<VenueQuote>): VenueQuote {
   const merged: VenueQuote = {
     bid: null,
@@ -68,10 +111,10 @@ describe('routeVerticalSpread — call credit spread', () => {
   // Venue A prices the short leg favorably (higher bid IV ⇒ more credit when selling)
   // Venue B prices the long leg favorably (lower ask IV ⇒ cheaper hedge).
   // Best execution should route short→A, long→B.
-  const shortIvA = 0.60; // A's bid IV on the short leg
+  const shortIvA = 0.6; // A's bid IV on the short leg
   const shortIvB = 0.55; // B's bid IV on the short leg
-  const longIvA = 0.62;  // A's ask IV on the long leg
-  const longIvB = 0.58;  // B's ask IV on the long leg
+  const longIvA = 0.62; // A's ask IV on the long leg
+  const longIvB = 0.58; // B's ask IV on the long leg
 
   const venueA: VenueId = 'deribit';
   const venueB: VenueId = 'okx';
@@ -178,9 +221,7 @@ describe('routeVerticalSpread — call credit spread', () => {
     });
     expect(result.combinedSignal).not.toBeNull();
     expect(result.theoreticalIndependentNetCredit).not.toBeNull();
-    expect(result.combinedSignal!.netCredit).toBeLessThan(
-      result.theoreticalIndependentNetCredit!,
-    );
+    expect(result.combinedSignal!.netCredit).toBeLessThan(result.theoreticalIndependentNetCredit!);
   });
 
   it('honors the venues filter', () => {
@@ -489,17 +530,33 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   ];
 
   it('values the continuous payoff between strikes when computing EV and ROC', () => {
-    const result = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, forward: spot, T });
+    const result = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike,
+      longStrike,
+      strikes,
+      spot,
+      forward: spot,
+      T,
+    });
     const sig = result.combinedSignal!;
-    const spreadValue = blackScholesCall(spot, shortStrike, T, r, iv)
-      - blackScholesCall(spot, longStrike, T, r, iv);
+    const spreadValue =
+      blackScholesCall(spot, shortStrike, T, r, iv) - blackScholesCall(spot, longStrike, T, r, iv);
     const expected = sig.netCredit - spreadValue;
     expect(sig.expectedValue).toBeCloseTo(expected, 8);
     expect(sig.roc).toBeCloseTo(sig.expectedValue / sig.maxLoss, 8);
   });
 
   it('uses real-world POP when realWorld is supplied (drift/sigmaRV)', () => {
-    const baseline = routeVerticalSpread({ kind: 'call-credit', shortStrike, longStrike, strikes, spot, forward: spot, T });
+    const baseline = routeVerticalSpread({
+      kind: 'call-credit',
+      shortStrike,
+      longStrike,
+      strikes,
+      spot,
+      forward: spot,
+      T,
+    });
     const withRv = routeVerticalSpread({
       kind: 'call-credit',
       shortStrike,
@@ -509,7 +566,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       T,
       forward: spot,
       // RV well below IV → real-world POP should be HIGHER than risk-neutral.
-      realWorld: { drift: 0, sigmaRV: 0.30 },
+      realWorld: { drift: 0, sigmaRV: 0.3 },
     });
     expect(withRv.combinedSignal!.probabilityMethod).toBe('real-world');
     expect(baseline.combinedSignal!.probabilityMethod).not.toBe('real-world');
@@ -520,11 +577,11 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
   });
 
   it('rocGateForRegime maps regime label to the right ROC threshold', () => {
-    expect(rocGateForRegime('high-vol')).toBeCloseTo(0.20, 6);
-    expect(rocGateForRegime('low-vol')).toBeCloseTo(0.10, 6);
-    expect(rocGateForRegime('mid-vol')).toBeCloseTo(0.10, 6);
-    expect(rocGateForRegime(null)).toBeCloseTo(0.10, 6);
-    expect(rocGateForRegime(undefined)).toBeCloseTo(0.10, 6);
+    expect(rocGateForRegime('high-vol')).toBeCloseTo(0.2, 6);
+    expect(rocGateForRegime('low-vol')).toBeCloseTo(0.1, 6);
+    expect(rocGateForRegime('mid-vol')).toBeCloseTo(0.1, 6);
+    expect(rocGateForRegime(null)).toBeCloseTo(0.1, 6);
+    expect(rocGateForRegime(undefined)).toBeCloseTo(0.1, 6);
   });
 
   it('reasoning string surfaces the active regime gate so it shows up in the UI', () => {
@@ -539,7 +596,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 0.20,
+              bid: 0.2,
               ask: 0.25,
               bidIv: 0.4,
               askIv: 0.41,
@@ -557,7 +614,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 0.30,
+              bid: 0.3,
               ask: 0.35,
               bidIv: 0.4,
               askIv: 0.41,
@@ -576,7 +633,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       spot: 100,
       T: 30 / 365.25,
       forward: 100,
-      realWorld: { drift: 0, sigmaRV: 0.10 },
+      realWorld: { drift: 0, sigmaRV: 0.1 },
     };
     const highVol = routeVerticalSpread({ ...base, regimeDominant: 'high-vol' });
     const lowVol = routeVerticalSpread({ ...base, regimeDominant: 'low-vol' });
@@ -600,11 +657,11 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 0.20,
+              bid: 0.2,
               ask: 0.25,
-              bidIv: 0.40,
+              bidIv: 0.4,
               askIv: 0.41,
-              markIv: 0.40,
+              markIv: 0.4,
               estimatedFees: { maker: 0, taker: 0 },
             }),
           },
@@ -618,11 +675,11 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
           bestVenue: null,
           venues: {
             deribit: quote({
-              bid: 0.30,
+              bid: 0.3,
               ask: 0.35,
-              bidIv: 0.40,
+              bidIv: 0.4,
               askIv: 0.41,
-              markIv: 0.40,
+              markIv: 0.4,
               estimatedFees: { maker: 0, taker: 0 },
             }),
           },
@@ -639,7 +696,7 @@ describe('routeVerticalSpread — EV / ROC fields', () => {
       forward: spot,
       // Drive POP deterministically via the real-world measure: low σ_RV +
       // breakeven well below spot ⇒ probability of profit near 1.
-      realWorld: { drift: 0, sigmaRV: 0.10 },
+      realWorld: { drift: 0, sigmaRV: 0.1 },
     });
     const sig = result.combinedSignal!;
     expect(sig.probabilityMethod).toBe('real-world');

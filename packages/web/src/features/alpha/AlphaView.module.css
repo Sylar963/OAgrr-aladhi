@@ -36,6 +36,8 @@
 .strategyTabs {
   display: flex;
   align-items: stretch;
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .strategyTabs button {
@@ -50,10 +52,11 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .strategyTabs button::after {
-  content: '';
+  content: "";
   position: absolute;
   right: var(--space-4);
   bottom: 0;
@@ -62,11 +65,11 @@
   background: transparent;
 }
 
-.strategyTabs button[data-active='true'] {
+.strategyTabs button[data-active="true"] {
   color: var(--accent-primary);
 }
 
-.strategyTabs button[data-active='true']::after {
+.strategyTabs button[data-active="true"]::after {
   background: var(--accent-primary);
 }
 

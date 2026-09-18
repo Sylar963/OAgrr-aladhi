@@ -6,7 +6,7 @@ import styles from './AlphaContextStrip.module.css';
 
 interface AlphaContextStripProps {
   context: AlphaMarketContextResponse | null;
-  strategy: 'call-credit' | 'put-credit' | 'long-call' | 'spreads';
+  strategy: 'call-credit' | 'put-credit' | 'call-debit' | 'put-debit' | 'long-call';
   loading: boolean;
 }
 
@@ -15,7 +15,7 @@ function setupLabel(
   strategy: AlphaContextStripProps['strategy'],
 ): string {
   if (context == null) return 'UNAVAILABLE';
-  if (strategy === 'spreads') return context.realized.vrp30d == null ? 'NO IV / RV DATA' : context.realized.vrp30d > 0 ? 'IV ABOVE PAST RV' : 'IV BELOW PAST RV';
+  if (strategy.endsWith('debit')) return 'CHECK DIRECTION + PRICE';
   return strategy === 'long-call'
     ? context.setup.longCall.toUpperCase()
     : context.setup.creditSpread.toUpperCase();
@@ -26,18 +26,28 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
   const vrp = context?.realized.vrp30d;
   return (
     <div className={styles.strip} aria-label="Alpha market context">
-      <div className={styles.setup} data-fit={setupLabel(context, strategy).toLowerCase()}>
-        <span>{strategy === 'spreads' ? '30D context · not a signal' : 'Setup heuristic'}</span>
+      <div
+        className={styles.setup}
+        data-fit={setupLabel(context, strategy).toLowerCase()}
+        title="Broad market heuristic, not a trade verdict. Past realized volatility is not a forecast. An unfavorable selling setup does not imply buying is profitable."
+      >
+        <span>Setup heuristic ⓘ</span>
         <strong>{loading ? 'LOADING' : setupLabel(context, strategy)}</strong>
       </div>
       <div>
         <span>ATM IV 30D</span>
         <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
-        <small>{context?.volatility.ivPercentile30d == null ? 'no rank' : `p${context.volatility.ivPercentile30d.toFixed(0)}`}</small>
+        <small>
+          {context?.volatility.ivPercentile30d == null
+            ? 'no rank'
+            : `p${context.volatility.ivPercentile30d.toFixed(0)}`}
+        </small>
       </div>
       <div>
         <span>RV 7D / 30D</span>
-        <strong>{fmtIv(context?.realized.rv7d ?? null)} / {fmtIv(context?.realized.rv30d ?? null)}</strong>
+        <strong>
+          {fmtIv(context?.realized.rv7d ?? null)} / {fmtIv(context?.realized.rv30d ?? null)}
+        </strong>
       </div>
       <div>
         <span>VRP 30D</span>
@@ -56,7 +66,9 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
       <div>
         <span>SPOT STATE</span>
         <strong>{context?.spotState.state.replaceAll('-', ' ').toUpperCase() ?? '—'}</strong>
-        <small>{context?.sources.ivScope === 'mixed' ? '30D DVOL + venue IV' : 'cross-venue IV'}</small>
+        <small>
+          {context?.sources.ivScope === 'mixed' ? '30D DVOL + venue IV' : 'cross-venue IV'}
+        </small>
       </div>
     </div>
   );

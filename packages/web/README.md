@@ -24,34 +24,10 @@ Fully responsive with:
 
 ## Alpha workspace
 
-Open `#alpha/BTC` and choose Spread scanner or Long calls.
-The spread scanner defaults to Thalex, filters expiries to the chosen venue, and enumerates
-call/put credit and debit verticals for the selected expiry. Compare each venue shows separate
-venue groups; legs are never combined across venues. Enter current equity, size per leg, risk
-percentage and an extra cost reserve. Equity, risk and reserve persist on this browser and must
-be updated manually; they are not live balance or free-margin data.
-
-Candidates require linear matching settlement, known execution metadata and fees, quantity
-minimum/step alignment, adequate displayed size, quotes no older than 15 seconds and leg
-timestamps within 2 seconds. Unsupported inverse products and other exclusions have explicit
-reasons. Entry fees use public taker estimates; Thalex assumes Tier 1 atomic combination
-execution and charges the largest leg fee, with the published minimum. The user reserve is
-included in payoff, breakeven and model difference; it is not a guarantee of future costs.
-
-The default model difference compares entry against a flat-IV Black-76 benchmark using
-the venue's forward and the average leg mark IV. This is not empirical expected profit.
-Optional forecast mode uses the entered expected mean expiry move and annual volatility
-in a common lognormal distribution. Positive results are labeled for review; no probability
-is a calibrated win rate. There is no arbitrary 10%/20% EV gate in the new scanner.
-
-Selecting a candidate shows exact legs, position-dollar economics, expiry scenarios,
-an indicative reverse-quote round trip and temporary thesis/exit notes. The connected
-venue's Portfolio metrics are read through the existing authenticated endpoint. Portfolio
-remains the position-management view; multi-expiry curves now explicitly describe their
-same-settlement-price assumption. Alpha never submits an order.
-
-The context strip describes historical IV/RV rather than making a blanket credit-spread
-recommendation. Long calls retain the existing active-venue scanner across 4–14 DTE.
+Open `#alpha/BTC` and choose Call Credit, Put Credit, or Long Call in the shared strategy bar.
+The market strip keeps IV percentile, 7d/30d realized volatility, VRP, implied move, range state,
+and spot extension visible across strategies. Credit spreads retain fee-aware cross-venue routing;
+Long Call scans the active venues and selected underlying across 4–14 DTE.
 
 Long-call candidates show venue-normalized mark and ask, OTM and expiry breakeven, ATM implied
 move, the required 10x move in implied-move units, and buying-power capacity. Selecting a row

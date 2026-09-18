@@ -30,7 +30,6 @@
   "devDependencies": {
     "@tanstack/react-query-devtools": "5.91.3",
     "@testing-library/react": "16.3.2",
-    "@testing-library/react-hooks": "8.0.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/react-plotly.js": "2.6.4",

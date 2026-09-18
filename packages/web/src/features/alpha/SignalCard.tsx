@@ -1,171 +1,214 @@
 import { memo } from 'react';
-
 import InfoTip from '@components/ui/InfoTip';
 import { fmtUsd } from '@lib/format';
-import type { RegimeLabel, SpreadSignal } from '@lib/analytics/verticalSpread';
-
+import { VENUES } from '@lib/venue-meta';
 import type { RegimeResponse } from './useRegimeQuery';
+import { expiryPnl, type SpreadCandidate } from './spread-scanner';
 import styles from './SignalCard.module.css';
 
 interface Props {
-  signal: SpreadSignal | null;
-  label?: string;
+  candidate: SpreadCandidate | null;
+  underlying: string;
+  spot: number | null;
+  emptyReason: string;
   regime?: RegimeResponse | null;
 }
 
-const REGIME_GATE_PCT: Record<RegimeLabel, string> = {
-  'low-vol': '10%',
-  'mid-vol': '10%',
-  'high-vol': '20%',
-};
-
-function SignalCard({ signal, label = 'Model screen (same-venue executable quote)', regime }: Props) {
-  if (!signal) {
-    return (
-      <div className={styles.card} data-empty="true">
-        <div className={styles.emptyText}>No valid executable spread analysis is available.</div>
-      </div>
-    );
-  }
-
+function SignalCard({ candidate, underlying, spot, emptyReason, regime }: Props) {
   const dominant = regime?.dominant ?? null;
   const direction = regime?.direction ?? null;
-  const confidencePct =
-    regime?.confidence != null ? Math.round(regime.confidence * 100) : null;
-  const gatePct = dominant ? REGIME_GATE_PCT[dominant] : null;
-
-  const probPct = Math.round(signal.successProbability * 100);
-  const probMethodHint =
-    signal.probabilityMethod === 'real-world'
-      ? 'Real-world: physical drift μ + realized σ_RV.'
-      : 'Risk-neutral: Black-76 N(±d₂) using the expiry forward and IV at breakeven.';
-  const probMethodSuffix =
-    signal.probabilityMethod === 'real-world'
-      ? '· P-measure'
-      : '· N(d₂)';
-
+  const label =
+    candidate?.status === 'over-budget'
+      ? 'OVER BUDGET'
+      : candidate?.status === 'review'
+        ? 'REVIEW MODEL'
+        : candidate?.status === 'no-model'
+          ? 'NO MODEL'
+          : 'NO MODEL EDGE';
+  const tone =
+    candidate?.status === 'review' ? 'SELL' : candidate?.status === 'no-model' ? 'HOLD' : 'AVOID';
+  const debit = candidate?.kind.endsWith('debit') ?? false;
+  const probPct = candidate?.probability == null ? null : Math.round(candidate.probability * 100);
+  const cash =
+    candidate == null ? null : candidate.grossPremium - candidate.entryFee - candidate.costReserve;
   return (
-    <div className={styles.card} data-signal={signal.signal}>
+    <div className={styles.card} data-signal={candidate ? tone : 'HOLD'}>
       <div className={styles.header}>
-        <span className={styles.label}>{label}</span>
-        <InfoTip label="How to read the signal" title="Reading the signal" align="end">
+        <span className={styles.label}>Model screen · your size · same venue</span>
+        <InfoTip
+          label="How to read the signal"
+          title="Model estimate, not a trading instruction"
+          align="end"
+        >
           <p>
-            <strong>Traffic light</strong> on this card is a gating decision, not a
-            recommendation. It only fires <strong>SELL</strong> when all three
-            execution conditions hold simultaneously:
+            EV averages the full expiry payoff, including partial gains and losses between strikes.
+            A high probability of profit alone does not make a trade attractive.
           </p>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-            <li><strong>Net credit &gt; 0</strong> — you actually get paid to put it on.</li>
-            <li><strong>EV &gt; 0</strong> — credit exceeds the modeled value of the full continuous spread payoff.</li>
-            <li><strong>ROC ≥ 10%</strong> — return on capital (EV ÷ maxLoss). Below this even a winning trade isn&apos;t worth the buying-power tie-up.</li>
-          </ul>
-          <p style={{ marginTop: 6 }}>
-            <strong>AVOID</strong> = credit but EV is negative or ROC is too low.
-            Usually means the credit is too small for the risk, or the smile makes
-            the trade fair-value.
+          <p>
+            The reference model uses one flat volatility (mean of both mark IVs) and the selected
+            venue’s forward. It ignores smile dynamics and jumps. Risk-neutral probability is not a
+            forecast or a historical win rate.
           </p>
-          <p style={{ marginTop: 6 }}>
-            <strong>Model probability source:</strong> the default is risk-neutral
-            Black-76 N(±d₂) at breakeven IV and the expiry forward. A physical scenario is used only when explicitly
-            supplied. This is a model estimate, not a historical win rate or forecast.
+          <p>
+            Positive model EV is a reason to inspect assumptions, not proof of an edge. Negative
+            selling EV does not imply that buying the reverse spread is profitable: both sides pay
+            spreads and fees.
           </p>
         </InfoTip>
       </div>
-
-      <div className={styles.pillRow}>
-        <span className={styles.pill} data-signal={signal.signal}>
-          {signal.signal}
-        </span>
-        <span className={styles.reasoning}>{signal.reasoning}</span>
-      </div>
-
-      {(dominant || direction) && (
-        <div className={styles.regimeRow}>
-          <span className={styles.regimeLabel}>Regime</span>
-          {dominant && (
-            <span className={styles.regimePill} data-regime={dominant}>
-              {dominant.toUpperCase()}
+      {!candidate ? (
+        <div className={styles.emptyText}>{emptyReason}</div>
+      ) : (
+        <>
+          <div className={styles.pillRow}>
+            <span className={styles.pill} data-signal={tone}>
+              {label}
             </span>
-          )}
-          {direction && (
-            <span className={styles.directionPill} data-direction={direction}>
-              {direction.toUpperCase()}
+            <span className={styles.reasoning}>
+              {VENUES[candidate.venue]?.label ?? candidate.venue} · {candidate.quantity}{' '}
+              {underlying} per leg · {candidate.direction}.{' '}
+              {candidate.status === 'over-budget'
+                ? 'Expiry loss exceeds your manual trade budget.'
+                : candidate.status === 'review'
+                  ? 'Positive under this model only. Validate price, forecast, and costs.'
+                  : candidate.status === 'no-model'
+                    ? 'Payoff is available; venue IV / forward is missing.'
+                    : 'This quote does not show a positive edge under the reference model. Waiting is a valid choice.'}
             </span>
+          </div>
+          {(dominant || direction) && (
+            <div className={styles.regimeRow}>
+              <span className={styles.regimeLabel}>Regime context</span>
+              {dominant && (
+                <span className={styles.regimePill} data-regime={dominant}>
+                  {dominant.toUpperCase()}
+                </span>
+              )}
+              {direction && (
+                <span className={styles.directionPill} data-direction={direction}>
+                  {direction.toUpperCase()}
+                </span>
+              )}
+              <span className={styles.regimeMeta}>Not a trade probability or an EV gate</span>
+            </div>
           )}
-          {confidencePct != null && (
-            <span className={styles.regimeMeta}>{confidencePct}% confidence</span>
+          <div className={styles.stats}>
+            <Stat
+              label={debit ? 'Net debit + reserve' : 'Net credit − reserve'}
+              value={fmtUsd(Math.abs(cash!))}
+            />
+            <Stat label="Max expiry profit" value={fmtUsd(candidate.maxProfit)} />
+            <Stat label="Max expiry loss" value={fmtUsd(candidate.maxLoss)} loss />
+            <Stat label="Account at risk" value={candidate.riskPct.toFixed(2) + '%'} loss />
+            <Stat
+              label="Model EV"
+              value={fmtUsd(candidate.modelEdge)}
+              loss={candidate.modelEdge != null && candidate.modelEdge < 0}
+            />
+            <Stat
+              label="Model EV / max loss"
+              value={
+                candidate.modelEdge == null
+                  ? '—'
+                  : ((100 * candidate.modelEdge) / candidate.maxLoss).toFixed(1) + '%'
+              }
+            />
+            <Stat label="Expiry breakeven" value={fmtUsd(candidate.breakeven)} />
+            <Stat
+              label="Max loss / max profit"
+              value={(candidate.maxLoss / candidate.maxProfit).toFixed(2) + ':1'}
+            />
+          </div>
+          <div className={styles.probBlock}>
+            <div className={styles.probLabelRow}>
+              <span className={styles.probLabel}>
+                Risk-neutral probability of profit · not forecast
+              </span>
+              <span className={styles.probPct}>{probPct == null ? '—' : probPct + '%'}</span>
+            </div>
+            {probPct != null && (
+              <div className={styles.probBar}>
+                <div className={styles.probFill} style={{ width: probPct + '%' }} />
+              </div>
+            )}
+          </div>
+          <p className={styles.reasoning}>
+            Entry fees {fmtUsd(candidate.entryFee)} + manual reserve {fmtUsd(candidate.costReserve)}{' '}
+            included. Immediate round-trip estimate {fmtUsd(candidate.roundTrip)} (bid/ask +
+            entry/exit fees; excludes reserve).
+            {candidate.venue === 'thalex' && (
+              <> Thalex fee assumes a combo order, not separate legs.</>
+            )}{' '}
+            Expiry bounds assume both legs filled and held together; they are not margin or
+            liquidation limits. Confirm venue margin and settlement costs.
+          </p>
+          {spot != null && spot > 0 && (
+            <details className={styles.guide}>
+              <summary>What if {underlying} moves? · expiry scenarios</summary>
+              <div className={styles.stats}>
+                {[-10, -5, 0, 5, 10].map((move) => (
+                  <Stat
+                    key={move}
+                    label={move + '% · ' + fmtUsd(spot * (1 + move / 100))}
+                    value={fmtUsd(expiryPnl(candidate, spot * (1 + move / 100)))}
+                    loss={expiryPnl(candidate, spot * (1 + move / 100)) < 0}
+                  />
+                ))}
+              </div>
+              <p>
+                Expiry-only scenarios, not tomorrow’s mark-to-market. IV and time changes before
+                expiry can move prices differently.
+              </p>
+            </details>
           )}
-          {gatePct && (
-            <span className={styles.regimeMeta}>· ROC gate {gatePct}</span>
-          )}
-        </div>
+        </>
       )}
+      <details className={styles.guide}>
+        <summary>Why this can lose · 3-step review · book notes</summary>
+        <ol>
+          <li>
+            Thesis: what must BTC do, by when, and why is the market price wrong? Credit collects
+            premium for taking risk; debit pays for a move with capped upside.
+          </li>
+          <li>
+            Risk: check dollar loss, fees, free margin, and your existing Portfolio exposure. Two
+            bullish trades can concentrate the same risk.
+          </li>
+          <li>
+            Plan: write the exit price, time limit, and invalidation before entering. Record the
+            result after costs; do not increase size just to recover losses.
+          </li>
+        </ol>
+        <p>
+          Sinclair, Volatility Trading: “The Trading Process” p. 3; Money Management p. 101; Trade
+          Evaluation pp. 128–129. Sizing cannot turn a negative edge positive; evaluate the process
+          as well as P&amp;L.
+        </p>
+        <p>
+          Bennett, Trading Volatility: “Option Trading in Practice” pp. 10–11. Strategy selection
+          needs a direction, volatility view, strike, and horizon. These general principles are
+          adapted to BTC—not a backtested BTC strategy.
+        </p>
+        <p>
+          Casanovas, Opciones financieras, §5.2.1, pp. 113–120: a vertical spread combines bought
+          and sold options with different strikes and the same expiry. It does not require different
+          venues.
+        </p>
+        <p>
+          Reference-model EV is a pricing comparison, not evidence you can earn it repeatedly.
+          Neither selling nor buying is always preferable.
+        </p>
+      </details>
+    </div>
+  );
+}
 
-      <div className={styles.stats}>
-        <div
-          className={styles.stat}
-          title="Premium received minus premium paid, after taker fees on best venue per leg. Your max profit if held to expiry and short stays OTM."
-        >
-          <div className={styles.statLabel}>Net credit</div>
-          <div className={styles.statValue} data-kind="credit">{fmtUsd(signal.netCredit)}</div>
-        </div>
-        <div
-          className={styles.stat}
-          title="Worst-case loss = strike width − net credit. Realized if spot finishes beyond the LONG strike (fully in-the-money) at expiry."
-        >
-          <div className={styles.statLabel}>Max loss</div>
-          <div className={styles.statValue} data-kind="loss">{fmtUsd(signal.maxLoss)}</div>
-        </div>
-        <div
-          className={styles.stat}
-          title="Model EV = net credit minus the Black-76 value of the continuous spread payoff, including partial losses between strikes."
-        >
-          <div className={styles.statLabel}>EV</div>
-          <div
-            className={styles.statValue}
-            data-kind={signal.expectedValue >= 0 ? 'credit' : 'loss'}
-          >
-            {fmtUsd(signal.expectedValue)}
-          </div>
-        </div>
-        <div
-          className={styles.stat}
-          title="Return on capital = EV ÷ maxLoss. Gate requires ≥ 10%. R/R is shown for reference: maxLoss ÷ maxProfit."
-        >
-          <div className={styles.statLabel}>ROC</div>
-          <div className={styles.statValue}>{`${(signal.roc * 100).toFixed(1)}%`}</div>
-        </div>
-        <div
-          className={styles.stat}
-          title="Spot price at expiry where P&L = 0. Call credit: short strike + credit. Put credit: short strike − credit. Anything past this point starts losing."
-        >
-          <div className={styles.statLabel}>Breakeven</div>
-          <div className={styles.statValue}>{fmtUsd(signal.breakeven)}</div>
-        </div>
-        <div
-          className={styles.stat}
-          title="R/R = max loss ÷ max profit. Reference metric only — the gate uses ROC."
-        >
-          <div className={styles.statLabel}>R/R</div>
-          <div className={styles.statValue}>
-            {signal.riskReward >= 999 ? '∞' : `${signal.riskReward.toFixed(2)}:1`}
-          </div>
-        </div>
-      </div>
-
-      <div className={styles.probBlock}>
-        <div className={styles.probLabelRow}>
-          <span className={styles.probLabel} title={probMethodHint}>
-            Model probability of profit {probMethodSuffix}
-          </span>
-          <span className={styles.probPct}>{probPct}%</span>
-        </div>
-        <div className={styles.probBar}>
-          <div
-            className={styles.probFill}
-            style={{ width: `${Math.min(100, Math.max(0, probPct))}%` }}
-          />
-        </div>
+function Stat({ label, value, loss = false }: { label: string; value: string; loss?: boolean }) {
+  return (
+    <div className={styles.stat}>
+      <div className={styles.statLabel}>{label}</div>
+      <div className={styles.statValue} data-kind={loss ? 'loss' : undefined}>
+        {value}
       </div>
     </div>
   );

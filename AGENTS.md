@@ -38,6 +38,15 @@ Structural changes to core/server/ingest should preserve the runtime-first archi
 
 Zod at I/O boundaries. No `any`. No vendor SDKs. Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.
 
+## Options knowledge and Alpha changes
+
+Before changing Alpha, portfolio risk explanations, or options opportunity models, read
+`docs/knowledge/options-trading.md`. It records reviewed book passages, BTC-specific
+interpretations, calculation invariants, and open research questions. Update the reading
+ledger when learning more; never claim unreviewed chapters or model estimates are proven edges.
+Preserve the existing Alpha workspace and controls. Enhancements must be additive unless
+Roberto explicitly approves a redesign; do not delete its components as “technical debt.”
+
 ## Local service ops
 
 `ogg-backend.service` runs as a user service on this machine.

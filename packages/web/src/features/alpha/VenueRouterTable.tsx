@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
 import { VenueDot } from '@components/ui';
@@ -18,6 +18,8 @@ interface Props {
   maxQuantity: number | null;
   quoteSkewMs: number | null;
   theoreticalIndependentNetCredit: number | null;
+  children?: ReactNode;
+  netLabel?: string;
 }
 
 function VenueRouterTable({
@@ -30,6 +32,8 @@ function VenueRouterTable({
   maxQuantity,
   quoteSkewMs,
   theoreticalIndependentNetCredit,
+  children,
+  netLabel = 'Same-venue net cash · USD per 1 underlying (known leg fees)',
 }: Props) {
   return (
     <div className={styles.wrap}>
@@ -38,32 +42,30 @@ function VenueRouterTable({
           Same-venue execution
           <InfoTip label="How routing is computed" title="Same-venue execution" align="start">
             <p>
-              The executable spread uses both legs from one venue, with matching
-              settlement, quote timestamps within two seconds, known taker fees,
-              and enough displayed size for a common tradable quantity.
+              The executable spread uses both legs from one venue, with matching settlement, quote
+              timestamps within two seconds, known taker fees, and enough displayed size for a
+              common tradable quantity.
             </p>
             <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
               <li>
-                <strong>Short (sell):</strong> highest <em>bid</em> wins — you
-                want the most premium collected.
+                <strong>Short (sell):</strong> highest <em>bid</em> wins — you want the most premium
+                collected.
               </li>
               <li>
-                <strong>Long (buy):</strong> lowest <em>ask</em> wins — you want
-                to pay the least.
+                <strong>Long (buy):</strong> lowest <em>ask</em> wins — you want to pay the least.
               </li>
               <li>
-                Fees use normalized, side-specific venue cap formulas
-                (<code>min(rate × underlying, cap × optionPrice)</code>) so they
-                stay realistic on cheap OTM strikes.
+                Fees use normalized, side-specific venue cap formulas (
+                <code>min(rate × underlying, cap × optionPrice)</code>) so they stay realistic on
+                cheap OTM strikes.
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
-              <strong>Independent-leg best</strong> is non-atomic and theoretical.
-              It may require accounts and collateral on multiple venues and can
-              leave one leg unfilled. Highlighted rows form the safer same-venue
-              route, but displayed size still does not guarantee a fill. The <code>inf</code> badge
-              means IV was inferred from price (venue didn&apos;t publish bid/ask
-              IV), so treat that IV as best-effort.
+              <strong>Independent-leg best</strong> is non-atomic and theoretical. It may require
+              accounts and collateral on multiple venues and can leave one leg unfilled. Highlighted
+              rows form the safer same-venue route, but displayed size still does not guarantee a
+              fill. The <code>inf</code> badge means IV was inferred from price (venue didn&apos;t
+              publish bid/ask IV), so treat that IV as best-effort.
             </p>
           </InfoTip>
         </span>
@@ -74,27 +76,26 @@ function VenueRouterTable({
         </span>
       </div>
 
-      <LegTable
-        legKind="short"
-        strike={shortStrike}
-        route={shortLeg}
-        heading="Short leg · SELL"
-      />
-      <LegTable
-        legKind="long"
-        strike={longStrike}
-        route={longLeg}
-        heading="Long leg · BUY"
-      />
+      {children}
+      <p className={styles.subtitle}>
+        Leg prices and fees below are USD per 1 underlying. The signal card above shows your actual
+        quantity. These are indicative outright books, not a live combo order; unhighlighted quotes
+        may be stale or ineligible. Leg fees are standalone estimates; the selected net applies
+        combo fees where supported.
+      </p>
+      <LegTable legKind="short" strike={shortStrike} route={shortLeg} heading="Short leg · SELL" />
+      <LegTable legKind="long" strike={longStrike} route={longLeg} heading="Long leg · BUY" />
 
       <div className={styles.sum}>
-        <span className={styles.sumLabel}>Same-venue net credit (after known fees)</span>
+        <span className={styles.sumLabel}>{netLabel}</span>
         <span className={styles.sumValue} data-kind="credit">
           {fmtUsd(executableNetCredit)}
         </span>
       </div>
       <div className={styles.sum}>
-        <span className={styles.sumLabel}>Independent-leg theoretical credit (non-atomic)</span>
+        <span className={styles.sumLabel}>
+          Independent-leg theoretical net cash / 1 underlying (non-atomic)
+        </span>
         <span className={styles.sumValue}>{fmtUsd(theoreticalIndependentNetCredit)}</span>
       </div>
     </div>
@@ -162,7 +163,10 @@ function VenueRow({
         <VenueDot venueId={cand.venue} isBest={isBest} />
         <span className={styles.venueLabel}>{meta?.label ?? cand.venue}</span>
         {cand.sourcedIv === 'inferred' && (
-          <span className={styles.badge} title="IV inferred from price (venue did not publish bid/ask IV)">
+          <span
+            className={styles.badge}
+            title="IV inferred from price (venue did not publish bid/ask IV)"
+          >
             inf
           </span>
         )}

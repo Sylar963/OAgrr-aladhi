@@ -109,6 +109,8 @@ describe('surgical Alpha enhancements', () => {
     const tabs = within(screen.getByRole('tablist', { name: 'Alpha strategy' }));
     for (const name of ['Call Credit', 'Put Credit', 'Call Debit', 'Put Debit', 'Long Call'])
       expect(tabs.getByRole('tab', { name })).toBeTruthy();
+    expect(screen.getAllByRole('tab', { name: 'Call Credit' })).toHaveLength(1);
+    expect(screen.getAllByRole('tab', { name: 'Put Credit' })).toHaveLength(1);
     expect(screen.getByText('Original expiry bar')).toBeTruthy();
     expect(screen.getByText('Original volatility smile')).toBeTruthy();
     expect(screen.getByText('Short leg · SELL')).toBeTruthy();

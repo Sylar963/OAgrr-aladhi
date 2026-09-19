@@ -86,26 +86,6 @@ export default function SpreadBuilderPanel({
             </ul>
           </InfoTip>
         </div>
-        <div className={styles.kindToggle} role="tablist">
-          <button
-            role="tab"
-            aria-selected={kind === 'call-credit'}
-            data-active={kind === 'call-credit'}
-            onClick={() => onKindChange('call-credit')}
-            className={styles.kindBtn}
-          >
-            Call Credit
-          </button>
-          <button
-            role="tab"
-            aria-selected={kind === 'put-credit'}
-            data-active={kind === 'put-credit'}
-            onClick={() => onKindChange('put-credit')}
-            className={styles.kindBtn}
-          >
-            Put Credit
-          </button>
-        </div>
         <p className={styles.hint}>{kindHint(kind)}</p>
         <div className={styles.kindToggle} role="tablist" aria-label="Debit spread strategy">
           <button

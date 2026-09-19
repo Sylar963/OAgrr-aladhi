@@ -214,6 +214,8 @@ export default function AlphaView() {
         candidate={selected}
         underlying={underlying}
         spot={analysis.spot}
+        riskBudgetPct={Number(sizing.riskPct)}
+        emptyState={!sizing.equity.trim() ? 'equity' : error ? 'market' : 'quote'}
         emptyReason={
           !sizing.equity.trim()
             ? 'Enter your current account equity in the builder to see dollar risk at your size.'

@@ -9,35 +9,43 @@
 }
 
 .opportunities {
-  padding: var(--space-3);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
 }
 
-.opportunities summary {
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-}
-.opportunity {
+.opportunitySummary {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-3);
-  text-align: left;
-  font: inherit;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  align-items: center;
   cursor: pointer;
+  color: var(--text-secondary);
 }
-.opportunity:hover,
-.opportunity:focus-visible {
-  border-color: var(--accent-primary);
+
+.opportunitySummary > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.opportunitySummary strong {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.opportunitySummary small,
+.opportunityNote {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.summaryCount {
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 25%, var(--border-subtle));
+  border-radius: 999px;
 }
 
 .header {
@@ -280,6 +288,341 @@
   }
 }
 
-.opportunityVenue {
+.venueGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.venueCard {
+  --venue-signal: var(--text-dim);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--venue-signal) 5%, transparent),
+      transparent 45%
+    ),
+    var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-top: 2px solid var(--venue-signal);
+  border-radius: 6px;
+}
+
+.venueCard[data-tone="review"] {
+  --venue-signal: var(--color-profit);
+}
+
+.venueCard[data-tone="danger"],
+.venueCard[data-tone="avoid"] {
+  --venue-signal: var(--color-loss);
+}
+
+.venueCard[data-tone="neutral"] {
+  --venue-signal: var(--color-warning);
+}
+
+.venueCardHeader,
+.coverageRow,
+.candidateTopline,
+.candidateNumbers {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.venueCardHeader {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.venueName {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.venueState,
+.candidateTopline > span {
+  padding: 3px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+}
+
+.venueState[data-tone="review"],
+.candidateTopline > span[data-tone="review"] {
+  color: var(--color-profit);
+  border-color: color-mix(in srgb, var(--color-profit) 35%, var(--border-subtle));
+}
+
+.venueState[data-tone="danger"],
+.venueState[data-tone="avoid"],
+.candidateTopline > span[data-tone="danger"],
+.candidateTopline > span[data-tone="avoid"] {
+  color: var(--color-loss);
+  border-color: color-mix(in srgb, var(--color-loss) 35%, var(--border-subtle));
+}
+
+.venueState[data-tone="neutral"],
+.candidateTopline > span[data-tone="neutral"] {
+  color: var(--color-warning);
+}
+
+.coverageRow {
+  padding: 10px var(--space-3) 5px;
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.coverageRow strong {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.coverageTrack {
+  height: 3px;
+  margin: 0 var(--space-3) var(--space-3);
+  overflow: hidden;
+  background: var(--border-subtle);
+}
+
+.coverageTrack span {
+  display: block;
+  height: 100%;
+  background: var(--venue-signal);
+}
+
+.candidateStack {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.candidateRow {
+  display: grid;
+  gap: 9px;
+  width: 100%;
+  padding: var(--space-3);
+  text-align: left;
+  font: inherit;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.candidateRow:hover,
+.candidateRow:focus-visible {
+  transform: translateY(-1px);
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.candidateRow[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-subtle));
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.candidateTopline strong {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.strikeRoute {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.strikeRoute > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.strikeRoute i {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+  font-style: normal;
+  color: var(--bg-base);
+  background: var(--color-loss);
+  border-radius: 50%;
+}
+
+.strikeRoute > span:last-child i {
+  background: var(--color-profit);
+}
+
+.strikeRoute b {
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--border-strong) 0 5px, transparent 5px 9px);
+}
+
+.candidateBalance {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+.candidateLoss {
+  background: var(--color-loss);
+}
+
+.candidateProfit {
+  background: var(--color-profit);
+}
+
+.candidateNumbers {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.candidateNumbers > span:first-child {
+  color: var(--color-loss);
+}
+
+.candidateNumbers > span:last-child {
+  color: var(--color-profit);
+}
+
+.loadLabel {
+  justify-self: end;
+  font-size: 9px;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+}
+
+.noPair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 132px;
+  margin: 0 var(--space-3) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+}
+
+.noPair > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  font-size: var(--text-xl);
+  color: var(--text-disabled);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+}
+
+.noPair div {
+  display: grid;
+  gap: 4px;
+}
+
+.noPair strong {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.noPair small {
+  max-width: 180px;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.coverageDetails {
+  padding: 9px var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.coverageDetails summary {
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.coverageDetails div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 5px 0;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.coverageDetails p {
+  margin: var(--space-2) 0 0;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.opportunityNote {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+}
+
+.scanEmpty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 130px;
+  place-content: center;
   margin-top: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.scanEmpty strong {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.scanEmptyIcon {
+  font-size: 28px;
+  color: var(--accent-primary);
+}
+
+@media (max-width: 640px) {
+  .opportunities {
+    padding: var(--space-3);
+  }
+
+  .venueGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunitySummary small {
+    display: none;
+  }
 }

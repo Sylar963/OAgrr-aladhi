@@ -129,11 +129,14 @@ describe('surgical Alpha enhancements', () => {
         costReserve: 0.25,
       }),
     );
-    expect(screen.getByText('$6.37')).toBeTruthy();
+    expect(screen.getByText('Risk $6.37')).toBeTruthy();
     expect(screen.getByText('0.59%')).toBeTruthy();
-    expect(screen.getByText('Unknown entry fees: 2')).toBeTruthy();
+    expect(screen.getAllByText('Fee data missing').length).toBeGreaterThan(0);
     expect(screen.getByText('Portfolio exposure: thalex')).toBeTruthy();
-    expect(screen.getByText(/Risk-neutral probability of profit/)).toBeTruthy();
+    expect(screen.getByText('Model probability')).toBeTruthy();
+    expect(screen.getByText('Expiry payoff')).toBeTruthy();
+    expect(screen.getByLabelText(/Risk budget used/)).toBeTruthy();
+    expect(screen.queryByText(/Sinclair|Bennett|Casanovas/)).toBeNull();
   });
   it('keeps debit selection in the existing builder', () => {
     render(<AlphaView />);
@@ -143,7 +146,7 @@ describe('surgical Alpha enhancements', () => {
         name: 'Call Debit',
       }),
     );
-    expect(screen.getByText('Net debit + reserve')).toBeTruthy();
+    expect(screen.getByText('Cash paid')).toBeTruthy();
     expect(screen.getByText('Original volatility smile')).toBeTruthy();
     expect(screen.getByText(/Bullish. Buy lower call/)).toBeTruthy();
   });

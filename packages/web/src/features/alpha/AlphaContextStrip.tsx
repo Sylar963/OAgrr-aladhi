@@ -1,6 +1,5 @@
-import type { AlphaMarketContextResponse } from '@oggregator/protocol';
-
 import { fmtIv, fmtPct, fmtUsdCompact } from '@lib/format';
+import type { AlphaMarketContextResponse } from '@oggregator/protocol';
 
 import styles from './AlphaContextStrip.module.css';
 

@@ -59,4 +59,8 @@ apps/landing/.data/
 
 apps/landing/.next
 /docs
+!/docs/
+/docs/*
+!/docs/knowledge/
+!/docs/knowledge/options-trading.md
 CLAUDE.md

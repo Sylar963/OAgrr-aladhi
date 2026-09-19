@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useAppStore } from '@stores/app-store';
-import type { SpreadCandidate } from './spread-scanner';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
+import type { SpreadCandidate } from './spread-scanner';
 
 const mocks = vi.hoisted(() => ({ chain: vi.fn(), scan: vi.fn() }));
 vi.mock('@features/chain', () => ({

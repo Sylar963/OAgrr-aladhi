@@ -1,10 +1,10 @@
-import { memo } from 'react';
 import InfoTip from '@components/ui/InfoTip';
 import { fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
-import type { RegimeResponse } from './useRegimeQuery';
-import { expiryPnl, type SpreadCandidate } from './spread-scanner';
+import { memo } from 'react';
 import styles from './SignalCard.module.css';
+import { expiryPnl, type SpreadCandidate } from './spread-scanner';
+import type { RegimeResponse } from './useRegimeQuery';
 
 interface Props {
   candidate: SpreadCandidate | null;
@@ -92,7 +92,7 @@ function SignalCard({ candidate, underlying, spot, emptyReason, regime }: Props)
               <span className={styles.regimeMeta}>Not a trade probability or an EV gate</span>
             </div>
           )}
-          <div className={styles.stats}>
+          <div className={`${styles.stats} ${styles.guideStats}`}>
             <Stat
               label={debit ? 'Net debit + reserve' : 'Net credit − reserve'}
               value={fmtUsd(Math.abs(cash!))}

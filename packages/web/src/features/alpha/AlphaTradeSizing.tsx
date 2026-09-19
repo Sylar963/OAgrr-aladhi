@@ -1,7 +1,7 @@
+import { VENUES } from '@lib/venue-meta';
+import type { VenueId } from '@shared/enriched';
 import { useState } from 'react';
 import { z } from 'zod';
-import type { VenueId } from '@shared/enriched';
-import { VENUES } from '@lib/venue-meta';
 import styles from './SpreadBuilderPanel.module.css';
 
 export interface AlphaSizing {

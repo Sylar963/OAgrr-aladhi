@@ -1,29 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
-
-import { useAppStore } from '@stores/app-store';
-import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
 import { useOpenPalette } from '@components/layout/palette-context';
-import { useIsMobile } from '@hooks/useIsMobile';
-import { Spinner, EmptyState } from '@components/ui';
-import type { SpreadKind } from '@lib/analytics/verticalSpread';
-import type { VenueId } from '@shared/enriched';
-import { VENUE_IDS } from '@oggregator/protocol';
+import { EmptyState, Spinner } from '@components/ui';
+import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
+import { useIsMobile } from '@hooks/useIsMobile';
+import type { SpreadKind } from '@lib/analytics/verticalSpread';
+import { VENUE_IDS } from '@oggregator/protocol';
+import type { VenueId } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
+import { useEffect, useMemo, useState } from 'react';
+import AlphaContextStrip from './AlphaContextStrip';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
-import { scanSpreads, type SpreadCandidate } from './spread-scanner';
-
-import SpreadBuilderPanel from './SpreadBuilderPanel';
-import AlphaContextStrip from './AlphaContextStrip';
+import styles from './AlphaView.module.css';
 import LottoScannerPanel from './LottoScannerPanel';
 import SignalCard from './SignalCard';
-import VenueRouterTable from './VenueRouterTable';
-import VolSmileInset from './VolSmileInset';
+import SpreadBuilderPanel from './SpreadBuilderPanel';
+import { type SpreadCandidate, scanSpreads } from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
-import styles from './AlphaView.module.css';
+import VenueRouterTable from './VenueRouterTable';
+import VolSmileInset from './VolSmileInset';
 
 type AlphaStrategy = SpreadKind | 'long-call';
 

@@ -10,7 +10,7 @@ React 19 + Vite + TypeScript dashboard for cross-venue crypto options data. Mobi
 - **Flow** — Live options trade flow with whale detection (🐋 $100K+) plus an institutional RFQ / block trade mode
 - **Analytics** — OI by venue, call/put summary, put/call ratio by expiry, DVOL chart with HV overlay, OI by strike, and cross-expiry curves
 - **GEX** — Gamma exposure by strike showing dealer positioning (magnet vs accelerator)
-- **Alpha** — Shared regime context for call credit, put credit, and multi-venue long-call scanning
+- **Alpha** — Same-venue credit/debit spread research, risk sizing, original venue routing and smile tools, plus multi-venue long-call scanning
 
 ## Mobile
 
@@ -24,10 +24,18 @@ Fully responsive with:
 
 ## Alpha workspace
 
-Open `#alpha/BTC` and choose Call Credit, Put Credit, or Long Call in the shared strategy bar.
+Open `#alpha/BTC` and choose Call Credit, Put Credit, Call Debit, Put Debit, or Long Call in the shared strategy bar.
 The market strip keeps IV percentile, 7d/30d realized volatility, VRP, implied move, range state,
-and spot extension visible across strategies. Credit spreads retain fee-aware cross-venue routing;
+and spot extension visible across strategies. The original strike builder, venue-leg table, and
+volatility-smile view remain in place. Vertical spreads are compared with both legs on the same
+venue using executable bid/ask, known fees, displayed size, timestamps, and settlement metadata;
 Long Call scans the active venues and selected underlying across 4–14 DTE.
+
+Spread research requires manually entered equity and shows the selected quantity's maximum expiry
+profit/loss, account risk, breakeven, simplified risk-neutral model EV, expiry scenarios, and up to
+three alternatives per active venue. Account equity, risk budget, and extra cost reserve are local
+planning inputs—not live venue balances, margin approval, or recommended limits. Positive model EV
+means “review the assumptions,” not “trade.”
 
 Long-call candidates show venue-normalized mark and ask, OTM and expiry breakeven, ATM implied
 move, the required 10x move in implied-move units, and buying-power capacity. Selecting a row
@@ -37,6 +45,9 @@ Premium cap, minimum OTM, and buying power are configurable, and results can be 
 Scanner values are estimates, not executable orders. Most short-dated OTM options expire
 worthless, and the UI does not assume that API orders satisfy funded-account or Strategy
 Builder eligibility rules.
+
+Book-derived principles, source coverage, payoff invariants, BTC interpretation limits, and the
+research backlog live in `docs/knowledge/options-trading.md`.
 
 ## Commands
 

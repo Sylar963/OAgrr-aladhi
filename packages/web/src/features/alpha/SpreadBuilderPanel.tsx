@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
 import InfoTip from '@components/ui/InfoTip';
-import type { EnrichedStrike } from '@shared/enriched';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
+import type { EnrichedStrike } from '@shared/enriched';
+import type { ReactNode } from 'react';
 
 import styles from './SpreadBuilderPanel.module.css';
 

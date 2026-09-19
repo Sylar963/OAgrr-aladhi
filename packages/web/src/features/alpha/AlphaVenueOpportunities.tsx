@@ -1,7 +1,7 @@
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
-import { VENUES } from '@lib/venue-meta';
 import { fmtUsd } from '@lib/format';
-import { VERTICAL_LABELS, type SpreadCandidate, type VenueScan } from './spread-scanner';
+import { VENUES } from '@lib/venue-meta';
+import { type SpreadCandidate, VERTICAL_LABELS, type VenueScan } from './spread-scanner';
 import styles from './VenueRouterTable.module.css';
 
 export default function AlphaVenueOpportunities({
@@ -38,7 +38,7 @@ export default function AlphaVenueOpportunities({
         const alternatives = candidates.filter((c) => c.id !== selected?.id).slice(0, 3);
         const withinBudget = candidates.filter((c) => c.status !== 'over-budget');
         return (
-          <div key={scan.venue} className={styles.leg}>
+          <div key={scan.venue} className={`${styles.leg} ${styles.opportunityVenue}`}>
             <strong className={styles.legHeading}>{VENUES[scan.venue]?.label ?? scan.venue}</strong>
             <span className={styles.subtitle}>
               {withinBudget.some((c) => c.status === 'review')

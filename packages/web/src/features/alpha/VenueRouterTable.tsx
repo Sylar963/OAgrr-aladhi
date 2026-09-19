@@ -1,10 +1,10 @@
-import { memo, type ReactNode } from 'react';
+import { VenueDot } from '@components/ui';
 
 import InfoTip from '@components/ui/InfoTip';
-import { VenueDot } from '@components/ui';
-import { fmtIv, fmtUsd, fmtCompact } from '@lib/format';
-import { VENUES } from '@lib/venue-meta';
 import type { LegRoute, VenueLegCandidate } from '@lib/analytics/verticalSpread';
+import { fmtCompact, fmtIv, fmtUsd } from '@lib/format';
+import { VENUES } from '@lib/venue-meta';
+import { memo, type ReactNode } from 'react';
 
 import styles from './VenueRouterTable.module.css';
 

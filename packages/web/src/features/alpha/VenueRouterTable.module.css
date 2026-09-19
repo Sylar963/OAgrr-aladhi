@@ -19,9 +19,6 @@
   color: var(--text-secondary);
   font-size: var(--text-xs);
 }
-.opportunities > .leg {
-  margin-top: var(--space-3);
-}
 .opportunity {
   display: flex;
   flex-wrap: wrap;
@@ -281,4 +278,8 @@
   .leg {
     padding: var(--space-2);
   }
+}
+
+.opportunityVenue {
+  margin-top: var(--space-3);
 }

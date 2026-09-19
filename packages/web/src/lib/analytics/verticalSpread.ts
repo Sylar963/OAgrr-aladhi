@@ -1,10 +1,10 @@
-import type { EnrichedStrike, VenueQuote, VenueId } from '@shared/enriched';
+import type { EnrichedStrike, VenueId, VenueQuote } from '@shared/enriched';
 import {
   black76Price,
   black76Probability,
   normCdf,
-  realWorldPop,
   type OptionRight,
+  realWorldPop,
 } from './blackScholes';
 import { inferMissingIv } from './ivInference';
 

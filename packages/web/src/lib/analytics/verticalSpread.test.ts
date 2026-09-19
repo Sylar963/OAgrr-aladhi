@@ -1,6 +1,5 @@
-import { describe, it, expect } from 'vitest';
-
 import type { EnrichedStrike, VenueExecutionQuote, VenueId, VenueQuote } from '@shared/enriched';
+import { describe, expect, it } from 'vitest';
 import { blackScholesCall, blackScholesPut } from './blackScholes';
 import { rocGateForRegime, routeVerticalSpread } from './verticalSpread';
 

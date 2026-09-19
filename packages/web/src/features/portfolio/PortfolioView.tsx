@@ -314,7 +314,11 @@ export default function PortfolioView() {
             mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
           />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
-          <ShockHeatmap grid={metrics?.shockGrid ?? []} />
+          <ShockHeatmap
+            grid={metrics?.shockGrid ?? []}
+            meta={metrics?.shockGridMeta ?? null}
+            currentUnrealizedPnl={metrics?.totals.unrealizedPnlUsd ?? null}
+          />
           <PortfolioVegaCurve
             byStrike={metrics?.byStrike ?? []}
             breakEven={metrics?.breakEven ?? []}

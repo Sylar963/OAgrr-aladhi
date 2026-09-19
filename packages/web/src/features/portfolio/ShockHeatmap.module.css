@@ -1,59 +1,266 @@
 .wrap {
+  --matrix-amber: #f5b84b;
+  --matrix-ink: #0b0d0d;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 12px;
-  border: 1px solid #1a1a1a;
+  gap: 12px;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid #202523;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background:
+    linear-gradient(135deg, rgba(245, 184, 75, 0.035), transparent 38%),
+    rgba(255, 255, 255, 0.018);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .title {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
-  color: #888;
+  color: #aeb7b3;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
-.title span {
-  margin-left: 8px;
-  color: #59615f;
+.subtitle {
+  margin-top: 3px;
+  color: #58615d;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
-  letter-spacing: 0;
-  text-transform: none;
+}
+
+.modeToggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid #262b29;
+  border-radius: 5px;
+  background: #0b0e0d;
+}
+
+.modeToggle button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #68716d;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.modeToggle button:hover {
+  color: #c2cbc7;
+}
+
+.modeToggle button[data-active='true'] {
+  background: #222824;
+  color: #f2f5f3;
+  box-shadow: 0 0 0 1px #303833 inset;
+}
+
+.referenceStrip {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.45fr) repeat(3, minmax(120px, 1fr));
+  border: 1px solid #252b28;
+  background: #0a0d0c;
+}
+
+.locationBlock,
+.referenceMetric {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid #202522;
+}
+
+.locationBlock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, rgba(245, 184, 75, 0.09), transparent);
+}
+
+.locationBlock strong,
+.referenceMetric strong {
+  display: block;
+  margin-top: 2px;
+  color: #e3e8e5;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.referenceLabel,
+.referenceMetric span {
+  display: block;
+  color: #66706b;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.referenceMetric:last-child {
+  border-right: 0;
+}
+
+.referenceMetric strong[data-sign='positive'] {
+  color: #62d991;
+}
+
+.referenceMetric strong[data-sign='negative'] {
+  color: #f07b78;
+}
+
+.referenceMetric strong[data-coverage='partial'] {
+  color: var(--matrix-amber);
+}
+
+.nowBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 1px solid rgba(245, 184, 75, 0.42);
+  border-radius: 2px;
+  color: var(--matrix-amber);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.nowBadge i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--matrix-amber);
+  box-shadow: 0 0 7px rgba(245, 184, 75, 0.8);
+  animation: nowPulse 1.8s ease-in-out infinite;
+}
+
+.coverageWarning {
+  padding: 7px 9px;
+  border-left: 2px solid var(--matrix-amber);
+  background: rgba(245, 184, 75, 0.07);
+  color: #bda774;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+}
+
+.tableScroll {
+  overflow-x: auto;
 }
 
 .grid {
-  border-collapse: collapse;
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 1px;
+  table-layout: fixed;
+  background: #151917;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
 }
 
 .grid th,
 .grid td {
+  height: 36px;
   padding: 4px 6px;
   text-align: center;
-  border: 1px solid #1a1a1a;
-  min-width: 50px;
 }
 
 .grid th {
-  color: #888;
+  background: #101311;
+  color: #75807a;
   font-weight: 500;
-  background: rgba(255, 255, 255, 0.02);
+}
+
+.grid th[data-current-axis='true'] {
+  background: rgba(245, 184, 75, 0.09);
+  color: var(--matrix-amber);
+}
+
+.axisCorner {
+  position: relative;
+  min-width: 92px;
+  background:
+    linear-gradient(to top right, transparent 49%, #2b312e 50%, transparent 51%),
+    #101311 !important;
+}
+
+.axisCorner span {
+  position: absolute;
+  color: #59635e;
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.axisCorner span:first-child {
+  bottom: 4px;
+  left: 6px;
+}
+
+.axisCorner span:last-child {
+  top: 4px;
+  right: 6px;
 }
 
 .grid td {
-  color: #e0e0e0;
+  position: relative;
+  color: #f0f4f1;
   font-size: 10px;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.grid td:hover {
+  z-index: 2;
+  filter: brightness(1.18);
+  transform: scale(1.02);
+}
+
+.grid td[data-current='true'] {
+  z-index: 1;
+  background: #171914 !important;
+  box-shadow:
+    0 0 0 2px var(--matrix-amber) inset,
+    0 0 16px rgba(245, 184, 75, 0.16);
+}
+
+.youAreHere {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--matrix-amber);
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cellValue {
+  white-space: nowrap;
 }
 
 .legend {
-  font-size: 10px;
-  color: #666;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: #5f6964;
   font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+}
+
+.legend b {
+  color: #89938e;
+  font-weight: 500;
 }
 
 .empty {
@@ -62,4 +269,51 @@
   color: #666;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes nowPulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 900px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modeToggle {
+    align-self: flex-start;
+  }
+
+  .referenceStrip {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .locationBlock,
+  .referenceMetric {
+    border-bottom: 1px solid #202522;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nowBadge i {
+    animation: none;
+  }
+
+  .grid td {
+    transition: none;
+  }
 }

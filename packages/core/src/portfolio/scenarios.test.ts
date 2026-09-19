@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { price76, vega76 } from '../feeds/thalex/bs-solver.js';
 import { attachMarks } from './aggregator.js';
-import { applyVolShock, computeShockGrid, computeShockPnl } from './scenarios.js';
+import { applyVolShock, computeShockGrid, computeShockPnl, getShockGridMeta } from './scenarios.js';
 import type { MarkContext, MarkProvider, PositionLeg } from './types.js';
 
 const F = 70_000;
@@ -151,5 +151,55 @@ describe('computeShockGrid', () => {
       const curr = pnls[i] ?? 0;
       expect(curr).toBeGreaterThan(prev);
     }
+  });
+
+  it('keeps the current-surface cell at zero when live mark and IV are inconsistent', () => {
+    const leg = makeLeg({ strike: 70_000, size: 1 });
+    const mark = constantMarks(leg);
+    const grid = computeShockGrid(
+      [{ leg, mark: { ...mark, markPriceUsd: (mark.markPriceUsd ?? 0) + 500 } }],
+      NOW_MS,
+    );
+
+    expect(grid[4]?.[4]?.totalPnlUsd).toBeCloseTo(0, 10);
+  });
+
+  it('anchors skew independently to each leg forward', () => {
+    const first = makeLeg({ strike: 70_000, size: 1 });
+    const second = makeLeg({ strike: 100_000, size: 1 });
+    const firstMark = constantMarks(first);
+    const secondMark: MarkContext = {
+      ...constantMarks(second),
+      underlyingPriceUsd: 100_000,
+      forwardPriceUsd: 100_000,
+      markPriceUsd: price76(100_000, second.strike, SIGMA, T_YEARS, second.optionRight),
+    };
+    const grid = computeShockGrid(
+      [
+        { leg: first, mark: firstMark },
+        { leg: second, mark: secondMark },
+      ],
+      NOW_MS,
+      70_000,
+    );
+
+    expect(grid[4]?.[8]?.totalPnlUsd).toBeCloseTo(0, 10);
+  });
+
+  it('reports legs excluded from repricing', () => {
+    const priced = makeLeg({ strike: 70_000, size: 1 });
+    const excluded = makeLeg({ strike: 80_000, size: 1, legId: 'missing-forward' });
+    const excludedMark = { ...constantMarks(excluded), forwardPriceUsd: null };
+    const meta = getShockGridMeta([
+      { leg: priced, mark: constantMarks(priced) },
+      { leg: excluded, mark: excludedMark },
+    ]);
+
+    expect(meta).toEqual({
+      totalLegs: 2,
+      pricedLegs: 1,
+      excludedLegIds: ['missing-forward'],
+      anchor: 'per_leg_forward',
+    });
   });
 });

@@ -123,6 +123,8 @@ export {
   PositionSourceSchema,
   type ShockGridCell,
   ShockGridCellSchema,
+  type ShockGridMeta,
+  ShockGridMetaSchema,
   type StrategyGroup,
   StrategyGroupSchema,
   type StrategyKind,

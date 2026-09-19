@@ -284,6 +284,7 @@ export {
   applyVolShock,
   computeShockPnl,
   computeShockGrid,
+  getShockGridMeta,
   foldManualLeg,
   findExistingForInput,
   naturalKeyOf,

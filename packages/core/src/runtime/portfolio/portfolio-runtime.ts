@@ -6,6 +6,7 @@ import type {
   PortfolioTotals,
   PositionLeg,
   ShockGridCell,
+  ShockGridMeta,
   StrategyGroup,
   VegaByStrikeRow,
 } from '@oggregator/protocol';
@@ -19,7 +20,7 @@ import {
   computeTotals,
 } from '../../portfolio/aggregator.js';
 import { buildPortfolioPnlCurve } from '../../portfolio/pnl-curve.js';
-import { computeShockGrid } from '../../portfolio/scenarios.js';
+import { computeShockGrid, getShockGridMeta } from '../../portfolio/scenarios.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
 import type {
   MarkProvider,
@@ -98,19 +99,6 @@ function emptyPnlCurve(): PortfolioPnlCurve {
     downsideBounded: false,
     points: [],
   };
-}
-
-function pickAtmStrike(
-  legs: PositionLeg[],
-  chainSurface: ChainSurfaceProvider | undefined,
-): number {
-  if (legs.length === 0) return 0;
-  const firstLeg = legs[0];
-  if (firstLeg == null) return 0;
-  const fromChain = chainSurface?.getAtmStrike(firstLeg.underlying, firstLeg.expiry) ?? null;
-  if (fromChain != null && fromChain > 0) return fromChain;
-  const strikes = legs.map((leg) => leg.strike).sort((a, b) => a - b);
-  return strikes[Math.floor(strikes.length / 2)] ?? 0;
 }
 
 export class PortfolioRuntime {
@@ -248,6 +236,7 @@ export class PortfolioRuntime {
     let byExpiry: ExpiryBucketRow[];
     let breakEven: BreakEvenIvRow[];
     let shockGrid: ShockGridCell[][];
+    let shockGridMeta: ShockGridMeta;
     let strategies: StrategyGroup[];
 
     if (positions.length === 0) {
@@ -257,6 +246,12 @@ export class PortfolioRuntime {
       byExpiry = [];
       breakEven = [];
       shockGrid = [];
+      shockGridMeta = {
+        totalLegs: 0,
+        pricedLegs: 0,
+        excludedLegIds: [],
+        anchor: 'per_leg_forward',
+      };
       strategies = [];
     } else {
       totals = computeTotals(withMarks);
@@ -264,8 +259,8 @@ export class PortfolioRuntime {
       byStrike = aggregateGreeksByStrike(withMarks);
       byExpiry = aggregateGreeksByExpiry(withMarks, nowMs);
       breakEven = breakEvenIvCurve(withMarks);
-      const atmStrike = pickAtmStrike(positions, this.chainSurface);
-      shockGrid = atmStrike > 0 ? computeShockGrid(withMarks, nowMs, atmStrike) : [];
+      shockGrid = computeShockGrid(withMarks, nowMs);
+      shockGridMeta = getShockGridMeta(withMarks);
       strategies = detectStrategyGroups(positions);
     }
 
@@ -279,6 +274,7 @@ export class PortfolioRuntime {
       byExpiry,
       breakEven,
       shockGrid,
+      shockGridMeta,
       strategies,
     };
     return { positions, metrics };
@@ -307,6 +303,12 @@ export class PortfolioRuntime {
         byExpiry: [],
         breakEven: [],
         shockGrid: [],
+        shockGridMeta: {
+          totalLegs: positions.length,
+          pricedLegs: 0,
+          excludedLegIds: positions.map((leg) => leg.legId),
+          anchor: 'per_leg_forward',
+        },
         strategies: [],
       };
       return {

@@ -1,5 +1,6 @@
 import type {
   ShockGridCell,
+  ShockGridMeta,
   VolShockLegResult,
   VolShockResult,
   VolShockScenario,
@@ -87,7 +88,7 @@ const SKEW_SHIFT_PER_LOG_K = [-0.5, -0.25, -0.1, -0.05, 0, 0.05, 0.1, 0.25, 0.5]
 export function computeShockGrid(
   legsWithMarks: LegWithMark[],
   nowMs: number,
-  atmStrike: number,
+  _legacyAtmStrike?: number,
 ): ShockGridCell[][] {
   const grid: ShockGridCell[][] = [];
 
@@ -96,7 +97,10 @@ export function computeShockGrid(
     for (const skewShift of SKEW_SHIFT_PER_LOG_K) {
       let totalPnlUsd = 0;
       for (const { leg, mark } of legsWithMarks) {
-        if (mark.iv == null || mark.markPriceUsd == null) continue;
+        if (mark.iv == null || mark.forwardPriceUsd == null) continue;
+
+        const baseModelUsd = legMarkFromShockedIv(leg, mark, mark.iv);
+        if (baseModelUsd == null) continue;
 
         const parallelBumped = applyVolShock(
           { kind: 'parallel', bumpVolPts: atmShift },
@@ -106,7 +110,7 @@ export function computeShockGrid(
           nowMs,
         );
         const skewBumped = applyVolShock(
-          { kind: 'skew_tilt', atmStrike, slopePerLogK: skewShift },
+          { kind: 'skew_tilt', atmStrike: mark.forwardPriceUsd, slopePerLogK: skewShift },
           parallelBumped,
           leg.strike,
           leg.expiry,
@@ -115,7 +119,7 @@ export function computeShockGrid(
         const safeIv = skewBumped > 0 ? skewBumped : 0.001;
         const bumpedMarkUsd = legMarkFromShockedIv(leg, mark, safeIv);
         if (bumpedMarkUsd == null) continue;
-        totalPnlUsd += (bumpedMarkUsd - mark.markPriceUsd) * leg.size;
+        totalPnlUsd += (bumpedMarkUsd - baseModelUsd) * leg.size;
       }
       row.push({ atmShiftVolPts: atmShift, skewShiftPerLogK: skewShift, totalPnlUsd });
     }
@@ -123,4 +127,21 @@ export function computeShockGrid(
   }
 
   return grid;
+}
+
+export function getShockGridMeta(legsWithMarks: LegWithMark[]): ShockGridMeta {
+  const excludedLegIds: string[] = [];
+
+  for (const { leg, mark } of legsWithMarks) {
+    if (mark.iv == null || legMarkFromShockedIv(leg, mark, mark.iv) == null) {
+      excludedLegIds.push(leg.legId);
+    }
+  }
+
+  return {
+    totalLegs: legsWithMarks.length,
+    pricedLegs: legsWithMarks.length - excludedLegIds.length,
+    excludedLegIds,
+    anchor: 'per_leg_forward',
+  };
 }

@@ -158,6 +158,14 @@ export const ShockGridCellSchema = z.object({
 });
 export type ShockGridCell = z.infer<typeof ShockGridCellSchema>;
 
+export const ShockGridMetaSchema = z.object({
+  totalLegs: z.number().int().nonnegative(),
+  pricedLegs: z.number().int().nonnegative(),
+  excludedLegIds: z.array(z.string()),
+  anchor: z.literal('per_leg_forward'),
+});
+export type ShockGridMeta = z.infer<typeof ShockGridMetaSchema>;
+
 export const PortfolioPnlCurveStatusSchema = z.enum([
   'ok',
   'empty',
@@ -226,6 +234,7 @@ export const PortfolioMetricsSchema = z.object({
   byExpiry: z.array(ExpiryBucketRowSchema),
   breakEven: z.array(BreakEvenIvRowSchema),
   shockGrid: z.array(z.array(ShockGridCellSchema)),
+  shockGridMeta: ShockGridMetaSchema,
   strategies: z.array(StrategyGroupSchema),
 });
 export type PortfolioMetrics = z.infer<typeof PortfolioMetricsSchema>;

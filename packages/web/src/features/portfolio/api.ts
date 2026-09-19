@@ -215,6 +215,13 @@ const ShockGridCellSchema = z.object({
   totalPnlUsd: z.number(),
 });
 
+const ShockGridMetaSchema = z.object({
+  totalLegs: z.number().int().nonnegative(),
+  pricedLegs: z.number().int().nonnegative(),
+  excludedLegIds: z.array(z.string()),
+  anchor: z.literal('per_leg_forward'),
+});
+
 const PortfolioPnlCurveStatusSchema = z.enum(['ok', 'empty', 'mixed_underlyings', 'missing_marks']);
 
 const PortfolioPnlPointSchema = z.object({
@@ -246,6 +253,7 @@ const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
   byExpiry: z.array(ExpiryBucketRowSchema),
   breakEven: z.array(BreakEvenIvRowSchema),
   shockGrid: z.array(z.array(ShockGridCellSchema)),
+  shockGridMeta: ShockGridMetaSchema,
   strategies: z.array(StrategyGroupSchema),
 }) as z.ZodType<PortfolioMetrics>;
 

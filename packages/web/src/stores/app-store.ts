@@ -1,10 +1,10 @@
 import type { TabId } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
-import {
-  type SystemAnnouncement,
-  type VenueFailure,
-  type VenueId,
-  type WsConnectionState,
+import type {
+  SystemAnnouncement,
+  VenueFailure,
+  VenueId,
+  WsConnectionState,
 } from '@oggregator/protocol';
 import { create } from 'zustand';
 

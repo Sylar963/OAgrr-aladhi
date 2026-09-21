@@ -10,7 +10,7 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { VENUES } from '@lib/venue-meta';
 
-import { type PortfolioSource } from './api';
+import type { PortfolioSource } from './api';
 import ExpiryBuckets from './ExpiryBuckets';
 import PortfolioPnlCurve from './PortfolioPnlCurve';
 import PortfolioVegaCurve from './PortfolioVegaCurve';

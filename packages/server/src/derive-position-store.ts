@@ -15,6 +15,8 @@ export class DerivePositionStore implements PositionStore {
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, DerivePrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
+  private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly retainCounts = new Map<string, number>();
 
   list(accountId: string): PositionLeg[] {
     const legs = this.cache.get(accountId);
@@ -50,9 +52,14 @@ export class DerivePositionStore implements PositionStore {
     this.clients.set(creds.accountId, client);
     this.unsubscribes.set(creds.accountId, unsubscribe);
     await client.start();
+    this.scheduleDisconnect(creds.accountId);
   }
 
   async disconnect(accountId: string): Promise<void> {
+    const timer = this.disconnectTimers.get(accountId);
+    if (timer != null) clearTimeout(timer);
+    this.disconnectTimers.delete(accountId);
+    this.retainCounts.delete(accountId);
     const unsubscribe = this.unsubscribes.get(accountId);
     if (unsubscribe != null) {
       unsubscribe();
@@ -65,6 +72,38 @@ export class DerivePositionStore implements PositionStore {
     }
     this.cache.delete(accountId);
     this.broadcast(accountId, []);
+  }
+
+  retain(accountId: string): void {
+    const timer = this.disconnectTimers.get(accountId);
+    if (timer != null) clearTimeout(timer);
+    this.disconnectTimers.delete(accountId);
+    this.retainCounts.set(accountId, (this.retainCounts.get(accountId) ?? 0) + 1);
+  }
+
+  release(accountId: string): void {
+    const nextCount = Math.max(0, (this.retainCounts.get(accountId) ?? 0) - 1);
+    if (nextCount > 0) {
+      this.retainCounts.set(accountId, nextCount);
+      return;
+    }
+    this.retainCounts.delete(accountId);
+    this.scheduleDisconnect(accountId);
+  }
+
+  private scheduleDisconnect(accountId: string): void {
+    if (!this.clients.has(accountId) || (this.retainCounts.get(accountId) ?? 0) > 0) return;
+    const current = this.disconnectTimers.get(accountId);
+    if (current != null) clearTimeout(current);
+    const timer = setTimeout(
+      () => {
+        this.disconnectTimers.delete(accountId);
+        void this.disconnect(accountId);
+      },
+      15 * 60 * 1000,
+    );
+    timer.unref?.();
+    this.disconnectTimers.set(accountId, timer);
   }
 
   isConnected(accountId: string): boolean {

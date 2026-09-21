@@ -2,21 +2,21 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 
-const { storeMock, getUserByTokenMock } = vi.hoisted(() => ({
+const { storeMock, consumeWebSocketTicketMock } = vi.hoisted(() => ({
   storeMock: { enabled: false as boolean },
-  getUserByTokenMock: vi.fn(),
+  consumeWebSocketTicketMock: vi.fn(),
 }));
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
 }));
 
-vi.mock('../../user-service.js', () => ({
-  getUserByToken: getUserByTokenMock,
+vi.mock('../../websocket-ticket-service.js', () => ({
+  consumeWebSocketTicket: consumeWebSocketTicketMock,
 }));
 
 vi.mock('../../portfolio-services.js', () => ({
-  bootstrapPortfolioForAccount: vi.fn().mockResolvedValue(undefined),
+  bootstrapPortfolioForAccount: vi.fn().mockReturnValue(undefined),
   getOrCreatePortfolioRuntime: vi.fn().mockReturnValue({
     getSnapshot: () => null,
     subscribe: () => () => {},
@@ -64,7 +64,7 @@ describe('WS /ws/portfolio auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    getUserByTokenMock.mockReset();
+    consumeWebSocketTicketMock.mockReset();
   });
 
   it('closes the connection when anonymous and persistence is enabled', async () => {
@@ -73,26 +73,26 @@ describe('WS /ws/portfolio auth gate', () => {
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
-  it('closes the connection when token is invalid and persistence is enabled', async () => {
+  it('closes the connection when ticket is invalid and persistence is enabled', async () => {
     storeMock.enabled = true;
-    getUserByTokenMock.mockResolvedValue(null);
+    consumeWebSocketTicketMock.mockReturnValue(null);
 
-    const ws = await app.injectWS('/ws/portfolio?token=bogus');
+    const ws = await app.injectWS('/ws/portfolio?ticket=bogus');
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
   it('accepts authenticated connections and keeps them open', async () => {
     storeMock.enabled = true;
-    getUserByTokenMock.mockResolvedValue({
+    consumeWebSocketTicketMock.mockReturnValue({
       id: 'usr_bob',
       accountId: 'acct_bob',
       label: 'bob',
     });
 
-    const ws = await app.injectWS('/ws/portfolio?token=k');
+    const ws = await app.injectWS('/ws/portfolio?ticket=k');
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(getUserByTokenMock).toHaveBeenCalledWith('k');
+    expect(consumeWebSocketTicketMock).toHaveBeenCalledWith('k');
     expect(ws.readyState).not.toBe(WS_CLOSED);
 
     ws.terminate();

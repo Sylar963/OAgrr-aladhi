@@ -1,14 +1,7 @@
 import type { TabId } from '@lib/tabs';
-import {
-  loadAllVenueCreds,
-  removeVenueCreds as storageRemoveVenueCreds,
-  saveVenueCreds as storageSaveVenueCreds,
-} from '@lib/venue-credentials';
 import { VENUE_IDS } from '@lib/venue-meta';
 import {
-  VENUE_IDS as PROTOCOL_VENUE_IDS,
   type SystemAnnouncement,
-  type VenueCredentials,
   type VenueFailure,
   type VenueId,
   type WsConnectionState,
@@ -97,7 +90,7 @@ interface AppState {
   feedStatus: FeedStatus;
   accountId: string | null;
   activeContext: ActiveContext;
-  venueCreds: Partial<Record<VenueId, VenueCredentials>>;
+  configuredVenueIds: VenueId[];
   soundEnabled: boolean;
   sessionNotice: SessionNotice | null;
   /** Monotonic counter — incremented by the warning dialog's "Stay active" button
@@ -121,11 +114,11 @@ interface AppState {
   setActiveVenues: (venues: string[]) => void;
   setMyIv: (iv: string) => void;
   setFeedStatus: (s: Partial<FeedStatus>) => void;
-  setAccountId: (accountId: string) => void;
-  clearAccount: () => void;
+  activateAccountSession: (accountId: string, configuredVenueIds: VenueId[]) => void;
+  clearAccountSession: () => void;
   setActiveContext: (ctx: ActiveContext) => void;
-  setVenueCreds: (creds: VenueCredentials) => void;
-  removeVenueCreds: (venue: VenueId) => void;
+  markVenueConfigured: (venue: VenueId) => void;
+  markVenueUnconfigured: (venue: VenueId) => void;
   setSessionNotice: (notice: SessionNotice | null) => void;
   extendSession: () => void;
   setSoundEnabled: (enabled: boolean) => void;
@@ -159,9 +152,9 @@ export const useAppStore = create<AppState>((set) => ({
     staleMs: null,
     lastUpdateMs: null,
   },
-  accountId: readStorage('paperAccountId'),
+  accountId: null,
   activeContext: readActiveContext(),
-  venueCreds: loadAllVenueCreds(PROTOCOL_VENUE_IDS),
+  configuredVenueIds: [],
   soundEnabled: readStorage('tapeSoundEnabled') === '1',
   sessionNotice: null,
   sessionExtendToken: 0,
@@ -190,29 +183,30 @@ export const useAppStore = create<AppState>((set) => ({
     set({ activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
   setMyIv: (myIv) => set({ myIv }),
   setFeedStatus: (s) => set((prev) => ({ feedStatus: { ...prev.feedStatus, ...s } })),
-  setAccountId: (accountId) => {
-    localStorage.setItem('paperAccountId', accountId);
-    set({ accountId });
+  activateAccountSession: (accountId, configuredVenueIds) => {
+    set({ accountId, configuredVenueIds });
   },
-  clearAccount: () => {
-    localStorage.removeItem('paperAccountId');
-    set({ accountId: null });
+  clearAccountSession: () => {
+    try {
+      localStorage.removeItem('activeContext');
+    } catch {}
+    set({ accountId: null, configuredVenueIds: [], activeContext: { kind: 'paper' } });
   },
   setActiveContext: (activeContext) => {
     localStorage.setItem('activeContext', JSON.stringify(activeContext));
     set({ activeContext });
   },
-  setVenueCreds: (creds) => {
-    storageSaveVenueCreds(creds);
-    set((s) => ({ venueCreds: { ...s.venueCreds, [creds.venue]: creds } }));
+  markVenueConfigured: (venue) => {
+    set((state) => ({
+      configuredVenueIds: state.configuredVenueIds.includes(venue)
+        ? state.configuredVenueIds
+        : [...state.configuredVenueIds, venue],
+    }));
   },
-  removeVenueCreds: (venue) => {
-    storageRemoveVenueCreds(venue);
-    set((s) => {
-      const next = { ...s.venueCreds };
-      delete next[venue];
-      return { venueCreds: next };
-    });
+  markVenueUnconfigured: (venue) => {
+    set((state) => ({
+      configuredVenueIds: state.configuredVenueIds.filter((configured) => configured !== venue),
+    }));
   },
   setSessionNotice: (sessionNotice) => set({ sessionNotice }),
   extendSession: () => set((s) => ({ sessionExtendToken: s.sessionExtendToken + 1 })),

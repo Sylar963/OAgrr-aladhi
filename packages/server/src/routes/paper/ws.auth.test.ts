@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 
-const { storeMock, getUserByTokenMock, listPositionsMock, getCashBalanceMock } = vi.hoisted(() => ({
-  storeMock: { enabled: false as boolean },
-  getUserByTokenMock: vi.fn(),
-  listPositionsMock: vi.fn().mockResolvedValue([]),
-  getCashBalanceMock: vi.fn().mockResolvedValue(0),
-}));
+const { storeMock, consumeWebSocketTicketMock, listPositionsMock, getCashBalanceMock } = vi.hoisted(
+  () => ({
+    storeMock: { enabled: false as boolean },
+    consumeWebSocketTicketMock: vi.fn(),
+    listPositionsMock: vi.fn().mockReturnValue([]),
+    getCashBalanceMock: vi.fn().mockReturnValue(0),
+  }),
+);
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
@@ -15,11 +17,11 @@ vi.mock('../../trading-services.js', () => ({
     listPositions: listPositionsMock,
     getCashBalance: getCashBalanceMock,
   },
-  quoteProvider: { getMark: vi.fn().mockResolvedValue(null) },
+  quoteProvider: { getMark: vi.fn().mockReturnValue(null) },
 }));
 
-vi.mock('../../user-service.js', () => ({
-  getUserByToken: getUserByTokenMock,
+vi.mock('../../websocket-ticket-service.js', () => ({
+  consumeWebSocketTicket: consumeWebSocketTicketMock,
 }));
 
 import { paperWsRoute } from './ws.js';
@@ -59,7 +61,7 @@ describe('WS /ws/paper auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
-    getUserByTokenMock.mockReset();
+    consumeWebSocketTicketMock.mockReset();
     listPositionsMock.mockClear();
     getCashBalanceMock.mockClear();
   });
@@ -70,27 +72,27 @@ describe('WS /ws/paper auth gate', () => {
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
   });
 
-  it('closes the connection when token is invalid and persistence is enabled', async () => {
+  it('closes the connection when ticket is invalid and persistence is enabled', async () => {
     storeMock.enabled = true;
-    getUserByTokenMock.mockResolvedValue(null);
+    consumeWebSocketTicketMock.mockReturnValue(null);
 
-    const ws = await app.injectWS('/ws/paper?token=does-not-exist');
+    const ws = await app.injectWS('/ws/paper?ticket=does-not-exist');
     expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
-    expect(getUserByTokenMock).toHaveBeenCalledWith('does-not-exist');
+    expect(consumeWebSocketTicketMock).toHaveBeenCalledWith('does-not-exist');
   });
 
   it('accepts authenticated connections and keeps them open', async () => {
     storeMock.enabled = true;
-    getUserByTokenMock.mockResolvedValue({
+    consumeWebSocketTicketMock.mockReturnValue({
       id: 'usr_abc',
       accountId: 'acct_alice',
       label: 'alice',
     });
 
-    const ws = await app.injectWS('/ws/paper?token=good-token');
+    const ws = await app.injectWS('/ws/paper?ticket=good-ticket');
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(getUserByTokenMock).toHaveBeenCalledWith('good-token');
+    expect(consumeWebSocketTicketMock).toHaveBeenCalledWith('good-ticket');
     expect(ws.readyState).not.toBe(WS_CLOSED);
 
     ws.terminate();
@@ -101,7 +103,7 @@ describe('WS /ws/paper auth gate', () => {
     const ws = await app.injectWS('/ws/paper');
     await new Promise((r) => setTimeout(r, 100));
     expect(ws.readyState).not.toBe(WS_CLOSED);
-    expect(getUserByTokenMock).not.toHaveBeenCalled();
+    expect(consumeWebSocketTicketMock).not.toHaveBeenCalled();
     ws.terminate();
   });
 

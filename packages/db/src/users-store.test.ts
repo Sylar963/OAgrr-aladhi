@@ -13,6 +13,17 @@ describe('NoopUsersStore', () => {
         accountId: 'acct_1',
       }),
     ).resolves.toBeNull();
+    await expect(
+      store.provisionByClerkId({
+        clerkUserId: 'user_abc',
+        email: 'a@b.co',
+        displayName: 'A',
+        accountId: 'acct_1',
+        accountLabel: 'A account',
+        initialCashUsd: 100_000,
+        createdAt: new Date(0),
+      }),
+    ).resolves.toBeNull();
     await expect(store.getByClerkId('user_abc')).resolves.toBeNull();
     await expect(store.dispose()).resolves.toBeUndefined();
   });

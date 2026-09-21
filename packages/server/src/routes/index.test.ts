@@ -7,14 +7,18 @@ describe('route bootstrap gate', () => {
     expect(shouldBlockApiRequestWhileBootstrapping('/api/ready')).toBe(false);
   });
 
+  it('keeps account initialization available during bootstrap', () => {
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/paper/auth/sync')).toBe(false);
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/paper/auth/ws-ticket')).toBe(false);
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/portfolio/venue-credentials')).toBe(false);
+  });
+
   it('keeps venue credential connections available during bootstrap', () => {
     expect(shouldBlockApiRequestWhileBootstrapping('/api/portfolio/venue-credentials/thalex')).toBe(
       false,
     );
     expect(
-      shouldBlockApiRequestWhileBootstrapping(
-        '/api/portfolio/venue-credentials/thalex/status',
-      ),
+      shouldBlockApiRequestWhileBootstrapping('/api/portfolio/venue-credentials/thalex/status'),
     ).toBe(false);
   });
 

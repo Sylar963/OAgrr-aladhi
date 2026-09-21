@@ -1,15 +1,20 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 import { VenueIdSchema, type VenueId } from '@oggregator/protocol';
+import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 
 import { derivePositionStore } from '../../derive-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { getOrCreatePortfolioRuntime } from '../../portfolio-services.js';
+import { venueCredentialsStore } from '../../trading-services.js';
 import { getRequestAccountId } from '../../user-service.js';
+import {
+  getVenueCredentialCipher,
+  type VenueCredentialCipher,
+} from '../../venue-credential-cipher.js';
 
-const DeriveCredsSchema = z.object({
+const DeriveCredentialsSchema = z.object({
   walletAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
@@ -20,136 +25,248 @@ const DeriveCredsSchema = z.object({
   env: z.enum(['prod', 'test']).optional(),
 });
 
-const ThalexCredsSchema = z.object({
+const ThalexCredentialsSchema = z.object({
   kid: z.string().min(1),
   privateKeyPem: z.string().min(1),
   account: z.string().optional(),
   env: z.enum(['prod', 'test']).optional(),
 });
 
-// Private-venue adapters accept raw signing keys (ETH private key, RSA PEM).
-// Off by default so the public demo refuses them; self-hosters opt in explicitly.
+type DeriveCredentials = z.infer<typeof DeriveCredentialsSchema>;
+type ThalexCredentials = z.infer<typeof ThalexCredentialsSchema>;
+
 function privateAdaptersEnabled(): boolean {
-  const v = process.env['PRIVATE_VENUE_ADAPTERS_ENABLED'];
-  return v === '1' || v === 'true';
+  const value = process.env['PRIVATE_VENUE_ADAPTERS_ENABLED'];
+  return value === '1' || value === 'true';
 }
 
-function getAccountId(req: FastifyRequest): string {
-  return getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
+function getAccountId(request: FastifyRequest): string {
+  return getRequestAccountId(request, DEFAULT_ACCOUNT_ID);
+}
+
+function getCredentialStoreOrSendError(reply: FastifyReply): boolean {
+  if (venueCredentialsStore.enabled) return true;
+  reply.status(503).send({
+    error: 'credential_storage_unavailable',
+    message: 'Encrypted venue credential storage is not configured.',
+  });
+  return false;
+}
+
+function getCredentialCipherOrSendError(reply: FastifyReply): VenueCredentialCipher | null {
+  if (!privateAdaptersEnabled()) {
+    reply.status(403).send({
+      error: 'private_adapters_disabled',
+      message: 'Private venue connections are disabled on this deployment.',
+    });
+    return null;
+  }
+  if (!getCredentialStoreOrSendError(reply)) return null;
+  const cipher = getVenueCredentialCipher();
+  if (cipher == null) {
+    reply.status(503).send({
+      error: 'credential_encryption_unavailable',
+      message: 'Venue credential encryption is not configured.',
+    });
+    return null;
+  }
+  return cipher;
+}
+
+async function connectDerive(accountId: string, credentials: DeriveCredentials): Promise<void> {
+  await derivePositionStore.connect({
+    accountId,
+    walletAddress: credentials.walletAddress,
+    signerPrivateKey: credentials.signerPrivateKey,
+    subaccountId: credentials.subaccountId,
+    ...(credentials.env != null && { env: credentials.env }),
+  });
+  getOrCreatePortfolioRuntime(accountId, 'derive');
+}
+
+async function connectThalex(accountId: string, credentials: ThalexCredentials): Promise<void> {
+  await thalexPositionStore.connect({
+    accountId,
+    kid: credentials.kid,
+    privateKeyPem: credentials.privateKeyPem,
+    ...(credentials.account != null && { account: credentials.account }),
+    ...(credentials.env != null && { env: credentials.env }),
+  });
+  getOrCreatePortfolioRuntime(accountId, 'thalex');
+}
+
+async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<boolean> {
+  const cipher = getVenueCredentialCipher();
+  if (cipher == null) return false;
+  const stored = await venueCredentialsStore.get(accountId, venue);
+  if (stored == null) return false;
+
+  if (venue === 'derive') {
+    const parsed = DeriveCredentialsSchema.safeParse(
+      cipher.decrypt<unknown>(stored.encryptedCredentials),
+    );
+    if (!parsed.success) throw new Error('Stored Derive credentials are invalid');
+    await connectDerive(accountId, parsed.data);
+    return true;
+  }
+  if (venue === 'thalex') {
+    const parsed = ThalexCredentialsSchema.safeParse(
+      cipher.decrypt<unknown>(stored.encryptedCredentials),
+    );
+    if (!parsed.success) throw new Error('Stored Thalex credentials are invalid');
+    await connectThalex(accountId, parsed.data);
+    return true;
+  }
+  return false;
+}
+
+async function disconnectVenue(accountId: string, venue: VenueId): Promise<void> {
+  if (venue === 'derive') {
+    await derivePositionStore.disconnect(accountId);
+  } else if (venue === 'thalex') {
+    await thalexPositionStore.disconnect(accountId);
+  }
+}
+
+function isVenueConnected(accountId: string, venue: VenueId): boolean {
+  if (venue === 'derive') return derivePositionStore.isConnected(accountId);
+  if (venue === 'thalex') return thalexPositionStore.isConnected(accountId);
+  return false;
 }
 
 export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
-  app.post<{
-    Params: { venue: string };
-    Body: unknown;
-  }>(
+  app.get('/portfolio/venue-credentials', async (request, reply) => {
+    if (!getCredentialStoreOrSendError(reply)) return reply;
+    const accountId = getAccountId(request);
+    const venues = await venueCredentialsStore.listVenues(accountId);
+    return {
+      venues: venues.flatMap((rawVenue) => {
+        const parsed = VenueIdSchema.safeParse(rawVenue);
+        return parsed.success
+          ? [
+              {
+                venue: parsed.data,
+                configured: true,
+                connected: isVenueConnected(accountId, parsed.data),
+              },
+            ]
+          : [];
+      }),
+    };
+  });
+
+  app.post('/portfolio/venue-credentials/reconnect', async (request, reply) => {
+    if (!privateAdaptersEnabled()) return { venues: [] };
+    if (getCredentialCipherOrSendError(reply) == null) return reply;
+    const accountId = getAccountId(request);
+    const storedVenues = await venueCredentialsStore.listVenues(accountId);
+    const results = await Promise.all(
+      storedVenues.map(async (rawVenue) => {
+        const parsed = VenueIdSchema.safeParse(rawVenue);
+        if (!parsed.success) return null;
+        try {
+          const connected = await reconnectStoredVenue(accountId, parsed.data);
+          return { venue: parsed.data, configured: true, connected };
+        } catch (error) {
+          request.log.warn(
+            { accountId, venue: parsed.data, err: String(error) },
+            'stored venue reconnect failed',
+          );
+          return { venue: parsed.data, configured: true, connected: false };
+        }
+      }),
+    );
+    return { venues: results.filter((result) => result != null) };
+  });
+
+  app.post<{ Params: { venue: string }; Body: unknown }>(
     '/portfolio/venue-credentials/:venue',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
-    async (req, reply) => {
-      if (!privateAdaptersEnabled()) {
-        return reply.status(403).send({
-          error: 'private_adapters_disabled',
-          message:
-            'Submitting private venue keys is disabled. Set PRIVATE_VENUE_ADAPTERS_ENABLED=1 (self-hosted only).',
-        });
-      }
-      const venueParsed = VenueIdSchema.safeParse(req.params.venue);
+    async (request, reply) => {
+      const cipher = getCredentialCipherOrSendError(reply);
+      if (cipher == null) return reply;
+      const venueParsed = VenueIdSchema.safeParse(request.params.venue);
       if (!venueParsed.success) {
         return reply.status(400).send({ error: 'invalid_venue', issues: venueParsed.error.issues });
       }
-      const venue: VenueId = venueParsed.data;
-      const accountId = getAccountId(req);
+      const venue = venueParsed.data;
+      const accountId = getAccountId(request);
 
-      if (venue === 'derive') {
-        const credsParsed = DeriveCredsSchema.safeParse(req.body);
-        if (!credsParsed.success) {
-          req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
-          return reply
-            .status(400)
-            .send({ error: 'invalid_creds', issues: credsParsed.error.issues });
-        }
-        try {
-          const creds = credsParsed.data;
-          await derivePositionStore.connect({
+      try {
+        if (venue === 'derive') {
+          const credentials = DeriveCredentialsSchema.parse(request.body);
+          await connectDerive(accountId, credentials);
+          await venueCredentialsStore.upsert({
             accountId,
-            walletAddress: creds.walletAddress,
-            signerPrivateKey: creds.signerPrivateKey,
-            subaccountId: creds.subaccountId,
-            ...(creds.env != null && { env: creds.env }),
+            venue,
+            encryptedCredentials: cipher.encrypt(credentials),
           });
-          getOrCreatePortfolioRuntime(accountId, 'derive');
-          return { venue, connected: true };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'connect failed';
-          return reply.status(502).send({ error: 'connect_failed', message });
+          return { venue, connected: true, configured: true };
         }
-      }
-
-      if (venue === 'thalex') {
-        const credsParsed = ThalexCredsSchema.safeParse(req.body);
-        if (!credsParsed.success) {
-          req.log.warn({ venue, issues: credsParsed.error.issues }, 'portfolio invalid_creds');
-          return reply
-            .status(400)
-            .send({ error: 'invalid_creds', issues: credsParsed.error.issues });
-        }
-        try {
-          const creds = credsParsed.data;
-          await thalexPositionStore.connect({
+        if (venue === 'thalex') {
+          const credentials = ThalexCredentialsSchema.parse(request.body);
+          await connectThalex(accountId, credentials);
+          await venueCredentialsStore.upsert({
             accountId,
-            kid: creds.kid,
-            privateKeyPem: creds.privateKeyPem,
-            ...(creds.account != null && { account: creds.account }),
-            ...(creds.env != null && { env: creds.env }),
+            venue,
+            encryptedCredentials: cipher.encrypt(credentials),
           });
-          getOrCreatePortfolioRuntime(accountId, 'thalex');
-          return { venue, connected: true };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'connect failed';
-          req.log.warn({ err: String(err), venue: 'thalex' }, 'thalex connect_failed');
-          return reply.status(502).send({ error: 'connect_failed', message });
+          return { venue, connected: true, configured: true };
         }
+        return reply.status(501).send({
+          error: 'not_implemented',
+          message: `Private adapter for ${venue} is not available.`,
+        });
+      } catch (error) {
+        await disconnectVenue(accountId, venue).catch(() => {});
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({ error: 'invalid_creds', issues: error.issues });
+        }
+        request.log.warn({ accountId, venue, err: String(error) }, 'venue connect failed');
+        return reply
+          .status(502)
+          .send({ error: 'connect_failed', message: 'Venue connection failed' });
       }
-
-      return reply.status(501).send({
-        error: 'not_implemented',
-        message: `private adapter for ${venue} is not wired yet (see PRIVATE_ADAPTER_SPECS.${venue}.todos)`,
-      });
     },
   );
 
   app.delete<{ Params: { venue: string } }>(
     '/portfolio/venue-credentials/:venue',
-    async (req, reply) => {
-      const venueParsed = VenueIdSchema.safeParse(req.params.venue);
+    async (request, reply) => {
+      if (!getCredentialStoreOrSendError(reply)) return reply;
+      const venueParsed = VenueIdSchema.safeParse(request.params.venue);
       if (!venueParsed.success) {
         return reply.status(400).send({ error: 'invalid_venue' });
       }
-      const accountId = getAccountId(req);
-      if (venueParsed.data === 'derive') {
-        await derivePositionStore.disconnect(accountId);
-      } else if (venueParsed.data === 'thalex') {
-        await thalexPositionStore.disconnect(accountId);
+      const accountId = getAccountId(request);
+      await venueCredentialsStore.delete(accountId, venueParsed.data);
+      try {
+        await disconnectVenue(accountId, venueParsed.data);
+      } catch (error) {
+        request.log.warn(
+          { accountId, venue: venueParsed.data, err: String(error) },
+          'venue disconnect failed after credential deletion',
+        );
       }
-      return { venue: venueParsed.data, connected: false };
+      return { venue: venueParsed.data, connected: false, configured: false };
     },
   );
 
   app.get<{ Params: { venue: string } }>(
     '/portfolio/venue-credentials/:venue/status',
-    async (req, reply) => {
-      const venueParsed = VenueIdSchema.safeParse(req.params.venue);
+    async (request, reply) => {
+      if (!getCredentialStoreOrSendError(reply)) return reply;
+      const venueParsed = VenueIdSchema.safeParse(request.params.venue);
       if (!venueParsed.success) {
         return reply.status(400).send({ error: 'invalid_venue' });
       }
-      const accountId = getAccountId(req);
-      if (venueParsed.data === 'derive') {
-        return { venue: 'derive', connected: derivePositionStore.isConnected(accountId) };
-      }
-      if (venueParsed.data === 'thalex') {
-        return { venue: 'thalex', connected: thalexPositionStore.isConnected(accountId) };
-      }
-      return { venue: venueParsed.data, connected: false };
+      const accountId = getAccountId(request);
+      const configured = await venueCredentialsStore.get(accountId, venueParsed.data);
+      return {
+        venue: venueParsed.data,
+        configured: configured != null,
+        connected: isVenueConnected(accountId, venueParsed.data),
+      };
     },
   );
 }

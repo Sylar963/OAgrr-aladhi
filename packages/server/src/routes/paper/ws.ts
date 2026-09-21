@@ -14,7 +14,7 @@ import {
   positionRepository,
   quoteProvider,
 } from '../../trading-services.js';
-import { getUserByToken } from '../../user-service.js';
+import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 import { paperEvents } from './events.js';
 import { pnlToDto, positionToDto } from './mappers.js';
 
@@ -43,21 +43,25 @@ export async function paperWsRoute(app: FastifyInstance) {
     let pushing = false;
     let refreshRetryAt = 0;
 
-    const token = new URL(req.url, 'http://localhost').searchParams.get('token');
+    const ticket = new URL(req.url, 'http://localhost').searchParams.get('ticket');
     let accountId: string;
     if (paperTradingStore.enabled) {
-      if (!token) {
+      if (!ticket) {
         send(socket, {
           type: 'error',
           code: 'unauthorized',
-          message: 'token query parameter required',
+          message: 'ticket query parameter required',
         });
         socket.close(1008, 'Unauthorized');
         return;
       }
-      const user = await getUserByToken(token);
+      const user = consumeWebSocketTicket(ticket);
       if (!user) {
-        send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid token' });
+        send(socket, {
+          type: 'error',
+          code: 'unauthorized',
+          message: 'Invalid or expired WebSocket ticket',
+        });
         socket.close(1008, 'Unauthorized');
         return;
       }

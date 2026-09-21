@@ -1,5 +1,5 @@
-import { ClerkProvider } from '@clerk/clerk-react';
-import ClerkTokenBridge from '@components/auth/ClerkTokenBridge';
+import { ClerkProvider } from '@clerk/react';
+import { AccountSessionProvider } from '@components/auth/AccountSessionProvider';
 import ErrorBoundary from '@components/ui/ErrorBoundary';
 import PopoutChartPage from '@features/chain/PopoutChartPage';
 import { TradfiPopoutChartPage } from '@features/tradfi';
@@ -26,14 +26,15 @@ const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
 createRoot(root).render(
   <StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
-      <ClerkTokenBridge />
       <QueryClientProvider client={queryClient}>
-        <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>
-          {isTradfiPopout ? <TradfiPopoutChartPage /> : isPopout ? <PopoutChartPage /> : <App />}
-        </ErrorBoundary>
-        <Analytics />
-        <SpeedInsights />
-        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        <AccountSessionProvider>
+          <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>
+            {isTradfiPopout ? <TradfiPopoutChartPage /> : isPopout ? <PopoutChartPage /> : <App />}
+          </ErrorBoundary>
+          <Analytics />
+          <SpeedInsights />
+          {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+        </AccountSessionProvider>
       </QueryClientProvider>
     </ClerkProvider>
   </StrictMode>,

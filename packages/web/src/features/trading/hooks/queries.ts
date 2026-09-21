@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addTradeNote,
   closeTrade,
@@ -18,148 +19,183 @@ import {
 } from '../api';
 
 export const QKEY = {
-  account: ['paper', 'account'] as const,
-  positions: ['paper', 'positions'] as const,
-  pnl: ['paper', 'pnl'] as const,
-  orders: ['paper', 'orders'] as const,
-  overview: ['paper', 'overview'] as const,
-  trades: ['paper', 'trades'] as const,
-  trade: ['paper', 'trade'] as const,
-  activity: ['paper', 'activity'] as const,
-  fills: ['paper', 'fills'] as const,
+  root: (accountId: string) => ['account', accountId, 'paper'] as const,
+  account: (accountId: string) => ['account', accountId, 'paper', 'account'] as const,
+  positions: (accountId: string) => ['account', accountId, 'paper', 'positions'] as const,
+  pnl: (accountId: string) => ['account', accountId, 'paper', 'pnl'] as const,
+  orders: (accountId: string) => ['account', accountId, 'paper', 'orders'] as const,
+  overview: (accountId: string) => ['account', accountId, 'paper', 'overview'] as const,
+  trades: (accountId: string) => ['account', accountId, 'paper', 'trades'] as const,
+  trade: (accountId: string) => ['account', accountId, 'paper', 'trade'] as const,
+  activity: (accountId: string) => ['account', accountId, 'paper', 'activity'] as const,
+  fills: (accountId: string) => ['account', accountId, 'paper', 'fills'] as const,
 };
 
-function invalidatePaper(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['paper'] });
+function usePaperSession() {
+  const session = useAccountSession();
+  return {
+    accountId: session.accountId ?? 'unresolved',
+    enabled: session.status === 'ready',
+  };
+}
+
+function invalidatePaper(queryClient: ReturnType<typeof useQueryClient>, accountId: string) {
+  void queryClient.invalidateQueries({ queryKey: QKEY.root(accountId) });
 }
 
 export function usePositions() {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: QKEY.positions,
+    queryKey: QKEY.positions(session.accountId),
     queryFn: getPositions,
+    enabled: session.enabled,
   });
 }
 
 export function usePaperAccount() {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: QKEY.account,
+    queryKey: QKEY.account(session.accountId),
     queryFn: getPaperAccount,
+    enabled: session.enabled,
   });
 }
 
 export function usePnl() {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: QKEY.pnl,
+    queryKey: QKEY.pnl(session.accountId),
     queryFn: getPnl,
+    enabled: session.enabled,
   });
 }
 
 export function useOrders(limit = 50) {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: [...QKEY.orders, limit],
+    queryKey: [...QKEY.orders(session.accountId), limit],
     queryFn: () => getOrders(limit),
+    enabled: session.enabled,
   });
 }
 
 export function useOverview() {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: QKEY.overview,
+    queryKey: QKEY.overview(session.accountId),
     queryFn: getOverview,
+    enabled: session.enabled,
   });
 }
 
 export function useTrades(status: 'open' | 'closed' | 'all' = 'all', limit = 100) {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: [...QKEY.trades, status, limit],
+    queryKey: [...QKEY.trades(session.accountId), status, limit],
     queryFn: () => getTrades(status, limit),
+    enabled: session.enabled,
   });
 }
 
 export function useTrade(tradeId: string | null) {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: [...QKEY.trade, tradeId],
+    queryKey: [...QKEY.trade(session.accountId), tradeId],
     queryFn: () => getTrade(tradeId!),
-    enabled: tradeId != null,
+    enabled: session.enabled && tradeId != null,
   });
 }
 
 export function useActivity(limit = 100, tradeId?: string) {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: [...QKEY.activity, limit, tradeId ?? 'all'],
+    queryKey: [...QKEY.activity(session.accountId), limit, tradeId ?? 'all'],
     queryFn: () => getActivity(limit, tradeId),
+    enabled: session.enabled,
   });
 }
 
 export function useFills(limit = 100, tradeId?: string) {
+  const session = usePaperSession();
   return useQuery({
-    queryKey: [...QKEY.fills, limit, tradeId ?? 'all'],
+    queryKey: [...QKEY.fills(session.accountId), limit, tradeId ?? 'all'],
     queryFn: () => getFills(limit, tradeId),
+    enabled: session.enabled,
   });
 }
 
 export function usePlaceOrder() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: placeOrder,
-    onSuccess: () => {
-      invalidatePaper(qc);
-    },
+    onSuccess: () => invalidatePaper(queryClient, session.accountId),
   });
 }
 
 export function useCreateTrade() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createTrade,
     onSuccess: (result) => {
-      qc.setQueryData([...QKEY.trade, result.trade.id], result.trade);
-      invalidatePaper(qc);
+      queryClient.setQueryData([...QKEY.trade(session.accountId), result.trade.id], result.trade);
+      invalidatePaper(queryClient, session.accountId);
     },
   });
 }
 
 export function useAddTradeNote() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ tradeId, content }: { tradeId: string; content: Parameters<typeof addTradeNote>[1] }) =>
-      addTradeNote(tradeId, content),
+    mutationFn: ({
+      tradeId,
+      content,
+    }: {
+      tradeId: string;
+      content: Parameters<typeof addTradeNote>[1];
+    }) => addTradeNote(tradeId, content),
     onSuccess: (trade) => {
-      qc.setQueryData([...QKEY.trade, trade.id], trade);
-      invalidatePaper(qc);
+      queryClient.setQueryData([...QKEY.trade(session.accountId), trade.id], trade);
+      invalidatePaper(queryClient, session.accountId);
     },
   });
 }
 
 export function useCloseTrade() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: closeTrade,
     onSuccess: (trade) => {
-      qc.setQueryData([...QKEY.trade, trade.id], trade);
-      invalidatePaper(qc);
+      queryClient.setQueryData([...QKEY.trade(session.accountId), trade.id], trade);
+      invalidatePaper(queryClient, session.accountId);
     },
   });
 }
 
 export function useReduceTrade() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ tradeId, fraction }: { tradeId: string; fraction: number }) =>
       reduceTrade(tradeId, fraction),
     onSuccess: (trade) => {
-      qc.setQueryData([...QKEY.trade, trade.id], trade);
-      invalidatePaper(qc);
+      queryClient.setQueryData([...QKEY.trade(session.accountId), trade.id], trade);
+      invalidatePaper(queryClient, session.accountId);
     },
   });
 }
 
 export function useInitPaperAccount() {
-  const qc = useQueryClient();
+  const session = usePaperSession();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: initPaperAccount,
     onSuccess: (account) => {
-      qc.setQueryData(QKEY.account, account);
-      invalidatePaper(qc);
+      queryClient.setQueryData(QKEY.account(session.accountId), account);
+      invalidatePaper(queryClient, session.accountId);
     },
   });
 }

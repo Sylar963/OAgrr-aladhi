@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, type JWTPayload, jwtVerify } from 'jose';
+import { createRemoteJWKSet, type JWTPayload, type JWTVerifyOptions, jwtVerify } from 'jose';
 
 export interface ClerkIdentity {
   clerkUserId: string;
@@ -39,7 +39,23 @@ function getJwks(): ReturnType<typeof createRemoteJWKSet> {
   return jwks;
 }
 
-/** Production verifier — caches the JWKS and verifies RS256 locally. */
+function getJwtVerificationOptions(): JWTVerifyOptions {
+  const jwksUrl = process.env['CLERK_JWKS_URL'];
+  if (!jwksUrl) {
+    throw new Error('CLERK_JWKS_URL is required to verify Clerk tokens');
+  }
+  const issuer = process.env['CLERK_JWT_ISSUER']?.trim() || new URL(jwksUrl).origin;
+  const audience = process.env['CLERK_JWT_AUDIENCE']?.trim();
+  return {
+    algorithms: ['RS256'],
+    issuer,
+    ...(audience ? { audience } : {}),
+  };
+}
+
+/** Production verifier — caches the JWKS and verifies issuer, expiry, and RS256 signature. */
 export async function verifyClerkToken(token: string): Promise<ClerkIdentity | null> {
-  return verifyClerkTokenWith(token, (t) => jwtVerify(t, getJwks()));
+  return verifyClerkTokenWith(token, (value) =>
+    jwtVerify(value, getJwks(), getJwtVerificationOptions()),
+  );
 }

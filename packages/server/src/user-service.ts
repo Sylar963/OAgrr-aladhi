@@ -1,4 +1,3 @@
-import type { PaperAccountRow } from '@oggregator/db';
 import { DEFAULT_ACCOUNT_ID, DEFAULT_INITIAL_CASH_USD } from '@oggregator/trading';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { verifyClerkToken } from './clerk-verifier.js';
@@ -7,6 +6,7 @@ import { paperTradingStore, usersStore } from './trading-services.js';
 
 export interface AuthenticatedUser {
   id: string;
+  clerkUserId: string;
   accountId: string;
   label: string;
 }
@@ -33,6 +33,7 @@ export async function getUserByToken(token: string | null): Promise<Authenticate
   if (existing?.defaultAccountId) {
     return {
       id: existing.id,
+      clerkUserId: identity.clerkUserId,
       accountId: existing.defaultAccountId,
       label: existing.displayName ?? identity.email ?? identity.clerkUserId,
     };
@@ -40,34 +41,32 @@ export async function getUserByToken(token: string | null): Promise<Authenticate
 
   // First sign-in: create a paper account, then link it on the user row.
   const accountId = `acct_${crypto.randomUUID()}`;
-  const account: PaperAccountRow = {
-    id: accountId,
-    label: `${identity.displayName ?? identity.email ?? 'Trader'}'s Account`,
-    initialCashUsd: DEFAULT_INITIAL_CASH_USD,
-    createdAt: new Date(),
-  };
-  await paperTradingStore.ensureAccount(account);
-
-  const user = await usersStore.upsertByClerkId({
+  const user = await usersStore.provisionByClerkId({
     clerkUserId: identity.clerkUserId,
     email: identity.email,
     displayName: identity.displayName,
     accountId,
+    accountLabel: `${identity.displayName ?? identity.email ?? 'Trader'}'s Account`,
+    initialCashUsd: DEFAULT_INITIAL_CASH_USD,
+    createdAt: new Date(),
   });
   if (!user?.defaultAccountId) return null;
 
   return {
     id: user.id,
+    clerkUserId: identity.clerkUserId,
     accountId: user.defaultAccountId,
     label: user.displayName ?? identity.email ?? identity.clerkUserId,
   };
 }
 
 /** Called by POST /api/paper/auth/sync once after sign-in. */
-export async function syncUser(token: string | null): Promise<{ accountId: string } | null> {
+export async function syncUser(
+  token: string | null,
+): Promise<{ accountId: string; clerkUserId: string } | null> {
   const user = await getUserByToken(token);
   if (!user) return null;
-  return { accountId: user.accountId };
+  return { accountId: user.accountId, clerkUserId: user.clerkUserId };
 }
 
 export async function authenticateUser(

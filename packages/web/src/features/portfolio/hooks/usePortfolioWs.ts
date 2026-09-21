@@ -1,4 +1,5 @@
-import { getClerkToken } from '@lib/clerk-token';
+import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { createWebSocketTicket } from '@lib/account-session-api';
 import { wsUrl } from '@lib/http';
 
 import { PortfolioWsServerMessageSchema } from '@oggregator/protocol';
@@ -23,21 +24,35 @@ export function usePortfolioWs(
   lastError: { code: string; message: string } | null;
 } {
   const qc = useQueryClient();
+  const accountSession = useAccountSession();
+  const accountId = accountSession.accountId;
   const [connectionState, setConnectionState] = useState<ConnectionState>('closed');
   const [lastSeq, setLastSeq] = useState(0);
   const [lastError, setLastError] = useState<{ code: string; message: string } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (accountSession.status !== 'ready' || accountId == null) {
+      setConnectionState('closed');
+      return;
+    }
     let disposed = false;
 
     const open = async () => {
       if (disposed) return;
       setConnectionState('connecting');
-      const token = await getClerkToken();
+      let ticket: string;
+      try {
+        ticket = await createWebSocketTicket();
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      if (disposed) return;
       const params = new URLSearchParams();
-      if (token) params.set('token', token);
+      params.set('ticket', ticket);
       params.set('source', source);
       if (underlying) params.set('underlying', underlying);
       const url = `${wsUrl('/ws/portfolio')}?${params.toString()}`;
@@ -57,22 +72,25 @@ export function usePortfolioWs(
           if (!parsed.success) return;
           const msg = parsed.data;
           if (msg.type === 'snapshot') {
-            qc.setQueryData(PORTFOLIO_QKEY.positions(source, underlying), {
+            qc.setQueryData(PORTFOLIO_QKEY.positions(accountId, source, underlying), {
               accountId: msg.metrics.accountId,
               source,
               positions: msg.positions,
             });
-            qc.setQueryData(PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying), {
-              accountId: msg.metrics.accountId,
-              source,
-              metrics: msg.metrics,
-              positions: msg.positions,
-            });
+            qc.setQueryData(
+              PORTFOLIO_QKEY.metrics(accountId, msg.metrics.forwardDays, source, underlying),
+              {
+                accountId: msg.metrics.accountId,
+                source,
+                metrics: msg.metrics,
+                positions: msg.positions,
+              },
+            );
             setLastSeq(msg.seq);
             setLastError(null);
           } else if (msg.type === 'delta') {
             qc.setQueryData(
-              PORTFOLIO_QKEY.metrics(msg.metrics.forwardDays, source, underlying),
+              PORTFOLIO_QKEY.metrics(accountId, msg.metrics.forwardDays, source, underlying),
               (prev: { positions?: unknown } | undefined) => ({
                 accountId: msg.metrics.accountId,
                 source,
@@ -92,10 +110,7 @@ export function usePortfolioWs(
       ws.addEventListener('close', () => {
         if (disposed) return;
         wsRef.current = null;
-        setConnectionState('retrying');
-        const delay = backoffMs(retryRef.current);
-        retryRef.current = Math.min(retryRef.current + 1, 5);
-        setTimeout(() => void open(), delay);
+        scheduleReconnect();
       });
 
       ws.addEventListener('error', () => {
@@ -103,15 +118,30 @@ export function usePortfolioWs(
       });
     };
 
+    function scheduleReconnect() {
+      if (disposed || reconnectTimerRef.current != null) return;
+      setConnectionState('retrying');
+      const delay = backoffMs(retryRef.current);
+      retryRef.current = Math.min(retryRef.current + 1, 5);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        void open();
+      }, delay);
+    }
+
     void open();
 
     return () => {
       disposed = true;
+      if (reconnectTimerRef.current != null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       wsRef.current?.close();
       wsRef.current = null;
       setConnectionState('closed');
     };
-  }, [qc, source, underlying]);
+  }, [accountId, accountSession.status, qc, source, underlying]);
 
   return { connectionState, lastSeq, lastError };
 }

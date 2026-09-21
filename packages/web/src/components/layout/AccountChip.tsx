@@ -1,12 +1,11 @@
-import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
-import { connectVenue, disconnectVenue, venueStatus } from '@features/portfolio/api';
-import { syncAuth } from '@features/trading/api';
+import { SignInButton } from '@clerk/react';
+import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import { VENUES } from '@lib/venue-meta';
 import {
   PRIVATE_ADAPTER_SPECS,
   VENUE_IDS,
   type VenueCredentialFieldKey,
-  type VenueCredentials,
   type VenueId,
 } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
@@ -17,6 +16,10 @@ import styles from './AccountChip.module.css';
 
 type Mode = 'home' | 'paste';
 
+const CONNECTABLE_VENUE_IDS = VENUE_IDS.filter(
+  (venue) => PRIVATE_ADAPTER_SPECS[venue].status === 'available',
+);
+
 function emptyVenueFields(venue: VenueId): Record<VenueCredentialFieldKey, string> {
   const spec = PRIVATE_ADAPTER_SPECS[venue];
   const fields: Partial<Record<VenueCredentialFieldKey, string>> = {};
@@ -26,19 +29,19 @@ function emptyVenueFields(venue: VenueId): Record<VenueCredentialFieldKey, strin
 
 export default function AccountChip() {
   const accountId = useAppStore((s) => s.accountId);
-  const setAccountId = useAppStore((s) => s.setAccountId);
-  const clearAccount = useAppStore((s) => s.clearAccount);
-  const venueCreds = useAppStore((s) => s.venueCreds);
-  const setVenueCreds = useAppStore((s) => s.setVenueCreds);
-  const removeVenueCreds = useAppStore((s) => s.removeVenueCreds);
+  const configuredVenueIds = useAppStore((state) => state.configuredVenueIds);
+  const markVenueConfigured = useAppStore((state) => state.markVenueConfigured);
+  const markVenueUnconfigured = useAppStore((state) => state.markVenueUnconfigured);
   const qc = useQueryClient();
-  const { isSignedIn } = useUser();
+  const accountSession = useAccountSession();
+  const isAccountReady = accountSession.status === 'ready';
+  const isSignedOut = accountSession.status === 'signed_out';
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('home');
-  const [pasteTarget, setPasteTarget] = useState<VenueId>(VENUE_IDS[0]!);
+  const [pasteTarget, setPasteTarget] = useState<VenueId>(CONNECTABLE_VENUE_IDS[0]!);
   const [venueFields, setVenueFields] = useState<Record<VenueCredentialFieldKey, string>>(() =>
-    emptyVenueFields(VENUE_IDS[0]!),
+    emptyVenueFields(CONNECTABLE_VENUE_IDS[0]!),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,30 +50,6 @@ export default function AccountChip() {
   const refresh = () => {
     void qc.invalidateQueries();
   };
-
-  // On sign-in, sync the user server-side and store the resulting paper account id.
-  useEffect(() => {
-    let cancelled = false;
-    if (!isSignedIn) {
-      clearAccount();
-      return;
-    }
-    void (async () => {
-      try {
-        const result = await syncAuth();
-        if (!cancelled) {
-          setAccountId(result.accountId);
-          refresh();
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Sync failed');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn]);
 
   useEffect(() => {
     if (!open) return;
@@ -91,78 +70,22 @@ export default function AccountChip() {
   }, [open]);
 
   useEffect(() => {
-    const existing = venueCreds[pasteTarget];
-    if (existing != null) {
-      setVenueFields({ ...emptyVenueFields(pasteTarget), ...existing.fields });
-    } else {
-      setVenueFields(emptyVenueFields(pasteTarget));
-    }
+    setVenueFields(emptyVenueFields(pasteTarget));
     setError(null);
-  }, [pasteTarget, venueCreds]);
+  }, [pasteTarget]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const reconnectDerive = async () => {
-      const creds = venueCreds.derive;
-      if (creds == null) return;
-      const walletAddress = creds.fields.walletAddress;
-      const signerPrivateKey = creds.fields.privateKeyPem;
-      const subaccountRaw = creds.fields.subaccountId;
-      if (!walletAddress || !signerPrivateKey || !subaccountRaw) return;
-      const subaccountId = Number(subaccountRaw);
-      if (!Number.isFinite(subaccountId) || subaccountId <= 0) return;
-      try {
-        const status = await venueStatus('derive');
-        if (cancelled || status.connected) return;
-        await connectVenue('derive', { walletAddress, signerPrivateKey, subaccountId });
-        if (!cancelled) refresh();
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? `Derive reconnect failed: ${err.message}`
-              : 'Derive reconnect failed',
-          );
-        }
-      }
-    };
-
-    const reconnectThalex = async () => {
-      const creds = venueCreds.thalex;
-      if (creds == null) return;
-      const kid = creds.fields.kid;
-      const privateKeyPem = creds.fields.privateKeyPem;
-      const account = creds.fields.account?.trim();
-      if (!kid || !privateKeyPem) return;
-      try {
-        const status = await venueStatus('thalex');
-        if (cancelled || status.connected) return;
-        await connectVenue('thalex', { kid, privateKeyPem, ...(account ? { account } : {}) });
-        if (!cancelled) refresh();
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? `Thalex reconnect failed: ${err.message}`
-              : 'Thalex reconnect failed',
-          );
-        }
-      }
-    };
-
-    void reconnectDerive();
-    void reconnectThalex();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (open && isAccountReady) return;
+    setVenueFields(emptyVenueFields(pasteTarget));
+    setError(null);
+    setMode('home');
+    if (!isAccountReady && !isSignedOut) setOpen(false);
+  }, [isAccountReady, isSignedOut, open, pasteTarget]);
 
   const acctShort = accountId != null ? accountId.slice(0, 8) : '';
   const configuredVenues = useMemo(
-    () => VENUE_IDS.filter((v) => venueCreds[v] != null),
-    [venueCreds],
+    () => VENUE_IDS.filter((venue) => configuredVenueIds.includes(venue)),
+    [configuredVenueIds],
   );
   const hasUnsupportedConfigured = useMemo(
     () => configuredVenues.some((v) => PRIVATE_ADAPTER_SPECS[v].status !== 'available'),
@@ -179,6 +102,10 @@ export default function AccountChip() {
   const onPasteVenue = async () => {
     const venue = pasteTarget;
     const spec = PRIVATE_ADAPTER_SPECS[venue];
+    if (spec.status !== 'available') {
+      setError(venue + ' private adapter is not available');
+      return;
+    }
     const missing: string[] = [];
     for (const field of spec.credentialFields) {
       if (field.required && (venueFields[field.key] ?? '').trim().length === 0) {
@@ -193,8 +120,10 @@ export default function AccountChip() {
     for (const key of Object.keys(trimmedFields) as VenueCredentialFieldKey[]) {
       trimmedFields[key] = trimmedFields[key]!.trim();
     }
-    const creds: VenueCredentials = { venue, fields: trimmedFields, addedAt: Date.now() };
-    setVenueCreds(creds);
+    if (!isAccountReady) {
+      setError('Account must finish loading before venue keys can be saved');
+      return;
+    }
 
     if (venue === 'derive') {
       setBusy(true);
@@ -208,6 +137,7 @@ export default function AccountChip() {
           signerPrivateKey: trimmedFields.privateKeyPem ?? '',
           subaccountId,
         });
+        markVenueConfigured('derive');
         refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'connect failed');
@@ -224,6 +154,7 @@ export default function AccountChip() {
           privateKeyPem: trimmedFields.privateKeyPem ?? '',
           ...((trimmedFields.account ?? '') !== '' ? { account: trimmedFields.account } : {}),
         });
+        markVenueConfigured('thalex');
         refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'connect failed');
@@ -234,17 +165,21 @@ export default function AccountChip() {
       }
     }
 
+    setVenueFields(emptyVenueFields(venue));
     setError(null);
     setMode('home');
   };
 
   const onRemoveVenue = async (venue: VenueId) => {
-    removeVenueCreds(venue);
+    if (!isAccountReady) return;
     if (venue === 'derive' || venue === 'thalex') {
       try {
         await disconnectVenue(venue);
+        markVenueUnconfigured(venue);
         refresh();
-      } catch {}
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Disconnect failed');
+      }
     }
   };
 
@@ -253,13 +188,13 @@ export default function AccountChip() {
       <button
         type="button"
         className={styles.chip}
-        data-signed-in={isSignedIn || undefined}
+        data-signed-in={isAccountReady || undefined}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
         <span className={styles.dot} />
-        {isSignedIn ? (accountId ? `acct ${acctShort}` : 'Account') : 'Sign in'}
+        {isSignedOut ? 'Sign in' : accountId ? `acct ${acctShort}` : 'Account loading'}
         {configuredVenues.length > 0 && (
           <span className={styles.venueBadge}>+{configuredVenues.length}</span>
         )}
@@ -270,7 +205,7 @@ export default function AccountChip() {
             <div className={styles.body}>
               <div className={styles.section}>
                 <div className={styles.label}>Account</div>
-                <SignedOut>
+                {isSignedOut ? (
                   <div className={styles.actionRow}>
                     <SignInButton mode="modal">
                       <button type="button" className={styles.primaryBtn}>
@@ -278,70 +213,87 @@ export default function AccountChip() {
                       </button>
                     </SignInButton>
                   </div>
-                </SignedOut>
-                <SignedIn>
+                ) : (
                   <div className={styles.actionRow}>
-                    <UserButton afterSignOutUrl="/" />
+                    {isAccountReady && (
+                      <button
+                        type="button"
+                        className={styles.dangerBtn}
+                        onClick={() => void accountSession.endSession()}
+                      >
+                        Sign out
+                      </button>
+                    )}
                     {accountId != null && <div className={styles.value}>{accountId}</div>}
                   </div>
-                </SignedIn>
-              </div>
-              <div className={styles.divider} />
-              <div className={styles.section}>
-                <div className={styles.label}>Venue API keys</div>
-                {configuredVenues.length === 0 ? (
-                  <div className={styles.hint}>
-                    No venue keys yet. Add keys to enable per-venue private feeds.
-                  </div>
-                ) : (
-                  <div className={styles.venueChipsRow}>
-                    {configuredVenues.map((venue) => (
-                      <div key={venue} className={styles.venueChip}>
-                        <span>{VENUES[venue]?.label ?? venue}</span>
-                        <span
-                          className={styles.venueChipStatus}
-                          data-status={PRIVATE_ADAPTER_SPECS[venue].status}
-                        >
-                          {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? 'live' : 'TODO'}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.venueChipRemove}
-                          onClick={() => onRemoveVenue(venue)}
-                          aria-label={`remove ${venue}`}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className={styles.secondaryBtn}
-                  onClick={() => {
-                    setPasteTarget(VENUE_IDS[0]!);
-                    setError(null);
-                    setMode('paste');
-                  }}
-                >
-                  + Add venue key
-                </button>
-                {hasUnsupportedConfigured && (
-                  <div className={styles.warning}>
-                    {unsupportedVenueLabels.join(', ')} private feed
-                    {unsupportedVenueLabels.length === 1 ? '' : 's'} not available yet — keys are
-                    saved locally but positions won&apos;t appear in the Portfolio tab. Derive and
-                    Thalex are live today.
-                  </div>
                 )}
               </div>
+              {isAccountReady && <div className={styles.divider} />}
+              {isAccountReady && (
+                <div className={styles.section}>
+                  <div className={styles.label}>Venue API keys</div>
+                  {configuredVenues.length === 0 ? (
+                    <div className={styles.hint}>
+                      No venue keys yet. Add keys to enable per-venue private feeds.
+                    </div>
+                  ) : (
+                    <div className={styles.venueChipsRow}>
+                      {configuredVenues.map((venue) => (
+                        <div key={venue} className={styles.venueChip}>
+                          <span>{VENUES[venue]?.label ?? venue}</span>
+                          <span
+                            className={styles.venueChipStatus}
+                            data-status={PRIVATE_ADAPTER_SPECS[venue].status}
+                          >
+                            {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? 'live' : 'TODO'}
+                          </span>
+                          <button
+                            type="button"
+                            className={styles.venueChipRemove}
+                            onClick={() => onRemoveVenue(venue)}
+                            aria-label={`remove ${venue}`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.secondaryBtn}
+                    onClick={() => {
+                      setPasteTarget(CONNECTABLE_VENUE_IDS[0]!);
+                      setError(null);
+                      setMode('paste');
+                    }}
+                  >
+                    + Add venue key
+                  </button>
+                  {hasUnsupportedConfigured && (
+                    <div className={styles.warning}>
+                      {unsupportedVenueLabels.join(', ')} private feed
+                      {unsupportedVenueLabels.length === 1 ? '' : 's'} not available yet —
+                      credentials are encrypted on the server but positions won&apos;t appear in the
+                      Portfolio tab. Derive and Thalex are live today.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {mode === 'paste' && (
             <div className={styles.body}>
-              <button type="button" className={styles.backBtn} onClick={() => setMode('home')}>
+              <button
+                type="button"
+                className={styles.backBtn}
+                onClick={() => {
+                  setVenueFields(emptyVenueFields(pasteTarget));
+                  setError(null);
+                  setMode('home');
+                }}
+              >
                 ← back
               </button>
               <label className={styles.field}>
@@ -350,7 +302,7 @@ export default function AccountChip() {
                   value={pasteTarget}
                   onChange={(e) => setPasteTarget(e.target.value as VenueId)}
                 >
-                  {VENUE_IDS.map((v) => (
+                  {CONNECTABLE_VENUE_IDS.map((v) => (
                     <option key={v} value={v}>
                       {VENUES[v]?.label ?? v}
                     </option>
@@ -410,6 +362,8 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
               onChange={(e) => onChange(field.key, e.target.value)}
               placeholder={field.placeholder}
               rows={4}
+              autoComplete="off"
+              spellCheck={false}
             />
           ) : (
             <input

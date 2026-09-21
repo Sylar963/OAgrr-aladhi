@@ -83,5 +83,13 @@ export type {
 } from './trade-store.js';
 export type { PersistedTradeLeg, PersistedTradeMode, PersistedTradeRecord } from './types.js';
 
-export type { UpsertUserInput, UserRow, UsersStore } from './users-store.js';
+export type { ProvisionUserInput, UpsertUserInput, UserRow, UsersStore } from './users-store.js';
 export { NoopUsersStore, PostgresUsersStore } from './users-store.js';
+export type {
+  StoredVenueCredentials,
+  VenueCredentialsStore,
+} from './venue-credentials-store.js';
+export {
+  NoopVenueCredentialsStore,
+  PostgresVenueCredentialsStore,
+} from './venue-credentials-store.js';

@@ -8,7 +8,12 @@ const state = {
     email: string | null;
     displayName: string | null;
   } | null,
-  upsertResult: null as {
+  existingResult: null as {
+    id: string;
+    defaultAccountId: string | null;
+    displayName: string | null;
+  } | null,
+  provisionResult: null as {
     id: string;
     defaultAccountId: string | null;
     displayName: string | null;
@@ -34,8 +39,9 @@ vi.mock('./trading-services.js', () => ({
     get enabled() {
       return state.dbEnabled;
     },
-    getByClerkId: vi.fn(async () => state.upsertResult),
-    upsertByClerkId: vi.fn(async () => state.upsertResult),
+    getByClerkId: vi.fn(async () => state.existingResult),
+    upsertByClerkId: vi.fn(async () => state.existingResult),
+    provisionByClerkId: vi.fn(async () => state.provisionResult),
   },
 }));
 
@@ -64,7 +70,8 @@ beforeEach(() => {
   vi.resetModules();
   state.dbEnabled = false;
   state.identity = null;
-  state.upsertResult = null;
+  state.existingResult = null;
+  state.provisionResult = null;
 });
 
 describe('requireUser (no-DB fallback)', () => {
@@ -88,13 +95,18 @@ describe('requireUser (DB enabled)', () => {
   it('resolves and sets request.user for a valid token', async () => {
     state.dbEnabled = true;
     state.identity = { clerkUserId: 'user_1', email: 'a@b.co', displayName: 'A' };
-    state.upsertResult = { id: 'usr_1', defaultAccountId: 'acct_1', displayName: 'A' };
+    state.existingResult = { id: 'usr_1', defaultAccountId: 'acct_1', displayName: 'A' };
     const { requireUser } = await import('./user-service.js');
     const req = fakeReq({ authorization: 'Bearer good' });
     const reply = fakeReply();
     await requireUser()(req, reply);
     expect(reply._status).toBe(200);
-    expect(req.user).toEqual({ id: 'usr_1', accountId: 'acct_1', label: 'A' });
+    expect(req.user).toEqual({
+      id: 'usr_1',
+      clerkUserId: 'user_1',
+      accountId: 'acct_1',
+      label: 'A',
+    });
   });
 
   it('401s for an invalid token', async () => {
@@ -118,9 +130,9 @@ describe('syncUser', () => {
   it('upserts and returns accountId for a valid token', async () => {
     state.dbEnabled = true;
     state.identity = { clerkUserId: 'user_1', email: 'a@b.co', displayName: 'A' };
-    state.upsertResult = { id: 'usr_1', defaultAccountId: 'acct_1', displayName: 'A' };
+    state.provisionResult = { id: 'usr_1', defaultAccountId: 'acct_1', displayName: 'A' };
     const { syncUser } = await import('./user-service.js');
-    expect(await syncUser('good')).toEqual({ accountId: 'acct_1' });
+    expect(await syncUser('good')).toEqual({ accountId: 'acct_1', clerkUserId: 'user_1' });
   });
 });
 

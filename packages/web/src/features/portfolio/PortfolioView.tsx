@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-
-import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 
 import {
   PRIVATE_ADAPTER_SPECS,
@@ -12,7 +10,7 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { VENUES } from '@lib/venue-meta';
 
-import { connectVenue, venueStatus, type PortfolioSource } from './api';
+import { type PortfolioSource } from './api';
 import ExpiryBuckets from './ExpiryBuckets';
 import PortfolioPnlCurve from './PortfolioPnlCurve';
 import PortfolioVegaCurve from './PortfolioVegaCurve';
@@ -111,8 +109,6 @@ function venueSourceOptions(): SourceOption[] {
 
 export default function PortfolioView() {
   const underlying = useAppStore((s) => s.underlying);
-  const venueCreds = useAppStore((s) => s.venueCreds);
-  const qc = useQueryClient();
   const [forwardDays, setForwardDays] = useState(loadStoredForwardDays);
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
   const [underlyingFilter, setUnderlyingFilter] = useState<UnderlyingOption>(loadStoredUnderlying);
@@ -125,7 +121,6 @@ export default function PortfolioView() {
     underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
   const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
-  const [venueConnectError, setVenueConnectError] = useState<string | null>(null);
 
   const sourceOptions = useMemo(() => [...BASE_SOURCES, ...venueSourceOptions()], []);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';
@@ -163,75 +158,6 @@ export default function PortfolioView() {
       localStorage.setItem(UNDERLYING_STORAGE_KEY, next);
     } catch {}
   };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const reconnectSelectedVenue = async () => {
-      try {
-        if (source !== 'derive' && source !== 'thalex') {
-          setVenueConnectError(null);
-          return;
-        }
-
-        const creds = venueCreds[source];
-        if (creds == null) {
-          setVenueConnectError(null);
-          return;
-        }
-
-        const status = await venueStatus(source);
-        if (cancelled || status.connected) {
-          setVenueConnectError(null);
-          return;
-        }
-
-        if (source === 'derive') {
-          const walletAddress = creds.fields.walletAddress;
-          const signerPrivateKey = creds.fields.privateKeyPem;
-          const subaccountId = Number(creds.fields.subaccountId);
-          if (
-            !walletAddress ||
-            !signerPrivateKey ||
-            !Number.isFinite(subaccountId) ||
-            subaccountId <= 0
-          ) {
-            return;
-          }
-          await connectVenue('derive', {
-            walletAddress,
-            signerPrivateKey,
-            subaccountId,
-          });
-        } else {
-          const kid = creds.fields.kid;
-          const privateKeyPem = creds.fields.privateKeyPem;
-          const account = creds.fields.account?.trim();
-          if (!kid || !privateKeyPem) return;
-          await connectVenue('thalex', {
-            kid,
-            privateKeyPem,
-            ...(account ? { account } : {}),
-          });
-        }
-
-        if (!cancelled) {
-          setVenueConnectError(null);
-          await qc.invalidateQueries({ queryKey: ['portfolio'] });
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn('portfolio venue reconnect failed', err);
-        if (!cancelled) setVenueConnectError(message);
-      }
-    };
-
-    void reconnectSelectedVenue();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [qc, source, venueCreds]);
 
   return (
     <div className={styles.wrap}>
@@ -298,11 +224,6 @@ export default function PortfolioView() {
       </div>
 
       <div className={styles.sourceNote}>{activeNote}</div>
-      {venueConnectError != null && (
-        <div className={styles.venueError}>
-          <strong>{sourceLabel} connect failed:</strong> {venueConnectError}
-        </div>
-      )}
 
       <RiskCockpit metrics={metrics} positions={positions} />
 

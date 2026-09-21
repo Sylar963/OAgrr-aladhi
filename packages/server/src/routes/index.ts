@@ -30,7 +30,13 @@ import { wsInstrumentTradesRoute } from './ws-instrument-trades.js';
 
 export function shouldBlockApiRequestWhileBootstrapping(url: string): boolean {
   if (!url.startsWith('/api/')) return false;
-  if (url.startsWith('/api/portfolio/venue-credentials/')) return false;
+  if (url.startsWith('/api/paper/auth/')) return false;
+  if (
+    url === '/api/portfolio/venue-credentials' ||
+    url.startsWith('/api/portfolio/venue-credentials/')
+  ) {
+    return false;
+  }
   return url !== '/api/health' && url !== '/api/ready';
 }
 

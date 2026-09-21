@@ -1,3 +1,4 @@
+import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { ChallengePanel, useFundedRun } from '@features/funded';
 import { fmtDelta, fmtNum, fmtUsd } from '@lib/format';
 import { useAppStore } from '@stores/app-store';
@@ -13,6 +14,7 @@ import styles from './TradingView.module.css';
 
 export default function TradingView() {
   const activeContext = useAppStore((s) => s.activeContext);
+  const accountSession = useAccountSession();
   const queryClient = useQueryClient();
   const { data: paperAccount } = usePaperAccount();
   const { data: overview } = useOverview();
@@ -29,8 +31,14 @@ export default function TradingView() {
 
   useEffect(() => {
     setPaperAccountScope(activeScope);
-    queryClient.invalidateQueries({ queryKey: ['paper'] });
-  }, [activeScope, queryClient]);
+    if (accountSession.accountId) {
+      const cacheAccountId = activeScope ?? accountSession.accountId;
+      void queryClient.invalidateQueries({
+        queryKey: ['account', cacheAccountId, 'paper'],
+      });
+    }
+    return () => setPaperAccountScope(null);
+  }, [accountSession.accountId, activeScope, queryClient]);
 
   useEffect(() => {
     if (paperAccount) {

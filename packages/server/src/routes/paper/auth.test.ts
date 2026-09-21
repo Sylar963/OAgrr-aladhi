@@ -1,10 +1,20 @@
 import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const state = { syncResult: null as { accountId: string } | null };
+const state = {
+  syncResult: null as { accountId: string; clerkUserId: string } | null,
+};
 
 vi.mock('../../user-service.js', () => ({
+  getUserByToken: vi.fn(async () => null),
   syncUser: vi.fn(async () => state.syncResult),
+}));
+
+vi.mock('../../derive-position-store.js', () => ({
+  derivePositionStore: { disconnect: vi.fn(async () => {}) },
+}));
+vi.mock('../../thalex-position-store.js', () => ({
+  thalexPositionStore: { disconnect: vi.fn(async () => {}) },
 }));
 
 beforeEach(() => {
@@ -22,7 +32,7 @@ async function buildApp() {
 
 describe('POST /api/paper/auth/sync', () => {
   it('returns accountId for a valid token', async () => {
-    state.syncResult = { accountId: 'acct_1' };
+    state.syncResult = { accountId: 'acct_1', clerkUserId: 'user_1' };
     const app = await buildApp();
     const res = await app.inject({
       method: 'POST',
@@ -30,7 +40,7 @@ describe('POST /api/paper/auth/sync', () => {
       headers: { authorization: 'Bearer good' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ accountId: 'acct_1' });
+    expect(res.json()).toEqual({ accountId: 'acct_1', clerkUserId: 'user_1' });
     await app.close();
   });
 

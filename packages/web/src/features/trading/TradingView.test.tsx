@@ -3,6 +3,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@components/auth/AccountSessionProvider', () => ({
+  useAccountSession: () => ({ status: 'ready', accountId: 'acct_default', userId: 'user_1' }),
+}));
+
 vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
 vi.mock('./PaperTraderPanel', () => ({ default: () => <div data-testid="paper-panel" /> }));
 vi.mock('@features/funded', () => ({
@@ -56,7 +60,9 @@ describe('TradingView shell', () => {
     useAppStore.setState({ activeContext: { kind: 'challenge', runId: 'run_1' } });
     rerender(wrap(<TradingView />, qc));
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['paper'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['account', 'pa_challenge', 'paper'],
+    });
   });
 
   it('renders the challenge panel for the challenge context', () => {

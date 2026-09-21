@@ -3,55 +3,71 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const clerkState = { signedIn: false };
+const accountSession = {
+  status: 'signed_out' as 'signed_out' | 'loading' | 'ready',
+  userId: null as string | null,
+  accountId: null as string | null,
+  error: null,
+  endSession: vi.fn(async () => {}),
+};
 
-vi.mock('@clerk/clerk-react', () => ({
-  SignedIn: ({ children }: { children: ReactElement }) => (clerkState.signedIn ? children : null),
-  SignedOut: ({ children }: { children: ReactElement }) => (clerkState.signedIn ? null : children),
+vi.mock('@clerk/react', () => ({
   SignInButton: ({ children }: { children?: ReactElement }) => (
     <div data-testid="sign-in-button">{children ?? 'Sign in'}</div>
   ),
-  UserButton: () => <div data-testid="user-button" />,
-  useAuth: () => ({ getToken: async () => 'tok', isSignedIn: clerkState.signedIn }),
-  useUser: () => ({
-    user: clerkState.signedIn ? { id: 'user_1' } : null,
-    isSignedIn: clerkState.signedIn,
-  }),
 }));
 
-vi.mock('@features/trading/api', () => ({
-  syncAuth: vi.fn(async () => ({ accountId: 'acct_1' })),
+vi.mock('@components/auth/AccountSessionProvider', () => ({
+  useAccountSession: () => accountSession,
 }));
-vi.mock('@features/portfolio/api', () => ({
+
+vi.mock('@lib/venue-connections-api', () => ({
   connectVenue: vi.fn(),
   disconnectVenue: vi.fn(),
-  venueStatus: vi.fn(async () => ({ connected: false })),
 }));
 
+import { useAppStore } from '@stores/app-store';
 import AccountChip from './AccountChip';
 
 function wrap(ui: ReactElement) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
 }
 
 describe('AccountChip', () => {
   afterEach(() => {
     cleanup();
-    clerkState.signedIn = false;
+    accountSession.status = 'signed_out';
+    accountSession.accountId = null;
+    accountSession.userId = null;
+    useAppStore.getState().clearAccountSession();
   });
 
-  it('shows a sign-in button when signed out', () => {
-    clerkState.signedIn = false;
+  it('shows sign-in without loading venue configuration when signed out', () => {
     render(wrap(<AccountChip />));
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
     expect(screen.getByTestId('sign-in-button')).toBeDefined();
+    expect(screen.queryByText('Venue API keys')).toBeNull();
   });
 
-  it('shows the Clerk user button when signed in', () => {
-    clerkState.signedIn = true;
+  it('shows account controls only after the account is ready', () => {
+    accountSession.status = 'ready';
+    accountSession.accountId = 'acct_1';
+    accountSession.userId = 'user_1';
+    useAppStore.getState().activateAccountSession('acct_1', ['derive']);
+
     render(wrap(<AccountChip />));
-    fireEvent.click(screen.getByRole('button', { name: /account/i }));
-    expect(screen.getByTestId('user-button')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: /acct acct_1/i }));
+
+    expect(screen.getByText('Venue API keys')).toBeDefined();
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeDefined();
+    expect(screen.getByText('Derive')).toBeDefined();
+  });
+
+  it('does not expose venue controls while an account is loading', () => {
+    accountSession.status = 'loading';
+    render(wrap(<AccountChip />));
+    fireEvent.click(screen.getByRole('button', { name: /account loading/i }));
+    expect(screen.queryByText('Venue API keys')).toBeNull();
   });
 });

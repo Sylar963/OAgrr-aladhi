@@ -8,8 +8,10 @@ import {
   bootstrapPortfolioForAccount,
   getOrCreatePortfolioRuntime,
 } from '../../portfolio-services.js';
+import { derivePositionStore } from '../../derive-position-store.js';
+import { thalexPositionStore } from '../../thalex-position-store.js';
 import { paperTradingStore } from '../../trading-services.js';
-import { getUserByToken } from '../../user-service.js';
+import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 import { portfolioEvents } from './events.js';
 
 const WS_OPEN = 1;
@@ -28,36 +30,37 @@ export async function portfolioWsRoute(app: FastifyInstance) {
     let disposed = false;
     let offRuntime: (() => void) | null = null;
     let offBus: (() => void) | null = null;
+    let releasePrivateConnection: (() => void) | null = null;
 
     socket.on('close', () => {
       disposed = true;
       offRuntime?.();
       offBus?.();
+      releasePrivateConnection?.();
     });
 
     try {
       const url = new URL(req.url, 'http://localhost');
-      const token = url.searchParams.get('token');
+      const ticket = url.searchParams.get('ticket');
 
       let accountId: string;
       if (paperTradingStore.enabled) {
-        if (!token) {
+        if (!ticket) {
           send(socket, {
             type: 'error',
             code: 'unauthorized',
-            message: 'token query parameter required',
+            message: 'ticket query parameter required',
           });
           socket.close(1008, 'Unauthorized');
           return;
         }
-        let user: Awaited<ReturnType<typeof getUserByToken>> = null;
-        try {
-          user = await getUserByToken(token);
-        } catch (err) {
-          req.log.warn({ err: String(err) }, 'portfolio ws: getUserByToken failed');
-        }
+        const user = consumeWebSocketTicket(ticket);
         if (!user) {
-          send(socket, { type: 'error', code: 'unauthorized', message: 'Invalid token' });
+          send(socket, {
+            type: 'error',
+            code: 'unauthorized',
+            message: 'Invalid or expired WebSocket ticket',
+          });
           socket.close(1008, 'Unauthorized');
           return;
         }
@@ -71,6 +74,14 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       const underlyingRaw = url.searchParams.get('underlying')?.trim();
       const underlying = underlyingRaw && underlyingRaw.length > 0 ? underlyingRaw : undefined;
 
+      if (source === 'derive') {
+        derivePositionStore.retain(accountId);
+        releasePrivateConnection = () => derivePositionStore.release(accountId);
+      } else if (source === 'thalex') {
+        thalexPositionStore.retain(accountId);
+        releasePrivateConnection = () => thalexPositionStore.release(accountId);
+      }
+
       req.log.info({ accountId, source, underlying }, 'portfolio ws: connected');
       send(socket, {
         type: 'hello',
@@ -82,7 +93,10 @@ export async function portfolioWsRoute(app: FastifyInstance) {
         await bootstrapPortfolioForAccount(accountId, source, underlying);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        req.log.warn({ err: message, accountId, source, underlying }, 'portfolio ws: bootstrap failed');
+        req.log.warn(
+          { err: message, accountId, source, underlying },
+          'portfolio ws: bootstrap failed',
+        );
         send(socket, { type: 'error', code: 'bootstrap_failed', message });
       }
       if (disposed) return;

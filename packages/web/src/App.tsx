@@ -1,3 +1,4 @@
+import { AccountAccessBoundary } from '@components/auth/AccountSessionProvider';
 import { AppShell } from '@components/layout';
 import { TradfiApp } from '@features/tradfi';
 import { ErrorBoundary, SessionNotice, Spinner } from '@components/ui';
@@ -74,8 +75,16 @@ export default function App() {
           <Suspense fallback={<Spinner size="lg" label={`Loading ${activeLabel}…`} />}>
             {activeTab === 'alpha' && <AlphaView />}
             {activeTab === 'architect' && <ArchitectView />}
-            {activeTab === 'trading' && <TradingView />}
-            {activeTab === 'portfolio' && <PortfolioView />}
+            {activeTab === 'trading' && (
+              <AccountAccessBoundary>
+                <TradingView />
+              </AccountAccessBoundary>
+            )}
+            {activeTab === 'portfolio' && (
+              <AccountAccessBoundary>
+                <PortfolioView />
+              </AccountAccessBoundary>
+            )}
             {activeTab === 'surface' && <SurfaceView />}
             {activeTab === 'flow' && <FlowView />}
             {activeTab === 'analytics' && <AnalyticsView />}

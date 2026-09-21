@@ -1,10 +1,12 @@
 import {
   NoopPaperTradingStore,
   NoopUsersStore,
+  NoopVenueCredentialsStore,
   type PaperAccountRow,
   type PaperTradingStore,
   PostgresPaperTradingStore,
   PostgresUsersStore,
+  PostgresVenueCredentialsStore,
   type UsersStore,
 } from '@oggregator/db';
 import {
@@ -35,6 +37,10 @@ export const paperTradingStore: PaperTradingStore = process.env['DATABASE_URL']
 export const usersStore: UsersStore = process.env['DATABASE_URL']
   ? PostgresUsersStore.fromConnectionString(process.env['DATABASE_URL'])
   : new NoopUsersStore();
+
+export const venueCredentialsStore = process.env['DATABASE_URL']
+  ? PostgresVenueCredentialsStore.fromConnectionString(process.env['DATABASE_URL'])
+  : new NoopVenueCredentialsStore();
 
 const clock = new SystemClock();
 const quoteProvider = new RuntimeQuoteProvider(chainEngines);

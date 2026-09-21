@@ -4,6 +4,7 @@ import {
   type PositionLeg,
   type PositionLegInput,
   VenueIdSchema,
+  type VenueId,
   type VolShockResult,
   type VolShockScenario,
 } from '@oggregator/protocol';
@@ -11,9 +12,9 @@ import { z } from 'zod';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
-async function getHeaders(): Promise<HeadersInit> {
+async function getHeaders(providedToken?: string): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  const token = await getClerkToken();
+  const token = providedToken ?? (await getClerkToken());
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
@@ -31,15 +32,20 @@ async function parseResponse<T>(res: Response, schema: z.ZodType<T>, path: strin
   return parsed.data;
 }
 
-async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: await getHeaders() });
+async function getJson<T>(path: string, schema: z.ZodType<T>, token?: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: await getHeaders(token) });
   return parseResponse(res, schema, path);
 }
 
-async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>,
+  token?: string,
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: await getHeaders(),
+    headers: await getHeaders(token),
     body: JSON.stringify(body),
   });
   return parseResponse(res, schema, path);
@@ -124,31 +130,51 @@ export interface ThalexConnectRequest {
 
 export type VenueConnectRequest = DeriveConnectRequest | ThalexConnectRequest;
 
+export interface VenueConnectionState {
+  venue: VenueId;
+  configured: boolean;
+  connected: boolean;
+}
+
+const VenueConnectionStateSchema: z.ZodType<VenueConnectionState> = z.object({
+  venue: VenueIdSchema,
+  configured: z.boolean(),
+  connected: z.boolean(),
+}) as z.ZodType<VenueConnectionState>;
+
 export async function connectVenue(
   venue: string,
   body: VenueConnectRequest,
-): Promise<{ venue: string; connected: boolean }> {
-  return postJson(
-    `/portfolio/venue-credentials/${venue}`,
-    body,
-    z.object({ venue: z.string(), connected: z.boolean() }),
-  );
+  token?: string,
+): Promise<VenueConnectionState> {
+  return postJson(`/portfolio/venue-credentials/${venue}`, body, VenueConnectionStateSchema, token);
 }
 
-export async function disconnectVenue(
-  venue: string,
-): Promise<{ venue: string; connected: boolean }> {
-  return deleteRequest(
-    `/portfolio/venue-credentials/${venue}`,
-    z.object({ venue: z.string(), connected: z.boolean() }),
-  );
+export async function disconnectVenue(venue: string): Promise<VenueConnectionState> {
+  return deleteRequest(`/portfolio/venue-credentials/${venue}`, VenueConnectionStateSchema);
 }
 
-export async function venueStatus(venue: string): Promise<{ venue: string; connected: boolean }> {
-  return getJson(
-    `/portfolio/venue-credentials/${venue}/status`,
-    z.object({ venue: z.string(), connected: z.boolean() }),
+export async function venueStatus(venue: string): Promise<VenueConnectionState> {
+  return getJson(`/portfolio/venue-credentials/${venue}/status`, VenueConnectionStateSchema);
+}
+
+export async function listVenueConnections(token?: string): Promise<VenueConnectionState[]> {
+  const result = await getJson(
+    '/portfolio/venue-credentials',
+    z.object({ venues: z.array(VenueConnectionStateSchema) }),
+    token,
   );
+  return result.venues;
+}
+
+export async function restoreVenueConnections(token?: string): Promise<VenueConnectionState[]> {
+  const result = await postJson(
+    '/portfolio/venue-credentials/reconnect',
+    {},
+    z.object({ venues: z.array(VenueConnectionStateSchema) }),
+    token,
+  );
+  return result.venues;
 }
 
 const PortfolioTotalsSchema = z.object({

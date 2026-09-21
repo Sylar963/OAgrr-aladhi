@@ -1,3 +1,4 @@
+import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
 
@@ -16,14 +17,14 @@ const IDLE_WARNING_MS = 9 * 60 * 1000;
  */
 export function useSessionTimeout() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
-  const clearAccount = useAppStore((s) => s.clearAccount);
+  const { endSession } = useAccountSession();
   const extendToken = useAppStore((s) => s.sessionExtendToken);
 
   // Refs avoid re-running the effect on every store change.
   const setSessionNoticeRef = useRef(setSessionNotice);
-  const clearAccountRef = useRef(clearAccount);
+  const endSessionRef = useRef(endSession);
   setSessionNoticeRef.current = setSessionNotice;
-  clearAccountRef.current = clearAccount;
+  endSessionRef.current = endSession;
 
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,7 +50,7 @@ export function useSessionTimeout() {
 
     const fireLogout = () => {
       logoutTimerRef.current = null;
-      clearAccountRef.current();
+      void endSessionRef.current();
       setSessionNoticeRef.current({ kind: 'idle-logout' });
     };
 

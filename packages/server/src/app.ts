@@ -30,7 +30,8 @@ import {
   shortStraddleSnapshotStore,
   tradeStore,
 } from './services.js';
-import { paperTradingStore } from './trading-services.js';
+import { paperTradingStore, venueCredentialsStore } from './trading-services.js';
+import { VenueCredentialCipher } from './venue-credential-cipher.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
@@ -84,7 +85,26 @@ export function startShutdown() {
 
 const isDev = process.env['NODE_ENV'] !== 'production';
 
+export function validateProductionAuthConfiguration(env: NodeJS.ProcessEnv): void {
+  if (env['NODE_ENV'] !== 'production') return;
+  const missing = ['DATABASE_URL', 'CLERK_JWKS_URL'].filter((key) => !env[key]);
+  const privateAdaptersEnabled =
+    env['PRIVATE_VENUE_ADAPTERS_ENABLED'] === '1' ||
+    env['PRIVATE_VENUE_ADAPTERS_ENABLED'] === 'true';
+  const encryptionKey = env['VENUE_CREDENTIALS_ENCRYPTION_KEY'];
+  if (privateAdaptersEnabled && !encryptionKey) {
+    missing.push('VENUE_CREDENTIALS_ENCRYPTION_KEY');
+  }
+  if (privateAdaptersEnabled && encryptionKey) {
+    new VenueCredentialCipher(encryptionKey);
+  }
+  if (missing.length > 0) {
+    throw new Error(`Missing production authentication configuration: ${missing.join(', ')}`);
+  }
+}
+
 export async function buildApp(): Promise<FastifyInstance> {
+  validateProductionAuthConfiguration(process.env);
   shuttingDown = false;
   ready = false;
 
@@ -178,6 +198,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
     await tradeStore.dispose();
+    await venueCredentialsStore.dispose();
     await paperTradingStore.dispose();
     disposeRuntimeMetrics();
   });

@@ -105,6 +105,7 @@ export class JsonRpcWsClient {
       rateLimitCooldownMs?: number;
       maxCooldownTotalMs?: number;
       handshakeTimeoutMs?: number;
+      onBinaryMessage?: (raw: WebSocket.RawData) => boolean;
       onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
       onResubscribe?: (channels: string[]) => void;
     } = {},
@@ -170,9 +171,19 @@ export class JsonRpcWsClient {
         resolveConnect();
       });
 
-      socket.on('message', (raw: WebSocket.RawData) => {
+      socket.on('message', (raw: WebSocket.RawData, isBinary: boolean) => {
         if (this.ws !== socket) return;
         this.lastActivityAt = Date.now();
+        if (isBinary) {
+          try {
+            if (this.options.onBinaryMessage?.(raw) === true) {
+              this.lastSubscriptionAt = this.lastActivityAt;
+            }
+          } catch (e: unknown) {
+            this.log.warn({ err: String(e) }, 'binary WS frame handler failed');
+          }
+          return;
+        }
 
         try {
           const msg = JSON.parse(raw.toString()) as JsonRpcMessage;
@@ -222,7 +233,8 @@ export class JsonRpcWsClient {
         // that uptime would reset the flap streak and re-arm the fast reconnect loop —
         // the death-spiral. Requiring recent data makes a long-but-dead session escalate.
         const deliveredDataRecently =
-          this.lastSubscriptionAt > 0 && Date.now() - this.lastSubscriptionAt < this.stableSessionMs();
+          this.lastSubscriptionAt > 0 &&
+          Date.now() - this.lastSubscriptionAt < this.stableSessionMs();
         if (uptimeMs != null && uptimeMs >= this.stableSessionMs() && deliveredDataRecently) {
           this.shortSessionStreak = 0;
         } else {

@@ -7,6 +7,7 @@ import { parseParadexSummary } from './codec.js';
 import { deriveParadexHealth } from './health.js';
 import { PARADEX_SUMMARY_CHANNEL } from './planner.js';
 import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaryAll } from './rest.js';
+import { decodeParadexMarketSummarySbe } from './sbe.js';
 import { buildParadexQuote, paradexInstrumentDetails } from './state.js';
 
 const log = feedLogger('paradex');
@@ -23,10 +24,8 @@ const HEALTH_CHECK_INTERVAL_MS = 60_000;
  * client's `{ channels: [...] }` — so we (re)subscribe the single firehose BY HAND
  * in the `onStatusChange('connected')` callback, never via `rpc.subscribe()`.
  *
- * Pushes arrive on channel `markets_summary` (bare) keyed by `data.symbol`; the
- * codec routes on `channel.startsWith('markets_summary')` so it is robust whether
- * the venue ever switches to `markets_summary.{symbol}`. USDC-settled, all linear,
- * IV already in fraction form.
+ * Control responses remain JSON while market-summary updates use Paradex SBE
+ * schema 1:1, template 4. USDC-settled, all linear, IV already in fraction form.
  */
 export class ParadexWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'paradex';
@@ -42,6 +41,12 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
       requestTimeoutMs: 30_000,
       subscribeMethod: 'subscribe',
       unsubscribeMethod: 'unsubscribe',
+      onBinaryMessage: (raw) => {
+        const summary = decodeParadexMarketSummarySbe(raw);
+        if (summary == null) return false;
+        this.handleSummary(summary);
+        return true;
+      },
       onStatusChange: (state) => {
         this.emitStatus(
           state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
@@ -87,8 +92,6 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
   // ─── instrument loading ───────────────────────────────────────
 
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
-    await this.rpc.connect();
-
     const markets = await fetchParadexMarkets();
     const instruments: CachedInstrument[] = [];
     for (const market of markets) {
@@ -99,6 +102,7 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
 
     const optionSymbols = new Set(instruments.map((i) => i.exchangeSymbol));
     await this.seedQuotes(optionSymbols);
+    this.connectInBackground();
 
     this.refreshTimer = setInterval(
       () => void this.refreshInstruments(),
@@ -161,7 +165,7 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
   // ─── WebSocket subscriptions ──────────────────────────────────
 
   protected async subscribeChain(): Promise<void> {
-    await this.rpc.connect();
+    this.connectInBackground();
   }
 
   protected async unsubscribeAll(): Promise<void> {
@@ -180,6 +184,11 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
       (v) => this.positiveOrNull(v),
     );
     this.emitQuoteUpdate(summary.symbol, quote);
+  }
+  private connectInBackground(): void {
+    void this.rpc.connect().catch((err: unknown) => {
+      log.warn({ err: String(err) }, 'paradex websocket unavailable; using REST seed');
+    });
   }
 
   private async refreshInstruments(): Promise<void> {
@@ -204,6 +213,11 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
     const serverTime = await fetchParadexServerTime();
     const health = deriveParadexHealth({ serverTime, wsConnected: this.rpc.isConnected });
     this.emitStatus(health.status, health.message);
+    if (!this.rpc.isConnected) {
+      await this.seedQuotes(
+        new Set(this.instruments.map((instrument) => instrument.exchangeSymbol)),
+      );
+    }
   }
 
   override async dispose(): Promise<void> {

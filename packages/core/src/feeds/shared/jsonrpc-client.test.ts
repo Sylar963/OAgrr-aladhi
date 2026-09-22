@@ -214,6 +214,29 @@ describe('JsonRpcWsClient', () => {
     vi.useRealTimers();
   });
 
+  it('routes binary frames to the venue handler and records subscription activity', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    FakeWebSocket.instances = [];
+    const onBinaryMessage = vi.fn(() => true);
+    const client = new JsonRpcWsClient('wss://example/ws', 'test', { onBinaryMessage });
+    const internals = client as unknown as JsonRpcWsClientInternals;
+
+    const connected = client.connect();
+    const socket = FakeWebSocket.instances.at(-1)!;
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit('open');
+    await connected;
+
+    const frame = Buffer.from([1, 2, 3]);
+    socket.emit('message', frame, true);
+
+    expect(onBinaryMessage).toHaveBeenCalledWith(frame);
+    expect(internals.lastSubscriptionAt).toBe(1_000_000);
+    await client.disconnect();
+    vi.useRealTimers();
+  });
+
   it('caps stacked rate-limit cooldowns at the configured ceiling', () => {
     vi.useFakeTimers();
     // Use a non-zero base time so the implementation's first-hit sentinel

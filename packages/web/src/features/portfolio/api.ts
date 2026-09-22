@@ -3,7 +3,7 @@ import {
   type PortfolioMetrics,
   type PositionLeg,
   type PositionLegInput,
-  VenueIdSchema,
+  VENUE_IDS,
   type VenueId,
   type VolShockResult,
   type VolShockScenario,
@@ -59,6 +59,8 @@ async function deleteRequest<T>(path: string, schema: z.ZodType<T>): Promise<T> 
   return parseResponse(res, schema, path);
 }
 
+const WebVenueIdSchema = z.enum(VENUE_IDS);
+
 const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
   legId: z.string().min(1),
   underlying: z.string().min(1),
@@ -71,7 +73,7 @@ const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
   entryIvIsModel: z.boolean().optional(),
   realizedPnlUsd: z.number().default(0),
   entryTs: z.number(),
-  venueHint: VenueIdSchema.nullable(),
+  venueHint: WebVenueIdSchema.nullable(),
   source: z.enum([
     'manual',
     'paper',
@@ -137,7 +139,7 @@ export interface VenueConnectionState {
 }
 
 const VenueConnectionStateSchema: z.ZodType<VenueConnectionState> = z.object({
-  venue: VenueIdSchema,
+  venue: WebVenueIdSchema,
   configured: z.boolean(),
   connected: z.boolean(),
 }) as z.ZodType<VenueConnectionState>;

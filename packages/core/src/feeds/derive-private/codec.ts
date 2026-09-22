@@ -1,9 +1,9 @@
-import type { PositionLeg } from '@oggregator/protocol';
+import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
-import type { DerivePosition } from './types.js';
+import type { DerivePosition, DeriveTrade } from './types.js';
 
-function parseInstrumentName(name: string): {
+export function parseDeriveOptionInstrument(name: string): {
   underlying: string;
   expiry: string;
   strike: number;
@@ -27,12 +27,15 @@ function parseInstrumentName(name: string): {
 
 export function derivePositionToLeg(pos: DerivePosition): PositionLeg | null {
   if (pos.instrument_type !== 'option') return null;
-  const parsed = parseInstrumentName(pos.instrument_name);
+  const parsed = parseDeriveOptionInstrument(pos.instrument_name);
   if (parsed == null) return null;
   const size = Number(pos.amount);
   if (!Number.isFinite(size) || size === 0) return null;
   const entryPriceUsd = Number(pos.average_price);
   if (!Number.isFinite(entryPriceUsd) || entryPriceUsd <= 0) return null;
+  const realizedPnlUsd = Number(pos.realized_pnl ?? 0);
+  if (!Number.isFinite(realizedPnlUsd)) return null;
+
 
   const legId = naturalKeyOf({
     underlying: parsed.underlying,
@@ -50,7 +53,7 @@ export function derivePositionToLeg(pos: DerivePosition): PositionLeg | null {
     size,
     entryPriceUsd,
     entryIv: null,
-    realizedPnlUsd: 0,
+    realizedPnlUsd,
     entryTs: pos.creation_timestamp,
     venueHint: 'derive',
     source: 'derive',
@@ -64,4 +67,44 @@ export function derivePositionsToLegs(positions: DerivePosition[]): PositionLeg[
     if (leg != null) legs.push(leg);
   }
   return legs;
+}
+
+export function deriveTradeToPortfolioTrade(
+  trade: DeriveTrade,
+): ExchangePortfolioTrade | null {
+  const parsed = parseDeriveOptionInstrument(trade.instrument_name);
+  if (parsed == null) return null;
+  const amount = Math.abs(Number(trade.trade_amount));
+  const priceUsd = Number(trade.trade_price);
+  const feeUsd = trade.trade_fee == null ? null : Number(trade.trade_fee);
+  const realizedPnlUsd = trade.realized_pnl == null ? null : Number(trade.realized_pnl);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!Number.isFinite(priceUsd) || priceUsd < 0) return null;
+  if (feeUsd != null && !Number.isFinite(feeUsd)) return null;
+  if (realizedPnlUsd != null && !Number.isFinite(realizedPnlUsd)) return null;
+  const groupReference = trade.quote_id ?? trade.rfq_id ?? null;
+  return {
+    venue: 'derive',
+    tradeId: trade.trade_id,
+    orderId: trade.order_id ?? null,
+    groupId: groupReference == null ? null : `derive:${groupReference}`,
+    instrumentName: trade.instrument_name,
+    ...parsed,
+    direction: trade.direction,
+    amount,
+    priceUsd,
+    feeUsd,
+    realizedPnlUsd,
+    liquidityRole: trade.liquidity_role ?? null,
+    timestampMs: trade.timestamp,
+  };
+}
+
+export function deriveTradesToPortfolioTrades(
+  trades: DeriveTrade[],
+): ExchangePortfolioTrade[] {
+  return trades.flatMap((trade) => {
+    const normalized = deriveTradeToPortfolioTrade(trade);
+    return normalized == null ? [] : [normalized];
+  });
 }

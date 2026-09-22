@@ -1,4 +1,12 @@
-import type { PositionLeg, StrategyGroup, StrategyKind } from '@oggregator/protocol';
+import type {
+  PortfolioTotals,
+  PositionLeg,
+  StrategyGroup,
+  StrategyKind,
+} from '@oggregator/protocol';
+
+import { computeTotals } from './aggregator.js';
+import type { MarkContext } from './types.js';
 
 const SIZE_EPS = 1e-6;
 
@@ -15,6 +23,30 @@ function groupByUnderlyingExpiry(legs: PositionLeg[]): Map<string, PositionLeg[]
 
 function netEntryPremium(legs: PositionLeg[]): number {
   return legs.reduce((acc, l) => acc + l.entryPriceUsd * l.size, 0);
+}
+
+function grossPremiums(legs: PositionLeg[]): { grossDebitUsd: number; grossCreditUsd: number } {
+  return legs.reduce(
+    (totals, leg) => {
+      const premium = leg.entryPriceUsd * Math.abs(leg.size);
+      if (leg.size > 0) totals.grossDebitUsd += premium;
+      else totals.grossCreditUsd += premium;
+      return totals;
+    },
+    { grossDebitUsd: 0, grossCreditUsd: 0 },
+  );
+}
+
+function emptyTotals(): PortfolioTotals {
+  return {
+    netDeltaUsd: 0,
+    netGammaUsd: 0,
+    netVegaUsd: 0,
+    netThetaUsd: 0,
+    netVannaUsd: 0,
+    netVolgaUsd: 0,
+    unrealizedPnlUsd: 0,
+  };
 }
 
 function debitOrCredit(netPremium: number): 'debit' | 'credit' | 'flat' {
@@ -133,9 +165,15 @@ function straddleStranglePayoff(legs: PositionLeg[]): {
 function buildGroup(
   kind: StrategyKind,
   legs: PositionLeg[],
+  marksByLeg: ReadonlyMap<string, MarkContext>,
 ): StrategyGroup {
   const first = legs[0]!;
   const net = netEntryPremium(legs);
+  const premiums = grossPremiums(legs);
+  const marked = legs.flatMap((leg) => {
+    const mark = marksByLeg.get(leg.legId);
+    return mark == null ? [] : [{ leg, mark }];
+  });
   const base = {
     groupId: groupIdOf(kind, legs),
     kind,
@@ -144,9 +182,12 @@ function buildGroup(
     legIds: legs.map((l) => l.legId),
     netEntryPremiumUsd: net,
     debitOrCredit: debitOrCredit(net),
+    ...premiums,
+    totals: marked.length === legs.length ? computeTotals(marked) : emptyTotals(),
   } satisfies Pick<
     StrategyGroup,
-    'groupId' | 'kind' | 'underlying' | 'expiry' | 'legIds' | 'netEntryPremiumUsd' | 'debitOrCredit'
+    'groupId' | 'kind' | 'underlying' | 'expiry' | 'legIds' | 'netEntryPremiumUsd' |
+    'debitOrCredit' | 'grossDebitUsd' | 'grossCreditUsd' | 'totals'
   >;
 
   if (kind === 'call_spread' || kind === 'put_spread') {
@@ -175,7 +216,10 @@ function buildGroup(
   };
 }
 
-export function detectStrategyGroups(legs: PositionLeg[]): StrategyGroup[] {
+export function detectStrategyGroups(
+  legs: PositionLeg[],
+  marksByLeg: ReadonlyMap<string, MarkContext> = new Map(),
+): StrategyGroup[] {
   const result: StrategyGroup[] = [];
   for (const bucket of groupByUnderlyingExpiry(legs).values()) {
     const used = new Set<string>();
@@ -194,7 +238,7 @@ export function detectStrategyGroups(legs: PositionLeg[]): StrategyGroup[] {
         if (used.has(b.legId)) continue;
         const trial = classifyPair(a, b);
         if (trial == null) continue;
-        result.push(buildGroup(trial.kind, trial.legs));
+        result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
         used.add(a.legId);
         used.add(b.legId);
         break;
@@ -202,7 +246,7 @@ export function detectStrategyGroups(legs: PositionLeg[]): StrategyGroup[] {
     }
     for (const leg of bucket) {
       if (used.has(leg.legId)) continue;
-      result.push(buildGroup('naked', [leg]));
+      result.push(buildGroup('naked', [leg], marksByLeg));
     }
   }
   return result;

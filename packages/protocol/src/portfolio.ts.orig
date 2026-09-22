@@ -52,42 +52,6 @@ export const PositionLegSchema = z.object({
 });
 export type PositionLeg = z.infer<typeof PositionLegSchema>;
 
-export const ExchangePortfolioVenueSchema = z.enum(['derive', 'thalex']);
-export type ExchangePortfolioVenue = z.infer<typeof ExchangePortfolioVenueSchema>;
-
-export const ExchangePortfolioTradeSchema = z.object({
-  venue: ExchangePortfolioVenueSchema,
-  tradeId: z.string().min(1),
-  orderId: z.string().nullable(),
-  groupId: z.string().nullable(),
-  instrumentName: z.string().min(1),
-  underlying: z.string().min(1),
-  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  strike: z.number().positive(),
-  optionRight: z.enum(['call', 'put']),
-  direction: z.enum(['buy', 'sell']),
-  amount: z.number().positive(),
-  priceUsd: z.number().nonnegative(),
-  feeUsd: z.number().nullable(),
-  realizedPnlUsd: z.number().nullable(),
-  liquidityRole: z.enum(['maker', 'taker']).nullable(),
-  timestampMs: z.number().int().nonnegative(),
-});
-export type ExchangePortfolioTrade = z.infer<typeof ExchangePortfolioTradeSchema>;
-
-export const PortfolioAccountingSchema = z.object({
-  openGrossDebitUsd: z.number().nonnegative(),
-  openGrossCreditUsd: z.number().nonnegative(),
-  openNetPremiumUsd: z.number(),
-  knownFeesUsd: z.number().nullable(),
-  realizedPnlUsd: z.number(),
-  persistedTradeCount: z.number().int().nonnegative().nullable(),
-  historyFromMs: z.number().int().nonnegative().nullable(),
-  lastSyncedAtMs: z.number().int().nonnegative().nullable(),
-  persistence: z.enum(['venue_history', 'position_snapshot', 'unavailable']),
-});
-export type PortfolioAccounting = z.infer<typeof PortfolioAccountingSchema>;
-
 export const PositionLegInputSchema = PositionLegSchema.omit({
   legId: true,
   entryTs: true,
@@ -257,9 +221,6 @@ export const StrategyGroupSchema = z.object({
   maxProfitUsd: z.number().nullable(),
   maxLossUsd: z.number().nullable(),
   breakEvenSpotsUsd: z.array(z.number()),
-  grossDebitUsd: z.number().nonnegative(),
-  grossCreditUsd: z.number().nonnegative(),
-  totals: PortfolioTotalsSchema,
 });
 export type StrategyGroup = z.infer<typeof StrategyGroupSchema>;
 
@@ -275,7 +236,6 @@ export const PortfolioMetricsSchema = z.object({
   shockGrid: z.array(z.array(ShockGridCellSchema)),
   shockGridMeta: ShockGridMetaSchema,
   strategies: z.array(StrategyGroupSchema),
-  accounting: PortfolioAccountingSchema,
 });
 export type PortfolioMetrics = z.infer<typeof PortfolioMetricsSchema>;
 

@@ -1,4 +1,4 @@
-import type { PositionLeg } from '@oggregator/protocol';
+import type { PortfolioAccounting, PositionLeg } from '@oggregator/protocol';
 
 export type { PositionLeg } from '@oggregator/protocol';
 
@@ -33,6 +33,7 @@ export interface PositionStore {
   upsert(accountId: string, leg: PositionLeg): PositionLeg;
   remove(accountId: string, legId: string): boolean;
   subscribe(listener: PositionStoreListener): () => void;
+  getAccounting?(accountId: string, underlying?: string): PortfolioAccounting | null;
 }
 
 export interface PortfolioPersistence {

@@ -1,8 +1,8 @@
-import type { PositionLeg } from '@oggregator/protocol';
+import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import { THALEX_OPTION_SYMBOL_RE } from '../thalex/types.js';
-import type { ThalexPortfolioEntry } from './types.js';
+import type { ThalexPortfolioEntry, ThalexTrade } from './types.js';
 
 const MONTH_TO_NUM: Record<string, string> = {
   JAN: '01',
@@ -19,7 +19,7 @@ const MONTH_TO_NUM: Record<string, string> = {
   DEC: '12',
 };
 
-function parseInstrumentName(name: string): {
+export function parseThalexOptionInstrument(name: string): {
   underlying: string;
   expiry: string;
   strike: number;
@@ -49,7 +49,7 @@ export function thalexPortfolioEntryToLeg(
   entry: ThalexPortfolioEntry,
   nowMs: number = Date.now(),
 ): PositionLeg | null {
-  const parsed = parseInstrumentName(entry.instrument_name);
+  const parsed = parseThalexOptionInstrument(entry.instrument_name);
   if (parsed == null) return null;
   const size = entry.position;
   if (!Number.isFinite(size) || size === 0) return null;
@@ -89,4 +89,43 @@ export function thalexPortfolioToLegs(
     if (leg != null) legs.push(leg);
   }
   return legs;
+}
+
+export function thalexTradeToPortfolioTrade(
+  trade: ThalexTrade,
+): ExchangePortfolioTrade | null {
+  const parsed = parseThalexOptionInstrument(trade.instrument_name);
+  if (parsed == null) return null;
+  if (!Number.isFinite(trade.amount) || trade.amount <= 0) return null;
+  if (!Number.isFinite(trade.price) || trade.price < 0) return null;
+  const timestampMs = Math.round(trade.time * 1_000);
+  if (!Number.isFinite(timestampMs) || timestampMs < 0) return null;
+  const orderId = trade.order_id ?? null;
+  const grouped =
+    orderId != null &&
+    (trade.trade_type === 'combo' || trade.trade_type === 'rfq' || (trade.leg_index ?? 0) > 0);
+  return {
+    venue: 'thalex',
+    tradeId: trade.trade_id,
+    orderId,
+    groupId: grouped ? `thalex:${orderId}` : null,
+    instrumentName: trade.instrument_name,
+    ...parsed,
+    direction: trade.direction,
+    amount: trade.amount,
+    priceUsd: trade.price,
+    feeUsd: trade.fee ?? null,
+    realizedPnlUsd: trade.position_pnl ?? null,
+    liquidityRole: trade.maker_taker ?? null,
+    timestampMs,
+  };
+}
+
+export function thalexTradesToPortfolioTrades(
+  trades: ThalexTrade[],
+): ExchangePortfolioTrade[] {
+  return trades.flatMap((trade) => {
+    const normalized = thalexTradeToPortfolioTrade(trade);
+    return normalized == null ? [] : [normalized];
+  });
 }

@@ -58,6 +58,11 @@ function fmtVolPoints(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)} vol`;
 }
+function fmtUsd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
 
 function exposureSide(value: number | null | undefined, positive: string, negative: string): string {
   if (value == null || Math.abs(value) < 1e-9) return 'Flat';
@@ -107,6 +112,60 @@ export default function RiskCockpit({ metrics, positions }: Props) {
           </div>
         </div>
       </div>
+      <div className={styles.accounting} aria-label="Premium and venue ledger">
+        <div className={styles.accountingGrid}>
+          <article className={styles.accountingCell}>
+            <span>Premium paid</span>
+            <strong>{fmtUsd(metrics?.accounting.openGrossDebitUsd)}</strong>
+            <small>current long legs</small>
+          </article>
+          <article className={styles.accountingCell}>
+            <span>Premium received</span>
+            <strong>{fmtUsd(metrics?.accounting.openGrossCreditUsd)}</strong>
+            <small>current short legs</small>
+          </article>
+          <article className={styles.accountingCell}>
+            <span>Net open premium</span>
+            <strong
+              data-sign={(metrics?.accounting.openNetPremiumUsd ?? 0) > 0 ? 'negative' : 'positive'}
+            >
+              {fmtUsd(metrics?.accounting.openNetPremiumUsd)}
+            </strong>
+            <small>
+              {(metrics?.accounting.openNetPremiumUsd ?? 0) > 0 ? 'net debit paid' : 'net credit received'}
+            </small>
+          </article>
+          <article className={styles.accountingCell}>
+            <span>Known fees</span>
+            <strong>{fmtUsd(metrics?.accounting.knownFeesUsd)}</strong>
+            <small>persisted venue fills</small>
+          </article>
+          <article className={styles.accountingCell}>
+            <span>Realized P&amp;L</span>
+            <strong
+              data-sign={(metrics?.accounting.realizedPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}
+            >
+              {fmtUsdSigned(metrics?.accounting.realizedPnlUsd)}
+            </strong>
+            <small>venue-reported</small>
+          </article>
+        </div>
+        <div className={styles.ledgerStatus} data-state={metrics?.accounting.persistence ?? 'unavailable'}>
+          <span>
+            {metrics?.accounting.persistence === 'venue_history'
+              ? `${metrics.accounting.persistedTradeCount ?? 0} venue fills persisted`
+              : metrics?.accounting.persistence === 'position_snapshot'
+                ? 'Position snapshot persisted; venue fill history pending'
+                : 'Venue fill persistence unavailable'}
+          </span>
+          <span>
+            {metrics?.accounting.lastSyncedAtMs == null
+              ? 'Not synced'
+              : `Synced ${new Date(metrics.accounting.lastSyncedAtMs).toLocaleString()}`}
+          </span>
+        </div>
+      </div>
+
 
       <div className={styles.exposureGrid}>
         <article className={styles.exposureCard} data-accent="delta">

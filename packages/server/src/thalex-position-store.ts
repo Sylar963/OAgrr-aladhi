@@ -1,10 +1,14 @@
 import {
   ThalexPrivateClient,
   type ThalexPrivateCreds,
+  logger,
   type PositionLeg,
   type PositionStore,
   type PositionStoreListener,
 } from '@oggregator/core';
+import type { PortfolioAccounting } from '@oggregator/protocol';
+import { exchangePortfolioLedgerStore } from './trading-services.js';
+import { VenuePositionPersistence } from './venue-position-persistence.js';
 
 export interface ThalexPositionStoreCreds extends ThalexPrivateCreds {
   accountId: string;
@@ -15,8 +19,11 @@ export class ThalexPositionStore implements PositionStore {
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, ThalexPrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
+  private readonly tradeUnsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly retainCounts = new Map<string, number>();
+  private readonly persistence = new VenuePositionPersistence('thalex', exchangePortfolioLedgerStore);
+
 
   list(accountId: string): PositionLeg[] {
     const legs = this.cache.get(accountId);
@@ -41,18 +48,41 @@ export class ThalexPositionStore implements PositionStore {
       this.listeners.delete(listener);
     };
   }
+  getAccounting(accountId: string, underlying?: string): PortfolioAccounting {
+    return this.persistence.getAccounting(accountId, this.list(accountId), underlying);
+  }
+
 
   async connect(creds: ThalexPositionStoreCreds): Promise<void> {
     await this.disconnect(creds.accountId);
+    try {
+      const persisted = await this.persistence.hydrate(creds.accountId);
+      this.applyLegs(creds.accountId, persisted);
+    } catch (error) {
+      logger.warn({ error: String(error), venue: 'thalex' }, 'portfolio snapshot hydration failed');
+    }
+
 
     const client = new ThalexPrivateClient(creds);
     const unsubscribe = client.subscribe((legs) => {
       this.applyLegs(creds.accountId, legs);
+      void this.persistence.persistPositions(creds.accountId, legs).catch((error) => {
+        logger.error({ error: String(error), venue: 'thalex' }, 'portfolio snapshot persistence failed');
+      });
     });
     this.clients.set(creds.accountId, client);
+    const unsubscribeTrades = client.subscribeTrades((trades) => {
+      void this.persistence.persistTrades(creds.accountId, trades).then(
+        () => this.broadcast(creds.accountId, []),
+        (error) => {
+          logger.error({ error: String(error), venue: 'thalex' }, 'portfolio trade persistence failed');
+        },
+      );
+    });
     this.unsubscribes.set(creds.accountId, unsubscribe);
     await client.start();
     this.scheduleDisconnect(creds.accountId);
+    this.tradeUnsubscribes.set(creds.accountId, unsubscribeTrades);
   }
 
   async disconnect(accountId: string): Promise<void> {
@@ -67,11 +97,14 @@ export class ThalexPositionStore implements PositionStore {
     }
     const client = this.clients.get(accountId);
     if (client != null) {
+    const tradeUnsubscribe = this.tradeUnsubscribes.get(accountId);
+    if (tradeUnsubscribe != null) {
+      tradeUnsubscribe();
+      this.tradeUnsubscribes.delete(accountId);
+    }
       this.clients.delete(accountId);
       await client.dispose();
     }
-    this.cache.delete(accountId);
-    this.broadcast(accountId, []);
   }
 
   retain(accountId: string): void {

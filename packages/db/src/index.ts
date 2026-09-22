@@ -2,6 +2,17 @@ export type { DealerBookStore, PersistedDealerPosition } from './dealer-book-sto
 export { NoopDealerBookStore, PostgresDealerBookStore } from './dealer-book-store.js';
 export { DeferredTradeStore } from './deferred-trade-store.js';
 export type {
+  ExchangePortfolioLedgerStore,
+  ExchangePortfolioVenue,
+  ExchangeTradeSummary,
+  PersistedExchangePosition,
+  PersistedExchangeTrade,
+} from './exchange-portfolio-ledger-store.js';
+export {
+  NoopExchangePortfolioLedgerStore,
+  PostgresExchangePortfolioLedgerStore,
+} from './exchange-portfolio-ledger-store.js';
+export type {
   FundedRouteType,
   FundedRunEventRow,
   FundedRunRow,

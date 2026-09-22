@@ -1,21 +1,24 @@
 import type WebSocket from 'ws';
-import type { PositionLeg } from '@oggregator/protocol';
+import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
-import { thalexPortfolioToLegs } from './codec.js';
+import { thalexPortfolioToLegs, thalexTradesToPortfolioTrades } from './codec.js';
 import {
   ThalexLoginResultSchema,
   ThalexPortfolioEntrySchema,
   ThalexPortfolioNotificationSchema,
+  ThalexTradeHistoryNotificationSchema,
+  ThalexTradeHistoryResultSchema,
   ThalexSubscribedChannelsSchema,
   type ThalexPortfolioEntry,
+  type ThalexTrade,
 } from './types.js';
 
 const PROD_WS_URL = 'wss://thalex.com/ws/api/v2';
 const TEST_WS_URL = 'wss://testnet.thalex.com/ws/api/v2';
-const PRIVATE_CHANNELS = ['account.portfolio', 'account.summary'] as const;
+const PRIVATE_CHANNELS = ['account.portfolio', 'account.summary', 'account.trade_history'] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function assertSubscribedChannels(result: unknown, channels: readonly string[]): string[] {
@@ -45,6 +48,7 @@ export interface ThalexPrivateCreds {
 
 export type ThalexPositionsListener = (legs: PositionLeg[]) => void;
 
+export type ThalexTradesListener = (trades: ExchangePortfolioTrade[]) => void;
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -63,6 +67,8 @@ export class ThalexPrivateClient {
   private readonly client: TopicWsClient;
   private readonly listeners = new Set<ThalexPositionsListener>();
   private readonly pending = new Map<number, PendingRequest>();
+  private readonly tradeListeners = new Set<ThalexTradesListener>();
+  private latestTrades: ExchangePortfolioTrade[] = [];
   private latestLegs: PositionLeg[] = [];
   private latestEntries: ThalexPortfolioEntry[] = [];
   private nextId = 1;
@@ -97,6 +103,7 @@ export class ThalexPrivateClient {
     await this.login();
     const subscribed = await this.privateSubscribe([...PRIVATE_CHANNELS]);
     await this.refreshPortfolio();
+    await this.refreshTradeHistory();
     this.log.info({ channels: subscribed }, 'thalex private subscribed');
   }
 
@@ -112,6 +119,18 @@ export class ThalexPrivateClient {
     };
   }
 
+  subscribeTrades(listener: ThalexTradesListener): () => void {
+    this.tradeListeners.add(listener);
+    if (this.latestTrades.length > 0) {
+      try {
+        listener(this.latestTrades);
+      } catch {}
+    }
+    return () => {
+      this.tradeListeners.delete(listener);
+    };
+  }
+
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
   }
@@ -119,6 +138,7 @@ export class ThalexPrivateClient {
   async dispose(): Promise<void> {
     this.disposed = true;
     this.listeners.clear();
+    this.tradeListeners.clear();
     this.rejectAllPending('disposed');
     await this.client.disconnect();
   }
@@ -157,6 +177,34 @@ export class ThalexPrivateClient {
     );
   }
 
+
+  private async refreshTradeHistory(): Promise<void> {
+    const trades: ThalexTrade[] = [];
+    let bookmark: string | undefined;
+    for (let page = 0; page < 100; page += 1) {
+      const result = await this.call('private/trade_history', {
+        limit: 1_000,
+        sort: 'descending',
+        ...(bookmark == null ? {} : { bookmark }),
+      });
+      const parsed = ThalexTradeHistoryResultSchema.safeParse(result);
+      if (!parsed.success) {
+        throw new Error(
+          `[thalex-private] private/trade_history returned an invalid payload: ${parsed.error.message}`,
+        );
+      }
+      trades.push(...parsed.data.trades);
+      bookmark = parsed.data.bookmark ?? undefined;
+      if (bookmark == null) break;
+    }
+    const normalized = thalexTradesToPortfolioTrades(trades);
+    this.latestTrades = normalized;
+    this.notifyTrades(normalized);
+    this.log.info(
+      { trades: trades.length, optionTrades: normalized.length },
+      'thalex private trade history bootstrap ok',
+    );
+  }
   private call(method: string, params: Record<string, unknown>): Promise<unknown> {
     if (!this.client.isConnected) {
       return Promise.reject(new Error('[thalex-private] not connected'));
@@ -210,6 +258,15 @@ export class ThalexPrivateClient {
   }
 
   private handleNotification(msg: JsonRpcEnvelope): void {
+    if (msg.channel_name === 'account.trade_history') {
+      const parsed = ThalexTradeHistoryNotificationSchema.safeParse(msg);
+      if (!parsed.success) {
+        this.log.warn({ err: parsed.error.message }, 'thalex trade notification parse failed');
+        return;
+      }
+      this.notifyTrades(thalexTradesToPortfolioTrades(parsed.data.notification));
+      return;
+    }
     if (msg.channel_name !== 'account.portfolio') return;
     const parsed = ThalexPortfolioNotificationSchema.safeParse(msg);
     if (!parsed.success) {
@@ -219,6 +276,18 @@ export class ThalexPrivateClient {
     this.applyPortfolio(parsed.data.notification, parsed.data.snapshot === true);
   }
 
+
+  private notifyTrades(trades: ExchangePortfolioTrade[]): void {
+    if (trades.length === 0) return;
+    const merged = new Map(this.latestTrades.map((trade) => [trade.tradeId, trade]));
+    for (const trade of trades) merged.set(trade.tradeId, trade);
+    this.latestTrades = [...merged.values()];
+    for (const listener of this.tradeListeners) {
+      try {
+        listener(trades);
+      } catch {}
+    }
+  }
   private applyPortfolio(entries: ThalexPortfolioEntry[], isSnapshot: boolean): void {
     const merged = isSnapshot ? entries : this.mergeEntries(this.latestEntries, entries);
     this.latestEntries = merged;

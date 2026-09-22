@@ -212,6 +212,9 @@ const StrategyGroupSchema = z.object({
   maxProfitUsd: z.number().nullable(),
   maxLossUsd: z.number().nullable(),
   breakEvenSpotsUsd: z.array(z.number()),
+  grossDebitUsd: z.number().nonnegative(),
+  grossCreditUsd: z.number().nonnegative(),
+  totals: PortfolioTotalsSchema,
 });
 
 const ExpiryBucketRowSchema = z.object({
@@ -283,6 +286,17 @@ const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
   shockGrid: z.array(z.array(ShockGridCellSchema)),
   shockGridMeta: ShockGridMetaSchema,
   strategies: z.array(StrategyGroupSchema),
+  accounting: z.object({
+    openGrossDebitUsd: z.number().nonnegative(),
+    openGrossCreditUsd: z.number().nonnegative(),
+    openNetPremiumUsd: z.number(),
+    knownFeesUsd: z.number().nullable(),
+    realizedPnlUsd: z.number(),
+    persistedTradeCount: z.number().int().nonnegative().nullable(),
+    historyFromMs: z.number().int().nonnegative().nullable(),
+    lastSyncedAtMs: z.number().int().nonnegative().nullable(),
+    persistence: z.enum(['venue_history', 'position_snapshot', 'unavailable']),
+  }),
 }) as z.ZodType<PortfolioMetrics>;
 
 const VolShockLegResultSchema = z.object({

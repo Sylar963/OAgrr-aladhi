@@ -97,6 +97,12 @@ export {
 export {
   type BreakEvenIvRow,
   BreakEvenIvRowSchema,
+  type ExchangePortfolioTrade,
+  ExchangePortfolioTradeSchema,
+  type ExchangePortfolioVenue,
+  ExchangePortfolioVenueSchema,
+  type PortfolioAccounting,
+  PortfolioAccountingSchema,
   type ExpiryBucketRow,
   ExpiryBucketRowSchema,
   type PortfolioMetrics,

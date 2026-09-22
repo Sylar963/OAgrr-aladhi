@@ -1,6 +1,7 @@
 import type {
   BreakEvenIvRow,
   ExpiryBucketRow,
+  PortfolioAccounting,
   PortfolioMetrics,
   PortfolioPnlCurve,
   PortfolioTotals,
@@ -84,6 +85,29 @@ function emptyTotals(): PortfolioTotals {
     netVannaUsd: 0,
     netVolgaUsd: 0,
     unrealizedPnlUsd: 0,
+  };
+}
+
+function positionAccounting(positions: PositionLeg[]): PortfolioAccounting {
+  let openGrossDebitUsd = 0;
+  let openGrossCreditUsd = 0;
+  let realizedPnlUsd = 0;
+  for (const leg of positions) {
+    const premium = leg.entryPriceUsd * Math.abs(leg.size);
+    if (leg.size > 0) openGrossDebitUsd += premium;
+    else openGrossCreditUsd += premium;
+    realizedPnlUsd += leg.realizedPnlUsd;
+  }
+  return {
+    openGrossDebitUsd,
+    openGrossCreditUsd,
+    openNetPremiumUsd: openGrossDebitUsd - openGrossCreditUsd,
+    knownFeesUsd: null,
+    realizedPnlUsd,
+    persistedTradeCount: null,
+    historyFromMs: null,
+    lastSyncedAtMs: null,
+    persistence: 'unavailable',
   };
 }
 
@@ -261,9 +285,15 @@ export class PortfolioRuntime {
       breakEven = breakEvenIvCurve(withMarks);
       shockGrid = computeShockGrid(withMarks, nowMs);
       shockGridMeta = getShockGridMeta(withMarks);
-      strategies = detectStrategyGroups(positions);
+      strategies = detectStrategyGroups(
+        positions,
+        new Map(withMarks.map(({ leg, mark }) => [leg.legId, mark])),
+      );
     }
 
+    const accounting =
+      this.store.getAccounting?.(this.accountId, this.underlyingFilter) ??
+      positionAccounting(positions);
     const metrics: PortfolioMetrics = {
       accountId: this.accountId,
       generatedAt: this.now(),
@@ -276,6 +306,7 @@ export class PortfolioRuntime {
       shockGrid,
       shockGridMeta,
       strategies,
+      accounting,
     };
     return { positions, metrics };
   }
@@ -310,6 +341,9 @@ export class PortfolioRuntime {
           anchor: 'per_leg_forward',
         },
         strategies: [],
+        accounting:
+          this.store.getAccounting?.(this.accountId, this.underlyingFilter) ??
+          positionAccounting(positions),
       };
       return {
         positions,

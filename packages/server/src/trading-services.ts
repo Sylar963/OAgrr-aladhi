@@ -1,5 +1,7 @@
 import {
+  NoopExchangePortfolioLedgerStore,
   NoopPaperTradingStore,
+  PostgresExchangePortfolioLedgerStore,
   NoopUsersStore,
   NoopVenueCredentialsStore,
   type PaperAccountRow,
@@ -41,6 +43,10 @@ export const usersStore: UsersStore = process.env['DATABASE_URL']
 export const venueCredentialsStore = process.env['DATABASE_URL']
   ? PostgresVenueCredentialsStore.fromConnectionString(process.env['DATABASE_URL'])
   : new NoopVenueCredentialsStore();
+export const exchangePortfolioLedgerStore = process.env['DATABASE_URL']
+  ? PostgresExchangePortfolioLedgerStore.fromConnectionString(process.env['DATABASE_URL'])
+  : new NoopExchangePortfolioLedgerStore();
+
 
 const clock = new SystemClock();
 const quoteProvider = new RuntimeQuoteProvider(chainEngines);

@@ -1,9 +1,31 @@
-import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
+import { type IntervalHistogram, monitorEventLoopDelay } from 'node:perf_hooks';
 import type { FastifyBaseLogger } from 'fastify';
 
 const NS_PER_MS = 1_000_000;
 const BYTES_PER_MB = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+
+export interface PortfolioAssistantRuntimeMetricsSnapshot {
+  requestsTotal: Record<string, number>;
+  activeRequests: number;
+  responseDurationMs: {
+    count: number;
+    total: number;
+    average: number;
+    max: number;
+  };
+  inputTokensTotal: number;
+  outputTokensTotal: number;
+  providerFailuresTotal: Record<string, number>;
+}
+
+export interface RecordPortfolioAssistantRuntimeCompletionInput {
+  outcome: string;
+  errorCode: string | null;
+  durationMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
 
 export interface RuntimeMetricsSnapshot {
   uptimeSec: number;
@@ -24,6 +46,7 @@ export interface RuntimeMetricsSnapshot {
     total: number;
     byType: Record<string, number>;
   };
+  portfolioAssistant: PortfolioAssistantRuntimeMetricsSnapshot;
 }
 
 let histogram: IntervalHistogram | null = null;
@@ -32,6 +55,19 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 // p50/p99/max numbers in /api/health describe a known interval rather than
 // "everything since boot" (which would mask recent spikes).
 let windowStartMs = Date.now();
+
+let portfolioAssistantMetrics = createPortfolioAssistantMetrics();
+
+function createPortfolioAssistantMetrics(): PortfolioAssistantRuntimeMetricsSnapshot {
+  return {
+    requestsTotal: {},
+    activeRequests: 0,
+    responseDurationMs: { count: 0, total: 0, average: 0, max: 0 },
+    inputTokensTotal: 0,
+    outputTokensTotal: 0,
+    providerFailuresTotal: {},
+  };
+}
 
 export function startRuntimeMetrics(log: FastifyBaseLogger): void {
   if (histogram) return;
@@ -57,6 +93,7 @@ export function disposeRuntimeMetrics(): void {
     histogram.disable();
     histogram = null;
   }
+  portfolioAssistantMetrics = createPortfolioAssistantMetrics();
 }
 
 export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
@@ -90,7 +127,51 @@ export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
       total: resources.length,
       byType,
     },
+    portfolioAssistant: {
+      requestsTotal: { ...portfolioAssistantMetrics.requestsTotal },
+      activeRequests: portfolioAssistantMetrics.activeRequests,
+      responseDurationMs: { ...portfolioAssistantMetrics.responseDurationMs },
+      inputTokensTotal: portfolioAssistantMetrics.inputTokensTotal,
+      outputTokensTotal: portfolioAssistantMetrics.outputTokensTotal,
+      providerFailuresTotal: { ...portfolioAssistantMetrics.providerFailuresTotal },
+    },
   };
+}
+
+export function beginPortfolioAssistantRuntimeRequest(): () => void {
+  portfolioAssistantMetrics.activeRequests += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    portfolioAssistantMetrics.activeRequests = Math.max(
+      0,
+      portfolioAssistantMetrics.activeRequests - 1,
+    );
+  };
+}
+
+export function recordPortfolioAssistantRuntimeCompletion(
+  input: RecordPortfolioAssistantRuntimeCompletionInput,
+): void {
+  portfolioAssistantMetrics.requestsTotal[input.outcome] =
+    (portfolioAssistantMetrics.requestsTotal[input.outcome] ?? 0) + 1;
+  const durationMs = Math.max(0, input.durationMs);
+  const duration = portfolioAssistantMetrics.responseDurationMs;
+  duration.count += 1;
+  duration.total += durationMs;
+  duration.average = duration.total / duration.count;
+  duration.max = Math.max(duration.max, durationMs);
+  portfolioAssistantMetrics.inputTokensTotal += Math.max(0, input.inputTokens ?? 0);
+  portfolioAssistantMetrics.outputTokensTotal += Math.max(0, input.outputTokens ?? 0);
+  if (input.errorCode && isProviderFailure(input.errorCode)) {
+    portfolioAssistantMetrics.providerFailuresTotal[input.errorCode] =
+      (portfolioAssistantMetrics.providerFailuresTotal[input.errorCode] ?? 0) + 1;
+  }
+}
+
+function isProviderFailure(code: string): boolean {
+  return code.startsWith('provider_') || code === 'invalid_provider_response';
 }
 
 function toMb(bytes: number): number {

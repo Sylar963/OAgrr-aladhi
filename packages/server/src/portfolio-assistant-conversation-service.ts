@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { logger } from '@oggregator/core';
 import type {
   PortfolioAssistantMessageRow,
   PortfolioAssistantStore,
@@ -23,6 +24,10 @@ import {
 } from './portfolio-assistant-model-gateway.js';
 import type { PortfolioAssistantPromptBuilder } from './portfolio-assistant-prompt-builder.js';
 import type { PortfolioAssistantUsageLimiter } from './portfolio-assistant-usage-limiter.js';
+import {
+  beginPortfolioAssistantRuntimeRequest,
+  recordPortfolioAssistantRuntimeCompletion,
+} from './runtime-metrics.js';
 import type { AuthenticatedUser } from './user-service.js';
 
 function mapThread(row: {
@@ -54,6 +59,18 @@ function mapMessage(row: PortfolioAssistantMessageRow): PortfolioAssistantMessag
     portfolioGeneratedAt: row.portfolioGeneratedAt?.getTime() ?? null,
     createdAt: row.createdAt.getTime(),
   };
+}
+
+interface PortfolioAssistantRunTelemetry {
+  requestId: string;
+  userIdHash: string;
+  source: string;
+  underlying: string | null;
+  portfolioGeneratedAt: number;
+  positionCount: number;
+  contextCharacterCount: number;
+  historyMessageCount: number;
+  startedAtMs: number;
 }
 
 export class PortfolioAssistantConversationService {
@@ -160,6 +177,10 @@ export class PortfolioAssistantConversationService {
     let inputTokens: number | null = null;
     let cachedInputTokens: number | null = null;
     let outputTokens: number | null = null;
+    let telemetry: PortfolioAssistantRunTelemetry | null = null;
+    let releaseRuntimeMetrics: (() => void) | null = null;
+    let runOutcome: PortfolioAssistantUsageOutcome | null = null;
+    let runErrorCode: string | null = null;
     try {
       const thread = await this.store.findOwnedPortfolioAssistantThread(user.id, threadId);
       if (!thread || thread.accountId !== user.accountId)
@@ -224,6 +245,18 @@ export class PortfolioAssistantConversationService {
       }
 
       const history = historyPage.messages.filter((message) => message.status !== 'streaming');
+      telemetry = {
+        requestId: crypto.randomUUID(),
+        userIdHash: createHash('sha256').update(user.id).digest('hex'),
+        source: source.data,
+        underlying: thread.underlying,
+        portfolioGeneratedAt: context.generatedAt,
+        positionCount: context.positions.length,
+        contextCharacterCount: contextMessage.length,
+        historyMessageCount: history.length,
+        startedAtMs: this.now(),
+      };
+      releaseRuntimeMetrics = beginPortfolioAssistantRuntimeRequest();
       let lastCheckpoint = this.now();
       for await (const event of this.gateway.streamPortfolioAnswer(
         {
@@ -263,6 +296,7 @@ export class PortfolioAssistantConversationService {
         cachedInputTokens,
         outputTokens,
       );
+      runOutcome = 'complete';
       yield { type: 'message_completed', assistantMessageId };
     } catch (error) {
       if (!assistantMessageId) throw error;
@@ -281,6 +315,8 @@ export class PortfolioAssistantConversationService {
         : serviceError.code === 'provider_allowance_exhausted'
           ? 'allowance_exhausted'
           : 'failed';
+      runOutcome = outcome;
+      runErrorCode = cancelled ? 'request_cancelled' : serviceError.code;
       await this.complete(
         user.id,
         threadId,
@@ -308,6 +344,39 @@ export class PortfolioAssistantConversationService {
             retryable: serviceError.retryable,
           };
     } finally {
+      releaseRuntimeMetrics?.();
+      if (telemetry && runOutcome) {
+        const durationMs = Math.max(0, this.now() - telemetry.startedAtMs);
+        recordPortfolioAssistantRuntimeCompletion({
+          outcome: runOutcome,
+          errorCode: runErrorCode,
+          durationMs,
+          inputTokens,
+          outputTokens,
+        });
+        logger.info(
+          {
+            requestId: telemetry.requestId,
+            userIdHash: telemetry.userIdHash,
+            threadId,
+            source: telemetry.source,
+            underlying: telemetry.underlying,
+            portfolioGeneratedAt: telemetry.portfolioGeneratedAt,
+            positionCount: telemetry.positionCount,
+            contextCharacterCount: telemetry.contextCharacterCount,
+            historyMessageCount: telemetry.historyMessageCount,
+            provider: 'hermes',
+            model: this.configuration.model,
+            inputTokens,
+            cachedInputTokens,
+            outputTokens,
+            durationMs,
+            outcome: runOutcome,
+            errorCode: runErrorCode,
+          },
+          'portfolio assistant model run completed',
+        );
+      }
       release();
     }
   }

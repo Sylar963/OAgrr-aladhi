@@ -124,6 +124,19 @@ describe('GET /health', () => {
         total: expect.any(Number),
         byType: expect.any(Object),
       },
+      portfolioAssistant: {
+        requestsTotal: expect.any(Object),
+        activeRequests: expect.any(Number),
+        responseDurationMs: {
+          count: expect.any(Number),
+          total: expect.any(Number),
+          average: expect.any(Number),
+          max: expect.any(Number),
+        },
+        inputTokensTotal: expect.any(Number),
+        outputTokensTotal: expect.any(Number),
+        providerFailuresTotal: expect.any(Object),
+      },
     });
   });
 

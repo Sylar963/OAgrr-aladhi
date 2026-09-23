@@ -63,14 +63,51 @@ function fmtUsd(value: number | null | undefined): string {
   return `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
+function fmtCashFlow(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (Math.abs(value) < 0.005) return '$0';
+  return fmtUsdSigned(value);
+}
 
 function exposureSide(value: number | null | undefined, positive: string, negative: string): string {
   if (value == null || Math.abs(value) < 1e-9) return 'Flat';
   return value > 0 ? positive : negative;
 }
 
+interface PremiumRowProps {
+  label: string;
+  note: string;
+  debitUsd: number | null;
+  creditUsd: number | null;
+}
+
+// Cash-flow signs: premium paid is money out (−), premium received is money in (+).
+function PremiumRow({ label, note, debitUsd, creditUsd }: PremiumRowProps) {
+  const net = debitUsd == null || creditUsd == null ? null : creditUsd - debitUsd;
+  const netSide =
+    net == null ? null : net > 0.005 ? 'credit' : net < -0.005 ? 'debit' : 'flat';
+  return (
+    <div className={styles.premiumRow} role="row">
+      <span role="rowheader">
+        {label}
+        <small>{note}</small>
+      </span>
+      <strong role="cell">{fmtCashFlow(debitUsd == null ? null : -debitUsd)}</strong>
+      <strong role="cell">{fmtCashFlow(creditUsd)}</strong>
+      <strong
+        role="cell"
+        data-sign={netSide === 'credit' ? 'positive' : netSide === 'debit' ? 'negative' : undefined}
+      >
+        {fmtCashFlow(net)}
+        {netSide != null && <small>net {netSide}</small>}
+      </strong>
+    </div>
+  );
+}
+
 export default function RiskCockpit({ metrics, positions }: Props) {
   const totals = metrics?.totals ?? null;
+  const accounting = metrics?.accounting ?? null;
   const mode = classifyBook(totals, positions.length);
   const modeMeta = MODE_META[mode];
   const ivEdge = calculateIvEdge(positions, metrics?.breakEven ?? []);
@@ -113,42 +150,45 @@ export default function RiskCockpit({ metrics, positions }: Props) {
         </div>
       </div>
       <div className={styles.accounting} aria-label="Premium and venue ledger">
-        <div className={styles.accountingGrid}>
-          <article className={styles.accountingCell}>
-            <span>Premium paid</span>
-            <strong>{fmtUsd(metrics?.accounting.openGrossDebitUsd)}</strong>
-            <small>current long legs</small>
-          </article>
-          <article className={styles.accountingCell}>
-            <span>Premium received</span>
-            <strong>{fmtUsd(metrics?.accounting.openGrossCreditUsd)}</strong>
-            <small>current short legs</small>
-          </article>
-          <article className={styles.accountingCell}>
-            <span>Net open premium</span>
-            <strong
-              data-sign={(metrics?.accounting.openNetPremiumUsd ?? 0) > 0 ? 'negative' : 'positive'}
-            >
-              {fmtUsd(metrics?.accounting.openNetPremiumUsd)}
-            </strong>
-            <small>
-              {(metrics?.accounting.openNetPremiumUsd ?? 0) > 0 ? 'net debit paid' : 'net credit received'}
-            </small>
-          </article>
-          <article className={styles.accountingCell}>
-            <span>Known fees</span>
-            <strong>{fmtUsd(metrics?.accounting.knownFeesUsd)}</strong>
-            <small>persisted venue fills</small>
-          </article>
-          <article className={styles.accountingCell}>
-            <span>Realized P&amp;L</span>
-            <strong
-              data-sign={(metrics?.accounting.realizedPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}
-            >
-              {fmtUsdSigned(metrics?.accounting.realizedPnlUsd)}
-            </strong>
-            <small>venue-reported</small>
-          </article>
+        <div className={styles.ledgerBody}>
+          <div className={styles.premiumTable} role="table" aria-label="Premium paid and received">
+            <div className={styles.premiumRow} role="row" data-head>
+              <span role="columnheader">Premium</span>
+              <span role="columnheader">Paid</span>
+              <span role="columnheader">Received</span>
+              <span role="columnheader">Net</span>
+            </div>
+            <PremiumRow
+              label="Open book"
+              note="legs still open"
+              debitUsd={accounting?.openGrossDebitUsd ?? null}
+              creditUsd={accounting?.openGrossCreditUsd ?? null}
+            />
+            <PremiumRow
+              label="Lifetime"
+              note={
+                accounting?.lifetimeGrossDebitUsd == null
+                  ? 'no fill history for this source'
+                  : 'every persisted fill, closed legs included'
+              }
+              debitUsd={accounting?.lifetimeGrossDebitUsd ?? null}
+              creditUsd={accounting?.lifetimeGrossCreditUsd ?? null}
+            />
+          </div>
+          <div className={styles.accountingGrid}>
+            <article className={styles.accountingCell}>
+              <span>Known fees</span>
+              <strong>{fmtUsd(accounting?.knownFeesUsd)}</strong>
+              <small>persisted venue fills</small>
+            </article>
+            <article className={styles.accountingCell}>
+              <span>Realized P&amp;L</span>
+              <strong data-sign={(accounting?.realizedPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}>
+                {fmtUsdSigned(accounting?.realizedPnlUsd)}
+              </strong>
+              <small>venue-reported</small>
+            </article>
+          </div>
         </div>
         <div className={styles.ledgerStatus} data-state={metrics?.accounting.persistence ?? 'unavailable'}>
           <span>

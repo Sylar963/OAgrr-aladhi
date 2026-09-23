@@ -81,6 +81,10 @@ export const PortfolioAccountingSchema = z.object({
   openGrossDebitUsd: z.number().nonnegative(),
   openGrossCreditUsd: z.number().nonnegative(),
   openNetPremiumUsd: z.number(),
+  // Gross premium across every persisted fill, closed legs included. Null when
+  // the source has no fill history (manual, paper, ledger disabled).
+  lifetimeGrossDebitUsd: z.number().nonnegative().nullable(),
+  lifetimeGrossCreditUsd: z.number().nonnegative().nullable(),
   knownFeesUsd: z.number().nullable(),
   realizedPnlUsd: z.number(),
   persistedTradeCount: z.number().int().nonnegative().nullable(),
@@ -242,12 +246,24 @@ export const StrategyKindSchema = z.enum([
 ]);
 export type StrategyKind = z.infer<typeof StrategyKindSchema>;
 
+// Legs as sized inside the group. A leg larger than its pair appears here at
+// the paired quantity, and its remainder shows up in another group.
+export const StrategyGroupLegSchema = z.object({
+  legId: z.string(),
+  strike: z.number(),
+  optionRight: z.enum(['call', 'put']),
+  size: z.number(),
+  entryPriceUsd: z.number(),
+});
+export type StrategyGroupLeg = z.infer<typeof StrategyGroupLegSchema>;
+
 export const StrategyGroupSchema = z.object({
   groupId: z.string(),
   kind: StrategyKindSchema,
   underlying: z.string(),
   expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   legIds: z.array(z.string()),
+  legs: z.array(StrategyGroupLegSchema),
   // Signed net entry premium: positive = net debit paid, negative = net
   // credit received. Sum over legs of entryPriceUsd * size, where size is
   // signed (positive long, negative short).

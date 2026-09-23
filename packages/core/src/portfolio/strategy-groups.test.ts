@@ -126,4 +126,33 @@ describe('detectStrategyGroups', () => {
     const groups = detectStrategyGroups(legs);
     expect(groups.every((g) => g.kind === 'naked')).toBe(true);
   });
+
+  it('pairs unequal sizes at the smaller quantity and leaves the excess as a single leg', () => {
+    const legs = [
+      leg({ legId: 'long-70', strike: 70_000, size: 2, entryPriceUsd: 1_000 }),
+      leg({ legId: 'short-75', strike: 75_000, size: -1, entryPriceUsd: 400 }),
+    ];
+    const groups = detectStrategyGroups(legs);
+    expect(groups.map((g) => g.kind)).toEqual(['call_spread', 'naked']);
+    const [spread, naked] = groups;
+    expect(spread?.legs.map((l) => l.size)).toEqual([1, -1]);
+    expect(spread?.netEntryPremiumUsd).toBeCloseTo(600, 6);
+    expect(spread?.maxProfitUsd).toBeCloseTo(5_000 - 600, 6);
+    expect(naked?.legIds).toEqual(['long-70']);
+    expect(naked?.legs[0]?.size).toBe(1);
+    expect(naked?.grossDebitUsd).toBeCloseTo(1_000, 6);
+  });
+
+  it('keeps gross premium across groups equal to the whole book', () => {
+    const legs = [
+      leg({ legId: 'lc', strike: 70_000, size: 3, entryPriceUsd: 1_000 }),
+      leg({ legId: 'sc', strike: 75_000, size: -2, entryPriceUsd: 400 }),
+      leg({ legId: 'lp', strike: 65_000, optionRight: 'put', size: 0.5, entryPriceUsd: 800 }),
+    ];
+    const groups = detectStrategyGroups(legs);
+    const debit = groups.reduce((acc, g) => acc + g.grossDebitUsd, 0);
+    const credit = groups.reduce((acc, g) => acc + g.grossCreditUsd, 0);
+    expect(debit).toBeCloseTo(3 * 1_000 + 0.5 * 800, 6);
+    expect(credit).toBeCloseTo(2 * 400, 6);
+  });
 });

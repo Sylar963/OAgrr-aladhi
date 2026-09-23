@@ -131,6 +131,8 @@ export {
   ShockGridCellSchema,
   type ShockGridMeta,
   ShockGridMetaSchema,
+  type StrategyGroupLeg,
+  StrategyGroupLegSchema,
   type StrategyGroup,
   StrategyGroupSchema,
   type StrategyKind,

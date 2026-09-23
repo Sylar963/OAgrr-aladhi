@@ -102,6 +102,8 @@ function positionAccounting(positions: PositionLeg[]): PortfolioAccounting {
     openGrossDebitUsd,
     openGrossCreditUsd,
     openNetPremiumUsd: openGrossDebitUsd - openGrossCreditUsd,
+    lifetimeGrossDebitUsd: null,
+    lifetimeGrossCreditUsd: null,
     knownFeesUsd: null,
     realizedPnlUsd,
     persistedTradeCount: null,

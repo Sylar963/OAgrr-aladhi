@@ -35,6 +35,8 @@ export interface PersistedExchangeTrade {
 
 export interface ExchangeTradeSummary {
   tradeCount: number;
+  grossBuyPremiumUsd: number;
+  grossSellPremiumUsd: number;
   knownFeesUsd: number;
   realizedPnlUsd: number;
   historyFromMs: number | null;
@@ -106,6 +108,8 @@ export class NoopExchangePortfolioLedgerStore implements ExchangePortfolioLedger
   ): Promise<ExchangeTradeSummary> {
     return {
       tradeCount: 0,
+      grossBuyPremiumUsd: 0,
+      grossSellPremiumUsd: 0,
       knownFeesUsd: 0,
       realizedPnlUsd: 0,
       historyFromMs: null,
@@ -355,6 +359,8 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
   ): Promise<ExchangeTradeSummary> {
     const result = await this.getPool().query<{
       trade_count: string;
+      gross_buy_premium_usd: number;
+      gross_sell_premium_usd: number;
       known_fees_usd: number;
       realized_pnl_usd: number;
       history_from: Date | null;
@@ -362,6 +368,10 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
     }>(
       `SELECT
          COUNT(t.trade_id)::text AS trade_count,
+         COALESCE(SUM(t.price_usd * t.amount) FILTER (WHERE t.direction = 'buy'), 0)
+           AS gross_buy_premium_usd,
+         COALESCE(SUM(t.price_usd * t.amount) FILTER (WHERE t.direction = 'sell'), 0)
+           AS gross_sell_premium_usd,
          COALESCE(SUM(t.fee_usd), 0) AS known_fees_usd,
          COALESCE(SUM(t.realized_pnl_usd), 0) AS realized_pnl_usd,
          MIN(t.traded_at) AS history_from,
@@ -376,6 +386,8 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
     const row = result.rows[0];
     return {
       tradeCount: Number(row?.trade_count ?? 0),
+      grossBuyPremiumUsd: Number(row?.gross_buy_premium_usd ?? 0),
+      grossSellPremiumUsd: Number(row?.gross_sell_premium_usd ?? 0),
       knownFeesUsd: Number(row?.known_fees_usd ?? 0),
       realizedPnlUsd: Number(row?.realized_pnl_usd ?? 0),
       historyFromMs: row?.history_from?.getTime() ?? null,

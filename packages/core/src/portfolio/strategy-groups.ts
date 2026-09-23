@@ -69,9 +69,8 @@ interface PairTrial {
 }
 
 // Try to pair two legs into a recognized 2-leg structure. Returns null when
-// the pair is not a structure we model.
+// the pair is not a structure we model. Sizes are matched by the caller.
 function classifyPair(a: PositionLeg, b: PositionLeg): PairTrial | null {
-  if (Math.abs(Math.abs(a.size) - Math.abs(b.size)) > SIZE_EPS) return null;
   const sameRight = a.optionRight === b.optionRight;
   const sameStrike = a.strike === b.strike;
   const oppositeSign = Math.sign(a.size) !== Math.sign(b.size);
@@ -180,13 +179,20 @@ function buildGroup(
     underlying: first.underlying,
     expiry: first.expiry,
     legIds: legs.map((l) => l.legId),
+    legs: legs.map((l) => ({
+      legId: l.legId,
+      strike: l.strike,
+      optionRight: l.optionRight,
+      size: l.size,
+      entryPriceUsd: l.entryPriceUsd,
+    })),
     netEntryPremiumUsd: net,
     debitOrCredit: debitOrCredit(net),
     ...premiums,
     totals: marked.length === legs.length ? computeTotals(marked) : emptyTotals(),
   } satisfies Pick<
     StrategyGroup,
-    'groupId' | 'kind' | 'underlying' | 'expiry' | 'legIds' | 'netEntryPremiumUsd' |
+    'groupId' | 'kind' | 'underlying' | 'expiry' | 'legIds' | 'legs' | 'netEntryPremiumUsd' |
     'debitOrCredit' | 'grossDebitUsd' | 'grossCreditUsd' | 'totals'
   >;
 
@@ -216,13 +222,20 @@ function buildGroup(
   };
 }
 
+function withQty(leg: PositionLeg, qty: number): PositionLeg {
+  return { ...leg, size: Math.sign(leg.size) * qty };
+}
+
 export function detectStrategyGroups(
   legs: PositionLeg[],
   marksByLeg: ReadonlyMap<string, MarkContext> = new Map(),
 ): StrategyGroup[] {
   const result: StrategyGroup[] = [];
   for (const bucket of groupByUnderlyingExpiry(legs).values()) {
-    const used = new Set<string>();
+    // Unequal sizes pair at the smaller quantity; the excess stays available
+    // for another pair or falls through as a single leg.
+    const remaining = new Map(bucket.map((leg) => [leg.legId, Math.abs(leg.size)]));
+    const left = (leg: PositionLeg) => remaining.get(leg.legId) ?? 0;
     // Greedy 2-leg pairing pass. Order by strike+right so deterministic.
     const sorted = [...bucket].sort((a, b) => {
       if (a.strike !== b.strike) return a.strike - b.strike;
@@ -232,21 +245,20 @@ export function detectStrategyGroups(
     });
     for (let i = 0; i < sorted.length; i += 1) {
       const a = sorted[i]!;
-      if (used.has(a.legId)) continue;
-      for (let j = i + 1; j < sorted.length; j += 1) {
+      for (let j = i + 1; j < sorted.length && left(a) > SIZE_EPS; j += 1) {
         const b = sorted[j]!;
-        if (used.has(b.legId)) continue;
-        const trial = classifyPair(a, b);
+        if (left(b) <= SIZE_EPS) continue;
+        const qty = Math.min(left(a), left(b));
+        const trial = classifyPair(withQty(a, qty), withQty(b, qty));
         if (trial == null) continue;
         result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
-        used.add(a.legId);
-        used.add(b.legId);
-        break;
+        remaining.set(a.legId, left(a) - qty);
+        remaining.set(b.legId, left(b) - qty);
       }
     }
     for (const leg of bucket) {
-      if (used.has(leg.legId)) continue;
-      result.push(buildGroup('naked', [leg], marksByLeg));
+      if (left(leg) <= SIZE_EPS) continue;
+      result.push(buildGroup('naked', [withQty(leg, left(leg))], marksByLeg));
     }
   }
   return result;

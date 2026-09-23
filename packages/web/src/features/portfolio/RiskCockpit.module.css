@@ -154,9 +154,75 @@
   background: rgba(4, 8, 8, 0.38);
 }
 
+.ledgerBody {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+}
+
+.premiumTable {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #202625;
+  font-family: var(--font-mono);
+}
+
+.premiumRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) repeat(3, minmax(0, 1fr));
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 16px;
+  border-top: 1px solid #1a201f;
+}
+
+.premiumRow[data-head] {
+  padding-block: 8px 4px;
+  border-top: 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.premiumRow[data-head] span:not(:first-child) {
+  text-align: right;
+}
+
+.premiumRow > span:first-child {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.premiumRow small {
+  margin-top: 2px;
+  color: #68706e;
+  font-size: 8px;
+  font-weight: 400;
+}
+
+.premiumRow strong {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.premiumRow strong[data-sign='positive'] {
+  color: var(--color-profit);
+}
+
+.premiumRow strong[data-sign='negative'] {
+  color: #ef6177;
+}
+
 .accountingGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .accountingCell {
@@ -168,8 +234,12 @@
   font-family: var(--font-mono);
 }
 
-.accountingCell:last-child {
+.accountingCell {
   border-right: 0;
+}
+
+.accountingCell + .accountingCell {
+  border-top: 1px solid #1a201f;
 }
 
 .accountingCell span {
@@ -363,10 +433,23 @@
     grid-template-columns: 1fr;
     gap: 14px;
   }
-  .accountingGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .ledgerBody {
+    grid-template-columns: 1fr;
   }
 
+  .premiumTable {
+    border-right: 0;
+    border-bottom: 1px solid #202625;
+  }
+
+  .accountingGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accountingCell + .accountingCell {
+    border-top: 0;
+    border-left: 1px solid #1a201f;
+  }
 
   .headlineMetric {
     border-top: 1px solid #2b3331;
@@ -390,10 +473,6 @@
 
   .headlineMetrics,
   .exposureGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .accountingGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -423,8 +502,14 @@
     grid-template-columns: 1fr;
   }
 
-  .accountingGrid {
-    grid-template-columns: 1fr;
+  .premiumRow {
+    grid-template-columns: minmax(84px, 1fr) repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .premiumRow strong {
+    font-size: 13px;
   }
 
   .exposureCard {

@@ -121,6 +121,8 @@ export class VenuePositionPersistence {
       openGrossDebitUsd,
       openGrossCreditUsd,
       openNetPremiumUsd: openGrossDebitUsd - openGrossCreditUsd,
+      lifetimeGrossDebitUsd: hasVenueHistory ? summary.grossBuyPremiumUsd : null,
+      lifetimeGrossCreditUsd: hasVenueHistory ? summary.grossSellPremiumUsd : null,
       knownFeesUsd: hasVenueHistory ? summary.knownFeesUsd : null,
       realizedPnlUsd: hasVenueHistory ? summary.realizedPnlUsd : positionRealizedPnlUsd,
       persistedTradeCount: hasVenueHistory ? summary.tradeCount : null,

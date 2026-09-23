@@ -95,6 +95,8 @@ const metrics: PortfolioMetrics = {
     openGrossDebitUsd: 0,
     openGrossCreditUsd: 2_000,
     openNetPremiumUsd: -2_000,
+    lifetimeGrossDebitUsd: null,
+    lifetimeGrossCreditUsd: null,
     knownFeesUsd: null,
     realizedPnlUsd: 0,
     persistedTradeCount: null,

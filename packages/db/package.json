@@ -15,6 +15,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "migrate": "node --env-file-if-exists=../../.env dist/migrate.js",
+    "portfolio-assistant:invite": "node --env-file-if-exists=../../.env dist/create-portfolio-assistant-invite.js",
     "seed:sample": "node --env-file-if-exists=../../.env dist/seed-sample.js"
   },
   "dependencies": {

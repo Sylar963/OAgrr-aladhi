@@ -36,10 +36,10 @@ export class PortfolioAssistantApiError extends Error {
   }
 }
 
-async function headers(): Promise<HeadersInit> {
+async function headers(hasJsonBody = false): Promise<HeadersInit> {
   const token = await getClerkToken();
   return {
-    'Content-Type': 'application/json',
+    ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
@@ -73,7 +73,7 @@ export async function redeemPortfolioAssistantInvite(
 ): Promise<PortfolioAssistantAccess> {
   const response = await fetch(`${API_BASE}/portfolio/assistant/invites/redeem`, {
     method: 'POST',
-    headers: await headers(),
+    headers: await headers(true),
     body: JSON.stringify({ code }),
   });
   return parseJson(response, PortfolioAssistantAccessSchema);
@@ -84,7 +84,7 @@ export async function createPortfolioAssistantThread(
 ): Promise<PortfolioAssistantThread> {
   const response = await fetch(`${API_BASE}/portfolio/assistant/threads`, {
     method: 'POST',
-    headers: await headers(),
+    headers: await headers(true),
     body: JSON.stringify(input),
   });
   return parseJson(response, PortfolioAssistantThreadSchema);
@@ -145,7 +145,7 @@ export async function streamPortfolioAssistantMessage(
     `${API_BASE}/portfolio/assistant/threads/${encodeURIComponent(threadId)}/messages`,
     {
       method: 'POST',
-      headers: await headers(),
+      headers: await headers(true),
       body: JSON.stringify(input),
       signal,
     },

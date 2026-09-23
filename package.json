@@ -13,6 +13,7 @@
     "build:landing": "pnpm --filter @oggregator/landing build",
     "db:migrate": "pnpm --filter @oggregator/db migrate",
     "db:seed:sample": "pnpm --filter @oggregator/db build && pnpm --filter @oggregator/db seed:sample",
+    "portfolio-assistant:invite": "pnpm --filter @oggregator/db build && pnpm --filter @oggregator/db portfolio-assistant:invite",
     "start": "NODE_ENV=production node packages/server/dist/index.js",
     "format": "biome format --write .",
     "format:check": "biome format .",

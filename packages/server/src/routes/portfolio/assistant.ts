@@ -189,13 +189,15 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
         return sendAssistantError(reply, error);
       }
 
-      reply.hijack();
-      reply.raw.writeHead(200, {
+      reply.headers({
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       });
+      const responseHeaders = reply.getHeaders();
+      reply.hijack();
+      reply.raw.writeHead(200, responseHeaders);
       const heartbeat = setInterval(() => {
         if (!reply.raw.destroyed) reply.raw.write(': keep-alive\n\n');
       }, 15_000);

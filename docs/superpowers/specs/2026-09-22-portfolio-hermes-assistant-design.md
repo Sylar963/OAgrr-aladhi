@@ -799,6 +799,15 @@ The OAuth material remains in Hermes's own credential store and is never copied 
 The API server requires its own strong bearer key. CORS stays disabled because only the Oggregator
 server calls Hermes. A reverse proxy must not publish the Hermes port to browsers.
 
+Create a single-use, 30-day beta invite from the repository root with:
+
+```bash
+pnpm portfolio-assistant:invite
+```
+
+The operator sends the printed code to one approved user. The command stores only its HMAC digest;
+the first authenticated account that redeems it receives the entitlement and exhausts the code.
+
 The `portfolio-chat` profile uses a restricted toolset. If Hermes cannot be configured to remove all
 write/terminal/code tools from the API-server profile, the initial implementation must run it with
 no tools and context-only answers. The feature does not launch with a full default Hermes toolset.

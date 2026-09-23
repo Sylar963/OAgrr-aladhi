@@ -94,6 +94,27 @@ export type {
 } from './trade-store.js';
 export type { PersistedTradeLeg, PersistedTradeMode, PersistedTradeRecord } from './types.js';
 
+export type {
+  BeginPortfolioAssistantExchangeInput,
+  BeginPortfolioAssistantExchangeResult,
+  CompletePortfolioAssistantExchangeInput,
+  CreatePortfolioAssistantThreadRow,
+  ListPortfolioAssistantMessagesInput,
+  ListPortfolioAssistantThreadsInput,
+  PortfolioAssistantMessageRole,
+  PortfolioAssistantMessageRow,
+  PortfolioAssistantMessageStatus,
+  PortfolioAssistantStore,
+  PortfolioAssistantThreadRow,
+  PortfolioAssistantUsageOutcome,
+  UserEntitlementRow,
+  UserEntitlementStatus,
+} from './portfolio-assistant-store.js';
+export {
+  NoopPortfolioAssistantStore,
+  PostgresPortfolioAssistantStore,
+} from './portfolio-assistant-store.js';
+
 export type { ProvisionUserInput, UpsertUserInput, UserRow, UsersStore } from './users-store.js';
 export { NoopUsersStore, PostgresUsersStore } from './users-store.js';
 export type {

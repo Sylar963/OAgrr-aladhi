@@ -288,6 +288,12 @@ export {
   foldManualLeg,
   findExistingForInput,
   naturalKeyOf,
+  buildPortfolioAssistantRiskFacts,
+  rankPortfolioRiskContributors,
+  type PortfolioAssistantPositionFact,
+  type PortfolioAssistantRiskFacts,
+  type PortfolioRiskContributor,
+  type PortfolioRiskMetric,
   type FoldContext,
   detectStrategyGroups,
 } from './portfolio/index.js';

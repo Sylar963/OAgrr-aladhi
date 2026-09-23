@@ -11,6 +11,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import { disposeChainWarmup, warmupChainRuntimes } from './chain-warmup.js';
 import { disposeFundedSettlementJob, startFundedSettlementJob } from './funded-settlement-job.js';
+import {
+  disposePortfolioAssistantServices,
+  startPortfolioAssistantRetentionCleanup,
+} from './portfolio-assistant-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
 import { registerRoutes } from './routes/index.js';
 import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
@@ -167,6 +171,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerRoutes(app);
   startRuntimeMetrics(app.log);
+  startPortfolioAssistantRetentionCleanup(app.log);
 
   // Tracked so onClose can await any in-flight bootstrap before disposing —
   // otherwise SIGTERM arriving mid-bootstrap would start runtimes that nobody
@@ -194,6 +199,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     disposeFundedSettlementJob();
     disposeServiceStores();
     await disposeChainWarmup();
+    await disposePortfolioAssistantServices();
     await disposePortfolioServices();
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();

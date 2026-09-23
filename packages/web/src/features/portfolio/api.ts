@@ -1,6 +1,8 @@
 import { getClerkToken } from '@lib/clerk-token';
 import {
   type PortfolioMetrics,
+  type PortfolioSource,
+  PortfolioSourceSchema as SharedPortfolioSourceSchema,
   type PositionLeg,
   type PositionLegInput,
   VENUE_IDS,
@@ -74,47 +76,15 @@ const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
   realizedPnlUsd: z.number().default(0),
   entryTs: z.number(),
   venueHint: WebVenueIdSchema.nullable(),
-  source: z.enum([
-    'manual',
-    'paper',
-    'deribit',
-    'okx',
-    'binance',
-    'bybit',
-    'derive',
-    'coincall',
-    'thalex',
-    'gateio',
-    'paradex',
-  ]),
+  source: z.custom<PortfolioSource>(
+    (value) => SharedPortfolioSourceSchema.safeParse(value).success,
+  ),
 }) as z.ZodType<PositionLeg>;
 
-export type PortfolioSource =
-  | 'manual'
-  | 'paper'
-  | 'deribit'
-  | 'okx'
-  | 'binance'
-  | 'bybit'
-  | 'derive'
-  | 'coincall'
-  | 'thalex'
-  | 'gateio'
-  | 'paradex';
-
-const PortfolioSourceSchema = z.enum([
-  'manual',
-  'paper',
-  'deribit',
-  'okx',
-  'binance',
-  'bybit',
-  'derive',
-  'coincall',
-  'thalex',
-  'gateio',
-  'paradex',
-]);
+export type { PortfolioSource } from '@oggregator/protocol';
+const WebPortfolioSourceSchema = z.custom<PortfolioSource>(
+  (value) => SharedPortfolioSourceSchema.safeParse(value).success,
+);
 
 export interface DeriveConnectRequest {
   walletAddress: string;
@@ -326,14 +296,14 @@ const VolShockResultSchema: z.ZodType<VolShockResult> = z.object({
 
 const PositionsResponseSchema = z.object({
   accountId: z.string(),
-  source: PortfolioSourceSchema.optional(),
+  source: WebPortfolioSourceSchema.optional(),
   positions: z.array(PositionLegSchema),
 });
 export type PositionsResponse = z.infer<typeof PositionsResponseSchema>;
 
 const MetricsResponseSchema = z.object({
   accountId: z.string(),
-  source: PortfolioSourceSchema.optional(),
+  source: WebPortfolioSourceSchema.optional(),
   metrics: PortfolioMetricsSchema.nullable(),
   positions: z.array(PositionLegSchema),
 });

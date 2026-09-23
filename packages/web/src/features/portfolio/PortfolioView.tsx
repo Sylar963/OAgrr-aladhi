@@ -4,13 +4,15 @@ import {
   PRIVATE_ADAPTER_SPECS,
   VENUE_IDS,
   type PortfolioPnlCurve as PortfolioPnlCurveData,
+  type PortfolioSource,
+  PortfolioSourceSchema,
   type VenueId,
 } from '@oggregator/protocol';
 
 import { useAppStore } from '@stores/app-store';
 import { VENUES } from '@lib/venue-meta';
 
-import type { PortfolioSource } from './api';
+import { PortfolioAssistantPanel } from './assistant';
 import ExpiryBuckets from './ExpiryBuckets';
 import PortfolioPnlCurve from './PortfolioPnlCurve';
 import PortfolioVegaCurve from './PortfolioVegaCurve';
@@ -45,19 +47,8 @@ const EMPTY_PNL_CURVE: PortfolioPnlCurveData = {
 function loadStoredSource(): PortfolioSource {
   try {
     const raw = localStorage.getItem(SOURCE_STORAGE_KEY);
-    if (
-      raw === 'manual' ||
-      raw === 'paper' ||
-      raw === 'deribit' ||
-      raw === 'okx' ||
-      raw === 'binance' ||
-      raw === 'bybit' ||
-      raw === 'derive' ||
-      raw === 'coincall' ||
-      raw === 'thalex'
-    ) {
-      return raw;
-    }
+    const parsed = PortfolioSourceSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
   } catch {}
   return DEFAULT_SOURCE;
 }
@@ -254,6 +245,14 @@ export default function PortfolioView() {
               {...(emptyMessage != null && { emptyMessage })}
             />
           </div>
+        </div>
+        <div className={styles.assistantSlot}>
+          <PortfolioAssistantPanel
+            source={source}
+            underlying={underlyingParam ?? null}
+            forwardDays={forwardDays}
+            generatedAt={metrics?.generatedAt ?? null}
+          />
         </div>
         <div className={styles.sidebar}>
           {source === 'manual' ? (

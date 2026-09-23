@@ -1,3 +1,11 @@
+export {
+  buildPortfolioAssistantRiskFacts,
+  rankPortfolioRiskContributors,
+  type PortfolioAssistantPositionFact,
+  type PortfolioAssistantRiskFacts,
+  type PortfolioRiskContributor,
+  type PortfolioRiskMetric,
+} from './assistant-facts.js';
 export type {
   PositionLeg,
   MarkContext,

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { requireUser } from '../../user-service.js';
+import { portfolioAssistantRoutes } from './assistant.js';
 import { portfolioMetricsRoute } from './metrics.js';
 import { portfolioPositionsRoute } from './positions.js';
 import { portfolioScenariosRoute } from './scenarios.js';
@@ -13,6 +14,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
   await portfolioMetricsRoute(app);
   await portfolioScenariosRoute(app);
   await portfolioVenueCredentialsRoute(app);
+  await portfolioAssistantRoutes(app);
 }
 
 export { portfolioWsRoute };

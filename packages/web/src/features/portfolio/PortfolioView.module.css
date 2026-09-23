@@ -15,7 +15,7 @@
 }
 
 .title {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 16px;
   font-weight: 500;
   color: #e0e0e0;
@@ -42,7 +42,7 @@
 }
 
 .status {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   color: #888;
   padding: 4px 8px;
@@ -50,16 +50,16 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
-.status[data-state='open'] {
+.status[data-state="open"] {
   color: #4ade80;
 }
 
-.status[data-state='retrying'],
-.status[data-state='connecting'] {
+.status[data-state="retrying"],
+.status[data-state="connecting"] {
   color: #fbbf24;
 }
 
-.status[data-state='closed'] {
+.status[data-state="closed"] {
   color: #f87171;
 }
 
@@ -75,7 +75,7 @@
   border: none;
   color: #888;
   padding: 4px 10px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   cursor: pointer;
 }
@@ -108,7 +108,7 @@
 }
 
 .sourceNote {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   color: #888;
   padding: 6px 10px;
@@ -118,7 +118,7 @@
 }
 
 .venueError {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   color: #fca5a5;
   padding: 8px 10px;
@@ -136,14 +136,22 @@
 .bodyGrid {
   display: grid;
   grid-template-columns: 1fr 360px;
+  grid-template-areas: "main assistant" "main sidebar";
+  grid-template-rows: auto auto;
   gap: 16px;
   align-items: start;
 }
 
 .mainCol {
+  grid-area: main;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.assistantSlot {
+  grid-area: assistant;
+  min-width: 0;
 }
 
 .tableWrap {
@@ -154,6 +162,7 @@
 }
 
 .sidebar {
+  grid-area: sidebar;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -164,7 +173,7 @@
   background: rgba(96, 165, 250, 0.08);
   border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 8px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   color: #cbd5e1;
   line-height: 1.5;
@@ -184,7 +193,6 @@
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 12px;
   }
-
 }
 
 @media (min-width: 1600px) {
@@ -197,7 +205,6 @@
     padding: 20px;
     gap: 20px;
   }
-
 }
 
 @media (min-width: 2200px) {
@@ -222,6 +229,7 @@
 @media (max-width: 900px) {
   .bodyGrid {
     grid-template-columns: 1fr;
+    grid-template-areas: "assistant" "main" "sidebar";
   }
 }
 

@@ -16,3 +16,4 @@ export { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 export { usePortfolioWs } from './hooks/usePortfolioWs';
 export { default as PortfolioView } from './PortfolioView';
 export { default as AlphaPortfolioContext } from './AlphaPortfolioContext';
+export { PortfolioAssistantPanel } from './assistant';

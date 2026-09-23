@@ -114,7 +114,9 @@ function fmtNumber(value: number, digits = 4): string {
   if (abs >= 10) return trimTrailingZeros(value.toFixed(1));
   if (abs >= 1) return trimTrailingZeros(value.toFixed(2));
   if (abs === 0) return '0';
-  return trimTrailingZeros(value.toFixed(digits));
+  const fixed = value.toFixed(digits);
+  if (Number(fixed) === 0) return value.toPrecision(2);
+  return trimTrailingZeros(fixed);
 }
 
 function fmtSignedNumber(value: number, digits = 4): string {
@@ -123,8 +125,20 @@ function fmtSignedNumber(value: number, digits = 4): string {
 
 function fmtUsd(value: number): string {
   const abs = Math.abs(value);
-  const digits = abs >= 100 ? 0 : abs >= 1 ? 2 : 4;
+  const digits = usdDigits(abs);
   return `${value >= 0 ? '+' : '-'}$${abs.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+}
+
+function usdDigits(abs: number): number {
+  return abs >= 100 ? 0 : abs >= 1 ? 2 : 4;
+}
+
+function fmtAxisUsd(value: number, digits: number): string {
+  if (value === 0) return '$0';
+  return `${value > 0 ? '+' : '-'}$${Math.abs(value).toLocaleString(undefined, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })}`;
@@ -160,14 +174,22 @@ function scenarioDisplay(
   return mode === 'vanna' ? `${fmtSignedNumber(value)} ${underlying} Δ` : fmtUsd(value);
 }
 
-function rawDisplay(mode: StrikeRiskMode, value: number, underlying: string): string {
+function rawDisplay(
+  mode: StrikeRiskMode,
+  value: number,
+  underlying: string,
+  spotUsd: number | null,
+): string {
   switch (mode) {
     case 'delta':
       return `${fmtSignedNumber(value)} ${underlying}`;
     case 'vega':
       return `${fmtUsd(value)} / vol point`;
     case 'gamma':
-      return `${fmtSignedNumber(value, 6)} Δ / $1`;
+      // Raw gamma per $1 is ~1e-7 on BTC; per 1% spot move is the readable unit.
+      return spotUsd == null
+        ? `${fmtSignedNumber(value, 6)} Δ / $1`
+        : `${fmtSignedNumber(value * spotUsd * 0.01)} ${underlying} Δ / 1% spot`;
     case 'vanna':
       return `${fmtSignedNumber(value, 6)} Δ / vol point`;
     case 'volga':
@@ -276,13 +298,49 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
     const yExtent = maxAbs * 1.2;
     const innerW = WIDTH - PADDING.left - PADDING.right;
     const innerH = HEIGHT - PADDING.top - PADDING.bottom;
-    const slotWidth = innerW / buckets.length;
-    const barWidth = Math.min(52, Math.max(12, slotWidth * 0.48));
+    const strikes = buckets.map((bucket) => bucket.strike);
+    const spot = spotUsd != null && Number.isFinite(spotUsd) && spotUsd > 0 ? spotUsd : null;
+    const lo = Math.min(...strikes, spot ?? Infinity);
+    const hi = Math.max(...strikes, spot ?? -Infinity);
+    const pad = Math.max((hi - lo) * 0.1, ((hi + lo) / 2) * 0.03);
+    const domainLo = lo - pad;
+    const domainHi = hi + pad;
+    const toX = (price: number) =>
+      PADDING.left + ((price - domainLo) / (domainHi - domainLo)) * innerW;
+    const xs = strikes.map(toX);
+    let minGap = Infinity;
+    for (let i = 1; i < xs.length; i += 1) minGap = Math.min(minGap, xs[i]! - xs[i - 1]!);
+    const barWidth = Math.max(3, Math.min(24, minGap * 0.7));
+    const hitEdges = xs.map((x, i) => ({
+      left: i === 0 ? PADDING.left : (xs[i - 1]! + x) / 2,
+      right: i === xs.length - 1 ? WIDTH - PADDING.right : (x + xs[i + 1]!) / 2,
+    }));
     const zeroY = PADDING.top + innerH / 2;
-    const toX = (index: number) => PADDING.left + slotWidth * (index + 0.5);
     const toY = (value: number) => zeroY - (value / yExtent) * (innerH / 2);
-    return { barWidth, maxAbs, slotWidth, toX, toY, zeroY };
-  }, [buckets]);
+    return { barWidth, hitEdges, maxAbs, spot, toX, toY, xs, zeroY };
+  }, [buckets, spotUsd]);
+
+  const visibleStrikeLabels = useMemo(() => {
+    const visible = new Set<number>();
+    if (chart == null) return visible;
+    const minLabelGap = 52;
+    const activeIndex = buckets.findIndex((bucket) => bucket.strike === activeStrike);
+    const activeX = activeIndex >= 0 ? chart.xs[activeIndex]! : null;
+    let lastX = -Infinity;
+    buckets.forEach((bucket, index) => {
+      const x = chart.xs[index]!;
+      if (index === activeIndex) {
+        visible.add(bucket.strike);
+        return;
+      }
+      if (activeX != null && Math.abs(x - activeX) < minLabelGap) return;
+      if (x - lastX < minLabelGap) return;
+      visible.add(bucket.strike);
+      lastX = x;
+    });
+    return visible;
+  }, [activeStrike, buckets, chart]);
+  const yTickDigits = chart == null ? 2 : usdDigits(chart.maxAbs);
 
   const activeBreakEvenRows = useMemo(() => {
     if (activeExpiry == null || activeStrike == null) return [];
@@ -347,7 +405,7 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
               data-sign={totalRaw >= 0 ? 'positive' : 'negative'}
             >
               <span className={styles.readoutLabel}>{posture(mode, totalRaw)}</span>
-              <strong>{rawDisplay(mode, totalRaw, asset)}</strong>
+              <strong>{rawDisplay(mode, totalRaw, asset, spotUsd)}</strong>
               <small>
                 Raw {meta.greek} across {activeExpiry}
               </small>
@@ -449,17 +507,44 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
                         fontSize={10}
                         fill="#74807d"
                       >
-                        {scenarioDisplay(mode, tick, asset, spotUsd)}
+                        {mode === 'vanna' ||
+                        (spotUsd == null && (mode === 'delta' || mode === 'gamma'))
+                          ? scenarioDisplay(mode, tick, asset, spotUsd)
+                          : fmtAxisUsd(tick, yTickDigits)}
                       </text>
                     </g>
                   );
                 })}
+                {chart.spot != null && (
+                  <g pointerEvents="none">
+                    <line
+                      x1={chart.toX(chart.spot)}
+                      x2={chart.toX(chart.spot)}
+                      y1={PADDING.top - 6}
+                      y2={HEIGHT - PADDING.bottom}
+                      stroke="#9aa8a4"
+                      strokeWidth={1}
+                      strokeDasharray="2 3"
+                    />
+                    <text
+                      x={chart.toX(chart.spot)}
+                      y={PADDING.top - 10}
+                      textAnchor="middle"
+                      fontSize={9}
+                      fill="#9aa8a4"
+                    >
+                      SPOT {fmtStrike(Math.round(chart.spot))}
+                    </text>
+                  </g>
+                )}
                 {buckets.map((bucket, index) => {
-                  const x = chart.toX(index);
+                  const x = chart.xs[index]!;
+                  const edges = chart.hitEdges[index]!;
                   const valueY = chart.toY(bucket.scenarioValue);
                   const y = Math.min(valueY, chart.zeroY);
                   const height = Math.max(2, Math.abs(chart.zeroY - valueY));
                   const selected = activeStrike === bucket.strike;
+                  const highlightWidth = chart.barWidth + 10;
                   return (
                     <g
                       key={bucket.strike}
@@ -469,20 +554,20 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
                     >
                       <title>{`Strike ${fmtStrike(bucket.strike)} · ${scenarioDisplay(mode, bucket.scenarioValue, asset, spotUsd)}`}</title>
                       <rect
-                        x={x - chart.slotWidth / 2}
+                        x={edges.left}
                         y={PADDING.top}
-                        width={chart.slotWidth}
+                        width={Math.max(0, edges.right - edges.left)}
                         height={HEIGHT - PADDING.top - PADDING.bottom}
                         fill="transparent"
                       />
                       {selected && (
                         <rect
-                          x={x - chart.slotWidth / 2 + 2}
+                          x={x - highlightWidth / 2}
                           y={PADDING.top}
-                          width={chart.slotWidth - 4}
+                          width={highlightWidth}
                           height={HEIGHT - PADDING.top - PADDING.bottom}
-                          rx={4}
-                          fill="rgba(255, 255, 255, 0.025)"
+                          rx={3}
+                          fill="rgba(255, 255, 255, 0.04)"
                         />
                       )}
                       <rect
@@ -490,21 +575,30 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
                         y={y}
                         width={chart.barWidth}
                         height={height}
-                        rx={3}
+                        rx={2}
                         fill={bucket.scenarioValue >= 0 ? COLORS[mode] : LOSS_COLOR}
                         opacity={selected ? 1 : 0.68}
                         stroke={selected ? '#eef5f3' : 'none'}
                         strokeWidth={selected ? 1 : 0}
                       />
-                      <text
-                        x={x}
-                        y={HEIGHT - PADDING.bottom + 18}
-                        textAnchor="middle"
-                        fontSize={10}
-                        fill={selected ? '#dbe5e2' : '#74807d'}
-                      >
-                        {fmtStrike(bucket.strike)}
-                      </text>
+                      <line
+                        x1={x}
+                        x2={x}
+                        y1={HEIGHT - PADDING.bottom}
+                        y2={HEIGHT - PADDING.bottom + 4}
+                        stroke="#44504d"
+                      />
+                      {visibleStrikeLabels.has(bucket.strike) && (
+                        <text
+                          x={x}
+                          y={HEIGHT - PADDING.bottom + 18}
+                          textAnchor="middle"
+                          fontSize={10}
+                          fill={selected ? '#dbe5e2' : '#74807d'}
+                        >
+                          {fmtStrike(bucket.strike)}
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -533,7 +627,7 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
               </div>
               <div className={styles.inspectorStat}>
                 <span>Raw {meta.greek}</span>
-                <strong>{rawDisplay(mode, activeBucket.rawValue, asset)}</strong>
+                <strong>{rawDisplay(mode, activeBucket.rawValue, asset, spotUsd)}</strong>
               </div>
               <div className={styles.inspectorStat}>
                 <span>Open contracts</span>

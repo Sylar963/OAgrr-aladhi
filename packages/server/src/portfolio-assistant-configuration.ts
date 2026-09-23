@@ -23,7 +23,9 @@ export function readPortfolioAssistantConfiguration(
 ): PortfolioAssistantConfiguration {
   const enabled =
     env['PORTFOLIO_ASSISTANT_ENABLED'] === 'true' || env['PORTFOLIO_ASSISTANT_ENABLED'] === '1';
-  const apiUrl = env['HERMES_PORTFOLIO_API_URL'] ?? 'http://127.0.0.1:8642/v1';
+  const apiUrl =
+    env['HERMES_PORTFOLIO_API_URL'] ??
+    'http://127.0.0.1:8642/p/portfolio-chat/v1';
   const apiKey = env['HERMES_PORTFOLIO_API_KEY']?.trim() || null;
   const inviteHashSecret = env['PORTFOLIO_ASSISTANT_INVITE_HASH_SECRET']?.trim() || null;
   if (enabled) {

@@ -770,7 +770,7 @@ Add server configuration with these exact environment names:
 
 ```text
 PORTFOLIO_ASSISTANT_ENABLED=false
-HERMES_PORTFOLIO_API_URL=http://127.0.0.1:8642/v1
+HERMES_PORTFOLIO_API_URL=http://127.0.0.1:8642/p/portfolio-chat/v1
 HERMES_PORTFOLIO_API_KEY=<server-only bearer>
 HERMES_PORTFOLIO_MODEL=portfolio-chat
 HERMES_PORTFOLIO_REQUEST_TIMEOUT_MS=90000

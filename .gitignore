@@ -64,3 +64,4 @@ apps/landing/.next
 !/docs/knowledge/
 !/docs/knowledge/options-trading.md
 CLAUDE.md
+.env.example

@@ -57,4 +57,8 @@ src/
 
 - **Portfolio transport is runtime-backed** — `/portfolio/*` routes and `WS /ws/portfolio` read from the shared in-memory position store plus live market marks. The REST side stays mutation-oriented; the WS side pushes recomputed metrics and changed leg IDs.
 
+- **Hermes gets market data two ways** — `assistant-market/` compacts `/api/*` responses (via `app.inject`) into small labeled tables. The portfolio assistant context embeds them as `marketFacts`, and a loopback-only MCP server (`127.0.0.1:${OGG_ASSISTANT_MCP_PORT:-3191}/mcp`, bearer `OGG_ASSISTANT_MCP_TOKEN`) exposes them as read-only tools to the Hermes `portfolio-chat` profile. It never exposes per-user portfolio data.
+
+- **Options book library** — `pnpm --filter @oggregator/server library:build` indexes `docs/*.pdf` into `docs/options-library.sqlite` (FTS5, gitignored). Scanned PDFs without a text layer are skipped. Restart the backend after a rebuild; an open handle keeps reading the replaced file.
+
 - **Enrichment happens per request / push** — each `/api/chains` call and each `WS /ws/chain` snapshot rebuilds the enriched response from the current QuoteStore. No caching layer between store and response.

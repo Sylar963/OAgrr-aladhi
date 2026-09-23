@@ -34,10 +34,7 @@ export async function portfolioMetricsRoute(app: FastifyInstance) {
     const runtime = getOrCreatePortfolioRuntime(accountId, source, underlying);
     const forwardDays = parsed.data.forwardDays ?? 0;
     runtime.setForwardDays(forwardDays);
-    const snapshot = runtime.getSnapshot();
-    if (snapshot == null) {
-      return { accountId, source, metrics: null, positions: [] };
-    }
+    const snapshot = runtime.computeMetricsAt(forwardDays);
     return {
       accountId,
       source,

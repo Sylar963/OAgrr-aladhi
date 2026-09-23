@@ -229,3 +229,70 @@ export function buildPortfolioPnlCurve(
     points,
   };
 }
+
+export interface PortfolioHorizonScenarioCell {
+  horizonDays: number;
+  spotMovePct: number;
+  spotUsd: number;
+  pnlUsd: number;
+  pnlByExpiryUsd: Record<string, number>;
+}
+
+export interface PortfolioHorizonScenarios {
+  status: PortfolioPnlCurve['status'];
+  underlying: string | null;
+  currentSpotUsd: number | null;
+  ivAssumption: 'current_iv_held_constant';
+  horizonsDays: number[];
+  spotMovesPct: number[];
+  cells: PortfolioHorizonScenarioCell[];
+}
+
+export function buildPortfolioHorizonScenarios(
+  legsWithMarks: LegWithMark[],
+  nowMs: number,
+  horizonsDays: number[],
+  spotMovesPct: number[],
+): PortfolioHorizonScenarios {
+  const horizons = dedupeSorted(horizonsDays.filter((days) => days >= 0));
+  const moves = dedupeSorted(spotMovesPct);
+  const base = {
+    ivAssumption: 'current_iv_held_constant' as const,
+    horizonsDays: horizons,
+    spotMovesPct: moves,
+  };
+  if (legsWithMarks.length === 0) {
+    return { ...base, status: 'empty', underlying: null, currentSpotUsd: null, cells: [] };
+  }
+  const underlying = legsWithMarks[0]?.leg.underlying ?? null;
+  if (underlying == null || legsWithMarks.some(({ leg }) => leg.underlying !== underlying)) {
+    return { ...base, status: 'mixed_underlyings', underlying: null, currentSpotUsd: null, cells: [] };
+  }
+  const currentSpotUsd = average(
+    legsWithMarks.map(({ mark }) => mark.underlyingPriceUsd ?? mark.forwardPriceUsd),
+  );
+  if (currentSpotUsd == null) {
+    return { ...base, status: 'missing_marks', underlying, currentSpotUsd: null, cells: [] };
+  }
+
+  const cells: PortfolioHorizonScenarioCell[] = [];
+  for (const horizonDays of horizons) {
+    const horizonMs = nowMs + horizonDays * DAY_MS;
+    for (const spotMovePct of moves) {
+      const spotUsd = currentSpotUsd * (1 + spotMovePct / 100);
+      let pnlUsd = 0;
+      const pnlByExpiryUsd: Record<string, number> = {};
+      for (const { leg, mark } of legsWithMarks) {
+        const value = markAtHorizon(leg, mark, spotUsd, yearsUntil(leg.expiry, horizonMs));
+        if (value == null) {
+          return { ...base, status: 'missing_marks', underlying, currentSpotUsd, cells: [] };
+        }
+        const legPnlUsd = (value - leg.entryPriceUsd) * leg.size;
+        pnlUsd += legPnlUsd;
+        pnlByExpiryUsd[leg.expiry] = (pnlByExpiryUsd[leg.expiry] ?? 0) + legPnlUsd;
+      }
+      cells.push({ horizonDays, spotMovePct, spotUsd, pnlUsd, pnlByExpiryUsd });
+    }
+  }
+  return { ...base, status: 'ok', underlying, currentSpotUsd, cells };
+}

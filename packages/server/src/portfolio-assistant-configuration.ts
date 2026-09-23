@@ -67,6 +67,10 @@ export function readPortfolioAssistantConfiguration(
       'PORTFOLIO_ASSISTANT_RETENTION_DAYS',
     ),
     inviteHashSecret,
-    maxContextCharacters: 80_000,
+    maxContextCharacters: positiveInteger(
+      env['PORTFOLIO_ASSISTANT_MAX_CONTEXT_CHARACTERS'],
+      160_000,
+      'PORTFOLIO_ASSISTANT_MAX_CONTEXT_CHARACTERS',
+    ),
   };
 }

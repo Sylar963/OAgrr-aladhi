@@ -12,7 +12,9 @@ import { bootstrapAdapters, disposeAdapters } from './adapters.js';
 import { disposeChainWarmup, warmupChainRuntimes } from './chain-warmup.js';
 import { disposeFundedSettlementJob, startFundedSettlementJob } from './funded-settlement-job.js';
 import {
+  bindAssistantMarketData,
   disposePortfolioAssistantServices,
+  startAssistantMcpFromEnv,
   startPortfolioAssistantRetentionCleanup,
 } from './portfolio-assistant-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
@@ -172,6 +174,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerRoutes(app);
   startRuntimeMetrics(app.log);
   startPortfolioAssistantRetentionCleanup(app.log);
+  bindAssistantMarketData(app);
+  app.addHook('onListen', async () => {
+    await startAssistantMcpFromEnv(app.log);
+  });
 
   // Tracked so onClose can await any in-flight bootstrap before disposing —
   // otherwise SIGTERM arriving mid-bootstrap would start runtimes that nobody

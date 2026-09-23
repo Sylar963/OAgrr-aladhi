@@ -20,10 +20,15 @@ import {
   breakEvenIvCurve,
   computeTotals,
 } from '../../portfolio/aggregator.js';
-import { buildPortfolioPnlCurve } from '../../portfolio/pnl-curve.js';
+import {
+  buildPortfolioHorizonScenarios,
+  buildPortfolioPnlCurve,
+  type PortfolioHorizonScenarios,
+} from '../../portfolio/pnl-curve.js';
 import { computeShockGrid, getShockGridMeta } from '../../portfolio/scenarios.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
 import type {
+  MarkContext,
   MarkProvider,
   PositionStore,
 } from '../../portfolio/types.js';
@@ -48,6 +53,12 @@ export interface PortfolioErrorEvent {
   type: 'error';
   code: string;
   message: string;
+}
+
+export interface PortfolioMetricsComputation {
+  positions: PositionLeg[];
+  metrics: PortfolioMetrics;
+  error: PortfolioErrorEvent | null;
 }
 
 export type PortfolioRuntimeEvent =
@@ -200,6 +211,25 @@ export class PortfolioRuntime {
     return this.lastSnapshot;
   }
 
+  // Computes fresh metrics for a horizon without touching the streamed
+  // forwardDays, so on-demand readers never see the previous tick's horizon.
+  computeMetricsAt(forwardDays: number): PortfolioMetricsComputation {
+    return this.buildMetricsSafe(forwardDays);
+  }
+
+  computeHorizonScenarios(
+    horizonsDays: number[],
+    spotMovesPct: number[],
+  ): PortfolioHorizonScenarios | null {
+    try {
+      const { withMarks } = this.collectLegsWithMarks();
+      return buildPortfolioHorizonScenarios(withMarks, this.now(), horizonsDays, spotMovesPct);
+    } catch (err: unknown) {
+      logger.error({ err, accountId: this.accountId }, 'portfolio horizon scenarios failed');
+      return null;
+    }
+  }
+
   dispose(): void {
     this.disposed = true;
     if (this.pushTimer != null) {
@@ -211,7 +241,10 @@ export class PortfolioRuntime {
     this.listeners.clear();
   }
 
-  private buildMetrics(): { positions: PositionLeg[]; metrics: PortfolioMetrics } {
+  private collectLegsWithMarks(): {
+    positions: PositionLeg[];
+    withMarks: Array<{ leg: PositionLeg; mark: MarkContext }>;
+  } {
     const storeList = this.store.list(this.accountId);
     const rawPositions =
       this.underlyingFilter == null
@@ -254,7 +287,15 @@ export class PortfolioRuntime {
       if (mark == null) throw new Error('mark missing for leg');
       return { leg, mark };
     });
-    const nowMs = this.now() + this.forwardDays * 86_400_000;
+    return { positions, withMarks };
+  }
+
+  private buildMetrics(forwardDays: number): {
+    positions: PositionLeg[];
+    metrics: PortfolioMetrics;
+  } {
+    const { positions, withMarks } = this.collectLegsWithMarks();
+    const nowMs = this.now() + forwardDays * 86_400_000;
 
     let totals: PortfolioTotals;
     let pnlCurve: PortfolioPnlCurve;
@@ -281,7 +322,7 @@ export class PortfolioRuntime {
       strategies = [];
     } else {
       totals = computeTotals(withMarks);
-      pnlCurve = buildPortfolioPnlCurve(withMarks, this.now(), this.forwardDays);
+      pnlCurve = buildPortfolioPnlCurve(withMarks, this.now(), forwardDays);
       byStrike = aggregateGreeksByStrike(withMarks);
       byExpiry = aggregateGreeksByExpiry(withMarks, nowMs);
       breakEven = breakEvenIvCurve(withMarks);
@@ -299,7 +340,7 @@ export class PortfolioRuntime {
     const metrics: PortfolioMetrics = {
       accountId: this.accountId,
       generatedAt: this.now(),
-      forwardDays: this.forwardDays,
+      forwardDays,
       totals,
       pnlCurve,
       byStrike,
@@ -313,14 +354,10 @@ export class PortfolioRuntime {
     return { positions, metrics };
   }
 
-  private buildMetricsSafe(): {
-    positions: PositionLeg[];
-    metrics: PortfolioMetrics;
-    error: PortfolioErrorEvent | null;
-  } {
+  private buildMetricsSafe(forwardDays: number = this.forwardDays): PortfolioMetricsComputation {
     try {
       return {
-        ...this.buildMetrics(),
+        ...this.buildMetrics(forwardDays),
         error: null,
       };
     } catch (err: unknown) {
@@ -329,7 +366,7 @@ export class PortfolioRuntime {
       const metrics: PortfolioMetrics = {
         accountId: this.accountId,
         generatedAt: this.now(),
-        forwardDays: this.forwardDays,
+        forwardDays,
         totals: emptyTotals(),
         pnlCurve: emptyPnlCurve(),
         byStrike: [],

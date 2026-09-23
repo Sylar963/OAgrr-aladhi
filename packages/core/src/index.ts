@@ -277,7 +277,10 @@ export {
   aggregateGreeksByStrike,
   aggregateGreeksByExpiry,
   breakEvenIvCurve,
+  buildPortfolioHorizonScenarios,
   buildPortfolioPnlCurve,
+  type PortfolioHorizonScenarioCell,
+  type PortfolioHorizonScenarios,
   computeTotals,
   attachMarks,
   legMarkFromShockedIv,
@@ -306,6 +309,7 @@ export {
   type PortfolioSnapshotEvent,
   type PortfolioDeltaEvent,
   type PortfolioErrorEvent,
+  type PortfolioMetricsComputation,
 } from './runtime/portfolio/index.js';
 
 // private (per-user, authenticated) venue adapters

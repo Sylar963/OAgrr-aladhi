@@ -144,6 +144,46 @@ describe('PortfolioRuntime', () => {
     runtime.dispose();
   });
 
+  it('computes metrics for a requested horizon without waiting for a push', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+    });
+    runtime.start();
+    const computed = runtime.computeMetricsAt(7);
+    expect(computed.error).toBeNull();
+    expect(computed.metrics.forwardDays).toBe(7);
+    expect(computed.metrics.pnlCurve.points.every((point) => point.forwardPnlUsd != null)).toBe(
+      true,
+    );
+    expect(runtime.getSnapshot()?.metrics.forwardDays).toBe(0);
+    runtime.dispose();
+  });
+
+  it('prices horizon scenarios with time decay at flat spot', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+    });
+    const scenarios = runtime.computeHorizonScenarios([0, 30], [0, 10]);
+    expect(scenarios?.status).toBe('ok');
+    const flatNow = scenarios?.cells.find((c) => c.horizonDays === 0 && c.spotMovePct === 0);
+    const flatLater = scenarios?.cells.find((c) => c.horizonDays === 30 && c.spotMovePct === 0);
+    const rallyLater = scenarios?.cells.find((c) => c.horizonDays === 30 && c.spotMovePct === 10);
+    expect(flatLater!.pnlUsd).toBeLessThan(flatNow!.pnlUsd);
+    expect(rallyLater!.pnlUsd).toBeGreaterThan(flatLater!.pnlUsd);
+    expect(flatLater!.pnlByExpiryUsd['2026-08-12']).toBeCloseTo(flatLater!.pnlUsd);
+    runtime.dispose();
+  });
+
   it('dispose stops emission', () => {
     const store = new InMemoryPositionStore();
     const runtime = new PortfolioRuntime({

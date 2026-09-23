@@ -26,7 +26,12 @@ export {
   legMarkFromShockedIv,
 } from './aggregator.js';
 export { applyVolShock, computeShockPnl, computeShockGrid, getShockGridMeta } from './scenarios.js';
-export { buildPortfolioPnlCurve } from './pnl-curve.js';
+export {
+  buildPortfolioHorizonScenarios,
+  buildPortfolioPnlCurve,
+  type PortfolioHorizonScenarioCell,
+  type PortfolioHorizonScenarios,
+} from './pnl-curve.js';
 export {
   foldManualLeg,
   findExistingForInput,

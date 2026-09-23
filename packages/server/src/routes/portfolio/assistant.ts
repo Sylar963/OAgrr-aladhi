@@ -196,8 +196,11 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
         'X-Accel-Buffering': 'no',
       });
       const responseHeaders = reply.getHeaders();
+      for (const [name, value] of Object.entries(responseHeaders)) {
+        if (value !== undefined) reply.raw.setHeader(name, value);
+      }
       reply.hijack();
-      reply.raw.writeHead(200, responseHeaders);
+      reply.raw.writeHead(200);
       const heartbeat = setInterval(() => {
         if (!reply.raw.destroyed) reply.raw.write(': keep-alive\n\n');
       }, 15_000);

@@ -4,6 +4,7 @@ import type { EnrichedChainResponse, VenueQuote } from '@shared/enriched';
 import {
   classifyStrikeVsEm,
   computeExpectedMove,
+  computeVisibleGammaLevels,
   filterRowsBySignificance,
   selectSignificantStrikes,
   STRIKE_FILTER,
@@ -223,7 +224,9 @@ describe('selectSignificantStrikes', () => {
         putBestIv: 0.5,
       });
     }
-    return chain(expiry, dte, strikes);
+    const c = chain(expiry, dte, strikes);
+    c.gex = strikes.map((s, i) => ({ strike: s.strike, gexUsdMillions: oiPattern[i]! / 10 }));
+    return c;
   }
 
   const em: ExpectedMove = { expiry: '2026-05-01', dte: 4, value: 4_000, source: 'straddle' };
@@ -304,7 +307,7 @@ describe('selectSignificantStrikes', () => {
     expect(result.size).toBe(0);
   });
 
-  it('A4 keeps strikes above mean + 1.5σ of OI distribution', () => {
+  it('A4 keeps strikes above mean + 1.5σ of |GEX| distribution', () => {
     const result = selectSignificantStrikes({
       chains: [bigChain('2026-05-01', 4)],
       spotPrice: 80_000,
@@ -316,6 +319,24 @@ describe('selectSignificantStrikes', () => {
     });
     // Strong outlier 500 dominates. Mean+1.5σ ~ peaked, so just the 500 strike (80k) qualifies.
     expect(result.has(80_000)).toBe(true);
+  });
+
+  it('A4 ranks by |GEX|, not OI — a big-OI strike with no gamma is dropped', () => {
+    const c = bigChain('2026-05-01', 4);
+    c.gex = c.strikes.map((s) => ({
+      strike: s.strike,
+      gexUsdMillions: s.strike === 80_000 ? 0 : s.strike === 77_000 ? -40 : 1,
+    }));
+    const result = selectSignificantStrikes({
+      chains: [c],
+      spotPrice: 80_000,
+      mode: 'contracts',
+      hiddenExpiries: new Set(),
+      side: 'both',
+      emByExpiry: new Map([['2026-05-01', em]]),
+      significance: 'a4-outliers',
+    });
+    expect([...result]).toEqual([77_000]);
   });
 
   it('A4 returns empty when distribution is perfectly flat', () => {
@@ -393,5 +414,25 @@ describe('classifyStrikeVsEm', () => {
   it('classifies outside when beyond 2·EM', () => {
     expect(classifyStrikeVsEm(90_000, 80_000, em)).toBe('outside');
     expect(classifyStrikeVsEm(70_000, 80_000, em)).toBe('outside');
+  });
+});
+
+describe('computeVisibleGammaLevels', () => {
+  it('sums GEX across visible expiries only and derives walls + flip', () => {
+    const a = chain('2026-05-01', 4, []);
+    a.gex = [
+      { strike: 78_000, gexUsdMillions: -10 },
+      { strike: 82_000, gexUsdMillions: 6 },
+    ];
+    const b = chain('2026-05-08', 11, []);
+    b.gex = [{ strike: 82_000, gexUsdMillions: 6 }];
+    const hidden = chain('2026-06-26', 60, []);
+    hidden.gex = [{ strike: 82_000, gexUsdMillions: -100 }];
+
+    const levels = computeVisibleGammaLevels([a, b, hidden], new Set(['2026-06-26']), 80_000);
+    expect(levels.netGexByStrike.get(82_000)).toBe(12);
+    expect(levels.callWall).toBe(82_000);
+    expect(levels.putWall).toBe(78_000);
+    expect(levels.gammaFlip).not.toBeNull();
   });
 });

@@ -7,6 +7,7 @@
 // so it can be unit-tested in isolation.
 
 import type { EnrichedChainResponse, EnrichedStrike, VenueQuote } from '@shared/enriched';
+import { computeGammaWalls, type GammaWalls } from '@features/gex';
 
 import type { HeatRow, OiMode, HeatSide } from './oi-heatmap-utils';
 
@@ -192,12 +193,13 @@ export function selectSignificantStrikes(input: SignificantStrikesInput): Set<nu
     const lo = spotPrice - STRIKE_FILTER.emBandMultiplier * em.value;
     const hi = spotPrice + STRIKE_FILTER.emBandMultiplier * em.value;
 
-    const candidates: { strike: number; oi: number }[] = [];
+    const gexByStrike = new Map(chain.gex.map((g) => [g.strike, g.gexUsdMillions]));
+    const candidates: { strike: number; oi: number; gexAbs: number }[] = [];
     for (const strike of chain.strikes) {
       if (strike.strike < lo || strike.strike > hi) continue;
       const oi = sideOi(strike, readOi, side);
       if (oi <= 0) continue;
-      candidates.push({ strike: strike.strike, oi });
+      candidates.push({ strike: strike.strike, oi, gexAbs: Math.abs(gexByStrike.get(strike.strike) ?? 0) });
     }
     if (candidates.length === 0) continue;
 
@@ -205,8 +207,11 @@ export function selectSignificantStrikes(input: SignificantStrikesInput): Set<nu
       candidates.sort((a, b) => b.oi - a.oi);
       for (const c of candidates.slice(0, STRIKE_FILTER.topK)) result.add(c.strike);
     } else {
-      const cutoff = outlierCutoff(candidates.map((c) => c.oi));
-      for (const c of candidates) if (c.oi > cutoff) result.add(c.strike);
+      // A4 ranks by |dealer GEX| rather than raw OI: a far-OTM pile with little
+      // gamma forces little hedging, so it isn't a level dealers defend.
+      const scored = candidates.filter((c) => c.gexAbs > 0);
+      const cutoff = outlierCutoff(scored.map((c) => c.gexAbs));
+      for (const c of scored) if (c.gexAbs > cutoff) result.add(c.strike);
     }
   }
   return result;
@@ -238,6 +243,30 @@ function outlierCutoff(values: number[]): number {
   const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
   const std = Math.sqrt(variance);
   return mean + STRIKE_FILTER.outlierSigma * std;
+}
+
+// ── Dealer gamma levels (A4) ─────────────────────────────────────────
+
+export interface GammaLevels extends GammaWalls {
+  netGexByStrike: Map<number, number>;
+}
+
+// Sums signed per-strike GEX ($M) across the visible expiries — dealer hedging
+// responds to the whole book, not one expiry.
+export function computeVisibleGammaLevels(
+  chains: readonly EnrichedChainResponse[],
+  hiddenExpiries: ReadonlySet<string>,
+  spot: number | null,
+): GammaLevels {
+  const netGexByStrike = new Map<number, number>();
+  for (const chain of chains) {
+    if (hiddenExpiries.has(chain.expiry)) continue;
+    for (const g of chain.gex) {
+      netGexByStrike.set(g.strike, (netGexByStrike.get(g.strike) ?? 0) + g.gexUsdMillions);
+    }
+  }
+  const gex = [...netGexByStrike].map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }));
+  return { ...computeGammaWalls(gex, spot), netGexByStrike };
 }
 
 // Convenience wrapper: filters a HeatRow[] to only the significant strikes.

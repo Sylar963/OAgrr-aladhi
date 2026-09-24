@@ -68,9 +68,12 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
                 <strong>A3</strong> (default) — top 5 strikes by OI per expiry,
                 inside its ±2σ band, then unioned across visible expiries.
                 <br />
-                <strong>A4 BETA</strong> — strikes whose OI exceeds mean + 1.5σ
-                of the per-expiry distribution. Sparser, surfaces single
-                "wall" strikes; can be empty on flat chains.
+                <strong>A4 BETA</strong> — dealer-gamma levels. Strikes whose
+                |GEX| exceeds mean + 1.5σ of the per-expiry distribution, summed
+                across visible expiries. Green = dealers long gamma (pinning),
+                red = short gamma (acceleration). Also draws the γ flip and
+                call/put walls. GEX uses tracked dealer inventory where
+                available, else assumes dealers long calls / short puts.
               </p>
               <p>
                 <strong>Timeframe tabs (1d / 3d / 7d / 30d / 90d):</strong>

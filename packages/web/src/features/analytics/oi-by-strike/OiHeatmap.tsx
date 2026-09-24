@@ -31,6 +31,7 @@ import {
 import {
   classifyStrikeVsEm,
   computeExpectedMove,
+  computeVisibleGammaLevels,
   filterRowsBySignificance,
   selectSignificantStrikes,
   type EmZone,
@@ -99,6 +100,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const strikeLinesRef = useRef<Map<number, IPriceLine>>(new Map());
   const spotLineRef = useRef<IPriceLine | null>(null);
   const maxPainLineRef = useRef<IPriceLine | null>(null);
+  const gammaLinesRef = useRef<IPriceLine[]>([]);
 
   const sessionBufferRef = useRef<Map<number, SessionPoint[]>>(new Map());
 
@@ -166,10 +168,21 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [chains, spotPrice, mode, hiddenExpiries, side, emByExpiry, significance],
   );
 
-  const heatRows = useMemo(
-    () => filterRowsBySignificance(allRows, significantStrikes),
-    [allRows, significantStrikes],
+  const gammaLevels = useMemo(
+    () => computeVisibleGammaLevels(chains, hiddenExpiries, spotPrice),
+    [chains, hiddenExpiries, spotPrice],
   );
+
+  // A4 colours bands by dealer gamma sign (green = long γ, pins/mean-reverts;
+  // red = short γ, accelerates) instead of call/put OI dominance.
+  const heatRows = useMemo(() => {
+    const rows = filterRowsBySignificance(allRows, significantStrikes);
+    if (significance !== 'a4-outliers') return rows;
+    return rows.map((r) => ({
+      ...r,
+      dominant: (gammaLevels.netGexByStrike.get(r.strike) ?? 0) >= 0 ? 'call' as const : 'put' as const,
+    }));
+  }, [allRows, significantStrikes, significance, gammaLevels]);
 
   // One cone at a time. Default to the nearest expiry that has an EM; the Cone
   // dropdown overrides it ('off' hides it). Deliberately independent of the
@@ -289,6 +302,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       strikeLinesRef.current.clear();
       spotLineRef.current = null;
       maxPainLineRef.current = null;
+      gammaLinesRef.current = [];
     };
   }, []);
 
@@ -341,7 +355,15 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       }
     }
     for (const row of heatRows) {
-      if (lines.has(row.strike)) continue;
+      const labelColors = {
+        axisLabelColor: row.dominant === 'call' ? '#0E3D2C' : '#3D0E1A',
+        axisLabelTextColor: row.dominant === 'call' ? '#00E997' : '#CB3855',
+      };
+      const existing = lines.get(row.strike);
+      if (existing) {
+        existing.applyOptions(labelColors);
+        continue;
+      }
       const line = series.createPriceLine({
         price: row.strike,
         color: 'transparent',
@@ -350,8 +372,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         lineVisible: false,
         axisLabelVisible: true,
         title: row.strike.toLocaleString(),
-        axisLabelColor: row.dominant === 'call' ? '#0E3D2C' : '#3D0E1A',
-        axisLabelTextColor: row.dominant === 'call' ? '#00E997' : '#CB3855',
+        ...labelColors,
       });
       lines.set(row.strike, line);
     }
@@ -395,6 +416,32 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       });
     }
   }, [maxPain]);
+
+  // ── A4 dealer-gamma levels: flip + call/put walls ───────────────
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    for (const line of gammaLinesRef.current) series.removePriceLine(line);
+    gammaLinesRef.current = [];
+    if (significance !== 'a4-outliers') return;
+    const { gammaFlip, callWall, putWall } = gammaLevels;
+    const levels: { price: number | null; color: string; title: string }[] = [
+      { price: gammaFlip, color: '#F7A600', title: 'γ FLIP' },
+      { price: callWall, color: '#00E997', title: 'CALL WALL' },
+      { price: putWall, color: '#CB3855', title: 'PUT WALL' },
+    ];
+    for (const { price, color, title } of levels) {
+      if (price == null) continue;
+      gammaLinesRef.current.push(series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title,
+      }));
+    }
+  }, [significance, gammaLevels]);
 
   // ── Session OI buffer (in-memory, clears on unmount/currency change) ──
   useEffect(() => {

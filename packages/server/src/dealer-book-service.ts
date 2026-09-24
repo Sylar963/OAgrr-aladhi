@@ -58,6 +58,7 @@ function toPersisted(pos: DealerPosition): PersistedDealerPosition {
     strike: pos.strike,
     optionType: pos.optionType,
     dealerContracts: pos.dealerContracts,
+    flowContracts: pos.flowContracts,
     lastOi: pos.lastOi,
     lastSnapshotTs: new Date(pos.lastSnapshotTs),
   };
@@ -72,6 +73,7 @@ function fromPersisted(row: PersistedDealerPosition): DealerPosition {
     strike: row.strike,
     optionType: row.optionType,
     dealerContracts: row.dealerContracts,
+    flowContracts: row.flowContracts,
     lastOi: row.lastOi,
     lastSnapshotTs: row.lastSnapshotTs.getTime(),
   };

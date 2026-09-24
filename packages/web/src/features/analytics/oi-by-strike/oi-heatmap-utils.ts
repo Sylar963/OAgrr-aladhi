@@ -124,6 +124,8 @@ export interface HeatRow {
   putOi: number;
   magnitude: number;
   dominant: 'call' | 'put';
+  /** 0–1 flow-attribution confidence (A4 only); fades low-confidence bands. */
+  confidence?: number;
 }
 
 export function aggregateHeatRows(
@@ -176,11 +178,17 @@ export function computeOpacity(magnitude: number, maxMagnitude: number): number 
   return OPACITY_FLOOR + Math.sqrt(ratio) * (OPACITY_CEILING - OPACITY_FLOOR);
 }
 
+// A fully naive-prior band keeps 35% of its opacity so it stays visible.
+const CONFIDENCE_ALPHA_FLOOR = 0.35;
+
 const CALL_RGB = '0, 233, 151';   // #00E997
 const PUT_RGB  = '203, 56, 85';   // #CB3855
 
 export function heatColor(row: HeatRow, maxMagnitude: number): string {
-  const alpha = computeOpacity(row.magnitude, maxMagnitude);
+  const base = computeOpacity(row.magnitude, maxMagnitude);
+  const alpha = row.confidence === undefined
+    ? base
+    : base * (CONFIDENCE_ALPHA_FLOOR + (1 - CONFIDENCE_ALPHA_FLOOR) * row.confidence);
   const rgb = row.dominant === 'call' ? CALL_RGB : PUT_RGB;
   return `rgba(${rgb}, ${alpha.toFixed(3)})`;
 }

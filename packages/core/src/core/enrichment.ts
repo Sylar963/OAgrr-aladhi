@@ -5,7 +5,7 @@ import type {
   ComparisonRow,
   EstimatedFees,
 } from './types.js';
-import type { BookLookup } from './dealer-book.js';
+import type { BookLookup, DealerPosition } from './dealer-book.js';
 
 // 2 vol points — avoids noise-driven flips on nearly-flat surfaces
 const TERM_STRUCTURE_THRESHOLD = 0.02;
@@ -137,6 +137,11 @@ export interface SmileCurve {
 export interface GexStrike {
   strike: number;
   gexUsdMillions: number;
+  /**
+   * 0–1 share of this strike's gross gamma whose dealer sign came from observed
+   * taker flow; the rest is the naive long-calls/short-puts prior.
+   */
+  flowShare?: number;
 }
 
 export type TermStructure = 'contango' | 'flat' | 'backwardation';
@@ -643,6 +648,8 @@ export function computeGex(
     const row = rowByStrike.get(s.strike);
     let callGex = 0;
     let putGex = 0;
+    let grossGex = 0;
+    let flowGex = 0;
 
     for (const venueKey of Object.keys(s.call.venues) as VenueId[]) {
       const vq = s.call.venues[venueKey];
@@ -656,7 +663,10 @@ export function computeGex(
       const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
       // Calls: dealerContracts is already +long-gamma. Naive prior = +OI.
       const qty = pos ? pos.dealerContracts : vq.openInterest;
-      callGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const contrib = (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      callGex += contrib;
+      grossGex += Math.abs(contrib);
+      flowGex += Math.abs(contrib) * flowFraction(pos);
     }
 
     for (const venueKey of Object.keys(s.put.venues) as VenueId[]) {
@@ -673,13 +683,25 @@ export function computeGex(
       // option (long gamma)", so negate it here to keep that meaning. Naive
       // prior = +OI (→ subtracted → −OI contribution), preserving call−put.
       const qty = pos ? -pos.dealerContracts : vq.openInterest;
-      putGex += (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      const contrib = (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
+      putGex += contrib;
+      grossGex += Math.abs(contrib);
+      flowGex += Math.abs(contrib) * flowFraction(pos);
     }
 
-    result.push({ strike: s.strike, gexUsdMillions: callGex - putGex });
+    result.push({
+      strike: s.strike,
+      gexUsdMillions: callGex - putGex,
+      flowShare: grossGex > 0 ? flowGex / grossGex : 0,
+    });
   }
 
   return result;
+}
+
+function flowFraction(pos: DealerPosition | undefined): number {
+  if (!pos || pos.lastOi <= 0) return 0;
+  return Math.max(0, Math.min(1, pos.flowContracts / pos.lastOi));
 }
 
 /**
@@ -692,14 +714,26 @@ export function computeGex(
  * preserved). Output is sorted ascending by strike.
  */
 export function combineGex(perExpiryGex: GexStrike[][]): GexStrike[] {
-  const byStrike = new Map<number, number>();
+  const byStrike = new Map<number, { net: number; gross: number; flow: number; hasFlow: boolean }>();
   for (const list of perExpiryGex) {
     for (const row of list) {
-      byStrike.set(row.strike, (byStrike.get(row.strike) ?? 0) + row.gexUsdMillions);
+      const acc = byStrike.get(row.strike) ?? { net: 0, gross: 0, flow: 0, hasFlow: false };
+      const abs = Math.abs(row.gexUsdMillions);
+      acc.net += row.gexUsdMillions;
+      acc.gross += abs;
+      if (row.flowShare !== undefined) {
+        acc.flow += abs * row.flowShare;
+        acc.hasFlow = true;
+      }
+      byStrike.set(row.strike, acc);
     }
   }
   return [...byStrike.entries()]
-    .map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }))
+    .map(([strike, acc]): GexStrike => {
+      const out: GexStrike = { strike, gexUsdMillions: acc.net };
+      if (acc.hasFlow) out.flowShare = acc.gross > 0 ? acc.flow / acc.gross : 0;
+      return out;
+    })
     .sort((left, right) => left.strike - right.strike);
 }
 

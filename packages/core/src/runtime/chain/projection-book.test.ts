@@ -69,6 +69,7 @@ describe('ChainProjection bookLookup', () => {
       strike: 70000,
       optionType: 'call',
       dealerContracts: 0,
+      flowContracts: 0,
       lastOi: 100,
       lastSnapshotTs: 1,
     });

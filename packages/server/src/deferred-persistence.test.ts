@@ -60,6 +60,7 @@ const dealerRow: PersistedDealerPosition = {
   strike: 70000,
   optionType: 'call',
   dealerContracts: 100,
+  flowContracts: 0,
   lastOi: 100,
   lastSnapshotTs: new Date(1_000),
 };

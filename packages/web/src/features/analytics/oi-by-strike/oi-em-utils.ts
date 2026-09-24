@@ -249,6 +249,8 @@ function outlierCutoff(values: number[]): number {
 
 export interface GammaLevels extends GammaWalls {
   netGexByStrike: Map<number, number>;
+  /** |GEX|-weighted flow-attribution share per strike; absent when no data. */
+  flowShareByStrike: Map<number, number>;
 }
 
 // Sums signed per-strike GEX ($M) across the visible expiries — dealer hedging
@@ -259,14 +261,25 @@ export function computeVisibleGammaLevels(
   spot: number | null,
 ): GammaLevels {
   const netGexByStrike = new Map<number, number>();
+  const flowAcc = new Map<number, { gross: number; flow: number }>();
   for (const chain of chains) {
     if (hiddenExpiries.has(chain.expiry)) continue;
     for (const g of chain.gex) {
       netGexByStrike.set(g.strike, (netGexByStrike.get(g.strike) ?? 0) + g.gexUsdMillions);
+      if (g.flowShare === undefined) continue;
+      const acc = flowAcc.get(g.strike) ?? { gross: 0, flow: 0 };
+      const abs = Math.abs(g.gexUsdMillions);
+      acc.gross += abs;
+      acc.flow += abs * g.flowShare;
+      flowAcc.set(g.strike, acc);
     }
   }
+  const flowShareByStrike = new Map<number, number>();
+  for (const [strike, acc] of flowAcc) {
+    flowShareByStrike.set(strike, acc.gross > 0 ? acc.flow / acc.gross : 0);
+  }
   const gex = [...netGexByStrike].map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }));
-  return { ...computeGammaWalls(gex, spot), netGexByStrike };
+  return { ...computeGammaWalls(gex, spot), netGexByStrike, flowShareByStrike };
 }
 
 // Convenience wrapper: filters a HeatRow[] to only the significant strikes.

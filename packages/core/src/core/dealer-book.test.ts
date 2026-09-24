@@ -102,3 +102,44 @@ describe('applyBookInterval', () => {
     expect(Math.abs(next.dealerContracts)).toBeLessThanOrEqual(150);
   });
 });
+
+describe('flowContracts attribution', () => {
+  const prior = (over: Partial<DealerPosition> = {}): DealerPosition => ({
+    ...bootstrapNaivePosition(snap()),
+    ...over,
+  });
+
+  it('bootstrap starts fully naive', () => {
+    expect(bootstrapNaivePosition(snap()).flowContracts).toBe(0);
+  });
+
+  it('opening with observed flow adds ΔOI to flowContracts', () => {
+    const next = applyBookInterval({
+      prior: prior(),
+      snapshot: snap({ openInterest: 150 }),
+      netFlow: 20,
+      hasFlow: true,
+    });
+    expect(next.flowContracts).toBe(50);
+  });
+
+  it('opening without flow leaves flowContracts unchanged', () => {
+    const next = applyBookInterval({
+      prior: prior({ flowContracts: 10 }),
+      snapshot: snap({ openInterest: 150 }),
+      netFlow: 0,
+      hasFlow: false,
+    });
+    expect(next.flowContracts).toBe(10);
+  });
+
+  it('closing scales flowContracts with OI', () => {
+    const next = applyBookInterval({
+      prior: prior({ flowContracts: 40 }),
+      snapshot: snap({ openInterest: 50 }),
+      netFlow: -5,
+      hasFlow: true,
+    });
+    expect(next.flowContracts).toBe(20);
+  });
+});

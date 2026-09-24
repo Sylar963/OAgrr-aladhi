@@ -13,6 +13,11 @@ export interface DealerPosition {
   strike: number;
   optionType: OptionRight;
   dealerContracts: number;
+  /**
+   * Unsigned contracts (≤ lastOi) whose sign came from observed taker flow
+   * rather than the naive prior. flowContracts / lastOi = attribution confidence.
+   */
+  flowContracts: number;
   lastOi: number;
   lastSnapshotTs: number;
 }
@@ -49,6 +54,7 @@ export function bootstrapNaivePosition(snap: OiSnapshotInput): DealerPosition {
     strike: snap.strike,
     optionType: snap.optionType,
     dealerContracts: sign * snap.openInterest,
+    flowContracts: 0,
     lastOi: snap.openInterest,
     lastSnapshotTs: snap.snapshotTs,
   };
@@ -92,19 +98,23 @@ export function applyBookInterval(params: {
   const nowOi = snapshot.openInterest;
   const deltaOi = nowOi - prevOi;
   let dealer = prior.dealerContracts;
+  let flow = prior.flowContracts;
 
   if (Math.abs(deltaOi) < OI_EPSILON) {
     // no net OI change → no position change
   } else if (deltaOi < 0) {
-    const scale = prevOi > OI_EPSILON ? nowOi / prevOi : 0;
-    dealer = dealer * Math.max(0, scale);
+    const scale = Math.max(0, prevOi > OI_EPSILON ? nowOi / prevOi : 0);
+    dealer = dealer * scale;
+    flow = flow * scale;
   } else {
     dealer = dealer + signOiDelta({ deltaOi, netFlow, hasFlow, optionType: snapshot.optionType });
+    if (hasFlow && netFlow !== 0) flow += deltaOi;
   }
 
   return {
     ...prior,
     dealerContracts: dealer,
+    flowContracts: Math.min(flow, nowOi),
     lastOi: nowOi,
     lastSnapshotTs: snapshot.snapshotTs,
   };

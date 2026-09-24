@@ -165,6 +165,7 @@ export function buildChain(
         const oi = c.quote.openInterest;
         if (oi == null) return undefined;
         const naiveBase = c.right === 'call' ? oi : -oi;
+        const netFlow = flowBook.netFlowFor(symbol);
         const pos: DealerPosition = {
           venue: TASTYTRADE_VENUE,
           symbol,
@@ -172,7 +173,8 @@ export function buildChain(
           expiry,
           strike: c.strike,
           optionType: c.right,
-          dealerContracts: naiveBase - flowBook.netFlowFor(symbol),
+          dealerContracts: naiveBase - netFlow,
+          flowContracts: Math.min(Math.abs(netFlow), oi),
           lastOi: oi,
           lastSnapshotTs: c.quote.timestamp ?? Date.now(),
         };

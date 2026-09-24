@@ -181,6 +181,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     return rows.map((r) => ({
       ...r,
       dominant: (gammaLevels.netGexByStrike.get(r.strike) ?? 0) >= 0 ? 'call' as const : 'put' as const,
+      confidence: gammaLevels.flowShareByStrike.get(r.strike),
     }));
   }, [allRows, significantStrikes, significance, gammaLevels]);
 
@@ -355,13 +356,16 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       }
     }
     for (const row of heatRows) {
-      const labelColors = {
+      const labelOptions = {
         axisLabelColor: row.dominant === 'call' ? '#0E3D2C' : '#3D0E1A',
         axisLabelTextColor: row.dominant === 'call' ? '#00E997' : '#CB3855',
+        title: row.confidence === undefined
+          ? row.strike.toLocaleString()
+          : `${row.strike.toLocaleString()} · ${Math.round(row.confidence * 100)}%`,
       };
       const existing = lines.get(row.strike);
       if (existing) {
-        existing.applyOptions(labelColors);
+        existing.applyOptions(labelOptions);
         continue;
       }
       const line = series.createPriceLine({
@@ -371,8 +375,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         lineStyle: LineStyle.Solid,
         lineVisible: false,
         axisLabelVisible: true,
-        title: row.strike.toLocaleString(),
-        ...labelColors,
+        ...labelOptions,
       });
       lines.set(row.strike, line);
     }

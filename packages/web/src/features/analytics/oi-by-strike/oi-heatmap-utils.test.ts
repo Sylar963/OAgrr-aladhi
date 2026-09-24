@@ -191,3 +191,17 @@ describe('heatColor', () => {
     expect(Number(m![1])).toBeCloseTo(0.05, 2);
   });
 });
+
+describe('heatColor confidence fade', () => {
+  const alphaOf = (s: string) => Number(s.match(/, ([\d.]+)\)$/)![1]);
+
+  it('leaves alpha unchanged when confidence is absent or 1', () => {
+    const base = alphaOf(heatColor(row('call', 100), 100));
+    expect(alphaOf(heatColor({ ...row('call', 100), confidence: 1 }, 100))).toBeCloseTo(base, 3);
+  });
+
+  it('fades a fully naive band to 35% of its opacity', () => {
+    const base = alphaOf(heatColor(row('call', 100), 100));
+    expect(alphaOf(heatColor({ ...row('call', 100), confidence: 0 }, 100))).toBeCloseTo(base * 0.35, 3);
+  });
+});

@@ -10,6 +10,7 @@ export interface PersistedDealerPosition {
   strike: number;
   optionType: 'call' | 'put';
   dealerContracts: number;
+  flowContracts: number;
   lastOi: number;
   lastSnapshotTs: Date;
 }
@@ -42,6 +43,7 @@ interface DealerBookRow {
   strike: string | number;
   option_type: 'call' | 'put';
   dealer_contracts: string | number;
+  flow_contracts: string | number;
   last_oi: string | number;
   last_snapshot_ts: Date;
 }
@@ -55,6 +57,7 @@ function mapRow(row: DealerBookRow): PersistedDealerPosition {
     strike: Number(row.strike),
     optionType: row.option_type,
     dealerContracts: Number(row.dealer_contracts),
+    flowContracts: Number(row.flow_contracts),
     lastOi: Number(row.last_oi),
     lastSnapshotTs: row.last_snapshot_ts,
   };
@@ -73,7 +76,7 @@ export class PostgresDealerBookStore implements DealerBookStore {
     if (underlyings.length === 0) return [];
     const result = await this.pool.query<DealerBookRow>(
       `SELECT venue, underlying, instrument_name, expiry, strike, option_type,
-              dealer_contracts, last_oi, last_snapshot_ts
+              dealer_contracts, flow_contracts, last_oi, last_snapshot_ts
        FROM dealer_book
        WHERE underlying = ANY($1::text[])`,
       [underlyings.map((u) => u.toUpperCase())],
@@ -87,7 +90,7 @@ export class PostgresDealerBookStore implements DealerBookStore {
       const batch = positions.slice(i, i + UPSERT_BATCH_SIZE);
       const values: unknown[] = [];
       const placeholders = batch.map((p, b) => {
-        const o = b * 9;
+        const o = b * 10;
         values.push(
           p.venue,
           p.underlying.toUpperCase(),
@@ -96,18 +99,20 @@ export class PostgresDealerBookStore implements DealerBookStore {
           p.strike,
           p.optionType,
           p.dealerContracts,
+          p.flowContracts,
           p.lastOi,
           p.lastSnapshotTs,
         );
-        return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8}, $${o + 9})`;
+        return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8}, $${o + 9}, $${o + 10})`;
       });
       await this.pool.query(
         `INSERT INTO dealer_book (
           venue, underlying, instrument_name, expiry, strike, option_type,
-          dealer_contracts, last_oi, last_snapshot_ts
+          dealer_contracts, flow_contracts, last_oi, last_snapshot_ts
         ) VALUES ${placeholders.join(', ')}
         ON CONFLICT (venue, instrument_name) DO UPDATE SET
           dealer_contracts = EXCLUDED.dealer_contracts,
+          flow_contracts = EXCLUDED.flow_contracts,
           last_oi = EXCLUDED.last_oi,
           last_snapshot_ts = EXCLUDED.last_snapshot_ts,
           updated_at = now()`,

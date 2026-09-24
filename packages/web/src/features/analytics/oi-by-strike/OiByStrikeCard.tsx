@@ -73,7 +73,11 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
                 across visible expiries. Green = dealers long gamma (pinning),
                 red = short gamma (acceleration). Also draws the γ flip and
                 call/put walls. GEX uses tracked dealer inventory where
-                available, else assumes dealers long calls / short puts.
+                available, else assumes dealers long calls / short puts. The
+                <strong> %</strong> on each label is the share of that strike's
+                gamma whose dealer sign came from observed taker flow; faded
+                bands lean on the naive assumption. Block trades are not yet
+                attributed.
               </p>
               <p>
                 <strong>Timeframe tabs (1d / 3d / 7d / 30d / 90d):</strong>

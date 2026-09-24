@@ -9,6 +9,7 @@ const pos: PersistedDealerPosition = {
   strike: 70000,
   optionType: 'call',
   dealerContracts: -42,
+  flowContracts: 0,
   lastOi: 100,
   lastSnapshotTs: new Date(1_000),
 };

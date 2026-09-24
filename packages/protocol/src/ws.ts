@@ -151,6 +151,8 @@ export interface EnrichedStrike {
 export interface GexStrike {
   strike: number;
   gexUsdMillions: number;
+  /** 0–1 share of gross gamma whose dealer sign came from observed taker flow. */
+  flowShare?: number;
 }
 
 export interface ChainStats {
@@ -282,6 +284,7 @@ const EnrichedStrikeSchema = z.object({
 const GexStrikeSchema = z.object({
   strike: z.number(),
   gexUsdMillions: z.number(),
+  flowShare: z.number().min(0).max(1).optional(),
 });
 
 const ChainStatsSchema = z.object({

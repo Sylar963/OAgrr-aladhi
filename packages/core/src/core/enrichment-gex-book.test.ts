@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildComparisonChain } from './aggregator.js';
 import type { BookLookup, DealerPosition } from './dealer-book.js';
-import { buildEnrichedChain, computeGex, enrichComparisonRow } from './enrichment.js';
+import { buildEnrichedChain, combineGex, computeGex, enrichComparisonRow } from './enrichment.js';
 import type { NormalizedOptionContract, VenueOptionChain } from './types.js';
 import { EMPTY_GREEKS } from './types.js';
 
@@ -77,6 +77,7 @@ describe('computeGex book awareness', () => {
         strike: 70000,
         optionType: 'call',
         dealerContracts: -100,
+        flowContracts: 0,
         lastOi: 100,
         lastSnapshotTs: 1,
       },
@@ -88,6 +89,7 @@ describe('computeGex book awareness', () => {
         strike: 70000,
         optionType: 'put',
         dealerContracts: -100,
+        flowContracts: 0,
         lastOi: 100,
         lastSnapshotTs: 1,
       },
@@ -109,11 +111,51 @@ describe('computeGex book awareness', () => {
       strike: 70000,
       optionType: 'call',
       dealerContracts: 0,
+      flowContracts: 0,
       lastOi: 0,
       lastSnapshotTs: 1,
     });
     const enriched = buildEnrichedChain('BTC', '2026-06-30', rows(), [chain()], lookup);
     // both legs map to dealerContracts 0 → flat GEX
     expect(enriched.gex[0]?.gexUsdMillions).toBe(0);
+  });
+});
+
+describe('GEX flowShare', () => {
+  const pos = (symbol: string, optionType: 'call' | 'put', flowContracts: number): DealerPosition => ({
+    venue: 'deribit',
+    symbol,
+    underlying: 'BTC',
+    expiry: '2026-06-30',
+    strike: 70000,
+    optionType,
+    dealerContracts: optionType === 'call' ? 100 : -100,
+    flowContracts,
+    lastOi: 100,
+    lastSnapshotTs: 1,
+  });
+
+  it('is 0 without a book', () => {
+    expect(computeGex(rows(), strikes(), 70000)[0]?.flowShare).toBe(0);
+  });
+
+  it('weights each leg by its gross gamma contribution', () => {
+    const book: Record<string, DealerPosition> = {
+      'BTC-30JUN26-70000-C': pos('BTC-30JUN26-70000-C', 'call', 100),
+      'BTC-30JUN26-70000-P': pos('BTC-30JUN26-70000-P', 'put', 0),
+    };
+    const gex = computeGex(rows(), strikes(), 70000, (_v, s) => book[s]);
+    expect(gex[0]?.flowShare).toBeCloseTo(0.5, 12);
+  });
+
+  it('combineGex blends flowShare by |GEX| and omits it when no input has one', () => {
+    const combined = combineGex([
+      [{ strike: 1, gexUsdMillions: 3, flowShare: 1 }],
+      [{ strike: 1, gexUsdMillions: -1, flowShare: 0 }],
+      [{ strike: 2, gexUsdMillions: 5 }],
+    ]);
+    expect(combined[0]?.gexUsdMillions).toBe(2);
+    expect(combined[0]?.flowShare).toBeCloseTo(0.75, 12);
+    expect(combined[1]?.flowShare).toBeUndefined();
   });
 });

@@ -435,4 +435,18 @@ describe('computeVisibleGammaLevels', () => {
     expect(levels.putWall).toBe(78_000);
     expect(levels.gammaFlip).not.toBeNull();
   });
+
+  it('blends flowShare by |GEX| and skips strikes without attribution data', () => {
+    const a = chain('2026-05-01', 4, []);
+    a.gex = [
+      { strike: 82_000, gexUsdMillions: 3, flowShare: 1 },
+      { strike: 84_000, gexUsdMillions: 2 },
+    ];
+    const b = chain('2026-05-08', 11, []);
+    b.gex = [{ strike: 82_000, gexUsdMillions: -1, flowShare: 0 }];
+
+    const levels = computeVisibleGammaLevels([a, b], new Set(), 80_000);
+    expect(levels.flowShareByStrike.get(82_000)).toBeCloseTo(0.75, 12);
+    expect(levels.flowShareByStrike.has(84_000)).toBe(false);
+  });
 });

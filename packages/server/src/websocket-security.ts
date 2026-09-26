@@ -7,7 +7,7 @@ let totalSockets = 0;
 
 export function protectWebSocket(socket: WebSocket, ip: string): boolean {
   if (totalSockets >= 1_000 || (socketsByIp.get(ip) ?? 0) >= 20) {
-    socket.close(1013, 'Connection limit reached');
+    socket.terminate();
     return false;
   }
   totalSockets += 1;
@@ -15,7 +15,9 @@ export function protectWebSocket(socket: WebSocket, ip: string): boolean {
   let windowStart = Date.now();
   let messages = 0;
   let alive = true;
-  socket.on('pong', () => { alive = true; });
+  socket.on('pong', () => {
+    alive = true;
+  });
   socket.on('message', () => {
     const now = Date.now();
     if (now - windowStart >= 1_000) {

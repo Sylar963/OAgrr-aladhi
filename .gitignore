@@ -61,6 +61,7 @@ apps/landing/.next
 /docs
 !/docs/
 /docs/*
+!/docs/SECURITY_HARDENING.md
 !/docs/knowledge/
 !/docs/knowledge/options-trading.md
 CLAUDE.md

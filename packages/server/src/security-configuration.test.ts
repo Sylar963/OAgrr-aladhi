@@ -5,7 +5,10 @@ import { allowedOrigins, trustedProxies } from './security-configuration.js';
 
 describe('security configuration', () => {
   it('does not allow arbitrary preview deployments or production localhost origins', () => {
-    const origins = allowedOrigins({ NODE_ENV: 'production', CORS_ALLOWED_ORIGINS: 'https://approved.vercel.app' });
+    const origins = allowedOrigins({
+      NODE_ENV: 'production',
+      CORS_ALLOWED_ORIGINS: 'https://approved.vercel.app',
+    });
     expect(origins).toContain('https://approved.vercel.app');
     expect(origins).not.toContain('https://attacker.vercel.app');
     expect(origins).not.toContain('http://localhost:5173');
@@ -23,19 +26,35 @@ describe('security configuration', () => {
     await app.register(rateLimit, { max: 1, timeWindow: '1 minute' });
     app.get('/probe', (req) => ({ ip: req.ip }));
     try {
-      const first = await app.inject({ url: '/probe', remoteAddress: '203.0.113.9', headers: { 'x-forwarded-for': '198.51.100.1' } });
-      const second = await app.inject({ url: '/probe', remoteAddress: '203.0.113.9', headers: { 'x-forwarded-for': '198.51.100.2' } });
+      const first = await app.inject({
+        url: '/probe',
+        remoteAddress: '203.0.113.9',
+        headers: { 'x-forwarded-for': '198.51.100.1' },
+      });
+      const second = await app.inject({
+        url: '/probe',
+        remoteAddress: '203.0.113.9',
+        headers: { 'x-forwarded-for': '198.51.100.2' },
+      });
       expect(first.json()).toEqual({ ip: '203.0.113.9' });
       expect(second.statusCode).toBe(429);
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
   });
 
   it('uses the first untrusted hop behind the local reverse proxy', async () => {
     const app = Fastify({ trustProxy: trustedProxies({}) });
     app.get('/probe', (req) => ({ ip: req.ip }));
     try {
-      const response = await app.inject({ url: '/probe', remoteAddress: '127.0.0.1', headers: { 'x-forwarded-for': '198.51.100.1, 203.0.113.9' } });
+      const response = await app.inject({
+        url: '/probe',
+        remoteAddress: '127.0.0.1',
+        headers: { 'x-forwarded-for': '198.51.100.1, 203.0.113.9' },
+      });
       expect(response.json()).toEqual({ ip: '203.0.113.9' });
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
   });
 });

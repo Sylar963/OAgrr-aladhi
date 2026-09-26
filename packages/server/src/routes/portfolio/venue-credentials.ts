@@ -155,29 +155,33 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     };
   });
 
-  app.post('/portfolio/venue-credentials/reconnect', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
-    if (!privateAdaptersEnabled()) return { venues: [] };
-    if (getCredentialCipherOrSendError(reply) == null) return reply;
-    const accountId = getAccountId(request);
-    const storedVenues = await venueCredentialsStore.listVenues(accountId);
-    const results = await Promise.all(
-      storedVenues.map(async (rawVenue) => {
-        const parsed = VenueIdSchema.safeParse(rawVenue);
-        if (!parsed.success) return null;
-        try {
-          const connected = await reconnectStoredVenue(accountId, parsed.data);
-          return { venue: parsed.data, configured: true, connected };
-        } catch (error) {
-          request.log.warn(
-            { accountId, venue: parsed.data, err: String(error) },
-            'stored venue reconnect failed',
-          );
-          return { venue: parsed.data, configured: true, connected: false };
-        }
-      }),
-    );
-    return { venues: results.filter((result) => result != null) };
-  });
+  app.post(
+    '/portfolio/venue-credentials/reconnect',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      if (!privateAdaptersEnabled()) return { venues: [] };
+      if (getCredentialCipherOrSendError(reply) == null) return reply;
+      const accountId = getAccountId(request);
+      const storedVenues = await venueCredentialsStore.listVenues(accountId);
+      const results = await Promise.all(
+        storedVenues.map(async (rawVenue) => {
+          const parsed = VenueIdSchema.safeParse(rawVenue);
+          if (!parsed.success) return null;
+          try {
+            const connected = await reconnectStoredVenue(accountId, parsed.data);
+            return { venue: parsed.data, configured: true, connected };
+          } catch (error) {
+            request.log.warn(
+              { accountId, venue: parsed.data, err: String(error) },
+              'stored venue reconnect failed',
+            );
+            return { venue: parsed.data, configured: true, connected: false };
+          }
+        }),
+      );
+      return { venues: results.filter((result) => result != null) };
+    },
+  );
 
   app.post<{ Params: { venue: string }; Body: unknown }>(
     '/portfolio/venue-credentials/:venue',

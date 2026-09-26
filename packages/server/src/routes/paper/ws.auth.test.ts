@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
+import { once } from 'node:events';
+import { revokePrivateWebSockets } from '../../websocket-security.js';
 
 const { storeMock, consumeWebSocketTicketMock, listPositionsMock, getCashBalanceMock } = vi.hoisted(
   () => ({
@@ -64,6 +66,16 @@ describe('WS /ws/paper auth gate', () => {
     consumeWebSocketTicketMock.mockReset();
     listPositionsMock.mockClear();
     getCashBalanceMock.mockClear();
+  });
+
+  it('closes an already authenticated socket when the user signs out', async () => {
+    storeMock.enabled = true;
+    consumeWebSocketTicketMock.mockReturnValue({ id: 'logout-paper', accountId: 'acct_logout' });
+    const ws = await app.injectWS('/ws/paper?ticket=logout');
+    const closed = once(ws, 'close');
+    revokePrivateWebSockets('logout-paper');
+    await closed;
+    expect(ws.readyState).toBe(WS_CLOSED);
   });
 
   it('closes the connection without a hello when anonymous and persistence is enabled', async () => {

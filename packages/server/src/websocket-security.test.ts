@@ -2,7 +2,12 @@ import { once } from 'node:events';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PRIVATE_SOCKET_LIFETIME_MS, protectWebSocket, registerPrivateWebSocket, revokePrivateWebSockets } from './websocket-security.js';
+import {
+  PRIVATE_SOCKET_LIFETIME_MS,
+  protectWebSocket,
+  registerPrivateWebSocket,
+  revokePrivateWebSockets,
+} from './websocket-security.js';
 
 afterEach(() => vi.useRealTimers());
 
@@ -29,7 +34,9 @@ describe('websocket security', () => {
       expect(a.readyState).toBe(3);
       expect(b.readyState).toBe(1);
       b.terminate();
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
   });
 
   it('requires periodic reauthentication', async () => {
@@ -41,7 +48,9 @@ describe('websocket security', () => {
       await vi.advanceTimersByTimeAsync(PRIVATE_SOCKET_LIFETIME_MS);
       await closed;
       expect(socket.readyState).toBe(3);
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
   });
 
   it('closes a socket that floods messages', async () => {
@@ -52,13 +61,30 @@ describe('websocket security', () => {
       for (let i = 0; i < 21; i += 1) socket.send('{}');
       await closed;
       expect(socket.readyState).toBe(3);
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects oversized incoming frames', async () => {
+    const app = await buildApp();
+    try {
+      const socket = await app.injectWS('/ws/payload');
+      const closed = once(socket, 'close');
+      socket.send('x'.repeat(64 * 1024 + 1));
+      const [code] = await closed;
+      expect(code).toBe(1009);
+    } finally {
+      await app.close();
+    }
   });
 
   it('caps connections per IP and releases slots when clients disconnect', async () => {
     const app = await buildApp();
     try {
-      const sockets = await Promise.all(Array.from({ length: 20 }, () => app.injectWS('/ws/quota')));
+      const sockets = await Promise.all(
+        Array.from({ length: 20 }, () => app.injectWS('/ws/quota')),
+      );
       const rejected = await app.injectWS('/ws/quota');
       if (rejected.readyState !== 3) await once(rejected, 'close');
       expect(rejected.readyState).toBe(3);
@@ -70,6 +96,8 @@ describe('websocket security', () => {
       expect(replacement.readyState).toBe(1);
       replacement.terminate();
       for (const socket of sockets) socket.terminate();
-    } finally { await app.close(); }
+    } finally {
+      await app.close();
+    }
   });
 });

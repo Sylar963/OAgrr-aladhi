@@ -125,12 +125,14 @@ export async function buildApp(): Promise<FastifyInstance> {
           remoteAddress: request.ip,
         }),
       },
-      ...(isDev ? {
-        transport: {
-          target: 'pino-pretty',
-          options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
-        },
-      } : {}),
+      ...(isDev
+        ? {
+            transport: {
+              target: 'pino-pretty',
+              options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+            },
+          }
+        : {}),
     },
   });
 
@@ -159,7 +161,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     crossOriginEmbedderPolicy: false,
   });
   app.addHook('onSend', async (_request, reply, payload) => {
-    reply.header('Content-Security-Policy', "object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+    reply.header(
+      'Content-Security-Policy',
+      "object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    );
     return payload;
   });
   await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' });

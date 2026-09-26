@@ -55,6 +55,9 @@ export type AlphaStraddleFlag = z.infer<typeof AlphaStraddleFlagSchema>;
 
 export const AlphaStraddlePremiumBaselineSchema = z.object({
   tenorDays: z.number(),
+  // 'venue': measured from this venue's own IV history. 'blended': cross-venue history, used
+  // until the venue has enough independent windows of its own.
+  source: z.enum(['venue', 'blended']),
   medianSpread: NullableNumberSchema,
   sampleCount: z.number().int().nonnegative(),
   independentSampleCount: z.number().int().nonnegative(),

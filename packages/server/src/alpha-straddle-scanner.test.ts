@@ -13,6 +13,7 @@ import {
   straddleVerdict,
   termStructureState,
   type StraddleMarketContext,
+  withVenueBaseline,
 } from './alpha-straddle-scanner.js';
 
 const DAY_MS = 86_400_000;
@@ -169,6 +170,21 @@ describe('buildStraddleVolModel', () => {
     const baseline = buildStraddleVolModel(candles(), { '7d': [], '30d': series }).premiumBaseline(30);
     expect(baseline.medianSpread).toBeCloseTo(0.05, 3);
     expect(baseline.independentSampleCount).toBeGreaterThanOrEqual(4);
+  });
+
+  it("prefers the venue's own premium baseline and marks its source", () => {
+    const blended = richModel();
+    const venue = buildStraddleVolModel(candles(), { '7d': ivSeries(REALIZED + 0.08), '30d': [] }, 'venue');
+    const baseline = withVenueBaseline(blended, venue).premiumBaseline(7);
+    expect(baseline.source).toBe('venue');
+    expect(baseline.medianSpread).toBeCloseTo(0.08, 3);
+  });
+
+  it('falls back to the blended baseline while the venue lacks history', () => {
+    const venue = buildStraddleVolModel(candles(), { '7d': [], '30d': [] }, 'venue');
+    const baseline = withVenueBaseline(richModel(), venue).premiumBaseline(7);
+    expect(baseline.source).toBe('blended');
+    expect(baseline.medianSpread).toBeCloseTo(0.05, 3);
   });
 
   it('leaves the baseline unknown instead of zero when IV history is missing', () => {

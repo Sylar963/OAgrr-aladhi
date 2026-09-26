@@ -19,7 +19,9 @@ import {
   rankStraddleCandidates,
   selectAtmStrike,
   termStructureState,
+  withVenueBaseline,
   type StraddleIvSeries,
+  type StraddleVolModel,
   type StraddleSkipReason,
 } from '../alpha-straddle-scanner.js';
 import { mergeIvSeries } from '../iv-baseline-history.js';
@@ -29,6 +31,7 @@ import {
   isSpotCandlesReady,
   ivBaselineHistory,
   ivHistoryService,
+  venueIvBaselineHistory,
   spotCandleService,
   spotService,
 } from '../services.js';
@@ -103,6 +106,25 @@ export async function alphaStraddleScannerRoute(app: FastifyInstance) {
           '7d': mergeIvSeries(storedIv['7d'], ivHistory?.tenors['7d'].series ?? []),
           '30d': mergeIvSeries(storedIv['30d'], ivHistory?.tenors['30d'].series ?? []),
         });
+        let venueIv: ReadonlyMap<string, StraddleIvSeries> = new Map();
+        try {
+          venueIv = await venueIvBaselineHistory.get(config.underlying);
+        } catch (error: unknown) {
+          req.log.warn({ error, underlying: config.underlying }, 'Straddle scanner venue IV history unavailable');
+        }
+        const venueModels = new Map<string, StraddleVolModel>();
+        const modelFor = (venue: string): StraddleVolModel => {
+          let venueModel = venueModels.get(venue);
+          if (venueModel == null) {
+            const series = venueIv.get(venue);
+            venueModel = withVenueBaseline(
+              model,
+              series == null ? null : buildStraddleVolModel(candles, series, 'venue'),
+            );
+            venueModels.set(venue, venueModel);
+          }
+          return venueModel;
+        };
         const market = {
           termStructure: termStructureState(
             context.volatility.atmIv7d,
@@ -134,7 +156,7 @@ export async function alphaStraddleScannerRoute(app: FastifyInstance) {
           const result = computeStraddleCandidate(
             { venue, underlying: config.underlying, expiry, expiryTs },
             strike,
-            model,
+            modelFor(venue),
             market,
             config,
             scanNowMs,

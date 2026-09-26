@@ -29,6 +29,7 @@ import {
   NoopLeadsStore,
   NoopOiSnapshotStore,
   NoopRegimeStore,
+  NoopVenueIvHistoryStore,
   type OiSnapshotStore,
   PostgresDealerBookStore,
   PostgresIvHistoryStore,
@@ -37,10 +38,12 @@ import {
   PostgresRegimeStore,
   PostgresShortStraddleSnapshotStore,
   PostgresTradeStore,
+  PostgresVenueIvHistoryStore,
   type RegimeStore,
   type ShortStraddleSnapshotStore,
   SqliteTradeStore,
   type TradeHistoryReader,
+  type VenueIvHistoryStore,
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
@@ -52,7 +55,8 @@ import {
   DeferredRegimeStore,
   DeferredShortStraddleSnapshotStore,
 } from './deferred-persistence.js';
-import { IvBaselineHistory } from './iv-baseline-history.js';
+import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
+import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
@@ -145,11 +149,25 @@ export const ivHistoryStore: IvHistoryStore = databaseUrl
   ? createIvHistoryStore(databaseUrl)
   : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
 export const ivBaselineHistory = new IvBaselineHistory(ivHistoryStore);
+export const venueIvHistoryStore: VenueIvHistoryStore = databaseUrl
+  ? PostgresVenueIvHistoryStore.fromConnectionString(databaseUrl)
+  : new NoopVenueIvHistoryStore();
+export const venueIvBaselineHistory = new VenueIvBaselineHistory(venueIvHistoryStore);
+const venueIvHistoryCollector = venueIvHistoryStore.enabled
+  ? new VenueIvHistoryCollector(venueIvHistoryStore)
+  : null;
 export const ivHistoryService = new IvHistoryService({
   dvol: dvolService,
   store: ivHistoryStore,
   getSurfaceGrid: async (underlying: string) => {
     const entries = await buildIvSurfaceGrid({ underlying });
+    if (venueIvHistoryCollector != null) {
+      try {
+        await venueIvHistoryCollector.collect(entries, underlying);
+      } catch (err: unknown) {
+        shortStraddleLog.warn({ err: String(err) }, 'venue IV history collection failed');
+      }
+    }
     if (shortStraddleSnapshotService != null) {
       try {
         const normalizedUnderlying = underlying.toUpperCase();
@@ -313,6 +331,13 @@ async function buildRegimeInputs(underlying: string): Promise<RegimeInputs> {
   let basis30d: number | null = null;
   try {
     const entries = await buildIvSurfaceGrid({ underlying });
+    if (venueIvHistoryCollector != null) {
+      try {
+        await venueIvHistoryCollector.collect(entries, underlying);
+      } catch (err: unknown) {
+        shortStraddleLog.warn({ err: String(err) }, 'venue IV history collection failed');
+      }
+    }
     const points = entries
       .filter((e) => e.basisPct != null)
       .map((e) => ({ dte: e.dte, basisPct: e.basisPct as number }));

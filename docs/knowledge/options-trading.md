@@ -102,6 +102,13 @@ the listed strike nearest the venue forward for each venue and expiry in the DTE
 - **Watch:** below cone p75; excess over the usual premium ≤ 0 or unknown (7D ATM IV history
   for DTE ≤ 14, 30D otherwise; needs 4 independent windows); backwardation; spot breakout;
   7D RV > 1.25 × 30D RV; under 2 DTE; or size below the venue minimum (K15).
+- **Usual premium source:** the venue's own constant-maturity ATM IV history
+  (`venue_iv_history_points`, hourly since 2026-09-26, built only from that venue's quotes and
+  only when its expiries bracket the tenor) once it has 4 independent windows. Until then the
+  cross-venue history (`iv_history_points`; 30D seeded from Deribit DVOL) is used, and the
+  response marks `premiumBaseline.source` as `venue` or `blended`. Venue IVs differ by a few
+  points, so a blended baseline can make one venue look rich or cheap for a structural reason.
+  Realized vol in both baselines comes from Deribit BTC-PERPETUAL daily closes (08:00 UTC).
 - **Sizing:** quantity whose loss at ±kσ (default 3σ at the higher of sell IV and hurdle)
   fits equity × stress budget %, capped by min(call bid size, put bid size).
 - **Ranking:** verdict, then model edge ÷ stress loss.
@@ -183,7 +190,8 @@ Do not confuse:
 
 1. Short vol: fit the forecast half-life and gate thresholds out-of-sample on BTC; add
    strangles/wings (K17), an event-implied move from the front two expiries (Sinclair
-   pp. 52–54), and a longer IV history so 30D baselines become measurable.
+   pp. 52–54). 30D baselines became measurable on 2026-09-26 (DVOL seed + stored history);
+   per-venue baselines need ~4 months of hourly venue history before they replace the blend.
 2. Re-upload Natenberg; render/OCR the auction document. Read the remaining targeted chapters
    on Greeks, skew, hedging costs, and forecast distributions; extend the source ledger.
 3. Study matched-horizon BTC volatility forecasts. Compare IV, trailing RV, simple forecasts,

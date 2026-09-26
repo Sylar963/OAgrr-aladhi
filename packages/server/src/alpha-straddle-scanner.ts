@@ -129,6 +129,7 @@ function median(values: number[]): number | null {
 export function buildStraddleVolModel(
   candles: readonly SpotCandle[],
   ivSeries: StraddleIvSeries,
+  baselineSource: AlphaStraddlePremiumBaseline['source'] = 'blended',
 ): StraddleVolModel {
   const sorted = [...candles].sort((a, b) => a.timestamp - b.timestamp);
   const closes = sorted.map((candle) => candle.close);
@@ -196,6 +197,7 @@ export function buildStraddleVolModel(
       const independentSampleCount = Math.ceil(spreads.length / tenorDays);
       const baseline = {
         tenorDays,
+        source: baselineSource,
         medianSpread:
           independentSampleCount >= MIN_INDEPENDENT_BASELINE_WINDOWS ? median(spreads) : null,
         sampleCount: spreads.length,
@@ -203,6 +205,21 @@ export function buildStraddleVolModel(
       };
       baselineCache.set(tenorDays, baseline);
       return baseline;
+    },
+  };
+}
+
+/** Prefers the venue's own premium baseline and falls back to the cross-venue one. */
+export function withVenueBaseline(
+  blended: StraddleVolModel,
+  venue: StraddleVolModel | null,
+): StraddleVolModel {
+  if (venue == null) return blended;
+  return {
+    ...blended,
+    premiumBaseline(dteDays) {
+      const own = venue.premiumBaseline(dteDays);
+      return own.medianSpread != null ? own : blended.premiumBaseline(dteDays);
     },
   };
 }

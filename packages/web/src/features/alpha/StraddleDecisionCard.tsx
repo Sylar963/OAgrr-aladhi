@@ -78,7 +78,11 @@ function gates(candidate: AlphaStraddleCandidate) {
     {
       label: 'Above usual premium',
       detail:
-        candidate.excessEdge == null ? 'unknown' : `${(candidate.excessEdge * 100).toFixed(1)}pt`,
+        candidate.excessEdge == null
+          ? 'unknown'
+          : `${(candidate.excessEdge * 100).toFixed(1)}pt · ${
+              candidate.premiumBaseline.source === 'venue' ? 'venue history' : 'all venues'
+            }`,
       state: has('premium_not_above_normal') ? 'fail' : has('premium_baseline_unknown') ? 'warn' : 'pass',
     },
     {

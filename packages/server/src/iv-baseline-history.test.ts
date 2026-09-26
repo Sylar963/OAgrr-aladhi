@@ -1,7 +1,7 @@
 import type { IvHistoryHourlyQuery, PersistedIvHistoryPoint } from '@oggregator/db';
 import { describe, expect, it, vi } from 'vitest';
 
-import { IvBaselineHistory, mergeIvSeries } from './iv-baseline-history.js';
+import { IvBaselineHistory, mergeIvSeries, VenueIvBaselineHistory } from './iv-baseline-history.js';
 
 const DAY_MS = 86_400_000;
 
@@ -79,5 +79,41 @@ describe('IvBaselineHistory', () => {
     const history = new IvBaselineHistory({ enabled: false, loadHourly });
     await expect(history.get('BTC')).resolves.toEqual({ '7d': [], '30d': [] });
     expect(loadHourly).not.toHaveBeenCalled();
+  });
+});
+
+describe('VenueIvBaselineHistory', () => {
+  it('groups rows by venue and tenor, sorted by observation time', async () => {
+    const venueRow = (venue: string, tenorDays: 7 | 30, day: number, atmIv: number) => ({
+      venue,
+      underlying: 'BTC',
+      tenorDays,
+      slotTs: new Date(day * DAY_MS),
+      observedAt: new Date(day * DAY_MS + 60_000),
+      atmIv,
+      rr25d: null,
+      bfly25d: null,
+    });
+    const loadSince = vi.fn(async () => [
+      venueRow('okx', 30, 2, 0.6),
+      venueRow('deribit', 30, 2, 0.52),
+      venueRow('deribit', 30, 1, 0.5),
+      venueRow('deribit', 7, 1, 0.45),
+    ]);
+    const history = new VenueIvBaselineHistory({ enabled: true, loadSince });
+
+    const byVenue = await history.get('BTC');
+    expect(byVenue.get('deribit')!['30d'].map((p) => p.atmIv)).toEqual([0.5, 0.52]);
+    expect(byVenue.get('deribit')!['7d'].map((p) => p.atmIv)).toEqual([0.45]);
+    expect(byVenue.get('okx')!['30d'].map((p) => p.atmIv)).toEqual([0.6]);
+    expect(byVenue.get('okx')!['7d']).toEqual([]);
+  });
+
+  it('returns no venues without a store', async () => {
+    const loadSince = vi.fn();
+    await expect(new VenueIvBaselineHistory({ enabled: false, loadSince }).get('BTC')).resolves.toEqual(
+      new Map(),
+    );
+    expect(loadSince).not.toHaveBeenCalled();
   });
 });

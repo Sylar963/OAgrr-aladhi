@@ -31,6 +31,7 @@ export interface SurfaceGridEntry {
   // already iterate the grid (e.g. RegimeService for 30d-CMM basis) don't
   // need to re-call computeChainStats.
   basisPct: number | null;
+  referencePriceUsd: number | null;
 }
 
 export interface BuildSurfaceGridOptions {
@@ -140,6 +141,7 @@ export async function buildIvSurfaceGrid({
       atmStrike,
       strikes: enriched.strikes,
       basisPct: stats.basisPct,
+      referencePriceUsd: refPrice,
     });
   }
 

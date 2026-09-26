@@ -30,6 +30,7 @@ import {
   indexPriceService,
   ivHistoryService,
   ivHistoryStore,
+  venueIvHistoryStore,
   markHistoryBuffer,
   spotCandleService,
   spotService,
@@ -215,6 +216,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await disposePortfolioServices();
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
+    await venueIvHistoryStore.dispose();
     await tradeStore.dispose();
     await venueCredentialsStore.dispose();
     await paperTradingStore.dispose();

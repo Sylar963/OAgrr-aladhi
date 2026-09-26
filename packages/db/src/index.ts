@@ -126,3 +126,12 @@ export {
   NoopVenueCredentialsStore,
   PostgresVenueCredentialsStore,
 } from './venue-credentials-store.js';
+export type {
+  PersistedVenueIvHistoryPoint,
+  VenueIvHistoryLoadQuery,
+  VenueIvHistoryStore,
+} from './venue-iv-history-store.js';
+export {
+  NoopVenueIvHistoryStore,
+  PostgresVenueIvHistoryStore,
+} from './venue-iv-history-store.js';

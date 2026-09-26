@@ -107,6 +107,7 @@ function entry(expiry: string, strikes: EnrichedStrike[]): SurfaceGridEntry {
     atmStrike: strikes[0] ?? null,
     strikes,
     basisPct: null,
+    referencePriceUsd: null,
   };
 }
 

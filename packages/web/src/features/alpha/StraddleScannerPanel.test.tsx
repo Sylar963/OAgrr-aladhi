@@ -43,7 +43,7 @@ function candidate(overrides: Partial<AlphaStraddleCandidate>): AlphaStraddleCan
     volEdge: -0.036,
     excessEdge: null,
     conePercentile: 44,
-    premiumBaseline: { tenorDays: 30, medianSpread: null, sampleCount: 0, independentSampleCount: 0 },
+    premiumBaseline: { tenorDays: 30, source: 'blended', medianSpread: null, sampleCount: 0, independentSampleCount: 0 },
     fairValueAtForecast: 7_606,
     modelEdgeUsd: -723,
     probInsideAtForecast: 0.5,
@@ -120,6 +120,23 @@ describe('StraddleScannerPanel', () => {
     expect(screen.getByText(/below the median realized vol for this horizon/)).toBeTruthy();
     expect(screen.getByText('Evidence collection is unavailable on this server.')).toBeTruthy();
     expect(screen.getByText('stress −$27,247')).toBeTruthy();
+  });
+
+  it('says whether the usual premium came from the venue or all venues', () => {
+    scan.data = response([
+      candidate({
+        excessEdge: -0.149,
+        premiumBaseline: {
+          tenorDays: 30,
+          source: 'venue',
+          medianSpread: 0.112,
+          sampleCount: 166,
+          independentSampleCount: 6,
+        },
+      }),
+    ]);
+    render(<StraddleScannerPanel underlying="BTC" venues={['deribit']} />);
+    expect(screen.getByText('-14.9pt · venue history')).toBeTruthy();
   });
 
   it('groups straddles by venue and loads a clicked one into the decision card', () => {

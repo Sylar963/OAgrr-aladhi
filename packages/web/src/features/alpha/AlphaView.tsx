@@ -21,6 +21,7 @@ import {
 } from './cross-venue-scanner';
 import SignalCard, { type ExecutionRoute } from './SignalCard';
 import SpreadBuilderPanel from './SpreadBuilderPanel';
+import StraddleScannerPanel from './StraddleScannerPanel';
 import { type SpreadCandidate, scanSpreads, type VenueScan } from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
@@ -29,7 +30,7 @@ import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
-type AlphaStrategy = SpreadKind | 'long-call';
+type AlphaStrategy = SpreadKind | 'long-call' | 'short-straddle';
 
 const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'call-credit', label: 'Call Credit' },
@@ -37,6 +38,7 @@ const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'call-debit', label: 'Call Debit' },
   { id: 'put-debit', label: 'Put Debit' },
   { id: 'long-call', label: 'Long Call' },
+  { id: 'short-straddle', label: 'Sell Straddle' },
 ];
 
 export default function AlphaView() {
@@ -57,7 +59,8 @@ export default function AlphaView() {
 
   const isMobile = useIsMobile();
   const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
-  const kind: SpreadKind = strategy === 'long-call' ? 'call-credit' : strategy;
+  const isSpread = strategy !== 'long-call' && strategy !== 'short-straddle';
+  const kind: SpreadKind = isSpread ? strategy : 'call-credit';
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
   const [preferredVenue, setPreferredVenue] = useState<VenueId>('thalex');
@@ -85,7 +88,7 @@ export default function AlphaView() {
       chain.expiry !== expiry ||
       !sizing.equity.trim() ||
       !sizing.reserve.trim() ||
-      strategy === 'long-call'
+      !isSpread
     )
       return null;
     return {
@@ -97,7 +100,7 @@ export default function AlphaView() {
       costReserve: Number(sizing.reserve),
       nowMs: Date.now(),
     };
-  }, [chain, error, underlying, expiry, scanVenues, sizing, strategy, clock]);
+  }, [chain, error, underlying, expiry, scanVenues, sizing, isSpread, clock]);
   const scans = useMemo(() => (scanInput ? scanSpreads(scanInput) : []), [scanInput]);
   const crossScans = useMemo(
     () => (scanInput && scanInput.venues.length > 1 ? scanCrossVenueSpreads(scanInput, scans) : []),
@@ -295,7 +298,7 @@ export default function AlphaView() {
               key={item.id}
               onClick={() => {
                 if (item.id === strategy) return;
-                if (item.id === 'long-call') {
+                if (item.id === 'long-call' || item.id === 'short-straddle') {
                   setStrategy(item.id);
                   return;
                 }
@@ -315,7 +318,7 @@ export default function AlphaView() {
         <span className={styles.venueScope}>{activeVenues.length} ACTIVE VENUES</span>
       </div>
 
-      {!isMobile && strategy !== 'long-call' && (
+      {!isMobile && isSpread && (
         <ExpiryBar
           underlying={underlying}
           spotPrice={chain?.stats.forwardPriceUsd}
@@ -339,13 +342,19 @@ export default function AlphaView() {
         </div>
       )}
 
-      {strategy !== 'long-call' && isLoading && !chain && (
+      {strategy === 'short-straddle' && (
+        <div className={styles.scannerWorkspace}>
+          <StraddleScannerPanel underlying={underlying} venues={activeVenues} />
+        </div>
+      )}
+
+      {isSpread && isLoading && !chain && (
         <div className={styles.state}>
           <Spinner size="lg" label="Loading chain data…" />
         </div>
       )}
 
-      {strategy !== 'long-call' && error && !chain && (
+      {isSpread && error && !chain && (
         <div className={styles.state}>
           <EmptyState
             icon="⚠"
@@ -355,7 +364,7 @@ export default function AlphaView() {
         </div>
       )}
 
-      {strategy !== 'long-call' && chain && chain.strikes.length === 0 && (
+      {isSpread && chain && chain.strikes.length === 0 && (
         <EmptyState
           icon="∅"
           title="No options data"
@@ -363,7 +372,7 @@ export default function AlphaView() {
         />
       )}
 
-      {strategy !== 'long-call' &&
+      {isSpread &&
         chain &&
         chain.strikes.length > 0 &&
         (isMobile ? (

@@ -5,7 +5,13 @@ import styles from './AlphaContextStrip.module.css';
 
 interface AlphaContextStripProps {
   context: AlphaMarketContextResponse | null;
-  strategy: 'call-credit' | 'put-credit' | 'call-debit' | 'put-debit' | 'long-call';
+  strategy:
+    | 'call-credit'
+    | 'put-credit'
+    | 'call-debit'
+    | 'put-debit'
+    | 'long-call'
+    | 'short-straddle';
   loading: boolean;
 }
 

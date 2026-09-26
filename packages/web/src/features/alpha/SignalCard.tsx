@@ -87,6 +87,7 @@ function CandidateDashboard({
 }) {
   const status = STATUS[candidate.status];
   const debit = candidate.kind.endsWith('debit');
+  const cross = candidate.buyVenue !== candidate.venue;
   const netCash = candidate.grossPremium - candidate.entryFee - candidate.costReserve;
   const probability = candidate.probability == null ? null : candidate.probability * 100;
   const budgetUsd =
@@ -107,7 +108,12 @@ function CandidateDashboard({
           </div>
         </div>
         <div className={styles.contractLine}>
-          <strong>{VENUES[candidate.venue]?.label ?? candidate.venue}</strong>
+          <strong>
+            {cross
+              ? `${VENUES[candidate.venue]?.label ?? candidate.venue} sell → ${VENUES[candidate.buyVenue]?.label ?? candidate.buyVenue} buy`
+              : (VENUES[candidate.venue]?.label ?? candidate.venue)}
+          </strong>
+          {cross && <span>non-atomic</span>}
           <span>
             {candidate.quantity} {underlying}
           </span>
@@ -208,6 +214,8 @@ function CandidateDashboard({
           Fees {fmtUsd(candidate.entryFee)} + reserve {fmtUsd(candidate.costReserve)} included.
           Expiry bounds require both legs to fill and remain paired. Confirm venue margin and final
           order price.
+          {cross &&
+            ` Cross-venue: legs fill independently, so one can fill without the other, and ${VENUES[candidate.venue]?.label ?? candidate.venue} margins the short leg as a naked short — collateral can far exceed max loss.`}
         </p>
       </details>
     </>

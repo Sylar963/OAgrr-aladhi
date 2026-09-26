@@ -513,6 +513,19 @@
   color: var(--color-profit);
 }
 
+.crossFees {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px var(--space-2);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.crossFees > span[data-tone="profit"] {
+  color: var(--color-profit);
+}
+
 .loadLabel {
   justify-self: end;
   font-size: 9px;

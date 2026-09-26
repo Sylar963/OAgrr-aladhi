@@ -17,6 +17,7 @@ describe('PortfolioAssistantPromptBuilder', () => {
     expect(instructions).toContain('Missing and null values are unavailable, never zero');
     expect(instructions).toContain('not a proven forecast edge');
     expect(instructions).toContain('Never claim to place');
+    expect(instructions).toContain('Format every answer as Markdown');
     expect(instructions).toContain('the current context wins');
     expect(instructions).toContain('horizonScenarios');
     expect(instructions).toContain('heldExpiryChains');

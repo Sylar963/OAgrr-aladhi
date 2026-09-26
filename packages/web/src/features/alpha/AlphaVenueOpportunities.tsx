@@ -12,19 +12,39 @@ const STATUS = {
   'no-model': { label: 'PRICE ONLY', tone: 'neutral' },
 } as const;
 
+type ScanMode = 'same' | 'cross';
+
+const COPY: Record<ScanMode, { title: string; subtitle: string; note: string }> = {
+  same: {
+    title: 'Same-venue spreads',
+    subtitle: 'Both legs execute on one venue',
+    note: 'Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your loss limit.',
+  },
+  cross: {
+    title: 'Cross-venue spreads',
+    subtitle: 'Short leg on this venue, long leg on another',
+    note: 'Each card is the venue holding the short leg. Legs fill independently (no combo order), fees are standalone taker fees on each venue, and the short venue margins its leg as a naked short. Only routes that beat the best same-venue price are shown.',
+  },
+};
+
 export default function AlphaVenueOpportunities({
   scans,
   kind,
   sellStrike,
   buyStrike,
   onSelect,
+  mode = 'same',
+  selectedId = null,
 }: {
   scans: VenueScan[];
   kind: SpreadKind;
   sellStrike: number | null;
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
+  mode?: ScanMode;
+  selectedId?: string | null;
 }) {
+  const copy = COPY[mode];
   const visibleCount = scans.reduce(
     (total, scan) => total + scan.candidates.filter((candidate) => candidate.kind === kind).length,
     0,
@@ -34,8 +54,8 @@ export default function AlphaVenueOpportunities({
     <details className={styles.opportunities} open>
       <summary className={styles.opportunitySummary}>
         <span>
-          <strong>Same-venue spreads</strong>
-          <small>Both legs execute on one venue</small>
+          <strong>{copy.title}</strong>
+          <small>{copy.subtitle}</small>
         </span>
         <span className={styles.summaryCount}>{visibleCount} live pairs</span>
       </summary>
@@ -44,7 +64,11 @@ export default function AlphaVenueOpportunities({
         <div className={styles.scanEmpty}>
           <span className={styles.scanEmptyIcon}>◎</span>
           <strong>Scanner waiting</strong>
-          <span>Enter account equity to map each venue.</span>
+          <span>
+            {mode === 'cross'
+              ? 'Enter account equity and enable at least two venues.'
+              : 'Enter account equity to map each venue.'}
+          </span>
         </div>
       ) : (
         <div className={styles.venueGrid}>
@@ -56,14 +80,13 @@ export default function AlphaVenueOpportunities({
               sellStrike={sellStrike}
               buyStrike={buyStrike}
               onSelect={onSelect}
+              mode={mode}
+              selectedId={selectedId}
             />
           ))}
         </div>
       )}
-      <p className={styles.opportunityNote}>
-        Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your
-        loss limit.
-      </p>
+      <p className={styles.opportunityNote}>{copy.note}</p>
     </details>
   );
 }
@@ -74,17 +97,26 @@ function VenueOpportunity({
   sellStrike,
   buyStrike,
   onSelect,
+  mode,
+  selectedId,
 }: {
   scan: VenueScan;
   kind: SpreadKind;
   sellStrike: number | null;
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
+  mode: ScanMode;
+  selectedId: string | null;
 }) {
   const candidates = scan.candidates.filter((candidate) => candidate.kind === kind);
-  const selected = candidates.find(
-    (candidate) => candidate.sellStrike === sellStrike && candidate.buyStrike === buyStrike,
-  );
+  const strikeMatch = (candidate: SpreadCandidate) =>
+    candidate.sellStrike === sellStrike && candidate.buyStrike === buyStrike;
+  // Cross cards hold one route per buy venue for the same strikes, so prefer the loaded route.
+  const selected =
+    mode === 'cross'
+      ? (candidates.find((candidate) => candidate.id === selectedId) ??
+        candidates.find(strikeMatch))
+      : candidates.find(strikeMatch);
   const alternatives = candidates.filter((candidate) => candidate.id !== selected?.id).slice(0, 2);
   const visible = [...(selected ? [selected] : []), ...alternatives];
   const best = candidates.find((candidate) => candidate.status === 'review') ?? candidates[0];
@@ -131,6 +163,8 @@ function VenueOpportunity({
               key={candidate.id}
               candidate={candidate}
               selected={candidate.id === selected?.id}
+              loaded={mode === 'same' || candidate.id === selectedId}
+              cross={mode === 'cross'}
               onSelect={onSelect}
             />
           ))}
@@ -154,10 +188,14 @@ function VenueOpportunity({
 function CandidateRow({
   candidate,
   selected,
+  loaded,
+  cross,
   onSelect,
 }: {
   candidate: SpreadCandidate;
   selected: boolean;
+  loaded: boolean;
+  cross: boolean;
   onSelect: (candidate: SpreadCandidate) => void;
 }) {
   const status = STATUS[candidate.status];
@@ -173,7 +211,9 @@ function CandidateRow({
       onClick={() => onSelect(candidate)}
     >
       <span className={styles.candidateTopline}>
-        <strong>{selected ? 'Selected' : VERTICAL_LABELS[candidate.kind]}</strong>
+        <strong>
+          {selected ? (loaded ? 'Selected' : 'Your strikes') : VERTICAL_LABELS[candidate.kind]}
+        </strong>
         <span data-tone={status.tone}>{status.label}</span>
       </span>
       <span className={styles.strikeRoute}>
@@ -185,8 +225,22 @@ function CandidateRow({
         <span>
           <i>B</i>
           {fmtStrike(candidate.buyStrike)}
+          {cross && <VenueDot venueId={candidate.buyVenue} />}
         </span>
       </span>
+      {cross && (
+        <span className={styles.crossFees}>
+          <span>
+            fee {fmtUsd(candidate.sellFee)} sell · {fmtUsd(candidate.buyFee)} buy @{' '}
+            {VENUES[candidate.buyVenue]?.label ?? candidate.buyVenue}
+          </span>
+          <span data-tone={candidate.crossImprovement == null ? 'neutral' : 'profit'}>
+            {candidate.crossImprovement == null
+              ? 'no same-venue pair'
+              : `+${fmtUsd(candidate.crossImprovement)} vs same`}
+          </span>
+        </span>
+      )}
       <span className={styles.candidateBalance}>
         <i className={styles.candidateLoss} style={{ width: `${lossWidth}%` }} />
         <i className={styles.candidateProfit} style={{ width: `${profitWidth}%` }} />
@@ -220,6 +274,7 @@ function humanizeRejection(reason: string): string {
     'Inverse settlement needs separate risk model': 'Unsupported settlement type',
     'Settlement mismatch': 'Leg settlement mismatch',
     'Crossed leg quote': 'Invalid crossed quote',
+    'Enable a second venue to route across venues': 'Enable a second venue',
   };
   return labels[reason] ?? reason;
 }

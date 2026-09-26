@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
 import type { SpreadCandidate } from './spread-scanner';
 
-const mocks = vi.hoisted(() => ({ chain: vi.fn(), scan: vi.fn() }));
+const mocks = vi.hoisted(() => ({ chain: vi.fn(), scan: vi.fn(), cross: vi.fn() }));
 vi.mock('@features/chain', () => ({
   useExpiries: () => ({ data: { expiries: ['2026-09-25'] } }),
   usePrefetchChain: () => vi.fn(),
@@ -34,11 +34,13 @@ vi.mock('./LottoScannerPanel', () => ({ default: () => <div>Original long-call s
 vi.mock('./spread-scanner', async (original) => ({
   ...(await original<typeof import('./spread-scanner')>()),
   scanSpreads: mocks.scan,
+  scanCrossVenueSpreads: mocks.cross,
 }));
 
 const candidate: SpreadCandidate = {
   id: 'credit',
   venue: 'thalex',
+  buyVenue: 'thalex',
   expiry: '2026-09-25',
   kind: 'call-credit',
   direction: 'bearish',
@@ -49,6 +51,8 @@ const candidate: SpreadCandidate = {
   quantity: 0.01,
   grossPremium: 4,
   entryFee: 0.12,
+  sellFee: 0.12,
+  buyFee: 0.12,
   costReserve: 0.25,
   maxProfit: 3.63,
   maxLoss: 6.37,
@@ -61,6 +65,7 @@ const candidate: SpreadCandidate = {
   ageMs: 1,
   capacity: 1,
   roundTrip: -1,
+  crossImprovement: null,
 };
 
 beforeEach(() => {
@@ -100,6 +105,7 @@ beforeEach(() => {
     { venue: 'okx', rejected: { 'Unknown entry fees': 2 }, candidates: [] },
   ]);
   mocks.scan.mockClear();
+  mocks.cross.mockReturnValue([]);
 });
 afterEach(cleanup);
 
@@ -151,6 +157,38 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getByText('Cash paid')).toBeTruthy();
     expect(screen.getByText('Original volatility smile')).toBeTruthy();
     expect(screen.getByText(/Bullish. Buy lower call/)).toBeTruthy();
+  });
+  it('lists cross-venue routes under same-venue cards and loads both venues', () => {
+    mocks.cross.mockReturnValue([
+      {
+        venue: 'okx',
+        rejected: {},
+        candidates: [
+          {
+            ...candidate,
+            id: 'okx>thalex:credit',
+            venue: 'okx',
+            buyVenue: 'thalex',
+            sellFee: 0.1,
+            buyFee: 0.12,
+            entryFee: 0.22,
+            crossImprovement: 0.4,
+            status: 'review',
+          },
+        ],
+      },
+      { venue: 'thalex', rejected: {}, candidates: [] },
+    ]);
+    render(<AlphaView />);
+    fireEvent.change(screen.getByLabelText('Account equity · USD'), { target: { value: '1080' } });
+    expect(screen.getByText('Same-venue spreads')).toBeTruthy();
+    expect(screen.getByText('Cross-venue spreads')).toBeTruthy();
+    expect(screen.getByText(/^\+\$0\.4.* vs same$/)).toBeTruthy();
+    expect(screen.getByText('Your strikes')).toBeTruthy();
+    fireEvent.click(screen.getByText(/^\+\$0\.4.* vs same$/));
+    expect(screen.getByText(/Cross-venue execution/)).toBeTruthy();
+    expect(screen.getAllByText(/OKX sell → Thalex buy/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Portfolio exposure: okx')).toBeTruthy();
   });
   it('does not present cached candidates after a chain error', () => {
     mocks.chain.mockReturnValue({ ...mocks.chain(), error: new Error('offline') });

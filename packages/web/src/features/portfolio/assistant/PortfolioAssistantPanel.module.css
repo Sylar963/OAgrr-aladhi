@@ -183,6 +183,66 @@
   text-align: right;
 }
 
+.messageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.message[data-role="user"] .messageHeader {
+  justify-content: flex-end;
+}
+
+.messageHeader .messageRole {
+  margin-bottom: 0;
+}
+
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #6f7d7a;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.copyButton svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.copyButton:hover,
+.copyButton:focus-visible {
+  border-color: #2a3735;
+  background: #0c1211;
+  color: #cfdcd9;
+  outline: none;
+}
+
+.copyButton[data-state="copied"] {
+  color: var(--assistant-accent);
+}
+
+.copyButton[data-state="failed"] {
+  color: #d0a25b;
+}
+
 .messageBody {
   overflow-wrap: anywhere;
   font-family: var(--font-sans);
@@ -230,6 +290,91 @@
 
 .messageBody a {
   color: #75d9cc;
+}
+
+.messageBody p {
+  margin: 0 0 8px;
+}
+
+.messageBody > p:first-child {
+  color: #dfe8e6;
+  font-size: 12.5px;
+}
+
+.messageBody h3,
+.messageBody h4 {
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1f2a28;
+  color: var(--assistant-accent);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.messageBody ul,
+.messageBody ol {
+  margin: 0 0 8px;
+  padding-left: 16px;
+}
+
+.messageBody li {
+  margin: 3px 0;
+}
+
+.messageBody li::marker {
+  color: #4f8f86;
+}
+
+.messageBody strong {
+  color: #eef5f3;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.messageBody em {
+  color: #9fb0ad;
+}
+
+.messageBody p:last-child > em:only-child {
+  display: block;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #23302e;
+  color: #75d9cc;
+  font-style: normal;
+}
+
+.messageBody table {
+  margin: 4px 0 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.messageBody th {
+  background: #0c1211;
+  color: #8fa29e;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.messageBody blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 9px;
+  border-left: 2px solid #2f5f58;
+  color: #9fb0ad;
+}
+
+.messageBody hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid #1f2a28;
 }
 
 .messageState {

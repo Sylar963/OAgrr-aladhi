@@ -15,6 +15,7 @@ interface Props {
   longStrike: number | null;
   executableNetCredit: number | null;
   routeVenue: string | null;
+  routeBuyVenue?: string | null;
   maxQuantity: number | null;
   quoteSkewMs: number | null;
   theoreticalIndependentNetCredit: number | null;
@@ -29,17 +30,25 @@ function VenueRouterTable({
   longStrike,
   executableNetCredit,
   routeVenue,
+  routeBuyVenue = null,
   maxQuantity,
   quoteSkewMs,
   theoreticalIndependentNetCredit,
   children,
   netLabel = 'Same-venue net cash · USD per 1 underlying (known leg fees)',
 }: Props) {
+  const cross = routeVenue != null && routeBuyVenue != null && routeBuyVenue !== routeVenue;
+  const routeLabel =
+    routeVenue == null
+      ? null
+      : cross
+        ? `${venueLabel(routeVenue)} sell → ${venueLabel(routeBuyVenue)} buy · non-atomic`
+        : venueLabel(routeVenue);
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>
-          Same-venue execution
+          {cross ? 'Cross-venue execution' : 'Same-venue execution'}
           <InfoTip label="How routing is computed" title="Same-venue execution" align="start">
             <p>
               The executable spread uses both legs from one venue, with matching settlement, quote
@@ -70,9 +79,9 @@ function VenueRouterTable({
           </InfoTip>
         </span>
         <span className={styles.subtitle}>
-          {routeVenue == null
+          {routeLabel == null
             ? 'No synchronized size-valid pair'
-            : `${VENUES[routeVenue as keyof typeof VENUES]?.label ?? routeVenue} · max ${fmtCompact(maxQuantity)} · skew ${fmtCompact(quoteSkewMs)}ms`}
+            : `${routeLabel} · max ${fmtCompact(maxQuantity)} · skew ${fmtCompact(quoteSkewMs)}ms`}
         </span>
       </div>
 
@@ -103,6 +112,10 @@ function VenueRouterTable({
 }
 
 export default memo(VenueRouterTable);
+
+function venueLabel(venue: string): string {
+  return VENUES[venue as keyof typeof VENUES]?.label ?? venue;
+}
 
 interface LegTableProps {
   legKind: 'short' | 'long';

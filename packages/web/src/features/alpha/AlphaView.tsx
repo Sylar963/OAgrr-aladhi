@@ -15,7 +15,7 @@ import styles from './AlphaView.module.css';
 import LottoScannerPanel from './LottoScannerPanel';
 import SignalCard from './SignalCard';
 import SpreadBuilderPanel from './SpreadBuilderPanel';
-import { type SpreadCandidate, scanSpreads } from './spread-scanner';
+import { type SpreadCandidate, scanCrossVenueSpreads, scanSpreads } from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { useRegimeQuery } from './useRegimeQuery';
@@ -55,6 +55,7 @@ export default function AlphaView() {
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
   const [preferredVenue, setPreferredVenue] = useState<VenueId>('thalex');
+  const [preferredBuyVenue, setPreferredBuyVenue] = useState<VenueId | null>(null);
   const tradeVenue = scanVenues.includes(preferredVenue)
     ? preferredVenue
     : (scanVenues[0] ?? 'thalex');
@@ -64,7 +65,13 @@ export default function AlphaView() {
     const timer = window.setInterval(() => setClock(Date.now()), 5_000);
     return () => window.clearInterval(timer);
   }, []);
-  const scans = useMemo(() => {
+  const crossBuyVenue =
+    preferredBuyVenue != null &&
+    preferredBuyVenue !== tradeVenue &&
+    scanVenues.includes(preferredBuyVenue)
+      ? preferredBuyVenue
+      : null;
+  const scanInput = useMemo(() => {
     if (
       !chain ||
       error ||
@@ -74,8 +81,8 @@ export default function AlphaView() {
       !sizing.reserve.trim() ||
       strategy === 'long-call'
     )
-      return [];
-    return scanSpreads({
+      return null;
+    return {
       chain,
       venues: scanVenues,
       quantity: Number(sizing.quantity),
@@ -83,16 +90,26 @@ export default function AlphaView() {
       riskPct: Number(sizing.riskPct),
       costReserve: Number(sizing.reserve),
       nowMs: Date.now(),
-    });
+    };
   }, [chain, error, underlying, expiry, scanVenues, sizing, strategy, clock]);
+  const scans = useMemo(() => (scanInput ? scanSpreads(scanInput) : []), [scanInput]);
+  const crossScans = useMemo(
+    () => (scanInput && scanInput.venues.length > 1 ? scanCrossVenueSpreads(scanInput, scans) : []),
+    [scanInput, scans],
+  );
   const selected =
-    scans
+    (crossBuyVenue == null ? scans : crossScans)
       .find((s) => s.venue === tradeVenue)
       ?.candidates.find(
-        (c) => c.kind === kind && c.sellStrike === shortStrike && c.buyStrike === longStrike,
+        (c) =>
+          c.kind === kind &&
+          c.sellStrike === shortStrike &&
+          c.buyStrike === longStrike &&
+          c.buyVenue === (crossBuyVenue ?? tradeVenue),
       ) ?? null;
   function selectCandidate(candidate: SpreadCandidate) {
     setPreferredVenue(candidate.venue);
+    setPreferredBuyVenue(candidate.buyVenue === candidate.venue ? null : candidate.buyVenue);
     setStrategy(candidate.kind);
     setShortStrike(candidate.sellStrike);
     setLongStrike(candidate.buyStrike);
@@ -170,7 +187,7 @@ export default function AlphaView() {
     ? (shortRoute?.candidates.find((c) => c.venue === tradeVenue) ?? null)
     : null;
   const longBest = selected
-    ? (longRoute?.candidates.find((c) => c.venue === tradeVenue) ?? null)
+    ? (longRoute?.candidates.find((c) => c.venue === (crossBuyVenue ?? tradeVenue)) ?? null)
     : null;
 
   const builder = chain && (
@@ -180,6 +197,7 @@ export default function AlphaView() {
         if (k === kind) return;
         const d = defaultsFor(k);
         setStrategy(k);
+        setPreferredBuyVenue(null);
         if (d) {
           setShortStrike(d.shortStrike);
           setLongStrike(d.longStrike);
@@ -202,7 +220,10 @@ export default function AlphaView() {
         update={update}
         venue={tradeVenue}
         venues={scanVenues}
-        onVenue={setPreferredVenue}
+        onVenue={(venue) => {
+          setPreferredVenue(venue);
+          setPreferredBuyVenue(null);
+        }}
         underlying={underlying}
       />
     </SpreadBuilderPanel>
@@ -232,6 +253,7 @@ export default function AlphaView() {
         longStrike={longStrike}
         executableNetCredit={executableNet}
         routeVenue={selected?.venue ?? null}
+        routeBuyVenue={selected?.buyVenue ?? null}
         maxQuantity={selected?.capacity ?? null}
         quoteSkewMs={
           shortBest?.asOfMs != null && longBest?.asOfMs != null
@@ -239,7 +261,11 @@ export default function AlphaView() {
             : null
         }
         theoreticalIndependentNetCredit={analysis.analysis?.theoreticalIndependentNetCredit ?? null}
-        netLabel="Selected venue net cash / 1 underlying · entry fees included; reserve excluded"
+        netLabel={
+          crossBuyVenue == null
+            ? 'Selected venue net cash / 1 underlying · entry fees included; reserve excluded'
+            : 'Selected cross-venue net cash / 1 underlying · standalone leg fees included; reserve excluded; non-atomic'
+        }
       >
         <AlphaVenueOpportunities
           scans={scans}
@@ -248,6 +274,17 @@ export default function AlphaView() {
           buyStrike={longStrike}
           onSelect={selectCandidate}
         />
+        {scanVenues.length > 1 && (
+          <AlphaVenueOpportunities
+            mode="cross"
+            scans={crossScans}
+            kind={kind}
+            sellStrike={shortStrike}
+            buyStrike={longStrike}
+            onSelect={selectCandidate}
+            selectedId={crossBuyVenue == null ? null : (selected?.id ?? null)}
+          />
+        )}
       </VenueRouterTable>
       <VolSmileInset
         smile={analysis.smile}
@@ -286,6 +323,7 @@ export default function AlphaView() {
                 }
                 const defaults = defaultsFor(item.id);
                 setStrategy(item.id);
+                setPreferredBuyVenue(null);
                 if (defaults) {
                   setShortStrike(defaults.shortStrike);
                   setLongStrike(defaults.longStrike);

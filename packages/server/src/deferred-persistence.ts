@@ -409,7 +409,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   private pending: PersistedOiSnapshot[];
   private pruneBefore: Date | null = null;
   private flushing = false;
-  private readonly timer: FlushSchedule;
+  private readonly timer: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly delegate: OiSnapshotStore,
@@ -418,17 +418,17 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   ) {
     this.enabled = delegate.enabled;
     this.pending = readJsonLines(options.cachePath, decodeOiSnapshot, log);
-    this.timer = new FlushSchedule(
-      options.cachePath,
-      options.flushIntervalMs,
-      () => this.flush(),
-      (err: unknown) => {
-      this.log.warn(
-        { err: String(err), pending: this.pending.length },
-        'deferred OI flush failed',
-      );
-      },
-    );
+    // Still a plain interval: this outbox holds ~5M rows and draining it to Postgres needs a
+    // deliberate decision about storage, not an automatic catch-up.
+    this.timer = setInterval(() => {
+      void this.flush().catch((err: unknown) => {
+        this.log.warn(
+          { err: String(err), pending: this.pending.length },
+          'deferred OI flush failed',
+        );
+      });
+    }, options.flushIntervalMs);
+    this.timer.unref?.();
   }
 
   async writeMany(rows: PersistedOiSnapshot[]): Promise<void> {
@@ -470,7 +470,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   }
 
   async dispose(): Promise<void> {
-    this.timer.dispose();
+    clearInterval(this.timer);
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
   }
@@ -511,10 +511,10 @@ export class DeferredDealerBookStore implements DealerBookStore {
       options.flushIntervalMs,
       () => this.flush(),
       (err: unknown) => {
-      this.log.warn(
-        { err: String(err), pending: this.pending.size },
-        'deferred dealer-book flush failed',
-      );
+        this.log.warn(
+          { err: String(err), pending: this.pending.size },
+          'deferred dealer-book flush failed',
+        );
       },
     );
   }
@@ -630,10 +630,10 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
       options.flushIntervalMs,
       () => this.flush(),
       (err: unknown) => {
-      this.log.warn(
-        { err: String(err), pending: this.pending.length },
-        'deferred IV-history flush failed',
-      );
+        this.log.warn(
+          { err: String(err), pending: this.pending.length },
+          'deferred IV-history flush failed',
+        );
       },
     );
   }
@@ -853,14 +853,14 @@ export class DeferredRegimeStore implements RegimeStore {
       options.flushIntervalMs,
       () => this.flush(),
       (err: unknown) => {
-      this.log.warn(
-        {
-          err: String(err),
-          observations: this.pendingObservations.length,
-          models: this.pendingModels.size,
-        },
-        'deferred regime flush failed',
-      );
+        this.log.warn(
+          {
+            err: String(err),
+            observations: this.pendingObservations.length,
+            models: this.pendingModels.size,
+          },
+          'deferred regime flush failed',
+        );
       },
     );
   }

@@ -2,20 +2,20 @@ import { useDeferredValue, useState } from 'react';
 import {
   VenueIdSchema,
   type AlphaStraddleCandidate,
-  type AlphaStraddleFlag,
   type AlphaStraddleScannerResponse,
   type AlphaStraddleVerdict,
-  type ShortStraddleEvaluationResponse,
   type VenueId,
 } from '@oggregator/protocol';
 
 import { Spinner } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
-import { fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { fmtIv } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
 import { straddleToBuilderLegs } from './radar-builder';
+import StraddleDecisionCard from './StraddleDecisionCard';
+import StraddleVenueCards, { straddleKey } from './StraddleVenueCards';
 import { useShortStraddleEvidence, useStraddleScanner } from './useStraddleScanner';
 import styles from './StraddleScannerPanel.module.css';
 
@@ -28,56 +28,11 @@ const DTE_PRESETS = [
 const STRESS_PRESETS = [2, 3, 4] as const;
 const MAX_SPREAD_PCT = 10;
 
-const VERDICT_LABEL: Record<AlphaStraddleVerdict, string> = {
-  'sell-candidate': 'SELL CANDIDATE',
-  watch: 'WATCH',
-  cheap: "CHEAP · DON'T SELL",
-  'no-forecast': 'NO FORECAST',
-};
-
-const FLAG_TEXT: Record<AlphaStraddleFlag, string> = {
-  iv_below_hurdle:
-    'Sellable IV (bids, after fees) is not above the higher of the forecast and matched-horizon realized vol. Edge is implied minus future realized (Sinclair p. 87).',
-  negative_model_edge:
-    'Net credit is below the straddle’s value at the forecast vol, so the model expects to pay out more than it collects.',
-  below_cone_median:
-    'Sellable IV is below the median realized vol for this horizon. That is cheap versus the vol cone (Sinclair pp. 39–41).',
-  below_cone_p75:
-    'Sellable IV is below the 75th percentile of the vol cone. It is not historically rich for this horizon.',
-  cone_unavailable: 'Not enough spot history to build the vol cone for this horizon.',
-  premium_not_above_normal:
-    'IV minus forecast is not above the usual implied-minus-subsequent-realized spread. That is ordinary insurance premium, which Sinclair (pp. 41–43) says is not a good enough reason to sell.',
-  premium_baseline_unknown:
-    'Too little IV history to measure the usual premium for this tenor. It is treated as unknown, not zero.',
-  term_backwardation:
-    'Front IV is above 30D IV. Turbulent regime: rich vol can be rich for a reason (Sinclair pp. 15–16; Bennett pp. 138–139).',
-  spot_breaking_out: 'Spot is outside its 20-day range. Realized vol may be about to re-rate.',
-  realized_accelerating: '7D realized vol is more than 1.25× the 30D level. The recent move may not be over.',
-  gamma_window: 'Under two days to expiry. Gamma dominates and small moves swing P&L sharply.',
-  size_below_minimum:
-    'The risk budget or top-of-book size cannot cover the venue minimum at this stress level.',
-  forecast_unavailable: 'No realized-vol forecast is available, so premium cannot be judged.',
-};
-
 function scannerVenues(venues: string[]): VenueId[] {
   return venues.flatMap((venue) => {
     const parsed = VenueIdSchema.safeParse(venue);
     return parsed.success ? [parsed.data] : [];
   });
-}
-
-function candidateKey(candidate: AlphaStraddleCandidate): string {
-  return `${candidate.venue}:${candidate.expiry}:${candidate.strike}`;
-}
-
-function volPts(value: number | null): string {
-  if (value == null) return '—';
-  const pts = value * 100;
-  return `${pts > 0 ? '+' : ''}${pts.toFixed(1)}pt`;
-}
-
-function fmtQty(value: number): string {
-  return value === 0 ? '0' : value.toFixed(value >= 1 ? 2 : 3).replace(/\.?0+$/, '');
 }
 
 function parseInput(value: string, max: number): number | null {
@@ -118,14 +73,14 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
       riskPct: deferredRisk,
       stressSigma,
       maxSpreadPct: MAX_SPREAD_PCT,
-      limit: 30,
+      limit: 50,
     },
     activeVenues.length > 0 && sizingValid,
   );
   const evidence = useShortStraddleEvidence(underlying);
   const data = query.data;
   const selected =
-    data?.candidates.find((candidate) => candidateKey(candidate) === selectedKey) ??
+    data?.candidates.find((candidate) => straddleKey(candidate) === selectedKey) ??
     data?.candidates[0] ??
     null;
   const unavailableVenues = data?.venueStatus.filter((status) => status.error != null) ?? [];
@@ -251,104 +206,23 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
               {unavailableVenues.map((status) => VENUES[status.venue]?.label ?? status.venue).join(', ')}.
             </div>
           )}
-          {data.candidates.length === 0 ? (
-            <div className={styles.message}>
-              No executable {underlying} ATM straddles in this window. Check spreads, fees, and
-              quote freshness.
-            </div>
-          ) : (
-            <div className={styles.results}>
-              <div className={styles.tableScroll}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Venue / expiry</th>
-                      <th title="Call bid + put bid minus taker fees, per 1 underlying.">Net credit</th>
-                      <th title="Vol implied by the net credit versus the higher of forecast and matched realized vol.">Sell IV / hurdle</th>
-                      <th title="Where sellable IV sits among historical realized vols of the same horizon.">Cone</th>
-                      <th title="IV minus forecast, less the usual implied-minus-subsequent-realized spread.">Excess</th>
-                      <th title="Net credit minus Black-76 value at forecast vol, per 1 underlying.">Model edge</th>
-                      <th title="Quantity where the stress loss fits the budget, capped by top-of-book.">Size</th>
-                      <th>Verdict</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.candidates.map((candidate) => {
-                      const key = candidateKey(candidate);
-                      return (
-                        <tr
-                          key={key}
-                          data-selected={selected != null && candidateKey(selected) === key}
-                          tabIndex={0}
-                          onClick={() => setSelectedKey(key)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              setSelectedKey(key);
-                            }
-                          }}
-                        >
-                          <td>
-                            <span className={styles.venue}>
-                              {VENUES[candidate.venue]?.label ?? candidate.venue}
-                            </span>
-                            <strong>{formatExpiry(candidate.expiry)}</strong>
-                            <small>
-                              {candidate.dte.toFixed(1)}D · K {candidate.strike.toLocaleString()}
-                            </small>
-                          </td>
-                          <td>
-                            <strong>{fmtUsd(candidate.netCredit)}</strong>
-                            <small>±{fmtPct(candidate.breakevenMovePct, 1)} BE</small>
-                          </td>
-                          <td>
-                            <strong>{fmtIv(candidate.sellIv)}</strong>
-                            <small>
-                              vs {fmtIv(candidate.hurdleVol)} · {volPts(candidate.volEdge)}
-                            </small>
-                          </td>
-                          <td>
-                            <strong>
-                              {candidate.conePercentile == null
-                                ? '—'
-                                : `p${candidate.conePercentile.toFixed(0)}`}
-                            </strong>
-                          </td>
-                          <td>
-                            <strong>{volPts(candidate.excessEdge)}</strong>
-                          </td>
-                          <td>
-                            <strong data-sign={Math.sign(candidate.modelEdgeUsd ?? 0)}>
-                              {fmtUsd(candidate.modelEdgeUsd)}
-                            </strong>
-                          </td>
-                          <td>
-                            <strong>{fmtQty(candidate.suggestedQuantity)}</strong>
-                            <small>min {fmtQty(candidate.minQuantity)}</small>
-                          </td>
-                          <td>
-                            <span className={styles.verdict} data-verdict={candidate.verdict}>
-                              {VERDICT_LABEL[candidate.verdict]}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {selected && (
-                <StraddleInspector
-                  candidate={selected}
-                  stressSigma={data.config.stressSigma}
-                  budgetUsd={(data.config.equity * data.config.riskPct) / 100}
-                  evidence={evidence.data ?? null}
-                  evidenceUnavailable={evidence.isError}
-                  onOpenBuilder={openInBuilder}
-                />
-              )}
-            </div>
-          )}
+          <div className={styles.decisionStack}>
+            <StraddleDecisionCard
+              candidate={selected}
+              emptyState="quote"
+              emptyReason={`No executable ${underlying} ATM straddles in this window. Check spreads, fees, and quote freshness, or widen the expiry window.`}
+              stressSigma={data.config.stressSigma}
+              budgetUsd={(data.config.equity * data.config.riskPct) / 100}
+              evidence={evidence.data ?? null}
+              evidenceUnavailable={evidence.isError}
+              onOpenBuilder={openInBuilder}
+            />
+            <StraddleVenueCards
+              data={data}
+              selectedKey={selected == null ? null : straddleKey(selected)}
+              onSelect={(candidate) => setSelectedKey(straddleKey(candidate))}
+            />
+          </div>
         </>
       )}
 
@@ -419,159 +293,5 @@ function RegimeStrip({
       </span>
       {refreshing && <span className={styles.refreshing}>REFRESHING</span>}
     </div>
-  );
-}
-
-interface StraddleInspectorProps {
-  candidate: AlphaStraddleCandidate;
-  stressSigma: number;
-  budgetUsd: number;
-  evidence: ShortStraddleEvaluationResponse | null;
-  evidenceUnavailable: boolean;
-  onOpenBuilder: (candidate: AlphaStraddleCandidate) => void;
-}
-
-function StraddleInspector({
-  candidate,
-  stressSigma,
-  budgetUsd,
-  evidence,
-  evidenceUnavailable,
-  onOpenBuilder,
-}: StraddleInspectorProps) {
-  const segments = evidence?.segments.filter((segment) => segment.venue === candidate.venue) ?? [];
-  const quantity = candidate.suggestedQuantity;
-  return (
-    <aside className={styles.inspector}>
-      <div className={styles.inspectorHeader}>
-        <span className={styles.venue}>{VENUES[candidate.venue]?.label ?? candidate.venue}</span>
-        <strong>
-          SELL {candidate.strike.toLocaleString()} STRADDLE · {formatExpiry(candidate.expiry)}
-        </strong>
-        <span className={styles.verdict} data-verdict={candidate.verdict}>
-          {VERDICT_LABEL[candidate.verdict]}
-        </span>
-      </div>
-
-      {candidate.flags.length === 0 ? (
-        <p className={styles.passNote}>
-          It clears all three gates: IV above the matched forecast, at least p75 on the vol cone,
-          and above the usual premium. That supports a sell, but it is not proof of an edge.
-          Record the thesis before trading.
-        </p>
-      ) : (
-        <ul className={styles.flagList}>
-          {candidate.flags.map((flag) => (
-            <li key={flag}>{FLAG_TEXT[flag]}</li>
-          ))}
-        </ul>
-      )}
-
-      <dl className={styles.facts}>
-        <div>
-          <dt>Credit</dt>
-          <dd>
-            {fmtUsd(candidate.grossCredit)} − {fmtUsd(candidate.entryFees)} fees ={' '}
-            <strong>{fmtUsd(candidate.netCredit)}</strong> / {candidate.underlying}
-          </dd>
-        </div>
-        <div>
-          <dt>Breakevens</dt>
-          <dd>
-            {fmtUsdCompact(candidate.breakevenLow)} – {fmtUsdCompact(candidate.breakevenHigh)}
-          </dd>
-        </div>
-        <div>
-          <dt title="Daily move at which gamma losses equal theta income at the selling IV.">
-            Daily BE move
-          </dt>
-          <dd>
-            {fmtPct(candidate.dailyBreakevenMovePct, 2)} vs forecast{' '}
-            {fmtPct(candidate.forecastDailyMovePct, 2)}
-          </dd>
-        </div>
-        <div>
-          <dt title="Lognormal probability at forecast vol. A model estimate, not a win rate.">
-            Inside BE (model)
-          </dt>
-          <dd>
-            {candidate.probInsideAtForecast == null
-              ? '—'
-              : fmtPct(candidate.probInsideAtForecast * 100, 0)}
-          </dd>
-        </div>
-        <div>
-          <dt>Vol</dt>
-          <dd>
-            sell {fmtIv(candidate.sellIv)} · mark {fmtIv(candidate.markIv)} · forecast{' '}
-            {fmtIv(candidate.forecastVol)} · realized {fmtIv(candidate.realizedMatchedVol)}
-          </dd>
-        </div>
-        <div>
-          <dt>Usual premium</dt>
-          <dd>
-            {candidate.premiumBaseline.medianSpread == null
-              ? `unknown (${candidate.premiumBaseline.independentSampleCount} independent ${candidate.premiumBaseline.tenorDays}D windows)`
-              : `${volPts(candidate.premiumBaseline.medianSpread)} median over ${candidate.premiumBaseline.independentSampleCount} independent ${candidate.premiumBaseline.tenorDays}D windows`}
-          </dd>
-        </div>
-        <div>
-          <dt>{stressSigma}σ stress</dt>
-          <dd>
-            ±{fmtPct(candidate.stressMovePct, 1)} → −{fmtUsd(candidate.stressLossUsd)} /{' '}
-            {candidate.underlying}
-          </dd>
-        </div>
-        <div>
-          <dt>Size</dt>
-          <dd>
-            {fmtQty(quantity)} {candidate.underlying} → −{fmtUsd(quantity * candidate.stressLossUsd)}{' '}
-            at stress of {fmtUsd(budgetUsd)} budget · book {fmtQty(candidate.topOfBookQuantity)}
-          </dd>
-        </div>
-        <div>
-          <dt>Net delta</dt>
-          <dd>{candidate.netDelta == null ? '—' : candidate.netDelta.toFixed(3)} / unit</dd>
-        </div>
-      </dl>
-
-      <div className={styles.evidence}>
-        <span>WALK-FORWARD EVIDENCE · ATM ~7D · BIDS IN, ASKS OUT, FEES</span>
-        {evidenceUnavailable ? (
-          <small>Evidence collection is unavailable on this server.</small>
-        ) : evidence == null ? (
-          <small>Loading…</small>
-        ) : segments.length === 0 ? (
-          <small>
-            {evidence.status === 'collecting' ? 'Collecting' : 'No completed'} samples for this
-            venue yet. Nothing here validates an edge.
-          </small>
-        ) : (
-          <div className={styles.evidenceGrid}>
-            {segments.map((segment) => (
-              <div key={segment.horizonHours} data-assessment={segment.assessment}>
-                <span>{segment.horizonHours}H</span>
-                <strong>{fmtUsd(segment.meanPnlUsdPerUnit)}</strong>
-                <small>
-                  n={segment.independentSampleCount} ·{' '}
-                  {segment.assessment.replaceAll('_', ' ')}
-                </small>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <p className={styles.bookNote}>
-        Premium concentrates near the strike. That is an argument for strangles when you want to
-        keep the short-vol view but survive more moves (Sinclair p. 97). Being right on vol can
-        still lose on the path (pp. 92–93), so size below full Kelly (p. 109).
-      </p>
-
-      <button type="button" className={styles.builderButton} onClick={() => onOpenBuilder(candidate)}>
-        <span>Open both legs in Builder V2</span>
-        <span aria-hidden="true">↗</span>
-      </button>
-    </aside>
   );
 }

@@ -9,7 +9,7 @@ export const PLOTLY_3D_CONFIG: Partial<Plotly.Config> = {
   scrollZoom: true,
 };
 
-export const SCENE_DEFAULTS: Partial<Plotly.Layout['scene']> = {
+export const SCENE_DEFAULTS: Partial<NonNullable<Plotly.Layout['scene']>> = {
   bgcolor: '#0A0A0A',
   xaxis: { gridcolor: '#1A1A1A', color: '#555B5E', showbackground: false },
   yaxis: { gridcolor: '#1A1A1A', color: '#555B5E', showbackground: false },

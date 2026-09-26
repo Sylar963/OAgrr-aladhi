@@ -62,7 +62,7 @@ function candidate(overrides: Partial<AlphaStraddleCandidate>): AlphaStraddleCan
     suggestedQuantity: 0,
     edgePerStress: -0.026,
     verdict: 'cheap',
-    flags: ['iv_below_hurdle', 'negative_model_edge', 'below_cone_median'],
+    flags: ['iv_below_hurdle', 'negative_model_edge', 'below_cone_median', 'premium_baseline_unknown'],
     asOfMs: 1_790_400_000_000,
     ...overrides,
   };
@@ -114,9 +114,23 @@ describe('StraddleScannerPanel', () => {
   it('explains why cheap premium is not a sell', () => {
     scan.data = response([candidate({})]);
     render(<StraddleScannerPanel underlying="BTC" venues={['deribit']} />);
-    expect(screen.getAllByText("CHEAP · DON'T SELL").length).toBeGreaterThan(0);
+    expect(screen.getByText("CHEAP · DON'T SELL")).toBeTruthy();
+    expect(screen.getByText('Premium does not pay for the vol')).toBeTruthy();
+    expect(screen.getByText('1/4 pass')).toBeTruthy();
     expect(screen.getByText(/below the median realized vol for this horizon/)).toBeTruthy();
     expect(screen.getByText('Evidence collection is unavailable on this server.')).toBeTruthy();
+    expect(screen.getByText('stress −$27,247')).toBeTruthy();
+  });
+
+  it('groups straddles by venue and loads a clicked one into the decision card', () => {
+    scan.data = response([
+      candidate({}),
+      candidate({ venue: 'deribit', expiry: '2026-10-16', dte: 20.2, strike: 85_000 }),
+    ]);
+    render(<StraddleScannerPanel underlying="BTC" venues={['deribit']} />);
+    expect(screen.getByText('2/7 priced')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: /Load straddle/ })[1]!);
+    expect(screen.getByText(/sell 85,000 C \+ P/)).toBeTruthy();
   });
 
   it('loads both short legs into the builder at the bids', () => {

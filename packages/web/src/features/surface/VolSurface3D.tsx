@@ -150,7 +150,7 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
     return tenorMode === 'cmm' ? buildCmmGrid(data) : buildListedGrid(data);
   }, [data, tenorMode]);
 
-  const plotData = useMemo<Partial<Plotly.PlotData>[] | null>(() => {
+  const plotData = useMemo<Plotly.Data[] | null>(() => {
     if (!grid) return null;
     return [
       {
@@ -181,7 +181,7 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
           'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
         contours: {
           z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
-        } as Plotly.PlotData['contours'],
+        },
       },
     ];
   }, [grid]);

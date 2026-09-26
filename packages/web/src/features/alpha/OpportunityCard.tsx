@@ -21,11 +21,13 @@ export function OpportunitySection({
   emptyHint,
   note,
   isEmpty,
+  countLabel = 'live pairs',
   children,
 }: {
   title: string;
   subtitle: string;
   count: number;
+  countLabel?: string;
   emptyHint: string;
   note: string;
   isEmpty: boolean;
@@ -38,7 +40,9 @@ export function OpportunitySection({
           <strong>{title}</strong>
           <small>{subtitle}</small>
         </span>
-        <span className={styles.summaryCount}>{count} live pairs</span>
+        <span className={styles.summaryCount}>
+          {count} {countLabel}
+        </span>
       </summary>
       {isEmpty ? (
         <div className={styles.scanEmpty}>

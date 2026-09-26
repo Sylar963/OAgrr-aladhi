@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const thalexWsMockState = vi.hoisted(() => ({
   sentPayloads: [] as Array<{ id: number; method: string; params: Record<string, unknown> }>,
   loginResult: { account_number: 'main' },
-  subscribeResult: ['account.portfolio', 'account.summary'],
+  subscribeResult: ['account.portfolio', 'account.summary', 'account.trade_history'],
   portfolioResult: [
     {
       instrument_name: 'BTC-21APR26-75000-C',
@@ -61,7 +61,9 @@ vi.mock('../shared/topic-ws-client.js', () => ({
             ? thalexWsMockState.subscribeResult
             : method === 'private/portfolio'
               ? thalexWsMockState.portfolioResult
-              : null;
+              : method === 'private/trade_history'
+                ? { trades: [] }
+                : null;
 
       this.options.onMessage?.(Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, result })));
     }
@@ -75,7 +77,7 @@ afterEach(() => {
   mintAuthTokenMock.mockClear();
   thalexWsMockState.sentPayloads.length = 0;
   thalexWsMockState.loginResult = { account_number: 'main' };
-  thalexWsMockState.subscribeResult = ['account.portfolio', 'account.summary'];
+  thalexWsMockState.subscribeResult = ['account.portfolio', 'account.summary', 'account.trade_history'];
   thalexWsMockState.portfolioResult = [
     {
       instrument_name: 'BTC-21APR26-75000-C',
@@ -107,6 +109,7 @@ describe('ThalexPrivateClient', () => {
       'public/login',
       'private/subscribe',
       'private/portfolio',
+      'private/trade_history',
     ]);
     expect(listener).toHaveBeenCalledWith([
       expect.objectContaining({

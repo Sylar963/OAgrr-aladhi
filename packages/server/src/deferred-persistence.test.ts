@@ -24,6 +24,7 @@ import {
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
   DeferredShortStraddleSnapshotStore,
+  FlushSchedule,
 } from './deferred-persistence.js';
 
 const noopLog = { warn: () => {} };
@@ -196,6 +197,10 @@ class FakeIvHistoryStore implements IvHistoryStore {
   }
 
   async loadSince(_query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]> {
+    return this.loaded;
+  }
+
+  async loadDaily(): Promise<PersistedIvHistoryPoint[]> {
     return this.loaded;
   }
 
@@ -655,5 +660,58 @@ describe('DeferredRegimeStore', () => {
     expect(delegate.observations).toEqual([regimeObservation]);
     expect(delegate.models).toEqual([regimeModel]);
     await store.dispose();
+  });
+});
+
+describe('FlushSchedule', () => {
+  const intervalMs = 24 * 60 * 60 * 1000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('flushes shortly after startup when no previous flush is recorded', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn(async () => {});
+    const schedule = new FlushSchedule(tempPath('cache.ndjson'), intervalMs, run, () => {});
+
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(run).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    schedule.dispose();
+  });
+
+  it('keeps the interval across restarts instead of resetting it', async () => {
+    vi.useFakeTimers();
+    const cachePath = tempPath('cache.ndjson');
+    const first = new FlushSchedule(cachePath, intervalMs, async () => {}, () => {});
+    await vi.advanceTimersByTimeAsync(60_000);
+    first.dispose();
+
+    await vi.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
+    const run = vi.fn(async () => {});
+    const restarted = new FlushSchedule(cachePath, intervalMs, run, () => {});
+
+    await vi.advanceTimersByTimeAsync(59 * 60 * 1000);
+    expect(run).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(run).toHaveBeenCalledTimes(1);
+    restarted.dispose();
+  });
+
+  it('retries a failed flush sooner than the full interval', async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const run = vi.fn(async () => {
+      if (run.mock.calls.length === 1) throw new Error('db down');
+    });
+    const schedule = new FlushSchedule(tempPath('cache.ndjson'), intervalMs, run, onError);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onError).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+    expect(run).toHaveBeenCalledTimes(2);
+    schedule.dispose();
   });
 });

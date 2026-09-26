@@ -7,6 +7,7 @@ import {
 import { isReady } from '../app.js';
 import { ChainStreamSession } from '../chain-stream-session.js';
 import { chainEngines } from '../chain-engines.js';
+import { protectWebSocket } from '../websocket-security.js';
 
 // WebSocket.OPEN is 1 per RFC 6455 — duck-typed socket interface doesn't carry the constant
 const WS_OPEN = 1;
@@ -25,6 +26,7 @@ export async function wsChainRoute(app: FastifyInstance) {
   chainEngines.start();
 
   app.get('/ws/chain', { websocket: true }, (socket, req) => {
+    if (!protectWebSocket(socket, req.ip)) return;
     const log = req.log.child({ route: 'ws-chain' });
 
     if (!isReady()) {
@@ -88,6 +90,7 @@ export async function wsChainRoute(app: FastifyInstance) {
     // ── Client messages ───────────────────────────────────────────
 
     socket.on('message', (raw) => {
+      if (socket.readyState !== WS_OPEN) return;
       let json: unknown;
       try {
         json = JSON.parse(raw.toString());

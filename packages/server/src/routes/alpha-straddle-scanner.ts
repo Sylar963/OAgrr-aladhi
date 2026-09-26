@@ -19,12 +19,15 @@ import {
   rankStraddleCandidates,
   selectAtmStrike,
   termStructureState,
+  type StraddleIvSeries,
   type StraddleSkipReason,
 } from '../alpha-straddle-scanner.js';
+import { mergeIvSeries } from '../iv-baseline-history.js';
 import { ResponseCache } from '../response-cache.js';
 import {
   isIvHistoryReady,
   isSpotCandlesReady,
+  ivBaselineHistory,
   ivHistoryService,
   spotCandleService,
   spotService,
@@ -90,9 +93,15 @@ export async function alphaStraddleScannerRoute(app: FastifyInstance) {
           candles,
           regime: null,
         });
+        let dailyIv: StraddleIvSeries = { '7d': [], '30d': [] };
+        try {
+          dailyIv = await ivBaselineHistory.get(config.underlying);
+        } catch (error: unknown) {
+          req.log.warn({ error, underlying: config.underlying }, 'Straddle scanner IV baseline history unavailable');
+        }
         const model = buildStraddleVolModel(candles, {
-          '7d': ivHistory?.tenors['7d'].series ?? [],
-          '30d': ivHistory?.tenors['30d'].series ?? [],
+          '7d': mergeIvSeries(dailyIv['7d'], ivHistory?.tenors['7d'].series ?? []),
+          '30d': mergeIvSeries(dailyIv['30d'], ivHistory?.tenors['30d'].series ?? []),
         });
         const market = {
           termStructure: termStructureState(

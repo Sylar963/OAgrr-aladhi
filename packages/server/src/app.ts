@@ -38,6 +38,7 @@ import {
 } from './services.js';
 import { paperTradingStore, venueCredentialsStore } from './trading-services.js';
 import { VenueCredentialCipher } from './venue-credential-cipher.js';
+import { allowedOrigins, reportOnlyCsp, trustedProxies } from './security-configuration.js';
 
 export const SERVER_BOOT_TIME = Date.now();
 
@@ -115,33 +116,27 @@ export async function buildApp(): Promise<FastifyInstance> {
   ready = false;
 
   const app = Fastify({
-    // The API sits behind a TLS-terminating reverse proxy in prod, so derive
-    // req.ip from X-Forwarded-For — without this, per-IP rate limits key on the
-    // proxy IP and lump every client into one bucket.
-    trustProxy: true,
-    logger: isDev
-      ? {
-          transport: {
-            target: 'pino-pretty',
-            options: {
-              translateTime: 'HH:MM:ss Z',
-              ignore: 'pid,hostname',
-            },
-          },
-        }
-      : true,
+    trustProxy: trustedProxies(process.env),
+    logger: {
+      serializers: {
+        req: (request) => ({
+          method: request.method,
+          url: request.url.split('?')[0] ?? '/',
+          remoteAddress: request.ip,
+        }),
+      },
+      ...(isDev ? {
+        transport: {
+          target: 'pino-pretty',
+          options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+        },
+      } : {}),
+    },
   });
 
+  const origins = allowedOrigins(process.env);
   await app.register(cors, {
-    origin: isDev
-      ? true
-      : [
-          'http://localhost:5173',
-          'https://oggregator.xyz',
-          'https://www.oggregator.xyz',
-          'https://app.oggregator.xyz',
-          /\.vercel\.app$/,
-        ],
+    origin: origins,
     credentials: false,
   });
   // gzip/deflate JSON responses; small payloads (<1KB) skip compression to
@@ -149,6 +144,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(compress, { global: true, threshold: 1024 });
   await app.register(websocket, {
     options: {
+      maxPayload: 64 * 1024,
       // Compress outbound WS frames. Snapshot/delta JSON compresses ~80%.
       perMessageDeflate: {
         zlibDeflateOptions: { level: 3 },
@@ -157,19 +153,24 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
   });
 
-  // Security headers. CSP is intentionally disabled — the SPA + Plotly + Vercel
-  // analytics need sources a strict policy would block (a separate, larger task).
-  // CORP/COEP are off because the Vercel-hosted SPA calls this API cross-origin.
-  // The rest (HSTS, X-Frame-Options, nosniff, Referrer-Policy) are safe wins.
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: reportOnlyCsp,
     crossOriginResourcePolicy: false,
     crossOriginEmbedderPolicy: false,
   });
-  // Opt-in rate limiting (global:false): only routes with config.rateLimit are
-  // throttled, leaving the high-volume data endpoints, SPA assets, and /ws/*
-  // upgrade paths (reconnect storms must never be blocked) untouched.
-  await app.register(rateLimit, { global: false });
+  app.addHook('onSend', async (_request, reply, payload) => {
+    reply.header('Content-Security-Policy', "object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+    return payload;
+  });
+  await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute' });
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.headers.upgrade?.toLowerCase() === 'websocket') {
+      const origin = request.headers.origin;
+      if (origin && !origins.includes(origin)) {
+        return reply.code(403).send({ error: 'origin_not_allowed' });
+      }
+    }
+  });
 
   registerRoutes(app);
   startRuntimeMetrics(app.log);

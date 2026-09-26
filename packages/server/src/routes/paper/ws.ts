@@ -15,6 +15,7 @@ import {
   quoteProvider,
 } from '../../trading-services.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
+import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { paperEvents } from './events.js';
 import { pnlToDto, positionToDto } from './mappers.js';
 
@@ -33,6 +34,7 @@ function send(
 
 export async function paperWsRoute(app: FastifyInstance) {
   app.get('/ws/paper', { websocket: true }, async (socket, req) => {
+    if (!protectWebSocket(socket, req.ip)) return;
     let disposed = false;
     let positions: Position[] = [];
     let fillEconomics: FillEconomics[] = [];
@@ -66,6 +68,7 @@ export async function paperWsRoute(app: FastifyInstance) {
         return;
       }
       accountId = user.accountId;
+      registerPrivateWebSocket(user.id, socket);
 
       const requested = new URL(req.url, 'http://localhost').searchParams.get('accountId');
       if (requested && requested !== user.accountId) {
@@ -84,6 +87,7 @@ export async function paperWsRoute(app: FastifyInstance) {
       accountId = DEFAULT_ACCOUNT_ID;
     }
 
+    if (socket.readyState !== WS_OPEN) return;
     send(socket, {
       type: 'hello',
       accountId,

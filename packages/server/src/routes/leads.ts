@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { leadsStore } from '../services.js';
 
 export async function leadsRoute(app: FastifyInstance) {
-  app.post('/leads', async (req, reply) => {
+  app.post('/leads', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req, reply) => {
     if (!leadsStore.enabled) {
       return reply
         .status(503)

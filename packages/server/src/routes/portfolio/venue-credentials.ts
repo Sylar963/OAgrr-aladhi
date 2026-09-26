@@ -155,7 +155,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     };
   });
 
-  app.post('/portfolio/venue-credentials/reconnect', async (request, reply) => {
+  app.post('/portfolio/venue-credentials/reconnect', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     if (!privateAdaptersEnabled()) return { venues: [] };
     if (getCredentialCipherOrSendError(reply) == null) return reply;
     const accountId = getAccountId(request);

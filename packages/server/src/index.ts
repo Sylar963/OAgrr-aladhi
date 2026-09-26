@@ -8,7 +8,7 @@ const FORCE_SHUTDOWN_TIMEOUT_MS = 10_000;
 async function main() {
   const app = await buildApp();
   registerShutdownHandlers(app);
-  await app.listen({ port: PORT, host: '0.0.0.0' });
+  await app.listen({ port: PORT, host: process.env['HOST'] ?? '127.0.0.1' });
 }
 
 function registerShutdownHandlers(app: FastifyInstance) {

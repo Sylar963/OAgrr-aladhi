@@ -52,6 +52,7 @@ import {
   DeferredRegimeStore,
   DeferredShortStraddleSnapshotStore,
 } from './deferred-persistence.js';
+import { IvBaselineHistory } from './iv-baseline-history.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
@@ -143,6 +144,7 @@ let shortStraddleLog: { warn: (obj: object, msg: string) => void } = console;
 export const ivHistoryStore: IvHistoryStore = databaseUrl
   ? createIvHistoryStore(databaseUrl)
   : new NoopIvHistoryStore(ivHistorySizeWarnBytes);
+export const ivBaselineHistory = new IvBaselineHistory(ivHistoryStore);
 export const ivHistoryService = new IvHistoryService({
   dvol: dvolService,
   store: ivHistoryStore,

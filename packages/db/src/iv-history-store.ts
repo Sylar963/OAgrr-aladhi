@@ -22,6 +22,12 @@ export interface IvHistoryLoadQuery {
   since: Date;
 }
 
+export interface IvHistoryDailyQuery {
+  underlying: string;
+  tenorDays: PersistedIvHistoryPoint['tenorDays'][];
+  since: Date;
+}
+
 export interface IvHistoryStorageStats {
   enabled: boolean;
   bytes: number | null;
@@ -33,6 +39,8 @@ export interface IvHistoryStore {
   readonly enabled: boolean;
   writeMany(points: PersistedIvHistoryPoint[]): Promise<void>;
   loadSince(query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]>;
+  /** One point per tenor per UTC day, the sample closest to midnight, with ATM IV present. */
+  loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]>;
   getStorageStats(): Promise<IvHistoryStorageStats>;
   dispose(): Promise<void>;
 }
@@ -47,6 +55,10 @@ export class NoopIvHistoryStore implements IvHistoryStore {
   async writeMany(_points: PersistedIvHistoryPoint[]): Promise<void> {}
 
   async loadSince(_query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]> {
+    return [];
+  }
+
+  async loadDaily(_query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
     return [];
   }
 
@@ -145,6 +157,37 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
     );
 
     return result.rows.map(mapRow);
+  }
+
+  async loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
+    if (query.tenorDays.length === 0) return [];
+
+    const result = await this.pool.query<IvHistoryRow>(
+      `SELECT DISTINCT ON (tenor_days, date_trunc('day', ts + interval '12 hours'))
+        underlying,
+        tenor_days,
+        ts,
+        atm_iv,
+        rr25d,
+        bfly25d,
+        rr10d,
+        bfly10d,
+        source
+      FROM iv_history_points
+      WHERE underlying = $1
+        AND tenor_days = ANY($2::smallint[])
+        AND ts >= $3
+        AND atm_iv IS NOT NULL
+      ORDER BY
+        tenor_days,
+        date_trunc('day', ts + interval '12 hours'),
+        abs(extract(epoch FROM ts - date_trunc('day', ts + interval '12 hours')))`,
+      [query.underlying.toUpperCase(), query.tenorDays, query.since],
+    );
+
+    return result.rows
+      .map(mapRow)
+      .sort((a, b) => a.tenorDays - b.tenorDays || a.ts.getTime() - b.ts.getTime());
   }
 
   async getStorageStats(): Promise<IvHistoryStorageStats> {

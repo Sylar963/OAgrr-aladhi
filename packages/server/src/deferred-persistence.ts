@@ -3,16 +3,19 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readFileSync,
   readSync,
   renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
   writeSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type {
   DealerBookStore,
+  IvHistoryDailyQuery,
   IvHistoryLoadQuery,
   IvHistoryStorageStats,
   IvHistoryStore,
@@ -149,6 +152,66 @@ const ShortStraddleSnapshotSchema = z
 
 function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
+}
+
+const FIRST_FLUSH_DELAY_MS = 60_000;
+const FLUSH_RETRY_MS = 15 * 60_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+function readFlushMarker(path: string): number | null {
+  try {
+    const value = Number(readFileSync(path, 'utf8').trim());
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+// A plain setInterval restarts its clock on every process start, so a daily flush never
+// fires when the service restarts more often than that. The last successful flush time is
+// kept next to the cache so the cadence survives restarts and an overdue backlog drains soon
+// after startup.
+export class FlushSchedule {
+  private readonly markerPath: string;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
+
+  constructor(
+    cachePath: string,
+    private readonly intervalMs: number,
+    private readonly run: () => Promise<void>,
+    private readonly onError: (err: unknown) => void,
+    now: number = Date.now(),
+  ) {
+    this.markerPath = `${cachePath}.last-flush`;
+    const lastFlush = readFlushMarker(this.markerPath);
+    const dueIn = lastFlush == null ? 0 : lastFlush + intervalMs - now;
+    this.schedule(Math.max(FIRST_FLUSH_DELAY_MS, dueIn));
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    if (this.timer != null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private schedule(delayMs: number): void {
+    if (this.disposed) return;
+    this.timer = setTimeout(() => void this.tick(), Math.min(delayMs, MAX_TIMEOUT_MS));
+    this.timer.unref?.();
+  }
+
+  private async tick(): Promise<void> {
+    try {
+      await this.run();
+      ensureCacheDir(this.markerPath);
+      writeFileSync(this.markerPath, `${Date.now()}\n`);
+      this.schedule(this.intervalMs);
+    } catch (err: unknown) {
+      this.onError(err);
+      this.schedule(Math.min(this.intervalMs, FLUSH_RETRY_MS));
+    }
+  }
 }
 
 function readJsonLines<T>(path: string, decode: (value: unknown) => T, log: DeferredLog): T[] {
@@ -346,7 +409,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   private pending: PersistedOiSnapshot[];
   private pruneBefore: Date | null = null;
   private flushing = false;
-  private readonly timer: ReturnType<typeof setInterval>;
+  private readonly timer: FlushSchedule;
 
   constructor(
     private readonly delegate: OiSnapshotStore,
@@ -355,15 +418,17 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   ) {
     this.enabled = delegate.enabled;
     this.pending = readJsonLines(options.cachePath, decodeOiSnapshot, log);
-    this.timer = setInterval(() => {
-      void this.flush().catch((err: unknown) => {
-        this.log.warn(
-          { err: String(err), pending: this.pending.length },
-          'deferred OI flush failed',
-        );
-      });
-    }, options.flushIntervalMs);
-    this.timer.unref?.();
+    this.timer = new FlushSchedule(
+      options.cachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+      this.log.warn(
+        { err: String(err), pending: this.pending.length },
+        'deferred OI flush failed',
+      );
+      },
+    );
   }
 
   async writeMany(rows: PersistedOiSnapshot[]): Promise<void> {
@@ -405,7 +470,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   }
 
   async dispose(): Promise<void> {
-    clearInterval(this.timer);
+    this.timer.dispose();
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
   }
@@ -418,7 +483,7 @@ export class DeferredDealerBookStore implements DealerBookStore {
   private readonly pendingPath: string;
   private pruneBeforeExpiry: string | null = null;
   private flushing = false;
-  private readonly timer: ReturnType<typeof setInterval>;
+  private readonly timer: FlushSchedule;
 
   constructor(
     private readonly delegate: DealerBookStore,
@@ -441,15 +506,17 @@ export class DeferredDealerBookStore implements DealerBookStore {
           ]),
         )
       : new Map(this.cache);
-    this.timer = setInterval(() => {
-      void this.flush().catch((err: unknown) => {
-        this.log.warn(
-          { err: String(err), pending: this.pending.size },
-          'deferred dealer-book flush failed',
-        );
-      });
-    }, options.flushIntervalMs);
-    this.timer.unref?.();
+    this.timer = new FlushSchedule(
+      options.cachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+      this.log.warn(
+        { err: String(err), pending: this.pending.size },
+        'deferred dealer-book flush failed',
+      );
+      },
+    );
   }
 
   async loadAll(underlyings: string[]): Promise<PersistedDealerPosition[]> {
@@ -525,7 +592,7 @@ export class DeferredDealerBookStore implements DealerBookStore {
   }
 
   async dispose(): Promise<void> {
-    clearInterval(this.timer);
+    this.timer.dispose();
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
   }
@@ -545,7 +612,7 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   private pending: PersistedIvHistoryPoint[];
   private readonly pendingPath: string;
   private flushing = false;
-  private readonly timer: ReturnType<typeof setInterval>;
+  private readonly timer: FlushSchedule;
 
   constructor(
     private readonly delegate: IvHistoryStore,
@@ -558,15 +625,17 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     this.pending = existsSync(this.pendingPath)
       ? readJsonLines(this.pendingPath, decodeIvHistoryPoint, log)
       : [...this.cache];
-    this.timer = setInterval(() => {
-      void this.flush().catch((err: unknown) => {
-        this.log.warn(
-          { err: String(err), pending: this.pending.length },
-          'deferred IV-history flush failed',
-        );
-      });
-    }, options.flushIntervalMs);
-    this.timer.unref?.();
+    this.timer = new FlushSchedule(
+      options.cachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+      this.log.warn(
+        { err: String(err), pending: this.pending.length },
+        'deferred IV-history flush failed',
+      );
+      },
+    );
   }
 
   async writeMany(points: PersistedIvHistoryPoint[]): Promise<void> {
@@ -591,6 +660,10 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     const rows = this.cache.filter((row) => matchesIvHistoryQuery(row, query));
     if (rows.length > 0) return rows.sort((a, b) => a.ts.getTime() - b.ts.getTime());
     return this.delegate.loadSince(query);
+  }
+
+  async loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
+    return this.delegate.loadDaily(query);
   }
 
   async getStorageStats(): Promise<IvHistoryStorageStats> {
@@ -619,7 +692,7 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   }
 
   async dispose(): Promise<void> {
-    clearInterval(this.timer);
+    this.timer.dispose();
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
   }
@@ -632,7 +705,7 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
   private pending: PersistedShortStraddleSnapshot[];
   private flushPromise: Promise<void> | null = null;
   private warned = false;
-  private readonly timer: ReturnType<typeof setInterval> | null;
+  private readonly timer: FlushSchedule | null;
 
   constructor(
     private readonly delegate: ShortStraddleSnapshotStore,
@@ -645,16 +718,18 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
     this.pending = readJsonLines(this.cachePath, decodeShortStraddleSnapshot, log);
     this.timer =
       options.flushIntervalMs > 0
-        ? setInterval(() => {
-            void this.flush().catch((err: unknown) => {
+        ? new FlushSchedule(
+            this.cachePath,
+            options.flushIntervalMs,
+            () => this.flush(),
+            (err: unknown) => {
               this.log.warn(
                 { err: String(err), pending: this.pending.length },
                 'deferred short-straddle snapshot flush failed',
               );
-            });
-          }, options.flushIntervalMs)
+            },
+          )
         : null;
-    this.timer?.unref?.();
     this.warnIfOverThreshold();
   }
 
@@ -704,7 +779,7 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
   }
 
   async dispose(): Promise<void> {
-    if (this.timer != null) clearInterval(this.timer);
+    this.timer?.dispose();
     try {
       if (this.flushPromise != null) await this.flushPromise;
     } finally {
@@ -745,7 +820,7 @@ export class DeferredRegimeStore implements RegimeStore {
   private readonly pendingObservationsPath: string;
   private readonly pendingModelsPath: string;
   private flushing = false;
-  private readonly timer: ReturnType<typeof setInterval>;
+  private readonly timer: FlushSchedule;
 
   constructor(
     private readonly delegate: RegimeStore,
@@ -773,19 +848,21 @@ export class DeferredRegimeStore implements RegimeStore {
           ]),
         )
       : new Map(this.models);
-    this.timer = setInterval(() => {
-      void this.flush().catch((err: unknown) => {
-        this.log.warn(
-          {
-            err: String(err),
-            observations: this.pendingObservations.length,
-            models: this.pendingModels.size,
-          },
-          'deferred regime flush failed',
-        );
-      });
-    }, options.flushIntervalMs);
-    this.timer.unref?.();
+    this.timer = new FlushSchedule(
+      options.observationsCachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+      this.log.warn(
+        {
+          err: String(err),
+          observations: this.pendingObservations.length,
+          models: this.pendingModels.size,
+        },
+        'deferred regime flush failed',
+      );
+      },
+    );
   }
 
   async loadModel(underlying: string): Promise<PersistedRegimeModel | null> {
@@ -860,7 +937,7 @@ export class DeferredRegimeStore implements RegimeStore {
   }
 
   async dispose(): Promise<void> {
-    clearInterval(this.timer);
+    this.timer.dispose();
     if (this.options.flushOnDispose === true) await this.flush();
     await this.delegate.dispose();
   }

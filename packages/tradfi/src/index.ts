@@ -38,7 +38,7 @@ async function main() {
   });
 
   const app = buildApp({ store, feed, candleClient, flowBook: feed.flowBook });
-  await app.listen({ port: cfg.port, host: '0.0.0.0' });
+  await app.listen({ port: cfg.port, host: process.env['TRADFI_HOST'] ?? '127.0.0.1' });
   logger.info({ port: cfg.port }, 'tradfi service listening');
 
   void feed.loadMarkets()

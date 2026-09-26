@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { flowService } from '../services.js';
 import { enrichLiveTrade } from './flow.js';
+import { protectWebSocket } from '../websocket-security.js';
 
 const WS_OPEN = 1;
 const MAX_SENT_UIDS = 10_000;
@@ -21,6 +22,7 @@ const InstrumentTradeWsQuerySchema = z.object({
 
 export async function wsInstrumentTradesRoute(app: FastifyInstance) {
   app.get('/ws/instrument-trades', { websocket: true }, async (socket, req) => {
+    if (!protectWebSocket(socket, req.ip)) return;
     const query = InstrumentTradeWsQuerySchema.safeParse(req.query);
     const venue = query.success ? VenueIdSchema.safeParse(query.data.venue) : null;
     if (!query.success || venue == null || !venue.success) {

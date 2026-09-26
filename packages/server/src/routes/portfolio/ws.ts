@@ -12,6 +12,7 @@ import { derivePositionStore } from '../../derive-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { paperTradingStore } from '../../trading-services.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
+import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { portfolioEvents } from './events.js';
 
 const WS_OPEN = 1;
@@ -27,6 +28,7 @@ function send(
 
 export async function portfolioWsRoute(app: FastifyInstance) {
   app.get('/ws/portfolio', { websocket: true }, async (socket, req) => {
+    if (!protectWebSocket(socket, req.ip)) return;
     let disposed = false;
     let offRuntime: (() => void) | null = null;
     let offBus: (() => void) | null = null;
@@ -65,6 +67,7 @@ export async function portfolioWsRoute(app: FastifyInstance) {
           return;
         }
         accountId = user.accountId;
+        registerPrivateWebSocket(user.id, socket);
       } else {
         accountId = DEFAULT_ACCOUNT_ID;
       }

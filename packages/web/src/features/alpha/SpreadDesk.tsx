@@ -3,13 +3,8 @@ import { VENUE_IDS, type VenueId } from '@oggregator/protocol';
 import { useChainQuery, useExpiries } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
 import { VENUES } from '@lib/venue-meta';
-import {
-  scanSpreads,
-  expiryPnl,
-  VERTICAL_LABELS,
-  type SpreadCandidate,
-  type VerticalKind,
-} from './spread-scanner';
+import { scanSpreads, type SpreadCandidate } from './spread-scanner';
+import { expiryPnl, VERTICAL_LABELS, type VerticalKind } from './vertical-pricing';
 import styles from './SpreadDesk.module.css';
 
 const money = (n: number | null) =>

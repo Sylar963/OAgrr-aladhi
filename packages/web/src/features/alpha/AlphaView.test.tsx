@@ -2,6 +2,7 @@ import { useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
+import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
 
 const mocks = vi.hoisted(() => ({ chain: vi.fn(), scan: vi.fn(), cross: vi.fn() }));
@@ -34,13 +35,15 @@ vi.mock('./LottoScannerPanel', () => ({ default: () => <div>Original long-call s
 vi.mock('./spread-scanner', async (original) => ({
   ...(await original<typeof import('./spread-scanner')>()),
   scanSpreads: mocks.scan,
+}));
+vi.mock('./cross-venue-scanner', async (original) => ({
+  ...(await original<typeof import('./cross-venue-scanner')>()),
   scanCrossVenueSpreads: mocks.cross,
 }));
 
 const candidate: SpreadCandidate = {
   id: 'credit',
   venue: 'thalex',
-  buyVenue: 'thalex',
   expiry: '2026-09-25',
   kind: 'call-credit',
   direction: 'bearish',
@@ -51,8 +54,7 @@ const candidate: SpreadCandidate = {
   quantity: 0.01,
   grossPremium: 4,
   entryFee: 0.12,
-  sellFee: 0.12,
-  buyFee: 0.12,
+  legFees: { sell: 0.12, buy: 0.12 },
   costReserve: 0.25,
   maxProfit: 3.63,
   maxLoss: 6.37,
@@ -65,7 +67,6 @@ const candidate: SpreadCandidate = {
   ageMs: 1,
   capacity: 1,
   roundTrip: -1,
-  crossImprovement: null,
 };
 
 beforeEach(() => {
@@ -119,8 +120,7 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getAllByRole('tab', { name: 'Put Credit' })).toHaveLength(1);
     expect(screen.getByText('Original expiry bar')).toBeTruthy();
     expect(screen.getByText('Original volatility smile')).toBeTruthy();
-    expect(screen.getByText('Short leg · SELL')).toBeTruthy();
-    expect(screen.getByText('Long leg · BUY')).toBeTruthy();
+    expect(screen.queryByText('Short leg · SELL')).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Spread scanner' })).toBeNull();
     fireEvent.click(tabs.getByRole('tab', { name: 'Long Call' }));
     expect(screen.getByText('Original long-call scanner')).toBeTruthy();
@@ -159,25 +159,20 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getByText(/Bullish. Buy lower call/)).toBeTruthy();
   });
   it('lists cross-venue routes under same-venue cards and loads both venues', () => {
+    const { venue: _venue, ...economics } = candidate;
+    const route: CrossVenueCandidate = {
+      ...economics,
+      id: 'okx>thalex:credit',
+      sellVenue: 'okx',
+      buyVenue: 'thalex',
+      legFees: { sell: 0.1, buy: 0.12 },
+      entryFee: 0.22,
+      improvement: 0.4,
+      status: 'review',
+    };
     mocks.cross.mockReturnValue([
-      {
-        venue: 'okx',
-        rejected: {},
-        candidates: [
-          {
-            ...candidate,
-            id: 'okx>thalex:credit',
-            venue: 'okx',
-            buyVenue: 'thalex',
-            sellFee: 0.1,
-            buyFee: 0.12,
-            entryFee: 0.22,
-            crossImprovement: 0.4,
-            status: 'review',
-          },
-        ],
-      },
-      { venue: 'thalex', rejected: {}, candidates: [] },
+      { sellVenue: 'okx', rejected: {}, candidates: [route] },
+      { sellVenue: 'thalex', rejected: {}, candidates: [] },
     ]);
     render(<AlphaView />);
     fireEvent.change(screen.getByLabelText('Account equity · USD'), { target: { value: '1080' } });
@@ -186,7 +181,6 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getByText(/^\+\$0\.4.* vs same$/)).toBeTruthy();
     expect(screen.getByText('Your strikes')).toBeTruthy();
     fireEvent.click(screen.getByText(/^\+\$0\.4.* vs same$/));
-    expect(screen.getByText(/Cross-venue execution/)).toBeTruthy();
     expect(screen.getAllByText(/OKX sell → Thalex buy/).length).toBeGreaterThan(0);
     expect(screen.getByText('Portfolio exposure: okx')).toBeTruthy();
   });

@@ -13,14 +13,20 @@ import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
 import LottoScannerPanel from './LottoScannerPanel';
-import SignalCard from './SignalCard';
+import CrossVenueOpportunities from './CrossVenueOpportunities';
+import {
+  type CrossVenueCandidate,
+  type CrossVenueScan,
+  scanCrossVenueSpreads,
+} from './cross-venue-scanner';
+import SignalCard, { type ExecutionRoute } from './SignalCard';
 import SpreadBuilderPanel from './SpreadBuilderPanel';
-import { type SpreadCandidate, scanCrossVenueSpreads, scanSpreads } from './spread-scanner';
+import { type SpreadCandidate, scanSpreads, type VenueScan } from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
-import VenueRouterTable from './VenueRouterTable';
+import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
 type AlphaStrategy = SpreadKind | 'long-call';
@@ -97,22 +103,27 @@ export default function AlphaView() {
     () => (scanInput && scanInput.venues.length > 1 ? scanCrossVenueSpreads(scanInput, scans) : []),
     [scanInput, scans],
   );
-  const selected =
-    (crossBuyVenue == null ? scans : crossScans)
-      .find((s) => s.venue === tradeVenue)
-      ?.candidates.find(
-        (c) =>
-          c.kind === kind &&
-          c.sellStrike === shortStrike &&
-          c.buyStrike === longStrike &&
-          c.buyVenue === (crossBuyVenue ?? tradeVenue),
-      ) ?? null;
-  function selectCandidate(candidate: SpreadCandidate) {
-    setPreferredVenue(candidate.venue);
-    setPreferredBuyVenue(candidate.buyVenue === candidate.venue ? null : candidate.buyVenue);
+  const selection = findSelection(scans, crossScans, {
+    sellVenue: tradeVenue,
+    buyVenue: crossBuyVenue,
+    kind,
+    sellStrike: shortStrike,
+    buyStrike: longStrike,
+  });
+  function loadStrikes(candidate: VerticalEconomics) {
     setStrategy(candidate.kind);
     setShortStrike(candidate.sellStrike);
     setLongStrike(candidate.buyStrike);
+  }
+  function selectSameVenue(candidate: SpreadCandidate) {
+    setPreferredVenue(candidate.venue);
+    setPreferredBuyVenue(null);
+    loadStrikes(candidate);
+  }
+  function selectCrossVenue(candidate: CrossVenueCandidate) {
+    setPreferredVenue(candidate.sellVenue);
+    setPreferredBuyVenue(candidate.buyVenue);
+    loadStrikes(candidate);
   }
 
   const atmStrike = chain?.stats.atmStrike ?? null;
@@ -179,17 +190,6 @@ export default function AlphaView() {
     [analysis.smile, analysis.T],
   );
 
-  const executableNet =
-    selected == null ? null : (selected.grossPremium - selected.entryFee) / selected.quantity;
-  const shortRoute = analysis.analysis?.short;
-  const longRoute = analysis.analysis?.long;
-  const shortBest = selected
-    ? (shortRoute?.candidates.find((c) => c.venue === tradeVenue) ?? null)
-    : null;
-  const longBest = selected
-    ? (longRoute?.candidates.find((c) => c.venue === (crossBuyVenue ?? tradeVenue)) ?? null)
-    : null;
-
   const builder = chain && (
     <SpreadBuilderPanel
       kind={kind}
@@ -232,7 +232,8 @@ export default function AlphaView() {
   const signalStack = (
     <>
       <SignalCard
-        candidate={selected}
+        candidate={selection?.candidate ?? null}
+        route={selection?.route ?? null}
         underlying={underlying}
         spot={analysis.spot}
         riskBudgetPct={Number(sizing.riskPct)}
@@ -246,46 +247,23 @@ export default function AlphaView() {
         }
         regime={regime ?? null}
       />
-      <VenueRouterTable
-        shortLeg={shortRoute ? { ...shortRoute, best: shortBest } : null}
-        longLeg={longRoute ? { ...longRoute, best: longBest } : null}
-        shortStrike={shortStrike}
-        longStrike={longStrike}
-        executableNetCredit={executableNet}
-        routeVenue={selected?.venue ?? null}
-        routeBuyVenue={selected?.buyVenue ?? null}
-        maxQuantity={selected?.capacity ?? null}
-        quoteSkewMs={
-          shortBest?.asOfMs != null && longBest?.asOfMs != null
-            ? Math.abs(shortBest.asOfMs - longBest.asOfMs)
-            : null
-        }
-        theoreticalIndependentNetCredit={analysis.analysis?.theoreticalIndependentNetCredit ?? null}
-        netLabel={
-          crossBuyVenue == null
-            ? 'Selected venue net cash / 1 underlying · entry fees included; reserve excluded'
-            : 'Selected cross-venue net cash / 1 underlying · standalone leg fees included; reserve excluded; non-atomic'
-        }
-      >
-        <AlphaVenueOpportunities
-          scans={scans}
+      <AlphaVenueOpportunities
+        scans={scans}
+        kind={kind}
+        sellStrike={shortStrike}
+        buyStrike={longStrike}
+        onSelect={selectSameVenue}
+      />
+      {scanVenues.length > 1 && (
+        <CrossVenueOpportunities
+          scans={crossScans}
           kind={kind}
           sellStrike={shortStrike}
           buyStrike={longStrike}
-          onSelect={selectCandidate}
+          loadedId={crossBuyVenue == null ? null : (selection?.id ?? null)}
+          onSelect={selectCrossVenue}
         />
-        {scanVenues.length > 1 && (
-          <AlphaVenueOpportunities
-            mode="cross"
-            scans={crossScans}
-            kind={kind}
-            sellStrike={shortStrike}
-            buyStrike={longStrike}
-            onSelect={selectCandidate}
-            selectedId={crossBuyVenue == null ? null : (selected?.id ?? null)}
-          />
-        )}
-      </VenueRouterTable>
+      )}
       <VolSmileInset
         smile={analysis.smile}
         shortStrike={shortStrike}
@@ -403,6 +381,35 @@ export default function AlphaView() {
         ))}
     </div>
   );
+}
+
+interface SelectionQuery {
+  sellVenue: VenueId;
+  /** null selects the same-venue route on `sellVenue`. */
+  buyVenue: VenueId | null;
+  kind: SpreadKind;
+  sellStrike: number | null;
+  buyStrike: number | null;
+}
+
+function findSelection(
+  scans: readonly VenueScan[],
+  crossScans: readonly CrossVenueScan[],
+  query: SelectionQuery,
+): { id: string; candidate: VerticalEconomics; route: ExecutionRoute } | null {
+  const matches = (c: VerticalEconomics) =>
+    c.kind === query.kind && c.sellStrike === query.sellStrike && c.buyStrike === query.buyStrike;
+  const { sellVenue, buyVenue } = query;
+  if (buyVenue == null) {
+    const candidate = scans.find((s) => s.venue === sellVenue)?.candidates.find(matches);
+    return candidate
+      ? { id: candidate.id, candidate, route: { sellVenue, buyVenue: sellVenue } }
+      : null;
+  }
+  const candidate = crossScans
+    .find((s) => s.sellVenue === sellVenue)
+    ?.candidates.find((c) => c.buyVenue === buyVenue && matches(c));
+  return candidate ? { id: candidate.id, candidate, route: { sellVenue, buyVenue } } : null;
 }
 
 function nearestIndex(strikes: number[], target: number): number {

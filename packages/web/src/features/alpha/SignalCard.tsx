@@ -1,13 +1,20 @@
 import InfoTip from '@components/ui/InfoTip';
 import { fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
+import type { VenueId } from '@shared/enriched';
 import { memo } from 'react';
 import styles from './SignalCard.module.css';
-import { expiryPnl, type SpreadCandidate } from './spread-scanner';
 import type { RegimeResponse } from './useRegimeQuery';
+import { expiryPnl, type VerticalEconomics } from './vertical-pricing';
+
+export interface ExecutionRoute {
+  sellVenue: VenueId;
+  buyVenue: VenueId;
+}
 
 interface Props {
-  candidate: SpreadCandidate | null;
+  candidate: VerticalEconomics | null;
+  route: ExecutionRoute | null;
   underlying: string;
   spot: number | null;
   emptyReason: string;
@@ -25,6 +32,7 @@ const STATUS = {
 
 function SignalCard({
   candidate,
+  route,
   underlying,
   spot,
   emptyReason,
@@ -54,11 +62,12 @@ function SignalCard({
         </InfoTip>
       </header>
 
-      {!candidate ? (
+      {!candidate || !route ? (
         <EmptyDecisionState state={emptyState} reason={emptyReason} />
       ) : (
         <CandidateDashboard
           candidate={candidate}
+          route={route}
           underlying={underlying}
           spot={spot}
           riskBudgetPct={riskBudgetPct}
@@ -72,13 +81,15 @@ function SignalCard({
 
 function CandidateDashboard({
   candidate,
+  route,
   underlying,
   spot,
   riskBudgetPct,
   dominant,
   direction,
 }: {
-  candidate: SpreadCandidate;
+  candidate: VerticalEconomics;
+  route: ExecutionRoute;
   underlying: string;
   spot: number | null;
   riskBudgetPct: number;
@@ -87,7 +98,9 @@ function CandidateDashboard({
 }) {
   const status = STATUS[candidate.status];
   const debit = candidate.kind.endsWith('debit');
-  const cross = candidate.buyVenue !== candidate.venue;
+  const cross = route.buyVenue !== route.sellVenue;
+  const sellLabel = VENUES[route.sellVenue]?.label ?? route.sellVenue;
+  const buyLabel = VENUES[route.buyVenue]?.label ?? route.buyVenue;
   const netCash = candidate.grossPremium - candidate.entryFee - candidate.costReserve;
   const probability = candidate.probability == null ? null : candidate.probability * 100;
   const budgetUsd =
@@ -108,11 +121,7 @@ function CandidateDashboard({
           </div>
         </div>
         <div className={styles.contractLine}>
-          <strong>
-            {cross
-              ? `${VENUES[candidate.venue]?.label ?? candidate.venue} sell → ${VENUES[candidate.buyVenue]?.label ?? candidate.buyVenue} buy`
-              : (VENUES[candidate.venue]?.label ?? candidate.venue)}
-          </strong>
+          <strong>{cross ? `${sellLabel} sell → ${buyLabel} buy` : sellLabel}</strong>
           {cross && <span>non-atomic</span>}
           <span>
             {candidate.quantity} {underlying}
@@ -215,7 +224,7 @@ function CandidateDashboard({
           Expiry bounds require both legs to fill and remain paired. Confirm venue margin and final
           order price.
           {cross &&
-            ` Cross-venue: legs fill independently, so one can fill without the other, and ${VENUES[candidate.venue]?.label ?? candidate.venue} margins the short leg as a naked short — collateral can far exceed max loss.`}
+            ` Cross-venue: legs fill independently, so one can fill without the other, and ${sellLabel} margins the short leg as a naked short — collateral can far exceed max loss.`}
         </p>
       </details>
     </>
@@ -265,7 +274,7 @@ function EmptyDecisionState({ state, reason }: { state: Props['emptyState']; rea
   );
 }
 
-function PayoffChart({ candidate, spot }: { candidate: SpreadCandidate; spot: number | null }) {
+function PayoffChart({ candidate, spot }: { candidate: VerticalEconomics; spot: number | null }) {
   const lowStrike = Math.min(candidate.buyStrike, candidate.sellStrike);
   const highStrike = Math.max(candidate.buyStrike, candidate.sellStrike);
   const width = highStrike - lowStrike;
@@ -391,7 +400,7 @@ function ProbabilityDial({ value }: { value: number | null }) {
   );
 }
 
-function ScenarioMeter({ candidate, spot }: { candidate: SpreadCandidate; spot: number }) {
+function ScenarioMeter({ candidate, spot }: { candidate: VerticalEconomics; spot: number }) {
   const moves = [-10, -5, 0, 5, 10];
   return (
     <details className={styles.scenarios}>

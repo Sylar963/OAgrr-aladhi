@@ -9,6 +9,7 @@ const { storeMock, consumeWebSocketTicketMock } = vi.hoisted(() => ({
 
 vi.mock('../../trading-services.js', () => ({
   paperTradingStore: storeMock,
+  exchangePortfolioLedgerStore: { enabled: false },
 }));
 
 vi.mock('../../websocket-ticket-service.js', () => ({

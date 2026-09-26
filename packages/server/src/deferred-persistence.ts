@@ -15,7 +15,7 @@ import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type {
   DealerBookStore,
-  IvHistoryDailyQuery,
+  IvHistoryHourlyQuery,
   IvHistoryLoadQuery,
   IvHistoryStorageStats,
   IvHistoryStore,
@@ -157,6 +157,13 @@ function ensureCacheDir(path: string): void {
 const FIRST_FLUSH_DELAY_MS = 60_000;
 const FLUSH_RETRY_MS = 15 * 60_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+function describeError(err: unknown): string {
+  if (err instanceof AggregateError && err.errors.length > 0) {
+    return `${String(err)}: ${err.errors.map((inner: unknown) => String(inner)).join('; ')}`;
+  }
+  return String(err);
+}
 
 function readFlushMarker(path: string): number | null {
   try {
@@ -335,7 +342,8 @@ function dealerKey(row: PersistedDealerPosition): string {
 
 function decodeDealerPosition(value: unknown): PersistedDealerPosition {
   const row = value as SerializedDealerPosition;
-  return { ...row, lastSnapshotTs: new Date(row.lastSnapshotTs) };
+  // Rows cached before flow attribution existed carry no flowContracts; migration 0026 starts them at 0.
+  return { ...row, flowContracts: row.flowContracts ?? 0, lastSnapshotTs: new Date(row.lastSnapshotTs) };
 }
 
 function encodeDealerPosition(row: PersistedDealerPosition): SerializedDealerPosition {
@@ -423,7 +431,7 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
-          { err: String(err), pending: this.pending.length },
+          { err: describeError(err), pending: this.pending.length },
           'deferred OI flush failed',
         );
       });
@@ -512,7 +520,7 @@ export class DeferredDealerBookStore implements DealerBookStore {
       () => this.flush(),
       (err: unknown) => {
         this.log.warn(
-          { err: String(err), pending: this.pending.size },
+          { err: describeError(err), pending: this.pending.size },
           'deferred dealer-book flush failed',
         );
       },
@@ -631,7 +639,7 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
       () => this.flush(),
       (err: unknown) => {
         this.log.warn(
-          { err: String(err), pending: this.pending.length },
+          { err: describeError(err), pending: this.pending.length },
           'deferred IV-history flush failed',
         );
       },
@@ -662,8 +670,8 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     return this.delegate.loadSince(query);
   }
 
-  async loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
-    return this.delegate.loadDaily(query);
+  async loadHourly(query: IvHistoryHourlyQuery): Promise<PersistedIvHistoryPoint[]> {
+    return this.delegate.loadHourly(query);
   }
 
   async getStorageStats(): Promise<IvHistoryStorageStats> {
@@ -724,7 +732,7 @@ export class DeferredShortStraddleSnapshotStore implements ShortStraddleSnapshot
             () => this.flush(),
             (err: unknown) => {
               this.log.warn(
-                { err: String(err), pending: this.pending.length },
+                { err: describeError(err), pending: this.pending.length },
                 'deferred short-straddle snapshot flush failed',
               );
             },
@@ -855,7 +863,7 @@ export class DeferredRegimeStore implements RegimeStore {
       (err: unknown) => {
         this.log.warn(
           {
-            err: String(err),
+            err: describeError(err),
             observations: this.pendingObservations.length,
             models: this.pendingModels.size,
           },
@@ -883,6 +891,10 @@ export class DeferredRegimeStore implements RegimeStore {
     const rows = this.observations.filter((row) => matchesRegimeObservationQuery(row, query));
     if (rows.length > 0) return rows.sort((a, b) => a.ts.getTime() - b.ts.getTime());
     return this.delegate.loadObservationsSince(query);
+  }
+
+  async saveObservations(rows: PersistedRegimeObservation[]): Promise<void> {
+    for (const row of rows) await this.saveObservation(row);
   }
 
   async saveObservation(row: PersistedRegimeObservation): Promise<void> {
@@ -922,7 +934,7 @@ export class DeferredRegimeStore implements RegimeStore {
     const models = new Map(this.pendingModels);
     try {
       for (const model of models.values()) await this.delegate.saveModel(model);
-      for (const observation of observations) await this.delegate.saveObservation(observation);
+      await this.delegate.saveObservations(observations);
       const flushedObservations = new Set(observations);
       this.pendingObservations = this.pendingObservations.filter(
         (observation) => !flushedObservations.has(observation),

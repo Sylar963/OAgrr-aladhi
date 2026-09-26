@@ -29,19 +29,19 @@ function toPoint(row: PersistedIvHistoryPoint): IvHistoryPoint {
   };
 }
 
-/** Daily long-range history before the recent in-memory series, recent points after it. */
+/** Long-range history before the recent in-memory series starts, recent points after it. */
 export function mergeIvSeries(
-  daily: readonly IvHistoryPoint[],
+  history: readonly IvHistoryPoint[],
   recent: readonly IvHistoryPoint[],
 ): IvHistoryPoint[] {
   const recentStart = recent[0]?.ts ?? Number.POSITIVE_INFINITY;
-  return [...daily.filter((point) => point.ts < recentStart), ...recent];
+  return [...history.filter((point) => point.ts < recentStart), ...recent];
 }
 
 /**
  * The premium baseline needs several non-overlapping windows of the tenor length (four
- * 30-day windows is ~4 months), which the 90-day in-memory IV buffer cannot hold. Reads a
- * daily-sampled series from the store and caches it per underlying.
+ * 30-day windows is ~4 months), which the 90-day in-memory IV buffer cannot hold. Reads an
+ * hourly-sampled series from the store and caches it per underlying.
  */
 export class IvBaselineHistory {
   private readonly cache = new Map<string, CacheEntry>();
@@ -50,7 +50,7 @@ export class IvBaselineHistory {
   private readonly now: () => number;
 
   constructor(
-    private readonly store: Pick<IvHistoryStore, 'enabled' | 'loadDaily'>,
+    private readonly store: Pick<IvHistoryStore, 'enabled' | 'loadHourly'>,
     options: IvBaselineHistoryOptions = {},
   ) {
     this.lookbackDays = options.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
@@ -74,7 +74,7 @@ export class IvBaselineHistory {
   }
 
   private async load(underlying: string, now: number): Promise<StraddleIvSeries> {
-    const rows = await this.store.loadDaily({
+    const rows = await this.store.loadHourly({
       underlying,
       tenorDays: [7, 30],
       since: new Date(now - this.lookbackDays * DAY_MS),

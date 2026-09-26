@@ -25,7 +25,7 @@ export type {
 } from './funded-store.js';
 export { NoopFundedStore, PostgresFundedStore } from './funded-store.js';
 export type {
-  IvHistoryDailyQuery,
+  IvHistoryHourlyQuery,
   IvHistoryLoadQuery,
   IvHistoryPointSource,
   IvHistoryStorageStats,

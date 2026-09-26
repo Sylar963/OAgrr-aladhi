@@ -1,5 +1,7 @@
 import { Pool } from 'pg';
 
+const OBSERVATION_INSERT_BATCH_SIZE = 500;
+
 export type RegimeLabel = 'low-vol' | 'mid-vol' | 'high-vol';
 
 export interface PersistedRegimeModel {
@@ -31,6 +33,7 @@ export interface RegimeStore {
   saveModel(model: PersistedRegimeModel): Promise<void>;
   loadObservationsSince(query: RegimeObservationLoadQuery): Promise<PersistedRegimeObservation[]>;
   saveObservation(row: PersistedRegimeObservation): Promise<void>;
+  saveObservations(rows: PersistedRegimeObservation[]): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -44,6 +47,7 @@ export class NoopRegimeStore implements RegimeStore {
     return [];
   }
   async saveObservation(): Promise<void> {}
+  async saveObservations(): Promise<void> {}
   async dispose(): Promise<void> {}
 }
 
@@ -124,6 +128,39 @@ export class PostgresRegimeStore implements RegimeStore {
         row.dominant,
       ],
     );
+  }
+
+  async saveObservations(rows: PersistedRegimeObservation[]): Promise<void> {
+    // A single INSERT cannot upsert the same key twice, so keep the last row per key.
+    const unique = [
+      ...new Map(
+        rows.map((row) => [`${row.underlying.toUpperCase()}:${row.ts.getTime()}`, row]),
+      ).values(),
+    ];
+    for (let index = 0; index < unique.length; index += OBSERVATION_INSERT_BATCH_SIZE) {
+      const batch = unique.slice(index, index + OBSERVATION_INSERT_BATCH_SIZE);
+      const values: unknown[] = [];
+      const placeholders = batch.map((row, batchIndex) => {
+        const offset = batchIndex * 5;
+        values.push(
+          row.underlying.toUpperCase(),
+          row.ts,
+          JSON.stringify(row.features),
+          row.posterior ? JSON.stringify(row.posterior) : null,
+          row.dominant,
+        );
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}::jsonb, $${offset + 4}::jsonb, $${offset + 5})`;
+      });
+      await this.pool.query(
+        `INSERT INTO regime_observations (underlying, ts, features, posterior, dominant)
+         VALUES ${placeholders.join(', ')}
+         ON CONFLICT (underlying, ts) DO UPDATE SET
+           features = EXCLUDED.features,
+           posterior = EXCLUDED.posterior,
+           dominant = EXCLUDED.dominant`,
+        values,
+      );
+    }
   }
 
   async dispose(): Promise<void> {

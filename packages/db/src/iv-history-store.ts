@@ -22,7 +22,7 @@ export interface IvHistoryLoadQuery {
   since: Date;
 }
 
-export interface IvHistoryDailyQuery {
+export interface IvHistoryHourlyQuery {
   underlying: string;
   tenorDays: PersistedIvHistoryPoint['tenorDays'][];
   since: Date;
@@ -39,8 +39,8 @@ export interface IvHistoryStore {
   readonly enabled: boolean;
   writeMany(points: PersistedIvHistoryPoint[]): Promise<void>;
   loadSince(query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]>;
-  /** One point per tenor per UTC day, the sample closest to midnight, with ATM IV present. */
-  loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]>;
+  /** First sample per tenor per UTC hour that has ATM IV. */
+  loadHourly(query: IvHistoryHourlyQuery): Promise<PersistedIvHistoryPoint[]>;
   getStorageStats(): Promise<IvHistoryStorageStats>;
   dispose(): Promise<void>;
 }
@@ -58,7 +58,7 @@ export class NoopIvHistoryStore implements IvHistoryStore {
     return [];
   }
 
-  async loadDaily(_query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
+  async loadHourly(_query: IvHistoryHourlyQuery): Promise<PersistedIvHistoryPoint[]> {
     return [];
   }
 
@@ -159,11 +159,11 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
     return result.rows.map(mapRow);
   }
 
-  async loadDaily(query: IvHistoryDailyQuery): Promise<PersistedIvHistoryPoint[]> {
+  async loadHourly(query: IvHistoryHourlyQuery): Promise<PersistedIvHistoryPoint[]> {
     if (query.tenorDays.length === 0) return [];
 
     const result = await this.pool.query<IvHistoryRow>(
-      `SELECT DISTINCT ON (tenor_days, date_trunc('day', ts + interval '12 hours'))
+      `SELECT DISTINCT ON (tenor_days, date_trunc('hour', ts))
         underlying,
         tenor_days,
         ts,
@@ -178,10 +178,7 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
         AND tenor_days = ANY($2::smallint[])
         AND ts >= $3
         AND atm_iv IS NOT NULL
-      ORDER BY
-        tenor_days,
-        date_trunc('day', ts + interval '12 hours'),
-        abs(extract(epoch FROM ts - date_trunc('day', ts + interval '12 hours')))`,
+      ORDER BY tenor_days, date_trunc('hour', ts), ts`,
       [query.underlying.toUpperCase(), query.tenorDays, query.since],
     );
 

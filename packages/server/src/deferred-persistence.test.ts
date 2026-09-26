@@ -200,7 +200,7 @@ class FakeIvHistoryStore implements IvHistoryStore {
     return this.loaded;
   }
 
-  async loadDaily(): Promise<PersistedIvHistoryPoint[]> {
+  async loadHourly(): Promise<PersistedIvHistoryPoint[]> {
     return this.loaded;
   }
 
@@ -241,6 +241,10 @@ class FakeRegimeStore implements RegimeStore {
 
   async saveObservation(row: PersistedRegimeObservation): Promise<void> {
     this.observations.push(row);
+  }
+
+  async saveObservations(rows: PersistedRegimeObservation[]): Promise<void> {
+    this.observations.push(...rows);
   }
 
   async dispose(): Promise<void> {
@@ -713,5 +717,24 @@ describe('FlushSchedule', () => {
     await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
     expect(run).toHaveBeenCalledTimes(2);
     schedule.dispose();
+  });
+});
+
+describe('DeferredDealerBookStore legacy cache rows', () => {
+  it('defaults flowContracts to 0 for rows cached before flow attribution', async () => {
+    const cachePath = tempPath('dealer-legacy.ndjson');
+    const { flowContracts: _omitted, ...legacy } = dealerRow;
+    writeFileSync(
+      cachePath,
+      `${JSON.stringify({ ...legacy, lastSnapshotTs: dealerRow.lastSnapshotTs.toISOString() })}\n`,
+    );
+    const store = new DeferredDealerBookStore(
+      new FakeDealerBookStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+
+    await expect(store.loadAll(['BTC'])).resolves.toEqual([{ ...dealerRow, flowContracts: 0 }]);
+    await store.dispose();
   });
 });

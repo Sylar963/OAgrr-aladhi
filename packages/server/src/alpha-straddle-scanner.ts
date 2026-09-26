@@ -30,7 +30,8 @@ const LONG_RUN_MAX_DAYS = 180;
 const MIN_FORECAST_CLOSES = 31;
 const MIN_CONE_WINDOWS = 20;
 const MIN_INDEPENDENT_BASELINE_WINDOWS = 4;
-const IV_SAMPLE_TOLERANCE_MS = 6 * 3_600_000;
+// Deribit daily candles close at 08:00 UTC while the DVOL-seeded IV history is daily at 00:00.
+const IV_SAMPLE_TOLERANCE_MS = 12 * 3_600_000;
 const CONE_SELL_PERCENTILE = 75;
 const CONE_CHEAP_PERCENTILE = 50;
 const REALIZED_ACCELERATION_RATIO = 1.25;

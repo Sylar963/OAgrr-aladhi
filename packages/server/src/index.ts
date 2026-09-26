@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './network-defaults.js';
 import type { FastifyInstance } from 'fastify';
 import { buildApp, startShutdown } from './app.js';
 

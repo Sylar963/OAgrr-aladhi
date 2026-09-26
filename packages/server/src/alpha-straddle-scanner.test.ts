@@ -164,6 +164,13 @@ describe('buildStraddleVolModel', () => {
     expect(baseline.independentSampleCount).toBeGreaterThanOrEqual(4);
   });
 
+  it('matches daily IV stamped at 00:00 UTC against candles that close at 08:00 UTC', () => {
+    const series = ivSeries(REALIZED + 0.05).map((point) => ({ ...point, ts: point.ts - 8 * 3_600_000 }));
+    const baseline = buildStraddleVolModel(candles(), { '7d': [], '30d': series }).premiumBaseline(30);
+    expect(baseline.medianSpread).toBeCloseTo(0.05, 3);
+    expect(baseline.independentSampleCount).toBeGreaterThanOrEqual(4);
+  });
+
   it('leaves the baseline unknown instead of zero when IV history is missing', () => {
     const model = buildStraddleVolModel(candles(), { '7d': [], '30d': [] });
     expect(model.premiumBaseline(30).medianSpread).toBeNull();

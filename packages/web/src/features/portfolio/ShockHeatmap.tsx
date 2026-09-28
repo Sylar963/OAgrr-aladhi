@@ -44,13 +44,14 @@ function valueFor(cell: ShockGridCell, mode: ValueMode, currentUnrealizedPnl: nu
 }
 
 export default function ShockHeatmap({ grid, meta, currentUnrealizedPnl }: Props) {
-  const [valueMode, setValueMode] = useState<ValueMode>('incremental');
+  const [valueMode, setValueMode] = useState<ValueMode>('total');
 
   if (grid.length === 0 || grid[0] == null || grid[0].length === 0) {
     return <div className={styles.empty}>Add positions to see vol-shock P&amp;L.</div>;
   }
 
   const openPnl = currentUnrealizedPnl ?? 0;
+  const totalUnavailable = valueMode === 'total' && currentUnrealizedPnl == null;
   const allCells = grid.flat();
   const maxAbs = allCells.reduce(
     (max, cell) => Math.max(max, Math.abs(valueFor(cell, valueMode, openPnl))),
@@ -66,7 +67,7 @@ export default function ShockHeatmap({ grid, meta, currentUnrealizedPnl }: Props
       <div className={styles.header}>
         <div>
           <div className={styles.title} id="vol-matrix-title">Vol repricing matrix</div>
-          <div className={styles.subtitle}>Immediate surface shock · spot, forwards and time held constant</div>
+          <div className={styles.subtitle}>Scenarios recalculate from current market conditions · spot, forwards and time held constant</div>
         </div>
         <div className={styles.modeToggle} role="group" aria-label="Matrix value mode">
           <button
@@ -92,13 +93,13 @@ export default function ShockHeatmap({ grid, meta, currentUnrealizedPnl }: Props
         <div className={styles.locationBlock}>
           <span className={styles.nowBadge}><i />NOW</span>
           <div>
-            <span className={styles.referenceLabel}>You are here</span>
-            <strong>0 vol pts · 0 skew tilt</strong>
+            <span className={styles.referenceLabel}>Live baseline</span>
+            <strong>No additional shock</strong>
           </div>
         </div>
         <div className={styles.referenceMetric}>
           <span>Current open P&amp;L</span>
-          <strong data-sign={openPnl >= 0 ? 'positive' : 'negative'}>{fmtUsdShort(openPnl)}</strong>
+          <strong data-sign={openPnl >= 0 ? 'positive' : 'negative'}>{currentUnrealizedPnl == null ? 'Unavailable' : fmtUsdShort(openPnl)}</strong>
         </div>
         <div className={styles.referenceMetric}>
           <span>Repricing coverage</span>
@@ -152,22 +153,22 @@ export default function ShockHeatmap({ grid, meta, currentUnrealizedPnl }: Props
                       Math.abs(cell.skewShiftPerLogK) < 1e-9;
                     const displayValue = valueFor(cell, valueMode, openPnl);
                     const title = isCurrent
-                      ? `Current surface · shock impact ${fmtUsdShort(cell.totalPnlUsd)} · total open P&L ${fmtUsdShort(openPnl)}`
-                      : `ATM IV ${fmtAxis(cell.atmShiftVolPts, 1)} vol pts · skew slope ${fmtAxis(cell.skewShiftPerLogK * 100)} vol pts/log-K · ${valueMode === 'total' ? 'total' : 'impact'} ${fmtUsdShort(displayValue)}`;
+                      ? `Current surface · shock impact ${fmtUsdShort(cell.totalPnlUsd)} · total open P&L ${currentUnrealizedPnl == null ? 'unavailable' : fmtUsdShort(openPnl)}`
+                      : `ATM IV ${fmtAxis(cell.atmShiftVolPts, 1)} vol pts · skew slope ${fmtAxis(cell.skewShiftPerLogK * 100)} vol pts/log-K · ${valueMode === 'total' ? 'total' : 'impact'} ${totalUnavailable ? 'unavailable' : fmtUsdShort(displayValue)}`;
 
                     return (
                       <td
                         key={`${cell.atmShiftVolPts}-${cell.skewShiftPerLogK}`}
                         data-current={isCurrent || undefined}
-                        style={{ background: colorFor(displayValue, maxAbs) }}
+                        style={{ background: totalUnavailable ? '#181c24' : colorFor(displayValue, maxAbs) }}
                         title={title}
                       >
-                        {isCurrent && <span className={styles.youAreHere}>You are here</span>}
+                        {isCurrent && <span className={styles.baselineLabel}>No additional shock</span>}
                         <span
                           className={styles.cellValue}
                           {...(isCurrent ? { 'data-testid': 'current-shock-cell-value' } : {})}
                         >
-                          {fmtUsdShort(displayValue)}
+                          {totalUnavailable ? '—' : fmtUsdShort(displayValue)}
                         </span>
                       </td>
                     );
@@ -180,6 +181,7 @@ export default function ShockHeatmap({ grid, meta, currentUnrealizedPnl }: Props
       </div>
 
       <div className={styles.legend}>
+        <span>Baseline stays centered; this is a scenario view, not market movement.</span>
         <span><b>Rows</b> parallel ATM IV shift in vol points</span>
         <span><b>Columns</b> skew-slope change in vol points per ln(K/F)</span>
         <span><b>Values</b> {valueMode === 'total' ? 'current open P&L + shock impact' : 'model-consistent change from now'}</span>

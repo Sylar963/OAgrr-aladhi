@@ -21,6 +21,7 @@ import PositionForm from './PositionForm';
 import PositionsTable from './PositionsTable';
 import RiskCockpit from './RiskCockpit';
 import ShockHeatmap from './ShockHeatmap';
+import MarketMovement from './MarketMovement';
 import StrategyGroupsPanel from './StrategyGroups';
 import { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
@@ -251,6 +252,7 @@ export default function PortfolioView() {
             meta={metrics?.shockGridMeta ?? null}
             currentUnrealizedPnl={metrics?.totals.unrealizedPnlUsd ?? null}
           />
+          <MarketMovement positions={positions} />
           <PortfolioVegaCurve
             byStrike={metrics?.byStrike ?? []}
             breakEven={metrics?.breakEven ?? []}

@@ -234,7 +234,7 @@
     0 0 16px rgba(245, 184, 75, 0.16);
 }
 
-.youAreHere {
+.baselineLabel {
   display: block;
   margin-bottom: 1px;
   color: var(--matrix-amber);

@@ -1,0 +1,27 @@
+.wrap {
+  padding: 14px;
+  border: 1px solid #252b28;
+  border-radius: 8px;
+  background: #0a0d0c;
+  color: #aeb7b3;
+  font: 11px 'IBM Plex Mono', monospace;
+}
+.header, .controls, .readings, .changes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+.header { justify-content: space-between; }
+.wrap h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; }
+.note { color: #89938e; font-size: 10px; line-height: 1.6; }
+.controls label { display: grid; gap: 5px; color: #89938e; font-size: 10px; }
+.wrap select, .wrap button { padding: 7px; border: 1px solid #39433d; border-radius: 4px; background: #151917; color: #e3e8e5; font: inherit; }
+.wrap button { cursor: pointer; }
+.wrap button:disabled { opacity: .45; cursor: default; }
+.readings { margin-top: 16px; }
+.readings strong, .changes strong { display: block; margin-top: 5px; color: #e3e8e5; }
+.changes strong { color: #f5b84b; }
+.chart { display: block; width: 100%; max-width: 540px; margin: 12px auto 0; }
+.chart text { fill: #aeb7b3; font: 10px 'IBM Plex Mono', monospace; }
+.wrap :focus-visible { outline: 2px solid #f5b84b; outline-offset: 3px; }

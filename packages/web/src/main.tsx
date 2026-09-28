@@ -25,7 +25,12 @@ const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
 
 createRoot(root).render(
   <StrictMode>
-    <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      afterSignOutUrl="/"
+      signInForceRedirectUrl={window.location.origin}
+      signUpForceRedirectUrl={window.location.origin}
+    >
       <QueryClientProvider client={queryClient}>
         <AccountSessionProvider>
           <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>

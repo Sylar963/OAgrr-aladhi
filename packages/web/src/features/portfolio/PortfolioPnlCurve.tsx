@@ -8,6 +8,8 @@ interface Props {
   curve: PortfolioPnlCurveData;
   forwardDays: number;
   mixedExpiries?: boolean;
+  onOpenBuilder?: () => void;
+  builderDisabledReason?: string | undefined;
 }
 
 const WIDTH = 720;
@@ -60,7 +62,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status']): string {
   return 'No P/L curve available.';
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason }: Props) {
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
 
   useEffect(() => {
@@ -132,6 +134,23 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
           <span className={styles.legendItem}><span className={styles.expirySwatch} />Expiry</span>
         </div>
       </div>
+
+      {onOpenBuilder && (
+        <div className={styles.builderRow}>
+          <button
+            type="button"
+            className={styles.builderButton}
+            onClick={onOpenBuilder}
+            disabled={builderDisabledReason != null}
+            aria-describedby="portfolio-builder-hint"
+          >
+            Open in Builder V2 →
+          </button>
+          <span id="portfolio-builder-hint" className={styles.subtitle}>
+            {builderDisabledReason ?? 'Explore price paths using your entry prices. Replaces current Builder legs; excludes realized P&L and fees.'}
+          </span>
+        </div>
+      )}
 
       <div className={styles.metaRow}>
         <span className={styles.metricPill}>underlying {displayCurve.underlying ?? '—'}</span>

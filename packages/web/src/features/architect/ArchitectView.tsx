@@ -41,6 +41,7 @@ import {
   type GhostSnapshot,
 } from './snapshots-store';
 import { repriceLeg } from './reprice';
+import { withPortfolioEntryPrice } from './portfolio-import';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
@@ -523,7 +524,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const pricedLegs = useMemo(
     () =>
       legs.map((leg) => {
-        const repriced = repriceStrategyLeg(leg);
+        const repriced = repriceStrategyLeg(leg, {}, leg.portfolioEntryPrice != null);
         return repriced ? { ...leg, ...repriced } : leg;
       }),
     [legs, repriceStrategyLeg],
@@ -531,8 +532,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const analyticsLegs = useMemo(
     () =>
       market === 'tradfi'
-        ? pricedLegs.map((leg) => ({ ...leg, contractMultiplier: 100 }))
-        : pricedLegs,
+        ? pricedLegs.map((leg) => ({ ...withPortfolioEntryPrice(leg), contractMultiplier: 100 }))
+        : pricedLegs.map(withPortfolioEntryPrice),
     [market, pricedLegs],
   );
 

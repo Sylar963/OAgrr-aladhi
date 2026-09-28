@@ -9,6 +9,7 @@ export interface Leg {
   quantity: number;
   /** Quoted premium in USD */
   entryPrice: number;
+  portfolioEntryPrice?: number;
   /** Underlying units represented by one contract. Defaults to 1. */
   contractMultiplier?: number;
   /** Best venue for this leg */

@@ -136,3 +136,34 @@
     height: 240px;
   }
 }
+
+.builderRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.builderButton {
+  padding: 7px 10px;
+  border: 1px solid #38bdf8;
+  border-radius: 5px;
+  background: rgba(56, 189, 248, 0.08);
+  color: #7dd3fc;
+  font: 11px 'IBM Plex Mono', monospace;
+  cursor: pointer;
+}
+
+.builderButton:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.builderButton:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
+.builderButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

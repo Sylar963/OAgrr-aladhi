@@ -10,6 +10,7 @@ import {
 } from '@oggregator/protocol';
 
 import { useAppStore } from '@stores/app-store';
+import { portfolioToBuilderLegs, useStrategyStore } from '@features/architect';
 import { VENUES } from '@lib/venue-meta';
 
 import { PortfolioAssistantPanel } from './assistant';
@@ -118,6 +119,23 @@ export default function PortfolioView() {
 
   const positions = positionsData?.positions ?? metricsData?.positions ?? [];
   const metrics = metricsData?.metrics ?? null;
+  const builderLegs = portfolioToBuilderLegs(positions, metrics?.breakEven);
+  const builderDisabledReason = positions.length === 0
+    ? 'Add option positions to explore them in Builder V2.'
+    : builderLegs.length === 0
+      ? 'Select one underlying above to open its positions in Builder V2.'
+      : undefined;
+  const openInBuilder = () => {
+    const first = positions[0];
+    if (!first || builderLegs.length === 0) return;
+    useStrategyStore.getState().replaceLegs(builderLegs, first.underlying);
+    const app = useAppStore.getState();
+    app.setAssetMode('crypto');
+    app.setUnderlying(first.underlying);
+    app.setExpiry([...builderLegs].sort((a, b) => a.expiry.localeCompare(b.expiry))[0]!.expiry);
+    app.setBuilderVariant('v2');
+    app.setActiveTab('architect');
+  };
   const isReadOnly = source !== 'manual';
   const sourceLabel =
     source === 'manual'
@@ -223,6 +241,8 @@ export default function PortfolioView() {
           <PortfolioPnlCurve
             curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
             forwardDays={forwardDays}
+            onOpenBuilder={openInBuilder}
+            builderDisabledReason={builderDisabledReason}
             mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
           />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />

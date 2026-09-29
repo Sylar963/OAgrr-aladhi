@@ -47,7 +47,7 @@ import {
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
-import { DealerBookService, type IntervalFlow } from './dealer-book-service.js';
+import { DealerBookService, type IntervalFlow, netIntervalFlow } from './dealer-book-service.js';
 import {
   DeferredDealerBookStore,
   DeferredIvHistoryStore,
@@ -222,21 +222,8 @@ export const dealerBookService = new DealerBookService({
       return null;
     }
   },
-  fetchIntervalFlow: async (venue, symbol, underlying, fromTs, toTs): Promise<IntervalFlow> => {
-    // Attribute ΔOI from the lit/live tape only. Block ('institutional') flow is
-    // deliberately excluded — block-trade aggressor sign is ambiguous — so
-    // block-driven OI changes fall through to the naive-prior sign in the book.
-    const tape = flowService
-      .getTrades(underlying)
-      .filter((trade) => !trade.isBlock && trade.venue === venue && trade.instrument === symbol);
-    if (tape.length === 0 || tape[0]!.timestamp > fromTs) {
-      return { netFlow: 0, hasFlow: false };
-    }
-    const buffered = tape.filter((trade) => trade.timestamp > fromTs && trade.timestamp <= toTs);
-    if (buffered.length === 0) return { netFlow: 0, hasFlow: false };
-    const net = buffered.reduce((acc, t) => acc + (t.side === 'buy' ? t.size : -t.size), 0);
-    return { netFlow: net, hasFlow: true };
-  },
+  fetchIntervalFlow: async (venue, exchangeSymbol, underlying, fromTs, toTs): Promise<IntervalFlow> =>
+    netIntervalFlow(flowService.getTrades(underlying), venue, exchangeSymbol, fromTs, toTs),
 });
 
 registerBookLookup(dealerBookService.lookup);

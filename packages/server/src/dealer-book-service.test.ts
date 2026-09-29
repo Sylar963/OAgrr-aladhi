@@ -2,7 +2,7 @@ import type { NormalizedOptionContract, VenueOptionChain } from '@oggregator/cor
 import { EMPTY_GREEKS } from '@oggregator/core';
 import { NoopDealerBookStore, NoopOiSnapshotStore } from '@oggregator/db';
 import { describe, expect, it } from 'vitest';
-import { DealerBookService } from './dealer-book-service.js';
+import { DealerBookService, netIntervalFlow } from './dealer-book-service.js';
 
 function callContract(oi: number): NormalizedOptionContract {
   return {
@@ -93,4 +93,68 @@ describe('DealerBookService', () => {
     await svc.runTick();
     expect(svc.lookup('deribit', 'NOPE')).toBeUndefined();
   });
+});
+
+describe('netIntervalFlow', () => {
+  const trade = (instrument: string, side: 'buy' | 'sell', size: number, timestamp: number) => ({
+    venue: 'deribit' as const,
+    instrument,
+    side,
+    size,
+    timestamp,
+    isBlock: false,
+  });
+
+  it('nets taker flow for the contract when the venue tape covers the interval', () => {
+    const tape = [
+      trade('BTC-30JUN26-60000-P', 'buy', 5, 50),
+      trade('BTC-30JUN26-70000-C', 'buy', 3, 150),
+      trade('BTC-30JUN26-70000-C', 'sell', 1, 180),
+    ];
+    expect(netIntervalFlow(tape, 'deribit', 'BTC-30JUN26-70000-C', 100, 200)).toEqual({
+      netFlow: 2,
+      hasFlow: true,
+    });
+  });
+
+  it('reports no flow when the venue tape starts after the interval opened', () => {
+    const tape = [trade('BTC-30JUN26-70000-C', 'buy', 3, 150)];
+    expect(netIntervalFlow(tape, 'deribit', 'BTC-30JUN26-70000-C', 100, 200).hasFlow).toBe(false);
+  });
+
+  it('ignores block trades and other venues', () => {
+    const tape = [
+      trade('BTC-30JUN26-60000-P', 'buy', 1, 50),
+      { ...trade('BTC-30JUN26-70000-C', 'buy', 3, 150), isBlock: true },
+      { ...trade('BTC-30JUN26-70000-C', 'buy', 3, 150), venue: 'okx' as const },
+    ];
+    expect(netIntervalFlow(tape, 'deribit', 'BTC-30JUN26-70000-C', 100, 200).hasFlow).toBe(false);
+  });
+});
+
+it('queries interval flow by venue-native exchangeSymbol, not the canonical symbol', async () => {
+  const seen: string[] = [];
+  let tick = 0;
+  const chain = (oi: number): VenueOptionChain => {
+    const c = { ...callContract(oi), symbol: 'BTC/USD:BTC-260630-70000-C' };
+    return { venue: 'deribit', underlying: 'BTC', expiry: '2026-06-30', asOf: 1, contracts: { [c.symbol]: c } };
+  };
+  const svc = new DealerBookService({
+    underlyings: ['BTC'],
+    oiSnapshotStore: new NoopOiSnapshotStore(),
+    dealerBookStore: new NoopDealerBookStore(),
+    listExpiries: async () => ['2026-06-30'],
+    listVenues: () => ['deribit'],
+    fetchChain: async () => chain(tick === 0 ? 100 : 130),
+    fetchIntervalFlow: async (_venue, exchangeSymbol) => {
+      seen.push(exchangeSymbol);
+      return { netFlow: 20, hasFlow: true };
+    },
+    now: () => ++tick * 900_000,
+    log: { info: () => {}, warn: () => {} },
+  });
+  await svc.runTick();
+  await svc.runTick();
+  expect(seen).toEqual(['BTC-30JUN26-70000-C']);
+  expect(svc.lookup('deribit', 'BTC/USD:BTC-260630-70000-C')?.flowContracts).toBe(30);
 });

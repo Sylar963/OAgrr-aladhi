@@ -35,7 +35,7 @@ export interface DealerBookServiceOptions {
   ) => Promise<VenueOptionChain | null>;
   fetchIntervalFlow: (
     venue: VenueId,
-    symbol: string,
+    exchangeSymbol: string,
     underlying: string,
     fromTs: number,
     toTs: number,
@@ -43,6 +43,43 @@ export interface DealerBookServiceOptions {
   now?: () => number;
   intervalMs?: number;
   log?: { info: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
+}
+
+export interface TapeTrade {
+  venue: VenueId;
+  instrument: string;
+  side: 'buy' | 'sell';
+  size: number;
+  timestamp: number;
+  isBlock: boolean;
+}
+
+/**
+ * Net taker flow for one contract over (fromTs, toTs]. Coverage is judged on
+ * the venue's whole tape: a contract that simply didn't trade earlier is still
+ * covered, but a buffer that starts after fromTs may have dropped trades.
+ * Block trades are excluded because their aggressor sign is ambiguous.
+ */
+export function netIntervalFlow(
+  trades: readonly TapeTrade[],
+  venue: VenueId,
+  exchangeSymbol: string,
+  fromTs: number,
+  toTs: number,
+): IntervalFlow {
+  let earliest = Infinity;
+  let net = 0;
+  let matched = false;
+  for (const t of trades) {
+    if (t.venue !== venue) continue;
+    if (t.timestamp < earliest) earliest = t.timestamp;
+    if (t.isBlock || t.instrument !== exchangeSymbol) continue;
+    if (t.timestamp <= fromTs || t.timestamp > toTs) continue;
+    net += t.side === 'buy' ? t.size : -t.size;
+    matched = true;
+  }
+  if (earliest > fromTs || !matched) return { netFlow: 0, hasFlow: false };
+  return { netFlow: net, hasFlow: true };
 }
 
 function bookKey(venue: VenueId, symbol: string): string {
@@ -226,9 +263,10 @@ export class DealerBookService {
       } else {
         let flow: IntervalFlow;
         try {
+          // Trade tapes carry venue-native instrument names, not canonical symbols.
           flow = await this.opts.fetchIntervalFlow(
             input.venue,
-            input.symbol,
+            contract.exchangeSymbol,
             underlying,
             prior.lastSnapshotTs,
             tickTs,

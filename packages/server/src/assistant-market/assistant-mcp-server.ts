@@ -254,7 +254,7 @@ export function buildAssistantMcpTools(
           books: library.listBooks(),
           results: hits,
           usage:
-            'Paraphrase and cite as (Author, Title, PDF p. N). Quote at most a sentence or two.',
+            'Paraphrase. Cite as (Author, Title, PDF p. N) only for specific claims a passage directly supports, at most two per answer.',
         };
       },
     }),

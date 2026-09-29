@@ -6,6 +6,11 @@ import {
   rankPortfolioRiskContributors,
 } from '@oggregator/core';
 import type {
+  ExchangePortfolioLedgerStore,
+  ExchangePortfolioVenue,
+  PersistedExchangeTrade,
+} from '@oggregator/db';
+import type {
   BreakEvenIvRow,
   ExpiryBucketRow,
   PortfolioAccounting,
@@ -47,6 +52,26 @@ export interface PortfolioAssistantMarketFacts {
   unavailable: string[];
 }
 
+export interface PortfolioAssistantTradeFact {
+  tradedAt: string;
+  instrument: string;
+  side: 'buy' | 'sell';
+  amount: number;
+  priceUsd: number;
+  premiumUsd: number;
+  feeUsd: number | null;
+  realizedPnlUsd: number | null;
+  liquidityRole: 'maker' | 'taker' | null;
+  orderId: string | null;
+}
+
+export interface PortfolioAssistantTradeHistoryFacts {
+  venue: ExchangePortfolioVenue;
+  underlying: string | null;
+  trades: PortfolioAssistantTradeFact[];
+  truncated: boolean;
+}
+
 export interface PortfolioAssistantContext {
   headline: PortfolioAssistantHeadline;
   schemaVersion: 1;
@@ -70,6 +95,7 @@ export interface PortfolioAssistantContext {
   marketFacts: PortfolioAssistantMarketFacts;
   shockFacts: { grid: ShockGridCell[][]; meta: ShockGridMeta } | null;
   accountingFacts: PortfolioAccounting | null;
+  tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
   topContributors: Record<
     'delta' | 'gamma' | 'vega' | 'theta' | 'vanna' | 'volga',
     PortfolioRiskContributor[]
@@ -92,6 +118,41 @@ const MARKET_EXPIRY_LIMIT = 4;
 const CHAIN_STRIKE_BAND = 0.15;
 const COMPACT_CHAIN_STRIKE_BAND = 0.07;
 const TERM_STRUCTURE_EXPIRY_LIMIT = 12;
+const TRADE_LOAD_LIMIT = 1_000;
+const TRADE_CONTEXT_LIMIT = 100;
+const COMPACT_TRADE_CONTEXT_LIMIT = 30;
+
+function isLedgerVenue(source: PortfolioSource): source is ExchangePortfolioVenue {
+  return source === 'thalex' || source === 'derive';
+}
+
+export function buildTradeHistoryFacts(
+  venue: ExchangePortfolioVenue,
+  trades: PersistedExchangeTrade[],
+  underlying: string | null,
+  limit: number,
+): PortfolioAssistantTradeHistoryFacts {
+  const matching = trades
+    .filter((trade) => underlying == null || trade.underlying === underlying)
+    .sort((a, b) => b.timestampMs - a.timestampMs);
+  return {
+    venue,
+    underlying,
+    trades: matching.slice(0, limit).map((trade) => ({
+      tradedAt: new Date(trade.timestampMs).toISOString(),
+      instrument: trade.instrumentName,
+      side: trade.direction,
+      amount: trade.amount,
+      priceUsd: roundCents(trade.priceUsd),
+      premiumUsd: roundCents(trade.priceUsd * trade.amount),
+      feeUsd: trade.feeUsd == null ? null : roundCents(trade.feeUsd),
+      realizedPnlUsd: trade.realizedPnlUsd == null ? null : roundCents(trade.realizedPnlUsd),
+      liquidityRole: trade.liquidityRole,
+      orderId: trade.orderId,
+    })),
+    truncated: matching.length > limit,
+  };
+}
 
 function narrowChain(
   chain: CompactChain & { units: string },
@@ -136,6 +197,7 @@ export class PortfolioAssistantContextBuilder {
   constructor(
     private readonly configuration: PortfolioAssistantConfiguration,
     private readonly marketData: AssistantMarketDataReader | null = null,
+    private readonly tradeLedger: ExchangePortfolioLedgerStore | null = null,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -202,6 +264,30 @@ export class PortfolioAssistantContextBuilder {
     return { underlyings: facts, unavailable };
   }
 
+  private async buildTradeHistory(
+    input: BuildPortfolioAssistantContextInput,
+    limitations: string[],
+  ): Promise<PortfolioAssistantTradeHistoryFacts | null> {
+    if (!isLedgerVenue(input.source)) return null;
+    if (!this.tradeLedger?.enabled) {
+      limitations.push('Venue trade history is unavailable because the trade ledger is not configured.');
+      return null;
+    }
+    try {
+      const trades = await this.tradeLedger.loadTrades(input.accountId, input.source, TRADE_LOAD_LIMIT);
+      const facts = buildTradeHistoryFacts(input.source, trades, input.underlying, TRADE_CONTEXT_LIMIT);
+      if (facts.truncated) {
+        limitations.push(
+          `tradeHistoryFacts lists the ${TRADE_CONTEXT_LIMIT} most recent trades; use accountingFacts for lifetime totals.`,
+        );
+      }
+      return facts;
+    } catch {
+      limitations.push('Venue trade history could not be loaded.');
+      return null;
+    }
+  }
+
   async buildPortfolioAssistantContext(
     input: BuildPortfolioAssistantContextInput,
   ): Promise<PortfolioAssistantContext> {
@@ -256,6 +342,7 @@ export class PortfolioAssistantContextBuilder {
       pnlCurve.currentSpotUsd,
     );
     const expiries = [...new Set(snapshot.positions.map((leg) => leg.expiry))].sort();
+    const tradeHistoryFacts = await this.buildTradeHistory(input, limitations);
 
     const context: PortfolioAssistantContext = {
       headline: {
@@ -300,6 +387,7 @@ export class PortfolioAssistantContextBuilder {
           ? { grid: snapshot.metrics.shockGrid, meta: snapshot.metrics.shockGridMeta }
           : null,
       accountingFacts: snapshot.metrics.accounting,
+      tradeHistoryFacts,
       topContributors: {
         delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
         gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
@@ -317,6 +405,16 @@ export class PortfolioAssistantContextBuilder {
         strikeFacts: context.strikeFacts.slice(0, 60),
         breakEvenFacts: context.breakEvenFacts.slice(0, 50),
         strategyFacts: context.strategyFacts.slice(0, 25),
+        tradeHistoryFacts:
+          context.tradeHistoryFacts == null
+            ? null
+            : {
+                ...context.tradeHistoryFacts,
+                trades: context.tradeHistoryFacts.trades.slice(0, COMPACT_TRADE_CONTEXT_LIMIT),
+                truncated:
+                  context.tradeHistoryFacts.truncated ||
+                  context.tradeHistoryFacts.trades.length > COMPACT_TRADE_CONTEXT_LIMIT,
+              },
         marketFacts: {
           ...context.marketFacts,
           underlyings: context.marketFacts.underlyings.map((facts) => {

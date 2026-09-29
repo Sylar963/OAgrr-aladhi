@@ -20,6 +20,7 @@ import { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-
 import { PortfolioAssistantConversationService } from './portfolio-assistant-conversation-service.js';
 import { PortfolioAssistantPromptBuilder } from './portfolio-assistant-prompt-builder.js';
 import { PortfolioAssistantUsageLimiter } from './portfolio-assistant-usage-limiter.js';
+import { exchangePortfolioLedgerStore } from './trading-services.js';
 
 const configuration = readPortfolioAssistantConfiguration(process.env);
 const store: PortfolioAssistantStore = process.env['DATABASE_URL']
@@ -46,6 +47,7 @@ export const portfolioAssistantAccessService = new PortfolioAssistantAccessServi
 const contextBuilder = new PortfolioAssistantContextBuilder(
   configuration,
   assistantMarketDataReader,
+  exchangePortfolioLedgerStore,
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);

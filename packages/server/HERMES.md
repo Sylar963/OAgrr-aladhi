@@ -77,7 +77,11 @@ portfolio. Then ask it to check feed health and recent trade flow. Confirm both:
 A successful direct `tools/list` request proves server availability, not agent
 integration. A fluent answer is not sufficient evidence of tool use.
 
-Private portfolio positions and scenarios remain scoped to the authenticated
-context attached by Oggregator. This MCP connection does not provide all private
+Private portfolio positions, scenarios and venue trade history remain scoped to the
+authenticated context attached by Oggregator. For Thalex and Derive portfolios the
+context includes `tradeHistoryFacts`: the 100 most recent fills (30 when compacted)
+from the Postgres trade ledger, filtered to the thread underlying. Lifetime totals
+stay in `accountingFacts`. The ledger fills while the venue connection is active, so
+history starts at the first sync (`historyFromMs`). This MCP connection does not provide all private
 platform data or the separate TradFi backend. New private tools require server-bound
 user scope; never accept a model-provided account ID as authorization.

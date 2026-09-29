@@ -51,6 +51,9 @@ export const AlphaLottoTargetSchema = z.object({
   modelUnderlyingPrice: NullableNumberSchema,
   modelMovePct: NullableNumberSchema,
   impliedMoveMultiple: NullableNumberSchema,
+  horizonDays: z.number(),
+  exitHaircutPct: z.number(),
+  touchProbability: NullableNumberSchema,
 });
 
 export type AlphaLottoTarget = z.infer<typeof AlphaLottoTargetSchema>;
@@ -95,6 +98,7 @@ export const AlphaLottoCandidateSchema = z.object({
   otmPct: z.number(),
   breakEvenPrice: z.number(),
   breakEvenMovePct: z.number(),
+  probabilityAboveBreakEven: NullableNumberSchema,
   minimumOrderCost: z.number(),
   quantityAtMark: z.number(),
   quantityAtAsk: z.number(),

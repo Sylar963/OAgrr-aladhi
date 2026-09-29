@@ -25,6 +25,9 @@ const GUIDED_MIN_DTE = 15;
 const GUIDED_MAX_DTE = 75;
 const GUIDED_PREMIUM_CAP = 10_000;
 const GUIDED_SCANNER_BUYING_POWER = 2_400;
+const ADVANCED_MIN_DTE = 15;
+const ADVANCED_MAX_DTE = 45;
+const ADVANCED_MAX_SPREAD_PCT = 30;
 type ScannerView = 'guided' | 'advanced';
 
 const CONTROL_TIPS = {
@@ -36,8 +39,8 @@ const CONTROL_TIPS = {
 const COLUMN_TIPS = {
   price: 'MARK is the table estimate. ASK is the quoted price before taker fees.',
   volatility: 'IV is how much movement the option market is pricing in. Higher IV usually means a more expensive bet.',
-  breakeven: 'OTM is the climb to the strike. BE uses the current ask plus the estimated taker fee when available.',
-  target: 'A model of the market move that could make the option worth 10× your ask-paid entry cost. It is not a probability or guarantee.',
+  breakeven: 'OTM is the climb to the strike. BE uses the current ask plus the estimated taker fee when available. The odds are the risk-neutral chance of finishing above BE at expiry, from the option\'s own IV.',
+  target: 'The move that makes the option worth 10× your ask-paid entry if it lands halfway to expiry and you sell at the bid. The odds are the risk-neutral chance of touching that level by then. Model estimates, not guarantees.',
   capacity: 'How many contracts your bankroll can cover at fee-adjusted ask, capped by quoted ask size. Reserved also uses a safety buffer.',
 } as const;
 
@@ -63,6 +66,13 @@ function moveContext(target: AlphaLottoTarget | null): string {
   if (ratio <= 1.5) return 'within 1.5 implied moves';
   if (ratio <= 2) return '1.5–2 implied moves';
   return 'over 2 implied moves';
+}
+
+function fmtChance(probability: number | null): string {
+  if (probability == null) return '—';
+  const pct = probability * 100;
+  if (pct < 0.1) return '<0.1%';
+  return `${pct.toFixed(pct < 10 ? 1 : 0)}%`;
 }
 
 function csvCell(value: string | number | boolean | null): string {
@@ -93,10 +103,14 @@ function downloadCsv(data: AlphaLottoScannerResponse): void {
     'expected_move_pct',
     'otm_pct',
     'expiry_be_pct',
+    'prob_above_be',
     'quantity_at_ask',
     'conservative_quantity',
     'move_10x_pct',
     'implied_moves_10x',
+    'horizon_days_10x',
+    'exit_haircut_pct',
+    'touch_prob_10x',
   ];
   const rows = data.candidates.map((candidate) => {
     const tenX = targetFor(candidate, 10);
@@ -121,10 +135,14 @@ function downloadCsv(data: AlphaLottoScannerResponse): void {
       candidate.expectedMovePct,
       candidate.otmPct,
       candidate.breakEvenMovePct,
+      candidate.probabilityAboveBreakEven,
       candidate.quantityAtAsk,
       candidate.conservativeQuantity,
       tenX?.modelMovePct ?? null,
       tenX?.impliedMoveMultiple ?? null,
+      tenX?.horizonDays ?? null,
+      tenX?.exitHaircutPct ?? null,
+      tenX?.touchProbability ?? null,
     ];
   });
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
@@ -187,7 +205,7 @@ function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
         <div data-tone="win">
           <span>PROFIT LINE AT EXPIRY</span>
           <strong>{candidate.underlying} above {fmtUsdCompact(candidate.breakEvenPrice)}</strong>
-          <small>That is a {fmtPct(candidate.breakEvenMovePct, 1)} climb from now.</small>
+          <small>That is a {fmtPct(candidate.breakEvenMovePct, 1)} climb from now · about {fmtChance(candidate.probabilityAboveBreakEven)} risk-neutral odds.</small>
         </div>
         <div data-tone="bust">
           <span>BUST LINE AT EXPIRY</span>
@@ -199,8 +217,8 @@ function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
         <strong>10× OUT:</strong>{' '}
         {tenX?.modelUnderlyingPrice == null
           ? 'The model cannot price this scenario.'
-          : `${candidate.underlying} near ${fmtUsdCompact(tenX.modelUnderlyingPrice)} (${fmtPct(tenX.modelMovePct, 1)}).`}{' '}
-        Assumes IV and time stay unchanged; this is not odds and not an expiry payout.
+          : `${candidate.underlying} near ${fmtUsdCompact(tenX.modelUnderlyingPrice)} (${fmtPct(tenX.modelMovePct, 1)}) within ${tenX.horizonDays.toFixed(1)} days, about ${fmtChance(tenX.touchProbability)} odds of touching it.`}{' '}
+        Assumes unchanged IV and a sale at the bid ({tenX == null ? '—' : `−${tenX.exitHaircutPct.toFixed(1)}%`} vs fair); not an expiry payout.
       </div>
       <div className={styles.maxLoss}>MAX LOSS: 100% OF WHAT YOU PAY · NO LOSS BEYOND THE PREMIUM</div>
     </div>
@@ -233,13 +251,13 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       underlying,
       venues: activeVenues,
       premiumCap: view === 'guided' ? GUIDED_PREMIUM_CAP : premiumCap,
-      minDte: view === 'guided' ? GUIDED_MIN_DTE : 4,
-      maxDte: view === 'guided' ? GUIDED_MAX_DTE : 14,
+      minDte: view === 'guided' ? GUIDED_MIN_DTE : ADVANCED_MIN_DTE,
+      maxDte: view === 'guided' ? GUIDED_MAX_DTE : ADVANCED_MAX_DTE,
       minOtmPct,
       maxOtmPct: 50,
       buyingPower: queryBuyingPower,
       marginHaircut: 1.2,
-      maxSpreadPct: 50,
+      maxSpreadPct: view === 'guided' ? 50 : ADVANCED_MAX_SPREAD_PCT,
       limit: view === 'guided' ? 50 : advancedLimit,
       diversifyExpiries: view === 'guided',
     },
@@ -270,7 +288,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           <p className={styles.description}>
             {view === 'guided'
               ? 'Define one possible future, cap what you can lose, and compare ways to own it.'
-              : 'Ranked by the 10× move relative to each expiry’s ATM implied move. Hover a contract for the poker read.'}
+              : 'Ranked by the 10× move, landing halfway to expiry and sold at the bid, in ATM implied-move units. Hover a contract for the poker read.'}
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -482,11 +500,12 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                         <div className={styles.numericCell}>
                           <strong>{fmtPct(candidate.otmPct, 1)}</strong>
                           <span>BE {fmtPct(candidate.breakEvenMovePct, 1)}</span>
+                          <small>{fmtChance(candidate.probabilityAboveBreakEven)} finish above</small>
                         </div>
                         <div className={styles.targetCell}>
                           <strong>{fmtPct(tenX?.modelMovePct ?? null, 1)}</strong>
                           <span>{tenX?.impliedMoveMultiple == null ? '—' : `${tenX.impliedMoveMultiple.toFixed(2)} implied`}</span>
-                          <small>{moveContext(tenX)}</small>
+                          <small>{moveContext(tenX)} · {fmtChance(tenX?.touchProbability ?? null)} touch</small>
                         </div>
                         <div className={styles.capacityCell}>
                           <strong>{formatQuantity(candidate.quantityAtAsk)}</strong>
@@ -509,7 +528,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
         {view === 'advanced' && (
           <>
             <span>Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.</span>
-            <span>Targets measure return on estimated entry cost and hold current IV and time constant.</span>
+            <span>Scans {ADVANCED_MIN_DTE}–{ADVANCED_MAX_DTE} DTE with spreads up to {ADVANCED_MAX_SPREAD_PCT}%. Targets measure return on estimated entry cost if the move lands halfway to expiry, IV is unchanged, and you sell at the bid.</span>
+            <span>Odds are risk-neutral estimates from the option&apos;s IV, not forecasts.</span>
           </>
         )}
         {view === 'guided' && (
@@ -549,6 +569,7 @@ function CandidateInspector({ candidate, onOpenBuilder }: CandidateInspectorProp
             <small>
               {fmtPct(target.modelMovePct, 1)} · {target.impliedMoveMultiple == null ? '—' : `${target.impliedMoveMultiple.toFixed(2)} implied`}
             </small>
+            <small>{fmtChance(target.touchProbability)} touch in {target.horizonDays.toFixed(1)}d</small>
             <small>expiry intrinsic {fmtUsdCompact(target.intrinsicUnderlyingPrice)}</small>
           </div>
         ))}

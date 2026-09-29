@@ -35,6 +35,7 @@ function candidate(overrides: Partial<AlphaLottoCandidate> = {}): AlphaLottoCand
     otmPct: 12.5,
     breakEvenPrice: 90_102,
     breakEvenMovePct: 12.63,
+    probabilityAboveBreakEven: 0.1,
     minimumOrderCost: 102,
     quantityAtMark: 2,
     quantityAtAsk: 2,

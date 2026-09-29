@@ -1,4 +1,4 @@
-import { price76 } from '@oggregator/core';
+import { cdf, price76 } from '@oggregator/core';
 import type { NormalizedOptionContract } from '@oggregator/core';
 import type {
   AlphaLottoCandidate,
@@ -13,6 +13,8 @@ const YEAR_MS = 365 * DAY_MS;
 const TARGET_MULTIPLES = [5, 10, 25] as const;
 const SHOCK_MOVES_PCT = [10, 15, 20] as const;
 const MAX_QUOTE_AGE_MS = 30_000;
+// Targets assume the move lands halfway to expiry, not instantly with the full clock intact.
+const TARGET_HORIZON_FRACTION = 0.5;
 
 export type ScannerSkipReason =
   | 'not_call'
@@ -107,20 +109,48 @@ function solveForwardForCallPrice(
   return (low + high) / 2;
 }
 
+function probabilityAbove(level: number, spot: number, vol: number, tYears: number): number | null {
+  if (!(level > 0 && spot > 0 && vol > 0 && tYears > 0)) return null;
+  const sd = vol * Math.sqrt(tYears);
+  return cdf((Math.log(spot / level) - 0.5 * sd * sd) / sd);
+}
+
+// Driftless GBM (log drift -σ²/2) first-passage probability of touching an upper barrier.
+function touchProbability(level: number, spot: number, vol: number, tYears: number): number | null {
+  if (!(level > 0 && spot > 0 && vol > 0 && tYears > 0)) return null;
+  if (level <= spot) return 1;
+  const sd = vol * Math.sqrt(tYears);
+  const b = Math.log(level / spot);
+  const nu = -0.5 * vol * vol;
+  return Math.min(
+    1,
+    cdf((-b + nu * tYears) / sd) + Math.exp(-b) * cdf((-b - nu * tYears) / sd),
+  );
+}
+
 function buildTargets(
   strike: number,
   entryPrice: number,
   contractSize: number,
   markIv: number | null,
   tYears: number,
+  exitHaircut: number,
   market: ScannerMarketContext,
 ): AlphaLottoTarget[] {
+  const horizonYears = tYears * TARGET_HORIZON_FRACTION;
+  const remainingYears = tYears - horizonYears;
+  const expectedMovePct =
+    market.atmIv == null ? null : market.atmIv * Math.sqrt(horizonYears) * 100;
+
   return TARGET_MULTIPLES.map((multiple) => {
     const targetMark = multiple * entryPrice;
     const targetUnitPrice = targetMark / contractSize;
     const intrinsicUnderlyingPrice = strike + targetUnitPrice;
+    const fairUnitPriceNeeded = targetUnitPrice / (1 - exitHaircut);
     const solvedForward =
-      markIv == null ? null : solveForwardForCallPrice(targetUnitPrice, strike, markIv, tYears);
+      markIv == null
+        ? null
+        : solveForwardForCallPrice(fairUnitPriceNeeded, strike, markIv, remainingYears);
     const modelUnderlyingPrice =
       solvedForward == null
         ? null
@@ -129,8 +159,6 @@ function buildTargets(
       modelUnderlyingPrice == null
         ? null
         : ((modelUnderlyingPrice - market.indexPrice) / market.indexPrice) * 100;
-    const expectedMovePct =
-      market.atmIv == null ? null : market.atmIv * Math.sqrt(tYears) * 100;
 
     return {
       multiple,
@@ -144,6 +172,12 @@ function buildTargets(
         modelMovePct == null || expectedMovePct == null || expectedMovePct <= 0
           ? null
           : modelMovePct / expectedMovePct,
+      horizonDays: (horizonYears * YEAR_MS) / DAY_MS,
+      exitHaircutPct: exitHaircut * 100,
+      touchProbability:
+        modelUnderlyingPrice == null || markIv == null
+          ? null
+          : touchProbability(modelUnderlyingPrice, market.indexPrice, markIv, horizonYears),
     };
   });
 }
@@ -235,6 +269,9 @@ export function computeLottoCandidate(
   const takerFee = contract.quote.estimatedAskFees?.taker ?? null;
   const entryCost = ask + (takerFee ?? 0);
   const breakEvenPrice = contract.strike + entryCost / contractSize;
+  // Selling at the bid gives up this share of fair value; mark sits near mid.
+  const exitHaircut = (ask - bid) / (ask + bid);
+  const markIv = contract.greeks.markIv;
   const expectedMovePct =
     market.atmIv == null ? null : market.atmIv * Math.sqrt(tYears) * 100;
   const expectedMoveUsd =
@@ -266,11 +303,20 @@ export function computeLottoCandidate(
       bidSize: contract.quote.bidSize,
       askSize: contract.quote.askSize,
       delta: contract.greeks.delta,
-      markIv: contract.greeks.markIv,
+      markIv,
       spreadPct,
       otmPct,
       breakEvenPrice,
       breakEvenMovePct: ((breakEvenPrice - market.indexPrice) / market.indexPrice) * 100,
+      probabilityAboveBreakEven:
+        markIv == null
+          ? null
+          : probabilityAbove(
+              breakEvenPrice * (market.forwardPrice / market.indexPrice),
+              market.forwardPrice,
+              markIv,
+              tYears,
+            ),
       minimumOrderCost: entryCost * minQty,
       quantityAtMark: floorToIncrement(config.buyingPower / mark, minQty),
       quantityAtAsk: capToAskSize(config.buyingPower / entryCost, contract.quote.askSize, minQty),
@@ -283,8 +329,9 @@ export function computeLottoCandidate(
         contract.strike,
         entryCost,
         contractSize,
-        contract.greeks.markIv,
+        markIv,
         tYears,
+        exitHaircut,
         market,
       ),
       shocks: buildShocks(contract.strike, entryCost, contractSize, market.indexPrice),

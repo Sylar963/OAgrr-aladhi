@@ -120,6 +120,23 @@ as evidence, which remains inconclusive until the per-horizon confidence interva
 zero. On 2026-09-26 the live scan rated every BTC straddle "cheap": sell IV was 31–34%
 against a forecast of about 37%, with 30D IV at p7.
 
+## Long call radar: model (Lotto radar, Advanced view)
+
+Engineering derivation, not a reviewed book passage. Let S be the index, K the strike, p the
+fee-adjusted ask per unit, T the time to expiry, σ the option's mark IV.
+
+- Expiry breakeven K + p. `probabilityAboveBreakEven` is the risk-neutral N(d2) at σ; a 14%
+  OTM, 10-DTE BTC call scores about 2%. It is not a forecast.
+- 5×/10×/25× targets (changed 2026-09-29): the move must land at T/2, and the exit sells at the
+  bid, so fair value must reach multiple·p / (1 − h) with h = (ask − bid)/(ask + bid). Before
+  this change the target priced an instant move at fair value, which made short-dated, wide
+  quotes look reachable: the 09OCT26 95k call showed +7.6% (1.41 implied moves), and needs
+  +11.1% (2.9) under this model.
+- `impliedMoveMultiple` divides the target move by ATM IV·√(T/2), the expected move over the
+  same horizon. Ranking sorts on it, so a wide spread raises the required move directly.
+- `touchProbability`: driftless-GBM barrier-touch odds of reaching the target by T/2 at σ.
+- Advanced view scans 15–45 DTE with spreads ≤ 30%; Guided keeps 15–75 DTE.
+
 ## Long put and protective put: model (Long Put tab)
 
 Engineering derivation, not a reviewed book passage: none of the sources in the ledger were

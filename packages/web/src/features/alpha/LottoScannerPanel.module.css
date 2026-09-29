@@ -393,6 +393,7 @@
 
 .contractCell span:not(.venue),
 .numericCell span,
+.numericCell small,
 .capacityCell span,
 .targetCell span,
 .targetCell small {

@@ -1,3 +1,4 @@
+import { price76 } from '@oggregator/core';
 import type { NormalizedOptionContract } from '@oggregator/core';
 import { AlphaLottoScannerQuerySchema } from '@oggregator/protocol';
 import { describe, expect, it } from 'vitest';
@@ -91,6 +92,12 @@ describe('computeLottoCandidate', () => {
     expect(tenX?.modelUnderlyingPrice).not.toBeNull();
     expect(tenX!.modelUnderlyingPrice!).toBeLessThan(tenX!.intrinsicUnderlyingPrice);
     expect(tenX?.impliedMoveMultiple).toBeGreaterThan(0);
+    expect(tenX?.horizonDays).toBeCloseTo(4.5, 6);
+    expect(tenX?.exitHaircutPct).toBeCloseTo((30 / 190) * 100, 6);
+    expect(tenX?.touchProbability).toBeGreaterThan(0);
+    expect(tenX?.touchProbability).toBeLessThan(1);
+    expect(result.candidate.probabilityAboveBreakEven).toBeGreaterThan(0);
+    expect(result.candidate.probabilityAboveBreakEven).toBeLessThan(0.1);
 
     const twentyPct = result.candidate.shocks.find((shock) => shock.movePct === 20);
     expect(twentyPct?.underlyingPrice).toBe(93_600);
@@ -142,6 +149,72 @@ describe('computeLottoCandidate', () => {
     expect(result.skipReason).toBe('missing_contract_economics');
   });
 });
+
+describe('lotto 10x target realism', () => {
+  it('requires a larger move than an instant, fair-value exit would', () => {
+    const result = computeLottoCandidate(contract(), market, config);
+    if (result.candidate == null) throw new Error('expected candidate');
+    const tenX = result.candidate.targets.find((target) => target.multiple === 10)!;
+    const tYears = 9 / 365;
+    const instantFairForward = solveInstantForward(tenX.targetMark, 90_000, 0.49, tYears);
+    const instantMovePct = (instantFairForward * (78_000 / 78_140) / 78_000 - 1) * 100;
+    expect(tenX.modelMovePct!).toBeGreaterThan(instantMovePct);
+  });
+
+  it('ranks a tight quote ahead of an identical contract with a wide quote', () => {
+    const tight = computeLottoCandidate(
+      contract({
+        exchangeSymbol: 'tight',
+        quote: {
+          ...contract().quote,
+          bid: { raw: 105, rawCurrency: 'USD', usd: 105 },
+          ask: { raw: 110, rawCurrency: 'USD', usd: 110 },
+        },
+      }),
+      market,
+      config,
+    );
+    const wide = computeLottoCandidate(contract({ exchangeSymbol: 'wide' }), market, config);
+    if (tight.candidate == null || wide.candidate == null) throw new Error('expected candidates');
+
+    const ranked = rankLottoCandidates([wide.candidate, tight.candidate]);
+    expect(ranked.map((candidate) => candidate.instrument)).toEqual(['tight', 'wide']);
+    const tenX = (candidate: typeof ranked[number]) =>
+      candidate.targets.find((target) => target.multiple === 10)!;
+    expect(tenX(ranked[0]).modelMovePct!).toBeLessThan(tenX(ranked[1]).modelMovePct!);
+  });
+
+  it('gives a deep OTM short-dated call low odds of finishing above breakeven', () => {
+    const result = computeLottoCandidate(
+      contract({
+        strike: 95_000,
+        greeks: { ...contract().greeks, markIv: 0.39 },
+        quote: {
+          ...contract().quote,
+          bid: { raw: 30, rawCurrency: 'USD', usd: 30 },
+          ask: { raw: 50, rawCurrency: 'USD', usd: 50 },
+          mark: { raw: 40, rawCurrency: 'USD', usd: 40 },
+          estimatedAskFees: { maker: 0, taker: 0 },
+        },
+      }),
+      { ...market, indexPrice: 83_163, forwardPrice: 83_163, atmIv: 0.331 },
+      config,
+    );
+    if (result.candidate == null) throw new Error('expected candidate');
+    expect(result.candidate.probabilityAboveBreakEven).toBeLessThan(0.03);
+  });
+});
+
+function solveInstantForward(targetMark: number, strike: number, sigma: number, tYears: number): number {
+  let low = 1;
+  let high = strike * 4;
+  for (let i = 0; i < 80; i++) {
+    const mid = (low + high) / 2;
+    if (price76(mid, strike, sigma, tYears, 'call') < targetMark) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
+}
 
 describe('rankLottoCandidates', () => {
   it('ranks the required 10x move in implied-move units before mark', () => {

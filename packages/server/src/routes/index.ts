@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { isReady } from '../app.js';
 import { alphaMarketContextRoute } from './alpha-market-context.js';
 import { alphaLottoScannerRoute } from './alpha-lotto-scanner.js';
+import { alphaPutScannerRoute } from './alpha-put-scanner.js';
 import { alphaShortStraddleEvaluationRoute } from './alpha-short-straddle-evaluation.js';
 import { alphaStraddleScannerRoute } from './alpha-straddle-scanner.js';
 import { blockFlowRoute } from './block-flow.js';
@@ -54,6 +55,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(venuesRoute, { prefix: '/api' });
   app.register(alphaMarketContextRoute, { prefix: '/api' });
   app.register(alphaLottoScannerRoute, { prefix: '/api' });
+  app.register(alphaPutScannerRoute, { prefix: '/api' });
   app.register(alphaShortStraddleEvaluationRoute, { prefix: '/api' });
   app.register(alphaStraddleScannerRoute, { prefix: '/api' });
   app.register(underlyingsRoute, { prefix: '/api' });

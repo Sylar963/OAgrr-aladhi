@@ -124,6 +124,16 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
               (rangeState === 'coiled' || spotState.state === 'breaking-out')
             ? 'favorable'
             : 'watch';
+  // Insurance is cheapest when vol is quiet or spot has run up; after a breakdown, puts carry the panic bid.
+  const protectivePut =
+    volatilityState === 'unavailable'
+      ? 'unavailable'
+      : volatilityState === 'bid' || spotState.direction === 'down'
+        ? 'expensive'
+        : volatilityState === 'compressed' ||
+            (spotState.direction === 'up' && spotState.state === 'extended')
+          ? 'favorable'
+          : 'watch';
   const creditSpread =
     vrp30d == null
       ? 'unavailable'
@@ -155,7 +165,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
       percentile14d,
     },
     spotState,
-    setup: { longCall, creditSpread },
+    setup: { longCall, protectivePut, creditSpread },
     regime:
       input.regime == null
         ? null

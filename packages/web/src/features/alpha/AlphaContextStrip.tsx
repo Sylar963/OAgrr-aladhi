@@ -11,6 +11,7 @@ interface AlphaContextStripProps {
     | 'call-debit'
     | 'put-debit'
     | 'long-call'
+    | 'long-put'
     | 'short-straddle';
   loading: boolean;
 }
@@ -21,9 +22,9 @@ function setupLabel(
 ): string {
   if (context == null) return 'UNAVAILABLE';
   if (strategy.endsWith('debit')) return 'CHECK DIRECTION + PRICE';
-  return strategy === 'long-call'
-    ? context.setup.longCall.toUpperCase()
-    : context.setup.creditSpread.toUpperCase();
+  if (strategy === 'long-call') return context.setup.longCall.toUpperCase();
+  if (strategy === 'long-put') return context.setup.protectivePut.toUpperCase();
+  return context.setup.creditSpread.toUpperCase();
 }
 
 export default function AlphaContextStrip({ context, strategy, loading }: AlphaContextStripProps) {

@@ -70,3 +70,27 @@ export function straddleToBuilderLegs(candidate: StraddleBuilderCandidate): Leg[
     leg('put', candidate.putInstrument, candidate.putBid),
   ];
 }
+
+type PutBuilderCandidate = RadarBuilderCandidate & { hedge: { coveredQty: number } | null };
+
+export function putCandidateToBuilderLeg(candidate: PutBuilderCandidate): Leg {
+  const quantity =
+    candidate.hedge != null && candidate.hedge.coveredQty > 0
+      ? candidate.hedge.coveredQty
+      : candidate.minQty * candidate.contractSize;
+  return {
+    id: `put-radar:${candidate.venue}:${candidate.instrument}`,
+    type: 'put',
+    direction: 'buy',
+    strike: candidate.strike,
+    expiry: candidate.expiry,
+    quantity: Number(quantity.toFixed(8)),
+    entryPrice: candidate.ask / candidate.contractSize,
+    venue: candidate.venue,
+    delta: candidate.delta,
+    gamma: null,
+    theta: null,
+    vega: null,
+    iv: candidate.markIv,
+  };
+}

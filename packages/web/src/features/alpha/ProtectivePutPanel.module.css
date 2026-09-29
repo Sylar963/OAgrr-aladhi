@@ -1,0 +1,61 @@
+.controls {
+  grid-template-columns: auto auto auto minmax(130px, 0.7fr) 1fr;
+}
+
+.qtyShell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qtyShell input {
+  flex: 1;
+  min-width: 0;
+}
+
+.qtyShell em {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+}
+
+.floorPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.floorPresets button {
+  padding: 3px 8px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.floorPresets button[data-active='true'] {
+  color: var(--text-primary);
+  border-color: var(--color-warning);
+}
+
+.coverageWarning {
+  color: var(--color-warning);
+  font-size: 10px;
+}
+
+@media (max-width: 1040px) {
+  .controls {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .controls {
+    grid-template-columns: 1fr 1fr;
+  }
+}

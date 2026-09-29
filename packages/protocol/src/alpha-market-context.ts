@@ -59,6 +59,7 @@ export const AlphaMarketContextResponseSchema = z.object({
   }),
   setup: z.object({
     longCall: z.enum(['favorable', 'watch', 'expensive', 'unavailable']),
+    protectivePut: z.enum(['favorable', 'watch', 'expensive', 'unavailable']),
     creditSpread: z.enum(['favorable', 'watch', 'unfavorable', 'unavailable']),
   }),
   regime: AlphaRegimeSchema.nullable(),

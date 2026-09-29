@@ -83,6 +83,7 @@ describe('buildAlphaMarketContext', () => {
     expect(result.range.state).toBe('coiled');
     expect(result.expectedMoves[0]!.movePct).toBeCloseTo(4.847, 3);
     expect(result.setup.longCall).toBe('favorable');
+    expect(result.setup.protectivePut).toBe('favorable');
     expect(result.sources.ivScope).toBe('mixed');
   });
 
@@ -99,6 +100,7 @@ describe('buildAlphaMarketContext', () => {
     expect(result.volatility.state).toBe('unavailable');
     expect(result.range.state).toBe('unavailable');
     expect(result.setup.longCall).toBe('unavailable');
+    expect(result.setup.protectivePut).toBe('unavailable');
     expect(result.setup.creditSpread).toBe('unavailable');
   });
 
@@ -116,5 +118,18 @@ describe('buildAlphaMarketContext', () => {
     expect(result.spotState.state).toBe('breaking-out');
     expect(result.spotState.direction).toBe('down');
     expect(result.setup.longCall).toBe('watch');
+  });
+
+  it('marks puts expensive once spot has already broken down', () => {
+    const result = buildAlphaMarketContext({
+      underlying: 'BTC',
+      nowMs: NOW_MS,
+      spotPrice: 98,
+      ivHistory: ivHistory(0.35, 0.4),
+      candles: quietCandles(),
+      regime: null,
+    });
+
+    expect(result.setup.protectivePut).toBe('expensive');
   });
 });

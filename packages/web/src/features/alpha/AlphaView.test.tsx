@@ -33,6 +33,7 @@ vi.mock('./useVerticalSpreadAnalysis', () => ({
 vi.mock('./VolSmileInset', () => ({ default: () => <div>Original volatility smile</div> }));
 vi.mock('./LottoScannerPanel', () => ({ default: () => <div>Original long-call scanner</div> }));
 vi.mock('./StraddleScannerPanel', () => ({ default: () => <div>Short straddle scanner</div> }));
+vi.mock('./ProtectivePutPanel', () => ({ default: () => <div>Protective put scanner</div> }));
 vi.mock('./spread-scanner', async (original) => ({
   ...(await original<typeof import('./spread-scanner')>()),
   scanSpreads: mocks.scan,
@@ -135,6 +136,17 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.queryByText('Original volatility smile')).toBeNull();
     fireEvent.click(tabs.getByRole('tab', { name: 'Call Credit' }));
     expect(screen.getByText('Original expiry bar')).toBeTruthy();
+  });
+  it('adds a separate long-put tab next to the untouched long-call scanner', () => {
+    render(<AlphaView />);
+    const tabs = within(screen.getByRole('tablist', { name: 'Alpha strategy' }));
+    fireEvent.click(tabs.getByRole('tab', { name: 'Long Put' }));
+    expect(screen.getByText('Protective put scanner')).toBeTruthy();
+    expect(screen.queryByText('Original long-call scanner')).toBeNull();
+    expect(screen.queryByText('Original expiry bar')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Long Call' }));
+    expect(screen.getByText('Original long-call scanner')).toBeTruthy();
+    expect(screen.queryByText('Protective put scanner')).toBeNull();
   });
   it('requires manual equity, uses actual quantity and fees, and shows per-venue coverage', () => {
     render(<AlphaView />);

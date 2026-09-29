@@ -100,6 +100,8 @@ describe('assistant platform tools', () => {
         maxOtmPct: 10,
       },
     ],
+    ['oggregator_put_scanner', { underlying: 'BTC', venues: ['deribit'], rankBy: 'yolo' }],
+    ['oggregator_put_scanner', { underlying: 'BTC', venues: ['deribit'], minDte: 30, maxDte: 7 }],
   ])('rejects invalid or unbounded inputs for %s', async (name, args) => {
     const { call, inject } = harness({});
     expect(resultData(await call(name, args)).isError).toBe(true);
@@ -121,6 +123,20 @@ describe('assistant platform tools', () => {
     expect(url.pathname).toBe('/api/alpha/lotto-scanner');
     expect(url.searchParams.get('venues')).toBe('gateio,derive');
     expect(result.isError).toBe(true);
+  });
+
+  it('routes put scans with hedge sizing to the put scanner', async () => {
+    const { call, inject } = harness({}, 503);
+    await call('oggregator_put_scanner', {
+      underlying: 'BTC',
+      venues: ['deribit'],
+      hedgeQty: 2,
+    });
+    expect(inject).toHaveBeenCalledOnce();
+    const url = new URL(inject.mock.calls[0]![0] as string, 'http://localhost');
+    expect(url.pathname).toBe('/api/alpha/put-scanner');
+    expect(url.searchParams.get('hedgeQty')).toBe('2');
+    expect(url.searchParams.get('rankBy')).toBe('protection');
   });
 
   it('rejects malformed data instead of passing it to the model', async () => {

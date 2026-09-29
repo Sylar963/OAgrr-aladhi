@@ -13,6 +13,7 @@ import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
 import LottoScannerPanel from './LottoScannerPanel';
+import ProtectivePutPanel from './ProtectivePutPanel';
 import CrossVenueOpportunities from './CrossVenueOpportunities';
 import {
   type CrossVenueCandidate,
@@ -30,7 +31,12 @@ import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
-type AlphaStrategy = SpreadKind | 'long-call' | 'short-straddle';
+type AlphaStrategy = SpreadKind | 'long-call' | 'long-put' | 'short-straddle';
+type ScannerStrategy = Exclude<AlphaStrategy, SpreadKind>;
+
+function isScannerStrategy(strategy: AlphaStrategy): strategy is ScannerStrategy {
+  return strategy === 'long-call' || strategy === 'long-put' || strategy === 'short-straddle';
+}
 
 const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'call-credit', label: 'Call Credit' },
@@ -38,6 +44,7 @@ const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'call-debit', label: 'Call Debit' },
   { id: 'put-debit', label: 'Put Debit' },
   { id: 'long-call', label: 'Long Call' },
+  { id: 'long-put', label: 'Long Put' },
   { id: 'short-straddle', label: 'Sell Straddle' },
 ];
 
@@ -59,8 +66,8 @@ export default function AlphaView() {
 
   const isMobile = useIsMobile();
   const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
-  const isSpread = strategy !== 'long-call' && strategy !== 'short-straddle';
-  const kind: SpreadKind = isSpread ? strategy : 'call-credit';
+  const isSpread = !isScannerStrategy(strategy);
+  const kind: SpreadKind = isScannerStrategy(strategy) ? 'call-credit' : strategy;
   const [shortStrike, setShortStrike] = useState<number | null>(null);
   const [longStrike, setLongStrike] = useState<number | null>(null);
   const [preferredVenue, setPreferredVenue] = useState<VenueId>('thalex');
@@ -298,7 +305,7 @@ export default function AlphaView() {
               key={item.id}
               onClick={() => {
                 if (item.id === strategy) return;
-                if (item.id === 'long-call' || item.id === 'short-straddle') {
+                if (isScannerStrategy(item.id)) {
                   setStrategy(item.id);
                   return;
                 }
@@ -339,6 +346,12 @@ export default function AlphaView() {
       {strategy === 'long-call' && (
         <div className={styles.scannerWorkspace}>
           <LottoScannerPanel underlying={underlying} venues={activeVenues} />
+        </div>
+      )}
+
+      {strategy === 'long-put' && (
+        <div className={styles.scannerWorkspace}>
+          <ProtectivePutPanel underlying={underlying} venues={activeVenues} />
         </div>
       )}
 

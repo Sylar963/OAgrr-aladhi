@@ -240,6 +240,32 @@ export function buildAssistantMcpTools(
       run: async (args) => unwrap(await reader.platformData('alpha/lotto-scanner', args)),
     }),
     tool({
+      name: 'oggregator_put_scanner',
+      description:
+        'Run the Alpha Long Put scanner. rankBy "protection" ranks puts as insurance for hedgeQty units of the underlying held (floor, cost %, annualized cost, worst-case hedged loss); rankBy "convexity" ranks outright bearish puts by the move needed for a 5x mark. Quotes are live; model estimates are not demonstrated edge; no orders.',
+      input: z
+        .object({
+          underlying,
+          venues: z.array(z.enum(VENUE_IDS)).min(1).max(VENUE_IDS.length),
+          rankBy: z.enum(['protection', 'convexity']).default('protection'),
+          hedgeQty: z.number().min(0).max(100_000).default(0),
+          buyingPower: z.number().positive().max(10_000_000).default(2_400),
+          premiumCap: z.number().positive().max(100_000).default(10_000),
+          minDte: z.number().min(0).max(365).default(7),
+          maxDte: z.number().min(0).max(365).default(90),
+          minOtmPct: z.number().min(0).max(95).default(0),
+          maxOtmPct: z.number().min(0).max(95).default(30),
+          maxSpreadPct: z.number().positive().max(500).default(40),
+          diversifyExpiries: z.boolean().default(true),
+          limit: z.number().int().min(1).max(20).default(8),
+        })
+        .refine(
+          (args) => args.maxDte >= args.minDte && args.maxOtmPct >= args.minOtmPct,
+          'Maximum DTE and OTM must be at least their minimums',
+        ),
+      run: async (args) => unwrap(await reader.platformData('alpha/put-scanner', args)),
+    }),
+    tool({
       name: 'search_options_library',
       description:
         'Full-text search over the indexed options trading books (volatility trading, pricing, strategies, risk). Returns passages with book and PDF page for citation. Use specific terms, e.g. "gamma scalping realized volatility" or "calendar spread vega".',

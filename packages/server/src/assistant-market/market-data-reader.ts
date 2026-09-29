@@ -1,5 +1,6 @@
 import {
   AlphaLottoScannerResponseSchema,
+  AlphaPutScannerResponseSchema,
   AlphaStraddleScannerResponseSchema,
   FlowTradeSchema,
 } from '@oggregator/protocol';
@@ -119,7 +120,8 @@ export class AssistantMarketDataReader {
       | 'spot-candles'
       | 'health'
       | 'alpha/straddle-scanner'
-      | 'alpha/lotto-scanner',
+      | 'alpha/lotto-scanner'
+      | 'alpha/put-scanner',
     parameters: Record<string, string | number | boolean | string[] | undefined>,
   ): Promise<MarketReadResult<unknown>> {
     const query = new URLSearchParams();
@@ -221,6 +223,9 @@ export class AssistantMarketDataReader {
         break;
       case 'alpha/lotto-scanner':
         result = await this.get(path, AlphaLottoScannerResponseSchema, 25_000);
+        break;
+      case 'alpha/put-scanner':
+        result = await this.get(path, AlphaPutScannerResponseSchema, 25_000);
         break;
     }
     if (!result.ok) return result;

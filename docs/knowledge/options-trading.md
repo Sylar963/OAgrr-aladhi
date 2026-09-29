@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-09-26. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-09-29. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -120,6 +120,30 @@ as evidence, which remains inconclusive until the per-horizon confidence interva
 zero. On 2026-09-26 the live scan rated every BTC straddle "cheap": sell IV was 31–34%
 against a forecast of about 37%, with 30D IV at p7.
 
+## Long put and protective put: model (Long Put tab)
+
+Engineering derivation, not a reviewed book passage: none of the sources in the ledger were
+read for protective puts. Treat every number here as arithmetic on live quotes, not an edge.
+Let S be the index at scan time, K the strike, p the fee-adjusted ask per unit of underlying,
+h the units held, c the units covered by bought puts, and T the days to expiry.
+
+- Floor distance (S − K)/S; cost p/S; annualized cost (p/S)·365/T so expiries compare.
+- Hedged expiry P&L at price X: h(X − S) + c·max(K − X, 0) − c·p. It is linear below K, so
+  the worst case is h(S − K) + c·p when c ≥ h, and h·S − c·K + c·p when ask size leaves c < h
+  (the uncovered units stay exposed to zero). Contracts round **up** to the venue increment.
+- Upside break-even S + p: the holding must rise by the premium before the insured position
+  beats the uninsured one at expiry.
+- Skew premium: put mark IV minus the ATM IV of the same chain. Positive skew means the floor
+  is priced above ATM volatility; it is descriptive, not proof the put is overpriced.
+- Outright long put (Advanced radar, "Bet"): breakeven K − p; 2×/5×/10× targets solve the
+  Black-76 put for the forward at constant IV and time, so they are not odds or expiry payoffs.
+  A put is worth at most K per unit, so a multiple above K/p is reported as unreachable.
+
+Setup heuristic `protectivePut`: favorable when 30D IV is compressed or spot is extended up;
+expensive when IV is bid or spot has broken down. This is our choice (buy insurance before the
+panic bid), untested on BTC data. The worst case uses today's index as the holding's value; it
+ignores the holding's cost basis, margin paths, and early exit at mark.
+
 ## What Alpha knows, and what it does not
 
 The sized card and per-venue alternatives use `features/alpha/spread-scanner.ts`.
@@ -143,6 +167,8 @@ Alpha currently shows:
 - Entry bid/ask pricing, known normalized entry fees, quote/size eligibility, and exclusions.
 - Size-adjusted payoff, breakeven, model EV, risk-neutral probability, and expiry scenarios.
 - Read-only connected portfolio context. Candidate risk is not combined margin approval.
+- Long Put tab: protective puts sized to a manually entered holding (tight floor / balanced /
+  crash cover per expiry) and an outright long-put radar. Scan only; no orders.
 - Sell Straddle tab: cross-expiry ATM short-straddle scan with the cheap-premium gates above,
   a stress-sized quantity, and walk-forward evidence. Scan only; no orders.
 
@@ -192,17 +218,20 @@ Do not confuse:
    strangles/wings (K17), an event-implied move from the front two expiries (Sinclair
    pp. 52–54). 30D baselines became measurable on 2026-09-26 (DVOL seed + stored history);
    per-venue baselines need ~4 months of hourly venue history before they replace the blend.
-2. Re-upload Natenberg; render/OCR the auction document. Read the remaining targeted chapters
+2. Protective puts: measure BTC put skew cost against subsequent realized downside by
+   tenor and moneyness, and test whether the `protectivePut` setup heuristic lowers the
+   average annualized cost of a rolled floor. Record rolled-hedge drag, not single outcomes.
+3. Re-upload Natenberg; render/OCR the auction document. Read the remaining targeted chapters
    on Greeks, skew, hedging costs, and forecast distributions; extend the source ledger.
-3. Study matched-horizon BTC volatility forecasts. Compare IV, trailing RV, simple forecasts,
+4. Study matched-horizon BTC volatility forecasts. Compare IV, trailing RV, simple forecasts,
    and event-aware alternatives on rolling out-of-sample periods. Avoid future leakage.
-4. Evaluate each strategy at contemporaneous bid/ask, fees, and tradable sizes. Record stale
+5. Evaluate each strategy at contemporaneous bid/ask, fees, and tradable sizes. Record stale
    and absent quotes. Do not silently fill at marks or assumed midpoints.
-5. Stress plausible BTC price jumps, IV/skew changes, and portfolio concentration separately
+6. Stress plausible BTC price jumps, IV/skew changes, and portfolio concentration separately
    from terminal payoff. Verify venue-specific collateral and margin rules.
-6. Track net expectancy, average win/loss, drawdown, tail loss, fill rate, turnover, and
+7. Track net expectancy, average win/loss, drawdown, tail loss, fill rate, turnover, and
    forecast calibration. Account for overlapping positions and uncertainty intervals.
-7. Only call an edge empirically supported after reproducible out-of-sample evidence and
+8. Only call an edge empirically supported after reproducible out-of-sample evidence and
    realistic execution assumptions. There is currently **no validated profitable BTC
    options strategy documented here**.
 

@@ -14,10 +14,14 @@ const { storeMock, usersStoreMock, verifyClerkTokenMock } = vi.hoisted(() => ({
   verifyClerkTokenMock: vi.fn(),
 }));
 
-vi.mock('../../trading-services.js', () => ({
-  paperTradingStore: storeMock,
-  usersStore: usersStoreMock,
-}));
+vi.mock('../../trading-services.js', async () => {
+  const { NoopExchangePortfolioLedgerStore } = await import('@oggregator/db');
+  return {
+    paperTradingStore: storeMock,
+    usersStore: usersStoreMock,
+    exchangePortfolioLedgerStore: new NoopExchangePortfolioLedgerStore(),
+  };
+});
 
 vi.mock('../../clerk-verifier.js', () => ({
   verifyClerkToken: verifyClerkTokenMock,

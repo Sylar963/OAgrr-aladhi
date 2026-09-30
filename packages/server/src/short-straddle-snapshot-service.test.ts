@@ -124,6 +124,7 @@ class FakeStore implements ShortStraddleSnapshotStore {
   readonly enabled = true;
   readonly writes: PersistedShortStraddleSnapshot[][] = [];
   failures = 0;
+  loads = 0;
 
   async writeMany(rows: PersistedShortStraddleSnapshot[]): Promise<void> {
     if (this.failures > 0) {
@@ -134,6 +135,7 @@ class FakeStore implements ShortStraddleSnapshotStore {
   }
 
   async loadSince(): Promise<PersistedShortStraddleSnapshot[]> {
+    this.loads += 1;
     return this.writes.flat();
   }
 
@@ -316,6 +318,25 @@ describe('ShortStraddleSnapshotService', () => {
     expect(store.writes).toHaveLength(2);
     expect(store.writes[0]?.[0]?.sampleSlotTs).toEqual(new Date('2026-07-13T08:00:00.000Z'));
     expect(store.writes[1]?.[0]?.sampleSlotTs).toEqual(new Date('2026-07-13T09:00:00.000Z'));
+  });
+
+  it('reads stored snapshots once per underlying instead of on every tick', async () => {
+    const store = new FakeStore();
+    const service = new ShortStraddleSnapshotService(store, {
+      log: console,
+      quoteMaxAgeMs: 2 * 3_600_000,
+    });
+    const entries = [entry('2026-07-20', [strike(SPOT)])];
+
+    for (let tick = 0; tick < 12; tick += 1) {
+      await service.collect(entries, 'BTC', SPOT, NOW + tick * 5 * 60_000);
+    }
+
+    expect(store.loads).toBe(1);
+    expect(store.writes.map((batch) => batch.map((row) => row.horizonHours))).toEqual([
+      [0],
+      [0, 1],
+    ]);
   });
 
   it('retries within the hour after a local write failure', async () => {

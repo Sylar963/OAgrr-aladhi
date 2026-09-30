@@ -175,6 +175,9 @@ function selectShortStraddleSnapshots(
 
 export class ShortStraddleSnapshotService {
   private readonly inFlightSlots = new Set<string>();
+  // This service is the only writer, so after one load per underlying the stored rows are
+  // tracked in memory; re-reading Postgres every tick kept the Neon compute from suspending.
+  private readonly knownSnapshots = new Map<string, PersistedShortStraddleSnapshot[]>();
   private readonly quoteMaxAgeMs: number;
   private log: SnapshotLog;
 
@@ -209,10 +212,10 @@ export class ShortStraddleSnapshotService {
     this.inFlightSlots.add(slotKey);
     try {
       const normalizedUnderlying = underlying.toUpperCase();
-      const existing = await this.store.loadSince({
-        underlying: normalizedUnderlying,
-        since: new Date(sampleSlotMs - MAX_MARK_HORIZON_MS),
-      });
+      const existing = await this.loadKnownSnapshots(
+        normalizedUnderlying,
+        new Date(sampleSlotMs - MAX_MARK_HORIZON_MS),
+      );
       const existingKeys = new Set(existing.map(snapshotKey));
       const rows: PersistedShortStraddleSnapshot[] = [];
       const selection = selectShortStraddleSnapshots(
@@ -253,6 +256,7 @@ export class ShortStraddleSnapshotService {
       }
 
       await this.store.writeMany(rows);
+      this.knownSnapshots.set(normalizedUnderlying, [...existing, ...rows]);
       this.log.debug?.(
         {
           sampleSlotMs,
@@ -272,6 +276,17 @@ export class ShortStraddleSnapshotService {
     } finally {
       this.inFlightSlots.delete(slotKey);
     }
+  }
+
+  private async loadKnownSnapshots(
+    underlying: string,
+    since: Date,
+  ): Promise<PersistedShortStraddleSnapshot[]> {
+    const cached = this.knownSnapshots.get(underlying);
+    const rows = cached ?? (await this.store.loadSince({ underlying, since }));
+    const current = rows.filter((row) => row.cohortSlotTs >= since);
+    this.knownSnapshots.set(underlying, current);
+    return current;
   }
 }
 

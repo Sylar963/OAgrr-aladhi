@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { VolRichnessSchema } from './vol-richness.js';
+
 const NullableNumberSchema = z.number().nullable();
 
 export const AlphaMarketContextQuerySchema = z.object({
@@ -32,6 +34,9 @@ export const AlphaMarketContextResponseSchema = z.object({
   spotPrice: NullableNumberSchema,
   volatility: z.object({
     state: z.enum(['compressed', 'normal', 'bid', 'unavailable']),
+    // 'excess-premium': 30D IV against forecast plus usual premium; 'iv-percentile': fallback
+    // to the 90-day IV percentile when the excess premium is unknown.
+    stateSource: z.enum(['excess-premium', 'iv-percentile', 'unavailable']),
     atmIv7d: NullableNumberSchema,
     atmIv30d: NullableNumberSchema,
     ivPercentile7d: NullableNumberSchema,
@@ -63,6 +68,7 @@ export const AlphaMarketContextResponseSchema = z.object({
     creditSpread: z.enum(['favorable', 'watch', 'unfavorable', 'unavailable']),
   }),
   regime: AlphaRegimeSchema.nullable(),
+  richness: VolRichnessSchema.nullable(),
   sources: z.object({
     ivHistory: z.boolean(),
     spotHistory: z.boolean(),

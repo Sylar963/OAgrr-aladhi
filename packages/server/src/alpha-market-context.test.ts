@@ -1,4 +1,10 @@
-import type { IvHistoryResponse, SpotCandle } from '@oggregator/core';
+import {
+  richnessState,
+  type IvHistoryResponse,
+  type SpotCandle,
+  type TenorRichness,
+  type VolRichness,
+} from '@oggregator/core';
 import { describe, expect, it } from 'vitest';
 
 import { buildAlphaMarketContext } from './alpha-market-context.js';
@@ -67,7 +73,68 @@ function quietCandles(): SpotCandle[] {
   });
 }
 
+function richness(excess30d: number | null): VolRichness {
+  const tenor = (tenorDays: 7 | 30, excessPremium: number | null): TenorRichness => ({
+    tenorDays,
+    atmIv: 0.4,
+    forecastVol: 0.35,
+    ivMinusForecast: 0.05,
+    premiumBaseline: {
+      tenorDays,
+      source: 'blended',
+      medianSpread: excessPremium == null ? null : 0.05 - excessPremium,
+      sampleCount: 120,
+      independentSampleCount: 10,
+    },
+    excessPremium,
+    excessChange24h: null,
+    excessHistory: { zScore: null, percentile: null, sampleCount: 0, firstTs: null },
+    conePercentile: null,
+    intraday: { ivChange24h: null, zScore24h: null, zScore7d: null, samples24h: 0, samples7d: 0 },
+    level: { percentile90d: 25, percentile1y: null },
+    state: richnessState(excessPremium),
+  });
+  return {
+    generatedAt: NOW_MS,
+    underlying: 'BTC',
+    forecast: {
+      method: 'mean-reverting-realized-v1',
+      rv7d: 0.35,
+      rv30d: 0.35,
+      longRunVol: 0.35,
+      longRunDays: 180,
+      halfLifeDays: 14,
+    },
+    tenors: { '7d': tenor(7, null), '30d': tenor(30, excess30d) },
+    termStructure: { state: 'flat', slope: 0 },
+    forecastCurve: [],
+    fairBand: 0.02,
+  };
+}
+
 describe('buildAlphaMarketContext', () => {
+  it('derives the volatility state from the 30D excess premium when it is known', () => {
+    const base = {
+      underlying: 'BTC',
+      nowMs: NOW_MS,
+      spotPrice: 100,
+      ivHistory: ivHistory(0.35, 0.4),
+      candles: quietCandles(),
+      regime: null,
+    };
+
+    const rich = buildAlphaMarketContext({ ...base, richness: richness(0.04) });
+    expect(rich.volatility).toMatchObject({ state: 'bid', stateSource: 'excess-premium' });
+    expect(rich.setup.longCall).toBe('expensive');
+
+    const fair = buildAlphaMarketContext({ ...base, richness: richness(0) });
+    expect(fair.volatility).toMatchObject({ state: 'normal', stateSource: 'excess-premium' });
+
+    const unknown = buildAlphaMarketContext({ ...base, richness: richness(null) });
+    expect(unknown.volatility).toMatchObject({ state: 'compressed', stateSource: 'iv-percentile' });
+    expect(unknown.richness?.tenors['30d'].state).toBe('unavailable');
+  });
+
   it('computes expected moves, IV changes, and compressed-range setup labels', () => {
     const result = buildAlphaMarketContext({
       underlying: 'BTC',

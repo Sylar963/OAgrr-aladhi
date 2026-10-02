@@ -105,7 +105,7 @@ The web dashboard includes:
 
 - **Chain** — Cross-venue option chain with best-price highlighting, IV chips, spread pills, expandable per-venue detail, and quick trade
 - **Architect** — Multi-leg strategy builder with prebuilt templates, custom legs, live repricing, interactive payoff chart with spot candle overlay, venue comparison slideover, and shareable URL strategies
-- **Surface** — IV surface heatmap across delta levels and expiries, vol smile per expiry with hover/grid lines, ATM term structure, RV vs IV overlay, and per-tenor IV rank panel (7d / 30d / 60d / 90d) seeded from Deribit DVOL history
+- **Surface** — IV surface heatmap across delta levels and expiries, vol smile per expiry with hover/grid lines, ATM term structure, RV vs IV overlay, and per-tenor IV rank panel (7d / 30d / 60d / 90d) seeded from Deribit DVOL history, with IV vs forecast (excess premium, vol cone, intraday z-score) on 7d / 30d
 - **Alpha** — Vertical spread analyzer, signals feed, and venue routing table with vol smile inset for cross-venue execution edge
 - **Flow** — Live options trade flow plus institutional RFQ / block trade mode
 - **Analytics** — OI by venue, call/put summary, put/call ratio by expiry, DVOL chart with HV overlay, OI by strike, and cross-expiry curves

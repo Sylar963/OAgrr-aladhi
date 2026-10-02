@@ -1,18 +1,18 @@
 import {
+  buildVolForecastModel,
   cdf,
   price76,
-  realizedVol,
+  termStructure,
+  withVenueBaseline,
   type EnrichedStrike,
-  type IvHistoryPoint,
-  type SpotCandle,
+  type TenorIvSeries,
   type VenueId,
   type VenueQuote,
+  type VolForecastModel,
 } from '@oggregator/core';
 import type {
   AlphaStraddleCandidate,
   AlphaStraddleFlag,
-  AlphaStraddleForecast,
-  AlphaStraddlePremiumBaseline,
   AlphaStraddleScannerQuery,
   AlphaStraddleScannerResponse,
   AlphaStraddleVerdict,
@@ -23,20 +23,10 @@ const DAYS_IN_YEAR = 365;
 const YEAR_MS = DAYS_IN_YEAR * DAY_MS;
 const MAX_QUOTE_AGE_MS = 30_000;
 const MAX_LEG_QUOTE_SKEW_MS = 5_000;
-// Engineering assumption, not fitted to BTC: how fast recent realized vol decays toward
-// the long-run level in the forecast. Bennett's ~8-month figure is SX5E-specific.
-const FORECAST_HALF_LIFE_DAYS = 14;
-const LONG_RUN_MAX_DAYS = 180;
-const MIN_FORECAST_CLOSES = 31;
-const MIN_CONE_WINDOWS = 20;
-const MIN_INDEPENDENT_BASELINE_WINDOWS = 4;
-// Deribit daily candles close at 08:00 UTC while the DVOL-seeded IV history is daily at 00:00.
-const IV_SAMPLE_TOLERANCE_MS = 12 * 3_600_000;
 const CONE_SELL_PERCENTILE = 75;
 const CONE_CHEAP_PERCENTILE = 50;
 const REALIZED_ACCELERATION_RATIO = 1.25;
 const GAMMA_WINDOW_DTE = 2;
-const TERM_FLAT_BAND = 0.02;
 
 export type StraddleSkipReason =
   | 'missing_pair'
@@ -51,18 +41,10 @@ export type StraddleSkipReason =
 export type StraddleTermStructure = AlphaStraddleScannerResponse['context']['termStructure'];
 export type StraddleSpotState = AlphaStraddleScannerResponse['context']['spotState'];
 
-export interface StraddleVolModel {
-  forecast: AlphaStraddleForecast;
-  forecastVol(dteDays: number): number | null;
-  realizedMatched(dteDays: number): number | null;
-  conePercentile(vol: number, dteDays: number): number | null;
-  premiumBaseline(dteDays: number): AlphaStraddlePremiumBaseline;
-}
-
-export interface StraddleIvSeries {
-  '7d': readonly IvHistoryPoint[];
-  '30d': readonly IvHistoryPoint[];
-}
+export type StraddleVolModel = VolForecastModel;
+export type StraddleIvSeries = TenorIvSeries;
+export const buildStraddleVolModel = buildVolForecastModel;
+export { withVenueBaseline };
 
 export interface StraddleMarketContext {
   termStructure: StraddleTermStructure;
@@ -84,144 +66,7 @@ export function termStructureState(
   atmIv7d: number | null,
   atmIv30d: number | null,
 ): StraddleTermStructure {
-  if (atmIv7d == null || atmIv30d == null) return 'unknown';
-  const slope = atmIv30d - atmIv7d;
-  if (slope > TERM_FLAT_BAND) return 'contango';
-  if (slope < -TERM_FLAT_BAND) return 'backwardation';
-  return 'flat';
-}
-
-function windowDays(dteDays: number, available: number): number {
-  return Math.min(Math.max(Math.round(dteDays), 3), available);
-}
-
-function nearestIv(series: readonly IvHistoryPoint[], ts: number): number | null {
-  let low = 0;
-  let high = series.length - 1;
-  while (low < high) {
-    const mid = (low + high) >> 1;
-    if (series[mid]!.ts < ts) low = mid + 1;
-    else high = mid;
-  }
-  let best: IvHistoryPoint | null = null;
-  for (const index of [low - 1, low]) {
-    const point = series[index];
-    if (point?.atmIv == null) continue;
-    if (best == null || Math.abs(point.ts - ts) < Math.abs(best.ts - ts)) best = point;
-  }
-  return best != null && Math.abs(best.ts - ts) <= IV_SAMPLE_TOLERANCE_MS ? best.atmIv : null;
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]!
-    : (sorted[middle - 1]! + sorted[middle]!) / 2;
-}
-
-/**
- * Horizon-matched realized-vol forecast (Sinclair pp. 32–33): recent 7D realized vol
- * decays toward the long-run level, averaged over the option's life. The cone and
- * implied-minus-subsequent-realized baseline follow Sinclair pp. 39–43.
- */
-export function buildStraddleVolModel(
-  candles: readonly SpotCandle[],
-  ivSeries: StraddleIvSeries,
-  baselineSource: AlphaStraddlePremiumBaseline['source'] = 'blended',
-): StraddleVolModel {
-  const sorted = [...candles].sort((a, b) => a.timestamp - b.timestamp);
-  const closes = sorted.map((candle) => candle.close);
-  const available = closes.length - 1;
-  const rv = (days: number) =>
-    closes.length > days ? realizedVol(closes.slice(-(days + 1)), DAYS_IN_YEAR) : null;
-  const rv7d = rv(7);
-  const rv30d = rv(30);
-  const longRunDays = Math.min(available, LONG_RUN_MAX_DAYS);
-  const longRunVol = closes.length >= MIN_FORECAST_CLOSES ? rv(longRunDays) : null;
-  const kappa = Math.LN2 / FORECAST_HALF_LIFE_DAYS;
-  const coneCache = new Map<number, number[]>();
-  const baselineCache = new Map<number, AlphaStraddlePremiumBaseline>();
-
-  function cone(days: number): number[] {
-    const cached = coneCache.get(days);
-    if (cached) return cached;
-    const values: number[] = [];
-    for (let end = days + 1; end <= closes.length; end += 1) {
-      const vol = realizedVol(closes.slice(end - days - 1, end), DAYS_IN_YEAR);
-      if (vol != null) values.push(vol);
-    }
-    coneCache.set(days, values);
-    return values;
-  }
-
-  return {
-    forecast: {
-      method: 'mean-reverting-realized-v1',
-      rv7d,
-      rv30d,
-      longRunVol,
-      longRunDays: longRunVol == null ? 0 : longRunDays,
-      halfLifeDays: FORECAST_HALF_LIFE_DAYS,
-    },
-    forecastVol(dteDays) {
-      if (rv7d == null || longRunVol == null) return null;
-      const tau = Math.max(dteDays, 1 / 24);
-      const weight = (1 - Math.exp(-kappa * tau)) / (kappa * tau);
-      const variance = longRunVol ** 2 + (rv7d ** 2 - longRunVol ** 2) * weight;
-      return Math.sqrt(Math.max(variance, 0));
-    },
-    realizedMatched(dteDays) {
-      if (available < 3) return null;
-      return rv(windowDays(dteDays, available));
-    },
-    conePercentile(vol, dteDays) {
-      if (available < 3) return null;
-      const values = cone(windowDays(dteDays, available));
-      if (values.length < MIN_CONE_WINDOWS) return null;
-      return (values.filter((value) => value <= vol).length / values.length) * 100;
-    },
-    premiumBaseline(dteDays) {
-      const tenorDays = dteDays <= 14 ? 7 : 30;
-      const cached = baselineCache.get(tenorDays);
-      if (cached) return cached;
-      const series = tenorDays === 7 ? ivSeries['7d'] : ivSeries['30d'];
-      const spreads: number[] = [];
-      for (let index = 0; index + tenorDays < sorted.length; index += 1) {
-        const iv = nearestIv(series, sorted[index]!.timestamp + DAY_MS);
-        if (iv == null) continue;
-        const subsequent = realizedVol(closes.slice(index, index + tenorDays + 1), DAYS_IN_YEAR);
-        if (subsequent != null) spreads.push(iv - subsequent);
-      }
-      const independentSampleCount = Math.ceil(spreads.length / tenorDays);
-      const baseline = {
-        tenorDays,
-        source: baselineSource,
-        medianSpread:
-          independentSampleCount >= MIN_INDEPENDENT_BASELINE_WINDOWS ? median(spreads) : null,
-        sampleCount: spreads.length,
-        independentSampleCount,
-      };
-      baselineCache.set(tenorDays, baseline);
-      return baseline;
-    },
-  };
-}
-
-/** Prefers the venue's own premium baseline and falls back to the cross-venue one. */
-export function withVenueBaseline(
-  blended: StraddleVolModel,
-  venue: StraddleVolModel | null,
-): StraddleVolModel {
-  if (venue == null) return blended;
-  return {
-    ...blended,
-    premiumBaseline(dteDays) {
-      const own = venue.premiumBaseline(dteDays);
-      return own.medianSpread != null ? own : blended.premiumBaseline(dteDays);
-    },
-  };
+  return termStructure(atmIv7d, atmIv30d).state;
 }
 
 function straddleValue(forward: number, strike: number, vol: number, tYears: number): number {

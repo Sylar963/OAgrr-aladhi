@@ -28,6 +28,7 @@ src/
     stats.ts         GET /api/stats?underlying=BTC
     dvol-history.ts  GET /api/dvol-history?currency=BTC
     iv-history.ts    GET /api/iv-history?underlying=BTC&window=90d
+    vol-richness.ts  GET /api/vol-richness?underlying=BTC (IV vs forecast, cone, intraday z)
     spot-candles.ts  GET /api/spot-candles?underlying=BTC
     flow.ts          GET /api/flow?underlying=BTC
     block-flow.ts    GET /api/block-flow?underlying=BTC

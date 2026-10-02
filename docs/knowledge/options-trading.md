@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-09-29. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-10-02. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -26,6 +26,7 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | [Bennett, Trading Volatility](../Colin_Bennett_Trading_Volatility_Trading_Volatility,_Correlation.pdf) | Contents; introductory/executive material; option trading pp. 10–13, 20, 24, 30; option structures p. 32; hedging p. 41; term structure pp. 49–50, 138–146; volatility overpricing pp. 84–85; events pp. 124–125; hedging noise pp. 128–135 | Equity-focused historical observations, not BTC findings. Printed page +1 gives PDF page. Extraction failed on PDF pp. 34 and 39; formulas are garbled on PDF pp. 126–127 and 147. Do not infer their text. Variance-swap and exotics chapters were not read. |
 | [Casanovas, Opciones financieras, 7th ed.](../Casanovas_Ramón,_Montserrat_Opciones_financieras_7a_ed_Larousse.pdf) | Contents; §5.2.1 pp. 113–116, 118–120 | Reviewed definitions and bull/bear vertical payoffs. PDF and printed pages match in this section. Historical Spanish market/legal material is not current exchange guidance. |
 | [Natenberg, Option Volatility & Pricing](../Sheldon_Natenberg_Option_Volatility_&_Pricing_Advanced_Trading_Strategies.pdf) | None | File is **0 bytes**. Needs re-upload. Do not attribute learning to it. |
+| Web sources on IV richness (2026-10-02) | [FlashAlpha VRP article](https://flashalpha.com/articles/volatility-risk-premium-api-find-overpriced-iv); vol-cone explainers ([LuxAlgo](https://www.luxalgo.com/library/concept/volatility-cones/), [Amberdata](https://blog.amberdata.io/estimating-future-volatility-ranges-with-volatility-cones), [Montréal Exchange](https://www.m-x.ca/f_publications_en/cone_vol_en.pdf)); DVOL VRP definitions ([Amberdata docs](https://docs.amberdata.io/docs/iv-dvol)); BTC HAR-RV forecasting ([Bouri et al. 2020](https://repository.up.ac.za/bitstream/handle/2263/76318/Bouri_Forecasting_2020.pdf?sequence=1)) | Vendor articles and abstracts, read for framing only. They agree with Sinclair K12–K14; none is evidence of a BTC edge. The HAR-RV paper was not read past its abstract. |
 | [PDF_AuctionPricing](../PDF_AuctionPricing.pdf) | File checked, six pages; first four have no extractable text | Not studied. Needs rendering/OCR before substantive attribution. Title/author not verified. |
 
 ## Principles we carry into the product
@@ -119,6 +120,42 @@ records ATM ~7D straddles sold at bids and bought back at asks after fees. The t
 as evidence, which remains inconclusive until the per-horizon confidence interval excludes
 zero. On 2026-09-26 the live scan rated every BTC straddle "cheap": sell IV was 31–34%
 against a forecast of about 37%, with 30D IV at p7.
+
+## Is IV cheap or rich? Richness reading (chain strip, Alpha strip, IV Rank panel)
+
+Problem (2026-10-02): the headline IVP ranked 30D DVOL against 365 daily closes. It read p3
+while 7D IV (27.1%) sat 6.5 pts **below** 7D realized and 30D IV matched 30D realized. A one-year
+self-percentile is pinned by one stress episode, barely moves intraday near its floor, drifts low
+while BTC vol declines structurally, and never compares price with expected delivery. It is
+sentiment context, not a richness measure (K13, K14; FlashAlpha's "self-relative vs
+truth-relative" framing says the same).
+
+`packages/core/src/services/vol-richness.ts` (route `/api/vol-richness`) now owns the forecast
+model the Sell Straddle scanner uses, and reports per 7D and 30D constant-maturity tenor:
+
+1. **Excess premium (main signal):** ATM IV − matched-horizon forecast − usual premium. The
+   forecast and usual premium are the scanner's (see the straddle section). ±2 vol points reads
+   as fair (our band, untested). An unknown baseline gives an unknown excess, never zero.
+   Also: z-score and percentile of IV − forecast against its own daily ex-ante history (each
+   point uses only candles closed by then). Points overlap heavily, so the z is descriptive.
+2. **Cone percentile:** IV's rank among realized vols over the same horizon (K14).
+3. **Intraday move:** z-score of current IV against the last 24h and 7d of 5-minute samples,
+   the 24h IV change, and the 24h change in excess premium (forecast as of one daily candle
+   earlier).
+4. **Context, demoted:** 90-day IV percentile, 52-week DVOL IVP (shown as "1y IV level", 30D
+   only), and the 7D/30D term structure.
+
+The chain strip computes the selected expiry's excess from the server's forecast curve (1–90 DTE)
+and the 7D (≤14 DTE) or 30D usual premium. Alpha's `volatility.state` now derives from the 30D
+excess premium (`stateSource: 'excess-premium'`) and falls back to the 90-day percentile only when
+the excess is unknown. That changes the long-call and protective-put setup heuristics. The
+credit-spread heuristic still uses raw IV − trailing 30D RV.
+
+Known limits: the forecast anchors on daily-close 7D RV (8 closes, noisy, K4); hourly RV was not
+adopted because the usual-premium baseline and the z-score history are measured against
+daily-close realized vol, and mixing estimators would bias the excess. On 2026-10-02 the usual
+premium was about 8.9 pts (7D) and 10.9 pts (30D), measured over a mostly falling-vol period, so
+it may overstate what IV normally carries; this is why the live reading looked very cheap.
 
 ## Long call radar: model (Lotto radar, Advanced view)
 
@@ -231,24 +268,27 @@ Do not confuse:
 
 ## Research queue and evidence requirements
 
-1. Short vol: fit the forecast half-life and gate thresholds out-of-sample on BTC; add
+1. Richness: test whether the ±2-pt band, the 30D excess state, and the intraday z-scores
+   predict subsequent IV − realized out-of-sample, net of costs. Evaluate an intraday RV estimator
+   (hourly HAR-RV with jumps) with a baseline re-measured on the same estimator before adopting it.
+2. Short vol: fit the forecast half-life and gate thresholds out-of-sample on BTC; add
    strangles/wings (K17), an event-implied move from the front two expiries (Sinclair
    pp. 52–54). 30D baselines became measurable on 2026-09-26 (DVOL seed + stored history);
    per-venue baselines need ~4 months of hourly venue history before they replace the blend.
-2. Protective puts: measure BTC put skew cost against subsequent realized downside by
+3. Protective puts: measure BTC put skew cost against subsequent realized downside by
    tenor and moneyness, and test whether the `protectivePut` setup heuristic lowers the
    average annualized cost of a rolled floor. Record rolled-hedge drag, not single outcomes.
-3. Re-upload Natenberg; render/OCR the auction document. Read the remaining targeted chapters
+4. Re-upload Natenberg; render/OCR the auction document. Read the remaining targeted chapters
    on Greeks, skew, hedging costs, and forecast distributions; extend the source ledger.
-4. Study matched-horizon BTC volatility forecasts. Compare IV, trailing RV, simple forecasts,
+5. Study matched-horizon BTC volatility forecasts. Compare IV, trailing RV, simple forecasts,
    and event-aware alternatives on rolling out-of-sample periods. Avoid future leakage.
-5. Evaluate each strategy at contemporaneous bid/ask, fees, and tradable sizes. Record stale
+6. Evaluate each strategy at contemporaneous bid/ask, fees, and tradable sizes. Record stale
    and absent quotes. Do not silently fill at marks or assumed midpoints.
-6. Stress plausible BTC price jumps, IV/skew changes, and portfolio concentration separately
+7. Stress plausible BTC price jumps, IV/skew changes, and portfolio concentration separately
    from terminal payoff. Verify venue-specific collateral and margin rules.
-7. Track net expectancy, average win/loss, drawdown, tail loss, fill rate, turnover, and
+8. Track net expectancy, average win/loss, drawdown, tail loss, fill rate, turnover, and
    forecast calibration. Account for overlapping positions and uncertainty intervals.
-8. Only call an edge empirically supported after reproducible out-of-sample evidence and
+9. Only call an edge empirically supported after reproducible out-of-sample evidence and
    realistic execution assumptions. There is currently **no validated profitable BTC
    options strategy documented here**.
 

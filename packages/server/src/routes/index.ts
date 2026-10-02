@@ -27,6 +27,7 @@ import { statsRoute } from './stats.js';
 import { surfaceRoute } from './surface.js';
 import { underlyingsRoute } from './underlyings.js';
 import { venuesRoute } from './venues.js';
+import { volRichnessRoute } from './vol-richness.js';
 import { wsChainRoute } from './ws-chain.js';
 import { wsInstrumentTradesRoute } from './ws-instrument-trades.js';
 
@@ -53,6 +54,7 @@ export function registerRoutes(app: FastifyInstance) {
 
   app.register(healthRoute, { prefix: '/api' });
   app.register(venuesRoute, { prefix: '/api' });
+  app.register(volRichnessRoute, { prefix: '/api' });
   app.register(alphaMarketContextRoute, { prefix: '/api' });
   app.register(alphaLottoScannerRoute, { prefix: '/api' });
   app.register(alphaPutScannerRoute, { prefix: '/api' });

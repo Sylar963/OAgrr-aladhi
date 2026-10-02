@@ -1,4 +1,5 @@
 import { fmtIv, fmtPct, fmtUsdCompact } from '@lib/format';
+import { fmtPercentile, fmtVolPts, fmtZ } from '@lib/vol-richness';
 import type { AlphaMarketContextResponse } from '@oggregator/protocol';
 
 import styles from './AlphaContextStrip.module.css';
@@ -30,6 +31,9 @@ function setupLabel(
 export default function AlphaContextStrip({ context, strategy, loading }: AlphaContextStripProps) {
   const move7d = context?.expectedMoves.find((move) => move.days === 7) ?? null;
   const vrp = context?.realized.vrp30d;
+  const richness30d = context?.richness?.tenors['30d'] ?? null;
+  const richness7d = context?.richness?.tenors['7d'] ?? null;
+  const stateSource = context?.volatility.stateSource;
   return (
     <div className={styles.strip} aria-label="Alpha market context">
       <div
@@ -43,10 +47,23 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
       <div>
         <span>ATM IV 30D</span>
         <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
+        <small
+          title="Context only: IV against its own past (90-day window and 52-week DVOL), not against expected realized volatility."
+        >
+          90d {fmtPercentile(context?.volatility.ivPercentile30d)} · 1y{' '}
+          {fmtPercentile(richness30d?.level.percentile1y)}
+        </small>
+      </div>
+      <div
+        title={`IV − matched-horizon realized forecast − usual premium (median IV − later RV). ±${((context?.richness?.fairBand ?? 0.02) * 100).toFixed(0)} pts reads as fair; thresholds are untested on BTC. Volatility state source: ${stateSource ?? 'unavailable'}.`}
+      >
+        <span>IV vs FCST 30D / 7D</span>
+        <strong>
+          {fmtVolPts(richness30d?.excessPremium)} / {fmtVolPts(richness7d?.excessPremium)}
+        </strong>
         <small>
-          {context?.volatility.ivPercentile30d == null
-            ? 'no rank'
-            : `p${context.volatility.ivPercentile30d.toFixed(0)}`}
+          {richness30d?.state.toUpperCase() ?? 'UNAVAILABLE'} · {fmtZ(richness30d?.excessHistory.zScore)}{' '}
+          hist · 7D {fmtZ(richness7d?.intraday.zScore24h)} 24h
         </small>
       </div>
       <div>

@@ -172,6 +172,30 @@ export {
 } from './services/spot-candles.js';
 export { realizedVol, rollingRealizedVol, type RealizedVolPoint } from './services/realized-vol.js';
 export {
+  baselineTenorDays,
+  buildVolForecastModel,
+  buildVolRichness,
+  EXCESS_PREMIUM_FAIR_BAND,
+  forecastFromCloses,
+  richnessState,
+  termStructure,
+  withVenueBaseline,
+  type ExcessPremiumHistory,
+  type ForecastCurvePoint,
+  type IntradayIvMove,
+  type PremiumBaseline,
+  type PremiumBaselineSource,
+  type RichnessState,
+  type RichnessTenor,
+  type TenorIvSeries,
+  type TenorRichness,
+  type TermStructureState,
+  type VolForecastModel,
+  type VolForecastSummary,
+  type VolRichness,
+  type VolRichnessInput,
+} from './services/vol-richness.js';
+export {
   backward,
   fitGaussianHmm,
   forward,

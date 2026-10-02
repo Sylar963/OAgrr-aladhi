@@ -1,9 +1,16 @@
 import type { ReactNode } from 'react';
 
 import type { ChainStats } from '@shared/enriched';
-import type { WsConnectionState } from '@oggregator/protocol';
+import type { VolRichness, WsConnectionState } from '@oggregator/protocol';
 
 import { fmtUsd, fmtUsdCompact, fmtIv, fmtPct, fmtNum } from '@lib/format';
+import {
+  expiryRichness,
+  fmtPercentile,
+  fmtVolPts,
+  fmtZ,
+  richnessTenorFor,
+} from '@lib/vol-richness';
 import HoverTooltip from '@components/ui/HoverTooltip';
 import type { StatsResponse } from './queries';
 import RegimeChip from './RegimeChip';
@@ -16,6 +23,7 @@ interface StatStripProps {
   dte: number;
   connectionState?: WsConnectionState;
   marketStats?: StatsResponse | null;
+  richness?: VolRichness | null;
   // Hide the regime chip's Basis × IV dot for venues with no day-over-day IV
   // feed (TradFi). Default true preserves crypto behavior.
   showRegimeIv?: boolean;
@@ -96,32 +104,74 @@ function StatCell({
 
 const IVP_TIP = (
   <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>IV Percentile (52-week)</div>
+    <div className={styles.statTipTitle}>1y IV level (52-week IVP)</div>
     <div>
       Share of trailing-year Deribit DVOL daily closes at or below today’s value. DVOL is
-      Deribit’s 30-day ATM IV index — the same series the IV history panel seeds from.
-      Robust to one-off vol spikes that would otherwise poison a min/max IV Rank denominator.
+      Deribit’s 30-day ATM IV index. This is context only: it compares IV with past IV, not
+      with the volatility BTC is likely to deliver, so use IV vs Fcst to judge cheap or rich.
     </div>
     <div className={styles.statTipFormula}>
       IVP = (# daily closes ≤ current) / (365 days) × 100
     </div>
     <ul className={styles.statTipList}>
-      <li>
-        <b style={{ color: 'var(--color-profit)' }}>0–30</b>: IV cheap vs the past year — vol buyers favored.
-      </li>
-      <li>
-        <b style={{ color: 'var(--color-warning)' }}>30–70</b>: mid-distribution; no strong edge.
-      </li>
-      <li>
-        <b style={{ color: 'var(--color-loss)' }}>70–100</b>: IV rich vs the past year — vol sellers favored.
-      </li>
-    </ul>
-    <ul className={styles.statTipList}>
-      <li>Sub-text shows the 52w low–high band for absolute context.</li>
-      <li>Available for BTC and ETH only (the venues Deribit publishes DVOL for).</li>
+      <li>One stress episode sets the scale for the whole year, so it can sit near 0 for weeks.</li>
+      <li>Near the bottom of the range, intraday IV moves barely change it.</li>
+      <li>Sub-text shows the 52w low–high band. BTC and ETH only.</li>
     </ul>
   </div>
 );
+
+function RichnessTip({
+  richness,
+  atmIv,
+  dte,
+}: {
+  richness: VolRichness;
+  atmIv: number | null;
+  dte: number;
+}) {
+  const expiry = expiryRichness(richness, atmIv, dte);
+  const tenor = richnessTenorFor(richness, dte);
+  const tenorLabel = `${tenor.tenorDays}D`;
+  return (
+    <div className={styles.statTip}>
+      <div className={styles.statTipTitle}>IV vs forecast (excess premium)</div>
+      <div>
+        Is this expiry’s IV cheap or rich against what BTC is likely to realize over the same
+        horizon? Positive: options cost more than the forecast plus the usual premium.
+      </div>
+      <div className={styles.statTipFormula}>
+        excess = ATM IV − forecast RV − usual (IV − later RV)
+      </div>
+      <div className={styles.statTipFormula}>
+        {fmtIv(atmIv)} − {fmtIv(expiry.forecastVol)} − {fmtVolPts(expiry.usualPremium)} ={' '}
+        {fmtVolPts(expiry.excessPremium)}
+      </div>
+      <ul className={styles.statTipList}>
+        <li>
+          {tenorLabel} constant maturity: excess {fmtVolPts(tenor.excessPremium)}, {fmtZ(
+            tenor.excessHistory.zScore,
+          )}{' '}
+          vs its own {tenor.excessHistory.sampleCount}-day history, cone{' '}
+          {fmtPercentile(tenor.conePercentile)} of realized {tenorLabel} vol.
+        </li>
+        <li>
+          Intraday: {tenorLabel} IV {fmtZ(tenor.intraday.zScore24h)} vs last 24h,{' '}
+          {fmtZ(tenor.intraday.zScore7d)} vs 7d; excess Δ24h {fmtVolPts(tenor.excessChange24h)}.
+        </li>
+        <li>
+          Forecast: 7D realized decays to the {richness.forecast.longRunDays}D level, half-life{' '}
+          {richness.forecast.halfLifeDays}d. Usual premium: median IV − subsequent RV over{' '}
+          {tenor.premiumBaseline.independentSampleCount} independent {tenorLabel} windows.
+        </li>
+        <li>
+          ±{(richness.fairBand * 100).toFixed(0)} pts reads as fair. The band and half-life are our
+          choices, untested on BTC. Unknown baseline shows “–”, never zero.
+        </li>
+      </ul>
+    </div>
+  );
+}
 
 const IV_CHANGE_TIP = (
   <div className={styles.statTip}>
@@ -188,8 +238,11 @@ export default function StatStrip({
   dte,
   connectionState,
   marketStats,
+  richness,
   showRegimeIv = true,
 }: StatStripProps) {
+  const expiry = richness ? expiryRichness(richness, stats.atmIv, dte) : null;
+  const expiryTenor = richness ? richnessTenorFor(richness, dte) : null;
   const basisSub = stats.basisPct != null ? fmtPct(stats.basisPct, 3) : undefined;
   const basisPositive =
     stats.basisPct != null ? (stats.basisPct > 0 ? true : stats.basisPct < 0 ? false : null) : null;
@@ -236,14 +289,29 @@ export default function StatStrip({
           ) : undefined
         }
       />
+      {richness && expiry && expiryTenor && (
+        <>
+          <div className={styles.divider} />
+          <StatCell
+            label="IV vs Fcst"
+            value={fmtVolPts(expiry.excessPremium)}
+            positive={
+              expiry.state === 'cheap' ? true : expiry.state === 'rich' ? false : null
+            }
+            sub={`${expiry.state.toUpperCase()} · ${expiryTenor.tenorDays}D ${fmtZ(
+              expiryTenor.intraday.zScore24h,
+            )} 24h`}
+            labelTooltip={<RichnessTip richness={richness} atmIv={stats.atmIv} dte={dte} />}
+          />
+        </>
+      )}
       {marketStats?.dvol && (
         <>
           <div className={styles.divider} />
           <StatCell
-            label="IVP"
-            value={marketStats.dvol.ivp != null ? `${marketStats.dvol.ivp.toFixed(0)}` : '–'}
+            label="1y IV lvl"
+            value={fmtPercentile(marketStats.dvol.ivp)}
             sub={`52w: ${fmtIv(marketStats.dvol.low52w)}–${fmtIv(marketStats.dvol.high52w)}`}
-            accent
             labelTooltip={IVP_TIP}
           />
           <div className={styles.divider} />

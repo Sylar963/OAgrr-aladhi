@@ -9,6 +9,17 @@ export {
   AlphaRegimeSchema,
 } from './alpha-market-context.js';
 export {
+  type TenorRichness,
+  TenorRichnessSchema,
+  VolPremiumBaselineSchema,
+  type VolRichness,
+  type VolRichnessQuery,
+  VolRichnessQuerySchema,
+  VolRichnessSchema,
+  type VolRichnessState,
+  VolRichnessStateSchema,
+} from './vol-richness.js';
+export {
   type AlphaLottoCandidate,
   AlphaLottoCandidateSchema,
   type AlphaLottoScannerQuery,

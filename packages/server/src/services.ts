@@ -13,6 +13,7 @@ import {
   type RegimePersistence,
   RegimeService,
   SpotCandleService,
+  type SpotCandleCurrency,
   SpotRuntime,
   TradeRuntime,
   type VenueId,
@@ -57,6 +58,7 @@ import {
 } from './deferred-persistence.js';
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
+import { createVolRichnessSource } from './vol-richness-source.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
@@ -379,6 +381,24 @@ export function isRegimeReady(): boolean {
 export function isNewsReady(): boolean {
   return serviceHealth.news;
 }
+
+const SPOT_HISTORY_UNDERLYINGS = new Set<string>(['BTC', 'ETH', 'HYPE']);
+const DVOL_UNDERLYINGS = new Set<string>(['BTC', 'ETH']);
+
+export const volRichnessSource = createVolRichnessSource({
+  now: Date.now,
+  getDailyCandles: async (underlying) =>
+    isSpotCandlesReady() && SPOT_HISTORY_UNDERLYINGS.has(underlying)
+      ? spotCandleService.getCandles(underlying as SpotCandleCurrency, 86_400, 200)
+      : [],
+  getIvHistory: (underlying, windowDays) =>
+    isIvHistoryReady() ? ivHistoryService.query(underlying, windowDays) : null,
+  getStoredIv: (underlying) => ivBaselineHistory.get(underlying),
+  getDvolPercentile1y: (underlying) =>
+    isDvolReady() && DVOL_UNDERLYINGS.has(underlying)
+      ? (dvolService.getSnapshot(underlying)?.ivp ?? null)
+      : null,
+});
 
 let ivHistoryStorageStatsCache: Promise<IvHistoryStorageStats> | null = null;
 

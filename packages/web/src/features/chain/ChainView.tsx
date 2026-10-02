@@ -5,6 +5,7 @@ import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './querie
 import { useOpenPalette } from '@components/layout/palette-context';
 import { Spinner, EmptyState } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { useVolRichness } from '@hooks/useVolRichness';
 import { fmtIv, fmtUsdCompact } from '@lib/format';
 
 import ExpiryBar from './ExpiryBar';
@@ -44,6 +45,7 @@ export default function ChainView() {
     enabled: connectionState !== 'live',
   });
   const { data: marketStats } = useStats(underlying);
+  const { data: richness } = useVolRichness(underlying);
 
   const displayChain = chain;
   const showLoading =
@@ -99,6 +101,7 @@ export default function ChainView() {
               dte={displayChain.dte}
               connectionState={connectionState}
               marketStats={marketStats}
+              richness={richness}
             />
           )}
 
@@ -165,6 +168,7 @@ export default function ChainView() {
             dte={displayChain.dte}
             connectionState={connectionState}
             marketStats={marketStats}
+            richness={richness}
           />
         )}
 

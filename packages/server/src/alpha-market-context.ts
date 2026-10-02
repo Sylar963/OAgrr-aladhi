@@ -1,4 +1,10 @@
-import { realizedVol, type IvHistoryResponse, type RegimeQueryResult, type SpotCandle } from '@oggregator/core';
+import {
+  realizedVol,
+  type IvHistoryResponse,
+  type RegimeQueryResult,
+  type SpotCandle,
+  type VolRichness,
+} from '@oggregator/core';
 import type { AlphaMarketContextResponse } from '@oggregator/protocol';
 
 const DAYS_IN_YEAR = 365;
@@ -10,6 +16,30 @@ interface AlphaMarketContextInput {
   ivHistory: IvHistoryResponse | null;
   candles: SpotCandle[];
   regime: RegimeQueryResult | null;
+  richness?: VolRichness | null;
+}
+
+type VolatilityState = AlphaMarketContextResponse['volatility']['state'];
+
+const STATE_BY_RICHNESS: Record<'cheap' | 'fair' | 'rich', VolatilityState> = {
+  cheap: 'compressed',
+  fair: 'normal',
+  rich: 'bid',
+};
+
+function volatilityStateOf(
+  richness: VolRichness | null,
+  ivPercentile30d: number | null,
+): Pick<AlphaMarketContextResponse['volatility'], 'state' | 'stateSource'> {
+  const richness30d = richness?.tenors['30d'].state ?? 'unavailable';
+  if (richness30d !== 'unavailable') {
+    return { state: STATE_BY_RICHNESS[richness30d], stateSource: 'excess-premium' };
+  }
+  if (ivPercentile30d == null) return { state: 'unavailable', stateSource: 'unavailable' };
+  return {
+    state: ivPercentile30d <= 30 ? 'compressed' : ivPercentile30d >= 70 ? 'bid' : 'normal',
+    stateSource: 'iv-percentile',
+  };
 }
 
 function ivChange(series: IvHistoryResponse['tenors']['30d']['series'], days: number): number | null {
@@ -105,14 +135,8 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
         : percentile14d >= 70
           ? 'expanded'
           : 'normal';
-  const volatilityState =
-    ivPercentile30d == null
-      ? 'unavailable'
-      : ivPercentile30d <= 30
-        ? 'compressed'
-        : ivPercentile30d >= 70
-          ? 'bid'
-          : 'normal';
+  const richness = input.richness ?? null;
+  const { state: volatilityState, stateSource } = volatilityStateOf(richness, ivPercentile30d);
   const spotState = spotRangeState(input.candles, input.spotPrice, expectedMoves[0]!.movePct);
   const longCall =
     volatilityState === 'unavailable' || rangeState === 'unavailable'
@@ -149,6 +173,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
     spotPrice: input.spotPrice,
     volatility: {
       state: volatilityState,
+      stateSource,
       atmIv7d,
       atmIv30d,
       ivPercentile7d,
@@ -175,6 +200,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
             confidence: input.regime.confidence,
             observationCount: input.regime.observationCount,
           },
+    richness,
     sources: {
       ivHistory: atmIv7d != null || atmIv30d != null,
       spotHistory: input.candles.length > 0,

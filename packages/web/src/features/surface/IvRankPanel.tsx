@@ -1,8 +1,12 @@
 import { useState } from 'react';
 
+import type { TenorRichness } from '@oggregator/protocol';
+
 import HoverTooltip from '@components/ui/HoverTooltip';
+import { useVolRichness } from '@hooks/useVolRichness';
 import { getTokenLogo } from '@lib/token-meta';
 import { fmtIv } from '@lib/format';
+import { fmtPercentile, fmtVolPts, fmtZ } from '@lib/vol-richness';
 import type { IvHistoryTenorResult, IvTenor } from '@shared/enriched';
 import { getHistoryCoverage, type HistoryCoverage } from './history-coverage';
 import { useIvHistory, type IvHistoryWindow } from './queries';
@@ -16,6 +20,13 @@ function rankLevel(rank: number | null): 'hot' | 'mid' | 'cold' | 'none' {
   if (rank >= 70) return 'hot';
   if (rank <= 30) return 'cold';
   return 'mid';
+}
+
+function richnessLevel(state: TenorRichness['state']): 'hot' | 'mid' | 'cold' | 'none' {
+  if (state === 'rich') return 'hot';
+  if (state === 'cheap') return 'cold';
+  if (state === 'fair') return 'mid';
+  return 'none';
 }
 
 function sparkPath(values: Array<number | null>, width: number, height: number): string {
@@ -112,6 +123,35 @@ const PCT_TIP = (
   </div>
 );
 
+const RICHNESS_TIP = (
+  <div className={styles.tip}>
+    <div className={styles.tipTitle}>IV vs forecast</div>
+    <div>
+      Rank and pct compare IV with its own past. This row compares it with what BTC is likely to
+      realize over the same horizon.
+    </div>
+    <div className={styles.tipFormula}>excess = IV − forecast RV − usual (IV − later RV)</div>
+    <ul className={styles.tipList}>
+      <li>
+        <b>fcst</b>: excess premium in vol points. Negative: cheap; positive: rich; ±2 pts fair
+        (our band, untested on BTC).
+      </li>
+      <li>
+        <b>hist</b>: z-score of IV − forecast against its own daily history (overlapping, so
+        descriptive only).
+      </li>
+      <li>
+        <b>cone</b>: percentile of IV among realized vols over the same horizon (Sinclair vol cone).
+      </li>
+      <li>
+        <b>24h</b>: z-score of IV against the last 24h of 5-minute samples. Shows whether vol was
+        just bid or offered.
+      </li>
+      <li>7D and 30D only: the usual-premium baselines exist for those tenors.</li>
+    </ul>
+  </div>
+);
+
 const SAMPLES_TIP = (
   <div className={styles.tip}>
     <div className={styles.tipTitle}>Samples</div>
@@ -124,7 +164,51 @@ const SAMPLES_TIP = (
   </div>
 );
 
-function Chip({ tenor, result }: { tenor: IvTenor; result: IvHistoryTenorResult | undefined }) {
+function RichnessBadges({ richness }: { richness: TenorRichness }) {
+  return (
+    <HoverTooltip
+      as="div"
+      className={styles.chipBadges}
+      placement="bottom-start"
+      content={RICHNESS_TIP}
+    >
+      <span className={styles.badge}>
+        fcst{' '}
+        <span className={styles.rankValue} data-level={richnessLevel(richness.state)}>
+          {fmtVolPts(richness.excessPremium)}
+        </span>
+      </span>
+      <span className={styles.badge}>
+        hist{' '}
+        <span className={styles.rankValue} data-level="none">
+          {fmtZ(richness.excessHistory.zScore)}
+        </span>
+      </span>
+      <span className={styles.badge}>
+        cone{' '}
+        <span className={styles.rankValue} data-level="none">
+          {fmtPercentile(richness.conePercentile)}
+        </span>
+      </span>
+      <span className={styles.badge}>
+        24h{' '}
+        <span className={styles.rankValue} data-level="none">
+          {fmtZ(richness.intraday.zScore24h)}
+        </span>
+      </span>
+    </HoverTooltip>
+  );
+}
+
+function Chip({
+  tenor,
+  result,
+  richness,
+}: {
+  tenor: IvTenor;
+  result: IvHistoryTenorResult | undefined;
+  richness: TenorRichness | null;
+}) {
   const series = result?.series ?? [];
   const n = series.filter((p) => p.atmIv != null).length;
   const currentIv = result?.current.atmIv ?? null;
@@ -182,6 +266,7 @@ function Chip({ tenor, result }: { tenor: IvTenor; result: IvHistoryTenorResult 
           </span>
         </HoverTooltip>
       </div>
+      {richness && <RichnessBadges richness={richness} />}
     </div>
   );
 }
@@ -198,6 +283,7 @@ function shortestCoverage(results: Array<IvHistoryTenorResult | undefined>, wind
 export default function IvRankPanel({ underlying }: Props) {
   const [window, setWindow] = useState<IvHistoryWindow>('30d');
   const { data } = useIvHistory(underlying, window);
+  const { data: richness } = useVolRichness(underlying);
   const logo = getTokenLogo(underlying);
   const coverage = shortestCoverage(
     TENORS.map((t) => data?.tenors[t]),
@@ -243,7 +329,12 @@ export default function IvRankPanel({ underlying }: Props) {
 
       <div className={styles.grid}>
         {TENORS.map((t) => (
-          <Chip key={t} tenor={t} result={data?.tenors[t]} />
+          <Chip
+            key={t}
+            tenor={t}
+            result={data?.tenors[t]}
+            richness={t === '7d' || t === '30d' ? (richness?.tenors[t] ?? null) : null}
+          />
         ))}
       </div>
     </div>

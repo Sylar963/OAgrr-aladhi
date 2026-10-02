@@ -1,4 +1,4 @@
-import type { SpotCandle, SpotCandleCurrency } from '@oggregator/core';
+import type { SpotCandle, SpotCandleCurrency, VolRichness } from '@oggregator/core';
 import {
   AlphaMarketContextQuerySchema,
   type AlphaMarketContextResponse,
@@ -14,6 +14,7 @@ import {
   regimeService,
   spotCandleService,
   spotService,
+  volRichnessSource,
 } from '../services.js';
 
 const SPOT_HISTORY_UNDERLYINGS = new Set<SpotCandleCurrency>(['BTC', 'ETH', 'HYPE']);
@@ -49,6 +50,13 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
           ? regimeService.query(underlying)
           : null;
 
+      let richness: VolRichness | null = null;
+      try {
+        richness = await volRichnessSource.get(underlying, req.log);
+      } catch (error: unknown) {
+        req.log.warn({ error, underlying }, 'Alpha market context vol richness unavailable');
+      }
+
       return buildAlphaMarketContext({
         underlying,
         nowMs: Date.now(),
@@ -56,6 +64,7 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
         ivHistory,
         candles,
         regime,
+        richness,
       });
     },
   );

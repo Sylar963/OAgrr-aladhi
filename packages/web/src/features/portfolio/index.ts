@@ -8,6 +8,8 @@ export type {
 export {
   connectVenue,
   disconnectVenue,
+  fetchExchangeTrades,
+  fetchPositions,
   listVenueConnections,
   restoreVenueConnections,
   venueStatus,

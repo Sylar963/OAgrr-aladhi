@@ -70,7 +70,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
     enabled: data.chartMode === 'attribution',
   });
   const countdown = useCandleCountdown(data.interval);
-  const entries = useInstrumentEntries({
+  const { entries, venueLeg } = useInstrumentEntries({
     venue: data.venue,
     underlying: data.underlying,
     expiry: data.expiry,
@@ -201,6 +201,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
                 entries={entries}
                 priceCurrency={priceCurrency}
                 fallbackSpotUsd={liveSpotUsd}
+                venueLeg={venueLeg}
               />
             )}
           </>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './queries';
@@ -9,6 +9,7 @@ import { fmtIv, fmtUsdCompact } from '@lib/format';
 
 import ExpiryBar from './ExpiryBar';
 import { useExpiryPositions } from './use-expiry-positions';
+import { summarizeStrikePositions } from './expiry-positions';
 import StatStrip from './StatStrip';
 import ChainTable from './ChainTable';
 import VenueSidebar from './VenueSidebar';
@@ -27,6 +28,8 @@ export default function ChainView() {
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
   const expiryPositions = useExpiryPositions(underlying, activeVenues);
+  const expiryLegs = expiryPositions.get(expiry)?.legs;
+  const strikePositions = useMemo(() => summarizeStrikePositions(expiryLegs ?? []), [expiryLegs]);
   const openPalette = useOpenPalette();
 
   const { data: expiriesData } = useExpiries(underlying);
@@ -196,6 +199,7 @@ export default function ChainView() {
               myIv={myIvValid ? myIvFloat : null}
               expiry={expiry}
               underlying={underlying}
+              positions={strikePositions}
             />
           )}
         </div>

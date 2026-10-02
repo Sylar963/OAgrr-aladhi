@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PositionLeg } from '@oggregator/protocol';
-import { summarizeExpiryPositions } from './expiry-positions.js';
+import { summarizeExpiryPositions, summarizeStrikePositions, strikePositionKey } from './expiry-positions.js';
 
 function leg(overrides: Partial<PositionLeg>): PositionLeg {
   return {
@@ -50,5 +50,23 @@ describe('summarizeExpiryPositions', () => {
       'BTC',
     );
     expect(badges.size).toBe(0);
+  });
+});
+
+describe('summarizeStrikePositions', () => {
+  it('nets size per strike and right across venues', () => {
+    const map = summarizeStrikePositions([
+      leg({ legId: 'a', size: 0.5, source: 'derive', venueHint: 'derive' }),
+      leg({ legId: 'b', size: 0.25, source: 'thalex', venueHint: 'thalex', entryPriceUsd: 1_100 }),
+      leg({ legId: 'c', size: -2, optionRight: 'put', strike: 60_000 }),
+      leg({ legId: 'd', size: 1, strike: 80_000 }),
+      leg({ legId: 'e', size: -1, strike: 80_000 }),
+    ]);
+    expect(map.get(strikePositionKey(70_000, 'call'))).toEqual({
+      size: 0.75,
+      title: 'derive +0.5 @ $1000.00\nthalex +0.25 @ $1100.00',
+    });
+    expect(map.get(strikePositionKey(60_000, 'put'))?.size).toBe(-2);
+    expect(map.has(strikePositionKey(80_000, 'call'))).toBe(false);
   });
 });

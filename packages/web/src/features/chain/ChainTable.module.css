@@ -26,7 +26,7 @@
 
 .header {
   display: grid;
-  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 100px 92px 72px 92px 72px 60px 50px 50px 1fr;
+  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 64px 100px 64px 92px 72px 92px 72px 60px 50px 50px 1fr;
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-elevated);
   flex-shrink: 0;
@@ -44,8 +44,8 @@
   position: relative;
 }
 
-.header > :not(:last-child):not(:nth-child(8)):not(:nth-child(9))::after,
-.row > :not(:last-child):not(:nth-child(8)):not(:nth-child(9))::after {
+.header > :not(:last-child):not(:nth-child(9)):not(:nth-child(10))::after,
+.row > :not(:last-child):not(:nth-child(9)):not(:nth-child(10))::after {
   content: '';
   position: absolute;
   top: 0;
@@ -146,7 +146,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 100px 92px 72px 92px 72px 60px 50px 50px 1fr;
+  grid-template-columns: 1fr 50px 50px 60px 72px 92px 72px 92px 64px 100px 64px 92px 72px 92px 72px 60px 50px 50px 1fr;
   align-items: center;
   height: 48px;
   cursor: pointer;
@@ -397,4 +397,22 @@
 .strikeCenter[data-atm="true"] .strikeDist {
   color: var(--accent-primary);
   opacity: 0.85;
+}
+
+.posCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+.posCell[data-direction='long'] {
+  color: var(--color-profit);
+  background: color-mix(in srgb, var(--color-profit) 10%, transparent);
+}
+.posCell[data-direction='short'] {
+  color: var(--color-loss);
+  background: color-mix(in srgb, var(--color-loss) 10%, transparent);
 }

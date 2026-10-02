@@ -19,6 +19,7 @@ export interface InstrumentEntry {
   side: 'buy' | 'sell';
   quantity: number;
   priceUsd: number;
+  feeUsd: number | null;
   spotUsd: number | null;
   ts: number;
 }
@@ -50,6 +51,7 @@ export function paperFillEntries(
       side: f.side,
       quantity: f.quantity,
       priceUsd: f.priceUsd,
+      feeUsd: f.feesUsd,
       spotUsd: f.underlyingSpotUsd,
       ts: Date.parse(f.filledAt),
     }));
@@ -74,6 +76,7 @@ export function exchangeTradeEntries(
       side: t.direction,
       quantity: t.amount,
       priceUsd: t.priceUsd,
+      feeUsd: t.feeUsd,
       spotUsd: null,
       ts: t.timestampMs,
     }));
@@ -139,4 +142,106 @@ export function buildEntryMarkers(
     });
   }
   return markers.sort((a, b) => a.barTs - b.barTs);
+}
+
+export interface BreakEvenLine {
+  id: string;
+  source: InstrumentEntry['source'];
+  price: number;
+  netQuantity: number;
+}
+
+export interface VenuePositionLeg {
+  size: number;
+  entryPriceUsd: number;
+}
+
+const QTY_EPSILON = 1e-9;
+
+// Average-cost replay: adds on the open side re-weight the basis (entry fees
+// included, so BE is where closing nets zero), reductions leave it untouched,
+// and a flip through zero restarts the basis at the flipping fill.
+export function costBasisFromEntries(
+  entries: readonly InstrumentEntry[],
+  priceCurrency: string | null,
+  fallbackSpotUsd: number | null,
+): { netQuantity: number; price: number } | null {
+  let qty = 0;
+  let avg = 0;
+  const ordered = [...entries].sort((a, b) => a.ts - b.ts);
+  for (const entry of ordered) {
+    const price = toChartPrice(entry, priceCurrency, fallbackSpotUsd);
+    if (price == null || !(entry.quantity > 0)) return null;
+    const feePerUnit =
+      entry.feeUsd != null && entry.feeUsd > 0
+        ? (toChartPrice({ ...entry, priceUsd: entry.feeUsd }, priceCurrency, fallbackSpotUsd) ?? 0) /
+          entry.quantity
+        : 0;
+    const signed = entry.side === 'buy' ? entry.quantity : -entry.quantity;
+    const effective = entry.side === 'buy' ? price + feePerUnit : price - feePerUnit;
+
+    if (Math.abs(qty) < QTY_EPSILON || Math.sign(qty) === Math.sign(signed)) {
+      avg = (avg * Math.abs(qty) + effective * Math.abs(signed)) / (Math.abs(qty) + Math.abs(signed));
+      qty += signed;
+    } else if (Math.abs(signed) <= Math.abs(qty) + QTY_EPSILON) {
+      qty += signed;
+    } else {
+      qty += signed;
+      avg = effective;
+    }
+    if (Math.abs(qty) < QTY_EPSILON) {
+      qty = 0;
+      avg = 0;
+    }
+  }
+  return qty === 0 ? null : { netQuantity: qty, price: avg };
+}
+
+export function buildBreakEvenLines(
+  entries: readonly InstrumentEntry[],
+  priceCurrency: string | null,
+  fallbackSpotUsd: number | null,
+  venueLeg: VenuePositionLeg | null | undefined,
+): BreakEvenLine[] {
+  const lines: BreakEvenLine[] = [];
+
+  const paper = costBasisFromEntries(
+    entries.filter((e) => e.source === 'paper'),
+    priceCurrency,
+    fallbackSpotUsd,
+  );
+  if (paper) lines.push({ id: 'be:paper', source: 'paper', ...paper });
+
+  const replayed = costBasisFromEntries(
+    entries.filter((e) => e.source === 'exchange'),
+    priceCurrency,
+    fallbackSpotUsd,
+  );
+  // undefined = venue not connected, so the trade replay is all we have.
+  // null = connected and flat, which overrides any replayed history.
+  if (venueLeg === undefined) {
+    if (replayed) lines.push({ id: 'be:exchange', source: 'exchange', ...replayed });
+  } else if (venueLeg !== null && venueLeg.size !== 0) {
+    const replayMatches =
+      replayed != null && Math.abs(replayed.netQuantity - venueLeg.size) < 1e-6;
+    const venuePrice = toChartPrice(
+      {
+        id: 'venue',
+        source: 'exchange',
+        side: venueLeg.size > 0 ? 'buy' : 'sell',
+        quantity: Math.abs(venueLeg.size),
+        priceUsd: venueLeg.entryPriceUsd,
+        feeUsd: null,
+        spotUsd: null,
+        ts: 0,
+      },
+      priceCurrency,
+      fallbackSpotUsd,
+    );
+    const price = replayMatches ? replayed.price : venuePrice;
+    if (price != null) {
+      lines.push({ id: 'be:exchange', source: 'exchange', price, netQuantity: venueLeg.size });
+    }
+  }
+  return lines;
 }

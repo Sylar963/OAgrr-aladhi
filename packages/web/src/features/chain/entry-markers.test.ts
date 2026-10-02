@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ExchangePortfolioTrade, InstrumentCandle, PaperFillDto } from '@oggregator/protocol';
 import {
+  buildBreakEvenLines,
   buildEntryMarkers,
+  costBasisFromEntries,
   exchangeTradeEntries,
   paperFillEntries,
   snapToBarTs,
@@ -89,6 +91,7 @@ function entry(overrides: Partial<InstrumentEntry>): InstrumentEntry {
     side: 'buy',
     quantity: 1,
     priceUsd: 3_000,
+    feeUsd: null,
     spotUsd: 60_000,
     ts: T0 + HOUR,
     ...overrides,
@@ -128,6 +131,7 @@ describe('exchangeTradeEntries', () => {
         side: 'sell',
         quantity: 1,
         priceUsd: 2_500,
+        feeUsd: null,
         spotUsd: null,
         ts: T0 + 30 * 60_000,
       },
@@ -182,5 +186,75 @@ describe('buildEntryMarkers', () => {
     expect(markers.map((m) => m.id)).toEqual(['early', 'late']);
     expect(markers[0]).toMatchObject({ barTs: T0, side: 'buy', text: 'B 1 @ 0.0500 · paper' });
     expect(markers[1]!.price).toBeCloseTo(0.06);
+  });
+});
+
+describe('costBasisFromEntries', () => {
+  it('averages adds and includes entry fees', () => {
+    const basis = costBasisFromEntries(
+      [
+        entry({ id: 'a', ts: 1, quantity: 1, priceUsd: 100, feeUsd: 2 }),
+        entry({ id: 'b', ts: 2, quantity: 1, priceUsd: 200, feeUsd: 0 }),
+      ],
+      'USD',
+      null,
+    );
+    expect(basis).toEqual({ netQuantity: 2, price: 151 });
+  });
+
+  it('keeps the basis through partial closes and drops it when flat', () => {
+    const open = entry({ id: 'a', ts: 1, quantity: 2, priceUsd: 100 });
+    const partial = entry({ id: 'b', ts: 2, side: 'sell', quantity: 1, priceUsd: 300 });
+    expect(costBasisFromEntries([partial, open], 'USD', null)).toEqual({ netQuantity: 1, price: 100 });
+    const close = entry({ id: 'c', ts: 3, side: 'sell', quantity: 1, priceUsd: 50 });
+    expect(costBasisFromEntries([open, partial, close], 'USD', null)).toBeNull();
+  });
+
+  it('restarts the basis on a flip and nets fees against shorts', () => {
+    const basis = costBasisFromEntries(
+      [
+        entry({ id: 'a', ts: 1, quantity: 1, priceUsd: 100 }),
+        entry({ id: 'b', ts: 2, side: 'sell', quantity: 3, priceUsd: 90, feeUsd: 3 }),
+      ],
+      'USD',
+      null,
+    );
+    expect(basis).toEqual({ netQuantity: -2, price: 89 });
+  });
+
+  it('works in coin units on inverse charts', () => {
+    const basis = costBasisFromEntries([entry({ priceUsd: 3_000, spotUsd: 60_000 })], 'BTC', null);
+    expect(basis?.price).toBeCloseTo(0.05);
+  });
+});
+
+describe('buildBreakEvenLines', () => {
+  const liveBuy = entry({ id: 'x', source: 'exchange', quantity: 1, priceUsd: 1_000, feeUsd: 10, spotUsd: null });
+
+  it('uses the fill replay when it agrees with the venue position', () => {
+    const lines = buildBreakEvenLines([liveBuy], 'USD', null, { size: 1, entryPriceUsd: 1_000 });
+    expect(lines).toEqual([{ id: 'be:exchange', source: 'exchange', price: 1_010, netQuantity: 1 }]);
+  });
+
+  it('falls back to the venue entry price when trade history is incomplete', () => {
+    const lines = buildBreakEvenLines([liveBuy], 'USD', null, { size: 3, entryPriceUsd: 1_200 });
+    expect(lines).toEqual([{ id: 'be:exchange', source: 'exchange', price: 1_200, netQuantity: 3 }]);
+  });
+
+  it('hides the live line when the connected venue is flat', () => {
+    expect(buildBreakEvenLines([liveBuy], 'USD', null, null)).toEqual([]);
+  });
+
+  it('uses the replay when the venue is not connected, alongside a paper line', () => {
+    const lines = buildBreakEvenLines(
+      [liveBuy, entry({ id: 'p', source: 'paper', priceUsd: 500, feeUsd: null })],
+      'USD',
+      null,
+      undefined,
+    );
+    expect(lines.map((l) => [l.id, l.price])).toEqual([
+      ['be:paper', 500],
+      ['be:exchange', 1_010],
+    ]);
   });
 });

@@ -8,6 +8,11 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ChainTable.module.css';
 import ExpandedRow from './ExpandedRow';
+import {
+  formatSignedSize,
+  strikePositionKey,
+  type StrikePosition,
+} from './expiry-positions';
 import { FlashingPrice } from './FlashingPrice';
 import { computeAtmConsensus } from './forward-analysis';
 import MobileStrikeCard from './MobileStrikeCard';
@@ -43,6 +48,7 @@ interface NewChainTableProps {
   expiry: string;
   underlying: string;
   builderMode?: 'crypto' | 'tradfi';
+  positions?: ReadonlyMap<string, StrikePosition>;
   // Optional override for the per-strike Chart button (see ExpandedRow). Lets a
   // non-crypto venue route charts to its own surface. Crypto omits it → unchanged.
   chartOverride?: (target: {
@@ -146,12 +152,27 @@ interface StrikeRowProps {
   underlying: string;
   expiry: string;
   freshnessNow: number;
+  callPos: StrikePosition | undefined;
+  putPos: StrikePosition | undefined;
   chartOverride?: (target: {
     underlying: string;
     expiry: string;
     strike: number;
     type: 'call' | 'put';
   }) => void;
+}
+
+function PosCell({ position }: { position: StrikePosition | undefined }) {
+  if (!position) return <span className={styles.posCell} />;
+  return (
+    <span
+      className={styles.posCell}
+      data-direction={position.size > 0 ? 'long' : 'short'}
+      title={position.title}
+    >
+      {formatSignedSize(position.size)}
+    </span>
+  );
 }
 
 function fmtDistPct(strike: number, indexPrice: number | null): string | null {
@@ -183,6 +204,8 @@ const StrikeRowItem = memo(function StrikeRowItem({
   underlying,
   expiry,
   freshnessNow,
+  callPos,
+  putPos,
   chartOverride,
 }: StrikeRowItemPropsInternal) {
   const distLabel = fmtDistPct(strike.strike, indexPrice);
@@ -262,6 +285,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           }}
           title="Buy call at best ask"
         />
+        <PosCell position={callPos} />
 
         <div
           className={styles.strikeCenter}
@@ -271,6 +295,8 @@ const StrikeRowItem = memo(function StrikeRowItem({
           <span className={styles.strikeNum}>{strike.strike.toLocaleString()}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
+
+        <PosCell position={putPos} />
 
         <PriceCell
           value={putBba.bid}
@@ -349,6 +375,7 @@ export default function NewChainTable({
   expiry,
   underlying,
   builderMode = 'crypto',
+  positions,
   chartOverride,
 }: NewChainTableProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -494,8 +521,14 @@ export default function NewChainTable({
             <span className={styles.hdrLabel} data-align="right">
               ASK
             </span>
+            <span className={styles.hdrLabel} data-align="center" title="Your call position (connected venues)">
+              POS
+            </span>
             <span className={styles.hdrLabel} data-align="center">
               STRIKE
+            </span>
+            <span className={styles.hdrLabel} data-align="center" title="Your put position (connected venues)">
+              POS
             </span>
             <span className={styles.hdrLabel}>BID</span>
             <span className={styles.hdrLabel} data-align="center">
@@ -569,6 +602,8 @@ export default function NewChainTable({
                       underlying={underlying}
                       expiry={expiry}
                       freshnessNow={freshnessNow}
+                      callPos={positions?.get(strikePositionKey(s.strike, 'call'))}
+                      putPos={positions?.get(strikePositionKey(s.strike, 'put'))}
                       chartOverride={chartOverride}
                     />
                   </div>

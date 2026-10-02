@@ -1,15 +1,19 @@
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { PRIVATE_ADAPTER_SPECS, VENUE_IDS, type VenueId } from '@oggregator/protocol';
+import {
+  ExchangePortfolioVenueSchema,
+  PRIVATE_ADAPTER_SPECS,
+  VENUE_IDS,
+  type ExchangePortfolioVenue,
+} from '@oggregator/protocol';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
-import { fetchPositions, venueStatus } from '@features/portfolio/api';
 import { summarizeExpiryPositions, type ExpiryPositionBadge } from './expiry-positions.js';
+import { venuePositionsQuery, venueStatusQuery } from './venue-position-queries.js';
 
-const PRIVATE_VENUES: readonly VenueId[] = VENUE_IDS.filter(
-  (v) => PRIVATE_ADAPTER_SPECS[v].status === 'available',
-);
-const STATUS_REFRESH_MS = 15_000;
-const POSITIONS_REFRESH_MS = 10_000;
+const PRIVATE_VENUES: readonly ExchangePortfolioVenue[] = VENUE_IDS.flatMap((v) => {
+  const parsed = ExchangePortfolioVenueSchema.safeParse(v);
+  return parsed.success && PRIVATE_ADAPTER_SPECS[v].status === 'available' ? [parsed.data] : [];
+});
 
 export function useExpiryPositions(
   underlying: string,
@@ -21,25 +25,11 @@ export function useExpiryPositions(
   const venues = PRIVATE_VENUES.filter((v) => activeVenues.includes(v));
 
   const statuses = useQueries({
-    queries: venues.map((venue) => ({
-      queryKey: ['account', accountId, 'portfolio', 'venue-status', venue],
-      queryFn: () => venueStatus(venue),
-      enabled: ready,
-      retry: false,
-      refetchInterval: STATUS_REFRESH_MS,
-    })),
+    queries: venues.map((venue) => venueStatusQuery(accountId, venue, ready)),
   });
-
   const connected = venues.filter((_, i) => statuses[i]?.data?.connected === true);
-
   const positions = useQueries({
-    queries: connected.map((venue) => ({
-      queryKey: ['account', accountId, 'portfolio', 'positions', venue, underlying],
-      queryFn: () => fetchPositions(venue, underlying),
-      enabled: ready,
-      retry: false,
-      refetchInterval: POSITIONS_REFRESH_MS,
-    })),
+    queries: connected.map((venue) => venuePositionsQuery(accountId, venue, underlying, ready)),
   });
 
   const connectedKey = connected.join(',');

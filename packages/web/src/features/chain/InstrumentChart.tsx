@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
+  LineStyle,
+  type IPriceLine,
   createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
@@ -13,7 +15,12 @@ import {
 } from 'lightweight-charts';
 import type { InstrumentCandle, InstrumentMarkPoint } from '@oggregator/protocol';
 import { priceFormatFromSeries } from './chart-precision.js';
-import { buildEntryMarkers, type InstrumentEntry } from './entry-markers.js';
+import {
+  buildBreakEvenLines,
+  buildEntryMarkers,
+  type InstrumentEntry,
+  type VenuePositionLeg,
+} from './entry-markers.js';
 import styles from './InstrumentChart.module.css';
 
 export interface InstrumentChartProps {
@@ -23,12 +30,14 @@ export interface InstrumentChartProps {
   entries?: readonly InstrumentEntry[];
   priceCurrency?: string | null;
   fallbackSpotUsd?: number | null;
+  venueLeg?: VenuePositionLeg | null;
   compact?: boolean;
 }
 
 const ENTRY_BUY_COLOR = '#38BDF8';
 const ENTRY_SELL_COLOR = '#F472B6';
 const NO_ENTRIES: readonly InstrumentEntry[] = [];
+const BE_COLOR = '#F59E0B';
 
 interface HoverOhlc { o: number; h: number; l: number; c: number }
 
@@ -50,6 +59,7 @@ export default function InstrumentChart({
   entries = NO_ENTRIES,
   priceCurrency = null,
   fallbackSpotUsd = null,
+  venueLeg,
   compact = false,
 }: InstrumentChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -59,6 +69,7 @@ export default function InstrumentChart({
   const ma9SeriesRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const ma20SeriesRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const entryMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const breakEvenLinesRef = useRef<IPriceLine[]>([]);
   const [hover, setHover] = useState<HoverOhlc | null>(null);
 
   // Chart lifecycle — mount once. compact changes are applied via applyOptions
@@ -125,7 +136,7 @@ export default function InstrumentChart({
       });
     });
 
-    return () => { chart.remove(); chartRef.current = null; entryMarkersRef.current = null; };
+    return () => { chart.remove(); chartRef.current = null; entryMarkersRef.current = null; breakEvenLinesRef.current = []; };
   }, []);
 
   useEffect(() => {
@@ -234,6 +245,28 @@ export default function InstrumentChart({
       })),
     );
   }, [entryMarkers, showEntries, compact]);
+
+  const breakEvens = useMemo(
+    () => buildBreakEvenLines(entries, priceCurrency, fallbackSpotUsd, venueLeg),
+    [entries, priceCurrency, fallbackSpotUsd, venueLeg],
+  );
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+    for (const line of breakEvenLinesRef.current) series.removePriceLine(line);
+    breakEvenLinesRef.current = !showEntries
+      ? []
+      : breakEvens.map((be) =>
+          series.createPriceLine({
+            price: be.price,
+            color: BE_COLOR,
+            lineWidth: 1,
+            lineStyle: be.source === 'paper' ? LineStyle.Dotted : LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `BE ${be.source === 'paper' ? 'paper' : 'live'} ${be.netQuantity > 0 ? '+' : ''}${Number(be.netQuantity.toPrecision(6))}`,
+          }),
+        );
+  }, [breakEvens, showEntries]);
 
   const last = candles.length > 0 ? candles[candles.length - 1]! : null;
   const displayOhlc = hover ?? (last ? { o: last.o, h: last.h, l: last.l, c: last.c } : null);

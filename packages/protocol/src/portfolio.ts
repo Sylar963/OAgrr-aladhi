@@ -77,6 +77,16 @@ export const ExchangePortfolioTradeSchema = z.object({
 });
 export type ExchangePortfolioTrade = z.infer<typeof ExchangePortfolioTradeSchema>;
 
+export const ExchangeTradesResponseSchema = z.object({
+  accountId: z.string(),
+  venue: ExchangePortfolioVenueSchema,
+  // False when DATABASE_URL is unset: venue fills are never persisted, so an
+  // empty list means "no history", not "no trades".
+  ledgerEnabled: z.boolean(),
+  trades: z.array(ExchangePortfolioTradeSchema),
+});
+export type ExchangeTradesResponse = z.infer<typeof ExchangeTradesResponseSchema>;
+
 export const PortfolioAccountingSchema = z.object({
   openGrossDebitUsd: z.number().nonnegative(),
   openGrossCreditUsd: z.number().nonnegative(),

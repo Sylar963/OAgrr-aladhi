@@ -14,7 +14,7 @@ export interface ChartPanel {
   type: 'call' | 'put';
   range: InstrumentCandleRange;
   interval: InstrumentCandleInterval;
-  overlays: { mark: boolean; ma9: boolean; ma20: boolean };
+  overlays: { mark: boolean; ma9: boolean; ma20: boolean; entries?: boolean };
   chartMode: ChartMode;
 }
 
@@ -34,7 +34,7 @@ interface ChartPanelsState {
   updatePanel: (id: string, patch: Partial<ChartPanel>) => void;
 }
 
-const DEFAULT_OVERLAYS = { mark: true, ma9: true, ma20: true } as const;
+const DEFAULT_OVERLAYS = { mark: true, ma9: true, ma20: true, entries: true } as const;
 
 function makeId(venue: VenueId, symbol: string): string {
   return `${venue}:${symbol}`;

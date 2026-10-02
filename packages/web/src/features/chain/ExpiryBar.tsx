@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { getTokenLogo } from '@lib/token-meta';
 import { dteDays, formatExpiry, fmtUsdCompact } from '@lib/format';
 
+import type { ExpiryPositionBadge } from './expiry-positions';
 import styles from './ExpiryBar.module.css';
 
 interface ExpiryBarProps {
@@ -16,6 +17,7 @@ interface ExpiryBarProps {
   /** Fired on hover/intent (NOT click) so consumers can warm caches/runtimes
    * ahead of a click. Called once per sustained hover (~60ms debounce). */
   onPrefetch?: (expiry: string) => void;
+  positions?: ReadonlyMap<string, ExpiryPositionBadge>;
 }
 
 const PREFETCH_HOVER_MS = 60;
@@ -29,6 +31,7 @@ export default function ExpiryBar({
   onSelect,
   onChangeAsset,
   onPrefetch,
+  positions,
 }: ExpiryBarProps) {
   const logo = getTokenLogo(underlying);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -112,6 +115,7 @@ export default function ExpiryBar({
       <div className={styles.tabs} ref={tabsRef} onWheel={handleWheel}>
         {expiries.map((e) => {
           const dte = dteDays(e);
+          const pos = positions?.get(e);
           return (
             <button
               key={e}
@@ -126,6 +130,11 @@ export default function ExpiryBar({
               <span className={styles.dteBadge} data-urgent={dte <= 1}>
                 {dte}d
               </span>
+              {pos && (
+                <span className={styles.posBadge} data-direction={pos.direction} title={pos.title}>
+                  POS
+                </span>
+              )}
             </button>
           );
         })}

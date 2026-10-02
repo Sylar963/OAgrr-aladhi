@@ -1,23 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   ColorType,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
 import type { InstrumentCandle, InstrumentMarkPoint } from '@oggregator/protocol';
 import { priceFormatFromSeries } from './chart-precision.js';
+import { buildEntryMarkers, type InstrumentEntry } from './entry-markers.js';
 import styles from './InstrumentChart.module.css';
 
 export interface InstrumentChartProps {
   candles: readonly InstrumentCandle[];
   markLine: readonly InstrumentMarkPoint[];
-  overlays: { mark: boolean; ma9: boolean; ma20: boolean };
+  overlays: { mark: boolean; ma9: boolean; ma20: boolean; entries?: boolean };
+  entries?: readonly InstrumentEntry[];
+  priceCurrency?: string | null;
+  fallbackSpotUsd?: number | null;
   compact?: boolean;
 }
+
+const ENTRY_BUY_COLOR = '#38BDF8';
+const ENTRY_SELL_COLOR = '#F472B6';
+const NO_ENTRIES: readonly InstrumentEntry[] = [];
 
 interface HoverOhlc { o: number; h: number; l: number; c: number }
 
@@ -32,13 +43,22 @@ function sma(values: readonly number[], period: number): (number | null)[] {
   return out;
 }
 
-export default function InstrumentChart({ candles, markLine, overlays, compact = false }: InstrumentChartProps) {
+export default function InstrumentChart({
+  candles,
+  markLine,
+  overlays,
+  entries = NO_ENTRIES,
+  priceCurrency = null,
+  fallbackSpotUsd = null,
+  compact = false,
+}: InstrumentChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const markSeriesRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const ma9SeriesRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const ma20SeriesRef = useRef<ISeriesApi<'Line', Time> | null>(null);
+  const entryMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const [hover, setHover] = useState<HoverOhlc | null>(null);
 
   // Chart lifecycle — mount once. compact changes are applied via applyOptions
@@ -72,6 +92,7 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
       borderVisible: true,
       priceLineVisible: false,
     });
+    entryMarkersRef.current = createSeriesMarkers(candleSeriesRef.current, []);
     markSeriesRef.current = chart.addSeries(LineSeries, {
       color: '#FBBF24',
       lineWidth: 1,
@@ -104,7 +125,7 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
       });
     });
 
-    return () => { chart.remove(); chartRef.current = null; };
+    return () => { chart.remove(); chartRef.current = null; entryMarkersRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -191,6 +212,28 @@ export default function InstrumentChart({ candles, markLine, overlays, compact =
       ),
     );
   }, [ma20, candles, overlays.ma20]);
+
+  const showEntries = overlays.entries !== false;
+  const entryMarkers = useMemo(
+    () => buildEntryMarkers(entries, candles, priceCurrency, fallbackSpotUsd, priceFormat.precision),
+    [entries, candles, priceCurrency, fallbackSpotUsd, priceFormat.precision],
+  );
+  useEffect(() => {
+    const plugin = entryMarkersRef.current;
+    if (!plugin) return;
+    if (!showEntries) { plugin.setMarkers([]); return; }
+    plugin.setMarkers(
+      entryMarkers.map((e): SeriesMarker<Time> => ({
+        id: e.id,
+        time: (e.barTs / 1000) as Time,
+        position: e.side === 'buy' ? 'atPriceBottom' : 'atPriceTop',
+        price: e.price,
+        shape: e.side === 'buy' ? 'arrowUp' : 'arrowDown',
+        color: e.side === 'buy' ? ENTRY_BUY_COLOR : ENTRY_SELL_COLOR,
+        ...(compact ? {} : { text: e.text }),
+      })),
+    );
+  }, [entryMarkers, showEntries, compact]);
 
   const last = candles.length > 0 ? candles[candles.length - 1]! : null;
   const displayOhlc = hover ?? (last ? { o: last.o, h: last.h, l: last.l, c: last.c } : null);

@@ -141,6 +141,26 @@
   background: color-mix(in srgb, var(--color-loss) 18%, transparent);
   color: var(--color-loss);
 }
+.posBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.posBadge[data-direction="long"] {
+  background: color-mix(in srgb, var(--color-profit) 18%, transparent);
+  color: var(--color-profit);
+}
+.posBadge[data-direction="short"] {
+  background: color-mix(in srgb, var(--color-loss) 18%, transparent);
+  color: var(--color-loss);
+}
+.posBadge[data-direction="mixed"] {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
 
 /* ── Mobile ──────────────────────────────────────────── */
 

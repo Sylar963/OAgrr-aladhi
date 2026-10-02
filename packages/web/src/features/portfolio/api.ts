@@ -1,5 +1,7 @@
 import { getClerkToken } from '@lib/clerk-token';
 import {
+  type ExchangePortfolioVenue,
+  type ExchangeTradesResponse,
   type PortfolioMetrics,
   type PortfolioSource,
   PortfolioSourceSchema as SharedPortfolioSourceSchema,
@@ -345,6 +347,53 @@ export function fetchPositions(
   params.set('source', source);
   if (underlying) params.set('underlying', underlying);
   return getJson(`/portfolio/positions?${params.toString()}`, PositionsResponseSchema);
+}
+
+const ExchangePortfolioVenueValues = ['derive', 'thalex'] as const satisfies readonly ExchangePortfolioVenue[];
+
+const ExchangeTradesResponseSchema: z.ZodType<ExchangeTradesResponse> = z.object({
+  accountId: z.string(),
+  venue: z.enum(ExchangePortfolioVenueValues),
+  ledgerEnabled: z.boolean(),
+  trades: z.array(
+    z.object({
+      venue: z.enum(ExchangePortfolioVenueValues),
+      tradeId: z.string().min(1),
+      orderId: z.string().nullable(),
+      groupId: z.string().nullable(),
+      instrumentName: z.string().min(1),
+      underlying: z.string().min(1),
+      expiry: z.string(),
+      strike: z.number(),
+      optionRight: z.enum(['call', 'put']),
+      direction: z.enum(['buy', 'sell']),
+      amount: z.number(),
+      priceUsd: z.number(),
+      feeUsd: z.number().nullable(),
+      realizedPnlUsd: z.number().nullable(),
+      liquidityRole: z.enum(['maker', 'taker']).nullable(),
+      timestampMs: z.number(),
+    }),
+  ),
+});
+
+export interface ExchangeTradesQuery {
+  venue: ExchangePortfolioVenue;
+  underlying: string;
+  expiry: string;
+  strike: number;
+  right: 'call' | 'put';
+}
+
+export function fetchExchangeTrades(query: ExchangeTradesQuery): Promise<ExchangeTradesResponse> {
+  const params = new URLSearchParams({
+    venue: query.venue,
+    underlying: query.underlying,
+    expiry: query.expiry,
+    strike: String(query.strike),
+    right: query.right,
+  });
+  return getJson(`/portfolio/exchange-trades?${params.toString()}`, ExchangeTradesResponseSchema);
 }
 
 export function fetchMetrics(

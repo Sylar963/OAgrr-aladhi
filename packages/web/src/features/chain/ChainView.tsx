@@ -8,6 +8,7 @@ import { useIsMobile } from '@hooks/useIsMobile';
 import { fmtIv, fmtUsdCompact } from '@lib/format';
 
 import ExpiryBar from './ExpiryBar';
+import { useExpiryPositions } from './use-expiry-positions';
 import StatStrip from './StatStrip';
 import ChainTable from './ChainTable';
 import VenueSidebar from './VenueSidebar';
@@ -25,6 +26,7 @@ export default function ChainView() {
   const myIv = useAppStore((s) => s.myIv);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
+  const expiryPositions = useExpiryPositions(underlying, activeVenues);
   const openPalette = useOpenPalette();
 
   const { data: expiriesData } = useExpiries(underlying);
@@ -150,6 +152,7 @@ export default function ChainView() {
           onSelect={setExpiry}
           onChangeAsset={openPalette}
           onPrefetch={prefetchChain}
+          positions={expiryPositions}
         />
 
         {displayChain && (

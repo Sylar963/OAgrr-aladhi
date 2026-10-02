@@ -135,6 +135,8 @@ export {
   ExchangePortfolioTradeSchema,
   type ExchangePortfolioVenue,
   ExchangePortfolioVenueSchema,
+  type ExchangeTradesResponse,
+  ExchangeTradesResponseSchema,
   type PortfolioAccounting,
   PortfolioAccountingSchema,
   type ExpiryBucketRow,

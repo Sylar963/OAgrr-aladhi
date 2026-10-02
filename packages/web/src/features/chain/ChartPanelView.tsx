@@ -7,6 +7,7 @@ import { useInstrumentCandles, useLiveMidFromChain } from './use-instrument-cand
 import { useCandleCountdown } from './candle-countdown.js';
 import { useInstrumentAttribution } from './use-instrument-attribution.js';
 import InstrumentChart from './InstrumentChart.js';
+import { useInstrumentEntries } from './use-instrument-entries.js';
 import InstrumentAttributionChart from './InstrumentAttributionChart.js';
 import { AttributionSummary } from './AttributionSummary.js';
 import { isChartSupportedVenue, NotSupportedVenueError, toVenueSymbol } from './instrument-symbol.js';
@@ -69,6 +70,15 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
     enabled: data.chartMode === 'attribution',
   });
   const countdown = useCandleCountdown(data.interval);
+  const entries = useInstrumentEntries({
+    venue: data.venue,
+    underlying: data.underlying,
+    expiry: data.expiry,
+    strike: data.strike,
+    type: data.type,
+  });
+  const liveSpotUsd =
+    liveMid?.usd != null && liveMid.raw != null && liveMid.raw > 0 ? liveMid.usd / liveMid.raw : null;
 
   function switchVenue(nextVenue: VenueId): void {
     if (nextVenue === data.venue) return;
@@ -153,6 +163,12 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
             data-active={data.overlays.ma20 || undefined}
             onClick={() => onPatch({ overlays: { ...data.overlays, ma20: !data.overlays.ma20 } })}
           >MA20</button>
+          <button
+            type="button"
+            data-active={data.overlays.entries !== false || undefined}
+            title={`My fills on ${VENUES[data.venue]?.shortLabel ?? data.venue} (paper + live)`}
+            onClick={() => onPatch({ overlays: { ...data.overlays, entries: data.overlays.entries === false } })}
+          >Entries{entries.length > 0 ? ` ${entries.length}` : ''}</button>
         </div>
         {strikeVenues.length > 0 && (
           <div className={styles.venueDots}>
@@ -178,7 +194,14 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
               </div>
             )}
             {!isLoading && !error && candles.length > 0 && (
-              <InstrumentChart candles={candles} markLine={markLine} overlays={data.overlays} />
+              <InstrumentChart
+                candles={candles}
+                markLine={markLine}
+                overlays={data.overlays}
+                entries={entries}
+                priceCurrency={priceCurrency}
+                fallbackSpotUsd={liveSpotUsd}
+              />
             )}
           </>
         ) : (

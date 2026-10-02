@@ -102,33 +102,16 @@ function StatCell({
   );
 }
 
-const IVP_TIP = (
-  <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>1y IV level (52-week IVP)</div>
-    <div>
-      Share of trailing-year Deribit DVOL daily closes at or below today’s value. DVOL is
-      Deribit’s 30-day ATM IV index. This is context only: it compares IV with past IV, not
-      with the volatility BTC is likely to deliver, so use IV vs Fcst to judge cheap or rich.
-    </div>
-    <div className={styles.statTipFormula}>
-      IVP = (# daily closes ≤ current) / (365 days) × 100
-    </div>
-    <ul className={styles.statTipList}>
-      <li>One stress episode sets the scale for the whole year, so it can sit near 0 for weeks.</li>
-      <li>Near the bottom of the range, intraday IV moves barely change it.</li>
-      <li>Sub-text shows the 52w low–high band. BTC and ETH only.</li>
-    </ul>
-  </div>
-);
-
 function RichnessTip({
   richness,
   atmIv,
   dte,
+  range52w,
 }: {
   richness: VolRichness;
   atmIv: number | null;
   dte: number;
+  range52w: { low: number; high: number } | null;
 }) {
   const expiry = expiryRichness(richness, atmIv, dte);
   const tenor = richnessTenorFor(richness, dte);
@@ -164,6 +147,11 @@ function RichnessTip({
           {richness.forecast.halfLifeDays}d. Usual premium: median IV − subsequent RV over{' '}
           {tenor.premiumBaseline.independentSampleCount} independent {tenorLabel} windows.
         </li>
+        {range52w && (
+          <li>
+            52-week 30D DVOL range: {fmtIv(range52w.low)}–{fmtIv(range52w.high)}.
+          </li>
+        )}
         <li>
           ±{(richness.fairBand * 100).toFixed(0)} pts reads as fair. The band and half-life are our
           choices, untested on BTC. Unknown baseline shows “–”, never zero.
@@ -301,19 +289,23 @@ export default function StatStrip({
             sub={`${expiry.state.toUpperCase()} · ${expiryTenor.tenorDays}D ${fmtZ(
               expiryTenor.intraday.zScore24h,
             )} 24h`}
-            labelTooltip={<RichnessTip richness={richness} atmIv={stats.atmIv} dte={dte} />}
+            labelTooltip={
+              <RichnessTip
+                richness={richness}
+                atmIv={stats.atmIv}
+                dte={dte}
+                range52w={
+                  marketStats?.dvol?.low52w != null && marketStats.dvol.high52w != null
+                    ? { low: marketStats.dvol.low52w, high: marketStats.dvol.high52w }
+                    : null
+                }
+              />
+            }
           />
         </>
       )}
       {marketStats?.dvol && (
         <>
-          <div className={styles.divider} />
-          <StatCell
-            label="1y IV lvl"
-            value={fmtPercentile(marketStats.dvol.ivp)}
-            sub={`52w: ${fmtIv(marketStats.dvol.low52w)}–${fmtIv(marketStats.dvol.high52w)}`}
-            labelTooltip={IVP_TIP}
-          />
           <div className={styles.divider} />
           <StatCell
             label="IV Δ1d"

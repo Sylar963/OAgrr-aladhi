@@ -47,11 +47,8 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
       <div>
         <span>ATM IV 30D</span>
         <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
-        <small
-          title="Context only: IV against its own past (90-day window and 52-week DVOL), not against expected realized volatility."
-        >
-          90d {fmtPercentile(context?.volatility.ivPercentile30d)} · 1y{' '}
-          {fmtPercentile(richness30d?.level.percentile1y)}
+        <small title="Context only: IV against its own 90-day past, not against expected realized volatility.">
+          90d {fmtPercentile(context?.volatility.ivPercentile30d)}
         </small>
       </div>
       <div

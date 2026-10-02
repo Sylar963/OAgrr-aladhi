@@ -26,7 +26,7 @@ Fully responsive with:
 
 Open `#alpha/BTC` and choose Call Credit, Put Credit, Call Debit, Put Debit, or Long Call in the shared strategy bar.
 The market strip leads with IV vs forecast (30D/7D excess premium, see
-`docs/knowledge/options-trading.md`), and keeps the 90-day/1y IV percentiles, 7d/30d realized
+`docs/knowledge/options-trading.md`), and keeps the 90-day IV percentile, 7d/30d realized
 volatility, VRP, implied move, range state, and spot extension visible across strategies. The original strike builder, venue-leg table, and
 volatility-smile view remain in place. Vertical spreads are compared with both legs on the same
 venue using executable bid/ask, known fees, displayed size, timestamps, and settlement metadata;

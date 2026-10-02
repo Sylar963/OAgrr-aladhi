@@ -142,8 +142,10 @@ model the Sell Straddle scanner uses, and reports per 7D and 30D constant-maturi
 3. **Intraday move:** z-score of current IV against the last 24h and 7d of 5-minute samples,
    the 24h IV change, and the 24h change in excess premium (forecast as of one daily candle
    earlier).
-4. **Context, demoted:** 90-day IV percentile, 52-week DVOL IVP (shown as "1y IV level", 30D
-   only), and the 7D/30D term structure.
+4. **Context, demoted:** 90-day IV percentile and the 7D/30D term structure. The 52-week DVOL
+   IVP stays in the API (`level.percentile1y`, `/api/stats`, the DVOL chart, the assistant's
+   market data) but was removed from the chain and Alpha strips on 2026-10-02 after Roberto
+   judged it close to useless. Only its 52-week range survives, in the IV vs Fcst tooltip.
 
 The chain strip computes the selected expiry's excess from the server's forecast curve (1–90 DTE)
 and the 7D (≤14 DTE) or 30D usual premium. Alpha's `volatility.state` now derives from the 30D

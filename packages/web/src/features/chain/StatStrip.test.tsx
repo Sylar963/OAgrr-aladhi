@@ -24,7 +24,7 @@ describe('StatStrip', () => {
     ).not.toThrow();
   });
 
-  it('leads with IV vs forecast for the selected expiry and demotes the 52-week IVP', () => {
+  it('shows IV vs forecast for the selected expiry and no 52-week IVP tile', () => {
     const tenor = (tenorDays: 7 | 30): TenorRichness => ({
       tenorDays,
       atmIv: 0.3,
@@ -81,8 +81,8 @@ describe('StatStrip', () => {
     expect(screen.getByText('IV vs Fcst')).toBeTruthy();
     expect(screen.getByText('+6.0 pts')).toBeTruthy();
     expect(screen.getByText('RICH · 7D −0.8σ 24h')).toBeTruthy();
-    expect(screen.getByText('1y IV lvl')).toBeTruthy();
-    expect(screen.getByText('p3')).toBeTruthy();
+    expect(screen.queryByText('1y IV lvl')).toBeNull();
     expect(screen.queryByText('IVP')).toBeNull();
+    expect(screen.getByText('IV Δ1d')).toBeTruthy();
   });
 });

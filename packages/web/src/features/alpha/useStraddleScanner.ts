@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlphaLongStraddleScannerResponseSchema,
   AlphaStraddleScannerResponseSchema,
   ShortStraddleEvaluationResponseSchema,
+  type AlphaLongStraddleScannerQuery,
   type AlphaStraddleScannerQuery,
 } from '@oggregator/protocol';
 
@@ -25,6 +27,30 @@ export function useStraddleScanner(config: AlphaStraddleScannerQuery, enabled = 
     queryFn: async () => {
       const payload = await fetchJson<unknown>(`/alpha/straddle-scanner?${params.toString()}`);
       return AlphaStraddleScannerResponseSchema.parse(payload);
+    },
+    enabled,
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+export function useLongStraddleScanner(config: AlphaLongStraddleScannerQuery, enabled = true) {
+  const params = new URLSearchParams({
+    underlying: config.underlying,
+    venues: config.venues.join(','),
+    minDte: String(config.minDte),
+    maxDte: String(config.maxDte),
+    equity: String(config.equity),
+    riskPct: String(config.riskPct),
+    maxSpreadPct: String(config.maxSpreadPct),
+    limit: String(config.limit),
+  });
+
+  return useQuery({
+    queryKey: ['alpha', 'long-straddle-scanner', config],
+    queryFn: async () => {
+      const payload = await fetchJson<unknown>(`/alpha/long-straddle-scanner?${params.toString()}`);
+      return AlphaLongStraddleScannerResponseSchema.parse(payload);
     },
     enabled,
     refetchInterval: 10_000,

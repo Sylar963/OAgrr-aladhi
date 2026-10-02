@@ -13,7 +13,8 @@ interface AlphaContextStripProps {
     | 'put-debit'
     | 'long-call'
     | 'long-put'
-    | 'short-straddle';
+    | 'short-straddle'
+    | 'long-straddle';
   loading: boolean;
 }
 
@@ -23,7 +24,9 @@ function setupLabel(
 ): string {
   if (context == null) return 'UNAVAILABLE';
   if (strategy.endsWith('debit')) return 'CHECK DIRECTION + PRICE';
-  if (strategy === 'long-call') return context.setup.longCall.toUpperCase();
+  if (strategy === 'long-call' || strategy === 'long-straddle') {
+    return context.setup.longCall.toUpperCase();
+  }
   if (strategy === 'long-put') return context.setup.protectivePut.toUpperCase();
   return context.setup.creditSpread.toUpperCase();
 }

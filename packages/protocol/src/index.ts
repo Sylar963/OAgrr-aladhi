@@ -66,6 +66,18 @@ export {
   AlphaStraddleVerdictSchema,
 } from './alpha-straddle.js';
 export {
+  type AlphaLongStraddleCandidate,
+  AlphaLongStraddleCandidateSchema,
+  type AlphaLongStraddleFlag,
+  AlphaLongStraddleFlagSchema,
+  type AlphaLongStraddleScannerQuery,
+  AlphaLongStraddleScannerQuerySchema,
+  type AlphaLongStraddleScannerResponse,
+  AlphaLongStraddleScannerResponseSchema,
+  type AlphaLongStraddleVerdict,
+  AlphaLongStraddleVerdictSchema,
+} from './alpha-long-straddle.js';
+export {
   type FlowTrade,
   type FlowTradeHistoryCursor,
   FlowTradeHistoryCursorSchema,

@@ -227,7 +227,8 @@
   color: var(--verdict-color);
 }
 
-[data-verdict='sell-candidate'] {
+[data-verdict='sell-candidate'],
+[data-verdict='buy-candidate'] {
   --verdict-color: var(--color-profit);
 }
 
@@ -235,12 +236,18 @@
   --verdict-color: var(--color-warning);
 }
 
-[data-verdict='cheap'] {
+[data-verdict='cheap'],
+[data-verdict='expensive'] {
   --verdict-color: var(--color-loss);
 }
 
 .straddleRoute > span:last-child i {
   background: var(--color-loss);
+}
+
+.longRoute > span i,
+.longRoute.longRoute > span:last-child i {
+  background: var(--color-profit);
 }
 
 .rowVol {

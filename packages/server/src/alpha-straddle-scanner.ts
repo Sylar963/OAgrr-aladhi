@@ -69,7 +69,7 @@ export function termStructureState(
   return termStructure(atmIv7d, atmIv30d).state;
 }
 
-function straddleValue(forward: number, strike: number, vol: number, tYears: number): number {
+export function straddleValue(forward: number, strike: number, vol: number, tYears: number): number {
   return (
     price76(forward, strike, vol, tYears, 'call') + price76(forward, strike, vol, tYears, 'put')
   );
@@ -94,13 +94,13 @@ export function solveStraddleIv(
   return (low + high) / 2;
 }
 
-function lognormalCdf(level: number, forward: number, vol: number, tYears: number): number {
+export function lognormalCdf(level: number, forward: number, vol: number, tYears: number): number {
   if (level <= 0) return 0;
   const sd = vol * Math.sqrt(tYears);
   return cdf((Math.log(level / forward) + 0.5 * sd * sd) / sd);
 }
 
-function floorToStep(value: number, step: number): number {
+export function floorToStep(value: number, step: number): number {
   if (!Number.isFinite(value)) return value;
   return Number((Math.floor((value + Number.EPSILON) / step) * step).toFixed(8));
 }

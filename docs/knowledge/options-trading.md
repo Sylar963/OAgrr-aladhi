@@ -121,6 +121,69 @@ as evidence, which remains inconclusive until the per-horizon confidence interva
 zero. On 2026-09-26 the live scan rated every BTC straddle "cheap": sell IV was 31–34%
 against a forecast of about 37%, with 30D IV at p7.
 
+## Weekend short straddle (sell Friday, buy back Monday): reconstruction
+
+Date: 2026-10-02. Status: **hypothesis**, empirical reconstruction, not a validated edge.
+Prompt: a claim that selling a BTC straddle every Friday and closing Monday makes money.
+
+Method: for 300 Fridays (2021-01 to 2026-09), sell the Deribit ATM straddle on the next
+Friday expiry. Leg IVs are inverted from the mark prices on Deribit trades in a 3h entry
+window and a 4h exit window (history.deribit.com), and repriced with Black-76 on hourly
+BTC-PERPETUAL closes. Costs: 0.03% of spot per leg in taker fees (capped at 12.5% of
+premium) plus a 4 bp of spot half-spread per leg, on entry and exit. The spread is assumed,
+not measured. P&L is split into theta (time at constant spot and IV), gamma (spot move),
+and vega (IV change). Weeks without trades are skipped (2–8%).
+
+Findings:
+
+- Weekend realized variance was 0.52–0.73× weekday variance (Fri 08→Mon 08 vs Mon 08→Fri 08
+  UTC hourly RV, by year). Market makers already price this. Friday's 7D IV is low, and the
+  same strike's IV is on average **+5.4 pts higher on Monday** (the weekend discount unwinds).
+  Our own snapshots show it too: on 2026-09-25 spot moved −1% and IV went from ~30.5 to ~34.5.
+- Unconditional Fri 08→Mon 08: +0.01% of spot at mid and −0.27% net (95% CI −0.54 to −0.01),
+  n=294, with a 61% win rate. The worst week (2024-08-02, −18% spot) lost 14.8% of spot.
+  Other entry/exit times (Fri 16/20, Sun 20, Mon 00) were also ≤ 0 net. A high win rate
+  with negative expectancy is the classic short-vol profile (K16).
+- Conditional on information known Friday, **7D IV > max(RV7, RV30) + 5 pts AND RV7 ≤ RV30**:
+  about +0.62% of spot net per weekend, CI excluding zero for all four timings tested
+  (n=19–27, win 78–83%, worst −0.6% to −3.0%). The result grows with the threshold (0/3/5/8 pts)
+  and is positive in 2021, 2022 and 2024. It is rare: about 5–10 weekends a year, 2 in 2025 and
+  none in 2026 so far. Fri 16:00 → Mon 00:00 UTC had the smallest tails.
+- The tercile split by IV level was look-ahead (IV trends down), so we replaced it with the
+  ex-ante IV − RV condition above. About 24 condition × timing slices were inspected, so the
+  conditional result can still be partly data-mined. The rule matches the scanner's existing
+  hurdle (K12) and accelerating-RV flag (K15), which limits the freedom used.
+
+Interpretation: market makers do not earn the weekend by selling cheap straddles at the bid.
+They earn the spread from takers, delta-hedge, and quote weekends at reduced variance weight.
+A taker selling every Friday pays the spread twice for theta that is mostly priced away.
+Sell only when Friday IV clears realized vol by a margin and realized vol is calming. A
+"cheap" verdict on a Friday means skip, not "sell anyway because it is the weekend".
+
+Next: out-of-sample tracking from the live snapshots (Friday cohorts × 72h marks); measure
+actual per-venue spreads instead of the 4 bp assumption; test strangles (K17); fit a
+weekend variance weight for the scanner's forecast (calendar time currently treats every day
+as equal, which overstates weekend theta and understates Monday IV).
+
+### Long 7D straddle held to expiry (same reconstruction)
+
+Buy the Deribit ATM straddle on Fridays at 08:00 UTC, 2021-01 to 2026-09. Entry costs are as
+above, plus a 0.015% settlement fee. Return is net P&L ÷ debit:
+
+- All weeks: −3.9% (CI −15 to +8), n=293, win 33%, median −34%, best +739%. Weekly ATM IV
+  averaged only 0.1 pt above the next 7 days' realized vol, so it was about fairly priced
+  before costs.
+- **IV < trailing realized** (the scanner's "cheap"): −12.5% (CI −23 to −2). IV more than
+  5 pts below min(RV7, RV30): −40.5% (CI −60 to −21), win 15%. Realized spikes fade, and the
+  market prices the fade. "Cheap to sell" does **not** mean "good to buy".
+- IV below the scanner's mean-reverting forecast (0, −5, −10 pts): −2% to −14%, all CIs
+  include zero. IV more than 10 pts below 180D realized: +10% (CI −13 to +34). Nothing tested
+  is an edge.
+
+Product rule: a long straddle is a paid bet on a move. Price the move, bound the loss to the
+debit, and require the user's catalyst thesis. Never present it as the inverse of a cheap
+short-straddle verdict.
+
 ## Is IV cheap or rich? Richness reading (chain strip, Alpha strip, IV Rank panel)
 
 Problem (2026-10-02): the headline IVP ranked 30D DVOL against 365 daily closes. It read p3

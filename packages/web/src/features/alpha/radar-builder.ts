@@ -1,4 +1,8 @@
-import type { AlphaLottoCandidate, AlphaStraddleCandidate } from '@oggregator/protocol';
+import type {
+  AlphaLongStraddleCandidate,
+  AlphaLottoCandidate,
+  AlphaStraddleCandidate,
+} from '@oggregator/protocol';
 
 import type { Leg } from '@features/architect/payoff';
 
@@ -68,6 +72,43 @@ export function straddleToBuilderLegs(candidate: StraddleBuilderCandidate): Leg[
   return [
     leg('call', candidate.callInstrument, candidate.callBid),
     leg('put', candidate.putInstrument, candidate.putBid),
+  ];
+}
+
+type LongStraddleBuilderCandidate = Pick<
+  AlphaLongStraddleCandidate,
+  | 'venue'
+  | 'expiry'
+  | 'strike'
+  | 'callInstrument'
+  | 'putInstrument'
+  | 'callAsk'
+  | 'putAsk'
+  | 'markIv'
+  | 'suggestedQuantity'
+  | 'minQuantity'
+>;
+
+export function longStraddleToBuilderLegs(candidate: LongStraddleBuilderCandidate): Leg[] {
+  const quantity = candidate.suggestedQuantity > 0 ? candidate.suggestedQuantity : candidate.minQuantity;
+  const leg = (type: 'call' | 'put', instrument: string, ask: number): Leg => ({
+    id: `long-straddle:${candidate.venue}:${instrument}`,
+    type,
+    direction: 'buy',
+    strike: candidate.strike,
+    expiry: candidate.expiry,
+    quantity,
+    entryPrice: ask,
+    venue: candidate.venue,
+    delta: null,
+    gamma: null,
+    theta: null,
+    vega: null,
+    iv: candidate.markIv,
+  });
+  return [
+    leg('call', candidate.callInstrument, candidate.callAsk),
+    leg('put', candidate.putInstrument, candidate.putAsk),
   ];
 }
 

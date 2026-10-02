@@ -12,6 +12,7 @@ import AlphaContextStrip from './AlphaContextStrip';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
+import LongStraddlePanel from './LongStraddlePanel';
 import LottoScannerPanel from './LottoScannerPanel';
 import ProtectivePutPanel from './ProtectivePutPanel';
 import CrossVenueOpportunities from './CrossVenueOpportunities';
@@ -31,11 +32,16 @@ import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
-type AlphaStrategy = SpreadKind | 'long-call' | 'long-put' | 'short-straddle';
+type AlphaStrategy = SpreadKind | 'long-call' | 'long-put' | 'short-straddle' | 'long-straddle';
 type ScannerStrategy = Exclude<AlphaStrategy, SpreadKind>;
 
 function isScannerStrategy(strategy: AlphaStrategy): strategy is ScannerStrategy {
-  return strategy === 'long-call' || strategy === 'long-put' || strategy === 'short-straddle';
+  return (
+    strategy === 'long-call' ||
+    strategy === 'long-put' ||
+    strategy === 'short-straddle' ||
+    strategy === 'long-straddle'
+  );
 }
 
 const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
@@ -46,6 +52,7 @@ const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'long-call', label: 'Long Call' },
   { id: 'long-put', label: 'Long Put' },
   { id: 'short-straddle', label: 'Sell Straddle' },
+  { id: 'long-straddle', label: 'Buy Straddle' },
 ];
 
 export default function AlphaView() {
@@ -358,6 +365,12 @@ export default function AlphaView() {
       {strategy === 'short-straddle' && (
         <div className={styles.scannerWorkspace}>
           <StraddleScannerPanel underlying={underlying} venues={activeVenues} />
+        </div>
+      )}
+
+      {strategy === 'long-straddle' && (
+        <div className={styles.scannerWorkspace}>
+          <LongStraddlePanel underlying={underlying} venues={activeVenues} />
         </div>
       )}
 

@@ -130,10 +130,9 @@ fees at the asks. Terminal P&L = |S_T − K| − D. Breakevens K ± D. Loss is c
 uses the same ATM selection, chains, and forecast model as the sell scanner:
 
 - **Buy IV:** the Black-76 vol at which the straddle is worth D.
-- **Forecast:** the sell scanner's forecast, with the weekend share of the remaining life weighted
-  at 0.65× variance and renormalized so a full week keeps its calendar forecast. 0.65 is the
-  pooled 2021–26 weekend/weekday variance ratio from the reconstruction below. Without this,
-  weekend-heavy dailies look cheap every Friday. The sell scanner still uses calendar time.
+- **Forecast:** the shared weekend-adjusted forecast (`forecastVolUntil`, see "Weekend
+  variance weight" below), the same one the Sell Straddle tab uses. The card also shows the
+  calendar-time forecast and the weekend share of the remaining life.
 - **Expensive (do not buy):** buy IV ≥ forecast, OR buy IV at or above the cone median.
 - **Watch:** forecast − buy IV < 2 pts (fair band); cone above p25; buy IV more than 5 pts below
   min(RV7, RV30) (the −40% case below); backwardation; under 2 DTE; size below venue minimum.
@@ -144,6 +143,19 @@ The fair band, p25 and 2-DTE thresholds are our choices. The reconstruction foun
 evidence** that IV below this forecast predicts profitable long straddles (see below). A green
 row is a price check that needs a move thesis. On 2026-10-02 (Friday night) the live scan had no
 buy candidates: 1–6 DTE were watch (IV far below realized) and 13+ DTE were expensive (cone > p50).
+
+## Weekend variance weight (shared forecast)
+
+`packages/core/src/services/vol-richness.ts` weights the Saturday–Sunday UTC share of an option's
+remaining life at `WEEKEND_VARIANCE_WEIGHT` = 0.52× weekday variance, renormalized so a whole
+week keeps the calendar forecast (`forecastVolUntil`). 0.52 is the pooled 2021–26 Sat–Sun vs
+Mon–Fri hourly variance ratio (yearly 0.35–0.67; 0.39–0.47 since 2023). Venues quote weekends at
+reduced variance. Without the weight, weekend-heavy short expiries look cheap every Friday, and
+a Friday sell IV was judged against a forecast that was too high. Both straddle scanners and
+the chain strip's per-expiry forecast curve use it. The constant-maturity 7D/30D richness tenors
+stay in calendar time: a 7D window is always exactly 2/7 weekend, so its weight is 1, and the
+ex-ante z-score history is calendar-based. The weight is a measurement, not a fitted forecast
+input, and it does not model the Monday re-bid or event days.
 
 ## Weekend short straddle (sell Friday, buy back Monday): reconstruction
 
@@ -156,15 +168,17 @@ window and a 4h exit window (history.deribit.com), and repriced with Black-76 on
 BTC-PERPETUAL closes. Costs: 0.03% of spot per leg in taker fees (capped at 12.5% of
 premium) plus a 4 bp of spot half-spread per leg, on entry and exit. The spread is assumed,
 not measured. P&L is split into theta (time at constant spot and IV), gamma (spot move),
-and vega (IV change). Weeks without trades are skipped (2–8%).
+and vega (IV change). Weeks without trades are skipped (2–8%). Reproduce with
+`scripts/research/btc-weekly-straddles/` (`reconstruct.mjs`, then `analyze.mjs`). Data is
+cached in its gitignored `.cache/`.
 
 Findings:
 
 - Weekend realized variance was 0.52–0.73× weekday variance (Fri 08→Mon 08 vs Mon 08→Fri 08
-  UTC hourly RV, by year). Market makers already price this. Friday's 7D IV is low, and the
+  UTC hourly RV, by year; 0.35–0.67 for Sat–Sun vs Mon–Fri UTC). Market makers already price this. Friday's 7D IV is low, and the
   same strike's IV is on average **+5.4 pts higher on Monday** (the weekend discount unwinds).
   Our own snapshots show it too: on 2026-09-25 spot moved −1% and IV went from ~30.5 to ~34.5.
-- Unconditional Fri 08→Mon 08: +0.01% of spot at mid and −0.27% net (95% CI −0.54 to −0.01),
+- Unconditional Fri 08→Mon 08: about 0% of spot at mid and −0.29% net (95% CI −0.55 to −0.02),
   n=294, with a 61% win rate. The worst week (2024-08-02, −18% spot) lost 14.8% of spot.
   Other entry/exit times (Fri 16/20, Sun 20, Mon 00) were also ≤ 0 net. A high win rate
   with negative expectancy is the classic short-vol profile (K16).
@@ -185,22 +199,21 @@ Sell only when Friday IV clears realized vol by a margin and realized vol is cal
 "cheap" verdict on a Friday means skip, not "sell anyway because it is the weekend".
 
 Next: out-of-sample tracking from the live snapshots (Friday cohorts × 72h marks); measure
-actual per-venue spreads instead of the 4 bp assumption; test strangles (K17); fit a
-weekend variance weight for the scanner's forecast (calendar time currently treats every day
-as equal, which overstates weekend theta and understates Monday IV).
+actual per-venue spreads instead of the 4 bp assumption; test strangles (K17). The weekend
+variance weight is now in the shared forecast (above).
 
 ### Long 7D straddle held to expiry (same reconstruction)
 
 Buy the Deribit ATM straddle on Fridays at 08:00 UTC, 2021-01 to 2026-09. Entry costs are as
 above, plus a 0.015% settlement fee. Return is net P&L ÷ debit:
 
-- All weeks: −3.9% (CI −15 to +8), n=293, win 33%, median −34%, best +739%. Weekly ATM IV
+- All weeks: −3.6% (CI −15 to +8), n=294, win 33%, median −31%, best +739%. Weekly ATM IV
   averaged only 0.1 pt above the next 7 days' realized vol, so it was about fairly priced
   before costs.
-- **IV < trailing realized** (the scanner's "cheap"): −12.5% (CI −23 to −2). IV more than
+- **IV < trailing realized** (the scanner's "cheap"): −12.1% (CI −23 to −1). IV more than
   5 pts below min(RV7, RV30): −40.5% (CI −60 to −21), win 15%. Realized spikes fade, and the
   market prices the fade. "Cheap to sell" does **not** mean "good to buy".
-- IV below the scanner's mean-reverting forecast (0, −5, −10 pts): −2% to −14%, all CIs
+- IV below the scanner's mean-reverting forecast (0, −5, −10 pts): −3% to −15%, all CIs
   include zero. IV more than 10 pts below 180D realized: +10% (CI −13 to +34). Nothing tested
   is an edge.
 

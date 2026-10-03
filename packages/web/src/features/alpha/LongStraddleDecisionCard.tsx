@@ -327,11 +327,11 @@ function Dashboard({
         )}
         <p className={signal.footnote}>
           {fmtPct(candidate.weekendShare * 100, 0)} of the remaining life is weekend, weighted at
-          0.65× weekday variance (BTC 2021–26), so the forecast is {fmtIv(candidate.forecastVol)}{' '}
+          0.52× weekday variance (BTC 2021–26), so the forecast is {fmtIv(candidate.forecastVol)}{' '}
           against {fmtIv(candidate.calendarForecastVol)} in calendar time. Daily breakeven move {fmtPct(candidate.dailyBreakevenMovePct, 2)} vs forecast{' '}
           {fmtPct(candidate.forecastDailyMovePct, 2)}. Entry fees {fmtUsd(candidate.entryFees * quantity)}.
           In our 2021–26 Deribit reconstruction, buying IV below this forecast was not yet a
-          demonstrated edge (−2% to −14% of debit, CIs include zero). Treat green as a price check
+          demonstrated edge (−3% to −15% of debit, CIs include zero). Treat green as a price check
           that needs your own move thesis.
         </p>
       </details>

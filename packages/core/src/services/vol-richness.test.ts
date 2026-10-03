@@ -8,6 +8,9 @@ import {
   forecastFromCloses,
   richnessState,
   termStructure,
+  WEEKEND_VARIANCE_WEIGHT,
+  weekendAdjustedVol,
+  weekendShare,
   type VolRichnessInput,
 } from './vol-richness.js';
 
@@ -71,6 +74,34 @@ describe('forecastFromCloses', () => {
     const model = buildVolForecastModel(daily, { '7d': [], '30d': [] });
     const closes = daily.map((candle) => candle.close);
     expect(model.forecastVol(12)).toBe(forecastFromCloses(closes, 12));
+  });
+});
+
+describe('weekend-adjusted forecast', () => {
+  // Friday 2026-01-02 08:00 UTC, a weekly expiry time.
+  const FRIDAY = Date.UTC(2026, 0, 2, 8);
+
+  it('measures the Saturday and Sunday share of a window in UTC', () => {
+    expect(weekendShare(FRIDAY, FRIDAY + 7 * DAY_MS)).toBeCloseTo(2 / 7, 10);
+    expect(weekendShare(FRIDAY, FRIDAY + 2 * DAY_MS)).toBeCloseTo(32 / 48, 10);
+    expect(weekendShare(FRIDAY + 3 * DAY_MS, FRIDAY + 4 * DAY_MS)).toBe(0);
+    expect(weekendShare(FRIDAY, FRIDAY)).toBe(0);
+  });
+
+  it('keeps a whole week at the calendar forecast and scales pure weekend and weekday time', () => {
+    const average = 5 / 7 + (2 / 7) * WEEKEND_VARIANCE_WEIGHT;
+    expect(weekendAdjustedVol(0.4, 2 / 7)).toBeCloseTo(0.4, 10);
+    expect(weekendAdjustedVol(0.4, 1)).toBeCloseTo(0.4 * Math.sqrt(WEEKEND_VARIANCE_WEIGHT / average), 10);
+    expect(weekendAdjustedVol(0.4, 0)).toBeCloseTo(0.4 * Math.sqrt(1 / average), 10);
+  });
+
+  it('applies the adjustment to the forecast until an expiry', () => {
+    const model = buildVolForecastModel(candles(120), { '7d': [], '30d': [] });
+    expect(model.forecastVolUntil(FRIDAY, FRIDAY + 7 * DAY_MS)).toBeCloseTo(model.forecastVol(7)!, 10);
+    expect(model.forecastVolUntil(FRIDAY, FRIDAY + 2 * DAY_MS)).toBeCloseTo(
+      weekendAdjustedVol(model.forecastVol(2)!, 32 / 48),
+      10,
+    );
   });
 });
 

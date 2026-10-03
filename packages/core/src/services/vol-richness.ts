@@ -21,6 +21,11 @@ const IV_24H_TOLERANCE_MS = HOUR_MS;
 export const EXCESS_PREMIUM_FAIR_BAND = 0.02;
 const TERM_FLAT_BAND = 0.02;
 const FORECAST_CURVE_MAX_DTE = 90;
+// Pooled 2021–26 BTC-PERPETUAL hourly variance, Sat–Sun vs Mon–Fri UTC (yearly 0.35–0.67).
+// Venues quote weekends at reduced variance, so a calendar-time forecast makes weekend-heavy
+// short expiries look cheap. Our measurement, not a sourced rule.
+export const WEEKEND_VARIANCE_WEIGHT = 0.52;
+const AVERAGE_WEEK_WEIGHT = 5 / 7 + (2 / 7) * WEEKEND_VARIANCE_WEIGHT;
 
 export type RichnessTenor = '7d' | '30d';
 export type PremiumBaselineSource = 'venue' | 'blended';
@@ -49,10 +54,30 @@ export interface PremiumBaseline {
 
 export interface VolForecastModel {
   forecast: VolForecastSummary;
+  /** Calendar-time forecast: every day weighs the same. */
   forecastVol(dteDays: number): number | null;
+  /** Forecast over [nowMs, expiryTs) with weekend days weighted at reduced variance. */
+  forecastVolUntil(nowMs: number, expiryTs: number): number | null;
   realizedMatched(dteDays: number): number | null;
   conePercentile(vol: number, dteDays: number): number | null;
   premiumBaseline(dteDays: number): PremiumBaseline;
+}
+
+/** Fraction of [fromMs, toMs) that falls on Saturday or Sunday UTC. */
+export function weekendShare(fromMs: number, toMs: number): number {
+  if (!(toMs > fromMs)) return 0;
+  let weekend = 0;
+  for (let dayStart = Math.floor(fromMs / DAY_MS) * DAY_MS; dayStart < toMs; dayStart += DAY_MS) {
+    const weekday = new Date(dayStart).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) continue;
+    weekend += Math.max(0, Math.min(toMs, dayStart + DAY_MS) - Math.max(fromMs, dayStart));
+  }
+  return weekend / (toMs - fromMs);
+}
+
+/** Rescales a calendar-time vol so a whole week keeps its variance and weekends weigh less. */
+export function weekendAdjustedVol(vol: number, share: number): number {
+  return vol * Math.sqrt((1 - share + share * WEEKEND_VARIANCE_WEIGHT) / AVERAGE_WEEK_WEIGHT);
 }
 
 function windowDays(dteDays: number, available: number): number {
@@ -176,6 +201,11 @@ export function buildVolForecastModel(
     forecastVol(dteDays) {
       if (rv7d == null) return null;
       return forecastFromCloses(closes, dteDays);
+    },
+    forecastVolUntil(nowMs, expiryTs) {
+      if (rv7d == null) return null;
+      const calendar = forecastFromCloses(closes, (expiryTs - nowMs) / DAY_MS);
+      return calendar == null ? null : weekendAdjustedVol(calendar, weekendShare(nowMs, expiryTs));
     },
     realizedMatched(dteDays) {
       if (available < 3) return null;
@@ -423,7 +453,7 @@ export function buildVolRichness(input: VolRichnessInput): VolRichness {
   for (let dteDays = 1; dteDays <= FORECAST_CURVE_MAX_DTE; dteDays += 1) {
     forecastCurve.push({
       dteDays,
-      forecastVol: model.forecastVol(dteDays),
+      forecastVol: model.forecastVolUntil(input.nowMs, input.nowMs + dteDays * DAY_MS),
       usualPremium: model.premiumBaseline(dteDays).medianSpread,
     });
   }

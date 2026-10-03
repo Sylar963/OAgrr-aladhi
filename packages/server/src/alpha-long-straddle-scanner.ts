@@ -1,4 +1,4 @@
-import type { EnrichedStrike, VenueQuote } from '@oggregator/core';
+import { weekendShare, type EnrichedStrike } from '@oggregator/core';
 import type {
   AlphaLongStraddleCandidate,
   AlphaLongStraddleFlag,
@@ -7,11 +7,14 @@ import type {
 } from '@oggregator/protocol';
 
 import {
+  finite,
   floorToStep,
   lognormalCdf,
+  readStraddlePair,
   solveStraddleIv,
   straddleValue,
   type StraddleExpiryInput,
+  type StraddlePairSkipReason,
   type StraddleMarketContext,
   type StraddleVolModel,
 } from './alpha-straddle-scanner.js';
@@ -19,8 +22,6 @@ import {
 const DAY_MS = 86_400_000;
 const DAYS_IN_YEAR = 365;
 const YEAR_MS = DAYS_IN_YEAR * DAY_MS;
-const MAX_QUOTE_AGE_MS = 30_000;
-const MAX_LEG_QUOTE_SKEW_MS = 5_000;
 const CONE_BUY_PERCENTILE = 25;
 const CONE_EXPENSIVE_PERCENTILE = 50;
 // Same ±2 vol-point "fair" band as the richness reading; our choice, untested.
@@ -28,99 +29,16 @@ const FAIR_BAND_VOL = 0.02;
 // 2021–26 Deribit reconstruction: 7D straddles bought >5 pts under min(RV7, RV30) returned
 // −40% of debit (realized fades and the market prices it). Flag, don't block.
 const BELOW_REALIZED_VOL = 0.05;
-// Pooled 2021–26 BTC-PERPETUAL hourly variance, Fri 08→Mon 08 vs Mon 08→Fri 08 UTC (yearly
-// 0.52–0.73). Venues quote weekends at reduced variance, so a calendar-time forecast makes
-// weekend-heavy short expiries look cheap.
-const WEEKEND_VARIANCE_WEIGHT = 0.65;
-const AVERAGE_WEEK_WEIGHT = 5 / 7 + (2 / 7) * WEEKEND_VARIANCE_WEIGHT;
 const THETA_WINDOW_DTE = 2;
 
 export type LongStraddleSkipReason =
-  | 'missing_pair'
-  | 'incompatible_pair'
-  | 'missing_market'
-  | 'missing_fees'
-  | 'stale_quote'
-  | 'quote_skew'
+  | StraddlePairSkipReason
   | 'wide_spread'
   | 'debit_below_intrinsic';
 
 export type LongStraddleCandidateResult =
   | { candidate: AlphaLongStraddleCandidate; skipReason: null }
   | { candidate: null; skipReason: LongStraddleSkipReason };
-
-interface AskLeg {
-  bid: number;
-  ask: number;
-  askSize: number;
-  fee: number;
-  delta: number | null;
-  markIv: number | null;
-  asOfMs: number;
-  forward: number | null;
-  symbol: string;
-  minQuantity: number;
-  quantityStep: number;
-  settle: string;
-  inverse: boolean;
-}
-
-function positive(value: number | null | undefined): value is number {
-  return value != null && Number.isFinite(value) && value > 0;
-}
-
-function finite(value: number | null | undefined): value is number {
-  return value != null && Number.isFinite(value);
-}
-
-function readAskLeg(
-  quote: VenueQuote | undefined,
-): AskLeg | 'missing' | 'missing_market' | 'missing_fees' {
-  const execution = quote?.execution;
-  if (quote == null || execution == null) return 'missing';
-  if (
-    !positive(execution.bidUsd) ||
-    !positive(execution.askUsd) ||
-    execution.askUsd < execution.bidUsd ||
-    !positive(execution.askSize) ||
-    !finite(quote.asOfMs)
-  ) {
-    return 'missing_market';
-  }
-  if (!finite(execution.askTakerFeeUsd) || execution.askTakerFeeUsd < 0) return 'missing_fees';
-  return {
-    bid: execution.bidUsd,
-    ask: execution.askUsd,
-    askSize: execution.askSize,
-    fee: execution.askTakerFeeUsd,
-    delta: quote.delta,
-    markIv: quote.markIv,
-    asOfMs: quote.asOfMs,
-    forward: quote.underlyingPriceUsd ?? null,
-    symbol: execution.exchangeSymbol,
-    minQuantity: execution.minQuantity,
-    quantityStep: execution.quantityStep,
-    settle: execution.settleCurrency,
-    inverse: execution.inverse,
-  };
-}
-
-/** Fraction of [fromMs, toMs) that falls on Saturday or Sunday UTC. */
-export function weekendShare(fromMs: number, toMs: number): number {
-  if (!(toMs > fromMs)) return 0;
-  let weekend = 0;
-  for (let dayStart = Math.floor(fromMs / DAY_MS) * DAY_MS; dayStart < toMs; dayStart += DAY_MS) {
-    const weekday = new Date(dayStart).getUTCDay();
-    if (weekday !== 0 && weekday !== 6) continue;
-    weekend += Math.max(0, Math.min(toMs, dayStart + DAY_MS) - Math.max(fromMs, dayStart));
-  }
-  return weekend / (toMs - fromMs);
-}
-
-/** Rescales a calendar-time vol so an average week keeps its variance. */
-export function weekendAdjustedVol(vol: number, share: number): number {
-  return vol * Math.sqrt((1 - share + share * WEEKEND_VARIANCE_WEIGHT) / AVERAGE_WEEK_WEIGHT);
-}
 
 export function computeLongStraddleCandidate(
   input: StraddleExpiryInput,
@@ -130,26 +48,9 @@ export function computeLongStraddleCandidate(
   config: AlphaLongStraddleScannerQuery,
   nowMs: number,
 ): LongStraddleCandidateResult {
-  const call = readAskLeg(strike.call.venues[input.venue]);
-  const put = readAskLeg(strike.put.venues[input.venue]);
-  if (call === 'missing' || put === 'missing') return { candidate: null, skipReason: 'missing_pair' };
-  if (call === 'missing_market' || put === 'missing_market') {
-    return { candidate: null, skipReason: 'missing_market' };
-  }
-  if (call === 'missing_fees' || put === 'missing_fees') {
-    return { candidate: null, skipReason: 'missing_fees' };
-  }
-  if (call.settle !== put.settle || call.inverse !== put.inverse) {
-    return { candidate: null, skipReason: 'incompatible_pair' };
-  }
-  if (nowMs - Math.min(call.asOfMs, put.asOfMs) > MAX_QUOTE_AGE_MS) {
-    return { candidate: null, skipReason: 'stale_quote' };
-  }
-  if (Math.abs(call.asOfMs - put.asOfMs) > MAX_LEG_QUOTE_SKEW_MS) {
-    return { candidate: null, skipReason: 'quote_skew' };
-  }
-  const forward = call.forward ?? put.forward;
-  if (!positive(forward)) return { candidate: null, skipReason: 'missing_market' };
+  const pair = readStraddlePair(strike, input.venue, 'buy', nowMs);
+  if (typeof pair === 'string') return { candidate: null, skipReason: pair };
+  const { call, put, forward } = pair;
 
   const bidCredit = call.bid + put.bid;
   const grossDebit = call.ask + put.ask;
@@ -166,9 +67,7 @@ export function computeLongStraddleCandidate(
   if (buyIv == null) return { candidate: null, skipReason: 'debit_below_intrinsic' };
 
   const calendarForecastVol = model.forecastVol(dte);
-  const weekend = weekendShare(nowMs, input.expiryTs);
-  const forecastVol =
-    calendarForecastVol == null ? null : weekendAdjustedVol(calendarForecastVol, weekend);
+  const forecastVol = model.forecastVolUntil(nowMs, input.expiryTs);
   const realizedMatchedVol = model.realizedMatched(dte);
   const volEdge = forecastVol == null ? null : forecastVol - buyIv;
   const conePercentile = model.conePercentile(buyIv, dte);
@@ -193,7 +92,7 @@ export function computeLongStraddleCandidate(
 
   const minQuantity = Math.max(call.minQuantity, put.minQuantity);
   const quantityStep = Math.max(call.quantityStep, put.quantityStep);
-  const topOfBookQuantity = Math.min(call.askSize, put.askSize);
+  const topOfBookQuantity = Math.min(call.size, put.size);
   const budgetUsd = (config.equity * config.riskPct) / 100;
   const riskBudgetQuantity = floorToStep(budgetUsd / netDebit, quantityStep);
   const fitted = floorToStep(Math.min(riskBudgetQuantity, topOfBookQuantity), quantityStep);
@@ -240,7 +139,7 @@ export function computeLongStraddleCandidate(
       buyIv,
       forecastVol,
       calendarForecastVol,
-      weekendShare: weekend,
+      weekendShare: weekendShare(nowMs, input.expiryTs),
       realizedMatchedVol,
       volEdge,
       conePercentile,

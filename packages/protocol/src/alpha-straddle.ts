@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { VenueIdSchema } from './ws.js';
 
-const NullableNumberSchema = z.number().nullable();
+export const NullableNumberSchema = z.number().nullable();
 
-const VenueListSchema = z.preprocess(
+export const VenueListSchema = z.preprocess(
   (value) =>
     typeof value === 'string'
       ? value.split(',').map((venue) => venue.trim()).filter(Boolean)

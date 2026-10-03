@@ -121,6 +121,30 @@ as evidence, which remains inconclusive until the per-horizon confidence interva
 zero. On 2026-09-26 the live scan rated every BTC straddle "cheap": sell IV was 31–34%
 against a forecast of about 37%, with 30D IV at p7.
 
+## Long ATM straddle: model and gates (Buy Straddle tab)
+
+Engineering derivation, mirroring the Sell Straddle tab. Net debit D = call ask + put ask + taker
+fees at the asks. Terminal P&L = |S_T − K| − D. Breakevens K ± D. Loss is capped at D.
+
+`packages/server/src/alpha-long-straddle-scanner.ts` (route `/api/alpha/long-straddle-scanner`)
+uses the same ATM selection, chains, and forecast model as the sell scanner:
+
+- **Buy IV:** the Black-76 vol at which the straddle is worth D.
+- **Forecast:** the sell scanner's forecast, with the weekend share of the remaining life weighted
+  at 0.65× variance and renormalized so a full week keeps its calendar forecast. 0.65 is the
+  pooled 2021–26 weekend/weekday variance ratio from the reconstruction below. Without this,
+  weekend-heavy dailies look cheap every Friday. The sell scanner still uses calendar time.
+- **Expensive (do not buy):** buy IV ≥ forecast, OR buy IV at or above the cone median.
+- **Watch:** forecast − buy IV < 2 pts (fair band); cone above p25; buy IV more than 5 pts below
+  min(RV7, RV30) (the −40% case below); backwardation; under 2 DTE; size below venue minimum.
+- **Sizing:** quantity whose debit fits equity × max-loss budget %, capped by min(ask sizes).
+- **Ranking:** verdict, then model edge (value at forecast − D) ÷ D.
+
+The fair band, p25 and 2-DTE thresholds are our choices. The reconstruction found **no
+evidence** that IV below this forecast predicts profitable long straddles (see below). A green
+row is a price check that needs a move thesis. On 2026-10-02 (Friday night) the live scan had no
+buy candidates: 1–6 DTE were watch (IV far below realized) and 13+ DTE were expensive (cone > p50).
+
 ## Weekend short straddle (sell Friday, buy back Monday): reconstruction
 
 Date: 2026-10-02. Status: **hypothesis**, empirical reconstruction, not a validated edge.
@@ -290,6 +314,8 @@ Alpha currently shows:
   crash cover per expiry) and an outright long-put radar. Scan only; no orders.
 - Sell Straddle tab: cross-expiry ATM short-straddle scan with the cheap-premium gates above,
   a stress-sized quantity, and walk-forward evidence. Scan only; no orders.
+- Buy Straddle tab: the mirror at the asks, gated on a weekend-adjusted forecast and the vol
+  cone, sized so the debit fits a max-loss budget. Scan only; no orders.
 
 Missing/unfinished research: calibrated physical return distributions, forecast errors,
 event-aware BTC volatility, out-of-sample execution-cost studies, portfolio incremental

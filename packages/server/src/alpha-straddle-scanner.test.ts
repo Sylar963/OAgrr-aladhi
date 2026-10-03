@@ -199,6 +199,13 @@ describe('buildStraddleVolModel', () => {
 });
 
 describe('computeStraddleCandidate', () => {
+  it('judges a weekend-heavy expiry against the weekend-adjusted forecast', () => {
+    const model = richModel();
+    const candidate = evaluate(0.6, calm, 2, model);
+    expect(candidate.forecastVol).toBeCloseTo(model.forecastVolUntil(NOW, NOW + 2 * DAY_MS)!, 10);
+    expect(candidate.forecastVol!).toBeLessThan(model.forecastVol(2)!);
+  });
+
   it('flags premium sold below realized volatility as cheap', () => {
     const candidate = evaluate(REALIZED - 0.08);
     expect(candidate.verdict).toBe('cheap');

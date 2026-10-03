@@ -29,12 +29,7 @@ const REALIZED_ACCELERATION_RATIO = 1.25;
 const GAMMA_WINDOW_DTE = 2;
 
 export type StraddleSkipReason =
-  | 'missing_pair'
-  | 'incompatible_pair'
-  | 'missing_market'
-  | 'missing_fees'
-  | 'stale_quote'
-  | 'quote_skew'
+  | StraddlePairSkipReason
   | 'wide_spread'
   | 'credit_below_intrinsic';
 
@@ -105,18 +100,21 @@ export function floorToStep(value: number, step: number): number {
   return Number((Math.floor((value + Number.EPSILON) / step) * step).toFixed(8));
 }
 
-function positive(value: number | null | undefined): value is number {
+export function positive(value: number | null | undefined): value is number {
   return value != null && Number.isFinite(value) && value > 0;
 }
 
-function finite(value: number | null | undefined): value is number {
+export function finite(value: number | null | undefined): value is number {
   return value != null && Number.isFinite(value);
 }
 
-interface Leg {
+export type StraddleSide = 'sell' | 'buy';
+
+/** One leg, read for the side being traded: size and fee are at the bid to sell, the ask to buy. */
+export interface StraddleLeg {
   bid: number;
   ask: number;
-  bidSize: number;
+  size: number;
   fee: number;
   delta: number | null;
   markIv: number | null;
@@ -129,24 +127,43 @@ interface Leg {
   inverse: boolean;
 }
 
-function readLeg(quote: VenueQuote | undefined): Leg | 'missing' | 'missing_market' | 'missing_fees' {
+export type StraddlePairSkipReason =
+  | 'missing_pair'
+  | 'incompatible_pair'
+  | 'missing_market'
+  | 'missing_fees'
+  | 'stale_quote'
+  | 'quote_skew';
+
+export interface StraddlePair {
+  call: StraddleLeg;
+  put: StraddleLeg;
+  forward: number;
+}
+
+function readLeg(
+  quote: VenueQuote | undefined,
+  side: StraddleSide,
+): StraddleLeg | 'missing' | 'missing_market' | 'missing_fees' {
   const execution = quote?.execution;
   if (quote == null || execution == null) return 'missing';
+  const size = side === 'sell' ? execution.bidSize : execution.askSize;
+  const fee = side === 'sell' ? execution.bidTakerFeeUsd : execution.askTakerFeeUsd;
   if (
     !positive(execution.bidUsd) ||
     !positive(execution.askUsd) ||
     execution.askUsd < execution.bidUsd ||
-    !positive(execution.bidSize) ||
+    !positive(size) ||
     !finite(quote.asOfMs)
   ) {
     return 'missing_market';
   }
-  if (!finite(execution.bidTakerFeeUsd) || execution.bidTakerFeeUsd < 0) return 'missing_fees';
+  if (!finite(fee) || fee < 0) return 'missing_fees';
   return {
     bid: execution.bidUsd,
     ask: execution.askUsd,
-    bidSize: execution.bidSize,
-    fee: execution.bidTakerFeeUsd,
+    size,
+    fee,
     delta: quote.delta,
     markIv: quote.markIv,
     asOfMs: quote.asOfMs,
@@ -157,6 +174,26 @@ function readLeg(quote: VenueQuote | undefined): Leg | 'missing' | 'missing_mark
     settle: execution.settleCurrency,
     inverse: execution.inverse,
   };
+}
+
+/** Both legs of one venue's straddle, fresh, synchronized, and settled alike. */
+export function readStraddlePair(
+  strike: EnrichedStrike,
+  venue: VenueId,
+  side: StraddleSide,
+  nowMs: number,
+): StraddlePair | StraddlePairSkipReason {
+  const call = readLeg(strike.call.venues[venue], side);
+  const put = readLeg(strike.put.venues[venue], side);
+  if (call === 'missing' || put === 'missing') return 'missing_pair';
+  if (call === 'missing_market' || put === 'missing_market') return 'missing_market';
+  if (call === 'missing_fees' || put === 'missing_fees') return 'missing_fees';
+  if (call.settle !== put.settle || call.inverse !== put.inverse) return 'incompatible_pair';
+  if (nowMs - Math.min(call.asOfMs, put.asOfMs) > MAX_QUOTE_AGE_MS) return 'stale_quote';
+  if (Math.abs(call.asOfMs - put.asOfMs) > MAX_LEG_QUOTE_SKEW_MS) return 'quote_skew';
+  const forward = call.forward ?? put.forward;
+  if (!positive(forward)) return 'missing_market';
+  return { call, put, forward };
 }
 
 export function selectAtmStrike(
@@ -185,26 +222,9 @@ export function computeStraddleCandidate(
   config: AlphaStraddleScannerQuery,
   nowMs: number,
 ): StraddleCandidateResult {
-  const call = readLeg(strike.call.venues[input.venue]);
-  const put = readLeg(strike.put.venues[input.venue]);
-  if (call === 'missing' || put === 'missing') return { candidate: null, skipReason: 'missing_pair' };
-  if (call === 'missing_market' || put === 'missing_market') {
-    return { candidate: null, skipReason: 'missing_market' };
-  }
-  if (call === 'missing_fees' || put === 'missing_fees') {
-    return { candidate: null, skipReason: 'missing_fees' };
-  }
-  if (call.settle !== put.settle || call.inverse !== put.inverse) {
-    return { candidate: null, skipReason: 'incompatible_pair' };
-  }
-  if (nowMs - Math.min(call.asOfMs, put.asOfMs) > MAX_QUOTE_AGE_MS) {
-    return { candidate: null, skipReason: 'stale_quote' };
-  }
-  if (Math.abs(call.asOfMs - put.asOfMs) > MAX_LEG_QUOTE_SKEW_MS) {
-    return { candidate: null, skipReason: 'quote_skew' };
-  }
-  const forward = call.forward ?? put.forward;
-  if (!positive(forward)) return { candidate: null, skipReason: 'missing_market' };
+  const pair = readStraddlePair(strike, input.venue, 'sell', nowMs);
+  if (typeof pair === 'string') return { candidate: null, skipReason: pair };
+  const { call, put, forward } = pair;
 
   const grossCredit = call.bid + put.bid;
   const askDebit = call.ask + put.ask;
@@ -220,7 +240,7 @@ export function computeStraddleCandidate(
   const sellIv = solveStraddleIv(netCredit, forward, K, tYears);
   if (sellIv == null) return { candidate: null, skipReason: 'credit_below_intrinsic' };
 
-  const forecastVol = model.forecastVol(dte);
+  const forecastVol = model.forecastVolUntil(nowMs, input.expiryTs);
   const realizedMatchedVol = model.realizedMatched(dte);
   const hurdleCandidates = [forecastVol, realizedMatchedVol].filter(finite);
   const hurdleVol = hurdleCandidates.length === 0 ? null : Math.max(...hurdleCandidates);
@@ -249,7 +269,7 @@ export function computeStraddleCandidate(
   const stressLossUsd = Math.max(0, Math.max(stressUp - K, K - stressDown) - netCredit);
   const minQuantity = Math.max(call.minQuantity, put.minQuantity);
   const quantityStep = Math.max(call.quantityStep, put.quantityStep);
-  const topOfBookQuantity = Math.min(call.bidSize, put.bidSize);
+  const topOfBookQuantity = Math.min(call.size, put.size);
   const budgetUsd = (config.equity * config.riskPct) / 100;
   const riskBudgetQuantity =
     stressLossUsd > 0 ? floorToStep(budgetUsd / stressLossUsd, quantityStep) : topOfBookQuantity;

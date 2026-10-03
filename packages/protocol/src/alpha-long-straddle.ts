@@ -1,17 +1,12 @@
 import { z } from 'zod';
 
-import { AlphaStraddleForecastSchema, AlphaStraddleScannerResponseSchema } from './alpha-straddle.js';
+import {
+  AlphaStraddleForecastSchema,
+  AlphaStraddleScannerResponseSchema,
+  NullableNumberSchema,
+  VenueListSchema,
+} from './alpha-straddle.js';
 import { VenueIdSchema } from './ws.js';
-
-const NullableNumberSchema = z.number().nullable();
-
-const VenueListSchema = z.preprocess(
-  (value) =>
-    typeof value === 'string'
-      ? value.split(',').map((venue) => venue.trim()).filter(Boolean)
-      : value,
-  z.array(VenueIdSchema).min(1).default(['thalex']),
-);
 
 export const AlphaLongStraddleScannerQuerySchema = z
   .object({

@@ -6,6 +6,8 @@ import {
   computeLongStraddleCandidate,
   longStraddleVerdict,
   rankLongStraddleCandidates,
+  weekendAdjustedVol,
+  weekendShare,
 } from './alpha-long-straddle-scanner.js';
 import {
   buildStraddleVolModel,
@@ -14,6 +16,7 @@ import {
 } from './alpha-straddle-scanner.js';
 
 const DAY_MS = 86_400_000;
+// Friday 2027-01-15 08:00 UTC, a weekly expiry time: a 7-day window holds exactly one weekend.
 const NOW = 1_800_000_000_000;
 const FORWARD = 60_000;
 const STRIKE = 60_000;
@@ -141,12 +144,13 @@ describe('computeLongStraddleCandidate', () => {
 
   it('watches IV far below trailing 7D realized as a fading spike', () => {
     const candidate = evaluate(forecast7d - 0.08);
-    expect(candidate.flags).toContain('realized_spike_fading');
+    expect(candidate.flags).toContain('iv_far_below_realized');
     expect(candidate.verdict).toBe('watch');
   });
 
   it('flags backwardation and the last two days of theta', () => {
-    const candidate = evaluate(forecast7d - 0.03, { termStructure: 'backwardation', spotState: 'inside-range' }, 1);
+    const forecast1d = weekendAdjustedVol(model.forecastVol(1)!, weekendShare(NOW, NOW + DAY_MS));
+    const candidate = evaluate(forecast1d - 0.03, { termStructure: 'backwardation', spotState: 'inside-range' }, 1);
     expect(candidate.flags).toEqual(expect.arrayContaining(['term_backwardation', 'theta_window']));
     expect(candidate.verdict).toBe('watch');
   });
@@ -198,6 +202,30 @@ describe('computeLongStraddleCandidate', () => {
     const t = 7 / 365;
     const bidIv = solveStraddleIv(candidate.callBid + candidate.putBid, FORWARD, STRIKE, t)!;
     expect(bidIv).toBeLessThan(candidate.buyIv);
+  });
+});
+
+describe('weekend-adjusted forecast', () => {
+  it('measures the Saturday and Sunday share of a window in UTC', () => {
+    expect(new Date(NOW).toISOString()).toBe('2027-01-15T08:00:00.000Z');
+    expect(weekendShare(NOW, NOW + 7 * DAY_MS)).toBeCloseTo(2 / 7, 10);
+    expect(weekendShare(NOW, NOW + DAY_MS)).toBeCloseTo(8 / 24, 10);
+    expect(weekendShare(NOW + 3 * DAY_MS, NOW + 4 * DAY_MS)).toBe(0);
+  });
+
+  it('keeps a whole week at the calendar forecast and lowers a weekend-heavy window', () => {
+    expect(weekendAdjustedVol(0.4, 2 / 7)).toBeCloseTo(0.4, 10);
+    expect(weekendAdjustedVol(0.4, 1)).toBeLessThan(0.4);
+    expect(weekendAdjustedVol(0.4, 0)).toBeGreaterThan(0.4);
+  });
+
+  it('judges a Sunday expiry against the lower weekend forecast', () => {
+    const calendar = model.forecastVol(2)!;
+    const candidate = evaluate(calendar - 0.01, calm, 2);
+    expect(candidate.calendarForecastVol).toBeCloseTo(calendar, 10);
+    expect(candidate.weekendShare).toBeCloseTo(32 / 48, 10);
+    expect(candidate.forecastVol!).toBeLessThan(calendar - 0.01);
+    expect(candidate.flags).toContain('iv_above_forecast');
   });
 });
 

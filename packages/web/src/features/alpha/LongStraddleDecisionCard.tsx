@@ -38,8 +38,8 @@ export const LONG_FLAG_TEXT: Record<AlphaLongStraddleFlag, string> = {
   above_cone_p25:
     'Buy IV is above the 25th percentile of the vol cone. It is below the median, but not historically low for this horizon.',
   cone_unavailable: 'Not enough spot history to build the vol cone for this horizon.',
-  realized_spike_fading:
-    'Buy IV is more than 5 pts below trailing 7D realized vol. In our 2021–26 Deribit reconstruction, 7D straddles bought in that state lost about 40% of the debit on average: spikes fade, and the market prices the fade.',
+  iv_far_below_realized:
+    'Buy IV is more than 5 pts below both 7D and 30D trailing realized vol. In our 2021–26 Deribit reconstruction, 7D straddles bought in that state lost about 40% of the debit on average: realized vol fades, and the market prices the fade.',
   term_backwardation:
     'Front IV is above 30D IV. The market is already paying up for near-term movement.',
   theta_window:
@@ -54,7 +54,7 @@ type GateState = 'pass' | 'fail' | 'warn';
 function gates(candidate: AlphaLongStraddleCandidate) {
   const has = (flag: AlphaLongStraddleFlag) => candidate.flags.includes(flag);
   const regimeFlags: AlphaLongStraddleFlag[] = [
-    'realized_spike_fading',
+    'iv_far_below_realized',
     'term_backwardation',
     'theta_window',
   ];
@@ -326,7 +326,9 @@ function Dashboard({
           </ul>
         )}
         <p className={signal.footnote}>
-          Daily breakeven move {fmtPct(candidate.dailyBreakevenMovePct, 2)} vs forecast{' '}
+          {fmtPct(candidate.weekendShare * 100, 0)} of the remaining life is weekend, weighted at
+          0.65× weekday variance (BTC 2021–26), so the forecast is {fmtIv(candidate.forecastVol)}{' '}
+          against {fmtIv(candidate.calendarForecastVol)} in calendar time. Daily breakeven move {fmtPct(candidate.dailyBreakevenMovePct, 2)} vs forecast{' '}
           {fmtPct(candidate.forecastDailyMovePct, 2)}. Entry fees {fmtUsd(candidate.entryFees * quantity)}.
           In our 2021–26 Deribit reconstruction, buying IV below this forecast was not yet a
           demonstrated edge (−2% to −14% of debit, CIs include zero). Treat green as a price check

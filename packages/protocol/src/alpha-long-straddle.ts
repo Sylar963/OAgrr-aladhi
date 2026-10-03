@@ -46,7 +46,7 @@ export const AlphaLongStraddleFlagSchema = z.enum([
   'above_cone_median',
   'above_cone_p25',
   'cone_unavailable',
-  'realized_spike_fading',
+  'iv_far_below_realized',
   'term_backwardation',
   'theta_window',
   'size_below_minimum',
@@ -75,7 +75,10 @@ export const AlphaLongStraddleCandidateSchema = z.object({
   combinedSpreadPct: z.number(),
   markIv: NullableNumberSchema,
   buyIv: z.number(),
+  /** Forecast with the weekend share of the remaining life weighted at reduced variance. */
   forecastVol: NullableNumberSchema,
+  calendarForecastVol: NullableNumberSchema,
+  weekendShare: z.number(),
   realizedMatchedVol: NullableNumberSchema,
   /** Forecast minus buy IV: positive when the forecast expects more vol than the asks pay for. */
   volEdge: NullableNumberSchema,

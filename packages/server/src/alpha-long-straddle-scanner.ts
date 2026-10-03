@@ -25,9 +25,14 @@ const CONE_BUY_PERCENTILE = 25;
 const CONE_EXPENSIVE_PERCENTILE = 50;
 // Same ±2 vol-point "fair" band as the richness reading; our choice, untested.
 const FAIR_BAND_VOL = 0.02;
-// 2021–26 Deribit reconstruction: 7D straddles bought >5 pts under trailing 7D realized
-// returned −40% of debit (spikes fade and the market prices it). Flag, don't block.
-const SPIKE_FADE_VOL = 0.05;
+// 2021–26 Deribit reconstruction: 7D straddles bought >5 pts under min(RV7, RV30) returned
+// −40% of debit (realized fades and the market prices it). Flag, don't block.
+const BELOW_REALIZED_VOL = 0.05;
+// Pooled 2021–26 BTC-PERPETUAL hourly variance, Fri 08→Mon 08 vs Mon 08→Fri 08 UTC (yearly
+// 0.52–0.73). Venues quote weekends at reduced variance, so a calendar-time forecast makes
+// weekend-heavy short expiries look cheap.
+const WEEKEND_VARIANCE_WEIGHT = 0.65;
+const AVERAGE_WEEK_WEIGHT = 5 / 7 + (2 / 7) * WEEKEND_VARIANCE_WEIGHT;
 const THETA_WINDOW_DTE = 2;
 
 export type LongStraddleSkipReason =
@@ -100,6 +105,23 @@ function readAskLeg(
   };
 }
 
+/** Fraction of [fromMs, toMs) that falls on Saturday or Sunday UTC. */
+export function weekendShare(fromMs: number, toMs: number): number {
+  if (!(toMs > fromMs)) return 0;
+  let weekend = 0;
+  for (let dayStart = Math.floor(fromMs / DAY_MS) * DAY_MS; dayStart < toMs; dayStart += DAY_MS) {
+    const weekday = new Date(dayStart).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) continue;
+    weekend += Math.max(0, Math.min(toMs, dayStart + DAY_MS) - Math.max(fromMs, dayStart));
+  }
+  return weekend / (toMs - fromMs);
+}
+
+/** Rescales a calendar-time vol so an average week keeps its variance. */
+export function weekendAdjustedVol(vol: number, share: number): number {
+  return vol * Math.sqrt((1 - share + share * WEEKEND_VARIANCE_WEIGHT) / AVERAGE_WEEK_WEIGHT);
+}
+
 export function computeLongStraddleCandidate(
   input: StraddleExpiryInput,
   strike: EnrichedStrike,
@@ -143,7 +165,10 @@ export function computeLongStraddleCandidate(
   const buyIv = solveStraddleIv(netDebit, forward, K, tYears);
   if (buyIv == null) return { candidate: null, skipReason: 'debit_below_intrinsic' };
 
-  const forecastVol = model.forecastVol(dte);
+  const calendarForecastVol = model.forecastVol(dte);
+  const weekend = weekendShare(nowMs, input.expiryTs);
+  const forecastVol =
+    calendarForecastVol == null ? null : weekendAdjustedVol(calendarForecastVol, weekend);
   const realizedMatchedVol = model.realizedMatched(dte);
   const volEdge = forecastVol == null ? null : forecastVol - buyIv;
   const conePercentile = model.conePercentile(buyIv, dte);
@@ -184,8 +209,10 @@ export function computeLongStraddleCandidate(
   if (conePercentile == null) flags.push('cone_unavailable');
   else if (conePercentile >= CONE_EXPENSIVE_PERCENTILE) flags.push('above_cone_median');
   else if (conePercentile > CONE_BUY_PERCENTILE) flags.push('above_cone_p25');
-  const { rv7d } = model.forecast;
-  if (rv7d != null && buyIv < rv7d - SPIKE_FADE_VOL) flags.push('realized_spike_fading');
+  const { rv7d, rv30d } = model.forecast;
+  if (rv7d != null && rv30d != null && buyIv < Math.min(rv7d, rv30d) - BELOW_REALIZED_VOL) {
+    flags.push('iv_far_below_realized');
+  }
   if (market.termStructure === 'backwardation') flags.push('term_backwardation');
   if (dte < THETA_WINDOW_DTE) flags.push('theta_window');
   if (suggestedQuantity === 0) flags.push('size_below_minimum');
@@ -212,6 +239,8 @@ export function computeLongStraddleCandidate(
       markIv,
       buyIv,
       forecastVol,
+      calendarForecastVol,
+      weekendShare: weekend,
       realizedMatchedVol,
       volEdge,
       conePercentile,

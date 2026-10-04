@@ -17,6 +17,8 @@ import type { ChainRequest, VenueOptionChain } from './types.js';
 
 const DAYS_IN_YEAR = 365;
 
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 export interface SurfaceGridEntry {
   expiry: string;
   dte: number;
@@ -72,6 +74,9 @@ export async function buildIvSurfaceGrid({
   const entries: SurfaceGridEntry[] = [];
 
   for (const expiry of sortedExpiries) {
+    // Chain fetches usually resolve synchronously from cached quotes, so without an explicit
+    // yield the whole grid (SVI fits per expiry) ran as one ~4 s block every snapshot.
+    await yieldToEventLoop();
     const request: ChainRequest = { underlying, expiry, venues: requestedVenues };
 
     const settled = await Promise.allSettled(

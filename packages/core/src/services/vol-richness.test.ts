@@ -186,6 +186,23 @@ describe('buildVolRichness', () => {
     expect(curve[13]!.usualPremium).toBeCloseTo(0.5 - CONSTANT_RV, 10);
     expect(curve[14]!.usualPremium).toBeCloseTo(0.6 - CONSTANT_RV, 10);
   });
+
+  it('publishes realized-vol cone quantiles per horizon with the current window', () => {
+    const daily = candles(200).map((candle, index) => {
+      const move = index < 100 ? 0.01 : 0.04;
+      const close = 100 * Math.exp(index % 2 === 0 ? 0 : move);
+      return { ...candle, open: close, high: close, low: close, close };
+    });
+    const cone = buildVolRichness(baseInput({ dailyCandles: daily })).volCone;
+
+    expect(cone.map((band) => band.horizonDays)).toEqual([7, 14, 30, 60, 90]);
+    expect(cone.at(-1)!.sampleCount).toBe(110);
+    for (const band of cone) {
+      const ordered = [band.min, band.p10, band.p25, band.p50, band.p75, band.p90, band.max];
+      expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
+      expect(band.current).toBeCloseTo(band.max, 1);
+    }
+  });
 });
 
 describe('richnessState and termStructure', () => {

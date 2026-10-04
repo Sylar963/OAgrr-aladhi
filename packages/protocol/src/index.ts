@@ -11,6 +11,8 @@ export {
 export {
   type TenorRichness,
   TenorRichnessSchema,
+  type VolConeBand,
+  VolConeBandSchema,
   VolPremiumBaselineSchema,
   type VolRichness,
   type VolRichnessQuery,

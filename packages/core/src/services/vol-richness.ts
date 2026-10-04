@@ -21,6 +21,7 @@ const IV_24H_TOLERANCE_MS = HOUR_MS;
 export const EXCESS_PREMIUM_FAIR_BAND = 0.02;
 const TERM_FLAT_BAND = 0.02;
 const FORECAST_CURVE_MAX_DTE = 90;
+export const VOL_CONE_HORIZONS = [7, 14, 30, 60, 90] as const;
 // Pooled 2021–26 BTC-PERPETUAL hourly variance, Sat–Sun vs Mon–Fri UTC (yearly 0.35–0.67).
 // Venues quote weekends at reduced variance, so a calendar-time forecast makes weekend-heavy
 // short expiries look cheap. Our measurement, not a sourced rule.
@@ -52,6 +53,21 @@ export interface PremiumBaseline {
   independentSampleCount: number;
 }
 
+/** Distribution of realized vol over every rolling window of one horizon (Sinclair vol cone). */
+export interface VolConeBand {
+  horizonDays: number;
+  windowDays: number;
+  sampleCount: number;
+  min: number;
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  max: number;
+  current: number | null;
+}
+
 export interface VolForecastModel {
   forecast: VolForecastSummary;
   /** Calendar-time forecast: every day weighs the same. */
@@ -60,6 +76,7 @@ export interface VolForecastModel {
   forecastVolUntil(nowMs: number, expiryTs: number): number | null;
   realizedMatched(dteDays: number): number | null;
   conePercentile(vol: number, dteDays: number): number | null;
+  coneBand(dteDays: number): VolConeBand | null;
   premiumBaseline(dteDays: number): PremiumBaseline;
 }
 
@@ -127,6 +144,13 @@ function zScore(current: number, values: readonly number[]): number | null {
   const stats = meanAndSd(values);
   if (stats == null || !(stats.sd > 0)) return null;
   return (current - stats.mean) / stats.sd;
+}
+
+function quantile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * q;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (position - lower);
 }
 
 function percentileOf(current: number, values: readonly number[]): number | null {
@@ -216,6 +240,26 @@ export function buildVolForecastModel(
       const values = cone(windowDays(dteDays, available));
       if (values.length < MIN_CONE_WINDOWS) return null;
       return percentileOf(vol, values);
+    },
+    coneBand(dteDays) {
+      if (available < 3) return null;
+      const windowLength = windowDays(dteDays, available);
+      const values = cone(windowLength);
+      if (values.length < MIN_CONE_WINDOWS) return null;
+      const sorted = [...values].sort((a, b) => a - b);
+      return {
+        horizonDays: dteDays,
+        windowDays: windowLength,
+        sampleCount: sorted.length,
+        min: sorted[0]!,
+        p10: quantile(sorted, 0.1),
+        p25: quantile(sorted, 0.25),
+        p50: quantile(sorted, 0.5),
+        p75: quantile(sorted, 0.75),
+        p90: quantile(sorted, 0.9),
+        max: sorted[sorted.length - 1]!,
+        current: rv(windowLength),
+      };
     },
     premiumBaseline(dteDays) {
       const tenorDays = baselineTenorDays(dteDays);
@@ -307,6 +351,7 @@ export interface VolRichness {
   tenors: Record<RichnessTenor, TenorRichness>;
   termStructure: { state: TermStructureState; slope: number | null };
   forecastCurve: ForecastCurvePoint[];
+  volCone: VolConeBand[];
   fairBand: number;
 }
 
@@ -464,6 +509,9 @@ export function buildVolRichness(input: VolRichnessInput): VolRichness {
     tenors,
     termStructure: termStructure(tenors['7d'].atmIv, tenors['30d'].atmIv),
     forecastCurve,
+    volCone: VOL_CONE_HORIZONS.map((days) => model.coneBand(days)).filter(
+      (band): band is VolConeBand => band != null,
+    ),
     fairBand: EXCESS_PREMIUM_FAIR_BAND,
   };
 }

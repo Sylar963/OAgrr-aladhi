@@ -71,15 +71,28 @@
 }
 
 .chip {
+  --level-color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: var(--space-3);
+  gap: 8px;
+  padding: 10px var(--space-3);
   border: 1px solid var(--border-subtle);
+  border-top: 2px solid var(--level-color);
   border-radius: var(--radius-md);
   background: var(--bg-panel);
   min-width: 0;
-  overflow: hidden;
+}
+
+.chip[data-level='hot'] {
+  --level-color: var(--color-loss);
+}
+
+.chip[data-level='mid'] {
+  --level-color: var(--color-warning);
+}
+
+.chip[data-level='cold'] {
+  --level-color: var(--color-profit);
 }
 
 @media (max-width: 768px) {
@@ -88,45 +101,184 @@
   }
 }
 
+.chipHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
 .chipTenor {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-dim);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
 }
 
 .chipIv {
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
-.spark {
-  width: 100%;
-  height: 22px;
-  display: block;
+.rankBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  color: var(--level-color);
+  line-height: 1;
+}
+
+.rankNum {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rankCaption {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.chipBadges {
+.sparkWrap {
+  position: relative;
+  color: var(--level-color);
+}
+
+.spark {
+  width: 100%;
+  height: 28px;
+  display: block;
+}
+
+.sparkDot {
+  position: absolute;
+  right: -2px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--level-color);
+  box-shadow: 0 0 0 2px var(--bg-panel);
+}
+
+.range {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rangeTrack {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-profit) 55%, transparent) 0%,
+    color-mix(in srgb, var(--color-warning) 40%, transparent) 50%,
+    color-mix(in srgb, var(--color-loss) 60%, transparent) 100%
+  );
+}
+
+.rangeMarker {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  border: 2px solid var(--bg-panel);
+  transform: translate(-50%, -50%);
+}
+
+.rangePct {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 10px;
+  background: var(--text-secondary);
+  opacity: 0.7;
+  transform: translateX(-50%);
+}
+
+.rangeLabels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.chipMeta {
+  display: flex;
+  justify-content: space-between;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-  min-width: 0;
 }
 
-.badge {
-  display: inline-flex;
+.richness {
+  display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  min-height: 18px;
+  cursor: help;
+}
+
+.richness[data-empty='true'] {
+  cursor: default;
+  font-size: 10px;
+  color: var(--text-disabled);
+}
+
+.statePill {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+}
+
+.statePill[data-level='hot'] {
+  color: var(--color-loss);
+  background: color-mix(in srgb, var(--color-loss) 14%, transparent);
+}
+
+.statePill[data-level='mid'] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+}
+
+.statePill[data-level='cold'] {
+  color: var(--color-profit);
+  background: color-mix(in srgb, var(--color-profit) 12%, transparent);
+}
+
+.metaRight {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
 }
 
 .rankValue {
@@ -147,6 +299,76 @@
 
 .rankValue[data-level='none'] {
   color: var(--text-dim);
+}
+
+.coneSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 180px;
+}
+
+.coneHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.coneTitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+}
+
+.legend {
+  display: flex;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend i {
+  display: inline-block;
+}
+
+.lgIv {
+  width: 12px;
+  height: 2px;
+  background: var(--accent-primary);
+}
+
+.lgRv {
+  width: 12px;
+  height: 2px;
+  background: #f7a600;
+}
+
+.lgMedian {
+  width: 12px;
+  border-top: 1px dashed var(--text-tertiary);
+}
+
+.lgBand {
+  width: 12px;
+  height: 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(135, 140, 143, 0.12) 0 25%,
+    rgba(135, 140, 143, 0.3) 25% 75%,
+    rgba(135, 140, 143, 0.12) 75%
+  );
 }
 
 .emptyNote {

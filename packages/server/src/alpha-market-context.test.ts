@@ -108,6 +108,7 @@ function richness(excess30d: number | null): VolRichness {
     tenors: { '7d': tenor(7, null), '30d': tenor(30, excess30d) },
     termStructure: { state: 'flat', slope: 0 },
     forecastCurve: [],
+    volCone: [],
     fairBand: 0.02,
   };
 }

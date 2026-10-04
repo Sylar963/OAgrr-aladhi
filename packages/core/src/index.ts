@@ -193,6 +193,7 @@ export {
   type TenorIvSeries,
   type TenorRichness,
   type TermStructureState,
+  type VolConeBand,
   type VolForecastModel,
   type VolForecastSummary,
   type VolRichness,

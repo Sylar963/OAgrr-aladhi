@@ -59,6 +59,7 @@ describe('StatStrip', () => {
       tenors: { '7d': tenor(7), '30d': tenor(30) },
       termStructure: { state: 'contango', slope: 0.07 },
       forecastCurve: [{ dteDays: 7, forecastVol: 0.35, usualPremium: 0.09 }],
+      volCone: [],
       fairBand: 0.02,
     };
     const marketStats = {

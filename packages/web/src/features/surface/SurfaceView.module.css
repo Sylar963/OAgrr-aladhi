@@ -90,6 +90,10 @@
   height: 460px;
 }
 
+.ivRankPanel {
+  height: 540px;
+}
+
 @media (max-width: 768px) {
   .view {
     padding: var(--space-3);

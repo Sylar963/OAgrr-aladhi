@@ -43,6 +43,7 @@ const RICHNESS: VolRichness = {
     { dteDays: 1, forecastVol: 0.4, usualPremium: 0.09 },
     { dteDays: 2, forecastVol: 0.38, usualPremium: 0.09 },
   ],
+  volCone: [],
   fairBand: 0.02,
 };
 

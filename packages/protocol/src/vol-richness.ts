@@ -52,6 +52,22 @@ export const TenorRichnessSchema = z.object({
 
 export type TenorRichness = z.infer<typeof TenorRichnessSchema>;
 
+export const VolConeBandSchema = z.object({
+  horizonDays: z.number(),
+  windowDays: z.number(),
+  sampleCount: z.number().int().nonnegative(),
+  min: z.number(),
+  p10: z.number(),
+  p25: z.number(),
+  p50: z.number(),
+  p75: z.number(),
+  p90: z.number(),
+  max: z.number(),
+  current: NullableNumberSchema,
+});
+
+export type VolConeBand = z.infer<typeof VolConeBandSchema>;
+
 export const VolRichnessSchema = z.object({
   generatedAt: z.number(),
   underlying: z.string(),
@@ -75,6 +91,7 @@ export const VolRichnessSchema = z.object({
       usualPremium: NullableNumberSchema,
     }),
   ),
+  volCone: z.array(VolConeBandSchema),
   fairBand: z.number(),
 });
 

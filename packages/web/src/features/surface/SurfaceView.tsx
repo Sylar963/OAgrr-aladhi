@@ -63,12 +63,12 @@ export default function SurfaceView() {
 
         <div className={styles.chartsRow}>
           {showBtc ? (
-            <div className={styles.chartPanel}>
+            <div className={`${styles.chartPanel} ${styles.ivRankPanel}`}>
               <IvRankPanel underlying="BTC" />
             </div>
           ) : null}
           {showEth ? (
-            <div className={styles.chartPanel}>
+            <div className={`${styles.chartPanel} ${styles.ivRankPanel}`}>
               <IvRankPanel underlying="ETH" />
             </div>
           ) : null}

@@ -350,6 +350,99 @@ describe('DeferredOiSnapshotStore', () => {
     expect(delegate.writes).toEqual([snapshots.slice(1)]);
     await restarted.dispose();
   });
+
+  function oiRows(count: number, offset = 0): PersistedOiSnapshot[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...oiRow,
+      instrumentName: `BTC-${offset + index}`,
+      snapshotTs: new Date(1_000 + offset + index),
+    }));
+  }
+
+  it('lets the outbox overshoot the cap by a slack before trimming the oldest rows', async () => {
+    const cachePath = tempPath('oi-trim.ndjson');
+    const store = new DeferredOiSnapshotStore(
+      new FakeOiStore(),
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+
+    await store.writeMany(oiRows(110));
+    expect(store.pendingCount).toBe(110);
+    await store.writeMany(oiRows(5, 110));
+    expect(store.pendingCount).toBe(100);
+    await store.dispose();
+
+    const delegate = new FakeOiStore();
+    const restarted = new DeferredOiSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    expect(restarted.pendingCount).toBe(100);
+    await restarted.flush();
+    expect(delegate.writes.flat()).toEqual(oiRows(100, 15));
+    await restarted.dispose();
+  });
+
+  it('keeps rows written during a failed flush after the rows that failed', async () => {
+    const cachePath = tempPath('oi-failed-flush.ndjson');
+    let release: () => void = () => {};
+    const delegate = new FakeOiStore();
+    const failing: OiSnapshotStore = {
+      enabled: true,
+      writeMany: () =>
+        new Promise<void>((_, reject) => {
+          release = () => reject(new Error('db down'));
+        }),
+      prune: async () => 0,
+      dispose: async () => {},
+    };
+    const store = new DeferredOiSnapshotStore(
+      failing,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany(oiRows(3));
+
+    const flushing = store.flush();
+    await store.writeMany(oiRows(2, 3));
+    release();
+    await expect(flushing).rejects.toThrow('db down');
+    expect(store.pendingCount).toBe(5);
+    expect(existsSync(`${cachePath}.flushing`)).toBe(false);
+
+    const restarted = new DeferredOiSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await restarted.flush();
+    expect(delegate.writes.flat()).toEqual(oiRows(5));
+    await store.dispose();
+    await restarted.dispose();
+  });
+
+  it('recovers an outbox left mid-flush by a crash', async () => {
+    const cachePath = tempPath('oi-crash.ndjson');
+    const encode = (row: PersistedOiSnapshot) =>
+      `${JSON.stringify({ ...row, snapshotTs: row.snapshotTs.toISOString() })}\n`;
+    writeFileSync(`${cachePath}.flushing`, oiRows(2).map(encode).join(''));
+    writeFileSync(cachePath, oiRows(1, 2).map(encode).join(''));
+
+    const delegate = new FakeOiStore();
+    const store = new DeferredOiSnapshotStore(
+      delegate,
+      { cachePath, flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    expect(store.pendingCount).toBe(3);
+    await store.flush();
+    expect(delegate.writes.flat()).toEqual(oiRows(3));
+    expect(existsSync(cachePath)).toBe(false);
+    expect(existsSync(`${cachePath}.flushing`)).toBe(false);
+    await store.dispose();
+  });
 });
 
 describe('DeferredDealerBookStore', () => {
@@ -412,6 +505,27 @@ describe('DeferredIvHistoryStore', () => {
     await store.flush();
 
     expect(delegate.writes).toEqual([[ivPoint]]);
+    await store.dispose();
+  });
+
+  it('backfills the window head from storage when the capped cache starts late', async () => {
+    const day = 86_400_000;
+    const now = Date.now();
+    const recent = { ...ivPoint, ts: new Date(now - day) };
+    const old = { ...ivPoint, ts: new Date(now - 80 * day) };
+    const overlap = { ...ivPoint, ts: new Date(now - day), atmIv: 0.99 };
+    const store = new DeferredIvHistoryStore(
+      new FakeIvHistoryStore([old, overlap]),
+      { cachePath: tempPath('iv-backfill.ndjson'), flushIntervalMs, maxPendingRows: 100 },
+      noopLog,
+    );
+    await store.writeMany([recent]);
+
+    const rows = await store.loadSince({ underlyings: ['BTC'], since: new Date(now - 90 * day) });
+    expect(rows).toEqual([old, recent]);
+
+    const covered = await store.loadSince({ underlyings: ['BTC'], since: new Date(now - day - 1000) });
+    expect(covered).toEqual([recent]);
     await store.dispose();
   });
 

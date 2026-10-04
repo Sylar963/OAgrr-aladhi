@@ -7,6 +7,7 @@ import {
   type IvSurfaceRow,
   type IvTenor,
 } from '../core/enrichment.js';
+import type { VenueId } from '../types/common.js';
 import { feedLogger } from '../utils/logger.js';
 import type { DvolService } from './dvol.js';
 
@@ -100,6 +101,77 @@ export function withFractionalDte(surfaces: IvSurfaceRow[], now: number): IvSurf
   });
 }
 
+const MIN_VENUES_FOR_MEDIAN = 3;
+const MIN_BRACKET_SPAN_DAYS = 21;
+const BRACKET_SPAN_TENOR_MULT = 1.25;
+
+type TenorField = 'atm' | 'delta25c' | 'delta25p' | 'delta10c' | 'delta10p';
+
+/**
+ * Venue-level tenor value only when the venue quotes this field on expiries close on both sides
+ * of the tenor. Venue chains are often partially subscribed, and interpolating 30d from a 12d
+ * and an 82d expiry would contribute a number that is mostly guesswork.
+ */
+function tightTenor(rows: IvSurfaceRow[], tenorDays: number, field: TenorField): number | null {
+  let lo = -Infinity;
+  let hi = Infinity;
+  for (const row of rows) {
+    if (row[field] == null || !(row.dte > 0)) continue;
+    if (row.dte <= tenorDays && row.dte > lo) lo = row.dte;
+    if (row.dte >= tenorDays && row.dte < hi) hi = row.dte;
+  }
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  if (hi - lo > Math.max(MIN_BRACKET_SPAN_DAYS, tenorDays * BRACKET_SPAN_TENOR_MULT)) return null;
+  return interpTenor(rows, tenorDays, field);
+}
+
+interface VenueSkew {
+  rr25d: number | null;
+  bfly25d: number | null;
+  rr10d: number | null;
+  bfly10d: number | null;
+}
+
+function medianOf(values: number[]): number | null {
+  if (values.length < MIN_VENUES_FOR_MEDIAN) return null;
+  return median([...values].sort((a, b) => a - b));
+}
+
+/**
+ * RR and fly per venue (each against its own ATM), then the median across venues. The blended
+ * grid averages quotes per delta, so a venue dropping out on reconnect or coming back with a
+ * stale wing moves the aggregate by several vol points; the median of venue-level skews does
+ * not. Venues without expiries tightly bracketing the tenor are excluded rather than extrapolated.
+ */
+export function medianVenueSkew(venueRows: IvSurfaceRow[][], tenorDays: number): VenueSkew {
+  const rr25: number[] = [];
+  const fly25: number[] = [];
+  const rr10: number[] = [];
+  const fly10: number[] = [];
+  for (const rows of venueRows) {
+    const atm = tightTenor(rows, tenorDays, 'atm');
+    if (atm == null) continue;
+    const c25 = tightTenor(rows, tenorDays, 'delta25c');
+    const p25 = tightTenor(rows, tenorDays, 'delta25p');
+    if (c25 != null && p25 != null) {
+      rr25.push(c25 - p25);
+      fly25.push((c25 + p25) / 2 - atm);
+    }
+    const c10 = tightTenor(rows, tenorDays, 'delta10c');
+    const p10 = tightTenor(rows, tenorDays, 'delta10p');
+    if (c10 != null && p10 != null) {
+      rr10.push(c10 - p10);
+      fly10.push((c10 + p10) / 2 - atm);
+    }
+  }
+  return {
+    rr25d: medianOf(rr25),
+    bfly25d: medianOf(fly25),
+    rr10d: medianOf(rr10),
+    bfly10d: medianOf(fly10),
+  };
+}
+
 const CURRENT_FALLBACK_SAMPLES = 3;
 
 /** Latest point with skew fields held at their last clean value when the newest sample was rejected. */
@@ -174,9 +246,15 @@ function rankAndPercentile(
   return { rank, percentile };
 }
 
+export interface IvSurfaceSnapshot {
+  rows: IvSurfaceRow[];
+  /** Per-venue rows built from each venue's own quotes; enables the cross-venue skew median. */
+  venueRows?: ReadonlyMap<VenueId, IvSurfaceRow[]>;
+}
+
 export interface IvHistoryDeps {
   /** Builds a fresh IvSurfaceRow[] for the underlying across all listed expiries. */
-  getSurfaceGrid: (underlying: string) => Promise<IvSurfaceRow[]>;
+  getSurfaceGrid: (underlying: string) => Promise<IvSurfaceRow[] | IvSurfaceSnapshot>;
   /** Source of the DVOL 30d seed. Only BTC/ETH are seeded. */
   dvol: DvolService;
   /** Optional persistence layer. Core stays storage-agnostic; server wires DB in. */
@@ -292,15 +370,19 @@ export class IvHistoryService {
   async snapshotOnce(now: number = Date.now()): Promise<void> {
     const persisted: PersistedIvHistoryPoint[] = [];
     for (const underlying of this.underlyings) {
-      let surfaces: IvSurfaceRow[];
+      let grid: IvSurfaceRow[] | IvSurfaceSnapshot;
       try {
-        surfaces = await this.deps.getSurfaceGrid(underlying);
+        grid = await this.deps.getSurfaceGrid(underlying);
       } catch (err: unknown) {
         log.warn({ underlying, err: String(err) }, 'surface grid fetch failed');
         continue;
       }
-      if (surfaces.length === 0) continue;
-      surfaces = withFractionalDte(surfaces, now);
+      const snapshot: IvSurfaceSnapshot = Array.isArray(grid) ? { rows: grid } : grid;
+      if (snapshot.rows.length === 0) continue;
+      const surfaces = withFractionalDte(snapshot.rows, now);
+      const venueRows = [...(snapshot.venueRows?.values() ?? [])].map((rows) =>
+        withFractionalDte(rows, now),
+      );
       // For 30d BTC/ETH we align the live "current" with the DVOL-seeded
       // history. DVOL uses Deribit's own variance methodology across multiple
       // strikes; our interpTenor uses cross-venue ATM averages. Mixing them
@@ -315,20 +397,19 @@ export class IvHistoryService {
         const atm = tenor === '30d' && dvolAtm != null ? dvolAtm : interpAtm;
         const c25 = interpTenor(surfaces, days, 'delta25c');
         const p25 = interpTenor(surfaces, days, 'delta25p');
-        const rr = c25 != null && p25 != null ? c25 - p25 : null;
+        const venueSkew = medianVenueSkew(venueRows, days);
+        const rr = venueSkew.rr25d ?? (c25 != null && p25 != null ? c25 - p25 : null);
         // Butterfly uses the SAME ATM reference as the wings: interpolated, not
         // DVOL, so fly = (c25+p25)/2 − interpAtm stays internally consistent.
         const fly =
-          c25 != null && p25 != null && interpAtm != null
-            ? (c25 + p25) / 2 - interpAtm
-            : null;
+          venueSkew.bfly25d ??
+          (c25 != null && p25 != null && interpAtm != null ? (c25 + p25) / 2 - interpAtm : null);
         const c10 = interpTenor(surfaces, days, 'delta10c');
         const p10 = interpTenor(surfaces, days, 'delta10p');
-        const rr10 = c10 != null && p10 != null ? c10 - p10 : null;
+        const rr10 = venueSkew.rr10d ?? (c10 != null && p10 != null ? c10 - p10 : null);
         const fly10 =
-          c10 != null && p10 != null && interpAtm != null
-            ? (c10 + p10) / 2 - interpAtm
-            : null;
+          venueSkew.bfly10d ??
+          (c10 != null && p10 != null && interpAtm != null ? (c10 + p10) / 2 - interpAtm : null);
         this.appendPoint(underlying, tenor, {
           ts: now,
           atmIv: atm,

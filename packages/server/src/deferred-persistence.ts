@@ -96,6 +96,10 @@ interface SerializedShortStraddleSnapshot
 type DeferredLog = { warn: (obj: object, msg: string) => void };
 
 const IO_CHUNK_BYTES = 64 * 1024;
+const COPY_CHUNK_BYTES = 1024 * 1024;
+const NEWLINE_BYTE = 0x0a;
+const OI_FLUSH_BATCH_ROWS = 10_000;
+const OI_TRIM_SLACK_RATIO = 0.1;
 const WRITE_BUFFER_CHARACTERS = 1024 * 1024;
 const DEFAULT_SHORT_STRADDLE_CACHE_PATH = '.cache/short-straddle-snapshots.ndjson';
 const DEFAULT_SHORT_STRADDLE_MAX_PENDING_ROWS = 100_000;
@@ -320,10 +324,121 @@ function writeJsonLines<T>(descriptor: number, rows: T[], encode: (row: T) => un
 }
 
 function writeString(descriptor: number, value: string): void {
-  const buffer = Buffer.from(value);
+  writeBuffer(descriptor, Buffer.from(value));
+}
+
+function writeBuffer(descriptor: number, buffer: Buffer): void {
   let offset = 0;
   while (offset < buffer.length) {
     offset += writeSync(descriptor, buffer, offset, buffer.length - offset);
+  }
+}
+
+function* readJsonLineBatches<T>(
+  path: string,
+  decode: (value: unknown) => T,
+  batchSize: number,
+  log: DeferredLog,
+): Generator<T[]> {
+  if (!existsSync(path)) return;
+  const descriptor = openSync(path, 'r');
+  const buffer = Buffer.allocUnsafe(IO_CHUNK_BYTES);
+  const decoder = new StringDecoder('utf8');
+  let remainder = '';
+  let rows: T[] = [];
+
+  try {
+    let bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      const body = remainder + decoder.write(buffer.subarray(0, bytesRead));
+      let lineStart = 0;
+      let newline = body.indexOf('\n', lineStart);
+      while (newline !== -1) {
+        decodeJsonLine(body.slice(lineStart, newline), decode, rows, path, log);
+        if (rows.length >= batchSize) {
+          yield rows;
+          rows = [];
+        }
+        lineStart = newline + 1;
+        newline = body.indexOf('\n', lineStart);
+      }
+      remainder = body.slice(lineStart);
+      bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    }
+    decodeJsonLine(remainder + decoder.end(), decode, rows, path, log);
+    if (rows.length > 0) yield rows;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function countLines(path: string): number {
+  if (!existsSync(path)) return 0;
+  const descriptor = openSync(path, 'r');
+  const buffer = Buffer.allocUnsafe(COPY_CHUNK_BYTES);
+  let lines = 0;
+  let lastByte = NEWLINE_BYTE;
+  try {
+    let bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      let index = buffer.indexOf(NEWLINE_BYTE, 0);
+      while (index !== -1 && index < bytesRead) {
+        lines += 1;
+        index = buffer.indexOf(NEWLINE_BYTE, index + 1);
+      }
+      lastByte = buffer[bytesRead - 1] ?? NEWLINE_BYTE;
+      bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return lastByte === NEWLINE_BYTE ? lines : lines + 1;
+}
+
+function dropLeadingLines(path: string, count: number): void {
+  if (count <= 0 || !existsSync(path)) return;
+  const temporaryPath = `${path}.tmp`;
+  const source = openSync(path, 'r');
+  const target = openSync(temporaryPath, 'w');
+  const buffer = Buffer.allocUnsafe(COPY_CHUNK_BYTES);
+  let remaining = count;
+  try {
+    let bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      let start = 0;
+      while (remaining > 0) {
+        const newline = buffer.indexOf(NEWLINE_BYTE, start);
+        if (newline === -1 || newline >= bytesRead) {
+          start = bytesRead;
+          break;
+        }
+        remaining -= 1;
+        start = newline + 1;
+      }
+      if (start < bytesRead) writeBuffer(target, buffer.subarray(start, bytesRead));
+      bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    }
+  } finally {
+    closeSync(source);
+    closeSync(target);
+  }
+  renameSync(temporaryPath, path);
+}
+
+function appendFileContents(sourcePath: string, targetPath: string): void {
+  if (!existsSync(sourcePath)) return;
+  const source = openSync(sourcePath, 'r');
+  const target = openSync(targetPath, 'a');
+  const buffer = Buffer.allocUnsafe(COPY_CHUNK_BYTES);
+  try {
+    let bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    while (bytesRead > 0) {
+      writeBuffer(target, buffer.subarray(0, bytesRead));
+      bytesRead = readSync(source, buffer, 0, buffer.length, null);
+    }
+  } finally {
+    closeSync(source);
+    closeSync(target);
   }
 }
 
@@ -399,6 +514,8 @@ function fileSize(path: string): number {
   return existsSync(path) ? statSync(path).size : 0;
 }
 
+const IV_CACHE_COVERAGE_SLACK_MS = 6 * 60 * 60 * 1000;
+
 function matchesIvHistoryQuery(row: PersistedIvHistoryPoint, query: IvHistoryLoadQuery): boolean {
   const allowed = new Set(query.underlyings.map((underlying) => underlying.toUpperCase()));
   return allowed.has(row.underlying.toUpperCase()) && row.ts >= query.since;
@@ -412,11 +529,16 @@ function matchesRegimeObservationQuery(
   return allowed.has(row.underlying.toUpperCase()) && row.ts >= query.since;
 }
 
+// Write-only outbox: nothing reads pending OI rows back, so they live only in the ndjson
+// file. Holding the ~5M capped rows as objects cost ~1.5 GB of heap, and rewriting the
+// whole file on every over-cap write blocked the event loop for ~25 s each dealer tick.
 export class DeferredOiSnapshotStore implements OiSnapshotStore {
   readonly enabled: boolean;
-  private pending: PersistedOiSnapshot[];
+  private pendingRows: number;
+  private flushingRows = 0;
   private pruneBefore: Date | null = null;
   private flushing = false;
+  private readonly flushingPath: string;
   private readonly timer: ReturnType<typeof setInterval>;
 
   constructor(
@@ -425,13 +547,15 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
     private readonly log: DeferredLog,
   ) {
     this.enabled = delegate.enabled;
-    this.pending = readJsonLines(options.cachePath, decodeOiSnapshot, log);
+    this.flushingPath = `${options.cachePath}.flushing`;
+    this.restoreInterruptedFlush();
+    this.pendingRows = countLines(options.cachePath);
     // Still a plain interval: this outbox holds ~5M rows and draining it to Postgres needs a
     // deliberate decision about storage, not an automatic catch-up.
     this.timer = setInterval(() => {
       void this.flush().catch((err: unknown) => {
         this.log.warn(
-          { err: describeError(err), pending: this.pending.length },
+          { err: describeError(err), pending: this.pendingCount },
           'deferred OI flush failed',
         );
       });
@@ -439,15 +563,20 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
     this.timer.unref?.();
   }
 
+  get pendingCount(): number {
+    return this.pendingRows + this.flushingRows;
+  }
+
   async writeMany(rows: PersistedOiSnapshot[]): Promise<void> {
     if (rows.length === 0) return;
-    this.pending.push(...rows);
-    if (this.pending.length > this.options.maxPendingRows) {
-      this.pending.splice(0, this.pending.length - this.options.maxPendingRows);
-      rewriteJsonLines(this.options.cachePath, this.pending, encodeOiSnapshot);
-      return;
-    }
     appendJsonLines(this.options.cachePath, rows, encodeOiSnapshot);
+    this.pendingRows += rows.length;
+    const max = this.options.maxPendingRows;
+    // Trimming copies the whole file, so let it overshoot by a slack before cutting back.
+    if (this.pendingRows > max + Math.floor(max * OI_TRIM_SLACK_RATIO)) {
+      dropLeadingLines(this.options.cachePath, this.pendingRows - max);
+      this.pendingRows = max;
+    }
   }
 
   async prune(before: Date): Promise<number> {
@@ -456,25 +585,41 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing || (this.pending.length === 0 && this.pruneBefore == null)) return;
+    if (this.flushing || (this.pendingRows === 0 && this.pruneBefore == null)) return;
     this.flushing = true;
-    const batch = this.pending;
     const pruneBefore = this.pruneBefore;
-    this.pending = [];
     this.pruneBefore = null;
+    if (existsSync(this.options.cachePath)) renameSync(this.options.cachePath, this.flushingPath);
+    this.flushingRows = this.pendingRows;
+    this.pendingRows = 0;
 
     try {
-      await this.delegate.writeMany(batch);
+      for (const batch of readJsonLineBatches(
+        this.flushingPath,
+        decodeOiSnapshot,
+        OI_FLUSH_BATCH_ROWS,
+        this.log,
+      )) {
+        await this.delegate.writeMany(batch);
+      }
       if (pruneBefore != null) await this.delegate.prune(pruneBefore);
-      rewriteJsonLines(this.options.cachePath, this.pending, encodeOiSnapshot);
+      if (existsSync(this.flushingPath)) unlinkSync(this.flushingPath);
+      this.flushingRows = 0;
     } catch (err) {
-      this.pending = [...batch, ...this.pending];
-      this.pruneBefore = pruneBefore;
-      rewriteJsonLines(this.options.cachePath, this.pending, encodeOiSnapshot);
+      if (pruneBefore != null) await this.prune(pruneBefore);
+      this.restoreInterruptedFlush();
+      this.pendingRows += this.flushingRows;
+      this.flushingRows = 0;
       throw err;
     } finally {
       this.flushing = false;
     }
+  }
+
+  private restoreInterruptedFlush(): void {
+    if (!existsSync(this.flushingPath)) return;
+    appendFileContents(this.options.cachePath, this.flushingPath);
+    renameSync(this.flushingPath, this.options.cachePath);
   }
 
   async dispose(): Promise<void> {
@@ -665,9 +810,37 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   }
 
   async loadSince(query: IvHistoryLoadQuery): Promise<PersistedIvHistoryPoint[]> {
-    const rows = this.cache.filter((row) => matchesIvHistoryQuery(row, query));
-    if (rows.length > 0) return rows.sort((a, b) => a.ts.getTime() - b.ts.getTime());
-    return this.delegate.loadSince(query);
+    const rows = this.cache
+      .filter((row) => matchesIvHistoryQuery(row, query))
+      .sort((a, b) => a.ts.getTime() - b.ts.getTime());
+    if (rows.length === 0) return this.delegate.loadSince(query);
+
+    // The local cache is row-capped, so its oldest rows can start well after `since`. Fill
+    // the uncovered head of each underlying from Postgres instead of silently serving a
+    // shorter window.
+    const earliest = new Map<string, number>();
+    for (const row of rows) {
+      const key = row.underlying.toUpperCase();
+      if (!earliest.has(key)) earliest.set(key, row.ts.getTime());
+    }
+    const sinceMs = query.since.getTime();
+    const short = query.underlyings.some((underlying) => {
+      const first = earliest.get(underlying.toUpperCase());
+      return first == null || first - sinceMs > IV_CACHE_COVERAGE_SLACK_MS;
+    });
+    if (!short) return rows;
+
+    try {
+      const older = (await this.delegate.loadSince(query)).filter((row) => {
+        const first = earliest.get(row.underlying.toUpperCase());
+        return first == null || row.ts.getTime() < first;
+      });
+      if (older.length === 0) return rows;
+      return [...older, ...rows].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+    } catch (err: unknown) {
+      this.log.warn({ err: describeError(err) }, 'IV-history backfill from storage failed');
+      return rows;
+    }
   }
 
   async loadHourly(query: IvHistoryHourlyQuery): Promise<PersistedIvHistoryPoint[]> {

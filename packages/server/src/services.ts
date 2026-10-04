@@ -1,6 +1,7 @@
 import {
   BlockTradeRuntime,
   buildIvSurfaceGrid,
+  computeVenueSurfaceRows,
   DvolService,
   getAdapter,
   getAllAdapters,
@@ -114,7 +115,8 @@ const dealerBookCacheMaxRows = parsePositiveInteger(
 );
 const ivHistoryCacheMaxRows = parsePositiveInteger(
   process.env['IV_HISTORY_CACHE_MAX_ROWS'],
-  200_000,
+  // 90 days × 288 five-minute samples × 2 underlyings × 4 tenors ≈ 207k, plus DVOL seed rows.
+  250_000,
   'IV_HISTORY_CACHE_MAX_ROWS',
 );
 const regimeObservationsCacheMaxRows = parsePositiveInteger(
@@ -182,7 +184,7 @@ export const ivHistoryService = new IvHistoryService({
         );
       }
     }
-    return entries.map((e) => e.surfaceRow);
+    return { rows: entries.map((e) => e.surfaceRow), venueRows: computeVenueSurfaceRows(entries) };
   },
 });
 const localTradeStore = new SqliteTradeStore(

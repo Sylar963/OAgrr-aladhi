@@ -50,14 +50,10 @@ function bracketedTenor(rows: IvSurfaceRow[], tenorDays: number, field: SurfaceF
   return interpTenor(rows, tenorDays, field);
 }
 
-/**
- * Constant-maturity ATM IV, 25Δ risk reversal and 25Δ butterfly per venue, built from that
- * venue's own quotes only. A tenor is omitted when the venue's expiries do not bracket it.
- */
-export function computeVenueTenorIvs(
+/** One IvSurfaceRow per expiry for each venue, built from that venue's own quotes only. */
+export function computeVenueSurfaceRows(
   entries: readonly VenueTenorIvInput[],
-  tenorDays: readonly number[],
-): VenueTenorIv[] {
+): Map<VenueId, IvSurfaceRow[]> {
   const venues = new Set<VenueId>();
   for (const entry of entries) {
     for (const strike of entry.strikes) {
@@ -66,7 +62,7 @@ export function computeVenueTenorIvs(
     }
   }
 
-  const results: VenueTenorIv[] = [];
+  const out = new Map<VenueId, IvSurfaceRow[]>();
   for (const venue of [...venues].sort()) {
     const rows = entries
       .map((entry) => {
@@ -76,7 +72,21 @@ export function computeVenueTenorIvs(
           : computeIvSurface(entry.expiry, entry.dte, strikes, entry.referencePriceUsd);
       })
       .filter((row): row is IvSurfaceRow => row != null);
+    if (rows.length > 0) out.set(venue, rows);
+  }
+  return out;
+}
 
+/**
+ * Constant-maturity ATM IV, 25Δ risk reversal and 25Δ butterfly per venue, built from that
+ * venue's own quotes only. A tenor is omitted when the venue's expiries do not bracket it.
+ */
+export function computeVenueTenorIvs(
+  entries: readonly VenueTenorIvInput[],
+  tenorDays: readonly number[],
+): VenueTenorIv[] {
+  const results: VenueTenorIv[] = [];
+  for (const [venue, rows] of computeVenueSurfaceRows(entries)) {
     for (const days of tenorDays) {
       const atmIv = bracketedTenor(rows, days, 'atm');
       if (atmIv == null) continue;

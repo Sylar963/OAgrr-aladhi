@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 // Declared before vi.mock because the factory closes over this object;
 // Vitest evaluates the factory lazily on re-import, after the variable exists.
 const startResolves = { dvol: true, spot: true, flow: true, ivHistory: true };
-let getSurfaceGrid: ((underlying: string) => Promise<unknown[]>) | null = null;
+let getSurfaceGrid: ((underlying: string) => Promise<unknown>) | null = null;
 const originalDatabaseUrl = process.env['DATABASE_URL'];
 const originalSnapshotsEnabled = process.env['SHORT_STRADDLE_SNAPSHOTS_ENABLED'];
 const originalSnapshotCachePath = process.env['SHORT_STRADDLE_SNAPSHOT_CACHE_PATH'];
@@ -62,7 +62,7 @@ vi.mock('@oggregator/core', async (importOriginal) => {
       }
     },
     IvHistoryService: class {
-      constructor(options: { getSurfaceGrid: (underlying: string) => Promise<unknown[]> }) {
+      constructor(options: { getSurfaceGrid: (underlying: string) => Promise<unknown> }) {
         getSurfaceGrid = options.getSurfaceGrid;
       }
       start() {
@@ -166,7 +166,7 @@ describe('bootstrapServices — readiness transitions', () => {
 
     expect(shortStraddleSnapshotService).toBeNull();
     if (getSurfaceGrid == null) throw new Error('IV surface callback not registered');
-    await expect(getSurfaceGrid('BTC')).resolves.toEqual([]);
+    await expect(getSurfaceGrid('BTC')).resolves.toEqual({ rows: [], venueRows: new Map() });
   });
 
   it('disables collection and warns when enabled without DATABASE_URL', async () => {
@@ -197,7 +197,7 @@ describe('bootstrapServices — readiness transitions', () => {
     }
     vi.spyOn(collector, 'collect').mockRejectedValueOnce(new Error('collector boom'));
 
-    await expect(getSurfaceGrid('BTC')).resolves.toEqual([]);
+    await expect(getSurfaceGrid('BTC')).resolves.toEqual({ rows: [], venueRows: new Map() });
 
     await Promise.all([
       services.shortStraddleSnapshotStore?.dispose(),

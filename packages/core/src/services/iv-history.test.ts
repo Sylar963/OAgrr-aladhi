@@ -3,12 +3,14 @@ import { interpTenor, type IvSurfaceRow } from '../core/enrichment.js';
 import {
   despikeSkewSeries,
   downsampleSeries,
+  medianVenueSkew,
   withFractionalDte,
   IvHistoryService,
   type IvHistoryPersistence,
   type PersistedIvHistoryPoint,
 } from './iv-history.js';
 import type { DvolService } from './dvol.js';
+import type { VenueId } from '../types/common.js';
 
 function makeRow(
   expiry: string,
@@ -547,5 +549,74 @@ describe('IvHistoryService.query options', () => {
     expect(slim.tenors['30d'].series).toHaveLength(0);
     expect(slim.tenors['30d'].current).toEqual(full.tenors['30d'].current);
     expect(slim.tenors['7d'].rrPercentile).toBe(full.tenors['7d'].rrPercentile);
+  });
+});
+
+describe('medianVenueSkew', () => {
+  const venue = (skew: number, fly = 0.01, near = 7, far = 35) => [
+    makeRow('n', near, 0.5, skew, fly, skew * 1.5, fly * 2),
+    makeRow('f', far, 0.5, skew, fly, skew * 1.5, fly * 2),
+  ];
+
+  it('ignores a single outlier venue', () => {
+    const out = medianVenueSkew([venue(-0.02), venue(-0.021), venue(-0.019), venue(0.08, 0.05)], 30);
+    expect(out.rr25d).toBeCloseTo(-0.0195, 6);
+    expect(out.bfly25d).toBeCloseTo(0.01, 6);
+    expect(out.rr10d).toBeCloseTo(-0.02925, 6);
+  });
+
+  it('excludes venues whose expiries do not bracket the tenor', () => {
+    const out = medianVenueSkew([venue(-0.02), venue(-0.02), venue(-0.02), venue(0.1, 0.01, 1, 5)], 30);
+    expect(out.rr25d).toBeCloseTo(-0.02, 6);
+  });
+
+  it('excludes venues whose bracketing expiries are too far apart', () => {
+    const out = medianVenueSkew(
+      [venue(-0.02), venue(-0.02), venue(-0.02), venue(0.1, 0.01, 12, 82)],
+      30,
+    );
+    expect(out.rr25d).toBeCloseTo(-0.02, 6);
+    expect(medianVenueSkew([venue(-0.02, 0.01, 82, 173)], 90).rr25d).toBeNull();
+    expect(
+      medianVenueSkew([venue(-0.02, 0.01, 82, 173), venue(-0.02, 0.01, 82, 173), venue(-0.02, 0.01, 82, 173)], 90)
+        .rr25d,
+    ).toBeCloseTo(-0.02, 6);
+  });
+
+  it('returns null with fewer than three contributing venues', () => {
+    expect(medianVenueSkew([venue(-0.02), venue(-0.03)], 30).rr25d).toBeNull();
+  });
+});
+
+describe('IvHistoryService venue-robust skew', () => {
+  it('keeps RR steady when a venue drops out of the grid', async () => {
+    const v = (skew: number) => [makeRow('n', 7, 0.5, skew, 0.01), makeRow('f', 35, 0.5, skew, 0.01)];
+    const all = new Map<VenueId, IvSurfaceRow[]>([
+      ['deribit', v(-0.02)],
+      ['okx', v(-0.021)],
+      ['bybit', v(-0.019)],
+      ['derive', v(-0.06)],
+    ]);
+    let venueRows = new Map(all);
+    const blended = [makeRow('n', 7, 0.5, -0.03, 0.01), makeRow('f', 35, 0.5, -0.03, 0.01)];
+    const svc = new IvHistoryService({
+      getSurfaceGrid: async () => ({ rows: blended, venueRows }),
+      dvol: mockDvol(),
+    });
+    await svc.snapshotOnce(1_000);
+    venueRows = new Map([...all].filter(([k]) => k !== 'okx'));
+    await svc.snapshotOnce(2_000);
+    const [a, b] = svc.getBuffer('BTC', '30d');
+    expect(a!.rr25d).toBeCloseTo(-0.0205, 6);
+    expect(b!.rr25d).toBeCloseTo(-0.02, 6);
+  });
+
+  it('falls back to the blended grid without venue rows', async () => {
+    const svc = new IvHistoryService({
+      getSurfaceGrid: async () => ({ rows: [makeRow('e', 30, 0.5, -0.03, 0.01)] }),
+      dvol: mockDvol(),
+    });
+    await svc.snapshotOnce(1_000);
+    expect(svc.getBuffer('BTC', '30d')[0]!.rr25d).toBeCloseTo(-0.03, 6);
   });
 });

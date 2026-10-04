@@ -59,7 +59,10 @@ export {
 } from './core/enrichment.js';
 
 export { buildIvSurfaceGrid } from './core/surface-grid.js';
-export { computeVenueTenorIvs } from './core/venue-tenor-iv.js';
+export {
+  computeVenueSurfaceRows,
+  computeVenueTenorIvs,
+} from './core/venue-tenor-iv.js';
 export type { VenueTenorIv, VenueTenorIvInput } from './core/venue-tenor-iv.js';
 export type { SurfaceGridEntry, BuildSurfaceGridOptions } from './core/surface-grid.js';
 
@@ -247,6 +250,7 @@ export {
   type IvHistoryOptions,
   type IvHistoryPersistence,
   type IvHistoryQueryOptions,
+  type IvSurfaceSnapshot,
   type IvHistoryPointSource,
   type PersistedIvHistoryPoint,
 } from './services/iv-history.js';

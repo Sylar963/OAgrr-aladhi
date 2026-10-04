@@ -1,9 +1,11 @@
 import {
+  BybitCommandResponseSchema,
   BybitInstrumentsResponseSchema,
   BybitRestTickerSchema,
   BybitSystemStatusResponseSchema,
   BybitTickersResponseSchema,
   BybitWsMessageSchema,
+  type BybitCommandResponse,
   type BybitInstrumentsResponse,
   type BybitRestTicker,
   type BybitSystemStatusResponse,
@@ -33,5 +35,10 @@ export function parseBybitWsMessage(input: unknown): BybitWsMessage | null {
 
 export function parseBybitSystemStatusResponse(input: unknown): BybitSystemStatusResponse | null {
   const parsed = BybitSystemStatusResponseSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseBybitCommandResponse(input: unknown): BybitCommandResponse | null {
+  const parsed = BybitCommandResponseSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }

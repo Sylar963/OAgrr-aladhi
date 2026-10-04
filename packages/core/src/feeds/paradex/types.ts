@@ -84,3 +84,17 @@ export const ParadexTradeSchema = z
 export type ParadexTrade = z.infer<typeof ParadexTradeSchema>;
 
 export const ParadexTradesResponseSchema = z.object({ results: z.array(ParadexTradeSchema) });
+
+// JSON-RPC control replies on the market-data socket (market data itself is SBE).
+export const ParadexRpcResponseSchema = z
+  .object({
+    jsonrpc: z.literal('2.0'),
+    id: z.number().optional(),
+    result: z.unknown().optional(),
+    error: z
+      .object({ code: z.number(), message: z.string(), data: z.unknown().optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+export type ParadexRpcResponse = z.infer<typeof ParadexRpcResponseSchema>;

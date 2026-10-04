@@ -122,6 +122,27 @@ export const BybitWsMessageSchema = z.object({
 });
 export type BybitWsMessage = z.infer<typeof BybitWsMessageSchema>;
 
+// Option public subscribe/unsubscribe ack, e.g.
+// {"success":true,"conn_id":"…","data":{"successTopics":[…],"failTopics":[]},"type":"COMMAND_RESP"}
+export const BybitCommandResponseSchema = z
+  .object({
+    success: z.boolean(),
+    ret_msg: z.string().optional(),
+    conn_id: z.string().optional(),
+    req_id: z.string().optional(),
+    op: z.string().optional(),
+    type: z.string().optional(),
+    data: z
+      .object({
+        successTopics: z.array(z.string()).optional(),
+        failTopics: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+export type BybitCommandResponse = z.infer<typeof BybitCommandResponseSchema>;
+
 export const BybitSystemStatusItemSchema = z.object({
   state: z.string(),
   serviceTypes: z.array(z.number()).optional(),

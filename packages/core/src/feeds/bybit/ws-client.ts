@@ -6,12 +6,18 @@ import {
   BYBIT_TICKERS,
   BYBIT_WS_URL,
 } from '../shared/endpoints.js';
-import { SdkBaseAdapter, type CachedInstrument } from '../shared/sdk-base.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+} from '../shared/sdk-base.js';
+import { TopicShardAllocator, aggregateShardState } from '../shared/topic-shards.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
+  parseBybitCommandResponse,
   parseBybitInstrumentsResponse,
   parseBybitRestTicker,
   parseBybitSystemStatusResponse,
@@ -20,8 +26,9 @@ import {
 } from './codec.js';
 import { deriveBybitHealth } from './health.js';
 import {
-  BYBIT_MAX_TOPICS_PER_BATCH,
+  BYBIT_MAX_TOPICS_PER_CONNECTION,
   buildBybitExpiredTopics,
+  chunkBybitTopics,
   buildBybitSubscriptionTopics,
   createBybitSubscriptionState,
   markBybitSubscribedTopics,
@@ -37,7 +44,10 @@ const log = feedLogger('bybit');
 const BYBIT_DEFAULT_MAKER_FEE = 0.0002;
 const BYBIT_DEFAULT_TAKER_FEE = 0.0005;
 
-// Bybit closes idle connections after 30s — ping well within that window
+// Bybit asks for {"op":"ping"} every 20s. Pings do not protect against the server
+// dropping a consumer that stops reading: a ≥15s event-loop stall closes the socket
+// with 1006 (10s survives), and a consumer that cannot keep up is dropped after
+// a few minutes — keep the hot path cheap and the event loop unblocked.
 const BYBIT_PING_INTERVAL_MS = 20_000;
 
 /**
@@ -68,11 +78,14 @@ const BASE_COINS = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP'] as const;
 export class BybitWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'bybit';
 
-  private wsClient: TopicWsClient | null = null;
+  private readonly shardClients: TopicWsClient[] = [];
+  private readonly shardStates: VenueConnectionState[] = [];
+  private readonly shardAllocator = new TopicShardAllocator(BYBIT_MAX_TOPICS_PER_CONNECTION);
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private readonly subscriptions = createBybitSubscriptionState();
   private wsState: VenueConnectionState = 'down';
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
 
   protected initClients(): void {}
 
@@ -199,14 +212,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       }
       this.instruments = this.instruments.filter((i) => !expiredSymbolSet.has(i.exchangeSymbol));
 
-      if (this.wsClient?.isConnected) {
-        for (let i = 0; i < expiredTopics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-          this.sendJson({
-            op: 'unsubscribe',
-            args: expiredTopics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH),
-          });
-        }
-      }
+      this.unsubscribeTopics(expiredTopics);
 
       log.info({ count: expiredSymbols.length }, 'removed expired instruments from refresh');
     }
@@ -223,16 +229,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
       if (plan.topics.length > 0) {
         try {
-          await this.ensureConnected();
-
-          for (let i = 0; i < plan.topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-            this.sendJson({
-              op: 'subscribe',
-              args: plan.topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH),
-            });
-          }
-
-          markBybitSubscribedTopics(this.subscriptions, plan.topics);
+          await this.subscribeTopics(plan.topics);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           log.warn(
@@ -332,16 +329,16 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     if (plan.topics.length === 0) return;
 
-    await this.ensureConnected();
+    await this.subscribeTopics(plan.topics);
 
-    for (let i = 0; i < plan.topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-      const batch = plan.topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
-      this.sendJson({ op: 'subscribe', args: batch });
-    }
-
-    markBybitSubscribedTopics(this.subscriptions, plan.topics);
-
-    log.info({ count: plan.topics.length }, 'subscribed to option tickers');
+    log.info(
+      {
+        count: plan.topics.length,
+        totalTopics: this.shardAllocator.size,
+        connections: this.shardAllocator.shardCount,
+      },
+      'subscribed to option tickers',
+    );
   }
 
   protected override async unsubscribeChain(
@@ -355,14 +352,8 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     if (topics.length === 0) return;
 
-    if (this.wsClient?.isConnected) {
-      for (let i = 0; i < topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-        const batch = topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH);
-        this.sendJson({ op: 'unsubscribe', args: batch });
-      }
-    }
-
     removeBybitSubscribedTopics(this.subscriptions, topics);
+    this.unsubscribeTopics(topics);
   }
 
   protected async unsubscribeAll(): Promise<void> {
@@ -370,49 +361,75 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     const topics = [...this.subscriptions.subscribedTopics];
     resetBybitSubscriptionState(this.subscriptions);
+    this.unsubscribeTopics(topics);
+  }
 
-    if (!this.wsClient?.isConnected) return;
+  /**
+   * Assigns topics to connection shards (≤2000 args each) and subscribes them.
+   * A shard that has to (re)connect picks the new topics up through its replay,
+   * so explicit subscribe frames only go to shards that were already open.
+   */
+  private async subscribeTopics(topics: string[]): Promise<void> {
+    const groups = this.shardAllocator.assign(topics);
+    markBybitSubscribedTopics(this.subscriptions, topics);
 
-    for (let i = 0; i < topics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-      this.sendJson({ op: 'unsubscribe', args: topics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH) });
+    for (const [shard, shardTopics] of groups) {
+      const client = this.shardClient(shard);
+      if (!client.isConnected) {
+        try {
+          await client.connect();
+        } catch (error: unknown) {
+          removeBybitSubscribedTopics(this.subscriptions, shardTopics);
+          this.shardAllocator.release(shardTopics);
+          throw error;
+        }
+        continue;
+      }
+      for (const args of chunkBybitTopics(shardTopics)) {
+        client.send({ op: 'subscribe', args });
+      }
     }
   }
 
-  private async ensureConnected(): Promise<void> {
-    if (this.wsClient?.isConnected) return;
-    await this.connectWs();
+  private unsubscribeTopics(topics: string[]): void {
+    for (const [shard, shardTopics] of this.shardAllocator.release(topics)) {
+      const client = this.shardClients[shard];
+      if (!client?.isConnected) continue;
+      for (const args of chunkBybitTopics(shardTopics)) {
+        client.send({ op: 'unsubscribe', args });
+      }
+    }
   }
 
-  private connectWs(): Promise<void> {
-    if (this.wsClient == null) {
-      this.wsClient = new TopicWsClient(BYBIT_WS_URL, 'bybit-ws', {
+  private shardClient(shard: number): TopicWsClient {
+    const existing = this.shardClients[shard];
+    if (existing) return existing;
+
+    const client = new TopicWsClient(
+      BYBIT_WS_URL,
+      shard === 0 ? 'bybit-ws' : `bybit-ws-${shard}`,
+      {
         pingIntervalMs: BYBIT_PING_INTERVAL_MS,
         pingMessage: { op: 'ping' },
         onStatusChange: (state) => {
-          this.wsState =
+          this.shardStates[shard] =
             state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting';
+          this.wsState = aggregateShardState(this.shardStates);
           this.emitStatus(this.wsState);
         },
-        getReplayMessages: () => {
-          if (this.subscriptions.subscribedTopics.size === 0) return [];
-          const messages: Array<Record<string, unknown>> = [];
-          const topics = [...this.subscriptions.subscribedTopics];
-          for (let index = 0; index < topics.length; index += BYBIT_MAX_TOPICS_PER_BATCH) {
-            messages.push({
-              op: 'subscribe',
-              args: topics.slice(index, index + BYBIT_MAX_TOPICS_PER_BATCH),
-            });
-          }
-          return messages;
-        },
+        getReplayMessages: () =>
+          chunkBybitTopics(this.shardAllocator.topicsFor(shard)).map((args) => ({
+            op: 'subscribe',
+            args,
+          })),
         onMessage: (raw) => {
           this.handleRawMessage(raw);
         },
-        onOpen: () => {},
-      });
-    }
-
-    return this.wsClient.connect();
+      },
+    );
+    this.shardClients[shard] = client;
+    this.shardStates[shard] = 'down';
+    return client;
   }
 
   private async refreshHealth(): Promise<void> {
@@ -441,19 +458,11 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     if (json == null || typeof json !== 'object') return;
     const obj = json as Record<string, unknown>;
-    if (obj['success'] === false) {
-      log.warn(
-        {
-          op: obj['op'],
-          retCode: obj['ret_code'],
-          retMsg: obj['ret_msg'],
-        },
-        'bybit control message failed',
-      );
+    if (obj['op'] === 'pong') return;
+    if (obj['success'] !== undefined) {
+      this.handleCommandResponse(json);
       return;
     }
-
-    if (obj['op'] === 'subscribe' || obj['op'] === 'pong' || obj['success'] !== undefined) return;
 
     const msg = parseBybitWsMessage(json);
     if (msg == null) return;
@@ -468,6 +477,31 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     );
   }
 
+  private handleCommandResponse(json: unknown): void {
+    const resp = parseBybitCommandResponse(json);
+    if (resp == null) return;
+
+    const failTopics = resp.data?.failTopics ?? [];
+    if (resp.success && failTopics.length === 0) return;
+
+    // Rejected topics must not stay in local state, or replay would resend them
+    // forever and the chain would look subscribed while never quoting.
+    if (failTopics.length > 0) {
+      removeBybitSubscribedTopics(this.subscriptions, failTopics);
+      this.shardAllocator.release(failTopics);
+    }
+    log.warn(
+      {
+        op: resp.op,
+        retMsg: resp.ret_msg,
+        connId: resp.conn_id,
+        failCount: failTopics.length,
+        failSample: failTopics.slice(0, 5),
+      },
+      'bybit control message failed',
+    );
+  }
+
   // ── helpers ───────────────────────────────────────────────────
 
   private async fetchJson(url: URL): Promise<unknown> {
@@ -476,22 +510,20 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     return res.json();
   }
 
-  private sendJson(payload: Record<string, unknown>): void {
-    this.wsClient?.send(payload);
-  }
-
   protected override getFeedConnectionSnapshot() {
-    const client = this.wsClient;
-    if (client == null) return null;
+    if (this.shardClients.length === 0) return null;
 
-    return {
-      connected: client.isConnected,
-      lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
-    };
+    let connected = true;
+    let lastActivityAt = Number.POSITIVE_INFINITY;
+    for (const client of this.shardClients) {
+      connected &&= client.isConnected;
+      lastActivityAt = Math.min(lastActivityAt, client.lastActivityAtMs || client.connectedAtMs);
+    }
+    return { connected, lastActivityAt };
   }
 
   protected override restartFeedFromWatchdog(): void {
-    this.wsClient?.terminate();
+    for (const client of this.shardClients) client.terminate();
   }
 
   private sweepExpiredState(): void {
@@ -503,14 +535,7 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       removed.map((i) => i.exchangeSymbol),
     );
 
-    if (expiredTopics.length > 0 && this.wsClient?.isConnected) {
-      for (let i = 0; i < expiredTopics.length; i += BYBIT_MAX_TOPICS_PER_BATCH) {
-        this.sendJson({
-          op: 'unsubscribe',
-          args: expiredTopics.slice(i, i + BYBIT_MAX_TOPICS_PER_BATCH),
-        });
-      }
-    }
+    this.unsubscribeTopics(expiredTopics);
 
     log.info({ count: removed.length }, 'removed expired instruments');
   }
@@ -524,8 +549,11 @@ export class BybitWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.stopBaseTimers();
     await this.unsubscribeAll();
-    await this.wsClient?.disconnect();
-    this.wsClient = null;
+    await Promise.all(this.shardClients.map((client) => client.disconnect()));
+    this.shardClients.length = 0;
+    this.shardStates.length = 0;
+    this.shardAllocator.clear();
   }
 }

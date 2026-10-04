@@ -1,11 +1,25 @@
+import type WebSocket from 'ws';
+import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
-import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
 import { PARADEX_WS_URL } from '../shared/endpoints.js';
-import { SdkBaseAdapter, type CachedInstrument } from '../shared/sdk-base.js';
-import { parseParadexSummary } from './codec.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+} from '../shared/sdk-base.js';
+import { PacedSender, TopicShardAllocator, aggregateShardState } from '../shared/topic-shards.js';
+import { TopicWsClient } from '../shared/topic-ws-client.js';
+import { parseParadexRpcResponse, parseParadexSummary } from './codec.js';
 import { deriveParadexHealth } from './health.js';
-import { PARADEX_SUMMARY_CHANNEL } from './planner.js';
+import {
+  PARADEX_SHARD_CAPACITY,
+  PARADEX_SUBSCRIBE_FRAMES_PER_TICK,
+  PARADEX_SUBSCRIBE_TICK_MS,
+  PARADEX_SUBSCRIPTION_CAP_ERROR,
+  paradexSummaryChannel,
+  paradexSymbolFromChannel,
+} from './planner.js';
 import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaryAll } from './rest.js';
 import { decodeParadexMarketSummarySbe } from './sbe.js';
 import { buildParadexQuote, paradexInstrumentDetails } from './state.js';
@@ -14,79 +28,51 @@ const log = feedLogger('paradex');
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60_000;
 const HEALTH_CHECK_INTERVAL_MS = 60_000;
 
+type ParadexControlFrame = { method: 'subscribe' | 'unsubscribe'; channel: string };
+
+interface ParadexShard {
+  client: TopicWsClient;
+  sender: PacedSender<ParadexControlFrame>;
+  pendingRequests: Map<number, ParadexControlFrame>;
+  state: VenueConnectionState;
+}
+
 /**
- * Paradex adapter using direct JSON-RPC over WebSocket.
- *
- * Closest in shape to Derive (JSON-RPC, fraction IV, no app heartbeat), with one
- * structural difference: Paradex exposes a single bare `markets_summary` firehose
- * that carries the whole chain in one channel, instead of per-instrument ticker
- * subscriptions. The subscribe param is `{ channel }` (singular) — not the shared
- * client's `{ channels: [...] }` — so we (re)subscribe the single firehose BY HAND
- * in the `onStatusChange('connected')` callback, never via `rpc.subscribe()`.
- *
- * Control responses remain JSON while market-summary updates use Paradex SBE
- * schema 1:1, template 4. USDC-settled, all linear, IV already in fraction form.
+ * Paradex options adapter: per-market `markets_summary.{symbol}` channels over
+ * sharded sockets (≤200 subscriptions each), SBE-encoded market data, JSON
+ * control replies. Paradex pings every ~30s and `ws` answers automatically, so
+ * there is no app-level heartbeat. Symbols outside the live set keep a REST
+ * snapshot refreshed on the health cadence. USDC-settled, linear, IV in fractions.
  */
 export class ParadexWsAdapter extends SdkBaseAdapter {
   readonly venue: VenueId = 'paradex';
 
-  private rpc!: JsonRpcWsClient;
+  private readonly shards: ParadexShard[] = [];
+  private readonly shardAllocator = new TopicShardAllocator(PARADEX_SHARD_CAPACITY);
+  private nextRequestId = 1;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
 
-  protected initClients(): void {
-    if (this.rpc) return;
-    this.rpc = new JsonRpcWsClient(PARADEX_WS_URL, 'paradex-ws', {
-      heartbeatIntervalSec: 30,
-      requestTimeoutMs: 30_000,
-      subscribeMethod: 'subscribe',
-      unsubscribeMethod: 'unsubscribe',
-      onBinaryMessage: (raw) => {
-        const summary = decodeParadexMarketSummarySbe(raw);
-        if (summary == null) return false;
-        this.handleSummary(summary);
-        return true;
-      },
-      onStatusChange: (state) => {
-        this.emitStatus(
-          state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting',
-        );
-        // Paradex subscribe param is { channel } (singular) — not the shared
-        // client's { channels: [...] } — so we (re)subscribe the single bare
-        // firehose by hand on every (re)connect.
-        if (state === 'connected') {
-          void this.rpc
-            .call('subscribe', { channel: PARADEX_SUMMARY_CHANNEL })
-            .catch((err: unknown) =>
-              log.warn({ err: String(err) }, 'markets_summary subscribe failed'),
-            );
-        }
-      },
-    });
-
-    this.rpc.onSubscription((channel, data) => {
-      if (channel.startsWith('markets_summary')) this.handleSummary(data);
-    });
-  }
+  protected initClients(): void {}
 
   protected override getFeedConnectionSnapshot() {
-    return {
-      connected: this.rpc.isConnected,
-      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
-    };
-  }
-
-  override getFeedDiagnostics() {
-    return {
-      connected: this.rpc.isConnected,
-      lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
-      reconnectAttempts: this.rpc.reconnectAttemptsCount,
-      rateLimitUntil: this.rpc.rateLimitUntilMs,
-    };
+    if (this.shards.length === 0) return null;
+    let connected = true;
+    let lastActivityAt = Number.POSITIVE_INFINITY;
+    for (const { client } of this.shards) {
+      connected &&= client.isConnected;
+      lastActivityAt = Math.min(lastActivityAt, client.lastActivityAtMs || client.connectedAtMs);
+    }
+    return { connected, lastActivityAt };
   }
 
   protected override restartFeedFromWatchdog(): void {
-    this.rpc.terminate();
+    for (const { client } of this.shards) client.terminate();
+  }
+
+  private get wsConnected(): boolean {
+    return this.shards.length > 0 && this.shards.every(({ client }) => client.isConnected);
   }
 
   // ─── instrument loading ───────────────────────────────────────
@@ -102,7 +88,6 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
 
     const optionSymbols = new Set(instruments.map((i) => i.exchangeSymbol));
     await this.seedQuotes(optionSymbols);
-    this.connectInBackground();
 
     this.refreshTimer = setInterval(
       () => void this.refreshInstruments(),
@@ -140,12 +125,13 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
     };
   }
 
-  private async seedQuotes(optionSymbols: Set<string>): Promise<void> {
+  private async seedQuotes(symbols: Set<string>): Promise<void> {
+    if (symbols.size === 0) return;
     try {
       const summaries = await fetchParadexSummaryAll();
       let n = 0;
       for (const s of summaries) {
-        if (!optionSymbols.has(s.symbol)) continue;
+        if (!symbols.has(s.symbol)) continue;
         this.quoteStore.set(
           s.symbol,
           buildParadexQuote(
@@ -164,15 +150,139 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
 
   // ─── WebSocket subscriptions ──────────────────────────────────
 
-  protected async subscribeChain(): Promise<void> {
-    this.connectInBackground();
+  protected async subscribeChain(
+    _underlying: string,
+    _expiry: string,
+    instruments: CachedInstrument[],
+  ): Promise<void> {
+    const channels = instruments.map((inst) => paradexSummaryChannel(inst.exchangeSymbol));
+    const groups = this.shardAllocator.assign(channels);
+
+    for (const [index, shardChannels] of groups) {
+      const shard = this.shard(index);
+      if (shard.client.isConnected) {
+        shard.sender.enqueue(shardChannels.map((channel) => ({ method: 'subscribe', channel })));
+        continue;
+      }
+      // A connecting shard subscribes its whole allocation from onOpen.
+      void shard.client.connect().catch((err: unknown) => {
+        log.warn({ shard: index, err: String(err) }, 'paradex shard connect failed; retrying');
+      });
+    }
+  }
+
+  protected override async unsubscribeChain(
+    _underlying: string,
+    _expiry: string,
+    instruments: CachedInstrument[],
+  ): Promise<void> {
+    this.releaseChannels(instruments.map((inst) => paradexSummaryChannel(inst.exchangeSymbol)));
   }
 
   protected async unsubscribeAll(): Promise<void> {
-    await this.rpc.unsubscribeAll();
+    const all: string[] = [];
+    for (let index = 0; index < this.shardAllocator.shardCount; index++) {
+      all.push(...this.shardAllocator.topicsFor(index));
+    }
+    this.releaseChannels(all);
+  }
+
+  private releaseChannels(channels: string[]): void {
+    for (const [index, released] of this.shardAllocator.release(channels)) {
+      const shard = this.shards[index];
+      if (shard == null) continue;
+      const releasedSet = new Set(released);
+      shard.sender.remove(
+        (frame) => frame.method === 'subscribe' && releasedSet.has(frame.channel),
+      );
+      if (!shard.client.isConnected) continue;
+      shard.sender.enqueue(released.map((channel) => ({ method: 'unsubscribe', channel })));
+    }
+  }
+
+  private shard(index: number): ParadexShard {
+    const existing = this.shards[index];
+    if (existing) return existing;
+
+    const pendingRequests = new Map<number, ParadexControlFrame>();
+    const client: TopicWsClient = new TopicWsClient(
+      PARADEX_WS_URL,
+      index === 0 ? 'paradex-ws' : `paradex-ws-${index}`,
+      {
+        skipUtf8Validation: true,
+        onStatusChange: (state) => {
+          shard.state =
+            state === 'connected' ? 'connected' : state === 'down' ? 'down' : 'reconnecting';
+          this.emitStatus(aggregateShardState(this.shards.map((s) => s.state)));
+        },
+        onOpen: () => {
+          shard.sender.clear();
+          pendingRequests.clear();
+          shard.sender.enqueue(
+            this.shardAllocator
+              .topicsFor(index)
+              .map((channel) => ({ method: 'subscribe' as const, channel })),
+          );
+        },
+        onClose: () => {
+          shard.sender.clear();
+          pendingRequests.clear();
+        },
+        onMessage: (raw) => this.handleShardMessage(index, raw),
+      },
+    );
+    const sender = new PacedSender<ParadexControlFrame>(
+      (frame) => {
+        const id = this.nextRequestId++;
+        pendingRequests.set(id, frame);
+        client.send({ jsonrpc: '2.0', id, method: frame.method, params: { channel: frame.channel } });
+      },
+      PARADEX_SUBSCRIBE_FRAMES_PER_TICK,
+      PARADEX_SUBSCRIBE_TICK_MS,
+    );
+    const shard: ParadexShard = { client, sender, pendingRequests, state: 'down' };
+    this.shards[index] = shard;
+    return shard;
   }
 
   // ─── WS message handlers ─────────────────────────────────────
+
+  private handleShardMessage(index: number, raw: WebSocket.RawData): void {
+    const summary = decodeParadexMarketSummarySbe(raw);
+    if (summary != null) {
+      this.handleSummary(summary);
+      return;
+    }
+
+    let json: unknown;
+    try {
+      json = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    const reply = parseParadexRpcResponse(json);
+    if (reply?.id == null) return;
+
+    const shard = this.shards[index];
+    const frame = shard?.pendingRequests.get(reply.id);
+    if (shard == null || frame == null) return;
+    shard.pendingRequests.delete(reply.id);
+    if (reply.error == null || frame.method !== 'subscribe') return;
+
+    // A rejected channel must leave the allocation, or every reconnect would
+    // replay it and the shard would keep counting it against the 200 cap.
+    this.shardAllocator.release([frame.channel]);
+    log.warn(
+      {
+        shard: index,
+        symbol: paradexSymbolFromChannel(frame.channel),
+        code: reply.error.code,
+        err: reply.error.message,
+        capHit: reply.error.code === PARADEX_SUBSCRIPTION_CAP_ERROR,
+      },
+      'paradex subscribe rejected',
+    );
+  }
 
   private handleSummary(data: unknown): void {
     const summary = parseParadexSummary(data);
@@ -184,11 +294,6 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
       (v) => this.positiveOrNull(v),
     );
     this.emitQuoteUpdate(summary.symbol, quote);
-  }
-  private connectInBackground(): void {
-    void this.rpc.connect().catch((err: unknown) => {
-      log.warn({ err: String(err) }, 'paradex websocket unavailable; using REST seed');
-    });
   }
 
   private async refreshInstruments(): Promise<void> {
@@ -204,6 +309,12 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
         added++;
       }
       if (added > 0) log.info({ added }, 'paradex new instruments from refresh');
+
+      const removed = this.sweepExpiredInstruments();
+      if (removed.length > 0) {
+        this.releaseChannels(removed.map((inst) => paradexSummaryChannel(inst.exchangeSymbol)));
+        log.info({ count: removed.length }, 'paradex expired instruments removed');
+      }
     } catch (err: unknown) {
       log.warn({ err: String(err) }, 'paradex instrument refresh failed');
     }
@@ -211,13 +322,18 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
 
   private async refreshHealth(): Promise<void> {
     const serverTime = await fetchParadexServerTime();
-    const health = deriveParadexHealth({ serverTime, wsConnected: this.rpc.isConnected });
+    const health = deriveParadexHealth({ serverTime, wsConnected: this.wsConnected });
     this.emitStatus(health.status, health.message);
-    if (!this.rpc.isConnected) {
-      await this.seedQuotes(
-        new Set(this.instruments.map((instrument) => instrument.exchangeSymbol)),
-      );
+
+    // Live channels only cover pinned/open chains; everything else (and any shard
+    // that is down) keeps a REST snapshot so the 5-minute freshness gate holds.
+    const restSymbols = new Set<string>();
+    for (const instrument of this.instruments) {
+      const shardIndex = this.shardAllocator.shardOf(paradexSummaryChannel(instrument.exchangeSymbol));
+      const live = shardIndex != null && this.shards[shardIndex]?.client.isConnected === true;
+      if (!live) restSymbols.add(instrument.exchangeSymbol);
     }
+    await this.seedQuotes(restSymbols);
   }
 
   override async dispose(): Promise<void> {
@@ -229,7 +345,11 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.stopBaseTimers();
     await this.unsubscribeAll();
-    await this.rpc?.disconnect();
+    for (const shard of this.shards) shard.sender.clear();
+    await Promise.all(this.shards.map(({ client }) => client.disconnect()));
+    this.shards.length = 0;
+    this.shardAllocator.clear();
   }
 }

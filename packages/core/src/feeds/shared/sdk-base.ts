@@ -34,10 +34,31 @@ const FEE_CAP: Record<VenueId, number> = {
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const DEFAULT_QUOTE_FRESHNESS_MS = 5 * 60 * 1000;
+const SURFACE_COVERAGE_REFRESH_MS = 10 * 60 * 1000;
+const MS_PER_DAY = 86_400_000;
+const DEFAULT_EXPIRY_HOUR_UTC = 8;
+
+export interface SurfaceCoverageConfig {
+  underlyings: readonly string[];
+  maxDteDays: number;
+}
+
+// The IV surface / IV history path reads ATM and 10Δ/25Δ wings for every listed
+// expiry out to ~120d. Venues that subscribe on demand only quote whatever chains a
+// browser happens to have open, so those expiries are pinned at boot instead.
+export const DEFAULT_SURFACE_COVERAGE: SurfaceCoverageConfig = {
+  underlyings: ['BTC', 'ETH'],
+  maxDteDays: 120,
+};
 
 function splitUnderlyingFamily(underlying: string): { base: string; settle: string | null } {
   const [base, settle] = underlying.split('_');
   return { base: base ?? underlying, settle: settle ?? null };
+}
+
+function expiryDateToMs(expiry: string): number | null {
+  const ts = Date.parse(`${expiry}T${String(DEFAULT_EXPIRY_HOUR_UTC).padStart(2, '0')}:00:00Z`);
+  return Number.isFinite(ts) ? ts : null;
 }
 
 interface FeedConnectionSnapshot {
@@ -113,7 +134,11 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
   protected quoteFreshnessMs = DEFAULT_QUOTE_FRESHNESS_MS;
   private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private surfaceCoverageTimer: ReturnType<typeof setInterval> | null = null;
+  private surfaceCoverageRunning = false;
   private lastWatchdogReconnectAt = 0;
+  protected surfaceCoverage: SurfaceCoverageConfig | null = null;
+  protected readonly pinnedChainKeys = new Set<string>();
 
   protected abstract initClients(): void;
   protected abstract fetchInstruments(): Promise<CachedInstrument[]>;
@@ -146,7 +171,84 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     this.marketsLoaded = true;
 
     await this.eagerSubscribe();
+    await this.ensureSurfaceCoverage();
+    this.startSurfaceCoverageRefresh();
     this.startFeedWatchdog();
+  }
+
+  /** Expiries of `underlying` that expire within the coverage window, nearest first. */
+  protected surfaceCoverageExpiries(underlying: string, now = Date.now()): string[] {
+    const config = this.surfaceCoverage;
+    if (config == null || !config.underlyings.includes(underlying)) return [];
+
+    const horizon = now + config.maxDteDays * MS_PER_DAY;
+    const byExpiry = new Map<string, number>();
+    for (const inst of this.instruments) {
+      if (inst.base !== underlying) continue;
+      const ts = inst.expirationTimestamp ?? expiryDateToMs(inst.expiry);
+      if (ts == null) continue;
+      const prev = byExpiry.get(inst.expiry);
+      if (prev == null || ts < prev) byExpiry.set(inst.expiry, ts);
+    }
+
+    return [...byExpiry.entries()]
+      .filter(([, ts]) => ts > now && ts <= horizon)
+      .map(([expiry]) => expiry)
+      .sort();
+  }
+
+  /**
+   * Subscribes and pins every coverage expiry that is not pinned yet. Pinned chains
+   * survive the last browser releasing them; expired keys are dropped. Idempotent,
+   * so the refresh timer also picks up expiries listed after boot.
+   */
+  protected async ensureSurfaceCoverage(): Promise<void> {
+    if (this.surfaceCoverage == null || this.surfaceCoverageRunning) return;
+    this.surfaceCoverageRunning = true;
+    try {
+      const wanted = new Set<string>();
+      for (const underlying of this.surfaceCoverage.underlyings) {
+        for (const expiry of this.surfaceCoverageExpiries(underlying)) {
+          const key = `${underlying}:${expiry}`;
+          wanted.add(key);
+          if (this.pinnedChainKeys.has(key)) continue;
+
+          const matching = this.instruments.filter(
+            (i) => i.base === underlying && i.expiry === expiry,
+          );
+          if (matching.length === 0) continue;
+          try {
+            await this.subscribeChain(underlying, expiry, matching);
+            this.pinnedChainKeys.add(key);
+          } catch (err: unknown) {
+            recorderLog.warn(
+              { venue: this.venue, underlying, expiry, err: String(err) },
+              'surface coverage subscribe failed; will retry on next refresh',
+            );
+          }
+        }
+      }
+
+      for (const key of this.pinnedChainKeys) {
+        if (!wanted.has(key)) this.pinnedChainKeys.delete(key);
+      }
+
+      if (wanted.size > 0) {
+        recorderLog.info(
+          { venue: this.venue, pinned: this.pinnedChainKeys.size, wanted: wanted.size },
+          'surface coverage ensured',
+        );
+      }
+    } finally {
+      this.surfaceCoverageRunning = false;
+    }
+  }
+
+  private startSurfaceCoverageRefresh(): void {
+    if (this.surfaceCoverage == null || this.surfaceCoverageTimer != null) return;
+    this.surfaceCoverageTimer = setInterval(() => {
+      void this.ensureSurfaceCoverage();
+    }, SURFACE_COVERAGE_REFRESH_MS);
   }
 
   protected async eagerSubscribe(): Promise<void> {
@@ -304,6 +406,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       const nextRequestRefCount = (this.requestRefCounts.get(key) ?? 1) - 1;
       if (nextRequestRefCount <= 0) {
         this.requestRefCounts.delete(key);
+        if (this.pinnedChainKeys.has(key)) return;
         await this.unsubscribeChain(effectiveUnderlying, request.expiry, matching);
         return;
       }
@@ -331,11 +434,21 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   async dispose(): Promise<void> {
+    this.stopBaseTimers();
+    await this.unsubscribeAll();
+  }
+
+  /** Venue `dispose()` overrides that skip `super.dispose()` must call this. */
+  protected stopBaseTimers(): void {
     if (this.feedWatchdogTimer != null) {
       clearInterval(this.feedWatchdogTimer);
       this.feedWatchdogTimer = null;
     }
-    await this.unsubscribeAll();
+    if (this.surfaceCoverageTimer != null) {
+      clearInterval(this.surfaceCoverageTimer);
+      this.surfaceCoverageTimer = null;
+    }
+    this.pinnedChainKeys.clear();
   }
 
   getFeedDiagnostics(): {

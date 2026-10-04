@@ -1,6 +1,14 @@
 import type { CachedInstrument } from '../shared/sdk-base.js';
 
 export const BYBIT_MAX_TOPICS_PER_BATCH = 200;
+// "Options can input up to 2000 args for a single connection" (v5/ws/connect).
+export const BYBIT_MAX_TOPICS_PER_CONNECTION = 2000;
+
+export function chunkBybitTopics(topics: string[], size = BYBIT_MAX_TOPICS_PER_BATCH): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < topics.length; i += size) chunks.push(topics.slice(i, i + size));
+  return chunks;
+}
 
 export interface BybitSubscriptionState {
   subscribedTopics: Set<string>;

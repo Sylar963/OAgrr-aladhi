@@ -1,8 +1,10 @@
 import {
   ParadexMarketsResponseSchema,
+  ParadexRpcResponseSchema,
   ParadexSummarySchema,
   ParadexSummaryResponseSchema,
   type ParadexMarket,
+  type ParadexRpcResponse,
   type ParadexSummary,
 } from './types.js';
 
@@ -18,5 +20,10 @@ export function parseParadexSummaries(input: unknown): ParadexSummary[] {
 
 export function parseParadexSummary(input: unknown): ParadexSummary | null {
   const parsed = ParadexSummarySchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseParadexRpcResponse(input: unknown): ParadexRpcResponse | null {
+  const parsed = ParadexRpcResponseSchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }

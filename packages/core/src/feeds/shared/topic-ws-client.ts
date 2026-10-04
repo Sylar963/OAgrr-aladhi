@@ -93,6 +93,9 @@ export class TopicWsClient {
       const url = this.resolveUrl();
       const socket = new WebSocket(url, {
         skipUTF8Validation: this.options.skipUtf8Validation ?? false,
+        // Inflating thousands of small frames per second cost ~15% of the main thread in profiles;
+        // raw frames trade a few MB/s of bandwidth for that CPU.
+        perMessageDeflate: false,
       });
       let settled = false;
 

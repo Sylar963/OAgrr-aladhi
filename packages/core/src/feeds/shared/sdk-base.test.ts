@@ -221,6 +221,28 @@ describe('SdkBaseAdapter', () => {
     await release();
   });
 
+  it('re-resolves aliases after instruments are added in place', async () => {
+    const adapter = new TestSdkAdapter();
+    expect(await adapter.listExpiries('AVAX')).toEqual([]);
+
+    adapter.addInstrument({
+      ...createInstrument('AVAX_USDC-260327-9-C', 9),
+      symbol: 'AVAX/USD:USDC-260327-9-C',
+      base: 'AVAX_USDC',
+      quote: 'USD',
+      settle: 'USDC',
+    });
+    expect(await adapter.listExpiries('AVAX')).toEqual(['2026-03-27']);
+
+    adapter.addInstrument({
+      ...createInstrument('AVAX-260424-9-C', 9),
+      symbol: 'AVAX/USD:USDT-260424-9-C',
+      base: 'AVAX',
+      expiry: '2026-04-24',
+    });
+    expect(await adapter.listExpiries('AVAX')).toEqual(['2026-04-24']);
+  });
+
   it('keeps sibling base and alias families separate on the same venue', async () => {
     const adapter = new TestSdkAdapter();
     adapter.addInstrument(createInstrument('BTC-260327-70000-C', 70_000));

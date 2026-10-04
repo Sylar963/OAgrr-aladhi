@@ -122,7 +122,8 @@ export class JsonRpcWsClient {
     this.shouldReconnect = true;
 
     this.connectPromise = new Promise((resolve, reject) => {
-      const socket = new WebSocket(this.url);
+      // See TopicWsClient: per-message inflate dominated main-thread CPU at feed rates.
+      const socket = new WebSocket(this.url, { perMessageDeflate: false });
       let settled = false;
 
       const resolveConnect = (): void => {

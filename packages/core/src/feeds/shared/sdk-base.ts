@@ -125,6 +125,11 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   };
 
   protected instruments: CachedInstrument[] = [];
+  private underlyingMatchCache: {
+    source: CachedInstrument[];
+    length: number;
+    byRequest: Map<string, Set<string>>;
+  } | null = null;
   protected quoteStore = new Map<string, LiveQuote>();
   protected instrumentMap = new Map<string, CachedInstrument>();
   protected symbolIndex = new Map<string, string>();
@@ -277,6 +282,31 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   private matchesRequestedUnderlying(requestUnderlying: string, instrumentBase: string): boolean {
+    if (requestUnderlying === instrumentBase) return true;
+    return this.matchingBases(requestUnderlying).has(instrumentBase);
+  }
+
+  // Alias resolution scans the whole instrument list, and it runs once per instrument on every
+  // chain fetch; uncached that was quadratic and a top CPU cost of the dealer-book and surface
+  // passes. Adapters push into `instruments` in place, so the cache keys on identity and length.
+  private matchingBases(requestUnderlying: string): Set<string> {
+    let cache = this.underlyingMatchCache;
+    if (cache?.source !== this.instruments || cache.length !== this.instruments.length) {
+      cache = { source: this.instruments, length: this.instruments.length, byRequest: new Map() };
+      this.underlyingMatchCache = cache;
+    }
+    let bases = cache.byRequest.get(requestUnderlying);
+    if (bases == null) {
+      bases = new Set();
+      for (const base of new Set(this.instruments.map((entry) => entry.base))) {
+        if (this.resolvesToUnderlying(requestUnderlying, base)) bases.add(base);
+      }
+      cache.byRequest.set(requestUnderlying, bases);
+    }
+    return bases;
+  }
+
+  private resolvesToUnderlying(requestUnderlying: string, instrumentBase: string): boolean {
     if (requestUnderlying === instrumentBase) return true;
 
     const request = splitUnderlyingFamily(requestUnderlying);

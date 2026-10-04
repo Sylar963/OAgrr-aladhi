@@ -17,6 +17,18 @@ describe('SkewSmileChart', () => {
     expect(screen.getByText('10Δc')).toBeTruthy();
   });
 
+  it('labels each point with its change vs the reference', () => {
+    const ref = now.map((p) => ({ ...p, iv: p.iv - 1 }));
+    render(<SkewSmileChart now={now} reference={ref} referenceLabel="7d ago" />);
+    expect(screen.getAllByText('+1.0')).toHaveLength(5);
+    expect(screen.getByText(/dashed = 7d ago/)).toBeTruthy();
+  });
+
+  it('says when there is no reference history', () => {
+    render(<SkewSmileChart now={now} reference={null} referenceLabel="30d ago" />);
+    expect(screen.getByText(/no history for 30d ago/)).toBeTruthy();
+  });
+
   it('renders an empty state with no points', () => {
     render(<SkewSmileChart now={[]} reference={null} referenceLabel="7d ago" />);
     expect(screen.getByText(/insufficient/i)).toBeTruthy();

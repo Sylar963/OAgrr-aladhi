@@ -115,7 +115,7 @@ export function pickReferencePoint(
   let best: IvHistoryPoint | null = null;
   let bestDist = Infinity;
   for (const point of series) {
-    if (point.atmIv == null) continue;
+    if (point.atmIv == null || point.rr25d == null || point.bfly25d == null) continue;
     const dist = Math.abs(point.ts - target);
     if (dist < bestDist) {
       bestDist = dist;
@@ -125,18 +125,10 @@ export function pickReferencePoint(
   return best != null && bestDist <= tolerance ? best : null;
 }
 
-export interface SkewDistribution {
-  bins: { x: number; density: number }[];
-  nowValue: number;
-  percentile: number | null;
-  sigma: number | null;
-  zone: SkewZone | null;
-  mean: number;
-  stddev: number;
-  rangeLo: number;
-  rangeHi: number;
-  min: number;
-  max: number;
+export interface SkewBands {
+  p10: number;
+  p50: number;
+  p90: number;
 }
 
 function quantile(sorted: number[], q: number): number {
@@ -148,72 +140,57 @@ function quantile(sorted: number[], q: number): number {
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (pos - lo);
 }
 
-function gaussianKde(
-  values: number[],
-  lo: number,
-  hi: number,
-  samples = 32,
-): { x: number; density: number }[] {
-  const n = values.length;
-  const mean = values.reduce((s, v) => s + v, 0) / n;
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
-  const sd = Math.sqrt(variance) || 1;
-  const bw = Math.max(1.06 * sd * n ** -0.2, (hi - lo) / 64 || 1e-6);
-  const span = hi - lo || 1;
-  const out: { x: number; density: number }[] = [];
-  for (let i = 0; i < samples; i++) {
-    const x = lo + (span * i) / (samples - 1);
-    let density = 0;
-    for (const v of values) {
-      const u = (x - v) / bw;
-      density += Math.exp(-0.5 * u * u);
-    }
-    out.push({ x, density: density / (n * bw * Math.sqrt(2 * Math.PI)) });
-  }
-  return out;
+/** p10/p50/p90 of a metric over the lookback, in vol points. */
+export function buildBands(points: SkewLinePoint[]): SkewBands | null {
+  if (points.length < 2) return null;
+  const sorted = points.map((p) => p.value).sort((a, b) => a - b);
+  return { p10: quantile(sorted, 0.1), p50: quantile(sorted, 0.5), p90: quantile(sorted, 0.9) };
 }
 
-export function buildDistribution(
-  series: IvHistoryPoint[],
-  key: SkewMetricKey,
-): SkewDistribution | null {
-  const values = series
-    .map((p) => p[key])
-    .filter((v): v is number => v != null && Number.isFinite(v))
-    .map((v) => v * 100);
-  if (values.length < 2) return null;
+export function zoneForPercentile(percentile: number | null): SkewZone | null {
+  if (percentile == null || !Number.isFinite(percentile)) return null;
+  const tail = Math.min(percentile, 100 - percentile);
+  if (tail <= 5) return 'extreme';
+  if (tail <= 15) return 'stretched';
+  return 'normal';
+}
 
-  const nowValue = values[values.length - 1]!;
-  const sorted = [...values].sort((a, b) => a - b);
-  const min = sorted[0]!;
-  const max = sorted[sorted.length - 1]!;
-  const mean = values.reduce((s, v) => s + v, 0) / values.length;
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
-  const stddev = Math.sqrt(variance);
-  const sigma = stddev > 0 ? (nowValue - mean) / stddev : null;
-  const leq = values.filter((v) => v <= nowValue).length;
-  const percentile = (leq / values.length) * 100;
+export function ordinal(n: number): string {
+  const v = Math.round(n);
+  const mod100 = v % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${v}th`;
+  const suffix = ['th', 'st', 'nd', 'rd'][v % 10] ?? 'th';
+  return `${v}${suffix}`;
+}
 
-  let rangeLo = Math.min(quantile(sorted, 0.02), nowValue);
-  let rangeHi = Math.max(quantile(sorted, 0.98), nowValue);
-  if (rangeHi - rangeLo < 1e-6) {
-    rangeLo -= 1;
-    rangeHi += 1;
+function relativeTo(percentile: number | null, low: string, high: string): string {
+  if (percentile == null) return 'no history yet';
+  if (percentile >= 85) return `${high} (${ordinal(percentile)} pct)`;
+  if (percentile <= 15) return `${low} (${ordinal(percentile)} pct)`;
+  return `typical for the lookback (${ordinal(percentile)} pct)`;
+}
+
+/** Plain-language read of RR/Fly level and where it sits in the lookback. Inputs in vol points. */
+export function describeSkew(
+  rrVp: number | null,
+  rrPct: number | null,
+  flyVp: number | null,
+  flyPct: number | null,
+): string {
+  const parts: string[] = [];
+  if (rrVp != null) {
+    const level =
+      Math.abs(rrVp) < 0.25
+        ? 'Calls ≈ puts'
+        : rrVp < 0
+          ? `Puts over calls by ${Math.abs(rrVp).toFixed(1)}vp`
+          : `Calls over puts by ${rrVp.toFixed(1)}vp`;
+    parts.push(`${level}: ${relativeTo(rrPct, 'puts unusually bid', 'calls unusually bid')}.`);
   }
-
-  return {
-    bins: gaussianKde(values, rangeLo, rangeHi),
-    nowValue,
-    percentile,
-    sigma,
-    zone: zoneFor(sigma, 'zscore'),
-    mean,
-    stddev,
-    rangeLo,
-    rangeHi,
-    min,
-    max,
-  };
+  if (flyVp != null) {
+    parts.push(`Tails ${relativeTo(flyPct, 'unusually cheap', 'unusually rich')}.`);
+  }
+  return parts.join(' ');
 }
 
 export function reconstructSmile(point: IvHistoryPoint): SmilePoint[] {

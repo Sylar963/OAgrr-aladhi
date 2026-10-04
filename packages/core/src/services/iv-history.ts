@@ -30,6 +30,67 @@ function emptyExtrema(): IvHistoryExtrema {
   return { atmIv: null, rr25d: null, bfly25d: null };
 }
 
+const SKEW_KEYS = ['rr25d', 'bfly25d', 'rr10d', 'bfly10d'] as const;
+const DESPIKE_HALF_WINDOW = 6;
+const DESPIKE_FLOOR = 0.01;
+const DESPIKE_MAD_MULT = 5;
+
+function median(sorted: number[]): number {
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/**
+ * Nulls skew fields that are single-snapshot outliers vs. their neighbours (Hampel filter).
+ * The live grid occasionally yields a one-off RR/fly jump of several vol points (mid-refresh
+ * or expiry-roll snapshots) that reverts on the next sample; left in, they inflate σ and
+ * percentile extremes. Step changes survive because the centred median follows the new level.
+ * The trailing edge has no forward neighbours, so the latest points are left untouched.
+ */
+export function despikeSkewSeries(series: IvHistoryPoint[]): IvHistoryPoint[] {
+  const out = series.map((p) => ({ ...p }));
+  for (const key of SKEW_KEYS) {
+    const idx: number[] = [];
+    for (let i = 0; i < series.length; i++) {
+      const v = series[i]![key];
+      if (v != null && Number.isFinite(v)) idx.push(i);
+    }
+    for (let j = DESPIKE_HALF_WINDOW; j < idx.length - DESPIKE_HALF_WINDOW; j++) {
+      const window: number[] = [];
+      for (let k = j - DESPIKE_HALF_WINDOW; k <= j + DESPIKE_HALF_WINDOW; k++) {
+        window.push(series[idx[k]!]![key]!);
+      }
+      window.sort((a, b) => a - b);
+      const med = median(window);
+      const mad = median(window.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
+      const threshold = Math.max(DESPIKE_FLOOR, DESPIKE_MAD_MULT * 1.4826 * mad);
+      const value = series[idx[j]!]![key]!;
+      if (Math.abs(value - med) > threshold) out[idx[j]!]![key] = null;
+    }
+  }
+  return out;
+}
+
+export function downsampleSeries(series: IvHistoryPoint[], bucketMs: number): IvHistoryPoint[] {
+  if (!(bucketMs > 0) || series.length === 0) return series;
+  const out: IvHistoryPoint[] = [];
+  let currentBucket = Number.NaN;
+  for (const point of series) {
+    const bucket = Math.floor(point.ts / bucketMs);
+    if (bucket === currentBucket) out[out.length - 1] = point;
+    else out.push(point);
+    currentBucket = bucket;
+  }
+  return out;
+}
+
+export interface IvHistoryQueryOptions {
+  /** Keep the last sample per bucket of this size. Stats are always computed at full resolution. */
+  resolutionMs?: number;
+  /** Only this tenor carries a series; the others return current + stats with an empty series. */
+  seriesTenor?: IvTenor;
+}
+
 function bufferKey(underlying: string, tenor: IvTenor): string {
   return `${underlying}:${tenor}`;
 }
@@ -111,6 +172,10 @@ export interface IvHistoryPersistence {
  */
 export class IvHistoryService {
   private buffers = new Map<string, IvHistoryPoint[]>();
+  private cleaned = new Map<
+    string,
+    { length: number; firstTs: number; lastTs: number; series: IvHistoryPoint[] }
+  >();
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly underlyings: string[];
   private readonly intervalMs: number;
@@ -152,11 +217,21 @@ export class IvHistoryService {
     }
   }
 
-  query(underlying: string, windowDays: 30 | 90): IvHistoryResponse {
+  query(
+    underlying: string,
+    windowDays: 30 | 90,
+    opts: IvHistoryQueryOptions = {},
+  ): IvHistoryResponse {
     const cutoff = Date.now() - windowDays * MS_PER_DAY;
     const tenors = {} as Record<IvTenor, IvHistoryTenorResult>;
     for (const tenor of TENORS) {
-      tenors[tenor] = this.buildTenorResult(underlying, tenor, cutoff);
+      const result = this.buildTenorResult(underlying, tenor, cutoff);
+      if (opts.seriesTenor != null && opts.seriesTenor !== tenor) {
+        result.series = [];
+      } else if (opts.resolutionMs != null) {
+        result.series = downsampleSeries(result.series, opts.resolutionMs);
+      }
+      tenors[tenor] = result;
     }
     return { underlying, windowDays, tenors };
   }
@@ -231,6 +306,20 @@ export class IvHistoryService {
   }
 
   // ── internals ────────────────────────────────────────────────────
+
+  private getCleanBuffer(underlying: string, tenor: IvTenor): IvHistoryPoint[] {
+    const key = bufferKey(underlying, tenor);
+    const buf = this.buffers.get(key) ?? [];
+    const firstTs = buf[0]?.ts ?? 0;
+    const lastTs = buf[buf.length - 1]?.ts ?? 0;
+    const hit = this.cleaned.get(key);
+    if (hit && hit.length === buf.length && hit.firstTs === firstTs && hit.lastTs === lastTs) {
+      return hit.series;
+    }
+    const series = despikeSkewSeries(buf);
+    this.cleaned.set(key, { length: buf.length, firstTs, lastTs, series });
+    return series;
+  }
 
   private appendPoint(underlying: string, tenor: IvTenor, point: IvHistoryPoint): void {
     const key = bufferKey(underlying, tenor);
@@ -340,8 +429,7 @@ export class IvHistoryService {
     tenor: IvTenor,
     cutoff: number,
   ): IvHistoryTenorResult {
-    const buf = this.buffers.get(bufferKey(underlying, tenor)) ?? [];
-    const series = buf.filter((p) => p.ts >= cutoff);
+    const series = this.getCleanBuffer(underlying, tenor).filter((p) => p.ts >= cutoff);
     const latest =
       series.length > 0
         ? series[series.length - 1]!

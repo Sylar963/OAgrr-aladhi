@@ -1,0 +1,12 @@
+.block { flex-shrink: 0; }
+.header { display: flex; align-items: center; gap: 9px; font-family: 'IBM Plex Mono', monospace; margin-bottom: 2px; min-height: 22px; }
+.name { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+.value { font-size: 16px; font-weight: 600; }
+.chip { font-size: 9px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; border: 1px solid #3a4248; color: #9ca3af; }
+.chip[data-zone='stretched'] { border-color: #f59e0b; color: #f59e0b; }
+.chip[data-zone='extreme'] { border-color: #ef4444; color: #ef4444; }
+.sub { font-size: 10px; color: #6b7280; white-space: nowrap; }
+.readout { margin-left: auto; font-size: 10px; color: #9ca3af; white-space: nowrap; }
+.muted { font-size: 11px; color: #4b5560; margin-left: auto; }
+.axis { fill: #3f484f; font-size: 9px; font-family: monospace; }
+.semantic { fill: #4b5560; font-size: 8px; font-family: monospace; letter-spacing: 0.04em; }

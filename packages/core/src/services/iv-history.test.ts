@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { interpTenor, type IvSurfaceRow } from '../core/enrichment.js';
 import {
+  despikeSkewSeries,
+  downsampleSeries,
   IvHistoryService,
   type IvHistoryPersistence,
   type PersistedIvHistoryPoint,
@@ -412,5 +414,75 @@ describe('IvHistoryService', () => {
     );
     expect(svc.getBuffer('BTC', '30d')[0]!.rr25d).toBeCloseTo(0.04, 6);
     svc.dispose();
+  });
+});
+
+function flatPoint(ts: number, rr: number | null, fly = 0.02) {
+  return { ts, atmIv: 0.5, rr25d: rr, bfly25d: fly, rr10d: null, bfly10d: null };
+}
+
+describe('despikeSkewSeries', () => {
+  it('nulls a single-snapshot RR spike and keeps neighbours', () => {
+    const series = Array.from({ length: 30 }, (_, i) =>
+      flatPoint(i * 300_000, -0.02 + (i % 2) * 0.001),
+    );
+    series[15]!.rr25d = 0.1;
+    const out = despikeSkewSeries(series);
+    expect(out[15]!.rr25d).toBeNull();
+    expect(out[15]!.atmIv).toBe(0.5);
+    expect(out[15]!.bfly25d).toBe(0.02);
+    expect(out[14]!.rr25d).toBe(series[14]!.rr25d);
+    expect(series[15]!.rr25d).toBe(0.1);
+  });
+
+  it('preserves a genuine step change', () => {
+    const series = Array.from({ length: 40 }, (_, i) =>
+      flatPoint(i * 300_000, i < 20 ? -0.02 : 0.03),
+    );
+    const out = despikeSkewSeries(series);
+    expect(out.every((p) => p.rr25d != null)).toBe(true);
+  });
+
+  it('leaves the trailing edge untouched', () => {
+    const series = Array.from({ length: 30 }, (_, i) => flatPoint(i * 300_000, -0.02));
+    series[29]!.rr25d = 0.2;
+    expect(despikeSkewSeries(series)[29]!.rr25d).toBe(0.2);
+  });
+
+  it('skips null samples when picking neighbours', () => {
+    const series = Array.from({ length: 30 }, (_, i) =>
+      flatPoint(i * 300_000, i % 3 === 0 ? null : -0.02),
+    );
+    series[16]!.rr25d = 0.1;
+    expect(despikeSkewSeries(series)[16]!.rr25d).toBeNull();
+  });
+});
+
+describe('downsampleSeries', () => {
+  it('keeps the last sample of each bucket', () => {
+    const series = Array.from({ length: 25 }, (_, i) => flatPoint(i * 300_000, i / 100));
+    const out = downsampleSeries(series, 3_600_000);
+    expect(out).toHaveLength(3);
+    expect(out[0]!.rr25d).toBe(0.11);
+    expect(out[2]!.ts).toBe(series[24]!.ts);
+  });
+});
+
+describe('IvHistoryService.query options', () => {
+  it('limits series to the requested tenor and downsamples without changing stats', async () => {
+    let rows: IvSurfaceRow[] = [];
+    const svc = new IvHistoryService({ getSurfaceGrid: async () => rows, dvol: mockDvol() });
+    const now = Date.now();
+    for (let i = 0; i < 48; i++) {
+      rows = [makeRow('a', 7, 0.5, -0.02 + i * 0.0005, 0.01), makeRow('b', 90, 0.55, -0.03, 0.02)];
+      await svc.snapshotOnce(now - (48 - i) * 300_000);
+    }
+    const full = svc.query('BTC', 30);
+    const slim = svc.query('BTC', 30, { seriesTenor: '7d', resolutionMs: 3_600_000 });
+    expect(full.tenors['7d'].series).toHaveLength(48);
+    expect(slim.tenors['7d'].series.length).toBeLessThanOrEqual(5);
+    expect(slim.tenors['30d'].series).toHaveLength(0);
+    expect(slim.tenors['30d'].current).toEqual(full.tenors['30d'].current);
+    expect(slim.tenors['7d'].rrPercentile).toBe(full.tenors['7d'].rrPercentile);
   });
 });

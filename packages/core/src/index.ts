@@ -246,6 +246,7 @@ export {
   type IvHistoryDeps,
   type IvHistoryOptions,
   type IvHistoryPersistence,
+  type IvHistoryQueryOptions,
   type IvHistoryPointSource,
   type PersistedIvHistoryPoint,
 } from './services/iv-history.js';

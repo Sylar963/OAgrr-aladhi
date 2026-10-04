@@ -68,35 +68,31 @@
   color: #0a0a0a;
 }
 
-.legend {
-  display: inline-flex;
-  gap: var(--space-4);
-  font-family: var(--font-mono);
+.term {
+  display: grid;
+  grid-template-columns: 64px repeat(4, minmax(0, 1fr));
+  column-gap: 6px;
+  row-gap: 2px;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 0.04em;
+  padding: 6px 0 2px;
+  border-top: 1px solid #15191d;
   flex-shrink: 0;
 }
-
-.legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legendSwatch {
-  width: 14px;
-  height: 3px;
-  border-radius: 1px;
-  flex-shrink: 0;
-}
+.termRow { display: contents; }
+.termHead { color: var(--text-dim); font-size: 9px; letter-spacing: 0.04em; text-align: right; }
+.termHead:first-child { text-align: left; }
+.termLabel { color: var(--text-dim); }
+.termCell { color: var(--text-secondary); text-align: right; white-space: nowrap; }
+.termHead[data-active='true'],
+.termCell[data-active='true'] { color: var(--text-primary); font-weight: 600; }
 
 .foot {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-top: 10px;
-  padding-top: 9px;
+  margin-top: auto;
+  padding-top: 6px;
   border-top: 1px solid #15191d;
   font-family: 'IBM Plex Mono', monospace;
 }
@@ -118,10 +114,5 @@
 
   .toggleLabel {
     display: none;
-  }
-
-  .legend {
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-3);
   }
 }

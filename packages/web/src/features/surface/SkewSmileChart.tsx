@@ -1,7 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-
 import styles from './SkewSmileChart.module.css';
 import type { SmilePoint } from './skew-history-utils';
+import { useMeasuredWidth } from './use-measured-width';
 
 interface Props {
   now: SmilePoint[];
@@ -15,31 +14,14 @@ interface Props {
 // the height stays fixed so the chart fits its slot in the (fixed-height)
 // surface panel without distorting the in-SVG axis text.
 const W_FALLBACK = 480;
-const H = 150;
+const H = 140;
 const PAD_L = 34;
 const PAD_R = 12;
-const PAD_T = 14;
+const PAD_T = 18;
 const PAD_B = 26;
 
 export default function SkewSmileChart({ now, reference, referenceLabel }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(W_FALLBACK);
-
-  useLayoutEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.getBoundingClientRect().width;
-      if (w > 0) setWidth(w);
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const W = width;
+  const [wrapRef, W] = useMeasuredWidth<HTMLDivElement>(W_FALLBACK);
 
   if (now.length === 0) {
     return (
@@ -72,6 +54,7 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
       .join(' ');
 
   const gridIvs = [hi, (hi + lo) / 2, lo];
+  const refByLabel = new Map((reference ?? []).map((p) => [p.label, p.iv]));
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
@@ -101,9 +84,32 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
           />
         )}
         <path d={line(now)} fill="none" stroke="#50d2c1" strokeWidth="2" />
-        {now.map((p) => (
-          <circle key={p.label} cx={toX(p.x)} cy={toY(p.iv)} r="3" fill="#50d2c1" />
-        ))}
+        {now.map((p, i) => {
+          const ref = refByLabel.get(p.label);
+          const delta = ref != null ? p.iv - ref : null;
+          return (
+            <g key={p.label}>
+              <circle cx={toX(p.x)} cy={toY(p.iv)} r="3" fill="#50d2c1">
+                <title>{`${p.label} ${p.iv.toFixed(1)}%${delta != null ? ` (${delta >= 0 ? '+' : ''}${delta.toFixed(1)} vs ${referenceLabel})` : ''}`}</title>
+              </circle>
+              <text
+                x={toX(p.x)}
+                y={toY(p.iv) - 7}
+                fill="#c9d1d9"
+                fontSize="9"
+                fontFamily="monospace"
+                textAnchor={i === 0 ? 'start' : i === now.length - 1 ? 'end' : 'middle'}
+              >
+                {p.iv.toFixed(1)}
+                {delta != null && (
+                  <tspan fill={delta >= 0 ? '#f59e0b' : '#50d2c1'}>
+                    {` ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`}
+                  </tspan>
+                )}
+              </text>
+            </g>
+          );
+        })}
         {now.map((p, i) => (
           <text
             key={`l-${p.label}`}
@@ -119,7 +125,9 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
         ))}
       </svg>
       <div className={styles.caption}>
-        solid = now · faded = {referenceLabel} · tilt = RR · lift = Fly
+        {reference && reference.length > 0
+          ? `solid = now · dashed = ${referenceLabel} · labels = IV and change in vol pts · tilt = RR · lift = Fly`
+          : `solid = now · no history for ${referenceLabel}`}
       </div>
     </div>
   );

@@ -3,7 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useExpiries } from '@features/chain';
 import { VENUE_IDS } from '@lib/venue-meta';
 import { fetchJson } from '@lib/http';
-import type { EnrichedChainResponse, IvHistoryResponse, IvSurfaceResponse } from '@shared/enriched';
+import type {
+  EnrichedChainResponse,
+  IvHistoryResponse,
+  IvSurfaceResponse,
+  IvTenor,
+} from '@shared/enriched';
 
 export type IvHistoryWindow = '30d' | '90d';
 
@@ -24,11 +29,17 @@ export function useSurface(underlying: string, venues: string[]) {
   });
 }
 
-export function useIvHistory(underlying: string, window: IvHistoryWindow) {
+// Raw history is 5-minute samples; a 90d window at full resolution is ~16 MB.
+const IV_HISTORY_RESOLUTION: Record<IvHistoryWindow, string> = { '30d': '15m', '90d': '1h' };
+
+export function useIvHistory(underlying: string, window: IvHistoryWindow, tenor?: IvTenor) {
+  const tenorParam = tenor ? `&tenor=${tenor}` : '';
   return useQuery({
-    queryKey: ['iv-history', underlying, window] as const,
+    queryKey: ['iv-history', underlying, window, tenor ?? 'all'] as const,
     queryFn: () =>
-      fetchJson<IvHistoryResponse>(`/iv-history?underlying=${underlying}&window=${window}`),
+      fetchJson<IvHistoryResponse>(
+        `/iv-history?underlying=${underlying}&window=${window}&resolution=${IV_HISTORY_RESOLUTION[window]}${tenorParam}`,
+      ),
     enabled: Boolean(underlying),
     staleTime: 30_000,
     refetchInterval: 60_000,

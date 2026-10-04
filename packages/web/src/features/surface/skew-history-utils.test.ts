@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { IvHistoryPoint } from '@shared/enriched';
 import {
-  buildDistribution,
+  buildBands,
+  describeSkew,
+  ordinal,
+  zoneForPercentile,
   buildSkewLineData,
   formatSkewDisplayValue,
   latestSkewDisplayValue,
@@ -34,6 +37,14 @@ describe('pickReferencePoint', () => {
   });
   it('returns null when no point is within half the horizon', () => {
     expect(pickReferencePoint(series, 14 * 86_400_000, 60)).toBeNull();
+  });
+  it('skips ATM-only points that cannot rebuild a smile', () => {
+    const withSeed = [
+      { ...series[0]!, ts: 5 * 86_400_000 },
+      { ...series[1]!, rr25d: null, bfly25d: null },
+      series[2]!,
+    ];
+    expect(pickReferencePoint(withSeed, 14 * 86_400_000, 7)?.ts).toBe(5 * 86_400_000);
   });
 });
 
@@ -152,27 +163,41 @@ describe('skew history transforms', () => {
   });
 });
 
-describe('buildDistribution', () => {
-  const series = [
-    { ts: 1, atmIv: 0.4, rr25d: -0.08, bfly25d: 0.01, rr10d: null, bfly10d: null },
-    { ts: 2, atmIv: 0.4, rr25d: -0.06, bfly25d: 0.01, rr10d: null, bfly10d: null },
-    { ts: 3, atmIv: 0.4, rr25d: -0.04, bfly25d: 0.01, rr10d: null, bfly10d: null },
-  ];
-
-  it('returns nowValue, percentile, sigma, and a density curve', () => {
-    const d = buildDistribution(series, 'rr25d')!;
-    expect(d.nowValue).toBeCloseTo(-4, 6);
-    expect(d.min).toBeCloseTo(-8, 6);
-    expect(d.max).toBeCloseTo(-4, 6);
-    expect(d.percentile).toBeCloseTo(100, 6);
-    expect(d.sigma).toBeGreaterThan(0);
-    expect(d.bins.length).toBeGreaterThan(8);
-    expect(d.bins.every((b) => b.density >= 0)).toBe(true);
-    expect(d.rangeLo).toBeLessThanOrEqual(d.nowValue);
-    expect(d.rangeHi).toBeGreaterThanOrEqual(d.nowValue);
+describe('buildBands', () => {
+  it('returns p10/p50/p90 of the values', () => {
+    const pts = Array.from({ length: 11 }, (_, i) => ({ time: i, value: i }));
+    expect(buildBands(pts)).toEqual({ p10: 1, p50: 5, p90: 9 });
   });
+  it('returns null with fewer than two points', () => {
+    expect(buildBands([{ time: 0, value: 1 }])).toBeNull();
+  });
+});
 
-  it('returns null with fewer than 2 valid points', () => {
-    expect(buildDistribution([series[0]!], 'rr25d')).toBeNull();
+describe('zoneForPercentile', () => {
+  it('classifies both tails symmetrically', () => {
+    expect(zoneForPercentile(50)).toBe('normal');
+    expect(zoneForPercentile(12)).toBe('stretched');
+    expect(zoneForPercentile(88)).toBe('stretched');
+    expect(zoneForPercentile(97)).toBe('extreme');
+    expect(zoneForPercentile(null)).toBeNull();
+  });
+});
+
+describe('ordinal', () => {
+  it('uses the correct English suffix', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 72, 100].map(ordinal)).toEqual([
+      '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '72nd', '100th',
+    ]);
+  });
+});
+
+describe('describeSkew', () => {
+  it('reads put skew and tail pricing in plain language', () => {
+    expect(describeSkew(-0.8, 72, 0.9, 44)).toBe(
+      'Puts over calls by 0.8vp: typical for the lookback (72nd pct). Tails typical for the lookback (44th pct).',
+    );
+    expect(describeSkew(1.2, 92, 2, 8)).toBe(
+      'Calls over puts by 1.2vp: calls unusually bid (92nd pct). Tails unusually cheap (8th pct).',
+    );
   });
 });

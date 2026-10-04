@@ -1,4 +1,10 @@
-import { computeGammaWalls, GammaChannelPrimitive } from '@features/gex';
+import {
+  CALL_WALL_COLOR,
+  computeGammaWalls,
+  GammaBandsPrimitive,
+  type GammaWalls,
+  PUT_WALL_COLOR,
+} from '@features/gex';
 import gexStyles from '@features/gex/GexView.module.css';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 import type { GexStrike } from '@shared/enriched';
@@ -17,10 +23,10 @@ import { liveBarToCandle, tsToSec } from './live-candle';
 import { useTradfiUnderlyingCandles } from './use-tradfi-underlying-candles';
 import { useTradfiUnderlyingCandlesLive } from './use-tradfi-underlying-candles-live';
 
-const CALL_WALL_COLOR = '#00E997';
-const PUT_WALL_COLOR = '#CB3855';
-const FLIP_COLOR = '#F0B90B';
 const SPOT_COLOR = '#50D2C1';
+// Share of the candles reserved right of the last bar for the live walls.
+const PROJECTION_FRACTION = 0.15;
+const MIN_PROJECTION_BARS = 8;
 
 // Range → interval mapping (both are protocol enums).
 const RANGES: Array<{ range: InstrumentCandleRange; interval: InstrumentCandleInterval; label: string }> = [
@@ -43,10 +49,10 @@ export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Prop
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
-  const channelRef = useRef<GammaChannelPrimitive | null>(null);
-  const callLineRef = useRef<IPriceLine | null>(null);
-  const putLineRef = useRef<IPriceLine | null>(null);
-  const flipLineRef = useRef<IPriceLine | null>(null);
+  const bandsRef = useRef<GammaBandsPrimitive | null>(null);
+  const wallsRef = useRef<GammaWalls>({ callWall: null, putWall: null, gammaFlip: null });
+  const anchorRef = useRef<number | null>(null);
+  const didFitRef = useRef(false);
   const spotLineRef = useRef<IPriceLine | null>(null);
 
   const { data, isLoading, error, refetch } = useTradfiUnderlyingCandles({
@@ -81,68 +87,56 @@ export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Prop
       borderVisible: false,
       priceLineVisible: false,
     }) as ISeriesApi<'Candlestick', Time>;
-    const channel = new GammaChannelPrimitive();
-    series.attachPrimitive(channel);
+    const bands = new GammaBandsPrimitive();
+    series.attachPrimitive(bands);
     chartRef.current = chart;
     seriesRef.current = series;
-    channelRef.current = channel;
+    bandsRef.current = bands;
     return () => {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      channelRef.current = null;
-      callLineRef.current = null;
-      putLineRef.current = null;
-      flipLineRef.current = null;
+      bandsRef.current = null;
       spotLineRef.current = null;
     };
   }, []);
 
-  // Candle data.
-  useEffect(() => {
-    const series = seriesRef.current;
-    if (!series || !data) return;
-    series.setData(
-      data.candles.map((c) => ({
-        time: tsToSec(c.ts) as Time,
-        open: c.o,
-        high: c.h,
-        low: c.l,
-        close: c.c,
-      })),
-    );
-  }, [data]);
+  const pushBands = useCallback(() => {
+    bandsRef.current?.update([], wallsRef.current, anchorRef.current);
+  }, []);
 
-  // Walls.
+  useEffect(() => {
+    didFitRef.current = false;
+  }, [underlying, rangeIdx]);
+
+  // Candle data, plus empty space right of the last bar for the live walls.
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series) return;
-    channelRef.current?.update(walls.callWall, walls.putWall);
-    const sync = (
-      ref: React.MutableRefObject<IPriceLine | null>,
-      price: number | null,
-      color: string,
-      label: string,
-      dashed: boolean,
-    ) => {
-      if (ref.current) {
-        series.removePriceLine(ref.current);
-        ref.current = null;
-      }
-      if (price == null) return;
-      ref.current = series.createPriceLine({
-        price,
-        color,
-        lineWidth: 2,
-        lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
-        axisLabelVisible: true,
-        title: `${Math.round(price).toLocaleString()} ${label}`,
-      });
-    };
-    sync(callLineRef, walls.callWall, CALL_WALL_COLOR, 'CALL WALL', false);
-    sync(putLineRef, walls.putWall, PUT_WALL_COLOR, 'PUT WALL', false);
-    sync(flipLineRef, walls.gammaFlip, FLIP_COLOR, 'FLIP', true);
-  }, [walls]);
+    const chart = chartRef.current;
+    if (!series || !chart || !data) return;
+    const candles = data.candles.map((c) => ({
+      time: tsToSec(c.ts) as Time,
+      open: c.o,
+      high: c.h,
+      low: c.l,
+      close: c.c,
+    }));
+    series.setData(candles);
+    anchorRef.current = candles.length > 0 ? (candles[candles.length - 1]!.time as number) : null;
+    pushBands();
+    if (candles.length === 0 || didFitRef.current) return;
+    const last = candles.length - 1;
+    chart.timeScale().setVisibleLogicalRange({
+      from: 0,
+      to: last + Math.max(MIN_PROJECTION_BARS, Math.round(candles.length * PROJECTION_FRACTION)),
+    });
+    didFitRef.current = true;
+  }, [data, pushBands]);
+
+  useEffect(() => {
+    wallsRef.current = walls;
+    pushBands();
+  }, [walls, pushBands]);
 
   const applySpotLine = useCallback((price: number | null) => {
     const series = seriesRef.current;
@@ -174,10 +168,15 @@ export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Prop
     (bar: { ts: number; o: number; h: number; l: number; c: number; vol: number }) => {
       const series = seriesRef.current;
       if (!series) return;
-      series.update(liveBarToCandle(bar));
+      const candle = liveBarToCandle(bar);
+      series.update(candle);
+      if (anchorRef.current === null || (candle.time as number) > anchorRef.current) {
+        anchorRef.current = candle.time as number;
+        pushBands();
+      }
       applySpotLine(bar.c);
     },
-    [applySpotLine],
+    [applySpotLine, pushBands],
   );
 
   useTradfiUnderlyingCandlesLive({ underlying, interval: sel.interval, onBar: handleLiveBar });

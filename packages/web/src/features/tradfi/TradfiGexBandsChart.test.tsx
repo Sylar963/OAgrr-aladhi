@@ -34,12 +34,14 @@ vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {},
   ColorType: { Solid: 'solid' },
   LineStyle: { Solid: 0, Dashed: 1 },
-  createChart: () => ({ addSeries: () => series, remove: () => {}, timeScale: () => ({}) }),
+  createChart: () => ({ addSeries: () => series, remove: () => {}, timeScale: () => ({ setVisibleLogicalRange: () => {} }) }),
 }));
 
 vi.mock('@features/gex', () => ({
   computeGammaWalls: () => ({ callWall: 100, putWall: 90, gammaFlip: 95 }),
-  GammaChannelPrimitive: class {
+  CALL_WALL_COLOR: '#00E997',
+  PUT_WALL_COLOR: '#CB3855',
+  GammaBandsPrimitive: class {
     update() {}
   },
 }));

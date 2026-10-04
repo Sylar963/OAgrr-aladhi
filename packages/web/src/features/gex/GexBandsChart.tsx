@@ -99,6 +99,7 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
   const {
     data: candleData,
     isLoading: candlesLoading,
+    isPlaceholderData: candlesStale,
     error: candlesError,
     refetch,
   } = useGexSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
@@ -117,10 +118,10 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
   );
   const history = useMemo(
     () =>
-      showHistory && historyData
+      showHistory && historyData && !candlesStale
         ? alignWallHistory(candleTimes, historyData.points, tfSpec.resolution)
         : [],
-    [showHistory, historyData, candleTimes, tfSpec.resolution],
+    [showHistory, historyData, candlesStale, candleTimes, tfSpec.resolution],
   );
 
   // Chart lifecycle (mount/unmount only).
@@ -189,7 +190,9 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
       close: c.close,
     }));
     series.setData(data);
-    if (data.length === 0) return;
+    // Placeholder bars belong to the previous timeframe; fitting logical
+    // indexes to them leaves the new data scrolled off-screen.
+    if (data.length === 0 || candlesStale) return;
     if (!didFitRef.current) {
       const last = data.length - 1;
       const windowBars = Math.min(last, Math.round(tfSpec.windowSec / tfSpec.resolution));
@@ -203,7 +206,7 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
       });
       didFitRef.current = true;
     }
-  }, [candleData, tfSpec]);
+  }, [candleData, candlesStale, tfSpec]);
 
   useEffect(() => {
     const anchor = candleTimes.length > 0 ? candleTimes[candleTimes.length - 1]! : null;

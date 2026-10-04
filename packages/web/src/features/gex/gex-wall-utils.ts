@@ -9,7 +9,7 @@ export interface GammaWalls {
   callWall: number | null;
   /** Most negative-GEX strike below spot (short-gamma → support). */
   putWall: number | null;
-  /** Price where cumulative signed GEX crosses zero (interpolated between strikes). */
+  /** Cumulative signed GEX zero-cross nearest spot (interpolated between strikes). */
   gammaFlip: number | null;
 }
 
@@ -38,11 +38,14 @@ export function computeGammaWalls(gex: readonly GexStrike[], spot: number | null
     }
   }
 
-  return { callWall, putWall, gammaFlip: computeGammaFlip(gex) };
+  return { callWall, putWall, gammaFlip: computeGammaFlip(gex, spot) };
 }
 
-function computeGammaFlip(gex: readonly GexStrike[]): number | null {
+// Deep OTM strikes can flip the running sum's sign far from spot, so the
+// first crossing is often meaningless; take the crossing nearest spot.
+function computeGammaFlip(gex: readonly GexStrike[], spot: number): number | null {
   const sorted = [...gex].sort((a, b) => a.strike - b.strike);
+  let best: number | null = null;
   let prevStrike = 0;
   let prevCum = 0;
   let cum = 0;
@@ -52,10 +55,11 @@ function computeGammaFlip(gex: readonly GexStrike[]): number | null {
       const denom = Math.abs(prevCum) + Math.abs(cum);
       const lo = prevStrike;
       const hi = sorted[i]!.strike;
-      return denom === 0 ? lo : lo + (hi - lo) * (Math.abs(prevCum) / denom);
+      const flip = denom === 0 ? lo : lo + (hi - lo) * (Math.abs(prevCum) / denom);
+      if (best === null || Math.abs(flip - spot) < Math.abs(best - spot)) best = flip;
     }
     prevCum = cum;
     prevStrike = sorted[i]!.strike;
   }
-  return null;
+  return best;
 }

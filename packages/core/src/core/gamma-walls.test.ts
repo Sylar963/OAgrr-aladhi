@@ -70,4 +70,15 @@ describe('computeGammaWalls', () => {
     // prevCum -50, cum 0: weight |prevCum|/denom = 50/50 = 1 -> lo + (hi-lo)*1 = hi = 65k
     expect(computeGammaWalls(exact, 61_800).gammaFlip).toBeCloseTo(65_000, 6);
   });
+
+  it('picks the zero-cross nearest spot when deep OTM strikes cross first', () => {
+    const tails: GexStrike[] = [
+      { strike: 10_000, gexUsdMillions: 5 },
+      { strike: 15_000, gexUsdMillions: -10 },
+      { strike: 80_000, gexUsdMillions: -20 },
+      { strike: 85_000, gexUsdMillions: 60 },
+    ];
+    // Crossings near 12.5k (deep OTM) and 80k + 5k * 25/60 ~ 82,083.33 (near spot).
+    expect(computeGammaWalls(tails, 84_000).gammaFlip).toBeCloseTo(82_083.33, 1);
+  });
 });

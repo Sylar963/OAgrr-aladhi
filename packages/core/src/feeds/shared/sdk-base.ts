@@ -136,6 +136,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   protected marketsLoaded = false;
   protected requestRefCounts = new Map<string, number>();
   protected handlerRefCounts = new Map<StreamHandlers, number>();
+  // `${base}:${expiry}` keys with a live delta subscriber. Surface-coverage pins keep
+  // upstream subscriptions for chains nobody streams; their quotes skip delta building.
+  private readonly deltaChainRefCounts = new Map<string, number>();
   protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
   protected quoteFreshnessMs = DEFAULT_QUOTE_FRESHNESS_MS;
   private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -398,6 +401,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
     handlers.onStatus({ venue: this.venue, state: 'connected', ts: Date.now() });
 
+    const deltaChainKeys = [...new Set(matching.map((inst) => `${inst.base}:${inst.expiry}`))];
+    this.retainDeltaChains(deltaChainKeys);
+
     const handlerRefCount = this.handlerRefCounts.get(handlers) ?? 0;
     this.handlerRefCounts.set(handlers, handlerRefCount + 1);
     if (handlerRefCount === 0) {
@@ -418,6 +424,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           this.handlerRefCounts.set(handlers, rolledBackHandlerRefCount);
         }
         this.requestRefCounts.delete(key);
+        this.releaseDeltaChains(deltaChainKeys);
         throw error;
       }
     }
@@ -427,6 +434,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return async () => {
       if (released) return;
       released = true;
+      this.releaseDeltaChains(deltaChainKeys);
 
       const nextHandlerRefCount = (this.handlerRefCounts.get(handlers) ?? 1) - 1;
       if (nextHandlerRefCount <= 0) {
@@ -446,6 +454,20 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
       this.requestRefCounts.set(key, nextRequestRefCount);
     };
+  }
+
+  protected retainDeltaChains(keys: string[]): void {
+    for (const key of keys) {
+      this.deltaChainRefCounts.set(key, (this.deltaChainRefCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  private releaseDeltaChains(keys: string[]): void {
+    for (const key of keys) {
+      const next = (this.deltaChainRefCounts.get(key) ?? 1) - 1;
+      if (next <= 0) this.deltaChainRefCounts.delete(key);
+      else this.deltaChainRefCounts.set(key, next);
+    }
   }
 
   /** Remove a handler without tearing down venue subscriptions. */
@@ -573,6 +595,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
       const inst = this.instrumentMap.get(update.exchangeSymbol);
       if (!inst) continue;
+      if (!this.deltaChainRefCounts.has(`${inst.base}:${inst.expiry}`)) continue;
 
       deltas.push({
         venue: this.venue,

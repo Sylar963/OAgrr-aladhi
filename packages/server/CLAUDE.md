@@ -54,7 +54,7 @@ src/
 
 - **Auto-subscribes on first request** — `chains.ts` calls `ensureSubscribed()` per venue/underlying on first `/api/chains` request, opening WS connections lazily.
 
-- **Chain browser transport is WS-first** — `ws-chain.ts` coalesces venue deltas and pushes enriched snapshots every 200ms. It does not forward raw exchange ticks one-by-one.
+- **Chain browser transport is WS-first** — `ws-chain.ts` streams from a shared `ChainRuntime` that coalesces venue deltas and pushes enriched strike patches every 500ms (GEX at most every 2s). It does not forward raw exchange ticks one-by-one. Frame bodies are serialized once per runtime event and shared across sessions.
 
 - **Portfolio transport is runtime-backed** — `/portfolio/*` routes and `WS /ws/portfolio` read from the shared in-memory position store plus live market marks. The REST side stays mutation-oriented; the WS side pushes recomputed metrics and changed leg IDs.
 
@@ -62,4 +62,4 @@ src/
 
 - **Options book library** — `pnpm --filter @oggregator/server library:build` indexes `docs/*.pdf` into `docs/options-library.sqlite` (FTS5, gitignored). Scanned PDFs without a text layer are skipped. Restart the backend after a rebuild; an open handle keeps reading the replaced file.
 
-- **Enrichment happens per request / push** — each `/api/chains` call and each `WS /ws/chain` snapshot rebuilds the enriched response from the current QuoteStore. No caching layer between store and response.
+- **Live chain runtimes are the cache** — `ChainRuntime.fetchSnapshotData()` returns the delta-maintained snapshot when the runtime has listeners, and rebuilds from the QuoteStore only for idle runtimes. Rebuilding a live runtime broadcasts a full snapshot frame to every viewer, so avoid forcing it from request paths.

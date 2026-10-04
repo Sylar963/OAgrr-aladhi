@@ -38,8 +38,9 @@ class TestSdkAdapter extends SdkBaseAdapter {
     this.symbolIndex.set(instrument.symbol, instrument.exchangeSymbol);
   }
 
-  addHandler(handlers: StreamHandlers): void {
+  addHandler(handlers: StreamHandlers, chainKeys = ['BTC:2026-03-27']): void {
     this.deltaHandlers.add(handlers);
+    this.retainDeltaChains(chainKeys);
   }
 
   publish(updates: Array<{ exchangeSymbol: string; quote: LiveQuote }>): void {
@@ -122,6 +123,35 @@ describe('SdkBaseAdapter', () => {
     expect(onDelta).toHaveBeenCalledTimes(1);
     const [deltas] = onDelta.mock.calls[0] ?? [];
     expect(deltas).toHaveLength(2);
+  });
+
+  it('skips delta building for chains without a live subscriber', async () => {
+    const adapter = new TestSdkAdapter();
+    const front = createInstrument('BTC-260327-70000-C', 70_000);
+    const back = {
+      ...createInstrument('BTC-260626-70000-C', 70_000),
+      symbol: 'BTC/USD:USDT-260626-70000-C',
+      expiry: '2026-06-26',
+    };
+    adapter.addInstrument(front);
+    adapter.addInstrument(back);
+
+    const onDelta = vi.fn<(deltas: Array<{ symbol: string }>) => void>();
+    const release = await adapter.subscribe(
+      { underlying: 'BTC', expiry: '2026-03-27' },
+      { onDelta, onStatus: vi.fn() },
+    );
+
+    adapter.publish([
+      { exchangeSymbol: front.exchangeSymbol, quote: createQuote(1) },
+      { exchangeSymbol: back.exchangeSymbol, quote: createQuote(1) },
+    ]);
+    expect(onDelta.mock.calls[0]?.[0].map((delta) => delta.symbol)).toEqual([front.symbol]);
+
+    await release();
+    adapter.addHandler({ onDelta, onStatus: vi.fn() }, []);
+    adapter.publish([{ exchangeSymbol: front.exchangeSymbol, quote: createQuote(2) }]);
+    expect(onDelta).toHaveBeenCalledTimes(1);
   });
 
   it('keeps per-base prices and side-specific fees identical in snapshots and deltas', async () => {

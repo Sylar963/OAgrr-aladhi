@@ -104,7 +104,7 @@ describe('ChainProjection', () => {
     expect(patch?.patch.gex).toEqual(expect.any(Array));
   });
 
-  it('requests a resync when a delta references an unknown contract', () => {
+  it('flags a reload when a delta references an unknown contract', () => {
     const projection = new ChainProjection('BTC', '2026-03-27');
     projection.loadSnapshot([buildChain()]);
 
@@ -113,6 +113,28 @@ describe('ChainProjection', () => {
     ]);
 
     expect(patch).toBeNull();
+    expect(projection.needsReload()).toBe(true);
+
+    projection.loadSnapshot([buildChain()]);
+    expect(projection.needsReload()).toBe(false);
+  });
+
+  it('still applies known contracts when a batch includes an unknown one', () => {
+    const projection = new ChainProjection('BTC', '2026-03-27');
+    projection.loadSnapshot([buildChain()]);
+
+    const patch = projection.applyDeltas([
+      { venue: 'deribit', symbol: 'BTC/USD:USDC-260327-99999-C', ts: 2000 },
+      {
+        venue: 'deribit',
+        symbol: 'BTC/USD:USDC-260327-70000-C',
+        ts: 2000,
+        quote: { bid: { raw: 310, rawCurrency: 'USDC', usd: 310 } },
+      },
+    ]);
+
+    expect(patch?.patch.strikes.map((strike) => strike.strike)).toEqual([70000]);
+    expect(projection.needsReload()).toBe(true);
   });
 
   it('computes staleMs from the oldest quote timestamp in the snapshot', () => {

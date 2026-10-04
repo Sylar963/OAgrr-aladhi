@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_GREEKS, type VenueOptionChain, type WsSubscriptionRequest } from '../../index.js';
-import { ChainRuntime } from './chain-runtime.js';
+import { ChainRuntime, mergeEnrichedStrikes } from './chain-runtime.js';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -318,5 +318,77 @@ describe('ChainRuntime', () => {
 
     await runtime.dispose();
     vi.useRealTimers();
+  });
+
+  it('serves the live snapshot without rebuilding or broadcasting', async () => {
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const events: Array<{ type: string }> = [];
+    runtime.subscribe({ onEvent: (event) => events.push(event) });
+    await runtime.fetchSnapshotData();
+    const callsAfterResume = fetchOptionChainMock.mock.calls.length;
+    const snapshotsAfterResume = events.filter((event) => event.type === 'snapshot').length;
+
+    const data = await runtime.fetchSnapshotData();
+
+    expect(data).toBe(runtime.getSnapshot()?.data);
+    expect(fetchOptionChainMock).toHaveBeenCalledTimes(callsAfterResume);
+    expect(events.filter((event) => event.type === 'snapshot')).toHaveLength(snapshotsAfterResume);
+    await runtime.dispose();
+  });
+
+  it('throttles rebuilds triggered by deltas for unknown contracts', async () => {
+    vi.useFakeTimers();
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => ({ release: async () => {} })) } as never,
+    });
+    await runtime.ready();
+
+    const internals = runtime as unknown as ChainRuntimeInternals;
+    runtime.subscribe({ onEvent: () => {} });
+    await vi.advanceTimersByTimeAsync(0);
+    const baseline = fetchOptionChainMock.mock.calls.length;
+
+    const unknown = {
+      venue: 'okx' as const,
+      symbol: 'BTC/USD:BTC-260327-99999-C',
+      ts: 2_000,
+      quote: { bid: { raw: 0.2, rawCurrency: 'BTC' as const, usd: 300 } },
+    };
+    for (let tick = 0; tick < 10; tick += 1) {
+      internals.venueListener.onDelta([unknown]);
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(fetchOptionChainMock.mock.calls.length - baseline).toBeLessThanOrEqual(1);
+    await runtime.dispose();
+  });
+});
+
+describe('mergeEnrichedStrikes', () => {
+  const row = (strike: number, bestIv: number) => ({
+    strike,
+    call: { venues: {}, bestIv, bestVenue: null },
+    put: { venues: {}, bestIv: null, bestVenue: null },
+  });
+
+  it('replaces matching strikes in place', () => {
+    const existing = [row(1, 0.1), row(2, 0.2), row(3, 0.3)];
+    const merged = mergeEnrichedStrikes(existing, [row(2, 0.25)]);
+
+    expect(merged.map((strike) => strike.call.bestIv)).toEqual([0.1, 0.25, 0.3]);
+    expect(merged[0]).toBe(existing[0]);
+  });
+
+  it('inserts unseen strikes in order', () => {
+    const merged = mergeEnrichedStrikes([row(1, 0.1), row(3, 0.3)], [row(2, 0.2), row(3, 0.35)]);
+
+    expect(merged.map((strike) => strike.strike)).toEqual([1, 2, 3]);
+    expect(merged[2]!.call.bestIv).toBe(0.35);
   });
 });

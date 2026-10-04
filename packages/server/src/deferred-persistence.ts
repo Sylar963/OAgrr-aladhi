@@ -15,12 +15,14 @@ import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type {
   DealerBookStore,
+  GexWallSnapshotStore,
   IvHistoryHourlyQuery,
   IvHistoryLoadQuery,
   IvHistoryStorageStats,
   IvHistoryStore,
   OiSnapshotStore,
   PersistedDealerPosition,
+  PersistedGexWallSnapshot,
   PersistedIvHistoryPoint,
   PersistedOiSnapshot,
   PersistedRegimeModel,
@@ -151,6 +153,19 @@ const ShortStraddleSnapshotSchema = z
     putAskMakerFeeUsd: FiniteNumberSchema,
     putAskTakerFeeUsd: FiniteNumberSchema,
     putQuoteTs: IsoDateSchema,
+  })
+  .strict();
+
+const NullableFiniteNumberSchema = FiniteNumberSchema.nullable();
+
+const GexWallSnapshotSchema = z
+  .object({
+    underlying: z.string().min(1),
+    slotTs: IsoDateSchema,
+    spot: NullableFiniteNumberSchema,
+    callWall: NullableFiniteNumberSchema,
+    putWall: NullableFiniteNumberSchema,
+    gammaFlip: NullableFiniteNumberSchema,
   })
   .strict();
 
@@ -1130,5 +1145,143 @@ export class DeferredRegimeStore implements RegimeStore {
   private rewritePending(): void {
     rewriteOutbox(this.pendingObservationsPath, this.pendingObservations, encodeRegimeObservation);
     rewriteOutbox(this.pendingModelsPath, [...this.pendingModels.values()], encodeRegimeModel);
+  }
+}
+
+interface DeferredGexWallPersistenceOptions {
+  flushIntervalMs: number;
+  cachePath: string;
+  maxPendingRows: number;
+  retentionMs: number;
+  flushOnDispose?: boolean;
+  now?: () => number;
+}
+
+interface SerializedGexWallSnapshot extends Omit<PersistedGexWallSnapshot, 'slotTs'> {
+  slotTs: string;
+}
+
+function gexWallKey(row: PersistedGexWallSnapshot): string {
+  return `${row.underlying.toUpperCase()}:${row.slotTs.getTime()}`;
+}
+
+function decodeGexWallSnapshot(value: unknown): PersistedGexWallSnapshot {
+  return GexWallSnapshotSchema.parse(value);
+}
+
+function encodeGexWallSnapshot(row: PersistedGexWallSnapshot): SerializedGexWallSnapshot {
+  return { ...row, slotTs: row.slotTs.toISOString() };
+}
+
+// The local ndjson cache doubles as the no-database store, so it keeps the full retention
+// window rather than only unflushed rows. Postgres is read once (loadSince at startup) and
+// written once per flush interval; retention pruning rides on that same daily flush.
+export class DeferredGexWallSnapshotStore implements GexWallSnapshotStore {
+  readonly enabled: boolean;
+  private cache: PersistedGexWallSnapshot[];
+  private pending: PersistedGexWallSnapshot[];
+  private readonly pendingPath: string;
+  private readonly now: () => number;
+  private flushing = false;
+  private readonly timer: FlushSchedule;
+
+  constructor(
+    private readonly delegate: GexWallSnapshotStore,
+    private readonly options: DeferredGexWallPersistenceOptions,
+    private readonly log: DeferredLog,
+  ) {
+    this.enabled = delegate.enabled;
+    this.now = options.now ?? Date.now;
+    this.pendingPath = `${options.cachePath}.pending`;
+    this.cache = readJsonLines(options.cachePath, decodeGexWallSnapshot, log);
+    this.pending =
+      delegate.enabled && existsSync(this.pendingPath)
+        ? readJsonLines(this.pendingPath, decodeGexWallSnapshot, log)
+        : [];
+    this.timer = new FlushSchedule(
+      options.cachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+        this.log.warn(
+          { err: describeError(err), pending: this.pending.length },
+          'deferred GEX-wall flush failed',
+        );
+      },
+    );
+  }
+
+  get pendingCount(): number {
+    return this.pending.length;
+  }
+
+  async writeMany(rows: PersistedGexWallSnapshot[]): Promise<void> {
+    if (rows.length === 0) return;
+    this.cache.push(...rows);
+    if (this.cache.length > this.options.maxPendingRows) {
+      this.cache.splice(0, this.cache.length - this.options.maxPendingRows);
+      rewriteJsonLines(this.options.cachePath, this.cache, encodeGexWallSnapshot);
+    } else {
+      appendJsonLines(this.options.cachePath, rows, encodeGexWallSnapshot);
+    }
+    if (!this.delegate.enabled) return;
+    this.pending.push(...rows);
+    if (this.pending.length > this.options.maxPendingRows) {
+      this.pending.splice(0, this.pending.length - this.options.maxPendingRows);
+      rewriteOutbox(this.pendingPath, this.pending, encodeGexWallSnapshot);
+    } else {
+      appendJsonLines(this.pendingPath, rows, encodeGexWallSnapshot);
+    }
+  }
+
+  async loadSince(since: Date): Promise<PersistedGexWallSnapshot[]> {
+    const byKey = new Map<string, PersistedGexWallSnapshot>();
+    if (this.delegate.enabled) {
+      try {
+        for (const row of await this.delegate.loadSince(since)) byKey.set(gexWallKey(row), row);
+      } catch (err: unknown) {
+        this.log.warn({ err: describeError(err) }, 'GEX-wall hydrate from storage failed');
+      }
+    }
+    for (const row of this.cache) {
+      if (row.slotTs >= since) byKey.set(gexWallKey(row), row);
+    }
+    return [...byKey.values()].sort((a, b) => a.slotTs.getTime() - b.slotTs.getTime());
+  }
+
+  async prune(before: Date): Promise<number> {
+    const kept = this.cache.filter((row) => row.slotTs >= before);
+    const removed = this.cache.length - kept.length;
+    if (removed > 0) {
+      this.cache = kept;
+      rewriteJsonLines(this.options.cachePath, this.cache, encodeGexWallSnapshot);
+    }
+    return removed;
+  }
+
+  async flush(): Promise<void> {
+    if (this.flushing) return;
+    this.flushing = true;
+    try {
+      const cutoff = new Date(this.now() - this.options.retentionMs);
+      await this.prune(cutoff);
+      if (!this.delegate.enabled) return;
+      const batch = [...this.pending];
+      if (batch.length > 0) {
+        await this.delegate.writeMany(batch);
+        const flushed = new Set(batch);
+        this.pending = this.pending.filter((row) => !flushed.has(row));
+        rewriteOutbox(this.pendingPath, this.pending, encodeGexWallSnapshot);
+      }
+      await this.delegate.prune(cutoff);
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  async dispose(): Promise<void> {
+    this.timer.dispose();
+    if (this.options.flushOnDispose === true) await this.flush();
+    await this.delegate.dispose();
   }
 }

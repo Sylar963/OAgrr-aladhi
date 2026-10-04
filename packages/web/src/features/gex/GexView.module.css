@@ -481,6 +481,12 @@
   margin-bottom: var(--space-2);
 }
 
+.bandsNote {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .bandsToggle {
   display: flex;
   border: 1px solid var(--border-subtle);

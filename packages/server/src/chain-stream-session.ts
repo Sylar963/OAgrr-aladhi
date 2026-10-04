@@ -18,7 +18,6 @@ const SLOW_CLIENT_GRACE_MS = 15_000;
 const LARGE_FRAME_BYTES = 250_000;
 const LARGE_FRAME_LOG_TTL_MS = 5_000;
 const SOFT_BACKPRESSURE_BYTES = 500_000;
-const GEX_DELTA_MIN_INTERVAL_MS = 2_000;
 
 function normalizeStatusMessage(message?: string): string {
   if (message == null) return '';
@@ -57,7 +56,6 @@ export class ChainStreamSession {
   private engineListener: ChainRuntimeListener | null = null;
   private slowClientSince: number | null = null;
   private lastLargeFrameLoggedAt = 0;
-  private lastGexSentAt = 0;
   private readonly lastVenueStatusByVenue = new Map<string, string>();
   private runtime: SessionRuntime | null = null;
   private needsResync = false;
@@ -115,7 +113,6 @@ export class ChainStreamSession {
     this.lastVenueStatusByVenue.clear();
     this.runtime = null;
     this.needsResync = false;
-    this.lastGexSentAt = 0;
 
     const release = this.releaseEngine;
     this.releaseEngine = null;
@@ -180,7 +177,6 @@ export class ChainStreamSession {
     switch (event.type) {
       case 'snapshot':
         this.lastSentSeq = event.seq;
-        this.lastGexSentAt = now;
         this.sendMessage('snapshot', {
           type: 'snapshot',
           subscriptionId: this.subscriptionId,
@@ -197,8 +193,6 @@ export class ChainStreamSession {
           this.needsResync = true;
           return;
         }
-        const includeGex = now - this.lastGexSentAt >= GEX_DELTA_MIN_INTERVAL_MS;
-        if (includeGex) this.lastGexSentAt = now;
         this.lastSentSeq = event.seq;
         this.sendMessage('delta', {
           type: 'delta',
@@ -206,7 +200,7 @@ export class ChainStreamSession {
           seq: event.seq,
           request: event.request,
           meta: event.meta,
-          patch: includeGex ? event.patch : { stats: event.patch.stats, strikes: event.patch.strikes },
+          patch: event.patch,
         });
         this.trackBackpressure(now, 'delta');
         return;
@@ -283,7 +277,6 @@ export class ChainStreamSession {
     if (snapshot == null) return;
     this.needsResync = false;
     this.lastSentSeq = snapshot.seq;
-    this.lastGexSentAt = Date.now();
     this.sendMessage('snapshot', {
       type: 'snapshot',
       subscriptionId: this.subscriptionId,
@@ -340,7 +333,6 @@ export class ChainStreamSession {
     this.lastVenueStatusByVenue.clear();
     this.runtime = null;
     this.needsResync = false;
-    this.lastGexSentAt = 0;
     this.log?.warn(
       {
         subscriptionId: this.subscriptionId,

@@ -299,3 +299,13 @@ export {
   type WsSubscriptionRequest,
   WsSubscriptionRequestSchema,
 } from './ws.js';
+export {
+  GEX_WALL_HISTORY_MAX_DAYS,
+  GEX_WALL_HISTORY_RESOLUTION_SEC,
+  type GexWallHistoryPoint,
+  GexWallHistoryPointSchema,
+  type GexWallHistoryQuery,
+  GexWallHistoryQuerySchema,
+  type GexWallHistoryResponse,
+  GexWallHistoryResponseSchema,
+} from './gex-wall-history.js';

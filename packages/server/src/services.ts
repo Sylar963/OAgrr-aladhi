@@ -22,11 +22,13 @@ import {
 import {
   DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
   type DealerBookStore,
+  type GexWallSnapshotStore,
   type IvHistoryStorageStats,
   type IvHistoryStore,
   type LeadsStore,
   MergedTradeStore,
   NoopDealerBookStore,
+  NoopGexWallSnapshotStore,
   NoopIvHistoryStore,
   NoopLeadsStore,
   NoopOiSnapshotStore,
@@ -34,6 +36,7 @@ import {
   NoopVenueIvHistoryStore,
   type OiSnapshotStore,
   PostgresDealerBookStore,
+  PostgresGexWallSnapshotStore,
   PostgresIvHistoryStore,
   PostgresLeadsStore,
   PostgresOiSnapshotStore,
@@ -57,11 +60,14 @@ import {
 } from './dealer-book-service.js';
 import {
   DeferredDealerBookStore,
+  DeferredGexWallSnapshotStore,
   DeferredIvHistoryStore,
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
   DeferredShortStraddleSnapshotStore,
 } from './deferred-persistence.js';
+import { getAllExpiriesGex } from './gex-all-expiries.js';
+import { GEX_WALL_RETENTION_MS, GexWallHistoryService } from './gex-wall-history-service.js';
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
 import { createVolRichnessSource } from './vol-richness-source.js';
@@ -107,6 +113,17 @@ const regimeDbFlushIntervalMs = parseNonNegativeMs(
   process.env['REGIME_DB_FLUSH_INTERVAL_MS'],
   marketDataDbFlushIntervalMs,
   'REGIME_DB_FLUSH_INTERVAL_MS',
+);
+const gexWallsDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['GEX_WALLS_DB_FLUSH_INTERVAL_MS'],
+  marketDataDbFlushIntervalMs,
+  'GEX_WALLS_DB_FLUSH_INTERVAL_MS',
+);
+const gexWallsCacheMaxRows = parsePositiveInteger(
+  process.env['GEX_WALLS_CACHE_MAX_ROWS'],
+  // 90 days × 96 fifteen-minute slots × 3 underlyings ≈ 26k.
+  50_000,
+  'GEX_WALLS_CACHE_MAX_ROWS',
 );
 const dealerBookOiCacheMaxRows = parsePositiveInteger(
   process.env['DEALER_BOOK_OI_CACHE_MAX_ROWS'],
@@ -242,6 +259,16 @@ export const dealerBookService = new DealerBookService({
 });
 
 registerBookLookup(dealerBookService.lookup);
+
+export const gexWallStore: GexWallSnapshotStore = createGexWallStore(databaseUrl);
+export const gexWallHistoryService = new GexWallHistoryService({
+  underlyings: ['BTC', 'ETH', 'HYPE'],
+  store: gexWallStore,
+  getInputs: async (underlying) => {
+    const { spotPrice, gex } = await getAllExpiriesGex(underlying);
+    return { spotPrice, gex };
+  },
+});
 
 export const regimeStore: RegimeStore = databaseUrl
   ? createRegimeStore(databaseUrl)
@@ -437,6 +464,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   shortStraddleLog = log;
   shortStraddleSnapshotService?.setLogger(log);
   dealerBookService.setLogger(log);
+  gexWallHistoryService.setLogger(log);
   if (shortStraddleSnapshotsEnabled && !databaseUrl) {
     log.warn({ reason: 'DATABASE_URL missing' }, 'short-straddle snapshot collection disabled');
   }
@@ -543,6 +571,9 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     log.warn({ err: String(err) }, 'dealer book service failed');
   }
 
+  await gexWallHistoryService.start();
+  log.info('GEX-wall history sampler started');
+
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
 
@@ -568,6 +599,7 @@ export function disposeServiceStores(): void {
     ivHistoryStorageAlarmTimer = null;
   }
   regimeService.dispose();
+  gexWallHistoryService.dispose();
   newsService?.dispose();
   disposeSettlementJob();
 }
@@ -598,6 +630,25 @@ function createDealerBookStore(connectionString: string): DealerBookStore {
       cachePath: process.env['DEALER_BOOK_CACHE_PATH'] ?? '.cache/dealer-book-latest.ndjson',
       maxPendingRows: dealerBookCacheMaxRows,
       flushOnDispose: parseBoolean(process.env['DEALER_BOOK_DB_FLUSH_ON_DISPOSE']),
+    },
+    console,
+  );
+}
+
+function createGexWallStore(connectionString: string | undefined): GexWallSnapshotStore {
+  const delegate: GexWallSnapshotStore = connectionString
+    ? PostgresGexWallSnapshotStore.fromConnectionString(connectionString)
+    : new NoopGexWallSnapshotStore();
+  if (delegate.enabled && gexWallsDbFlushIntervalMs === 0) return delegate;
+  return new DeferredGexWallSnapshotStore(
+    delegate,
+    {
+      // Without a database the flush only prunes the local cache, so it still runs daily.
+      flushIntervalMs: gexWallsDbFlushIntervalMs === 0 ? DAY_MS : gexWallsDbFlushIntervalMs,
+      cachePath: process.env['GEX_WALLS_CACHE_PATH'] ?? '.cache/gex-wall-snapshots.ndjson',
+      maxPendingRows: gexWallsCacheMaxRows,
+      retentionMs: GEX_WALL_RETENTION_MS,
+      flushOnDispose: parseBoolean(process.env['GEX_WALLS_DB_FLUSH_ON_DISPOSE']),
     },
     console,
   );

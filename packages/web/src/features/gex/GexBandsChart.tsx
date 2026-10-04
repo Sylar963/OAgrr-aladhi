@@ -19,7 +19,8 @@ import type {
 } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
 
-import { GammaChannelPrimitive } from './GammaChannelPrimitive';
+import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
+import { alignWallHistory, type GexWallHistoryResponse } from './gex-wall-history';
 import { computeGammaWalls } from './gex-wall-utils';
 import styles from './GexView.module.css';
 
@@ -40,10 +41,10 @@ const TIMEFRAMES: Record<Timeframe, TimeframeSpec> = {
 };
 const DEFAULT_TIMEFRAME: Timeframe = '30d';
 
-const CALL_WALL_COLOR = '#00E997';
-const PUT_WALL_COLOR = '#CB3855';
-const FLIP_COLOR = '#F0B90B';
 const SPOT_COLOR = '#50D2C1';
+// Share of the visible window reserved right of the last candle for the live walls.
+const PROJECTION_FRACTION = 0.15;
+const MIN_PROJECTION_BARS = 8;
 
 function useGexSpotCandles(
   currency: SpotCandleCurrency,
@@ -62,31 +63,17 @@ function useGexSpotCandles(
   });
 }
 
-interface WallLineOpts {
-  color: string;
-  label: string;
-  dashed: boolean;
-}
-
-// Remove the old price line and draw the new one; null price clears it.
-function syncWallLine(
-  series: ISeriesApi<'Candlestick', Time>,
-  ref: React.MutableRefObject<IPriceLine | null>,
-  price: number | null,
-  opts: WallLineOpts,
-): void {
-  if (ref.current) {
-    series.removePriceLine(ref.current);
-    ref.current = null;
-  }
-  if (price == null) return;
-  ref.current = series.createPriceLine({
-    price,
-    color: opts.color,
-    lineWidth: 2,
-    lineStyle: opts.dashed ? LineStyle.Dashed : LineStyle.Solid,
-    axisLabelVisible: true,
-    title: `${Math.round(price).toLocaleString()} ${opts.label}`,
+// Recorded walls are all-expiry, all-venue snapshots, so callers only enable
+// this when the live walls are computed on the same basis.
+function useGexWallHistory(currency: SpotCandleCurrency, days: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['gex-wall-history', currency, days],
+    queryFn: () =>
+      fetchJson<GexWallHistoryResponse>(`/gex-wall-history?underlying=${currency}&days=${days}`),
+    enabled,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: false,
   });
 }
 
@@ -94,18 +81,16 @@ interface Props {
   gex: GexStrike[];
   spotPrice: number | null;
   currency: SpotCandleCurrency;
+  showHistory: boolean;
 }
 
-export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
+export default function GexBandsChart({ gex, spotPrice, currency, showHistory }: Props) {
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TIMEFRAME);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
-  const channelRef = useRef<GammaChannelPrimitive | null>(null);
-  const callLineRef = useRef<IPriceLine | null>(null);
-  const putLineRef = useRef<IPriceLine | null>(null);
-  const flipLineRef = useRef<IPriceLine | null>(null);
+  const bandsRef = useRef<GammaBandsPrimitive | null>(null);
   const spotLineRef = useRef<IPriceLine | null>(null);
   const didFitRef = useRef(false);
 
@@ -118,6 +103,24 @@ export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
   } = useGexSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
 
   const walls = useMemo(() => computeGammaWalls(gex, spotPrice), [gex, spotPrice]);
+
+  const { data: historyData } = useGexWallHistory(
+    currency,
+    Math.ceil(tfSpec.windowSec / 86_400),
+    showHistory,
+  );
+
+  const candleTimes = useMemo(
+    () => (candleData?.candles ?? []).map((c) => Math.floor(c.timestamp / 1000)),
+    [candleData],
+  );
+  const history = useMemo(
+    () =>
+      showHistory && historyData
+        ? alignWallHistory(candleTimes, historyData.points, tfSpec.resolution)
+        : [],
+    [showHistory, historyData, candleTimes, tfSpec.resolution],
+  );
 
   // Chart lifecycle (mount/unmount only).
   useEffect(() => {
@@ -150,21 +153,18 @@ export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
       priceLineVisible: false,
     }) as ISeriesApi<'Candlestick', Time>;
 
-    const channel = new GammaChannelPrimitive();
-    series.attachPrimitive(channel);
+    const bands = new GammaBandsPrimitive();
+    series.attachPrimitive(bands);
 
     chartRef.current = chart;
     seriesRef.current = series;
-    channelRef.current = channel;
+    bandsRef.current = bands;
 
     return () => {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      channelRef.current = null;
-      callLineRef.current = null;
-      putLineRef.current = null;
-      flipLineRef.current = null;
+      bandsRef.current = null;
       spotLineRef.current = null;
     };
   }, []);
@@ -174,8 +174,8 @@ export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
     didFitRef.current = false;
   }, [currency, timeframe]);
 
-  // Push candle data + set the visible range for the timeframe. The walls are
-  // horizontal price lines, so no future whitespace is needed here.
+  // Push candle data + set the visible range for the timeframe, leaving empty
+  // space right of the last candle for the live-wall projection.
   useEffect(() => {
     const series = seriesRef.current;
     const chart = chartRef.current;
@@ -190,36 +190,24 @@ export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
     series.setData(data);
     if (data.length === 0) return;
     if (!didFitRef.current) {
-      const nowSec = Math.floor(Date.now() / 1000);
-      chart.timeScale().setVisibleRange({
-        from: (nowSec - tfSpec.windowSec) as Time,
-        to: nowSec as Time,
+      const last = data.length - 1;
+      const windowBars = Math.min(last, Math.round(tfSpec.windowSec / tfSpec.resolution));
+      const projectionBars = Math.max(
+        MIN_PROJECTION_BARS,
+        Math.round(windowBars * PROJECTION_FRACTION),
+      );
+      chart.timeScale().setVisibleLogicalRange({
+        from: last - windowBars,
+        to: last + projectionBars,
       });
       didFitRef.current = true;
     }
   }, [candleData, tfSpec]);
 
-  // Channel fill + the three wall/flip price lines.
   useEffect(() => {
-    const series = seriesRef.current;
-    if (!series) return;
-    channelRef.current?.update(walls.callWall, walls.putWall);
-    syncWallLine(series, callLineRef, walls.callWall, {
-      color: CALL_WALL_COLOR,
-      label: 'CALL WALL',
-      dashed: false,
-    });
-    syncWallLine(series, putLineRef, walls.putWall, {
-      color: PUT_WALL_COLOR,
-      label: 'PUT WALL',
-      dashed: false,
-    });
-    syncWallLine(series, flipLineRef, walls.gammaFlip, {
-      color: FLIP_COLOR,
-      label: 'FLIP',
-      dashed: true,
-    });
-  }, [walls]);
+    const anchor = candleTimes.length > 0 ? candleTimes[candleTimes.length - 1]! : null;
+    bandsRef.current?.update(history, walls, anchor);
+  }, [history, walls, candleTimes]);
 
   // SPOT line.
   useEffect(() => {
@@ -257,6 +245,11 @@ export default function GexBandsChart({ gex, spotPrice, currency }: Props) {
             </button>
           ))}
         </div>
+        <span className={styles.bandsNote}>
+          {showHistory
+            ? 'Band history: recorded walls · dashed zone: live walls'
+            : 'Dashed zone: live walls · band history needs ALL expiries + all venues'}
+        </span>
       </div>
 
       <div className={styles.bandsChartWrap}>

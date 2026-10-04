@@ -10,6 +10,7 @@ import {
   sviIv,
   thetaPerDay,
   vega76,
+  type ChainRuntimeDeltaEvent,
   type ChainRuntimeListener,
   type EnrichedChainResponse,
   type EnrichedStrike,
@@ -88,12 +89,7 @@ async function ensureChain(underlying: string, expiry: string): Promise<void> {
         } else if (event.type === 'delta') {
           const prev = handle.snapshot;
           if (prev == null) return;
-          handle.snapshot = {
-            ...prev,
-            stats: event.patch.stats,
-            strikes: event.patch.strikes,
-            gex: event.patch.gex ?? prev.gex,
-          };
+          handle.snapshot = applyChainDelta(prev, event.patch);
           handle.lastUsedAt = Date.now();
           notifyChainTickListeners();
         }
@@ -115,6 +111,21 @@ async function ensureChain(underlying: string, expiry: string): Promise<void> {
   } finally {
     pendingEnsure.delete(key);
   }
+}
+
+// Delta patches carry only the strikes that changed this tick.
+export function applyChainDelta(
+  prev: EnrichedChainResponse,
+  patch: ChainRuntimeDeltaEvent['patch'],
+): EnrichedChainResponse {
+  const byStrike = new Map(prev.strikes.map((row) => [row.strike, row]));
+  for (const row of patch.strikes) byStrike.set(row.strike, row);
+  return {
+    ...prev,
+    stats: patch.stats,
+    strikes: [...byStrike.values()].sort((left, right) => left.strike - right.strike),
+    gex: patch.gex ?? prev.gex,
+  };
 }
 
 function findStrike(snapshot: EnrichedChainResponse, strike: number): EnrichedStrike | null {

@@ -135,3 +135,11 @@ export {
   NoopVenueIvHistoryStore,
   PostgresVenueIvHistoryStore,
 } from './venue-iv-history-store.js';
+export type {
+  GexWallSnapshotStore,
+  PersistedGexWallSnapshot,
+} from './gex-wall-snapshot-store.js';
+export {
+  NoopGexWallSnapshotStore,
+  PostgresGexWallSnapshotStore,
+} from './gex-wall-snapshot-store.js';

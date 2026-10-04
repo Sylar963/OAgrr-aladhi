@@ -59,6 +59,7 @@ export {
 } from './core/enrichment.js';
 
 export { buildIvSurfaceGrid } from './core/surface-grid.js';
+export { computeGammaWalls, GEX_WALL_FLOOR_M, type GammaWalls } from './core/gamma-walls.js';
 export {
   computeVenueSurfaceRows,
   computeVenueTenorIvs,

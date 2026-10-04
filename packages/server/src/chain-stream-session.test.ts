@@ -206,4 +206,48 @@ describe('ChainStreamSession', () => {
 
     expect(log.warn).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards runtime GEX on every delta that carries it', async () => {
+    let listener: { onEvent(event: ChainRuntimeEvent): void } | null = null;
+    subscribeMock.mockImplementation(
+      (nextListener: { onEvent(event: ChainRuntimeEvent): void }) => {
+        listener = nextListener;
+        return vi.fn();
+      },
+    );
+
+    const socket = { readyState: 1, bufferedAmount: 0, send: vi.fn(), close: vi.fn() };
+    const session = new ChainStreamSession(socket, 'sub-1', makeRequest());
+    await session.subscribe();
+
+    const stats = {
+      forwardPriceUsd: null,
+      indexPriceUsd: null,
+      basisPct: null,
+      atmStrike: null,
+      atmIv: null,
+      putCallOiRatio: null,
+      totalOiUsd: null,
+      skew25d: null,
+      bfly25d: null,
+    };
+    const delta = (seq: number, withGex: boolean): ChainRuntimeEvent => ({
+      type: 'delta',
+      seq,
+      request: makeRequest(),
+      meta: { generatedAt: seq, maxQuoteTs: seq, staleMs: 0 },
+      deltas: [],
+      patch: withGex ? { stats, strikes: [], gex: [] } : { stats, strikes: [] },
+    });
+
+    listener?.onEvent(delta(1, false));
+    listener?.onEvent(delta(2, true));
+    listener?.onEvent(delta(3, true));
+
+    const patches = socket.send.mock.calls
+      .map(([payload]) => JSON.parse(payload as string))
+      .filter((message) => message.type === 'delta')
+      .map((message) => message.patch);
+    expect(patches.map((patch) => 'gex' in patch)).toEqual([false, true, true]);
+  });
 });

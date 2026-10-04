@@ -7,7 +7,13 @@ import {
   type SviParams,
 } from '@oggregator/core';
 
-import { blendSvi, buildSviFitPoints, getSmileFit, sviMark } from './portfolio-services.js';
+import {
+  applyChainDelta,
+  blendSvi,
+  buildSviFitPoints,
+  getSmileFit,
+  sviMark,
+} from './portfolio-services.js';
 
 function makeSnapshot(
   underlying: string,
@@ -181,5 +187,35 @@ describe('portfolio-services SVI fallback', () => {
     const farLeg = makeLeg(3500, 'call');
     const blown = sviMark(farLeg, FORWARD, FORWARD, T, blowUp);
     expect(blown).toBeNull();
+  });
+});
+
+describe('applyChainDelta', () => {
+  it('keeps strikes that did not change in the delta', () => {
+    const prev = makeSnapshot('ETH', '2026-06-26', 3000, [
+      { strike: 2800, iv: 0.6 },
+      { strike: 3000, iv: 0.55 },
+      { strike: 3200, iv: 0.58 },
+    ]);
+    const changed = { ...prev.strikes[1]!, call: { ...prev.strikes[1]!.call, bestIv: 0.5 } };
+
+    const next = applyChainDelta(prev, { stats: prev.stats, strikes: [changed] });
+
+    expect(next.strikes.map((row) => row.strike)).toEqual([2800, 3000, 3200]);
+    expect(next.strikes[1]!.call.bestIv).toBe(0.5);
+    expect(next.strikes[0]).toBe(prev.strikes[0]);
+    expect(next.gex).toBe(prev.gex);
+  });
+
+  it('inserts new strikes in order', () => {
+    const prev = makeSnapshot('ETH', '2026-06-26', 3000, [
+      { strike: 2800, iv: 0.6 },
+      { strike: 3200, iv: 0.58 },
+    ]);
+    const added = makeSnapshot('ETH', '2026-06-26', 3000, [{ strike: 3000, iv: 0.55 }]).strikes[0]!;
+
+    const next = applyChainDelta(prev, { stats: prev.stats, strikes: [added] });
+
+    expect(next.strikes.map((row) => row.strike)).toEqual([2800, 3000, 3200]);
   });
 });

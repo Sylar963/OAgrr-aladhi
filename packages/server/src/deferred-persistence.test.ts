@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
   DealerBookStore,
+  GexWallSnapshotStore,
   IvHistoryLoadQuery,
   IvHistoryStorageStats,
   IvHistoryStore,
   OiSnapshotStore,
   PersistedDealerPosition,
+  PersistedGexWallSnapshot,
   PersistedIvHistoryPoint,
   PersistedOiSnapshot,
   PersistedRegimeModel,
@@ -20,6 +22,7 @@ import type {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DeferredDealerBookStore,
+  DeferredGexWallSnapshotStore,
   DeferredIvHistoryStore,
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
@@ -850,5 +853,114 @@ describe('DeferredDealerBookStore legacy cache rows', () => {
 
     await expect(store.loadAll(['BTC'])).resolves.toEqual([{ ...dealerRow, flowContracts: 0 }]);
     await store.dispose();
+  });
+});
+
+class FakeGexWallStore implements GexWallSnapshotStore {
+  writes: PersistedGexWallSnapshot[][] = [];
+  loads = 0;
+  prunes: Date[] = [];
+
+  constructor(
+    readonly enabled: boolean,
+    private readonly stored: PersistedGexWallSnapshot[] = [],
+  ) {}
+
+  async writeMany(rows: PersistedGexWallSnapshot[]): Promise<void> {
+    this.writes.push(rows);
+  }
+  async loadSince(since: Date): Promise<PersistedGexWallSnapshot[]> {
+    this.loads += 1;
+    return this.stored.filter((row) => row.slotTs >= since);
+  }
+  async prune(before: Date): Promise<number> {
+    this.prunes.push(before);
+    return 0;
+  }
+  async dispose(): Promise<void> {}
+}
+
+describe('DeferredGexWallSnapshotStore', () => {
+  const day = 86_400_000;
+  const now = 200 * day;
+  const wall = (slotTs: number, spot = 60_000): PersistedGexWallSnapshot => ({
+    underlying: 'BTC',
+    slotTs: new Date(slotTs),
+    spot,
+    callWall: 65_000,
+    putWall: null,
+    gammaFlip: 61_234.5,
+  });
+  const options = (cachePath: string) => ({
+    cachePath,
+    flushIntervalMs,
+    maxPendingRows: 100,
+    retentionMs: 90 * day,
+    now: () => now,
+  });
+
+  it('buffers writes locally and only reaches storage on flush', async () => {
+    const delegate = new FakeGexWallStore(true);
+    const store = new DeferredGexWallSnapshotStore(delegate, options(tempPath('gex.ndjson')), noopLog);
+
+    await store.writeMany([wall(now - 900_000)]);
+    await store.writeMany([wall(now)]);
+    expect(delegate.writes).toEqual([]);
+    expect(store.pendingCount).toBe(2);
+
+    await store.flush();
+    expect(delegate.writes).toEqual([[wall(now - 900_000), wall(now)]]);
+    expect(delegate.prunes).toEqual([new Date(now - 90 * day)]);
+    expect(store.pendingCount).toBe(0);
+
+    await store.flush();
+    expect(delegate.writes).toHaveLength(1);
+    await store.dispose();
+  });
+
+  it('survives a restart through the ndjson cache and pending outbox', async () => {
+    const cachePath = tempPath('gex-restart.ndjson');
+    const delegate = new FakeGexWallStore(true);
+    const first = new DeferredGexWallSnapshotStore(delegate, options(cachePath), noopLog);
+    await first.writeMany([wall(now)]);
+    await first.dispose();
+
+    const second = new DeferredGexWallSnapshotStore(delegate, options(cachePath), noopLog);
+    expect(second.pendingCount).toBe(1);
+    expect(await second.loadSince(new Date(0))).toEqual([wall(now)]);
+    await second.dispose();
+  });
+
+  it('hydrates from storage on load and lets the local cache win on overlap', async () => {
+    const delegate = new FakeGexWallStore(true, [wall(now - 10 * day), wall(now, 1)]);
+    const store = new DeferredGexWallSnapshotStore(delegate, options(tempPath('gex-hydrate.ndjson')), noopLog);
+    await store.writeMany([wall(now)]);
+
+    expect(await store.loadSince(new Date(now - 30 * day))).toEqual([
+      wall(now - 10 * day),
+      wall(now),
+    ]);
+    expect(delegate.loads).toBe(1);
+    await store.dispose();
+  });
+
+  it('works without a database: no outbox, cache pruned to retention on flush', async () => {
+    const cachePath = tempPath('gex-nodb.ndjson');
+    const delegate = new FakeGexWallStore(false);
+    const store = new DeferredGexWallSnapshotStore(delegate, options(cachePath), noopLog);
+    await store.writeMany([wall(now - 100 * day), wall(now)]);
+    expect(store.pendingCount).toBe(0);
+    expect(existsSync(`${cachePath}.pending`)).toBe(false);
+
+    await store.flush();
+    expect(delegate.writes).toEqual([]);
+    expect(delegate.prunes).toEqual([]);
+    expect(delegate.loads).toBe(0);
+    expect(await store.loadSince(new Date(0))).toEqual([wall(now)]);
+    await store.dispose();
+
+    const reopened = new DeferredGexWallSnapshotStore(delegate, options(cachePath), noopLog);
+    expect(await reopened.loadSince(new Date(0))).toEqual([wall(now)]);
+    await reopened.dispose();
   });
 });

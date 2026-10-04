@@ -571,8 +571,8 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     log.warn({ err: String(err) }, 'dealer book service failed');
   }
 
-  await gexWallHistoryService.start();
-  log.info('GEX-wall history sampler started');
+  // Not awaited: the one-time storage hydrate must not hold up readiness.
+  void gexWallHistoryService.start().then(() => log.info('GEX-wall history sampler started'));
 
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);

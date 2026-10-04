@@ -12,6 +12,7 @@ import { expiriesRoute } from './expiries.js';
 import { flowRoute } from './flow.js';
 import { fundedRoutes } from './funded/index.js';
 import { gexAllExpiriesRoute } from './gex-all-expiries.js';
+import { gexWallHistoryRoute } from './gex-wall-history.js';
 import { healthRoute } from './health.js';
 import { instrumentCandlesRoute } from './instrument-candles.js';
 import { ivHistoryRoute } from './iv-history.js';
@@ -64,6 +65,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(expiriesRoute, { prefix: '/api' });
   app.register(chainsRoute, { prefix: '/api' });
   app.register(gexAllExpiriesRoute, { prefix: '/api' });
+  app.register(gexWallHistoryRoute, { prefix: '/api' });
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });

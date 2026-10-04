@@ -1194,10 +1194,11 @@ export class DeferredGexWallSnapshotStore implements GexWallSnapshotStore {
     this.now = options.now ?? Date.now;
     this.pendingPath = `${options.cachePath}.pending`;
     this.cache = readJsonLines(options.cachePath, decodeGexWallSnapshot, log);
-    this.pending =
-      delegate.enabled && existsSync(this.pendingPath)
+    this.pending = !delegate.enabled
+      ? []
+      : existsSync(this.pendingPath)
         ? readJsonLines(this.pendingPath, decodeGexWallSnapshot, log)
-        : [];
+        : [...this.cache];
     this.timer = new FlushSchedule(
       options.cachePath,
       options.flushIntervalMs,

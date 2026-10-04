@@ -4,7 +4,7 @@
 // pong latency climbs past 20s. Per-market channels are capped at 200 per connection
 // (error 42900 "max subscriptions per connection reached"), so subscriptions are
 // sharded across connections instead.
-export const PARADEX_SUMMARY_CHANNEL = 'markets_summary';
+export const PARADEX_SUMMARY_CHANNEL = "markets_summary";
 export const PARADEX_MAX_SUBSCRIPTIONS_PER_CONNECTION = 200;
 // Headroom below the venue cap so a late ack never pushes a shard over the limit.
 export const PARADEX_SHARD_CAPACITY = 195;
@@ -25,5 +25,5 @@ export function paradexSymbolFromChannel(channel: string): string | null {
 // Option symbols end in -C / -P (e.g. BTC-USD-12JUN26-66000-C); perps end in
 // -PERP and spot has no suffix.
 export function isParadexOptionSymbol(symbol: string): boolean {
-  return symbol.endsWith('-C') || symbol.endsWith('-P');
+  return symbol.endsWith("-C") || symbol.endsWith("-P");
 }

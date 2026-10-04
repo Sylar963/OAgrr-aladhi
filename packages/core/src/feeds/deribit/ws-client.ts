@@ -1,6 +1,11 @@
 import { DERIBIT_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
-import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+  type LiveQuote,
+} from '../shared/sdk-base.js';
 import type { ChainRequest, VenueOptionChain } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -139,6 +144,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private forcedStaleReconnectAt = 0;
   private forcedStaleReconnectStreak = 0;
   private publicStatusRefreshPromise: Promise<void> | null = null;
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -204,7 +210,11 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   protected initClients(): void {
     if (this.rpc) return;
     this.rpc = new JsonRpcWsClient(DERIBIT_WS_URL, 'deribit-ws', {
-      heartbeatIntervalSec: 30,
+      // Deribit closes with 4000 "heartbeat close" when a test_request goes
+      // unanswered for one interval. Production event-loop stalls reach 25–28s, so
+      // 30s left almost no margin; 60s rides them out (the stale watchdog still
+      // catches dead sockets).
+      heartbeatIntervalSec: 60,
       // Far expiries can require large subscribe batches and Deribit's RPC ack
       // can lag well past 15s under venue load. A short timeout causes false
       // reconnect loops precisely when users switch into those tenors.
@@ -508,7 +518,12 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     return underlying === 'BTC' || underlying === 'ETH';
   }
 
+  // BTC/ETH keep tickers on every expiry inside the surface window: the bulk
+  // markprice channel carries mark IV but no greeks, so without tickers the surface
+  // has ATM but no 10Δ/25Δ wings. Measured live: 1296 agg2 tickers ≈ 950 msg/s.
   private eagerTickerExpiries(underlying: string): string[] {
+    const covered = this.surfaceCoverageExpiries(underlying);
+    if (covered.length > 0) return covered;
     return [...new Set(this.instruments.filter((i) => i.base === underlying).map((i) => i.expiry))]
       .sort()
       .slice(0, EAGER_TICKER_EXPIRY_COUNT);
@@ -1159,6 +1174,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       this.instrumentStateFlushTimer = null;
     }
     this.instrumentStateQueue.length = 0;
+    this.stopBaseTimers();
     await this.unsubscribeAll();
     await this.rpc?.disconnect();
   }

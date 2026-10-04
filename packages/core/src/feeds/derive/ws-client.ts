@@ -1,6 +1,10 @@
 import { DERIVE_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
-import { SdkBaseAdapter, type CachedInstrument } from '../shared/sdk-base.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+} from '../shared/sdk-base.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import {
@@ -64,6 +68,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
   private readonly state = createDeriveState();
   private readonly subscriptions = createDeriveSubscriptionState();
   private lastControlPlaneReconnectAt = 0;
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
 
   protected initClients(): void {
     if (this.rpc) return;
@@ -370,7 +375,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     for (const [key, grouped] of groups) {
       const [underlying, expiry] = key.split(':');
       if (!underlying || !expiry) continue;
-      if ((this.requestRefCounts.get(key) ?? 0) <= 0) continue;
+      if ((this.requestRefCounts.get(key) ?? 0) <= 0 && !this.pinnedChainKeys.has(key)) continue;
 
       try {
         const count = await this.fetchTickersForExpiry(underlying, expiry.replace(/-/g, ''));
@@ -505,6 +510,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.stopBaseTimers();
     await this.unsubscribeAll();
     await this.rpc?.disconnect();
   }

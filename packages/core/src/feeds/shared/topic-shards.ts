@@ -1,4 +1,4 @@
-import type { VenueConnectionState } from '../../core/types.js';
+import type { VenueConnectionState } from "../../core/types.js";
 
 /**
  * Assigns topics to connection shards under a per-connection subscription cap
@@ -11,7 +11,9 @@ export class TopicShardAllocator {
 
   constructor(readonly capacity: number) {
     if (!Number.isInteger(capacity) || capacity <= 0) {
-      throw new Error(`shard capacity must be a positive integer, got ${capacity}`);
+      throw new Error(
+        `shard capacity must be a positive integer, got ${capacity}`,
+      );
     }
   }
 
@@ -43,7 +45,10 @@ export class TopicShardAllocator {
     for (const topic of topics) {
       if (this.owner.has(topic)) continue;
 
-      while (cursor < this.shards.length && this.shards[cursor]!.size >= this.capacity) {
+      while (
+        cursor < this.shards.length &&
+        this.shards[cursor]!.size >= this.capacity
+      ) {
         cursor += 1;
       }
       if (cursor === this.shards.length) this.shards.push(new Set());
@@ -82,11 +87,13 @@ export class TopicShardAllocator {
 }
 
 /** One venue status for N shard sockets: any `down` wins, all `connected` is connected. */
-export function aggregateShardState(states: readonly VenueConnectionState[]): VenueConnectionState {
-  if (states.length === 0) return 'down';
-  if (states.some((state) => state === 'down')) return 'down';
-  if (states.every((state) => state === 'connected')) return 'connected';
-  return 'reconnecting';
+export function aggregateShardState(
+  states: readonly VenueConnectionState[],
+): VenueConnectionState {
+  if (states.length === 0) return "down";
+  if (states.some((state) => state === "down")) return "down";
+  if (states.every((state) => state === "connected")) return "connected";
+  return "reconnecting";
 }
 
 /**

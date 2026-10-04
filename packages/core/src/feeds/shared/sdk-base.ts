@@ -171,7 +171,9 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     this.marketsLoaded = true;
 
     await this.eagerSubscribe();
-    await this.ensureSurfaceCoverage();
+    // Background: pinning ~1k topics takes several seconds on rate-limited venues
+    // and must not hold up the bootstrap of the other adapters.
+    void this.ensureSurfaceCoverage();
     this.startSurfaceCoverageRefresh();
     this.startFeedWatchdog();
   }
@@ -198,9 +200,11 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   }
 
   /**
-   * Subscribes and pins every coverage expiry that is not pinned yet. Pinned chains
-   * survive the last browser releasing them; expired keys are dropped. Idempotent,
-   * so the refresh timer also picks up expiries listed after boot.
+   * Subscribes and pins every coverage expiry. Pinned chains survive the last
+   * browser releasing them; expired keys are dropped. Every run re-issues
+   * subscribeChain for all wanted keys — venue planners skip topics that are
+   * already live, so this only sends frames for new expiries/strikes or for
+   * subscriptions a failed control call silently dropped.
    */
   protected async ensureSurfaceCoverage(): Promise<void> {
     if (this.surfaceCoverage == null || this.surfaceCoverageRunning) return;
@@ -211,7 +215,6 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
         for (const expiry of this.surfaceCoverageExpiries(underlying)) {
           const key = `${underlying}:${expiry}`;
           wanted.add(key);
-          if (this.pinnedChainKeys.has(key)) continue;
 
           const matching = this.instruments.filter(
             (i) => i.base === underlying && i.expiry === expiry,

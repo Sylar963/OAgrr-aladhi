@@ -383,13 +383,16 @@ export function isNewsReady(): boolean {
 }
 
 const SPOT_HISTORY_UNDERLYINGS = new Set<string>(['BTC', 'ETH', 'HYPE']);
+// Two years of daily closes so the 60D/90D vol cone has several independent windows.
+// Shared by the richness reading and the Alpha scanners so their cone percentiles agree.
+export const DAILY_SPOT_HISTORY_DAYS = 730;
 const DVOL_UNDERLYINGS = new Set<string>(['BTC', 'ETH']);
 
 export const volRichnessSource = createVolRichnessSource({
   now: Date.now,
   getDailyCandles: async (underlying) =>
     isSpotCandlesReady() && SPOT_HISTORY_UNDERLYINGS.has(underlying)
-      ? spotCandleService.getCandles(underlying as SpotCandleCurrency, 86_400, 200)
+      ? spotCandleService.getCandles(underlying as SpotCandleCurrency, 86_400, DAILY_SPOT_HISTORY_DAYS)
       : [],
   getIvHistory: (underlying, windowDays) =>
     isIvHistoryReady() ? ivHistoryService.query(underlying, windowDays) : null,

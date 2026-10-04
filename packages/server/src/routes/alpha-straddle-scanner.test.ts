@@ -83,6 +83,7 @@ function atmStrike(): EnrichedStrike {
 }
 
 vi.mock('../services.js', () => ({
+  DAILY_SPOT_HISTORY_DAYS: 730,
   isIvHistoryReady: () => false,
   isSpotCandlesReady: () => true,
   ivHistoryService: { query: () => null },

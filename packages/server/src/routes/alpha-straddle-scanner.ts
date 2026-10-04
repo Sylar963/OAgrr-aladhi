@@ -39,6 +39,7 @@ import {
 import { mergeIvSeries } from '../iv-baseline-history.js';
 import { ResponseCache } from '../response-cache.js';
 import {
+  DAILY_SPOT_HISTORY_DAYS,
   isIvHistoryReady,
   isSpotCandlesReady,
   ivBaselineHistory,
@@ -114,7 +115,7 @@ function createAtmStraddleScan(app: FastifyInstance) {
         candles = await spotCandleService.getCandles(
           config.underlying as SpotCandleCurrency,
           86_400,
-          200,
+          DAILY_SPOT_HISTORY_DAYS,
         );
       } catch (error: unknown) {
         req.log.warn({ error, underlying: config.underlying }, 'Straddle scanner spot history unavailable');

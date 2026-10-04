@@ -259,6 +259,22 @@ daily-close realized vol, and mixing estimators would bias the excess. On 2026-1
 premium was about 8.9 pts (7D) and 10.9 pts (30D), measured over a mostly falling-vol period, so
 it may overstate what IV normally carries; this is why the live reading looked very cheap.
 
+Daily history extended to 730 closes (2026-10-04, `DAILY_SPOT_HISTORY_DAYS` in
+`packages/server/src/services.ts`), shared by the richness reading, both straddle scanners, and
+Alpha market context. With 200 closes the 90D cone had 111 heavily overlapping windows (about one
+independent sample). It now has 641. The 2024–26 history includes higher-vol stretches, so the
+cone sits higher. On the day of the change, the cone percentile of the scanned BTC straddles fell from about p50 to
+p33–40, and every row kept its verdict (sell: cheap, buy: expensive). The 30D usual premium can
+now use about one year of DVOL-seeded IV: it fell from about 10.9 to 4.2 pts (13 independent
+windows, up from about 5), and the BTC 30D excess moved from −7.5 (cheap) to −0.9 (fair). Alpha's
+`volatility.state` follows. The 7D baseline is unchanged, because its IV history is still the
+binding limit. The 14D range percentile in Alpha market context also ranks against 2 years now.
+The forecast is unchanged, since its long-run window stays capped at 180 days.
+
+The IV Rank panel draws the full cone (`volCone` on `/api/vol-richness`: min/p10/p25/p50/p75/
+p90/max and current realized vol at 7/14/30/60/90 days) with the ATM IV term structure on top.
+60D/90D IV percentiles in the chart are interpolated from those quantiles.
+
 ## Long call radar: model (Lotto radar, Advanced view)
 
 Engineering derivation, not a reviewed book passage. Let S be the index, K the strike, p the

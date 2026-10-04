@@ -403,7 +403,7 @@ const CONE_TIP = (
     <div className={styles.tipTitle}>Vol cone</div>
     <div>
       Grey bands: distribution of realized vol over every rolling window of each
-      horizon, from ~200 days of spot closes (Sinclair vol cone).
+      horizon, from ~2 years of Deribit perpetual daily closes (Sinclair vol cone).
     </div>
     <ul className={styles.tipList}>
       <li>

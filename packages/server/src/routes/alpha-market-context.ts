@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { buildAlphaMarketContext } from '../alpha-market-context.js';
 import {
+  DAILY_SPOT_HISTORY_DAYS,
   isIvHistoryReady,
   isRegimeReady,
   isSpotCandlesReady,
@@ -39,7 +40,7 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
           candles = await spotCandleService.getCandles(
             underlying as SpotCandleCurrency,
             86_400,
-            200,
+            DAILY_SPOT_HISTORY_DAYS,
           );
         } catch (error: unknown) {
           req.log.warn({ error, underlying }, 'Alpha market context spot history unavailable');

@@ -49,7 +49,12 @@ import {
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
-import { DealerBookService, type IntervalFlow, netIntervalFlow } from './dealer-book-service.js';
+import {
+  DealerBookService,
+  indexIntervalFlow,
+  type IntervalFlow,
+  type IntervalFlowLookup,
+} from './dealer-book-service.js';
 import {
   DeferredDealerBookStore,
   DeferredIvHistoryStore,
@@ -208,6 +213,7 @@ export const dealerBookStore: DealerBookStore = databaseUrl
   ? createDealerBookStore(databaseUrl)
   : new NoopDealerBookStore();
 
+let flowIndex: { underlying: string; toTs: number; lookup: IntervalFlowLookup } | null = null;
 export const dealerBookService = new DealerBookService({
   underlyings: [...FLOW_ALWAYS_ON_UNDERLYINGS],
   oiSnapshotStore,
@@ -226,8 +232,13 @@ export const dealerBookService = new DealerBookService({
       return null;
     }
   },
-  fetchIntervalFlow: async (venue, exchangeSymbol, underlying, fromTs, toTs): Promise<IntervalFlow> =>
-    netIntervalFlow(flowService.getTrades(underlying), venue, exchangeSymbol, fromTs, toTs),
+  fetchIntervalFlow: async (venue, exchangeSymbol, underlying, fromTs, toTs): Promise<IntervalFlow> => {
+    // Every contract in a tick shares toTs, so the tape is indexed once per underlying per tick.
+    if (flowIndex?.underlying !== underlying || flowIndex.toTs !== toTs) {
+      flowIndex = { underlying, toTs, lookup: indexIntervalFlow(flowService.getTrades(underlying)) };
+    }
+    return flowIndex.lookup(venue, exchangeSymbol, fromTs, toTs);
+  },
 });
 
 registerBookLookup(dealerBookService.lookup);
@@ -425,6 +436,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   const start = Date.now();
   shortStraddleLog = log;
   shortStraddleSnapshotService?.setLogger(log);
+  dealerBookService.setLogger(log);
   if (shortStraddleSnapshotsEnabled && !databaseUrl) {
     log.warn({ reason: 'DATABASE_URL missing' }, 'short-straddle snapshot collection disabled');
   }

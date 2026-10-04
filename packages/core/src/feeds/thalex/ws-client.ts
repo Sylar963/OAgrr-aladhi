@@ -1,6 +1,10 @@
 import type WebSocket from 'ws';
 import { THALEX_INSTRUMENTS, THALEX_MARKET_WS_URL, THALEX_REST_URL, THALEX_SYSTEM_INFO } from '../shared/endpoints.js';
-import { SdkBaseAdapter, type CachedInstrument } from '../shared/sdk-base.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+} from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -70,6 +74,7 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
   private connectPromise: Promise<void> | null = null;
 
   private readonly subscriptions = createThalexSubscriptionState();
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
 
   protected initClients(): void {}
 
@@ -376,6 +381,7 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
+    this.stopBaseTimers();
     await this.unsubscribeAll();
     await this.wsClient?.disconnect();
     this.wsClient = null;

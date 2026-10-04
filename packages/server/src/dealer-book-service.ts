@@ -54,12 +54,48 @@ export interface TapeTrade {
   isBlock: boolean;
 }
 
+export type IntervalFlowLookup = (
+  venue: VenueId,
+  exchangeSymbol: string,
+  fromTs: number,
+  toTs: number,
+) => IntervalFlow;
+
 /**
- * Net taker flow for one contract over (fromTs, toTs]. Coverage is judged on
- * the venue's whole tape: a contract that simply didn't trade earlier is still
- * covered, but a buffer that starts after fromTs may have dropped trades.
- * Block trades are excluded because their aggressor sign is ambiguous.
+ * Indexes a trade tape once so each contract's net taker flow only scans that contract's
+ * trades. The dealer-book tick looks up thousands of contracts; scanning the whole tape for
+ * each one stalled the event loop for ~25 s per tick and dropped venue websockets.
+ * Coverage is judged on the venue's whole tape: a contract that simply didn't trade earlier is
+ * still covered, but a buffer that starts after fromTs may have dropped trades. Block trades are
+ * excluded because their aggressor sign is ambiguous.
  */
+export function indexIntervalFlow(trades: readonly TapeTrade[]): IntervalFlowLookup {
+  const earliestByVenue = new Map<VenueId, number>();
+  const byContract = new Map<string, TapeTrade[]>();
+  for (const t of trades) {
+    const earliest = earliestByVenue.get(t.venue);
+    if (earliest === undefined || t.timestamp < earliest) earliestByVenue.set(t.venue, t.timestamp);
+    if (t.isBlock) continue;
+    const key = bookKey(t.venue, t.instrument);
+    const list = byContract.get(key);
+    if (list) list.push(t);
+    else byContract.set(key, [t]);
+  }
+  return (venue, exchangeSymbol, fromTs, toTs) => {
+    const earliest = earliestByVenue.get(venue) ?? Infinity;
+    if (earliest > fromTs) return { netFlow: 0, hasFlow: false };
+    let net = 0;
+    let matched = false;
+    for (const t of byContract.get(bookKey(venue, exchangeSymbol)) ?? []) {
+      if (t.timestamp <= fromTs || t.timestamp > toTs) continue;
+      net += t.side === 'buy' ? t.size : -t.size;
+      matched = true;
+    }
+    return matched ? { netFlow: net, hasFlow: true } : { netFlow: 0, hasFlow: false };
+  };
+}
+
+/** Net taker flow for one contract over (fromTs, toTs]; see indexIntervalFlow. */
 export function netIntervalFlow(
   trades: readonly TapeTrade[],
   venue: VenueId,
@@ -67,20 +103,10 @@ export function netIntervalFlow(
   fromTs: number,
   toTs: number,
 ): IntervalFlow {
-  let earliest = Infinity;
-  let net = 0;
-  let matched = false;
-  for (const t of trades) {
-    if (t.venue !== venue) continue;
-    if (t.timestamp < earliest) earliest = t.timestamp;
-    if (t.isBlock || t.instrument !== exchangeSymbol) continue;
-    if (t.timestamp <= fromTs || t.timestamp > toTs) continue;
-    net += t.side === 'buy' ? t.size : -t.size;
-    matched = true;
-  }
-  if (earliest > fromTs || !matched) return { netFlow: 0, hasFlow: false };
-  return { netFlow: net, hasFlow: true };
+  return indexIntervalFlow(trades)(venue, exchangeSymbol, fromTs, toTs);
 }
+
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 function bookKey(venue: VenueId, symbol: string): string {
   return `${venue}:${symbol}`;
@@ -141,6 +167,10 @@ export class DealerBookService {
 
   lookup: BookLookup = (venue, symbol) => this.book.get(bookKey(venue, symbol));
 
+  setLogger(log: NonNullable<DealerBookServiceOptions['log']>): void {
+    this.opts.log = log;
+  }
+
   async start(): Promise<void> {
     if (this.timer) return; // already started; don't stack intervals
     await this.warmFromStore();
@@ -174,6 +204,7 @@ export class DealerBookService {
   async runTick(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    const startedAt = Date.now();
     // Collect chains first, then stamp a single tickTs so fetchChain closures
     // see the pre-tick state (important for injected test doubles that share a
     // counter between now() and fetchChain).
@@ -200,6 +231,7 @@ export class DealerBookService {
               chain = null;
             }
             if (chain != null) chains.push({ chain, underlying });
+            await yieldToEventLoop();
           }
         }
       }
@@ -210,13 +242,26 @@ export class DealerBookService {
     const tickTs = this.opts.now();
     const snapshots: PersistedOiSnapshot[] = [];
     const updated: DealerPosition[] = [];
+    const gatheredAt = Date.now();
 
     try {
       for (const { chain, underlying } of chains) {
         await this.ingestChain(chain, underlying, tickTs, snapshots, updated);
+        await yieldToEventLoop();
       }
+      const ingestedAt = Date.now();
 
       await this.persist(snapshots, updated, tickTs);
+      this.opts.log.info(
+        {
+          chains: chains.length,
+          contracts: updated.length,
+          gatherMs: gatheredAt - startedAt,
+          ingestMs: ingestedAt - gatheredAt,
+          persistMs: Date.now() - ingestedAt,
+        },
+        'dealer book tick',
+      );
     } finally {
       this.running = false;
     }

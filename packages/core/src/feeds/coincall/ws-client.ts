@@ -9,7 +9,12 @@ import {
   COINCALL_REST_BASE_URL,
   COINCALL_TIME,
 } from '../shared/endpoints.js';
-import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import {
+  DEFAULT_SURFACE_COVERAGE,
+  SdkBaseAdapter,
+  type CachedInstrument,
+  type LiveQuote,
+} from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -192,6 +197,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
   private oiRefreshInFlight = false;
 
   private readonly subscriptions = createCoincallSubscriptionState();
+  protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
   private optionConfig: Record<string, CoincallOptionConfigEntry> = {};
   // pairRoot (e.g. "BTCUSD") + expiry (YYYY-MM-DD) → expirationTimestamp ms.
   // Populated when building instruments so tOption subs know the `end` param.
@@ -770,6 +776,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
       clearInterval(this.oiTimer);
       this.oiTimer = null;
     }
+    this.stopBaseTimers();
     await this.unsubscribeAll();
     await this.wsClient?.disconnect();
     this.wsClient = null;

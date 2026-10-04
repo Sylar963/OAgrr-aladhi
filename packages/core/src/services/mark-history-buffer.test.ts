@@ -80,16 +80,58 @@ describe('MarkHistoryBuffer', () => {
     expect(five[1]).toMatchObject({ ts: BASE_TS + 5 * MIN, o: 105, h: 109, l: 105, c: 109 });
   });
 
-  it('drops stale buckets past the retention window once prune fires', () => {
+  it('drops stale buckets past the retention window once a sweep fires', () => {
     const buffer = new MarkHistoryBuffer({ retentionMs: 5 * MIN });
-    // 255 writes within the first 5 minutes — under the prune-on-256 threshold.
     for (let i = 0; i < 255; i++) {
       buffer.recordMark('derive', 'A', BASE_TS + i * 1000, 100);
     }
-    // 256th write lands 100 minutes later: cutoff = ts - retentionMs is well
-    // past every earlier bucket, so prune leaves only this latest bucket.
+    // Lands 100 minutes later: cutoff = ts - retentionMs is past every earlier bucket.
     buffer.recordMark('derive', 'A', BASE_TS + 100 * MIN, 999);
     expect(buffer.stats().markBuckets).toBe(1);
+  });
+
+  it('rolls buckets older than the fine window into coarse candles', () => {
+    const buffer = new MarkHistoryBuffer({ fineRetentionMs: 60 * MIN, coarseBucketMs: 60 * MIN });
+    for (let i = 0; i < 180; i++) {
+      buffer.recordMark('derive', 'A', BASE_TS + i * MIN, 100 + i);
+    }
+    vi.setSystemTime(BASE_TS + 180 * MIN);
+    buffer.recordMark('derive', 'A', BASE_TS + 180 * MIN, 500);
+
+    // Sweep at t=180m: hours [0,60) and [60,120) are rolled up, [120,181) stay at 1m.
+    expect(buffer.stats().markBuckets).toBe(2 + 61);
+    const candles = buffer.getMarkCandles('derive', 'A', MIN, 240 * MIN);
+    expect(candles[0]).toMatchObject({ ts: BASE_TS, o: 100, h: 159, l: 100, c: 159 });
+    expect(candles[1]).toMatchObject({ ts: BASE_TS + 60 * MIN, o: 160, h: 219, l: 160, c: 219 });
+    expect(candles[2]).toMatchObject({ ts: BASE_TS + 120 * MIN, c: 220 });
+
+    const hourly = buffer.getMarkCandles('derive', 'A', 60 * MIN, 240 * MIN);
+    expect(hourly.map((c) => c.c)).toEqual([159, 219, 279, 500]);
+  });
+
+  it('evicts the oldest buckets across instruments once the global cap is exceeded', () => {
+    const buffer = new MarkHistoryBuffer({ maxBuckets: 100, fineRetentionMs: 24 * 60 * MIN });
+    for (let i = 0; i < 60; i++) {
+      buffer.recordMark('derive', 'A', BASE_TS + i * MIN, 100);
+      buffer.recordMark('derive', 'B', BASE_TS + i * MIN, 100);
+    }
+    buffer.recordMark('derive', 'A', BASE_TS + 60 * MIN, 100);
+
+    const { markBuckets } = buffer.stats();
+    expect(markBuckets).toBeLessThanOrEqual(100);
+    vi.setSystemTime(BASE_TS + 61 * MIN);
+    const a = buffer.getMarkCandles('derive', 'A', MIN, 120 * MIN);
+    expect(a.at(-1)?.ts).toBe(BASE_TS + 60 * MIN);
+    expect(a[0]!.ts).toBeGreaterThan(BASE_TS);
+  });
+
+  it('sweeps at most once per sweep interval regardless of write volume', () => {
+    const buffer = new MarkHistoryBuffer({ retentionMs: MIN, sweepIntervalMs: 10 * MIN });
+    buffer.recordMark('derive', 'A', BASE_TS, 100);
+    for (let i = 1; i <= 1000; i++) buffer.recordMark('derive', 'B', BASE_TS + 5 * MIN, 100);
+    expect(buffer.hasMark('derive', 'A')).toBe(true);
+    buffer.recordMark('derive', 'B', BASE_TS + 10 * MIN, 100);
+    expect(buffer.hasMark('derive', 'A')).toBe(false);
   });
 
   it('rejects non-finite or non-positive prices', () => {

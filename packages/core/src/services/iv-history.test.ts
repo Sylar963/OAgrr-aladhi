@@ -3,6 +3,7 @@ import { interpTenor, type IvSurfaceRow } from '../core/enrichment.js';
 import {
   despikeSkewSeries,
   downsampleSeries,
+  withFractionalDte,
   IvHistoryService,
   type IvHistoryPersistence,
   type PersistedIvHistoryPoint,
@@ -191,6 +192,25 @@ describe('IvHistoryService', () => {
     expect(svc.getBuffer('BTC', '90d')).toHaveLength(0);
     expect(svc.getBuffer('ETH', '30d')).toHaveLength(0);
     svc.dispose();
+  });
+
+  it('waits one interval before the first live snapshot so feeds can warm up', async () => {
+    vi.useFakeTimers();
+    try {
+      const getSurfaceGrid = vi.fn(() => Promise.resolve([makeRow('e', 30, 0.5, 0.02, 0.01)]));
+      const svc = new IvHistoryService(
+        { getSurfaceGrid, dvol: mockDvol() },
+        { underlyings: ['BTC'], intervalMs: 60_000 },
+      );
+      await svc.start();
+      expect(getSurfaceGrid).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(getSurfaceGrid).toHaveBeenCalledTimes(1);
+      expect(svc.getBuffer('BTC', '30d')).toHaveLength(1);
+      svc.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('loads persisted history before querying and before DVOL fallback', async () => {
@@ -443,10 +463,25 @@ describe('despikeSkewSeries', () => {
     expect(out.every((p) => p.rr25d != null)).toBe(true);
   });
 
-  it('leaves the trailing edge untouched', () => {
+  it('holds back an unconfirmed outlier at the trailing edge', () => {
     const series = Array.from({ length: 30 }, (_, i) => flatPoint(i * 300_000, -0.02));
     series[29]!.rr25d = 0.2;
-    expect(despikeSkewSeries(series)[29]!.rr25d).toBe(0.2);
+    expect(despikeSkewSeries(series)[29]!.rr25d).toBeNull();
+  });
+
+  it('drops a trailing glitch once the next sample reverts', () => {
+    const series = Array.from({ length: 30 }, (_, i) => flatPoint(i * 300_000, -0.02));
+    series[28]!.rr25d = 0.2;
+    const out = despikeSkewSeries(series);
+    expect(out[28]!.rr25d).toBeNull();
+    expect(out[29]!.rr25d).toBe(-0.02);
+  });
+
+  it('surfaces a genuine trailing move one sample late', () => {
+    const series = Array.from({ length: 30 }, (_, i) => flatPoint(i * 300_000, i >= 28 ? 0.03 : -0.02));
+    const out = despikeSkewSeries(series);
+    expect(out[28]!.rr25d).toBe(0.03);
+    expect(out[29]!.rr25d).toBeNull();
   });
 
   it('skips null samples when picking neighbours', () => {
@@ -455,6 +490,34 @@ describe('despikeSkewSeries', () => {
     );
     series[16]!.rr25d = 0.1;
     expect(despikeSkewSeries(series)[16]!.rr25d).toBeNull();
+  });
+});
+
+describe('IvHistoryService current point', () => {
+  it('holds the last clean skew value when the newest snapshot is a glitch', async () => {
+    let rows: IvSurfaceRow[] = [];
+    const svc = new IvHistoryService({ getSurfaceGrid: async () => rows, dvol: mockDvol() });
+    const now = Date.now();
+    for (let i = 0; i < 20; i++) {
+      const skew = i === 19 ? 0.15 : -0.02;
+      rows = [makeRow('a', 7, 0.5, skew, 0.01), makeRow('b', 90, 0.55, skew, 0.01)];
+      await svc.snapshotOnce(now - (20 - i) * 300_000);
+    }
+    const current = svc.query('BTC', 30).tenors['30d'].current;
+    expect(current.rr25d).toBeCloseTo(-0.02);
+  });
+});
+
+describe('withFractionalDte', () => {
+  it('replaces rounded-up DTE with time to the 08:00 UTC expiry', () => {
+    const now = Date.parse('2026-10-04T20:00:00Z');
+    const [row] = withFractionalDte([makeRow('2026-10-08', 4, 0.5, 0, 0)], now);
+    expect(row!.dte).toBeCloseTo(3.5);
+  });
+
+  it('keeps the stored DTE when the expiry cannot be parsed', () => {
+    const [row] = withFractionalDte([makeRow('weekly', 4, 0.5, 0, 0)], Date.now());
+    expect(row!.dte).toBe(4);
   });
 });
 

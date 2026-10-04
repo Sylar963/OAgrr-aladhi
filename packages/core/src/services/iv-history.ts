@@ -40,35 +40,84 @@ function median(sorted: number[]): number {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+function robustStats(values: number[]): { med: number; threshold: number } {
+  const sorted = [...values].sort((a, b) => a - b);
+  const med = median(sorted);
+  const mad = median(sorted.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
+  return { med, threshold: Math.max(DESPIKE_FLOOR, DESPIKE_MAD_MULT * 1.4826 * mad) };
+}
+
 /**
  * Nulls skew fields that are single-snapshot outliers vs. their neighbours (Hampel filter).
- * The live grid occasionally yields a one-off RR/fly jump of several vol points (mid-refresh
- * or expiry-roll snapshots) that reverts on the next sample; left in, they inflate σ and
- * percentile extremes. Step changes survive because the centred median follows the new level.
- * The trailing edge has no forward neighbours, so the latest points are left untouched.
+ * The live grid occasionally yields a one-off RR/fly jump of several vol points that reverts
+ * on the next sample (they cluster on the first snapshot after the top of the hour); left in,
+ * they inflate σ and percentile extremes. Step changes survive because the centred median
+ * follows the new level. Near the trailing edge there are too few forward neighbours for a
+ * centred window, so an outlier vs. the preceding hour is held back until the next sample
+ * confirms it: a genuine move surfaces one sample late, a glitch never does.
  */
 export function despikeSkewSeries(series: IvHistoryPoint[]): IvHistoryPoint[] {
   const out = series.map((p) => ({ ...p }));
+  const K = DESPIKE_HALF_WINDOW;
   for (const key of SKEW_KEYS) {
     const idx: number[] = [];
     for (let i = 0; i < series.length; i++) {
       const v = series[i]![key];
       if (v != null && Number.isFinite(v)) idx.push(i);
     }
-    for (let j = DESPIKE_HALF_WINDOW; j < idx.length - DESPIKE_HALF_WINDOW; j++) {
-      const window: number[] = [];
-      for (let k = j - DESPIKE_HALF_WINDOW; k <= j + DESPIKE_HALF_WINDOW; k++) {
-        window.push(series[idx[k]!]![key]!);
+    const valueAt = (j: number) => series[idx[j]!]![key]!;
+    for (let j = K; j < idx.length; j++) {
+      const value = valueAt(j);
+      if (j + K < idx.length) {
+        const window: number[] = [];
+        for (let k = j - K; k <= j + K; k++) window.push(valueAt(k));
+        const { med, threshold } = robustStats(window);
+        if (Math.abs(value - med) > threshold) out[idx[j]!]![key] = null;
+        continue;
       }
-      window.sort((a, b) => a - b);
-      const med = median(window);
-      const mad = median(window.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
-      const threshold = Math.max(DESPIKE_FLOOR, DESPIKE_MAD_MULT * 1.4826 * mad);
-      const value = series[idx[j]!]![key]!;
-      if (Math.abs(value - med) > threshold) out[idx[j]!]![key] = null;
+      const back: number[] = [];
+      for (let k = j - 2 * K; k < j; k++) if (k >= 0) back.push(valueAt(k));
+      const { med, threshold } = robustStats(back);
+      const dev = value - med;
+      if (Math.abs(dev) <= threshold) continue;
+      const nextDev = j + 1 < idx.length ? valueAt(j + 1) - med : null;
+      const confirmed = nextDev != null && Math.sign(nextDev) === Math.sign(dev) && Math.abs(nextDev) > threshold;
+      if (!confirmed) out[idx[j]!]![key] = null;
     }
   }
   return out;
+}
+
+/**
+ * IvSurfaceRow.dte is whole days rounded up (display convention). Variance-time interpolation
+ * needs real time to expiry, otherwise a weekly 3.1 days out is weighted as 4 and every tenor
+ * saw-tooths at the 08:00 UTC roll.
+ */
+export function withFractionalDte(surfaces: IvSurfaceRow[], now: number): IvSurfaceRow[] {
+  return surfaces.map((row) => {
+    const expiryMs = Date.parse(`${row.expiry}T08:00:00Z`);
+    return Number.isFinite(expiryMs) ? { ...row, dte: (expiryMs - now) / MS_PER_DAY } : row;
+  });
+}
+
+const CURRENT_FALLBACK_SAMPLES = 3;
+
+/** Latest point with skew fields held at their last clean value when the newest sample was rejected. */
+function latestClean(series: IvHistoryPoint[]): IvHistoryPoint | null {
+  const last = series[series.length - 1];
+  if (!last) return null;
+  const latest = { ...last };
+  for (const key of SKEW_KEYS) {
+    if (latest[key] != null) continue;
+    for (let i = series.length - 2; i >= Math.max(0, series.length - CURRENT_FALLBACK_SAMPLES); i--) {
+      const v = series[i]![key];
+      if (v != null) {
+        latest[key] = v;
+        break;
+      }
+    }
+  }
+  return latest;
 }
 
 export function downsampleSeries(series: IvHistoryPoint[], bucketMs: number): IvHistoryPoint[] {
@@ -194,11 +243,9 @@ export class IvHistoryService {
   async start(): Promise<void> {
     await this.loadPersistedHistory();
     await this.seedFromDvol();
-    try {
-      await this.snapshotOnce();
-    } catch (err: unknown) {
-      log.warn({ err: String(err) }, 'initial IV-history snapshot failed');
-    }
+    // No snapshot at boot: venue feeds are still reconnecting and replaying subscriptions, so
+    // the grid is partial and skew comes out several vol points off (the hourly restart timer
+    // made this the single largest source of RR/fly glitches). Persisted history covers the gap.
     this.timer = setInterval(() => {
       this.snapshotOnce().catch((err: unknown) => {
         log.warn({ err: String(err) }, 'IV-history snapshot failed');
@@ -253,6 +300,7 @@ export class IvHistoryService {
         continue;
       }
       if (surfaces.length === 0) continue;
+      surfaces = withFractionalDte(surfaces, now);
       // For 30d BTC/ETH we align the live "current" with the DVOL-seeded
       // history. DVOL uses Deribit's own variance methodology across multiple
       // strikes; our interpTenor uses cross-venue ATM averages. Mixing them
@@ -430,10 +478,14 @@ export class IvHistoryService {
     cutoff: number,
   ): IvHistoryTenorResult {
     const series = this.getCleanBuffer(underlying, tenor).filter((p) => p.ts >= cutoff);
-    const latest =
-      series.length > 0
-        ? series[series.length - 1]!
-        : { ts: 0, atmIv: null, rr25d: null, bfly25d: null, rr10d: null, bfly10d: null };
+    const latest = latestClean(series) ?? {
+      ts: 0,
+      atmIv: null,
+      rr25d: null,
+      bfly25d: null,
+      rr10d: null,
+      bfly10d: null,
+    };
 
     const atmValues = series.map((p) => p.atmIv);
     const rrValues = series.map((p) => p.rr25d);

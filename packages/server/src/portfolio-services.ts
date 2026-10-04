@@ -6,6 +6,7 @@ import {
   delta76,
   fitSvi,
   gamma76,
+  mergeEnrichedStrikes,
   price76,
   sviIv,
   thetaPerDay,
@@ -118,12 +119,10 @@ export function applyChainDelta(
   prev: EnrichedChainResponse,
   patch: ChainRuntimeDeltaEvent['patch'],
 ): EnrichedChainResponse {
-  const byStrike = new Map(prev.strikes.map((row) => [row.strike, row]));
-  for (const row of patch.strikes) byStrike.set(row.strike, row);
   return {
     ...prev,
     stats: patch.stats,
-    strikes: [...byStrike.values()].sort((left, right) => left.strike - right.strike),
+    strikes: mergeEnrichedStrikes(prev.strikes, patch.strikes),
     gex: patch.gex ?? prev.gex,
   };
 }

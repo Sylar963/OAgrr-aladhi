@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { alignWallHistory, type GexWallPoint } from './gex-wall-history';
+import type { GexWallHistoryPoint } from '@oggregator/protocol';
+
+import { alignWallHistory } from './gex-wall-history';
 
 const HOUR = 3600;
 
-function point(tsSec: number, callWall: number, putWall: number): GexWallPoint {
+function point(tsSec: number, callWall: number, putWall: number): GexWallHistoryPoint {
   return { ts: tsSec * 1000, spot: null, callWall, putWall, gammaFlip: null };
 }
 

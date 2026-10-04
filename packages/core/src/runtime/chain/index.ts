@@ -1,5 +1,6 @@
 export {
   ChainRuntime,
+  mergeEnrichedStrikes,
   type ChainRuntimeDeltaEvent,
   type ChainRuntimeEvent,
   type ChainRuntimeListener,

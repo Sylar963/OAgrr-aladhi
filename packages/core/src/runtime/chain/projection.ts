@@ -80,6 +80,7 @@ export class ChainProjection {
   private venueChains = new Map<VenueId, VenueOptionChain>();
   private comparisonRows = new Map<number, ComparisonRow>();
   private enrichedStrikes = new Map<number, EnrichedStrike>();
+  private missedSymbols = false;
 
   constructor(
     private readonly underlying: string,
@@ -91,6 +92,7 @@ export class ChainProjection {
     this.venueChains = new Map(venueChains.map((chain) => [chain.venue, chain]));
     this.comparisonRows = comparisonRowsMap(this.underlying, this.expiry, venueChains);
     this.enrichedStrikes = enrichedStrikesMap(this.comparisonRows);
+    this.missedSymbols = false;
 
     return buildEnrichedChain(
       this.underlying,
@@ -99,6 +101,11 @@ export class ChainProjection {
       venueChains,
       this.bookLookup,
     );
+  }
+
+  /** True once a delta referenced a contract this projection was not loaded with (e.g. a new listing). */
+  needsReload(): boolean {
+    return this.missedSymbols;
   }
 
   buildSnapshotMeta(): SnapshotMeta {
@@ -113,7 +120,10 @@ export class ChainProjection {
     for (const delta of deltas) {
       const chain = this.venueChains.get(delta.venue);
       const contract = chain?.contracts[delta.symbol];
-      if (chain == null || contract == null) return null;
+      if (chain == null || contract == null || !this.comparisonRows.has(contract.strike)) {
+        this.missedSymbols = true;
+        continue;
+      }
 
       if (delta.quote != null) {
         contract.quote = { ...contract.quote, ...delta.quote };
@@ -124,16 +134,15 @@ export class ChainProjection {
       changedStrikes.add(contract.strike);
     }
 
+    if (changedStrikes.size === 0) return null;
+
     for (const strike of changedStrikes) {
-      const row = this.comparisonRows.get(strike);
-      if (row == null) return null;
-      this.enrichedStrikes.set(strike, enrichComparisonRow(row));
+      this.enrichedStrikes.set(strike, enrichComparisonRow(this.comparisonRows.get(strike)!));
     }
 
     const venueChains = [...this.venueChains.values()];
-    const strikes = [...this.enrichedStrikes.values()].sort(
-      (left, right) => left.strike - right.strike,
-    );
+    // Insertion order is strike-sorted from loadSnapshot and set() on an existing key keeps it.
+    const strikes = [...this.enrichedStrikes.values()];
     const stats = computeChainStats(strikes, venueChains);
     const patchStrikes = [...changedStrikes]
       .sort((left, right) => left - right)

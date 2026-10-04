@@ -19,6 +19,46 @@ const LARGE_FRAME_BYTES = 250_000;
 const LARGE_FRAME_LOG_TTL_MS = 5_000;
 const SOFT_BACKPRESSURE_BYTES = 500_000;
 
+interface SerializedBody {
+  json: string;
+  bytes: number;
+}
+
+// Snapshot data / delta patches are shared by every session on an engine, so
+// serialize each once and splice it into the per-session envelope.
+const serializedBodies = new WeakMap<object, SerializedBody>();
+
+function serializeBody(body: object): SerializedBody {
+  let cached = serializedBodies.get(body);
+  if (cached == null) {
+    const json = JSON.stringify(body);
+    cached = { json, bytes: Buffer.byteLength(json) };
+    serializedBodies.set(body, cached);
+  }
+  return cached;
+}
+
+function serializeWithBody(envelope: object, key: string, body: object): { payload: string; bytes: number } {
+  const head = JSON.stringify(envelope);
+  const serialized = serializeBody(body);
+  return {
+    payload: `${head.slice(0, -1)},${JSON.stringify(key)}:${serialized.json}}`,
+    bytes: Buffer.byteLength(head) + serialized.bytes + key.length + 4,
+  };
+}
+
+function serializeMessage(message: ServerWsMessage): { payload: string; bytes: number | null } {
+  if (message.type === 'snapshot') {
+    const { data, ...envelope } = message;
+    return serializeWithBody(envelope, 'data', data);
+  }
+  if (message.type === 'delta') {
+    const { patch, ...envelope } = message;
+    return serializeWithBody(envelope, 'patch', patch);
+  }
+  return { payload: JSON.stringify(message), bytes: null };
+}
+
 function normalizeStatusMessage(message?: string): string {
   if (message == null) return '';
   return message
@@ -238,12 +278,11 @@ export class ChainStreamSession {
   private sendMessage(kind: 'subscribed' | 'snapshot' | 'delta' | 'status', message: ServerWsMessage): void {
     if (this.socket.readyState !== WS_OPEN) return;
 
-    const payload = JSON.stringify(message);
+    const { payload, bytes } = serializeMessage(message);
     this.socket.send(payload);
 
-    const bytes = Buffer.byteLength(payload);
     if (
-      (kind === 'snapshot' || kind === 'delta') &&
+      bytes != null &&
       bytes >= LARGE_FRAME_BYTES &&
       Date.now() - this.lastLargeFrameLoggedAt >= LARGE_FRAME_LOG_TTL_MS
     ) {

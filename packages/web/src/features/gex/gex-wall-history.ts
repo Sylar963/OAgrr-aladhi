@@ -1,19 +1,6 @@
+import type { GexWallHistoryPoint } from '@oggregator/protocol';
+
 import type { GammaWalls } from './gex-wall-utils';
-
-/** One server-sampled wall snapshot (`GET /gex-wall-history`). */
-export interface GexWallPoint {
-  ts: number;
-  spot: number | null;
-  callWall: number | null;
-  putWall: number | null;
-  gammaFlip: number | null;
-}
-
-export interface GexWallHistoryResponse {
-  underlying: string;
-  resolutionSec: number;
-  points: GexWallPoint[];
-}
 
 /** Wall levels held at a candle's open time (seconds). */
 export interface AlignedWalls extends GammaWalls {
@@ -32,7 +19,7 @@ const SAMPLE_SEC = 900;
  */
 export function alignWallHistory(
   candleTimesSec: readonly number[],
-  points: readonly GexWallPoint[],
+  points: readonly GexWallHistoryPoint[],
   resolutionSec: number,
 ): AlignedWalls[] {
   const sorted = [...points].sort((a, b) => a.ts - b.ts);

@@ -19,6 +19,7 @@ import { VenueHealthManager } from './health.js';
 const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
 const GEX_DELTA_MIN_INTERVAL_MS = 2_000;
+const MISSED_SYMBOL_REBUILD_MIN_INTERVAL_MS = 10_000;
 
 interface FailedVenue {
   venue: VenueId;
@@ -99,19 +100,25 @@ function mergeDelta(left: VenueDelta | undefined, right: VenueDelta): VenueDelta
   return merged;
 }
 
-function mergeStrikes(
+/** Replace strikes in a strike-sorted list with patched rows; rows for unseen strikes are inserted in order. */
+export function mergeEnrichedStrikes(
   existing: EnrichedChainResponse['strikes'],
   incoming: EnrichedChainResponse['strikes'],
 ): EnrichedChainResponse['strikes'] {
-  const byStrike = new Map<number, EnrichedChainResponse['strikes'][number]>();
+  if (incoming.length === 0) return existing;
+  const incomingByStrike = new Map(incoming.map((strike) => [strike.strike, strike]));
 
-  for (const strike of existing) {
-    byStrike.set(strike.strike, strike);
-  }
-  for (const strike of incoming) {
-    byStrike.set(strike.strike, strike);
-  }
+  let replaced = 0;
+  const merged = existing.map((strike) => {
+    const next = incomingByStrike.get(strike.strike);
+    if (next == null) return strike;
+    replaced += 1;
+    return next;
+  });
+  if (replaced === incomingByStrike.size) return merged;
 
+  const byStrike = new Map(merged.map((strike) => [strike.strike, strike]));
+  for (const strike of incoming) byStrike.set(strike.strike, strike);
   return [...byStrike.values()].sort((left, right) => left.strike - right.strike);
 }
 
@@ -136,6 +143,8 @@ export class ChainRuntime {
   private pendingDeltaVersion = 0;
   private snapshotBuildVersion = 0;
   private lastGexComputedAt = 0;
+  private lastSnapshotBuiltAt = 0;
+  private resumeBuild: Promise<void> | null = null;
 
   constructor(
     readonly key: string,
@@ -220,6 +229,12 @@ export class ChainRuntime {
 
   async fetchSnapshotData(): Promise<EnrichedChainResponse> {
     await this.ready();
+    // A live engine keeps currentSnapshot current via deltas; rebuilding here
+    // would push a full snapshot frame to every attached listener.
+    if (this.resumeBuild != null) await this.resumeBuild;
+    if (this.pushTimer != null && this.currentSnapshot != null && !this.needsResync) {
+      return this.currentSnapshot.data;
+    }
     await this.buildSnapshot();
     const refreshed = this.currentSnapshot;
     return refreshed != null ? refreshed.data : this.projection.loadSnapshot([]);
@@ -301,7 +316,14 @@ export class ChainRuntime {
     if (this.pushTimer != null || this.disposed || this.listeners.size === 0) return;
     // Resuming after idle: ticks were dropped while paused, so refresh from the
     // venue quote stores before streaming live patches.
-    void this.buildSnapshot();
+    const resumeBuild = this.buildSnapshot()
+      .catch((error: unknown) => {
+        this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
+      })
+      .finally(() => {
+        if (this.resumeBuild === resumeBuild) this.resumeBuild = null;
+      });
+    this.resumeBuild = resumeBuild;
     this.pushTimer = setInterval(() => {
       if (this.disposed) return;
       if (this.needsResync) {
@@ -350,6 +372,7 @@ export class ChainRuntime {
     const enriched = this.projection.loadSnapshot(result.chains.filter((chain) => chain != null));
     this.seq += 1;
     this.lastGexComputedAt = Date.now();
+    this.lastSnapshotBuiltAt = this.lastGexComputedAt;
 
     const snapshot: ChainRuntimeSnapshotEvent = {
       type: 'snapshot',
@@ -399,12 +422,16 @@ export class ChainRuntime {
     const includeGex = now - this.lastGexComputedAt >= GEX_DELTA_MIN_INTERVAL_MS;
     const patch = this.projection.applyDeltas(deltas, { includeGex });
 
-    if (patch == null) {
+    if (
+      this.projection.needsReload() &&
+      now - this.lastSnapshotBuiltAt >= MISSED_SYMBOL_REBUILD_MIN_INTERVAL_MS
+    ) {
+      this.lastSnapshotBuiltAt = now;
       void this.buildSnapshot().catch((error: unknown) => {
         this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
       });
-      return;
     }
+    if (patch == null) return;
     if (patch.patch.gex != null) this.lastGexComputedAt = now;
 
     this.seq += 1;
@@ -429,7 +456,7 @@ export class ChainRuntime {
             data: {
               ...snapshot.data,
               stats: patch.patch.stats,
-              strikes: mergeStrikes(snapshot.data.strikes, patch.patch.strikes),
+              strikes: mergeEnrichedStrikes(snapshot.data.strikes, patch.patch.strikes),
               gex: patch.patch.gex ?? snapshot.data.gex,
             },
           };

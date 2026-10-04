@@ -122,6 +122,7 @@ export {
   ChainRuntimeRegistry,
   ChainProjection,
   VenueHealthManager,
+  mergeEnrichedStrikes,
   type ChainRuntimeDeltaEvent,
   type ChainRuntimeEvent,
   type ChainRuntimeListener,

@@ -18,9 +18,10 @@ import type {
   SpotCandlesResponse,
 } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
+import type { GexWallHistoryResponse } from '@oggregator/protocol';
 
 import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
-import { alignWallHistory, type GexWallHistoryResponse } from './gex-wall-history';
+import { alignWallHistory } from './gex-wall-history';
 import { computeGammaWalls } from './gex-wall-utils';
 import styles from './GexView.module.css';
 

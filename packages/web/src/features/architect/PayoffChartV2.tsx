@@ -170,7 +170,7 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const lastWindowKeyRef = useRef<string>('');
-  const ghostSeriesRef = useRef<ISeriesApi<'Candlestick'>[]>([]);
+  const ghostSeriesRef = useRef(new Map<GhostPathKind, ISeriesApi<'Candlestick'>>());
   const frontierSeriesRef = useRef(new Map<ProfitFrontier['kind'], ISeriesApi<'Line'>>());
   const lastGhostFitKeyRef = useRef<string>('');
 
@@ -246,7 +246,7 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       lastWindowKeyRef.current = '';
-      ghostSeriesRef.current = [];
+      ghostSeriesRef.current.clear();
       frontierSeriesRef.current.clear();
       lastGhostFitKeyRef.current = '';
     };
@@ -339,47 +339,66 @@ export default function PayoffChartV2({
 
   // Render the projection paths as translucent candlestick series. Each series'
   // future data points extend the shared time scale into the projection region.
+  // Series are kept per kind and updated in place: removing and re-adding them
+  // on every spot tick shrinks/grows the time scale's base index, which makes
+  // lightweight-charts shift the visible range and undo the user's pan/zoom.
   useEffect(() => {
     const chart = chartApiRef.current;
     if (!chart) return;
 
-    for (const s of ghostSeriesRef.current) chart.removeSeries(s);
-    ghostSeriesRef.current = [];
+    const timeScale = chart.timeScale();
+    const shouldFit = projectionKey !== lastGhostFitKeyRef.current;
+    const preservedRange = shouldFit ? null : timeScale.getVisibleLogicalRange();
 
-    if (!showProjections || ghostPaths.length === 0) return;
-
-    for (const path of ghostPaths) {
-      if (path.candles.length === 0) continue;
-      const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
-      const bodyAlpha = path.kind === 'theta' ? 0.18 : 0.3;
-      const series = chart.addSeries(CandlestickSeries, {
-        upColor: rgba(rgb, bodyAlpha),
-        downColor: rgba(rgb, bodyAlpha),
-        borderUpColor: rgba(rgb, 0.55),
-        borderDownColor: rgba(rgb, 0.55),
-        wickUpColor: rgba(rgb, 0.55),
-        wickDownColor: rgba(rgb, 0.55),
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      series.setData(
-        path.candles.map((c) => ({
-          time: Math.floor(c.timestamp / 1000) as number, // seconds — match the main series
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-        })) as never,
-      );
-      ghostSeriesRef.current.push(series);
+    const activeKinds = new Set<GhostPathKind>();
+    if (showProjections) {
+      for (const path of ghostPaths) {
+        if (path.candles.length === 0) continue;
+        const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
+        const bodyAlpha = path.kind === 'theta' ? 0.18 : 0.3;
+        const style = {
+          upColor: rgba(rgb, bodyAlpha),
+          downColor: rgba(rgb, bodyAlpha),
+          borderUpColor: rgba(rgb, 0.55),
+          borderDownColor: rgba(rgb, 0.55),
+          wickUpColor: rgba(rgb, 0.55),
+          wickDownColor: rgba(rgb, 0.55),
+        };
+        let series = ghostSeriesRef.current.get(path.kind);
+        if (series) {
+          series.applyOptions(style);
+        } else {
+          series = chart.addSeries(CandlestickSeries, {
+            ...style,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          ghostSeriesRef.current.set(path.kind, series);
+        }
+        series.setData(
+          path.candles.map((c) => ({
+            time: Math.floor(c.timestamp / 1000) as number, // seconds — match the main series
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          })) as never,
+        );
+        activeKinds.add(path.kind);
+      }
+    }
+    for (const [kind, series] of ghostSeriesRef.current) {
+      if (!activeKinds.has(kind)) series.setData([]);
     }
 
     // Bring the projection into view only when the projection identity changes
     // (toggle on, snapshot switch, tenor/resolution change) — not on every tick,
     // so the user's pan/zoom is preserved during rolling updates.
-    if (projectionKey !== lastGhostFitKeyRef.current) {
-      chart.timeScale().fitContent();
+    if (shouldFit) {
+      timeScale.fitContent();
       lastGhostFitKeyRef.current = projectionKey;
+    } else if (preservedRange) {
+      timeScale.setVisibleLogicalRange(preservedRange);
     }
   }, [ghostPaths, showProjections, projectionKey]);
 

@@ -1,3 +1,5 @@
+import { black76Price } from '@lib/analytics/blackScholes';
+
 import { pnlAtPrice, type Leg, type PayoffPoint } from './payoff';
 
 export interface PriceScale {
@@ -246,34 +248,6 @@ export function deriveTenorColumns(
   return [...allExpiries.slice(loIdx, hiIdx + 1), ...unknown];
 }
 
-export interface TenorScale {
-  tenors: string[];
-  colW: number;
-  /** Center x of a tenor's column, or null when the tenor has no column. */
-  xCenter: (tenor: string) => number | null;
-  /** Tenor whose column contains pixel x (clamped to the edge columns). */
-  tenorAt: (xPx: number) => string | null;
-}
-
-/** Evenly split the plot width into one column per tenor. */
-export function makeTenorScale(tenors: string[], plotLeft: number, plotW: number): TenorScale {
-  const n = tenors.length;
-  const colW = n > 0 ? plotW / n : plotW;
-  return {
-    tenors,
-    colW,
-    xCenter: (tenor) => {
-      const i = tenors.indexOf(tenor);
-      return i === -1 ? null : plotLeft + (i + 0.5) * colW;
-    },
-    tenorAt: (xPx) => {
-      if (n === 0) return null;
-      const i = Math.max(0, Math.min(n - 1, Math.floor((xPx - plotLeft) / colW)));
-      return tenors[i]!;
-    },
-  };
-}
-
 export interface TenorLaneItem extends LaneItem {
   expiry: string;
 }
@@ -390,13 +364,17 @@ export function buildLadderUnits(legs: Leg[]): LadderUnit[] {
   return units;
 }
 
-/** Net position P&L at a price, plus % of cost basis (|netDebit|). */
+/**
+ * Net position P&L at a price, plus % of cost basis (|netDebit|). At expiry by
+ * default; pass `atMs` for the model value at that moment.
+ */
 export function netPnlReadout(
   legs: Leg[],
   price: number,
   netDebit: number,
+  atMs?: number,
 ): { pnl: number; pct: number | null } {
-  const pnl = pnlAtPrice(legs, price);
+  const pnl = atMs != null ? pnlAtTime(legs, price, atMs) : pnlAtPrice(legs, price);
   const cost = Math.abs(netDebit);
   return { pnl, pct: cost > 0 ? (pnl / cost) * 100 : null };
 }
@@ -425,4 +403,183 @@ export function formatPriceTick(price: number, span: number, axisMax: number): s
   const useK = shouldUseKFormat(axisMax);
   const dp = pickDecimals(span, useK);
   return useK ? `${(price / 1000).toFixed(dp)}k` : price.toFixed(dp);
+}
+
+const MS_PER_DAY = 86_400_000;
+const MS_PER_YEAR = 365 * MS_PER_DAY;
+const DEFAULT_IV = 0.5;
+const MIN_IV = 0.01;
+
+/** Settlement instant of a YYYY-MM-DD expiry (08:00 UTC, matching dteDays). */
+export function expiryMs(expiry: string): number {
+  return new Date(expiry + 'T08:00:00Z').getTime();
+}
+
+export interface TimeScale {
+  /** Tenors sorted chronologically. */
+  tenors: string[];
+  nowMs: number;
+  endMs: number;
+  /** Calendar time → pixel x, clamped to the plot. */
+  xOf: (ms: number) => number;
+  timeAt: (xPx: number) => number;
+  /** x of a tenor's expiry line, or null when the tenor has no column. */
+  xExpiry: (tenor: string) => number | null;
+  /** Pixel span of a tenor's segment: (previous expiry or now, this expiry]. */
+  segment: (tenor: string) => { x0: number; x1: number } | null;
+  /** Tenor whose segment contains pixel x — the first expiry at or after that time. */
+  tenorAt: (xPx: number) => string | null;
+}
+
+/**
+ * Linear calendar-time axis from now to the last tenor's expiry, so theta decay
+ * reads honestly: equal widths are equal days, expiries land where they occur.
+ */
+export function makeTimeScale(
+  tenors: string[],
+  plotLeft: number,
+  plotW: number,
+  nowMs: number,
+): TimeScale {
+  const sorted = [...tenors].sort((a, b) => expiryMs(a) - expiryMs(b));
+  const lastMs = sorted.length > 0 ? expiryMs(sorted[sorted.length - 1]!) : nowMs;
+  const endMs = Math.max(lastMs, nowMs + MS_PER_DAY);
+  const spanMs = endMs - nowMs;
+  const xOf = (ms: number) =>
+    plotLeft + Math.max(0, Math.min(1, (ms - nowMs) / spanMs)) * plotW;
+  const timeAt = (xPx: number) => nowMs + ((xPx - plotLeft) / plotW) * spanMs;
+  return {
+    tenors: sorted,
+    nowMs,
+    endMs,
+    xOf,
+    timeAt,
+    xExpiry: (tenor) => (sorted.includes(tenor) ? xOf(expiryMs(tenor)) : null),
+    segment: (tenor) => {
+      const i = sorted.indexOf(tenor);
+      if (i === -1) return null;
+      const startMs = i === 0 ? nowMs : expiryMs(sorted[i - 1]!);
+      return { x0: xOf(startMs), x1: xOf(expiryMs(tenor)) };
+    },
+    tenorAt: (xPx) => {
+      if (sorted.length === 0) return null;
+      const t = timeAt(xPx);
+      return sorted.find((e) => expiryMs(e) >= t) ?? sorted[sorted.length - 1]!;
+    },
+  };
+}
+
+/**
+ * Model value of one contract at a price and moment. Black-76 on the leg's own
+ * IV (sticky strike); after expiry the leg is treated as settled at that price.
+ */
+export function legValueAt(leg: Leg, price: number, atMs: number): number {
+  const tYears = (expiryMs(leg.expiry) - atMs) / MS_PER_YEAR;
+  const intrinsic =
+    leg.type === 'call' ? Math.max(price - leg.strike, 0) : Math.max(leg.strike - price, 0);
+  if (tYears <= 0) return intrinsic;
+  const iv = Math.max(MIN_IV, leg.iv ?? DEFAULT_IV);
+  const v = black76Price(leg.type, price, leg.strike, tYears, iv);
+  return Number.isFinite(v) ? v : intrinsic;
+}
+
+/** Net structure P&L if the underlying sits at `price` at time `atMs`. */
+export function pnlAtTime(legs: Leg[], price: number, atMs: number): number {
+  let total = 0;
+  for (const leg of legs) {
+    const sign = leg.direction === 'buy' ? 1 : -1;
+    total +=
+      sign * (legValueAt(leg, price, atMs) - leg.entryPrice) * leg.quantity * (leg.contractMultiplier ?? 1);
+  }
+  return total;
+}
+
+/**
+ * Price-row edges for the P&L grid, ascending. Strike rungs are always edges so
+ * cells line up with the ladder; each band is split into ~`targetPx` rows.
+ */
+export function gridRowEdges(
+  rungs: number[],
+  priceMin: number,
+  priceMax: number,
+  pxPerPrice: number,
+  targetPx: number,
+): number[] {
+  const anchors = [priceMin, ...rungs.filter((k) => k > priceMin && k < priceMax), priceMax];
+  const edges: number[] = [anchors[0]!];
+  for (let i = 1; i < anchors.length; i++) {
+    const lo = anchors[i - 1]!;
+    const hi = anchors[i]!;
+    const n = Math.max(1, Math.round(((hi - lo) * pxPerPrice) / targetPx));
+    for (let j = 1; j <= n; j++) edges.push(lo + ((hi - lo) * j) / n);
+  }
+  return edges;
+}
+
+/** Whole-day time-column edges from now to endMs, ~`maxCols` columns at most. */
+export function gridTimeEdges(nowMs: number, endMs: number, maxCols: number): number[] {
+  const horizonDays = Math.max(0, (endMs - nowMs) / MS_PER_DAY);
+  const stepDays = Math.max(1, Math.ceil(horizonDays / Math.max(1, maxCols)));
+  const edges = [nowMs];
+  for (let t = nowMs + stepDays * MS_PER_DAY; t < endMs; t += stepDays * MS_PER_DAY) edges.push(t);
+  edges.push(endMs);
+  return edges;
+}
+
+export interface PnlGridCell {
+  t0Ms: number;
+  t1Ms: number;
+  lowPrice: number;
+  highPrice: number;
+  pnl: number;
+}
+
+/**
+ * Price × time P&L grid for the whole structure. Each cell is valued at the end
+ * of its time step (so the last column is the at-expiry payoff) and the middle
+ * of its price band.
+ */
+export function buildPnlGrid(
+  legs: Leg[],
+  timeEdges: number[],
+  priceEdges: number[],
+): { cells: PnlGridCell[]; maxAbs: number } {
+  const cells: PnlGridCell[] = [];
+  let maxAbs = 0;
+  if (legs.length === 0) return { cells, maxAbs };
+  for (let c = 1; c < timeEdges.length; c++) {
+    const t0Ms = timeEdges[c - 1]!;
+    const t1Ms = timeEdges[c]!;
+    for (let r = 1; r < priceEdges.length; r++) {
+      const lowPrice = priceEdges[r - 1]!;
+      const highPrice = priceEdges[r]!;
+      const pnl = pnlAtTime(legs, (lowPrice + highPrice) / 2, t1Ms);
+      maxAbs = Math.max(maxAbs, Math.abs(pnl));
+      cells.push({ t0Ms, t1Ms, lowPrice, highPrice, pnl });
+    }
+  }
+  return { cells, maxAbs };
+}
+
+/** Lognormal ±kσ band around spot at time atMs. */
+export function expectedMoveBand(
+  spot: number,
+  iv: number,
+  nowMs: number,
+  atMs: number,
+  k: number,
+): { low: number; high: number } {
+  const tYears = Math.max(0, (atMs - nowMs) / MS_PER_YEAR);
+  const move = k * Math.max(MIN_IV, iv) * Math.sqrt(tYears);
+  return { low: spot * Math.exp(-move), high: spot * Math.exp(move) };
+}
+
+/** IV of the leg struck nearest spot — the cone's ATM-vol proxy. */
+export function nearestAtmIv(legs: Leg[], spotPrice: number): number | null {
+  let best: Leg | null = null;
+  for (const l of legs) {
+    if (l.iv == null || !(l.iv > 0)) continue;
+    if (!best || Math.abs(l.strike - spotPrice) < Math.abs(best.strike - spotPrice)) best = l;
+  }
+  return best?.iv ?? null;
 }

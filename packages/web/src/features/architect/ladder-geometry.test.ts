@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Leg } from './payoff';
+import { pnlAtPrice, type Leg } from './payoff';
 import {
   buildLadderUnits,
   buildLadderZones,
@@ -9,8 +9,15 @@ import {
   formatPriceTick,
   legToBlock,
   makePriceScale,
-  makeTenorScale,
+  buildPnlGrid,
+  expectedMoveBand,
+  expiryMs,
+  gridRowEdges,
+  gridTimeEdges,
+  makeTimeScale,
+  nearestAtmIv,
   netPnlReadout,
+  pnlAtTime,
   packLanes,
   packLanesByTenor,
 } from './ladder-geometry';
@@ -367,30 +374,6 @@ describe('deriveTenorColumns', () => {
   });
 });
 
-describe('makeTenorScale', () => {
-  const scale = makeTenorScale(['a', 'b', 'c'], 48, 488); // colW ≈ 162.67
-
-  it('centers each tenor in its column', () => {
-    expect(scale.xCenter('a')).toBeCloseTo(48 + 488 / 6);
-    expect(scale.xCenter('b')).toBeCloseTo(48 + 488 / 2);
-    expect(scale.xCenter('c')).toBeCloseTo(48 + (5 * 488) / 6);
-  });
-
-  it('returns null for a tenor without a column', () => {
-    expect(scale.xCenter('nope')).toBeNull();
-  });
-
-  it('maps x back to the containing column, clamped at the edges', () => {
-    expect(scale.tenorAt(scale.xCenter('b')!)).toBe('b');
-    expect(scale.tenorAt(0)).toBe('a'); // left of the plot → first column
-    expect(scale.tenorAt(10_000)).toBe('c'); // right of the plot → last column
-  });
-
-  it('handles an empty tenor list', () => {
-    expect(makeTenorScale([], 48, 488).tenorAt(100)).toBeNull();
-  });
-});
-
 describe('packLanesByTenor', () => {
   it('same-span blocks in different tenors do not contend for lanes', () => {
     const near = legToBlock(makeLeg({ id: 'near', strike: 100, entryPrice: 5, expiry: 'e1' }));
@@ -420,5 +403,106 @@ describe('formatPriceTick', () => {
     // Same axis (max 1200): both sides of 1000 must use one format (V1-faithful).
     expect(formatPriceTick(950, 400, 1200)).toBe('0.950k');
     expect(formatPriceTick(1150, 400, 1200)).toBe('1.150k');
+  });
+});
+
+describe('makeTimeScale', () => {
+  const NOW = Date.parse('2026-06-01T08:00:00Z');
+  const scale = makeTimeScale(['2026-08-24', '2026-06-29', '2026-07-27'], 48, 488, NOW);
+
+  it('sorts tenors and places expiries linearly in calendar time', () => {
+    expect(scale.tenors).toEqual(['2026-06-29', '2026-07-27', '2026-08-24']);
+    expect(scale.xOf(NOW)).toBeCloseTo(48);
+    expect(scale.xExpiry('2026-06-29')).toBeCloseTo(48 + 488 / 3);
+    expect(scale.xExpiry('2026-08-24')).toBeCloseTo(48 + 488);
+    expect(scale.xExpiry('nope')).toBeNull();
+  });
+
+  it('maps x to the tenor whose segment contains it, clamped at the edges', () => {
+    expect(scale.tenorAt(100)).toBe('2026-06-29');
+    expect(scale.tenorAt(48 + 488 / 2)).toBe('2026-07-27');
+    expect(scale.tenorAt(0)).toBe('2026-06-29');
+    expect(scale.tenorAt(10_000)).toBe('2026-08-24');
+  });
+
+  it('segments run from the previous expiry (or now) to the tenor expiry', () => {
+    const seg = scale.segment('2026-07-27')!;
+    expect(seg.x0).toBeCloseTo(48 + 488 / 3);
+    expect(seg.x1).toBeCloseTo(48 + (488 * 2) / 3);
+  });
+});
+
+describe('pnlAtTime', () => {
+  const EXP = '2026-12-25';
+  const atExpiry = expiryMs(EXP);
+
+  it('matches the at-expiry payoff at and after expiry', () => {
+    const legs = [makeLeg({ strike: 100, entryPrice: 3 })];
+    expect(pnlAtTime(legs, 110, atExpiry)).toBeCloseTo(pnlAtPrice(legs, 110));
+    expect(pnlAtTime(legs, 90, atExpiry + 86_400_000)).toBeCloseTo(-3);
+  });
+
+  it('short straddle at the strike earns theta as expiry approaches', () => {
+    const legs = [
+      makeLeg({ id: 'c', type: 'call', direction: 'sell', strike: 100, entryPrice: 6 }),
+      makeLeg({ id: 'p', type: 'put', direction: 'sell', strike: 100, entryPrice: 6 }),
+    ];
+    const early = pnlAtTime(legs, 100, atExpiry - 30 * 86_400_000);
+    const late = pnlAtTime(legs, 100, atExpiry - 2 * 86_400_000);
+    expect(late).toBeGreaterThan(early);
+    expect(pnlAtTime(legs, 100, atExpiry)).toBeCloseTo(12);
+  });
+});
+
+describe('gridRowEdges / gridTimeEdges', () => {
+  it('keeps every rung as a row edge and splits bands to ~targetPx', () => {
+    const edges = gridRowEdges([95, 100, 105], 90, 110, 10, 24);
+    for (const k of [90, 95, 100, 105, 110]) expect(edges).toContain(k);
+    expect(edges.length).toBe(9); // 4 bands of 50px → 2 rows each
+  });
+
+  it('steps whole days and ends exactly at the horizon', () => {
+    const now = 0;
+    const end = 10.5 * 86_400_000;
+    expect(gridTimeEdges(now, end, 100)).toHaveLength(12);
+    const coarse = gridTimeEdges(now, end, 3);
+    expect(coarse[1]).toBe(4 * 86_400_000);
+    expect(coarse[coarse.length - 1]).toBe(end);
+  });
+});
+
+describe('buildPnlGrid', () => {
+  it('signs a long call grid: loss below strike, profit far above at expiry', () => {
+    const exp = expiryMs('2026-12-25');
+    const grid = buildPnlGrid(
+      [makeLeg({ strike: 100, entryPrice: 3, expiry: '2026-12-25' })],
+      [exp - 86_400_000, exp],
+      [80, 90, 120, 130],
+    );
+    expect(grid.cells).toHaveLength(3);
+    expect(grid.cells[0]!.pnl).toBeCloseTo(-3);
+    expect(grid.cells[2]!.pnl).toBeCloseTo(22);
+    expect(grid.maxAbs).toBeCloseTo(22);
+  });
+
+  it('is empty without legs', () => {
+    expect(buildPnlGrid([], [0, 1], [1, 2]).cells).toHaveLength(0);
+  });
+});
+
+describe('expectedMoveBand / nearestAtmIv', () => {
+  it('is spot at now and widens with √t', () => {
+    const now = 0;
+    const year = 365 * 86_400_000;
+    expect(expectedMoveBand(100, 0.5, now, now, 1)).toEqual({ low: 100, high: 100 });
+    const b = expectedMoveBand(100, 0.5, now, year, 1);
+    expect(b.high).toBeCloseTo(100 * Math.exp(0.5));
+    expect(b.low).toBeCloseTo(100 * Math.exp(-0.5));
+  });
+
+  it('takes the IV of the leg struck nearest spot', () => {
+    const legs = [makeLeg({ id: 'a', strike: 90, iv: 0.7 }), makeLeg({ id: 'b', strike: 101, iv: 0.45 })];
+    expect(nearestAtmIv(legs, 100)).toBe(0.45);
+    expect(nearestAtmIv([makeLeg({ iv: null })], 100)).toBeNull();
   });
 });

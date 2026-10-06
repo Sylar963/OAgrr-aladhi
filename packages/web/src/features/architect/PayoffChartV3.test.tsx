@@ -3,7 +3,7 @@
  */
 
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Leg } from './payoff';
 import PayoffChartV3 from './PayoffChartV3';
 
@@ -513,9 +513,15 @@ describe('PayoffChartV3 (placement)', () => {
 });
 
 describe('PayoffChartV3 (tenor columns)', () => {
-  // Default jsdom size 600×400 → plotLeft 48, plotW 488 → colW ≈ 162.7;
-  // column centers ≈ 129 / 292 / 455.
-  const TENORS = ['2026-06-26', '2026-07-31', '2026-09-25'];
+  // Calendar axis: now pinned 28 days before each evenly spaced expiry. Default
+  // jsdom size 600×400 → plotLeft 48, plotW 488 → expiry lines ≈ 211 / 373 / 536,
+  // segment midpoints ≈ 129 / 292 / 455.
+  const TENORS = ['2026-06-29', '2026-07-27', '2026-08-24'];
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-01T08:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
 
   function renderTenors(legs: Leg[], extra: Record<string, unknown> = {}) {
     return render(
@@ -535,9 +541,9 @@ describe('PayoffChartV3 (tenor columns)', () => {
 
   it('renders a tenor header with one label per column, active tenor marked', () => {
     const { container } = renderTenors([makeLeg({ expiry: TENORS[0] })]);
-    expect(container.textContent).toContain('26 JUN');
-    expect(container.textContent).toContain('31 JUL');
-    expect(container.textContent).toContain('25 SEP');
+    expect(container.textContent).toContain('29 JUN');
+    expect(container.textContent).toContain('27 JUL');
+    expect(container.textContent).toContain('24 AUG');
     expect(container.querySelector(`[data-tenor="${TENORS[0]}"]`)!.getAttribute('data-active')).toBe('true');
     expect(container.querySelector(`[data-tenor="${TENORS[1]}"]`)!.getAttribute('data-active')).toBe('false');
   });
@@ -563,8 +569,42 @@ describe('PayoffChartV3 (tenor columns)', () => {
     ]);
     const nearX = Number(container.querySelector('[data-leg-id="near"] rect')!.getAttribute('x'));
     const farX = Number(container.querySelector('[data-leg-id="far"] rect')!.getAttribute('x'));
-    // colW ≈ 162.7 — two columns apart means >300px between the blocks.
+    // Expiry lines two segments apart (≈ 325px) — blocks sit flush left of each.
     expect(farX - nearX).toBeGreaterThan(300);
+  });
+
+  it('sits each block flush against its expiry line', () => {
+    const { container } = renderTenors([makeLeg({ id: 'leg-1', expiry: TENORS[1] })]);
+    const lineX = Number(container.querySelector(`[data-expiry-line="${TENORS[1]}"]`)!.getAttribute('x1'));
+    const rect = container.querySelector('[data-leg-id="leg-1"] rect')!;
+    const right = Number(rect.getAttribute('x')) + Number(rect.getAttribute('width'));
+    expect(lineX).toBeCloseTo(48 + (488 * 2) / 3, 0);
+    expect(lineX - right).toBeGreaterThanOrEqual(0);
+    expect(lineX - right).toBeLessThan(6);
+  });
+
+  it('paints a price × time P&L grid with profit and loss cells', () => {
+    const { container } = renderTenors([
+      makeLeg({ id: 'c', direction: 'sell', type: 'call', strike: 100, expiry: TENORS[2] }),
+      makeLeg({ id: 'p', direction: 'sell', type: 'put', strike: 100, expiry: TENORS[2] }),
+    ]);
+    const cells = [...container.querySelectorAll('[data-testid="pnl-grid"] rect')];
+    expect(cells.length).toBeGreaterThan(20);
+    const fills = new Set(cells.map((c) => c.getAttribute('fill')));
+    expect(fills).toContain('var(--lego-profit)');
+    expect(fills).toContain('var(--lego-loss)');
+  });
+
+  it('draws the ±1σ and ±2σ expected-move cone', () => {
+    const { container } = renderTenors([makeLeg({ expiry: TENORS[0] })]);
+    expect(container.querySelector('[data-cone="1"]')).not.toBeNull();
+    expect(container.querySelector('[data-cone="2"]')).not.toBeNull();
+  });
+
+  it('crosshair reads P&L at the hovered date', () => {
+    const { container } = renderTenors([makeLeg({ expiry: TENORS[2] })]);
+    fireEvent.pointerMove(container.querySelector('svg')!, { clientX: 211, clientY: 200 });
+    expect(container.querySelector('[data-testid="crosshair-chip"]')!.textContent).toContain('29 JUN');
   });
 
   it('drags a block onto another tenor column and fires onLegTenorDrag', () => {

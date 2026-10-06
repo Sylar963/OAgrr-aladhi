@@ -5,11 +5,16 @@ import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderUnits,
   buildLadderZones,
+  buildPnlGrid,
   deriveLadderDomain,
+  expectedMoveBand,
   formatPriceTick,
+  gridRowEdges,
+  gridTimeEdges,
   legToBlock,
   makePriceScale,
-  makeTenorScale,
+  makeTimeScale,
+  nearestAtmIv,
   netPnlReadout,
   packLanes,
   packLanesByTenor,
@@ -58,6 +63,9 @@ const FAN_STEP = 16;
 const TENOR_HEADER_H = 24;
 /** Horizontal pointer travel before a drag can hop tenor columns. */
 const TENOR_DRAG_ENGAGE_PX = 20;
+/** Target edge length of a P&L grid square. */
+const CELL_PX = 24;
+const CONE_SAMPLES = 48;
 
 /** Map a price to a clamped pixel y inside the plot; ±Infinity → plot edges. */
 function clampY(price: number, yOf: (p: number) => number, plotTop: number, plotBottom: number): number {
@@ -89,6 +97,7 @@ export default function PayoffChartV3({
   // ResizeObserver — jsdom has no ResizeObserver, and the first paint has no box.
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 600, h: 400 });
   const [hoverY, setHoverY] = useState<number | null>(null);
+  const [hoverX, setHoverX] = useState<number | null>(null);
   const [hoverLegId, setHoverLegId] = useState<string | null>(null);
   const [hoverSpreadKey, setHoverSpreadKey] = useState<string | null>(null);
   const [drag, setDrag] = useState<{
@@ -169,12 +178,19 @@ export default function PayoffChartV3({
     [domain, plotTop, plotH],
   );
 
-  // Tenor (expiry) columns on the horizontal axis. Single/absent tenor list →
+  // Calendar-time horizontal axis (now → last expiry). Single/absent tenor list →
   // null scale → the original centered single-column layout.
+  const nowMs = Math.floor(Date.now() / 60_000) * 60_000;
   const tenorScale = useMemo(
-    () => (tenors && tenors.length > 1 ? makeTenorScale(tenors, plotLeft, plotW) : null),
-    [tenors, plotLeft, plotW],
+    () => (tenors && tenors.length > 1 ? makeTimeScale(tenors, plotLeft, plotW, nowMs) : null),
+    [tenors, plotLeft, plotW, nowMs],
   );
+  // Blocks sit flush against their expiry line, inside the segment they live in.
+  const blockCenterX = (tenor: string): number | null => {
+    const xe = tenorScale?.xExpiry(tenor);
+    if (xe == null) return null;
+    return Math.max(plotLeft + BLOCK_W / 2, xe - BLOCK_W / 2 - 2);
+  };
   const headerH = tenorScale ? TENOR_HEADER_H : 0;
 
   // Render units fuse clean verticals into one spread block; lanes pack by each
@@ -217,7 +233,7 @@ export default function PayoffChartV3({
 
   const unitX = (key: string, expiry: string): number => {
     if (tenorScale) {
-      const cx = tenorScale.xCenter(expiry) ?? centerX;
+      const cx = blockCenterX(expiry) ?? centerX;
       const info = tenorLanes?.get(key);
       const lane = info?.lane ?? 0;
       const fan = info?.lanesInTenor ?? 1;
@@ -229,6 +245,50 @@ export default function PayoffChartV3({
   };
 
   const spotY = clampY(spotPrice, scale.y, plotTop, plotBottom);
+
+  const gridLayer = useMemo(() => {
+    if (!tenorScale || viewLegs.length === 0) return null;
+    const timeEdges = gridTimeEdges(tenorScale.nowMs, tenorScale.endMs, Math.floor(plotW / CELL_PX));
+    const priceEdges = gridRowEdges(rungs, domain.priceMin, domain.priceMax, plotH / span, CELL_PX);
+    const grid = buildPnlGrid(viewLegs, timeEdges, priceEdges);
+    if (grid.maxAbs === 0) return null;
+    return (
+      <g data-testid="pnl-grid" pointerEvents="none">
+        {grid.cells.map((c) => {
+          const x0 = tenorScale.xOf(c.t0Ms);
+          const x1 = tenorScale.xOf(c.t1Ms);
+          const yTop = scale.y(c.highPrice);
+          const yBot = scale.y(c.lowPrice);
+          return (
+            <rect
+              key={`${c.t0Ms}:${c.lowPrice}`}
+              x={x0 + 0.5}
+              y={yTop + 0.5}
+              width={Math.max(0, x1 - x0 - 1)}
+              height={Math.max(0, yBot - yTop - 1)}
+              rx={1.5}
+              fill={c.pnl >= 0 ? 'var(--lego-profit)' : 'var(--lego-loss)'}
+              opacity={0.05 + 0.3 * Math.sqrt(Math.abs(c.pnl) / grid.maxAbs)}
+            />
+          );
+        })}
+      </g>
+    );
+  }, [tenorScale, viewLegs, rungs, domain, plotW, plotH, span, scale]);
+
+  const coneIv = useMemo(() => nearestAtmIv(legs, spotPrice), [legs, spotPrice]);
+  const conePaths = useMemo(() => {
+    if (!tenorScale || coneIv == null || !(spotPrice > 0)) return null;
+    const { nowMs: t0, endMs } = tenorScale;
+    const path = (k: number, side: 'low' | 'high') =>
+      Array.from({ length: CONE_SAMPLES + 1 }, (_, i) => {
+        const t = t0 + ((endMs - t0) * i) / CONE_SAMPLES;
+        const band = expectedMoveBand(spotPrice, coneIv, t0, t, k);
+        const y = clampY(band[side], scale.y, plotTop, plotBottom);
+        return `${i === 0 ? 'M' : 'L'}${tenorScale.xOf(t).toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+    return [1, 2].map((k) => ({ k, d: `${path(k, 'high')} ${path(k, 'low')}` }));
+  }, [tenorScale, coneIv, spotPrice, scale, plotTop, plotBottom]);
 
   // When the ladder overflows the viewport, center it on spot once so the live
   // action is in view; let the user scroll freely after that.
@@ -273,6 +333,7 @@ export default function PayoffChartV3({
       return;
     }
     setHoverY(y >= plotTop && y <= plotBottom ? y : null);
+    setHoverX(e.clientX - svgRect.left);
   };
   // NOTE: deliberately does NOT clear the picker — the picker overlay is a
   // sibling of the svg, so moving the mouse onto it fires the svg's
@@ -280,6 +341,7 @@ export default function PayoffChartV3({
   // clicked. The picker closes on container leave (below) or button click.
   const handlePointerLeave = () => {
     setHoverY(null);
+    setHoverX(null);
     setHoverLegId(null);
     setHoverSpreadKey(null);
   };
@@ -319,7 +381,12 @@ export default function PayoffChartV3({
   };
 
   const hoverPrice = hoverY != null ? scale.priceAt(hoverY) : null;
-  const hoverReadout = hoverPrice != null ? netPnlReadout(legs, hoverPrice, netDebit) : null;
+  const hoverMs =
+    tenorScale && hoverX != null
+      ? Math.max(tenorScale.nowMs, Math.min(tenorScale.endMs, tenorScale.timeAt(hoverX)))
+      : null;
+  const hoverReadout =
+    hoverPrice != null ? netPnlReadout(legs, hoverPrice, netDebit, hoverMs ?? undefined) : null;
   const hoveredLeg = hoverLegId != null ? legs.find((l) => l.id === hoverLegId) ?? null : null;
   const hoveredSpread = ((): LadderSpread | null => {
     if (hoverSpreadKey == null) return null;
@@ -333,13 +400,16 @@ export default function PayoffChartV3({
     <div className={s.container} ref={containerRef} onPointerLeave={() => setPicker(null)}>
       {tenorScale && (
         <div className={s.tenorHeader} style={{ height: TENOR_HEADER_H }}>
+          <span className={s.tenorLabel} data-now="true" style={{ left: plotLeft }}>
+            now
+          </span>
           {tenorScale.tenors.map((t) => (
             <span
               key={t}
               className={s.tenorLabel}
               data-tenor={t}
               data-active={t === activeTenor}
-              style={{ left: tenorScale.xCenter(t) ?? 0 }}
+              style={{ left: tenorScale.xExpiry(t) ?? 0 }}
             >
               {formatExpiry(t)}
               <span className={s.tenorDte}>{dteDays(t)}d</span>
@@ -368,8 +438,9 @@ export default function PayoffChartV3({
           </pattern>
         </defs>
 
-        {/* Net P&L wash */}
-        {zones.map((z, i) => {
+        {/* Net P&L: price × time grid on the calendar axis, at-expiry wash otherwise */}
+        {gridLayer}
+        {!gridLayer && zones.map((z, i) => {
           const yHigh = clampY(z.highPrice, scale.y, plotTop, plotBottom);
           const yLow = clampY(z.lowPrice, scale.y, plotTop, plotBottom);
           return (
@@ -390,12 +461,12 @@ export default function PayoffChartV3({
         {tenorScale &&
           activeTenor &&
           (() => {
-            const cx = tenorScale.xCenter(activeTenor);
-            return cx == null ? null : (
+            const seg = tenorScale.segment(activeTenor);
+            return seg == null ? null : (
               <rect
-                x={cx - tenorScale.colW / 2}
+                x={seg.x0}
                 y={plotTop}
-                width={tenorScale.colW}
+                width={Math.max(0, seg.x1 - seg.x0)}
                 height={plotH}
                 fill="var(--accent-primary)"
                 opacity={0.03}
@@ -403,19 +474,20 @@ export default function PayoffChartV3({
               />
             );
           })()}
-        {tenorScale?.tenors.slice(1).map((t, i) => {
-            const x = plotLeft + (i + 1) * tenorScale.colW;
+        {tenorScale?.tenors.map((t) => {
+            const x = tenorScale.xExpiry(t)!;
             return (
               <line
                 key={`tcol-${t}`}
+                data-expiry-line={t}
                 x1={x}
                 y1={plotTop}
                 x2={x}
                 y2={plotBottom}
-                stroke="var(--border-subtle)"
+                stroke="var(--text-tertiary)"
                 strokeWidth="1"
-                strokeDasharray="2 5"
-                opacity={0.7}
+                opacity={0.45}
+                pointerEvents="none"
               />
             );
           })}
@@ -453,6 +525,24 @@ export default function PayoffChartV3({
         <text x={plotRight + 4} y={spotY + 3} fill="var(--accent-primary)" fontSize="9">
           {formatPriceTick(spotPrice, span, domain.priceMax)}
         </text>
+
+        {/* Expected-move cone (±1σ dashed, ±2σ dotted) from spot, now */}
+        {conePaths?.map(({ k, d }) => (
+          <path
+            key={`cone-${k}`}
+            data-cone={k}
+            d={d}
+            fill="none"
+            stroke="var(--accent-primary)"
+            strokeWidth={k === 1 ? 1.3 : 1}
+            strokeDasharray={k === 1 ? '6 4' : '2 4'}
+            opacity={k === 1 ? 0.75 : 0.45}
+            pointerEvents="none"
+          />
+        ))}
+        {tenorScale && (
+          <circle cx={plotLeft} cy={spotY} r={4} fill="var(--accent-primary)" pointerEvents="none" />
+        )}
 
         {/* Blocks — fused spreads + lone legs */}
         {units.map((u) => {
@@ -548,7 +638,9 @@ export default function PayoffChartV3({
 
       {hoverY != null && hoverReadout != null && hoverLegId == null && hoverSpreadKey == null && (
         <div className={s.crosshairChip} data-testid="crosshair-chip" style={{ left: plotLeft + 6, top: hoverY }}>
-          @{formatPriceTick(hoverPrice as number, span, domain.priceMax)} → {fmtUsd(hoverReadout.pnl)}
+          @{formatPriceTick(hoverPrice as number, span, domain.priceMax)}
+          {hoverMs != null ? ` · ${formatExpiry(new Date(hoverMs).toISOString().slice(0, 10))}` : ''} →{' '}
+          {fmtUsd(hoverReadout.pnl)}
           {hoverReadout.pct != null ? ` (${fmtPct(hoverReadout.pct, 0)})` : ''}
         </div>
       )}
@@ -557,7 +649,7 @@ export default function PayoffChartV3({
         <div
           className={s.card}
           style={{
-            left: Math.min((tenorScale?.xCenter(hoveredLeg.expiry) ?? centerX) + BLOCK_W, w - 140),
+            left: Math.min((blockCenterX(hoveredLeg.expiry) ?? centerX) + BLOCK_W, w - 140),
             top: scale.y(hoveredLeg.strike) - 40,
           }}
         >
@@ -577,7 +669,7 @@ export default function PayoffChartV3({
           const m = computeMetrics([lLeg, sLeg], spotPrice);
           const midY = scale.y((hoveredSpread.lowStrike + hoveredSpread.highStrike) / 2);
           const cardLeft = Math.min(
-            (tenorScale?.xCenter(hoveredSpread.expiry) ?? centerX) + BLOCK_W,
+            (blockCenterX(hoveredSpread.expiry) ?? centerX) + BLOCK_W,
             w - 140,
           );
           return (
@@ -601,7 +693,7 @@ export default function PayoffChartV3({
               4,
               Math.min(
                 w - 210,
-                (picker.expiry != null ? (tenorScale?.xCenter(picker.expiry) ?? centerX) : centerX) - 70,
+                (picker.expiry != null ? (blockCenterX(picker.expiry) ?? centerX) : centerX) - 70,
               ),
             ),
             top: picker.y,

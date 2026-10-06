@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   LineStyle,
@@ -8,6 +9,8 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type ISeriesMarkersPluginApi,
+  type Time,
 } from 'lightweight-charts';
 
 import { Spinner } from '@components/ui';
@@ -18,6 +21,8 @@ import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
 import type { GhostPath, GhostPathKind } from './ghost-paths';
 import type { ProfitFrontier } from './profit-frontiers';
+import { ExpiryLinesPrimitive } from './expiry-lines-primitive';
+import { findBreakevenCrossing, type ExpiryMark } from './expiry-timeline';
 import styles from './Architect.module.css';
 
 const GHOST_RGB: Record<'profit' | 'loss', string> = {
@@ -41,6 +46,7 @@ interface PayoffChartV2Props {
   snapshotMeta: { agoLabel: string } | null;
   projectionKey: string;
   profitFrontiers: ProfitFrontier[];
+  expiryMarks: ExpiryMark[];
 }
 
 export interface CandleSpec {
@@ -163,12 +169,15 @@ export default function PayoffChartV2({
   snapshotMeta,
   projectionKey,
   profitFrontiers,
+  expiryMarks,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
+  const expiryLinesRef = useRef<ExpiryLinesPrimitive | null>(null);
+  const ghostMarkersRef = useRef(new Map<GhostPathKind, ISeriesMarkersPluginApi<Time>>());
   const lastWindowKeyRef = useRef<string>('');
   const ghostSeriesRef = useRef(new Map<GhostPathKind, ISeriesApi<'Candlestick'>>());
   const frontierSeriesRef = useRef(new Map<ProfitFrontier['kind'], ISeriesApi<'Line'>>());
@@ -234,10 +243,13 @@ export default function PayoffChartV2({
 
     const primitive = new ZonesPrimitive();
     series.attachPrimitive(primitive);
+    const expiryLines = new ExpiryLinesPrimitive();
+    series.attachPrimitive(expiryLines);
 
     chartApiRef.current = chart;
     seriesRef.current = series;
     primitiveRef.current = primitive;
+    expiryLinesRef.current = expiryLines;
 
     return () => {
       chart.remove();
@@ -245,8 +257,10 @@ export default function PayoffChartV2({
       seriesRef.current = null;
       priceLinesRef.current = [];
       primitiveRef.current = null;
+      expiryLinesRef.current = null;
       lastWindowKeyRef.current = '';
       ghostSeriesRef.current.clear();
+      ghostMarkersRef.current.clear();
       frontierSeriesRef.current.clear();
       lastGhostFitKeyRef.current = '';
     };
@@ -374,6 +388,7 @@ export default function PayoffChartV2({
             lastValueVisible: false,
           });
           ghostSeriesRef.current.set(path.kind, series);
+          ghostMarkersRef.current.set(path.kind, createSeriesMarkers(series, []));
         }
         series.setData(
           path.candles.map((c) => ({
@@ -384,11 +399,33 @@ export default function PayoffChartV2({
             close: c.close,
           })) as never,
         );
+        const crossing = findBreakevenCrossing(
+          path.candles,
+          breakevens,
+          expiryMarks[0]?.expiryMs ?? path.candles.at(-1)!.timestamp,
+        );
+        const towardUp = path.targetPrice >= path.candles[0]!.open;
+        ghostMarkersRef.current.get(path.kind)?.setMarkers(
+          crossing
+            ? [
+                {
+                  time: Math.floor(crossing.timestamp / 1000) as Time,
+                  position: towardUp ? 'aboveBar' : 'belowBar',
+                  shape: 'circle',
+                  color: rgba(rgb, 0.9),
+                  text: crossing.label,
+                  size: 0.6,
+                },
+              ]
+            : [],
+        );
         activeKinds.add(path.kind);
       }
     }
     for (const [kind, series] of ghostSeriesRef.current) {
-      if (!activeKinds.has(kind)) series.setData([]);
+      if (activeKinds.has(kind)) continue;
+      series.setData([]);
+      ghostMarkersRef.current.get(kind)?.setMarkers([]);
     }
 
     // Bring the projection into view only when the projection identity changes
@@ -400,7 +437,25 @@ export default function PayoffChartV2({
     } else if (preservedRange) {
       timeScale.setVisibleLogicalRange(preservedRange);
     }
-  }, [ghostPaths, showProjections, projectionKey]);
+  }, [ghostPaths, showProjections, projectionKey, breakevens, expiryMarks]);
+
+  // Expiry lines are positioned off the last time point on the shared scale,
+  // which the projection and frontier series extend past the last real candle.
+  useEffect(() => {
+    let lastMs = candles.at(-1)?.timestamp ?? null;
+    if (showProjections) {
+      const extents = [
+        ...ghostPaths.map((p) => p.candles.at(-1)?.timestamp),
+        ...profitFrontiers.map((f) => f.points.at(-1)?.timestamp),
+      ];
+      for (const t of extents) if (t != null && (lastMs == null || t > lastMs)) lastMs = t;
+    }
+    expiryLinesRef.current?.setMarks(
+      expiryMarks,
+      lastMs == null ? null : Math.floor(lastMs / 1000),
+      resolutionSec,
+    );
+  }, [expiryMarks, candles, ghostPaths, profitFrontiers, showProjections, resolutionSec]);
 
   useEffect(() => {
     const chart = chartApiRef.current;

@@ -46,6 +46,7 @@ import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
 import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
 import PayoffChartV3 from './PayoffChartV3';
+import { buildExpiryMarks, expiryTimeMs } from './expiry-timeline';
 import { computeLongCallProfitFrontiers } from './profit-frontiers';
 import SnapshotBanner from './SnapshotBanner';
 import {
@@ -697,8 +698,15 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     const expiries = pricedLegs.map((l) => l.expiry).filter(Boolean);
     if (expiries.length === 0) return Number.NaN;
     const earliest = expiries.reduce((a, b) => (a < b ? a : b));
-    return Date.parse(`${earliest}T${market === 'tradfi' ? '21' : '08'}:00:00Z`);
+    return expiryTimeMs(earliest, market);
   }, [market, pricedLegs]);
+
+  const expiryKey = [...new Set(pricedLegs.map((l) => l.expiry))].sort().join(',');
+  const expiryMarks = useMemo(
+    () => buildExpiryMarks(expiryKey ? expiryKey.split(',') : [], market, Date.now()),
+    // lastBarMs advances once per candle, which keeps the time-left labels fresh.
+    [expiryKey, market, lastBarMs],
+  );
 
   const liveGhostPaths = useMemo(
     () =>
@@ -1216,6 +1224,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         snapshotMeta={snapshotMeta}
                         projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
                         profitFrontiers={profitFrontiers}
+                        expiryMarks={expiryMarks}
                       />
                     </>
                   ) : (

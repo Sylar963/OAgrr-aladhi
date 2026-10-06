@@ -21,6 +21,7 @@ import {
   spreadKey,
   type LadderBlock,
   type LadderSpread,
+  type PnlGridCell,
 } from './ladder-geometry';
 import s from './PayoffChartV3.module.css';
 
@@ -252,29 +253,45 @@ export default function PayoffChartV3({
     const priceEdges = gridRowEdges(rungs, domain.priceMin, domain.priceMax, plotH / span, CELL_PX);
     const grid = buildPnlGrid(viewLegs, timeEdges, priceEdges);
     if (grid.maxAbs === 0) return null;
+    const cellBox = (c: PnlGridCell) => {
+      const x0 = tenorScale.xOf(c.t0Ms);
+      const yTop = scale.y(c.highPrice);
+      return {
+        x: x0 + 0.5,
+        y: yTop + 0.5,
+        width: Math.max(0, tenorScale.xOf(c.t1Ms) - x0 - 1),
+        height: Math.max(0, scale.y(c.lowPrice) - yTop - 1),
+      };
+    };
+    const spotRow = grid.cells.filter((c) => spotPrice >= c.lowPrice && spotPrice < c.highPrice);
     return (
       <g data-testid="pnl-grid" pointerEvents="none">
-        {grid.cells.map((c) => {
-          const x0 = tenorScale.xOf(c.t0Ms);
-          const x1 = tenorScale.xOf(c.t1Ms);
-          const yTop = scale.y(c.highPrice);
-          const yBot = scale.y(c.lowPrice);
-          return (
-            <rect
-              key={`${c.t0Ms}:${c.lowPrice}`}
-              x={x0 + 0.5}
-              y={yTop + 0.5}
-              width={Math.max(0, x1 - x0 - 1)}
-              height={Math.max(0, yBot - yTop - 1)}
-              rx={1.5}
-              fill={c.pnl >= 0 ? 'var(--lego-profit)' : 'var(--lego-loss)'}
-              opacity={0.05 + 0.3 * Math.sqrt(Math.abs(c.pnl) / grid.maxAbs)}
-            />
-          );
-        })}
+        {grid.cells.map((c) => (
+          <rect
+            key={`${c.t0Ms}:${c.lowPrice}`}
+            {...cellBox(c)}
+            rx={1.5}
+            fill={c.pnl >= 0 ? 'var(--lego-profit)' : 'var(--lego-loss)'}
+            opacity={0.05 + 0.3 * Math.sqrt(Math.abs(c.pnl) / grid.maxAbs)}
+          />
+        ))}
+        {/* Current-price row: where the position sits today, followed through time */}
+        {spotRow.map((c, i) => (
+          <rect
+            key={`spot:${c.t0Ms}`}
+            data-spot-cell={i === 0 ? 'now' : 'row'}
+            {...cellBox(c)}
+            rx={1.5}
+            fill="var(--lego-be)"
+            fillOpacity={i === 0 ? 0.55 : 0.1}
+            stroke="var(--lego-be)"
+            strokeOpacity={i === 0 ? 1 : 0.45}
+            strokeWidth={i === 0 ? 1.5 : 1}
+          />
+        ))}
       </g>
     );
-  }, [tenorScale, viewLegs, rungs, domain, plotW, plotH, span, scale]);
+  }, [tenorScale, viewLegs, rungs, domain, plotW, plotH, span, scale, spotPrice]);
 
   const coneIv = useMemo(() => nearestAtmIv(legs, spotPrice), [legs, spotPrice]);
   const conePaths = useMemo(() => {

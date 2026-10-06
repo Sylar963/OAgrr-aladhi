@@ -595,6 +595,14 @@ describe('PayoffChartV3 (tenor columns)', () => {
     expect(fills).toContain('var(--lego-loss)');
   });
 
+  it('marks the current-price row in break-even yellow, strongest on the now square', () => {
+    const { container } = renderTenors([makeLeg({ expiry: TENORS[2] })]);
+    const now = container.querySelectorAll('[data-spot-cell="now"]');
+    expect(now).toHaveLength(1);
+    expect(now[0]!.getAttribute('fill')).toBe('var(--lego-be)');
+    expect(container.querySelectorAll('[data-spot-cell="row"]').length).toBeGreaterThan(5);
+  });
+
   it('draws the ±1σ and ±2σ expected-move cone', () => {
     const { container } = renderTenors([makeLeg({ expiry: TENORS[0] })]);
     expect(container.querySelector('[data-cone="1"]')).not.toBeNull();

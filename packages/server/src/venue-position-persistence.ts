@@ -54,6 +54,8 @@ function toPersistedTrade(trade: ExchangePortfolioTrade): PersistedExchangeTrade
 
 export class VenuePositionPersistence {
   private readonly summaries = new Map<string, ExchangeTradeSummary>();
+  private readonly positionWrites = new Map<string, Promise<void>>();
+  private readonly queuedPositions = new Map<string, PositionLeg[]>();
 
   constructor(
     private readonly venue: ExchangePortfolioVenue,
@@ -75,14 +77,33 @@ export class VenuePositionPersistence {
     }));
   }
 
-  async persistPositions(accountId: string, legs: PositionLeg[]): Promise<void> {
-    if (!this.ledger.enabled) return;
-    await this.ledger.replacePositions(
-      accountId,
-      this.venue,
-      legs.map(toPersistedPosition),
-      new Date(),
-    );
+  // replacePositions is DELETE + INSERT in one transaction; two overlapping runs for the same
+  // account both miss each other's uncommitted rows and the second INSERT hits the primary key.
+  // Venues emit a REST bootstrap and a WS snapshot back to back, so writes are serialized per
+  // account and a write still waiting in the queue just takes the newest legs.
+  persistPositions(accountId: string, legs: PositionLeg[]): Promise<void> {
+    if (!this.ledger.enabled) return Promise.resolve();
+    const alreadyQueued = this.queuedPositions.has(accountId);
+    this.queuedPositions.set(accountId, legs);
+    const inFlight = this.positionWrites.get(accountId);
+    if (alreadyQueued && inFlight != null) return inFlight;
+    const write = (inFlight ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => {
+        const latest = this.queuedPositions.get(accountId) ?? legs;
+        this.queuedPositions.delete(accountId);
+        return this.ledger.replacePositions(
+          accountId,
+          this.venue,
+          latest.map(toPersistedPosition),
+          new Date(),
+        );
+      })
+      .finally(() => {
+        if (this.positionWrites.get(accountId) === write) this.positionWrites.delete(accountId);
+      });
+    this.positionWrites.set(accountId, write);
+    return write;
   }
 
   async persistTrades(accountId: string, trades: ExchangePortfolioTrade[]): Promise<void> {

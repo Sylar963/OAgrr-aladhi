@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { mergeTradeAndMark, bucketTicks, bucketTrades, InstrumentCandleService } from './instrument-candles.js';
+import { mergeTradeAndMark, bucketTicks, bucketTrades, fetchDeribitTrade, InstrumentCandleService } from './instrument-candles.js';
 import { MarkHistoryBuffer } from './mark-history-buffer.js';
 
 describe('mergeTradeAndMark', () => {
@@ -850,5 +850,46 @@ describe('bucketTicks', () => {
     expect(out.map((c) => c.ts)).toEqual([60_000, 120_000]);
     expect(out[0]?.h).toBe(12);
     expect(out[1]?.h).toBe(11);
+  });
+});
+
+describe('fetchDeribitTrade — 4h aggregation', () => {
+  const H = 60 * 60_000;
+  const BASE = Math.floor(1_700_000_000_000 / (4 * H)) * (4 * H);
+  const fetchSpy = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE + 10 * H);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('requests 120m bars (Deribit has no 240) and folds them onto the 4h grid', async () => {
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({
+      result: {
+        status: 'ok',
+        ticks: [BASE, BASE + 2 * H, BASE + 4 * H, BASE + 6 * H],
+        open: [1, 2, 3, 4],
+        high: [5, 6, 7, 8],
+        low: [0.5, 1.5, 2.5, 3.5],
+        close: [2, 3, 4, 5],
+        volume: [1, 2, 3, 4],
+      },
+    }), { status: 200 }));
+
+    const candles = await fetchDeribitTrade('BTC-16OCT26-84000-C', '4h', '1d');
+
+    const url = new URL(String(fetchSpy.mock.calls[0]![0]));
+    expect(url.searchParams.get('resolution')).toBe('120');
+    expect(Number(url.searchParams.get('start_timestamp')) % (4 * H)).toBe(0);
+    expect(candles).toEqual([
+      { ts: BASE, o: 1, h: 6, l: 0.5, c: 3, vol: 3 },
+      { ts: BASE + 4 * H, o: 3, h: 8, l: 2.5, c: 5, vol: 7 },
+    ]);
   });
 });

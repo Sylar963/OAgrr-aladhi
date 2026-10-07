@@ -363,11 +363,22 @@ export class AssistantMcpHandler {
 
   private async callTool(params: unknown) {
     const parsed = ToolCallParamsSchema.safeParse(params);
-    if (!parsed.success) return this.errorResult('Invalid tool call parameters.');
+    if (!parsed.success) {
+      this.logRejected(null, 'invalid_params');
+      return this.errorResult('Invalid tool call parameters.');
+    }
     const definition = this.tools.get(parsed.data.name);
-    if (!definition) return this.errorResult(`Unknown tool: ${parsed.data.name}`);
+    if (!definition) {
+      this.logRejected(parsed.data.name, 'unknown_tool');
+      return this.errorResult(`Unknown tool: ${parsed.data.name}`);
+    }
     const args = definition.input.safeParse(parsed.data.arguments ?? {});
-    if (!args.success) return this.errorResult(`Invalid arguments: ${z.prettifyError(args.error)}`);
+    if (!args.success) {
+      this.logRejected(definition.name, 'invalid_arguments', {
+        issues: args.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`),
+      });
+      return this.errorResult(`Invalid arguments: ${z.prettifyError(args.error)}`);
+    }
     const startedAt = Date.now();
     try {
       const data = await definition.run(args.data as never);
@@ -377,10 +388,21 @@ export class AssistantMcpHandler {
       );
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     } catch (error) {
-      if (error instanceof ToolInputError) return this.errorResult(error.message);
+      if (error instanceof ToolInputError) {
+        this.logRejected(definition.name, 'input_error', {
+          durationMs: Date.now() - startedAt,
+          reason: error.message,
+        });
+        return this.errorResult(error.message);
+      }
       this.log.error({ err: error, tool: definition.name }, 'assistant mcp tool failed');
       return this.errorResult('The tool failed unexpectedly.');
     }
+  }
+
+  // Separate msg from 'assistant mcp tool call' so assistant-eval keeps counting only completed calls.
+  private logRejected(tool: string | null, outcome: string, detail: Record<string, unknown> = {}) {
+    this.log.warn({ tool, outcome, ...detail }, 'assistant mcp tool rejected');
   }
 
   private errorResult(text: string) {

@@ -50,6 +50,15 @@ export function pickLiveMid(
   return useRaw ? liveMid.raw : liveMid.usd;
 }
 
+export function instrumentCandlesKey(
+  venue: VenueId,
+  symbol: string,
+  interval: InstrumentCandleInterval,
+  range: InstrumentCandleRange,
+) {
+  return ['instrument-candles', venue, symbol, interval, range] as const;
+}
+
 interface UseInstrumentCandlesArgs {
   venue: VenueId;
   symbol: string;
@@ -68,7 +77,7 @@ export function useInstrumentCandles({
   liveMid = null,
 }: UseInstrumentCandlesArgs) {
   const query = useQuery<InstrumentCandlesResponse>({
-    queryKey: ['instrument-candles', venue, symbol, interval, range],
+    queryKey: instrumentCandlesKey(venue, symbol, interval, range),
     queryFn: async () => {
       if (!warmupDone) await warmupPromise;
       const raw = await fetchJson<unknown>(
@@ -81,6 +90,9 @@ export function useInstrumentCandles({
       return parsed.data as InstrumentCandlesResponse;
     },
     enabled,
+    // fetchJson already retries gateway blips; stacking query retries on top
+    // delays the timeframe fallback by ~20s on an unsupported resolution.
+    retry: false,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });

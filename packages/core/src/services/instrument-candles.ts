@@ -112,8 +112,9 @@ export function bucketTicks(
 }
 
 // ── Deribit ────────────────────────────────────────────────────────
+// Deribit rejects 240 ("unsupported resolution"); 4h is aggregated from 120m.
 const INTERVAL_TO_DERIBIT: Record<InstrumentCandleInterval, string> = {
-  '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': '1D',
+  '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '120', '1d': '1D',
 };
 
 const DeribitTradingViewSchema = z.object({
@@ -138,7 +139,10 @@ export async function fetchDeribitTrade(
   range: InstrumentCandleRange,
 ): Promise<RawCandle[]> {
   const now = Date.now();
-  const start = now - RANGE_TO_MS[range];
+  const bucketMs = INTERVAL_TO_MS[interval];
+  const aggregate = interval === '4h';
+  let start = now - RANGE_TO_MS[range];
+  if (aggregate) start = Math.ceil(start / bucketMs) * bucketMs;
   const params = new URLSearchParams({
     instrument_name: symbol,
     resolution: INTERVAL_TO_DERIBIT[interval],
@@ -172,7 +176,7 @@ export async function fetchDeribitTrade(
       vol: r.volume?.[i] ?? 0,
     });
   }
-  return candles;
+  return aggregate ? downsampleRawCandles(candles, bucketMs) : candles;
 }
 
 export async function fetchDeribitMark(

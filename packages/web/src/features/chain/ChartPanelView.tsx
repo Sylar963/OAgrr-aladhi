@@ -1,19 +1,26 @@
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { InstrumentCandleInterval, InstrumentCandleRange, VenueId } from '@oggregator/protocol';
+import type { InstrumentCandlesResponse, VenueId } from '@oggregator/protocol';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
 import type { ChartPanel } from './chart-panels-store.js';
-import { useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
+import { instrumentCandlesKey, useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
 import { useCandleCountdown } from './candle-countdown.js';
 import { useInstrumentAttribution } from './use-instrument-attribution.js';
 import InstrumentChart from './InstrumentChart.js';
 import { useInstrumentEntries } from './use-instrument-entries.js';
 import InstrumentAttributionChart from './InstrumentAttributionChart.js';
 import { AttributionSummary } from './AttributionSummary.js';
-import { isChartSupportedVenue, NotSupportedVenueError, toVenueSymbol } from './instrument-symbol.js';
+import { CHART_SUPPORTED_VENUES, NotSupportedVenueError, toVenueSymbol } from './instrument-symbol.js';
+import {
+  fallbackTimeframes,
+  INTERVALS,
+  isCandleStateUnavailable,
+  RANGES,
+  type Timeframe,
+} from './timeframe-fallback.js';
 
-export const INTERVALS: readonly InstrumentCandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
-export const RANGES: readonly InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
+export { INTERVALS, RANGES };
 
 export type ChartPanelData = Omit<ChartPanel, 'id'>;
 
@@ -34,30 +41,74 @@ export function useStrikeVenues(
   type: 'call' | 'put',
 ): VenueId[] {
   const qc = useQueryClient();
-  const entries = qc.getQueriesData<EnrichedChainResponse>({ queryKey: ['chain', underlying, expiry] });
-  for (const [, data] of entries) {
-    if (!data) continue;
-    const row = data.strikes.find((s) => s.strike === strike);
-    if (!row) continue;
-    const side = type === 'call' ? row.call : row.put;
-    return (Object.keys(side.venues) as VenueId[]).filter(isChartSupportedVenue);
-  }
-  return [];
+  const subscribe = useCallback((cb: () => void) => qc.getQueryCache().subscribe(cb), [qc]);
+  // Several chain entries can be cached for one expiry (e.g. the popout's
+  // all-venue REST query next to its single-venue WS feed), so union them
+  // rather than trusting whichever entry happens to come first.
+  const getSnapshot = useCallback(() => {
+    const quoted = new Set<string>();
+    for (const [, data] of qc.getQueriesData<EnrichedChainResponse>({ queryKey: ['chain', underlying, expiry] })) {
+      const row = data?.strikes.find((s) => s.strike === strike);
+      if (!row) continue;
+      const side = type === 'call' ? row.call : row.put;
+      for (const v of Object.keys(side.venues)) quoted.add(v);
+    }
+    return CHART_SUPPORTED_VENUES.filter((v) => quoted.has(v)).join(',');
+  }, [qc, underlying, expiry, strike, type]);
+  const joined = useSyncExternalStore(subscribe, getSnapshot);
+  return useMemo(() => (joined ? (joined.split(',') as VenueId[]) : []), [joined]);
 }
 
 export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }: ChartPanelViewProps) {
+  const qc = useQueryClient();
   const strikeVenues = useStrikeVenues(data.underlying, data.expiry, data.strike, data.type);
+  const [anchor, setAnchor] = useState<Timeframe>({ interval: data.interval, range: data.range });
 
   const liveMid = useLiveMidFromChain(
     data.underlying, data.expiry, data.strike, data.type, data.venue,
   );
-  const { candles, markLine, isLoading, error, priceCurrency } = useInstrumentCandles({
+  const candleQuery = useInstrumentCandles({
     venue: data.venue,
     symbol: data.symbol,
     interval: data.interval,
     range: data.range,
     liveMid,
   });
+  const { candles, markLine, isLoading, error, priceCurrency } = candleQuery;
+
+  const unavailable = data.chartMode === 'price' && isCandleStateUnavailable(candleQuery);
+  const nextTimeframe = unavailable
+    ? fallbackTimeframes(anchor).find(
+        (tf) =>
+          !isCandleStateUnavailable(
+            qc.getQueryState<InstrumentCandlesResponse>(
+              instrumentCandlesKey(data.venue, data.symbol, tf.interval, tf.range),
+            ),
+          ),
+      )
+    : undefined;
+  const fallingBack = nextTimeframe != null;
+
+  const applyPatch = useEffectEvent((patch: Partial<ChartPanelData>) => onPatch(patch));
+
+  useEffect(() => {
+    if (nextTimeframe) applyPatch(nextTimeframe);
+  }, [nextTimeframe?.interval, nextTimeframe?.range]);
+
+  // A fallback is specific to one instrument: on a venue switch, retry the
+  // timeframe the user actually picked before falling back again.
+  const instrumentKey = `${data.venue}|${data.symbol}`;
+  const prevInstrumentKey = useRef(instrumentKey);
+  useEffect(() => {
+    if (prevInstrumentKey.current === instrumentKey) return;
+    prevInstrumentKey.current = instrumentKey;
+    applyPatch(anchor);
+  }, [instrumentKey]);
+
+  function selectTimeframe(patch: Partial<Timeframe>): void {
+    setAnchor({ interval: data.interval, range: data.range, ...patch });
+    onPatch(patch);
+  }
   const attribution = useInstrumentAttribution({
     venue: data.venue,
     symbol: data.symbol,
@@ -130,7 +181,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
               key={i}
               type="button"
               data-active={data.interval === i || undefined}
-              onClick={() => onPatch({ interval: i })}
+              onClick={() => selectTimeframe({ interval: i })}
             >{i}</button>
           ))}
           <span className={styles.countdown} title={`Next ${data.interval} bar closes in ${countdown}`}>
@@ -143,7 +194,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
               key={r}
               type="button"
               data-active={data.range === r || undefined}
-              onClick={() => onPatch({ range: r })}
+              onClick={() => selectTimeframe({ range: r })}
             >{r}</button>
           ))}
         </div>
@@ -186,9 +237,9 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
       <div className={styles.body}>
         {data.chartMode === 'price' ? (
           <>
-            {isLoading && <div className={styles.empty}>loading…</div>}
-            {error && <div className={styles.empty}>error — retry</div>}
-            {!isLoading && !error && candles.length === 0 && (
+            {(isLoading || fallingBack) && <div className={styles.empty}>loading…</div>}
+            {error && !fallingBack && <div className={styles.empty}>error — retry</div>}
+            {!isLoading && !error && !fallingBack && candles.length === 0 && (
               <div className={styles.empty}>
                 No historical data for this strike on {VENUES[data.venue]?.shortLabel ?? data.venue}
               </div>

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import Fastify from 'fastify';
-import { afterAll, describe, expect, it } from 'vitest';
+import type { FastifyBaseLogger } from 'fastify';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMcpHandler, buildAssistantMcpServer, buildAssistantMcpTools } from './assistant-mcp-server.js';
 import { AssistantMarketDataReader } from './market-data-reader.js';
@@ -142,5 +143,34 @@ describe('buildOptionsLibraryMatchQuery', () => {
       '"gamma" OR "near" OR "theta" OR "vega"',
     );
     expect(buildOptionsLibraryMatchQuery('!!')).toBeNull();
+  });
+});
+
+describe('assistant MCP tool call logging', () => {
+  const capture = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  const handler = new AssistantMcpHandler(
+    buildAssistantMcpTools(reader, library, {
+      refs: new PortfolioRefStore(),
+      resolveHeldLegs: async () => [],
+    }),
+    capture as unknown as FastifyBaseLogger,
+  );
+  const call = (params: unknown) =>
+    handler.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+
+  it('logs every rejected attempt without echoing argument values', async () => {
+    await call({ name: 'nope' });
+    await call({ name: 'oggregator_option_chain', arguments: { underlying: 'BTC', expiry: 'soon' } });
+    await call({ name: 'oggregator_gamma_exposure', arguments: { underlying: 'BTC' } });
+
+    expect(capture.info).not.toHaveBeenCalled();
+    const rejected = capture.warn.mock.calls.map(([fields, msg]) => ({ ...fields, msg }));
+    expect(rejected.map((entry) => [entry.tool, entry.outcome, entry.msg])).toEqual([
+      ['nope', 'unknown_tool', 'assistant mcp tool rejected'],
+      ['oggregator_option_chain', 'invalid_arguments', 'assistant mcp tool rejected'],
+      ['oggregator_gamma_exposure', 'input_error', 'assistant mcp tool rejected'],
+    ]);
+    expect(JSON.stringify(rejected[1])).not.toContain('soon');
+    expect(rejected[2].reason).toContain('Server is loading market data');
   });
 });

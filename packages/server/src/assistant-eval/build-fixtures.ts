@@ -2,14 +2,11 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPortfolioAssistantRiskFacts,
   InMemoryPositionStore,
   logger,
-  type PortfolioHorizonScenarios,
   PortfolioRuntime,
   type PositionLeg,
   type PositionStore,
-  rankPortfolioRiskContributors,
 } from '@oggregator/core';
 import type { PersistedExchangeTrade } from '@oggregator/db';
 import type {
@@ -20,10 +17,15 @@ import type {
 
 import { AssistantMarketDataReader } from '../assistant-market/market-data-reader.js';
 import {
+  assemblePortfolioAssistantContext,
   buildTradeHistoryFacts,
+  CONTEXT_COMPACTED_LIMITATION,
   type PortfolioAssistantContext,
   PortfolioAssistantContextBuilder,
   type PortfolioAssistantMarketFacts,
+  SCENARIO_HORIZONS_DAYS,
+  SCENARIO_SPOT_MOVES_PCT,
+  TRADE_CONTEXT_LIMIT,
 } from '../portfolio-assistant-context-builder.js';
 import { readPortfolioAssistantConfiguration } from '../portfolio-assistant-configuration.js';
 import {
@@ -46,12 +48,6 @@ const FIXTURE_PORTFOLIO_REF = 'pref_evalFixtureNotResolvable';
 const GENERATOR = 'packages/server/src/assistant-eval/build-fixtures.ts';
 const FIXTURE_DIRECTORY = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
-// Mirrors portfolio-assistant-context-builder.ts; that builder needs live chain
-// runtimes, so the eval rebuilds the same shape from the same engine calls.
-const STALE_AFTER_MS = 30_000;
-const SCENARIO_HORIZONS_DAYS = [0, 1, 3, 5, 7, 10, 14, 21, 30];
-const SCENARIO_SPOT_MOVES_PCT = [-10, -5, -2, 0, 2, 5, 10];
-const TRADE_CONTEXT_LIMIT = 100;
 
 const DEFAULT_BANNED_PHRASES = [
   'I cannot identify',
@@ -93,23 +89,6 @@ interface BookSpec {
 
 function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function compactHorizonScenarios(
-  scenarios: PortfolioHorizonScenarios | null,
-): PortfolioHorizonScenarios | null {
-  if (scenarios == null) return null;
-  return {
-    ...scenarios,
-    cells: scenarios.cells.map((cell) => ({
-      ...cell,
-      spotUsd: roundCents(cell.spotUsd),
-      pnlUsd: roundCents(cell.pnlUsd),
-      pnlByExpiryUsd: Object.fromEntries(
-        Object.entries(cell.pnlByExpiryUsd).map(([expiry, pnl]) => [expiry, roundCents(pnl)]),
-      ),
-    })),
-  };
 }
 
 function toPositionLeg(spec: LegSpec, source: PortfolioSource, nowMs: number): PositionLeg {
@@ -178,21 +157,16 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
   });
   const snapshot = runtime.computeMetricsAt(forwardDays);
   if (snapshot.error != null) throw new Error(`engine failed: ${snapshot.error.message}`);
-  const riskFacts = buildPortfolioAssistantRiskFacts(snapshot.positions, snapshot.metrics);
-  const limitations = [...riskFacts.limitations];
-  const horizonScenarios = compactHorizonScenarios(
-    runtime.computeHorizonScenarios([...SCENARIO_HORIZONS_DAYS, forwardDays], SCENARIO_SPOT_MOVES_PCT),
+  const horizonScenarios = runtime.computeHorizonScenarios(
+    [...SCENARIO_HORIZONS_DAYS, forwardDays],
+    SCENARIO_SPOT_MOVES_PCT,
   );
   if (horizonScenarios == null) throw new Error('horizon scenarios failed');
 
   const reader = new AssistantMarketDataReader(() => book.nowMs);
   reader.bind(market.injector());
-  const builder = new PortfolioAssistantContextBuilder(
-    readPortfolioAssistantConfiguration({}),
-    reader,
-    null,
-    () => book.nowMs,
-  );
+  const configuration = readPortfolioAssistantConfiguration({});
+  const builder = new PortfolioAssistantContextBuilder(configuration, reader, null, () => book.nowMs);
   // Element access reaches the private method so marketFacts come from the production code path.
   const marketFacts: PortfolioAssistantMarketFacts = await builder['buildMarketFacts'](
     snapshot.positions,
@@ -200,6 +174,7 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
     snapshot.metrics.pnlCurve.currentSpotUsd,
   );
 
+  const limitations: string[] = [];
   const venue = book.source === 'thalex' || book.source === 'derive' ? book.source : null;
   const tradeHistoryFacts =
     venue != null && book.trades != null
@@ -209,60 +184,24 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
     limitations.push('Venue trade history is unavailable because the trade ledger is not configured.');
   }
 
-  const { totals, pnlCurve } = snapshot.metrics;
-  const expiries = [...new Set(snapshot.positions.map((leg) => leg.expiry))].sort();
-  const partial = riskFacts.limitations.length > 0;
-  const context: PortfolioAssistantContext = {
-    headline: {
-      asOf: new Date(snapshot.metrics.generatedAt).toISOString(),
-      underlying: pnlCurve.underlying ?? 'BTC',
-      spotUsd: pnlCurve.currentSpotUsd,
-      unrealizedPnlUsd: riskFacts.missingMarkLegIds.length > 0 ? null : totals.unrealizedPnlUsd,
-      netDeltaUsd: totals.netDeltaUsd,
-      netThetaUsd: totals.netThetaUsd,
-      netVegaUsd: totals.netVegaUsd,
-      openLegCount: snapshot.positions.length,
-      nearestExpiry: expiries[0] ?? null,
-    },
-    schemaVersion: 1,
+  // The live builder's runtime needs chain feeds, so the eval feeds the same assembly from a synthetic market.
+  const context = assemblePortfolioAssistantContext({
     source: book.source,
     underlying: 'BTC',
-    portfolioRef: FIXTURE_PORTFOLIO_REF,
     forwardDays,
-    generatedAt: snapshot.metrics.generatedAt,
-    dataFreshness: {
-      state: partial ? 'partial' : 'fresh',
-      staleAfterMs: STALE_AFTER_MS,
-      explanation: partial ? 'Some calculations have explicit exclusions or unavailable inputs.' : null,
-    },
-    positions: [...riskFacts.positions].sort((a, b) => a.legId.localeCompare(b.legId)),
-    totals,
-    expiryFacts: snapshot.metrics.byExpiry,
-    strikeFacts: snapshot.metrics.byStrike,
-    strategyFacts: snapshot.metrics.strategies,
-    breakEvenFacts: snapshot.metrics.breakEven,
-    payoffFacts: pnlCurve,
+    nowMs: book.nowMs,
+    portfolioRef: FIXTURE_PORTFOLIO_REF,
+    computation: snapshot,
+    legsWithMarks: runtime.legsWithMarks(),
     horizonScenarios,
     marketFacts,
-    shockFacts:
-      snapshot.metrics.shockGrid.length > 0
-        ? { grid: snapshot.metrics.shockGrid, meta: snapshot.metrics.shockGridMeta }
-        : null,
-    accountingFacts: snapshot.metrics.accounting,
     tradeHistoryFacts,
-    topContributors: {
-      delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
-      gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
-      vega: rankPortfolioRiskContributors(riskFacts, 'vega').slice(0, 10),
-      theta: rankPortfolioRiskContributors(riskFacts, 'theta').slice(0, 10),
-      vanna: rankPortfolioRiskContributors(riskFacts, 'vanna').slice(0, 10),
-      volga: rankPortfolioRiskContributors(riskFacts, 'volga').slice(0, 10),
-    },
     limitations,
-  };
-  const characters = JSON.stringify(context).length;
-  const budget = readPortfolioAssistantConfiguration({}).maxContextCharacters;
-  if (characters > budget) throw new Error(`context is ${characters} chars, above the ${budget} budget`);
+    maxContextCharacters: configuration.maxContextCharacters,
+  });
+  if (context.limitations.includes(CONTEXT_COMPACTED_LIMITATION)) {
+    throw new Error(`context exceeded the ${configuration.maxContextCharacters} character budget`);
+  }
   return context;
 }
 

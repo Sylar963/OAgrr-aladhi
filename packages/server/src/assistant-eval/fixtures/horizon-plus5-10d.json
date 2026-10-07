@@ -20,6 +20,66 @@
     "source": "manual",
     "underlying": "BTC",
     "portfolioRef": "pref_evalFixtureNotResolvable",
+    "toolHints": [
+      "oggregator_evaluate_structure and oggregator_structure_search accept portfolioRef; no other tool does.",
+      "oggregator_evaluate_structure with portfolioRef: price proposed legs together with this book (cost, fees, worst loss per expiry window, budget fit). Use it before quoting any combined max loss.",
+      "oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts."
+    ],
+    "riskBudgetFacts": {
+      "riskWindows": [
+        {
+          "from": "2026-10-07T12:00:00.000Z",
+          "until": "2026-10-30",
+          "liveLegIds": [
+            "hz-oct30-80000-p",
+            "hz-nov27-95000-c",
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": -0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        },
+        {
+          "from": "2026-10-30",
+          "until": "2026-11-27",
+          "liveLegIds": [
+            "hz-nov27-95000-c",
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": -0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        },
+        {
+          "from": "2026-11-27",
+          "until": "2026-12-25",
+          "liveLegIds": [
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": 0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        }
+      ],
+      "worstLossUsd": null,
+      "unboundedAfter": "2026-10-07T12:00:00.000Z",
+      "uncoveredShorts": [
+        {
+          "legId": "hz-nov27-95000-c",
+          "expiry": "2026-11-27",
+          "strike": 95000,
+          "right": "call",
+          "size": 1
+        }
+      ],
+      "note": "Loss is unbounded on a rally from 2026-10-07T12:00:00.000Z because live calls are net short; a total max-loss budget is only reachable after covering or closing uncoveredShorts."
+    },
     "forwardDays": 0,
     "generatedAt": 1791374400000,
     "dataFreshness": {
@@ -158,9 +218,11 @@
         ],
         "netEntryPremiumUsd": 1450,
         "debitOrCredit": "debit",
-        "maxProfitUsd": null,
-        "maxLossUsd": null,
-        "breakEvenSpotsUsd": [],
+        "maxProfitUsd": 78550,
+        "maxLossUsd": 1450,
+        "breakEvenSpotsUsd": [
+          78550
+        ],
         "grossDebitUsd": 1450,
         "grossCreditUsd": 0,
         "totals": {
@@ -192,9 +254,11 @@
         ],
         "netEntryPremiumUsd": -1600,
         "debitOrCredit": "credit",
-        "maxProfitUsd": null,
+        "maxProfitUsd": 1600,
         "maxLossUsd": null,
-        "breakEvenSpotsUsd": [],
+        "breakEvenSpotsUsd": [
+          96600
+        ],
         "grossDebitUsd": 0,
         "grossCreditUsd": 1600,
         "totals": {
@@ -227,8 +291,10 @@
         "netEntryPremiumUsd": 2050,
         "debitOrCredit": "debit",
         "maxProfitUsd": null,
-        "maxLossUsd": null,
-        "breakEvenSpotsUsd": [],
+        "maxLossUsd": 2050,
+        "breakEvenSpotsUsd": [
+          94100
+        ],
         "grossDebitUsd": 2050,
         "grossCreditUsd": 0,
         "totals": {
@@ -292,370 +358,134 @@
       "downsideBounded": false,
       "points": [
         {
-          "underlyingPriceUsd": 63222.668,
-          "nowPnlUsd": 14972.507397306897,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 14877.332000000002
+          "underlyingPriceUsd": 63222.67,
+          "nowPnlUsd": 14972.51,
+          "expiryPnlUsd": 14877.33
         },
         {
-          "underlyingPriceUsd": 64031.9124,
-          "nowPnlUsd": 14188.846225795507,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 14068.087599999999
+          "underlyingPriceUsd": 65650.4,
+          "nowPnlUsd": 12641.41,
+          "expiryPnlUsd": 12449.6
         },
         {
-          "underlyingPriceUsd": 64841.1568,
-          "nowPnlUsd": 13411.400158174838,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 13258.843200000003
+          "underlyingPriceUsd": 68078.13,
+          "nowPnlUsd": 10390.79,
+          "expiryPnlUsd": 10021.87
         },
         {
-          "underlyingPriceUsd": 65650.4012,
-          "nowPnlUsd": 12641.410682878779,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 12449.598800000007
+          "underlyingPriceUsd": 70505.87,
+          "nowPnlUsd": 8264.71,
+          "expiryPnlUsd": 7594.13
         },
         {
-          "underlyingPriceUsd": 66459.6456,
-          "nowPnlUsd": 11880.269477383998,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 11640.354399999997
+          "underlyingPriceUsd": 72933.6,
+          "nowPnlUsd": 6312.14,
+          "expiryPnlUsd": 5166.4
         },
         {
-          "underlyingPriceUsd": 67268.89,
-          "nowPnlUsd": 11129.508987596924,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 10831.11
+          "underlyingPriceUsd": 75361.33,
+          "nowPnlUsd": 4577.17,
+          "expiryPnlUsd": 2738.67
         },
         {
-          "underlyingPriceUsd": 68078.1344,
-          "nowPnlUsd": 10390.785709263544,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 10021.865600000005
+          "underlyingPriceUsd": 77789.07,
+          "nowPnlUsd": 3088.25,
+          "expiryPnlUsd": 310.93
         },
         {
-          "underlyingPriceUsd": 68887.37879999999,
-          "nowPnlUsd": 9665.856018496885,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 9212.621200000009
+          "underlyingPriceUsd": 78598.31,
+          "nowPnlUsd": 2648.28,
+          "expiryPnlUsd": -498.31
         },
         {
-          "underlyingPriceUsd": 69696.6232,
-          "nowPnlUsd": 8956.544856180655,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 8403.376799999998
-        },
-        {
-          "underlyingPriceUsd": 70505.8676,
-          "nowPnlUsd": 8264.70804320993,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 7594.132400000002
-        },
-        {
-          "underlyingPriceUsd": 71315.112,
-          "nowPnlUsd": 7592.189451740329,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 6784.888000000006
-        },
-        {
-          "underlyingPriceUsd": 72124.35639999999,
-          "nowPnlUsd": 6940.774645039387,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 5975.64360000001
-        },
-        {
-          "underlyingPriceUsd": 72933.6008,
-          "nowPnlUsd": 6312.14289392853,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 5166.3992
-        },
-        {
-          "underlyingPriceUsd": 73742.8452,
-          "nowPnlUsd": 5707.819658550304,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 4357.154800000004
-        },
-        {
-          "underlyingPriceUsd": 74552.08959999999,
-          "nowPnlUsd": 5129.1316782203,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 3547.910400000008
-        },
-        {
-          "underlyingPriceUsd": 75361.334,
-          "nowPnlUsd": 4577.166738558228,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 2738.6659999999974
-        },
-        {
-          "underlyingPriceUsd": 76170.5784,
-          "nowPnlUsd": 4052.7399936729853,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 1929.4216000000015
-        },
-        {
-          "underlyingPriceUsd": 76979.8228,
-          "nowPnlUsd": 3556.3684306085115,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 1120.1772000000055
-        },
-        {
-          "underlyingPriceUsd": 77789.06719999999,
-          "nowPnlUsd": 3088.2546988006543,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 310.9328000000096
-        },
-        {
-          "underlyingPriceUsd": 78598.3116,
-          "nowPnlUsd": 2648.2811179821356,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -498.3116000000009
-        },
-        {
-          "underlyingPriceUsd": 79407.556,
-          "nowPnlUsd": 2236.014253779096,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1307.5559999999969
-        },
-        {
-          "underlyingPriceUsd": 80216.8004,
-          "nowPnlUsd": 1850.6893557256753,
-          "forwardPnlUsd": null,
+          "underlyingPriceUsd": 80216.8,
+          "nowPnlUsd": 1850.69,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 81026.0448,
-          "nowPnlUsd": 1491.2318384528644,
-          "forwardPnlUsd": null,
+          "underlyingPriceUsd": 82644.53,
+          "nowPnlUsd": 844.53,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 81835.2892,
-          "nowPnlUsd": 1156.3657697854705,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 82644.5336,
-          "nowPnlUsd": 844.5297481224643,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 83453.77799999999,
-          "nowPnlUsd": 553.9683529754839,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 84263.02239999999,
-          "nowPnlUsd": 282.7710758000121,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 85072.2668,
-          "nowPnlUsd": 28.910775949469098,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 85881.5112,
-          "nowPnlUsd": -209.71675735011922,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
-        },
-        {
-          "underlyingPriceUsd": 86690.7556,
-          "nowPnlUsd": -435.2538029318166,
-          "forwardPnlUsd": null,
+          "underlyingPriceUsd": 85072.27,
+          "nowPnlUsd": 28.91,
           "expiryPnlUsd": -1900
         },
         {
           "underlyingPriceUsd": 87500,
-          "nowPnlUsd": -649.8436221311058,
-          "forwardPnlUsd": null,
+          "nowPnlUsd": -649.84,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 88309.2444,
-          "nowPnlUsd": -855.5963445930847,
-          "forwardPnlUsd": null,
+          "underlyingPriceUsd": 89927.73,
+          "nowPnlUsd": -1248.71,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 89118.48879999999,
-          "nowPnlUsd": -1054.5622239612603,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
+          "underlyingPriceUsd": 92355.47,
+          "nowPnlUsd": -1820.09,
+          "expiryPnlUsd": -722.27
         },
         {
-          "underlyingPriceUsd": 89927.73319999999,
-          "nowPnlUsd": -1248.7085372339825,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1900
+          "underlyingPriceUsd": 93164.71,
+          "nowPnlUsd": -2012.12,
+          "expiryPnlUsd": -317.64
         },
         {
-          "underlyingPriceUsd": 90736.9776,
-          "nowPnlUsd": -1439.8853729349867,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1531.5112000000008
+          "underlyingPriceUsd": 93973.96,
+          "nowPnlUsd": -2207.22,
+          "expiryPnlUsd": 86.98
         },
         {
-          "underlyingPriceUsd": 91546.222,
-          "nowPnlUsd": -1629.8174528776253,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1126.8890000000029
+          "underlyingPriceUsd": 94783.2,
+          "nowPnlUsd": -2406.5,
+          "expiryPnlUsd": 491.6
         },
         {
-          "underlyingPriceUsd": 92355.46639999999,
-          "nowPnlUsd": -1820.0851610476493,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -722.2668000000049
+          "underlyingPriceUsd": 95592.44,
+          "nowPnlUsd": -2610.92,
+          "expiryPnlUsd": 303.78
         },
         {
-          "underlyingPriceUsd": 93164.7108,
-          "nowPnlUsd": -2012.1237012974516,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -317.6445999999996
+          "underlyingPriceUsd": 96401.69,
+          "nowPnlUsd": -2821.3,
+          "expiryPnlUsd": -100.84
         },
         {
-          "underlyingPriceUsd": 93973.9552,
-          "nowPnlUsd": -2207.222276742311,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 86.97759999999835
+          "underlyingPriceUsd": 97210.93,
+          "nowPnlUsd": -3038.36,
+          "expiryPnlUsd": -505.47
         },
         {
-          "underlyingPriceUsd": 94783.19959999999,
-          "nowPnlUsd": -2406.499362347512,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 491.5997999999963
+          "underlyingPriceUsd": 99638.67,
+          "nowPnlUsd": -3734.44,
+          "expiryPnlUsd": -1719.33
         },
         {
-          "underlyingPriceUsd": 95592.44399999999,
-          "nowPnlUsd": -2610.915767450715,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": 303.7780000000057
+          "underlyingPriceUsd": 102066.4,
+          "nowPnlUsd": -4503.35,
+          "expiryPnlUsd": -2933.2
         },
         {
-          "underlyingPriceUsd": 96401.68839999998,
-          "nowPnlUsd": -2821.3009115890154,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -100.84419999999227
+          "underlyingPriceUsd": 104494.13,
+          "nowPnlUsd": -5346.11,
+          "expiryPnlUsd": -4147.07
         },
         {
-          "underlyingPriceUsd": 97210.9328,
-          "nowPnlUsd": -3038.3600351387786,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -505.4663999999975
+          "underlyingPriceUsd": 106921.87,
+          "nowPnlUsd": -6258.53,
+          "expiryPnlUsd": -5360.93
         },
         {
-          "underlyingPriceUsd": 98020.1772,
-          "nowPnlUsd": -3262.64150029299,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -910.0886000000028
+          "underlyingPriceUsd": 109349.6,
+          "nowPnlUsd": -7233.34,
+          "expiryPnlUsd": -6574.8
         },
         {
-          "underlyingPriceUsd": 98829.4216,
-          "nowPnlUsd": -3494.5661557719923,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1314.7108000000007
-        },
-        {
-          "underlyingPriceUsd": 99638.666,
-          "nowPnlUsd": -3734.4415289343106,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -1719.3329999999987
-        },
-        {
-          "underlyingPriceUsd": 100447.9104,
-          "nowPnlUsd": -3982.471604125476,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -2123.9551999999967
-        },
-        {
-          "underlyingPriceUsd": 101257.15479999999,
-          "nowPnlUsd": -4238.766950625037,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -2528.5773999999947
-        },
-        {
-          "underlyingPriceUsd": 102066.39919999999,
-          "nowPnlUsd": -4503.354925792764,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -2933.1995999999926
-        },
-        {
-          "underlyingPriceUsd": 102875.6436,
-          "nowPnlUsd": -4776.189730129918,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -3337.821799999998
-        },
-        {
-          "underlyingPriceUsd": 103684.88799999999,
-          "nowPnlUsd": -5057.162137805784,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -3742.443999999996
-        },
-        {
-          "underlyingPriceUsd": 104494.1324,
-          "nowPnlUsd": -5346.108768146203,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -4147.066200000001
-        },
-        {
-          "underlyingPriceUsd": 105303.3768,
-          "nowPnlUsd": -5642.820800364514,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -4551.688399999999
-        },
-        {
-          "underlyingPriceUsd": 106112.6212,
-          "nowPnlUsd": -5947.0520654109405,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -4956.310599999997
-        },
-        {
-          "underlyingPriceUsd": 106921.86559999999,
-          "nowPnlUsd": -6258.526475412191,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -5360.932799999995
-        },
-        {
-          "underlyingPriceUsd": 107731.10999999999,
-          "nowPnlUsd": -6576.944773085563,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -5765.554999999993
-        },
-        {
-          "underlyingPriceUsd": 108540.3544,
-          "nowPnlUsd": -6901.990601162313,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -6170.177199999998
-        },
-        {
-          "underlyingPriceUsd": 109349.59879999999,
-          "nowPnlUsd": -7233.335905708365,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -6574.799399999996
-        },
-        {
-          "underlyingPriceUsd": 110158.8432,
-          "nowPnlUsd": -7570.645697772599,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -6979.4216000000015
-        },
-        {
-          "underlyingPriceUsd": 110968.0876,
-          "nowPnlUsd": -7913.5822055014105,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -7384.0437999999995
-        },
-        {
-          "underlyingPriceUsd": 111777.332,
-          "nowPnlUsd": -8261.808454191221,
-          "forwardPnlUsd": null,
-          "expiryPnlUsd": -7788.665999999997
+          "underlyingPriceUsd": 111777.33,
+          "nowPnlUsd": -8261.81,
+          "expiryPnlUsd": -7788.67
         }
       ],
       "expiryBasis": "mixed_expiry",
@@ -4525,210 +4355,210 @@
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": -294.56885414124827
+            "totalPnlUsd": -294.57
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -436.0446787820092
+            "totalPnlUsd": -436.04
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -535.7307599385476
+            "totalPnlUsd": -535.73
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -571.1682239009897
+            "totalPnlUsd": -571.17
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": -607.6407710116018
+            "totalPnlUsd": -607.64
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -645.1082172160659
+            "totalPnlUsd": -645.11
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -683.5314393691006
+            "totalPnlUsd": -683.53
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -804.1615262256673
+            "totalPnlUsd": -804.16
           },
           {
             "atmShiftVolPts": -10,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -1021.0104430116062
+            "totalPnlUsd": -1021.01
           }
         ],
         [
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 120.12452506914451
+            "totalPnlUsd": 120.12
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -72.0230599396109
+            "totalPnlUsd": -72.02
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -198.42086319800183
+            "totalPnlUsd": -198.42
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -242.19430861639376
+            "totalPnlUsd": -242.19
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": -286.73467470754986
+            "totalPnlUsd": -286.73
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -332.0116349140244
+            "totalPnlUsd": -332.01
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -377.99601153004005
+            "totalPnlUsd": -378
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -519.9184492572786
+            "totalPnlUsd": -519.92
           },
           {
             "atmShiftVolPts": -5,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -768.1901171245099
+            "totalPnlUsd": -768.19
           }
         ],
         [
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 304.63895486090587
+            "totalPnlUsd": 304.64
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 92.18761222555258
+            "totalPnlUsd": 92.19
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -44.818558410064725
+            "totalPnlUsd": -44.82
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -91.89573710562945
+            "totalPnlUsd": -91.9
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": -139.6316712331227
+            "totalPnlUsd": -139.63
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -188.00068036771881
+            "totalPnlUsd": -188
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -236.97810251189003
+            "totalPnlUsd": -236.98
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -387.3287256862259
+            "totalPnlUsd": -387.33
           },
           {
             "atmShiftVolPts": -2.5,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -648.0477095021943
+            "totalPnlUsd": -648.05
           }
         ],
         [
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 409.10822025356174
+            "totalPnlUsd": 409.11
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 185.87892703970647
+            "totalPnlUsd": 185.88
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 43.244290727257976
+            "totalPnlUsd": 43.24
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -5.586303544554539
+            "totalPnlUsd": -5.59
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": -55.018678337752135
+            "totalPnlUsd": -55.02
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -105.02966014529193
+            "totalPnlUsd": -105.03
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -155.59700525885637
+            "totalPnlUsd": -155.6
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -310.42795645749356
+            "totalPnlUsd": -310.43
           },
           {
             "atmShiftVolPts": -1,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -577.7736899400461
+            "totalPnlUsd": -577.77
           }
         ],
         [
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 476.3918398081023
+            "totalPnlUsd": 476.39
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 246.50729315196986
+            "totalPnlUsd": 246.51
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 100.39549413418717
+            "totalPnlUsd": 100.4
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 50.48116924108399
+            "totalPnlUsd": 50.48
           },
           {
             "atmShiftVolPts": 0,
@@ -4738,210 +4568,210 @@
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -51.026386126450234
+            "totalPnlUsd": -51.03
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -102.57723240160885
+            "totalPnlUsd": -102.58
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -260.18127270443983
+            "totalPnlUsd": -260.18
           },
           {
             "atmShiftVolPts": 0,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -531.6332972799901
+            "totalPnlUsd": -531.63
           }
         ],
         [
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 541.9100705262463
+            "totalPnlUsd": 541.91
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 305.7641341940398
+            "totalPnlUsd": 305.76
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 156.37870032190222
+            "totalPnlUsd": 156.38
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 105.44359566838284
+            "totalPnlUsd": 105.44
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": 53.97430382545281
+            "totalPnlUsd": 53.97
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 1.991005607364059
+            "totalPnlUsd": 1.99
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -50.48693121839642
+            "totalPnlUsd": -50.49
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -210.7063683818742
+            "totalPnlUsd": -210.71
           },
           {
             "atmShiftVolPts": 1,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -486.0350094904097
+            "totalPnlUsd": -486.04
           }
         ],
         [
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 637.0965317240698
+            "totalPnlUsd": 637.1
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 392.24294853720494
+            "totalPnlUsd": 392.24
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 238.2996893274776
+            "totalPnlUsd": 238.3
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 185.94239805181678
+            "totalPnlUsd": 185.94
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": 133.09593365768706
+            "totalPnlUsd": 133.1
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 79.77848709461978
+            "totalPnlUsd": 79.78
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 26.00751861084973
+            "totalPnlUsd": 26.01
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -137.86220804061486
+            "totalPnlUsd": -137.86
           },
           {
             "atmShiftVolPts": 2.5,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -418.6084624320665
+            "totalPnlUsd": -418.61
           }
         ],
         [
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 788.2653244048761
+            "totalPnlUsd": 788.27
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 530.5329068353167
+            "totalPnlUsd": 530.53
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 369.8330797967992
+            "totalPnlUsd": 369.83
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 315.3649107654637
+            "totalPnlUsd": 315.36
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": 260.47311419851576
+            "totalPnlUsd": 260.47
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 205.17300938098197
+            "totalPnlUsd": 205.17
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 149.4793080588861
+            "totalPnlUsd": 149.48
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -19.824801845574257
+            "totalPnlUsd": -19.82
           },
           {
             "atmShiftVolPts": 5,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -308.6541399385769
+            "totalPnlUsd": -308.65
           }
         ],
         [
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 1067.0178830778532
+            "totalPnlUsd": 1067.02
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 788.5427142504886
+            "totalPnlUsd": 788.54
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 616.9055768875423
+            "totalPnlUsd": 616.91
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 559.0117050347253
+            "totalPnlUsd": 559.01
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": 0,
-            "totalPnlUsd": 500.796471095
+            "totalPnlUsd": 500.8
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 442.27083877682526
+            "totalPnlUsd": 442.27
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 383.44535531418296
+            "totalPnlUsd": 383.45
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 205.26941266359427
+            "totalPnlUsd": 205.27
           },
           {
             "atmShiftVolPts": 10,
             "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -96.81079011156544
+            "totalPnlUsd": -96.81
           }
         ]
       ],

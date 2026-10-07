@@ -1,10 +1,11 @@
 import {
   BreakEvenIvRowSchema,
   ExchangePortfolioVenueSchema,
+  ExpiryBasisSchema,
   ExpiryBucketRowSchema,
+  ExpiryRiskWindowSchema,
   PortfolioAccountingSchema,
   PortfolioAssistantMessageSchema,
-  PortfolioPnlCurveSchema,
   PortfolioPnlCurveStatusSchema,
   PortfolioSourceSchema,
   PortfolioTotalsSchema,
@@ -108,6 +109,43 @@ const RiskContributorSchema = z.object({
   value: z.number(),
 });
 
+const PayoffFactsSchema = z.object({
+  status: protocol(PortfolioPnlCurveStatusSchema),
+  underlying: z.string().nullable(),
+  currentSpotUsd: nullableNumber,
+  breakEvenPricesUsd: z.array(z.number()),
+  maxProfitUsd: nullableNumber,
+  maxLossUsd: nullableNumber,
+  upsideBounded: z.boolean(),
+  downsideBounded: z.boolean(),
+  points: z.array(
+    z.object({
+      underlyingPriceUsd: z.number(),
+      nowPnlUsd: z.number(),
+      forwardPnlUsd: nullableNumber.exactOptional(),
+      expiryPnlUsd: z.number(),
+    }),
+  ),
+  expiryBasis: protocol(ExpiryBasisSchema),
+  riskWindows: z.array(protocol(ExpiryRiskWindowSchema)),
+});
+
+const RiskBudgetFactsSchema = z.object({
+  riskWindows: z.array(protocol(ExpiryRiskWindowSchema)),
+  worstLossUsd: nullableNumber,
+  unboundedAfter: z.string().nullable(),
+  uncoveredShorts: z.array(
+    z.object({
+      legId: z.string(),
+      expiry: isoDate,
+      strike: z.number(),
+      right: optionRight,
+      size: z.number().positive(),
+    }),
+  ),
+  note: z.string(),
+});
+
 const PortfolioAssistantContextSchema = z.object({
   headline: z.object({
     asOf: z.string(),
@@ -124,6 +162,8 @@ const PortfolioAssistantContextSchema = z.object({
   source: protocol(PortfolioSourceSchema),
   underlying: z.string().nullable(),
   portfolioRef: z.string().regex(/^pref_[A-Za-z0-9_-]+$/),
+  toolHints: z.array(z.string()),
+  riskBudgetFacts: RiskBudgetFactsSchema,
   forwardDays: z.number().int().nonnegative(),
   generatedAt: z.number().int().nonnegative(),
   dataFreshness: z.object({
@@ -151,7 +191,7 @@ const PortfolioAssistantContextSchema = z.object({
   strikeFacts: z.array(protocol(VegaByStrikeRowSchema)),
   strategyFacts: z.array(protocol(StrategyGroupSchema)),
   breakEvenFacts: z.array(protocol(BreakEvenIvRowSchema)),
-  payoffFacts: protocol(PortfolioPnlCurveSchema),
+  payoffFacts: PayoffFactsSchema,
   horizonScenarios: z
     .object({
       status: protocol(PortfolioPnlCurveStatusSchema),

@@ -336,7 +336,7 @@ export default function SpreadDesk({ underlying }: { underlying: string }) {
             <div className={styles.venueHeading}>
               <h3>{VENUES[scan.venue]?.label ?? scan.venue}</h3>
               <span>
-                {scan.candidates.length} matches · ranked by budget, then model difference in USD
+                {scan.candidates.length} matches · ranked by budget, then model difference ÷ expiry P&L standard deviation
               </span>
             </div>
             {scan.candidates.length > 0 ? (

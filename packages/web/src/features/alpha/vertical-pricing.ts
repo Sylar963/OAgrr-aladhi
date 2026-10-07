@@ -1,5 +1,5 @@
 import type { EnrichedChainResponse, VenueId, VenueQuote } from '@shared/enriched';
-import { black76Price, black76Probability } from '@lib/analytics/blackScholes';
+import { black76Price, black76Probability, normCdf } from '@lib/analytics/blackScholes';
 
 export type VerticalKind = 'call-credit' | 'put-credit' | 'call-debit' | 'put-debit';
 export const VERTICAL_LABELS: Record<VerticalKind, string> = {
@@ -40,6 +40,8 @@ export interface VerticalEconomics {
   riskPct: number;
   breakeven: number;
   modelEdge: number | null;
+  /** Model edge ÷ standard deviation of the expiry P&L under the same distribution. */
+  edgeRatio: number | null;
   probability: number | null;
   model: 'market' | 'forecast';
   status: VerticalStatus;
@@ -83,6 +85,27 @@ const aligned = (q: number, step: number) => Math.abs(q / step - Math.round(q / 
 
 export const sumTakerFees: PricingRules['combineFees'] = (buyFee, sellFee, quantity) =>
   (buyFee + sellFee) * quantity;
+
+/** Standard deviation of min(max(S_T, low), high) for lognormal S_T with mean `forward`. */
+export function clampedStdev(
+  forward: number,
+  low: number,
+  high: number,
+  T: number,
+  sigma: number,
+): number {
+  const v = sigma * Math.sqrt(T);
+  // E[S^n; S > k] = F^n · e^{n(n−1)v²/2} · N((ln(F/k) + (n − ½)v²) / v)
+  const above = (k: number, n: number) =>
+    forward ** n *
+    Math.exp((n * (n - 1) * v * v) / 2) *
+    normCdf((Math.log(forward / k) + (n - 0.5) * v * v) / v);
+  const pBelow = 1 - above(low, 0);
+  const pAbove = above(high, 0);
+  const m1 = low * pBelow + above(low, 1) - above(high, 1) + high * pAbove;
+  const m2 = low * low * pBelow + above(low, 2) - above(high, 2) + high * high * pAbove;
+  return Math.sqrt(Math.max(m2 - m1 * m1, 0));
+}
 
 export function scanContext(input: SpreadScanInput): ScanContext {
   const { chain, quantity, equity, riskPct, costReserve, nowMs } = input;
@@ -209,6 +232,7 @@ export function priceVertical(
     ? (chain.stats.indexPriceUsd ?? 0) * (1 + input.forecast.movePct / 100)
     : forward;
   let modelEdge: number | null = null;
+  let edgeRatio: number | null = null;
   let probability: number | null = null;
   if (
     positive(expectedSpot) &&
@@ -230,10 +254,21 @@ export function priceVertical(
       T,
       breakevenSigma,
     );
+    const payoffStdev =
+      quantity *
+      clampedStdev(
+        expectedSpot,
+        Math.min(buyStrike, sellStrike),
+        Math.max(buyStrike, sellStrike),
+        T,
+        breakevenSigma,
+      );
+    edgeRatio = payoffStdev > 0 ? modelEdge / payoffStdev : null;
     if (!Number.isFinite(modelEdge) || !Number.isFinite(probability)) {
       modelEdge = null;
       probability = null;
     }
+    if (modelEdge == null || !Number.isFinite(edgeRatio)) edgeRatio = null;
   }
   const exitKnown =
     positive(b.bidUsd) &&
@@ -272,6 +307,7 @@ export function priceVertical(
     riskPct: (maxLoss / equity) * 100,
     breakeven,
     modelEdge,
+    edgeRatio,
     probability,
     model: input.forecast ? 'forecast' : 'market',
     status,
@@ -286,6 +322,7 @@ export function rankCandidates(candidates: RankedVertical[]): void {
   candidates.sort(
     (a, b) =>
       Number(a.status === 'over-budget') - Number(b.status === 'over-budget') ||
+      (b.edgeRatio ?? -Infinity) - (a.edgeRatio ?? -Infinity) ||
       (b.modelEdge ?? -Infinity) - (a.modelEdge ?? -Infinity) ||
       a.maxLoss - b.maxLoss ||
       a.id.localeCompare(b.id),

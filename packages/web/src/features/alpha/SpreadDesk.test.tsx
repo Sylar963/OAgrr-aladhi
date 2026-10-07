@@ -52,6 +52,7 @@ beforeEach(() => {
           riskPct: 0.33,
           breakeven: 80357,
           modelEdge: -0.5,
+          edgeRatio: -0.01,
           probability: 0.6,
           model: 'market',
           status: 'no-edge',
@@ -92,7 +93,7 @@ describe('Alpha spread decision flow', () => {
     expect(screen.getByText('BTC-25SEP26-80000-P')).toBeTruthy();
     expect(screen.getByText('BTC-25SEP26-80500-P')).toBeTruthy();
     expect(screen.getByText('BUY 0.01 BTC')).toBeTruthy();
-    expect(screen.getByText(/Probability is risk-neutral/)).toBeTruthy();
+    expect(screen.getByText(/probability is risk-neutral/i)).toBeTruthy();
     expect(screen.getByText('Estimated entry fee')).toBeTruthy();
   });
   it('does not show cached candidates after a fetch error', () => {

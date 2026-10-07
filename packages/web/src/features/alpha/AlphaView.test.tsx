@@ -63,6 +63,7 @@ const candidate: SpreadCandidate = {
   riskPct: 0.59,
   breakeven: 80363,
   modelEdge: -0.5,
+  edgeRatio: -0.01,
   probability: 0.6,
   model: 'market',
   status: 'no-edge',

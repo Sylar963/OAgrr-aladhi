@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { input, now } from './spread-scan.fixtures';
 import { scanSpreads } from './spread-scanner';
 import { black76Price } from '@lib/analytics/blackScholes';
-import { expiryPnl } from './vertical-pricing';
+import { clampedStdev, expiryPnl, rankCandidates, type RankedVertical } from './vertical-pricing';
 
 const candidates = (i = input()) => scanSpreads(i)[0]!.candidates;
 
@@ -139,6 +139,44 @@ describe('venue-specific spread scanner', () => {
     const rows = candidates(i);
     expect(rows.length).toBeGreaterThan(0);
     for (const c of rows) expect(c.modelEdge!).toBeCloseTo(-0.01 - c.entryFee - c.costReserve, 6);
+  });
+  it('computes the clamped lognormal standard deviation in closed form', () => {
+    const [F, T, sigma] = [80_000, 0.1, 0.5];
+    const v2 = sigma * sigma * T;
+    expect(clampedStdev(F, 1e-9, 1e12, T, sigma)).toBeCloseTo(F * Math.sqrt(Math.exp(v2) - 1), 0);
+    expect(clampedStdev(F, 80_000, 80_000, T, sigma)).toBeCloseTo(0, 6);
+    const steps = 200_000;
+    let m1 = 0;
+    let m2 = 0;
+    for (let i = 0; i < steps; i++) {
+      const z = -8 + (16 * (i + 0.5)) / steps;
+      const w = (Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI)) * (16 / steps);
+      const x = Math.min(Math.max(F * Math.exp(-v2 / 2 + Math.sqrt(v2) * z), 75_000), 90_000);
+      m1 += w * x;
+      m2 += w * x * x;
+    }
+    expect(clampedStdev(F, 75_000, 90_000, T, sigma)).toBeCloseTo(Math.sqrt(m2 - m1 * m1), 0);
+  });
+  it('ranks in-budget pairs by edge per unit of payoff spread, not raw dollars', () => {
+    const base = candidates()[0]!;
+    const penny: RankedVertical = { ...base, id: 'penny', modelEdge: -1, edgeRatio: -0.05 };
+    const balanced: RankedVertical = { ...base, id: 'balanced', modelEdge: -3, edgeRatio: -0.01 };
+    const large: RankedVertical = {
+      ...base,
+      id: 'large',
+      status: 'over-budget',
+      modelEdge: 5,
+      edgeRatio: 0.2,
+    };
+    const rows = [penny, large, balanced];
+    rankCandidates(rows);
+    expect(rows.map((r) => r.id)).toEqual(['balanced', 'penny', 'large']);
+  });
+  it('gives every modeled candidate an edge ratio with the sign of its edge', () => {
+    for (const c of candidates()) {
+      expect(c.edgeRatio).not.toBeNull();
+      expect(Math.sign(c.edgeRatio!)).toBe(Math.sign(c.modelEdge!));
+    }
   });
   it('expires cached quotes even if the feed stops updating', () => {
     const i = input();

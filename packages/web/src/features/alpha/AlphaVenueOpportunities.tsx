@@ -29,7 +29,7 @@ export default function AlphaVenueOpportunities({
       subtitle="Both legs execute on one venue"
       count={visibleCount}
       emptyHint="Enter account equity to map each venue."
-      note="Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your loss limit."
+      note="Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your loss limit; within budget, rows are ordered by EV per standard deviation of expiry P&L."
       isEmpty={scans.length === 0}
     >
       {scans.map((scan) => {

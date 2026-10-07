@@ -32,16 +32,18 @@ import {
   registerDeriveExpiry,
   registerDeriveInstrument,
 } from './state.js';
+import type { DeriveInstrument } from './types.js';
 
 const log = feedLogger('derive');
 
-// Production still uses the legacy lyra.finance domain
 const CURRENCIES = ['BTC', 'ETH', 'SOL', 'HYPE'];
 
 // Derive has no instrument lifecycle push channel — poll for new strikes/expiries.
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
 const CONTROL_PLANE_RECONNECT_COOLDOWN_MS = 60 * 1000;
+const INSTRUMENT_PAGE_SIZE = 1_000;
+const MAX_INSTRUMENT_PAGES = 20;
 
 /**
  * Derive (formerly Lyra Finance) adapter using direct JSON-RPC over WebSocket.
@@ -55,8 +57,7 @@ const CONTROL_PLANE_RECONNECT_COOLDOWN_MS = 60 * 1000;
  * - WS channel: ticker_slim.{instrument_name}.{interval}
  * - Notification data wrapped in { instrument_ticker: { ... } }
  *
- * Instruments: `public/get_instruments` per currency (MUST per-currency,
- *              `get_all_instruments` caps at 100).
+ * Instruments: `public/get_all_instruments` per currency, paged (v3 defaults to 100 per page).
  * USDC-settled, all linear.
  */
 export class DeriveWsAdapter extends SdkBaseAdapter {
@@ -113,6 +114,23 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
 
   // ─── instrument loading ───────────────────────────────────────
 
+  private async fetchOptionInstruments(currency: string): Promise<DeriveInstrument[]> {
+    const instruments: DeriveInstrument[] = [];
+    for (let page = 1; page <= MAX_INSTRUMENT_PAGES; page += 1) {
+      const result = await this.rpc.call('public/get_all_instruments', {
+        currency,
+        instrument_type: 'option',
+        expired: false,
+        page,
+        page_size: INSTRUMENT_PAGE_SIZE,
+      });
+      const parsed = parseDeriveInstrumentsResponse(result);
+      instruments.push(...parsed.instruments);
+      if (page >= parsed.numPages) break;
+    }
+    return instruments;
+  }
+
   protected async fetchInstruments(): Promise<CachedInstrument[]> {
     await this.rpc.connect();
 
@@ -120,13 +138,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
 
     for (const currency of CURRENCIES) {
       try {
-        const result = await this.rpc.call('public/get_instruments', {
-          currency,
-          instrument_type: 'option',
-          expired: false,
-        });
-
-        const list = parseDeriveInstrumentsResponse(result);
+        const list = await this.fetchOptionInstruments(currency);
         for (const item of list) {
           const inst = this.parseInstrument(item);
           if (inst) instruments.push(inst);
@@ -152,7 +164,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     void this.refreshHealth();
 
     // Prune instruments for expiries where Derive returned zero tickers.
-    // Derive's get_instruments lists expiries that have no actual market data,
+    // Derive's get_all_instruments lists expiries that have no actual market data,
     // which causes ghost expiry tabs in the UI.
     const before = instruments.length;
     const live = instruments.filter((inst) => this.quoteStore.has(inst.exchangeSymbol));
@@ -317,7 +329,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
   }
 
   /**
-   * Poll get_instruments every 10 minutes to pick up new strikes and expiries.
+   * Poll get_all_instruments every 10 minutes to pick up new strikes and expiries.
    * Derive has no instrument lifecycle push channel.
    */
   private async refreshInstruments(): Promise<void> {
@@ -326,13 +338,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
 
     for (const currency of CURRENCIES) {
       try {
-        const result = await this.rpc.call('public/get_instruments', {
-          currency,
-          instrument_type: 'option',
-          expired: false,
-        });
-
-        const list = parseDeriveInstrumentsResponse(result);
+        const list = await this.fetchOptionInstruments(currency);
         const newInstruments: CachedInstrument[] = [];
 
         for (const item of list) {

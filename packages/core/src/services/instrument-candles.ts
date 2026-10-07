@@ -557,9 +557,9 @@ export async function fetchBybitTradeBucketed(
   );
 }
 
-// ── Derive (Lyra v2) ───────────────────────────────────────────────
+// ── Derive (v3) ────────────────────────────────────────────────────
 // POST /public/get_tradingview_chart_data returns ClickHouse-backed OHLCV
-// candles by instrument. Probe-verified contract (api.lyra.finance):
+// candles by instrument. Probe-verified contract (v2 2026-05-22, v3 2026-10-07):
 //   body: { instrument_name, start_timestamp, end_timestamp, period }
 //   timestamps are Unix SECONDS (not ms — note the divergence from every
 //     other Derive REST endpoint we call)
@@ -646,9 +646,10 @@ export async function fetchDeriveTrade(
 // POST /public/get_trade_history returns each individual trade with the
 // venue mark_price captured at the moment of the trade. Used as a sparse
 // backfill for the mark line on options whose MarkHistoryBuffer is cold
-// (chart just opened). Probe-verified contract (2026-05-22):
-//   body: { instrument_name, from_timestamp_sec, to_timestamp_sec, page_size }
-//   timestamp is in MILLISECONDS (unlike chart_data which uses seconds);
+// (chart just opened). Probe-verified contract (v3, 2026-10-07):
+//   body: { instrument_name, from_timestamp, to_timestamp, page_size }
+//   timestamps are MILLISECONDS (unlike chart_data which uses seconds);
+//   unknown params such as from_timestamp_sec are silently ignored;
 //   page_size=500 returns all trades in one shot for any 7-day window we've
 //   seen (max observed: 258 trades on a high-volume strike). The default
 //   page_size is 100, so an explicit higher cap avoids paging.
@@ -670,16 +671,15 @@ export async function fetchDeriveTradeHistory(
   symbol: string,
   range: InstrumentCandleRange,
 ): Promise<Array<[number, number]>> {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const startSec = nowSec - Math.floor(RANGE_TO_MS[range] / 1000);
+  const nowMs = Date.now();
   const res = await fetch(`${DERIVE_REST_BASE_URL}/public/get_trade_history`, {
     method: 'POST',
     signal: AbortSignal.timeout(10_000),
     headers: { accept: 'application/json', 'content-type': 'application/json' },
     body: JSON.stringify({
       instrument_name: symbol,
-      from_timestamp_sec: startSec,
-      to_timestamp_sec: nowSec,
+      from_timestamp: nowMs - RANGE_TO_MS[range],
+      to_timestamp: nowMs,
       page_size: 500,
     }),
   });

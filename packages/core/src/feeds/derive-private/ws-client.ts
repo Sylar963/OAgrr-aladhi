@@ -1,4 +1,5 @@
 import { feedLogger } from '../../utils/logger.js';
+import { DERIVE_TESTNET_WS_URL, DERIVE_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
 import { signLoginMessage } from './auth.js';
 import { derivePositionsToLegs, deriveTradesToPortfolioTrades } from './codec.js';
@@ -10,8 +11,6 @@ import {
 } from './types.js';
 import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
-const DERIVE_WS_URL = 'wss://api.lyra.finance/ws';
-const DERIVE_TESTNET_WS_URL = 'wss://api-demo.lyra.finance/ws';
 
 export interface DerivePrivateCreds {
   walletAddress: string;

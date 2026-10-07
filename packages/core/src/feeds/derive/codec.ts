@@ -7,6 +7,7 @@ import {
   DeriveTickersResponseSchema,
   type DeriveHealthIncidents,
   type DeriveInstrument,
+  type DeriveInstrumentsPage,
   type DeriveTicker,
   type DeriveTickersResponse,
 } from './types.js';
@@ -21,9 +22,9 @@ export function parseDeriveTicker(input: unknown): DeriveTicker | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function parseDeriveInstrumentsResponse(input: unknown): DeriveInstrument[] {
+export function parseDeriveInstrumentsResponse(input: unknown): DeriveInstrumentsPage {
   const parsed = DeriveInstrumentsResponseSchema.safeParse(input);
-  return parsed.success ? parsed.data : [];
+  return parsed.success ? parsed.data : { instruments: [], numPages: 0 };
 }
 
 export function parseDeriveTickersResponse(input: unknown): DeriveTickersResponse | null {

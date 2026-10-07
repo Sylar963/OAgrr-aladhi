@@ -288,8 +288,9 @@ describe('InstrumentCandleService — Derive buffer integration', () => {
     const body = JSON.parse(String(historyCall[1].body));
     expect(body.instrument_name).toBe('COLD-WITH-HISTORY');
     expect(body.page_size).toBe(500);
-    expect(body.from_timestamp_sec).toBeLessThan(1e11);
-    expect(body.to_timestamp_sec).toBeLessThan(1e11);
+    expect(body.from_timestamp).toBeGreaterThan(1e12);
+    expect(body.to_timestamp).toBeGreaterThan(body.from_timestamp);
+    expect(body).not.toHaveProperty('from_timestamp_sec');
   });
 
   it('buffer wins over trade_history on the active bucket', async () => {

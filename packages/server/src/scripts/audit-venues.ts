@@ -508,7 +508,7 @@ async function fetchDerive(currency: string, expiry: string): Promise<ExchangeMa
   const map: ExchangeMap = new Map();
 
   return new Promise((resolve) => {
-    const ws = new WebSocket('wss://api.lyra.finance/ws');
+    const ws = new WebSocket('wss://api.derive.xyz/v3/ws');
     let settled = false;
 
     const done = () => {

@@ -68,7 +68,7 @@ export const DeriveTickerSchema = z
   .passthrough();
 export type DeriveTicker = z.infer<typeof DeriveTickerSchema>;
 
-// public/get_instruments response item
+// public/get_all_instruments response item
 // Docs: result is a direct array of these objects
 export const DeriveInstrumentSchema = z
   .object({
@@ -95,11 +95,18 @@ export const DeriveInstrumentSchema = z
   .passthrough();
 export type DeriveInstrument = z.infer<typeof DeriveInstrumentSchema>;
 
-// public/get_instruments: result is a direct array, or { instruments: [...] } on some API versions
+// v2 public/get_instruments returned a bare array; v3 public/get_all_instruments returns
+// { instruments, pagination } and pages at 100 by default.
 export const DeriveInstrumentsResponseSchema = z.union([
-  z.array(DeriveInstrumentSchema),
-  z.object({ instruments: z.array(DeriveInstrumentSchema) }).transform((r) => r.instruments),
+  z.array(DeriveInstrumentSchema).transform((instruments) => ({ instruments, numPages: 1 })),
+  z
+    .object({
+      instruments: z.array(DeriveInstrumentSchema),
+      pagination: z.object({ num_pages: z.number().int().nonnegative() }).optional(),
+    })
+    .transform((r) => ({ instruments: r.instruments, numPages: r.pagination?.num_pages ?? 1 })),
 ]);
+export type DeriveInstrumentsPage = z.output<typeof DeriveInstrumentsResponseSchema>;
 
 // public/get_tickers: { tickers: { [instrument_name]: ticker } }
 export const DeriveTickersResponseSchema = z.object({

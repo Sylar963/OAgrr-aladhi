@@ -167,16 +167,16 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
   derive: {
     venue: 'derive',
     status: 'available',
-    wsEndpoint: 'wss://api.lyra.finance/ws',
+    wsEndpoint: 'wss://api.derive.xyz/v3/ws',
     authScheme: 'eip712',
     subscribeMethod: 'subscribe',
-    positionChannels: ['{subaccount_id}.positions'],
-    docsUrl: 'https://docs.derive.xyz/reference/private-login',
+    positionChannels: ['{subaccount_id}.balances'],
+    docsUrl: 'https://docs.derive.xyz/authentication/session-login',
     credentialFields: [
       {
         key: 'walletAddress',
-        label: 'Wallet address',
-        placeholder: '0x…',
+        label: 'Owner wallet address',
+        placeholder: '0x… (your own wallet, not the old Derive Wallet)',
         secret: false,
         required: true,
       },
@@ -198,8 +198,8 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     todos: [
       'create packages/core/src/feeds/derive-private/ws-client.ts using JsonRpcWsClient (subscribe method)',
       'public/login with EIP-712 signed message (timestamp + wallet)',
-      'subscribe to "{subaccount_id}.positions" channel',
-      'use api.lyra.finance (not api.derive.xyz — DNS gotcha)',
+      'subscribe to "{subaccount_id}.balances" channel',
+      'v3 (2026-10): wallet is the owner EOA/multisig; v2 Derive smart wallets were migrated to it',
       'normalize Derive numeric-as-string position fields',
       'add "derive" to PortfolioSource enum',
     ],

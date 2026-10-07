@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DeriveTickerSchema, DeriveInstrumentSchema } from './types.js';
+import { DeriveTickerSchema, DeriveInstrumentSchema, DeriveInstrumentsResponseSchema } from './types.js';
 
 // ─── DeriveTickerSchema — get_tickers response ─────────────────────────────
 
@@ -382,6 +382,16 @@ describe('DeriveInstrumentSchema', () => {
     expect(result.data.instrument_type).toBe('option');
     expect(result.data.is_active).toBe(true);
     expect(result.data.quote_currency).toBe('USDC');
+  });
+
+  it('reads page count from the v3 get_all_instruments envelope', () => {
+    const v3 = DeriveInstrumentsResponseSchema.safeParse({
+      instruments: [docFixture],
+      pagination: { num_pages: 8, count: 760 },
+    });
+    expect(v3.success && v3.data).toEqual({ instruments: [expect.objectContaining({ instrument_name: 'BTC-20260327-84000-P' })], numPages: 8 });
+    const v2 = DeriveInstrumentsResponseSchema.safeParse([docFixture]);
+    expect(v2.success && v2.data.numPages).toBe(1);
   });
 
   it('parses tick_size, minimum_amount, maximum_amount as strings', () => {

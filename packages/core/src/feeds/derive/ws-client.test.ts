@@ -97,7 +97,7 @@ describe('DeriveWsAdapter', () => {
     internals.rpc = {
       connect: vi.fn(async () => {}),
       call: vi.fn(async () => {
-        throw new Error('[derive-ws] public/get_instruments timed out after 45000ms');
+        throw new Error('[derive-ws] public/get_all_instruments timed out after 45000ms');
       }),
       subscribe: vi.fn(async () => {}),
       terminate,

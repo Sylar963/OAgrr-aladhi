@@ -33,8 +33,9 @@ export const BINANCE_TIME = '/eapi/v1/time';
 export const BINANCE_BLOCK_TRADES = '/eapi/v1/blockTrades';
 
 // ── Derive ────────────────────────────────────────────────────────
-export const DERIVE_WS_URL = 'wss://api.lyra.finance/ws';
-export const DERIVE_REST_BASE_URL = 'https://api.lyra.finance';
+export const DERIVE_WS_URL = 'wss://api.derive.xyz/v3/ws';
+export const DERIVE_TESTNET_WS_URL = 'wss://testnet.api.derive.xyz/v3/ws';
+export const DERIVE_REST_BASE_URL = 'https://api.derive.xyz/v3';
 export const DERIVE_GET_TRADE_HISTORY = '/public/get_trade_history';
 
 // ── Coincall ────────────────────────────────────────────────────────

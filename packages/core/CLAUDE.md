@@ -99,10 +99,11 @@ pnpm --filter @oggregator/core build   # tsc → dist/
 - **OKX oiUsd is not notional**: `/public/open-interest` returns a face/count-style USD field, not market notional. Do not use it for analytics. Core normalizes OI to contract count and derives USD OI from contract metadata plus underlying price.
 - **OKX vol24h is contracts, not base currency**: Multiply by `ctMult` (0.01 for BTC, 0.1 for ETH) to get base currency before storing as `volume24h`. Enrichment then multiplies by `underlyingPrice` for USD.
 - **Derive sends numeric fields as strings**: schema them that way and coerce downstream with the shared helpers.
-- **Derive `get_all_instruments` is incomplete**: it caps out and misses the full venue set. Fetch per currency instead.
+- **Derive instrument listings are paged**: `public/get_all_instruments` returns 100 per page unless `page_size` is set (1000 fits a currency). Fetch per currency and follow `pagination.num_pages`. `public/get_instruments` no longer exists.
 - **Derive subscribe method is `subscribe`**: not `public/subscribe` like Deribit.
 - **Derive has no app-level heartbeat**: rely on WS ping/pong and reconnect logic.
-- **Derive DNS**: `api.derive.xyz` doesn't resolve. Use `api.lyra.finance`.
+- **Derive v3 hosts**: `wss://api.derive.xyz/v3/ws` and `https://api.derive.xyz/v3`. The legacy `api.lyra.finance` WS returns HTTP 503. Breaking changes vs v2: https://docs.derive.xyz/migrating/breaking-changes.md
+- **Derive ignores unknown params**: e.g. `public/get_trade_history` silently drops `from_timestamp_sec`; the window params are `from_timestamp`/`to_timestamp` in ms. Probe a filter live before trusting it.
 - **Derive slow bootstrap**: ~13s to load all instruments + tickers across currencies/expiries.
 - **Gate.io has no 24h volume in tickers**: neither `/options/tickers` REST nor the `options.contract_tickers` WS channel expose a 24h options volume. The contracts endpoint's `trade_size` is cumulative historical, not 24h. The adapter derives `volume24h` by maintaining a 24h sliding window of `options.trades` per contract (see `feeds/gateio/state.ts` → `gateioRecordTrade`); `volume24hUsd` is then `volume24h × underlyingPrice`. A periodic prune in the health loop rolls inactive contracts back to zero. Implication: at boot, volume starts at null and fills in only as trades arrive — there is no REST backfill possible.
 - **Gate.io options.trades sign-encoded side**: trades have no `side` field; the sign of `size` carries taker direction (positive = buy, negative = sell). Verified against `/api/v4/options/trades` REST and applied in both the chain adapter and the live-trade tape entry in `runtime/trades/trade-runtime.ts`.

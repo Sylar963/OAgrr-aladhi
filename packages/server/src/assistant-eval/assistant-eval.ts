@@ -23,6 +23,7 @@ import {
   type AssistantEvalJudge,
   type AssistantEvalToolObservation,
   gradeAnswer,
+  type HeldLegRef,
   summarizeChecks,
 } from './assistant-eval-checks.js';
 import {
@@ -80,6 +81,12 @@ interface FixtureRun {
   tools: AssistantEvalToolObservation;
   grade: AssistantEvalGrade;
   judge: { name: string; score: number; rationale: string } | null;
+}
+
+function heldLegs(fixture: AssistantEvalFixture): HeldLegRef[] {
+  return fixture.context.positions
+    .filter((position) => position.size !== 0)
+    .map(({ expiry, strike, optionRight }) => ({ expiry, strike, optionRight }));
 }
 
 function readArgs(argv: string[]): EvalArgs {
@@ -244,7 +251,7 @@ async function runFixture(
   }
   const finishedAt = Date.now();
   const tools = await observeTools(args, startedAt, finishedAt);
-  const grade = gradeAnswer(fixture.expect, answer, tools);
+  const grade = gradeAnswer(fixture.expect, answer, tools, heldLegs(fixture));
   const judged =
     judge == null || answer === ''
       ? null
@@ -391,7 +398,7 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
   for (const run of saved.runs) {
     const fixture = byId.get(run.fixtureId);
     if (fixture == null) continue;
-    const grade = gradeAnswer(fixture.expect, run.answer, run.tools);
+    const grade = gradeAnswer(fixture.expect, run.answer, run.tools, heldLegs(fixture));
     const regraded: FixtureRun = {
       fixtureId: fixture.id,
       scenario: fixture.scenario,

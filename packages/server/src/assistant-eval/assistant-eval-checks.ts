@@ -163,7 +163,7 @@ const MONTH = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
 const ISO_DATE = /\b\d{4}-(\d{2})-(\d{2})\b/g;
 const MONTH_DAY = new RegExp(`\\b${MONTH}\\s*(\\d{1,2})\\b`, 'gi');
 const DAY_MONTH = new RegExp(`\\b(\\d{1,2})\\s*${MONTH}`, 'gi');
-const STRIKE_TOKEN = /(?<![\w.,-])\$?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?(?![\d,-])|(?<![\w.])(\d{2,3}(?:\.\d+)?)k\b/gi;
+const STRIKE_TOKEN = /(?<![\w.,-])\$?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?(?!\d|[,-]\d)|(?<![\w.])(\d{2,3}(?:\.\d+)?)k\b/gi;
 const CALL_PATTERN = /\bcalls?\b|\d(?:k|,\d{3})?\s?C\b/i;
 const PUT_PATTERN = /\bputs?\b|\d(?:k|,\d{3})?\s?P\b/i;
 

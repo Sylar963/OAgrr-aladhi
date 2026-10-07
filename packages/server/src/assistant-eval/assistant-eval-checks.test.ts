@@ -23,6 +23,7 @@ function expectation(overrides: Partial<AssistantEvalExpect> = {}): AssistantEva
     requiredMentions: [],
     requiredTools: [],
     mustProposeStructure: false,
+    requireNewLeg: false,
     bannedPhrases: ['I cannot identify', 'my earlier … were wrong'],
     maxChars: 2_000,
     ...overrides,
@@ -96,6 +97,46 @@ describe('detectProposedStructure', () => {
   });
 });
 
+const REFERENCE_HELD = [
+  { expiry: '2026-10-16', strike: 87_000, optionRight: 'call' as const },
+  { expiry: '2026-10-30', strike: 85_000, optionRight: 'call' as const },
+];
+
+const CLOSING_TABLE = [
+  '### What closing it would cost',
+  '| Leg | Closing quote | Action |',
+  '|---|---:|---|',
+  '| Oct 16 $87,000 call | **$1,089.27** bid | Sell |',
+  '| Oct 30 $85,000 call | **$3,093.90** ask | Buy back |',
+].join('\n');
+
+describe('new-leg detection', () => {
+  it('treats a table that only prices closing held legs as no new leg', () => {
+    expect(detectProposedStructure(CLOSING_TABLE, REFERENCE_HELD)).toMatchObject({
+      proposed: true,
+      inTable: true,
+      newLeg: false,
+    });
+  });
+
+  it('finds a new strike, right or expiry next to closing legs', () => {
+    const twoPart = 'Buy back the Oct 30 85k call and buy 0.1x Oct 23 80k put for $412.';
+    expect(detectProposedStructure(twoPart, REFERENCE_HELD)).toMatchObject({ newLeg: true, evidence: twoPart });
+    expect(detectProposedStructure('- Buy 1x Nov 27 85,000 call', REFERENCE_HELD).newLeg).toBe(true);
+    expect(detectProposedStructure('- Buy 1x 2026-10-30 85,000 put', REFERENCE_HELD).newLeg).toBe(true);
+    expect(detectProposedStructure('- Sell 1x 2026-10-16 87,000 call at $1,089', REFERENCE_HELD).newLeg).toBe(false);
+    const table = [CLOSING_TABLE, '', '| Trade | Leg |', '|---|---|', '| Buy | Oct 30 90,000 call |'].join('\n');
+    expect(detectProposedStructure(table, REFERENCE_HELD)).toMatchObject({
+      newLeg: true,
+      evidence: '| Buy | Oct 30 90,000 call |',
+    });
+  });
+
+  it('counts any proposal as new without a held book', () => {
+    expect(detectProposedStructure(CLOSING_TABLE).newLeg).toBe(true);
+  });
+});
+
 describe('banned phrases', () => {
   it('matches ellipsis wildcards and curly quotes', () => {
     expect(bannedPhrasePattern('my earlier … were wrong').test('My earlier spot and PnL figures were wrong')).toBe(true);
@@ -165,6 +206,33 @@ describe('gradeAnswer', () => {
     );
     expect(grade.pass).toBe(true);
     expect(grade.checks.find((check) => check.check === 'tools')?.status).toBe('unverified');
+  });
+
+  it('requires a new leg when the fixture asks for a new trade, unless structure_search was used', () => {
+    const newTrade = expectation({ mustProposeStructure: true, requireNewLeg: true });
+    const closing = gradeAnswer(newTrade, CLOSING_TABLE, NO_TOOLS, REFERENCE_HELD);
+    expect(closing.pass).toBe(false);
+    expect(closing.checks.find((check) => check.check === 'structure')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringContaining('Only held legs are traded'),
+    });
+
+    const lenient = gradeAnswer(expectation({ mustProposeStructure: true }), CLOSING_TABLE, NO_TOOLS, REFERENCE_HELD);
+    expect(lenient.pass).toBe(true);
+
+    const searched = gradeAnswer(
+      newTrade,
+      CLOSING_TABLE,
+      { observedTools: ['mcp__oggregator__oggregator_structure_search'], evidence: 'journal' },
+      REFERENCE_HELD,
+    );
+    expect(searched.checks.find((check) => check.check === 'structure')).toMatchObject({
+      status: 'pass',
+      detail: expect.stringContaining('after oggregator_structure_search'),
+    });
+
+    const fresh = gradeAnswer(newTrade, '- **Buy** 1x Oct 30 90k call for $1,000', NO_TOOLS, REFERENCE_HELD);
+    expect(fresh.pass).toBe(true);
   });
 
   it('fails empty and over-long answers', () => {

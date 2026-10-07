@@ -47,7 +47,29 @@ request window. This is reliable evidence only when no other users are active at
 ## Reading the results
 
 - **Phase 0 acceptance:** the reference fixture fails on current code for the expected reasons: it refuses and apologises for stale figures.
-- **Structure check is lenient.** On the reference fixture it passes because a closing-cost table counts as a proposal. The refusal is still caught by banned phrases. Tighten this check once Phase 3 gives a canonical structure output.
+- **Structure check was lenient.** On the reference fixture it passed because a closing-cost table counted as a proposal. Phase 3 tightened it; see the re-grade below.
 - **Required numbers come from the engine.** In `trade-history-realized` the right numbers can come from the wrong source, so a numeric pass does not prove the answer read `tradeHistoryFacts`.
 - **Live tools vs synthetic market.** Fixture contexts use a deterministic synthetic market, while MCP tools return live data. Answers that call tools can see different spots or quotes, or a different "now", than the context. Do not compare tool-dependent fixtures number for number.
 - **One sample per fixture.** Answers are non-deterministic. Before claiming a regression or an improvement on a single fixture, rerun it (`--fixture <id>`).
+
+## Re-grade after the Phase 3 structure grader change (2026-10-07)
+
+Fixtures that ask for a new trade now carry `expect.requireNewLeg: true` (reference-bearish-budget-18,
+the three budget-* fixtures and infeasible-budget-bear-call-spread). For them the structure check
+passes only if a proposed row or line trades a leg the book does not already hold (a strike, right
+or expiry not in `context.positions`), or if `oggregator_structure_search` was observed in the tool
+logs, since its candidates can be buy-backs. Strike-like numbers outside 0.5×–2× the held strikes
+are ignored as premiums or P&L. reference-cap-upside keeps the old rule: buying back the short is a
+valid way to cap it.
+
+Re-grading the same saved answers (`--regrade .eval-out/2026-10-07T02-58-24-632Z`) still gives
+**10 of 14** fixtures passing. Only the structure check changes:
+
+| Check | Pass | Fail | Unverified | N/A | Pass rate |
+| --- | --- | --- | --- | --- | --- |
+| structure | 4 | 2 | 0 | 8 | 67% (was 83%) |
+
+reference-bearish-budget-18 now fails structure as well as banned_phrases: its only table prices
+closing the two held legs. The fixture already failed, so the fixture pass rate is unchanged. The
+other checks are as above.
+

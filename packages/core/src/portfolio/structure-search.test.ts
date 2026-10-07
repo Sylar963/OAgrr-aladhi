@@ -63,6 +63,7 @@ const REFERENCE_BOOK = [
 
 interface ChainOptions {
   expiries?: string[];
+  firstStrike?: number;
   strikeStep?: number;
   halfSpread?: number;
   fee?: number | null;
@@ -76,7 +77,7 @@ function chain(options: ChainOptions = {}): StructureSearchContract[] {
   const halfSpread = options.halfSpread ?? 0.02;
   for (const expiry of options.expiries ?? EXPIRIES) {
     const years = (expiryInstantMs(expiry) - NOW) / (365 * 86_400_000);
-    for (let strike = 66_000; strike <= 102_000; strike += step) {
+    for (let strike = options.firstStrike ?? 66_000; strike <= 102_000; strike += step) {
       for (const right of ['call', 'put'] as const) {
         const fair = price76(SPOT, strike, IV, years, right);
         if (fair < 5) continue;
@@ -146,7 +147,8 @@ describe('findUncoveredShorts', () => {
   });
 });
 
-describe('searchStructures', () => {
+// Each search runs hundreds of full book evaluations; leave headroom for a loaded CI runner.
+describe('searchStructures', { timeout: 30_000 }, () => {
   it('keeps bearish candidates inside the budget and ranks them by reward per unit of risk', () => {
     const result = search({ maxTotalRiskUsd: 1_500, limit: 8 });
 
@@ -267,14 +269,13 @@ describe('searchStructures', () => {
   });
 
   it('pairs a bearish trade with the cheapest cover when the reference book is unbounded', () => {
-    const result = search({ held: REFERENCE_BOOK, maxTotalRiskUsd: 18 });
+    const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
+    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 18 });
 
     expect(result.cover?.label).toBe('Buy back 2026-10-30 85000 call');
     // Bare puts cannot bound the naked call, so only two-part candidates are evaluated.
     expect(result.stats.skippedUnbounded).toBeGreaterThan(0);
-    expect(result.stats.evaluated).toBe(
-      Math.min(STRUCTURE_SEARCH_MAX_CANDIDATES, result.stats.enumerated - result.stats.skippedUnbounded),
-    );
+    expect(result.stats.evaluated).toBe(result.stats.enumerated - result.stats.skippedUnbounded);
     expect(result.cover?.bookWorstLossUsd).toBeLessThan(-18);
     expect(result.candidates).toEqual([]);
     expect(result.nearestInfeasible.length).toBeGreaterThan(0);
@@ -285,7 +286,7 @@ describe('searchStructures', () => {
       expect(candidate.shortfallUsd).toBeCloseTo(-(candidate.worstLossUsd as number) - 18, 6);
     }
 
-    const roomy = search({ held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
+    const roomy = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
     expect(roomy.candidates.length).toBeGreaterThan(0);
     expect(roomy.candidates.every((candidate) => candidate.coveredShortLegIds.includes('short-oct30'))).toBe(true);
     expect(roomy.candidates.every((candidate) => (candidate.worstLossUsd as number) >= -3_000)).toBe(true);

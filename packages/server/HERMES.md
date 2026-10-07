@@ -56,6 +56,7 @@ on loopback; a remote or containerized Hermes needs a private network arrangemen
 | lotto_scanner | Existing Alpha scan with explicit premium cap and buying power |
 | search_options_library | Indexed book passages with page citations |
 | evaluate_structure | Proposed legs (± held book via `portfolioRef`) at executable quotes: cost, fees, worst loss per expiry window, budget fit, horizon and expiry P&L |
+| structure_search | Candidates for a view (bearish, bullish, long_vol, hedge_held_shorts) within a book-wide risk budget, ranked by P&L at a target move per dollar of worst loss; `nearestInfeasible` and the shortfall when nothing fits |
 
 Names have the `oggregator_` prefix except `search_options_library`. Hermes may
 expose a further `mcp__oggregator__` prefix during discovery.
@@ -93,10 +94,18 @@ Each chat context carries `portfolioRef`, an opaque `pref_` token (16 random byt
 backend maps it in memory to the account, portfolio source and underlying of that context.
 It lives 15 minutes, the store keeps at most 1,000 refs (least recently used evicted), and
 nothing is persisted, so a backend restart revokes every ref. `oggregator_evaluate_structure`
-resolves the ref in-process to the live runtime's legs and marks; the model never passes
-account IDs or held legs. Unknown, expired or mismatched-underlying refs return a tool error.
-Without a ref the tool evaluates the proposed legs alone. Proposed legs are priced only from
-Oggregator quotes (buy at ask, sell at bid, venue taker fee estimate); a leg without an
-executable quote is reported as an error and nothing is evaluated. Worst loss is measured from
-those executable entries and includes the proposed legs' fees. Tool logs carry the tool name
-and duration only, never the ref.
+and `oggregator_structure_search` resolve the ref in-process to the live runtime's legs and
+marks; the model never passes account IDs or held legs. Unknown, expired or mismatched-underlying
+refs return a tool error. Without a ref the tools evaluate the proposed legs alone
+(`hedge_held_shorts` requires a ref). Proposed legs are priced only from Oggregator quotes (buy
+at ask, sell at bid). Fees use the venue taker estimate; when a venue gives none, a conservative
+default of min(0.05% of underlying, 12.5% of premium) per contract is applied and flagged
+`feeSource: "default_estimate"`. A leg without an executable quote is reported as an error and
+nothing is evaluated. Worst loss is measured from those executable entries and includes the
+proposed legs' fees. Tool logs carry the tool name and duration only, never the ref.
+
+`oggregator_structure_search` reads up to 6 listed expiries (the uncovered shorts' expiries
+first, then the DTE window), strikes within ±20% of each forward, and evaluates at most 600
+candidates, nearest the money first, with the same engine as `evaluate_structure`. Each chain
+read has the 5-second reader timeout and runs in parallel, so a search stays well inside the
+profile's 30-second MCP timeout.

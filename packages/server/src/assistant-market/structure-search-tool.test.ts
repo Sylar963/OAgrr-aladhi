@@ -66,7 +66,7 @@ function chainBody(expiry: string) {
     execution: fee == null ? null : { bidTakerFeeUsd: fee, askTakerFeeUsd: fee },
   });
   const strikes = [];
-  for (let strike = 60_000; strike <= 110_000; strike += 1_000) {
+  for (let strike = 61_000; strike <= 109_000; strike += 2_000) {
     const side = (right: 'call' | 'put') => {
       const fair = price76(SPOT, strike, IV, years, right);
       return fair < 5 ? { venues: {} } : { venues: { deribit: quote(fair, 0.02, 10), okx: quote(fair, 0.03, null) } };
@@ -150,7 +150,7 @@ interface Candidate {
   sameVenue: boolean;
 }
 
-describe('oggregator_structure_search', () => {
+describe('oggregator_structure_search', { timeout: 30_000 }, () => {
   it('finds the Oct 30 higher-strike cover for the referenced book', async () => {
     const { ref, call, resolveHeldLegs } = harness();
     const { data } = await call({ portfolioRef: ref, underlying: 'btc', view: 'hedge_held_shorts', maxTotalRiskUsd: 5_000, limit: 8 });

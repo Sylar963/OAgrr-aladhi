@@ -19,6 +19,7 @@
     "schemaVersion": 1,
     "source": "manual",
     "underlying": "BTC",
+    "portfolioRef": "pref_evalFixtureNotResolvable",
     "forwardDays": 0,
     "generatedAt": 1791374400000,
     "dataFreshness": {

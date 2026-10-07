@@ -3,6 +3,11 @@ import { VENUE_IDS } from '@oggregator/protocol';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import {
+  EvaluateStructureToolInputSchema,
+  runEvaluateStructureTool,
+  type StructureToolPortfolioAccess,
+} from './evaluate-structure-tool.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
 
@@ -56,6 +61,8 @@ function unwrap<T>(result: MarketReadResult<T>): T {
 export function buildAssistantMcpTools(
   reader: AssistantMarketDataReader,
   library: OptionsLibrary,
+  portfolio: StructureToolPortfolioAccess,
+  now: () => number = Date.now,
 ): ToolDefinition[] {
   return [
     tool({
@@ -266,6 +273,13 @@ export function buildAssistantMcpTools(
       run: async (args) => unwrap(await reader.platformData('alpha/put-scanner', args)),
     }),
     tool({
+      name: 'oggregator_evaluate_structure',
+      description:
+        "Evaluate a candidate trade or hedge against the user's whole book and a risk budget. Prices each proposed leg at live executable quotes (buy at ask, sell at bid) plus venue fee estimates, then returns net cost, book-wide worst loss per expiry window (null when unbounded), worst loss before and after the trade, budget fit and headroom, P&L by horizon and spot move, and P&L at each expiry for spot moves of -20% to +20%. Pass portfolioRef from the portfolio context to include held positions server-side; to close a held leg, trade the opposite side with the same size. Use this to check any structure before recommending it. Prices come only from Oggregator quotes; a leg without an executable quote returns an error instead of a guess. No orders.",
+      input: EvaluateStructureToolInputSchema,
+      run: async (args) => unwrap(await runEvaluateStructureTool(reader, portfolio, args, now())),
+    }),
+    tool({
       name: 'search_options_library',
       description:
         'Full-text search over the indexed options trading books (volatility trading, pricing, strategies, risk). Returns passages with book and PDF page for citation. Use specific terms, e.g. "gamma scalping realized volatility" or "calendar spread vega".',
@@ -321,7 +335,7 @@ export class AssistantMcpHandler {
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
           instructions:
-            'Read-only Oggregator market data and options library search. IV values are fractions.',
+            'Read-only Oggregator market data, structure evaluation and options library search. IV values are fractions.',
         });
       }
       case 'ping':

@@ -55,6 +55,7 @@ on loopback; a remote or containerized Hermes needs a private network arrangemen
 | straddle_scanner | Existing Alpha scan with explicit equity and risk inputs |
 | lotto_scanner | Existing Alpha scan with explicit premium cap and buying power |
 | search_options_library | Indexed book passages with page citations |
+| evaluate_structure | Proposed legs (± held book via `portfolioRef`) at executable quotes: cost, fees, worst loss per expiry window, budget fit, horizon and expiry P&L |
 
 Names have the `oggregator_` prefix except `search_options_library`. Hermes may
 expose a further `mcp__oggregator__` prefix during discovery.
@@ -85,3 +86,17 @@ stay in `accountingFacts`. The ledger fills while the venue connection is active
 history starts at the first sync (`historyFromMs`). This MCP connection does not provide all private
 platform data or the separate TradFi backend. New private tools require server-bound
 user scope; never accept a model-provided account ID as authorization.
+
+## portfolioRef scope
+
+Each chat context carries `portfolioRef`, an opaque `pref_` token (16 random bytes). The
+backend maps it in memory to the account, portfolio source and underlying of that context.
+It lives 15 minutes, the store keeps at most 1,000 refs (least recently used evicted), and
+nothing is persisted, so a backend restart revokes every ref. `oggregator_evaluate_structure`
+resolves the ref in-process to the live runtime's legs and marks; the model never passes
+account IDs or held legs. Unknown, expired or mismatched-underlying refs return a tool error.
+Without a ref the tool evaluates the proposed legs alone. Proposed legs are priced only from
+Oggregator quotes (buy at ask, sell at bid, venue taker fee estimate); a leg without an
+executable quote is reported as an error and nothing is evaluated. Worst loss is measured from
+those executable entries and includes the proposed legs' fees. Tool logs carry the tool name
+and duration only, never the ref.

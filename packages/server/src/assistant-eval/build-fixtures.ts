@@ -41,6 +41,8 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const REFERENCE_SPOT_USD = 83_886.66;
 const ACCOUNT_ID = 'eval-account';
+// Fixtures are offline, so no live ref store resolves this; the runner only needs the field present.
+const FIXTURE_PORTFOLIO_REF = 'pref_evalFixtureNotResolvable';
 const GENERATOR = 'packages/server/src/assistant-eval/build-fixtures.ts';
 const FIXTURE_DIRECTORY = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
@@ -225,6 +227,7 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
     schemaVersion: 1,
     source: book.source,
     underlying: 'BTC',
+    portfolioRef: FIXTURE_PORTFOLIO_REF,
     forwardDays,
     generatedAt: snapshot.metrics.generatedAt,
     dataFreshness: {

@@ -13,6 +13,7 @@ import {
 } from './assistant-market/assistant-mcp-server.js';
 import { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { OptionsLibrary } from './assistant-market/options-library.js';
+import { type PortfolioRefScope, PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import { HermesPortfolioAssistantGateway } from './hermes-portfolio-assistant-gateway.js';
 import { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import { readPortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
@@ -20,6 +21,7 @@ import { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-
 import { PortfolioAssistantConversationService } from './portfolio-assistant-conversation-service.js';
 import { PortfolioAssistantPromptBuilder } from './portfolio-assistant-prompt-builder.js';
 import { PortfolioAssistantUsageLimiter } from './portfolio-assistant-usage-limiter.js';
+import { bootstrapPortfolioForAccount, getOrCreatePortfolioRuntime } from './portfolio-services.js';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 
 const configuration = readPortfolioAssistantConfiguration(process.env);
@@ -36,7 +38,16 @@ export const assistantMarketDataReader = new AssistantMarketDataReader();
 export const optionsLibrary = new OptionsLibrary(
   resolve(repoRoot, process.env['OPTIONS_LIBRARY_PATH'] ?? 'docs/options-library.sqlite'),
 );
+// The MCP listener runs in this process, so the refs minted for chat contexts
+// resolve here without persistence.
+const portfolioRefStore = new PortfolioRefStore();
 let assistantMcpServer: FastifyInstance | null = null;
+
+async function resolveHeldLegs(scope: PortfolioRefScope) {
+  const underlying = scope.underlying ?? undefined;
+  await bootstrapPortfolioForAccount(scope.accountId, scope.source, underlying);
+  return getOrCreatePortfolioRuntime(scope.accountId, scope.source, underlying).legsWithMarks();
+}
 
 const gateway = new HermesPortfolioAssistantGateway(configuration);
 export const portfolioAssistantAccessService = new PortfolioAssistantAccessService(
@@ -48,6 +59,8 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   configuration,
   assistantMarketDataReader,
   exchangePortfolioLedgerStore,
+  Date.now,
+  portfolioRefStore,
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);
@@ -114,7 +127,10 @@ export async function startAssistantMcpFromEnv(log: FastifyBaseLogger): Promise<
       port,
       log,
       handler: new AssistantMcpHandler(
-        buildAssistantMcpTools(assistantMarketDataReader, optionsLibrary),
+        buildAssistantMcpTools(assistantMarketDataReader, optionsLibrary, {
+          refs: portfolioRefStore,
+          resolveHeldLegs,
+        }),
         log,
       ),
     });

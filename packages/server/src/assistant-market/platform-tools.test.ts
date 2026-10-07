@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { AssistantMcpHandler, buildAssistantMcpTools } from './assistant-mcp-server.js';
 import { AssistantMarketDataReader } from './market-data-reader.js';
+import { PortfolioRefStore } from './portfolio-ref.js';
 import { OptionsLibrary } from './options-library.js';
 
 function harness(body: unknown, statusCode = 200) {
@@ -9,7 +10,10 @@ function harness(body: unknown, statusCode = 200) {
   const inject = vi.fn(async (_path: string) => ({ statusCode, body }));
   reader.bind(inject);
   const library = new OptionsLibrary('/tmp/oggregator-nonexistent-test-library.sqlite');
-  const handler = new AssistantMcpHandler(buildAssistantMcpTools(reader, library), Fastify().log);
+  const handler = new AssistantMcpHandler(buildAssistantMcpTools(reader, library, {
+    refs: new PortfolioRefStore(),
+    resolveHeldLegs: async () => [],
+  }), Fastify().log);
   return {
     inject,
     call: (name: string, args: Record<string, unknown> = {}) =>

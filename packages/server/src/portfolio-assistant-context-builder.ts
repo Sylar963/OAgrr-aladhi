@@ -24,6 +24,7 @@ import type {
 } from '@oggregator/protocol';
 import type { CompactChain, CompactSurface } from './assistant-market/market-data-compaction.js';
 import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
+import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import { PortfolioAssistantServiceError } from './portfolio-assistant-model-gateway.js';
 import { bootstrapPortfolioForAccount, getOrCreatePortfolioRuntime } from './portfolio-services.js';
@@ -77,6 +78,8 @@ export interface PortfolioAssistantContext {
   schemaVersion: 1;
   source: PortfolioSource;
   underlying: string | null;
+  /** Opaque, 15-minute server-side handle to this book for oggregator_evaluate_structure. */
+  portfolioRef: string;
   forwardDays: number;
   generatedAt: number;
   dataFreshness: {
@@ -199,6 +202,7 @@ export class PortfolioAssistantContextBuilder {
     private readonly marketData: AssistantMarketDataReader | null = null,
     private readonly tradeLedger: ExchangePortfolioLedgerStore | null = null,
     private readonly now: () => number = Date.now,
+    private readonly portfolioRefs: PortfolioRefStore = new PortfolioRefStore(),
   ) {}
 
   private async buildMarketFacts(
@@ -359,6 +363,12 @@ export class PortfolioAssistantContextBuilder {
       schemaVersion: 1,
       source: input.source,
       underlying: input.underlying,
+      portfolioRef: this.portfolioRefs.mint({
+        accountId: input.accountId,
+        source: input.source,
+        underlying: input.underlying,
+        generatedAt: snapshot.metrics.generatedAt,
+      }),
       forwardDays: input.forwardDays,
       generatedAt: snapshot.metrics.generatedAt,
       dataFreshness: {

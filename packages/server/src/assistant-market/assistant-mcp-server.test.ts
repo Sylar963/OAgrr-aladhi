@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { AssistantMcpHandler, buildAssistantMcpServer, buildAssistantMcpTools } from './assistant-mcp-server.js';
 import { AssistantMarketDataReader } from './market-data-reader.js';
+import { PortfolioRefStore } from './portfolio-ref.js';
 import { OPTIONS_LIBRARY_SCHEMA, OptionsLibrary, buildOptionsLibraryMatchQuery } from './options-library.js';
 
 const TOKEN = 'a'.repeat(40);
@@ -34,7 +35,10 @@ const log = Fastify({ logger: false }).log;
 const server = buildAssistantMcpServer({
   token: TOKEN,
   log,
-  handler: new AssistantMcpHandler(buildAssistantMcpTools(reader, library), log),
+  handler: new AssistantMcpHandler(buildAssistantMcpTools(reader, library, {
+    refs: new PortfolioRefStore(),
+    resolveHeldLegs: async () => [],
+  }), log),
 });
 
 afterAll(async () => {

@@ -123,6 +123,7 @@ const PortfolioAssistantContextSchema = z.object({
   schemaVersion: z.literal(1),
   source: protocol(PortfolioSourceSchema),
   underlying: z.string().nullable(),
+  portfolioRef: z.string().regex(/^pref_[A-Za-z0-9_-]+$/),
   forwardDays: z.number().int().nonnegative(),
   generatedAt: z.number().int().nonnegative(),
   dataFreshness: z.object({

@@ -3991,6 +3991,7 @@
     ],
     "requiredTools": [],
     "mustProposeStructure": false,
+    "requireNewLeg": false,
     "bannedPhrases": [
       "I cannot identify",
       "I can't identify",

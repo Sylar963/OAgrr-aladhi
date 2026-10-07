@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { EvaluateStructureToolInputSchema, runEvaluateStructureTool } from './evaluate-structure-tool.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
+import { runStructureSearchTool, StructureSearchToolInputSchema } from './structure-search-tool.js';
 import type { StructureToolPortfolioAccess } from './structure-tool-support.js';
 
 const SERVER_INFO = { name: 'oggregator-market', version: '1.0.0' };
@@ -277,6 +278,13 @@ export function buildAssistantMcpTools(
       run: async (args) => unwrap(await runEvaluateStructureTool(reader, portfolio, args, now())),
     }),
     tool({
+      name: 'oggregator_structure_search',
+      description:
+        "Find trades that fit a risk budget. Use for questions like \"find a bearish trade within $X total risk\", bullish, long-vol, or \"hedge my short calls\". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is itself unbounded, bearish/bullish candidates are paired with the cheapest cover. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.",
+      input: StructureSearchToolInputSchema,
+      run: async (args) => unwrap(await runStructureSearchTool(reader, portfolio, args, now())),
+    }),
+    tool({
       name: 'search_options_library',
       description:
         'Full-text search over the indexed options trading books (volatility trading, pricing, strategies, risk). Returns passages with book and PDF page for citation. Use specific terms, e.g. "gamma scalping realized volatility" or "calendar spread vega".',
@@ -332,7 +340,7 @@ export class AssistantMcpHandler {
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
           instructions:
-            'Read-only Oggregator market data, structure evaluation and options library search. IV values are fractions.',
+            'Read-only Oggregator market data, structure evaluation and search, and options library search. IV values are fractions.',
         });
       }
       case 'ping':

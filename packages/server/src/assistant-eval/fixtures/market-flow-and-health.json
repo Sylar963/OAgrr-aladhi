@@ -2787,6 +2787,7 @@
       "oggregator_feed_health"
     ],
     "mustProposeStructure": false,
+    "requireNewLeg": false,
     "bannedPhrases": [
       "I cannot identify",
       "I can't identify",

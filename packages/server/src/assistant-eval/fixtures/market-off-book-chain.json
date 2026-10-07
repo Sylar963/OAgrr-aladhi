@@ -2877,6 +2877,7 @@
       "oggregator_option_chain"
     ],
     "mustProposeStructure": false,
+    "requireNewLeg": false,
     "bannedPhrases": [
       "I cannot identify",
       "I can't identify",

@@ -2896,6 +2896,7 @@
     ],
     "requiredTools": [],
     "mustProposeStructure": true,
+    "requireNewLeg": true,
     "bannedPhrases": [
       "I cannot identify",
       "I can't identify",

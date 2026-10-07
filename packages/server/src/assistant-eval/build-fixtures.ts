@@ -352,6 +352,7 @@ function expectation(overrides: Partial<AssistantEvalExpect>): AssistantEvalExpe
     requiredMentions: [],
     requiredTools: [],
     mustProposeStructure: false,
+    requireNewLeg: false,
     bannedPhrases: DEFAULT_BANNED_PHRASES,
     maxChars: 4_000,
     ...overrides,
@@ -540,6 +541,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       expect: expectation({
         requiredMentions: [UNBOUNDED_MENTION],
         mustProposeStructure: true,
+        requireNewLeg: true,
         maxChars: 4_500,
       }),
       notes: [
@@ -581,7 +583,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       question: `I'm turning bearish into November. Find me a bearish trade so my total portfolio max loss stays within $${longCallBudget.toLocaleString('en-US')}.`,
       history: [],
       context: longCall,
-      expect: expectation({ numbers: [maxLoss(longCall)], mustProposeStructure: true }),
+      expect: expectation({ numbers: [maxLoss(longCall)], mustProposeStructure: true, requireNewLeg: true }),
     },
     {
       id: 'budget-bullish-bear-put-spread',
@@ -590,7 +592,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       question: `BTC looks like it is basing here. I want a bullish trade, but my total portfolio max loss must stay within $${bearPutBudget.toLocaleString('en-US')}.`,
       history: [],
       context: bearPut,
-      expect: expectation({ numbers: [maxLoss(bearPut)], mustProposeStructure: true }),
+      expect: expectation({ numbers: [maxLoss(bearPut)], mustProposeStructure: true, requireNewLeg: true }),
     },
     {
       id: 'budget-long-vol-condor',
@@ -599,7 +601,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       question: `I'm short vol through this condor but there is CPI next week. Add a long-vol trade so my total max loss stays within $${condorBudget.toLocaleString('en-US')}.`,
       history: [],
       context: condor,
-      expect: expectation({ numbers: [maxLoss(condor)], mustProposeStructure: true }),
+      expect: expectation({ numbers: [maxLoss(condor)], mustProposeStructure: true, requireNewLeg: true }),
     },
     {
       id: 'horizon-plus5-10d',
@@ -720,6 +722,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
           },
         ],
         mustProposeStructure: true,
+        requireNewLeg: true,
       }),
     },
   ];

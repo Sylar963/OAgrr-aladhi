@@ -144,29 +144,97 @@ export function extractMarkdownTables(answer: string): MarkdownTable[] {
   return tables;
 }
 
+export interface HeldLegRef {
+  expiry: string;
+  strike: number;
+  optionRight: 'call' | 'put';
+}
+
 export interface ProposedStructureDetection {
   proposed: boolean;
   inTable: boolean;
   evidence: string | null;
+  /** A proposal trades at least one leg the book does not already hold. */
+  newLeg: boolean;
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
+const ISO_DATE = /\b\d{4}-(\d{2})-(\d{2})\b/g;
+const MONTH_DAY = new RegExp(`\\b${MONTH}\\s*(\\d{1,2})\\b`, 'gi');
+const DAY_MONTH = new RegExp(`\\b(\\d{1,2})\\s*${MONTH}`, 'gi');
+const STRIKE_TOKEN = /(?<![\w.,-])\$?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?(?![\d,-])|(?<![\w.])(\d{2,3}(?:\.\d+)?)k\b/gi;
+const CALL_PATTERN = /\bcalls?\b|\d(?:k|,\d{3})?\s?C\b/i;
+const PUT_PATTERN = /\bputs?\b|\d(?:k|,\d{3})?\s?P\b/i;
+
+function monthDay(month: number, day: number): string {
+  return `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function rowExpiries(row: string): Set<string> {
+  const found = new Set<string>();
+  for (const match of row.matchAll(ISO_DATE)) found.add(`${match[1]}-${match[2]}`);
+  for (const match of row.matchAll(MONTH_DAY)) {
+    found.add(monthDay(MONTHS.indexOf((match[1] ?? '').toLowerCase()) + 1, Number(match[2])));
+  }
+  for (const match of row.matchAll(DAY_MONTH)) {
+    found.add(monthDay(MONTHS.indexOf((match[2] ?? '').toLowerCase()) + 1, Number(match[1])));
+  }
+  return found;
+}
+
+// Strike-like numbers outside 0.5×–2× the held strikes are premiums, P&L or sizes.
+function tradesNewLeg(row: string, held: HeldLegRef[]): boolean {
+  if (held.length === 0) return true;
+  const strikes = held.map((leg) => leg.strike);
+  const low = Math.min(...strikes) * 0.5;
+  const high = Math.max(...strikes) * 2;
+  const rights = new Set<'call' | 'put'>();
+  if (CALL_PATTERN.test(row)) rights.add('call');
+  if (PUT_PATTERN.test(row)) rights.add('put');
+  const expiries = rowExpiries(row);
+  for (const match of row.matchAll(STRIKE_TOKEN)) {
+    const value = match[1] != null ? Number(match[1].replace(/,/g, '')) : Number(match[2]) * 1_000;
+    if (!(value >= low && value <= high)) continue;
+    const isHeld = held.some(
+      (leg) =>
+        leg.strike === value &&
+        (rights.size === 0 || rights.has(leg.optionRight)) &&
+        (expiries.size === 0 || expiries.has(leg.expiry.slice(5))),
+    );
+    if (!isHeld) return true;
+  }
+  return false;
 }
 
 // A proposal needs an action verb (buy/sell/add), an option right and a strike. Plain
 // "long"/"short" are excluded because answers use them to describe the held book.
-export function detectProposedStructure(answer: string): ProposedStructureDetection {
+export function detectProposedStructure(
+  answer: string,
+  held: HeldLegRef[] = [],
+): ProposedStructureDetection {
   const text = normalizeAnswerText(answer);
+  const proposals: Array<{ row: string; inTable: boolean }> = [];
   for (const table of extractMarkdownTables(text)) {
     const headerHasAction = /\b(side|action|trade|buy|sell)\b/i.test(table.header);
     for (const row of table.rows) {
       const actionable = ACTION_PATTERN.test(row) || (headerHasAction && /\b(long|short)\b/i.test(row));
       if (actionable && RIGHT_PATTERN.test(row) && STRIKE_PATTERN.test(row)) {
-        return { proposed: true, inTable: true, evidence: row.trim() };
+        proposals.push({ row: row.trim(), inTable: true });
       }
     }
   }
   for (const line of text.split(/\r?\n/)) {
-    if (isLegLine(line)) return { proposed: true, inTable: false, evidence: line.trim() };
+    if (isLegLine(line)) proposals.push({ row: line.trim(), inTable: false });
   }
-  return { proposed: false, inTable: false, evidence: null };
+  const fresh = proposals.find((proposal) => tradesNewLeg(proposal.row, held));
+  const shown = fresh ?? proposals[0];
+  return {
+    proposed: shown != null,
+    inTable: shown?.inTable ?? false,
+    evidence: shown?.row ?? null,
+    newLeg: fresh != null,
+  };
 }
 
 function escapeRegExp(value: string): string {
@@ -229,10 +297,43 @@ function formatNumber(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
+function gradeStructure(
+  expect: AssistantEvalExpect,
+  answer: string,
+  tools: AssistantEvalToolObservation,
+  held: HeldLegRef[],
+): AssistantEvalCheckResult {
+  if (!expect.mustProposeStructure) {
+    return { check: 'structure', status: 'not_applicable', detail: 'Structure not required.' };
+  }
+  const structure = detectProposedStructure(answer, held);
+  if (!structure.proposed) {
+    return { check: 'structure', status: 'fail', detail: 'No proposed structure (action + strike + call/put) found.' };
+  }
+  const where = structure.inTable ? 'in table' : 'in text';
+  if (!expect.requireNewLeg || structure.newLeg) {
+    return { check: 'structure', status: 'pass', detail: `Proposed ${where}: ${structure.evidence}` };
+  }
+  // A structure_search candidate may legitimately be a buy-back, so it counts without a new leg.
+  if ((tools.observedTools ?? []).map(normalizeToolName).includes('oggregator_structure_search')) {
+    return {
+      check: 'structure',
+      status: 'pass',
+      detail: `Proposed ${where} after oggregator_structure_search: ${structure.evidence}`,
+    };
+  }
+  return {
+    check: 'structure',
+    status: 'fail',
+    detail: `Only held legs are traded (e.g. closing quotes), but the question asks for a new trade: ${structure.evidence}`,
+  };
+}
+
 export function gradeAnswer(
   expect: AssistantEvalExpect,
   answer: string,
   tools: AssistantEvalToolObservation,
+  held: HeldLegRef[] = [],
 ): AssistantEvalGrade {
   const numbers = matchExpectedNumbers(answer, expect.numbers);
   const checks: AssistantEvalCheckResult[] = [];
@@ -267,18 +368,7 @@ export function gradeAnswer(
         },
   );
 
-  const structure = detectProposedStructure(answer);
-  checks.push(
-    expect.mustProposeStructure
-      ? {
-          check: 'structure',
-          status: structure.proposed ? 'pass' : 'fail',
-          detail: structure.proposed
-            ? `Proposed ${structure.inTable ? 'in table' : 'in text'}: ${structure.evidence}`
-            : 'No proposed structure (action + strike + call/put) found.',
-        }
-      : { check: 'structure', status: 'not_applicable', detail: 'Structure not required.' },
-  );
+  checks.push(gradeStructure(expect, answer, tools, held));
 
   const banned = findBannedPhrases(answer, expect.bannedPhrases);
   checks.push({

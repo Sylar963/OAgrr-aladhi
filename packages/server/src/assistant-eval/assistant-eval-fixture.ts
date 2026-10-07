@@ -237,6 +237,8 @@ export const AssistantEvalExpectSchema = z.object({
   requiredMentions: z.array(AssistantEvalRequiredMentionSchema),
   requiredTools: z.array(z.string().min(1)),
   mustProposeStructure: z.boolean(),
+  // The question asks for a new trade: closing or re-pricing held legs alone is not a proposal.
+  requireNewLeg: z.boolean().default(false),
   bannedPhrases: z.array(z.string().min(1)),
   maxChars: z.number().int().positive(),
 });

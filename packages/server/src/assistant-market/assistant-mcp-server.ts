@@ -15,6 +15,7 @@ import type { AssistantMarketDataReader, MarketReadResult } from './market-data-
 import type { OptionsLibrary } from './options-library.js';
 import { runStructureSearchTool, StructureSearchToolInputSchema } from './structure-search-tool.js';
 import type { StructureToolPortfolioAccess } from './structure-tool-support.js';
+import { type ToolErrorCode, type ToolErrorPayload, toolErrorPayload } from './tool-errors.js';
 
 const SERVER_INFO = { name: 'oggregator-market', version: '1.0.0' };
 const FALLBACK_PROTOCOL_VERSION = '2025-06-18';
@@ -56,12 +57,22 @@ function tool<Schema extends z.ZodObject>(definition: {
   return definition as unknown as ToolDefinition;
 }
 
-class ToolInputError extends Error {}
+class ToolInputError extends Error {
+  constructor(
+    message: string,
+    readonly code: ToolErrorCode,
+    readonly hint?: string,
+  ) {
+    super(message);
+  }
+}
 class ToolTimeoutError extends ToolInputError {}
 
 function unwrap<T>(result: MarketReadResult<T>): T {
   if (!result.ok) {
-    throw result.timedOut ? new ToolTimeoutError(result.error) : new ToolInputError(result.error);
+    throw result.timedOut
+      ? new ToolTimeoutError(result.error, 'timeout', result.hint)
+      : new ToolInputError(result.error, result.code ?? 'upstream_error', result.hint);
   }
   return result.data;
 }
@@ -72,6 +83,9 @@ const MAX_LOGGED_TOOL_NAME_LENGTH = 80;
 const NO_ATTRIBUTION: AssistantToolAttribution = { mode: 'none' };
 
 const PortfolioRefArgumentSchema = z.object({ portfolioRef: z.string().min(1) });
+const UnresolvedHeldBookSchema = z.object({
+  heldBook: z.object({ status: z.literal('unresolved'), reason: z.string() }),
+});
 
 interface ToolExecution {
   tool: string | null;
@@ -310,14 +324,14 @@ export function buildAssistantMcpTools(
     tool({
       name: 'oggregator_evaluate_structure',
       description:
-        "Evaluate a candidate trade or hedge against the user's whole book and a risk budget. Prices each proposed leg at live executable quotes (buy at ask, sell at bid) plus venue fee estimates, then returns net cost, book-wide worst loss (null when unbounded), best profit and breakevens per expiry window, worst loss before and after the trade, budget fit and headroom, P&L by horizon and spot move, and P&L at each expiry for spot moves of -20% to +20%. Pass portfolioRef from the portfolio context to include held positions server-side; to close a held leg, trade the opposite side with the same size. Use this to check any structure before recommending it. Prices come only from Oggregator quotes; a leg without an executable quote returns an error instead of a guess. No orders.",
+        "Evaluate a candidate trade or hedge against the user's whole book and a risk budget. Prices each proposed leg at live executable quotes (buy at ask, sell at bid) plus venue fee estimates, then returns net cost, book-wide worst loss (null when unbounded), best profit and breakevens per expiry window, worst loss before and after the trade, budget fit and headroom, P&L by horizon and spot move, and P&L at each expiry for spot moves of -20% to +20%. Pass portfolioRef from the portfolio context to include held positions server-side (an unknown or expired ref evaluates the legs alone and reports heldBook.status unresolved); to close a held leg, trade the opposite side with the same size. Use this to check any structure before recommending it. Prices come only from Oggregator quotes; a leg without an executable quote returns an error instead of a guess. No orders.",
       input: EvaluateStructureToolInputSchema,
       run: async (args) => unwrap(await runEvaluateStructureTool(reader, portfolio, args, now())),
     }),
     tool({
       name: 'oggregator_structure_search',
       description:
-        "Find trades that fit a risk budget. Use for questions like \"find a bearish trade within $X total risk\", bullish, long-vol, or \"hedge my short calls\". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is itself unbounded, bearish/bullish candidates are paired with the cheapest cover. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.",
+        "Find trades that fit a risk budget. Use for questions like \"find a bearish trade within $X total risk\", bullish, long-vol, or \"hedge my short calls\". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is unbounded or already over maxTotalRiskUsd, bearish, bullish and long_vol candidates are packages: the best repair of the book (cover, buy-back or close, chosen by book-wide worst loss) plus the view structure, evaluated together with components labelled repair and view. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall, and repairOnly the repair alone. An unknown or expired portfolioRef searches without the book and says so in heldBook. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.",
       input: StructureSearchToolInputSchema,
       run: async (args) => unwrap(await runStructureSearchTool(reader, portfolio, args, now())),
     }),
@@ -331,7 +345,7 @@ export function buildAssistantMcpTools(
       }),
       run: async (args) => {
         const hits = library.search(args.query, args.limit ?? 5);
-        if (hits == null) throw new ToolInputError('The options library has not been indexed yet.');
+        if (hits == null) throw new ToolInputError('The options library has not been indexed yet.', 'unavailable');
         return {
           books: library.listBooks(),
           results: hits,
@@ -440,72 +454,99 @@ export class AssistantMcpHandler {
     if (execution.outcome === 'ok') this.log.info(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
     else if (execution.outcome === 'failed') this.log.error(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
     else this.log.warn(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
-    return execution.outcome === 'ok'
-      ? { content: [{ type: 'text', text: execution.text }] }
-      : this.errorResult(execution.text);
+    return toolResult(execution);
   }
 
   private async execute(params: z.infer<typeof ToolCallParamsSchema> | null): Promise<ToolExecution> {
     if (params == null) {
-      return this.rejected(null, false, 'Invalid tool call parameters.', { rejection: 'invalid_params' });
+      return rejected(null, false, toolErrorPayload('invalid_params', 'Invalid tool call parameters.'), {
+        rejection: 'invalid_params',
+      });
     }
     const definition = this.tools.get(params.name);
     if (!definition) {
-      return this.rejected(
+      return rejected(
         params.name.slice(0, MAX_LOGGED_TOOL_NAME_LENGTH),
         false,
-        `Unknown tool: ${params.name}`,
+        toolErrorPayload('unknown_tool', `Unknown tool: ${params.name}`),
         { rejection: 'unknown_tool' },
       );
     }
     const args = definition.input.safeParse(params.arguments ?? {});
     if (!args.success) {
-      return this.rejected(definition.name, true, `Invalid arguments: ${z.prettifyError(args.error)}`, {
-        rejection: 'invalid_arguments',
-        issues: args.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`),
-      });
+      return rejected(
+        definition.name,
+        true,
+        toolErrorPayload('invalid_arguments', `Invalid arguments: ${z.prettifyError(args.error)}`),
+        {
+          rejection: 'invalid_arguments',
+          issues: args.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`),
+        },
+      );
     }
     try {
       const data = await definition.run(args.data as never);
-      return { tool: definition.name, registered: true, outcome: 'ok', text: JSON.stringify(data), detail: {} };
+      const unresolved = UnresolvedHeldBookSchema.safeParse(data);
+      return {
+        tool: definition.name,
+        registered: true,
+        outcome: 'ok',
+        text: JSON.stringify(data),
+        detail: unresolved.success ? { heldBook: 'unresolved', heldBookReason: unresolved.data.heldBook.reason } : {},
+      };
     } catch (error) {
       if (error instanceof ToolTimeoutError) {
+        const payload = toolErrorPayload('timeout', error.message, error.hint);
         return {
           tool: definition.name,
           registered: true,
           outcome: 'timeout',
-          text: error.message,
-          detail: { reason: error.message },
+          text: JSON.stringify(payload),
+          detail: { code: payload.code, reason: error.message },
         };
       }
       if (error instanceof ToolInputError) {
-        return this.rejected(definition.name, true, error.message, {
+        return rejected(definition.name, true, toolErrorPayload(error.code, error.message, error.hint), {
           rejection: 'input_error',
           reason: error.message,
         });
       }
+      const payload = toolErrorPayload('internal_error', 'The tool failed unexpectedly.');
       return {
         tool: definition.name,
         registered: true,
         outcome: 'failed',
-        text: 'The tool failed unexpectedly.',
-        detail: { err: error },
+        text: JSON.stringify(payload),
+        detail: { code: payload.code, err: error },
       };
     }
   }
+}
 
-  private rejected(
-    tool: string | null,
-    registered: boolean,
-    text: string,
-    detail: Record<string, unknown>,
-  ): ToolExecution {
-    return { tool, registered, outcome: 'rejected_input', text, detail };
-  }
+function rejected(
+  tool: string | null,
+  registered: boolean,
+  payload: ToolErrorPayload,
+  detail: Record<string, unknown>,
+): ToolExecution {
+  return {
+    tool,
+    registered,
+    outcome: 'rejected_input',
+    text: JSON.stringify(payload),
+    detail: { ...detail, code: payload.code },
+  };
+}
 
-  private errorResult(text: string) {
-    return { content: [{ type: 'text', text }], isError: true };
-  }
+/**
+ * Hermes counts an `isError` result toward its per-server circuit breaker (3 consecutive strikes
+ * pause every call to this server for 60 s). Rejected input and upstream timeouts are recoverable,
+ * so they return a normal result whose body says `ok: false` with a hint; only a genuine server
+ * fault sets `isError`.
+ */
+function toolResult(execution: ToolExecution) {
+  const content = [{ type: 'text', text: execution.text }];
+  return execution.outcome === 'failed' ? { content, isError: true } : { content };
 }
 
 export const MIN_ASSISTANT_MCP_TOKEN_LENGTH = 32;

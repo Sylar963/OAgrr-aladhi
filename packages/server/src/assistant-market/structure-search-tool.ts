@@ -5,7 +5,10 @@ import {
   STRUCTURE_SEARCH_STRIKE_BAND,
   type StructureSearchCandidate,
   type StructureSearchContract,
+  type StructureSearchLeg,
   type StructureSearchQuoteSide,
+  type StructureSearchRepairOption,
+  type StructureSearchResult,
   type UncoveredShort,
 } from '@oggregator/core';
 import { VENUE_IDS } from '@oggregator/protocol';
@@ -16,10 +19,12 @@ import type { ExecutableQuoteSet } from './market-data-compaction.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import {
   cents,
+  heldBookSummary,
   isVenueId,
   resolveHeldBook,
   selectExecutableQuote,
   type StructureToolPortfolioAccess,
+  unresolvedBookNote,
 } from './structure-tool-support.js';
 
 export const STRUCTURE_SEARCH_MAX_EXPIRIES = 6;
@@ -98,25 +103,30 @@ function shortLabel(underlying: string, short: UncoveredShort): string {
   return `short ${short.size} ${underlying} ${short.expiry} ${short.strike} ${short.optionRight} (${short.exposure})`;
 }
 
+function compactLeg(leg: StructureSearchLeg) {
+  return {
+    role: leg.role,
+    side: leg.side,
+    size: leg.size,
+    expiry: leg.expiry,
+    strike: leg.strike,
+    right: leg.optionRight,
+    venue: leg.venue,
+    priceUsd: cents(leg.executablePriceUsd),
+    feeUsd: cents(leg.feeUsd),
+    feeSource: leg.feeSource,
+    spreadPct: round(leg.spreadPct, 1),
+    sizeAtBest: leg.sizeAtBest,
+  };
+}
+
 function compactCandidate(candidate: StructureSearchCandidate) {
   const venues = [...new Set(candidate.legs.map((leg) => leg.venue))];
   return {
     label: candidate.label,
     family: candidate.family,
-    legs: candidate.legs.map((leg) => ({
-      role: leg.role,
-      side: leg.side,
-      size: leg.size,
-      expiry: leg.expiry,
-      strike: leg.strike,
-      right: leg.optionRight,
-      venue: leg.venue,
-      priceUsd: cents(leg.executablePriceUsd),
-      feeUsd: cents(leg.feeUsd),
-      feeSource: leg.feeSource,
-      spreadPct: round(leg.spreadPct, 1),
-      sizeAtBest: leg.sizeAtBest,
-    })),
+    components: candidate.components,
+    legs: candidate.legs.map(compactLeg),
     sameVenue: venues.length === 1,
     netCostUsd: cents(candidate.netCostUsd),
     worstLossUsd: cents(candidate.worstLossUsd),
@@ -142,6 +152,47 @@ function compactCandidate(candidate: StructureSearchCandidate) {
       displayedSizeCovers: candidate.liquidity.displayedSizeCovers,
     },
   };
+}
+
+function compactRepair(option: StructureSearchRepairOption) {
+  return {
+    label: option.label,
+    kind: option.kind,
+    legs: option.legs.map(compactLeg),
+    netCostUsd: cents(option.netCostUsd),
+    bookWorstLossUsd: cents(option.bookWorstLossUsd),
+    headroomUsd: cents(option.headroomUsd),
+    fits: option.fits,
+    shortfallUsd: cents(option.shortfallUsd),
+  };
+}
+
+function usd(value: number | null): string {
+  return value == null ? 'unbounded' : `$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+}
+
+function repairNotes(result: StructureSearchResult, size: number): string[] {
+  const { repair, heldBook } = result;
+  if (repair == null || heldBook == null) return [];
+  const state =
+    repair.reason === 'unbounded'
+      ? `unbounded after ${heldBook.unboundedAfter ?? 'an earlier expiry'}`
+      : `over the ${usd(result.maxTotalRiskUsd)} budget (worst loss ${usd(heldBook.worstLossUsd)})`;
+  const notes = [
+    `The held book is ${state}, so a view alone cannot fit. Candidates are packages: the repair "${repair.chosen.label}" (chosen from ${repair.considered.length} evaluated repairs by book-wide worst loss, ${usd(repair.chosen.bookWorstLossUsd)}) plus the view structure, evaluated together book-wide with fees. Present each package with its repair and view components.`,
+    'With a repair, packages rank by book P&L at the target per dollar of book-wide worst loss; packages that lose at the target rank after those that gain.',
+  ];
+  const alone = result.repairOnly;
+  if (alone != null && !alone.fits) {
+    notes.push(
+      `Even the repair alone exceeds the ${usd(result.maxTotalRiskUsd)} budget by ${usd(alone.shortfallUsd)} (repairOnly). nearestInfeasible lists the closest packages with each one's exact shortfallUsd.`,
+    );
+  } else if (alone != null) {
+    notes.push(
+      `The repair alone fits with ${usd(alone.headroomUsd)} headroom (repairOnly), but no package fits at size ${size}; nearestInfeasible gives each package's shortfall. A smaller size shrinks the view's cost.`,
+    );
+  }
+  return notes;
 }
 
 function quoteSide(
@@ -179,28 +230,42 @@ export async function runStructureSearchTool(
 ): Promise<MarketReadResult<Record<string, unknown>>> {
   const underlying = args.underlying.trim().toUpperCase();
   if (args.view === 'hedge_held_shorts' && args.portfolioRef == null) {
-    return { ok: false, error: 'view hedge_held_shorts needs the portfolioRef from the latest portfolio context.' };
+    return {
+      ok: false,
+      code: 'portfolio_ref_required',
+      error: 'view hedge_held_shorts needs the portfolioRef from the latest portfolio context.',
+    };
   }
-  const book = await resolveHeldBook(portfolio, args.portfolioRef, underlying, 'search without the held book');
-  if (!book.ok) return book;
-  const { held, scope } = book;
+  const book = await resolveHeldBook(portfolio, args.portfolioRef, underlying);
+  if (args.view === 'hedge_held_shorts' && book.unresolved != null) {
+    return {
+      ok: false,
+      code: 'portfolio_ref_unresolved',
+      error: `${book.unresolved.message} hedge_held_shorts needs the held book.`,
+    };
+  }
+  const { held } = book;
 
   const listing = await reader.listExpiries(underlying);
   if (!listing.ok) return listing;
   const listed = new Map(listing.data.expiries.map((row) => [row.expiry, row.daysToExpiry]));
   const shorts = findUncoveredShorts(held, nowMs) ?? [];
-  const coverExpiries =
-    args.view === 'long_vol' ? [] : [...new Set(shorts.map((short) => short.expiry))].filter((expiry) => listed.has(expiry));
+  // Repairs close or cover held legs, so their expiries are read first.
+  const heldExpiries =
+    args.view === 'hedge_held_shorts'
+      ? shorts.map((short) => short.expiry)
+      : held.map(({ leg }) => leg.expiry);
+  const repairExpiries = [...new Set(heldExpiries)].filter((expiry) => listed.has(expiry));
   const windowExpiries =
     args.view === 'hedge_held_shorts'
       ? []
       : listing.data.expiries
           .filter((row) => row.daysToExpiry != null && row.daysToExpiry >= args.minDte && row.daysToExpiry <= args.maxDte)
           .map((row) => row.expiry);
-  const wanted = [...new Set([...coverExpiries.sort(), ...windowExpiries.sort()])];
+  const wanted = [...new Set([...repairExpiries.sort(), ...windowExpiries.sort()])];
   const expiries = wanted.slice(0, STRUCTURE_SEARCH_MAX_EXPIRIES).sort();
 
-  const notes: string[] = [];
+  const notes: string[] = [...unresolvedBookNote(book)];
   if (expiries.length < wanted.length) {
     notes.push(
       `${wanted.length - expiries.length} later expiries in the DTE window were not searched (limit ${STRUCTURE_SEARCH_MAX_EXPIRIES}). Narrow minDte/maxDte to reach them.`,
@@ -209,13 +274,14 @@ export async function runStructureSearchTool(
   if (expiries.length === 0) {
     return {
       ok: false,
+      code: 'not_found',
       error: `No listed ${underlying} expiry between ${args.minDte} and ${args.maxDte} days. Check oggregator_list_expiries and widen the DTE window.`,
     };
   }
 
   const sets = await Promise.all(
     expiries.map(async (expiry) => {
-      const strikes = shorts.filter((short) => short.expiry === expiry).map((short) => short.strike);
+      const strikes = [...new Set(held.filter(({ leg }) => leg.expiry === expiry).map(({ leg }) => leg.strike))];
       return {
         expiry,
         result: await reader.executableQuotes(underlying, expiry, strikes, {
@@ -238,7 +304,9 @@ export async function runStructureSearchTool(
   const spotUsd =
     median(spots) ??
     median(held.flatMap(({ mark }) => mark.underlyingPriceUsd ?? mark.forwardPriceUsd ?? []));
-  if (spotUsd == null) return { ok: false, error: `No ${underlying} spot price is available to search around.` };
+  if (spotUsd == null) {
+    return { ok: false, code: 'no_spot', error: `No ${underlying} spot price is available to search around.` };
+  }
 
   const result = searchStructures({
     underlying,
@@ -263,12 +331,8 @@ export async function runStructureSearchTool(
   if (result.status === 'missing_marks') {
     notes.push('The held book has legs without IV, so book-wide risk could not be evaluated.');
   }
-  if (result.cover != null) {
-    notes.push(
-      `The held book alone is unbounded or over budget, so two-part candidates start with the cheapest cover: ${result.cover.label}.`,
-    );
-  }
-  if (result.status === 'ok' && result.candidates.length === 0 && result.nearestInfeasible.length > 0) {
+  notes.push(...repairNotes(result, args.size));
+  if (result.status === 'ok' && result.candidates.length === 0 && result.nearestInfeasible.length > 0 && result.repair == null) {
     notes.push(
       `Nothing fits the $${args.maxTotalRiskUsd} budget. nearestInfeasible lists the closest candidates; shortfallUsd is the extra budget each needs.`,
     );
@@ -277,7 +341,9 @@ export async function runStructureSearchTool(
   if (allLegs.some((leg) => leg.feeSource === 'default_estimate')) notes.push(DEFAULT_FEE_NOTE);
   notes.push(
     'Each leg is priced at the best executable quote across venues (buy at ask, sell at bid); sameVenue is false when legs sit on different venues, which do not share margin.',
-    "candidatePnlUsd is the candidate's own P&L at the target; bookPnlUsd and worstLossUsd include the held book when portfolioRef is given. rewardToRisk = candidatePnlUsd ÷ the worst loss the candidate adds (book-wide worst loss when the held book alone is unbounded).",
+    result.rankedBy === 'book_reward_to_risk'
+      ? 'candidatePnlUsd is the P&L of all proposed legs (repair and view) at the target; bookPnlUsd and worstLossUsd are book-wide. rewardToRisk = bookPnlUsd ÷ book-wide worst loss.'
+      : "candidatePnlUsd is the candidate's own P&L at the target; bookPnlUsd and worstLossUsd include the held book when portfolioRef is given. rewardToRisk = candidatePnlUsd ÷ the worst loss the candidate adds.",
     'Verify the chosen candidate with oggregator_evaluate_structure (same legs, sides, sizes and venues, plus portfolioRef) before recommending it.',
   );
 
@@ -301,27 +367,33 @@ export async function runStructureSearchTool(
         targetHorizonDays: args.targetHorizonDays ?? "each candidate's first expiry",
         venues: args.venues ?? 'all',
       },
-      heldBook:
-        scope == null || result.heldBook == null
-          ? { included: false, legCount: 0 }
+      heldBook: heldBookSummary(
+        book,
+        result.heldBook == null
+          ? {}
           : {
-              included: true,
-              legCount: result.heldBook.legCount,
-              portfolioGeneratedAt: new Date(scope.generatedAt).toISOString(),
               worstLossUsd: cents(result.heldBook.worstLossUsd),
               upsideUnbounded: result.heldBook.upsideUnbounded,
               unboundedAfter: result.heldBook.unboundedAfter,
               uncoveredShorts: result.heldBook.uncoveredShorts.map((short) => shortLabel(underlying, short)),
             },
-      cover:
-        result.cover == null
+      ),
+      repair:
+        result.repair == null
           ? null
           : {
-              label: result.cover.label,
-              netCostUsd: cents(result.cover.netCostUsd),
-              bookWorstLossUsd: cents(result.cover.bookWorstLossUsd),
-              headroomUsd: cents(result.cover.headroomUsd),
+              reason: result.repair.reason,
+              chosen: result.repair.chosen.label,
+              considered: result.repair.considered.map((option) => ({
+                label: option.label,
+                kind: option.kind,
+                netCostUsd: cents(option.netCostUsd),
+                bookWorstLossUsd: cents(option.bookWorstLossUsd),
+                fits: option.fits,
+              })),
             },
+      repairOnly: result.repairOnly == null ? null : compactRepair(result.repairOnly),
+      rankedBy: result.rankedBy,
       candidates: result.candidates.map(compactCandidate),
       nearestInfeasible: result.nearestInfeasible.map(compactCandidate),
       stats: result.stats,

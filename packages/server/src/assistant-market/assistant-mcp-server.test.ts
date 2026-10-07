@@ -14,6 +14,7 @@ import { AssistantRunRegistry, hashPortfolioRef } from './assistant-run-registry
 import { AssistantMarketDataReader } from './market-data-reader.js';
 import { PortfolioRefStore } from './portfolio-ref.js';
 import { OPTIONS_LIBRARY_SCHEMA, OptionsLibrary, buildOptionsLibraryMatchQuery } from './options-library.js';
+import { ToolErrorPayloadSchema } from './tool-errors.js';
 
 const TOKEN = 'a'.repeat(40);
 const directory = mkdtempSync(join(tmpdir(), 'ogg-library-'));
@@ -106,7 +107,7 @@ describe('assistant MCP server', () => {
     expect(JSON.parse(result.content[0].text).expiries[0].expiry).toBe('2026-10-02');
   });
 
-  it('surfaces upstream failures as tool errors', async () => {
+  it('returns a loading upstream as a structured, retryable result that is not an error result', async () => {
     const response = await rpc({
       jsonrpc: '2.0',
       id: 4,
@@ -114,18 +115,27 @@ describe('assistant MCP server', () => {
       params: { name: 'oggregator_gamma_exposure', arguments: { underlying: 'BTC' } },
     });
     const result = response.json().result;
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Server is loading market data');
+    expect(result.isError).toBeUndefined();
+    const body = ToolErrorPayloadSchema.parse(JSON.parse(result.content[0].text));
+    expect(body).toMatchObject({ ok: false, code: 'upstream_unavailable', retryable: true });
+    expect(body.error).toContain('Server is loading market data');
+    expect(body.hint).toContain('Retry at most once');
   });
 
-  it('rejects invalid tool arguments', async () => {
+  it('rejects invalid tool arguments with a hint instead of an error result', async () => {
     const response = await rpc({
       jsonrpc: '2.0',
       id: 5,
       method: 'tools/call',
       params: { name: 'oggregator_option_chain', arguments: { underlying: 'BTC', expiry: 'soon' } },
     });
-    expect(response.json().result.isError).toBe(true);
+    const result = response.json().result;
+    expect(result.isError).toBeUndefined();
+    expect(ToolErrorPayloadSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      code: 'invalid_arguments',
+      error: expect.stringContaining('expiry'),
+      hint: expect.stringContaining('Do not repeat an identical call'),
+    });
   });
 
   it('searches the options library with citations', async () => {
@@ -222,6 +232,8 @@ describe('assistant MCP tool call logging', () => {
     const byTool = (tool: string | null) => logged.find((entry) => entry.tool === tool);
     expect(byTool(null)).toMatchObject({ level: 'warn', outcome: 'rejected_input', rejection: 'invalid_params' });
     expect(byTool('nope')).toMatchObject({ level: 'warn', outcome: 'rejected_input', rejection: 'unknown_tool' });
+    expect(byTool('oggregator_gamma_exposure')).toMatchObject({ code: 'upstream_unavailable' });
+    expect(byTool('test_broken')).toMatchObject({ code: 'internal_error' });
     expect(byTool('oggregator_option_chain')).toMatchObject({
       level: 'warn',
       outcome: 'rejected_input',
@@ -253,6 +265,62 @@ describe('assistant MCP tool call logging', () => {
     expect(metrics.byTool['test_broken']).toMatchObject({ calls: 1, failed: 1 });
     expect(metrics.byTool['oggregator_list_expiries']).toMatchObject({ calls: 1, failed: 0, rejected: 0 });
     expect(metrics.attributionTotal).toEqual({ none: 7 });
+  });
+
+  // Mirrors Hermes tools/mcp_tool_handlers.py: an isError result renders as {"error": ...} and
+  // _record_call_outcome bumps the breaker when the rendered JSON has a top-level "error" key;
+  // any other result renders as {"result": text} and resets it.
+  function hermesBreakerStrike(reply: Record<string, unknown> | null): boolean {
+    const result = reply?.['result'] as { content: Array<{ text: string }>; isError?: boolean };
+    const rendered = result.isError === true ? { error: result.content[0]?.text } : { result: result.content[0]?.text };
+    return 'error' in rendered;
+  }
+
+  it('flags only genuine server faults as error results, so recoverable rejections never trip the breaker', async () => {
+    const handler = handlerWith(capture());
+    const replies = {
+      invalid_params: await callWith(handler, 'not an object'),
+      unknown_tool: await callWith(handler, { name: 'nope' }),
+      invalid_arguments: await callWith(handler, { name: 'oggregator_option_chain', arguments: { underlying: 'BTC' } }),
+      upstream_unavailable: await callWith(handler, { name: 'oggregator_gamma_exposure', arguments: { underlying: 'BTC' } }),
+      timeout: await callWith(handler, { name: 'test_slow_expiries', arguments: { underlying: 'BTC' } }),
+      internal_error: await callWith(handler, { name: 'test_broken', arguments: {} }),
+    };
+    for (const [code, reply] of Object.entries(replies)) {
+      const result = reply?.['result'] as { content: Array<{ text: string }>; isError?: boolean };
+      const body = ToolErrorPayloadSchema.parse(JSON.parse(result.content[0]?.text ?? ''));
+      expect(body.code).toBe(code);
+      expect(body.hint.length).toBeGreaterThan(0);
+      expect(hermesBreakerStrike(reply)).toBe(code === 'internal_error');
+    }
+    const ok = await callWith(handler, { name: 'oggregator_list_expiries', arguments: { underlying: 'BTC' } });
+    expect(hermesBreakerStrike(ok)).toBe(false);
+
+    // The eval run's failure mode: 30 rejected calls in a row never reach the 3-strike threshold.
+    let consecutive = 0;
+    for (let index = 0; index < 30; index += 1) {
+      const reply = await callWith(handler, { name: 'oggregator_option_chain', arguments: { underlying: 'BTC' } });
+      consecutive = hermesBreakerStrike(reply) ? consecutive + 1 : 0;
+      expect(consecutive).toBeLessThan(3);
+    }
+  });
+
+  it('logs a call whose portfolioRef did not resolve as ok with the unresolved reason', async () => {
+    const log = capture();
+    const unresolvedTool = {
+      name: 'test_unresolved',
+      description: 'Returns a standalone evaluation.',
+      input: z.object({}),
+      run: async () => ({ heldBook: { status: 'unresolved', reason: 'expired_ref' } }),
+    };
+    const handler = new AssistantMcpHandler([unresolvedTool], log as unknown as FastifyBaseLogger);
+    await callWith(handler, { name: 'test_unresolved', arguments: {} });
+    expect(entries(log)[0]).toMatchObject({
+      level: 'info',
+      outcome: 'ok',
+      heldBook: 'unresolved',
+      heldBookReason: 'expired_ref',
+    });
   });
 
   it('attributes calls to chat runs and logs only a hash of the portfolioRef', async () => {

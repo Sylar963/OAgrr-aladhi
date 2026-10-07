@@ -23,7 +23,7 @@
     "toolHints": [
       "oggregator_evaluate_structure and oggregator_structure_search accept portfolioRef; no other tool does.",
       "oggregator_evaluate_structure with portfolioRef: price proposed legs together with this book (cost, fees, worst loss per expiry window, budget fit). Use it before quoting any combined max loss.",
-      "oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts."
+      "oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts. When this book is unbounded or over the budget, bearish, bullish and long_vol results are packages: a repair of the book plus the view trade."
     ],
     "riskBudgetFacts": {
       "riskWindows": [
@@ -2623,7 +2623,81 @@
           "orderId": "order-09"
         }
       ],
-      "truncated": false
+      "truncated": false,
+      "totals": {
+        "scope": "Sums over the fills listed in trades only (newest first), not lifetime figures; lifetime totals are in accountingFacts. Null fees and null realized PnL are excluded from the sums and counted separately.",
+        "fillCount": 9,
+        "firstFillAt": "2026-09-27T12:00:00.000Z",
+        "lastFillAt": "2026-10-06T11:55:00.000Z",
+        "feesUsd": 169.72,
+        "fillsWithoutFee": 0,
+        "premiumBoughtUsd": 2460,
+        "premiumSoldUsd": 4187.95,
+        "netPremiumPaidUsd": -1727.95,
+        "realizedPnlUsd": -124,
+        "fillsWithRealizedPnl": 3,
+        "fillsWithoutRealizedPnl": 6,
+        "recentFees": [
+          {
+            "fills": 5,
+            "feesUsd": 81.79,
+            "fillsWithoutFee": 0
+          }
+        ],
+        "byInstrument": [
+          {
+            "instrument": "BTC-30OCT26-85000-C",
+            "fills": 2,
+            "netAmount": -1,
+            "feesUsd": 18.87,
+            "premiumBoughtUsd": 0,
+            "premiumSoldUsd": 3031.95,
+            "realizedPnlUsd": null,
+            "fillsWithoutRealizedPnl": 2
+          },
+          {
+            "instrument": "BTC-16OCT26-80000-P",
+            "fills": 2,
+            "netAmount": 0,
+            "feesUsd": 37.75,
+            "premiumBoughtUsd": 410,
+            "premiumSoldUsd": 640,
+            "realizedPnlUsd": 230,
+            "fillsWithoutRealizedPnl": 1
+          },
+          {
+            "instrument": "BTC-23OCT26-75000-P",
+            "fills": 2,
+            "netAmount": 0,
+            "feesUsd": 72.83,
+            "premiumBoughtUsd": 600,
+            "premiumSoldUsd": 360,
+            "realizedPnlUsd": -240,
+            "fillsWithoutRealizedPnl": 1
+          },
+          {
+            "instrument": "BTC-09OCT26-90000-C",
+            "fills": 2,
+            "netAmount": 0,
+            "feesUsd": 15.1,
+            "premiumBoughtUsd": 270,
+            "premiumSoldUsd": 156,
+            "realizedPnlUsd": -114,
+            "fillsWithoutRealizedPnl": 1
+          },
+          {
+            "instrument": "BTC-27NOV26-95000-C",
+            "fills": 1,
+            "netAmount": 1,
+            "feesUsd": 25.17,
+            "premiumBoughtUsd": 1180,
+            "premiumSoldUsd": 0,
+            "realizedPnlUsd": null,
+            "fillsWithoutRealizedPnl": 1
+          }
+        ],
+        "instrumentsOmitted": 0
+      }
     },
     "topContributors": {
       "delta": [
@@ -2761,7 +2835,7 @@
         "label": "realized PnL from listed fills",
         "value": -124,
         "tolerance": 1,
-        "source": "tradeHistoryFacts.trades[].realizedPnlUsd sum"
+        "source": "tradeHistoryFacts.trades[].realizedPnlUsd sum (= totals.realizedPnlUsd)"
       }
     ],
     "requiredMentions": [],

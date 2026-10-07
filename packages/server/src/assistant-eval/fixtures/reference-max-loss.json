@@ -23,7 +23,7 @@
     "toolHints": [
       "oggregator_evaluate_structure and oggregator_structure_search accept portfolioRef; no other tool does.",
       "oggregator_evaluate_structure with portfolioRef: price proposed legs together with this book (cost, fees, worst loss per expiry window, budget fit). Use it before quoting any combined max loss.",
-      "oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts."
+      "oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts. When this book is unbounded or over the budget, bearish, bullish and long_vol results are packages: a repair of the book plus the view trade."
     ],
     "riskBudgetFacts": {
       "riskWindows": [

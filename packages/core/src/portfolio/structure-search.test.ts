@@ -104,6 +104,12 @@ function chain(options: ChainOptions = {}): StructureSearchContract[] {
   return contracts;
 }
 
+function quoted(expiry: string, strike: number, right: OptionRight) {
+  const years = (expiryInstantMs(expiry) - NOW) / (365 * 86_400_000);
+  const fair = price76(SPOT, strike, IV, years, right);
+  return { bidUsd: Math.round(fair * 0.98 * 100) / 100, askUsd: Math.round(fair * 1.02 * 100) / 100 };
+}
+
 function search(overrides: Partial<StructureSearchInput> = {}) {
   return searchStructures({
     underlying: 'BTC',
@@ -181,7 +187,7 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     const vertical = result.candidates.find((candidate) => candidate.family === 'put_debit_vertical');
     expect(vertical).toBeDefined();
     const [long, short] = vertical?.legs ?? [];
-    expect(long).toMatchObject({ side: 'buy', optionRight: 'put', role: 'trade', feeSource: 'quote', feeUsd: 10 });
+    expect(long).toMatchObject({ side: 'buy', optionRight: 'put', role: 'view', feeSource: 'quote', feeUsd: 10 });
     expect(short).toMatchObject({ side: 'sell', optionRight: 'put', expiry: long?.expiry });
     expect((long?.strike ?? 0) - (short?.strike ?? 0)).toBeLessThanOrEqual(0.15 * SPOT);
     const debit = (long?.executablePriceUsd ?? 0) - (short?.executablePriceUsd ?? 0) + 20;
@@ -245,7 +251,7 @@ describe('searchStructures', { timeout: 30_000 }, () => {
       expect(candidate.coveredShortLegIds).toEqual(['short-oct30']);
       expect(candidate.worstLossUsd).not.toBeNull();
       const [leg] = candidate.legs;
-      expect(leg).toMatchObject({ role: 'cover', side: 'buy', size: 1, expiry: '2026-10-30', optionRight: 'call' });
+      expect(leg).toMatchObject({ role: 'repair', side: 'buy', size: 1, expiry: '2026-10-30', optionRight: 'call' });
       expect(leg?.strike).toBeGreaterThanOrEqual(85_000);
       expect(candidate.target.spotMovePct).toBe(10);
     }
@@ -268,28 +274,107 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(search({ view: 'hedge_held_shorts', held: covered }).status).toBe('no_uncovered_shorts');
   });
 
-  it('pairs a bearish trade with the cheapest cover when the reference book is unbounded', () => {
+  it('repairs the unbounded reference book first and pairs the repair with each bearish view', () => {
     const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
-    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 18 });
+    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
 
-    expect(result.cover?.label).toBe('Buy back 2026-10-30 85000 call');
-    // Bare puts cannot bound the naked call, so only two-part candidates are evaluated.
+    expect(result.rankedBy).toBe('book_reward_to_risk');
+    expect(result.repair?.reason).toBe('unbounded');
+    expect(result.repair?.considered.map((option) => option.kind).sort()).toEqual(['buy_back', 'close_book', 'cover']);
+    const losses = result.repair?.considered.map((option) => option.bookWorstLossUsd as number) ?? [];
+    expect(losses).toEqual([...losses].sort((left, right) => right - left));
+
+    // Closing both legs locks entry-relative P&L: sell the Oct 16 87k at bid, buy the Oct 30 85k at ask,
+    // 10 USD fee each. It beats the buy-back, which still risks the long's full 1,050 premium.
+    const bid87 = quoted('2026-10-16', 87_000, 'call').bidUsd;
+    const ask85 = quoted('2026-10-30', 85_000, 'call').askUsd;
+    const locked = bid87 - 1_050 + 3_031.95 - ask85 - 20;
+    expect(result.repair?.chosen).toMatchObject({
+      kind: 'close_book',
+      label: 'Close book: sell 2026-10-16 87000 call, buy 2026-10-30 85000 call',
+      fits: true,
+    });
+    expect(result.repair?.chosen.bookWorstLossUsd).toBeCloseTo(locked, 6);
+    expect(result.repair?.chosen.legs.every((leg) => leg.role === 'repair')).toBe(true);
+    const buyBack = result.repair?.considered.find((option) => option.kind === 'buy_back');
+    expect(buyBack?.bookWorstLossUsd).toBeCloseTo(-1_050 + 3_031.95 - ask85 - 10, 6);
+
+    expect(result.candidates.length).toBeGreaterThan(0);
+    for (const candidate of result.candidates) {
+      expect(candidate.fits).toBe(true);
+      expect(candidate.components[0]).toEqual({ role: 'repair', label: result.repair?.chosen.label });
+      expect(candidate.components[1]?.role).toBe('view');
+      expect(candidate.legs.filter((leg) => leg.role === 'view').every((leg) => leg.optionRight === 'put')).toBe(true);
+      expect(candidate.headroomUsd).toBeCloseTo(3_000 + (candidate.worstLossUsd as number), 6);
+    }
+    expect(result.repairOnly).toBeNull();
+
+    // Hand check: with both held legs offset, the book-wide low is the locked P&L minus the debit
+    // (ask paid, bid received) and fees of the put structure, all at size 1.
+    const best = result.candidates[0];
+    const debit = (best?.legs ?? [])
+      .filter((leg) => leg.role === 'view')
+      .reduce((sum, leg) => {
+        const quote = quoted(leg.expiry, leg.strike, 'put');
+        return sum + (leg.side === 'buy' ? quote.askUsd : -quote.bidUsd) + 10;
+      }, 0);
+    expect(best?.worstLossUsd).toBeCloseTo(locked - debit, 2);
+  });
+
+  it('returns the repair alone and the closest packages with the exact gap when even the repair exceeds $18', () => {
+    const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
+    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 18, size: 0.1 });
+
+    // Bare puts cannot bound the naked call, so only packages are evaluated.
     expect(result.stats.skippedUnbounded).toBeGreaterThan(0);
     expect(result.stats.evaluated).toBe(result.stats.enumerated - result.stats.skippedUnbounded);
-    expect(result.cover?.bookWorstLossUsd).toBeLessThan(-18);
     expect(result.candidates).toEqual([]);
+    const repairOnly = result.repairOnly;
+    expect(repairOnly?.kind).toBe('close_book');
+    expect(repairOnly?.fits).toBe(false);
+    expect(repairOnly?.shortfallUsd).toBeCloseTo(-(repairOnly?.bookWorstLossUsd as number) - 18, 6);
     expect(result.nearestInfeasible.length).toBeGreaterThan(0);
     for (const candidate of result.nearestInfeasible) {
-      expect(candidate.label.startsWith('Buy back 2026-10-30 85000 call + ')).toBe(true);
-      expect(candidate.legs[0]).toMatchObject({ role: 'cover', strike: 85_000, side: 'buy' });
-      expect(candidate.legs.slice(1).every((leg) => leg.role === 'trade' && leg.optionRight === 'put')).toBe(true);
+      expect(candidate.label.startsWith(`${repairOnly?.label} + `)).toBe(true);
+      expect(candidate.components.map((component) => component.role)).toEqual(['repair', 'view']);
+      expect(candidate.legs.filter((leg) => leg.role === 'view').every((leg) => leg.size === 0.1)).toBe(true);
       expect(candidate.shortfallUsd).toBeCloseTo(-(candidate.worstLossUsd as number) - 18, 6);
+      expect(candidate.shortfallUsd as number).toBeGreaterThan(repairOnly?.shortfallUsd as number);
     }
+  });
 
-    const roomy = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
-    expect(roomy.candidates.length).toBeGreaterThan(0);
-    expect(roomy.candidates.every((candidate) => candidate.coveredShortLegIds.includes('short-oct30'))).toBe(true);
-    expect(roomy.candidates.every((candidate) => (candidate.worstLossUsd as number) >= -3_000)).toBe(true);
+  it('closes legs of a bounded book that is already over budget before adding the view', () => {
+    const bearCall = [heldLeg('short', '2026-10-30', 84_000, -1, 3_000), heldLeg('long', '2026-10-30', 90_000, 1, 1_000)];
+    const result = search({ held: bearCall, maxTotalRiskUsd: 1_300 });
+
+    expect(result.heldBook?.worstLossUsd).toBeCloseTo(-4_000, 0);
+    expect(result.repair?.reason).toBe('over_budget');
+    expect(result.repair?.considered.map((option) => option.kind).sort()).toEqual(['buy_back', 'close_book']);
+    expect(result.candidates.length).toBeGreaterThan(0);
+    for (const candidate of result.candidates) {
+      expect(candidate.components.map((component) => component.role)).toEqual(['repair', 'view']);
+      expect(candidate.worstLossUsd as number).toBeGreaterThanOrEqual(-1_300);
+    }
+  });
+
+  it('offers long-vol packages on an unbounded book', () => {
+    const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
+    const result = search({ view: 'long_vol', contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000, limit: 3 });
+
+    expect(result.repair?.chosen.kind).toBe('close_book');
+    expect(result.candidates).toHaveLength(3);
+    for (const candidate of result.candidates) {
+      expect(['long_straddle', 'long_strangle']).toContain(candidate.family);
+      expect(candidate.components[0]?.role).toBe('repair');
+    }
+  });
+
+  it('stops evaluating at the time budget and says so', () => {
+    let now = 0;
+    const result = search({ maxTotalRiskUsd: 100_000, clock: () => (now += 1_000) });
+    expect(result.stats.stoppedEarly).toBe(true);
+    expect(result.stats.evaluated).toBeLessThan(10);
+    expect(result.notes.some((note) => note.includes('time budget'))).toBe(true);
   });
 
   it('evaluates at most the cap, nearest the money first', () => {

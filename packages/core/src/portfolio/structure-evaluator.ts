@@ -42,6 +42,10 @@ export interface EvaluateStructureInput {
   horizonsDays: number[];
   spotMovesPct: number[];
   riskBudgetUsd?: number | null;
+  /** Precomputed analysis of `held` alone, for callers that evaluate many structures against one book. */
+  heldWindows?: ExpiryRiskWindow[] | undefined;
+  /** Defaults to true; searches that only rank candidates skip the per-expiry payoff table. */
+  includePayoffAtExpiries?: boolean;
 }
 
 export interface EvaluatedProposedLeg {
@@ -317,7 +321,8 @@ export function evaluateStructure(input: EvaluateStructureInput): StructureEvalu
   const feesUsd = legs.reduce((sum, leg) => sum + (leg.feeUsd ?? 0), 0);
   const combinedWindows = analyzeExpiryStructure(combinedWithMarks, input.nowMs, -feesUsd);
   const heldWindows =
-    input.held.length === 0 ? [] : analyzeExpiryStructure(input.held, input.nowMs);
+    input.heldWindows ??
+    (input.held.length === 0 ? [] : analyzeExpiryStructure(input.held, input.nowMs));
   if (combinedWindows == null || heldWindows == null) {
     return emptyEvaluation('missing_marks', legs, underlying);
   }
@@ -347,7 +352,7 @@ export function evaluateStructure(input: EvaluateStructureInput): StructureEvalu
     .filter((expiry) => expiryInstantMs(expiry) > input.nowMs)
     .sort();
   const payoffAtExpiries: StructurePayoffAtExpiry[] = [];
-  for (const expiry of expiries) {
+  for (const expiry of input.includePayoffAtExpiries === false ? [] : expiries) {
     const horizonDays = (expiryInstantMs(expiry) - input.nowMs) / DAY_MS;
     const payoff = buildPortfolioHorizonScenarios(
       combinedWithMarks,

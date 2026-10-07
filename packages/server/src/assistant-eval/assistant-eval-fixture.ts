@@ -248,6 +248,40 @@ const PortfolioAssistantContextSchema = z.object({
         }),
       ),
       truncated: z.boolean(),
+      totals: z.object({
+        scope: z.string(),
+        fillCount: z.number().int().nonnegative(),
+        firstFillAt: z.string().nullable(),
+        lastFillAt: z.string().nullable(),
+        feesUsd: z.number(),
+        fillsWithoutFee: z.number().int().nonnegative(),
+        premiumBoughtUsd: z.number(),
+        premiumSoldUsd: z.number(),
+        netPremiumPaidUsd: z.number(),
+        realizedPnlUsd: nullableNumber,
+        fillsWithRealizedPnl: z.number().int().nonnegative(),
+        fillsWithoutRealizedPnl: z.number().int().nonnegative(),
+        recentFees: z.array(
+          z.object({
+            fills: z.number().int().positive(),
+            feesUsd: z.number(),
+            fillsWithoutFee: z.number().int().nonnegative(),
+          }),
+        ),
+        byInstrument: z.array(
+          z.object({
+            instrument: z.string(),
+            fills: z.number().int().positive(),
+            netAmount: z.number(),
+            feesUsd: z.number(),
+            premiumBoughtUsd: z.number(),
+            premiumSoldUsd: z.number(),
+            realizedPnlUsd: nullableNumber,
+            fillsWithoutRealizedPnl: z.number().int().nonnegative(),
+          }),
+        ),
+        instrumentsOmitted: z.number().int().nonnegative(),
+      }),
     })
     .nullable(),
   topContributors: z.object({

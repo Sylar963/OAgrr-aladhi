@@ -12,11 +12,13 @@ import type { AssistantMarketDataReader, MarketReadResult } from './market-data-
 import {
   cents,
   fraction,
+  heldBookSummary,
   isVenueId,
   type ResolvedQuote,
   resolveHeldBook,
   selectExecutableQuote,
   type StructureToolPortfolioAccess,
+  unresolvedBookNote,
 } from './structure-tool-support.js';
 
 const DAY_MS = 86_400_000;
@@ -179,8 +181,7 @@ export async function runEvaluateStructureTool(
   nowMs: number,
 ): Promise<MarketReadResult<Record<string, unknown>>> {
   const underlying = args.underlying.trim().toUpperCase();
-  const book = await resolveHeldBook(portfolio, args.portfolioRef, underlying, 'evaluate the legs alone');
-  if (!book.ok) return book;
+  const book = await resolveHeldBook(portfolio, args.portfolioRef, underlying);
   const { held, scope } = book;
 
   const expiries = [...new Set(args.legs.map((leg) => leg.expiry))].sort();
@@ -242,6 +243,7 @@ export async function runEvaluateStructureTool(
   });
 
   const notes = [
+    ...unresolvedBookNote(book),
     'worstLossUsd, horizon and expiry P&L include the spread paid (executable entry) and the proposed legs’ estimated fees.',
   ];
   if (evaluation.legs.some((leg) => leg.feeSource === 'default_estimate' && leg.error == null)) {
@@ -263,14 +265,7 @@ export async function runEvaluateStructureTool(
     data: {
       source: 'oggregator_evaluate_structure',
       evaluatedAt: new Date(nowMs).toISOString(),
-      heldBook:
-        scope == null
-          ? { included: false, legCount: 0 }
-          : {
-              included: true,
-              legCount: held.length,
-              portfolioGeneratedAt: new Date(scope.generatedAt).toISOString(),
-            },
+      heldBook: heldBookSummary(book),
       ...compactEvaluation(evaluation, echoes, scope != null),
       assumptions: evaluation.assumptions,
       notes,

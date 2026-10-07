@@ -7,6 +7,7 @@ import type { HeldLegsWithMarks } from './structure-tool-support.js';
 import { AssistantMarketDataReader } from './market-data-reader.js';
 import { OptionsLibrary } from './options-library.js';
 import { PORTFOLIO_REF_TTL_MS, PortfolioRefStore } from './portfolio-ref.js';
+import { ToolErrorPayloadSchema } from './tool-errors.js';
 
 const NOW = Date.parse('2026-10-07T12:00:00.000Z');
 const SPOT = 84_000;
@@ -135,8 +136,10 @@ function harness(book: HeldLegsWithMarks = REFERENCE_BOOK) {
         method: 'tools/call',
         params: { name: 'oggregator_evaluate_structure', arguments: args },
       })) as { result: { content: Array<{ text: string }>; isError?: boolean } };
+      expect(reply.result.isError).toBeUndefined();
       const text = reply.result.content[0]?.text ?? '';
-      return reply.result.isError ? { error: text } : { data: JSON.parse(text) };
+      const error = ToolErrorPayloadSchema.safeParse(JSON.parse(text));
+      return error.success ? { error: error.data.error, code: error.data.code } : { data: JSON.parse(text) };
     },
   };
 }
@@ -150,7 +153,12 @@ describe('oggregator_evaluate_structure', () => {
 
     expect(resolveHeldLegs).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'user-1', source: 'thalex' }));
     expect(data.status).toBe('ok');
-    expect(data.heldBook).toEqual({ included: true, legCount: 2, portfolioGeneratedAt: '2026-10-07T12:00:00.000Z' });
+    expect(data.heldBook).toEqual({
+      included: true,
+      status: 'included',
+      legCount: 2,
+      portfolioGeneratedAt: '2026-10-07T12:00:00.000Z',
+    });
     expect(data.legs[0]).toMatchObject({
       venue: 'deribit',
       executablePriceUsd: 1_000,
@@ -211,7 +219,7 @@ describe('oggregator_evaluate_structure', () => {
     });
 
     expect(resolveHeldLegs).not.toHaveBeenCalled();
-    expect(data.heldBook).toEqual({ included: false, legCount: 0 });
+    expect(data.heldBook).toEqual({ included: false, status: 'not_requested', legCount: 0 });
     expect(data.heldOnly).toBeNull();
     expect(data.legs[0]).toMatchObject({ venue: 'okx', executablePriceUsd: 1_010, feeUsd: 4 });
     expect(data.legs[1]).toMatchObject({ venue: 'deribit', executablePriceUsd: 400, premiumUsd: -400, feeUsd: 2 });
@@ -252,28 +260,56 @@ describe('oggregator_evaluate_structure', () => {
     expect(data.legs[1].executablePriceUsd).toBeNull();
   });
 
-  it('rejects unknown, tampered, expired and mismatched refs', async () => {
+  it('evaluates the legs alone and flags the book unresolved for unknown, tampered, expired and mismatched refs', async () => {
     const { ref, refs, call, advance, resolveHeldLegs } = harness();
     const tampered = `${ref.slice(0, -2)}${ref.endsWith('AA') ? 'BB' : 'AA'}`;
-
-    expect((await call({ portfolioRef: tampered, underlying: 'BTC', legs: [BUY_90K] })).error).toContain(
-      'not recognised',
-    );
-    expect((await call({ portfolioRef: 'user-1', underlying: 'BTC', legs: [BUY_90K] })).error).toContain(
-      'not recognised',
-    );
     const ethRef = refs.mint({ accountId: 'user-1', source: 'thalex', underlying: 'ETH', generatedAt: NOW });
-    expect((await call({ portfolioRef: ethRef, underlying: 'BTC', legs: [BUY_90K] })).error).toBe(
-      'portfolioRef covers the ETH book, not BTC.',
-    );
+    const standalone = (await call({ underlying: 'BTC', legs: [BUY_90K] })).data;
+
+    const cases: Array<[string, string, string]> = [
+      [tampered, 'unknown_ref', 'not recognised'],
+      ['user-1', 'unknown_ref', 'not recognised'],
+      [ethRef, 'underlying_mismatch', 'portfolioRef covers the ETH book, not BTC.'],
+    ];
+    for (const [portfolioRef, reason, message] of cases) {
+      const { data } = await call({ portfolioRef, underlying: 'BTC', legs: [BUY_90K], riskBudgetUsd: 2_000 });
+      expect(data.status).toBe('ok');
+      expect(data.heldBook).toMatchObject({
+        included: false,
+        status: 'unresolved',
+        reason,
+        message: expect.stringContaining(message),
+        hint: expect.stringContaining('not book-wide'),
+      });
+      expect(data.heldOnly).toBeNull();
+      expect(data.combined.worstLossUsd).toBe(standalone.combined.worstLossUsd);
+      expect(data.notes[0]).toMatch(/^HELD BOOK NOT INCLUDED/);
+    }
     advance(PORTFOLIO_REF_TTL_MS);
-    expect((await call({ portfolioRef: ref, underlying: 'BTC', legs: [BUY_90K] })).error).toContain('expired');
+    const expired = (await call({ portfolioRef: ref, underlying: 'BTC', legs: [BUY_90K] })).data;
+    expect(expired.heldBook).toMatchObject({ status: 'unresolved', reason: 'expired_ref' });
+    const later = (await call({ underlying: 'BTC', legs: [BUY_90K] })).data;
+    expect(expired.status).toBe(later.status);
+    expect(expired.combined).toEqual(later.combined);
     expect(resolveHeldLegs).not.toHaveBeenCalled();
+  });
+
+  it('keeps a ref alive across a long multi-call answer by sliding its expiry', async () => {
+    const { ref, call, advance, resolveHeldLegs } = harness();
+    for (let step = 0; step < 3; step += 1) {
+      advance(PORTFOLIO_REF_TTL_MS - 1_000);
+      const { data } = await call({ portfolioRef: ref, underlying: 'BTC', legs: [BUY_90K] });
+      expect(data.heldBook.status).toBe('included');
+    }
+    expect(resolveHeldLegs).toHaveBeenCalledTimes(3);
   });
 
   it('rejects malformed leg input', async () => {
     const { call } = harness();
-    expect((await call({ underlying: 'BTC', legs: [] })).error).toContain('Invalid arguments');
+    expect(await call({ underlying: 'BTC', legs: [] })).toMatchObject({
+      code: 'invalid_arguments',
+      error: expect.stringContaining('Invalid arguments'),
+    });
     expect((await call({ underlying: 'BTC', legs: [{ ...BUY_90K, size: 0 }] })).error).toContain('Invalid arguments');
     expect((await call({ underlying: 'BTC', legs: [{ ...BUY_90K, venue: 'nyse' }] })).error).toContain(
       'Invalid arguments',

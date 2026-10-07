@@ -180,3 +180,83 @@ observed lists understate attempts. The answers themselves report that the refer
   predate the portfolio snapshot". Do not compare tool-dependent numbers.
 - One sample per fixture per run; Run A and Run B differ on fixtures the prompt change does not touch
   (budget-long-vol-condor, reference-cap-upside), which is sampling noise.
+
+## Workstream 3 eval: real refs + synthetic tools (2026-10-07)
+
+### What changed in the harness
+
+- `--mcp eval` (new default) starts the production MCP handler and tool registry in the runner on
+  `127.0.0.1:3192` (`createAssistantMcpHandler`, shared with `portfolio-assistant-services.ts`). Each
+  sample gets a real `portfolioRef` for the fixture's held book, chain/surface/overview/expiries/IV
+  history and both structure tools answer from the fixture's synthetic market at 2026-10-07T12:00Z, and
+  tool usage is read exactly from the runner's `AssistantRunRegistry`. Setup and the per-tool data
+  sources are in `EVAL.md`.
+- `--samples N` (default 3), `--concurrency N` (default 1, max 3). Reports give per-fixture `x/N`, a
+  majority verdict, per-check rates over all samples and a Wilson 95% interval.
+- Graders: an imperative "Short the …" or "go long" counts as an action, a "Calls"/"Puts" table header
+  applies to its rows, and `requireNewLeg` is unchanged. Re-grading the saved runs: Run A 10/14 → 11/14,
+  Run B 10/14 → 12/14 (budget-bullish-bear-put-spread now passes; its right is only in the header).
+
+### Status: `--mcp eval` has not been run
+
+The eval needs a Hermes profile `portfolio-chat-eval` whose MCP URL is port 3192. That profile was not
+created. `portfolio-chat` holds a profile-local Codex OAuth grant whose refresh token is identical to the
+one in `~/.codex/auth.json`, and no root grant exists. Hermes refresh tokens for `openai-codex` are
+single-use. A clone carries no `auth.json`, but with `auth.adopt_external_logins` on (the default) Hermes
+would adopt `~/.codex/auth.json` into it. That puts the same refresh token in a third place, and the
+first holder to refresh revokes it for the others. `EVAL.md` lists the safe setup: an independent device
+login for the eval profile, with external adoption turned off first. This needs an interactive login.
+
+### Validation run: `--mcp live`, 3 samples (`2026-10-07T16-48-25-731Z`)
+
+This run uses the old behaviour: the production profile, the fake ref and live tools. It checks the
+sampling and grader changes only. It does not measure the book-wide budget path.
+
+**Samples passed: 31/42 (74%, Wilson 95% 59–85%). Fixtures passing by majority: 11/14.**
+
+| Check | Pass | Fail | N/A | Pass rate |
+| --- | --- | --- | --- | --- |
+| numbers | 21 | 6 | 15 | 78% |
+| required_mentions | 9 | 3 | 30 | 75% |
+| structure | 9 | 9 | 24 | 50% |
+| banned_phrases | 42 | 0 | 0 | 100% |
+| length | 42 | 0 | 0 | 100% |
+| tools | 6 | 0 | 36 | 100% |
+
+| Fixture | Passed | Failed checks (samples) | Tools (journal, successful calls only) |
+| --- | --- | --- | --- |
+| budget-bearish-long-call | 2/3 | timeout ×1 | structure_search, evaluate_structure |
+| budget-bullish-bear-put-spread | 2/3 | timeout ×1 | structure_search, evaluate_structure |
+| budget-long-vol-condor | 1/3 | timeout ×2 | structure_search, evaluate_structure |
+| horizon-minus10-7d-by-expiry | 3/3 | – | – |
+| horizon-plus5-10d | 3/3 | – | – |
+| infeasible-budget-bear-call-spread | 0/3 | timeout ×3 (two with partial text) | structure_search, evaluate_structure |
+| market-flow-and-health | 3/3 | – | trade_flow, block_flow, feed_health, market_overview, vol_surface |
+| market-off-book-chain | 3/3 | – | option_chain |
+| reference-bearish-budget-18 | 0/3 | structure ×3, timeout ×1 | – |
+| reference-cap-upside | 3/3 | – | option_chain, evaluate_structure |
+| reference-max-loss | 3/3 | – | – |
+| stale-history-followup | 3/3 | – | – |
+| trade-history-fees | 2/3 | numbers ×1 | – |
+| trade-history-realized | 3/3 | – | – |
+
+Tool usage is approximate here: the deployed backend logs only successful calls, and the window is shared
+with other users. The Hermes gateway journal for the run shows 30 `portfolioRef is not recognised`
+rejections (15 per structure tool). It also shows 8 MCP circuit-breaker pauses of 1–54 s ("rejected the last
+3/4 calls … Paused"), which then blocked further calls.
+
+Failures:
+
+- **Provider timeouts (8 of 11 failures).** All of them are on constraint fixtures that call the structure
+  tools. The fake ref gets rejected, the breaker pauses the oggregator server, and the 90 s budget runs
+  out. `infeasible-budget-bear-call-spread` s1 was cut off mid-table after stating the gap: "its Oct 30
+  expiry loss is already **$4,000**, or **$2,700** over budget". In production, an expired ref (15-minute TTL) would set off
+  the same rejection-then-breaker cascade.
+- **reference-bearish-budget-18 (0/3).** Every answer proposes only closing the held legs: "Close both
+  calls, then consider a bearish trade only if … fit within $18" and "Close the Oct 30 $85,000 short call and
+  sell the Oct 16 $87,000 long call, then evaluate a bearish put using a valid portfolio reference." No new
+  leg is named. The answers blame the rejected reference.
+- **trade-history-fees s1.** It lists the five fees but does not give their sum ($81.79): "I can't verify
+  the summed total with the available tools."
+- Live/synthetic mismatch is visible. budget-bearish-long-call s1 proposes a "Nov 6 $80,000 put" spread on
+  Bybit, an expiry that the fixture market does not list.

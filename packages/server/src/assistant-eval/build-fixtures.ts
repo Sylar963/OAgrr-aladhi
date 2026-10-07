@@ -452,6 +452,15 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
     shortCallSales.reduce((sum, trade) => sum + trade.priceUsd * trade.amount, 0) /
     shortCallSales.reduce((sum, trade) => sum + trade.amount, 0);
   const realizedTotal = recentTrades.reduce((sum, trade) => sum + (trade.realizedPnlUsd ?? 0), 0);
+  // The context's deterministic totals must agree with sums over the listed fills.
+  const totals = thalex.tradeHistoryFacts?.totals;
+  const lastFiveTotal = totals?.recentFees.find((window) => window.fills === 5)?.feesUsd;
+  if (lastFiveTotal == null || Math.abs(lastFiveTotal - lastFiveFees) > 0.005) {
+    throw new Error(`tradeHistoryFacts.totals.recentFees[5] ${lastFiveTotal} != listed sum ${lastFiveFees}`);
+  }
+  if (totals?.realizedPnlUsd == null || Math.abs(totals.realizedPnlUsd - realizedTotal) > 0.005) {
+    throw new Error(`tradeHistoryFacts.totals.realizedPnlUsd ${totals?.realizedPnlUsd} != listed sum ${realizedTotal}`);
+  }
 
   return [
     {
@@ -574,7 +583,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       context: thalex,
       expect: expectation({
         numbers: [
-          engineNumber('fees on the last 5 fills', lastFiveFees, 'tradeHistoryFacts.trades[0..4].feeUsd sum'),
+          engineNumber('fees on the last 5 fills', lastFiveFees, 'tradeHistoryFacts.trades[0..4].feeUsd sum (= totals.recentFees[5])'),
           engineNumber('largest fee in the last 5 fills', largestFee, 'tradeHistoryFacts.trades[0..4].feeUsd max'),
         ],
         maxChars: 2_500,
@@ -591,7 +600,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       expect: expectation({
         numbers: [
           engineNumber('average Oct 30 85k call sale price', averageSale, 'tradeHistoryFacts sell fills, size-weighted'),
-          engineNumber('realized PnL from listed fills', realizedTotal, 'tradeHistoryFacts.trades[].realizedPnlUsd sum'),
+          engineNumber('realized PnL from listed fills', realizedTotal, 'tradeHistoryFacts.trades[].realizedPnlUsd sum (= totals.realizedPnlUsd)'),
         ],
         maxChars: 2_500,
       }),

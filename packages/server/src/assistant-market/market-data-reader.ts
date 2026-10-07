@@ -23,12 +23,19 @@ import {
   round,
   SurfaceResponseSchema,
 } from './market-data-compaction.js';
+import { codeForHttpStatus, type ToolErrorCode } from './tool-errors.js';
 
 export type MarketInjector = (path: string) => Promise<{ statusCode: number; body: unknown }>;
 
-export type MarketReadResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; timedOut?: boolean };
+export interface MarketReadError {
+  ok: false;
+  error: string;
+  timedOut?: boolean;
+  code?: ToolErrorCode;
+  hint?: string;
+}
+
+export type MarketReadResult<T> = { ok: true; data: T } | MarketReadError;
 
 const ExpiriesResponseSchema = z.object({
   underlying: z.string(),
@@ -89,7 +96,7 @@ export class AssistantMarketDataReader {
     timeoutMs = this.timeoutMs,
   ): Promise<MarketReadResult<T>> {
     const injector = this.injector;
-    if (!injector) return { ok: false, error: 'Market data is not wired yet.' };
+    if (!injector) return { ok: false, error: 'Market data is not wired yet.', code: 'upstream_unavailable' };
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const response = await Promise.race([
@@ -103,17 +110,22 @@ export class AssistantMarketDataReader {
           response.body && typeof response.body === 'object' && 'message' in response.body
             ? String((response.body as { message: unknown }).message)
             : `HTTP ${response.statusCode}`;
-        return { ok: false, error: `Oggregator returned ${message} for ${path.split('?')[0]}.` };
+        return {
+          ok: false,
+          error: `Oggregator returned ${message} for ${path.split('?')[0]}.`,
+          code: codeForHttpStatus(response.statusCode),
+        };
       }
       const parsed = schema.safeParse(response.body);
       if (!parsed.success)
-        return { ok: false, error: `Unexpected payload from ${path.split('?')[0]}.` };
+        return { ok: false, error: `Unexpected payload from ${path.split('?')[0]}.`, code: 'upstream_error' };
       return { ok: true, data: parsed.data };
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'timeout';
       return {
         ok: false,
         error: `Request to ${path.split('?')[0]} ${timedOut ? 'timed out' : 'failed'}.`,
+        code: timedOut ? 'timeout' : 'upstream_error',
         ...(timedOut ? { timedOut } : {}),
       };
     } finally {

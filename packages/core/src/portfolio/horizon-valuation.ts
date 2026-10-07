@@ -5,9 +5,17 @@ import { price76 } from '../feeds/thalex/bs-solver.js';
 import type { MarkContext } from './types.js';
 
 const YEAR_SECONDS = 365 * 24 * 60 * 60;
+const EXPIRY_CACHE_LIMIT = 4_096;
+const expiryInstants = new Map<string, number>();
 
+// Payoff grids call this per leg per spot point; Date.parse dominated structure search time.
 export function expiryInstantMs(expiry: string): number {
-  return Date.parse(`${expiry}T08:00:00.000Z`);
+  const cached = expiryInstants.get(expiry);
+  if (cached !== undefined) return cached;
+  const parsed = Date.parse(`${expiry}T08:00:00.000Z`);
+  if (expiryInstants.size >= EXPIRY_CACHE_LIMIT) expiryInstants.clear();
+  expiryInstants.set(expiry, parsed);
+  return parsed;
 }
 
 export function yearsUntil(expiry: string, nowMs: number): number {

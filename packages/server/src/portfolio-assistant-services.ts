@@ -41,8 +41,8 @@ export const optionsLibrary = new OptionsLibrary(
 );
 // The MCP listener runs in this process, so the refs minted for chat contexts
 // resolve here without persistence.
-const portfolioRefStore = new PortfolioRefStore();
 const assistantRuns = new AssistantRunRegistry();
+const portfolioRefStore = new PortfolioRefStore({ isActive: (ref) => assistantRuns.isRefActive(ref) });
 let assistantMcpServer: FastifyInstance | null = null;
 
 async function resolveHeldLegs(scope: PortfolioRefScope) {

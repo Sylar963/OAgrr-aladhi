@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { buildAssistantMcpServer } from '../assistant-market/assistant-mcp-server.js';
 import { AssistantMarketDataReader } from '../assistant-market/market-data-reader.js';
 import { OptionsLibrary } from '../assistant-market/options-library.js';
+import { ToolErrorPayloadSchema } from '../assistant-market/tool-errors.js';
 import { AssistantEvalFixtureSchema } from './assistant-eval-fixture.js';
 import { registryObservation } from './assistant-eval-tool-log.js';
 import { AssistantEvalMcp, EVAL_TOOL_SOURCES } from './eval-mcp-server.js';
@@ -121,8 +122,11 @@ describe('eval MCP server', () => {
       underlying: 'BTC',
       legs: [{ expiry: '2026-10-30', strike: 90_000, right: 'call', side: 'buy', size: 1 }],
     });
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     expect(result.text).toContain('portfolioRef is not recognised');
+    expect(z.object({ heldBook: z.object({ status: z.string() }) }).parse(result.json()).heldBook.status).toBe(
+      'unresolved',
+    );
     const usage = mcp.finishRun('r1');
     expect(usage.calls).toEqual([]);
     expect(usage.unattributedDuringRun).toBe(1);
@@ -143,10 +147,44 @@ describe('eval MCP server', () => {
       'Assistant eval: proxied from the live market',
     );
     const gex = await call(mcp, 'oggregator_gamma_exposure', { underlying: 'BTC' });
-    expect(gex.isError).toBe(true);
-    expect(gex.text).toContain('not available in the assistant eval');
+    expect(gex.isError).toBe(false);
+    expect(ToolErrorPayloadSchema.parse(gex.json())).toMatchObject({
+      code: 'unavailable',
+      error: expect.stringContaining('not available in the assistant eval'),
+      retryable: false,
+    });
     const health = await call(evalMcp(null), 'oggregator_feed_health', {});
-    expect(health.isError).toBe(true);
+    expect(ToolErrorPayloadSchema.parse(health.json()).code).toBe('unavailable');
+  });
+
+  it('searches repair + view packages for the reference book on the fixture chain within 5 seconds', async () => {
+    const mcp = evalMcp();
+    const { portfolioRef } = mcp.beginRun({ requestId: 'r1', threadId: 't1', context: fixture.context });
+    const startedAt = performance.now();
+    const result = await call(mcp, 'oggregator_structure_search', {
+      portfolioRef,
+      underlying: 'BTC',
+      view: 'bearish',
+      maxTotalRiskUsd: 18,
+      size: 0.1,
+    });
+    expect(performance.now() - startedAt).toBeLessThan(5_000);
+    const search = z
+      .object({
+        repair: z.object({ reason: z.string(), chosen: z.string() }),
+        repairOnly: z.object({ fits: z.boolean(), shortfallUsd: z.number() }),
+        nearestInfeasible: z.array(
+          z.object({ components: z.array(z.object({ role: z.string() })), shortfallUsd: z.number() }),
+        ),
+        stats: z.object({ stoppedEarly: z.boolean() }),
+      })
+      .parse(result.json());
+    expect(search.repair.reason).toBe('unbounded');
+    expect(search.repairOnly.fits).toBe(false);
+    expect(search.stats.stoppedEarly).toBe(false);
+    expect(search.nearestInfeasible[0]?.components.map((component) => component.role)).toEqual(['repair', 'view']);
+    expect(search.nearestInfeasible[0]?.shortfallUsd).toBeGreaterThanOrEqual(search.repairOnly.shortfallUsd);
+    mcp.finishRun('r1');
   });
 
   it('declares a source for every registered tool', async () => {

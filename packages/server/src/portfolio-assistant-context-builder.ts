@@ -73,11 +73,47 @@ export interface PortfolioAssistantTradeFact {
   orderId: string | null;
 }
 
+export interface PortfolioAssistantTradeInstrumentTotals {
+  instrument: string;
+  fills: number;
+  /** Bought minus sold contracts over the listed fills. */
+  netAmount: number;
+  feesUsd: number;
+  premiumBoughtUsd: number;
+  premiumSoldUsd: number;
+  /** Null when no listed fill of the instrument reports realized PnL. */
+  realizedPnlUsd: number | null;
+  fillsWithoutRealizedPnl: number;
+}
+
+/** Deterministic sums over `trades` exactly as listed; not lifetime figures. */
+export interface PortfolioAssistantTradeTotals {
+  scope: string;
+  fillCount: number;
+  firstFillAt: string | null;
+  lastFillAt: string | null;
+  feesUsd: number;
+  fillsWithoutFee: number;
+  premiumBoughtUsd: number;
+  premiumSoldUsd: number;
+  /** Premium bought minus premium sold. */
+  netPremiumPaidUsd: number;
+  /** Null when no listed fill reports realized PnL. */
+  realizedPnlUsd: number | null;
+  fillsWithRealizedPnl: number;
+  fillsWithoutRealizedPnl: number;
+  /** Fees over the newest N listed fills. */
+  recentFees: Array<{ fills: number; feesUsd: number; fillsWithoutFee: number }>;
+  byInstrument: PortfolioAssistantTradeInstrumentTotals[];
+  instrumentsOmitted: number;
+}
+
 export interface PortfolioAssistantTradeHistoryFacts {
   venue: ExchangePortfolioVenue;
   underlying: string | null;
   trades: PortfolioAssistantTradeFact[];
   truncated: boolean;
+  totals: PortfolioAssistantTradeTotals;
 }
 
 export type PortfolioAssistantPayoffPoint = Omit<PortfolioPnlPoint, 'forwardPnlUsd'> & {
@@ -178,11 +214,86 @@ export const CONTEXT_COMPACTED_LIMITATION =
 export const PORTFOLIO_ASSISTANT_TOOL_HINTS: readonly string[] = [
   'oggregator_evaluate_structure and oggregator_structure_search accept portfolioRef; no other tool does.',
   'oggregator_evaluate_structure with portfolioRef: price proposed legs together with this book (cost, fees, worst loss per expiry window, budget fit). Use it before quoting any combined max loss.',
-  'oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts.',
+  'oggregator_structure_search with portfolioRef: find trades for a view within a book-wide maxTotalRiskUsd; view hedge_held_shorts covers riskBudgetFacts.uncoveredShorts. When this book is unbounded or over the budget, bearish, bullish and long_vol results are packages: a repair of the book plus the view trade.',
 ];
 
 function isLedgerVenue(source: PortfolioSource): source is ExchangePortfolioVenue {
   return source === 'thalex' || source === 'derive';
+}
+
+const TRADE_TOTALS_SCOPE =
+  'Sums over the fills listed in trades only (newest first), not lifetime figures; lifetime totals are in accountingFacts. Null fees and null realized PnL are excluded from the sums and counted separately.';
+const RECENT_FEE_WINDOWS = [5, 10, 20];
+const TRADE_TOTALS_INSTRUMENT_LIMIT = 10;
+
+function sumCents(values: number[]): number {
+  return roundCents(values.reduce((total, value) => total + value, 0));
+}
+
+function feeSummary(trades: PortfolioAssistantTradeFact[]) {
+  return {
+    feesUsd: sumCents(trades.flatMap((trade) => trade.feeUsd ?? [])),
+    fillsWithoutFee: trades.filter((trade) => trade.feeUsd == null).length,
+  };
+}
+
+function premiumSummary(trades: PortfolioAssistantTradeFact[]) {
+  const reported = trades.flatMap((trade) => trade.realizedPnlUsd ?? []);
+  return {
+    premiumBoughtUsd: sumCents(trades.filter((trade) => trade.side === 'buy').map((trade) => trade.premiumUsd)),
+    premiumSoldUsd: sumCents(trades.filter((trade) => trade.side === 'sell').map((trade) => trade.premiumUsd)),
+    realizedPnlUsd: reported.length === 0 ? null : sumCents(reported),
+    fillsWithRealizedPnl: reported.length,
+    fillsWithoutRealizedPnl: trades.length - reported.length,
+  };
+}
+
+export function summarizeTradeFacts(trades: PortfolioAssistantTradeFact[]): PortfolioAssistantTradeTotals {
+  const premiums = premiumSummary(trades);
+  const times = trades.map((trade) => trade.tradedAt).sort();
+  const groups = new Map<string, PortfolioAssistantTradeFact[]>();
+  for (const trade of trades) groups.set(trade.instrument, [...(groups.get(trade.instrument) ?? []), trade]);
+  const byInstrument = [...groups.entries()]
+    .map(([instrument, fills]) => {
+      const summary = premiumSummary(fills);
+      return {
+        instrument,
+        fills: fills.length,
+        netAmount:
+          Math.round(fills.reduce((sum, fill) => sum + (fill.side === 'buy' ? fill.amount : -fill.amount), 0) * 1e8) /
+          1e8,
+        feesUsd: feeSummary(fills).feesUsd,
+        premiumBoughtUsd: summary.premiumBoughtUsd,
+        premiumSoldUsd: summary.premiumSoldUsd,
+        realizedPnlUsd: summary.realizedPnlUsd,
+        fillsWithoutRealizedPnl: summary.fillsWithoutRealizedPnl,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.fills - left.fills ||
+        right.premiumBoughtUsd + right.premiumSoldUsd - (left.premiumBoughtUsd + left.premiumSoldUsd) ||
+        left.instrument.localeCompare(right.instrument),
+    );
+  return {
+    scope: TRADE_TOTALS_SCOPE,
+    fillCount: trades.length,
+    firstFillAt: times[0] ?? null,
+    lastFillAt: times.at(-1) ?? null,
+    ...feeSummary(trades),
+    premiumBoughtUsd: premiums.premiumBoughtUsd,
+    premiumSoldUsd: premiums.premiumSoldUsd,
+    netPremiumPaidUsd: roundCents(premiums.premiumBoughtUsd - premiums.premiumSoldUsd),
+    realizedPnlUsd: premiums.realizedPnlUsd,
+    fillsWithRealizedPnl: premiums.fillsWithRealizedPnl,
+    fillsWithoutRealizedPnl: premiums.fillsWithoutRealizedPnl,
+    recentFees: RECENT_FEE_WINDOWS.filter((fills) => fills < trades.length).map((fills) => ({
+      fills,
+      ...feeSummary(trades.slice(0, fills)),
+    })),
+    byInstrument: byInstrument.slice(0, TRADE_TOTALS_INSTRUMENT_LIMIT),
+    instrumentsOmitted: Math.max(0, byInstrument.length - TRADE_TOTALS_INSTRUMENT_LIMIT),
+  };
 }
 
 export function buildTradeHistoryFacts(
@@ -194,10 +305,7 @@ export function buildTradeHistoryFacts(
   const matching = trades
     .filter((trade) => underlying == null || trade.underlying === underlying)
     .sort((a, b) => b.timestampMs - a.timestampMs);
-  return {
-    venue,
-    underlying,
-    trades: matching.slice(0, limit).map((trade) => ({
+  const listed: PortfolioAssistantTradeFact[] = matching.slice(0, limit).map((trade) => ({
       tradedAt: new Date(trade.timestampMs).toISOString(),
       instrument: trade.instrumentName,
       side: trade.direction,
@@ -208,8 +316,13 @@ export function buildTradeHistoryFacts(
       realizedPnlUsd: trade.realizedPnlUsd == null ? null : roundCents(trade.realizedPnlUsd),
       liquidityRole: trade.liquidityRole,
       orderId: trade.orderId,
-    })),
+  }));
+  return {
+    venue,
+    underlying,
+    trades: listed,
     truncated: matching.length > limit,
+    totals: summarizeTradeFacts(listed),
   };
 }
 
@@ -424,6 +537,7 @@ export function compactPortfolioAssistantContext(
             truncated:
               context.tradeHistoryFacts.truncated ||
               context.tradeHistoryFacts.trades.length > COMPACT_TRADE_CONTEXT_LIMIT,
+            totals: summarizeTradeFacts(context.tradeHistoryFacts.trades.slice(0, COMPACT_TRADE_CONTEXT_LIMIT)),
           },
     marketFacts: {
       ...context.marketFacts,

@@ -125,33 +125,79 @@ export function selectExecutableQuote(
   };
 }
 
-export type HeldBookResolution =
-  | { ok: true; held: HeldLegsWithMarks; scope: PortfolioRefScope | null }
-  | { ok: false; error: string };
+export type UnresolvedHeldBookReason = 'unknown_ref' | 'expired_ref' | 'underlying_mismatch' | 'load_failed';
 
-/** Resolves an optional portfolioRef server-side to the held legs on `underlying`. */
+export interface UnresolvedHeldBook {
+  reason: UnresolvedHeldBookReason;
+  message: string;
+}
+
+export interface HeldBookResolution {
+  held: HeldLegsWithMarks;
+  /** Null when no ref was passed or it did not resolve. */
+  scope: PortfolioRefScope | null;
+  unresolved: UnresolvedHeldBook | null;
+}
+
+const STANDALONE_HINT =
+  'Every number in this result is for the proposed legs alone, not book-wide. Do not present it as total portfolio risk; take held-book risk from riskBudgetFacts, and if a fresh portfolioRef is needed, ask the user to resend the question. Do not retry with the same ref.';
+
+/**
+ * Resolves an optional portfolioRef server-side to the held legs on `underlying`. A ref that does
+ * not resolve leaves the book empty and says why, so callers can still evaluate the proposed legs.
+ */
 export async function resolveHeldBook(
   portfolio: StructureToolPortfolioAccess,
   portfolioRef: string | undefined,
   underlying: string,
-  omitHint: string,
 ): Promise<HeldBookResolution> {
-  if (portfolioRef == null) return { ok: true, held: [], scope: null };
+  const unresolved = (reason: UnresolvedHeldBookReason, message: string): HeldBookResolution => ({
+    held: [],
+    scope: null,
+    unresolved: { reason, message },
+  });
+  if (portfolioRef == null) return { held: [], scope: null, unresolved: null };
   const resolved = portfolio.refs.resolve(portfolioRef);
   if (!resolved.ok) {
-    return {
-      ok: false,
-      error:
-        resolved.error === 'expired'
-          ? `portfolioRef has expired (15 minute lifetime). Ask the user to send the question again for a fresh portfolio context, or omit portfolioRef to ${omitHint}.`
-          : `portfolioRef is not recognised. Use the portfolioRef from the latest portfolio context, or omit it to ${omitHint}.`,
-    };
+    return resolved.error === 'expired'
+      ? unresolved('expired_ref', 'portfolioRef has expired.')
+      : unresolved(
+          'unknown_ref',
+          'portfolioRef is not recognised: it is not from the latest portfolio context, or the server restarted.',
+        );
   }
   const scope = resolved.scope;
   if (scope.underlying != null && scope.underlying.toUpperCase() !== underlying) {
-    return { ok: false, error: `portfolioRef covers the ${scope.underlying} book, not ${underlying}.` };
+    return unresolved('underlying_mismatch', `portfolioRef covers the ${scope.underlying} book, not ${underlying}.`);
   }
   const legs = await portfolio.resolveHeldLegs(scope);
-  if (legs == null) return { ok: false, error: 'The held portfolio could not be loaded.' };
-  return { ok: true, held: legs.filter(({ leg }) => leg.underlying === underlying), scope };
+  if (legs == null) return unresolved('load_failed', 'The held portfolio could not be loaded.');
+  return { held: legs.filter(({ leg }) => leg.underlying === underlying), scope, unresolved: null };
+}
+
+export function heldBookSummary(book: HeldBookResolution, extra: Record<string, unknown> = {}) {
+  if (book.unresolved != null) {
+    return {
+      included: false,
+      status: 'unresolved' as const,
+      reason: book.unresolved.reason,
+      message: book.unresolved.message,
+      legCount: 0,
+      hint: STANDALONE_HINT,
+    };
+  }
+  if (book.scope == null) return { included: false, status: 'not_requested' as const, legCount: 0 };
+  return {
+    included: true,
+    status: 'included' as const,
+    legCount: book.held.length,
+    portfolioGeneratedAt: new Date(book.scope.generatedAt).toISOString(),
+    ...extra,
+  };
+}
+
+export function unresolvedBookNote(book: HeldBookResolution): string[] {
+  return book.unresolved == null
+    ? []
+    : [`HELD BOOK NOT INCLUDED (${book.unresolved.message}) ${STANDALONE_HINT}`];
 }

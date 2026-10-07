@@ -38,6 +38,33 @@ describe('PortfolioAssistantPromptBuilder', () => {
     expect(instructions).toMatch(/Caveats section of at most three/);
   });
 
+  it('turns a broken book into repair-plus-view packages, with the repair alone only when infeasible', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('A broken book is not the whole answer');
+    expect(instructions).toContain('a repair of the book (cover, buy-back or close) plus a new view structure');
+    expect(instructions).toContain('label which legs are the repair and which are the new view trade');
+    expect(instructions).toContain('plus repairOnly: the repair alone and its own gap');
+    expect(instructions).toContain('closing the held legs alone is not an answer to a request for a new trade');
+  });
+
+  it('limits retries after ok:false tool results and never passes standalone numbers off as book-wide', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('A tool result with ok:false is not data: read error and hint');
+    expect(instructions).toContain('fix the arguments once, and never repeat the same call more than once');
+    expect(instructions).toContain('heldBook.status "unresolved"');
+    expect(instructions).toContain('never present them as book-wide');
+  });
+
+  it('reads trade-history sums from the deterministic totals', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('For sums over the listed fills use tradeHistoryFacts.totals');
+    expect(instructions).toContain('recentFees for the newest 5, 10 or 20');
+    expect(instructions).toContain('never present listed sums as lifetime figures');
+  });
+
   it('uses current numbers silently instead of apologising for earlier answers', () => {
     const instructions =
       new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();

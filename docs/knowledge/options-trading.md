@@ -150,6 +150,11 @@ Required test invariants:
   smaller one does not, and the window after the short settles stays unbounded.
 - Same-expiry bull call spread: breakeven = lower strike + debit, best profit = width − debit.
   Long straddle: breakevens K ± debit, `bestProfitUsd` null.
+- Repair packages (`structure_search` on an unbounded or over-budget book): closing every held
+  leg locks the entry-relative P&L, Σ(exit − entry) × size − fees. On the reference book that is
+  bid(Oct 16 87k) − 1,050 + 3,031.95 − ask(Oct 30 85k) − fees, which beats buying back the short
+  alone (that still risks the long's 1,050). A close-book + debit view package's worst loss is the
+  locked P&L minus the view's debit and fees.
 
 Limits: constant IV, European exercise, no fees, margin, or liquidation paths. A covered window
 is a mark-to-model statement at the short's expiry. It does not promise that the remaining long

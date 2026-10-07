@@ -111,6 +111,12 @@ export class AssistantRunRegistry {
     if (attribution.mode === 'exact') tools.exactAttributed += 1;
   }
 
+  /** True while a run that carries this ref is in flight and younger than the run TTL. */
+  isRefActive(portfolioRef: string): boolean {
+    this.evictExpired();
+    return this.refToRequest.has(portfolioRef);
+  }
+
   finish(requestId: string): AssistantRunToolSummary | null {
     const run = this.runs.get(requestId);
     if (run == null) return null;

@@ -65,6 +65,22 @@ revokes it for the others, which can log out the production profile.
 
 The runner refuses `--mcp eval` when the Hermes URL is the production profile's.
 
+### Fixtures
+
+`pnpm --filter @oggregator/server eval:assistant:fixtures` regenerates `fixtures/` from the engine
+(`build-fixtures.ts`). Expected numbers are engine-derived; trade-history fixtures carry
+`tradeHistoryFacts.totals`, and the generator fails if those totals disagree with sums over the
+listed fills.
+
+### Tool errors
+
+Recoverable tool errors (bad arguments, unresolvable ref on `hedge_held_shorts`, datasets refused
+in the eval, upstream loading or timeouts) come back as normal results with an
+`{ ok: false, code, error, hint }` body, so Hermes's circuit breaker does not pause the server
+(`HERMES.md`). A structure call with a stale ref evaluates the legs alone with
+`heldBook.status: "unresolved"`. The report still shows each call's logged outcome
+(`rejected_input`, `timeout`, `failed`).
+
 ## Report
 
 `report.md` gives samples passed with a Wilson 95% interval, fixtures passing by majority (more than half

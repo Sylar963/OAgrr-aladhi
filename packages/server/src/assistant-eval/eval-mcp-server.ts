@@ -17,6 +17,7 @@ import {
 import {
   AssistantMarketDataReader,
   type MarketInjector,
+  type MarketReadError,
   type MarketReadResult,
 } from '../assistant-market/market-data-reader.js';
 import type { OptionsLibrary } from '../assistant-market/options-library.js';
@@ -63,9 +64,10 @@ type PlatformParameters = Parameters<AssistantMarketDataReader['platformData']>[
 const LIVE_PLATFORM_DATASETS: ReadonlySet<PlatformDataset> = new Set(['flow', 'news', 'health']);
 const NotesSchema = z.looseObject({ notes: z.array(z.string()) });
 
-function evalUnavailable(dataset: string): { ok: false; error: string } {
+function evalUnavailable(dataset: string): MarketReadError {
   return {
     ok: false,
+    code: 'unavailable',
     error: `${dataset} is not available in the assistant eval: its prices would come from the live market, which differs from this portfolio snapshot.`,
   };
 }
@@ -228,8 +230,9 @@ export class AssistantEvalMcp {
   constructor(options: AssistantEvalMcpOptions) {
     this.now = options.now ?? Date.now;
     this.log = options.log;
-    this.refs = new PortfolioRefStore({ now: this.now });
     this.runs = new AssistantRunRegistry({ now: this.now });
+    const runs = this.runs;
+    this.refs = new PortfolioRefStore({ now: this.now, isActive: (ref) => runs.isRefActive(ref) });
     this.reader = new EvalMarketReader(options.market, options.live);
     this.handler = createAssistantMcpHandler({
       reader: this.reader,

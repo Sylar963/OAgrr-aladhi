@@ -4,6 +4,7 @@ import { AssistantMcpHandler, buildAssistantMcpTools } from './assistant-mcp-ser
 import { AssistantMarketDataReader } from './market-data-reader.js';
 import { PortfolioRefStore } from './portfolio-ref.js';
 import { OptionsLibrary } from './options-library.js';
+import { ToolErrorPayloadSchema } from './tool-errors.js';
 
 function harness(body: unknown, statusCode = 200) {
   const reader = new AssistantMarketDataReader(() => Date.UTC(2026, 8, 28));
@@ -28,9 +29,12 @@ function harness(body: unknown, statusCode = 200) {
 
 function resultData(reply: unknown) {
   const parsed = reply as { result: { content: Array<{ text: string }>; isError?: boolean } };
+  const body: unknown = JSON.parse(parsed.result.content[0]!.text);
+  const error = ToolErrorPayloadSchema.safeParse(body);
   return {
     ...parsed.result,
-    data: parsed.result.isError ? null : JSON.parse(parsed.result.content[0]!.text),
+    error: error.success ? error.data : null,
+    data: error.success ? null : body,
   };
 }
 
@@ -108,7 +112,9 @@ describe('assistant platform tools', () => {
     ['oggregator_put_scanner', { underlying: 'BTC', venues: ['deribit'], minDte: 30, maxDte: 7 }],
   ])('rejects invalid or unbounded inputs for %s', async (name, args) => {
     const { call, inject } = harness({});
-    expect(resultData(await call(name, args)).isError).toBe(true);
+    const result = resultData(await call(name, args));
+    expect(result.error?.code).toBe('invalid_arguments');
+    expect(result.isError).toBeUndefined();
     expect(inject).not.toHaveBeenCalled();
   });
 
@@ -126,7 +132,8 @@ describe('assistant platform tools', () => {
     const url = new URL(inject.mock.calls[0]![0] as string, 'http://localhost');
     expect(url.pathname).toBe('/api/alpha/lotto-scanner');
     expect(url.searchParams.get('venues')).toBe('gateio,derive');
-    expect(result.isError).toBe(true);
+    expect(result.error).toMatchObject({ ok: false, code: 'upstream_unavailable', retryable: true });
+    expect(result.isError).toBeUndefined();
   });
 
   it('routes put scans with hedge sizing to the put scanner', async () => {
@@ -146,13 +153,13 @@ describe('assistant platform tools', () => {
   it('rejects malformed data instead of passing it to the model', async () => {
     const { call } = harness({ currency: 'BTC', candles: 'invalid' });
     const result = resultData(await call('oggregator_spot_candles', { currency: 'BTC' }));
-    expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('Unexpected payload');
+    expect(result.error?.code).toBe('upstream_error');
+    expect(result.error?.error).toContain('Unexpected payload');
   });
 
   it('cannot use a tool name to access private routes', async () => {
     const { call, inject } = harness({});
-    expect(resultData(await call('/api/portfolio/venue-credentials')).isError).toBe(true);
+    expect(resultData(await call('/api/portfolio/venue-credentials')).error?.code).toBe('unknown_tool');
     expect(inject).not.toHaveBeenCalled();
   });
 });

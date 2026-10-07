@@ -42,13 +42,20 @@ function legSummary(group: StrategyGroup): string {
   return `${strikes} × ${fmtQty(qty)}`;
 }
 
+function fmtAmount(abs: number): string {
+  if (abs >= 100) return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (abs >= 0.01) return `$${abs.toFixed(2)}`;
+  return fmtUsdSigned(abs).slice(1);
+}
+
 function fmtCashFlow(value: number): string {
-  return Math.abs(value) < 0.005 ? '$0' : fmtUsdSigned(value);
+  if (Math.abs(value) < 0.005) return '$0';
+  return `${value > 0 ? '+' : '-'}${fmtAmount(Math.abs(value))}`;
 }
 
 function fmtUsd(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '∞';
-  return `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  return fmtAmount(Math.abs(value));
 }
 
 function fmtSpot(values: number[]): string {
@@ -120,9 +127,7 @@ export default function StrategyGroupsPanel({ groups }: Props) {
                   <small>net {side}</small>
                 </span>
                 <span role="cell" className={styles.maxRange}>
-                  {group.kind === 'naked'
-                    ? '—'
-                    : `+${fmtUsd(group.maxProfitUsd)} / −${fmtUsd(group.maxLossUsd)}`}
+                  {`+${fmtUsd(group.maxProfitUsd)} / -${fmtUsd(group.maxLossUsd)}`}
                 </span>
                 <span role="cell" className={styles.be}>
                   {fmtSpot(group.breakEvenSpotsUsd)}

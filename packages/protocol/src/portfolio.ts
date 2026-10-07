@@ -303,9 +303,8 @@ export const StrategyGroupSchema = z.object({
   // signed (positive long, negative short).
   netEntryPremiumUsd: z.number(),
   debitOrCredit: z.enum(['debit', 'credit', 'flat']),
-  // Max profit / loss known in closed form for verticals; null when the
-  // structure has unbounded payoff in one direction (naked / strangle short
-  // calls etc.).
+  // Max profit / loss at expiry in closed form; null when the payoff is
+  // unbounded in that direction (long/short calls, strangles).
   maxProfitUsd: z.number().nullable(),
   maxLossUsd: z.number().nullable(),
   breakEvenSpotsUsd: z.array(z.number()),

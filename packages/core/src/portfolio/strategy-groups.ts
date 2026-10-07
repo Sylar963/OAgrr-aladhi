@@ -142,23 +142,46 @@ function straddleStranglePayoff(legs: PositionLeg[]): {
   const call = a.optionRight === 'call' ? a : b;
   const put = a.optionRight === 'put' ? a : b;
   if (call.optionRight !== 'call' || put.optionRight !== 'put') return null;
-  const netDebit = (call.entryPriceUsd + put.entryPriceUsd) * Math.abs(a.size);
+  const premium = (call.entryPriceUsd + put.entryPriceUsd) * qty;
+  // Guts (put strike above call strike) always pays at least the strike overlap.
+  const guaranteedPayout = Math.max(0, put.strike - call.strike) * qty;
+  const breakEvens = [put.strike - premium / qty, call.strike + premium / qty];
   if (isLong) {
-    // Long straddle/strangle: max loss = debit paid; max profit unbounded
-    // on the upside and capped at strike-floor on the downside, so report
-    // unbounded.
-    const breakEvens = [
-      put.strike - netDebit / qty,
-      call.strike + netDebit / qty,
-    ];
-    return { maxProfitUsd: null, maxLossUsd: netDebit, breakEvenSpotsUsd: breakEvens };
+    return {
+      maxProfitUsd: null,
+      maxLossUsd: premium - guaranteedPayout,
+      breakEvenSpotsUsd: breakEvens,
+    };
   }
-  // Short straddle/strangle: max profit = credit, max loss unbounded.
-  const breakEvens = [
-    put.strike - netDebit / qty,
-    call.strike + netDebit / qty,
-  ];
-  return { maxProfitUsd: netDebit, maxLossUsd: null, breakEvenSpotsUsd: breakEvens };
+  return {
+    maxProfitUsd: premium - guaranteedPayout,
+    maxLossUsd: null,
+    breakEvenSpotsUsd: breakEvens,
+  };
+}
+
+function singleLegPayoff(leg: PositionLeg): {
+  maxProfitUsd: number | null;
+  maxLossUsd: number | null;
+  breakEvenSpotsUsd: number[];
+} {
+  const qty = Math.abs(leg.size);
+  const premium = leg.entryPriceUsd * qty;
+  const isCall = leg.optionRight === 'call';
+  const beSpot = isCall ? leg.strike + leg.entryPriceUsd : leg.strike - leg.entryPriceUsd;
+  const putFloorPayout = leg.strike * qty - premium;
+  if (leg.size > 0) {
+    return {
+      maxProfitUsd: isCall ? null : putFloorPayout,
+      maxLossUsd: premium,
+      breakEvenSpotsUsd: [beSpot],
+    };
+  }
+  return {
+    maxProfitUsd: premium,
+    maxLossUsd: isCall ? null : putFloorPayout,
+    breakEvenSpotsUsd: [beSpot],
+  };
 }
 
 function buildGroup(
@@ -214,6 +237,9 @@ function buildGroup(
       breakEvenSpotsUsd: payoff?.breakEvenSpotsUsd ?? [],
     };
   }
+  if (kind === 'naked' && legs.length === 1) {
+    return { ...base, ...singleLegPayoff(first) };
+  }
   return {
     ...base,
     maxProfitUsd: null,
@@ -221,6 +247,11 @@ function buildGroup(
     breakEvenSpotsUsd: [],
   };
 }
+
+const PAIRING_PASSES: ReadonlySet<StrategyKind>[] = [
+  new Set(['call_spread', 'put_spread']),
+  new Set(['straddle', 'strangle']),
+];
 
 function withQty(leg: PositionLeg, qty: number): PositionLeg {
   return { ...leg, size: Math.sign(leg.size) * qty };
@@ -243,17 +274,22 @@ export function detectStrategyGroups(
       if (a.legId === b.legId) return 0;
       return a.legId < b.legId ? -1 : 1;
     });
-    for (let i = 0; i < sorted.length; i += 1) {
-      const a = sorted[i]!;
-      for (let j = i + 1; j < sorted.length && left(a) > SIZE_EPS; j += 1) {
-        const b = sorted[j]!;
-        if (left(b) <= SIZE_EPS) continue;
-        const qty = Math.min(left(a), left(b));
-        const trial = classifyPair(withQty(a, qty), withQty(b, qty));
-        if (trial == null) continue;
-        result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
-        remaining.set(a.legId, left(a) - qty);
-        remaining.set(b.legId, left(b) - qty);
+    // Verticals pass first: positions are netted per instrument, so a short leg
+    // that hedges a long of the same right must be paired as a defined-risk
+    // spread before it can be mistaken for half of a short strangle.
+    for (const pass of PAIRING_PASSES) {
+      for (let i = 0; i < sorted.length; i += 1) {
+        const a = sorted[i]!;
+        for (let j = i + 1; j < sorted.length && left(a) > SIZE_EPS; j += 1) {
+          const b = sorted[j]!;
+          if (left(b) <= SIZE_EPS) continue;
+          const qty = Math.min(left(a), left(b));
+          const trial = classifyPair(withQty(a, qty), withQty(b, qty));
+          if (trial == null || !pass.has(trial.kind)) continue;
+          result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
+          remaining.set(a.legId, left(a) - qty);
+          remaining.set(b.legId, left(b) - qty);
+        }
       }
     }
     for (const leg of bucket) {

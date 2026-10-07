@@ -155,4 +155,59 @@ describe('detectStrategyGroups', () => {
     expect(debit).toBeCloseTo(3 * 1_000 + 0.5 * 800, 6);
     expect(credit).toBeCloseTo(2 * 400, 6);
   });
+  it('pairs netted verticals before strangles so hedged shorts are not reported as unbounded', () => {
+    const put = 'put' as const;
+    const legs = [
+      leg({ legId: 'p75', optionRight: put, strike: 75_000, size: -0.05, entryPriceUsd: 65 }),
+      leg({ legId: 'p82', optionRight: put, strike: 82_000, size: 0.04, entryPriceUsd: 925 }),
+      leg({ legId: 'p83', optionRight: put, strike: 83_000, size: 0.01, entryPriceUsd: 980 }),
+      leg({ legId: 'c80', strike: 80_000, size: -0.04, entryPriceUsd: 4_415 }),
+      leg({ legId: 'c83', strike: 83_000, size: 0.04, entryPriceUsd: 2_450 }),
+      leg({ legId: 'c84', strike: 84_000, size: -0.01, entryPriceUsd: 3_275 }),
+      leg({ legId: 'c86', strike: 86_000, size: 0.01, entryPriceUsd: 2_150 }),
+      leg({ legId: 'c87', strike: 87_000, size: 0.01, entryPriceUsd: 1_135 }),
+    ];
+    const groups = detectStrategyGroups(legs);
+    const summary = groups.map((g) => [g.kind, [...g.legIds].sort().join('+')]);
+    expect(summary).toEqual([
+      ['put_spread', 'p75+p82'],
+      ['put_spread', 'p75+p83'],
+      ['call_spread', 'c80+c83'],
+      ['call_spread', 'c84+c86'],
+      ['naked', 'c87'],
+    ]);
+    const spreads = groups.filter((g) => g.kind !== 'naked');
+    expect(spreads.every((g) => g.maxLossUsd != null && g.maxProfitUsd != null)).toBe(true);
+    const bearCall = groups[2]!;
+    expect(bearCall.netEntryPremiumUsd).toBeCloseTo(-0.04 * (4_415 - 2_450), 6);
+    expect(bearCall.maxLossUsd).toBeCloseTo(0.04 * 3_000 - 0.04 * 1_965, 6);
+  });
+
+  it('nets the guaranteed strike overlap out of a long guts', () => {
+    const legs = [
+      leg({ legId: 'c', strike: 80_000, size: 1, entryPriceUsd: 6_000 }),
+      leg({ legId: 'p', strike: 85_000, size: 1, entryPriceUsd: 7_000, optionRight: 'put' }),
+    ];
+    const [g] = detectStrategyGroups(legs);
+    expect(g?.kind).toBe('strangle');
+    expect(g?.maxLossUsd).toBeCloseTo(13_000 - 5_000, 6);
+    expect(g?.breakEvenSpotsUsd[0]).toBeCloseTo(72_000, 6);
+    expect(g?.breakEvenSpotsUsd[1]).toBeCloseTo(93_000, 6);
+  });
+
+  it('reports closed-form payoff for single legs', () => {
+    const [longCall] = detectStrategyGroups([
+      leg({ legId: 'lc', strike: 87_000, size: 0.01, entryPriceUsd: 1_135 }),
+    ]);
+    expect(longCall?.maxProfitUsd).toBeNull();
+    expect(longCall?.maxLossUsd).toBeCloseTo(11.35, 6);
+    expect(longCall?.breakEvenSpotsUsd[0]).toBeCloseTo(88_135, 6);
+
+    const [shortPut] = detectStrategyGroups([
+      leg({ legId: 'sp', strike: 70_000, size: -2, entryPriceUsd: 1_000, optionRight: 'put' }),
+    ]);
+    expect(shortPut?.maxProfitUsd).toBeCloseTo(2_000, 6);
+    expect(shortPut?.maxLossUsd).toBeCloseTo(140_000 - 2_000, 6);
+    expect(shortPut?.breakEvenSpotsUsd[0]).toBeCloseTo(69_000, 6);
+  });
 });

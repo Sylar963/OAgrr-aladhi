@@ -1,0 +1,205 @@
+import { readdirSync, readFileSync } from 'node:fs';
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  bannedPhrasePattern,
+  detectProposedStructure,
+  findBannedPhrases,
+  gradeAnswer,
+  gradeTools,
+  matchExpectedNumbers,
+  missingMentions,
+  parseAnswerNumbers,
+  summarizeChecks,
+} from './assistant-eval-checks.js';
+import { type AssistantEvalExpect, AssistantEvalFixtureSchema } from './assistant-eval-fixture.js';
+
+const NO_TOOLS = { observedTools: null, evidence: 'no tool log evidence' };
+
+function expectation(overrides: Partial<AssistantEvalExpect> = {}): AssistantEvalExpect {
+  return {
+    numbers: [],
+    requiredMentions: [],
+    requiredTools: [],
+    mustProposeStructure: false,
+    bannedPhrases: ['I cannot identify', 'my earlier … were wrong'],
+    maxChars: 2_000,
+    ...overrides,
+  };
+}
+
+describe('parseAnswerNumbers', () => {
+  it('parses dollar, comma, decimal, negative and k-suffixed values', () => {
+    expect(
+      parseAnswerNumbers('Spot **$83,886.66**, loss -$1,234.5, strike 85k, IV 45.2%, cost $1.2M'),
+    ).toEqual([83_886.66, -1_234.5, 85_000, 45.2, 1_200_000]);
+  });
+
+  it('reads unicode minus signs and ignores hyphens inside dates', () => {
+    expect(parseAnswerNumbers('PnL −$18.05 on 2026-10-30')).toEqual([-18.05, 2026, 10, 30]);
+  });
+
+  it('does not treat words starting with m or k as suffixes', () => {
+    expect(parseAnswerNumbers('5 min and 3 kittens')).toEqual([5, 3]);
+  });
+});
+
+describe('matchExpectedNumbers', () => {
+  const expected = [
+    { label: 'spot', value: 83_886.66, tolerance: 1, source: 'headline.spotUsd' },
+    { label: 'pnl', value: -412.37, tolerance: 0.5, source: 'horizonScenarios' },
+  ];
+
+  it('matches magnitudes within tolerance', () => {
+    const results = matchExpectedNumbers('Spot $83,887 and a loss of $412.10', expected);
+    expect(results.map((result) => result.pass)).toEqual([true, true]);
+    expect(results[0]?.matched).toBe(83_887);
+  });
+
+  it('fails numbers outside tolerance', () => {
+    const results = matchExpectedNumbers('Spot $83.9k, loss $410', expected);
+    expect(results.map((result) => result.pass)).toEqual([false, false]);
+  });
+});
+
+describe('detectProposedStructure', () => {
+  it('finds a leg row in a markdown table', () => {
+    const answer = [
+      '| Leg | Side | Strike |',
+      '| --- | --- | --- |',
+      '| Oct 30 put | Buy | 80,000 |',
+    ].join('\n');
+    expect(detectProposedStructure(answer)).toMatchObject({ proposed: true, inTable: true });
+  });
+
+  it('finds a leg in a bullet', () => {
+    expect(detectProposedStructure('- **Buy** 1x Oct 30 80k put for $910').proposed).toBe(true);
+  });
+
+  it('requires the strike and right in the same clause as the action verb', () => {
+    const answer =
+      'You can add bearish exposure, but not as a standalone trade while keeping loss within $1,300. Your Oct 30 $84,000/$90,000 short call spread alone can lose $4,000.';
+    expect(detectProposedStructure(answer).proposed).toBe(false);
+    expect(detectProposedStructure('Sell 1 Oct 30 $90,000 call; it caps nothing.').proposed).toBe(true);
+  });
+
+  it('does not treat a description of held legs as a proposal', () => {
+    const answer = [
+      'You are short the Oct 30 85,000 call and long the Oct 16 87,000 call.',
+      'I cannot identify a structure that fits.',
+      '| Leg | Strike |',
+      '| --- | --- |',
+      '| Short Oct 30 call | 85,000 |',
+    ].join('\n');
+    expect(detectProposedStructure(answer).proposed).toBe(false);
+  });
+});
+
+describe('banned phrases', () => {
+  it('matches ellipsis wildcards and curly quotes', () => {
+    expect(bannedPhrasePattern('my earlier … were wrong').test('My earlier spot and PnL figures were wrong')).toBe(true);
+    expect(bannedPhrasePattern('my previous … were wrong').test('My previous **+$232.38** and **$82,950** figures were wrong')).toBe(true);
+    expect(findBannedPhrases('I can’t identify one; I cannot identify any', ['I cannot identify', "I can't identify"])).toEqual([
+      'I cannot identify',
+      "I can't identify",
+    ]);
+  });
+
+  it('does not match across long spans', () => {
+    const answer = `My earlier ${'x'.repeat(200)} were wrong`;
+    expect(findBannedPhrases(answer, ['my earlier … were wrong'])).toEqual([]);
+  });
+});
+
+describe('missingMentions', () => {
+  it('accepts any of the alternatives case-insensitively', () => {
+    const mentions = [{ label: 'unbounded', anyOf: ['unbounded', 'uncovered'] }];
+    expect(missingMentions('The short call is UNCOVERED after Oct 16', mentions)).toEqual([]);
+    expect(missingMentions('Max loss is $18', mentions)).toEqual(mentions);
+  });
+});
+
+describe('gradeTools', () => {
+  it('reports unverified without evidence instead of passing', () => {
+    expect(gradeTools(['oggregator_feed_health'], NO_TOOLS).status).toBe('unverified');
+  });
+
+  it('normalizes Hermes MCP prefixes', () => {
+    const result = gradeTools(['oggregator_feed_health'], {
+      observedTools: ['mcp__oggregator__oggregator_feed_health'],
+      evidence: 'backend log window',
+    });
+    expect(result.status).toBe('pass');
+  });
+
+  it('fails when a required tool was not observed', () => {
+    const result = gradeTools(['oggregator_trade_flow'], { observedTools: [], evidence: 'log' });
+    expect(result.status).toBe('fail');
+  });
+});
+
+describe('gradeAnswer', () => {
+  it('fails the reference refusal for the expected reasons', () => {
+    const answer =
+      'My earlier spot and PnL figures were wrong. I cannot identify an $18-total-risk structure.';
+    const grade = gradeAnswer(
+      expectation({ mustProposeStructure: true, maxChars: 4_000 }),
+      answer,
+      NO_TOOLS,
+    );
+    expect(grade.pass).toBe(false);
+    const failed = grade.checks.filter((check) => check.status === 'fail').map((check) => check.check);
+    expect(failed).toEqual(['structure', 'banned_phrases']);
+  });
+
+  it('passes a direct answer and does not gate on unverified tools', () => {
+    const grade = gradeAnswer(
+      expectation({
+        numbers: [{ label: 'pnl', value: -412.37, tolerance: 0.5, source: 'cell' }],
+        requiredTools: ['oggregator_option_chain'],
+        mustProposeStructure: true,
+      }),
+      'Your book loses **$412.37**.\n- **Buy** 1x Oct 30 87,000 call to cap the upside.',
+      NO_TOOLS,
+    );
+    expect(grade.pass).toBe(true);
+    expect(grade.checks.find((check) => check.check === 'tools')?.status).toBe('unverified');
+  });
+
+  it('fails empty and over-long answers', () => {
+    expect(gradeAnswer(expectation(), '', NO_TOOLS).pass).toBe(false);
+    expect(gradeAnswer(expectation({ maxChars: 5 }), 'too long answer', NO_TOOLS).pass).toBe(false);
+  });
+
+  it('summarizes pass rates excluding unverified and not-applicable checks', () => {
+    const grades = [
+      gradeAnswer(expectation({ requiredTools: ['x'] }), 'ok', NO_TOOLS),
+      gradeAnswer(expectation(), 'I cannot identify one', NO_TOOLS),
+    ];
+    const summary = summarizeChecks(grades);
+    expect(summary.find((row) => row.check === 'banned_phrases')?.passRate).toBe(0.5);
+    expect(summary.find((row) => row.check === 'tools')).toMatchObject({
+      unverified: 1,
+      notApplicable: 1,
+      passRate: null,
+    });
+  });
+});
+
+describe('committed fixtures', () => {
+  const directory = new URL('./fixtures/', import.meta.url);
+  const files = readdirSync(directory).filter((file) => file.endsWith('.json'));
+
+  it('has 12 to 15 fixtures', () => {
+    expect(files.length).toBeGreaterThanOrEqual(12);
+    expect(files.length).toBeLessThanOrEqual(15);
+  });
+
+  it.each(files)('%s validates and matches its file name', (file) => {
+    const fixture = AssistantEvalFixtureSchema.parse(
+      JSON.parse(readFileSync(new URL(file, directory), 'utf8')),
+    );
+    expect(`${fixture.id}.json`).toBe(file);
+  });
+});

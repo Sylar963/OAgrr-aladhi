@@ -44,6 +44,8 @@ const EMPTY_PNL_CURVE: PortfolioPnlCurveData = {
   upsideBounded: false,
   downsideBounded: false,
   points: [],
+  expiryBasis: 'common_expiry',
+  riskWindows: [],
 };
 
 function loadStoredSource(): PortfolioSource {

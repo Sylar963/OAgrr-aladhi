@@ -316,6 +316,8 @@ export {
   breakEvenIvCurve,
   buildPortfolioHorizonScenarios,
   buildPortfolioPnlCurve,
+  analyzeExpiryStructure,
+  type ExpiryRiskWindow,
   type PortfolioHorizonScenarioCell,
   type PortfolioHorizonScenarios,
   computeTotals,

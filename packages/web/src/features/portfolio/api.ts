@@ -243,6 +243,17 @@ const PortfolioPnlPointSchema = z.object({
   expiryPnlUsd: z.number(),
 });
 
+const ExpiryRiskWindowSchema = z.object({
+  from: z.string(),
+  until: z.string(),
+  liveLegIds: z.array(z.string()),
+  netCallSize: z.number(),
+  upsideUnbounded: z.boolean(),
+  lossAtZeroSpotUsd: z.number(),
+  worstLossUsd: z.number().nullable(),
+  worstLossSpotUsd: z.number().nullable(),
+});
+
 const PortfolioPnlCurveSchema = z.object({
   status: PortfolioPnlCurveStatusSchema,
   underlying: z.string().nullable(),
@@ -253,6 +264,8 @@ const PortfolioPnlCurveSchema = z.object({
   upsideBounded: z.boolean(),
   downsideBounded: z.boolean(),
   points: z.array(PortfolioPnlPointSchema),
+  expiryBasis: z.enum(['common_expiry', 'mixed_expiry']).default('common_expiry'),
+  riskWindows: z.array(ExpiryRiskWindowSchema).default([]),
 });
 
 const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({

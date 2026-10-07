@@ -44,6 +44,8 @@ const metrics: PortfolioMetrics = {
     upsideBounded: false,
     downsideBounded: false,
     points: [],
+    expiryBasis: 'common_expiry',
+    riskWindows: [],
   },
   byStrike: [
     {

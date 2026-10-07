@@ -32,6 +32,7 @@ export {
   type PortfolioHorizonScenarioCell,
   type PortfolioHorizonScenarios,
 } from './pnl-curve.js';
+export { analyzeExpiryStructure, type ExpiryRiskWindow } from './expiry-structure.js';
 export {
   foldManualLeg,
   findExistingForInput,

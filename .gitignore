@@ -66,3 +66,6 @@ apps/landing/.next
 !/docs/knowledge/options-trading.md
 CLAUDE.md
 .env.example
+
+# Assistant eval output
+packages/server/.eval-out/

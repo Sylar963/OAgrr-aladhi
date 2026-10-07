@@ -112,6 +112,8 @@ describe('scenario translations', () => {
         { underlyingPriceUsd: 100, nowPnlUsd: 10, forwardPnlUsd: null, expiryPnlUsd: -50 },
         { underlyingPriceUsd: 105, nowPnlUsd: 90, forwardPnlUsd: null, expiryPnlUsd: 0 },
       ],
+      expiryBasis: 'common_expiry',
+      riskWindows: [],
     };
 
     expect(getSpotShock(curve, 0.05)).toBe(80);

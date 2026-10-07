@@ -1,0 +1,3992 @@
+{
+  "id": "reference-bearish-budget-18",
+  "description": "Reference failure: +1 Oct 16 87k call / -1 Oct 30 85k call, bearish trade within $18 total risk, with stale-spot history.",
+  "scenario": "reference_diagonal",
+  "question": "I'm bearish from here. Propose a trade that keeps my TOTAL portfolio max loss within $18.",
+  "history": [
+    {
+      "messageId": "00000000-0000-4000-8000-000000000001",
+      "role": "user",
+      "content": "How is my diagonal doing?",
+      "status": "complete",
+      "portfolioGeneratedAt": null,
+      "createdAt": 1791367140000
+    },
+    {
+      "messageId": "00000000-0000-4000-8000-000000000002",
+      "role": "assistant",
+      "content": "Your book is **up $232.38** with BTC at **$82,950.00**.\n\n- **Unrealized PnL:** $232.38\n- **Spot:** $82,950.00\n- **Net delta:** -0.177 BTC\n- **Max loss at expiry:** $18.05",
+      "status": "complete",
+      "portfolioGeneratedAt": 1791367200000,
+      "createdAt": 1791367200000
+    }
+  ],
+  "context": {
+    "headline": {
+      "asOf": "2026-10-07T12:00:00.000Z",
+      "underlying": "BTC",
+      "spotUsd": 83886.66,
+      "unrealizedPnlUsd": 60.21083207624815,
+      "netDeltaUsd": -0.16479014699544298,
+      "netThetaUsd": -38.84750148288397,
+      "netVegaUsd": -37.5004564933509,
+      "openLegCount": 2,
+      "nearestExpiry": "2026-10-16"
+    },
+    "schemaVersion": 1,
+    "source": "manual",
+    "underlying": "BTC",
+    "forwardDays": 0,
+    "generatedAt": 1791374400000,
+    "dataFreshness": {
+      "state": "partial",
+      "staleAfterMs": 30000,
+      "explanation": "Some calculations have explicit exclusions or unavailable inputs."
+    },
+    "positions": [
+      {
+        "legId": "ref-oct16-87000-c",
+        "underlying": "BTC",
+        "expiry": "2026-10-16",
+        "strike": 87000,
+        "optionRight": "call",
+        "size": 1,
+        "entryPriceUsd": 1050,
+        "entryIv": 0.43861990937987466,
+        "currentMarkUsd": 1111.499132234192,
+        "currentIv": 0.43861990937987466,
+        "currentIvIsModel": false
+      },
+      {
+        "legId": "ref-oct30-85000-c",
+        "underlying": "BTC",
+        "expiry": "2026-10-30",
+        "strike": 85000,
+        "optionRight": "call",
+        "size": -1,
+        "entryPriceUsd": 3031.95,
+        "entryIv": 0.4140509588856771,
+        "currentMarkUsd": 3033.2383001579437,
+        "currentIv": 0.4140509588856771,
+        "currentIvIsModel": false
+      }
+    ],
+    "totals": {
+      "netDeltaUsd": -0.16479014699544298,
+      "netGammaUsd": 0.000016027582191932312,
+      "netVegaUsd": -37.5004564933509,
+      "netThetaUsd": -38.84750148288397,
+      "netVannaUsd": 0.00295035152857801,
+      "netVolgaUsd": 0.2687921330928926,
+      "unrealizedPnlUsd": 60.21083207624815
+    },
+    "expiryFacts": [
+      {
+        "expiry": "2026-10-16",
+        "dte": 9,
+        "vega": 46.221487038711736,
+        "gamma": 0.00006178849559152662,
+        "theta": -114.75659126220451,
+        "contracts": 1
+      },
+      {
+        "expiry": "2026-10-30",
+        "dte": 23,
+        "vega": -83.72194353206264,
+        "gamma": -0.00004576091339959431,
+        "theta": 75.90908977932054,
+        "contracts": 1
+      }
+    ],
+    "strikeFacts": [
+      {
+        "strike": 87000,
+        "expiry": "2026-10-16",
+        "optionRight": "call",
+        "delta": 0.3123114468896691,
+        "vega": 46.221487038711736,
+        "gamma": 0.00006178849559152662,
+        "vanna": 0.004498942584588557,
+        "volga": 0.2874866697671143,
+        "contracts": 1
+      },
+      {
+        "strike": 85000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "delta": -0.4771015938851121,
+        "vega": -83.72194353206264,
+        "gamma": -0.00004576091339959431,
+        "vanna": -0.0015485910560105473,
+        "volga": -0.018694536674221666,
+        "contracts": 1
+      }
+    ],
+    "strategyFacts": [
+      {
+        "groupId": "naked:ref-oct16-87000-c",
+        "kind": "naked",
+        "underlying": "BTC",
+        "expiry": "2026-10-16",
+        "legIds": [
+          "ref-oct16-87000-c"
+        ],
+        "legs": [
+          {
+            "legId": "ref-oct16-87000-c",
+            "strike": 87000,
+            "optionRight": "call",
+            "size": 1,
+            "entryPriceUsd": 1050
+          }
+        ],
+        "netEntryPremiumUsd": 1050,
+        "debitOrCredit": "debit",
+        "maxProfitUsd": null,
+        "maxLossUsd": null,
+        "breakEvenSpotsUsd": [],
+        "grossDebitUsd": 1050,
+        "grossCreditUsd": 0,
+        "totals": {
+          "netDeltaUsd": 0.3123114468896691,
+          "netGammaUsd": 0.00006178849559152662,
+          "netVegaUsd": 46.221487038711736,
+          "netThetaUsd": -114.75659126220451,
+          "netVannaUsd": 0.004498942584588557,
+          "netVolgaUsd": 0.2874866697671143,
+          "unrealizedPnlUsd": 61.499132234192075
+        }
+      },
+      {
+        "groupId": "naked:ref-oct30-85000-c",
+        "kind": "naked",
+        "underlying": "BTC",
+        "expiry": "2026-10-30",
+        "legIds": [
+          "ref-oct30-85000-c"
+        ],
+        "legs": [
+          {
+            "legId": "ref-oct30-85000-c",
+            "strike": 85000,
+            "optionRight": "call",
+            "size": -1,
+            "entryPriceUsd": 3031.95
+          }
+        ],
+        "netEntryPremiumUsd": -3031.95,
+        "debitOrCredit": "credit",
+        "maxProfitUsd": null,
+        "maxLossUsd": null,
+        "breakEvenSpotsUsd": [],
+        "grossDebitUsd": 0,
+        "grossCreditUsd": 3031.95,
+        "totals": {
+          "netDeltaUsd": -0.4771015938851121,
+          "netGammaUsd": -0.00004576091339959431,
+          "netVegaUsd": -83.72194353206264,
+          "netThetaUsd": 75.90908977932054,
+          "netVannaUsd": -0.0015485910560105473,
+          "netVolgaUsd": -0.018694536674221666,
+          "unrealizedPnlUsd": -1.2883001579439224
+        }
+      }
+    ],
+    "breakEvenFacts": [
+      {
+        "legId": "ref-oct16-87000-c",
+        "strike": 87000,
+        "expiry": "2026-10-16",
+        "optionRight": "call",
+        "entryIv": 0.43861990937987466,
+        "currentMarkUsd": 1111.499132234192,
+        "currentIv": 0.43861990937987466,
+        "breakEvenIv": 0.4252575211828648,
+        "ivCushionPct": 0.03142187387971888
+      },
+      {
+        "legId": "ref-oct30-85000-c",
+        "strike": 85000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "entryIv": 0.4140509588856771,
+        "currentMarkUsd": 3033.2383001579437,
+        "currentIv": 0.4140509588856771,
+        "breakEvenIv": 0.4138970804514706,
+        "ivCushionPct": 0.0003717794627559411
+      }
+    ],
+    "payoffFacts": {
+      "status": "ok",
+      "underlying": "BTC",
+      "currentSpotUsd": 83886.66,
+      "breakEvenPricesUsd": [
+        87243.74320146051
+      ],
+      "maxProfitUsd": 1981.9499999999998,
+      "maxLossUsd": -18.050000000000182,
+      "upsideBounded": true,
+      "downsideBounded": true,
+      "points": [
+        {
+          "underlyingPriceUsd": 67109.32800000001,
+          "nowPnlUsd": 1951.8890334714208,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 67720.46140000001,
+          "nowPnlUsd": 1943.1429010747493,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 68331.5948,
+          "nowPnlUsd": 1932.2972224011867,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 68942.72820000001,
+          "nowPnlUsd": 1918.9731358270094,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 69553.8616,
+          "nowPnlUsd": 1902.7550844302211,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 70164.99500000001,
+          "nowPnlUsd": 1883.1950606942082,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 70776.1284,
+          "nowPnlUsd": 1859.819223032445,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 71387.26180000001,
+          "nowPnlUsd": 1832.137142116252,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 71998.39520000001,
+          "nowPnlUsd": 1799.6538348012991,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 72609.5286,
+          "nowPnlUsd": 1761.884602439297,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 73220.66200000001,
+          "nowPnlUsd": 1718.3725102387023,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 73831.7954,
+          "nowPnlUsd": 1668.7081318654905,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 74442.92880000001,
+          "nowPnlUsd": 1612.5509509746664,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 75054.0622,
+          "nowPnlUsd": 1549.6515765090503,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 75665.1956,
+          "nowPnlUsd": 1479.8737133494005,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 76276.329,
+          "nowPnlUsd": 1403.2146585689075,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 76887.4624,
+          "nowPnlUsd": 1319.822990181914,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 77498.59580000001,
+          "nowPnlUsd": 1230.0121006265717,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 78109.7292,
+          "nowPnlUsd": 1134.268315688655,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 78720.86260000001,
+          "nowPnlUsd": 1033.2525366806058,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 79331.996,
+          "nowPnlUsd": 927.794644416781,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 79943.1294,
+          "nowPnlUsd": 818.8802919137497,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 80554.2628,
+          "nowPnlUsd": 707.6301628670526,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 81165.3962,
+          "nowPnlUsd": 595.2722512209357,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 81776.52960000001,
+          "nowPnlUsd": 483.10818567479237,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 82387.663,
+          "nowPnlUsd": 372.4750435590895,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 82998.7964,
+          "nowPnlUsd": 264.7044367549088,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 83609.92980000001,
+          "nowPnlUsd": 161.08088121407036,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 84221.0632,
+          "nowPnlUsd": 62.80156430074476,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 84832.1966,
+          "nowPnlUsd": -29.055080675764657,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1981.9499999999998
+        },
+        {
+          "underlyingPriceUsd": 85443.33,
+          "nowPnlUsd": -113.53038156989805,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1538.619999999998
+        },
+        {
+          "underlyingPriceUsd": 86054.46340000001,
+          "nowPnlUsd": -189.8804003573432,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 927.486599999992
+        },
+        {
+          "underlyingPriceUsd": 86665.5968,
+          "nowPnlUsd": -257.5508693755155,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 316.35320000000047
+        },
+        {
+          "underlyingPriceUsd": 87276.7302,
+          "nowPnlUsd": -316.19085699347215,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 87887.86360000001,
+          "nowPnlUsd": -365.6460624080037,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 88498.997,
+          "nowPnlUsd": -405.9337878148481,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 89110.1304,
+          "nowPnlUsd": -437.28576409892867,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 89721.2638,
+          "nowPnlUsd": -460.0915436972764,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 90332.3972,
+          "nowPnlUsd": -474.8779134253391,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 90943.5306,
+          "nowPnlUsd": -482.28401966343245,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 91554.664,
+          "nowPnlUsd": -483.0341491775007,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 92165.79740000001,
+          "nowPnlUsd": -477.90987906686223,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 92776.9308,
+          "nowPnlUsd": -467.7230431000762,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 93388.0642,
+          "nowPnlUsd": -453.2906731154626,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 93999.1976,
+          "nowPnlUsd": -435.4127785644787,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 94610.331,
+          "nowPnlUsd": -414.85353955048504,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 95221.4644,
+          "nowPnlUsd": -392.32622198720946,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 95832.5978,
+          "nowPnlUsd": -368.4818881861247,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.050000000000182
+        },
+        {
+          "underlyingPriceUsd": 96443.73120000001,
+          "nowPnlUsd": -343.9017794935462,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 97054.8646,
+          "nowPnlUsd": -319.0930934179305,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 97665.99799999999,
+          "nowPnlUsd": -294.48776674121837,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 98277.1314,
+          "nowPnlUsd": -270.4438064244714,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 98888.2648,
+          "nowPnlUsd": -247.24867759045082,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 99499.3982,
+          "nowPnlUsd": -225.1242569306596,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 100110.5316,
+          "nowPnlUsd": -204.23288415990464,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 100721.66500000001,
+          "nowPnlUsd": -184.6840870233682,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 101332.7984,
+          "nowPnlUsd": -166.54161051450865,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 101943.93179999999,
+          "nowPnlUsd": -149.8304426772338,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 102555.0652,
+          "nowPnlUsd": -134.5435928165207,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 103166.1986,
+          "nowPnlUsd": -120.64843928475966,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        },
+        {
+          "underlyingPriceUsd": 103777.332,
+          "nowPnlUsd": -108.09252043325614,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -18.049999999999272
+        }
+      ]
+    },
+    "horizonScenarios": {
+      "status": "ok",
+      "underlying": "BTC",
+      "currentSpotUsd": 83886.66,
+      "ivAssumption": "current_iv_held_constant",
+      "horizonsDays": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        10,
+        14,
+        21,
+        30
+      ],
+      "spotMovesPct": [
+        -10,
+        -5,
+        -2,
+        0,
+        2,
+        5,
+        10
+      ],
+      "cells": [
+        {
+          "horizonDays": 0,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1499.65,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1012.03,
+            "2026-10-30": 2511.68
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 863.93,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -783.52,
+            "2026-10-30": 1647.44
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 404.59,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -392.65,
+            "2026-10-30": 797.25
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 115.85,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 42.59,
+            "2026-10-30": 73.26
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -129.32,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 649.93,
+            "2026-10-30": -779.24
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -379.36,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 1911.92,
+            "2026-10-30": -2291.28
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -476.43,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4882.17,
+            "2026-10-30": -5358.61
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1524.08,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1025.05,
+            "2026-10-30": 2549.13
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 870.67,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -838.45,
+            "2026-10-30": 1709.12
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 383.96,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -485.7,
+            "2026-10-30": 869.67
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 75.89,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -73.88,
+            "2026-10-30": 149.77
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -184.17,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 517.32,
+            "2026-10-30": -701.49
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -441.41,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 1775.46,
+            "2026-10-30": -2216.86
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -513.51,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4786.44,
+            "2026-10-30": -5299.94
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1580.55,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1042.47,
+            "2026-10-30": 2623.02
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 896.89,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -938.14,
+            "2026-10-30": 1835.04
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 343.94,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -675.16,
+            "2026-10-30": 1019.09
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -14.74,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -322.9,
+            "2026-10-30": 308.16
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -314.58,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 225.88,
+            "2026-10-30": -540.46
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -588.84,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 1474.56,
+            "2026-10-30": -2063.4
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -588.44,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4592.8,
+            "2026-10-30": -5181.24
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1645.83,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1049.2,
+            "2026-10-30": 2695.03
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 950.65,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1013.88,
+            "2026-10-30": 1964.54
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 313.56,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -861.77,
+            "2026-10-30": 1175.33
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -122.5,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -597.12,
+            "2026-10-30": 474.62
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -487,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -115.9,
+            "2026-10-30": -371.1
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -784.03,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 1119.03,
+            "2026-10-30": -1903.07
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -655.94,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4404.93,
+            "2026-10-30": -5060.87
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1714.33,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2764.33
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1049.58,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1048.17,
+            "2026-10-30": 2097.75
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 324.87,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1014.52,
+            "2026-10-30": 1339.39
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -241.84,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -892.36,
+            "2026-10-30": 650.52
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -740.1,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -548.12,
+            "2026-10-30": -191.98
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1074.27,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 660.62,
+            "2026-10-30": -1734.89
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -682.57,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4256.62,
+            "2026-10-30": -4939.19
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1810.65,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2860.65
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1254.59,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2304.59
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 553.02,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 1603.02
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -113.8,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 936.2
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -950.63,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 99.37
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1434.12,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 30.99,
+            "2026-10-30": -1465.11
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -530.34,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4225.33,
+            "2026-10-30": -4755.67
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1915.48,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2965.48
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1541.27,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2591.27
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 947.35,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 1997.35
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 323.8,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 1373.8
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -502.9,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 547.1
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1032.13,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 30.99,
+            "2026-10-30": -1063.13
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -291.79,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4225.33,
+            "2026-10-30": -4517.11
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1981.94,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3031.94
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1970.06,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3020.06
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 1825.83,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2875.83
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 1451.97,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2501.97
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": 676.13,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 1726.13
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -156.63,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 30.99,
+            "2026-10-30": -187.62
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -20.04,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4225.33,
+            "2026-10-30": -4245.36
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1981.95,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3031.95
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1981.95,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3031.95
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 1981.95,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3031.95
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 1981.95,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 3031.95
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": 1417.56,
+          "pnlByExpiryUsd": {
+            "2026-10-16": -1050,
+            "2026-10-30": 2467.56
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -18.05,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 30.99,
+            "2026-10-30": -49.04
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -18.05,
+          "pnlByExpiryUsd": {
+            "2026-10-16": 4225.33,
+            "2026-10-30": -4243.38
+          }
+        }
+      ]
+    },
+    "marketFacts": {
+      "underlyings": [
+        {
+          "underlying": "BTC",
+          "overview": {
+            "underlying": "BTC",
+            "spot24h": {
+              "price": 83886.66,
+              "change24hPct": -1.209031948540129,
+              "high24h": 85932.24825550792,
+              "low24h": 82880.02008
+            },
+            "dvol": {
+              "current": 0.41565944506890007,
+              "ivp": 0.42,
+              "ivChange1d": -0.006,
+              "high52w": 0.78,
+              "low52w": 0.33
+            },
+            "volatilityContext": {
+              "generatedAt": 1791374400000,
+              "underlying": "BTC",
+              "spotPrice": 83886.66,
+              "volatility": {
+                "state": "unavailable",
+                "stateSource": "unavailable",
+                "atmIv7d": null,
+                "atmIv30d": null,
+                "ivPercentile7d": null,
+                "ivPercentile30d": null,
+                "ivChange1d": null,
+                "ivChange7d": null
+              },
+              "realized": {
+                "rv7d": 0.23770222723610657,
+                "rv30d": 0.26223904261481934,
+                "vrp7d": null,
+                "vrp30d": null
+              },
+              "expectedMoves": [
+                {
+                  "days": 7,
+                  "iv": null,
+                  "moveUsd": null,
+                  "movePct": null
+                },
+                {
+                  "days": 30,
+                  "iv": null,
+                  "moveUsd": null,
+                  "movePct": null
+                }
+              ],
+              "range": {
+                "state": "coiled",
+                "width14dPct": 5.566908233403374,
+                "width30dPct": 8.152156125914408,
+                "percentile14d": 6.25
+              },
+              "spotState": {
+                "state": "inside-range",
+                "direction": null,
+                "extensionPct": 0
+              },
+              "setup": {
+                "longCall": "unavailable",
+                "protectivePut": "unavailable",
+                "creditSpread": "unavailable"
+              },
+              "regime": null,
+              "richness": null,
+              "sources": {
+                "ivHistory": false,
+                "spotHistory": true,
+                "regime": false,
+                "ivScope": "mixed"
+              }
+            },
+            "notes": [
+              "IV, DVOL and realized volatility are fractions (0.36 = 36%).",
+              "vrp = implied minus realized volatility; descriptive, not a proven edge."
+            ]
+          },
+          "termStructure": {
+            "underlying": "BTC",
+            "termStructure": "backwardation",
+            "rows": [
+              {
+                "expiry": "2026-10-09",
+                "daysToExpiry": 1.83,
+                "iv10dPut": 0.481,
+                "iv25dPut": 0.4746,
+                "ivAtm": 0.4702,
+                "iv25dCall": 0.468,
+                "iv10dCall": 0.468,
+                "riskReversal25d": -0.0067,
+                "butterfly25d": 0.0011
+              },
+              {
+                "expiry": "2026-10-16",
+                "daysToExpiry": 8.83,
+                "iv10dPut": 0.4651,
+                "iv25dPut": 0.4515,
+                "ivAtm": 0.4426,
+                "iv25dCall": 0.4379,
+                "iv10dCall": 0.438,
+                "riskReversal25d": -0.0136,
+                "butterfly25d": 0.0022
+              },
+              {
+                "expiry": "2026-10-23",
+                "daysToExpiry": 15.83,
+                "iv10dPut": 0.4546,
+                "iv25dPut": 0.4371,
+                "ivAtm": 0.4258,
+                "iv25dCall": 0.4197,
+                "iv10dCall": 0.4195,
+                "riskReversal25d": -0.0175,
+                "butterfly25d": 0.0026
+              },
+              {
+                "expiry": "2026-10-30",
+                "daysToExpiry": 22.83,
+                "iv10dPut": 0.4494,
+                "iv25dPut": 0.4287,
+                "ivAtm": 0.4157,
+                "iv25dCall": 0.4083,
+                "iv10dCall": 0.408,
+                "riskReversal25d": -0.0204,
+                "butterfly25d": 0.0028
+              },
+              {
+                "expiry": "2026-11-27",
+                "daysToExpiry": 50.83,
+                "iv10dPut": 0.4511,
+                "iv25dPut": 0.4202,
+                "ivAtm": 0.4021,
+                "iv25dCall": 0.3912,
+                "iv10dCall": 0.3905,
+                "riskReversal25d": -0.0289,
+                "butterfly25d": 0.0036
+              },
+              {
+                "expiry": "2026-12-25",
+                "daysToExpiry": 78.83,
+                "iv10dPut": 0.4616,
+                "iv25dPut": 0.422,
+                "ivAtm": 0.4003,
+                "iv25dCall": 0.3867,
+                "iv10dCall": 0.3858,
+                "riskReversal25d": -0.0353,
+                "butterfly25d": 0.004
+              },
+              {
+                "expiry": "2027-03-26",
+                "daysToExpiry": 169.83,
+                "iv10dPut": 0.4911,
+                "iv25dPut": 0.4292,
+                "ivAtm": 0.4,
+                "iv25dCall": 0.3797,
+                "iv10dCall": 0.3788,
+                "riskReversal25d": -0.0495,
+                "butterfly25d": 0.0045
+              }
+            ]
+          },
+          "heldExpiryChains": [
+            {
+              "underlying": "BTC",
+              "expiry": "2026-10-16",
+              "expiryIso": "2026-10-16T08:00:00.000Z",
+              "daysToExpiry": 8.83,
+              "stats": {
+                "forwardPriceUsd": 83947.56,
+                "indexPriceUsd": 83886.66,
+                "atmStrike": 84000,
+                "atmIv": 0.4426,
+                "skew25d": -0.0136,
+                "bfly25d": 0.0022,
+                "putCallOiRatio": 0.8,
+                "totalOiUsd": 1924458967
+              },
+              "strikeFilter": {
+                "minStrike": 71303.66100000001,
+                "maxStrike": 96469.659
+              },
+              "strikesAvailable": 51,
+              "strikesReturned": 25,
+              "rows": [
+                {
+                  "strike": 72000,
+                  "side": "call",
+                  "bestBidUsd": 11757.11,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12236.99,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11997.05,
+                  "medianMarkIv": 0.4917,
+                  "delta": 0.9796,
+                  "gamma": 0.00000767,
+                  "thetaUsdPerDay": -17.9,
+                  "vegaUsd": 6.43,
+                  "openInterestContracts": 117,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 72000,
+                  "side": "put",
+                  "bestBidUsd": 44.49,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 54.49,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 49.49,
+                  "medianMarkIv": 0.4917,
+                  "delta": -0.0204,
+                  "gamma": 0.00000767,
+                  "thetaUsdPerDay": -17.9,
+                  "vegaUsd": 6.43,
+                  "openInterestContracts": 93,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "call",
+                  "bestBidUsd": 10801.09,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11241.95,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11021.52,
+                  "medianMarkIv": 0.4851,
+                  "delta": 0.9706,
+                  "gamma": 0.00001057,
+                  "thetaUsdPerDay": -24.01,
+                  "vegaUsd": 8.74,
+                  "openInterestContracts": 154,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "put",
+                  "bestBidUsd": 68.96,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 78.96,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 73.96,
+                  "medianMarkIv": 0.4851,
+                  "delta": -0.0294,
+                  "gamma": 0.00001057,
+                  "thetaUsdPerDay": -24.01,
+                  "vegaUsd": 8.74,
+                  "openInterestContracts": 123,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "call",
+                  "bestBidUsd": 9855.81,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10258.09,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10056.95,
+                  "medianMarkIv": 0.4791,
+                  "delta": 0.9581,
+                  "gamma": 0.00001429,
+                  "thetaUsdPerDay": -31.66,
+                  "vegaUsd": 11.67,
+                  "openInterestContracts": 210,
+                  "volume24hContracts": 25,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "put",
+                  "bestBidUsd": 104.39,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 114.39,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 109.39,
+                  "medianMarkIv": 0.4791,
+                  "delta": -0.0419,
+                  "gamma": 0.00001429,
+                  "thetaUsdPerDay": -31.66,
+                  "vegaUsd": 11.67,
+                  "openInterestContracts": 168,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "call",
+                  "bestBidUsd": 8925.26,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9289.56,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9107.41,
+                  "medianMarkIv": 0.4735,
+                  "delta": 0.9414,
+                  "gamma": 0.0000189,
+                  "thetaUsdPerDay": -40.92,
+                  "vegaUsd": 15.27,
+                  "openInterestContracts": 288,
+                  "volume24hContracts": 35,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "put",
+                  "bestBidUsd": 154.85,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 164.85,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 159.85,
+                  "medianMarkIv": 0.4735,
+                  "delta": -0.0586,
+                  "gamma": 0.0000189,
+                  "thetaUsdPerDay": -40.92,
+                  "vegaUsd": 15.27,
+                  "openInterestContracts": 231,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "call",
+                  "bestBidUsd": 8014.39,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8341.51,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8177.95,
+                  "medianMarkIv": 0.4684,
+                  "delta": 0.9194,
+                  "gamma": 0.00002443,
+                  "thetaUsdPerDay": -51.75,
+                  "vegaUsd": 19.52,
+                  "openInterestContracts": 392,
+                  "volume24hContracts": 47,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "put",
+                  "bestBidUsd": 225.38,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 235.38,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 230.38,
+                  "medianMarkIv": 0.4684,
+                  "delta": -0.0806,
+                  "gamma": 0.00002443,
+                  "thetaUsdPerDay": -51.75,
+                  "vegaUsd": 19.52,
+                  "openInterestContracts": 314,
+                  "volume24hContracts": 38,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "call",
+                  "bestBidUsd": 7129.12,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7420.11,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7274.62,
+                  "medianMarkIv": 0.4638,
+                  "delta": 0.8913,
+                  "gamma": 0.00003078,
+                  "thetaUsdPerDay": -63.92,
+                  "vegaUsd": 24.35,
+                  "openInterestContracts": 522,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "put",
+                  "bestBidUsd": 320.51,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 333.59,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 327.05,
+                  "medianMarkIv": 0.4638,
+                  "delta": -0.1087,
+                  "gamma": 0.00003078,
+                  "thetaUsdPerDay": -63.92,
+                  "vegaUsd": 24.35,
+                  "openInterestContracts": 418,
+                  "volume24hContracts": 50,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "call",
+                  "bestBidUsd": 6276.25,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6532.42,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6404.33,
+                  "medianMarkIv": 0.4596,
+                  "delta": 0.8562,
+                  "gamma": 0.00003776,
+                  "thetaUsdPerDay": -76.98,
+                  "vegaUsd": 29.59,
+                  "openInterestContracts": 675,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "put",
+                  "bestBidUsd": 447.63,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 465.9,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 456.77,
+                  "medianMarkIv": 0.4596,
+                  "delta": -0.1438,
+                  "gamma": 0.00003776,
+                  "thetaUsdPerDay": -76.98,
+                  "vegaUsd": 29.59,
+                  "openInterestContracts": 540,
+                  "volume24hContracts": 65,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "call",
+                  "bestBidUsd": 5463.12,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5686.11,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5574.62,
+                  "medianMarkIv": 0.4558,
+                  "delta": 0.8139,
+                  "gamma": 0.00004502,
+                  "thetaUsdPerDay": -90.27,
+                  "vegaUsd": 34.99,
+                  "openInterestContracts": 844,
+                  "volume24hContracts": 102,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "put",
+                  "bestBidUsd": 614.51,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 639.59,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 627.05,
+                  "medianMarkIv": 0.4558,
+                  "delta": -0.1861,
+                  "gamma": 0.00004502,
+                  "thetaUsdPerDay": -90.27,
+                  "vegaUsd": 34.99,
+                  "openInterestContracts": 675,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "call",
+                  "bestBidUsd": 4697.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4889.03,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4793.17,
+                  "medianMarkIv": 0.4524,
+                  "delta": 0.7641,
+                  "gamma": 0.00005213,
+                  "thetaUsdPerDay": -102.97,
+                  "vegaUsd": 40.21,
+                  "openInterestContracts": 1015,
+                  "volume24hContracts": 122,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "put",
+                  "bestBidUsd": 828.69,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 862.52,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 845.6,
+                  "medianMarkIv": 0.4524,
+                  "delta": -0.2359,
+                  "gamma": 0.00005213,
+                  "thetaUsdPerDay": -102.97,
+                  "vegaUsd": 40.21,
+                  "openInterestContracts": 812,
+                  "volume24hContracts": 97,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "call",
+                  "bestBidUsd": 3985.99,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4148.68,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4067.33,
+                  "medianMarkIv": 0.4493,
+                  "delta": 0.7076,
+                  "gamma": 0.00005856,
+                  "thetaUsdPerDay": -114.14,
+                  "vegaUsd": 44.88,
+                  "openInterestContracts": 1173,
+                  "volume24hContracts": 141,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "put",
+                  "bestBidUsd": 1097.37,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1142.16,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1119.77,
+                  "medianMarkIv": 0.4493,
+                  "delta": -0.2924,
+                  "gamma": 0.00005856,
+                  "thetaUsdPerDay": -114.14,
+                  "vegaUsd": 44.88,
+                  "openInterestContracts": 939,
+                  "volume24hContracts": 113,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "call",
+                  "bestBidUsd": 3335.44,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3471.58,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3403.51,
+                  "medianMarkIv": 0.4467,
+                  "delta": 0.6453,
+                  "gamma": 0.0000638,
+                  "thetaUsdPerDay": -122.9,
+                  "vegaUsd": 48.61,
+                  "openInterestContracts": 1301,
+                  "volume24hContracts": 156,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "put",
+                  "bestBidUsd": 1426.82,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1485.06,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1455.94,
+                  "medianMarkIv": 0.4467,
+                  "delta": -0.3547,
+                  "gamma": 0.0000638,
+                  "thetaUsdPerDay": -122.9,
+                  "vegaUsd": 48.61,
+                  "openInterestContracts": 1041,
+                  "volume24hContracts": 125,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "call",
+                  "bestBidUsd": 2750.43,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2862.7,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2806.57,
+                  "medianMarkIv": 0.4444,
+                  "delta": 0.5788,
+                  "gamma": 0.00006739,
+                  "thetaUsdPerDay": -128.5,
+                  "vegaUsd": 51.08,
+                  "openInterestContracts": 1383,
+                  "volume24hContracts": 166,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "put",
+                  "bestBidUsd": 1821.82,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1896.18,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1859,
+                  "medianMarkIv": 0.4444,
+                  "delta": -0.4212,
+                  "gamma": 0.00006739,
+                  "thetaUsdPerDay": -128.5,
+                  "vegaUsd": 51.08,
+                  "openInterestContracts": 1107,
+                  "volume24hContracts": 133,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "call",
+                  "bestBidUsd": 2233.83,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2325.01,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2279.42,
+                  "medianMarkIv": 0.4425,
+                  "delta": 0.5101,
+                  "gamma": 0.00006902,
+                  "thetaUsdPerDay": -130.44,
+                  "vegaUsd": 52.08,
+                  "openInterestContracts": 1410,
+                  "volume24hContracts": 169,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "put",
+                  "bestBidUsd": 2285.22,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2378.49,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2331.85,
+                  "medianMarkIv": 0.4425,
+                  "delta": -0.4899,
+                  "gamma": 0.00006902,
+                  "thetaUsdPerDay": -130.44,
+                  "vegaUsd": 52.08,
+                  "openInterestContracts": 1128,
+                  "volume24hContracts": 135,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "call",
+                  "bestBidUsd": 1786.19,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1859.09,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1822.64,
+                  "medianMarkIv": 0.4409,
+                  "delta": 0.4414,
+                  "gamma": 0.00006854,
+                  "thetaUsdPerDay": -128.61,
+                  "vegaUsd": 51.54,
+                  "openInterestContracts": 1377,
+                  "volume24hContracts": 165,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "put",
+                  "bestBidUsd": 2817.58,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2932.58,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2875.08,
+                  "medianMarkIv": 0.4409,
+                  "delta": -0.5586,
+                  "gamma": 0.00006854,
+                  "thetaUsdPerDay": -128.61,
+                  "vegaUsd": 51.54,
+                  "openInterestContracts": 1101,
+                  "volume24hContracts": 132,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "call",
+                  "bestBidUsd": 1405.91,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1463.3,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1434.6,
+                  "medianMarkIv": 0.4396,
+                  "delta": 0.3749,
+                  "gamma": 0.00006604,
+                  "thetaUsdPerDay": -123.2,
+                  "vegaUsd": 49.51,
+                  "openInterestContracts": 1290,
+                  "volume24hContracts": 155,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "put",
+                  "bestBidUsd": 3417.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3556.78,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3487.04,
+                  "medianMarkIv": 0.4396,
+                  "delta": -0.6251,
+                  "gamma": 0.00006604,
+                  "thetaUsdPerDay": -123.2,
+                  "vegaUsd": 49.51,
+                  "openInterestContracts": 1032,
+                  "volume24hContracts": 124,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "call",
+                  "bestBidUsd": 1089.27,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1133.73,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1111.5,
+                  "medianMarkIv": 0.4386,
+                  "delta": 0.3123,
+                  "gamma": 0.00006179,
+                  "thetaUsdPerDay": -114.76,
+                  "vegaUsd": 46.22,
+                  "openInterestContracts": 1158,
+                  "volume24hContracts": 139,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "put",
+                  "bestBidUsd": 4080.66,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4247.21,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4163.94,
+                  "medianMarkIv": 0.4386,
+                  "delta": -0.6877,
+                  "gamma": 0.00006179,
+                  "thetaUsdPerDay": -114.76,
+                  "vegaUsd": 46.22,
+                  "openInterestContracts": 926,
+                  "volume24hContracts": 111,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "call",
+                  "bestBidUsd": 830.88,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 864.79,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 847.84,
+                  "medianMarkIv": 0.438,
+                  "delta": 0.2553,
+                  "gamma": 0.00005618,
+                  "thetaUsdPerDay": -104.02,
+                  "vegaUsd": 41.96,
+                  "openInterestContracts": 998,
+                  "volume24hContracts": 120,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "put",
+                  "bestBidUsd": 4802.27,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4998.28,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4900.27,
+                  "medianMarkIv": 0.438,
+                  "delta": -0.7447,
+                  "gamma": 0.00005618,
+                  "thetaUsdPerDay": -104.02,
+                  "vegaUsd": 41.96,
+                  "openInterestContracts": 798,
+                  "volume24hContracts": 96,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "call",
+                  "bestBidUsd": 624.21,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 649.69,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 636.95,
+                  "medianMarkIv": 0.4376,
+                  "delta": 0.2048,
+                  "gamma": 0.00004969,
+                  "thetaUsdPerDay": -91.86,
+                  "vegaUsd": 37.09,
+                  "openInterestContracts": 826,
+                  "volume24hContracts": 99,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "put",
+                  "bestBidUsd": 5575.6,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5803.17,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5689.39,
+                  "medianMarkIv": 0.4376,
+                  "delta": -0.7952,
+                  "gamma": 0.00004969,
+                  "thetaUsdPerDay": -91.86,
+                  "vegaUsd": 37.09,
+                  "openInterestContracts": 660,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "call",
+                  "bestBidUsd": 462.12,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 480.98,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 471.55,
+                  "medianMarkIv": 0.4375,
+                  "delta": 0.1614,
+                  "gamma": 0.00004282,
+                  "thetaUsdPerDay": -79.12,
+                  "vegaUsd": 31.95,
+                  "openInterestContracts": 659,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "put",
+                  "bestBidUsd": 6393.51,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6654.47,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6523.99,
+                  "medianMarkIv": 0.4375,
+                  "delta": -0.8386,
+                  "gamma": 0.00004282,
+                  "thetaUsdPerDay": -79.12,
+                  "vegaUsd": 31.95,
+                  "openInterestContracts": 527,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "call",
+                  "bestBidUsd": 337.39,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 351.16,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 344.27,
+                  "medianMarkIv": 0.4377,
+                  "delta": 0.1249,
+                  "gamma": 0.000036,
+                  "thetaUsdPerDay": -66.57,
+                  "vegaUsd": 26.87,
+                  "openInterestContracts": 507,
+                  "volume24hContracts": 61,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "put",
+                  "bestBidUsd": 7248.77,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7544.64,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7396.71,
+                  "medianMarkIv": 0.4377,
+                  "delta": -0.8751,
+                  "gamma": 0.000036,
+                  "thetaUsdPerDay": -66.57,
+                  "vegaUsd": 26.87,
+                  "openInterestContracts": 406,
+                  "volume24hContracts": 48,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "call",
+                  "bestBidUsd": 243.08,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 253.08,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 248.08,
+                  "medianMarkIv": 0.4381,
+                  "delta": 0.0951,
+                  "gamma": 0.00002957,
+                  "thetaUsdPerDay": -54.79,
+                  "vegaUsd": 22.09,
+                  "openInterestContracts": 380,
+                  "volume24hContracts": 45,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "put",
+                  "bestBidUsd": 8134.5,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8466.53,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8300.51,
+                  "medianMarkIv": 0.4381,
+                  "delta": -0.9049,
+                  "gamma": 0.00002957,
+                  "thetaUsdPerDay": -54.79,
+                  "vegaUsd": 22.09,
+                  "openInterestContracts": 304,
+                  "volume24hContracts": 36,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "call",
+                  "bestBidUsd": 171.62,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 181.62,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 176.62,
+                  "medianMarkIv": 0.4388,
+                  "delta": 0.0713,
+                  "gamma": 0.00002377,
+                  "thetaUsdPerDay": -44.18,
+                  "vegaUsd": 17.79,
+                  "openInterestContracts": 279,
+                  "volume24hContracts": 33,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "put",
+                  "bestBidUsd": 9044.47,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9413.63,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9229.05,
+                  "medianMarkIv": 0.4388,
+                  "delta": -0.9287,
+                  "gamma": 0.00002377,
+                  "thetaUsdPerDay": -44.18,
+                  "vegaUsd": 17.79,
+                  "openInterestContracts": 223,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "call",
+                  "bestBidUsd": 119.37,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 129.37,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 124.37,
+                  "medianMarkIv": 0.4397,
+                  "delta": 0.0527,
+                  "gamma": 0.00001873,
+                  "thetaUsdPerDay": -34.96,
+                  "vegaUsd": 14.05,
+                  "openInterestContracts": 204,
+                  "volume24hContracts": 24,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "put",
+                  "bestBidUsd": 9973.27,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10380.34,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10176.8,
+                  "medianMarkIv": 0.4397,
+                  "delta": -0.9473,
+                  "gamma": 0.00001873,
+                  "thetaUsdPerDay": -34.96,
+                  "vegaUsd": 14.05,
+                  "openInterestContracts": 162,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "call",
+                  "bestBidUsd": 81.72,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 91.72,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 86.72,
+                  "medianMarkIv": 0.4409,
+                  "delta": 0.0385,
+                  "gamma": 0.00001449,
+                  "thetaUsdPerDay": -27.2,
+                  "vegaUsd": 10.9,
+                  "openInterestContracts": 150,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "put",
+                  "bestBidUsd": 10916.37,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11361.94,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11139.16,
+                  "medianMarkIv": 0.4409,
+                  "delta": -0.9615,
+                  "gamma": 0.00001449,
+                  "thetaUsdPerDay": -27.2,
+                  "vegaUsd": 10.9,
+                  "openInterestContracts": 120,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "call",
+                  "bestBidUsd": 54.95,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 64.95,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 59.95,
+                  "medianMarkIv": 0.4423,
+                  "delta": 0.0277,
+                  "gamma": 0.00001104,
+                  "thetaUsdPerDay": -20.84,
+                  "vegaUsd": 8.33,
+                  "openInterestContracts": 114,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "put",
+                  "bestBidUsd": 11870.14,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12354.64,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 12112.39,
+                  "medianMarkIv": 0.4423,
+                  "delta": -0.9723,
+                  "gamma": 0.00001104,
+                  "thetaUsdPerDay": -20.84,
+                  "vegaUsd": 8.33,
+                  "openInterestContracts": 91,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                }
+              ],
+              "units": "Prices are USD per 1 contract of underlying. Best bid/ask are the highest bid and lowest ask across fresh venue quotes. IV, delta, gamma, theta and vega are medians of venue-reported values; theta is venue-reported USD per day and vega venue-reported USD per 1 vol point. Open interest and volume are summed contracts across venues."
+            },
+            {
+              "underlying": "BTC",
+              "expiry": "2026-10-30",
+              "expiryIso": "2026-10-30T08:00:00.000Z",
+              "daysToExpiry": 22.83,
+              "stats": {
+                "forwardPriceUsd": 84044.09,
+                "indexPriceUsd": 83886.66,
+                "atmStrike": 84000,
+                "atmIv": 0.4157,
+                "skew25d": -0.0204,
+                "bfly25d": 0.0028,
+                "putCallOiRatio": 0.8,
+                "totalOiUsd": 1924504265
+              },
+              "strikeFilter": {
+                "minStrike": 71303.66100000001,
+                "maxStrike": 96469.659
+              },
+              "strikesAvailable": 51,
+              "strikesReturned": 25,
+              "rows": [
+                {
+                  "strike": 72000,
+                  "side": "call",
+                  "bestBidUsd": 12151.59,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12647.58,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 12399.59,
+                  "medianMarkIv": 0.4553,
+                  "delta": 0.9215,
+                  "gamma": 0.00001531,
+                  "thetaUsdPerDay": -30.72,
+                  "vegaUsd": 30.81,
+                  "openInterestContracts": 114,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 72000,
+                  "side": "put",
+                  "bestBidUsd": 348.38,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 362.6,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 355.49,
+                  "medianMarkIv": 0.4553,
+                  "delta": -0.0785,
+                  "gamma": 0.00001531,
+                  "thetaUsdPerDay": -30.72,
+                  "vegaUsd": 30.81,
+                  "openInterestContracts": 91,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "call",
+                  "bestBidUsd": 11259.77,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11719.35,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11489.56,
+                  "medianMarkIv": 0.4504,
+                  "delta": 0.9044,
+                  "gamma": 0.00001794,
+                  "thetaUsdPerDay": -35.22,
+                  "vegaUsd": 35.7,
+                  "openInterestContracts": 150,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "put",
+                  "bestBidUsd": 436.56,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 454.38,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 445.47,
+                  "medianMarkIv": 0.4504,
+                  "delta": -0.0956,
+                  "gamma": 0.00001794,
+                  "thetaUsdPerDay": -35.22,
+                  "vegaUsd": 35.7,
+                  "openInterestContracts": 120,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "call",
+                  "bestBidUsd": 10387.43,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10811.4,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10599.41,
+                  "medianMarkIv": 0.4459,
+                  "delta": 0.8843,
+                  "gamma": 0.00002079,
+                  "thetaUsdPerDay": -40,
+                  "vegaUsd": 40.97,
+                  "openInterestContracts": 204,
+                  "volume24hContracts": 24,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "put",
+                  "bestBidUsd": 544.22,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 566.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 555.32,
+                  "medianMarkIv": 0.4459,
+                  "delta": -0.1157,
+                  "gamma": 0.00002079,
+                  "thetaUsdPerDay": -40,
+                  "vegaUsd": 40.97,
+                  "openInterestContracts": 163,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "call",
+                  "bestBidUsd": 9537.74,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9927.03,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9732.39,
+                  "medianMarkIv": 0.4417,
+                  "delta": 0.8612,
+                  "gamma": 0.00002383,
+                  "thetaUsdPerDay": -44.98,
+                  "vegaUsd": 46.5,
+                  "openInterestContracts": 279,
+                  "volume24hContracts": 33,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "put",
+                  "bestBidUsd": 674.53,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 702.06,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 688.29,
+                  "medianMarkIv": 0.4417,
+                  "delta": -0.1388,
+                  "gamma": 0.00002383,
+                  "thetaUsdPerDay": -44.98,
+                  "vegaUsd": 46.5,
+                  "openInterestContracts": 224,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "call",
+                  "bestBidUsd": 8714.04,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9069.72,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8891.88,
+                  "medianMarkIv": 0.4377,
+                  "delta": 0.8349,
+                  "gamma": 0.00002699,
+                  "thetaUsdPerDay": -50.03,
+                  "vegaUsd": 52.2,
+                  "openInterestContracts": 381,
+                  "volume24hContracts": 45,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "put",
+                  "bestBidUsd": 830.84,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 864.75,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 847.79,
+                  "medianMarkIv": 0.4377,
+                  "delta": -0.1651,
+                  "gamma": 0.00002699,
+                  "thetaUsdPerDay": -50.03,
+                  "vegaUsd": 52.2,
+                  "openInterestContracts": 305,
+                  "volume24hContracts": 36,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "call",
+                  "bestBidUsd": 7919.77,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8243.02,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8081.39,
+                  "medianMarkIv": 0.4341,
+                  "delta": 0.8053,
+                  "gamma": 0.00003019,
+                  "thetaUsdPerDay": -55.04,
+                  "vegaUsd": 57.91,
+                  "openInterestContracts": 509,
+                  "volume24hContracts": 61,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "put",
+                  "bestBidUsd": 1016.56,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1058.05,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1037.3,
+                  "medianMarkIv": 0.4341,
+                  "delta": -0.1947,
+                  "gamma": 0.00003019,
+                  "thetaUsdPerDay": -55.04,
+                  "vegaUsd": 57.91,
+                  "openInterestContracts": 407,
+                  "volume24hContracts": 49,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "call",
+                  "bestBidUsd": 7158.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7450.48,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7304.39,
+                  "medianMarkIv": 0.4307,
+                  "delta": 0.7724,
+                  "gamma": 0.00003335,
+                  "thetaUsdPerDay": -59.85,
+                  "vegaUsd": 63.46,
+                  "openInterestContracts": 660,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "put",
+                  "bestBidUsd": 1235.1,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1285.51,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1260.3,
+                  "medianMarkIv": 0.4307,
+                  "delta": -0.2276,
+                  "gamma": 0.00003335,
+                  "thetaUsdPerDay": -59.85,
+                  "vegaUsd": 63.46,
+                  "openInterestContracts": 528,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "call",
+                  "bestBidUsd": 6432.92,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6695.48,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6564.2,
+                  "medianMarkIv": 0.4276,
+                  "delta": 0.7364,
+                  "gamma": 0.00003635,
+                  "thetaUsdPerDay": -64.29,
+                  "vegaUsd": 68.67,
+                  "openInterestContracts": 828,
+                  "volume24hContracts": 99,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "put",
+                  "bestBidUsd": 1489.71,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1550.51,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1520.11,
+                  "medianMarkIv": 0.4276,
+                  "delta": -0.2636,
+                  "gamma": 0.00003635,
+                  "thetaUsdPerDay": -64.29,
+                  "vegaUsd": 68.67,
+                  "openInterestContracts": 662,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "call",
+                  "bestBidUsd": 5746.59,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5981.14,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5863.87,
+                  "medianMarkIv": 0.4247,
+                  "delta": 0.6975,
+                  "gamma": 0.00003909,
+                  "thetaUsdPerDay": -68.23,
+                  "vegaUsd": 73.36,
+                  "openInterestContracts": 999,
+                  "volume24hContracts": 120,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "put",
+                  "bestBidUsd": 1783.38,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1856.17,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1819.78,
+                  "medianMarkIv": 0.4247,
+                  "delta": -0.3025,
+                  "gamma": 0.00003909,
+                  "thetaUsdPerDay": -68.23,
+                  "vegaUsd": 73.36,
+                  "openInterestContracts": 799,
+                  "volume24hContracts": 96,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "call",
+                  "bestBidUsd": 5101.93,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5310.17,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5206.05,
+                  "medianMarkIv": 0.4221,
+                  "delta": 0.6562,
+                  "gamma": 0.00004147,
+                  "thetaUsdPerDay": -71.49,
+                  "vegaUsd": 77.34,
+                  "openInterestContracts": 1159,
+                  "volume24hContracts": 139,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "put",
+                  "bestBidUsd": 2118.72,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2205.2,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2161.96,
+                  "medianMarkIv": 0.4221,
+                  "delta": -0.3438,
+                  "gamma": 0.00004147,
+                  "thetaUsdPerDay": -71.49,
+                  "vegaUsd": 77.34,
+                  "openInterestContracts": 927,
+                  "volume24hContracts": 111,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "call",
+                  "bestBidUsd": 4501.03,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4684.74,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4592.88,
+                  "medianMarkIv": 0.4198,
+                  "delta": 0.6129,
+                  "gamma": 0.00004339,
+                  "thetaUsdPerDay": -73.97,
+                  "vegaUsd": 80.48,
+                  "openInterestContracts": 1290,
+                  "volume24hContracts": 155,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "put",
+                  "bestBidUsd": 2497.82,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2599.77,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2548.79,
+                  "medianMarkIv": 0.4198,
+                  "delta": -0.3871,
+                  "gamma": 0.00004339,
+                  "thetaUsdPerDay": -73.97,
+                  "vegaUsd": 80.48,
+                  "openInterestContracts": 1032,
+                  "volume24hContracts": 124,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "call",
+                  "bestBidUsd": 3945.4,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4106.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4025.91,
+                  "medianMarkIv": 0.4176,
+                  "delta": 0.5682,
+                  "gamma": 0.00004478,
+                  "thetaUsdPerDay": -75.57,
+                  "vegaUsd": 82.63,
+                  "openInterestContracts": 1378,
+                  "volume24hContracts": 165,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "put",
+                  "bestBidUsd": 2922.19,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3041.46,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2981.82,
+                  "medianMarkIv": 0.4176,
+                  "delta": -0.4318,
+                  "gamma": 0.00004478,
+                  "thetaUsdPerDay": -75.57,
+                  "vegaUsd": 82.63,
+                  "openInterestContracts": 1102,
+                  "volume24hContracts": 132,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "call",
+                  "bestBidUsd": 3435.88,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3576.12,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3506,
+                  "medianMarkIv": 0.4157,
+                  "delta": 0.5227,
+                  "gamma": 0.00004558,
+                  "thetaUsdPerDay": -76.22,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1410,
+                  "volume24hContracts": 169,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "put",
+                  "bestBidUsd": 3392.67,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3531.15,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3461.91,
+                  "medianMarkIv": 0.4157,
+                  "delta": -0.4773,
+                  "gamma": 0.00004558,
+                  "thetaUsdPerDay": -76.22,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1128,
+                  "volume24hContracts": 135,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "call",
+                  "bestBidUsd": 2972.57,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3093.9,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3033.24,
+                  "medianMarkIv": 0.4141,
+                  "delta": 0.4771,
+                  "gamma": 0.00004576,
+                  "thetaUsdPerDay": -75.91,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1383,
+                  "volume24hContracts": 166,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "put",
+                  "bestBidUsd": 3909.36,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4068.93,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3989.15,
+                  "medianMarkIv": 0.4141,
+                  "delta": -0.5229,
+                  "gamma": 0.00004576,
+                  "thetaUsdPerDay": -75.91,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1107,
+                  "volume24hContracts": 133,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "call",
+                  "bestBidUsd": 2554.95,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2659.23,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2607.09,
+                  "medianMarkIv": 0.4126,
+                  "delta": 0.432,
+                  "gamma": 0.00004533,
+                  "thetaUsdPerDay": -74.66,
+                  "vegaUsd": 82.64,
+                  "openInterestContracts": 1300,
+                  "volume24hContracts": 156,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "put",
+                  "bestBidUsd": 4471.74,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4654.26,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4563,
+                  "medianMarkIv": 0.4126,
+                  "delta": -0.568,
+                  "gamma": 0.00004533,
+                  "thetaUsdPerDay": -74.66,
+                  "vegaUsd": 82.64,
+                  "openInterestContracts": 1040,
+                  "volume24hContracts": 125,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "call",
+                  "bestBidUsd": 2181.78,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2270.83,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2226.3,
+                  "medianMarkIv": 0.4113,
+                  "delta": 0.388,
+                  "gamma": 0.00004431,
+                  "thetaUsdPerDay": -72.53,
+                  "vegaUsd": 80.53,
+                  "openInterestContracts": 1172,
+                  "volume24hContracts": 141,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "put",
+                  "bestBidUsd": 5078.57,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5285.86,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5182.21,
+                  "medianMarkIv": 0.4113,
+                  "delta": -0.612,
+                  "gamma": 0.00004431,
+                  "thetaUsdPerDay": -72.53,
+                  "vegaUsd": 80.53,
+                  "openInterestContracts": 938,
+                  "volume24hContracts": 113,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "call",
+                  "bestBidUsd": 1851.22,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1926.78,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1889,
+                  "medianMarkIv": 0.4102,
+                  "delta": 0.3457,
+                  "gamma": 0.00004276,
+                  "thetaUsdPerDay": -69.62,
+                  "vegaUsd": 77.51,
+                  "openInterestContracts": 1014,
+                  "volume24hContracts": 122,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "put",
+                  "bestBidUsd": 5728.01,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5961.81,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5844.91,
+                  "medianMarkIv": 0.4102,
+                  "delta": -0.6543,
+                  "gamma": 0.00004276,
+                  "thetaUsdPerDay": -69.62,
+                  "vegaUsd": 77.51,
+                  "openInterestContracts": 811,
+                  "volume24hContracts": 97,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "call",
+                  "bestBidUsd": 1560.94,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1624.66,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1592.8,
+                  "medianMarkIv": 0.4093,
+                  "delta": 0.3056,
+                  "gamma": 0.00004074,
+                  "thetaUsdPerDay": -66.05,
+                  "vegaUsd": 73.69,
+                  "openInterestContracts": 843,
+                  "volume24hContracts": 101,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "put",
+                  "bestBidUsd": 6417.73,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6679.68,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6548.71,
+                  "medianMarkIv": 0.4093,
+                  "delta": -0.6944,
+                  "gamma": 0.00004074,
+                  "thetaUsdPerDay": -66.05,
+                  "vegaUsd": 73.69,
+                  "openInterestContracts": 674,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "call",
+                  "bestBidUsd": 1308.21,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1361.61,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1334.91,
+                  "medianMarkIv": 0.4086,
+                  "delta": 0.268,
+                  "gamma": 0.00003835,
+                  "thetaUsdPerDay": -61.96,
+                  "vegaUsd": 69.25,
+                  "openInterestContracts": 674,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "put",
+                  "bestBidUsd": 7145,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7436.64,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7290.82,
+                  "medianMarkIv": 0.4086,
+                  "delta": -0.732,
+                  "gamma": 0.00003835,
+                  "thetaUsdPerDay": -61.96,
+                  "vegaUsd": 69.25,
+                  "openInterestContracts": 540,
+                  "volume24hContracts": 65,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "call",
+                  "bestBidUsd": 1090.01,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1134.5,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1112.26,
+                  "medianMarkIv": 0.4081,
+                  "delta": 0.2333,
+                  "gamma": 0.00003568,
+                  "thetaUsdPerDay": -57.49,
+                  "vegaUsd": 64.34,
+                  "openInterestContracts": 521,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "put",
+                  "bestBidUsd": 7906.8,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8229.53,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8068.17,
+                  "medianMarkIv": 0.4081,
+                  "delta": -0.7667,
+                  "gamma": 0.00003568,
+                  "thetaUsdPerDay": -57.49,
+                  "vegaUsd": 64.34,
+                  "openInterestContracts": 417,
+                  "volume24hContracts": 50,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "call",
+                  "bestBidUsd": 903.15,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 940.02,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 921.58,
+                  "medianMarkIv": 0.4077,
+                  "delta": 0.2016,
+                  "gamma": 0.00003282,
+                  "thetaUsdPerDay": -52.79,
+                  "vegaUsd": 59.13,
+                  "openInterestContracts": 391,
+                  "volume24hContracts": 47,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "put",
+                  "bestBidUsd": 8699.94,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9055.04,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8877.49,
+                  "medianMarkIv": 0.4077,
+                  "delta": -0.7984,
+                  "gamma": 0.00003282,
+                  "thetaUsdPerDay": -52.79,
+                  "vegaUsd": 59.13,
+                  "openInterestContracts": 313,
+                  "volume24hContracts": 38,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "call",
+                  "bestBidUsd": 744.39,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 774.77,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 759.58,
+                  "medianMarkIv": 0.4075,
+                  "delta": 0.173,
+                  "gamma": 0.00002987,
+                  "thetaUsdPerDay": -48,
+                  "vegaUsd": 53.79,
+                  "openInterestContracts": 288,
+                  "volume24hContracts": 34,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "put",
+                  "bestBidUsd": 9521.18,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9909.8,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9715.49,
+                  "medianMarkIv": 0.4075,
+                  "delta": -0.827,
+                  "gamma": 0.00002987,
+                  "thetaUsdPerDay": -48,
+                  "vegaUsd": 53.79,
+                  "openInterestContracts": 230,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "call",
+                  "bestBidUsd": 610.51,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 635.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 622.97,
+                  "medianMarkIv": 0.4075,
+                  "delta": 0.1474,
+                  "gamma": 0.00002691,
+                  "thetaUsdPerDay": -43.23,
+                  "vegaUsd": 48.45,
+                  "openInterestContracts": 210,
+                  "volume24hContracts": 25,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "put",
+                  "bestBidUsd": 10367.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10790.45,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10578.88,
+                  "medianMarkIv": 0.4075,
+                  "delta": -0.8526,
+                  "gamma": 0.00002691,
+                  "thetaUsdPerDay": -43.23,
+                  "vegaUsd": 48.45,
+                  "openInterestContracts": 168,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "call",
+                  "bestBidUsd": 498.41,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 518.76,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 508.59,
+                  "medianMarkIv": 0.4076,
+                  "delta": 0.1249,
+                  "gamma": 0.00002401,
+                  "thetaUsdPerDay": -38.6,
+                  "vegaUsd": 43.24,
+                  "openInterestContracts": 154,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "put",
+                  "bestBidUsd": 11235.21,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11693.78,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11464.49,
+                  "medianMarkIv": 0.4076,
+                  "delta": -0.8751,
+                  "gamma": 0.00002401,
+                  "thetaUsdPerDay": -38.6,
+                  "vegaUsd": 43.24,
+                  "openInterestContracts": 123,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "call",
+                  "bestBidUsd": 405.2,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 421.73,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 413.47,
+                  "medianMarkIv": 0.4079,
+                  "delta": 0.1051,
+                  "gamma": 0.00002123,
+                  "thetaUsdPerDay": -34.17,
+                  "vegaUsd": 38.26,
+                  "openInterestContracts": 117,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "put",
+                  "bestBidUsd": 12121.99,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12616.76,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 12369.37,
+                  "medianMarkIv": 0.4079,
+                  "delta": -0.8949,
+                  "gamma": 0.00002123,
+                  "thetaUsdPerDay": -34.17,
+                  "vegaUsd": 38.26,
+                  "openInterestContracts": 93,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                }
+              ],
+              "units": "Prices are USD per 1 contract of underlying. Best bid/ask are the highest bid and lowest ask across fresh venue quotes. IV, delta, gamma, theta and vega are medians of venue-reported values; theta is venue-reported USD per day and vega venue-reported USD per 1 vol point. Open interest and volume are summed contracts across venues."
+            }
+          ]
+        }
+      ],
+      "unavailable": []
+    },
+    "shockFacts": {
+      "grid": [
+        [
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": 364.6458468354067
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": 377.9708854738674
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 386.1999666631964
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 388.98042521739626
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 391.77917940462794
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 394.5959834618807
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 397.4305957179422
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 406.03892472976804
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 420.7208787327545
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": 159.65429706826035
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": 175.27627849733108
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 184.8119762050228
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 188.01662813892472
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 191.23405641720092
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 194.46410475729135
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 197.70661929355992
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 207.50745675524013
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 224.07781820937817
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": 61.35337487612196
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": 77.8525787387589
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 87.88919982106381
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 91.25678526627962
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 94.635178059787
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 98.02425196910917
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 101.42388263669272
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 111.68489904537637
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 128.9866414090975
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": 3.461995426136127
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": 20.421338105967152
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 30.7212055703676
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 34.174495230698085
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 37.63759515263155
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 41.11039382602394
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 44.59278135674322
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 55.09640180847782
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 72.78440476784817
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -34.72537458828083
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -17.483189569455135
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -7.021327566500986
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -3.51526901419129
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 0
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 3.524376641074923
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 7.057759540046391
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 17.71095356184742
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 35.63734810546521
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -72.61039466760849
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -55.10273694556963
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -44.48869851872951
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -40.933048370956385
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -37.368741231435706
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -33.795872060574766
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -30.21453448704051
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": -19.420628129799297
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": -1.2697847782255849
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -128.91021652133713
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -111.03399113148043
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -100.20846177144267
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -96.58385552268373
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -92.9513447841855
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -89.31101402571221
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -85.66294656109676
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": -74.67314012860516
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": -56.20951643859007
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -221.46862309623248
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -203.04749053271007
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -191.9087943883169
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -188.1820022542961
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -184.44838231795438
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -180.70800451373725
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -176.960937856893
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": -165.68028144707205
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": -146.75159587055896
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -402.5463884775454
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -383.24352294623895
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -371.596734392042
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -367.70393559251534
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -363.8059520135721
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -359.90283266030747
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -355.99462594313445
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": -344.2399569705376
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": -324.5514468551264
+          }
+        ]
+      ],
+      "meta": {
+        "totalLegs": 2,
+        "pricedLegs": 2,
+        "excludedLegIds": [],
+        "anchor": "per_leg_forward"
+      }
+    },
+    "accountingFacts": {
+      "openGrossDebitUsd": 1050,
+      "openGrossCreditUsd": 3031.95,
+      "openNetPremiumUsd": -1981.9499999999998,
+      "lifetimeGrossDebitUsd": null,
+      "lifetimeGrossCreditUsd": null,
+      "knownFeesUsd": null,
+      "realizedPnlUsd": 0,
+      "persistedTradeCount": null,
+      "historyFromMs": null,
+      "lastSyncedAtMs": null,
+      "persistence": "unavailable"
+    },
+    "tradeHistoryFacts": null,
+    "topContributors": {
+      "delta": [
+        {
+          "key": "2026-10-30|85000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 85000,
+          "optionRight": "call",
+          "metric": "delta",
+          "value": -0.4771015938851121
+        },
+        {
+          "key": "2026-10-16|87000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-16",
+          "strike": 87000,
+          "optionRight": "call",
+          "metric": "delta",
+          "value": 0.3123114468896691
+        }
+      ],
+      "gamma": [
+        {
+          "key": "2026-10-16|87000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-16",
+          "strike": 87000,
+          "optionRight": "call",
+          "metric": "gamma",
+          "value": 0.00006178849559152662
+        },
+        {
+          "key": "2026-10-30|85000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 85000,
+          "optionRight": "call",
+          "metric": "gamma",
+          "value": -0.00004576091339959431
+        }
+      ],
+      "vega": [
+        {
+          "key": "2026-10-30|85000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 85000,
+          "optionRight": "call",
+          "metric": "vega",
+          "value": -83.72194353206264
+        },
+        {
+          "key": "2026-10-16|87000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-16",
+          "strike": 87000,
+          "optionRight": "call",
+          "metric": "vega",
+          "value": 46.221487038711736
+        }
+      ],
+      "theta": [
+        {
+          "key": "2026-10-16",
+          "dimension": "expiry",
+          "expiry": "2026-10-16",
+          "strike": null,
+          "optionRight": null,
+          "metric": "theta",
+          "value": -114.75659126220451
+        },
+        {
+          "key": "2026-10-30",
+          "dimension": "expiry",
+          "expiry": "2026-10-30",
+          "strike": null,
+          "optionRight": null,
+          "metric": "theta",
+          "value": 75.90908977932054
+        }
+      ],
+      "vanna": [
+        {
+          "key": "2026-10-16|87000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-16",
+          "strike": 87000,
+          "optionRight": "call",
+          "metric": "vanna",
+          "value": 0.004498942584588557
+        },
+        {
+          "key": "2026-10-30|85000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 85000,
+          "optionRight": "call",
+          "metric": "vanna",
+          "value": -0.0015485910560105473
+        }
+      ],
+      "volga": [
+        {
+          "key": "2026-10-16|87000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-16",
+          "strike": 87000,
+          "optionRight": "call",
+          "metric": "volga",
+          "value": 0.2874866697671143
+        },
+        {
+          "key": "2026-10-30|85000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 85000,
+          "optionRight": "call",
+          "metric": "volga",
+          "value": -0.018694536674221666
+        }
+      ]
+    },
+    "limitations": [
+      "Fees and venue trade history are unavailable; do not infer them as zero."
+    ]
+  },
+  "expect": {
+    "numbers": [],
+    "requiredMentions": [
+      {
+        "label": "short Oct 30 call is uncovered after the Oct 16 expiry",
+        "anyOf": [
+          "unbounded",
+          "unlimited",
+          "uncovered",
+          "naked",
+          "uncapped",
+          "no cap",
+          "not covered",
+          "remains open",
+          "remain open",
+          "stays open"
+        ]
+      }
+    ],
+    "requiredTools": [],
+    "mustProposeStructure": true,
+    "bannedPhrases": [
+      "I cannot identify",
+      "I can't identify",
+      "I cannot propose",
+      "I can't propose",
+      "my earlier … were wrong",
+      "my earlier … was wrong",
+      "my previous … were wrong",
+      "my previous … was wrong"
+    ],
+    "maxChars": 4500
+  },
+  "provenance": {
+    "generator": "packages/server/src/assistant-eval/build-fixtures.ts",
+    "nowIso": "2026-10-07T12:00:00.000Z",
+    "notes": [
+      "payoffFacts.maxLossUsd is the same-price expiry low; the short Oct 30 call is uncovered after Oct 16."
+    ]
+  }
+}

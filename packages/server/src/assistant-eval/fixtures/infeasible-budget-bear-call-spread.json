@@ -1,0 +1,2899 @@
+{
+  "id": "infeasible-budget-bear-call-spread",
+  "description": "Bear call spread whose max loss already exceeds the requested total budget; expect the closest feasible structure plus the gap.",
+  "scenario": "infeasible_budget",
+  "question": "I want to add a bearish trade but keep my TOTAL portfolio max loss within $1,300.",
+  "history": [],
+  "context": {
+    "headline": {
+      "asOf": "2026-10-07T12:00:00.000Z",
+      "underlying": "BTC",
+      "spotUsd": 83886.66,
+      "unrealizedPnlUsd": -171.09288561602443,
+      "netDeltaUsd": -0.254732520686689,
+      "netThetaUsd": 14.260554852730898,
+      "netVegaUsd": -14.47770645620082,
+      "openLegCount": 2,
+      "nearestExpiry": "2026-10-30"
+    },
+    "schemaVersion": 1,
+    "source": "manual",
+    "underlying": "BTC",
+    "forwardDays": 0,
+    "generatedAt": 1791374400000,
+    "dataFreshness": {
+      "state": "partial",
+      "staleAfterMs": 30000,
+      "explanation": "Some calculations have explicit exclusions or unavailable inputs."
+    },
+    "positions": [
+      {
+        "legId": "bcs-oct30-84000-c",
+        "underlying": "BTC",
+        "expiry": "2026-10-30",
+        "strike": 84000,
+        "optionRight": "call",
+        "size": -1,
+        "entryPriceUsd": 3000,
+        "entryIv": 0.41573834795552406,
+        "currentMarkUsd": 3506.0038725774357,
+        "currentIv": 0.41573834795552406,
+        "currentIvIsModel": false
+      },
+      {
+        "legId": "bcs-oct30-90000-c",
+        "underlying": "BTC",
+        "expiry": "2026-10-30",
+        "strike": 90000,
+        "optionRight": "call",
+        "size": 1,
+        "entryPriceUsd": 1000,
+        "entryIv": 0.4086132941161638,
+        "currentMarkUsd": 1334.9109869614113,
+        "currentIv": 0.4086132941161638,
+        "currentIvIsModel": false
+      }
+    ],
+    "totals": {
+      "netDeltaUsd": -0.254732520686689,
+      "netGammaUsd": -0.000007223841932738359,
+      "netVegaUsd": -14.47770645620082,
+      "netThetaUsd": 14.260554852730898,
+      "netVannaUsd": 0.005363229008403595,
+      "netVolgaUsd": 0.7615705037141548,
+      "unrealizedPnlUsd": -171.09288561602443
+    },
+    "expiryFacts": [
+      {
+        "expiry": "2026-10-30",
+        "dte": 23,
+        "vega": -14.47770645620082,
+        "gamma": -0.000007223841932738359,
+        "theta": 14.260554852730898,
+        "contracts": 2
+      }
+    ],
+    "strikeFacts": [
+      {
+        "strike": 84000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "delta": -0.5227424579838573,
+        "vega": -83.7238197139383,
+        "gamma": -0.00004557620140118897,
+        "vanna": -0.000449746100459606,
+        "volga": 0.005392302692197883,
+        "contracts": 1
+      },
+      {
+        "strike": 90000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "delta": 0.2680099372971683,
+        "vega": 69.24611325773748,
+        "gamma": 0.00003835235946845061,
+        "vanna": 0.005812975108863201,
+        "volga": 0.7561782010219569,
+        "contracts": 1
+      }
+    ],
+    "strategyFacts": [
+      {
+        "groupId": "call_spread:bcs-oct30-84000-c+bcs-oct30-90000-c",
+        "kind": "call_spread",
+        "underlying": "BTC",
+        "expiry": "2026-10-30",
+        "legIds": [
+          "bcs-oct30-84000-c",
+          "bcs-oct30-90000-c"
+        ],
+        "legs": [
+          {
+            "legId": "bcs-oct30-84000-c",
+            "strike": 84000,
+            "optionRight": "call",
+            "size": -1,
+            "entryPriceUsd": 3000
+          },
+          {
+            "legId": "bcs-oct30-90000-c",
+            "strike": 90000,
+            "optionRight": "call",
+            "size": 1,
+            "entryPriceUsd": 1000
+          }
+        ],
+        "netEntryPremiumUsd": -2000,
+        "debitOrCredit": "credit",
+        "maxProfitUsd": 2000,
+        "maxLossUsd": 4000,
+        "breakEvenSpotsUsd": [
+          86000
+        ],
+        "grossDebitUsd": 1000,
+        "grossCreditUsd": 3000,
+        "totals": {
+          "netDeltaUsd": -0.254732520686689,
+          "netGammaUsd": -0.000007223841932738359,
+          "netVegaUsd": -14.47770645620082,
+          "netThetaUsd": 14.260554852730898,
+          "netVannaUsd": 0.005363229008403595,
+          "netVolgaUsd": 0.7615705037141548,
+          "unrealizedPnlUsd": -171.09288561602443
+        }
+      }
+    ],
+    "breakEvenFacts": [
+      {
+        "legId": "bcs-oct30-84000-c",
+        "strike": 84000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "entryIv": 0.41573834795552406,
+        "currentMarkUsd": 3506.0038725774357,
+        "currentIv": 0.41573834795552406,
+        "breakEvenIv": 0.3553123164046295,
+        "ivCushionPct": 0.1700645566197638
+      },
+      {
+        "legId": "bcs-oct30-90000-c",
+        "strike": 90000,
+        "expiry": "2026-10-30",
+        "optionRight": "call",
+        "entryIv": 0.4086132941161638,
+        "currentMarkUsd": 1334.9109869614113,
+        "currentIv": 0.4086132941161638,
+        "breakEvenIv": 0.3587320910699617,
+        "ivCushionPct": 0.13904862232265153
+      }
+    ],
+    "payoffFacts": {
+      "status": "ok",
+      "underlying": "BTC",
+      "currentSpotUsd": 83886.66,
+      "breakEvenPricesUsd": [
+        86000
+      ],
+      "maxProfitUsd": 2000,
+      "maxLossUsd": -4000,
+      "upsideBounded": true,
+      "downsideBounded": true,
+      "points": [
+        {
+          "underlyingPriceUsd": 67109.32800000001,
+          "nowPnlUsd": 1961.9331637123837,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 67770.46140000001,
+          "nowPnlUsd": 1950.7213265826585,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 68431.5948,
+          "nowPnlUsd": 1936.8567496541614,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 69092.72820000001,
+          "nowPnlUsd": 1919.8904596559469,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 69753.8616,
+          "nowPnlUsd": 1899.339149094931,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 70414.99500000001,
+          "nowPnlUsd": 1874.6911172141777,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 71076.1284,
+          "nowPnlUsd": 1845.4139734189885,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 71737.26180000001,
+          "nowPnlUsd": 1810.9640211764638,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 72398.39520000001,
+          "nowPnlUsd": 1770.7971546018462,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 73059.5286,
+          "nowPnlUsd": 1724.3810158804652,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 73720.66200000001,
+          "nowPnlUsd": 1671.2080843862602,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 74381.7954,
+          "nowPnlUsd": 1610.8093026391361,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 75042.92880000001,
+          "nowPnlUsd": 1542.767794278438,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 75704.0622,
+          "nowPnlUsd": 1466.73219828438,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 76365.1956,
+          "nowPnlUsd": 1382.4291338722314,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 77026.329,
+          "nowPnlUsd": 1289.6743226449744,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 77687.4624,
+          "nowPnlUsd": 1188.3819282196755,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 78348.59580000001,
+          "nowPnlUsd": 1078.5717268730123,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 79009.7292,
+          "nowPnlUsd": 960.37379289821,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 79670.86260000001,
+          "nowPnlUsd": 834.0304655510263,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 80331.996,
+          "nowPnlUsd": 699.8954562926938,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 80993.1294,
+          "nowPnlUsd": 558.4300508039978,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 81654.2628,
+          "nowPnlUsd": 410.1964552298923,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 82315.3962,
+          "nowPnlUsd": 255.8484258704466,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 82976.52960000001,
+          "nowPnlUsd": 96.1194021328447,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 83637.663,
+          "nowPnlUsd": -68.19111573657938,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 2000
+        },
+        {
+          "underlyingPriceUsd": 84298.7964,
+          "nowPnlUsd": -236.1966480534793,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1701.2035999999935
+        },
+        {
+          "underlyingPriceUsd": 84959.92980000001,
+          "nowPnlUsd": -406.9903174964784,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 1040.0701999999874
+        },
+        {
+          "underlyingPriceUsd": 85621.0632,
+          "nowPnlUsd": -579.671289322072,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": 378.93679999999586
+        },
+        {
+          "underlyingPriceUsd": 86282.1966,
+          "nowPnlUsd": -753.2951837598739,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -282.19659999999567
+        },
+        {
+          "underlyingPriceUsd": 86943.33,
+          "nowPnlUsd": -926.9258782137731,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -943.3300000000017
+        },
+        {
+          "underlyingPriceUsd": 87604.46340000001,
+          "nowPnlUsd": -1099.6496281196596,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -1604.4634000000078
+        },
+        {
+          "underlyingPriceUsd": 88265.5968,
+          "nowPnlUsd": -1270.5869211924073,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -2265.5967999999993
+        },
+        {
+          "underlyingPriceUsd": 88926.7302,
+          "nowPnlUsd": -1438.903087529783,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -2926.7302000000054
+        },
+        {
+          "underlyingPriceUsd": 89587.86360000001,
+          "nowPnlUsd": -1603.8173912871425,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -3587.8636000000115
+        },
+        {
+          "underlyingPriceUsd": 90248.997,
+          "nowPnlUsd": -1764.6436112240917,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 90910.1304,
+          "nowPnlUsd": -1920.7557814165993,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 91571.2638,
+          "nowPnlUsd": -2071.567311281513,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 92232.3972,
+          "nowPnlUsd": -2216.6074295020226,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 92893.5306,
+          "nowPnlUsd": -2355.486967109464,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 93554.664,
+          "nowPnlUsd": -2487.8965254225477,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 94215.79740000001,
+          "nowPnlUsd": -2613.605713658799,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 94876.9308,
+          "nowPnlUsd": -2732.4607358465364,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 95538.0642,
+          "nowPnlUsd": -2844.3806098625646,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 96199.1976,
+          "nowPnlUsd": -2949.3522930466497,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 96860.331,
+          "nowPnlUsd": -3047.424975666465,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 97521.4644,
+          "nowPnlUsd": -3138.7037861694116,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 98182.5978,
+          "nowPnlUsd": -3223.3431314394547,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 98843.73120000001,
+          "nowPnlUsd": -3301.5398720277735,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 99504.8646,
+          "nowPnlUsd": -3373.5265074134804,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 100165.99799999999,
+          "nowPnlUsd": -3439.5645206208283,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 100827.1314,
+          "nowPnlUsd": -3499.9380057509406,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 101488.2648,
+          "nowPnlUsd": -3554.947676875803,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 102149.3982,
+          "nowPnlUsd": -3604.9053328767623,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 102810.5316,
+          "nowPnlUsd": -3650.1288306633796,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 103471.66500000001,
+          "nowPnlUsd": -3690.9375991356064,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 104132.7984,
+          "nowPnlUsd": -3727.6487084935507,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 104793.93179999999,
+          "nowPnlUsd": -3760.5734941894916,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 105455.0652,
+          "nowPnlUsd": -3790.0147219899663,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 106116.1986,
+          "nowPnlUsd": -3816.2642702318117,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        },
+        {
+          "underlyingPriceUsd": 106777.332,
+          "nowPnlUsd": -3839.6012972967583,
+          "forwardPnlUsd": null,
+          "expiryPnlUsd": -4000
+        }
+      ]
+    },
+    "horizonScenarios": {
+      "status": "ok",
+      "underlying": "BTC",
+      "currentSpotUsd": 83886.66,
+      "ivAssumption": "current_iv_held_constant",
+      "horizonsDays": [
+        0,
+        1,
+        3,
+        5,
+        7,
+        10,
+        14,
+        21,
+        30
+      ],
+      "spotMovesPct": [
+        -10,
+        -5,
+        -2,
+        0,
+        2,
+        5,
+        10
+      ],
+      "cells": [
+        {
+          "horizonDays": 0,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1491.31,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1491.31
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 829.8,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 829.8
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 281.09,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 281.09
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -131.08,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -131.08
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -564.82,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -564.82
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1223.09,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1223.09
+          }
+        },
+        {
+          "horizonDays": 0,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2225.82,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2225.82
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1517.54,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1517.54
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 858.62,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 858.62
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 303.74,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 303.74
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -115.58,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -115.58
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -558.11,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -558.11
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1230.62,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1230.62
+          }
+        },
+        {
+          "horizonDays": 1,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2252.32,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2252.32
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1572.01,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1572.01
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 920.97,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 920.97
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 353.52,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 353.52
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -81.23,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -81.23
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -543.1,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -543.1
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1247.09,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1247.09
+          }
+        },
+        {
+          "horizonDays": 3,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2310.14,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2310.14
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1629.06,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1629.06
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 990.51,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 990.51
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 410.4,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 410.4
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": -41.5,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -41.5
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -525.47,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -525.47
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1265.83,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1265.83
+          }
+        },
+        {
+          "horizonDays": 5,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2375.6,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2375.6
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1688.36,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1688.36
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1068.61,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1068.61
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 476.17,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 476.17
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 5.09,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 5.09
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -504.47,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -504.47
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1287.47,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1287.47
+          }
+        },
+        {
+          "horizonDays": 7,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2450.57,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2450.57
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1780.01,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1780.01
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1205.6,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1205.6
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 597.2,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 597.2
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 92.77,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 92.77
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -464.03,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -464.03
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1327.52,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1327.52
+          }
+        },
+        {
+          "horizonDays": 10,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2586.76,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2586.76
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1898.23,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1898.23
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1437.05,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1437.05
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 823.66,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 823.66
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 264.65,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 264.65
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": -381.54,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -381.54
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1404.86,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1404.86
+          }
+        },
+        {
+          "horizonDays": 14,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -2836.54,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2836.54
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 1999.92,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1999.92
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 1964.43,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1964.43
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 1669.07,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1669.07
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 1075.22,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 1075.22
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": 73.59,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 73.59
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -1796.95,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -1796.95
+          }
+        },
+        {
+          "horizonDays": 21,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -3716.58,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -3716.58
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -10,
+          "spotUsd": 75497.99,
+          "pnlUsd": 2000,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 2000
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -5,
+          "spotUsd": 79692.33,
+          "pnlUsd": 2000,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 2000
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": -2,
+          "spotUsd": 82208.93,
+          "pnlUsd": 2000,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 2000
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 0,
+          "spotUsd": 83886.66,
+          "pnlUsd": 2000,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 2000
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 2,
+          "spotUsd": 85564.39,
+          "pnlUsd": 435.61,
+          "pnlByExpiryUsd": {
+            "2026-10-30": 435.61
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 5,
+          "spotUsd": 88080.99,
+          "pnlUsd": -2080.99,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -2080.99
+          }
+        },
+        {
+          "horizonDays": 30,
+          "spotMovePct": 10,
+          "spotUsd": 92275.33,
+          "pnlUsd": -4000,
+          "pnlByExpiryUsd": {
+            "2026-10-30": -4000
+          }
+        }
+      ]
+    },
+    "marketFacts": {
+      "underlyings": [
+        {
+          "underlying": "BTC",
+          "overview": {
+            "underlying": "BTC",
+            "spot24h": {
+              "price": 83886.66,
+              "change24hPct": -1.209031948540129,
+              "high24h": 85932.24825550792,
+              "low24h": 82880.02008
+            },
+            "dvol": {
+              "current": 0.41565944506890007,
+              "ivp": 0.42,
+              "ivChange1d": -0.006,
+              "high52w": 0.78,
+              "low52w": 0.33
+            },
+            "volatilityContext": {
+              "generatedAt": 1791374400000,
+              "underlying": "BTC",
+              "spotPrice": 83886.66,
+              "volatility": {
+                "state": "unavailable",
+                "stateSource": "unavailable",
+                "atmIv7d": null,
+                "atmIv30d": null,
+                "ivPercentile7d": null,
+                "ivPercentile30d": null,
+                "ivChange1d": null,
+                "ivChange7d": null
+              },
+              "realized": {
+                "rv7d": 0.23770222723610657,
+                "rv30d": 0.26223904261481934,
+                "vrp7d": null,
+                "vrp30d": null
+              },
+              "expectedMoves": [
+                {
+                  "days": 7,
+                  "iv": null,
+                  "moveUsd": null,
+                  "movePct": null
+                },
+                {
+                  "days": 30,
+                  "iv": null,
+                  "moveUsd": null,
+                  "movePct": null
+                }
+              ],
+              "range": {
+                "state": "coiled",
+                "width14dPct": 5.566908233403374,
+                "width30dPct": 8.152156125914408,
+                "percentile14d": 6.25
+              },
+              "spotState": {
+                "state": "inside-range",
+                "direction": null,
+                "extensionPct": 0
+              },
+              "setup": {
+                "longCall": "unavailable",
+                "protectivePut": "unavailable",
+                "creditSpread": "unavailable"
+              },
+              "regime": null,
+              "richness": null,
+              "sources": {
+                "ivHistory": false,
+                "spotHistory": true,
+                "regime": false,
+                "ivScope": "mixed"
+              }
+            },
+            "notes": [
+              "IV, DVOL and realized volatility are fractions (0.36 = 36%).",
+              "vrp = implied minus realized volatility; descriptive, not a proven edge."
+            ]
+          },
+          "termStructure": {
+            "underlying": "BTC",
+            "termStructure": "backwardation",
+            "rows": [
+              {
+                "expiry": "2026-10-09",
+                "daysToExpiry": 1.83,
+                "iv10dPut": 0.481,
+                "iv25dPut": 0.4746,
+                "ivAtm": 0.4702,
+                "iv25dCall": 0.468,
+                "iv10dCall": 0.468,
+                "riskReversal25d": -0.0067,
+                "butterfly25d": 0.0011
+              },
+              {
+                "expiry": "2026-10-16",
+                "daysToExpiry": 8.83,
+                "iv10dPut": 0.4651,
+                "iv25dPut": 0.4515,
+                "ivAtm": 0.4426,
+                "iv25dCall": 0.4379,
+                "iv10dCall": 0.438,
+                "riskReversal25d": -0.0136,
+                "butterfly25d": 0.0022
+              },
+              {
+                "expiry": "2026-10-23",
+                "daysToExpiry": 15.83,
+                "iv10dPut": 0.4546,
+                "iv25dPut": 0.4371,
+                "ivAtm": 0.4258,
+                "iv25dCall": 0.4197,
+                "iv10dCall": 0.4195,
+                "riskReversal25d": -0.0175,
+                "butterfly25d": 0.0026
+              },
+              {
+                "expiry": "2026-10-30",
+                "daysToExpiry": 22.83,
+                "iv10dPut": 0.4494,
+                "iv25dPut": 0.4287,
+                "ivAtm": 0.4157,
+                "iv25dCall": 0.4083,
+                "iv10dCall": 0.408,
+                "riskReversal25d": -0.0204,
+                "butterfly25d": 0.0028
+              },
+              {
+                "expiry": "2026-11-27",
+                "daysToExpiry": 50.83,
+                "iv10dPut": 0.4511,
+                "iv25dPut": 0.4202,
+                "ivAtm": 0.4021,
+                "iv25dCall": 0.3912,
+                "iv10dCall": 0.3905,
+                "riskReversal25d": -0.0289,
+                "butterfly25d": 0.0036
+              },
+              {
+                "expiry": "2026-12-25",
+                "daysToExpiry": 78.83,
+                "iv10dPut": 0.4616,
+                "iv25dPut": 0.422,
+                "ivAtm": 0.4003,
+                "iv25dCall": 0.3867,
+                "iv10dCall": 0.3858,
+                "riskReversal25d": -0.0353,
+                "butterfly25d": 0.004
+              },
+              {
+                "expiry": "2027-03-26",
+                "daysToExpiry": 169.83,
+                "iv10dPut": 0.4911,
+                "iv25dPut": 0.4292,
+                "ivAtm": 0.4,
+                "iv25dCall": 0.3797,
+                "iv10dCall": 0.3788,
+                "riskReversal25d": -0.0495,
+                "butterfly25d": 0.0045
+              }
+            ]
+          },
+          "heldExpiryChains": [
+            {
+              "underlying": "BTC",
+              "expiry": "2026-10-30",
+              "expiryIso": "2026-10-30T08:00:00.000Z",
+              "daysToExpiry": 22.83,
+              "stats": {
+                "forwardPriceUsd": 84044.09,
+                "indexPriceUsd": 83886.66,
+                "atmStrike": 84000,
+                "atmIv": 0.4157,
+                "skew25d": -0.0204,
+                "bfly25d": 0.0028,
+                "putCallOiRatio": 0.8,
+                "totalOiUsd": 1924504265
+              },
+              "strikeFilter": {
+                "minStrike": 71303.66100000001,
+                "maxStrike": 96469.659
+              },
+              "strikesAvailable": 51,
+              "strikesReturned": 25,
+              "rows": [
+                {
+                  "strike": 72000,
+                  "side": "call",
+                  "bestBidUsd": 12151.59,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12647.58,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 12399.59,
+                  "medianMarkIv": 0.4553,
+                  "delta": 0.9215,
+                  "gamma": 0.00001531,
+                  "thetaUsdPerDay": -30.72,
+                  "vegaUsd": 30.81,
+                  "openInterestContracts": 114,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 72000,
+                  "side": "put",
+                  "bestBidUsd": 348.38,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 362.6,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 355.49,
+                  "medianMarkIv": 0.4553,
+                  "delta": -0.0785,
+                  "gamma": 0.00001531,
+                  "thetaUsdPerDay": -30.72,
+                  "vegaUsd": 30.81,
+                  "openInterestContracts": 91,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "call",
+                  "bestBidUsd": 11259.77,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11719.35,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11489.56,
+                  "medianMarkIv": 0.4504,
+                  "delta": 0.9044,
+                  "gamma": 0.00001794,
+                  "thetaUsdPerDay": -35.22,
+                  "vegaUsd": 35.7,
+                  "openInterestContracts": 150,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 73000,
+                  "side": "put",
+                  "bestBidUsd": 436.56,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 454.38,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 445.47,
+                  "medianMarkIv": 0.4504,
+                  "delta": -0.0956,
+                  "gamma": 0.00001794,
+                  "thetaUsdPerDay": -35.22,
+                  "vegaUsd": 35.7,
+                  "openInterestContracts": 120,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "call",
+                  "bestBidUsd": 10387.43,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10811.4,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10599.41,
+                  "medianMarkIv": 0.4459,
+                  "delta": 0.8843,
+                  "gamma": 0.00002079,
+                  "thetaUsdPerDay": -40,
+                  "vegaUsd": 40.97,
+                  "openInterestContracts": 204,
+                  "volume24hContracts": 24,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 74000,
+                  "side": "put",
+                  "bestBidUsd": 544.22,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 566.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 555.32,
+                  "medianMarkIv": 0.4459,
+                  "delta": -0.1157,
+                  "gamma": 0.00002079,
+                  "thetaUsdPerDay": -40,
+                  "vegaUsd": 40.97,
+                  "openInterestContracts": 163,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "call",
+                  "bestBidUsd": 9537.74,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9927.03,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9732.39,
+                  "medianMarkIv": 0.4417,
+                  "delta": 0.8612,
+                  "gamma": 0.00002383,
+                  "thetaUsdPerDay": -44.98,
+                  "vegaUsd": 46.5,
+                  "openInterestContracts": 279,
+                  "volume24hContracts": 33,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 75000,
+                  "side": "put",
+                  "bestBidUsd": 674.53,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 702.06,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 688.29,
+                  "medianMarkIv": 0.4417,
+                  "delta": -0.1388,
+                  "gamma": 0.00002383,
+                  "thetaUsdPerDay": -44.98,
+                  "vegaUsd": 46.5,
+                  "openInterestContracts": 224,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "call",
+                  "bestBidUsd": 8714.04,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9069.72,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8891.88,
+                  "medianMarkIv": 0.4377,
+                  "delta": 0.8349,
+                  "gamma": 0.00002699,
+                  "thetaUsdPerDay": -50.03,
+                  "vegaUsd": 52.2,
+                  "openInterestContracts": 381,
+                  "volume24hContracts": 45,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 76000,
+                  "side": "put",
+                  "bestBidUsd": 830.84,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 864.75,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 847.79,
+                  "medianMarkIv": 0.4377,
+                  "delta": -0.1651,
+                  "gamma": 0.00002699,
+                  "thetaUsdPerDay": -50.03,
+                  "vegaUsd": 52.2,
+                  "openInterestContracts": 305,
+                  "volume24hContracts": 36,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "call",
+                  "bestBidUsd": 7919.77,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8243.02,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8081.39,
+                  "medianMarkIv": 0.4341,
+                  "delta": 0.8053,
+                  "gamma": 0.00003019,
+                  "thetaUsdPerDay": -55.04,
+                  "vegaUsd": 57.91,
+                  "openInterestContracts": 509,
+                  "volume24hContracts": 61,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 77000,
+                  "side": "put",
+                  "bestBidUsd": 1016.56,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1058.05,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1037.3,
+                  "medianMarkIv": 0.4341,
+                  "delta": -0.1947,
+                  "gamma": 0.00003019,
+                  "thetaUsdPerDay": -55.04,
+                  "vegaUsd": 57.91,
+                  "openInterestContracts": 407,
+                  "volume24hContracts": 49,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "call",
+                  "bestBidUsd": 7158.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7450.48,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7304.39,
+                  "medianMarkIv": 0.4307,
+                  "delta": 0.7724,
+                  "gamma": 0.00003335,
+                  "thetaUsdPerDay": -59.85,
+                  "vegaUsd": 63.46,
+                  "openInterestContracts": 660,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 78000,
+                  "side": "put",
+                  "bestBidUsd": 1235.1,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1285.51,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1260.3,
+                  "medianMarkIv": 0.4307,
+                  "delta": -0.2276,
+                  "gamma": 0.00003335,
+                  "thetaUsdPerDay": -59.85,
+                  "vegaUsd": 63.46,
+                  "openInterestContracts": 528,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "call",
+                  "bestBidUsd": 6432.92,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6695.48,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6564.2,
+                  "medianMarkIv": 0.4276,
+                  "delta": 0.7364,
+                  "gamma": 0.00003635,
+                  "thetaUsdPerDay": -64.29,
+                  "vegaUsd": 68.67,
+                  "openInterestContracts": 828,
+                  "volume24hContracts": 99,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 79000,
+                  "side": "put",
+                  "bestBidUsd": 1489.71,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1550.51,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1520.11,
+                  "medianMarkIv": 0.4276,
+                  "delta": -0.2636,
+                  "gamma": 0.00003635,
+                  "thetaUsdPerDay": -64.29,
+                  "vegaUsd": 68.67,
+                  "openInterestContracts": 662,
+                  "volume24hContracts": 79,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "call",
+                  "bestBidUsd": 5746.59,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5981.14,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5863.87,
+                  "medianMarkIv": 0.4247,
+                  "delta": 0.6975,
+                  "gamma": 0.00003909,
+                  "thetaUsdPerDay": -68.23,
+                  "vegaUsd": 73.36,
+                  "openInterestContracts": 999,
+                  "volume24hContracts": 120,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 80000,
+                  "side": "put",
+                  "bestBidUsd": 1783.38,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1856.17,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1819.78,
+                  "medianMarkIv": 0.4247,
+                  "delta": -0.3025,
+                  "gamma": 0.00003909,
+                  "thetaUsdPerDay": -68.23,
+                  "vegaUsd": 73.36,
+                  "openInterestContracts": 799,
+                  "volume24hContracts": 96,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "call",
+                  "bestBidUsd": 5101.93,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5310.17,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5206.05,
+                  "medianMarkIv": 0.4221,
+                  "delta": 0.6562,
+                  "gamma": 0.00004147,
+                  "thetaUsdPerDay": -71.49,
+                  "vegaUsd": 77.34,
+                  "openInterestContracts": 1159,
+                  "volume24hContracts": 139,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 81000,
+                  "side": "put",
+                  "bestBidUsd": 2118.72,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2205.2,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2161.96,
+                  "medianMarkIv": 0.4221,
+                  "delta": -0.3438,
+                  "gamma": 0.00004147,
+                  "thetaUsdPerDay": -71.49,
+                  "vegaUsd": 77.34,
+                  "openInterestContracts": 927,
+                  "volume24hContracts": 111,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "call",
+                  "bestBidUsd": 4501.03,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4684.74,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4592.88,
+                  "medianMarkIv": 0.4198,
+                  "delta": 0.6129,
+                  "gamma": 0.00004339,
+                  "thetaUsdPerDay": -73.97,
+                  "vegaUsd": 80.48,
+                  "openInterestContracts": 1290,
+                  "volume24hContracts": 155,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 82000,
+                  "side": "put",
+                  "bestBidUsd": 2497.82,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2599.77,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2548.79,
+                  "medianMarkIv": 0.4198,
+                  "delta": -0.3871,
+                  "gamma": 0.00004339,
+                  "thetaUsdPerDay": -73.97,
+                  "vegaUsd": 80.48,
+                  "openInterestContracts": 1032,
+                  "volume24hContracts": 124,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "call",
+                  "bestBidUsd": 3945.4,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4106.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4025.91,
+                  "medianMarkIv": 0.4176,
+                  "delta": 0.5682,
+                  "gamma": 0.00004478,
+                  "thetaUsdPerDay": -75.57,
+                  "vegaUsd": 82.63,
+                  "openInterestContracts": 1378,
+                  "volume24hContracts": 165,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 83000,
+                  "side": "put",
+                  "bestBidUsd": 2922.19,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3041.46,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2981.82,
+                  "medianMarkIv": 0.4176,
+                  "delta": -0.4318,
+                  "gamma": 0.00004478,
+                  "thetaUsdPerDay": -75.57,
+                  "vegaUsd": 82.63,
+                  "openInterestContracts": 1102,
+                  "volume24hContracts": 132,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "call",
+                  "bestBidUsd": 3435.88,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3576.12,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3506,
+                  "medianMarkIv": 0.4157,
+                  "delta": 0.5227,
+                  "gamma": 0.00004558,
+                  "thetaUsdPerDay": -76.22,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1410,
+                  "volume24hContracts": 169,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 84000,
+                  "side": "put",
+                  "bestBidUsd": 3392.67,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3531.15,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3461.91,
+                  "medianMarkIv": 0.4157,
+                  "delta": -0.4773,
+                  "gamma": 0.00004558,
+                  "thetaUsdPerDay": -76.22,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1128,
+                  "volume24hContracts": 135,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "call",
+                  "bestBidUsd": 2972.57,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 3093.9,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3033.24,
+                  "medianMarkIv": 0.4141,
+                  "delta": 0.4771,
+                  "gamma": 0.00004576,
+                  "thetaUsdPerDay": -75.91,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1383,
+                  "volume24hContracts": 166,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 85000,
+                  "side": "put",
+                  "bestBidUsd": 3909.36,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4068.93,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 3989.15,
+                  "medianMarkIv": 0.4141,
+                  "delta": -0.5229,
+                  "gamma": 0.00004576,
+                  "thetaUsdPerDay": -75.91,
+                  "vegaUsd": 83.72,
+                  "openInterestContracts": 1107,
+                  "volume24hContracts": 133,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "call",
+                  "bestBidUsd": 2554.95,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2659.23,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2607.09,
+                  "medianMarkIv": 0.4126,
+                  "delta": 0.432,
+                  "gamma": 0.00004533,
+                  "thetaUsdPerDay": -74.66,
+                  "vegaUsd": 82.64,
+                  "openInterestContracts": 1300,
+                  "volume24hContracts": 156,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 86000,
+                  "side": "put",
+                  "bestBidUsd": 4471.74,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 4654.26,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 4563,
+                  "medianMarkIv": 0.4126,
+                  "delta": -0.568,
+                  "gamma": 0.00004533,
+                  "thetaUsdPerDay": -74.66,
+                  "vegaUsd": 82.64,
+                  "openInterestContracts": 1040,
+                  "volume24hContracts": 125,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "call",
+                  "bestBidUsd": 2181.78,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 2270.83,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 2226.3,
+                  "medianMarkIv": 0.4113,
+                  "delta": 0.388,
+                  "gamma": 0.00004431,
+                  "thetaUsdPerDay": -72.53,
+                  "vegaUsd": 80.53,
+                  "openInterestContracts": 1172,
+                  "volume24hContracts": 141,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 87000,
+                  "side": "put",
+                  "bestBidUsd": 5078.57,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5285.86,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5182.21,
+                  "medianMarkIv": 0.4113,
+                  "delta": -0.612,
+                  "gamma": 0.00004431,
+                  "thetaUsdPerDay": -72.53,
+                  "vegaUsd": 80.53,
+                  "openInterestContracts": 938,
+                  "volume24hContracts": 113,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "call",
+                  "bestBidUsd": 1851.22,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1926.78,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1889,
+                  "medianMarkIv": 0.4102,
+                  "delta": 0.3457,
+                  "gamma": 0.00004276,
+                  "thetaUsdPerDay": -69.62,
+                  "vegaUsd": 77.51,
+                  "openInterestContracts": 1014,
+                  "volume24hContracts": 122,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 88000,
+                  "side": "put",
+                  "bestBidUsd": 5728.01,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 5961.81,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 5844.91,
+                  "medianMarkIv": 0.4102,
+                  "delta": -0.6543,
+                  "gamma": 0.00004276,
+                  "thetaUsdPerDay": -69.62,
+                  "vegaUsd": 77.51,
+                  "openInterestContracts": 811,
+                  "volume24hContracts": 97,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "call",
+                  "bestBidUsd": 1560.94,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1624.66,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1592.8,
+                  "medianMarkIv": 0.4093,
+                  "delta": 0.3056,
+                  "gamma": 0.00004074,
+                  "thetaUsdPerDay": -66.05,
+                  "vegaUsd": 73.69,
+                  "openInterestContracts": 843,
+                  "volume24hContracts": 101,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 89000,
+                  "side": "put",
+                  "bestBidUsd": 6417.73,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 6679.68,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 6548.71,
+                  "medianMarkIv": 0.4093,
+                  "delta": -0.6944,
+                  "gamma": 0.00004074,
+                  "thetaUsdPerDay": -66.05,
+                  "vegaUsd": 73.69,
+                  "openInterestContracts": 674,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "call",
+                  "bestBidUsd": 1308.21,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1361.61,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1334.91,
+                  "medianMarkIv": 0.4086,
+                  "delta": 0.268,
+                  "gamma": 0.00003835,
+                  "thetaUsdPerDay": -61.96,
+                  "vegaUsd": 69.25,
+                  "openInterestContracts": 674,
+                  "volume24hContracts": 81,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 90000,
+                  "side": "put",
+                  "bestBidUsd": 7145,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 7436.64,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 7290.82,
+                  "medianMarkIv": 0.4086,
+                  "delta": -0.732,
+                  "gamma": 0.00003835,
+                  "thetaUsdPerDay": -61.96,
+                  "vegaUsd": 69.25,
+                  "openInterestContracts": 540,
+                  "volume24hContracts": 65,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "call",
+                  "bestBidUsd": 1090.01,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 1134.5,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 1112.26,
+                  "medianMarkIv": 0.4081,
+                  "delta": 0.2333,
+                  "gamma": 0.00003568,
+                  "thetaUsdPerDay": -57.49,
+                  "vegaUsd": 64.34,
+                  "openInterestContracts": 521,
+                  "volume24hContracts": 63,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 91000,
+                  "side": "put",
+                  "bestBidUsd": 7906.8,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 8229.53,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8068.17,
+                  "medianMarkIv": 0.4081,
+                  "delta": -0.7667,
+                  "gamma": 0.00003568,
+                  "thetaUsdPerDay": -57.49,
+                  "vegaUsd": 64.34,
+                  "openInterestContracts": 417,
+                  "volume24hContracts": 50,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "call",
+                  "bestBidUsd": 903.15,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 940.02,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 921.58,
+                  "medianMarkIv": 0.4077,
+                  "delta": 0.2016,
+                  "gamma": 0.00003282,
+                  "thetaUsdPerDay": -52.79,
+                  "vegaUsd": 59.13,
+                  "openInterestContracts": 391,
+                  "volume24hContracts": 47,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 92000,
+                  "side": "put",
+                  "bestBidUsd": 8699.94,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9055.04,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 8877.49,
+                  "medianMarkIv": 0.4077,
+                  "delta": -0.7984,
+                  "gamma": 0.00003282,
+                  "thetaUsdPerDay": -52.79,
+                  "vegaUsd": 59.13,
+                  "openInterestContracts": 313,
+                  "volume24hContracts": 38,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "call",
+                  "bestBidUsd": 744.39,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 774.77,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 759.58,
+                  "medianMarkIv": 0.4075,
+                  "delta": 0.173,
+                  "gamma": 0.00002987,
+                  "thetaUsdPerDay": -48,
+                  "vegaUsd": 53.79,
+                  "openInterestContracts": 288,
+                  "volume24hContracts": 34,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 93000,
+                  "side": "put",
+                  "bestBidUsd": 9521.18,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 9909.8,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 9715.49,
+                  "medianMarkIv": 0.4075,
+                  "delta": -0.827,
+                  "gamma": 0.00002987,
+                  "thetaUsdPerDay": -48,
+                  "vegaUsd": 53.79,
+                  "openInterestContracts": 230,
+                  "volume24hContracts": 27,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "call",
+                  "bestBidUsd": 610.51,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 635.43,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 622.97,
+                  "medianMarkIv": 0.4075,
+                  "delta": 0.1474,
+                  "gamma": 0.00002691,
+                  "thetaUsdPerDay": -43.23,
+                  "vegaUsd": 48.45,
+                  "openInterestContracts": 210,
+                  "volume24hContracts": 25,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 94000,
+                  "side": "put",
+                  "bestBidUsd": 10367.3,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 10790.45,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 10578.88,
+                  "medianMarkIv": 0.4075,
+                  "delta": -0.8526,
+                  "gamma": 0.00002691,
+                  "thetaUsdPerDay": -43.23,
+                  "vegaUsd": 48.45,
+                  "openInterestContracts": 168,
+                  "volume24hContracts": 20,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "call",
+                  "bestBidUsd": 498.41,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 518.76,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 508.59,
+                  "medianMarkIv": 0.4076,
+                  "delta": 0.1249,
+                  "gamma": 0.00002401,
+                  "thetaUsdPerDay": -38.6,
+                  "vegaUsd": 43.24,
+                  "openInterestContracts": 154,
+                  "volume24hContracts": 18,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 95000,
+                  "side": "put",
+                  "bestBidUsd": 11235.21,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 11693.78,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 11464.49,
+                  "medianMarkIv": 0.4076,
+                  "delta": -0.8751,
+                  "gamma": 0.00002401,
+                  "thetaUsdPerDay": -38.6,
+                  "vegaUsd": 43.24,
+                  "openInterestContracts": 123,
+                  "volume24hContracts": 15,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "call",
+                  "bestBidUsd": 405.2,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 421.73,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 413.47,
+                  "medianMarkIv": 0.4079,
+                  "delta": 0.1051,
+                  "gamma": 0.00002123,
+                  "thetaUsdPerDay": -34.17,
+                  "vegaUsd": 38.26,
+                  "openInterestContracts": 117,
+                  "volume24hContracts": 14,
+                  "quotingVenues": 2
+                },
+                {
+                  "strike": 96000,
+                  "side": "put",
+                  "bestBidUsd": 12121.99,
+                  "bestBidVenue": "deribit",
+                  "bestBidSize": 5,
+                  "bestAskUsd": 12616.76,
+                  "bestAskVenue": "deribit",
+                  "bestAskSize": 4,
+                  "medianMidUsd": 12369.37,
+                  "medianMarkIv": 0.4079,
+                  "delta": -0.8949,
+                  "gamma": 0.00002123,
+                  "thetaUsdPerDay": -34.17,
+                  "vegaUsd": 38.26,
+                  "openInterestContracts": 93,
+                  "volume24hContracts": 11,
+                  "quotingVenues": 2
+                }
+              ],
+              "units": "Prices are USD per 1 contract of underlying. Best bid/ask are the highest bid and lowest ask across fresh venue quotes. IV, delta, gamma, theta and vega are medians of venue-reported values; theta is venue-reported USD per day and vega venue-reported USD per 1 vol point. Open interest and volume are summed contracts across venues."
+            }
+          ]
+        }
+      ],
+      "unavailable": []
+    },
+    "shockFacts": {
+      "grid": [
+        [
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -0.35992865584739775
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": 93.67451186278595
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 152.50795224596368
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 172.4920168495064
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 192.65496221200556
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 212.9924260322914
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 233.50016524254534
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 296.0043341728742
+          },
+          {
+            "atmShiftVolPts": -10,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 403.2199444259277
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -134.31179012798384
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -27.384952321619494
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": 38.4584910166559
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 60.66806749265015
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 83.00348936226146
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 105.46186018350272
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 128.04036339466256
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 196.46965086534692
+          },
+          {
+            "atmShiftVolPts": -5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 312.6797154070373
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -187.91513162537012
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -76.06497238374868
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -7.533127095037344
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": 15.5319159091232
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 38.70339752585642
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 61.97895278798023
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 85.35628074186752
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 156.0768112577025
+          },
+          {
+            "atmShiftVolPts": -2.5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 275.7822528880861
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -216.62568789914803
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -102.20049056936841
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -32.25884918742668
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -8.744603163151623
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 14.866182125824707
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 38.57140821469147
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 62.36903260073086
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 134.29667477252224
+          },
+          {
+            "atmShiftVolPts": -1,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 255.84844028785665
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -234.48316538757717
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -118.47892665427571
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -47.6713451682881
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -23.880955117583653
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": 0
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 23.969580485467304
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 48.02589780366907
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 120.6971207642091
+          },
+          {
+            "atmShiftVolPts": 0,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 243.38804262347185
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -251.39111549788868
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -133.9080356366976
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -62.28838941160575
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -38.238865398583584
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -14.104300086542935
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": 10.113511986939557
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 34.412823071128514
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 107.7829454522871
+          },
+          {
+            "atmShiftVolPts": 1,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 231.54591168539264
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -275.1027939151718
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -155.57269168573475
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -82.8271411550013
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -58.41804475893878
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -33.93143157802115
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -9.368901311190712
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": 15.267987287894357
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 89.6098043546408
+          },
+          {
+            "atmShiftVolPts": 2.5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 214.86552582612785
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -310.66181295039496
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -188.12115578768498
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -113.71550877802292
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -88.77557282324051
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -63.76890785764408
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -38.696841126289655
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -13.560666991499602
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 62.220029476262425
+          },
+          {
+            "atmShiftVolPts": 5,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 189.69138674813803
+          }
+        ],
+        [
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.5,
+            "totalPnlUsd": -369.3843146075633
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.25,
+            "totalPnlUsd": -242.02521364497443
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.1,
+            "totalPnlUsd": -164.95066359340854
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": -0.05,
+            "totalPnlUsd": -139.1554427419578
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0,
+            "totalPnlUsd": -113.3099770429435
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.05,
+            "totalPnlUsd": -87.41519723514648
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.1,
+            "totalPnlUsd": -61.472012530022766
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.25,
+            "totalPnlUsd": 16.63918933273817
+          },
+          {
+            "atmShiftVolPts": 10,
+            "skewShiftPerLogK": 0.5,
+            "totalPnlUsd": 147.71358312515076
+          }
+        ]
+      ],
+      "meta": {
+        "totalLegs": 2,
+        "pricedLegs": 2,
+        "excludedLegIds": [],
+        "anchor": "per_leg_forward"
+      }
+    },
+    "accountingFacts": {
+      "openGrossDebitUsd": 1000,
+      "openGrossCreditUsd": 3000,
+      "openNetPremiumUsd": -2000,
+      "lifetimeGrossDebitUsd": null,
+      "lifetimeGrossCreditUsd": null,
+      "knownFeesUsd": null,
+      "realizedPnlUsd": 0,
+      "persistedTradeCount": null,
+      "historyFromMs": null,
+      "lastSyncedAtMs": null,
+      "persistence": "unavailable"
+    },
+    "tradeHistoryFacts": null,
+    "topContributors": {
+      "delta": [
+        {
+          "key": "2026-10-30|84000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 84000,
+          "optionRight": "call",
+          "metric": "delta",
+          "value": -0.5227424579838573
+        },
+        {
+          "key": "2026-10-30|90000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 90000,
+          "optionRight": "call",
+          "metric": "delta",
+          "value": 0.2680099372971683
+        }
+      ],
+      "gamma": [
+        {
+          "key": "2026-10-30|84000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 84000,
+          "optionRight": "call",
+          "metric": "gamma",
+          "value": -0.00004557620140118897
+        },
+        {
+          "key": "2026-10-30|90000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 90000,
+          "optionRight": "call",
+          "metric": "gamma",
+          "value": 0.00003835235946845061
+        }
+      ],
+      "vega": [
+        {
+          "key": "2026-10-30|84000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 84000,
+          "optionRight": "call",
+          "metric": "vega",
+          "value": -83.7238197139383
+        },
+        {
+          "key": "2026-10-30|90000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 90000,
+          "optionRight": "call",
+          "metric": "vega",
+          "value": 69.24611325773748
+        }
+      ],
+      "theta": [
+        {
+          "key": "2026-10-30",
+          "dimension": "expiry",
+          "expiry": "2026-10-30",
+          "strike": null,
+          "optionRight": null,
+          "metric": "theta",
+          "value": 14.260554852730898
+        }
+      ],
+      "vanna": [
+        {
+          "key": "2026-10-30|90000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 90000,
+          "optionRight": "call",
+          "metric": "vanna",
+          "value": 0.005812975108863201
+        },
+        {
+          "key": "2026-10-30|84000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 84000,
+          "optionRight": "call",
+          "metric": "vanna",
+          "value": -0.000449746100459606
+        }
+      ],
+      "volga": [
+        {
+          "key": "2026-10-30|90000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 90000,
+          "optionRight": "call",
+          "metric": "volga",
+          "value": 0.7561782010219569
+        },
+        {
+          "key": "2026-10-30|84000|call",
+          "dimension": "strike",
+          "expiry": "2026-10-30",
+          "strike": 84000,
+          "optionRight": "call",
+          "metric": "volga",
+          "value": 0.005392302692197883
+        }
+      ]
+    },
+    "limitations": [
+      "Fees and venue trade history are unavailable; do not infer them as zero."
+    ]
+  },
+  "expect": {
+    "numbers": [
+      {
+        "label": "current book max loss",
+        "value": -4000,
+        "tolerance": 20,
+        "source": "payoffFacts.maxLossUsd"
+      }
+    ],
+    "requiredMentions": [
+      {
+        "label": "states the budget gap or closest feasible option",
+        "anyOf": [
+          "gap",
+          "shortfall",
+          "exceed",
+          "short of",
+          "over budget",
+          "over your budget",
+          "above your",
+          "closest"
+        ]
+      }
+    ],
+    "requiredTools": [],
+    "mustProposeStructure": true,
+    "bannedPhrases": [
+      "I cannot identify",
+      "I can't identify",
+      "I cannot propose",
+      "I can't propose",
+      "my earlier … were wrong",
+      "my earlier … was wrong",
+      "my previous … were wrong",
+      "my previous … was wrong"
+    ],
+    "maxChars": 4000
+  },
+  "provenance": {
+    "generator": "packages/server/src/assistant-eval/build-fixtures.ts",
+    "nowIso": "2026-10-07T12:00:00.000Z",
+    "notes": []
+  }
+}

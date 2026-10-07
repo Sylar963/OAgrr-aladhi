@@ -135,6 +135,8 @@ function emptyPnlCurve(): PortfolioPnlCurve {
     upsideBounded: false,
     downsideBounded: false,
     points: [],
+    expiryBasis: 'common_expiry',
+    riskWindows: [],
   };
 }
 

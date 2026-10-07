@@ -234,6 +234,26 @@ export const PortfolioPnlPointSchema = z.object({
 });
 export type PortfolioPnlPoint = z.infer<typeof PortfolioPnlPointSchema>;
 
+export const ExpiryBasisSchema = z.enum(['common_expiry', 'mixed_expiry']);
+export type ExpiryBasis = z.infer<typeof ExpiryBasisSchema>;
+
+// One window per distinct future expiry, ending at that expiry. PnL is relative
+// to entry and evaluated at `until`: legs expiring then or earlier settle at
+// intrinsic on one spot path, later legs reprice with Black-76 at current IV.
+// `upsideUnbounded` is set when the calls alive during the window are net short,
+// because spot can keep rising after any earlier settlement.
+export const ExpiryRiskWindowSchema = z.object({
+  from: z.string(),
+  until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  liveLegIds: z.array(z.string()),
+  netCallSize: z.number(),
+  upsideUnbounded: z.boolean(),
+  lossAtZeroSpotUsd: z.number(),
+  worstLossUsd: z.number().nullable(),
+  worstLossSpotUsd: z.number().nonnegative().nullable(),
+});
+export type ExpiryRiskWindow = z.infer<typeof ExpiryRiskWindowSchema>;
+
 export const PortfolioPnlCurveSchema = z.object({
   status: PortfolioPnlCurveStatusSchema,
   underlying: z.string().nullable(),
@@ -244,6 +264,9 @@ export const PortfolioPnlCurveSchema = z.object({
   upsideBounded: z.boolean(),
   downsideBounded: z.boolean(),
   points: z.array(PortfolioPnlPointSchema),
+  // Defaults keep payloads from servers that predate expiry windows parseable.
+  expiryBasis: ExpiryBasisSchema.default('common_expiry'),
+  riskWindows: z.array(ExpiryRiskWindowSchema).default([]),
 });
 export type PortfolioPnlCurve = z.infer<typeof PortfolioPnlCurveSchema>;
 

@@ -1,7 +1,13 @@
-import type { PortfolioPnlCurve, PortfolioPnlPoint, PositionLeg } from '@oggregator/protocol';
+import type {
+  ExpiryBasis,
+  PortfolioPnlCurve,
+  PortfolioPnlCurveStatus,
+  PortfolioPnlPoint,
+  PositionLeg,
+} from '@oggregator/protocol';
 
-import { price76 } from '../feeds/thalex/bs-solver.js';
-
+import { analyzeExpiryStructure } from './expiry-structure.js';
+import { intrinsicValue, markAtHorizon, yearsUntil } from './horizon-valuation.js';
 import type { MarkContext } from './types.js';
 
 interface LegWithMark {
@@ -11,19 +17,6 @@ interface LegWithMark {
 
 const CURVE_POINTS = 61;
 const DAY_MS = 86_400_000;
-
-function yearsUntil(expiry: string, nowMs: number): number {
-  const target = Date.parse(`${expiry}T08:00:00.000Z`);
-  if (!Number.isFinite(target)) return 0;
-  const seconds = (target - nowMs) / 1000;
-  return seconds > 0 ? seconds / (365 * 24 * 60 * 60) : 0;
-}
-
-function intrinsicValue(underlyingPriceUsd: number, strike: number, right: PositionLeg['optionRight']): number {
-  return right === 'call'
-    ? Math.max(0, underlyingPriceUsd - strike)
-    : Math.max(0, strike - underlyingPriceUsd);
-}
 
 function average(values: Array<number | null | undefined>): number | null {
   const filtered = values.filter((value): value is number => value != null && Number.isFinite(value));
@@ -98,17 +91,25 @@ function buildPriceRange(legsWithMarks: LegWithMark[], currentSpotUsd: number | 
   return [minPrice, maxPrice];
 }
 
-function markAtHorizon(
-  leg: PositionLeg,
-  mark: MarkContext,
-  underlyingPriceUsd: number,
-  tYears: number,
-): number | null {
-  if (!(underlyingPriceUsd > 0)) return null;
-  if (!(tYears > 0)) return intrinsicValue(underlyingPriceUsd, leg.strike, leg.optionRight);
-  const sigma = mark.iv ?? leg.entryIv ?? null;
-  if (!(sigma != null && sigma > 0)) return null;
-  return price76(underlyingPriceUsd, leg.strike, sigma, tYears, leg.optionRight);
+function unavailableCurve(
+  status: Exclude<PortfolioPnlCurveStatus, 'ok'>,
+  underlying: string | null,
+  currentSpotUsd: number | null,
+  expiryBasis: ExpiryBasis,
+): PortfolioPnlCurve {
+  return {
+    status,
+    underlying,
+    currentSpotUsd,
+    breakEvenPricesUsd: [],
+    maxProfitUsd: null,
+    maxLossUsd: null,
+    upsideBounded: false,
+    downsideBounded: false,
+    points: [],
+    expiryBasis,
+    riskWindows: [],
+  };
 }
 
 export function buildPortfolioPnlCurve(
@@ -116,33 +117,13 @@ export function buildPortfolioPnlCurve(
   nowMs: number,
   forwardDays: number,
 ): PortfolioPnlCurve {
-  if (legsWithMarks.length === 0) {
-    return {
-      status: 'empty',
-      underlying: null,
-      currentSpotUsd: null,
-      breakEvenPricesUsd: [],
-      maxProfitUsd: null,
-      maxLossUsd: null,
-      upsideBounded: false,
-      downsideBounded: false,
-      points: [],
-    };
-  }
+  const expiryBasis: ExpiryBasis =
+    new Set(legsWithMarks.map(({ leg }) => leg.expiry)).size > 1 ? 'mixed_expiry' : 'common_expiry';
+  if (legsWithMarks.length === 0) return unavailableCurve('empty', null, null, expiryBasis);
 
   const underlying = legsWithMarks[0]?.leg.underlying ?? null;
   if (underlying == null || legsWithMarks.some(({ leg }) => leg.underlying !== underlying)) {
-    return {
-      status: 'mixed_underlyings',
-      underlying: null,
-      currentSpotUsd: null,
-      breakEvenPricesUsd: [],
-      maxProfitUsd: null,
-      maxLossUsd: null,
-      upsideBounded: false,
-      downsideBounded: false,
-      points: [],
-    };
+    return unavailableCurve('mixed_underlyings', null, null, expiryBasis);
   }
 
   const currentSpotUsd = average(
@@ -162,17 +143,7 @@ export function buildPortfolioPnlCurve(
     for (const { leg, mark } of legsWithMarks) {
       const nowValue = markAtHorizon(leg, mark, underlyingPriceUsd, yearsUntil(leg.expiry, nowMs));
       if (nowValue == null) {
-        return {
-          status: 'missing_marks',
-          underlying,
-          currentSpotUsd,
-          breakEvenPricesUsd: [],
-          maxProfitUsd: null,
-          maxLossUsd: null,
-          upsideBounded: false,
-          downsideBounded: false,
-          points: [],
-        };
+        return unavailableCurve('missing_marks', underlying, currentSpotUsd, expiryBasis);
       }
 
       const forwardValue =
@@ -180,17 +151,7 @@ export function buildPortfolioPnlCurve(
           ? markAtHorizon(leg, mark, underlyingPriceUsd, yearsUntil(leg.expiry, forwardNowMs))
           : nowValue;
       if (forwardValue == null) {
-        return {
-          status: 'missing_marks',
-          underlying,
-          currentSpotUsd,
-          breakEvenPricesUsd: [],
-          maxProfitUsd: null,
-          maxLossUsd: null,
-          upsideBounded: false,
-          downsideBounded: false,
-          points: [],
-        };
+        return unavailableCurve('missing_marks', underlying, currentSpotUsd, expiryBasis);
       }
 
       const expiryValue = intrinsicValue(underlyingPriceUsd, leg.strike, leg.optionRight);
@@ -207,9 +168,14 @@ export function buildPortfolioPnlCurve(
     });
   }
 
+  const riskWindows = analyzeExpiryStructure(legsWithMarks, nowMs);
+  if (riskWindows == null) {
+    return unavailableCurve('missing_marks', underlying, currentSpotUsd, expiryBasis);
+  }
+
   const expiryValues = points.map((point) => point.expiryPnlUsd);
   const maxProfitUsd = Math.max(...expiryValues);
-  const maxLossUsd = Math.min(...expiryValues);
+  const curveLowUsd = Math.min(...expiryValues);
   const maxAbs = Math.max(...expiryValues.map((value) => Math.abs(value)), 1);
   const plateauTolerance = Math.max(1, maxAbs * 0.01);
   const first = expiryValues[0] ?? 0;
@@ -217,16 +183,31 @@ export function buildPortfolioPnlCurve(
   const last = expiryValues[expiryValues.length - 1] ?? 0;
   const prev = expiryValues[expiryValues.length - 2] ?? last;
 
+  let maxLossUsd = hasPlateau(expiryValues, curveLowUsd, plateauTolerance) ? curveLowUsd : null;
+  let upsideBounded = Math.abs(last - prev) <= plateauTolerance;
+  // A common settlement spot hides risk that opens once an earlier expiry settles,
+  // so mixed-expiry books take their loss bound from the per-expiry windows.
+  if (expiryBasis === 'mixed_expiry' && riskWindows.length > 0) {
+    if (riskWindows.some((window) => window.upsideUnbounded)) {
+      maxLossUsd = null;
+      upsideBounded = false;
+    } else {
+      maxLossUsd = Math.min(...riskWindows.flatMap((window) => window.worstLossUsd ?? []));
+    }
+  }
+
   return {
     status: 'ok',
     underlying,
     currentSpotUsd,
     breakEvenPricesUsd: breakEvenPrices(points),
     maxProfitUsd: hasPlateau(expiryValues, maxProfitUsd, plateauTolerance) ? maxProfitUsd : null,
-    maxLossUsd: hasPlateau(expiryValues, maxLossUsd, plateauTolerance) ? maxLossUsd : null,
-    upsideBounded: Math.abs(last - prev) <= plateauTolerance,
+    maxLossUsd,
+    upsideBounded,
     downsideBounded: Math.abs(second - first) <= plateauTolerance,
     points,
+    expiryBasis,
+    riskWindows,
   };
 }
 

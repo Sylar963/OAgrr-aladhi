@@ -36,7 +36,11 @@ function spotGrid(legsWithMarks: LegWithMark[]): number[] {
   return [...new Set(grid)].sort((left, right) => left - right);
 }
 
-function pnlAtHorizon(legsWithMarks: LegWithMark[], spotUsd: number, horizonMs: number): number | null {
+export function pnlAtHorizon(
+  legsWithMarks: LegWithMark[],
+  spotUsd: number,
+  horizonMs: number,
+): number | null {
   let pnlUsd = 0;
   for (const { leg, mark } of legsWithMarks) {
     // Black-76 at a zero forward collapses to intrinsic, which markAtHorizon rejects.

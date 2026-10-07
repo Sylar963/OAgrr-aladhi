@@ -4,6 +4,7 @@ import type { PositionLeg } from '@oggregator/protocol';
 
 import { price76 } from '../feeds/thalex/bs-solver.js';
 import {
+  defaultTakerFeeUsd,
   evaluateStructure,
   type ProposedLegQuote,
   type ProposedStructureLeg,
@@ -169,17 +170,29 @@ describe('evaluateStructure', () => {
     expect(result.incrementalWorstLossUsd).toBeCloseTo(-605, 6);
   });
 
-  it('applies the default fee when a quote carries no venue estimate', () => {
-    const result = evaluateStructure({
-      held: [],
-      proposed: [proposed(90_000, 'buy', { size: 2, quote: quote({ feePerContractUsd: null }) })],
-      nowMs: NOW,
-      horizonsDays: [0],
-      spotMovesPct: [0],
-      feePerContractUsd: 4,
-    });
-    expect(result.legs[0]).toMatchObject({ feeUsd: 8, feeSource: 'default' });
-    expect(result.combined?.worstLossUsd).toBeCloseTo(-2_008, 6);
+  it('estimates a conservative taker fee when a quote carries no venue estimate', () => {
+    const run = (overrides: Partial<ProposedLegQuote>) =>
+      evaluateStructure({
+        held: [],
+        proposed: [proposed(90_000, 'buy', { size: 2, quote: quote({ feePerContractUsd: null, ...overrides }) })],
+        nowMs: NOW,
+        horizonsDays: [0],
+        spotMovesPct: [0],
+      });
+
+    // 0.05% of 84,000 = 42 per contract, below 12.5% of the 1,000 ask.
+    const notional = run({});
+    expect(notional.legs[0]).toMatchObject({ feeUsd: 84, feeSource: 'default_estimate' });
+    expect(notional.combined?.worstLossUsd).toBeCloseTo(-2_084, 6);
+
+    // A cheap wing is capped at 12.5% of premium: 0.125 × 100 = 12.5 per contract.
+    const capped = run({ bidUsd: 90, askUsd: 100, midUsd: 95 });
+    expect(capped.legs[0]).toMatchObject({ feeUsd: 25, feeSource: 'default_estimate' });
+
+    // Without any underlying price only the premium cap applies.
+    const noSpot = run({ underlyingPriceUsd: null, forwardPriceUsd: null });
+    expect(noSpot.legs[0]?.feeUsd).toBeCloseTo(250, 6);
+    expect(defaultTakerFeeUsd(1_000, null)).toBe(125);
   });
 
   it('nets fees out of horizon and expiry payoffs', () => {

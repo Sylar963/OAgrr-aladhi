@@ -42,8 +42,6 @@ export interface EvaluateStructureInput {
   horizonsDays: number[];
   spotMovesPct: number[];
   riskBudgetUsd?: number | null;
-  /** Fallback when a leg quote carries no venue fee estimate. Defaults to 0. */
-  feePerContractUsd?: number;
 }
 
 export interface EvaluatedProposedLeg {
@@ -62,7 +60,7 @@ export interface EvaluatedProposedLeg {
   premiumUsd: number | null;
   spreadCostUsd: number | null;
   feeUsd: number | null;
-  feeSource: 'quote' | 'default';
+  feeSource: 'quote' | 'default_estimate';
   error: string | null;
 }
 
@@ -128,12 +126,17 @@ export interface StructureEvaluation {
 }
 
 const DAY_MS = 86_400_000;
+// Highest standard taker rate among venues without per-instrument fees (OKX, Bybit, Binance:
+// 0.05% of underlying) with the 12.5% premium cap most venues apply (see FEE_CAP in sdk-base).
+export const DEFAULT_TAKER_FEE_RATE = 0.0005;
+export const DEFAULT_TAKER_FEE_PREMIUM_CAP = 0.125;
 const PAYOFF_SPOT_MOVES_PCT = [-20, -15, -10, -5, 0, 5, 10, 15, 20];
 
 export const STRUCTURE_ASSUMPTIONS = [
   'Current IV held constant for every leg until its expiry.',
   'Single spot path across expiries: legs that expired earlier settle at the same spot that is evaluated later.',
   'P&L is against entry: held legs at their recorded entry price, proposed legs at the executable side (buy at ask, sell at bid), net of estimated proposed-leg fees.',
+  'Legs without a venue fee estimate use a conservative default taker fee: min(0.05% of underlying, 12.5% of premium) per contract (feeSource "default_estimate").',
   'Executable quotes are as of retrieval and are not guaranteed fills; displayed size may be smaller than the requested size.',
   'Worst loss is negative for a loss; null means the loss is unbounded as spot rises.',
   'European exercise; no margin, funding or liquidation paths.',
@@ -159,18 +162,28 @@ function midOf(quote: ProposedLegQuote | null): number | null {
   return null;
 }
 
-function evaluateLeg(
-  leg: ProposedStructureLeg,
-  index: number,
-  defaultFeeUsd: number,
-): EvaluatedProposedLeg {
+/** Per contract. Without an underlying price the premium cap alone bounds the fee from above. */
+export function defaultTakerFeeUsd(premiumUsd: number, underlyingPriceUsd: number | null): number {
+  const cap = DEFAULT_TAKER_FEE_PREMIUM_CAP * Math.max(0, premiumUsd);
+  return underlyingPriceUsd != null && underlyingPriceUsd > 0
+    ? Math.min(DEFAULT_TAKER_FEE_RATE * underlyingPriceUsd, cap)
+    : cap;
+}
+
+function evaluateLeg(leg: ProposedStructureLeg, index: number): EvaluatedProposedLeg {
   const error = legError(leg);
   const quote = leg.quote;
   const mid = midOf(quote);
   const executable = error == null ? (leg.side === 'buy' ? quote?.askUsd : quote?.bidUsd) ?? null : null;
   const venueFee = quote?.feePerContractUsd;
-  const feeSource = venueFee != null && venueFee >= 0 ? 'quote' : 'default';
-  const feePerContract = feeSource === 'quote' ? (venueFee ?? 0) : defaultFeeUsd;
+  const feeSource = venueFee != null && venueFee >= 0 ? 'quote' : 'default_estimate';
+  const feePerContract =
+    feeSource === 'quote'
+      ? (venueFee ?? 0)
+      : defaultTakerFeeUsd(
+          executable ?? 0,
+          quote?.underlyingPriceUsd ?? quote?.forwardPriceUsd ?? null,
+        );
   const sign = leg.side === 'buy' ? 1 : -1;
   return {
     legId: `proposed-${index + 1}`,
@@ -193,7 +206,7 @@ function evaluateLeg(
   };
 }
 
-function toPositionLeg(
+export function proposedLegWithMark(
   leg: ProposedStructureLeg,
   evaluated: EvaluatedProposedLeg,
   nowMs: number,
@@ -229,7 +242,7 @@ function toPositionLeg(
   };
 }
 
-function summarizeRisk(windows: ExpiryRiskWindow[], feesUsd: number): StructureRiskSummary {
+export function summarizeRisk(windows: ExpiryRiskWindow[], feesUsd: number): StructureRiskSummary {
   const unbounded = windows.find((window) => window.upsideUnbounded);
   const losses = windows.flatMap((window) => window.worstLossUsd ?? []);
   return {
@@ -285,8 +298,7 @@ function emptyEvaluation(
  * the proposed legs. Held-leg fees are sunk and not re-counted.
  */
 export function evaluateStructure(input: EvaluateStructureInput): StructureEvaluation {
-  const defaultFeeUsd = Math.max(0, input.feePerContractUsd ?? 0);
-  const legs = input.proposed.map((leg, index) => evaluateLeg(leg, index, defaultFeeUsd));
+  const legs = input.proposed.map((leg, index) => evaluateLeg(leg, index));
   const underlying = input.proposed[0]?.underlying ?? input.held[0]?.leg.underlying ?? null;
   if (input.proposed.length === 0) return emptyEvaluation('empty', legs, underlying);
   if (legs.some((leg) => leg.error != null)) return emptyEvaluation('quote_error', legs, underlying);
@@ -298,7 +310,7 @@ export function evaluateStructure(input: EvaluateStructureInput): StructureEvalu
   }
 
   const proposedWithMarks = input.proposed.map((leg, index) =>
-    toPositionLeg(leg, legs[index] as EvaluatedProposedLeg, input.nowMs),
+    proposedLegWithMark(leg, legs[index] as EvaluatedProposedLeg, input.nowMs),
   );
   const combinedWithMarks = [...input.held, ...proposedWithMarks];
   const combinedWindows = analyzeExpiryStructure(combinedWithMarks, input.nowMs);

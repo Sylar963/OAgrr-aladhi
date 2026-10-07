@@ -16,6 +16,11 @@ const VenueQuoteSchema = z.object({
   openInterest: nullableNumber,
   volume24h: nullableNumber,
   asOfMs: nullableNumber,
+  underlyingPriceUsd: nullableNumber,
+  execution: z
+    .object({ bidTakerFeeUsd: nullableNumber, askTakerFeeUsd: nullableNumber })
+    .nullable()
+    .optional(),
 });
 type VenueQuote = z.infer<typeof VenueQuoteSchema>;
 
@@ -159,6 +164,71 @@ function compactSide(
     openInterestContracts: round(sum(quotes.map((quote) => quote.openInterest)), 2),
     volume24hContracts: round(sum(quotes.map((quote) => quote.volume24h)), 2),
     quotingVenues: fresh.length,
+  };
+}
+
+export interface VenueExecutableQuote {
+  venue: string;
+  bidUsd: number | null;
+  askUsd: number | null;
+  midUsd: number | null;
+  bidSize: number | null;
+  askSize: number | null;
+  markIv: number | null;
+  asOfMs: number | null;
+  bidTakerFeeUsd: number | null;
+  askTakerFeeUsd: number | null;
+  underlyingPriceUsd: number | null;
+}
+
+export interface ExecutableQuoteSet {
+  underlying: string;
+  expiry: string;
+  forwardPriceUsd: number | null;
+  indexPriceUsd: number | null;
+  quotes: Array<{ strike: number; right: 'call' | 'put'; venues: VenueExecutableQuote[] }>;
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) ? value : null;
+}
+
+// Unrounded and per venue, unlike compactChain rows: pricing needs the exact
+// executable side, its venue fee estimate and the quote timestamp.
+export function extractExecutableQuotes(
+  chain: ChainResponse,
+  options: { strikes: number[]; nowMs: number; maxQuoteAgeMs?: number | undefined },
+): ExecutableQuoteSet {
+  const maxQuoteAgeMs = options.maxQuoteAgeMs ?? DEFAULT_MAX_QUOTE_AGE_MS;
+  const wanted = new Set(options.strikes);
+  const quotes: ExecutableQuoteSet['quotes'] = [];
+  for (const row of chain.strikes) {
+    if (!wanted.has(row.strike)) continue;
+    for (const right of ['call', 'put'] as const) {
+      const venues = Object.entries(row[right].venues)
+        .filter(([, quote]) => quote.asOfMs == null || options.nowMs - quote.asOfMs <= maxQuoteAgeMs)
+        .map(([venue, quote]) => ({
+          venue,
+          bidUsd: finiteOrNull(quote.bid),
+          askUsd: finiteOrNull(quote.ask),
+          midUsd: finiteOrNull(quote.mid),
+          bidSize: finiteOrNull(quote.bidSize),
+          askSize: finiteOrNull(quote.askSize),
+          markIv: finiteOrNull(quote.markIv),
+          asOfMs: finiteOrNull(quote.asOfMs),
+          bidTakerFeeUsd: finiteOrNull(quote.execution?.bidTakerFeeUsd),
+          askTakerFeeUsd: finiteOrNull(quote.execution?.askTakerFeeUsd),
+          underlyingPriceUsd: finiteOrNull(quote.underlyingPriceUsd),
+        }));
+      quotes.push({ strike: row.strike, right, venues });
+    }
+  }
+  return {
+    underlying: chain.underlying,
+    expiry: chain.expiry,
+    forwardPriceUsd: finiteOrNull(chain.stats.forwardPriceUsd),
+    indexPriceUsd: finiteOrNull(chain.stats.indexPriceUsd),
+    quotes,
   };
 }
 

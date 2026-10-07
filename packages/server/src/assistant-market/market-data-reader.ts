@@ -12,6 +12,8 @@ import {
   type CompactChain,
   type CompactSurface,
   compactBlockFlow,
+  type ExecutableQuoteSet,
+  extractExecutableQuotes,
   compactChain,
   compactGex,
   compactIvHistory,
@@ -341,6 +343,23 @@ export class AssistantMarketDataReader {
         ...compactChain(result.data, { ...options, nowMs: this.now() }),
         units: CHAIN_UNITS_NOTE,
       },
+    };
+  }
+
+  async executableQuotes(
+    underlying: string,
+    expiry: string,
+    strikes: number[],
+  ): Promise<MarketReadResult<ExecutableQuoteSet>> {
+    const u = encodeURIComponent(normalizeUnderlying(underlying));
+    const result = await this.get(
+      `/api/chains?underlying=${u}&expiry=${encodeURIComponent(expiry)}`,
+      ChainResponseSchema,
+    );
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      data: extractExecutableQuotes(result.data, { strikes, nowMs: this.now() }),
     };
   }
 

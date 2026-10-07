@@ -241,7 +241,8 @@ export type ExpiryBasis = z.infer<typeof ExpiryBasisSchema>;
 // to entry and evaluated at `until`: legs expiring then or earlier settle at
 // intrinsic on one spot path, later legs reprice with Black-76 at current IV.
 // `upsideUnbounded` is set when the calls alive during the window are net short,
-// because spot can keep rising after any earlier settlement.
+// because spot can keep rising after any earlier settlement, and stays set for
+// every later window because that uncapped settlement is part of their P&L.
 export const ExpiryRiskWindowSchema = z.object({
   from: z.string(),
   until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

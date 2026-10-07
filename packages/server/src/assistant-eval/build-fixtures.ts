@@ -289,6 +289,11 @@ function maxLoss(context: PortfolioAssistantContext): AssistantEvalExpectedNumbe
   return engineNumber('current book max loss', context.payoffFacts.maxLossUsd, 'payoffFacts.maxLossUsd');
 }
 
+// The pre-window engine reported this common-spot low as max loss; the stale answer quotes it.
+function samePriceExpiryLow(context: PortfolioAssistantContext): number {
+  return Math.min(...context.payoffFacts.points.map((point) => point.expiryPnlUsd));
+}
+
 function budgetAbove(lossUsd: number | null, headroomUsd: number): number {
   if (lossUsd == null) throw new Error('budget needs a bounded engine max loss');
   return Math.ceil((Math.abs(lossUsd) + headroomUsd) / 100) * 100;
@@ -525,7 +530,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
       history: staleHistory(
         referenceStale,
         'How is my diagonal doing?',
-        [`- **Max loss at expiry:** ${usd(referenceStale.payoffFacts.maxLossUsd ?? 0)}`],
+        [`- **Max loss at expiry:** ${usd(samePriceExpiryLow(referenceStale))}`],
         1,
       ),
       context: reference,
@@ -535,7 +540,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
         maxChars: 4_500,
       }),
       notes: [
-        'payoffFacts.maxLossUsd is the same-price expiry low; the short Oct 30 call is uncovered after Oct 16.',
+        'payoffFacts.maxLossUsd is null: riskWindows flags the short Oct 30 call as uncovered after Oct 16. The stale history quotes the old same-price expiry low.',
       ],
     },
     {

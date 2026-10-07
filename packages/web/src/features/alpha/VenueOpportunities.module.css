@@ -363,6 +363,15 @@
   color: var(--accent-primary);
 }
 
+.settlementNote {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px var(--space-2);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
 @media (max-width: 640px) {
   .opportunities {
     padding: var(--space-3);

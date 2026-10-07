@@ -70,7 +70,29 @@ are for q, not per contract). Actual settlement/closing costs can differ from th
 The entry should have a positive possible payoff after estimated costs; missing fees are
 unknown, not zero. Bounds assume the equal-size legs are both filled and retained together.
 They exclude exchange default, collateral depeg, forced liquidation, unmatched execution,
-and costs exceeding the reserve. Inverse-settled contracts need a different risk model.
+and costs exceeding the reserve. Inverse-settled contracts use the hedged model below.
+
+### Inverse (coin-settled) verticals: forward-hedged USD model
+
+Engineering derivation, added 2026-10-07. Not a reviewed book passage. Deribit and OKX BTC
+options quote premium in BTC and settle in BTC: a call pays (S_T − K)⁺ / S_T BTC per unit. The
+normalized `bidUsd`/`askUsd`/fees are BTC amounts × that expiry's venue forward F
+(`underlyingPriceUsd`). Let n = net BTC premium after entry fees (positive for credit).
+
+- **Assumption:** n is hedged with the same-expiry future at F, and the BTC settlement is
+  converted at the delivery price S_T. USD terminal P&L is then n·F − (net intrinsic in USD),
+  identical to the linear table above. Bounds, breakeven, and expiry scenarios are unchanged.
+- **Unhedged, P&L changes:** holding n BTC adds a delta of n. A call credit kept in BTC has a
+  bounded loss (qW − H·n at S_T = H) but no upper bound on profit. A debit paid from BTC has an
+  unbounded USD opportunity loss as BTC rises. The scanner shows n (`basePremium`) and the
+  10%-move sensitivity, and does not rank the unhedged variant.
+- Same-venue only. Cross-venue routes keep inverse legs excluded, because the hedge and the
+  other leg would sit on different venues. Mixed inverse/linear legs are rejected.
+- The hedge's own fees and spread, delivery fees, and BTC-margin liquidation paths are not
+  modeled. They belong in the reserve or the venue's margin check.
+
+Required test invariants: inverse and linear twins have equal USD bounds; `basePremium` =
+(gross − entry fee) / F with the sign of the structure; a missing F rejects the pair.
 
 Required test invariants:
 
@@ -82,6 +104,45 @@ Required test invariants:
 - Test non-unit size, fees, minimum quantity, both leg increments, displayed size, expiry,
   timestamps, absent fields, settlement, and venue identity.
 - Do not rank a cross-venue synthetic as an executable same-venue opportunity.
+
+## Mixed-expiry books: risk windows (Portfolio payoff facts)
+
+Engineering derivation, not a reviewed book passage. Casanovas §5.2.1 defines calendars and
+diagonals but was not read for their risk bounds. Code: `packages/core/src/portfolio/expiry-structure.ts`.
+
+The plotted expiry curve settles every leg at intrinsic at one common spot. That is a terminal
+payoff only when all legs share an expiry. With staggered expiries, spot keeps moving after an
+earlier leg settles, so the common-spot low can understate risk. Reference book: +1 Oct 16 87k
+call, −1 Oct 30 85k call. Its common-spot low is −$18.05, yet after Oct 16 the short call is
+naked and the loss is unbounded.
+
+Let E1 < … < En be the future expiries. Window i runs from E(i−1) (or now) to Ei. Its live
+legs are those expiring at or after Ei. P&L is against entry price and excludes realized P&L.
+
+- `netCallSize` = signed size of the live calls. If it is negative, loss is unbounded as spot
+  rises inside the window, whatever the earlier legs settled at. Each earlier settlement is a
+  fixed amount, while the live calls' value at Ei grows with slope `netCallSize` as S → ∞
+  (Black-76 call delta → 1). Every later window is then unbounded too, even if its own live
+  calls are net long, because the uncapped settlement is part of its cumulative P&L.
+- Worst loss of a bounded window: P&L at Ei over spots 0…3× spot plus every strike. Legs that
+  expire at or before Ei settle at intrinsic, and later legs are priced with Black-76 at current
+  IV. Earlier settlements use the same spot (single-path assumption). A path that settles an
+  earlier leg at a different spot can lose more.
+- Book `maxLossUsd` for mixed expiries is null if any window is unbounded. Otherwise it is the
+  worst window loss. Same-expiry books keep the common-spot curve low.
+
+Required test invariants:
+
+- Reference book: the window ending Oct 30 is unbounded and `maxLossUsd` is null.
+- Same-expiry vertical: max loss unchanged (−debit).
+- Put diagonal (−1 Oct 16 84k put at 2,500, +1 Oct 30 80k put at 1,500): worst loss is
+  credit − strike gap = −3,000, at S = 0.
+- A longer-dated long call at least as large as a shorter-dated short call covers it. A
+  smaller one does not, and the window after the short settles stays unbounded.
+
+Limits: constant IV, European exercise, no fees, margin, or liquidation paths. A covered window
+is a mark-to-model statement at the short's expiry. It does not promise that the remaining long
+keeps its value afterwards (K5).
 
 ## Short ATM straddle: model and gates (Sell Straddle tab)
 
@@ -323,9 +384,13 @@ The original leg tables and smile remain available. The old `verticalSpread.ts` 
 still supports the original routing diagnostic API and its tests; its 10%/20% ROC heuristic
 is **not** used as the sized card's decision threshold.
 
-The reference model uses the mean of the two legs' venue forward inputs and mean mark IV,
-with one flat-IV lognormal terminal distribution for both legs. Model EV is signed entry
-cash less costs plus expected net intrinsic payoff. This is a simplified risk-neutral
+The reference model uses the mean of the two legs' venue forward inputs. Without a user
+forecast, each leg is valued with Black-76 at its own mark IV, and the modeled spread value is
+clamped to [0, qW]. Probability uses the IV of the leg strike nearest the breakeven. With a
+forecast, both legs use the forecast vol. Until 2026-10-07 the market model averaged the two
+legs' IVs. On wide pairs, such as a 40k short against an 85k long at 94%/34% IV, that inflated
+the far OTM leg and showed about +$240 of phantom edge per 0.1 BTC. Edges from before that date
+are not evidence. Model EV is signed entry cash less costs plus expected net intrinsic payoff. This is a simplified risk-neutral
 pricing comparison, not a physical forecast. It omits smile dynamics, jumps, and model
 parameter uncertainty. Positive model EV may be a model artifact.
 

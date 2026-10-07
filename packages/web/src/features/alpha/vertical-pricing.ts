@@ -46,6 +46,11 @@ export interface VerticalEconomics {
   ageMs: number;
   capacity: number;
   roundTrip: number | null;
+  /**
+   * Inverse (coin-settled) pairs only: net premium after entry fees in the underlying,
+   * positive when received. USD figures assume it is hedged at the expiry forward.
+   */
+  basePremium: number | null;
 }
 export interface RankedVertical extends VerticalEconomics {
   id: string;
@@ -57,6 +62,7 @@ export interface VerticalLeg {
 }
 export interface PricingRules {
   requireSameSettlement: boolean;
+  allowInverse: boolean;
   /** Total fee for both legs; receives per-unit taker fees. */
   combineFees: (buyFee: number, sellFee: number, quantity: number) => number;
 }
@@ -109,13 +115,17 @@ function pairIssue(
   const b = buy.execution;
   const s = sell.execution;
   if (!b || !s) return 'Missing execution metadata / fees';
-  if (b.inverse || s.inverse) return 'Inverse settlement needs separate risk model';
+  if ((b.inverse || s.inverse) && !rules.allowInverse)
+    return 'Inverse settlement needs separate risk model';
   if (
+    b.inverse !== s.inverse ||
     !b.settleCurrency ||
     !s.settleCurrency ||
     (rules.requireSameSettlement && b.settleCurrency !== s.settleCurrency)
   )
     return 'Settlement mismatch';
+  if (b.inverse && (!positive(buy.underlyingPriceUsd) || !positive(sell.underlyingPriceUsd)))
+    return 'Missing inverse conversion price';
   if (!positive(b.askUsd) || !positive(s.bidUsd)) return 'Missing buy ask / sell bid';
   if (!nonnegative(b.askTakerFeeUsd) || !nonnegative(s.bidTakerFeeUsd)) return 'Unknown entry fees';
   if ((positive(b.bidUsd) && b.bidUsd > b.askUsd) || (positive(s.askUsd) && s.bidUsd > s.askUsd))
@@ -190,26 +200,35 @@ export function priceVertical(
     ((right === 'call' ? 1 : -1) * (debit ? -cash : cash)) / quantity;
   const forwards = [buy.underlyingPriceUsd, sell.underlyingPriceUsd].filter(positive);
   const forward = forwards.length === 2 ? (forwards[0]! + forwards[1]!) / 2 : null;
-  const ivs = [buy.markIv, sell.markIv].filter(positive);
-  const sigma = input.forecast?.volatility ?? (ivs.length === 2 ? (ivs[0]! + ivs[1]!) / 2 : null);
+  const forecastSigma = input.forecast?.volatility ?? null;
+  const buySigma = forecastSigma ?? (positive(buy.markIv) ? buy.markIv : null);
+  const sellSigma = forecastSigma ?? (positive(sell.markIv) ? sell.markIv : null);
+  const breakevenSigma =
+    Math.abs(breakeven - buyStrike) <= Math.abs(breakeven - sellStrike) ? buySigma : sellSigma;
   const expectedSpot = input.forecast
     ? (chain.stats.indexPriceUsd ?? 0) * (1 + input.forecast.movePct / 100)
     : forward;
   let modelEdge: number | null = null;
   let probability: number | null = null;
-  if (positive(expectedSpot) && positive(sigma)) {
-    // One lognormal distribution for both legs keeps the modeled vertical payoff bounded.
+  if (
+    positive(expectedSpot) &&
+    positive(buySigma) &&
+    positive(sellSigma) &&
+    positive(breakevenSigma)
+  ) {
+    // Each leg at its own smile IV: one averaged IV misprices the far leg of a wide pair by
+    // hundreds of dollars. The clamp keeps a non-monotone smile from implying an arbitrage value.
+    const legValue =
+      black76Price(right, expectedSpot, buyStrike, T, buySigma) -
+      black76Price(right, expectedSpot, sellStrike, T, sellSigma);
     modelEdge =
-      cash +
-      quantity *
-        (black76Price(right, expectedSpot, buyStrike, T, sigma) -
-          black76Price(right, expectedSpot, sellStrike, T, sigma));
+      cash + quantity * Math.min(Math.max(legValue, debit ? 0 : -width), debit ? width : 0);
     probability = black76Probability(
       direction === 'bullish' ? 'above' : 'below',
       expectedSpot,
       breakeven,
       T,
-      sigma,
+      breakevenSigma,
     );
     if (!Number.isFinite(modelEdge) || !Number.isFinite(probability)) {
       modelEdge = null;
@@ -259,6 +278,7 @@ export function priceVertical(
     ageMs: nowMs - Math.min(buy.asOfMs!, sell.asOfMs!),
     capacity: Math.min(b.askSize!, s.bidSize!),
     roundTrip,
+    basePremium: b.inverse && forward != null ? (gross - entryFee) / forward : null,
   };
 }
 

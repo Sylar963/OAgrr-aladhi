@@ -206,6 +206,7 @@ const REJECTION_LABELS: Record<string, string> = {
   'No positive payoff after costs': 'Costs consume the payoff',
   'Missing execution metadata / fees': 'Execution data missing',
   'Inverse settlement needs separate risk model': 'Unsupported settlement type',
+  'Missing inverse conversion price': 'Coin-to-USD price missing',
   'Settlement mismatch': 'Leg settlement mismatch',
   'Crossed leg quote': 'Invalid crossed quote',
   'Enable a second venue to route across venues': 'Enable a second venue',

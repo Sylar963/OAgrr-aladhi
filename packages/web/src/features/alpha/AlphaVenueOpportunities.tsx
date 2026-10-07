@@ -1,16 +1,19 @@
 import { CandidateRow, OpportunityCard, OpportunitySection } from './OpportunityCard';
 import type { SpreadCandidate, VenueScan } from './spread-scanner';
 import { VERTICAL_LABELS, type VerticalKind } from './vertical-pricing';
+import styles from './VenueOpportunities.module.css';
 
 export default function AlphaVenueOpportunities({
   scans,
   kind,
+  underlying,
   sellStrike,
   buyStrike,
   onSelect,
 }: {
   scans: VenueScan[];
   kind: VerticalKind;
+  underlying: string;
   sellStrike: number | null;
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
@@ -50,6 +53,17 @@ export default function AlphaVenueOpportunities({
                 candidate={candidate}
                 title={candidate === selected ? 'Selected' : VERTICAL_LABELS[candidate.kind]}
                 selected={candidate === selected}
+                detail={
+                  candidate.basePremium != null && (
+                    <span className={styles.settlementNote}>
+                      <span>settles in {underlying}</span>
+                      <span>
+                        {candidate.basePremium > 0 ? '+' : ''}
+                        {candidate.basePremium.toFixed(4)} {underlying} premium
+                      </span>
+                    </span>
+                  )
+                }
                 onClick={() => onSelect(candidate)}
               />
             ))}

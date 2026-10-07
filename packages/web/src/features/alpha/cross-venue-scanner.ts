@@ -31,7 +31,12 @@ export const NOT_BETTER_REASON = 'Same-venue route is as good or better';
 export const SINGLE_VENUE_REASON = 'Enable a second venue to route across venues';
 
 // Legs fill as independent outright orders, so no combo discount and settlement may differ.
-const CROSS_RULES: PricingRules = { requireSameSettlement: false, combineFees: sumTakerFees };
+// Inverse legs stay excluded here: their premium hedge lives on a different venue than the other leg.
+const CROSS_RULES: PricingRules = {
+  requireSameSettlement: false,
+  allowInverse: false,
+  combineFees: sumTakerFees,
+};
 
 const netEntry = (c: VerticalEconomics) => c.grossPremium - c.entryFee;
 const pairKey = (c: Pick<VerticalEconomics, 'kind' | 'buyStrike' | 'sellStrike'>) =>

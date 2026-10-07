@@ -128,7 +128,23 @@ describe('analyzeExpiryStructure', () => {
     );
 
     expect(windows?.[0]).toMatchObject({ netCallSize: -0.5, upsideUnbounded: true, worstLossUsd: null });
-    expect(windows?.[1]).toMatchObject({ netCallSize: 0.5, upsideUnbounded: false });
+    // The Oct 16 settlement is uncapped, so the cumulative loss at Oct 30 is too.
+    expect(windows?.[1]).toMatchObject({ netCallSize: 0.5, upsideUnbounded: true, worstLossUsd: null });
+  });
+
+  it('keeps later windows unbounded after an uncovered short call settles', () => {
+    const windows = analyzeExpiryStructure(
+      withMarks([
+        leg('long-put-oct30', '2026-10-30', 80_000, 'put', 1, 1_450),
+        leg('short-call-nov27', '2026-11-27', 95_000, 'call', -1, 1_600),
+        leg('long-call-dec25', '2026-12-25', 90_000, 'call', 0.5, 4_100),
+      ]),
+      NOW,
+    );
+
+    expect(windows?.map((window) => window.netCallSize)).toEqual([-0.5, -0.5, 0.5]);
+    expect(windows?.map((window) => window.upsideUnbounded)).toEqual([true, true, true]);
+    expect(windows?.[2]).toMatchObject({ liveLegIds: ['long-call-dec25'], worstLossUsd: null, worstLossSpotUsd: null });
   });
 
   it('settles already-expired legs without opening a window for them', () => {

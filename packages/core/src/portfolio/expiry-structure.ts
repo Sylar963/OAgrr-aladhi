@@ -54,7 +54,8 @@ function pnlAtHorizon(legsWithMarks: LegWithMark[], spotUsd: number, horizonMs: 
  * Risk per expiry window for a single-underlying book. Returns null when a
  * leg cannot be priced (no IV). Worst loss assumes one spot path: legs that
  * expired before the window's end settled at the same spot that is evaluated
- * at its end. Unboundedness does not rely on that assumption.
+ * at its end. Unboundedness does not rely on that assumption, and once a
+ * window is unbounded every later window is too.
  */
 export function analyzeExpiryStructure(
   legsWithMarks: LegWithMark[],
@@ -66,6 +67,12 @@ export function analyzeExpiryStructure(
   if (expiries.length === 0) return [];
 
   const grid = spotGrid(legsWithMarks);
+  // Every evaluated leg, including already-expired ones settled at intrinsic, sets the
+  // single-path slope as spot rises; a negative slope makes any grid minimum an edge artifact.
+  const pathCallSize = legsWithMarks.reduce(
+    (sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum),
+    0,
+  );
   const windows: ExpiryRiskWindow[] = [];
   let from = new Date(nowMs).toISOString();
 
@@ -76,7 +83,12 @@ export function analyzeExpiryStructure(
       (sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum),
       0,
     );
-    const upsideUnbounded = netCallSize < -SIZE_EPSILON;
+    // An earlier unbounded window settled at a spot this window cannot cap, so the
+    // cumulative P&L at `until` stays unbounded even when the live calls are net long.
+    const upsideUnbounded =
+      netCallSize < -SIZE_EPSILON ||
+      pathCallSize < -SIZE_EPSILON ||
+      windows.some((window) => window.upsideUnbounded);
 
     const lossAtZeroSpotUsd = pnlAtHorizon(legsWithMarks, 0, horizonMs);
     if (lossAtZeroSpotUsd == null) return null;

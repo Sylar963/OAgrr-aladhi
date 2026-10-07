@@ -500,6 +500,21 @@
           "forwardPnlUsd": null,
           "expiryPnlUsd": 7213.665999999997
         }
+      ],
+      "expiryBasis": "common_expiry",
+      "riskWindows": [
+        {
+          "from": "2026-10-07T12:00:00.000Z",
+          "until": "2026-11-27",
+          "liveLegIds": [
+            "lc-nov27-90000-c"
+          ],
+          "netCallSize": 0.5,
+          "upsideUnbounded": false,
+          "lossAtZeroSpotUsd": -1175,
+          "worstLossUsd": -1175,
+          "worstLossSpotUsd": 0
+        }
       ]
     },
     "horizonScenarios": {

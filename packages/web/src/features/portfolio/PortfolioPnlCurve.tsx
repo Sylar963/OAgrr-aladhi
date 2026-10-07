@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
+import { formatExpiry } from '@lib/format';
 
 import styles from './PortfolioPnlCurve.module.css';
 
@@ -82,6 +83,15 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ? stickyCurve
         : curve;
   const isStale = displayCurve !== curve;
+  const firstUnboundedIndex = displayCurve.riskWindows.findIndex((window) => window.upsideUnbounded);
+  const upsideUnboundedAfter =
+    firstUnboundedIndex > 0 ? (displayCurve.riskWindows[firstUnboundedIndex]?.from ?? null) : null;
+  const lossLabel =
+    displayCurve.expiryBasis === 'mixed_expiry'
+      ? 'expiry-window low'
+      : mixedExpiries
+        ? 'same-price scenario low'
+        : 'expiry curve low';
 
   const chart = useMemo(() => {
     if (displayCurve.status !== 'ok' || displayCurve.points.length === 0) return null;
@@ -159,7 +169,11 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
           BE {displayCurve.breakEvenPricesUsd.length === 0 ? '—' : displayCurve.breakEvenPricesUsd.map((value) => fmtPrice(value)).join(' / ')}
         </span>
         {displayCurve.maxProfitUsd != null && <span className={styles.metricPill}>max gain {fmtUsd(displayCurve.maxProfitUsd)}</span>}
-        {displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{mixedExpiries ? 'same-price scenario low' : 'expiry curve low'} {fmtUsd(displayCurve.maxLossUsd)}</span>}
+        {upsideUnboundedAfter != null ? (
+          <span className={styles.metricPill}>Upside unbounded after {formatExpiry(upsideUnboundedAfter)}</span>
+        ) : (
+          displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
+        )}
         {isStale && <span className={styles.stalePill}>stale · waiting for live marks</span>}
       </div>
 

@@ -58,6 +58,22 @@ describe('cross-venue spread scanner', () => {
     for (let spot = 70_000; spot <= 90_000; spot += 500)
       expect(expiryPnl(route, spot)).toBeLessThanOrEqual(route.maxProfit + 1e-9);
   });
+  it('keeps coin-settled legs out of cross-venue routes', () => {
+    const i = input();
+    const row = i.chain.strikes[1]!;
+    row.call.venues.bybit = row.call.venues.thalex;
+    row.put.venues.bybit = row.put.venues.thalex;
+    delete row.call.venues.thalex;
+    delete row.put.venues.thalex;
+    i.venues = ['thalex', 'bybit'];
+    for (const r of i.chain.strikes)
+      for (const side of ['call', 'put'] as const)
+        for (const q of Object.values(r[side].venues)) {
+          q!.execution!.inverse = true;
+          q!.execution!.settleCurrency = 'BTC';
+        }
+    expect(cross(i).flatMap((s) => s.candidates)).toHaveLength(0);
+  });
   it('requires a second venue', () => {
     const [scan] = cross(input());
     expect(scan!.candidates).toHaveLength(0);

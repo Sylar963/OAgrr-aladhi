@@ -656,6 +656,48 @@
           "forwardPnlUsd": null,
           "expiryPnlUsd": -7788.665999999997
         }
+      ],
+      "expiryBasis": "mixed_expiry",
+      "riskWindows": [
+        {
+          "from": "2026-10-07T12:00:00.000Z",
+          "until": "2026-10-30",
+          "liveLegIds": [
+            "hz-oct30-80000-p",
+            "hz-nov27-95000-c",
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": -0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        },
+        {
+          "from": "2026-10-30",
+          "until": "2026-11-27",
+          "liveLegIds": [
+            "hz-nov27-95000-c",
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": -0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        },
+        {
+          "from": "2026-11-27",
+          "until": "2026-12-25",
+          "liveLegIds": [
+            "hz-dec25-90000-c"
+          ],
+          "netCallSize": 0.5,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 78100,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
+        }
       ]
     },
     "horizonScenarios": {

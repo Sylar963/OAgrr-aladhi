@@ -577,6 +577,34 @@
           "forwardPnlUsd": null,
           "expiryPnlUsd": -8148.049999999999
         }
+      ],
+      "expiryBasis": "mixed_expiry",
+      "riskWindows": [
+        {
+          "from": "2026-10-07T12:00:00.000Z",
+          "until": "2026-10-30",
+          "liveLegIds": [
+            "thalex-oct30-85000-c",
+            "thalex-nov27-95000-c"
+          ],
+          "netCallSize": 0,
+          "upsideUnbounded": false,
+          "lossAtZeroSpotUsd": 1851.9499999999998,
+          "worstLossUsd": -8148.049999802883,
+          "worstLossSpotUsd": 189374.13495
+        },
+        {
+          "from": "2026-10-30",
+          "until": "2026-11-27",
+          "liveLegIds": [
+            "thalex-nov27-95000-c"
+          ],
+          "netCallSize": 1,
+          "upsideUnbounded": false,
+          "lossAtZeroSpotUsd": 1851.9499999999998,
+          "worstLossUsd": -8148.05,
+          "worstLossSpotUsd": 95000
+        }
       ]
     },
     "horizonScenarios": {

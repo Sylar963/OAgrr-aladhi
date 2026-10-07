@@ -24,10 +24,15 @@ export interface VenueScan {
 // Thalex charges one combo fee for both legs.
 const THALEX_RULES: PricingRules = {
   requireSameSettlement: true,
+  allowInverse: true,
   combineFees: (buyFee, sellFee, quantity) =>
     Math.max(0.0001, buyFee * quantity, sellFee * quantity),
 };
-const DEFAULT_RULES: PricingRules = { requireSameSettlement: true, combineFees: sumTakerFees };
+const DEFAULT_RULES: PricingRules = {
+  requireSameSettlement: true,
+  allowInverse: true,
+  combineFees: sumTakerFees,
+};
 
 export function scanSpreads(input: SpreadScanInput): VenueScan[] {
   const ctx = scanContext(input);

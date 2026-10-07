@@ -267,6 +267,7 @@ export default function AlphaView() {
       <AlphaVenueOpportunities
         scans={scans}
         kind={kind}
+        underlying={underlying}
         sellStrike={shortStrike}
         buyStrike={longStrike}
         onSelect={selectSameVenue}

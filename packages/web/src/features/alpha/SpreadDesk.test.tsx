@@ -58,6 +58,7 @@ beforeEach(() => {
           ageMs: 100,
           capacity: 1,
           roundTrip: -0.8,
+          basePremium: null,
         },
       ],
     },

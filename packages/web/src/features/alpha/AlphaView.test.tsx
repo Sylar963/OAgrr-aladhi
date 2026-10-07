@@ -69,6 +69,7 @@ const candidate: SpreadCandidate = {
   ageMs: 1,
   capacity: 1,
   roundTrip: -1,
+  basePremium: null,
 };
 
 beforeEach(() => {

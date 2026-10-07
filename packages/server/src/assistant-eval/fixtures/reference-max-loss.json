@@ -207,8 +207,8 @@
         87243.74320146051
       ],
       "maxProfitUsd": 1981.9499999999998,
-      "maxLossUsd": -18.050000000000182,
-      "upsideBounded": true,
+      "maxLossUsd": null,
+      "upsideBounded": false,
       "downsideBounded": true,
       "points": [
         {
@@ -576,6 +576,34 @@
           "nowPnlUsd": -108.09252043325614,
           "forwardPnlUsd": null,
           "expiryPnlUsd": -18.049999999999272
+        }
+      ],
+      "expiryBasis": "mixed_expiry",
+      "riskWindows": [
+        {
+          "from": "2026-10-07T12:00:00.000Z",
+          "until": "2026-10-16",
+          "liveLegIds": [
+            "ref-oct16-87000-c",
+            "ref-oct30-85000-c"
+          ],
+          "netCallSize": 0,
+          "upsideUnbounded": false,
+          "lossAtZeroSpotUsd": 1981.9499999999998,
+          "worstLossUsd": -1912.9766547398513,
+          "worstLossSpotUsd": 87000
+        },
+        {
+          "from": "2026-10-16",
+          "until": "2026-10-30",
+          "liveLegIds": [
+            "ref-oct30-85000-c"
+          ],
+          "netCallSize": -1,
+          "upsideUnbounded": true,
+          "lossAtZeroSpotUsd": 1981.9499999999998,
+          "worstLossUsd": null,
+          "worstLossSpotUsd": null
         }
       ]
     },

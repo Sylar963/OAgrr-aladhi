@@ -418,7 +418,7 @@ export default function SpreadDesk({ underlying }: { underlying: string }) {
                 </p>
               ))}
               <p>
-                Requires known fees, matching linear settlement, valid minimum/step, sufficient
+                Requires known fees, matching settlement on both legs, valid minimum/step, sufficient
                 displayed size, quotes ≤15s old and timestamps ≤2s apart. Exclusion counts show the
                 first failed check per pair. Same venue alone does not guarantee atomic execution.
               </p>
@@ -427,8 +427,9 @@ export default function SpreadDesk({ underlying }: { underlying: string }) {
         ))}
         <p className={styles.note}>
           * Position dollars after estimated entry fees and your cost reserve. No trade is a valid
-          result. A better rank does not mean positive expected profit. Inverse-settled contracts
-          are excluded because their collateral risk needs a separate model.
+          result. A better rank does not mean positive expected profit. Coin-settled (inverse)
+          spreads assume the net coin premium is hedged at the expiry forward; unhedged, it moves
+          with the coin price. Their margin is posted in the coin.
         </p>
       </section>
       {selectedId && !selected && (
@@ -538,13 +539,29 @@ function SpreadReview({
           <span>Immediate round-trip estimate</span>
           <strong>{money(c.roundTrip)}</strong>
         </div>
+        {c.basePremium != null && (
+          <div>
+            <span>Net premium settled in {underlying}</span>
+            <strong>
+              {c.basePremium > 0 ? '+' : ''}
+              {c.basePremium.toFixed(4)} {underlying}
+            </strong>
+          </div>
+        )}
       </div>
       <p className={styles.note}>
         {c.model === 'market'
-          ? 'Probability is risk-neutral under a flat-IV approximation.'
+          ? 'EV values each leg at its own mark IV; probability is risk-neutral at the IV nearest breakeven.'
           : 'Probability and EV use your forecast distribution.'}{' '}
         * Includes the chosen reserve. Round-trip estimate uses reverse bid/ask quotes and estimated
-        fees, excludes the reserve, and is not a guaranteed exit fill. Quote age{' '}
+        fees, excludes the reserve, and is not a guaranteed exit fill.{' '}
+        {c.basePremium != null &&
+          `USD figures assume the ${underlying} premium is hedged with the same-expiry future${
+            spot != null && spot > 0
+              ? `; unhedged, each 10% ${underlying} move changes P&L by about ${money(Math.abs(c.basePremium) * spot * 0.1)}`
+              : ''
+          }. `}
+        Quote age{' '}
         {(c.ageMs / 1000).toFixed(1)}s · displayed entry capacity {c.capacity} {underlying}.
       </p>
       {spot != null && spot > 0 && (

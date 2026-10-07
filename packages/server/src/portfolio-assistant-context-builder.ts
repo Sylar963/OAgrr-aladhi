@@ -105,6 +105,14 @@ export interface PortfolioAssistantRiskBudgetFacts {
   note: string;
 }
 
+/** Vol-shock P&L matrix: totalPnlUsd[row][column] follows the two axis arrays. */
+export interface PortfolioAssistantShockFacts {
+  rowsAtmShiftVolPts: number[];
+  columnsSkewShiftPerLogK: number[];
+  totalPnlUsd: number[][];
+  meta: ShockGridMeta;
+}
+
 export interface PortfolioAssistantContext {
   headline: PortfolioAssistantHeadline;
   schemaVersion: 1;
@@ -130,7 +138,7 @@ export interface PortfolioAssistantContext {
   payoffFacts: PortfolioAssistantPayoffFacts;
   horizonScenarios: PortfolioHorizonScenarios | null;
   marketFacts: PortfolioAssistantMarketFacts;
-  shockFacts: { grid: ShockGridCell[][]; meta: ShockGridMeta } | null;
+  shockFacts: PortfolioAssistantShockFacts | null;
   accountingFacts: PortfolioAccounting | null;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
   topContributors: Record<
@@ -154,6 +162,7 @@ const MARKET_UNDERLYING_LIMIT = 2;
 const MARKET_EXPIRY_LIMIT = 4;
 const CHAIN_STRIKE_BAND = 0.15;
 const COMPACT_CHAIN_STRIKE_BAND = 0.07;
+const CHAIN_BOTH_SIDES_BAND = 0.02;
 const TERM_STRUCTURE_EXPIRY_LIMIT = 12;
 const TRADE_LOAD_LIMIT = 1_000;
 export const TRADE_CONTEXT_LIMIT = 100;
@@ -220,6 +229,23 @@ function narrowChain(
     strikesReturned: new Set(rows.map((row) => row.strike)).size,
     rows,
   };
+}
+
+// In-the-money rows mirror the out-of-the-money side through put-call parity, so beyond the
+// ATM band only the out-of-the-money side is kept; held strikes keep both sides.
+function outOfTheMoneyChain(
+  chain: CompactChain & { units: string },
+  heldStrikes: Set<number>,
+): CompactChain & { units: string } {
+  const reference = chain.stats.forwardPriceUsd ?? chain.stats.indexPriceUsd;
+  if (reference == null) return chain;
+  const rows = chain.rows.filter(
+    (row) =>
+      heldStrikes.has(row.strike) ||
+      Math.abs(row.strike / reference - 1) <= CHAIN_BOTH_SIDES_BAND ||
+      (row.side === 'call' ? row.strike > reference : row.strike < reference),
+  );
+  return { ...chain, strikesReturned: new Set(rows.map((row) => row.strike)).size, rows };
 }
 
 function roundCents(value: number): number {
@@ -342,20 +368,34 @@ export function buildRiskBudgetFacts(
   };
 }
 
-export function roundShockGrid(grid: ShockGridCell[][]): ShockGridCell[][] {
-  return grid.map((row) => row.map((cell) => ({ ...cell, totalPnlUsd: roundCents(cell.totalPnlUsd) })));
+export function toShockFacts(
+  grid: ShockGridCell[][],
+  meta: ShockGridMeta,
+): PortfolioAssistantShockFacts | null {
+  const rows = grid.filter((row) => row.length > 0);
+  const firstRow = rows[0];
+  if (firstRow == null) return null;
+  return {
+    rowsAtmShiftVolPts: rows.flatMap((row) => row[0]?.atmShiftVolPts ?? []),
+    columnsSkewShiftPerLogK: firstRow.map((cell) => cell.skewShiftPerLogK),
+    totalPnlUsd: rows.map((row) => row.map((cell) => roundCents(cell.totalPnlUsd))),
+    meta,
+  };
 }
 
-export function trimShockGrid(grid: ShockGridCell[][]): ShockGridCell[][] {
-  return grid
-    .map((row) =>
-      row.filter(
-        (cell) =>
-          Math.abs(cell.atmShiftVolPts) <= SHOCK_MAX_ATM_SHIFT_VOL_PTS &&
-          Math.abs(cell.skewShiftPerLogK) <= SHOCK_MAX_SKEW_SHIFT_PER_LOG_K,
-      ),
-    )
-    .filter((row) => row.length > 0);
+export function trimShockFacts(facts: PortfolioAssistantShockFacts): PortfolioAssistantShockFacts {
+  const keepRow = facts.rowsAtmShiftVolPts.map((value) => Math.abs(value) <= SHOCK_MAX_ATM_SHIFT_VOL_PTS);
+  const keepColumn = facts.columnsSkewShiftPerLogK.map(
+    (value) => Math.abs(value) <= SHOCK_MAX_SKEW_SHIFT_PER_LOG_K,
+  );
+  return {
+    ...facts,
+    rowsAtmShiftVolPts: facts.rowsAtmShiftVolPts.filter((_, index) => keepRow[index]),
+    columnsSkewShiftPerLogK: facts.columnsSkewShiftPerLogK.filter((_, index) => keepColumn[index]),
+    totalPnlUsd: facts.totalPnlUsd
+      .filter((_, index) => keepRow[index])
+      .map((row) => row.filter((_, index) => keepColumn[index])),
+  };
 }
 
 export function compactPortfolioAssistantContext(
@@ -495,10 +535,7 @@ export function assemblePortfolioAssistantContext(
     payoffFacts: trimPayoffFacts(pnlCurve, input.forwardDays),
     horizonScenarios,
     marketFacts: input.marketFacts,
-    shockFacts:
-      metrics.shockGrid.length > 0
-        ? { grid: roundShockGrid(metrics.shockGrid), meta: metrics.shockGridMeta }
-        : null,
+    shockFacts: toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
     topContributors: {
@@ -519,10 +556,10 @@ export function assemblePortfolioAssistantContext(
   ) {
     shaped = {
       ...context,
-      shockFacts: { ...context.shockFacts, grid: trimShockGrid(context.shockFacts.grid) },
+      shockFacts: trimShockFacts(context.shockFacts),
       limitations: [
         ...context.limitations,
-        `shockFacts.grid keeps ATM shifts within ±${SHOCK_MAX_ATM_SHIFT_VOL_PTS} vol points and skew tilts within ±${SHOCK_MAX_SKEW_SHIFT_PER_LOG_K} per log-strike to save context.`,
+        `shockFacts keeps ATM shifts within ±${SHOCK_MAX_ATM_SHIFT_VOL_PTS} vol points and skew tilts within ±${SHOCK_MAX_SKEW_SHIFT_PER_LOG_K} per log-strike to save context.`,
       ],
     };
   }
@@ -579,6 +616,11 @@ export class PortfolioAssistantContextBuilder {
             }),
           ),
         ]);
+        if (chains.some((chain) => chain.ok)) {
+          unavailable.push(
+            `${underlying} heldExpiryChains omit in-the-money sides beyond ±${CHAIN_BOTH_SIDES_BAND * 100}% of each forward, except held strikes; use oggregator_option_chain for those quotes.`,
+          );
+        }
         if (!overview.ok) unavailable.push(`${underlying} overview: ${overview.error}`);
         if (!surface.ok) unavailable.push(`${underlying} term structure: ${surface.error}`);
         const heldStrikes = new Set(legs.map((leg) => leg.strike));
@@ -586,7 +628,10 @@ export class PortfolioAssistantContextBuilder {
         chains.forEach((chain, index) => {
           if (chain.ok) {
             heldExpiryChains.push(
-              reference == null ? narrowChain(chain.data, CHAIN_STRIKE_BAND, heldStrikes) : chain.data,
+              outOfTheMoneyChain(
+                reference == null ? narrowChain(chain.data, CHAIN_STRIKE_BAND, heldStrikes) : chain.data,
+                heldStrikes,
+              ),
             );
           } else {
             unavailable.push(`${underlying} ${expiries[index]} chain: ${chain.error}`);

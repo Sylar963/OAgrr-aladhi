@@ -73,3 +73,34 @@ reference-bearish-budget-18 now fails structure as well as banned_phrases: its o
 closing the two held legs. The fixture already failed, so the fixture pass rate is unchanged. The
 other checks are as above.
 
+
+## Phase 4 context sizes (2026-10-07)
+
+`JSON.stringify(context).length` per fixture. "Before" is the pre-Phase-4 builder regenerated on the
+same core (`90b0ab52` strategy changes included), "after" is the reshaped context. The 160,000-character
+budget is unchanged. Expected numbers, questions and history are identical before and after, and
+`riskBudgetFacts.worstLossUsd` equals `payoffFacts.maxLossUsd` on every fixture.
+
+| Fixture | Before | After | Reduction |
+| --- | --- | --- | --- |
+| budget-bearish-long-call | 45,540 | 28,386 | 37.7% |
+| budget-bullish-bear-put-spread | 47,041 | 30,304 | 35.6% |
+| budget-long-vol-condor | 50,963 | 35,059 | 31.2% |
+| horizon-minus10-7d-by-expiry | 89,658 | 61,023 | 31.9% |
+| horizon-plus5-10d | 89,658 | 61,023 | 31.9% |
+| infeasible-budget-bear-call-spread | 46,939 | 30,135 | 35.8% |
+| market-flow-and-health | 45,540 | 28,386 | 37.7% |
+| market-off-book-chain | 47,041 | 30,304 | 35.6% |
+| reference-bearish-budget-18 | 67,886 | 43,279 | 36.2% |
+| reference-cap-upside | 67,886 | 43,279 | 36.2% |
+| reference-max-loss | 67,886 | 43,279 | 36.2% |
+| stale-history-followup | 47,041 | 30,304 | 35.6% |
+| trade-history-fees | 70,119 | 45,391 | 35.3% |
+| trade-history-realized | 70,119 | 45,391 | 35.3% |
+
+Where it came from: `payoffFacts` 7.2–8.4k → 2.0–2.8k (22–26 of 61 points, cents, no `forwardPnlUsd`
+at `forwardDays = 0`); `shockFacts` 6.5k → 0.8k (axis arrays plus a P&L matrix instead of 81 cell
+objects); `heldExpiryChains` lose in-the-money sides beyond ±2% of the forward, except held strikes
+(−7k to −19k). Added: `riskBudgetFacts` (0.45–1.0k) and `toolHints` (0.47k). No fixture reaches 60% of
+the budget, so the shock-grid trim does not apply to any of them. Answer quality after Phase 4 has not
+been measured against Hermes yet.

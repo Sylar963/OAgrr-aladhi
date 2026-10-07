@@ -1254,25 +1254,6 @@
               "rows": [
                 {
                   "strike": 72000,
-                  "side": "call",
-                  "bestBidUsd": 12151.59,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 12647.58,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 12399.59,
-                  "medianMarkIv": 0.4553,
-                  "delta": 0.9215,
-                  "gamma": 0.00001531,
-                  "thetaUsdPerDay": -30.72,
-                  "vegaUsd": 30.81,
-                  "openInterestContracts": 114,
-                  "volume24hContracts": 14,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 72000,
                   "side": "put",
                   "bestBidUsd": 348.38,
                   "bestBidVenue": "deribit",
@@ -1288,25 +1269,6 @@
                   "vegaUsd": 30.81,
                   "openInterestContracts": 91,
                   "volume24hContracts": 11,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 73000,
-                  "side": "call",
-                  "bestBidUsd": 11259.77,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 11719.35,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 11489.56,
-                  "medianMarkIv": 0.4504,
-                  "delta": 0.9044,
-                  "gamma": 0.00001794,
-                  "thetaUsdPerDay": -35.22,
-                  "vegaUsd": 35.7,
-                  "openInterestContracts": 150,
-                  "volume24hContracts": 18,
                   "quotingVenues": 2
                 },
                 {
@@ -1368,25 +1330,6 @@
                 },
                 {
                   "strike": 75000,
-                  "side": "call",
-                  "bestBidUsd": 9537.74,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 9927.03,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 9732.39,
-                  "medianMarkIv": 0.4417,
-                  "delta": 0.8612,
-                  "gamma": 0.00002383,
-                  "thetaUsdPerDay": -44.98,
-                  "vegaUsd": 46.5,
-                  "openInterestContracts": 279,
-                  "volume24hContracts": 33,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 75000,
                   "side": "put",
                   "bestBidUsd": 674.53,
                   "bestBidVenue": "deribit",
@@ -1406,25 +1349,6 @@
                 },
                 {
                   "strike": 76000,
-                  "side": "call",
-                  "bestBidUsd": 8714.04,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 9069.72,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 8891.88,
-                  "medianMarkIv": 0.4377,
-                  "delta": 0.8349,
-                  "gamma": 0.00002699,
-                  "thetaUsdPerDay": -50.03,
-                  "vegaUsd": 52.2,
-                  "openInterestContracts": 381,
-                  "volume24hContracts": 45,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 76000,
                   "side": "put",
                   "bestBidUsd": 830.84,
                   "bestBidVenue": "deribit",
@@ -1440,25 +1364,6 @@
                   "vegaUsd": 52.2,
                   "openInterestContracts": 305,
                   "volume24hContracts": 36,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 77000,
-                  "side": "call",
-                  "bestBidUsd": 7919.77,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 8243.02,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 8081.39,
-                  "medianMarkIv": 0.4341,
-                  "delta": 0.8053,
-                  "gamma": 0.00003019,
-                  "thetaUsdPerDay": -55.04,
-                  "vegaUsd": 57.91,
-                  "openInterestContracts": 509,
-                  "volume24hContracts": 61,
                   "quotingVenues": 2
                 },
                 {
@@ -1520,25 +1425,6 @@
                 },
                 {
                   "strike": 79000,
-                  "side": "call",
-                  "bestBidUsd": 6432.92,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 6695.48,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 6564.2,
-                  "medianMarkIv": 0.4276,
-                  "delta": 0.7364,
-                  "gamma": 0.00003635,
-                  "thetaUsdPerDay": -64.29,
-                  "vegaUsd": 68.67,
-                  "openInterestContracts": 828,
-                  "volume24hContracts": 99,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 79000,
                   "side": "put",
                   "bestBidUsd": 1489.71,
                   "bestBidVenue": "deribit",
@@ -1554,25 +1440,6 @@
                   "vegaUsd": 68.67,
                   "openInterestContracts": 662,
                   "volume24hContracts": 79,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 80000,
-                  "side": "call",
-                  "bestBidUsd": 5746.59,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 5981.14,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 5863.87,
-                  "medianMarkIv": 0.4247,
-                  "delta": 0.6975,
-                  "gamma": 0.00003909,
-                  "thetaUsdPerDay": -68.23,
-                  "vegaUsd": 73.36,
-                  "openInterestContracts": 999,
-                  "volume24hContracts": 120,
                   "quotingVenues": 2
                 },
                 {
@@ -1596,25 +1463,6 @@
                 },
                 {
                   "strike": 81000,
-                  "side": "call",
-                  "bestBidUsd": 5101.93,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 5310.17,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 5206.05,
-                  "medianMarkIv": 0.4221,
-                  "delta": 0.6562,
-                  "gamma": 0.00004147,
-                  "thetaUsdPerDay": -71.49,
-                  "vegaUsd": 77.34,
-                  "openInterestContracts": 1159,
-                  "volume24hContracts": 139,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 81000,
                   "side": "put",
                   "bestBidUsd": 2118.72,
                   "bestBidVenue": "deribit",
@@ -1630,25 +1478,6 @@
                   "vegaUsd": 77.34,
                   "openInterestContracts": 927,
                   "volume24hContracts": 111,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 82000,
-                  "side": "call",
-                  "bestBidUsd": 4501.03,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 4684.74,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 4592.88,
-                  "medianMarkIv": 0.4198,
-                  "delta": 0.6129,
-                  "gamma": 0.00004339,
-                  "thetaUsdPerDay": -73.97,
-                  "vegaUsd": 80.48,
-                  "openInterestContracts": 1290,
-                  "volume24hContracts": 155,
                   "quotingVenues": 2
                 },
                 {
@@ -1804,25 +1633,6 @@
                   "quotingVenues": 2
                 },
                 {
-                  "strike": 86000,
-                  "side": "put",
-                  "bestBidUsd": 4471.74,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 4654.26,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 4563,
-                  "medianMarkIv": 0.4126,
-                  "delta": -0.568,
-                  "gamma": 0.00004533,
-                  "thetaUsdPerDay": -74.66,
-                  "vegaUsd": 82.64,
-                  "openInterestContracts": 1040,
-                  "volume24hContracts": 125,
-                  "quotingVenues": 2
-                },
-                {
                   "strike": 87000,
                   "side": "call",
                   "bestBidUsd": 2181.78,
@@ -1839,25 +1649,6 @@
                   "vegaUsd": 80.53,
                   "openInterestContracts": 1172,
                   "volume24hContracts": 141,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 87000,
-                  "side": "put",
-                  "bestBidUsd": 5078.57,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 5285.86,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 5182.21,
-                  "medianMarkIv": 0.4113,
-                  "delta": -0.612,
-                  "gamma": 0.00004431,
-                  "thetaUsdPerDay": -72.53,
-                  "vegaUsd": 80.53,
-                  "openInterestContracts": 938,
-                  "volume24hContracts": 113,
                   "quotingVenues": 2
                 },
                 {
@@ -1880,25 +1671,6 @@
                   "quotingVenues": 2
                 },
                 {
-                  "strike": 88000,
-                  "side": "put",
-                  "bestBidUsd": 5728.01,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 5961.81,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 5844.91,
-                  "medianMarkIv": 0.4102,
-                  "delta": -0.6543,
-                  "gamma": 0.00004276,
-                  "thetaUsdPerDay": -69.62,
-                  "vegaUsd": 77.51,
-                  "openInterestContracts": 811,
-                  "volume24hContracts": 97,
-                  "quotingVenues": 2
-                },
-                {
                   "strike": 89000,
                   "side": "call",
                   "bestBidUsd": 1560.94,
@@ -1915,25 +1687,6 @@
                   "vegaUsd": 73.69,
                   "openInterestContracts": 843,
                   "volume24hContracts": 101,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 89000,
-                  "side": "put",
-                  "bestBidUsd": 6417.73,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 6679.68,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 6548.71,
-                  "medianMarkIv": 0.4093,
-                  "delta": -0.6944,
-                  "gamma": 0.00004074,
-                  "thetaUsdPerDay": -66.05,
-                  "vegaUsd": 73.69,
-                  "openInterestContracts": 674,
-                  "volume24hContracts": 81,
                   "quotingVenues": 2
                 },
                 {
@@ -1994,25 +1747,6 @@
                   "quotingVenues": 2
                 },
                 {
-                  "strike": 91000,
-                  "side": "put",
-                  "bestBidUsd": 7906.8,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 8229.53,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 8068.17,
-                  "medianMarkIv": 0.4081,
-                  "delta": -0.7667,
-                  "gamma": 0.00003568,
-                  "thetaUsdPerDay": -57.49,
-                  "vegaUsd": 64.34,
-                  "openInterestContracts": 417,
-                  "volume24hContracts": 50,
-                  "quotingVenues": 2
-                },
-                {
                   "strike": 92000,
                   "side": "call",
                   "bestBidUsd": 903.15,
@@ -2032,25 +1766,6 @@
                   "quotingVenues": 2
                 },
                 {
-                  "strike": 92000,
-                  "side": "put",
-                  "bestBidUsd": 8699.94,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 9055.04,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 8877.49,
-                  "medianMarkIv": 0.4077,
-                  "delta": -0.7984,
-                  "gamma": 0.00003282,
-                  "thetaUsdPerDay": -52.79,
-                  "vegaUsd": 59.13,
-                  "openInterestContracts": 313,
-                  "volume24hContracts": 38,
-                  "quotingVenues": 2
-                },
-                {
                   "strike": 93000,
                   "side": "call",
                   "bestBidUsd": 744.39,
@@ -2067,25 +1782,6 @@
                   "vegaUsd": 53.79,
                   "openInterestContracts": 288,
                   "volume24hContracts": 34,
-                  "quotingVenues": 2
-                },
-                {
-                  "strike": 93000,
-                  "side": "put",
-                  "bestBidUsd": 9521.18,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 9909.8,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 9715.49,
-                  "medianMarkIv": 0.4075,
-                  "delta": -0.827,
-                  "gamma": 0.00002987,
-                  "thetaUsdPerDay": -48,
-                  "vegaUsd": 53.79,
-                  "openInterestContracts": 230,
-                  "volume24hContracts": 27,
                   "quotingVenues": 2
                 },
                 {
@@ -2146,25 +1842,6 @@
                   "quotingVenues": 2
                 },
                 {
-                  "strike": 95000,
-                  "side": "put",
-                  "bestBidUsd": 11235.21,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 11693.78,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 11464.49,
-                  "medianMarkIv": 0.4076,
-                  "delta": -0.8751,
-                  "gamma": 0.00002401,
-                  "thetaUsdPerDay": -38.6,
-                  "vegaUsd": 43.24,
-                  "openInterestContracts": 123,
-                  "volume24hContracts": 15,
-                  "quotingVenues": 2
-                },
-                {
                   "strike": 96000,
                   "side": "call",
                   "bestBidUsd": 405.2,
@@ -2182,25 +1859,6 @@
                   "openInterestContracts": 117,
                   "volume24hContracts": 14,
                   "quotingVenues": 2
-                },
-                {
-                  "strike": 96000,
-                  "side": "put",
-                  "bestBidUsd": 12121.99,
-                  "bestBidVenue": "deribit",
-                  "bestBidSize": 5,
-                  "bestAskUsd": 12616.76,
-                  "bestAskVenue": "deribit",
-                  "bestAskSize": 4,
-                  "medianMidUsd": 12369.37,
-                  "medianMarkIv": 0.4079,
-                  "delta": -0.8949,
-                  "gamma": 0.00002123,
-                  "thetaUsdPerDay": -34.17,
-                  "vegaUsd": 38.26,
-                  "openInterestContracts": 93,
-                  "volume24hContracts": 11,
-                  "quotingVenues": 2
                 }
               ],
               "units": "Prices are USD per 1 contract of underlying. Best bid/ask are the highest bid and lowest ask across fresh venue quotes. IV, delta, gamma, theta and vega are medians of venue-reported values; theta is venue-reported USD per day and vega venue-reported USD per 1 vol point. Open interest and volume are summed contracts across venues."
@@ -2208,432 +1866,132 @@
           ]
         }
       ],
-      "unavailable": []
+      "unavailable": [
+        "BTC heldExpiryChains omit in-the-money sides beyond ±2% of each forward, except held strikes; use oggregator_option_chain for those quotes."
+      ]
     },
     "shockFacts": {
-      "grid": [
+      "rowsAtmShiftVolPts": [
+        -10,
+        -5,
+        -2.5,
+        -1,
+        0,
+        1,
+        2.5,
+        5,
+        10
+      ],
+      "columnsSkewShiftPerLogK": [
+        -0.5,
+        -0.25,
+        -0.1,
+        -0.05,
+        0,
+        0.05,
+        0.1,
+        0.25,
+        0.5
+      ],
+      "totalPnlUsd": [
         [
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 538
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 503.1
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 493.63
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 492.42
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": 492.19
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 492.94
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 494.66
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 505.67
-          },
-          {
-            "atmShiftVolPts": -10,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 543
-          }
+          538,
+          503.1,
+          493.63,
+          492.42,
+          492.19,
+          492.94,
+          494.66,
+          505.67,
+          543
         ],
         [
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 268.05
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 238.71
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 231.65
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 231.05
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": 231.33
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 232.5
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 234.54
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 245.94
-          },
-          {
-            "atmShiftVolPts": -5,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 282.46
-          }
+          268.05,
+          238.71,
+          231.65,
+          231.05,
+          231.33,
+          232.5,
+          234.54,
+          245.94,
+          282.46
         ],
         [
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 143.69
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 117.62
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 111.76
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 111.43
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": 111.92
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 113.22
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 115.33
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 126.56
-          },
-          {
-            "atmShiftVolPts": -2.5,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 161.61
-          }
+          143.69,
+          117.62,
+          111.76,
+          111.43,
+          111.92,
+          113.22,
+          115.33,
+          126.56,
+          161.61
         ],
         [
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 72.79
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 48.65
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": 43.47
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": 43.29
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": 43.88
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 45.24
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 47.38
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 58.43
-          },
-          {
-            "atmShiftVolPts": -1,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 92.43
-          }
+          72.79,
+          48.65,
+          43.47,
+          43.29,
+          43.88,
+          45.24,
+          47.38,
+          58.43,
+          92.43
         ],
         [
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": 27.08
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": 4.19
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -0.56
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -0.65
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": 0
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": 1.4
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": 3.54
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": 14.46
-          },
-          {
-            "atmShiftVolPts": 0,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 47.71
-          }
+          27.08,
+          4.19,
+          -0.56,
+          -0.65,
+          0,
+          1.4,
+          3.54,
+          14.46,
+          47.71
         ],
         [
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": -17.39
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -39.07
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -43.41
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -43.42
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": -42.71
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -41.28
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -39.14
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -28.37
-          },
-          {
-            "atmShiftVolPts": 1,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": 4.12
-          }
+          -17.39,
+          -39.07,
+          -43.41,
+          -43.42,
+          -42.71,
+          -41.28,
+          -39.14,
+          -28.37,
+          4.12
         ],
         [
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": -81.83
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -101.76
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -105.52
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -105.42
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": -104.64
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -103.18
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -101.04
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -90.52
-          },
-          {
-            "atmShiftVolPts": 2.5,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -59.2
-          }
+          -81.83,
+          -101.76,
+          -105.52,
+          -105.42,
+          -104.64,
+          -103.18,
+          -101.04,
+          -90.52,
+          -59.2
         ],
         [
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": -183.35
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -200.59
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -203.5
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -203.24
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": -202.36
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -200.86
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -198.74
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -188.67
-          },
-          {
-            "atmShiftVolPts": 5,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -159.32
-          }
+          -183.35,
+          -200.59,
+          -203.5,
+          -203.24,
+          -202.36,
+          -200.86,
+          -198.74,
+          -188.67,
+          -159.32
         ],
         [
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": -0.5,
-            "totalPnlUsd": -365.98
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": -0.25,
-            "totalPnlUsd": -378.71
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": -0.1,
-            "totalPnlUsd": -380.26
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": -0.05,
-            "totalPnlUsd": -379.76
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": 0,
-            "totalPnlUsd": -378.76
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": 0.05,
-            "totalPnlUsd": -377.25
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": 0.1,
-            "totalPnlUsd": -375.23
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": 0.25,
-            "totalPnlUsd": -366.11
-          },
-          {
-            "atmShiftVolPts": 10,
-            "skewShiftPerLogK": 0.5,
-            "totalPnlUsd": -340.53
-          }
+          -365.98,
+          -378.71,
+          -380.26,
+          -379.76,
+          -378.76,
+          -377.25,
+          -375.23,
+          -366.11,
+          -340.53
         ]
       ],
       "meta": {

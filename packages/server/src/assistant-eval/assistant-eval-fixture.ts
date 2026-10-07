@@ -9,7 +9,6 @@ import {
   PortfolioPnlCurveStatusSchema,
   PortfolioSourceSchema,
   PortfolioTotalsSchema,
-  ShockGridCellSchema,
   ShockGridMetaSchema,
   StrategyGroupSchema,
   VegaByStrikeRowSchema,
@@ -223,7 +222,12 @@ const PortfolioAssistantContextSchema = z.object({
     unavailable: z.array(z.string()),
   }),
   shockFacts: z
-    .object({ grid: z.array(z.array(protocol(ShockGridCellSchema))), meta: protocol(ShockGridMetaSchema) })
+    .object({
+      rowsAtmShiftVolPts: z.array(z.number()),
+      columnsSkewShiftPerLogK: z.array(z.number()),
+      totalPnlUsd: z.array(z.array(z.number())),
+      meta: protocol(ShockGridMetaSchema),
+    })
     .nullable(),
   accountingFacts: protocol(PortfolioAccountingSchema).nullable(),
   tradeHistoryFacts: z

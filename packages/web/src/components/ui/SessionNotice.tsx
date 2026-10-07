@@ -99,7 +99,7 @@ export default function SessionNotice() {
           </span>
         </div>
         <p className={styles.body}>
-          Your session was ended after 10 minutes of inactivity. Idle sessions are
+          Your session was ended after 30 minutes of inactivity. Idle sessions are
           released to keep live market data responsive for active users. Reload the
           page to start a new session.
         </p>

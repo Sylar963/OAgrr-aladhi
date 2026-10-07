@@ -2,13 +2,13 @@ import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
 
-const IDLE_LOGOUT_MS = 10 * 60 * 1000;
-const IDLE_WARNING_MS = 9 * 60 * 1000;
+const IDLE_LOGOUT_MS = 30 * 60 * 1000;
+const IDLE_WARNING_MS = 29 * 60 * 1000;
 
 /**
  * Tracks how long the tab has been hidden or unfocused, then escalates:
- *   9 minutes  → idle-warning notice (with 60s countdown)
- *   10 minutes → clears the paper account id + idle-logout notice
+ *   29 minutes → idle-warning notice (with 60s countdown)
+ *   30 minutes → clears the paper account id + idle-logout notice
  *
  * Applies to every user (paper-trading and anonymous) to curb idle public
  * sessions. Timers start on `visibilitychange → hidden` and are cancelled when

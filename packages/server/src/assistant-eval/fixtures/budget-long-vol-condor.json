@@ -359,9 +359,9 @@
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 75966.8,
-          "nowPnlUsd": -952.82,
-          "expiryPnlUsd": -893.2
+          "underlyingPriceUsd": 75074.22,
+          "nowPnlUsd": -1096.74,
+          "expiryPnlUsd": -1785.78
         },
         {
           "underlyingPriceUsd": 76859.38,
@@ -374,28 +374,33 @@
           "expiryPnlUsd": 891.96
         },
         {
-          "underlyingPriceUsd": 78644.53,
-          "nowPnlUsd": -580.81,
+          "underlyingPriceUsd": 78000,
+          "nowPnlUsd": -659.98,
           "expiryPnlUsd": 1140
         },
         {
-          "underlyingPriceUsd": 81322.27,
-          "nowPnlUsd": -343.97,
+          "underlyingPriceUsd": 79537.11,
+          "nowPnlUsd": -484.47,
           "expiryPnlUsd": 1140
         },
         {
-          "underlyingPriceUsd": 84000,
-          "nowPnlUsd": -276.57,
+          "underlyingPriceUsd": 82214.84,
+          "nowPnlUsd": -301.96,
           "expiryPnlUsd": 1140
         },
         {
-          "underlyingPriceUsd": 86677.73,
-          "nowPnlUsd": -378.89,
+          "underlyingPriceUsd": 84892.58,
+          "nowPnlUsd": -292.76,
           "expiryPnlUsd": 1140
         },
         {
-          "underlyingPriceUsd": 89355.47,
-          "nowPnlUsd": -621.09,
+          "underlyingPriceUsd": 87570.31,
+          "nowPnlUsd": -446.23,
+          "expiryPnlUsd": 1140
+        },
+        {
+          "underlyingPriceUsd": 90000,
+          "nowPnlUsd": -695.05,
           "expiryPnlUsd": 1140
         },
         {
@@ -414,33 +419,38 @@
           "expiryPnlUsd": -893.2
         },
         {
-          "underlyingPriceUsd": 94710.93,
-          "nowPnlUsd": -1324.99,
+          "underlyingPriceUsd": 94000,
+          "nowPnlUsd": -1225.79,
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 97388.67,
-          "nowPnlUsd": -1686.23,
+          "underlyingPriceUsd": 96496.09,
+          "nowPnlUsd": -1569.2,
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 100066.4,
-          "nowPnlUsd": -2005.53,
+          "underlyingPriceUsd": 99173.82,
+          "nowPnlUsd": -1905.1,
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 102744.13,
-          "nowPnlUsd": -2266.24,
+          "underlyingPriceUsd": 101851.55,
+          "nowPnlUsd": -2186.28,
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 105421.87,
-          "nowPnlUsd": -2465.12,
+          "underlyingPriceUsd": 104529.29,
+          "nowPnlUsd": -2405.47,
           "expiryPnlUsd": -2860
         },
         {
-          "underlyingPriceUsd": 108099.6,
-          "nowPnlUsd": -2608.03,
+          "underlyingPriceUsd": 107207.02,
+          "nowPnlUsd": -2566.02,
+          "expiryPnlUsd": -2860
+        },
+        {
+          "underlyingPriceUsd": 109884.75,
+          "nowPnlUsd": -2677.27,
           "expiryPnlUsd": -2860
         },
         {
@@ -449,24 +459,7 @@
           "expiryPnlUsd": -2860
         }
       ],
-      "expiryBasis": "common_expiry",
-      "riskWindows": [
-        {
-          "from": "2026-10-07T12:00:00.000Z",
-          "until": "2026-10-30",
-          "liveLegIds": [
-            "ic-oct30-74000-p",
-            "ic-oct30-78000-p",
-            "ic-oct30-90000-c",
-            "ic-oct30-94000-c"
-          ],
-          "netCallSize": 0,
-          "upsideUnbounded": false,
-          "lossAtZeroSpotUsd": -2860,
-          "worstLossUsd": -2860,
-          "worstLossSpotUsd": 0
-        }
-      ]
+      "expiryBasis": "common_expiry"
     },
     "horizonScenarios": {
       "status": "ok",

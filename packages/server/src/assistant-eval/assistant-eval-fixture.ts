@@ -126,7 +126,6 @@ const PayoffFactsSchema = z.object({
     }),
   ),
   expiryBasis: protocol(ExpiryBasisSchema),
-  riskWindows: z.array(protocol(ExpiryRiskWindowSchema)),
 });
 
 const RiskBudgetFactsSchema = z.object({

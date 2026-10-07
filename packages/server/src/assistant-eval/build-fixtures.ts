@@ -484,7 +484,7 @@ async function buildDrafts(): Promise<FixtureDraft[]> {
         maxChars: 4_500,
       }),
       notes: [
-        'payoffFacts.maxLossUsd is null: riskWindows flags the short Oct 30 call as uncovered after Oct 16. The stale history quotes the old same-price expiry low.',
+        'payoffFacts.maxLossUsd is null: riskBudgetFacts.riskWindows flags the short Oct 30 call as uncovered after Oct 16. The stale history quotes the old same-price expiry low.',
       ],
     },
     {

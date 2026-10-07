@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ExpiryRiskWindow, PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
@@ -82,5 +82,40 @@ describe('PortfolioPnlCurve', () => {
 
     expect(screen.getByText('expiry-window low -$1,000')).toBeTruthy();
     expect(screen.queryByText(/Upside unbounded/)).toBeNull();
+  });
+
+  it('uses round axis ticks with a $0 line and labels spot and break-even', () => {
+    const { container } = render(
+      <PortfolioPnlCurve
+        forwardDays={0}
+        curve={curve({ breakEvenPricesUsd: [86_000], expiryBasis: 'common_expiry' })}
+      />,
+    );
+    const labels = [...container.querySelectorAll('svg text')].map((node) => node.textContent);
+
+    expect(labels).toContain('$0');
+    expect(labels).toContain('82,000');
+    expect(labels).toContain('spot 84,000');
+    expect(labels).toContain('BE 86,000');
+    expect(labels.some((label) => label === '+2%')).toBe(true);
+  });
+
+  it('shows the P&L readout for the nearest point under the pointer', () => {
+    const { container } = render(<PortfolioPnlCurve forwardDays={0} curve={curve({})} />);
+    const svg = container.querySelector('svg');
+    if (svg == null) throw new Error('chart missing');
+    const identity = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    Object.defineProperty(svg, 'getScreenCTM', { value: () => ({ ...identity, inverse: () => identity }) });
+
+    fireEvent.pointerMove(svg, { clientX: 690, clientY: 100 });
+    const readout = screen.getByTestId('pnl-hover');
+
+    expect(readout.textContent).toContain('90,000');
+    expect(readout.textContent).toContain('+7.1%');
+    expect(readout.textContent).toContain('+$20');
+    expect(readout.textContent).toContain('+$10');
+
+    fireEvent.pointerLeave(svg);
+    expect(screen.queryByTestId('pnl-hover')).toBeNull();
   });
 });

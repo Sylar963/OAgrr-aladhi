@@ -398,34 +398,34 @@
           "expiryPnlUsd": -498.31
         },
         {
-          "underlyingPriceUsd": 80216.8,
-          "nowPnlUsd": 1850.69,
+          "underlyingPriceUsd": 80000,
+          "nowPnlUsd": 1951.34,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 82644.53,
-          "nowPnlUsd": 844.53,
+          "underlyingPriceUsd": 81835.29,
+          "nowPnlUsd": 1156.37,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 85072.27,
-          "nowPnlUsd": 28.91,
+          "underlyingPriceUsd": 84263.02,
+          "nowPnlUsd": 282.77,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 87500,
-          "nowPnlUsd": -649.84,
+          "underlyingPriceUsd": 86690.76,
+          "nowPnlUsd": -435.25,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 89927.73,
-          "nowPnlUsd": -1248.71,
+          "underlyingPriceUsd": 89118.49,
+          "nowPnlUsd": -1054.56,
           "expiryPnlUsd": -1900
         },
         {
-          "underlyingPriceUsd": 92355.47,
-          "nowPnlUsd": -1820.09,
-          "expiryPnlUsd": -722.27
+          "underlyingPriceUsd": 90736.98,
+          "nowPnlUsd": -1439.89,
+          "expiryPnlUsd": -1531.51
         },
         {
           "underlyingPriceUsd": 93164.71,
@@ -438,9 +438,9 @@
           "expiryPnlUsd": 86.98
         },
         {
-          "underlyingPriceUsd": 94783.2,
-          "nowPnlUsd": -2406.5,
-          "expiryPnlUsd": 491.6
+          "underlyingPriceUsd": 95000,
+          "nowPnlUsd": -2460.72,
+          "expiryPnlUsd": 600
         },
         {
           "underlyingPriceUsd": 95592.44,
@@ -488,48 +488,7 @@
           "expiryPnlUsd": -7788.67
         }
       ],
-      "expiryBasis": "mixed_expiry",
-      "riskWindows": [
-        {
-          "from": "2026-10-07T12:00:00.000Z",
-          "until": "2026-10-30",
-          "liveLegIds": [
-            "hz-oct30-80000-p",
-            "hz-nov27-95000-c",
-            "hz-dec25-90000-c"
-          ],
-          "netCallSize": -0.5,
-          "upsideUnbounded": true,
-          "lossAtZeroSpotUsd": 78100,
-          "worstLossUsd": null,
-          "worstLossSpotUsd": null
-        },
-        {
-          "from": "2026-10-30",
-          "until": "2026-11-27",
-          "liveLegIds": [
-            "hz-nov27-95000-c",
-            "hz-dec25-90000-c"
-          ],
-          "netCallSize": -0.5,
-          "upsideUnbounded": true,
-          "lossAtZeroSpotUsd": 78100,
-          "worstLossUsd": null,
-          "worstLossSpotUsd": null
-        },
-        {
-          "from": "2026-11-27",
-          "until": "2026-12-25",
-          "liveLegIds": [
-            "hz-dec25-90000-c"
-          ],
-          "netCallSize": 0.5,
-          "upsideUnbounded": true,
-          "lossAtZeroSpotUsd": 78100,
-          "worstLossUsd": null,
-          "worstLossSpotUsd": null
-        }
-      ]
+      "expiryBasis": "mixed_expiry"
     },
     "horizonScenarios": {
       "status": "ok",

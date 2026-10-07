@@ -84,7 +84,7 @@ export type PortfolioAssistantPayoffPoint = Omit<PortfolioPnlPoint, 'forwardPnlU
   forwardPnlUsd?: number | null;
 };
 
-export interface PortfolioAssistantPayoffFacts extends Omit<PortfolioPnlCurve, 'points'> {
+export interface PortfolioAssistantPayoffFacts extends Omit<PortfolioPnlCurve, 'points' | 'riskWindows'> {
   points: PortfolioAssistantPayoffPoint[];
 }
 
@@ -290,7 +290,7 @@ export function trimPayoffFacts(
   curve: PortfolioPnlCurve,
   forwardDays: number,
 ): PortfolioAssistantPayoffFacts {
-  const { points } = curve;
+  const { points, riskWindows: _riskWindows, ...facts } = curve;
   const keep = new Set<number>();
   for (let index = 0; index < points.length; index += PAYOFF_POINT_STRIDE) keep.add(index);
   if (points.length > 0) {
@@ -305,7 +305,7 @@ export function trimPayoffFacts(
     if (above > 0) keep.add(above - 1);
   }
   return {
-    ...curve,
+    ...facts,
     currentSpotUsd: curve.currentSpotUsd == null ? null : roundCents(curve.currentSpotUsd),
     breakEvenPricesUsd: curve.breakEvenPricesUsd.map(roundCents),
     maxProfitUsd: curve.maxProfitUsd == null ? null : roundCents(curve.maxProfitUsd),
@@ -323,7 +323,6 @@ export function trimPayoffFacts(
           ? { ...rounded, forwardPnlUsd: forwardPnlUsd == null ? null : roundCents(forwardPnlUsd) }
           : rounded;
       }),
-    riskWindows: curve.riskWindows.map(roundRiskWindow),
   };
 }
 

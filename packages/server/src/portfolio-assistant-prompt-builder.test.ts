@@ -25,6 +25,27 @@ describe('PortfolioAssistantPromptBuilder', () => {
     expect(instructions).toContain('search_options_library');
   });
 
+  it('drives constraint questions to checked candidates from the structure tools', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('Call oggregator_structure_search with portfolioRef');
+    expect(instructions).toContain('Verify the chosen candidate with oggregator_evaluate_structure');
+    expect(instructions).toContain('Read riskBudgetFacts');
+    expect(instructions).toContain('Take worst-case loss from riskBudgetFacts');
+    expect(instructions).toContain('show the closest option and the exact dollar gap');
+    expect(instructions).toContain('"Cannot" is never the whole answer');
+    expect(instructions).toContain('candidates are structures to evaluate, not orders');
+    expect(instructions).toMatch(/Caveats section of at most three/);
+  });
+
+  it('uses current numbers silently instead of apologising for earlier answers', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('use current numbers silently');
+    expect(instructions).toContain('never apologise for or re-litigate earlier figures');
+    expect(instructions).not.toContain('was wrong');
+  });
+
   describe('buildPortfolioAssistantConversationMessages', () => {
     const builder = new PortfolioAssistantPromptBuilder();
     const snapshotAt = Date.UTC(2026, 9, 7, 12, 30);

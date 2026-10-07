@@ -223,9 +223,9 @@
           "expiryPnlUsd": -1175
         },
         {
-          "underlyingPriceUsd": 90910.13,
-          "nowPnlUsd": 1710.76,
-          "expiryPnlUsd": -719.93
+          "underlyingPriceUsd": 90249,
+          "nowPnlUsd": 1530.06,
+          "expiryPnlUsd": -1050.5
         },
         {
           "underlyingPriceUsd": 92232.4,
@@ -238,34 +238,39 @@
           "expiryPnlUsd": 271.77
         },
         {
-          "underlyingPriceUsd": 94876.93,
-          "nowPnlUsd": 2926.57,
-          "expiryPnlUsd": 1263.47
+          "underlyingPriceUsd": 94215.8,
+          "nowPnlUsd": 2708.88,
+          "expiryPnlUsd": 932.9
         },
         {
-          "underlyingPriceUsd": 96860.33,
-          "nowPnlUsd": 3613.13,
-          "expiryPnlUsd": 2255.17
+          "underlyingPriceUsd": 96199.2,
+          "nowPnlUsd": 3378.86,
+          "expiryPnlUsd": 1924.6
         },
         {
-          "underlyingPriceUsd": 98843.73,
-          "nowPnlUsd": 4346.4,
-          "expiryPnlUsd": 3246.87
+          "underlyingPriceUsd": 98182.6,
+          "nowPnlUsd": 4097.08,
+          "expiryPnlUsd": 2916.3
         },
         {
-          "underlyingPriceUsd": 100827.13,
-          "nowPnlUsd": 5121.58,
-          "expiryPnlUsd": 4238.57
+          "underlyingPriceUsd": 100166,
+          "nowPnlUsd": 4858.83,
+          "expiryPnlUsd": 3908
         },
         {
-          "underlyingPriceUsd": 102810.53,
-          "nowPnlUsd": 5933.76,
-          "expiryPnlUsd": 5230.27
+          "underlyingPriceUsd": 102149.4,
+          "nowPnlUsd": 5659.22,
+          "expiryPnlUsd": 4899.7
         },
         {
-          "underlyingPriceUsd": 104793.93,
-          "nowPnlUsd": 6778.12,
-          "expiryPnlUsd": 6221.97
+          "underlyingPriceUsd": 104132.8,
+          "nowPnlUsd": 6493.38,
+          "expiryPnlUsd": 5891.4
+        },
+        {
+          "underlyingPriceUsd": 106116.2,
+          "nowPnlUsd": 7356.61,
+          "expiryPnlUsd": 6883.1
         },
         {
           "underlyingPriceUsd": 106777.33,
@@ -273,21 +278,7 @@
           "expiryPnlUsd": 7213.67
         }
       ],
-      "expiryBasis": "common_expiry",
-      "riskWindows": [
-        {
-          "from": "2026-10-07T12:00:00.000Z",
-          "until": "2026-11-27",
-          "liveLegIds": [
-            "lc-nov27-90000-c"
-          ],
-          "netCallSize": 0.5,
-          "upsideUnbounded": false,
-          "lossAtZeroSpotUsd": -1175,
-          "worstLossUsd": -1175,
-          "worstLossSpotUsd": 0
-        }
-      ]
+      "expiryBasis": "common_expiry"
     },
     "horizonScenarios": {
       "status": "ok",

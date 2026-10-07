@@ -239,7 +239,12 @@ describe('assemblePortfolioAssistantContext', () => {
     expect(context.riskBudgetFacts.uncoveredShorts).toEqual([
       { legId: 'short-oct30-85000-c', expiry: '2026-10-30', strike: 85_000, right: 'call', size: 1 },
     ]);
-    expect(context.riskBudgetFacts.riskWindows).toEqual(context.payoffFacts.riskWindows);
+    expect(context.riskBudgetFacts.riskWindows.map((window) => window.until)).toEqual([
+      '2026-10-16',
+      '2026-10-30',
+    ]);
+    expect(context.riskBudgetFacts.riskWindows[1]?.upsideUnbounded).toBe(true);
+    expect(context.payoffFacts).not.toHaveProperty('riskWindows');
     expect(context.payoffFacts.maxLossUsd).toBeNull();
     expect(context.shockFacts?.rowsAtmShiftVolPts).toHaveLength(9);
     expect(context.limitations).not.toContain(CONTEXT_COMPACTED_LIMITATION);

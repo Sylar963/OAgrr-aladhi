@@ -104,3 +104,79 @@ objects); `heldExpiryChains` lose in-the-money sides beyond ±2% of the forward,
 (−7k to −19k). Added: `riskBudgetFacts` (0.45–1.0k) and `toolHints` (0.47k). No fixture reaches 60% of
 the budget, so the shock-grid trim does not apply to any of them. Answer quality after Phase 4 has not
 been measured against Hermes yet.
+
+## Post-rollout (Phase 7, 2026-10-07)
+
+- **Deploy:** protocol, core and server rebuilt; `ogg-backend.service` and `hermes-gateway.service`
+  restarted. A direct `tools/list` on the MCP listener returns 18 tools, including
+  `oggregator_evaluate_structure`, `oggregator_structure_search` and `oggregator_put_scanner`.
+- **Run A** `2026-10-07T04-44-49-643Z`: server code as committed in `ed0f9014` (Phases 0–6).
+- **Run B** `2026-10-07T05-04-30-279Z`: `ed0f9014` plus one prompt change (uncommitted at the time
+  of the run): procedure step 3 now asks for the dollar excess over the budget, or "unbounded from
+  <date>", when the held book already breaks the constraint.
+
+### Pass rate per check
+
+| Check | Baseline (re-graded) | Run A | Run B |
+| --- | --- | --- | --- |
+| numbers | 89% (8/9) | 100% (9/9) | 100% (9/9) |
+| required_mentions | 75% (3/4) | 75% (3/4) | 100% (4/4) |
+| structure | 67% (4/6) | 50% (3/6) | 33% (2/6) |
+| banned_phrases | 86% (12/14) | 100% (14/14) | 100% (14/14) |
+| length | 100% | 100% | 100% |
+| tools | 100% (2/2) | 100% (2/2) | 100% (2/2) |
+| **fixtures** | **10/14** | **10/14** | **10/14** |
+
+### Per fixture
+
+| Fixture | Baseline | Run A | Run B |
+| --- | --- | --- | --- |
+| reference-bearish-budget-18 | FAIL banned, structure | FAIL structure | FAIL structure |
+| reference-max-loss | pass | pass | pass |
+| reference-cap-upside | pass | FAIL structure* | pass |
+| budget-bearish-long-call | pass | pass | pass |
+| budget-bullish-bear-put-spread | pass | FAIL structure | FAIL structure† |
+| budget-long-vol-condor | pass | pass | FAIL structure* |
+| horizon-plus5-10d | pass | pass | pass |
+| horizon-minus10-7d-by-expiry | pass | pass | pass |
+| trade-history-fees | FAIL numbers | pass | pass |
+| trade-history-realized | pass | pass | pass |
+| market-flow-and-health | pass | pass | pass |
+| market-off-book-chain | pass | pass | pass |
+| stale-history-followup | FAIL banned | pass | pass |
+| infeasible-budget-bear-call-spread | FAIL mentions, structure | FAIL mentions | FAIL structure |
+
+\* Grader false negative: `ACTION_PATTERN` matches `buy` but not `buying`, so "Buying one Oct 30
+$90,000 call…" and "Consider buying 0.1 BTC each of the Oct 30 $84,000 call and put" are not seen as
+proposals. Re-grading both runs with `buy(?:ing|s)?|sell(?:ing|s)?|bought|sold` gives **11/14** for each.
+The grader was not changed in this phase.
+† The right ("calls") is only in the table header, and the grader reads rows alone.
+
+What improved: no apologies or "I can't propose" wording in any answer (the stale-history and
+reference fixtures previously failed on this), `tradeHistoryFacts` is now read for fees, and the
+infeasible-budget answer states the gap after the step 3 change ("**$4,000** … **$2,700 above** your
+$1,300 portfolio limit"). The reference fixture still proposes only closing both held legs, which
+does not satisfy `requireNewLeg`; it no longer refuses outright.
+
+### Tool usage
+
+From `assistant mcp tool call` lines in the backend journal. Run A: every constraint fixture except
+the two reference ones called `oggregator_structure_search` then `oggregator_evaluate_structure` 2–3
+times; market fixtures called trade_flow, block_flow, feed_health, market_overview, vol_surface and
+option_chain. Run B: only `infeasible-budget-bear-call-spread` logged a successful structure_search;
+the other constraint fixtures logged no successful calls. That journal line is written only on success:
+calls rejected with a tool input error (such as an unknown `portfolioRef`) are not logged, so the
+observed lists understate attempts. The answers themselves report that the reference was rejected.
+
+### Limitations of this eval
+
+- **Fake `portfolioRef`.** Fixtures carry `pref_evalFixtureNotResolvable`, which the live backend
+  cannot resolve, so every ref-scoped call errors on the held book. Answers then hedge ("could not
+  verify book-wide worst loss") or fall back to standalone evaluation. The structure tools work
+  without a ref, but the book-wide budget check, which is the point of Phases 1–3, is not exercised by
+  this eval. Constraint-fixture results are a lower bound for production behaviour.
+- **Synthetic market vs live tools.** Fixture contexts use the synthetic market at 2026-10-07T12:00Z,
+  while tools quote the live market at run time (earlier than the snapshot). Answers note that "quotes
+  predate the portfolio snapshot". Do not compare tool-dependent numbers.
+- One sample per fixture per run; Run A and Run B differ on fixtures the prompt change does not touch
+  (budget-long-vol-condor, reference-cap-upside), which is sampling noise.

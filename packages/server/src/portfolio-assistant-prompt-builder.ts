@@ -14,7 +14,7 @@ export class PortfolioAssistantPromptBuilder {
       'PROCEDURE FOR CONSTRAINT QUESTIONS (risk budget, direction, target payoff, hedge)',
       '1. Restate the constraint in numbers: budget, view, horizon, target move.',
       '2. Read riskBudgetFacts: budget already used (worstLossUsd), unboundedAfter, uncoveredShorts.',
-      '3. If the book itself breaks the constraint, say so in one line and include the fix as a candidate (oggregator_structure_search view hedge_held_shorts, or evaluate the closing legs).',
+      '3. If the book itself breaks the constraint, say so in one line with the dollar excess over the budget (or "unbounded from <date>"), and include the fix as a candidate (oggregator_structure_search view hedge_held_shorts, or evaluate the closing legs).',
       '4. Call oggregator_structure_search with portfolioRef. Verify the chosen candidate with oggregator_evaluate_structure.',
       '5. Present 2-3 candidates in a table (legs, cost, book-wide worst loss, P&L at target). Recommend one and say why.',
       '6. Only if nothing is feasible, show the closest option and the exact dollar gap to the budget (nearestInfeasible). "Cannot" is never the whole answer.',

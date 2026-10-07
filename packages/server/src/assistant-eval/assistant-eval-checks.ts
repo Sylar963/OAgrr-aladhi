@@ -101,7 +101,7 @@ export function matchExpectedNumbers(
   });
 }
 
-const ACTION_PATTERN = /\b(buy|sell|add|open|purchase|write)\b/i;
+const ACTION_PATTERN = /\b(buy(?:ing|s)?|bought|sell(?:ing|s)?|sold|add(?:ing|s)?|open(?:ing|s)?|purchas(?:e|es|ing)|writ(?:e|es|ing))\b/i;
 const RIGHT_PATTERN = /\b(calls?|puts?)\b|\d(?:k|,\d{3})?\s?[CP]\b/i;
 const STRIKE_PATTERN = /(?<![\w.])\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d{2,3}(?:\.\d+)?k\b|(?<![\w.,])\d{4,6}(?![\d-])/i;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;

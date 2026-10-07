@@ -54,6 +54,7 @@ on loopback; a remote or containerized Hermes needs a private network arrangemen
 | feed_health | Feed readiness, connections and last-message ages |
 | straddle_scanner | Existing Alpha scan with explicit equity and risk inputs |
 | lotto_scanner | Existing Alpha scan with explicit premium cap and buying power |
+| put_scanner | Alpha Long Put scan, ranked by protection for a hedge quantity or by convexity for outright bearish puts |
 | search_options_library | Indexed book passages with page citations |
 | evaluate_structure | Proposed legs (± held book via `portfolioRef`) at executable quotes: cost, fees, worst loss per expiry window, budget fit, horizon and expiry P&L |
 | structure_search | Candidates for a view (bearish, bullish, long_vol, hedge_held_shorts) within a book-wide risk budget, ranked by P&L at a target move per dollar of worst loss; `nearestInfeasible` and the shortfall when nothing fits |
@@ -87,6 +88,16 @@ stay in `accountingFacts`. The ledger fills while the venue connection is active
 history starts at the first sync (`historyFromMs`). This MCP connection does not provide all private
 platform data or the separate TradFi backend. New private tools require server-bound
 user scope; never accept a model-provided account ID as authorization.
+
+## Portfolio context fields for tools
+
+- `portfolioRef`: opaque handle to the book in this context. Pass it to the two structure
+  tools; no other tool accepts it (scope below).
+- `riskBudgetFacts`: per-expiry `riskWindows`, book-wide `worstLossUsd` (null when unbounded
+  or unavailable; `note` says which), `unboundedAfter`, and `uncoveredShorts`. Answers about
+  max loss or budgets for mixed-expiry books read this, not the final-expiry payoff alone.
+- `toolHints`: fixed strings naming which tools take `portfolioRef` and when to call them.
+  They are static guidance, not per-request state.
 
 ## portfolioRef scope
 

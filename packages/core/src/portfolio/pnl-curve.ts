@@ -131,11 +131,15 @@ export function buildPortfolioPnlCurve(
   );
   const [minPrice, maxPrice] = buildPriceRange(legsWithMarks, currentSpotUsd);
   const priceStep = (maxPrice - minPrice) / (CURVE_POINTS - 1);
+  // Expiry payoff only bends at strikes, so sampling them keeps its corners exact.
+  const samplePrices = dedupeSorted([
+    ...Array.from({ length: CURVE_POINTS }, (_, index) => minPrice + priceStep * index),
+    ...legsWithMarks.map(({ leg }) => leg.strike).filter((strike) => strike > minPrice && strike < maxPrice),
+  ]);
   const forwardNowMs = nowMs + Math.max(0, forwardDays) * DAY_MS;
   const points: PortfolioPnlPoint[] = [];
 
-  for (let index = 0; index < CURVE_POINTS; index += 1) {
-    const underlyingPriceUsd = minPrice + priceStep * index;
+  for (const underlyingPriceUsd of samplePrices) {
     let nowPnlUsd = 0;
     let forwardPnlUsd = 0;
     let expiryPnlUsd = 0;

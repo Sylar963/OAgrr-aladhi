@@ -52,6 +52,22 @@ describe('buildPortfolioPnlCurve', () => {
     expect(Math.abs((curve.breakEvenPricesUsd[0] ?? 0) - 71_000)).toBeLessThan(150);
   });
 
+  it('samples every strike so the expiry payoff keeps its exact corners', () => {
+    const curve = buildPortfolioPnlCurve(
+      [
+        { leg: makeLeg({ strike: 70_123, size: 1, entryPriceUsd: 3_000 }), mark: makeMark() },
+        { leg: makeLeg({ strike: 76_457, size: -1, entryPriceUsd: 1_000 }), mark: makeMark() },
+      ],
+      NOW,
+      0,
+    );
+
+    const prices = curve.points.map((point) => point.underlyingPriceUsd);
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+    expect(curve.points.find((point) => point.underlyingPriceUsd === 70_123)?.expiryPnlUsd).toBeCloseTo(-2_000, 6);
+    expect(curve.points.find((point) => point.underlyingPriceUsd === 76_457)?.expiryPnlUsd).toBeCloseTo(4_334, 6);
+  });
+
   it('returns mixed_underlyings when the book spans multiple assets', () => {
     const curve = buildPortfolioPnlCurve(
       [

@@ -137,6 +137,14 @@ describe('GET /health', () => {
         outputTokensTotal: expect.any(Number),
         providerFailuresTotal: expect.any(Object),
         toolCalls: { byTool: expect.any(Object), attributionTotal: expect.any(Object) },
+        feedback: {
+          votesTotal: expect.any(Object),
+          downReasonsTotal: expect.any(Object),
+          changedTotal: expect.any(Number),
+          pendingVotes: expect.any(Number),
+          flushedTotal: expect.any(Number),
+          flushSkippedTotal: expect.any(Number),
+        },
       },
     });
   });

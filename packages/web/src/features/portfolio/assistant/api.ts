@@ -4,6 +4,12 @@ import {
   type PortfolioAssistantAccess,
   PortfolioAssistantAccessSchema,
   type PortfolioAssistantErrorResponse,
+  type PortfolioAssistantFeedback,
+  type PortfolioAssistantFeedbackList,
+  PortfolioAssistantFeedbackListSchema,
+  PortfolioAssistantFeedbackSchema,
+  type PortfolioAssistantMemory,
+  PortfolioAssistantMemorySchema,
   type PortfolioAssistantMessagePage,
   PortfolioAssistantMessagePageSchema,
   type PortfolioAssistantStreamEvent,
@@ -12,6 +18,7 @@ import {
   PortfolioAssistantThreadListSchema,
   PortfolioAssistantThreadSchema,
   type SendPortfolioAssistantMessageRequest,
+  type SubmitPortfolioAssistantFeedbackRequest,
 } from '@oggregator/protocol';
 
 import { parsePortfolioAssistantEventStream } from './stream';
@@ -133,6 +140,65 @@ export async function deletePortfolioAssistantThread(threadId: string): Promise<
       response.status,
     );
   }
+}
+
+export async function fetchPortfolioAssistantFeedback(
+  threadId: string,
+): Promise<PortfolioAssistantFeedbackList> {
+  const response = await fetch(
+    `${API_BASE}/portfolio/assistant/threads/${encodeURIComponent(threadId)}/feedback`,
+    { headers: await headers() },
+  );
+  return parseJson(response, PortfolioAssistantFeedbackListSchema);
+}
+
+export async function submitPortfolioAssistantFeedback(
+  threadId: string,
+  messageId: string,
+  input: SubmitPortfolioAssistantFeedbackRequest,
+): Promise<PortfolioAssistantFeedback> {
+  const response = await fetch(
+    `${API_BASE}/portfolio/assistant/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/feedback`,
+    {
+      method: 'POST',
+      headers: await headers(true),
+      body: JSON.stringify(input),
+    },
+  );
+  return parseJson(response, PortfolioAssistantFeedbackSchema);
+}
+
+export async function fetchPortfolioAssistantMemory(): Promise<PortfolioAssistantMemory> {
+  const response = await fetch(`${API_BASE}/portfolio/assistant/memory`, {
+    headers: await headers(),
+  });
+  return parseJson(response, PortfolioAssistantMemorySchema);
+}
+
+async function deleteMemory(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/portfolio/assistant/memory${path}`, {
+    method: 'DELETE',
+    headers: await headers(),
+  });
+  if (!response.ok && response.status !== 404) {
+    const body = (await response
+      .json()
+      .catch(() => null)) as Partial<PortfolioAssistantErrorResponse> | null;
+    throw new PortfolioAssistantApiError(
+      body?.error ?? 'delete_failed',
+      body?.message ?? 'Could not update what Hermes remembers.',
+      body?.retryable ?? true,
+      response.status,
+    );
+  }
+}
+
+export function forgetPortfolioAssistantMemory(): Promise<void> {
+  return deleteMemory('');
+}
+
+export function forgetPortfolioAssistantMemoryItem(itemId: string): Promise<void> {
+  return deleteMemory(`/items/${encodeURIComponent(itemId)}`);
 }
 
 export async function streamPortfolioAssistantMessage(

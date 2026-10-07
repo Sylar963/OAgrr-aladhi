@@ -65,6 +65,20 @@ describe('PortfolioAssistantPromptBuilder', () => {
     expect(instructions).toContain('never present listed sums as lifetime figures');
   });
 
+  it('routes options theory through knowledge skills and keeps skills free of private data', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('skills_list, skill_view');
+    expect(instructions).toContain(
+      'cite pages only from passages search_options_library returned, never from a skill',
+    );
+    expect(instructions).toContain('Cite only passages search_options_library returned in this answer');
+    expect(instructions).toContain(
+      'Never write user, portfolio, position, trade or conversation specifics into a skill',
+    );
+    expect(instructions).toContain('a skill proposal must be a generic procedure');
+  });
+
   it('uses current numbers silently instead of apologising for earlier answers', () => {
     const instructions =
       new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
@@ -168,5 +182,14 @@ describe('PortfolioAssistantPromptBuilder', () => {
       expect(messages[0]).toEqual({ role: 'user', content: 'm10' });
       expect(messages[19]?.content).toMatch(/\nm29$/);
     });
+  });
+
+  it('personalises from the asking user\'s memory without letting it override current data', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain('userMemoryFacts: durable preferences this user stated');
+    expect(instructions).toContain("The current context and the user's message override it");
+    expect(instructions).toContain('It belongs to the asking user only');
+    expect(instructions).toContain('What Hermes remembers');
   });
 });

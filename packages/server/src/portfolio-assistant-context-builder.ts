@@ -33,6 +33,7 @@ import type { CompactChain, CompactSurface } from './assistant-market/market-dat
 import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
+import type { PortfolioAssistantUserMemoryFacts } from './portfolio-assistant-memory.js';
 import { PortfolioAssistantServiceError } from './portfolio-assistant-model-gateway.js';
 import { bootstrapPortfolioForAccount, getOrCreatePortfolioRuntime } from './portfolio-services.js';
 
@@ -177,6 +178,8 @@ export interface PortfolioAssistantContext {
   shockFacts: PortfolioAssistantShockFacts | null;
   accountingFacts: PortfolioAccounting | null;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
+  /** Durable preferences of the asking user only; null when nothing is remembered. */
+  userMemoryFacts: PortfolioAssistantUserMemoryFacts | null;
   topContributors: Record<
     'delta' | 'gamma' | 'vega' | 'theta' | 'vanna' | 'volga',
     PortfolioRiskContributor[]
@@ -189,6 +192,7 @@ export interface BuildPortfolioAssistantContextInput {
   source: PortfolioSource;
   underlying: string | null;
   forwardDays: number;
+  userMemoryFacts?: PortfolioAssistantUserMemoryFacts | null;
 }
 
 const STALE_AFTER_MS = 30_000;
@@ -575,6 +579,7 @@ export interface AssemblePortfolioAssistantContextInput {
   horizonScenarios: PortfolioHorizonScenarios | null;
   marketFacts: PortfolioAssistantMarketFacts;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
+  userMemoryFacts?: PortfolioAssistantUserMemoryFacts | null;
   /** Limitations found while loading inputs, appended after the engine's own. */
   limitations: string[];
   maxContextCharacters: number;
@@ -659,6 +664,7 @@ export function assemblePortfolioAssistantContext(
     shockFacts: toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
+    userMemoryFacts: input.userMemoryFacts ?? null,
     topContributors: {
       delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
       gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
@@ -835,6 +841,7 @@ export class PortfolioAssistantContextBuilder {
       horizonScenarios,
       marketFacts,
       tradeHistoryFacts,
+      userMemoryFacts: input.userMemoryFacts ?? null,
       limitations,
       maxContextCharacters: this.configuration.maxContextCharacters,
     });

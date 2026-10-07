@@ -26,6 +26,23 @@ export interface PortfolioAssistantRuntimeMetricsSnapshot {
     byTool: Record<string, PortfolioAssistantToolCallMetrics>;
     attributionTotal: Record<string, number>;
   };
+  feedback: PortfolioAssistantFeedbackMetrics;
+}
+
+/** Counts since process start; pendingVotes is the current on-disk buffer size. */
+export interface PortfolioAssistantFeedbackMetrics {
+  votesTotal: Record<string, number>;
+  downReasonsTotal: Record<string, number>;
+  changedTotal: number;
+  pendingVotes: number;
+  flushedTotal: number;
+  flushSkippedTotal: number;
+}
+
+export interface RecordPortfolioAssistantFeedbackInput {
+  vote: string;
+  reasons: readonly string[];
+  previous: { vote: string; reasons: readonly string[] } | null;
 }
 
 export interface PortfolioAssistantToolCallMetrics {
@@ -91,6 +108,14 @@ function createPortfolioAssistantMetrics(): PortfolioAssistantRuntimeMetricsSnap
     outputTokensTotal: 0,
     providerFailuresTotal: {},
     toolCalls: { byTool: {}, attributionTotal: {} },
+    feedback: {
+      votesTotal: {},
+      downReasonsTotal: {},
+      changedTotal: 0,
+      pendingVotes: 0,
+      flushedTotal: 0,
+      flushSkippedTotal: 0,
+    },
   };
 }
 
@@ -168,6 +193,11 @@ export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
         ),
         attributionTotal: { ...portfolioAssistantMetrics.toolCalls.attributionTotal },
       },
+      feedback: {
+        ...portfolioAssistantMetrics.feedback,
+        votesTotal: { ...portfolioAssistantMetrics.feedback.votesTotal },
+        downReasonsTotal: { ...portfolioAssistantMetrics.feedback.downReasonsTotal },
+      },
     },
   };
 }
@@ -228,6 +258,31 @@ export function recordPortfolioAssistantToolCall(
   metrics.durationMs.max = Math.max(metrics.durationMs.max, durationMs);
   toolCalls.attributionTotal[input.attribution] =
     (toolCalls.attributionTotal[input.attribution] ?? 0) + 1;
+}
+
+// A re-submitted vote (e.g. reasons added after a thumbs-down) counts only what changed, so
+// totals approximate distinct votes rather than clicks.
+export function recordPortfolioAssistantFeedback(input: RecordPortfolioAssistantFeedbackInput): void {
+  const feedback = portfolioAssistantMetrics.feedback;
+  if (input.previous?.vote !== input.vote) {
+    feedback.votesTotal[input.vote] = (feedback.votesTotal[input.vote] ?? 0) + 1;
+    if (input.previous) feedback.changedTotal += 1;
+  }
+  if (input.vote !== 'down') return;
+  const counted = new Set(input.previous?.vote === 'down' ? input.previous.reasons : []);
+  for (const reason of input.reasons) {
+    if (counted.has(reason)) continue;
+    feedback.downReasonsTotal[reason] = (feedback.downReasonsTotal[reason] ?? 0) + 1;
+  }
+}
+
+export function setPortfolioAssistantFeedbackPending(pendingVotes: number): void {
+  portfolioAssistantMetrics.feedback.pendingVotes = Math.max(0, pendingVotes);
+}
+
+export function recordPortfolioAssistantFeedbackFlush(written: number, skipped: number): void {
+  portfolioAssistantMetrics.feedback.flushedTotal += Math.max(0, written);
+  portfolioAssistantMetrics.feedback.flushSkippedTotal += Math.max(0, skipped);
 }
 
 function isProviderFailure(code: string): boolean {

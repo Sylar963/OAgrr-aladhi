@@ -5,6 +5,7 @@ import {
   ExpiryBucketRowSchema,
   ExpiryRiskWindowSchema,
   PortfolioAccountingSchema,
+  PortfolioAssistantMemoryCategorySchema,
   PortfolioAssistantMessageSchema,
   PortfolioPnlCurveStatusSchema,
   PortfolioSourceSchema,
@@ -284,6 +285,19 @@ const PortfolioAssistantContextSchema = z.object({
       }),
     })
     .nullable(),
+  // Fixtures written before per-user memory have no field; they describe a user with none.
+  userMemoryFacts: z
+    .object({
+      items: z.array(
+        z.object({
+          category: z.enum(PortfolioAssistantMemoryCategorySchema.options),
+          text: z.string().min(1).max(200),
+        }),
+      ),
+      updatedAt: z.string(),
+    })
+    .nullable()
+    .default(null),
   topContributors: z.object({
     delta: z.array(RiskContributorSchema),
     gamma: z.array(RiskContributorSchema),

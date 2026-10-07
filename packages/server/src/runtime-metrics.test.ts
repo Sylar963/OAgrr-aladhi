@@ -4,8 +4,11 @@ import {
   beginPortfolioAssistantRuntimeRequest,
   disposeRuntimeMetrics,
   getRuntimeMetricsSnapshot,
+  recordPortfolioAssistantFeedback,
+  recordPortfolioAssistantFeedbackFlush,
   recordPortfolioAssistantRuntimeCompletion,
   recordPortfolioAssistantToolCall,
+  setPortfolioAssistantFeedbackPending,
 } from './runtime-metrics.js';
 
 afterEach(() => disposeRuntimeMetrics());
@@ -33,6 +36,40 @@ describe('Portfolio Assistant runtime metrics', () => {
       outputTokensTotal: 12,
       providerFailuresTotal: { provider_timeout: 1 },
       toolCalls: { byTool: {}, attributionTotal: {} },
+      feedback: {
+        votesTotal: {},
+        downReasonsTotal: {},
+        changedTotal: 0,
+        pendingVotes: 0,
+        flushedTotal: 0,
+        flushSkippedTotal: 0,
+      },
+    });
+  });
+
+  it('counts feedback votes, changes and reasons without double counting re-submits', () => {
+    recordPortfolioAssistantFeedback({ vote: 'up', reasons: [], previous: null });
+    recordPortfolioAssistantFeedback({ vote: 'down', reasons: [], previous: null });
+    recordPortfolioAssistantFeedback({
+      vote: 'down',
+      reasons: ['wrong_numbers', 'too_long'],
+      previous: { vote: 'down', reasons: [] },
+    });
+    recordPortfolioAssistantFeedback({
+      vote: 'down',
+      reasons: ['wrong_numbers'],
+      previous: { vote: 'up', reasons: [] },
+    });
+    setPortfolioAssistantFeedbackPending(3);
+    recordPortfolioAssistantFeedbackFlush(2, 1);
+
+    expect(getRuntimeMetricsSnapshot().portfolioAssistant.feedback).toEqual({
+      votesTotal: { up: 1, down: 2 },
+      downReasonsTotal: { wrong_numbers: 2, too_long: 1 },
+      changedTotal: 1,
+      pendingVotes: 3,
+      flushedTotal: 2,
+      flushSkippedTotal: 1,
     });
   });
 

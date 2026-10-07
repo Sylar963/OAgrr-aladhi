@@ -1,8 +1,12 @@
-import type { PortfolioAssistantMessage } from '@oggregator/protocol';
+import type {
+  PortfolioAssistantFeedback as PortfolioAssistantFeedbackValue,
+  PortfolioAssistantMessage,
+} from '@oggregator/protocol';
 import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { PortfolioAssistantFeedback } from './PortfolioAssistantFeedback';
 import styles from './PortfolioAssistantPanel.module.css';
 
 type CopyState = 'idle' | 'copied' | 'failed';
@@ -55,8 +59,12 @@ function CopyMarkdownButton({ markdown }: { markdown: string }) {
 
 export function PortfolioAssistantMessageBubble({
   message,
+  feedbackThreadId = null,
+  feedback,
 }: {
   message: PortfolioAssistantMessage;
+  feedbackThreadId?: string | null;
+  feedback?: PortfolioAssistantFeedbackValue;
 }) {
   const copyable =
     message.role === 'assistant' && message.status !== 'streaming' && message.content.length > 0;
@@ -82,6 +90,16 @@ export function PortfolioAssistantMessageBubble({
       </div>
       {message.status === 'cancelled' && <span className={styles.messageState}>Stopped</span>}
       {message.status === 'failed' && <span className={styles.messageState}>Incomplete</span>}
+      {feedbackThreadId &&
+        message.role === 'assistant' &&
+        message.status === 'complete' &&
+        message.content.length > 0 && (
+          <PortfolioAssistantFeedback
+            threadId={feedbackThreadId}
+            messageId={message.messageId}
+            feedback={feedback}
+          />
+        )}
     </article>
   );
 }

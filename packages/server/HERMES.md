@@ -15,6 +15,7 @@ MCP listener. The Oggregator chat gateway itself does not execute model tool cal
 platform_toolsets:
   api_server:
     - mcp-oggregator
+    - skills          # see "Shared learning (skills)" for the required memory/skills keys
 mcp_servers:
   oggregator:
     url: http://127.0.0.1:3191/mcp
@@ -98,6 +99,242 @@ Backend log lines:
 
 A successful direct `tools/list` request proves server availability, not agent
 integration. A fluent answer is not sufficient evidence of tool use.
+
+## Session isolation
+
+Every Ask Hermes request is its own Hermes session, so no state crosses users or threads.
+Oggregator owns the history and sends all of it on each request. Paths are in
+`~/.hermes/hermes-agent`:
+
+- Hermes ignores the OpenAI `user` field. Without `X-Hermes-Session-Id`, `/v1/chat/completions`
+  uses session `api-` + sha256(system prompt + first user message)[:16]
+  (`gateway/platforms/api_server.py:1045`, `api_server_openai_routes.py:650-655`). Two requests
+  with the same system prompt and context would share that session.
+- Keyed by that id: the state.db transcript the turn appends to (`agent/session_persistence.py:262`),
+  the system prompt restored from the row (`agent/conversation_loop.py:668-709`), the parked memory
+  manager (`api_server_memory_sessions.py`, `api_server.py:2267,4097`), the tool `task_id`
+  (`api_server.py:4038`), and the durable turn lease (`agent/turn_facade_lease.py:238-309`). A turn
+  that waits on that lease replaces its history with the state.db transcript, which could carry
+  another user's turns and `portfolioRef`.
+- `X-Hermes-Session-Id` is no fix: it replaces the request's history with the state.db
+  transcript and keeps only the last message (`api_server_openai_routes.py:618-648`). That drops
+  the context message and our history. `X-Hermes-Session-Key` sets the memory and prompt-cache
+  scope but not the session id on this route (`api_server_openai_routes.py:613-616`). Neither is sent.
+- The api_server builds a new `AIAgent` for each request (`api_server.py:2195-2275`). Agent
+  instances are never cached between requests.
+
+The gateway therefore adds a second system message with a fresh `ogg_scope_` value (16 random
+bytes) to each request (`buildHermesChatMessages`). Hermes joins it into the system prompt, so the
+derived session id is new for every request. It never reuses a row, waits on a lease or loads
+stored history. The thread id is not sent. Hermes appends the system prompt after its own core
+prompt (`agent/chat_completion_helpers.py:2176`), so the scope sits just before the per-request
+context. Prompt-cache reuse is unaffected.
+
+Profile-wide stores remain shared by every chat on the profile. Background review only writes
+memory or skills when the `memory` or `skill_manage` tool is enabled (`agent/turn_finalizer.py:682-685`,
+`agent/turn_context.py:712`). Keep built-in memory off and configure no `memory.provider`: either
+would carry one user's conversation into other users' prompts. The `skills` toolset is enabled
+only behind the owner approval gate in [Shared learning (skills)](#shared-learning-skills).
+
+## Shared learning (skills)
+
+Ask Hermes learns shared, non-private knowledge only as Hermes skills on the profile. Skills are
+listed in every chat's system prompt, so nothing reaches them without owner approval. Per-user
+memory lives in Oggregator; see [Per-user memory](#per-user-memory).
+
+Profile config (`~/.hermes/profiles/portfolio-chat/config.yaml`; `portfolio-chat-eval` has the
+same memory/skills keys):
+
+```yaml
+platform_toolsets:
+  api_server: [mcp-oggregator, skills]
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+  write_approval: true     # defense in depth; the memory tool is absent anyway
+  provider: ""
+skills:
+  write_approval: true     # every skill_manage write is staged
+  guard_agent_created: true
+```
+
+Curator and `auxiliary.background_review` keep their defaults. `session_search` stays off.
+The api_server re-reads config and resolves toolsets on every request
+(`gateway/platforms/api_server.py:2231-2232`), so edits apply to the next chat.
+
+What is learned:
+
+- Book knowledge skills in category `options-trading`: a lean `SKILL.md` plus `references/`
+  per chapter, citing `PDF p. N` and labelling equity-market examples. Applied:
+  `sinclair-volatility-trading`. Staged, awaiting owner approval: `bennett-trading-volatility`.
+  Not learned: Casanovas, Natenberg (0 bytes) and `PDF_AuctionPricing.pdf`. Answers still cite
+  only passages `search_options_library` returned.
+- Native `/learn` cannot read these PDFs: `read_file` extracts PDFs with anydoc, which rejects
+  the whole file when any page is a scan (`NeedsOcrError`, Sinclair p. 1, Bennett p. 83,
+  Casanovas p. 88), and hosted OCR is off (`tools/read_extract.py:205-236`,
+  `tools/file_tools.py:421-450`). The two book skills were learned from page-marked text
+  extractions outside Hermes.
+- Generic procedures Hermes proposes with `skill_manage`, in a chat turn or in the background
+  review. These are staged and never apply without approval.
+
+Not learned: questions, answers, portfolios, positions, fills, `portfolioRef` or anything else
+from a conversation. Built-in memory (`MEMORY.md`, `USER.md`) and memory providers are off.
+
+Approval workflow (interactive CLI on the profile; there is no `hermes skills pending`
+subcommand):
+
+```text
+hermes -p portfolio-chat
+/skills pending          # staged writes with a gist; [auto] marks background review
+/skills diff <id>        # full unified diff
+/skills approve <id>     # or 'all' (oldest first)
+/skills reject <id>      # or 'all'
+```
+
+Staged records are JSON files in `~/.hermes/profiles/portfolio-chat/pending/skills/`; the
+payload is replayed verbatim on approval. Reject any proposal that mentions a user, a held
+position, a size, a quote from a conversation or anything that only holds for one portfolio. Approve
+only procedures and principles that hold for every user. Every applied mutation is in
+`skills/.curator_ledger.jsonl` (`hermes -p portfolio-chat curator ledger`, `curator rollback
+<entry-id>`). Run `/learn` in an interactive session: one-shot `hermes chat -q` hides
+`skill_manage` (`agent/oneshot_footprint.py:21`).
+
+Privacy guarantees (paths in `~/.hermes/hermes-agent`):
+
+- The memory tool is not registered when both built-in stores are off
+  (`tools/memory_tool.py:229-241`), and the memory review needs that tool
+  (`agent/turn_context.py:709-718`).
+- With `skills.write_approval: true` every `skill_manage` write stages, whatever its origin
+  (`tools/write_approval.py:170-180`). The gate runs before validation or any file write
+  (`tools/skill_manager_tool.py:774-780`). Staged writes are invisible to `skills_list` and
+  `skill_view` until approved.
+- The background review forks after a turn with at least `skills.creation_nudge_interval`
+  (default 10) tool iterations (`agent/turn_finalizer.py:682-685`). With memory off it may call
+  only the skills toolset, plus `read_file` and `search_files` when the parent advertises them,
+  which the api_server profile does not (`agent/background_review.py:1087-1102`). It never loads
+  a memory provider (`:918-930`). It reads the whole conversation, so a proposal can contain
+  private data; staging is what keeps it out of shared state.
+- Known limitation: the api_server builds a new agent per request, so the iteration counter
+  never carries across requests. The skill review fires only inside a single request that uses
+  at least 10 tool steps; most chats never trigger it.
+- `guard_agent_created` scans applied agent writes for dangerous patterns and turns a dangerous
+  verdict into a tool error (`tools/skill_manager_tool.py:51-65`, `tools/skills_guard.py:32`).
+  It is a scanner, not an approval gate.
+- The curator prunes by default (consolidation off) and only manages skills the background
+  review created. `/learn` skills are `created_by: learn` and left alone
+  (`website/docs/user-guide/features/curator.md`, "What agent-created means").
+- Skill usage records hold counters and timestamps only (`tools/skill_usage.py:490-505`).
+  Shared-metrics telemetry is off by default (`hermes_cli/config_defaults.py:2290-2295`).
+
+## Per-user memory
+
+Oggregator keeps a small memory per user and sends it only with that user's own requests.
+Hermes's built-in memory stays off because it is shared by every user of the profile.
+
+Storage: `portfolio_assistant_user_memory` (migration `0029`), one row per `user_id` with
+`items` (at most 12 `{id, text, category, sourceThreadId?, updatedAt}`), `content` (the rendered
+list, at most 1,500 characters), `last_distilled_at` and `updated_at`. Every query is keyed by
+`user_id`. Categories: `risk_budget`, `preferred_structures`, `experience_level`,
+`explanation_style`, `venues`, `goals`, `explicit_note`.
+
+Distillation runs once a day on the same restart-proof `FlushSchedule` as the deferred
+market-data stores (marker `.cache/portfolio-assistant-memory.last-flush`, override with
+`PORTFOLIO_ASSISTANT_MEMORY_SCHEDULE_PATH`; first run 60 s after a start with no marker):
+
+- Candidates: entitled users with a completed answer newer than their `last_distilled_at` and
+  the 7-day lookback, oldest watermark first, at most `PORTFOLIO_ASSISTANT_MEMORY_MAX_USERS_PER_RUN`
+  (default 25) per run, one at a time.
+- Input per user: their newest 40 completed messages since the watermark (user text up to 1,500
+  characters, answers up to 400 and marked as context only), threads labelled `T1`, `T2`, and
+  their current items with ids. No portfolio context message is sent; the distillation prompt
+  says not to call tools and to reply with JSON only.
+- The reply must parse as `{"items":[{category,text,source?,replaces?}],"forget":[ids]}`
+  (Zod). Prose, broken JSON or a schema mismatch writes nothing; the next run retries.
+- Merge: every item passes a deterministic filter that rejects identifiers (`pref_`, UUIDs,
+  wallets, account IDs, emails, long tokens), instrument names, positions, PnL and balances,
+  dates and time-relative phrases, and any amount outside `risk_budget`. New items win over
+  `replaces`/`forget` targets, identical text and an older `experience_level`; the result is
+  newest first, capped at 12 items and 1,500 characters.
+- One upsert per user per run, guarded by the `updated_at` read before the model call: a delete
+  made while the model was running wins and the write is skipped (`conflict`).
+- Each call takes a slot from the chat concurrency cap (`PORTFOLIO_ASSISTANT_MAX_CONCURRENT_REQUESTS`)
+  under its own key, so a busy cap defers the user to the next run without blocking their chat.
+  It counts in `/api/health` `runtime.portfolioAssistant.activeRequests`, not in chat completion
+  metrics, and not against the user's daily question allowance (no `portfolio_assistant_usage`
+  row). `provider_allowance_exhausted` or `provider_unavailable` stops the rest of the run.
+- Logs: `portfolio assistant memory distilled` (per user: `userIdHash`, counts, rejection
+  reasons, tokens; never item text) and `portfolio assistant memory distillation run completed`.
+
+Use: the conversation service loads the asking user's items and the context carries
+`userMemoryFacts: { items: [{category, text}], updatedAt } | null`. A failed read sends null.
+The prompt treats it as defaults that the current context and the user's message override.
+`PORTFOLIO_ASSISTANT_MEMORY_ENABLED=false` stops both distillation and injection.
+
+User control (same bearer auth as the other assistant routes):
+
+| Route | Effect |
+| --- | --- |
+| `GET /api/portfolio/assistant/memory` | The caller's items (requires the entitlement) |
+| `DELETE /api/portfolio/assistant/memory` | Clears every item; keeps an empty row whose watermark stops older chats being re-learned |
+| `DELETE /api/portfolio/assistant/memory/items/:itemId` | Removes one item; 404 when the caller has no such item |
+
+Deletes write immediately and do not require the entitlement. The web panel's "Memory" toggle
+shows "What Hermes remembers" with per-item delete and "Forget all".
+
+Limits: only threads that still exist at the daily run are read, so a chat cleared with "New
+chat" before then is never distilled. Deleting a thread does not remove items learned from it.
+
+## Feedback
+
+Users rate each completed answer with a thumbs up or down. A thumbs down records at once and opens
+optional reason chips (`wrong_numbers`, `did_not_answer`, `too_long`, `refused`, `other`) and a note
+of at most 200 characters. One vote per user per message; a later vote replaces it.
+
+| Route (same bearer auth, requires the entitlement) | Effect |
+| --- | --- |
+| `POST /api/portfolio/assistant/threads/:threadId/messages/:messageId/feedback` | `{vote:"up"}` or `{vote:"down", reasons?, note?}`; 404 unless the caller owns the thread and the assistant message, 409 while the answer is not `complete` |
+| `GET /api/portfolio/assistant/threads/:threadId/feedback` | The caller's votes in that thread (buffer merged over the table) |
+
+Storage: votes go to a local NDJSON outbox (`.cache/portfolio-assistant-feedback.ndjson`, override
+`PORTFOLIO_ASSISTANT_FEEDBACK_CACHE_PATH`), rewritten on each vote and read back on start. The same
+restart-proof `FlushSchedule` as the market-data stores (marker `...ndjson.last-flush`, first run
+60 s after a start with no marker) writes the whole outbox to `portfolio_assistant_feedback`
+(migration `0030`) once a day as one `INSERT ... ON CONFLICT` statement. The statement joins
+messages and threads on the voter, so a vote whose thread was deleted or expired is skipped, and the
+newest `updated_at` wins. A failed flush keeps the outbox and retries after 15 minutes. Shutdown does
+not flush. The outbox holds at most 20,000 votes; new votes beyond that get 503.
+
+Table: primary key `(user_id, message_id)`, `thread_id`, `vote`, `reasons text[]`, `note`,
+`run_telemetry jsonb`, `created_at`, `updated_at`. It cascades from `users`, `portfolio_assistant_threads`
+and `portfolio_assistant_messages`, so "New chat" (which deletes the thread) and the 30-day thread
+retention delete the votes too; "New chat" also drops that thread's buffered votes.
+
+Run telemetry: the conversation service keeps the last 2,000 run summaries for 24 h in memory, keyed
+by assistant message id (`requestId`, outcome, error code, duration, model, tool-call counts). A vote
+copies the summary into `run_telemetry`. A vote cast after a backend restart or later than 24 h has
+none; the `portfolio assistant model run completed` log line carries `assistantMessageId`, so the run
+is still findable in the journal while it is retained.
+
+Metrics: `/api/health` `runtime.portfolioAssistant.feedback` has counts only, since process start:
+`votesTotal.{up,down}` (a re-submitted identical vote is not counted again), `downReasonsTotal`,
+`changedTotal`, `pendingVotes` (current outbox size), `flushedTotal`, `flushSkippedTotal`.
+
+Owner review (read-only; never automatic):
+
+```bash
+pnpm --filter @oggregator/server assistant:feedback-report              # last 30 days
+pnpm --filter @oggregator/server assistant:feedback-report -- --since-days 7
+```
+
+It reads the table inside `READ ONLY` transactions plus the local outbox, and writes
+`packages/server/.eval-out/feedback-<date>/report.md` and `summary.json` (gitignored, mode 600).
+`report.md` has totals, down-vote reasons, telemetry coverage, every down-voted answer with its
+question, answer, note and run summary (user ids as the first 16 hex of the `userIdHash` digest),
+and "Candidate eval fixtures": failure patterns grouped by question topic, reasons and tool profile,
+with the existing fixtures on that topic and suggested checks. `summary.json` holds only counts and
+patterns, no user content. Turn patterns into synthetic fixtures (`src/assistant-eval/EVAL.md`).
+Feedback never reaches Hermes skills or memory: do not paste report content into `/learn`,
+`skill_manage` or a fixture.
 
 ## Tool errors and the Hermes circuit breaker
 

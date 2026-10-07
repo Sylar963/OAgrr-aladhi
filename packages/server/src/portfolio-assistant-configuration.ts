@@ -9,6 +9,8 @@ export interface PortfolioAssistantConfiguration {
   retentionDays: number;
   inviteHashSecret: string | null;
   maxContextCharacters: number;
+  memoryEnabled: boolean;
+  memoryMaxUsersPerRun: number;
 }
 
 function positiveInteger(raw: string | undefined, fallback: number, name: string): number {
@@ -71,6 +73,14 @@ export function readPortfolioAssistantConfiguration(
       env['PORTFOLIO_ASSISTANT_MAX_CONTEXT_CHARACTERS'],
       160_000,
       'PORTFOLIO_ASSISTANT_MAX_CONTEXT_CHARACTERS',
+    ),
+    memoryEnabled:
+      env['PORTFOLIO_ASSISTANT_MEMORY_ENABLED'] !== 'false' &&
+      env['PORTFOLIO_ASSISTANT_MEMORY_ENABLED'] !== '0',
+    memoryMaxUsersPerRun: positiveInteger(
+      env['PORTFOLIO_ASSISTANT_MEMORY_MAX_USERS_PER_RUN'],
+      25,
+      'PORTFOLIO_ASSISTANT_MEMORY_MAX_USERS_PER_RUN',
     ),
   };
 }

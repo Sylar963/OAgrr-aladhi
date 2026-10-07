@@ -1,19 +1,27 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import type {
+  PortfolioAssistantFeedback,
+  PortfolioAssistantFeedbackList,
   PortfolioAssistantMessage,
   PortfolioAssistantStreamEvent,
   PortfolioSource,
+  SubmitPortfolioAssistantFeedbackRequest,
 } from '@oggregator/protocol';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   createPortfolioAssistantThread,
   deletePortfolioAssistantThread,
   fetchPortfolioAssistantAccess,
+  fetchPortfolioAssistantFeedback,
+  fetchPortfolioAssistantMemory,
   fetchPortfolioAssistantMessages,
   fetchPortfolioAssistantThreads,
+  forgetPortfolioAssistantMemory,
+  forgetPortfolioAssistantMemoryItem,
   streamPortfolioAssistantMessage,
+  submitPortfolioAssistantFeedback,
 } from './api';
 
 export const PORTFOLIO_ASSISTANT_QKEY = {
@@ -31,6 +39,10 @@ export const PORTFOLIO_ASSISTANT_QKEY = {
     ] as const,
   messages: (accountId: string, threadId: string) =>
     ['account', accountId, 'portfolio', 'assistant', 'messages', threadId] as const,
+  memory: (accountId: string) =>
+    ['account', accountId, 'portfolio', 'assistant', 'memory'] as const,
+  feedback: (accountId: string, threadId: string) =>
+    ['account', accountId, 'portfolio', 'assistant', 'feedback', threadId] as const,
 };
 
 export function usePortfolioAssistantAccess() {
@@ -201,4 +213,62 @@ export function usePortfolioAssistantConversation(
   const stop = useCallback(() => controllerRef.current?.abort(), []);
 
   return { messages, isLoading: query.isLoading, isStreaming, error, sendMessage, stop };
+}
+
+export function usePortfolioAssistantMemory(enabled = true) {
+  const session = useAccountSession();
+  return useQuery({
+    queryKey: PORTFOLIO_ASSISTANT_QKEY.memory(session.accountId ?? 'unresolved'),
+    queryFn: fetchPortfolioAssistantMemory,
+    enabled: enabled && session.status === 'ready',
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+/** `itemId` null forgets everything. */
+export function useForgetPortfolioAssistantMemory() {
+  const session = useAccountSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: string | null) =>
+      itemId == null ? forgetPortfolioAssistantMemory() : forgetPortfolioAssistantMemoryItem(itemId),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: PORTFOLIO_ASSISTANT_QKEY.memory(session.accountId ?? 'unresolved'),
+      }),
+  });
+}
+
+/** The caller's votes in a thread, keyed by message id. */
+export function usePortfolioAssistantFeedback(threadId: string | null) {
+  const session = useAccountSession();
+  const query = useQuery({
+    queryKey: PORTFOLIO_ASSISTANT_QKEY.feedback(session.accountId ?? 'unresolved', threadId ?? 'none'),
+    queryFn: () => fetchPortfolioAssistantFeedback(threadId!),
+    enabled: threadId != null && session.status === 'ready',
+    staleTime: 60_000,
+    retry: false,
+  });
+  const byMessage = new Map<string, PortfolioAssistantFeedback>();
+  for (const item of query.data?.feedback ?? []) byMessage.set(item.messageId, item);
+  return byMessage;
+}
+
+export function useSubmitPortfolioAssistantFeedback(threadId: string, messageId: string) {
+  const session = useAccountSession();
+  const queryClient = useQueryClient();
+  const key = PORTFOLIO_ASSISTANT_QKEY.feedback(session.accountId ?? 'unresolved', threadId);
+  return useMutation({
+    mutationFn: (input: SubmitPortfolioAssistantFeedbackRequest) =>
+      submitPortfolioAssistantFeedback(threadId, messageId, input),
+    onSuccess: (saved) => {
+      queryClient.setQueryData<PortfolioAssistantFeedbackList>(key, (current) => ({
+        feedback: [
+          ...(current?.feedback ?? []).filter((item) => item.messageId !== saved.messageId),
+          saved,
+        ],
+      }));
+    },
+  });
 }

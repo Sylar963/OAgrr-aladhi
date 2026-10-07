@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import { SyntheticMarket } from './assistant-eval/synthetic-market.js';
 import { readPortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
+import type { PortfolioAssistantContext } from './portfolio-assistant-context-builder.js';
 
 vi.mock('./portfolio-services.js', () => ({
   bootstrapPortfolioForAccount: vi.fn(async () => undefined),
@@ -71,7 +72,10 @@ function diagonalRuntime(): PortfolioRuntime {
   });
 }
 
-function assembleDiagonal(maxContextCharacters: number) {
+function assembleDiagonal(
+  maxContextCharacters: number,
+  userMemoryFacts?: PortfolioAssistantContext['userMemoryFacts'],
+) {
   const runtime = diagonalRuntime();
   const computation = runtime.computeMetricsAt(0);
   if (computation.error != null) throw new Error(computation.error.message);
@@ -86,6 +90,7 @@ function assembleDiagonal(maxContextCharacters: number) {
     horizonScenarios: runtime.computeHorizonScenarios([0, 7], [-5, 0, 5]),
     marketFacts: { underlyings: [], unavailable: [] },
     tradeHistoryFacts: null,
+    ...(userMemoryFacts !== undefined ? { userMemoryFacts } : {}),
     limitations: [],
     maxContextCharacters,
   });
@@ -270,6 +275,16 @@ describe('assemblePortfolioAssistantContext', () => {
     expect(compacted.shockFacts?.columnsSkewShiftPerLogK.every((value) => Math.abs(value) <= 0.25)).toBe(true);
     expect(compacted.riskBudgetFacts).toEqual(full.riskBudgetFacts);
     expect(compacted.toolHints).toEqual(full.toolHints);
+  });
+
+  it('carries the user memory through compaction and defaults to none', () => {
+    const memory = {
+      items: [{ category: 'risk_budget' as const, text: 'Max loss per trade is $2,000.' }],
+      updatedAt: '2026-10-01T00:00:00.000Z',
+    };
+    expect(assembleDiagonal(160_000).userMemoryFacts).toBeNull();
+    expect(assembleDiagonal(160_000, memory).userMemoryFacts).toEqual(memory);
+    expect(assembleDiagonal(1_000, memory).userMemoryFacts).toEqual(memory);
   });
 
   it('names the tools that accept portfolioRef', () => {

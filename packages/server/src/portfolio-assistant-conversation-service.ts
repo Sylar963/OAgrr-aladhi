@@ -23,11 +23,13 @@ import {
 import type { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-builder.js';
+import type { PortfolioAssistantMemoryService } from './portfolio-assistant-memory-service.js';
 import {
   type PortfolioAssistantModelGateway,
   PortfolioAssistantServiceError,
 } from './portfolio-assistant-model-gateway.js';
 import type { PortfolioAssistantPromptBuilder } from './portfolio-assistant-prompt-builder.js';
+import type { PortfolioAssistantRunTelemetryCache } from './portfolio-assistant-run-telemetry.js';
 import type { PortfolioAssistantUsageLimiter } from './portfolio-assistant-usage-limiter.js';
 import {
   beginPortfolioAssistantRuntimeRequest,
@@ -88,7 +90,9 @@ export class PortfolioAssistantConversationService {
     private readonly gateway: PortfolioAssistantModelGateway,
     private readonly usageLimiter: PortfolioAssistantUsageLimiter,
     private readonly runs: AssistantRunRegistry | null = null,
+    private readonly memory: Pick<PortfolioAssistantMemoryService, 'loadUserMemoryFacts'> | null = null,
     private readonly now: () => number = Date.now,
+    private readonly runTelemetry: Pick<PortfolioAssistantRunTelemetryCache, 'record'> | null = null,
   ) {}
 
   async createPortfolioAssistantThread(
@@ -209,6 +213,7 @@ export class PortfolioAssistantConversationService {
         source: source.data,
         underlying: thread.underlying,
         forwardDays: input.forwardDays,
+        userMemoryFacts: (await this.memory?.loadUserMemoryFacts(user.id)) ?? null,
       });
       const contextMessage = this.promptBuilder.buildPortfolioAssistantContextMessage(context);
       if (contextMessage.length > this.configuration.maxContextCharacters + 1_000) {
@@ -369,11 +374,23 @@ export class PortfolioAssistantConversationService {
           inputTokens,
           outputTokens,
         });
+        if (assistantMessageId && toolCalls) {
+          this.runTelemetry?.record(assistantMessageId, {
+            requestId: telemetry.requestId,
+            outcome: runOutcome,
+            errorCode: runErrorCode,
+            durationMs,
+            model: this.configuration.model,
+            toolCalls,
+            completedAt: this.now(),
+          });
+        }
         logger.info(
           {
             requestId: telemetry.requestId,
             userIdHash: telemetry.userIdHash,
             threadId,
+            assistantMessageId,
             source: telemetry.source,
             underlying: telemetry.underlying,
             portfolioGeneratedAt: telemetry.portfolioGeneratedAt,

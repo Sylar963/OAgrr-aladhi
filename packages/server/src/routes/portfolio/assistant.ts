@@ -1,9 +1,13 @@
 import {
   CreatePortfolioAssistantThreadRequestSchema,
+  PortfolioAssistantFeedbackListSchema,
+  PortfolioAssistantFeedbackSchema,
   type PortfolioAssistantStreamEvent,
+  PortfolioAssistantMemorySchema,
   PortfolioAssistantStreamEventSchema,
   RedeemPortfolioAssistantInviteRequestSchema,
   SendPortfolioAssistantMessageRequestSchema,
+  SubmitPortfolioAssistantFeedbackRequestSchema,
 } from '@oggregator/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -12,6 +16,11 @@ import { PortfolioAssistantServiceError } from '../../portfolio-assistant-model-
 import { authenticateUser } from '../../user-service.js';
 
 const ThreadParamsSchema = z.object({ threadId: z.string().uuid() });
+const MessageParamsSchema = z.object({
+  threadId: z.string().uuid(),
+  messageId: z.string().uuid(),
+});
+const MemoryItemParamsSchema = z.object({ itemId: z.string().regex(/^mem_[a-f0-9]{1,48}$/) });
 const ThreadListQuerySchema = z.object({
   source: z.string().min(1),
   underlying: z.string().trim().min(1).max(32).optional(),
@@ -59,9 +68,12 @@ function frame(event: PortfolioAssistantStreamEvent): string {
 }
 
 export async function portfolioAssistantRoutes(app: FastifyInstance) {
-  const { portfolioAssistantAccessService, portfolioAssistantConversationService } = await import(
-    '../../portfolio-assistant-services.js'
-  );
+  const {
+    portfolioAssistantAccessService,
+    portfolioAssistantConversationService,
+    portfolioAssistantFeedbackService,
+    portfolioAssistantMemoryService,
+  } = await import('../../portfolio-assistant-services.js');
   const strictAuth = { onRequest: requireAuthenticatedPortfolioAssistantUser };
 
   app.get('/portfolio/assistant/access', strictAuth, async (request, reply) => {
@@ -249,6 +261,97 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
         return reply.status(404).send({
           error: 'thread_not_found',
           message: 'Conversation not found.',
+          retryable: false,
+        });
+      portfolioAssistantFeedbackService.forgetThread(request.user!.id, params.data.threadId);
+      return reply.status(204).send();
+    } catch (error) {
+      return sendAssistantError(reply, error);
+    }
+  });
+
+  app.get('/portfolio/assistant/threads/:threadId/feedback', strictAuth, async (request, reply) => {
+    const params = ThreadParamsSchema.safeParse(request.params);
+    if (!params.success)
+      return reply
+        .status(400)
+        .send({ error: 'invalid_query', message: 'Thread ID is invalid.', retryable: false });
+    try {
+      return PortfolioAssistantFeedbackListSchema.parse({
+        feedback: await portfolioAssistantFeedbackService.listThreadFeedback(
+          request.user!.id,
+          params.data.threadId,
+        ),
+      });
+    } catch (error) {
+      return sendAssistantError(reply, error);
+    }
+  });
+
+  app.post(
+    '/portfolio/assistant/threads/:threadId/messages/:messageId/feedback',
+    {
+      ...strictAuth,
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      const params = MessageParamsSchema.safeParse(request.params);
+      const body = SubmitPortfolioAssistantFeedbackRequestSchema.safeParse(request.body);
+      if (!params.success || !body.success)
+        return reply.status(400).send({
+          error: 'invalid_body',
+          message: 'Feedback request is invalid.',
+          retryable: false,
+        });
+      try {
+        return PortfolioAssistantFeedbackSchema.parse(
+          await portfolioAssistantFeedbackService.submitFeedback(
+            request.user!.id,
+            params.data.threadId,
+            params.data.messageId,
+            body.data,
+          ),
+        );
+      } catch (error) {
+        return sendAssistantError(reply, error);
+      }
+    },
+  );
+
+  app.get('/portfolio/assistant/memory', strictAuth, async (request, reply) => {
+    try {
+      return PortfolioAssistantMemorySchema.parse(
+        await portfolioAssistantMemoryService.getUserMemory(request.user!.id),
+      );
+    } catch (error) {
+      return sendAssistantError(reply, error);
+    }
+  });
+
+  app.delete('/portfolio/assistant/memory', strictAuth, async (request, reply) => {
+    try {
+      await portfolioAssistantMemoryService.forgetUserMemory(request.user!.id);
+      return reply.status(204).send();
+    } catch (error) {
+      return sendAssistantError(reply, error);
+    }
+  });
+
+  app.delete('/portfolio/assistant/memory/items/:itemId', strictAuth, async (request, reply) => {
+    const params = MemoryItemParamsSchema.safeParse(request.params);
+    if (!params.success)
+      return reply
+        .status(400)
+        .send({ error: 'invalid_query', message: 'Memory item ID is invalid.', retryable: false });
+    try {
+      const deleted = await portfolioAssistantMemoryService.forgetUserMemoryItem(
+        request.user!.id,
+        params.data.itemId,
+      );
+      if (!deleted)
+        return reply.status(404).send({
+          error: 'memory_item_not_found',
+          message: 'Memory item not found.',
           retryable: false,
         });
       return reply.status(204).send();

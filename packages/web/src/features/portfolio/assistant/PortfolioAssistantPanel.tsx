@@ -10,6 +10,7 @@ import {
 } from './hooks';
 import { PortfolioAssistantComposer } from './PortfolioAssistantComposer';
 import { PortfolioAssistantInviteForm } from './PortfolioAssistantInviteForm';
+import { PortfolioAssistantMemory } from './PortfolioAssistantMemory';
 import styles from './PortfolioAssistantPanel.module.css';
 import { PortfolioAssistantTranscript } from './PortfolioAssistantTranscript';
 
@@ -42,6 +43,7 @@ export function PortfolioAssistantPanel({
   const conversation = usePortfolioAssistantConversation(thread.threadId);
   const [draft, setDraft] = useState('');
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
+  const [showMemory, setShowMemory] = useState(false);
 
   const send = async (prompt = draft) => {
     const message = prompt.trim();
@@ -135,17 +137,28 @@ export function PortfolioAssistantPanel({
             <span>
               {thread.isLoading ? 'Opening conversation...' : 'Grounded in current analytics'}
             </span>
-            <button
-              type="button"
-              disabled={conversation.isStreaming || !thread.threadId}
-              onClick={() => void thread.startNewChat()}
-            >
-              New chat
-            </button>
+            <div className={styles.toolbarActions}>
+              <button
+                type="button"
+                aria-expanded={showMemory}
+                onClick={() => setShowMemory((open) => !open)}
+              >
+                Memory
+              </button>
+              <button
+                type="button"
+                disabled={conversation.isStreaming || !thread.threadId}
+                onClick={() => void thread.startNewChat()}
+              >
+                New chat
+              </button>
+            </div>
           </div>
+          {showMemory && <PortfolioAssistantMemory />}
           <PortfolioAssistantTranscript
             messages={conversation.messages}
             isLoading={conversation.isLoading || thread.isLoading}
+            feedbackThreadId={thread.threadId}
           />
           {conversation.messages.length === 0 && !conversation.isLoading && (
             <div className={styles.suggestions}>

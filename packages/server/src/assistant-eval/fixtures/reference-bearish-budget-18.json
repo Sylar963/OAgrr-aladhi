@@ -2536,6 +2536,7 @@
       "persistence": "unavailable"
     },
     "tradeHistoryFacts": null,
+    "userMemoryFacts": null,
     "topContributors": {
       "delta": [
         {

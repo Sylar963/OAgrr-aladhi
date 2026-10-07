@@ -95,7 +95,7 @@ interface SerializedShortStraddleSnapshot
   putQuoteTs: string;
 }
 
-type DeferredLog = { warn: (obj: object, msg: string) => void };
+export type DeferredLog = { warn: (obj: object, msg: string) => void };
 
 const IO_CHUNK_BYTES = 64 * 1024;
 const COPY_CHUNK_BYTES = 1024 * 1024;
@@ -240,7 +240,7 @@ export class FlushSchedule {
   }
 }
 
-function readJsonLines<T>(path: string, decode: (value: unknown) => T, log: DeferredLog): T[] {
+export function readJsonLines<T>(path: string, decode: (value: unknown) => T, log: DeferredLog): T[] {
   if (!existsSync(path)) return [];
   const rows: T[] = [];
   const descriptor = openSync(path, 'r');
@@ -296,7 +296,7 @@ function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown
   }
 }
 
-function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
+export function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   ensureCacheDir(path);
   if (rows.length === 0) {
     if (existsSync(path)) unlinkSync(path);

@@ -135,3 +135,82 @@ export const PortfolioAssistantErrorResponseSchema = z.object({
   retryable: z.boolean(),
 });
 export type PortfolioAssistantErrorResponse = z.infer<typeof PortfolioAssistantErrorResponseSchema>;
+
+export const PortfolioAssistantMemoryCategorySchema = z.enum([
+  'risk_budget',
+  'preferred_structures',
+  'experience_level',
+  'explanation_style',
+  'venues',
+  'goals',
+  'explicit_note',
+]);
+export type PortfolioAssistantMemoryCategory = z.infer<
+  typeof PortfolioAssistantMemoryCategorySchema
+>;
+
+export const PortfolioAssistantMemoryItemSchema = z.object({
+  id: z.string().min(1).max(64),
+  text: z.string().min(1).max(200),
+  category: PortfolioAssistantMemoryCategorySchema,
+  sourceThreadId: z.string().uuid().nullable(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export type PortfolioAssistantMemoryItem = z.infer<typeof PortfolioAssistantMemoryItemSchema>;
+
+export const PortfolioAssistantMemorySchema = z.object({
+  items: z.array(PortfolioAssistantMemoryItemSchema).max(12),
+  updatedAt: z.number().int().nonnegative().nullable(),
+  lastDistilledAt: z.number().int().nonnegative().nullable(),
+});
+export type PortfolioAssistantMemory = z.infer<typeof PortfolioAssistantMemorySchema>;
+
+export const PortfolioAssistantFeedbackVoteSchema = z.enum(['up', 'down']);
+export type PortfolioAssistantFeedbackVote = z.infer<typeof PortfolioAssistantFeedbackVoteSchema>;
+
+export const PortfolioAssistantFeedbackReasonSchema = z.enum([
+  'wrong_numbers',
+  'did_not_answer',
+  'too_long',
+  'refused',
+  'other',
+]);
+export type PortfolioAssistantFeedbackReason = z.infer<
+  typeof PortfolioAssistantFeedbackReasonSchema
+>;
+
+export const PORTFOLIO_ASSISTANT_FEEDBACK_NOTE_MAX_CHARS = 200;
+
+export const SubmitPortfolioAssistantFeedbackRequestSchema = z
+  .discriminatedUnion('vote', [
+    z.object({ vote: z.literal('up') }).strict(),
+    z
+      .object({
+        vote: z.literal('down'),
+        reasons: z.array(PortfolioAssistantFeedbackReasonSchema).max(5).default([]),
+        note: z.string().trim().max(PORTFOLIO_ASSISTANT_FEEDBACK_NOTE_MAX_CHARS).optional(),
+      })
+      .strict(),
+  ])
+  .superRefine((value, context) => {
+    if (value.vote === 'down' && new Set(value.reasons).size !== value.reasons.length) {
+      context.addIssue({ code: 'custom', message: 'Reasons must be unique.', path: ['reasons'] });
+    }
+  });
+export type SubmitPortfolioAssistantFeedbackRequest = z.input<
+  typeof SubmitPortfolioAssistantFeedbackRequestSchema
+>;
+
+export const PortfolioAssistantFeedbackSchema = z.object({
+  messageId: z.string().uuid(),
+  vote: PortfolioAssistantFeedbackVoteSchema,
+  reasons: z.array(PortfolioAssistantFeedbackReasonSchema),
+  note: z.string().max(PORTFOLIO_ASSISTANT_FEEDBACK_NOTE_MAX_CHARS).nullable(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export type PortfolioAssistantFeedback = z.infer<typeof PortfolioAssistantFeedbackSchema>;
+
+export const PortfolioAssistantFeedbackListSchema = z.object({
+  feedback: z.array(PortfolioAssistantFeedbackSchema),
+});
+export type PortfolioAssistantFeedbackList = z.infer<typeof PortfolioAssistantFeedbackListSchema>;

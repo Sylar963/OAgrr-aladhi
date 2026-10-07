@@ -1,12 +1,40 @@
+import { randomBytes } from 'node:crypto';
+
 import { z } from 'zod';
 
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import {
   type PortfolioAssistantModelEvent,
   type PortfolioAssistantModelGateway,
+  type PortfolioAssistantModelMessage,
   PortfolioAssistantServiceError,
   type StreamPortfolioAnswerRequest,
 } from './portfolio-assistant-model-gateway.js';
+
+export function createHermesSessionScope(): string {
+  return `ogg_scope_${randomBytes(16).toString('base64url')}`;
+}
+
+// Hermes keys a header-less /chat/completions turn to session `api-` + sha256(system prompt +
+// first user message): its state.db transcript, turn lease, restored system prompt and parked
+// memory manager. Identical prompts from two users would share all of them. X-Hermes-Session-Id
+// is no alternative: it replaces the request's history with the state.db transcript, dropping
+// the context message and the history we own. A fresh scope in the system prompt makes every
+// request its own session while Hermes still uses only the messages we send. See HERMES.md.
+export function buildHermesChatMessages(
+  request: StreamPortfolioAnswerRequest,
+  sessionScope: string,
+): PortfolioAssistantModelMessage[] {
+  return [
+    { role: 'system', content: request.systemInstructions },
+    {
+      role: 'system',
+      content: `Session scope ${sessionScope}: an internal routing value, not user data. Never mention it.`,
+    },
+    { role: 'user', content: request.contextMessage },
+    ...request.conversationMessages,
+  ];
+}
 
 const CompletionChunkSchema = z
   .object({
@@ -99,6 +127,7 @@ export class HermesPortfolioAssistantGateway implements PortfolioAssistantModelG
   constructor(
     private readonly configuration: PortfolioAssistantConfiguration,
     private readonly fetchImplementation: typeof fetch = fetch,
+    private readonly createSessionScope: () => string = createHermesSessionScope,
   ) {}
 
   async checkPortfolioAssistantModelAvailability(): Promise<'available' | 'unavailable'> {
@@ -140,12 +169,7 @@ export class HermesPortfolioAssistantGateway implements PortfolioAssistantModelG
           model: this.configuration.model,
           stream: true,
           stream_options: { include_usage: true },
-          user: request.threadId,
-          messages: [
-            { role: 'system', content: request.systemInstructions },
-            { role: 'user', content: request.contextMessage },
-            ...request.conversationMessages,
-          ],
+          messages: buildHermesChatMessages(request, this.createSessionScope()),
         }),
         signal: combined,
       });

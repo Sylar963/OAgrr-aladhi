@@ -15,6 +15,8 @@ import {
   bindAssistantMarketData,
   disposePortfolioAssistantServices,
   startAssistantMcpFromEnv,
+  startPortfolioAssistantFeedbackFlush,
+  startPortfolioAssistantMemoryDistillation,
   startPortfolioAssistantRetentionCleanup,
 } from './portfolio-assistant-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
@@ -182,6 +184,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerRoutes(app);
   startRuntimeMetrics(app.log);
   startPortfolioAssistantRetentionCleanup(app.log);
+  startPortfolioAssistantMemoryDistillation(app.log);
+  startPortfolioAssistantFeedbackFlush();
   bindAssistantMarketData(app);
   app.addHook('onListen', async () => {
     await startAssistantMcpFromEnv(app.log);

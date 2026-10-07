@@ -115,6 +115,38 @@ export {
   NoopPortfolioAssistantStore,
   PostgresPortfolioAssistantStore,
 } from './portfolio-assistant-store.js';
+export type {
+  OwnedPortfolioAssistantMessageRow,
+  PortfolioAssistantFeedbackExchangeRow,
+  PortfolioAssistantFeedbackRecord,
+  PortfolioAssistantFeedbackReportRow,
+  PortfolioAssistantFeedbackReportSource,
+  PortfolioAssistantFeedbackStore,
+  PortfolioAssistantFeedbackUpsertResult,
+  PortfolioAssistantFeedbackVoteValue,
+} from './portfolio-assistant-feedback-store.js';
+export {
+  NoopPortfolioAssistantFeedbackStore,
+  PostgresPortfolioAssistantFeedbackReportSource,
+  PostgresPortfolioAssistantFeedbackStore,
+} from './portfolio-assistant-feedback-store.js';
+export type {
+  ListPortfolioAssistantMemoryCandidatesInput,
+  ListPortfolioAssistantMemoryMessagesInput,
+  PortfolioAssistantMemoryCandidateRow,
+  PortfolioAssistantMemoryMessageRow,
+  PortfolioAssistantUserMemoryItemRecord,
+  PortfolioAssistantUserMemoryRow,
+  PortfolioAssistantUserMemoryStore,
+  ReplacePortfolioAssistantUserMemoryInput,
+} from './portfolio-assistant-user-memory-store.js';
+export {
+  NoopPortfolioAssistantUserMemoryStore,
+  PORTFOLIO_ASSISTANT_MEMORY_MAX_CONTENT_CHARS,
+  PORTFOLIO_ASSISTANT_MEMORY_MAX_ITEMS,
+  PostgresPortfolioAssistantUserMemoryStore,
+  renderPortfolioAssistantUserMemoryContent,
+} from './portfolio-assistant-user-memory-store.js';
 
 export type { ProvisionUserInput, UpsertUserInput, UserRow, UsersStore } from './users-store.js';
 export { NoopUsersStore, PostgresUsersStore } from './users-store.js';

@@ -87,3 +87,18 @@ in the eval, upstream loading or timeouts) come back as normal results with an
 of their samples), per-check pass rates over all samples, per-fixture `x/N` with failed-check counts, and
 the exact tool calls per fixture with non-`ok` outcomes. Grades are deterministic
 (`assistant-eval-checks.ts`); `--regrade` re-applies them to saved answers without calling Hermes.
+
+## From feedback to fixtures
+
+`pnpm --filter @oggregator/server assistant:feedback-report` (see `HERMES.md`, "Feedback") ends with
+"Candidate eval fixtures": one block per failure pattern (question topic, down-vote reasons, tool
+profile, answer length, fixtures already on that topic, suggested checks). For a pattern worth
+covering:
+
+1. Pick or add a scenario in `build-fixtures.ts` whose book exercises the topic; expected numbers stay
+   engine-derived.
+2. Write a new synthetic question in the same shape. Never copy a user's question, answer, note,
+   position, size or instrument from `report.md`.
+3. Encode the suggested checks in `expect` (required tools for `no_tool_calls`, number tolerances for
+   `wrong_numbers`, a word ceiling for `too_long`, refusal phrases for `refused`).
+4. Regenerate fixtures, run `--dry-run`, then a sampled eval, and record the baseline.

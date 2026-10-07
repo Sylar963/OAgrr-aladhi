@@ -13,6 +13,7 @@
     "library:build": "tsx src/scripts/build-options-library.ts",
     "eval:assistant": "tsx --env-file-if-exists=../../.env src/assistant-eval/assistant-eval.ts",
     "eval:assistant:fixtures": "tsx src/assistant-eval/build-fixtures.ts",
+    "assistant:feedback-report": "tsx --env-file-if-exists=../../.env src/scripts/assistant-feedback-report.ts",
     "test:run": "pnpm --filter @oggregator/core build && pnpm --filter @oggregator/db build && vitest run"
   },
   "dependencies": {

@@ -242,12 +242,13 @@ export function proposedLegWithMark(
   };
 }
 
+/** `windows` already include `feesUsd`; it only sets the worst loss when no window is left. */
 export function summarizeRisk(windows: ExpiryRiskWindow[], feesUsd: number): StructureRiskSummary {
   const unbounded = windows.find((window) => window.upsideUnbounded);
   const losses = windows.flatMap((window) => window.worstLossUsd ?? []);
   return {
     riskWindows: windows,
-    worstLossUsd: unbounded != null ? null : losses.length > 0 ? Math.min(...losses) - feesUsd : 0 - feesUsd,
+    worstLossUsd: unbounded != null ? null : losses.length > 0 ? Math.min(...losses) : 0 - feesUsd,
     upsideUnbounded: unbounded != null,
     unboundedAfter: unbounded?.from ?? null,
   };
@@ -313,14 +314,14 @@ export function evaluateStructure(input: EvaluateStructureInput): StructureEvalu
     proposedLegWithMark(leg, legs[index] as EvaluatedProposedLeg, input.nowMs),
   );
   const combinedWithMarks = [...input.held, ...proposedWithMarks];
-  const combinedWindows = analyzeExpiryStructure(combinedWithMarks, input.nowMs);
+  const feesUsd = legs.reduce((sum, leg) => sum + (leg.feeUsd ?? 0), 0);
+  const combinedWindows = analyzeExpiryStructure(combinedWithMarks, input.nowMs, -feesUsd);
   const heldWindows =
     input.held.length === 0 ? [] : analyzeExpiryStructure(input.held, input.nowMs);
   if (combinedWindows == null || heldWindows == null) {
     return emptyEvaluation('missing_marks', legs, underlying);
   }
 
-  const feesUsd = legs.reduce((sum, leg) => sum + (leg.feeUsd ?? 0), 0);
   const netPremiumUsd = legs.reduce((sum, leg) => sum + (leg.premiumUsd ?? 0), 0);
   const midPremiums = legs.map((leg) =>
     leg.midUsd == null ? null : (leg.side === 'buy' ? 1 : -1) * leg.midUsd * leg.size,

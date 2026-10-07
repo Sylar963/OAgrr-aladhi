@@ -243,6 +243,9 @@ export type ExpiryBasis = z.infer<typeof ExpiryBasisSchema>;
 // `upsideUnbounded` is set when the calls alive during the window are net short,
 // because spot can keep rising after any earlier settlement, and stays set for
 // every later window because that uncapped settlement is part of their P&L.
+// `bestProfitUsd` is null by the mirror rule (live calls net long). Spots of the
+// worst loss and best profit are the lowest grid spot reaching them.
+// The payoff fields default for payloads from servers that predate them.
 export const ExpiryRiskWindowSchema = z.object({
   from: z.string(),
   until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -252,6 +255,9 @@ export const ExpiryRiskWindowSchema = z.object({
   lossAtZeroSpotUsd: z.number(),
   worstLossUsd: z.number().nullable(),
   worstLossSpotUsd: z.number().nonnegative().nullable(),
+  bestProfitUsd: z.number().nullable().default(null),
+  bestProfitSpotUsd: z.number().nonnegative().nullable().default(null),
+  breakevenSpotsUsd: z.array(z.number().nonnegative()).default([]),
 });
 export type ExpiryRiskWindow = z.infer<typeof ExpiryRiskWindowSchema>;
 

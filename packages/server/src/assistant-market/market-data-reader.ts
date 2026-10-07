@@ -26,7 +26,9 @@ import {
 
 export type MarketInjector = (path: string) => Promise<{ statusCode: number; body: unknown }>;
 
-export type MarketReadResult<T> = { ok: true; data: T } | { ok: false; error: string };
+export type MarketReadResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; timedOut?: boolean };
 
 const ExpiriesResponseSchema = z.object({
   underlying: z.string(),
@@ -108,8 +110,12 @@ export class AssistantMarketDataReader {
         return { ok: false, error: `Unexpected payload from ${path.split('?')[0]}.` };
       return { ok: true, data: parsed.data };
     } catch (error) {
-      const reason = error instanceof Error && error.message === 'timeout' ? 'timed out' : 'failed';
-      return { ok: false, error: `Request to ${path.split('?')[0]} ${reason}.` };
+      const timedOut = error instanceof Error && error.message === 'timeout';
+      return {
+        ok: false,
+        error: `Request to ${path.split('?')[0]} ${timedOut ? 'timed out' : 'failed'}.`,
+        ...(timedOut ? { timedOut } : {}),
+      };
     } finally {
       if (timer) clearTimeout(timer);
     }

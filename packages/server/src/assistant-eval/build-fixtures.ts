@@ -34,7 +34,7 @@ import {
   type AssistantEvalFixture,
   AssistantEvalFixtureSchema,
 } from './assistant-eval-fixture.js';
-import { SyntheticMarket, type SyntheticMarketParams } from './synthetic-market.js';
+import { EVAL_MARKET_DEFAULTS, SyntheticMarket } from './synthetic-market.js';
 
 const log = logger.child({ component: 'assistant-eval-fixtures' });
 
@@ -43,7 +43,7 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const REFERENCE_SPOT_USD = 83_886.66;
 const ACCOUNT_ID = 'eval-account';
-// Fixtures are offline, so no live ref store resolves this; the runner only needs the field present.
+// Placeholder: `--mcp eval` replaces it with a ref minted for the fixture's book; the live backend never resolves it.
 const FIXTURE_PORTFOLIO_REF = 'pref_evalFixtureNotResolvable';
 const GENERATOR = 'packages/server/src/assistant-eval/build-fixtures.ts';
 const FIXTURE_DIRECTORY = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -59,15 +59,6 @@ const DEFAULT_BANNED_PHRASES = [
   'my previous … were wrong',
   'my previous … was wrong',
 ];
-
-const MARKET_DEFAULTS: Omit<SyntheticMarketParams, 'spotUsd' | 'nowMs'> = {
-  underlying: 'BTC',
-  basisPerYear: 0.03,
-  atmFloor: 0.4,
-  atmFrontPremium: 0.08,
-  skew: -0.15,
-  curvature: 0.6,
-};
 
 interface LegSpec {
   legId: string;
@@ -146,7 +137,7 @@ function storeFor(book: BookSpec, legs: PositionLeg[]): PositionStore {
 
 async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> {
   const forwardDays = book.forwardDays ?? 0;
-  const market = new SyntheticMarket({ ...MARKET_DEFAULTS, spotUsd: book.spotUsd, nowMs: book.nowMs });
+  const market = new SyntheticMarket({ ...EVAL_MARKET_DEFAULTS, spotUsd: book.spotUsd, nowMs: book.nowMs });
   const legs = book.legs.map((spec) => toPositionLeg(spec, book.source, book.nowMs));
   const runtime = new PortfolioRuntime({
     accountId: ACCOUNT_ID,

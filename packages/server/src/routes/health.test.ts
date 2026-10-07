@@ -136,6 +136,7 @@ describe('GET /health', () => {
         inputTokensTotal: expect.any(Number),
         outputTokensTotal: expect.any(Number),
         providerFailuresTotal: expect.any(Object),
+        toolCalls: { byTool: expect.any(Object), attributionTotal: expect.any(Object) },
       },
     });
   });

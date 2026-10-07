@@ -252,6 +252,9 @@ const ExpiryRiskWindowSchema = z.object({
   lossAtZeroSpotUsd: z.number(),
   worstLossUsd: z.number().nullable(),
   worstLossSpotUsd: z.number().nullable(),
+  bestProfitUsd: z.number().nullable().default(null),
+  bestProfitSpotUsd: z.number().nullable().default(null),
+  breakevenSpotsUsd: z.array(z.number()).default([]),
 });
 
 const PortfolioPnlCurveSchema = z.object({

@@ -1,6 +1,11 @@
 import { type IntervalHistogram, monitorEventLoopDelay } from 'node:perf_hooks';
 import type { FastifyBaseLogger } from 'fastify';
 
+import type {
+  AssistantToolAttribution,
+  AssistantToolCallOutcome,
+} from './assistant-market/assistant-run-registry.js';
+
 const NS_PER_MS = 1_000_000;
 const BYTES_PER_MB = 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
@@ -17,6 +22,25 @@ export interface PortfolioAssistantRuntimeMetricsSnapshot {
   inputTokensTotal: number;
   outputTokensTotal: number;
   providerFailuresTotal: Record<string, number>;
+  toolCalls: {
+    byTool: Record<string, PortfolioAssistantToolCallMetrics>;
+    attributionTotal: Record<string, number>;
+  };
+}
+
+export interface PortfolioAssistantToolCallMetrics {
+  calls: number;
+  failed: number;
+  timedOut: number;
+  rejected: number;
+  durationMs: { count: number; total: number; average: number; max: number };
+}
+
+export interface RecordPortfolioAssistantToolCallInput {
+  tool: string;
+  outcome: AssistantToolCallOutcome;
+  attribution: AssistantToolAttribution['mode'];
+  durationMs: number;
 }
 
 export interface RecordPortfolioAssistantRuntimeCompletionInput {
@@ -66,6 +90,7 @@ function createPortfolioAssistantMetrics(): PortfolioAssistantRuntimeMetricsSnap
     inputTokensTotal: 0,
     outputTokensTotal: 0,
     providerFailuresTotal: {},
+    toolCalls: { byTool: {}, attributionTotal: {} },
   };
 }
 
@@ -134,6 +159,15 @@ export function getRuntimeMetricsSnapshot(): RuntimeMetricsSnapshot {
       inputTokensTotal: portfolioAssistantMetrics.inputTokensTotal,
       outputTokensTotal: portfolioAssistantMetrics.outputTokensTotal,
       providerFailuresTotal: { ...portfolioAssistantMetrics.providerFailuresTotal },
+      toolCalls: {
+        byTool: Object.fromEntries(
+          Object.entries(portfolioAssistantMetrics.toolCalls.byTool).map(([tool, metrics]) => [
+            tool,
+            { ...metrics, durationMs: { ...metrics.durationMs } },
+          ]),
+        ),
+        attributionTotal: { ...portfolioAssistantMetrics.toolCalls.attributionTotal },
+      },
     },
   };
 }
@@ -168,6 +202,32 @@ export function recordPortfolioAssistantRuntimeCompletion(
     portfolioAssistantMetrics.providerFailuresTotal[input.errorCode] =
       (portfolioAssistantMetrics.providerFailuresTotal[input.errorCode] ?? 0) + 1;
   }
+}
+
+// Callers pass only registered tool names, which keeps the per-tool map bounded.
+export function recordPortfolioAssistantToolCall(
+  input: RecordPortfolioAssistantToolCallInput,
+): void {
+  const toolCalls = portfolioAssistantMetrics.toolCalls;
+  const metrics = toolCalls.byTool[input.tool] ?? {
+    calls: 0,
+    failed: 0,
+    timedOut: 0,
+    rejected: 0,
+    durationMs: { count: 0, total: 0, average: 0, max: 0 },
+  };
+  toolCalls.byTool[input.tool] = metrics;
+  metrics.calls += 1;
+  if (input.outcome === 'failed') metrics.failed += 1;
+  else if (input.outcome === 'timeout') metrics.timedOut += 1;
+  else if (input.outcome === 'rejected_input') metrics.rejected += 1;
+  const durationMs = Math.max(0, input.durationMs);
+  metrics.durationMs.count += 1;
+  metrics.durationMs.total += durationMs;
+  metrics.durationMs.average = metrics.durationMs.total / metrics.durationMs.count;
+  metrics.durationMs.max = Math.max(metrics.durationMs.max, durationMs);
+  toolCalls.attributionTotal[input.attribution] =
+    (toolCalls.attributionTotal[input.attribution] ?? 0) + 1;
 }
 
 function isProviderFailure(code: string): boolean {

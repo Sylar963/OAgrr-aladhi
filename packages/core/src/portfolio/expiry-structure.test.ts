@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PositionLeg } from '@oggregator/protocol';
 
+import { price76 } from '../feeds/thalex/bs-solver.js';
 import { analyzeExpiryStructure } from './expiry-structure.js';
 import type { MarkContext } from './types.js';
 
@@ -170,5 +171,96 @@ describe('analyzeExpiryStructure', () => {
     );
 
     expect(windows).toBeNull();
+  });
+
+  describe('payoff structure per window', () => {
+    // The Oct 30 short still has 14 days left when the Oct 16 window ends.
+    const windowOneYears = 14 / 365;
+
+    it('gives the reference diagonal a bounded first window and a finite best profit after Oct 16', () => {
+      const [first, second] =
+        analyzeExpiryStructure(
+          withMarks([
+            leg('long-oct16', '2026-10-16', 87_000, 'call', 1, 1_050),
+            leg('short-oct30', '2026-10-30', 85_000, 'call', -1, 3_031.95),
+          ]),
+          NOW,
+        ) ?? [];
+      const credit = 3_031.95 - 1_050;
+      const windowOnePnl = (spot: number) =>
+        Math.max(0, spot - 87_000) - price76(spot, 85_000, 0.5, windowOneYears, 'call') + credit;
+
+      expect(first).toMatchObject({ bestProfitSpotUsd: 0 });
+      expect(first?.bestProfitUsd).toBeCloseTo(credit, 6);
+      expect(first?.breakevenSpotsUsd).toHaveLength(1);
+      const [windowOneBreakeven = Number.NaN] = first?.breakevenSpotsUsd ?? [];
+      expect(windowOneBreakeven).toBeLessThan(87_000);
+      expect(Math.abs(windowOnePnl(windowOneBreakeven))).toBeLessThan(1);
+
+      // All intrinsic at Oct 30: credit minus (S − 85k) between the strikes, −18.05 above 87k.
+      expect(second).toMatchObject({ upsideUnbounded: true, worstLossUsd: null });
+      expect(second?.bestProfitUsd).toBeCloseTo(credit, 6);
+      expect(second?.bestProfitSpotUsd).toBe(0);
+      expect(second?.breakevenSpotsUsd).toHaveLength(1);
+      expect(second?.breakevenSpotsUsd[0]).toBeCloseTo(85_000 + credit, 0);
+    });
+
+    it('matches the hand calculation for a same-expiry bull call spread', () => {
+      const debit = 2_000 - 800;
+      const [window, ...rest] =
+        analyzeExpiryStructure(
+          withMarks([
+            leg('long', '2026-10-30', 85_000, 'call', 1, 2_000),
+            leg('short', '2026-10-30', 90_000, 'call', -1, 800),
+          ]),
+          NOW,
+        ) ?? [];
+
+      expect(rest).toHaveLength(0);
+      expect(window).toMatchObject({ upsideUnbounded: false, worstLossSpotUsd: 0, bestProfitSpotUsd: 90_000 });
+      expect(window?.worstLossUsd).toBeCloseTo(-debit, 6);
+      expect(window?.bestProfitUsd).toBeCloseTo(90_000 - 85_000 - debit, 6);
+      expect(window?.breakevenSpotsUsd).toHaveLength(1);
+      expect(window?.breakevenSpotsUsd[0]).toBeCloseTo(85_000 + debit, 0);
+    });
+
+    it('gives a long straddle two breakevens and an uncapped best profit', () => {
+      const debit = 3_000 + 2_500;
+      const [window] =
+        analyzeExpiryStructure(
+          withMarks([
+            leg('call', '2026-10-30', 85_000, 'call', 1, 3_000),
+            leg('put', '2026-10-30', 85_000, 'put', 1, 2_500),
+          ]),
+          NOW,
+        ) ?? [];
+
+      expect(window).toMatchObject({ bestProfitUsd: null, bestProfitSpotUsd: null, worstLossSpotUsd: 85_000 });
+      expect(window?.worstLossUsd).toBeCloseTo(-debit, 6);
+      expect(window?.breakevenSpotsUsd).toHaveLength(2);
+      expect(window?.breakevenSpotsUsd[0]).toBeCloseTo(85_000 - debit, 0);
+      expect(window?.breakevenSpotsUsd[1]).toBeCloseTo(85_000 + debit, 0);
+    });
+
+    it('follows the upside slope to a breakeven above the spot grid', () => {
+      const [window] =
+        analyzeExpiryStructure(withMarks([leg('far', '2026-10-30', 300_000, 'call', 1, 100)]), NOW) ?? [];
+
+      expect(window?.breakevenSpotsUsd).toHaveLength(1);
+      expect(window?.breakevenSpotsUsd[0]).toBeCloseTo(300_100, 0);
+    });
+
+    it('keeps best profit uncapped once a window holds net long calls', () => {
+      const windows = analyzeExpiryStructure(
+        withMarks([
+          leg('short-oct16', '2026-10-16', 85_000, 'call', -1, 2_000),
+          leg('long-oct30', '2026-10-30', 85_000, 'call', 1, 3_000),
+        ]),
+        NOW,
+      );
+
+      expect(windows?.[0]?.bestProfitUsd).not.toBeNull();
+      expect(windows?.[1]).toMatchObject({ netCallSize: 1, bestProfitUsd: null, bestProfitSpotUsd: null });
+    });
   });
 });

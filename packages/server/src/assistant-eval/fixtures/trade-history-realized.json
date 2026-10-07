@@ -38,7 +38,12 @@
           "upsideUnbounded": false,
           "lossAtZeroSpotUsd": 1851.95,
           "worstLossUsd": -8148.05,
-          "worstLossSpotUsd": 189374.13495
+          "worstLossSpotUsd": 189374,
+          "bestProfitUsd": 2619.61,
+          "bestProfitSpotUsd": 85000,
+          "breakevenSpotsUsd": [
+            88336
+          ]
         },
         {
           "from": "2026-10-30",
@@ -50,13 +55,18 @@
           "upsideUnbounded": false,
           "lossAtZeroSpotUsd": 1851.95,
           "worstLossUsd": -8148.05,
-          "worstLossSpotUsd": 95000
+          "worstLossSpotUsd": 95000,
+          "bestProfitUsd": null,
+          "bestProfitSpotUsd": null,
+          "breakevenSpotsUsd": [
+            86852
+          ]
         }
       ],
       "worstLossUsd": -8148.05,
       "unboundedAfter": null,
       "uncoveredShorts": [],
-      "note": "worstLossUsd is the lowest entry-relative P&L across expiry windows (negative is a loss), at spot 189374.13495 by 2026-10-30. It is an expiry bound, not intraday margin."
+      "note": "worstLossUsd is the lowest entry-relative P&L across expiry windows (negative is a loss), at spot 189374 by 2026-10-30. It is an expiry bound, not intraday margin."
     },
     "forwardDays": 0,
     "generatedAt": 1791374400000,

@@ -113,6 +113,7 @@ describe('evaluateStructure', () => {
     expect(result.combined?.upsideUnbounded).toBe(false);
     expect(result.combined?.riskWindows.every((window) => !window.upsideUnbounded)).toBe(true);
 
+    const feeUsd = 3;
     // Oct 16: the 87k long is intrinsic and the Oct 30 85/90 call spread keeps 14 days of
     // time value. P&L falls up to the 87k kink and rises after it (spread delta < 1).
     const windowOneUsd =
@@ -120,14 +121,22 @@ describe('evaluateStructure', () => {
       3_031.95 -
       price76(87_000, 85_000, IV, WINDOW_ONE_YEARS, 'call') +
       price76(87_000, 90_000, IV, WINDOW_ONE_YEARS, 'call') -
-      1_000;
-    // Oct 30: everything intrinsic; flat between 87k and 90k at −2,000 of call spread.
-    const windowTwoUsd = -2_000 - 1_050 + 3_031.95 - 1_000;
+      1_000 -
+      feeUsd;
+    // Oct 30: everything intrinsic. Net credit after the 90k call and its fee below 85k, minus
+    // (S − 85k) up to 87k, flat to 90k, then rising one for one with the net long call.
+    const lowSpotUsd = -1_050 + 3_031.95 - 1_000 - feeUsd;
+    const windowTwoUsd = lowSpotUsd - 2_000;
     const [first, second] = result.combined?.riskWindows ?? [];
     expect(first?.worstLossSpotUsd).toBe(87_000);
     expect(first?.worstLossUsd).toBeCloseTo(windowOneUsd, 2);
     expect(second?.worstLossUsd).toBeCloseTo(windowTwoUsd, 2);
-    expect(result.combined?.worstLossUsd).toBeCloseTo(Math.min(windowOneUsd, windowTwoUsd) - 3, 2);
+    expect(second?.lossAtZeroSpotUsd).toBeCloseTo(lowSpotUsd, 6);
+    expect(second?.bestProfitUsd).toBeNull();
+    expect(second?.breakevenSpotsUsd).toHaveLength(2);
+    expect(second?.breakevenSpotsUsd[0]).toBeCloseTo(85_000 + lowSpotUsd, 0);
+    expect(second?.breakevenSpotsUsd[1]).toBeCloseTo(90_000 - windowTwoUsd, 0);
+    expect(result.combined?.worstLossUsd).toBeCloseTo(Math.min(windowOneUsd, windowTwoUsd), 2);
     expect(result.incrementalBasis).toBe('held_unbounded');
     expect(result.incrementalWorstLossUsd).toBeNull();
   });

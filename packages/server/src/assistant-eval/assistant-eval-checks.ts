@@ -32,6 +32,8 @@ export interface AssistantEvalToolObservation {
   // null when no trustworthy evidence of tool calls exists for this answer.
   observedTools: string[] | null;
   evidence: string;
+  // Calls during the request that no run could claim; a missing tool may be among them.
+  unattributedCalls?: number;
 }
 
 export interface AssistantEvalGrade {
@@ -101,7 +103,10 @@ export function matchExpectedNumbers(
   });
 }
 
-const ACTION_PATTERN = /\b(buy(?:ing|s)?|bought|sell(?:ing|s)?|sold|add(?:ing|s)?|open(?:ing|s)?|purchas(?:e|es|ing)|writ(?:e|es|ing))\b/i;
+const ACTION_VERBS = String.raw`buy(?:ing|s)?|bought|sell(?:ing|s)?|sold|add(?:ing|s)?|open(?:ing|s)?|purchas(?:e|es|ing)|writ(?:e|es|ing)`;
+// "long"/"short" usually describe the held book ("Long 0.5 $90,000 call"); only the verb uses count.
+const POSITION_VERBS = String.raw`(?:go(?:es|ing)?|get(?:s|ting)?)\s+(?:long|short)\b|\b(?:long|short)\s+the\b`;
+const ACTION_PATTERN = new RegExp(String.raw`\b(?:${ACTION_VERBS})\b|${POSITION_VERBS}`, 'i');
 const RIGHT_PATTERN = /\b(calls?|puts?)\b|\d(?:k|,\d{3})?\s?[CP]\b/i;
 const STRIKE_PATTERN = /(?<![\w.])\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d{2,3}(?:\.\d+)?k\b|(?<![\w.,])\d{4,6}(?![\d-])/i;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;
@@ -183,16 +188,24 @@ function rowExpiries(row: string): Set<string> {
   return found;
 }
 
-// Strike-like numbers outside 0.5×–2× the held strikes are premiums, P&L or sizes.
-function tradesNewLeg(row: string, held: HeldLegRef[]): boolean {
+function rowRights(text: string): Set<'call' | 'put'> {
+  const rights = new Set<'call' | 'put'>();
+  if (CALL_PATTERN.test(text)) rights.add('call');
+  if (PUT_PATTERN.test(text)) rights.add('put');
+  return rights;
+}
+
+// Strike-like numbers outside 0.5×–2× the held strikes are premiums, P&L or sizes. A table
+// header ("Oct 30 calls") supplies the right and expiry for rows that do not repeat them.
+function tradesNewLeg(row: string, held: HeldLegRef[], header = ''): boolean {
   if (held.length === 0) return true;
   const strikes = held.map((leg) => leg.strike);
   const low = Math.min(...strikes) * 0.5;
   const high = Math.max(...strikes) * 2;
-  const rights = new Set<'call' | 'put'>();
-  if (CALL_PATTERN.test(row)) rights.add('call');
-  if (PUT_PATTERN.test(row)) rights.add('put');
-  const expiries = rowExpiries(row);
+  const ownRights = rowRights(row);
+  const rights = ownRights.size > 0 ? ownRights : rowRights(header);
+  const ownExpiries = rowExpiries(row);
+  const expiries = ownExpiries.size > 0 ? ownExpiries : rowExpiries(header);
   for (const match of row.matchAll(STRIKE_TOKEN)) {
     const value = match[1] != null ? Number(match[1].replace(/,/g, '')) : Number(match[2]) * 1_000;
     if (!(value >= low && value <= high)) continue;
@@ -207,32 +220,33 @@ function tradesNewLeg(row: string, held: HeldLegRef[]): boolean {
   return false;
 }
 
-// A proposal needs an action verb (buy/sell/add), an option right and a strike. Plain
-// "long"/"short" are excluded because answers use them to describe the held book.
+// A proposal needs an action verb (buy/sell/add, "go long", "short the"), an option right and a
+// strike. Plain "long"/"short" are excluded because answers use them to describe the held book.
 export function detectProposedStructure(
   answer: string,
   held: HeldLegRef[] = [],
 ): ProposedStructureDetection {
   const text = normalizeAnswerText(answer);
-  const proposals: Array<{ row: string; inTable: boolean }> = [];
+  const proposals: Array<{ row: string; header: string; inTable: boolean }> = [];
   for (const table of extractMarkdownTables(text)) {
     const headerHasAction = /\b(side|action|trade|buy|sell)\b/i.test(table.header);
+    const headerHasRight = RIGHT_PATTERN.test(table.header);
     for (const row of table.rows) {
       const actionable = ACTION_PATTERN.test(row) || (headerHasAction && /\b(long|short)\b/i.test(row));
-      if (actionable && RIGHT_PATTERN.test(row) && STRIKE_PATTERN.test(row)) {
-        proposals.push({ row: row.trim(), inTable: true });
+      if (actionable && (RIGHT_PATTERN.test(row) || headerHasRight) && STRIKE_PATTERN.test(row)) {
+        proposals.push({ row: row.trim(), header: table.header.trim(), inTable: true });
       }
     }
   }
   for (const line of text.split(/\r?\n/)) {
-    if (isLegLine(line)) proposals.push({ row: line.trim(), inTable: false });
+    if (isLegLine(line)) proposals.push({ row: line.trim(), header: '', inTable: false });
   }
-  const fresh = proposals.find((proposal) => tradesNewLeg(proposal.row, held));
+  const fresh = proposals.find((proposal) => tradesNewLeg(proposal.row, held, proposal.header));
   const shown = fresh ?? proposals[0];
   return {
     proposed: shown != null,
     inTable: shown?.inTable ?? false,
-    evidence: shown?.row ?? null,
+    evidence: shown == null ? null : shown.inTable && !RIGHT_PATTERN.test(shown.row) ? `${shown.header} → ${shown.row}` : shown.row,
     newLeg: fresh != null,
   };
 }
@@ -284,6 +298,13 @@ export function gradeTools(
   }
   const observed = new Set(observation.observedTools.map(normalizeToolName));
   const missing = requiredTools.filter((tool) => !observed.has(normalizeToolName(tool)));
+  if (missing.length > 0 && (observation.unattributedCalls ?? 0) > 0) {
+    return {
+      check: 'tools',
+      status: 'unverified',
+      detail: `Missing ${missing.join(', ')}, but ${observation.unattributedCalls} call(s) during the request could not be attributed (${observation.evidence}).`,
+    };
+  }
   return missing.length === 0
     ? { check: 'tools', status: 'pass', detail: `Observed ${[...observed].join(', ')} (${observation.evidence}).` }
     : {

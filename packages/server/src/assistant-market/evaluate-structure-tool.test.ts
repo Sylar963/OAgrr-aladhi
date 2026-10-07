@@ -217,6 +217,15 @@ describe('oggregator_evaluate_structure', () => {
     expect(data.legs[1]).toMatchObject({ venue: 'deribit', executablePriceUsd: 400, premiumUsd: -400, feeUsd: 2 });
     expect(data.totals).toMatchObject({ netPremiumUsd: 610, feesUsd: 6, netCostUsd: 616 });
     expect(data.combined.worstLossUsd).toBeCloseTo(-616, 2);
+    // 90/95 call spread: 610 debit plus 6 of fees.
+    expect(data.combined.riskWindows).toEqual([
+      expect.objectContaining({
+        worstLossUsd: -616,
+        bestProfitUsd: 5_000 - 616,
+        bestProfitSpotUsd: 95_000,
+        breakevenSpotsUsd: [90_000 + 616],
+      }),
+    ]);
   });
 
   it('reports missing quotes per leg instead of pricing them', async () => {

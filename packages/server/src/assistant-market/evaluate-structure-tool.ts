@@ -83,6 +83,9 @@ export function compactRisk(summary: StructureRiskSummary | null) {
       upsideUnbounded: window.upsideUnbounded,
       worstLossUsd: cents(window.worstLossUsd),
       worstLossSpotUsd: cents(window.worstLossSpotUsd),
+      bestProfitUsd: cents(window.bestProfitUsd),
+      bestProfitSpotUsd: cents(window.bestProfitSpotUsd),
+      breakevenSpotsUsd: window.breakevenSpotsUsd.map(Math.round),
     })),
   };
 }

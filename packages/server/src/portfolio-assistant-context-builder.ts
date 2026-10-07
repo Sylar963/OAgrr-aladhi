@@ -269,11 +269,19 @@ function compactHorizonScenarios(
   };
 }
 
+function roundNullable(value: number | null, round: (value: number) => number): number | null {
+  return value == null ? null : round(value);
+}
+
 function roundRiskWindow(window: ExpiryRiskWindow): ExpiryRiskWindow {
   return {
     ...window,
     lossAtZeroSpotUsd: roundCents(window.lossAtZeroSpotUsd),
-    worstLossUsd: window.worstLossUsd == null ? null : roundCents(window.worstLossUsd),
+    worstLossUsd: roundNullable(window.worstLossUsd, roundCents),
+    worstLossSpotUsd: roundNullable(window.worstLossSpotUsd, Math.round),
+    bestProfitUsd: roundNullable(window.bestProfitUsd, roundCents),
+    bestProfitSpotUsd: roundNullable(window.bestProfitSpotUsd, Math.round),
+    breakevenSpotsUsd: window.breakevenSpotsUsd.map(Math.round),
   };
 }
 

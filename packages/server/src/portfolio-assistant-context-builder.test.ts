@@ -153,7 +153,19 @@ describe('buildRiskBudgetFacts', () => {
     lossAtZeroSpotUsd: 10.004,
     worstLossUsd: -18.054,
     worstLossSpotUsd: 87_000,
+    bestProfitUsd: 1_981.954,
+    bestProfitSpotUsd: 0,
+    breakevenSpotsUsd: [83_012.4, 86_981.6],
   };
+
+  it('rounds window payoff fields to cents and whole-dollar spots', () => {
+    const [rounded] = buildRiskBudgetFacts({ status: 'ok', riskWindows: [window] }, []).riskWindows;
+    expect(rounded).toMatchObject({
+      bestProfitUsd: 1_981.95,
+      bestProfitSpotUsd: 0,
+      breakevenSpotsUsd: [83_012, 86_982],
+    });
+  });
 
   it('reports the lowest windowed loss when every window is bounded', () => {
     const facts = buildRiskBudgetFacts(

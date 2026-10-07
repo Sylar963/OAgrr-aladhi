@@ -13,6 +13,9 @@ function riskWindow(partial: Partial<ExpiryRiskWindow> & Pick<ExpiryRiskWindow, 
     lossAtZeroSpotUsd: -100,
     worstLossUsd: -100,
     worstLossSpotUsd: 0,
+    bestProfitUsd: 100,
+    bestProfitSpotUsd: 0,
+    breakevenSpotsUsd: [],
     ...partial,
   };
 }

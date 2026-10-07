@@ -130,6 +130,15 @@ legs are those expiring at or after Ei. P&L is against entry price and excludes 
   earlier leg at a different spot can lose more.
 - Book `maxLossUsd` for mixed expiries is null if any window is unbounded. Otherwise it is the
   worst window loss. Same-expiry books keep the common-spot curve low.
+- Payoff of each window, on the same single-path P&L at Ei: `bestProfitUsd` is the grid
+  maximum. It is null when the live calls are net long (profit uncapped on a rally), and it then
+  stays null for later windows by the mirror of the loss rule. `breakevenSpotsUsd` are the sign
+  changes on the grid, refined by bisection to about $1, and followed past the grid while the
+  single-path slope (sum of all call sizes) points back toward zero. No single-path slope is
+  published: on the reference book it is 0 while window 2 is unbounded, so `netCallSize`
+  stays the slope signal. Reference window 2: breakeven 85,000 + 1,981.95 = 86,981.95, best
+  profit 1,981.95 at or below 85k. `evaluate_structure` passes the proposed legs' fees as a
+  P&L offset, so its windows and breakevens are after fees; held-book windows have none.
 
 Required test invariants:
 
@@ -139,6 +148,8 @@ Required test invariants:
   credit − strike gap = −3,000, at S = 0.
 - A longer-dated long call at least as large as a shorter-dated short call covers it. A
   smaller one does not, and the window after the short settles stays unbounded.
+- Same-expiry bull call spread: breakeven = lower strike + debit, best profit = width − debit.
+  Long straddle: breakevens K ± debit, `bestProfitUsd` null.
 
 Limits: constant IV, European exercise, no fees, margin, or liquidation paths. A covered window
 is a mark-to-model statement at the short's expiry. It does not promise that the remaining long

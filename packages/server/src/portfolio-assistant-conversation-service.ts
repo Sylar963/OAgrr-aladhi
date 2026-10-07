@@ -15,6 +15,11 @@ import {
   PortfolioSourceSchema,
   type SendPortfolioAssistantMessageRequest,
 } from '@oggregator/protocol';
+import {
+  type AssistantRunRegistry,
+  type AssistantRunToolSummary,
+  emptyAssistantRunToolSummary,
+} from './assistant-market/assistant-run-registry.js';
 import type { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-builder.js';
@@ -82,6 +87,7 @@ export class PortfolioAssistantConversationService {
     private readonly promptBuilder: PortfolioAssistantPromptBuilder,
     private readonly gateway: PortfolioAssistantModelGateway,
     private readonly usageLimiter: PortfolioAssistantUsageLimiter,
+    private readonly runs: AssistantRunRegistry | null = null,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -259,6 +265,12 @@ export class PortfolioAssistantConversationService {
         historyMessageCount: conversationMessages.length - 1,
         startedAtMs: this.now(),
       };
+      this.runs?.begin({
+        requestId: telemetry.requestId,
+        userIdHash: telemetry.userIdHash,
+        threadId,
+        portfolioRef: context.portfolioRef,
+      });
       releaseRuntimeMetrics = beginPortfolioAssistantRuntimeRequest();
       let lastCheckpoint = this.now();
       for await (const event of this.gateway.streamPortfolioAnswer(
@@ -345,6 +357,9 @@ export class PortfolioAssistantConversationService {
           };
     } finally {
       releaseRuntimeMetrics?.();
+      const toolCalls: AssistantRunToolSummary | null = telemetry
+        ? (this.runs?.finish(telemetry.requestId) ?? emptyAssistantRunToolSummary())
+        : null;
       if (telemetry && runOutcome) {
         const durationMs = Math.max(0, this.now() - telemetry.startedAtMs);
         recordPortfolioAssistantRuntimeCompletion({
@@ -373,6 +388,7 @@ export class PortfolioAssistantConversationService {
             durationMs,
             outcome: runOutcome,
             errorCode: runErrorCode,
+            toolCalls,
           },
           'portfolio assistant model run completed',
         );

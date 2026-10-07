@@ -38,6 +38,29 @@ export interface SyntheticMarketParams {
   curvature: number;
 }
 
+export const EVAL_MARKET_DEFAULTS: Omit<SyntheticMarketParams, 'spotUsd' | 'nowMs'> = {
+  underlying: 'BTC',
+  basisPerYear: 0.03,
+  atmFloor: 0.4,
+  atmFrontPremium: 0.08,
+  skew: -0.15,
+  curvature: 0.6,
+};
+
+/** The market a fixture context was generated from: its spot at its generation time. */
+export function syntheticMarketForContext(context: {
+  generatedAt: number;
+  headline: { spotUsd: number | null };
+}): SyntheticMarket {
+  const spotUsd = context.headline.spotUsd;
+  if (spotUsd == null) throw new Error('fixture context has no spot to rebuild its market from');
+  return new SyntheticMarket({ ...EVAL_MARKET_DEFAULTS, spotUsd, nowMs: context.generatedAt });
+}
+
+const IV_HISTORY_TENORS_DAYS = [7, 30, 60, 90];
+// One-sided 25-delta log-moneyness is about 0.674 standard deviations.
+const DELTA25_STDEVS = 0.674;
+
 export function expiryMs(expiry: string): number {
   return Date.parse(`${expiry}T08:00:00.000Z`);
 }
@@ -260,12 +283,90 @@ export class SyntheticMarket {
     });
   }
 
+  liveExpiries(): string[] {
+    return LISTED_EXPIRIES.filter((expiry) => this.yearsToExpiry(expiry) > 0);
+  }
+
+  expiriesResponse(): unknown {
+    const expiries = this.liveExpiries();
+    return {
+      underlying: this.params.underlying,
+      expiries,
+      timestamps: expiries.map((expiry) => ({ expiry, expiryTs: expiryMs(expiry) })),
+    };
+  }
+
+  private constantMaturity(days: number): { atmIv: number; rr25d: number; bfly25d: number } {
+    const atmIv = this.params.atmFloor + this.params.atmFrontPremium * Math.exp(-days / 14);
+    const k = DELTA25_STDEVS * atmIv * Math.sqrt(days / 365);
+    const curvature = this.params.curvature * Math.sqrt(30 / Math.max(2, days));
+    return { atmIv, rr25d: 2 * this.params.skew * k, bfly25d: curvature * k * k };
+  }
+
+  // Deterministic oscillation around today's constant-maturity values; the eval has no recorded history.
+  ivHistoryResponse(windowDays: number): unknown {
+    const dayStart = Math.floor(this.params.nowMs / DAY_MS) * DAY_MS;
+    const tenors: Record<string, unknown> = {};
+    for (const tenorDays of IV_HISTORY_TENORS_DAYS) {
+      const today = this.constantMaturity(tenorDays);
+      const series = Array.from({ length: windowDays + 1 }, (_, index) => {
+        const age = windowDays - index;
+        const wave = Math.sin(age * 0.35) * 0.06 + Math.sin(age * 0.11) * 0.04;
+        return {
+          ts: age === 0 ? this.params.nowMs : dayStart - age * DAY_MS,
+          atmIv: today.atmIv * (1 + wave * (age / Math.max(1, windowDays)) * 2),
+          rr25d: today.rr25d * (1 + wave * 3),
+          bfly25d: today.bfly25d * (1 + wave),
+        };
+      });
+      const stats = (pick: (point: (typeof series)[number]) => number) => {
+        const values = series.map(pick);
+        const current = values[values.length - 1] ?? 0;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        return {
+          min,
+          max,
+          rank: max === min ? 50 : ((current - min) / (max - min)) * 100,
+          percentile: (values.filter((value) => value < current).length / values.length) * 100,
+        };
+      };
+      const atm = stats((point) => point.atmIv);
+      const rr = stats((point) => point.rr25d);
+      const fly = stats((point) => point.bfly25d);
+      tenors[`${tenorDays}d`] = {
+        current: series[series.length - 1],
+        atmRank: atm.rank,
+        atmPercentile: atm.percentile,
+        rrRank: rr.rank,
+        rrPercentile: rr.percentile,
+        flyRank: fly.rank,
+        flyPercentile: fly.percentile,
+        min: { atmIv: atm.min, rr25d: rr.min, bfly25d: fly.min },
+        max: { atmIv: atm.max, rr25d: rr.max, bfly25d: fly.max },
+        series,
+      };
+    }
+    return { underlying: this.params.underlying, windowDays, tenors };
+  }
+
   injector(): MarketInjector {
     return async (path: string) => {
       const url = new URL(path, 'http://eval.local');
+      if (url.pathname === '/api/underlyings') {
+        return { statusCode: 200, body: { underlyings: [this.params.underlying] } };
+      }
       const underlying = url.searchParams.get('underlying');
       if (underlying !== this.params.underlying) return { statusCode: 404, body: { message: 'unknown underlying' } };
       switch (url.pathname) {
+        case '/api/expiries':
+          return { statusCode: 200, body: this.expiriesResponse() };
+        case '/api/iv-history': {
+          const windowDays = Number((url.searchParams.get('window') ?? '30d').replace(/d$/, ''));
+          if (windowDays !== 30 && windowDays !== 90)
+            return { statusCode: 400, body: { message: 'window must be 30d or 90d' } };
+          return { statusCode: 200, body: this.ivHistoryResponse(windowDays) };
+        }
         case '/api/chains': {
           const expiry = url.searchParams.get('expiry') ?? '';
           if (!LISTED_EXPIRIES.includes(expiry) || this.yearsToExpiry(expiry) <= 0)

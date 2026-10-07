@@ -3,6 +3,13 @@ import { VENUE_IDS } from '@oggregator/protocol';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { recordPortfolioAssistantToolCall } from '../runtime-metrics.js';
+import {
+  type AssistantRunRegistry,
+  type AssistantToolAttribution,
+  type AssistantToolCallOutcome,
+  hashPortfolioRef,
+} from './assistant-run-registry.js';
 import { EvaluateStructureToolInputSchema, runEvaluateStructureTool } from './evaluate-structure-tool.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
@@ -50,10 +57,40 @@ function tool<Schema extends z.ZodObject>(definition: {
 }
 
 class ToolInputError extends Error {}
+class ToolTimeoutError extends ToolInputError {}
 
 function unwrap<T>(result: MarketReadResult<T>): T {
-  if (!result.ok) throw new ToolInputError(result.error);
+  if (!result.ok) {
+    throw result.timedOut ? new ToolTimeoutError(result.error) : new ToolInputError(result.error);
+  }
   return result.data;
+}
+
+export const ASSISTANT_MCP_TOOL_CALL_MESSAGE = 'assistant mcp tool call';
+const UNREGISTERED_TOOL = '(unregistered)';
+const MAX_LOGGED_TOOL_NAME_LENGTH = 80;
+const NO_ATTRIBUTION: AssistantToolAttribution = { mode: 'none' };
+
+const PortfolioRefArgumentSchema = z.object({ portfolioRef: z.string().min(1) });
+
+interface ToolExecution {
+  tool: string | null;
+  registered: boolean;
+  outcome: AssistantToolCallOutcome;
+  text: string;
+  detail: Record<string, unknown>;
+}
+
+function attributionFields(attribution: AssistantToolAttribution): Record<string, unknown> {
+  switch (attribution.mode) {
+    case 'exact':
+    case 'single_active':
+      return { attribution: attribution.mode, requestId: attribution.requestId };
+    case 'ambiguous':
+      return { attribution: attribution.mode, candidateRuns: attribution.candidateCount };
+    case 'none':
+      return { attribution: attribution.mode };
+  }
 }
 
 export function buildAssistantMcpTools(
@@ -273,7 +310,7 @@ export function buildAssistantMcpTools(
     tool({
       name: 'oggregator_evaluate_structure',
       description:
-        "Evaluate a candidate trade or hedge against the user's whole book and a risk budget. Prices each proposed leg at live executable quotes (buy at ask, sell at bid) plus venue fee estimates, then returns net cost, book-wide worst loss per expiry window (null when unbounded), worst loss before and after the trade, budget fit and headroom, P&L by horizon and spot move, and P&L at each expiry for spot moves of -20% to +20%. Pass portfolioRef from the portfolio context to include held positions server-side; to close a held leg, trade the opposite side with the same size. Use this to check any structure before recommending it. Prices come only from Oggregator quotes; a leg without an executable quote returns an error instead of a guess. No orders.",
+        "Evaluate a candidate trade or hedge against the user's whole book and a risk budget. Prices each proposed leg at live executable quotes (buy at ask, sell at bid) plus venue fee estimates, then returns net cost, book-wide worst loss (null when unbounded), best profit and breakevens per expiry window, worst loss before and after the trade, budget fit and headroom, P&L by horizon and spot move, and P&L at each expiry for spot moves of -20% to +20%. Pass portfolioRef from the portfolio context to include held positions server-side; to close a held leg, trade the opposite side with the same size. Use this to check any structure before recommending it. Prices come only from Oggregator quotes; a leg without an executable quote returns an error instead of a guess. No orders.",
       input: EvaluateStructureToolInputSchema,
       run: async (args) => unwrap(await runEvaluateStructureTool(reader, portfolio, args, now())),
     }),
@@ -313,12 +350,24 @@ function tokenMatches(header: string | undefined, token: string): boolean {
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
+export interface AssistantToolCallRecord {
+  tool: string;
+  outcome: AssistantToolCallOutcome;
+  attribution: AssistantToolAttribution;
+  durationMs: number;
+}
+
+export type AssistantToolCallObserver = (record: AssistantToolCallRecord) => void;
+
 export class AssistantMcpHandler {
   private readonly tools: Map<string, ToolDefinition>;
 
   constructor(
     tools: ToolDefinition[],
     private readonly log: FastifyBaseLogger,
+    private readonly runs: AssistantRunRegistry | null = null,
+    private readonly now: () => number = Date.now,
+    private readonly onToolCall: AssistantToolCallObserver | null = null,
   ) {
     this.tools = new Map(tools.map((definition) => [definition.name, definition]));
   }
@@ -362,52 +411,125 @@ export class AssistantMcpHandler {
   }
 
   private async callTool(params: unknown) {
+    const startedAt = this.now();
     const parsed = ToolCallParamsSchema.safeParse(params);
-    if (!parsed.success) {
-      this.logRejected(null, 'invalid_params');
-      return this.errorResult('Invalid tool call parameters.');
+    const portfolioRef = parsed.success
+      ? (PortfolioRefArgumentSchema.safeParse(parsed.data.arguments).data?.portfolioRef ?? null)
+      : null;
+    const attribution = this.runs?.attribute(portfolioRef) ?? NO_ATTRIBUTION;
+    const execution = await this.execute(parsed.success ? parsed.data : null);
+    const durationMs = Math.max(0, this.now() - startedAt);
+    const metricTool = execution.registered && execution.tool != null ? execution.tool : UNREGISTERED_TOOL;
+    this.runs?.recordToolCall(attribution, metricTool, execution.outcome);
+    this.onToolCall?.({ tool: metricTool, outcome: execution.outcome, attribution, durationMs });
+    recordPortfolioAssistantToolCall({
+      tool: metricTool,
+      outcome: execution.outcome,
+      attribution: attribution.mode,
+      durationMs,
+    });
+    const fields = {
+      tool: execution.tool,
+      outcome: execution.outcome,
+      durationMs,
+      resultChars: execution.text.length,
+      ...attributionFields(attribution),
+      ...(portfolioRef != null ? { portfolioRefHash: hashPortfolioRef(portfolioRef) } : {}),
+      ...execution.detail,
+    };
+    if (execution.outcome === 'ok') this.log.info(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
+    else if (execution.outcome === 'failed') this.log.error(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
+    else this.log.warn(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
+    return execution.outcome === 'ok'
+      ? { content: [{ type: 'text', text: execution.text }] }
+      : this.errorResult(execution.text);
+  }
+
+  private async execute(params: z.infer<typeof ToolCallParamsSchema> | null): Promise<ToolExecution> {
+    if (params == null) {
+      return this.rejected(null, false, 'Invalid tool call parameters.', { rejection: 'invalid_params' });
     }
-    const definition = this.tools.get(parsed.data.name);
+    const definition = this.tools.get(params.name);
     if (!definition) {
-      this.logRejected(parsed.data.name, 'unknown_tool');
-      return this.errorResult(`Unknown tool: ${parsed.data.name}`);
+      return this.rejected(
+        params.name.slice(0, MAX_LOGGED_TOOL_NAME_LENGTH),
+        false,
+        `Unknown tool: ${params.name}`,
+        { rejection: 'unknown_tool' },
+      );
     }
-    const args = definition.input.safeParse(parsed.data.arguments ?? {});
+    const args = definition.input.safeParse(params.arguments ?? {});
     if (!args.success) {
-      this.logRejected(definition.name, 'invalid_arguments', {
+      return this.rejected(definition.name, true, `Invalid arguments: ${z.prettifyError(args.error)}`, {
+        rejection: 'invalid_arguments',
         issues: args.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`),
       });
-      return this.errorResult(`Invalid arguments: ${z.prettifyError(args.error)}`);
     }
-    const startedAt = Date.now();
     try {
       const data = await definition.run(args.data as never);
-      this.log.info(
-        { tool: definition.name, durationMs: Date.now() - startedAt },
-        'assistant mcp tool call',
-      );
-      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+      return { tool: definition.name, registered: true, outcome: 'ok', text: JSON.stringify(data), detail: {} };
     } catch (error) {
+      if (error instanceof ToolTimeoutError) {
+        return {
+          tool: definition.name,
+          registered: true,
+          outcome: 'timeout',
+          text: error.message,
+          detail: { reason: error.message },
+        };
+      }
       if (error instanceof ToolInputError) {
-        this.logRejected(definition.name, 'input_error', {
-          durationMs: Date.now() - startedAt,
+        return this.rejected(definition.name, true, error.message, {
+          rejection: 'input_error',
           reason: error.message,
         });
-        return this.errorResult(error.message);
       }
-      this.log.error({ err: error, tool: definition.name }, 'assistant mcp tool failed');
-      return this.errorResult('The tool failed unexpectedly.');
+      return {
+        tool: definition.name,
+        registered: true,
+        outcome: 'failed',
+        text: 'The tool failed unexpectedly.',
+        detail: { err: error },
+      };
     }
   }
 
-  // Separate msg from 'assistant mcp tool call' so assistant-eval keeps counting only completed calls.
-  private logRejected(tool: string | null, outcome: string, detail: Record<string, unknown> = {}) {
-    this.log.warn({ tool, outcome, ...detail }, 'assistant mcp tool rejected');
+  private rejected(
+    tool: string | null,
+    registered: boolean,
+    text: string,
+    detail: Record<string, unknown>,
+  ): ToolExecution {
+    return { tool, registered, outcome: 'rejected_input', text, detail };
   }
 
   private errorResult(text: string) {
     return { content: [{ type: 'text', text }], isError: true };
   }
+}
+
+export const MIN_ASSISTANT_MCP_TOKEN_LENGTH = 32;
+
+export interface AssistantMcpWiring {
+  reader: AssistantMarketDataReader;
+  library: OptionsLibrary;
+  portfolio: StructureToolPortfolioAccess;
+  runs: AssistantRunRegistry | null;
+  log: FastifyBaseLogger;
+  /** Clock the structure tools evaluate at; the eval pins it to the fixture snapshot. */
+  toolClock?: () => number;
+  onToolCall?: AssistantToolCallObserver;
+}
+
+/** The one place the tool registry is wired to a handler, so production and the eval cannot drift. */
+export function createAssistantMcpHandler(wiring: AssistantMcpWiring): AssistantMcpHandler {
+  return new AssistantMcpHandler(
+    buildAssistantMcpTools(wiring.reader, wiring.library, wiring.portfolio, wiring.toolClock),
+    wiring.log,
+    wiring.runs,
+    Date.now,
+    wiring.onToolCall ?? null,
+  );
 }
 
 export interface AssistantMcpServerOptions {

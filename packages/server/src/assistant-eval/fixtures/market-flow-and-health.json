@@ -37,7 +37,12 @@
           "upsideUnbounded": false,
           "lossAtZeroSpotUsd": -1175,
           "worstLossUsd": -1175,
-          "worstLossSpotUsd": 0
+          "worstLossSpotUsd": 0,
+          "bestProfitUsd": null,
+          "bestProfitSpotUsd": null,
+          "breakevenSpotsUsd": [
+            92350
+          ]
         }
       ],
       "worstLossUsd": -1175,

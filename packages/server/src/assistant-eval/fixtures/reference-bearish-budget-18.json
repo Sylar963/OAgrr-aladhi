@@ -55,7 +55,12 @@
           "upsideUnbounded": false,
           "lossAtZeroSpotUsd": 1981.95,
           "worstLossUsd": -1912.98,
-          "worstLossSpotUsd": 87000
+          "worstLossSpotUsd": 87000,
+          "bestProfitUsd": 1981.95,
+          "bestProfitSpotUsd": 0,
+          "breakevenSpotsUsd": [
+            83363
+          ]
         },
         {
           "from": "2026-10-16",
@@ -67,7 +72,12 @@
           "upsideUnbounded": true,
           "lossAtZeroSpotUsd": 1981.95,
           "worstLossUsd": null,
-          "worstLossSpotUsd": null
+          "worstLossSpotUsd": null,
+          "bestProfitUsd": 1981.95,
+          "bestProfitSpotUsd": 0,
+          "breakevenSpotsUsd": [
+            86982
+          ]
         }
       ],
       "worstLossUsd": null,

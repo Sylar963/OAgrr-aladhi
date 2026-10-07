@@ -31,6 +31,7 @@ import {
   AssistantEvalFixtureSchema,
   fixtureContext,
 } from './assistant-eval-fixture.js';
+import { matchEvalToolCalls } from './assistant-eval-tool-log.js';
 
 const log = logger.child({ component: 'assistant-eval' });
 const execFileAsync = promisify(execFile);
@@ -38,7 +39,6 @@ const execFileAsync = promisify(execFile);
 const FIXTURE_DIRECTORY = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const DEFAULT_OUT_DIRECTORY = fileURLToPath(new URL('../../.eval-out/', import.meta.url));
 const TOOL_LOG_SETTLE_MS = 1_500;
-const TOOL_CALL_MESSAGE = 'assistant mcp tool call';
 
 const ArgsSchema = z.object({
   fixture: z.array(z.string().min(1)).default([]),
@@ -50,12 +50,6 @@ const ArgsSchema = z.object({
   regrade: z.string().min(1).optional(),
 });
 type EvalArgs = z.infer<typeof ArgsSchema>;
-
-const JournalLineSchema = z.object({
-  msg: z.string(),
-  time: z.number(),
-  tool: z.string().optional(),
-});
 
 interface LoadedFixtures {
   fixtures: AssistantEvalFixture[];
@@ -173,6 +167,7 @@ function evalConfiguration(env: NodeJS.ProcessEnv, timeoutMs: number | undefined
 
 async function observeTools(
   args: EvalArgs,
+  portfolioRef: string,
   startedAt: number,
   finishedAt: number,
 ): Promise<AssistantEvalToolObservation> {
@@ -197,23 +192,17 @@ async function observeTools(
       ],
       { maxBuffer: 32 * 1024 * 1024 },
     );
-    const tools: string[] = [];
-    for (const line of stdout.split('\n')) {
-      if (!line.includes(TOOL_CALL_MESSAGE)) continue;
-      let json: unknown;
-      try {
-        json = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const parsed = JournalLineSchema.safeParse(json);
-      if (!parsed.success || parsed.data.msg !== TOOL_CALL_MESSAGE || parsed.data.tool == null) continue;
-      if (parsed.data.time >= startedAt && parsed.data.time <= finishedAt + TOOL_LOG_SETTLE_MS)
-        tools.push(parsed.data.tool);
-    }
+    const match = matchEvalToolCalls(stdout, {
+      startedAt,
+      until: finishedAt + TOOL_LOG_SETTLE_MS,
+      portfolioRef,
+    });
     return {
-      observedTools: tools,
-      evidence: `backend journal (${args['journal-unit']}) during the request window; concurrent users could add calls`,
+      observedTools: match.tools,
+      evidence:
+        `backend journal (${args['journal-unit']}): ${match.matchedByRef} call(s) matched by fixture portfolioRef, ` +
+        `${match.matchedByWindow} by request window only (concurrent users could add calls), ` +
+        `${match.excludedOtherRuns} excluded as other runs`,
     };
   } catch {
     return { observedTools: null, evidence: 'backend journal unavailable, tool calls unverified' };
@@ -250,7 +239,7 @@ async function runFixture(
         : { code: 'unexpected', message: caught instanceof Error ? caught.message : 'unknown error' };
   }
   const finishedAt = Date.now();
-  const tools = await observeTools(args, startedAt, finishedAt);
+  const tools = await observeTools(args, fixture.context.portfolioRef, startedAt, finishedAt);
   const grade = gradeAnswer(fixture.expect, answer, tools, heldLegs(fixture));
   const judged =
     judge == null || answer === ''

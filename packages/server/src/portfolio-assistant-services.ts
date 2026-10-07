@@ -7,11 +7,12 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import {
-  AssistantMcpHandler,
-  buildAssistantMcpTools,
+  createAssistantMcpHandler,
+  MIN_ASSISTANT_MCP_TOKEN_LENGTH,
   startAssistantMcpServer,
 } from './assistant-market/assistant-mcp-server.js';
 import { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
+import { AssistantRunRegistry } from './assistant-market/assistant-run-registry.js';
 import { OptionsLibrary } from './assistant-market/options-library.js';
 import { type PortfolioRefScope, PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import { HermesPortfolioAssistantGateway } from './hermes-portfolio-assistant-gateway.js';
@@ -41,6 +42,7 @@ export const optionsLibrary = new OptionsLibrary(
 // The MCP listener runs in this process, so the refs minted for chat contexts
 // resolve here without persistence.
 const portfolioRefStore = new PortfolioRefStore();
+const assistantRuns = new AssistantRunRegistry();
 let assistantMcpServer: FastifyInstance | null = null;
 
 async function resolveHeldLegs(scope: PortfolioRefScope) {
@@ -73,6 +75,7 @@ export const portfolioAssistantConversationService = new PortfolioAssistantConve
   promptBuilder,
   gateway,
   usageLimiter,
+  assistantRuns,
 );
 
 let retentionTimer: ReturnType<typeof setInterval> | null = null;
@@ -111,12 +114,10 @@ export function bindAssistantMarketData(app: FastifyInstance): void {
   });
 }
 
-const MIN_MCP_TOKEN_LENGTH = 32;
-
 export async function startAssistantMcpFromEnv(log: FastifyBaseLogger): Promise<void> {
   const token = process.env['OGG_ASSISTANT_MCP_TOKEN']?.trim();
   if (!token || assistantMcpServer) return;
-  if (token.length < MIN_MCP_TOKEN_LENGTH) {
+  if (token.length < MIN_ASSISTANT_MCP_TOKEN_LENGTH) {
     log.error('OGG_ASSISTANT_MCP_TOKEN is too short; assistant MCP server not started');
     return;
   }
@@ -126,13 +127,13 @@ export async function startAssistantMcpFromEnv(log: FastifyBaseLogger): Promise<
       token,
       port,
       log,
-      handler: new AssistantMcpHandler(
-        buildAssistantMcpTools(assistantMarketDataReader, optionsLibrary, {
-          refs: portfolioRefStore,
-          resolveHeldLegs,
-        }),
+      handler: createAssistantMcpHandler({
+        reader: assistantMarketDataReader,
+        library: optionsLibrary,
+        portfolio: { refs: portfolioRefStore, resolveHeldLegs },
+        runs: assistantRuns,
         log,
-      ),
+      }),
     });
     log.info({ port }, 'assistant MCP server listening on loopback');
   } catch (error) {

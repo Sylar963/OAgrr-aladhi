@@ -39,7 +39,12 @@
           "upsideUnbounded": true,
           "lossAtZeroSpotUsd": 78100,
           "worstLossUsd": null,
-          "worstLossSpotUsd": null
+          "worstLossSpotUsd": null,
+          "bestProfitUsd": 78100,
+          "bestProfitSpotUsd": 0,
+          "breakevenSpotsUsd": [
+            78620
+          ]
         },
         {
           "from": "2026-10-30",
@@ -52,7 +57,14 @@
           "upsideUnbounded": true,
           "lossAtZeroSpotUsd": 78100,
           "worstLossUsd": null,
-          "worstLossSpotUsd": null
+          "worstLossSpotUsd": null,
+          "bestProfitUsd": 78100,
+          "bestProfitSpotUsd": 0,
+          "breakevenSpotsUsd": [
+            78317,
+            89810,
+            97553
+          ]
         },
         {
           "from": "2026-11-27",
@@ -64,7 +76,14 @@
           "upsideUnbounded": true,
           "lossAtZeroSpotUsd": 78100,
           "worstLossUsd": null,
-          "worstLossSpotUsd": null
+          "worstLossSpotUsd": null,
+          "bestProfitUsd": null,
+          "bestProfitSpotUsd": null,
+          "breakevenSpotsUsd": [
+            78100,
+            93800,
+            96200
+          ]
         }
       ],
       "worstLossUsd": null,

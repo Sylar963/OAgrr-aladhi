@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ExpiryRiskWindowSchema,
   PositionLegSchema,
   VolShockScenarioSchema,
   PortfolioWsClientMessageSchema,
@@ -128,5 +129,25 @@ describe('PortfolioWsServerMessageSchema', () => {
       PortfolioWsServerMessageSchema.safeParse({ type: 'hello', accountId: 'a1', serverTime: 1.5 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('ExpiryRiskWindowSchema', () => {
+  it('parses windows from servers that predate the payoff fields', () => {
+    const window = ExpiryRiskWindowSchema.parse({
+      from: '2026-10-07T12:00:00.000Z',
+      until: '2026-10-16',
+      liveLegIds: ['a'],
+      netCallSize: 0,
+      upsideUnbounded: false,
+      lossAtZeroSpotUsd: -100,
+      worstLossUsd: -100,
+      worstLossSpotUsd: 0,
+    });
+    expect(window).toMatchObject({
+      bestProfitUsd: null,
+      bestProfitSpotUsd: null,
+      breakevenSpotsUsd: [],
+    });
   });
 });

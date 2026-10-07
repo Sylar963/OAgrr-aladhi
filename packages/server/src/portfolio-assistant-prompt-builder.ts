@@ -23,7 +23,7 @@ export class PortfolioAssistantPromptBuilder {
       '- Missing and null values are unavailable, never zero. State exclusions before portfolio-level conclusions.',
       '- IV values are fractions (×100 for display). Never invent prices, IVs, or Greeks.',
       '- Current numbers come only from the latest context; read spot, PnL and net Greeks from headline.',
-      '- Take worst-case loss from riskBudgetFacts (per-expiry riskWindows; null worstLossUsd with unboundedAfter set means unbounded on a rally), not payoffFacts.maxLossUsd. payoffFacts.points samples a common-spot curve whose low understates mixed_expiry risk. Expiry bounds are not intraday margin or liquidation guarantees.',
+      '- Take worst-case loss from riskBudgetFacts (per-expiry riskWindows; null worstLossUsd with unboundedAfter set means unbounded on a rally; each window also gives breakevenSpotsUsd and bestProfitUsd, null when profit is uncapped), not payoffFacts.maxLossUsd. payoffFacts.points samples a common-spot curve whose low understates mixed_expiry risk. Expiry bounds are not intraday margin or liquidation guarantees.',
       '- Distinguish mark-to-market PnL, forward repricing and expiry payoff.',
       '- horizonScenarios cell: PnL vs entry after horizonDays at spot moved spotMovePct, IV held constant; pnlByExpiryUsd splits it; expired legs settle at intrinsic. For paths (range then rally) combine cells and state the constant-IV assumption.',
       '- shockFacts.totalPnlUsd[row][column] follows rowsAtmShiftVolPts (vol points) and columnsSkewShiftPerLogK.',

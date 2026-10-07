@@ -34,6 +34,9 @@ export {
 } from './pnl-curve.js';
 export { analyzeExpiryStructure, type ExpiryRiskWindow } from './expiry-structure.js';
 export {
+  DEFAULT_TAKER_FEE_PREMIUM_CAP,
+  DEFAULT_TAKER_FEE_RATE,
+  defaultTakerFeeUsd,
   evaluateStructure,
   STRUCTURE_ASSUMPTIONS,
   type EvaluatedProposedLeg,
@@ -48,6 +51,24 @@ export {
   type StructureRiskSummary,
   type StructureScenarioCell,
 } from './structure-evaluator.js';
+export {
+  findUncoveredShorts,
+  searchStructures,
+  STRUCTURE_SEARCH_MAX_CANDIDATES,
+  STRUCTURE_SEARCH_MAX_LIMIT,
+  STRUCTURE_SEARCH_MAX_WIDTH,
+  STRUCTURE_SEARCH_STRIKE_BAND,
+  type StructureSearchCandidate,
+  type StructureSearchContract,
+  type StructureSearchFamily,
+  type StructureSearchInput,
+  type StructureSearchLeg,
+  type StructureSearchQuoteSide,
+  type StructureSearchResult,
+  type StructureSearchStatus,
+  type StructureSearchView,
+  type UncoveredShort,
+} from './structure-search.js';
 export {
   foldManualLeg,
   findExistingForInput,

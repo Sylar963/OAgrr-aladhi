@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMcpHandler, buildAssistantMcpTools } from './assistant-mcp-server.js';
-import type { HeldLegsWithMarks } from './evaluate-structure-tool.js';
+import type { HeldLegsWithMarks } from './structure-tool-support.js';
 import { AssistantMarketDataReader } from './market-data-reader.js';
 import { OptionsLibrary } from './options-library.js';
 import { PORTFOLIO_REF_TTL_MS, PortfolioRefStore } from './portfolio-ref.js';
@@ -187,9 +187,15 @@ describe('oggregator_evaluate_structure', () => {
       riskBudgetUsd: 18,
     });
 
-    expect(data.legs[0]).toMatchObject({ venue: 'okx', executablePriceUsd: 3_090, feeSource: 'default', feeUsd: 0 });
+    // OKX gives no fee estimate: 0.05% of the 84,000 underlying (42) is below 12.5% of the 3,090 ask.
+    expect(data.legs[0]).toMatchObject({
+      venue: 'okx',
+      executablePriceUsd: 3_090,
+      feeSource: 'default_estimate',
+      feeUsd: 42,
+    });
     expect(data.combined.upsideUnbounded).toBe(false);
-    expect(data.combined.worstLossUsd).toBeCloseTo(-1_050 - (3_090 - 3_031.95), 2);
+    expect(data.combined.worstLossUsd).toBeCloseTo(-1_050 - (3_090 - 3_031.95) - 42, 2);
     expect(data.budget).toMatchObject({ fits: false });
     expect(data.notes.some((note: string) => note.includes('no venue fee estimate'))).toBe(true);
   });

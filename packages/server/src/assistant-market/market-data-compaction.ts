@@ -197,13 +197,23 @@ function finiteOrNull(value: number | null | undefined): number | null {
 // executable side, its venue fee estimate and the quote timestamp.
 export function extractExecutableQuotes(
   chain: ChainResponse,
-  options: { strikes: number[]; nowMs: number; maxQuoteAgeMs?: number | undefined },
+  options: {
+    strikes: number[];
+    nowMs: number;
+    maxQuoteAgeMs?: number | undefined;
+    /** Also include every strike within this fraction of the forward (index when no forward). */
+    forwardBand?: number | undefined;
+  },
 ): ExecutableQuoteSet {
   const maxQuoteAgeMs = options.maxQuoteAgeMs ?? DEFAULT_MAX_QUOTE_AGE_MS;
   const wanted = new Set(options.strikes);
+  const anchor = finiteOrNull(chain.stats.forwardPriceUsd) ?? finiteOrNull(chain.stats.indexPriceUsd);
+  const band = options.forwardBand;
+  const inBand = (strike: number) =>
+    band != null && anchor != null && anchor > 0 && Math.abs(strike / anchor - 1) <= band;
   const quotes: ExecutableQuoteSet['quotes'] = [];
   for (const row of chain.strikes) {
-    if (!wanted.has(row.strike)) continue;
+    if (!wanted.has(row.strike) && !inBand(row.strike)) continue;
     for (const right of ['call', 'put'] as const) {
       const venues = Object.entries(row[right].venues)
         .filter(([, quote]) => quote.asOfMs == null || options.nowMs - quote.asOfMs <= maxQuoteAgeMs)

@@ -3,13 +3,10 @@ import { VENUE_IDS } from '@oggregator/protocol';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import {
-  EvaluateStructureToolInputSchema,
-  runEvaluateStructureTool,
-  type StructureToolPortfolioAccess,
-} from './evaluate-structure-tool.js';
+import { EvaluateStructureToolInputSchema, runEvaluateStructureTool } from './evaluate-structure-tool.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
+import type { StructureToolPortfolioAccess } from './structure-tool-support.js';
 
 const SERVER_INFO = { name: 'oggregator-market', version: '1.0.0' };
 const FALLBACK_PROTOCOL_VERSION = '2025-06-18';

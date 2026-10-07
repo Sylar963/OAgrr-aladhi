@@ -350,6 +350,7 @@ export class AssistantMarketDataReader {
     underlying: string,
     expiry: string,
     strikes: number[],
+    options: { forwardBand?: number } = {},
   ): Promise<MarketReadResult<ExecutableQuoteSet>> {
     const u = encodeURIComponent(normalizeUnderlying(underlying));
     const result = await this.get(
@@ -359,7 +360,11 @@ export class AssistantMarketDataReader {
     if (!result.ok) return result;
     return {
       ok: true,
-      data: extractExecutableQuotes(result.data, { strikes, nowMs: this.now() }),
+      data: extractExecutableQuotes(result.data, {
+        strikes,
+        nowMs: this.now(),
+        forwardBand: options.forwardBand,
+      }),
     };
   }
 

@@ -34,6 +34,21 @@ export {
 } from './pnl-curve.js';
 export { analyzeExpiryStructure, type ExpiryRiskWindow } from './expiry-structure.js';
 export {
+  evaluateStructure,
+  STRUCTURE_ASSUMPTIONS,
+  type EvaluatedProposedLeg,
+  type EvaluateStructureInput,
+  type IncrementalBasis,
+  type ProposedLegQuote,
+  type ProposedStructureLeg,
+  type StructureBudget,
+  type StructureEvaluation,
+  type StructureEvaluationStatus,
+  type StructurePayoffAtExpiry,
+  type StructureRiskSummary,
+  type StructureScenarioCell,
+} from './structure-evaluator.js';
+export {
   foldManualLeg,
   findExistingForInput,
   naturalKeyOf,

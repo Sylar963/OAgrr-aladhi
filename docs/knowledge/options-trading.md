@@ -394,6 +394,16 @@ are not evidence. Model EV is signed entry cash less costs plus expected net int
 pricing comparison, not a physical forecast. It omits smile dynamics, jumps, and model
 parameter uncertainty. Positive model EV may be a model artifact.
 
+**Ranking (since 2026-10-07):** first by whether the pair fits the budget, then by `edgeRatio`,
+which is model EV ÷ the standard deviation of expiry P&L. That standard deviation is q times
+the closed-form standard deviation of the lognormal price clamped to [L, H], using the
+breakeven IV. Raw-dollar EV, and EV ÷ max loss, both put lopsided pairs first. Examples are
+credits of $0–6 against $700 risk at 94–99% probability, and debits risking $9 for $490 at 1–2%.
+In those pairs almost no money changes hands, so the costs look small. With no forecast, every
+EV is roughly −costs, and the ratio then measures friction per unit of outcome risk. It favors
+wider pairs up to the loss budget, because per-leg costs do not grow with width. This is a
+choice for ordering rows, not a sourced rule. A higher ratio is not a recommendation (K2).
+
 Alpha currently shows:
 
 - Call/put credit and debit controls in the original builder.

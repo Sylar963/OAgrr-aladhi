@@ -184,6 +184,23 @@ describe('PortfolioRuntime', () => {
     runtime.dispose();
   });
 
+  it('exposes the filtered legs with their live marks', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    store.upsert(ACCOUNT, { ...makeLeg(3_000, 1, 'eth-leg'), underlying: 'ETH' });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+      underlyingFilter: 'BTC',
+    });
+    const legs = runtime.legsWithMarks();
+    expect(legs?.map(({ leg }) => leg.legId)).toEqual(['leg-70000-1']);
+    expect(legs?.[0]?.mark.iv).toBe(SIGMA);
+    runtime.dispose();
+  });
+
   it('dispose stops emission', () => {
     const store = new InMemoryPositionStore();
     const runtime = new PortfolioRuntime({

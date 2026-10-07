@@ -232,6 +232,15 @@ export class PortfolioRuntime {
     }
   }
 
+  legsWithMarks(): Array<{ leg: PositionLeg; mark: MarkContext }> | null {
+    try {
+      return this.collectLegsWithMarks().withMarks;
+    } catch (err: unknown) {
+      logger.error({ err, accountId: this.accountId }, 'portfolio legs with marks failed');
+      return null;
+    }
+  }
+
   dispose(): void {
     this.disposed = true;
     if (this.pushTimer != null) {

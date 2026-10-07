@@ -244,7 +244,10 @@ export class PortfolioAssistantConversationService {
         return;
       }
 
-      const history = historyPage.messages.filter((message) => message.status !== 'streaming');
+      const conversationMessages = this.promptBuilder.buildPortfolioAssistantConversationMessages(
+        historyPage.messages,
+        input.message,
+      );
       telemetry = {
         requestId: crypto.randomUUID(),
         userIdHash: createHash('sha256').update(user.id).digest('hex'),
@@ -253,7 +256,7 @@ export class PortfolioAssistantConversationService {
         portfolioGeneratedAt: context.generatedAt,
         positionCount: context.positions.length,
         contextCharacterCount: contextMessage.length,
-        historyMessageCount: history.length,
+        historyMessageCount: conversationMessages.length - 1,
         startedAtMs: this.now(),
       };
       releaseRuntimeMetrics = beginPortfolioAssistantRuntimeRequest();
@@ -263,10 +266,7 @@ export class PortfolioAssistantConversationService {
           threadId,
           systemInstructions: this.promptBuilder.buildPortfolioAssistantSystemInstructions(),
           contextMessage,
-          conversationMessages: this.promptBuilder.buildPortfolioAssistantConversationMessages(
-            history,
-            input.message,
-          ),
+          conversationMessages,
         },
         signal,
       )) {

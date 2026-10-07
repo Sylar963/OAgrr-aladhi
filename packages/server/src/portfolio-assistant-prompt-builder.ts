@@ -47,12 +47,32 @@ export class PortfolioAssistantPromptBuilder {
   ): PortfolioAssistantModelMessage[] {
     const bounded: PortfolioAssistantModelMessage[] = [];
     let characters = question.length;
-    for (const message of [...history].reverse().slice(0, 20)) {
-      if (characters + message.content.length > 24_000) break;
-      bounded.unshift({ role: message.role, content: message.content });
-      characters += message.content.length;
+    for (const message of selectReplayableMessages(history).reverse().slice(0, 20)) {
+      const content =
+        message.role === 'assistant'
+          ? `${snapshotAnnotation(message.portfolioGeneratedAt)}\n${message.content}`
+          : message.content;
+      if (characters + content.length > 24_000) break;
+      bounded.unshift({ role: message.role, content });
+      characters += content.length;
     }
     bounded.push({ role: 'user', content: question });
     return bounded;
   }
+}
+
+// An unanswered question is dropped with its unfinished reply so the replay stays in complete
+// question/answer pairs; the user's next message is usually a retry of it.
+function selectReplayableMessages(history: PortfolioAssistantMessage[]): PortfolioAssistantMessage[] {
+  return history.filter((message, index) => {
+    if (message.status !== 'complete') return false;
+    const next = history[index + 1];
+    return !(message.role === 'user' && next?.role === 'assistant' && next.status !== 'complete');
+  });
+}
+
+function snapshotAnnotation(portfolioGeneratedAt: number | null): string {
+  return portfolioGeneratedAt === null
+    ? '[Earlier answer from an older portfolio snapshot. Its numbers may be outdated.]'
+    : `[Earlier answer from portfolio snapshot ${new Date(portfolioGeneratedAt).toISOString()}. Its numbers may be outdated.]`;
 }

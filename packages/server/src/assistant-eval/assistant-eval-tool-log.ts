@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { ASSISTANT_MCP_TOOL_CALL_MESSAGE } from '../assistant-market/assistant-mcp-server.js';
 import { hashPortfolioRef } from '../assistant-market/assistant-run-registry.js';
+import type { AssistantEvalToolObservation } from './assistant-eval-checks.js';
+import type { EvalRunToolCall, EvalRunToolUsage } from './eval-mcp-server.js';
 
 const ToolCallLineSchema = z.object({
   msg: z.literal(ASSISTANT_MCP_TOOL_CALL_MESSAGE),
@@ -64,4 +66,50 @@ export function matchEvalToolCalls(lines: string, window: ToolLogWindow): ToolLo
     match.tools.push(tool);
   }
   return match;
+}
+
+export function registryObservation(usage: EvalRunToolUsage): AssistantEvalToolObservation {
+  const { summary, calls } = usage;
+  const exact = calls.filter((call) => call.attribution === 'exact').length;
+  const notOk = calls.filter((call) => call.outcome !== 'ok').length;
+  return {
+    observedTools: calls.filter((call) => call.outcome === 'ok').map((call) => call.tool),
+    evidence:
+      `eval MCP run registry: ${summary.total} call(s), ${exact} attributed by portfolioRef, ` +
+      `${summary.total - exact} as the only run in flight; ${notOk} not ok ` +
+      `(${summary.rejected} rejected, ${summary.failed} failed, ${summary.timedOut} timed out)` +
+      (usage.unattributedDuringRun > 0 ? `; ${usage.unattributedDuringRun} unattributed call(s) overlapped` : ''),
+    unattributedCalls: usage.unattributedDuringRun,
+  };
+}
+
+
+const SHORT_TOOL_PREFIX = /^oggregator_/;
+
+/** "structure_search ×3 (1 rejected_input)" per tool, over every sample of one fixture. */
+export interface ToolUsageRecord {
+  tools: AssistantEvalToolObservation;
+  // Exact per-call records from the eval MCP server; null when tools came from the journal.
+  toolCalls: EvalRunToolCall[] | null;
+}
+
+export function toolUsageCell(runs: ToolUsageRecord[]): string {
+  if (runs.every((run) => run.toolCalls == null)) {
+    const tools = runs.flatMap((run) => run.tools.observedTools ?? []);
+    return tools.length === 0 ? '–' : `${[...new Set(tools)].map((tool) => tool.replace(SHORT_TOOL_PREFIX, '')).join(', ')} (journal)`;
+  }
+  const byTool = new Map<string, { total: number; notOk: Map<string, number> }>();
+  for (const call of runs.flatMap((run) => run.toolCalls ?? [])) {
+    const entry = byTool.get(call.tool) ?? { total: 0, notOk: new Map<string, number>() };
+    entry.total += 1;
+    if (call.outcome !== 'ok') entry.notOk.set(call.outcome, (entry.notOk.get(call.outcome) ?? 0) + 1);
+    byTool.set(call.tool, entry);
+  }
+  if (byTool.size === 0) return 'none';
+  return [...byTool.entries()]
+    .map(([tool, entry]) => {
+      const failures = [...entry.notOk.entries()].map(([outcome, count]) => `${count} ${outcome}`).join(', ');
+      return `${tool.replace(SHORT_TOOL_PREFIX, '')} ×${entry.total}${failures ? ` (${failures})` : ''}`;
+    })
+    .join('; ');
 }

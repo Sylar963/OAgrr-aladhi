@@ -104,8 +104,9 @@ export function matchExpectedNumbers(
 }
 
 const ACTION_VERBS = String.raw`buy(?:ing|s)?|bought|sell(?:ing|s)?|sold|add(?:ing|s)?|open(?:ing|s)?|purchas(?:e|es|ing)|writ(?:e|es|ing)`;
-// "long"/"short" usually describe the held book ("Long 0.5 $90,000 call"); only the verb uses count.
-const POSITION_VERBS = String.raw`(?:go(?:es|ing)?|get(?:s|ting)?)\s+(?:long|short)\b|\b(?:long|short)\s+the\b`;
+// "long"/"short" usually describe the held book ("you are short the Oct 30 call", "Long 0.5
+// $90,000 call"); only "go/get long" and an imperative "Short the …" opening a clause count.
+const POSITION_VERBS = String.raw`(?:go(?:es|ing)?|get(?:s|ting)?)\s+(?:long|short)\b|(?:^|[.!?:;]\s+|[-*•]\s+|\d+\.\s+|\|\s*)(?:long|short)\s+the\b`;
 const ACTION_PATTERN = new RegExp(String.raw`\b(?:${ACTION_VERBS})\b|${POSITION_VERBS}`, 'i');
 const RIGHT_PATTERN = /\b(calls?|puts?)\b|\d(?:k|,\d{3})?\s?[CP]\b/i;
 const STRIKE_PATTERN = /(?<![\w.])\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d{2,3}(?:\.\d+)?k\b|(?<![\w.,])\d{4,6}(?![\d-])/i;

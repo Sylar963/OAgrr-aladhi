@@ -137,6 +137,88 @@ describe('new-leg detection', () => {
   });
 });
 
+// Answer snippets below are verbatim from packages/server/.eval-out runs unless marked constructed.
+const CONDOR_HELD = [
+  { expiry: '2026-10-30', strike: 74_000, optionRight: 'put' as const },
+  { expiry: '2026-10-30', strike: 78_000, optionRight: 'put' as const },
+  { expiry: '2026-10-30', strike: 90_000, optionRight: 'call' as const },
+  { expiry: '2026-10-30', strike: 94_000, optionRight: 'call' as const },
+];
+const BEAR_PUT_HELD = [
+  { expiry: '2026-10-30', strike: 82_000, optionRight: 'put' as const },
+  { expiry: '2026-10-30', strike: 76_000, optionRight: 'put' as const },
+];
+
+describe('action verb forms', () => {
+  it('reads "buying" as a proposal (Run A reference-cap-upside, Run B budget-long-vol-condor)', () => {
+    const capUpside =
+      'Buying one Oct 30 $90,000 call against your short Oct 30 $85,000 call is the tightest cover shown under your **$1,500** extra-cost limit.';
+    expect(detectProposedStructure(capUpside, REFERENCE_HELD)).toMatchObject({ proposed: true, newLeg: true });
+    const condor =
+      'Consider buying 0.1 BTC each of the Oct 30 $84,000 call and put. The indicative asks are $3,576.12 and $3,531.15 per BTC, respectively.';
+    expect(detectProposedStructure(condor, CONDOR_HELD)).toMatchObject({ proposed: true, newLeg: true });
+  });
+
+  it('reads "go long" and "short the" as verbs (constructed: no saved answer uses them)', () => {
+    expect(detectProposedStructure('Go long the Oct 30 $90,000 call for $1,361.61.', REFERENCE_HELD)).toMatchObject({
+      proposed: true,
+      newLeg: true,
+    });
+    expect(detectProposedStructure('- Short the Nov 27 $78,000 put against it.', BEAR_PUT_HELD).newLeg).toBe(true);
+  });
+
+  it('does not read a held-book "Long 0.5 … call" row as a proposal (Run 02-58 horizon-minus10-7d)', () => {
+    const heldTable = [
+      '| Expiry | Position | Projected P&L |',
+      '|---|---|---:|',
+      '| Oct 30 | Long $80,000 put | **+$4,111.19** |',
+      '| Nov 27 | Short $95,000 call | **+$1,389.02** |',
+      '| Dec 25 | Long 0.5 $90,000 call | **−$1,465.01** |',
+    ].join('\n');
+    expect(detectProposedStructure(heldTable).proposed).toBe(false);
+  });
+});
+
+describe('table header option right', () => {
+  // Run 2026-10-07T05-04-30-279Z budget-bullish-bear-put-spread: the right is only in the header.
+  const headerRightTable = [
+    '### Candidates to check',
+    '',
+    '| Oct 30 calls | Indicative buy ask | Indicative sell bid |',
+    '|---|---:|---:|',
+    '| Buy $90,000 / sell $94,000 | $1,361.61 | $610.51 |',
+    '| Buy $92,000 / sell $96,000 | $940.02 | $405.20 |',
+  ].join('\n');
+
+  it('applies a "calls" header to rows that only carry strikes', () => {
+    expect(detectProposedStructure(headerRightTable, BEAR_PUT_HELD)).toMatchObject({
+      proposed: true,
+      inTable: true,
+      newLeg: true,
+      evidence: '| Oct 30 calls | Indicative buy ask | Indicative sell bid | → | Buy $90,000 / sell $94,000 | $1,361.61 | $610.51 |',
+    });
+    const grade = gradeAnswer(
+      expectation({ mustProposeStructure: true, requireNewLeg: true }),
+      headerRightTable,
+      NO_TOOLS,
+      BEAR_PUT_HELD,
+    );
+    expect(grade.checks.find((check) => check.check === 'structure')?.status).toBe('pass');
+  });
+
+  it('keeps requireNewLeg: a header right plus held strikes and expiry is still only held legs', () => {
+    const closing = ['| Oct 30 calls | Action |', '|---|---|', '| $85,000 | Buy back |'].join('\n');
+    expect(detectProposedStructure(closing, REFERENCE_HELD)).toMatchObject({ proposed: true, newLeg: false });
+    const grade = gradeAnswer(
+      expectation({ mustProposeStructure: true, requireNewLeg: true }),
+      closing,
+      NO_TOOLS,
+      REFERENCE_HELD,
+    );
+    expect(grade.checks.find((check) => check.check === 'structure')?.status).toBe('fail');
+  });
+});
+
 describe('banned phrases', () => {
   it('matches ellipsis wildcards and curly quotes', () => {
     expect(bannedPhrasePattern('my earlier … were wrong').test('My earlier spot and PnL figures were wrong')).toBe(true);

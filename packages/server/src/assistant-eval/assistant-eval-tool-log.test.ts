@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { hashPortfolioRef } from '../assistant-market/assistant-run-registry.js';
-import { matchEvalToolCalls } from './assistant-eval-tool-log.js';
+import { matchEvalToolCalls, toolUsageCell } from './assistant-eval-tool-log.js';
 
 const FIXTURE_REF = 'pref_evalFixtureNotResolvable';
 const PRODUCT_REF = 'pref_QUFBQUFBQUFBQUFBQUFBQQ';
@@ -49,5 +49,31 @@ describe('matchEvalToolCalls', () => {
       matchedByWindow: 2,
       excludedOtherRuns: 1,
     });
+  });
+});
+
+describe('toolUsageCell', () => {
+  const tools = { observedTools: [], evidence: '' };
+
+  it('counts exact calls per tool with non-ok outcomes across samples', () => {
+    expect(
+      toolUsageCell([
+        {
+          tools,
+          toolCalls: [
+            { tool: 'oggregator_structure_search', outcome: 'ok', attribution: 'exact' },
+            { tool: 'oggregator_evaluate_structure', outcome: 'rejected_input', attribution: 'exact' },
+          ],
+        },
+        { tools, toolCalls: [{ tool: 'oggregator_structure_search', outcome: 'ok', attribution: 'exact' }] },
+      ]),
+    ).toBe('structure_search ×2; evaluate_structure ×1 (1 rejected_input)');
+    expect(toolUsageCell([{ tools, toolCalls: [] }])).toBe('none');
+  });
+
+  it('falls back to journal tool names', () => {
+    expect(
+      toolUsageCell([{ tools: { observedTools: ['oggregator_trade_flow'], evidence: '' }, toolCalls: null }]),
+    ).toBe('trade_flow (journal)');
   });
 });

@@ -169,3 +169,35 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.modeToggle {
+  display: inline-flex;
+  border: 1px solid #243041;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.modeButton {
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font: 10px 'IBM Plex Mono', monospace;
+  cursor: pointer;
+}
+
+.modeButton + .modeButton {
+  border-left: 1px solid #243041;
+}
+
+.modeButton[data-active] {
+  background: rgba(167, 139, 250, 0.16);
+  color: #ede9fe;
+}

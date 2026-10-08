@@ -1,9 +1,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExpiryRiskWindow, PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
 
 import PortfolioPnlCurve from './PortfolioPnlCurve';
+
+vi.mock('./BreakevenTaChart', () => ({
+  TA_UNDERLYINGS: ['BTC', 'ETH'],
+  default: (props: { underlying: string; portfolioBreakEvensUsd: number[] }) => (
+    <div data-testid="ta-chart">
+      {props.underlying} {props.portfolioBreakEvensUsd.join(',')}
+    </div>
+  ),
+}));
 
 function riskWindow(partial: Partial<ExpiryRiskWindow> & Pick<ExpiryRiskWindow, 'from' | 'until'>): ExpiryRiskWindow {
   return {
@@ -40,7 +49,10 @@ function curve(partial: Partial<PortfolioPnlCurveData>): PortfolioPnlCurveData {
   };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 describe('PortfolioPnlCurve', () => {
   it('names the expiry after which upside loss is unbounded', () => {
@@ -120,5 +132,16 @@ describe('PortfolioPnlCurve', () => {
 
     fireEvent.pointerLeave(svg);
     expect(screen.queryByTestId('pnl-hover')).toBeNull();
+  });
+
+  it('switches to the TA view with the book underlying and portfolio break-evens', () => {
+    render(<PortfolioPnlCurve forwardDays={0} curve={curve({ underlying: 'ETH', breakEvenPricesUsd: [3_100, 3_900] })} />);
+    expect(screen.queryByTestId('ta-chart')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'TA V2' }));
+
+    expect(screen.getByTestId('ta-chart').textContent).toBe('ETH 3100,3900');
+    expect(screen.queryByText('Now')).toBeNull();
+    expect(localStorage.getItem('portfolioPnlCurveMode')).toBe('ta');
   });
 });

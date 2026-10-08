@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 import type { PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
 import { formatExpiry } from '@lib/format';
 
+import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
 import styles from './PortfolioPnlCurve.module.css';
 
 interface Props {
@@ -17,6 +18,19 @@ const WIDTH = 720;
 const HEIGHT = 280;
 const PADDING = { top: 34, right: 16, bottom: 44, left: 64 };
 const TOOLTIP_WIDTH = 150;
+const MODE_STORAGE_KEY = 'portfolioPnlCurveMode';
+type CurveMode = 'payoff' | 'ta';
+
+function loadMode(): CurveMode {
+  try {
+    if (localStorage.getItem(MODE_STORAGE_KEY) === 'ta') return 'ta';
+  } catch {}
+  return 'payoff';
+}
+
+function isTaUnderlying(value: string | null): value is TaUnderlying {
+  return value != null && (TA_UNDERLYINGS as readonly string[]).includes(value);
+}
 
 function fmtPrice(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
@@ -101,6 +115,8 @@ function emptyMessage(status: PortfolioPnlCurveData['status']): string {
 export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason }: Props) {
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
+  const [mode, setMode] = useState<CurveMode>(loadMode);
+  const [taUnderlying, setTaUnderlying] = useState<TaUnderlying | null>(null);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
   useEffect(() => {
@@ -189,19 +205,60 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
     setHoverPrice(chart.fromX(svgX));
   };
 
+  const selectMode = (next: CurveMode) => {
+    setMode(next);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {}
+  };
+
+  const header = (
+    <div className={styles.header}>
+      <div className={styles.titleBlock}>
+        <span className={styles.title}>Portfolio P&amp;L curve</span>
+        <span className={styles.subtitle}>
+          {mode === 'ta'
+            ? 'x-axis: time • y-axis: underlying price with structure break-evens'
+            : 'x-axis: underlying price • y-axis: portfolio P&L'}
+        </span>
+      </div>
+      <div className={styles.headerRight}>
+        <div className={styles.modeToggle} role="radiogroup" aria-label="Curve view">
+          <button type="button" role="radio" aria-checked={mode === 'payoff'} className={styles.modeButton} data-active={mode === 'payoff' || undefined} onClick={() => selectMode('payoff')}>
+            Payoff
+          </button>
+          <button type="button" role="radio" aria-checked={mode === 'ta'} className={styles.modeButton} data-active={mode === 'ta' || undefined} onClick={() => selectMode('ta')}>
+            TA V2
+          </button>
+        </div>
+        {mode === 'payoff' && (
+          <div className={styles.legend}>
+            <span className={styles.legendItem}><span className={styles.nowSwatch} />Now</span>
+            {forwardDays > 0 && <span className={styles.legendItem}><span className={styles.forwardSwatch} />T+{forwardDays}d</span>}
+            <span className={styles.legendItem}><span className={styles.expirySwatch} />Expiry</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (mode === 'ta') {
+    return (
+      <div className={styles.wrap}>
+        {header}
+        <BreakevenTaChart
+          underlying={taUnderlying ?? (isTaUnderlying(displayCurve.underlying) ? displayCurve.underlying : 'BTC')}
+          onUnderlyingChange={setTaUnderlying}
+          portfolioUnderlying={displayCurve.underlying}
+          portfolioBreakEvensUsd={displayCurve.breakEvenPricesUsd}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={styles.wrap}>
-      <div className={styles.header}>
-        <div className={styles.titleBlock}>
-          <span className={styles.title}>Portfolio P&amp;L curve</span>
-          <span className={styles.subtitle}>x-axis: underlying price • y-axis: portfolio P&amp;L</span>
-        </div>
-        <div className={styles.legend}>
-          <span className={styles.legendItem}><span className={styles.nowSwatch} />Now</span>
-          {forwardDays > 0 && <span className={styles.legendItem}><span className={styles.forwardSwatch} />T+{forwardDays}d</span>}
-          <span className={styles.legendItem}><span className={styles.expirySwatch} />Expiry</span>
-        </div>
-      </div>
+      {header}
 
       {onOpenBuilder && (
         <div className={styles.builderRow}>

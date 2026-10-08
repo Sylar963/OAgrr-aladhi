@@ -8,6 +8,7 @@ const inst: TradfiInstrument = {
   underlying: 'AAPL', expiry: '2026-04-17', strike: 200, right: 'call',
   occSymbol: 'AAPLC', streamerSymbol: '.AAPL200C', canonical: 'AAPL/USD:USD-260417-200-C',
   multiplier: 100, rootSymbol: 'AAPL', settlementType: 'physical', expirationType: 'Regular',
+  expiryTs: 0, tickSizes: [],
 };
 
 const spxInst: TradfiInstrument = {
@@ -22,6 +23,8 @@ const spxInst: TradfiInstrument = {
   rootSymbol: 'SPX',
   settlementType: 'cash',
   expirationType: 'Regular',
+  expiryTs: 0,
+  tickSizes: [],
 };
 
 describe('applyEvent', () => {

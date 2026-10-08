@@ -10,10 +10,35 @@ function inst(right: 'call' | 'put', strike: number): TradfiInstrument {
     occSymbol: `AAPL...${strike}${right}`, streamerSymbol: `.AAPL${strike}${right[0]}`,
     canonical: `AAPL/USD:USD-260417-${strike}-${right === 'call' ? 'C' : 'P'}`,
     multiplier: 100, rootSymbol: 'AAPL', settlementType: 'physical', expirationType: 'Regular',
+    expiryTs: 0, tickSizes: [],
   };
 }
 
 describe('buildChain', () => {
+  it('publishes an executable quote: per-share fees, 100-share size step, expiry time', () => {
+    const store = new TradfiStore();
+    const expiryTs = Date.parse('2026-04-17T20:00:00Z');
+    const tickSizes = [{ below: 3, value: 0.01 }, { below: null, value: 0.05 }];
+    const c = { ...inst('call', 200), expiryTs, tickSizes };
+    store.setInstruments([c]);
+    store.setSpot('AAPL', 198);
+    store.mergeQuote(c.streamerSymbol, { bid: 5, ask: 5.2, mark: 5.1, bidSize: 3, askSize: 7, ts: 1 });
+
+    const enriched = buildChain(store, 'AAPL', '2026-04-17');
+    expect(enriched.expiryTs).toBe(expiryTs);
+    expect(enriched.strikes[0]!.call.venues.tastytrade?.execution).toMatchObject({
+      contractMultiplierBase: 100,
+      minQuantity: 100,
+      quantityStep: 100,
+      nativePriceTick: 0.05,
+      bidUsd: 5,
+      askUsd: 5.2,
+      bidSize: 300,
+      askSize: 700,
+    });
+    expect(enriched.strikes[0]!.call.venues.tastytrade?.execution?.askTakerFeeUsd).toBeCloseTo(0.011);
+  });
+
   it('returns an enriched chain with the requested underlying/expiry', () => {
     const store = new TradfiStore();
     const c = inst('call', 200);
@@ -114,6 +139,8 @@ function seedStore(): TradfiStore {
       rootSymbol: 'SPX',
       settlementType: 'cash',
       expirationType: 'Regular',
+      expiryTs: 0,
+      tickSizes: [],
     } satisfies TradfiInstrument,
     {
       canonical: 'SPX/USD:USD-260618-4900-P',
@@ -127,6 +154,8 @@ function seedStore(): TradfiStore {
       rootSymbol: 'SPX',
       settlementType: 'cash',
       expirationType: 'Regular',
+      expiryTs: 0,
+      tickSizes: [],
     } satisfies TradfiInstrument,
   ]);
   store.setSpot('SPX', 5000);

@@ -5,12 +5,27 @@ import AlphaView from './AlphaView';
 import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
 
-const mocks = vi.hoisted(() => ({ chain: vi.fn(), scan: vi.fn(), cross: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  chain: vi.fn(),
+  tradfiChain: vi.fn(),
+  scan: vi.fn(),
+  cross: vi.fn(),
+}));
 vi.mock('@features/chain', () => ({
   useExpiries: () => ({ data: { expiries: ['2026-09-25'] } }),
   usePrefetchChain: () => vi.fn(),
   useChainQuery: mocks.chain,
   ExpiryBar: () => <div>Original expiry bar</div>,
+}));
+vi.mock('@features/tradfi', () => ({
+  useTradfiSelection: () => ({
+    underlying: 'AAPL',
+    expiry: '2026-10-16',
+    setExpiry: vi.fn(),
+    expiries: ['2026-10-16'],
+    cycleUnderlying: vi.fn(),
+  }),
+  useTradfiChain: mocks.tradfiChain,
 }));
 vi.mock('@features/portfolio', () => ({
   AlphaPortfolioContext: ({ venue }: { venue: string }) => <div>Portfolio exposure: {venue}</div>,
@@ -111,6 +126,7 @@ beforeEach(() => {
   ]);
   mocks.scan.mockClear();
   mocks.cross.mockReturnValue([]);
+  mocks.tradfiChain.mockReturnValue({ data: undefined, isLoading: false, error: null });
 });
 afterEach(cleanup);
 
@@ -216,5 +232,34 @@ describe('surgical Alpha enhancements', () => {
     expect(mocks.scan).not.toHaveBeenCalled();
     expect(screen.queryByText('$6.37')).toBeNull();
     expect(screen.getByText(/Cached quotes are not used/)).toBeTruthy();
+  });
+
+  it('runs the spread tabs on the TradFi chain without crypto-only panels', () => {
+    mocks.tradfiChain.mockReturnValue({
+      data: {
+        underlying: 'AAPL',
+        expiry: '2026-10-16',
+        stats: { atmStrike: 200 },
+        strikes: [{ strike: 200 }, { strike: 205 }],
+      },
+      isLoading: false,
+      error: null,
+    });
+    mocks.scan.mockReturnValue([{ venue: 'tastytrade', rejected: {}, candidates: [] }]);
+    render(<AlphaView market="tradfi" />);
+    const tabs = within(screen.getByRole('tablist', { name: 'Alpha strategy' }));
+    expect(tabs.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Call Credit',
+      'Put Credit',
+      'Call Debit',
+      'Put Debit',
+    ]);
+    expect(screen.queryByText(/Portfolio exposure/)).toBeNull();
+    expect(screen.queryByText(/ACTIVE VENUES/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Account equity/), { target: { value: '25000' } });
+    expect(mocks.scan).toHaveBeenLastCalledWith(
+      expect.objectContaining({ quantity: 100, venues: ['tastytrade'] }),
+    );
+    expect(screen.getByLabelText(/AAPL shares \(100 = 1 contract\) per leg/)).toBeTruthy();
   });
 });

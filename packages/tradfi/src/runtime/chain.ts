@@ -12,7 +12,7 @@ import {
 } from '@oggregator/core';
 import type { TradfiStore, TradfiLiveQuote } from './store.js';
 import { emptyQuote } from './store.js';
-import type { TradfiInstrument } from '../tastytrade/instrument.js';
+import { tickFor, type TradfiInstrument } from '../tastytrade/instrument.js';
 import type { TradfiFlowBook } from './flow-book.js';
 
 // TradFi is a separate service; the shared core chain/enrichment types are keyed
@@ -21,8 +21,15 @@ import type { TradfiFlowBook } from './flow-book.js';
 // string, so it flows through to the response as `venues.tastytrade` unchanged.
 const TASTYTRADE_VENUE = 'tastytrade' as VenueId;
 
+// tastytrade's per-contract commission ($1 to open) plus the $0.10 clearing fee.
+// A flat estimate: it ignores the $10/leg cap, free closing commission, and
+// index exchange fees, so costs are overstated on closes and understated on SPX/NDX.
+const FEE_PER_CONTRACT_USD = 1.1;
+const FLAT_FEES = { maker: FEE_PER_CONTRACT_USD, taker: FEE_PER_CONTRACT_USD };
+
 function premium(value: number | null): PremiumValue {
-  return { raw: value, rawCurrency: 'USD', usd: value };
+  // Listed equity options quote per share, so the per-base price is the quote itself.
+  return { raw: value, rawCurrency: 'USD', usd: value, usdPerBase: value };
 }
 
 // USD notional for OI/volume: contracts × shares-per-contract × underlying spot.
@@ -89,15 +96,18 @@ function toContract(
     base: inst.underlying,
     settle: 'USD',
     expiry: inst.expiry,
-    expiryTs: null,
+    expiryTs: inst.expiryTs,
     strike: inst.strike,
     right: inst.right,
     inverse: false,
     contractSize: inst.multiplier,
-    tickSize: null,
-    minQty: null,
-    makerFee: null,
-    takerFee: null,
+    contractMultiplierBase: inst.multiplier,
+    tickSize: tickFor(inst.tickSizes, quoteMark(quote)),
+    minQty: 1,
+    lotSize: 1,
+    // Rates are a fraction of underlying notional; tastytrade charges flat per contract.
+    makerFee: 0,
+    takerFee: 0,
     greeks: {
       ...EMPTY_GREEKS,
       delta: quote.delta,
@@ -123,7 +133,9 @@ function toContract(
       openInterest: quote.openInterest,
       openInterestUsd: notionalUsd(quote.openInterest, inst.multiplier, spot),
       volume24hUsd: notionalUsd(quote.volume, inst.multiplier, spot),
-      estimatedFees: null,
+      estimatedFees: FLAT_FEES,
+      estimatedBidFees: FLAT_FEES,
+      estimatedAskFees: FLAT_FEES,
       timestamp: quote.ts || null,
       source,
     },

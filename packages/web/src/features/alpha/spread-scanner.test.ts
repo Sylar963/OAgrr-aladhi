@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { VenueId } from '@shared/enriched';
 import { input, now } from './spread-scan.fixtures';
 import { scanSpreads } from './spread-scanner';
 import { black76Price } from '@lib/analytics/blackScholes';
@@ -200,5 +201,23 @@ describe('venue-specific spread scanner', () => {
     expect(forecast.model).toBe('forecast');
     expect(forecast.modelEdge!).toBeGreaterThan(base.modelEdge!);
     expect(forecast.probability!).toBeGreaterThan(base.probability!);
+  });
+
+  it('applies the delayed-feed freshness window to tastytrade quotes only', () => {
+    const scanAged = (venue: 'thalex' | 'tastytrade', ageMs: number) => {
+      const i = input();
+      const id = venue as VenueId;
+      for (const row of i.chain.strikes)
+        for (const side of [row.call, row.put]) {
+          const q = side.venues.thalex!;
+          q.asOfMs = now - ageMs;
+          side.venues = { [id]: q };
+        }
+      i.venues = [id];
+      return scanSpreads(i)[0]!;
+    };
+    expect(scanAged('thalex', 60_000).candidates).toHaveLength(0);
+    expect(scanAged('tastytrade', 60_000).candidates.length).toBeGreaterThan(0);
+    expect(scanAged('tastytrade', 100_000).rejected).toHaveProperty(['Stale or missing timestamp']);
   });
 });

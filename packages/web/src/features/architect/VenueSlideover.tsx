@@ -105,7 +105,7 @@ export default function VenueSlideover({
       return {
         legId: leg.id,
         direction: leg.direction,
-        quantity: leg.quantity,
+        quantity: leg.quantity * (leg.contractMultiplier ?? 1),
         venues: legChain
           ? activeVenues
               .map((venueId) => {
@@ -368,7 +368,7 @@ export default function VenueSlideover({
                 <span data-direction={leg.direction} className={styles.legBlockDir}>
                   {leg.direction === 'buy' ? 'BUY' : 'SELL'}
                 </span>
-                <span className={styles.legBlockQty}>{leg.quantity} base</span>
+                <span className={styles.legBlockQty}>{leg.quantity * (leg.contractMultiplier ?? 1)} base</span>
                 <span className={styles.legBlockStrike}>{leg.strike.toLocaleString()}</span>
                 <span data-type={leg.type} className={styles.legBlockType}>
                   {leg.type === 'call' ? 'C' : 'P'}

@@ -3,6 +3,7 @@ import type { VenueId } from '@shared/enriched';
 import { useState } from 'react';
 import { z } from 'zod';
 import styles from './SpreadBuilderPanel.module.css';
+import type { AlphaMarket } from './useAlphaMarketData';
 
 export interface AlphaSizing {
   equity: string;
@@ -11,7 +12,21 @@ export interface AlphaSizing {
   reserve: string;
 }
 
-const defaults: AlphaSizing = { equity: '', quantity: '0.01', riskPct: '1', reserve: '0.25' };
+const SIZING: Record<
+  AlphaMarket,
+  { storageKey: string; defaults: AlphaSizing; unit: (underlying: string) => string }
+> = {
+  crypto: {
+    storageKey: 'alpha-sizing-v1',
+    defaults: { equity: '', quantity: '0.01', riskPct: '1', reserve: '0.25' },
+    unit: (underlying) => underlying,
+  },
+  tradfi: {
+    storageKey: 'alpha-sizing-tradfi-v1',
+    defaults: { equity: '', quantity: '100', riskPct: '1', reserve: '0.25' },
+    unit: (underlying) => `${underlying} shares (100 = 1 contract)`,
+  },
+};
 const sizingSchema = z.object({
   equity: z.string(),
   quantity: z.string(),
@@ -19,12 +34,11 @@ const sizingSchema = z.object({
   reserve: z.string(),
 });
 
-export function useAlphaSizing() {
+export function useAlphaSizing(market: AlphaMarket) {
+  const { storageKey, defaults } = SIZING[market];
   const [sizing, setSizing] = useState<AlphaSizing>(() => {
     try {
-      const stored = sizingSchema.safeParse(
-        JSON.parse(localStorage.getItem('alpha-sizing-v1') ?? 'null'),
-      );
+      const stored = sizingSchema.safeParse(JSON.parse(localStorage.getItem(storageKey) ?? 'null'));
       if (stored.success) return stored.data;
     } catch {}
     return defaults;
@@ -33,7 +47,7 @@ export function useAlphaSizing() {
     setSizing((previous) => {
       const next = { ...previous, [key]: value };
       try {
-        localStorage.setItem('alpha-sizing-v1', JSON.stringify(next));
+        localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -48,6 +62,7 @@ export default function AlphaTradeSizing({
   venues,
   onVenue,
   underlying,
+  market,
 }: {
   sizing: AlphaSizing;
   update: (key: keyof AlphaSizing, value: string) => void;
@@ -55,7 +70,9 @@ export default function AlphaTradeSizing({
   venues: readonly VenueId[];
   onVenue: (venue: VenueId) => void;
   underlying: string;
+  market: AlphaMarket;
 }) {
+  const { defaults, unit } = SIZING[market];
   return (
     <div className={styles.block}>
       <div className={styles.label}>Your trade size</div>
@@ -76,7 +93,7 @@ export default function AlphaTradeSizing({
       {(
         [
           ['equity', 'Account equity · USD', '1080'],
-          ['quantity', 'Quantity · ' + underlying + ' per leg', '0.01'],
+          ['quantity', `Quantity · ${unit(underlying)} per leg`, defaults.quantity],
           ['riskPct', 'Max loss budget · % of equity', '1'],
           ['reserve', 'Exit / settlement / slippage reserve · USD', '0.25'],
         ] as const

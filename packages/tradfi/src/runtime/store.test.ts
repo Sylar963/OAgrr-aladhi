@@ -7,6 +7,7 @@ const inst: TradfiInstrument = {
   occSymbol: 'AAPL  260417C00200000', streamerSymbol: '.AAPL260417C200',
   canonical: 'AAPL/USD:USD-260417-200-C', multiplier: 100, rootSymbol: 'AAPL',
   settlementType: 'physical', expirationType: 'Regular',
+  expiryTs: 0, tickSizes: [],
 };
 
 describe('TradfiStore', () => {

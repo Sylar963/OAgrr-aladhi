@@ -1437,7 +1437,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
         <>
           <div className={styles.backdrop} onClick={() => setShowVenues(false)} />
           <VenueSlideover
-            legs={pricedLegs}
+            legs={analyticsLegs}
             chain={chain ?? null}
             chainFor={chainFor}
             activeVenues={pricingVenues}

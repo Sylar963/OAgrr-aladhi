@@ -200,7 +200,7 @@ const REJECTION_LABELS: Record<string, string> = {
   'Missing buy ask / sell bid': 'No tradable bid or ask',
   'Unknown entry fees': 'Fee data missing',
   'Stale or missing timestamp': 'Quote too old',
-  'Leg timestamps differ by over 2s': 'Leg quotes not synchronized',
+  'Leg timestamps out of sync': 'Leg quotes not synchronized',
   'Quantity below minimum or off step': 'Size below venue minimum',
   'Insufficient displayed size': 'Not enough size at quote',
   'No positive payoff after costs': 'Costs consume the payoff',

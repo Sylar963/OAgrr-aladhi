@@ -1,12 +1,9 @@
-import { useOpenPalette } from '@components/layout/palette-context';
 import { EmptyState, Spinner } from '@components/ui';
-import { ExpiryBar, useChainQuery, useExpiries, usePrefetchChain } from '@features/chain';
+import { ExpiryBar } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
-import { VENUE_IDS } from '@oggregator/protocol';
 import type { VenueId } from '@shared/enriched';
-import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
@@ -27,6 +24,7 @@ import StraddleScannerPanel from './StraddleScannerPanel';
 import { type SpreadCandidate, scanSpreads, type VenueScan } from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
+import { type AlphaMarket, useAlphaMarketData } from './useAlphaMarketData';
 import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
 import type { VerticalEconomics } from './vertical-pricing';
@@ -54,22 +52,22 @@ const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
   { id: 'short-straddle', label: 'Sell Straddle' },
   { id: 'long-straddle', label: 'Buy Straddle' },
 ];
+// TradFi has no scanner runtime yet; only the chain-local spread tabs apply.
+const SPREAD_STRATEGIES = STRATEGIES.filter((item) => !isScannerStrategy(item.id));
 
-export default function AlphaView() {
-  const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
-  const setExpiry = useAppStore((s) => s.setExpiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
-  const scanVenues = useMemo(
-    () => VENUE_IDS.filter((venue) => activeVenues.includes(venue)),
-    [activeVenues],
-  );
-  const openPalette = useOpenPalette();
-
-  const { data: expiriesData } = useExpiries(underlying);
-  const expiries = expiriesData?.expiries ?? [];
-  const prefetchChain = usePrefetchChain(underlying, activeVenues);
-  const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues);
+export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket }) {
+  const tradfi = market === 'tradfi';
+  const {
+    underlying,
+    expiry,
+    setExpiry,
+    expiries,
+    venues: scanVenues,
+    chainQuery,
+    changeAsset,
+    prefetch,
+  } = useAlphaMarketData(market);
+  const { data: chain, isLoading, error } = chainQuery;
 
   const isMobile = useIsMobile();
   const [strategy, setStrategy] = useState<AlphaStrategy>('call-credit');
@@ -82,7 +80,7 @@ export default function AlphaView() {
   const tradeVenue = scanVenues.includes(preferredVenue)
     ? preferredVenue
     : (scanVenues[0] ?? 'thalex');
-  const { sizing, update } = useAlphaSizing();
+  const { sizing, update } = useAlphaSizing(market);
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 5_000);
@@ -189,8 +187,8 @@ export default function AlphaView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedStrikes, atmStrike, kind, shortStrike, longStrike]);
 
-  const { data: regime } = useRegimeQuery(underlying);
-  const marketContext = useAlphaMarketContext(underlying);
+  const { data: regime } = useRegimeQuery(tradfi ? '' : underlying);
+  const marketContext = useAlphaMarketContext(underlying, !tradfi);
   const regimeDominant = regime?.dominant ?? null;
 
   const analysis = useVerticalSpreadAnalysis({
@@ -198,7 +196,7 @@ export default function AlphaView() {
     kind,
     shortStrike,
     longStrike,
-    venues: activeVenues,
+    venues: scanVenues,
     regimeDominant,
   });
 
@@ -242,6 +240,7 @@ export default function AlphaView() {
           setPreferredBuyVenue(null);
         }}
         underlying={underlying}
+        market={market}
       />
     </SpreadBuilderPanel>
   );
@@ -289,22 +288,24 @@ export default function AlphaView() {
         richness={richness}
         T={analysis.T}
       />
-      <details>
-        <summary>Existing portfolio risk · {tradeVenue}</summary>
-        <AlphaPortfolioContext venue={tradeVenue} underlying={underlying} />
-      </details>
+      {!tradfi && (
+        <details>
+          <summary>Existing portfolio risk · {tradeVenue}</summary>
+          <AlphaPortfolioContext venue={tradeVenue} underlying={underlying} />
+        </details>
+      )}
     </>
   );
 
   return (
     <div className={styles.view}>
       <div className={styles.strategyBar}>
-        <button type="button" className={styles.assetButton} onClick={openPalette}>
+        <button type="button" className={styles.assetButton} onClick={changeAsset}>
           <span>ALPHA</span>
           <strong>{underlying}</strong>
         </button>
         <div className={styles.strategyTabs} role="tablist" aria-label="Alpha strategy">
-          {STRATEGIES.map((item) => (
+          {(tradfi ? SPREAD_STRATEGIES : STRATEGIES).map((item) => (
             <button
               type="button"
               role="tab"
@@ -330,7 +331,9 @@ export default function AlphaView() {
             </button>
           ))}
         </div>
-        <span className={styles.venueScope}>{activeVenues.length} ACTIVE VENUES</span>
+        {!tradfi && (
+          <span className={styles.venueScope}>{scanVenues.length} ACTIVE VENUES</span>
+        )}
       </div>
 
       {!isMobile && isSpread && (
@@ -340,38 +343,40 @@ export default function AlphaView() {
           expiries={expiries}
           selected={expiry}
           onSelect={setExpiry}
-          onChangeAsset={openPalette}
-          onPrefetch={prefetchChain}
+          onChangeAsset={changeAsset}
+          {...(prefetch && { onPrefetch: prefetch })}
         />
       )}
 
-      <AlphaContextStrip
-        context={marketContext.data ?? null}
-        strategy={strategy}
-        loading={marketContext.isLoading}
-      />
+      {!tradfi && (
+        <AlphaContextStrip
+          context={marketContext.data ?? null}
+          strategy={strategy}
+          loading={marketContext.isLoading}
+        />
+      )}
 
       {strategy === 'long-call' && (
         <div className={styles.scannerWorkspace}>
-          <LottoScannerPanel underlying={underlying} venues={activeVenues} />
+          <LottoScannerPanel underlying={underlying} venues={scanVenues} />
         </div>
       )}
 
       {strategy === 'long-put' && (
         <div className={styles.scannerWorkspace}>
-          <ProtectivePutPanel underlying={underlying} venues={activeVenues} />
+          <ProtectivePutPanel underlying={underlying} venues={scanVenues} />
         </div>
       )}
 
       {strategy === 'short-straddle' && (
         <div className={styles.scannerWorkspace}>
-          <StraddleScannerPanel underlying={underlying} venues={activeVenues} />
+          <StraddleScannerPanel underlying={underlying} venues={scanVenues} />
         </div>
       )}
 
       {strategy === 'long-straddle' && (
         <div className={styles.scannerWorkspace}>
-          <LongStraddlePanel underlying={underlying} venues={activeVenues} />
+          <LongStraddlePanel underlying={underlying} venues={scanVenues} />
         </div>
       )}
 

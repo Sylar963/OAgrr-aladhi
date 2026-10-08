@@ -19,6 +19,7 @@ import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
+import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import { useStrategyStore } from './strategy-store';
 import {
   computePayoff,
@@ -115,6 +116,12 @@ function tradfiCandleWindow(resolutionSec: number, buckets: number): {
     '1d': 86_400,
   };
   return { interval, range, resolutionSec: effectiveResolutionSec[interval] };
+}
+
+function chainMultiplier(chain: EnrichedChainResponse | null, leg: Leg): number | null {
+  const side = chain?.strikes.find((s) => s.strike === leg.strike)?.[leg.type];
+  const quote = side?.venues[leg.venue as VenueId] ?? Object.values(side?.venues ?? {})[0];
+  return quote?.execution?.contractMultiplierBase ?? null;
 }
 
 function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): string {
@@ -533,9 +540,12 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const analyticsLegs = useMemo(
     () =>
       market === 'tradfi'
-        ? pricedLegs.map((leg) => ({ ...withPortfolioEntryPrice(leg), contractMultiplier: 100 }))
+        ? pricedLegs.map((leg) => ({
+            ...withPortfolioEntryPrice(leg),
+            contractMultiplier: chainMultiplier(chainFor(leg.expiry), leg) ?? 100,
+          }))
         : pricedLegs.map(withPortfolioEntryPrice),
-    [market, pricedLegs],
+    [market, pricedLegs, chainFor],
   );
 
   const payoffPoints = useMemo(

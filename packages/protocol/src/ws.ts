@@ -134,6 +134,7 @@ export interface VenueExecutionQuote {
   bidTakerFeeUsd: number | null;
   askMakerFeeUsd: number | null;
   askTakerFeeUsd: number | null;
+  expiryTs?: number | null;
 }
 
 export interface EnrichedSide {
@@ -240,6 +241,7 @@ export const VenueExecutionQuoteSchema = z.object({
   bidTakerFeeUsd: z.number().finite().nonnegative().nullable(),
   askMakerFeeUsd: z.number().finite().nonnegative().nullable(),
   askTakerFeeUsd: z.number().finite().nonnegative().nullable(),
+  expiryTs: z.number().finite().nullable().optional(),
 });
 
 const VenueQuoteSchema = z.object({

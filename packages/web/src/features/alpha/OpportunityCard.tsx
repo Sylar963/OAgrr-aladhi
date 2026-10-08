@@ -208,6 +208,7 @@ const REJECTION_LABELS: Record<string, string> = {
   'Inverse settlement needs separate risk model': 'Unsupported settlement type',
   'Missing inverse conversion price': 'Coin-to-USD price missing',
   'Settlement mismatch': 'Leg settlement mismatch',
+  'Leg expiry times differ': 'Legs expire at different times',
   'Crossed leg quote': 'Invalid crossed quote',
   'Enable a second venue to route across venues': 'Enable a second venue',
 };

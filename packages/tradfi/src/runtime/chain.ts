@@ -102,7 +102,7 @@ function toContract(
     inverse: false,
     contractSize: inst.multiplier,
     contractMultiplierBase: inst.multiplier,
-    tickSize: tickFor(inst.tickSizes, quoteMark(quote)),
+    tickSize: tickFor(inst.tickSizes, quoteMark(quote) ?? quote.ask ?? quote.bid),
     minQty: 1,
     lotSize: 1,
     // Rates are a fraction of underlying notional; tastytrade charges flat per contract.

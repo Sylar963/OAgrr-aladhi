@@ -37,6 +37,19 @@ describe('buildChain', () => {
       askSize: 700,
     });
     expect(enriched.strikes[0]!.call.venues.tastytrade?.execution?.askTakerFeeUsd).toBeCloseTo(0.011);
+    expect(enriched.strikes[0]!.call.venues.tastytrade?.execution?.expiryTs).toBe(expiryTs);
+  });
+
+  it('picks the tick from the quoted side when only one side is present', () => {
+    const store = new TradfiStore();
+    const tickSizes = [{ below: 3, value: 0.05 }, { below: null, value: 0.1 }];
+    const c = { ...inst('call', 200), expiryTs: Date.parse('2026-04-17T20:00:00Z'), tickSizes };
+    store.setInstruments([c]);
+    store.setSpot('AAPL', 198);
+    store.mergeQuote(c.streamerSymbol, { ask: 5, askSize: 1, ts: 1 });
+
+    const enriched = buildChain(store, 'AAPL', '2026-04-17');
+    expect(enriched.strikes[0]!.call.venues.tastytrade?.execution?.nativePriceTick).toBe(0.1);
   });
 
   it('returns an enriched chain with the requested underlying/expiry', () => {

@@ -151,6 +151,8 @@ function pairIssue(
     (rules.requireSameSettlement && b.settleCurrency !== s.settleCurrency)
   )
     return 'Settlement mismatch';
+  if (b.expiryTs != null && s.expiryTs != null && b.expiryTs !== s.expiryTs)
+    return 'Leg expiry times differ';
   if (b.inverse && (!positive(buy.underlyingPriceUsd) || !positive(sell.underlyingPriceUsd)))
     return 'Missing inverse conversion price';
   if (!positive(b.askUsd) || !positive(s.bidUsd)) return 'Missing buy ask / sell bid';

@@ -1023,6 +1023,7 @@ describe('enrichment', () => {
       bidTakerFeeUsd: 21,
       askMakerFeeUsd: expect.closeTo(14, 10),
       askTakerFeeUsd: 21,
+      expiryTs: null,
     });
 
     const contract = row.call.okx;

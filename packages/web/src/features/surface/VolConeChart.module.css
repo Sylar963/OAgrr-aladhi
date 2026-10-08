@@ -174,3 +174,58 @@
 .swRv {
   background: #f7a600;
 }
+
+.plot {
+  cursor: ns-resize;
+}
+
+.plot[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.clipLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  fill: var(--text-dim);
+  text-anchor: middle;
+}
+
+.toolbar {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.toolBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.toolbar > .toolBtn {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.toolBtn:hover {
+  color: var(--text-secondary);
+}
+
+.toolBtn[data-active='true'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}

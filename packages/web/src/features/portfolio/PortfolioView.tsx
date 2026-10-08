@@ -252,6 +252,8 @@ export default function PortfolioView() {
           <ShockHeatmap
             grid={metrics?.shockGrid ?? []}
             meta={metrics?.shockGridMeta ?? null}
+            entryGrid={metrics?.entryShockGrid ?? []}
+            entryDrift={metrics?.entryDrift ?? null}
             currentUnrealizedPnl={metrics?.totals.unrealizedPnlUsd ?? null}
           />
           <MarketMovement positions={positions} />

@@ -195,6 +195,8 @@ export {
   type ShockGridCell,
   ShockGridCellSchema,
   type ShockGridMeta,
+  type EntryVolDrift,
+  EntryVolDriftSchema,
   ShockGridMetaSchema,
   type StrategyGroupLeg,
   StrategyGroupLegSchema,

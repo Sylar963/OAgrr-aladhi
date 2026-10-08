@@ -19,6 +19,10 @@ export interface DerivePrivateCreds {
   env?: 'prod' | 'test';
 }
 
+// Balance events fire on fills and settlements, not on mark moves, so venue marks
+// would freeze between trades without a periodic positions refresh.
+const POSITIONS_REFRESH_MS = 15_000;
+
 export type DerivePositionsListener = (legs: PositionLeg[]) => void;
 export type DeriveTradesListener = (trades: ExchangePortfolioTrade[]) => void;
 
@@ -31,6 +35,7 @@ export class DerivePrivateClient {
   private refreshInFlight: Promise<void> | null = null;
   private tradeRefreshInFlight: Promise<void> | null = null;
   private disposed = false;
+  private positionsTimer: ReturnType<typeof setInterval> | null = null;
   private readonly log = feedLogger('derive-private');
 
   constructor(private readonly creds: DerivePrivateCreds) {
@@ -57,6 +62,10 @@ export class DerivePrivateClient {
     await this.login();
     await this.client.subscribe([this.balanceChannel()], 'derive-private');
     await Promise.all([this.refreshPositions(), this.refreshTradeHistory()]);
+    this.positionsTimer = setInterval(() => {
+      if (this.client.isConnected) void this.refreshPositions();
+    }, POSITIONS_REFRESH_MS);
+    this.positionsTimer.unref?.();
   }
 
   subscribe(listener: DerivePositionsListener): () => void {
@@ -89,6 +98,10 @@ export class DerivePrivateClient {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    if (this.positionsTimer != null) {
+      clearInterval(this.positionsTimer);
+      this.positionsTimer = null;
+    }
     this.listeners.clear();
     await this.client.disconnect();
     this.tradeListeners.clear();

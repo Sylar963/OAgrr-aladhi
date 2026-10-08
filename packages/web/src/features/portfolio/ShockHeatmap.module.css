@@ -35,6 +35,13 @@
   font-size: 9px;
 }
 
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .modeToggle {
   display: inline-flex;
   flex: none;
@@ -57,6 +64,11 @@
 
 .modeToggle button:hover {
   color: #c2cbc7;
+}
+
+.modeToggle button:disabled {
+  color: #3c4340;
+  cursor: not-allowed;
 }
 
 .modeToggle button[data-active='true'] {
@@ -154,6 +166,15 @@
   font-size: 9px;
 }
 
+.anchorNote {
+  padding: 7px 9px;
+  border-left: 2px solid #3a423e;
+  background: rgba(255, 255, 255, 0.025);
+  color: #7d8782;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+}
+
 .tableScroll {
   overflow-x: auto;
 }
@@ -234,6 +255,25 @@
     0 0 16px rgba(245, 184, 75, 0.16);
 }
 
+.grid th[data-entry-axis='true']:not([data-current-axis='true']) {
+  color: #a9b2ad;
+}
+
+.grid td[data-entry='true'] {
+  box-shadow: 0 0 0 1px rgba(226, 232, 229, 0.55) inset;
+}
+
+.entryLabel {
+  display: block;
+  margin-bottom: 1px;
+  color: #c9d1cd;
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .baselineLabel {
   display: block;
   margin-bottom: 1px;
@@ -294,8 +334,8 @@
     flex-direction: column;
   }
 
-  .modeToggle {
-    align-self: flex-start;
+  .toggles {
+    justify-content: flex-start;
   }
 
   .referenceStrip {

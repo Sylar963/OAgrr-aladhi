@@ -48,4 +48,48 @@ describe('ShockHeatmap', () => {
 
     expect(screen.getByRole('status').textContent).toContain('1 leg excluded');
   });
+
+  it('moves the now marker to the vol drift since entry', () => {
+    const atm = [-5, 0, 5];
+    const skew = [-0.1, 0, 0.1];
+    const entryGrid = atm.map((a) =>
+      skew.map((k) => ({ atmShiftVolPts: a, skewShiftPerLogK: k, totalPnlUsd: a * 10 + k * 100 - 50 })),
+    );
+    const nowGrid = atm.map((a) =>
+      skew.map((k) => ({ atmShiftVolPts: a, skewShiftPerLogK: k, totalPnlUsd: 0 })),
+    );
+    render(
+      <ShockHeatmap
+        grid={nowGrid}
+        meta={meta}
+        entryGrid={entryGrid}
+        entryDrift={{
+          atmShiftVolPts: 4.2,
+          skewShiftPerLogK: 0.08,
+          volPnlUsd: 40,
+          anchoredLegs: 2,
+          basis: 'first_seen',
+        }}
+        currentUnrealizedPnl={12}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'From entry' }));
+
+    const nowCell = screen.getByTestId('current-shock-cell-value').closest('td');
+    expect(nowCell?.getAttribute('title')).toContain('ATM +4.2 pts · skew +8');
+    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$22.00');
+    expect(screen.getByText('Entry')).toBeTruthy();
+    expect(screen.getByText(/first live IV this server recorded/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shock impact' }));
+    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$50.00');
+  });
+
+  it('disables the entry anchor when no entry IV is known', () => {
+    render(<ShockHeatmap grid={grid} meta={meta} currentUnrealizedPnl={0} />);
+    expect((screen.getByRole('button', { name: 'From entry' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
 });

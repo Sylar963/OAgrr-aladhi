@@ -55,6 +55,8 @@ export function thalexPortfolioEntryToLeg(
   if (!Number.isFinite(size) || size === 0) return null;
   const avg = entry.average_price;
   if (avg == null || !Number.isFinite(avg) || avg <= 0) return null;
+  const mark = entry.mark_price;
+  const venueMarkPriceUsd = mark != null && Number.isFinite(mark) && mark >= 0 ? mark : null;
 
   const legId = naturalKeyOf({
     underlying: parsed.underlying,
@@ -76,6 +78,8 @@ export function thalexPortfolioEntryToLeg(
     entryTs: nowMs,
     venueHint: 'thalex',
     source: 'thalex',
+    venueMarkPriceUsd,
+    venueMarkTs: venueMarkPriceUsd == null ? null : nowMs,
   };
 }
 

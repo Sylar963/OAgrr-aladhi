@@ -125,8 +125,11 @@ export function downsampleCandles(candles: SpotCandle[], bucketMs: number): Spot
  * (e.g. SOL) are unsupported here and the caller must handle them as an empty
  * result.
  */
+const PRICE_AT_CACHE_MAX = 5_000;
+
 export class SpotCandleService {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly priceAtCache = new Map<string, number>();
   private ready = false;
 
   async start(): Promise<void> {
@@ -140,6 +143,7 @@ export class SpotCandleService {
   dispose(): void {
     this.ready = false;
     this.cache.clear();
+    this.priceAtCache.clear();
   }
 
   async getCandles(
@@ -187,18 +191,43 @@ export class SpotCandleService {
     }
   }
 
+  // Close of the 1m candle covering timestampMs, for pricing past fills. Minutes
+  // never change once closed, so hits are cached without a TTL.
+  async getPriceAt(currency: SpotCandleCurrency, timestampMs: number): Promise<number | null> {
+    const minuteMs = Math.floor(timestampMs / 60_000) * 60_000;
+    const key = `${currency}|${minuteMs}`;
+    const cached = this.priceAtCache.get(key);
+    if (cached != null) return cached;
+
+    const range = { start: minuteMs - 120_000, end: minuteMs + 60_000 };
+    const candles =
+      currency === 'HYPE'
+        ? await this.fetchFromHyperliquid(currency, 60, 0, range)
+        : await this.fetchFromDeribit(currency, 60, 0, range);
+    let best: SpotCandle | null = null;
+    for (const candle of candles) {
+      if (candle.timestamp > minuteMs) continue;
+      if (best == null || candle.timestamp > best.timestamp) best = candle;
+    }
+    if (best == null || !(best.close > 0)) return null;
+    if (this.priceAtCache.size >= PRICE_AT_CACHE_MAX) this.priceAtCache.clear();
+    this.priceAtCache.set(key, best.close);
+    return best.close;
+  }
+
   private async fetchFromDeribit(
     currency: SpotCandleCurrency,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
+    range?: { start: number; end: number },
   ): Promise<SpotCandle[]> {
     // Deribit has no 4h resolution; fetch the 4h tier as 1h over the same
     // window and downsample below.
     const aggregate4h = resolutionSec === AGGREGATE_4H_SEC;
     const fetchResolutionSec = aggregate4h ? AGGREGATE_4H_SOURCE_SEC : resolutionSec;
 
-    const end = Date.now();
-    const start = end - resolutionSec * 1000 * buckets;
+    const end = range?.end ?? Date.now();
+    const start = range?.start ?? end - resolutionSec * 1000 * buckets;
     const instrument = `${currency}-PERPETUAL`;
     const params = new URLSearchParams({
       instrument_name: instrument,
@@ -284,9 +313,10 @@ export class SpotCandleService {
     currency: SpotCandleCurrency,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
+    range?: { start: number; end: number },
   ): Promise<SpotCandle[]> {
-    const end = Date.now();
-    const start = end - resolutionSec * 1000 * buckets;
+    const end = range?.end ?? Date.now();
+    const start = range?.start ?? end - resolutionSec * 1000 * buckets;
     const body = JSON.stringify({
       type: 'candleSnapshot',
       req: {

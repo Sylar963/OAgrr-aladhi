@@ -33,6 +33,15 @@ describe('derivePositionToLeg', () => {
     });
   });
 
+  it('carries the venue mark with its receipt time', () => {
+    const leg = derivePositionToLeg(SAMPLE, 1_716_000_000_000);
+    expect(leg?.venueMarkPriceUsd).toBe(1900);
+    expect(leg?.venueMarkTs).toBe(1_716_000_000_000);
+    const unmarked = derivePositionToLeg({ ...SAMPLE, mark_price: 'NaN' });
+    expect(unmarked?.venueMarkPriceUsd).toBeNull();
+    expect(unmarked?.venueMarkTs).toBeNull();
+  });
+
   it('parses a short put', () => {
     const leg = derivePositionToLeg({
       ...SAMPLE,

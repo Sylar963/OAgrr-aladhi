@@ -25,7 +25,10 @@ export function parseDeriveOptionInstrument(name: string): {
   return { underlying, expiry, strike, optionRight };
 }
 
-export function derivePositionToLeg(pos: DerivePosition): PositionLeg | null {
+export function derivePositionToLeg(
+  pos: DerivePosition,
+  nowMs: number = Date.now(),
+): PositionLeg | null {
   if (pos.instrument_type !== 'option') return null;
   const parsed = parseDeriveOptionInstrument(pos.instrument_name);
   if (parsed == null) return null;
@@ -35,6 +38,8 @@ export function derivePositionToLeg(pos: DerivePosition): PositionLeg | null {
   if (!Number.isFinite(entryPriceUsd) || entryPriceUsd <= 0) return null;
   const realizedPnlUsd = Number(pos.realized_pnl ?? 0);
   if (!Number.isFinite(realizedPnlUsd)) return null;
+  const mark = Number(pos.mark_price);
+  const venueMarkPriceUsd = Number.isFinite(mark) && mark >= 0 ? mark : null;
 
 
   const legId = naturalKeyOf({
@@ -57,13 +62,18 @@ export function derivePositionToLeg(pos: DerivePosition): PositionLeg | null {
     entryTs: pos.creation_timestamp,
     venueHint: 'derive',
     source: 'derive',
+    venueMarkPriceUsd,
+    venueMarkTs: venueMarkPriceUsd == null ? null : nowMs,
   };
 }
 
-export function derivePositionsToLegs(positions: DerivePosition[]): PositionLeg[] {
+export function derivePositionsToLegs(
+  positions: DerivePosition[],
+  nowMs: number = Date.now(),
+): PositionLeg[] {
   const legs: PositionLeg[] = [];
   for (const pos of positions) {
-    const leg = derivePositionToLeg(pos);
+    const leg = derivePositionToLeg(pos, nowMs);
     if (leg != null) legs.push(leg);
   }
   return legs;

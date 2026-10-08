@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { VolConeBand } from "@oggregator/protocol";
 
@@ -17,7 +17,12 @@ interface Props {
   ivPoints: ConeIvPoint[];
 }
 
-const MARGIN = { top: 14, right: 16, bottom: 22, left: 40 };
+const MARGIN = { top: 26, right: 16, bottom: 22, left: 40 };
+const MIN_SPAN = 0.04;
+const ZOOM_STEP = 1.15;
+
+type ViewMode = "core" | "full";
+type Domain = [number, number];
 const QUANTILE_KNOTS = [
   ["min", 0],
   ["p10", 10],
@@ -67,6 +72,16 @@ function niceStep(span: number): number {
   return (unit < 1.5 ? 1 : unit < 3.5 ? 2 : unit < 7.5 ? 5 : 10) * pow;
 }
 
+function niceDomain(values: number[]): Domain {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const step = niceStep(Math.max(hi - lo, MIN_SPAN));
+  return [
+    Math.max(0, Math.floor(lo / step) * step),
+    Math.ceil(hi / step) * step,
+  ];
+}
+
 function useSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -87,6 +102,39 @@ function useSize<T extends HTMLElement>() {
 export default function VolConeChart({ bands, ivPoints }: Props) {
   const [ref, { width, height }] = useSize<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const [mode, setMode] = useState<ViewMode>("core");
+  const [zoom, setZoom] = useState<Domain | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const plotRef = useRef<SVGRectElement | null>(null);
+  const dragRef = useRef<{ startY: number; domain: Domain } | null>(null);
+  const domainRef = useRef<Domain>([0, 1]);
+  const fullRef = useRef<Domain>([0, 1]);
+
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const [lo, hi] = domainRef.current;
+      const [fullLo, fullHi] = fullRef.current;
+      const anchor =
+        hi - ((event.clientY - rect.top) / rect.height) * (hi - lo);
+      const factor = event.deltaY > 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+      const span = Math.min(
+        Math.max((hi - lo) * factor, MIN_SPAN),
+        fullHi - fullLo,
+      );
+      const ratio = (anchor - lo) / (hi - lo);
+      let next: Domain = [anchor - ratio * span, anchor - ratio * span + span];
+      if (next[0] < fullLo) next = [fullLo, fullLo + span];
+      if (next[1] > fullHi) next = [fullHi - span, fullHi];
+      setZoom(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [width, height, bands.length]);
 
   if (bands.length < 2) {
     return (
@@ -109,19 +157,29 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
   const plotted = ivPoints.filter(
     (p) => p.days >= minDays && p.days <= maxDays,
   );
-  const values = [
-    ...bands.flatMap((b) => [b.min, b.max, b.current ?? b.p50]),
+  const live = [
+    ...bands.map((b) => b.current ?? b.p50),
     ...plotted.map((p) => p.iv),
   ];
-  const step = niceStep(
-    Math.max(Math.max(...values) - Math.min(...values), 0.04),
-  );
-  const yMin = Math.max(0, Math.floor(Math.min(...values) / step) * step);
-  const yMax = Math.ceil(Math.max(...values) / step) * step;
+  const fullDomain = niceDomain([
+    ...bands.flatMap((b) => [b.min, b.max]),
+    ...live,
+  ]);
+  const coreDomain = niceDomain([
+    ...bands.flatMap((b) => [b.p10, b.p90]),
+    ...live,
+  ]);
+  const [yMin, yMax] = zoom ?? (mode === "full" ? fullDomain : coreDomain);
+  domainRef.current = [yMin, yMax];
+  fullRef.current = fullDomain;
+  const step = niceStep(yMax - yMin);
   const y = (vol: number) =>
     MARGIN.top + innerH - ((vol - yMin) / (yMax - yMin)) * innerH;
   const yTicks: number[] = [];
-  for (let v = yMin; v <= yMax + step / 2; v += step) yTicks.push(v);
+  for (let v = Math.ceil(yMin / step) * step; v <= yMax + 1e-9; v += step)
+    yTicks.push(v);
+  const clippedMax = bands.filter((b) => b.max > yMax + 1e-9);
+  const clippedMin = bands.filter((b) => b.min < yMin - 1e-9);
 
   const area = (lo: keyof VolConeBand, hi: keyof VolConeBand) => {
     const top = bands.map((b) => `${x(b.horizonDays)},${y(b[hi] as number)}`);
@@ -136,6 +194,7 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
   const rvPoints = bands
     .filter((b) => b.current != null)
     .map((b): [number, number] => [b.horizonDays, b.current!]);
+  const clipId = `vol-cone-clip-${uid}`;
   const bandByDays = new Map(bands.map((b) => [b.horizonDays, b]));
   const hovered = hover != null ? bands[hover] : undefined;
   const hoveredIv = hovered
@@ -143,6 +202,16 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
     : undefined;
 
   function onMove(event: React.MouseEvent<SVGRectElement>) {
+    const drag = dragRef.current;
+    if (drag) {
+      const [lo, hi] = drag.domain;
+      const [fullLo, fullHi] = fullDomain;
+      const shift = ((event.clientY - drag.startY) / innerH) * (hi - lo);
+      const clamped = Math.min(Math.max(shift, fullLo - lo), fullHi - hi);
+      setZoom([lo + clamped, hi + clamped]);
+      setHover(null);
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const px = event.clientX - rect.left + MARGIN.left;
     let best = 0;
@@ -185,68 +254,150 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
             </text>
           ))}
 
-          <path d={area("min", "max")} className={styles.bandOuter} />
-          <path d={area("p10", "p90")} className={styles.bandMid} />
-          <path d={area("p25", "p75")} className={styles.bandInner} />
-          <path
-            d={line(bands.map((b) => [b.horizonDays, b.p50]))}
-            className={styles.median}
-          />
-
-          {hovered && (
-            <line
-              x1={x(hovered.horizonDays)}
-              x2={x(hovered.horizonDays)}
-              y1={MARGIN.top}
-              y2={MARGIN.top + innerH}
-              className={styles.crosshair}
-            />
-          )}
-
-          {rvPoints.length > 1 && (
-            <path d={line(rvPoints)} className={styles.rvLine} />
-          )}
-          {rvPoints.map(([d, v]) => (
-            <circle
-              key={d}
-              cx={x(d)}
-              cy={y(v)}
-              r={2.5}
-              className={styles.rvDot}
-            />
-          ))}
-
-          {plotted.length > 1 && (
-            <path
-              d={line(plotted.map((p) => [p.days, p.iv]))}
-              className={styles.ivLine}
-            />
-          )}
-          {plotted.map((p) => (
-            <g key={p.days}>
-              <circle
-                cx={x(p.days)}
-                cy={y(p.iv)}
-                r={3.5}
-                className={styles.ivDot}
+          <defs>
+            <clipPath id={clipId}>
+              <rect
+                x={MARGIN.left}
+                y={MARGIN.top}
+                width={innerW}
+                height={innerH}
               />
-              <text x={x(p.days)} y={y(p.iv) - 8} className={styles.ivLabel}>
-                {percentileLabel(bandByDays.get(p.days), p)}
-              </text>
-            </g>
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#${clipId})`}>
+            <path d={area("min", "max")} className={styles.bandOuter} />
+            <path d={area("p10", "p90")} className={styles.bandMid} />
+            <path d={area("p25", "p75")} className={styles.bandInner} />
+            <path
+              d={line(bands.map((b) => [b.horizonDays, b.p50]))}
+              className={styles.median}
+            />
+
+            {hovered && (
+              <line
+                x1={x(hovered.horizonDays)}
+                x2={x(hovered.horizonDays)}
+                y1={MARGIN.top}
+                y2={MARGIN.top + innerH}
+                className={styles.crosshair}
+              />
+            )}
+
+            {rvPoints.length > 1 && (
+              <path d={line(rvPoints)} className={styles.rvLine} />
+            )}
+            {rvPoints.map(([d, v]) => (
+              <circle
+                key={d}
+                cx={x(d)}
+                cy={y(v)}
+                r={2.5}
+                className={styles.rvDot}
+              />
+            ))}
+
+            {plotted.length > 1 && (
+              <path
+                d={line(plotted.map((p) => [p.days, p.iv]))}
+                className={styles.ivLine}
+              />
+            )}
+            {plotted.map((p) => (
+              <g key={p.days}>
+                <circle
+                  cx={x(p.days)}
+                  cy={y(p.iv)}
+                  r={3.5}
+                  className={styles.ivDot}
+                />
+                <text x={x(p.days)} y={y(p.iv) - 8} className={styles.ivLabel}>
+                  {percentileLabel(bandByDays.get(p.days), p)}
+                </text>
+              </g>
+            ))}
+          </g>
+
+          {clippedMax.map((b) => (
+            <text
+              key={`max-${b.horizonDays}`}
+              x={x(b.horizonDays)}
+              y={MARGIN.top - 4}
+              className={styles.clipLabel}
+            >
+              ▲ {(b.max * 100).toFixed(0)}%
+            </text>
+          ))}
+          {clippedMin.map((b) => (
+            <text
+              key={`min-${b.horizonDays}`}
+              x={x(b.horizonDays)}
+              y={MARGIN.top + innerH - 4}
+              className={styles.clipLabel}
+            >
+              ▼ {(b.min * 100).toFixed(0)}%
+            </text>
           ))}
 
           <rect
+            ref={plotRef}
             x={MARGIN.left}
             y={MARGIN.top}
             width={innerW}
             height={innerH}
             fill="transparent"
+            className={styles.plot}
+            data-dragging={dragging ? "true" : undefined}
+            onMouseDown={(event) => {
+              dragRef.current = { startY: event.clientY, domain: [yMin, yMax] };
+              setDragging(true);
+            }}
+            onMouseUp={() => {
+              dragRef.current = null;
+              setDragging(false);
+            }}
             onMouseMove={onMove}
-            onMouseLeave={() => setHover(null)}
+            onMouseLeave={() => {
+              dragRef.current = null;
+              setDragging(false);
+              setHover(null);
+            }}
+            onDoubleClick={() => setZoom(null)}
           />
         </svg>
       )}
+
+      <div className={styles.toolbar}>
+        {zoom && (
+          <button
+            type="button"
+            className={styles.toolBtn}
+            onClick={() => setZoom(null)}
+          >
+            reset
+          </button>
+        )}
+        <div className={styles.segment}>
+          {(["core", "full"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={styles.toolBtn}
+              data-active={mode === m && !zoom ? "true" : undefined}
+              onClick={() => {
+                setMode(m);
+                setZoom(null);
+              }}
+              title={
+                m === "core"
+                  ? "Fit p10–p90, IV and RV"
+                  : "Fit the full min–max range"
+              }
+            >
+              {m === "core" ? "p10–p90" : "full"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {hovered && (
         <div

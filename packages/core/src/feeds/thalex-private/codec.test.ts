@@ -27,6 +27,15 @@ describe('thalexPortfolioEntryToLeg', () => {
     });
   });
 
+  it('carries the venue mark with its receipt time', () => {
+    const leg = thalexPortfolioEntryToLeg(SAMPLE, 1_715_000_000_000);
+    expect(leg?.venueMarkPriceUsd).toBe(1900);
+    expect(leg?.venueMarkTs).toBe(1_715_000_000_000);
+    const unmarked = thalexPortfolioEntryToLeg({ ...SAMPLE, mark_price: null });
+    expect(unmarked?.venueMarkPriceUsd).toBeNull();
+    expect(unmarked?.venueMarkTs).toBeNull();
+  });
+
   it('parses a short put', () => {
     const leg = thalexPortfolioEntryToLeg({
       ...SAMPLE,

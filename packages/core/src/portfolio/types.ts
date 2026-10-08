@@ -34,6 +34,9 @@ export interface PositionStore {
   remove(accountId: string, legId: string): boolean;
   subscribe(listener: PositionStoreListener): () => void;
   getAccounting?(accountId: string, underlying?: string): PortfolioAccounting | null;
+  // Venue legs arrive without an entry IV; the runtime reports the first live IV it
+  // captured (legId → IV) so stores can keep it across pushes and restarts.
+  recordEntryIvs?(accountId: string, entryIvs: ReadonlyMap<string, number>): void;
 }
 
 export interface PortfolioPersistence {

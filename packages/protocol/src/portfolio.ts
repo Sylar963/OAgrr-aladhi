@@ -44,6 +44,9 @@ export const PositionLegSchema = z.object({
   // True when entryIv was back-solved from price+forward+T (not user/venue
   // supplied) so the UI can mark it as model-derived.
   entryIvIsModel: z.boolean().optional(),
+  // How a venue leg's entryIv was obtained: back-solved from its opening fills, or
+  // the first live IV the server saw. Absent for manual/paper legs.
+  entryIvSource: z.enum(['fill', 'first_seen']).optional(),
   // Realized PnL accumulated by prior partial closes on this leg. Manual
   // upserts that reduce or flip size fold the closed slice into this field
   // instead of dropping it.
@@ -51,6 +54,10 @@ export const PositionLegSchema = z.object({
   entryTs: z.number().int().nonnegative(),
   venueHint: VenueIdSchema.nullable(),
   source: PositionSourceSchema,
+  // Mark the holding venue reports for this position. Open P&L uses it over the
+  // cross-venue mid so the total matches the venue's own unrealized P&L.
+  venueMarkPriceUsd: z.number().nonnegative().nullable().optional(),
+  venueMarkTs: z.number().int().nonnegative().nullable().optional(),
 });
 export type PositionLeg = z.infer<typeof PositionLegSchema>;
 
@@ -219,6 +226,18 @@ export const ShockGridMetaSchema = z.object({
 });
 export type ShockGridMeta = z.infer<typeof ShockGridMetaSchema>;
 
+// Live IV move since each leg's entry IV, fitted as one ATM shift plus one skew tilt
+// across legs (vega-weighted, against ln(K/F)). Venue legs have no trade-time IV, so
+// their entry IV is the first live IV the server saw: basis 'first_seen'.
+export const EntryVolDriftSchema = z.object({
+  atmShiftVolPts: z.number(),
+  skewShiftPerLogK: z.number(),
+  volPnlUsd: z.number(),
+  anchoredLegs: z.number().int().nonnegative(),
+  basis: z.enum(['entry', 'first_seen', 'mixed']),
+});
+export type EntryVolDrift = z.infer<typeof EntryVolDriftSchema>;
+
 export const PortfolioPnlCurveStatusSchema = z.enum([
   'ok',
   'empty',
@@ -332,6 +351,9 @@ export const PortfolioMetricsSchema = z.object({
   breakEven: z.array(BreakEvenIvRowSchema),
   shockGrid: z.array(z.array(ShockGridCellSchema)),
   shockGridMeta: ShockGridMetaSchema,
+  // Same axes as shockGrid but shocked from entry IV; each cell is the change from now.
+  entryShockGrid: z.array(z.array(ShockGridCellSchema)).optional(),
+  entryDrift: EntryVolDriftSchema.nullable().optional(),
   strategies: z.array(StrategyGroupSchema),
   accounting: PortfolioAccountingSchema,
 });

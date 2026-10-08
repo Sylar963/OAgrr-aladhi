@@ -1,4 +1,5 @@
 import type {
+  EntryVolDrift,
   ShockGridCell,
   ShockGridMeta,
   VolShockLegResult,
@@ -90,6 +91,27 @@ export function computeShockGrid(
   nowMs: number,
   _legacyAtmStrike?: number,
 ): ShockGridCell[][] {
+  return buildShockGrid(legsWithMarks, nowMs, (_leg, mark) => mark.iv);
+}
+
+// Shocks are applied to each leg's entry IV rather than its live IV, but every cell is
+// still the change from the current model value, so "now" sits at the entry drift.
+export function computeEntryShockGrid(
+  legsWithMarks: LegWithMark[],
+  nowMs: number,
+): ShockGridCell[][] {
+  return buildShockGrid(legsWithMarks, nowMs, entryAnchorIv);
+}
+
+function entryAnchorIv(leg: PositionLeg, mark: MarkContext): number | null {
+  return leg.entryIv != null && leg.entryIv > 0 ? leg.entryIv : mark.iv;
+}
+
+function buildShockGrid(
+  legsWithMarks: LegWithMark[],
+  nowMs: number,
+  anchorIv: (leg: PositionLeg, mark: MarkContext) => number | null,
+): ShockGridCell[][] {
   const grid: ShockGridCell[][] = [];
 
   for (const atmShift of ATM_SHIFT_VOL_PTS) {
@@ -98,13 +120,15 @@ export function computeShockGrid(
       let totalPnlUsd = 0;
       for (const { leg, mark } of legsWithMarks) {
         if (mark.iv == null || mark.forwardPriceUsd == null) continue;
+        const anchor = anchorIv(leg, mark);
+        if (anchor == null) continue;
 
         const baseModelUsd = legMarkFromShockedIv(leg, mark, mark.iv);
         if (baseModelUsd == null) continue;
 
         const parallelBumped = applyVolShock(
           { kind: 'parallel', bumpVolPts: atmShift },
-          mark.iv,
+          anchor,
           leg.strike,
           leg.expiry,
           nowMs,
@@ -127,6 +151,54 @@ export function computeShockGrid(
   }
 
   return grid;
+}
+
+// Below ~2% log-moneyness dispersion a slope fit is noise, so the drift is all ATM.
+const MIN_SKEW_FIT_STD_LOG_K = 0.02;
+const ENTRY_SOURCES = new Set<PositionLeg['source']>(['manual', 'paper']);
+
+export function computeEntryVolDrift(legsWithMarks: LegWithMark[]): EntryVolDrift | null {
+  const points: Array<{ x: number; d: number; w: number }> = [];
+  let volPnlUsd = 0;
+  let entryLegs = 0;
+  let firstSeenLegs = 0;
+
+  for (const { leg, mark } of legsWithMarks) {
+    if (leg.entryIv == null || leg.entryIv <= 0) continue;
+    if (mark.iv == null || mark.forwardPriceUsd == null || mark.forwardPriceUsd <= 0) continue;
+    const nowModelUsd = legMarkFromShockedIv(leg, mark, mark.iv);
+    const entryModelUsd = legMarkFromShockedIv(leg, mark, leg.entryIv);
+    if (nowModelUsd == null || entryModelUsd == null) continue;
+
+    volPnlUsd += (nowModelUsd - entryModelUsd) * leg.size;
+    points.push({
+      x: Math.log(leg.strike / mark.forwardPriceUsd),
+      d: mark.iv - leg.entryIv,
+      w: Math.abs((mark.vega ?? 0) * leg.size),
+    });
+    if (ENTRY_SOURCES.has(leg.source) || leg.entryIvSource === 'fill') entryLegs += 1;
+    else firstSeenLegs += 1;
+  }
+
+  if (points.length === 0) return null;
+  if (points.every((p) => !(p.w > 0))) for (const p of points) p.w = 1;
+
+  const sumW = points.reduce((acc, p) => acc + p.w, 0);
+  const meanX = points.reduce((acc, p) => acc + p.w * p.x, 0) / sumW;
+  const meanD = points.reduce((acc, p) => acc + p.w * p.d, 0) / sumW;
+  const sxx = points.reduce((acc, p) => acc + p.w * (p.x - meanX) ** 2, 0);
+  const sxd = points.reduce((acc, p) => acc + p.w * (p.x - meanX) * (p.d - meanD), 0);
+  const fitSkew = sxx / sumW >= MIN_SKEW_FIT_STD_LOG_K ** 2;
+  const slope = fitSkew ? sxd / sxx : 0;
+  const atm = meanD - slope * meanX;
+
+  return {
+    atmShiftVolPts: atm * 100,
+    skewShiftPerLogK: slope,
+    volPnlUsd,
+    anchoredLegs: points.length,
+    basis: firstSeenLegs === 0 ? 'entry' : entryLegs === 0 ? 'first_seen' : 'mixed',
+  };
 }
 
 export function getShockGridMeta(legsWithMarks: LegWithMark[]): ShockGridMeta {

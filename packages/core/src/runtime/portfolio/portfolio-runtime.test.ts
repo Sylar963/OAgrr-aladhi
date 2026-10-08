@@ -201,6 +201,31 @@ describe('PortfolioRuntime', () => {
     runtime.dispose();
   });
 
+  it('reports first-seen IVs to the store once and anchors the entry grid on them', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, { ...makeLeg(70_000, 1), entryIv: null, source: 'derive' });
+    const recorded: Array<[string, number]> = [];
+    const recordingStore = Object.assign(store, {
+      recordEntryIvs: (_accountId: string, entryIvs: ReadonlyMap<string, number>) => {
+        recorded.push(...entryIvs);
+      },
+    });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store: recordingStore,
+      markProvider,
+      now: () => NOW,
+    });
+    const first = runtime.computeMetricsAt(0);
+    runtime.computeMetricsAt(0);
+
+    expect(recorded).toEqual([['leg-70000-1', SIGMA]]);
+    expect(first.metrics.entryDrift?.basis).toBe('first_seen');
+    expect(first.metrics.entryDrift?.atmShiftVolPts).toBeCloseTo(0, 10);
+    expect(first.metrics.entryShockGrid).toHaveLength(9);
+    runtime.dispose();
+  });
+
   it('dispose stops emission', () => {
     const store = new InMemoryPositionStore();
     const runtime = new PortfolioRuntime({

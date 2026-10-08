@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { price76, vega76 } from '../feeds/thalex/bs-solver.js';
 import { attachMarks } from './aggregator.js';
-import { applyVolShock, computeShockGrid, computeShockPnl, getShockGridMeta } from './scenarios.js';
+import {
+  applyVolShock,
+  computeEntryShockGrid,
+  computeEntryVolDrift,
+  computeShockGrid,
+  computeShockPnl,
+  getShockGridMeta,
+} from './scenarios.js';
 import type { MarkContext, MarkProvider, PositionLeg } from './types.js';
 
 const F = 70_000;
@@ -201,5 +208,63 @@ describe('computeShockGrid', () => {
       excludedLegIds: ['missing-forward'],
       anchor: 'per_leg_forward',
     });
+  });
+});
+
+describe('entry-anchored vol drift', () => {
+  it('places now on the realized parallel drift since entry', () => {
+    const leg = makeLeg({ strike: 70_000, size: 1, entryIv: SIGMA - 0.05 });
+    const withMarks = attachMarks([leg], constantMarks);
+
+    const drift = computeEntryVolDrift(withMarks);
+    expect(drift?.atmShiftVolPts).toBeCloseTo(5, 8);
+    expect(drift?.skewShiftPerLogK).toBe(0);
+    expect(drift?.basis).toBe('entry');
+    expect(drift?.volPnlUsd).toBeGreaterThan(0);
+
+    const grid = computeEntryShockGrid(withMarks, NOW_MS);
+    expect(grid[7]?.[4]?.atmShiftVolPts).toBe(5);
+    expect(grid[7]?.[4]?.totalPnlUsd).toBeCloseTo(0, 8);
+    expect(grid[4]?.[4]?.totalPnlUsd).toBeCloseTo(-(drift?.volPnlUsd ?? 0), 8);
+  });
+
+  it('recovers ATM shift and skew tilt across strikes', () => {
+    const atm = 0.02;
+    const slope = 0.1;
+    const legs = [60_000, 70_000, 85_000].map((strike) =>
+      makeLeg({ strike, size: 1, entryIv: SIGMA - atm - slope * Math.log(strike / F) }),
+    );
+
+    const drift = computeEntryVolDrift(attachMarks(legs, constantMarks));
+    expect(drift?.atmShiftVolPts).toBeCloseTo(atm * 100, 8);
+    expect(drift?.skewShiftPerLogK).toBeCloseTo(slope, 8);
+    expect(drift?.anchoredLegs).toBe(3);
+  });
+
+  it('treats near-identical strikes as pure ATM drift', () => {
+    const legs = [
+      makeLeg({ strike: 70_000, size: 1, entryIv: SIGMA - 0.01 }),
+      makeLeg({ strike: 70_500, size: -1, entryIv: SIGMA - 0.03 }),
+    ];
+
+    const drift = computeEntryVolDrift(attachMarks(legs, constantMarks));
+    expect(drift?.skewShiftPerLogK).toBe(0);
+    expect(drift?.atmShiftVolPts).toBeGreaterThan(1);
+    expect(drift?.atmShiftVolPts).toBeLessThan(3);
+  });
+
+  it('labels venue legs as first-seen and returns null without entry IVs', () => {
+    const venueLeg = makeLeg({ strike: 70_000, size: 1, source: 'derive' });
+    const manualLeg = makeLeg({ strike: 75_000, size: 1 });
+    expect(computeEntryVolDrift(attachMarks([venueLeg], constantMarks))?.basis).toBe('first_seen');
+    expect(
+      computeEntryVolDrift(attachMarks([venueLeg, manualLeg], constantMarks))?.basis,
+    ).toBe('mixed');
+    expect(
+      computeEntryVolDrift(attachMarks([{ ...venueLeg, entryIvSource: 'fill' }], constantMarks))?.basis,
+    ).toBe('entry');
+    expect(
+      computeEntryVolDrift(attachMarks([makeLeg({ strike: 70_000, size: 1, entryIv: null })], constantMarks)),
+    ).toBeNull();
   });
 });

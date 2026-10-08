@@ -8,11 +8,18 @@ import {
 } from '@oggregator/core';
 import type { PortfolioAccounting } from '@oggregator/protocol';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
-import { VenuePositionPersistence } from './venue-position-persistence.js';
+import { portfolioFillPriceAt } from './portfolio-fill-prices.js';
+import {
+  carryEntryIvs,
+  mergePersistedEntryIvs,
+  VenuePositionPersistence,
+} from './venue-position-persistence.js';
 
 export interface ThalexPositionStoreCreds extends ThalexPrivateCreds {
   accountId: string;
 }
+
+const HYDRATE_RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 120_000, 300_000];
 
 export class ThalexPositionStore implements PositionStore {
   private readonly cache = new Map<string, Map<string, PositionLeg>>();
@@ -22,7 +29,12 @@ export class ThalexPositionStore implements PositionStore {
   private readonly tradeUnsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly retainCounts = new Map<string, number>();
-  private readonly persistence = new VenuePositionPersistence('thalex', exchangePortfolioLedgerStore);
+  private readonly persistence = new VenuePositionPersistence(
+    'thalex',
+    exchangePortfolioLedgerStore,
+    portfolioFillPriceAt,
+  );
+  private readonly hydrateTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 
   list(accountId: string): PositionLeg[] {
@@ -52,28 +64,103 @@ export class ThalexPositionStore implements PositionStore {
     return this.persistence.getAccounting(accountId, this.list(accountId), underlying);
   }
 
+  recordEntryIvs(accountId: string, entryIvs: ReadonlyMap<string, number>): void {
+    const legs = this.cache.get(accountId);
+    if (legs == null) return;
+    let changed = false;
+    for (const [legId, entryIv] of entryIvs) {
+      const leg = legs.get(legId);
+      if (leg == null || leg.entryIv != null) continue;
+      legs.set(legId, { ...leg, entryIv, entryIvSource: 'first_seen' });
+      changed = true;
+    }
+    if (changed) this.persistCurrent(accountId);
+  }
+
+  private persistCurrent(accountId: string): void {
+    void this.persistence.persistPositions(accountId, this.list(accountId)).catch((error) => {
+      logger.error({ error: String(error), venue: 'thalex' }, 'portfolio snapshot persistence failed');
+    });
+  }
+
+  private async refreshFillEntryIvs(accountId: string): Promise<void> {
+    let resolved: Map<string, number>;
+    try {
+      resolved = await this.persistence.resolveFillEntryIvs(accountId, this.list(accountId));
+    } catch (error) {
+      logger.warn({ error: String(error), venue: 'thalex' }, 'portfolio fill entry IV resolve failed');
+      return;
+    }
+    const legs = this.cache.get(accountId);
+    if (legs == null) return;
+    const changedLegIds: string[] = [];
+    for (const [legId, entryIv] of resolved) {
+      const leg = legs.get(legId);
+      if (leg == null || (leg.entryIvSource === 'fill' && leg.entryIv === entryIv)) continue;
+      legs.set(legId, { ...leg, entryIv, entryIvSource: 'fill' });
+      changedLegIds.push(legId);
+    }
+    if (changedLegIds.length === 0) return;
+    this.broadcast(accountId, changedLegIds);
+    this.persistCurrent(accountId);
+  }
+
+  private async tryHydrate(accountId: string): Promise<boolean> {
+    try {
+      const persisted = await this.persistence.hydrate(accountId);
+      const current = this.list(accountId);
+      if (current.length === 0) {
+        this.applyLegs(accountId, persisted);
+      } else {
+        this.applyLegs(accountId, mergePersistedEntryIvs(current, persisted));
+        this.persistCurrent(accountId);
+      }
+      void this.refreshFillEntryIvs(accountId);
+      return true;
+    } catch (error) {
+      logger.warn({ error: String(error), venue: 'thalex' }, 'portfolio snapshot hydration failed');
+      return false;
+    }
+  }
+
+  // Neon cold starts can time out the first read; until a hydrate succeeds, snapshot
+  // writes stay off so the stored entry IVs are not replaced.
+  private scheduleHydrateRetry(accountId: string, attempt: number): void {
+    const delay = HYDRATE_RETRY_DELAYS_MS[attempt];
+    if (delay == null) return;
+    const timer = setTimeout(() => {
+      this.hydrateTimers.delete(accountId);
+      if (!this.clients.has(accountId) || this.persistence.isHydrated(accountId)) return;
+      void this.tryHydrate(accountId).then((ok) => {
+        if (!ok) this.scheduleHydrateRetry(accountId, attempt + 1);
+      });
+    }, delay);
+    timer.unref?.();
+    this.hydrateTimers.set(accountId, timer);
+  }
+
 
   async connect(creds: ThalexPositionStoreCreds): Promise<void> {
     await this.disconnect(creds.accountId);
-    try {
-      const persisted = await this.persistence.hydrate(creds.accountId);
-      this.applyLegs(creds.accountId, persisted);
-    } catch (error) {
-      logger.warn({ error: String(error), venue: 'thalex' }, 'portfolio snapshot hydration failed');
-    }
+    const hydrated = await this.tryHydrate(creds.accountId);
 
 
     const client = new ThalexPrivateClient(creds);
-    const unsubscribe = client.subscribe((legs) => {
+    const unsubscribe = client.subscribe((incoming) => {
+      const legs = carryEntryIvs(this.cache.get(creds.accountId), incoming);
       this.applyLegs(creds.accountId, legs);
       void this.persistence.persistPositions(creds.accountId, legs).catch((error) => {
         logger.error({ error: String(error), venue: 'thalex' }, 'portfolio snapshot persistence failed');
       });
     });
     this.clients.set(creds.accountId, client);
+    if (!hydrated) this.scheduleHydrateRetry(creds.accountId, 0);
     const unsubscribeTrades = client.subscribeTrades((trades) => {
       void this.persistence.persistTrades(creds.accountId, trades).then(
-        () => this.broadcast(creds.accountId, []),
+        () => {
+          this.broadcast(creds.accountId, []);
+          void this.refreshFillEntryIvs(creds.accountId);
+        },
         (error) => {
           logger.error({ error: String(error), venue: 'thalex' }, 'portfolio trade persistence failed');
         },
@@ -88,6 +175,9 @@ export class ThalexPositionStore implements PositionStore {
   async disconnect(accountId: string): Promise<void> {
     const timer = this.disconnectTimers.get(accountId);
     if (timer != null) clearTimeout(timer);
+    const hydrateTimer = this.hydrateTimers.get(accountId);
+    if (hydrateTimer != null) clearTimeout(hydrateTimer);
+    this.hydrateTimers.delete(accountId);
     this.disconnectTimers.delete(accountId);
     this.retainCounts.delete(accountId);
     const unsubscribe = this.unsubscribes.get(accountId);

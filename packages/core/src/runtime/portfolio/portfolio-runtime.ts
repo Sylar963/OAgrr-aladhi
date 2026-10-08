@@ -1,5 +1,6 @@
 import type {
   BreakEvenIvRow,
+  EntryVolDrift,
   ExpiryBucketRow,
   PortfolioAccounting,
   PortfolioMetrics,
@@ -25,7 +26,12 @@ import {
   buildPortfolioPnlCurve,
   type PortfolioHorizonScenarios,
 } from '../../portfolio/pnl-curve.js';
-import { computeShockGrid, getShockGridMeta } from '../../portfolio/scenarios.js';
+import {
+  computeEntryShockGrid,
+  computeEntryVolDrift,
+  computeShockGrid,
+  getShockGridMeta,
+} from '../../portfolio/scenarios.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
 import type {
   MarkContext,
@@ -267,6 +273,7 @@ export class PortfolioRuntime {
     // venue-imported positions (which never carry historical entry IV).
     // Once captured the value sticks, so the "entry IV" column doesn't
     // drift with the live mark.
+    const captured = new Map<string, number>();
     for (let i = 0; i < rawPositions.length; i += 1) {
       const leg = rawPositions[i];
       if (leg == null || leg.entryIv != null) continue;
@@ -279,8 +286,10 @@ export class PortfolioRuntime {
         !this.firstSeenIv.has(leg.legId)
       ) {
         this.firstSeenIv.set(leg.legId, mark.iv);
+        captured.set(leg.legId, mark.iv);
       }
     }
+    if (captured.size > 0) this.store.recordEntryIvs?.(this.accountId, captured);
 
     const liveIds = new Set(rawPositions.map((leg) => leg.legId));
     for (const id of [...this.firstSeenIv.keys()]) {
@@ -290,7 +299,7 @@ export class PortfolioRuntime {
     const positions = rawPositions.map((leg) => {
       if (leg.entryIv != null) return leg;
       const cached = this.firstSeenIv.get(leg.legId);
-      return cached != null ? { ...leg, entryIv: cached } : leg;
+      return cached != null ? { ...leg, entryIv: cached, entryIvSource: 'first_seen' as const } : leg;
     });
 
     const withMarks = positions.map((leg, i) => {
@@ -315,6 +324,8 @@ export class PortfolioRuntime {
     let breakEven: BreakEvenIvRow[];
     let shockGrid: ShockGridCell[][];
     let shockGridMeta: ShockGridMeta;
+    let entryShockGrid: ShockGridCell[][];
+    let entryDrift: EntryVolDrift | null;
     let strategies: StrategyGroup[];
 
     if (positions.length === 0) {
@@ -330,6 +341,8 @@ export class PortfolioRuntime {
         excludedLegIds: [],
         anchor: 'per_leg_forward',
       };
+      entryShockGrid = [];
+      entryDrift = null;
       strategies = [];
     } else {
       totals = computeTotals(withMarks);
@@ -339,6 +352,8 @@ export class PortfolioRuntime {
       breakEven = breakEvenIvCurve(withMarks);
       shockGrid = computeShockGrid(withMarks, nowMs);
       shockGridMeta = getShockGridMeta(withMarks);
+      entryShockGrid = computeEntryShockGrid(withMarks, nowMs);
+      entryDrift = computeEntryVolDrift(withMarks);
       strategies = detectStrategyGroups(
         positions,
         new Map(withMarks.map(({ leg, mark }) => [leg.legId, mark])),
@@ -359,6 +374,8 @@ export class PortfolioRuntime {
       breakEven,
       shockGrid,
       shockGridMeta,
+      entryShockGrid,
+      entryDrift,
       strategies,
       accounting,
     };

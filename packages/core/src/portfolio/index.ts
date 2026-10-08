@@ -25,7 +25,14 @@ export {
   attachMarks,
   legMarkFromShockedIv,
 } from './aggregator.js';
-export { applyVolShock, computeShockPnl, computeShockGrid, getShockGridMeta } from './scenarios.js';
+export {
+  applyVolShock,
+  computeShockPnl,
+  computeShockGrid,
+  computeEntryShockGrid,
+  computeEntryVolDrift,
+  getShockGridMeta,
+} from './scenarios.js';
 export {
   buildPortfolioHorizonScenarios,
   buildPortfolioPnlCurve,
@@ -83,3 +90,4 @@ export {
   type FoldContext,
 } from './position-fold.js';
 export { detectStrategyGroups } from './strategy-groups.js';
+export { entryIvFromFills, type EntryFill } from './entry-iv.js';

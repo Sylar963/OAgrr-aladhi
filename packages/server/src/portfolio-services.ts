@@ -462,8 +462,21 @@ export const portfolioMarkProvider: MarkProvider = (leg: PositionLeg) => {
     lastSeenMark.set(leg.legId, merged);
   }
 
-  return merged;
+  const venueMark = freshVenueMark(leg, Date.now());
+  return venueMark == null ? merged : { ...merged, markPriceUsd: venueMark };
 };
+
+// Venue-held legs carry the holding venue's own mark. Open P&L must match what the
+// venue reports, so that mark wins over the cross-venue mid while it is fresh;
+// IV and greeks stay on the cross-venue path the shock grid and curves use.
+const VENUE_MARK_MAX_AGE_MS = 60_000;
+
+function freshVenueMark(leg: PositionLeg, nowMs: number): number | null {
+  const mark = leg.venueMarkPriceUsd;
+  const ts = leg.venueMarkTs;
+  if (mark == null || ts == null) return null;
+  return nowMs - ts <= VENUE_MARK_MAX_AGE_MS ? mark : null;
+}
 
 const portfolioChainSurface: ChainSurfaceProvider = {
   getAtmStrike(underlying: string, expiry: string): number | null {

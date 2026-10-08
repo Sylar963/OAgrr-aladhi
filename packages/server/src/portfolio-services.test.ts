@@ -12,6 +12,7 @@ import {
   blendSvi,
   buildSviFitPoints,
   getSmileFit,
+  portfolioMarkProvider,
   sviMark,
 } from './portfolio-services.js';
 
@@ -217,5 +218,27 @@ describe('applyChainDelta', () => {
     const next = applyChainDelta(prev, { stats: prev.stats, strikes: [added] });
 
     expect(next.strikes.map((row) => row.strike)).toEqual([2800, 3000, 3200]);
+  });
+});
+
+describe('portfolioMarkProvider venue mark', () => {
+  function venueLeg(legId: string, venueMarkTs: number): PositionLeg {
+    return {
+      ...makeLeg(3_000, 'call'),
+      legId,
+      underlying: 'VENUEMARKTEST',
+      venueMarkPriceUsd: 72.5,
+      venueMarkTs,
+    };
+  }
+
+  it('uses the holding venue mark while it is fresh', () => {
+    const mark = portfolioMarkProvider(venueLeg('venue-mark-fresh', Date.now()));
+    expect(mark.markPriceUsd).toBe(72.5);
+  });
+
+  it('ignores a stale venue mark', () => {
+    const mark = portfolioMarkProvider(venueLeg('venue-mark-stale', Date.now() - 5 * 60_000));
+    expect(mark.markPriceUsd).toBeNull();
   });
 });

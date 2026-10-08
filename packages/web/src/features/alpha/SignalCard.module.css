@@ -676,3 +676,32 @@
     width: 100%;
   }
 }
+
+.builderButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 11px;
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 38%, var(--border-default));
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.builderButton:hover {
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-elevated));
+  border-color: var(--accent-primary);
+}
+
+.builderButton:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 2px;
+}

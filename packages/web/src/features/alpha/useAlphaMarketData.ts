@@ -19,6 +19,8 @@ export function useAlphaMarketData(market: AlphaMarket) {
   const cryptoExpiry = useAppStore((s) => s.expiry);
   const setCryptoExpiry = useAppStore((s) => s.setExpiry);
   const activeVenues = useAppStore((s) => s.activeVenues);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setTradfiPage = useAppStore((s) => s.setTradfiPage);
   const cryptoVenues = useMemo(
     () => VENUE_IDS.filter((venue) => activeVenues.includes(venue)),
     [activeVenues],
@@ -42,6 +44,7 @@ export function useAlphaMarketData(market: AlphaMarket) {
       chainQuery: tradfiChain,
       changeAsset: selection.cycleUnderlying,
       prefetch: undefined,
+      showBuilder: () => setTradfiPage('builder'),
     };
   }
   return {
@@ -53,5 +56,6 @@ export function useAlphaMarketData(market: AlphaMarket) {
     chainQuery: cryptoChain,
     changeAsset: openPalette,
     prefetch: prefetchCrypto,
+    showBuilder: () => setActiveTab('architect'),
   };
 }

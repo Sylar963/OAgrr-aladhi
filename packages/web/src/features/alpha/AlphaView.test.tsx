@@ -1,3 +1,4 @@
+import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -100,7 +101,11 @@ beforeEach(() => {
       underlying: 'BTC',
       expiry: '2026-09-25',
       stats: { atmStrike: 80000 },
-      strikes: [{ strike: 80000 }, { strike: 81000 }],
+      strikes: [80000, 81000].map((strike) => ({
+        strike,
+        call: { venues: {} },
+        put: { venues: {} },
+      })),
     },
     isLoading: false,
     error: null,
@@ -261,5 +266,58 @@ describe('surgical Alpha enhancements', () => {
       expect.objectContaining({ quantity: 100, venues: ['tastytrade'] }),
     );
     expect(screen.getByLabelText(/AAPL shares \(100 = 1 contract\) per leg/)).toBeTruthy();
+  });
+
+  it('opens the selected TradFi spread in Builder V2 sized in contracts', () => {
+    const quote = (bid: number, ask: number) => ({
+      delta: 0.5,
+      gamma: 0.01,
+      theta: -0.1,
+      vega: 0.2,
+      markIv: 0.6,
+      execution: { bidUsd: bid, askUsd: ask, contractMultiplierBase: 100 },
+    });
+    mocks.tradfiChain.mockReturnValue({
+      data: {
+        underlying: 'AAPL',
+        expiry: '2026-10-16',
+        stats: { atmStrike: 200 },
+        strikes: [
+          { strike: 200, call: { venues: { tastytrade: quote(6, 6.2) } }, put: { venues: {} } },
+          { strike: 205, call: { venues: { tastytrade: quote(3.4, 3.6) } }, put: { venues: {} } },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+    mocks.scan.mockReturnValue([
+      {
+        venue: 'tastytrade',
+        rejected: {},
+        candidates: [
+          {
+            ...candidate,
+            id: 'tradfi-credit',
+            venue: 'tastytrade',
+            expiry: '2026-10-16',
+            sellStrike: 200,
+            buyStrike: 205,
+            quantity: 100,
+          },
+        ],
+      },
+    ]);
+    useAppStore.setState({ tradfiPage: 'alpha', builderVariant: 'v1' });
+    render(<AlphaView market="tradfi" />);
+    fireEvent.change(screen.getByLabelText(/Account equity/), { target: { value: '25000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Open both legs in Builder V2/ }));
+
+    expect(useAppStore.getState()).toMatchObject({ tradfiPage: 'builder', builderVariant: 'v2' });
+    const { legs, underlying } = useStrategyStore.getState();
+    expect(underlying).toBe('AAPL');
+    expect(legs.map((leg) => [leg.direction, leg.strike, leg.quantity, leg.entryPrice])).toEqual([
+      ['sell', 200, 1, 6],
+      ['buy', 205, 1, 3.6],
+    ]);
   });
 });

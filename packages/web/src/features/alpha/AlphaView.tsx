@@ -1,9 +1,11 @@
 import { EmptyState, Spinner } from '@components/ui';
+import { useStrategyStore } from '@features/architect/strategy-store';
 import { ExpiryBar } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 import type { VenueId } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
@@ -12,6 +14,7 @@ import styles from './AlphaView.module.css';
 import LongStraddlePanel from './LongStraddlePanel';
 import LottoScannerPanel from './LottoScannerPanel';
 import ProtectivePutPanel from './ProtectivePutPanel';
+import { verticalToBuilderLegs } from './radar-builder';
 import CrossVenueOpportunities from './CrossVenueOpportunities';
 import {
   type CrossVenueCandidate,
@@ -66,7 +69,10 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     chainQuery,
     changeAsset,
     prefetch,
+    showBuilder,
   } = useAlphaMarketData(market);
+  const replaceLegs = useStrategyStore((s) => s.replaceLegs);
+  const setBuilderVariant = useAppStore((s) => s.setBuilderVariant);
   const { data: chain, isLoading, error } = chainQuery;
 
   const isMobile = useIsMobile();
@@ -139,6 +145,18 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     setPreferredVenue(candidate.sellVenue);
     setPreferredBuyVenue(candidate.buyVenue);
     loadStrikes(candidate);
+  }
+
+  const builderLegs =
+    chain && selection
+      ? verticalToBuilderLegs(selection.candidate, selection.route, chain, tradfi)
+      : null;
+  function openInBuilder() {
+    if (!builderLegs) return;
+    replaceLegs(builderLegs, underlying);
+    setExpiry(expiry);
+    setBuilderVariant('v2');
+    showBuilder();
   }
 
   const atmStrike = chain?.stats.atmStrike ?? null;
@@ -262,6 +280,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
               : 'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.'
         }
         regime={regime ?? null}
+        {...(builderLegs && { onOpenBuilder: openInBuilder })}
       />
       <AlphaVenueOpportunities
         scans={scans}

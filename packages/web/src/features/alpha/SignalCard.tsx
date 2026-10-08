@@ -21,6 +21,7 @@ interface Props {
   emptyState: 'equity' | 'market' | 'quote';
   riskBudgetPct: number;
   regime?: RegimeResponse | null;
+  onOpenBuilder?: () => void;
 }
 
 const STATUS = {
@@ -39,6 +40,7 @@ function SignalCard({
   emptyState,
   riskBudgetPct,
   regime,
+  onOpenBuilder,
 }: Props) {
   const dominant = regime?.dominant ?? null;
   const direction = regime?.direction ?? null;
@@ -73,6 +75,7 @@ function SignalCard({
           riskBudgetPct={riskBudgetPct}
           dominant={dominant}
           direction={direction}
+          onOpenBuilder={onOpenBuilder}
         />
       )}
     </section>
@@ -87,6 +90,7 @@ function CandidateDashboard({
   riskBudgetPct,
   dominant,
   direction,
+  onOpenBuilder,
 }: {
   candidate: VerticalEconomics;
   route: ExecutionRoute;
@@ -95,6 +99,7 @@ function CandidateDashboard({
   riskBudgetPct: number;
   dominant: RegimeResponse['dominant'] | null;
   direction: RegimeResponse['direction'] | null;
+  onOpenBuilder: (() => void) | undefined;
 }) {
   const status = STATUS[candidate.status];
   const debit = candidate.kind.endsWith('debit');
@@ -227,6 +232,13 @@ function CandidateDashboard({
             ` Cross-venue: legs fill independently, so one can fill without the other, and ${sellLabel} margins the short leg as a naked short — collateral can far exceed max loss.`}
         </p>
       </details>
+
+      {onOpenBuilder && (
+        <button type="button" className={styles.builderButton} onClick={onOpenBuilder}>
+          <span>Open both legs in Builder V2</span>
+          <span aria-hidden="true">↗</span>
+        </button>
+      )}
     </>
   );
 }

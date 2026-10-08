@@ -5,6 +5,8 @@ import type {
 } from '@oggregator/protocol';
 
 import type { Leg } from '@features/architect/payoff';
+import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
+import type { VerticalEconomics } from './vertical-pricing';
 
 type RadarBuilderCandidate = Pick<
   AlphaLottoCandidate,
@@ -134,4 +136,43 @@ export function putCandidateToBuilderLeg(candidate: PutBuilderCandidate): Leg {
     vega: null,
     iv: candidate.markIv,
   };
+}
+
+/**
+ * Builder legs for a priced vertical, at the quotes it was priced on. `perContract` converts
+ * the base-unit quantity into contracts for markets whose Builder sizes legs in contracts.
+ */
+export function verticalToBuilderLegs(
+  candidate: VerticalEconomics,
+  route: { sellVenue: string; buyVenue: string },
+  chain: EnrichedChainResponse,
+  perContract: boolean,
+): Leg[] | null {
+  const right = candidate.kind.startsWith('call') ? 'call' : 'put';
+  const leg = (direction: 'buy' | 'sell', strike: number, venue: string): Leg | null => {
+    const quote = chain.strikes.find((s) => s.strike === strike)?.[right].venues[venue as VenueId];
+    const execution = quote?.execution;
+    const price = direction === 'buy' ? execution?.askUsd : execution?.bidUsd;
+    if (!quote || !execution || price == null) return null;
+    return {
+      id: `vertical:${venue}:${candidate.expiry}:${right}:${direction}:${strike}`,
+      type: right,
+      direction,
+      strike,
+      expiry: candidate.expiry,
+      quantity: perContract
+        ? candidate.quantity / execution.contractMultiplierBase
+        : candidate.quantity,
+      entryPrice: price,
+      venue,
+      delta: quote.delta,
+      gamma: quote.gamma,
+      theta: quote.theta,
+      vega: quote.vega,
+      iv: quote.markIv,
+    };
+  };
+  const sell = leg('sell', candidate.sellStrike, route.sellVenue);
+  const buy = leg('buy', candidate.buyStrike, route.buyVenue);
+  return sell && buy ? [sell, buy] : null;
 }

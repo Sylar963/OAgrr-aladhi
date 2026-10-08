@@ -2,6 +2,7 @@ import type { VenueId } from '@shared/enriched';
 import type { VenueScan } from './spread-scanner';
 import {
   INVALID_INPUT_REASON,
+  LIVE_QUOTE_LIMITS,
   type PricingRules,
   priceVertical,
   type RankedVertical,
@@ -36,6 +37,7 @@ const CROSS_RULES: PricingRules = {
   requireSameSettlement: false,
   allowInverse: false,
   combineFees: sumTakerFees,
+  ...LIVE_QUOTE_LIMITS,
 };
 
 const netEntry = (c: VerticalEconomics) => c.grossPremium - c.entryFee;

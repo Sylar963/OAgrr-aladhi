@@ -67,7 +67,11 @@ export interface PricingRules {
   allowInverse: boolean;
   /** Total fee for both legs; receives per-unit taker fees. */
   combineFees: (buyFee: number, sellFee: number, quantity: number) => number;
+  maxQuoteAgeMs: number;
+  maxLegSkewMs: number;
 }
+
+export const LIVE_QUOTE_LIMITS = { maxQuoteAgeMs: 15_000, maxLegSkewMs: 2_000 } as const;
 export interface ScanContext {
   input: SpreadScanInput;
   T: number;
@@ -147,6 +151,8 @@ function pairIssue(
     (rules.requireSameSettlement && b.settleCurrency !== s.settleCurrency)
   )
     return 'Settlement mismatch';
+  if (b.expiryTs != null && s.expiryTs != null && b.expiryTs !== s.expiryTs)
+    return 'Leg expiry times differ';
   if (b.inverse && (!positive(buy.underlyingPriceUsd) || !positive(sell.underlyingPriceUsd)))
     return 'Missing inverse conversion price';
   if (!positive(b.askUsd) || !positive(s.bidUsd)) return 'Missing buy ask / sell bid';
@@ -158,10 +164,10 @@ function pairIssue(
     !positive(sell.asOfMs) ||
     buy.asOfMs > input.nowMs ||
     sell.asOfMs > input.nowMs ||
-    input.nowMs - Math.min(buy.asOfMs, sell.asOfMs) > 15_000
+    input.nowMs - Math.min(buy.asOfMs, sell.asOfMs) > rules.maxQuoteAgeMs
   )
     return 'Stale or missing timestamp';
-  if (Math.abs(buy.asOfMs - sell.asOfMs) > 2_000) return 'Leg timestamps differ by over 2s';
+  if (Math.abs(buy.asOfMs - sell.asOfMs) > rules.maxLegSkewMs) return 'Leg timestamps out of sync';
   if (
     !positive(b.minQuantity) ||
     !positive(s.minQuantity) ||

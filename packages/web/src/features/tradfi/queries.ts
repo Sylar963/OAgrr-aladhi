@@ -1,7 +1,11 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
 
 import { tradfiFetchJson } from '@lib/tradfi-http';
 import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
+import { useAppStore } from '@stores/app-store';
+
+const NONE: string[] = [];
 
 interface TradfiUnderlyingsResponse {
   underlyings: string[];
@@ -41,6 +45,33 @@ export function useTradfiExpiries(underlying: string) {
     staleTime: 30_000,
     placeholderData: (prev: TradfiExpiriesResponse | undefined) => prev,
   });
+}
+
+/** Store-backed TradFi underlying/expiry, defaulting each to the first listed. */
+export function useTradfiSelection(enabled = true) {
+  const underlying = useAppStore((s) => s.tradfiUnderlying);
+  const expiry = useAppStore((s) => s.tradfiExpiry);
+  const setUnderlying = useAppStore((s) => s.setTradfiUnderlying);
+  const setExpiry = useAppStore((s) => s.setTradfiExpiry);
+  const underlyings = useTradfiUnderlyings(enabled).data?.underlyings ?? NONE;
+  const expiries = useTradfiExpiries(enabled ? underlying : '').data?.expiries ?? NONE;
+
+  useEffect(() => {
+    if (enabled && underlyings.length > 0 && !underlyings.includes(underlying)) {
+      setUnderlying(underlyings[0]!);
+    }
+  }, [enabled, underlyings, underlying, setUnderlying]);
+
+  useEffect(() => {
+    if (enabled && expiries.length > 0 && !expiry) setExpiry(expiries[0]!);
+  }, [enabled, expiries, expiry, setExpiry]);
+
+  const cycleUnderlying = useCallback(() => {
+    const next = underlyings[(underlyings.indexOf(underlying) + 1) % Math.max(underlyings.length, 1)];
+    if (next) setUnderlying(next);
+  }, [underlyings, underlying, setUnderlying]);
+
+  return { underlying, expiry, setExpiry, expiries, cycleUnderlying };
 }
 
 export function useTradfiChain(underlying: string, expiry: string) {

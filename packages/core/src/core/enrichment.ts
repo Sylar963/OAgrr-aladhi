@@ -67,6 +67,7 @@ export interface VenueExecutionQuote {
   bidTakerFeeUsd: number | null;
   askMakerFeeUsd: number | null;
   askTakerFeeUsd: number | null;
+  expiryTs?: number | null;
 }
 
 export interface EnrichedSide {
@@ -335,6 +336,7 @@ function buildVenueExecutionQuote(
     bidTakerFeeUsd: bidFees?.taker ?? null,
     askMakerFeeUsd: askFees?.maker ?? null,
     askTakerFeeUsd: askFees?.taker ?? null,
+    expiryTs: contract.expiryTs,
   };
 }
 

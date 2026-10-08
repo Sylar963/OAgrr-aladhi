@@ -198,7 +198,7 @@ function CandidateDashboard({
         <Metric label="Round trip est." value={fmtUsd(candidate.roundTrip)} />
       </div>
 
-      {spot != null && spot > 0 && <ScenarioMeter candidate={candidate} spot={spot} />}
+      {spot != null && spot > 0 && <ScenarioMeter candidate={candidate} spot={spot} underlying={underlying} />}
 
       <details className={styles.review}>
         <summary>Before trading · 3 checks</summary>
@@ -206,7 +206,7 @@ function CandidateDashboard({
           <ReviewStep
             number="01"
             title="Thesis"
-            text="What must BTC do by expiry? What proves you wrong?"
+            text={`What must ${underlying} do by expiry? What proves you wrong?`}
           />
           <ReviewStep
             number="02"
@@ -400,11 +400,19 @@ function ProbabilityDial({ value }: { value: number | null }) {
   );
 }
 
-function ScenarioMeter({ candidate, spot }: { candidate: VerticalEconomics; spot: number }) {
+function ScenarioMeter({
+  candidate,
+  spot,
+  underlying,
+}: {
+  candidate: VerticalEconomics;
+  spot: number;
+  underlying: string;
+}) {
   const moves = [-10, -5, 0, 5, 10];
   return (
     <details className={styles.scenarios}>
-      <summary>BTC move at expiry</summary>
+      <summary>{underlying} move at expiry</summary>
       <div className={styles.scenarioGrid}>
         {moves.map((move) => {
           const pnl = expiryPnl(candidate, spot * (1 + move / 100));

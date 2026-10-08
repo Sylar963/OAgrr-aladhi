@@ -5,8 +5,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('@hooks/useIsMobile', () => ({ useIsMobile: () => false }));
 
 vi.mock('./queries', () => ({
-  useTradfiUnderlyings: () => ({ data: { underlyings: ['AAPL'] } }),
-  useTradfiExpiries: () => ({ data: { underlying: 'AAPL', expiries: ['2026-06-17'] } }),
+  useTradfiSelection: () => ({
+    underlying: 'AAPL',
+    expiry: '2026-06-17',
+    setExpiry: () => {},
+    expiries: ['2026-06-17'],
+    cycleUnderlying: () => {},
+  }),
   useTradfiChain: () => ({
     data: {
       underlying: 'AAPL',

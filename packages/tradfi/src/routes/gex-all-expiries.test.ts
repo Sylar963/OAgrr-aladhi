@@ -21,6 +21,7 @@ function seed(store: TradfiStore) {
   const base: Omit<TradfiInstrument, 'streamerSymbol' | 'canonical' | 'expiry' | 'occSymbol'> = {
     underlying: 'SPX', strike: 5000, right: 'call', multiplier: 100,
     rootSymbol: 'SPX', settlementType: 'cash', expirationType: 'Regular',
+    expiryTs: 0, tickSizes: [],
   };
   store.setInstruments([
     { ...base, expiry: '2026-06-18', occSymbol: 'SPXA', streamerSymbol: '.A', canonical: 'SPX-20260618-5000-C' },

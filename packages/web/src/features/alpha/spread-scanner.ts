@@ -1,6 +1,7 @@
 import type { VenueId } from '@shared/enriched';
 import {
   INVALID_INPUT_REASON,
+  LIVE_QUOTE_LIMITS,
   type PricingRules,
   priceVertical,
   type RankedVertical,
@@ -21,17 +22,22 @@ export interface VenueScan {
   rejected: Record<string, number>;
 }
 
-// Thalex charges one combo fee for both legs.
-const THALEX_RULES: PricingRules = {
-  requireSameSettlement: true,
-  allowInverse: true,
-  combineFees: (buyFee, sellFee, quantity) =>
-    Math.max(0.0001, buyFee * quantity, sellFee * quantity),
-};
 const DEFAULT_RULES: PricingRules = {
   requireSameSettlement: true,
   allowInverse: true,
   combineFees: sumTakerFees,
+  ...LIVE_QUOTE_LIMITS,
+};
+const VENUE_RULES: Partial<Record<string, PricingRules>> = {
+  // Thalex charges one combo fee for both legs.
+  thalex: {
+    ...DEFAULT_RULES,
+    combineFees: (buyFee, sellFee, quantity) =>
+      Math.max(0.0001, buyFee * quantity, sellFee * quantity),
+  },
+  // 15-min delayed feed: asOfMs is when the delayed quote reached us, so these bound
+  // feed liveness (the service's 90s staleness window), not executability.
+  tastytrade: { ...DEFAULT_RULES, maxQuoteAgeMs: 90_000, maxLegSkewMs: 90_000 },
 };
 
 export function scanSpreads(input: SpreadScanInput): VenueScan[] {
@@ -43,7 +49,7 @@ export function scanSpreads(input: SpreadScanInput): VenueScan[] {
       reject(INVALID_INPUT_REASON);
       return result;
     }
-    const rules = venue === 'thalex' ? THALEX_RULES : DEFAULT_RULES;
+    const rules = VENUE_RULES[venue] ?? DEFAULT_RULES;
     for (const right of ['call', 'put'] as const) {
       const legs = venueLegs(input, venue, right);
       for (const buy of legs)

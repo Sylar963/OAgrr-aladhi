@@ -1,9 +1,8 @@
 import { EmptyState, Spinner } from '@components/ui';
 import { ChainTable, ExpiryBar, StatStrip } from '@features/chain';
 import { useIsMobile } from '@hooks/useIsMobile';
-import { useAppStore } from '@stores/app-store';
 import { useEffect, useState } from 'react';
-import { useTradfiChain, useTradfiExpiries, useTradfiUnderlyings } from './queries';
+import { useTradfiChain, useTradfiSelection } from './queries';
 import styles from './TradfiChainView.module.css';
 import TradfiChartPanel, { type TradfiChartPanelData } from './TradfiChartPanel';
 import { openTradfiChartPopout } from './tradfi-chart-popout';
@@ -13,28 +12,8 @@ const TRADFI_VENUES = ['tastytrade'];
 export default function TradfiChainView() {
   const isMobile = useIsMobile();
   const [modal, setModal] = useState<TradfiChartPanelData | null>(null);
-  const underlying = useAppStore((s) => s.tradfiUnderlying);
-  const expiry = useAppStore((s) => s.tradfiExpiry);
-  const setUnderlying = useAppStore((s) => s.setTradfiUnderlying);
-  const setExpiry = useAppStore((s) => s.setTradfiExpiry);
-
-  const { data: underlyingsData } = useTradfiUnderlyings();
-  const underlyings = underlyingsData?.underlyings ?? [];
-  const { data: expiriesData } = useTradfiExpiries(underlying);
-  const expiries = expiriesData?.expiries ?? [];
+  const { underlying, expiry, setExpiry, expiries, cycleUnderlying } = useTradfiSelection();
   const { data: chain, isLoading, error } = useTradfiChain(underlying, expiry);
-
-  // Default underlying → first available.
-  useEffect(() => {
-    if (underlyings.length > 0 && !underlyings.includes(underlying)) {
-      setUnderlying(underlyings[0]!);
-    }
-  }, [underlyings, underlying, setUnderlying]);
-
-  // Default expiry → first available.
-  useEffect(() => {
-    if (expiries.length > 0 && !expiry) setExpiry(expiries[0]!);
-  }, [expiries, expiry, setExpiry]);
 
   // Close the mobile chart modal on Escape (standard dialog behaviour).
   useEffect(() => {
@@ -68,11 +47,7 @@ export default function TradfiChainView() {
         expiries={expiries}
         selected={expiry}
         onSelect={setExpiry}
-        onChangeAsset={() => {
-          const i = underlyings.indexOf(underlying);
-          const next = underlyings[(i + 1) % Math.max(underlyings.length, 1)];
-          if (next) setUnderlying(next);
-        }}
+        onChangeAsset={cycleUnderlying}
       />
 
       {chain && (

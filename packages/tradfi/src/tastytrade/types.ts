@@ -45,6 +45,9 @@ export const NestedChainResponseSchema = z.object({
         'root-symbol': z.string().optional(),
         'option-chain-type': z.string().optional(),
         'shares-per-contract': z.number().optional(),
+        'tick-sizes': z
+          .array(z.object({ threshold: z.string().optional(), value: z.string() }))
+          .optional(),
         expirations: z.array(NestedExpirationSchema),
       }),
     ),

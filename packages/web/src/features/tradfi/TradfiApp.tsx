@@ -1,5 +1,5 @@
 import { Spinner } from '@components/ui';
-import { useAppStore } from '@stores/app-store';
+import { type TradfiPage, useAppStore } from '@stores/app-store';
 import { lazy, Suspense } from 'react';
 import { useTradfiUnderlyings } from './queries';
 import TradfiChainView from './TradfiChainView';
@@ -9,6 +9,16 @@ import styles from './TradfiApp.module.css';
 const ArchitectView = lazy(() =>
   import('@features/architect').then((module) => ({ default: module.ArchitectView })),
 );
+const AlphaView = lazy(() =>
+  import('@features/alpha').then((module) => ({ default: module.AlphaView })),
+);
+
+const PAGES: ReadonlyArray<[TradfiPage, string]> = [
+  ['chain', 'Chain'],
+  ['builder', 'Builder'],
+  ['gex', 'GEX'],
+  ['alpha', 'Alpha'],
+];
 
 export default function TradfiApp() {
   const setAssetMode = useAppStore((s) => s.setAssetMode);
@@ -27,30 +37,17 @@ export default function TradfiApp() {
         </button>
         <span className={styles.brand}>TRADFI</span>
         <nav className={styles.pageNav}>
-          <button
-            type="button"
-            className={styles.pageTab}
-            data-active={page === 'chain' || undefined}
-            onClick={() => setPage('chain')}
-          >
-            Chain
-          </button>
-          <button
-            type="button"
-            className={styles.pageTab}
-            data-active={page === 'builder' || undefined}
-            onClick={() => setPage('builder')}
-          >
-            Builder
-          </button>
-          <button
-            type="button"
-            className={styles.pageTab}
-            data-active={page === 'gex' || undefined}
-            onClick={() => setPage('gex')}
-          >
-            GEX
-          </button>
+          {PAGES.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={styles.pageTab}
+              data-active={page === id || undefined}
+              onClick={() => setPage(id)}
+            >
+              {label}
+            </button>
+          ))}
         </nav>
         <select
           className={styles.select}
@@ -72,6 +69,10 @@ export default function TradfiApp() {
           </Suspense>
         ) : page === 'gex' ? (
           <TradfiGexView />
+        ) : page === 'alpha' ? (
+          <Suspense fallback={<Spinner size="lg" label="Loading TradFi Alpha…" />}>
+            <AlphaView market="tradfi" />
+          </Suspense>
         ) : (
           <TradfiChainView />
         )}

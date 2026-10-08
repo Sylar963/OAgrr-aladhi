@@ -16,6 +16,8 @@ const inst: TradfiInstrument = {
   rootSymbol: 'SPXW',
   settlementType: 'cash',
   expirationType: 'Weekly',
+  expiryTs: 0,
+  tickSizes: [],
 };
 
 describe('buildCandlesResponse', () => {

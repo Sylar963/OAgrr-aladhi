@@ -18,6 +18,8 @@ const inst: TradfiInstrument = {
   rootSymbol: 'AAPL',
   settlementType: 'physical',
   expirationType: 'Regular',
+  expiryTs: 0,
+  tickSizes: [],
 };
 
 function readiness(over: Partial<TradfiReadiness> = {}): TradfiReadiness {

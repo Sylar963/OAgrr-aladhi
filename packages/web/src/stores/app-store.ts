@@ -18,7 +18,7 @@ function readStorage(key: string): string | null {
 
 export type ActiveContext = { kind: 'paper' | 'challenge' | 'thalex'; runId?: string };
 
-export type TradfiPage = 'chain' | 'builder' | 'gex';
+export type TradfiPage = 'chain' | 'builder' | 'gex' | 'alpha';
 export type BuilderVariant = 'v1' | 'v2' | 'v3';
 
 function readActiveContext(): ActiveContext {

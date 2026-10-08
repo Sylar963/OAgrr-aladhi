@@ -40,6 +40,7 @@ export function aggregateGreeksByStrike(legsWithMarks: LegWithMark[]): VegaByStr
       delta: 0,
       vega: 0,
       gamma: 0,
+      theta: 0,
       vanna: 0,
       volga: 0,
       contracts: 0,
@@ -51,6 +52,7 @@ export function aggregateGreeksByStrike(legsWithMarks: LegWithMark[]): VegaByStr
     row.delta += (mark.delta ?? 0) * leg.size;
     row.vega += (mark.vega ?? 0) * leg.size;
     row.gamma += (mark.gamma ?? 0) * leg.size;
+    row.theta += (mark.theta ?? 0) * leg.size;
     row.vanna += vanna * leg.size;
     row.volga += volga * leg.size;
     // Gross open contracts at the strike — same convention as byExpiry so a

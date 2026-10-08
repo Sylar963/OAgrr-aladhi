@@ -1,6 +1,6 @@
 import type { VegaByStrikeRow } from '@oggregator/protocol';
 
-export type StrikeRiskMode = 'delta' | 'vega' | 'gamma' | 'vanna' | 'volga';
+export type StrikeRiskMode = 'delta' | 'vega' | 'gamma' | 'theta' | 'vanna' | 'volga';
 
 export interface StrikeRiskBucket {
   strike: number;
@@ -24,6 +24,8 @@ export function translateStrikeRisk(
       const fivePctMoveUsd = spotUsd * 0.05;
       return 0.5 * rawValue * fivePctMoveUsd * fivePctMoveUsd;
     }
+    case 'theta':
+      return rawValue;
     case 'vanna':
       return rawValue * 5;
     case 'volga':

@@ -8,7 +8,12 @@ import styles from './PortfolioVegaCurve.module.css';
 function hasUsefulGreeks(rows: VegaByStrikeRow[]): boolean {
   return rows.some(
     (row) =>
-      row.delta !== 0 || row.vega !== 0 || row.gamma !== 0 || row.vanna !== 0 || row.volga !== 0,
+      row.delta !== 0 ||
+      row.vega !== 0 ||
+      row.gamma !== 0 ||
+      row.theta !== 0 ||
+      row.vanna !== 0 ||
+      row.volga !== 0,
   );
 }
 
@@ -45,11 +50,12 @@ interface Props {
   underlying: string | null;
 }
 
-const MODES: StrikeRiskMode[] = ['delta', 'vega', 'gamma', 'vanna', 'volga'];
+const MODES: StrikeRiskMode[] = ['delta', 'vega', 'gamma', 'theta', 'vanna', 'volga'];
 const COLORS: Record<StrikeRiskMode, string> = {
   delta: '#50d2c1',
   vega: '#a78bfa',
   gamma: '#f59e0b',
+  theta: '#f472b6',
   vanna: '#60a5fa',
   volga: '#f0c76a',
 };
@@ -80,6 +86,15 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     axis: 'curvature P&L for a ±5% spot move',
     lesson:
       'Gamma is the extra curvature beyond your current delta. It has the same sign up or down.',
+  },
+  theta: {
+    tab: 'Time decay',
+    greek: 'Theta Θ',
+    question: 'Am I paying or collecting time decay?',
+    scenario: '24 hours pass',
+    axis: 'estimated P&L after 24 hours with spot and IV unchanged',
+    lesson:
+      'Theta is the rent on convexity: long options pay it daily, short options collect it. Positive theta usually means short gamma.',
   },
   vanna: {
     tab: 'Hedge drift',
@@ -185,6 +200,8 @@ function rawDisplay(
       return `${fmtSignedNumber(value)} ${underlying}`;
     case 'vega':
       return `${fmtUsd(value)} / vol point`;
+    case 'theta':
+      return `${fmtUsd(value)} / day`;
     case 'gamma':
       // Raw gamma per $1 is ~1e-7 on BTC; per 1% spot move is the readable unit.
       return spotUsd == null
@@ -202,6 +219,7 @@ function posture(mode: StrikeRiskMode, value: number): string {
   if (mode === 'delta') return value > 0 ? 'LONG DELTA' : 'SHORT DELTA';
   if (mode === 'vega') return value > 0 ? 'LONG VOL' : 'SHORT VOL';
   if (mode === 'gamma') return value > 0 ? 'LONG CONVEXITY' : 'SHORT CONVEXITY';
+  if (mode === 'theta') return value > 0 ? 'COLLECTING THETA' : 'PAYING THETA';
   if (mode === 'vanna') return value > 0 ? 'HEDGE GROWS WITH IV' : 'HEDGE SHRINKS WITH IV';
   return value > 0 ? 'LONG VOL CONVEXITY' : 'SHORT VOL CONVEXITY';
 }
@@ -216,6 +234,11 @@ function actionText(mode: StrikeRiskMode, rawValue: number, underlying: string):
     return `${side} ${fmtNumber(Math.abs(rawValue))} ${underlying}-PERP`;
   }
   if (mode === 'gamma') return 'Recheck and rebalance delta after spot moves.';
+  if (mode === 'theta') {
+    return rawValue > 0
+      ? 'Decay pays you; watch the short gamma that funds it.'
+      : 'You need realized moves to out-earn this daily decay.';
+  }
   if (mode === 'vanna') return 'Recheck the perp hedge after a material IV move.';
   return 'A perp cannot hedge this; offset it with options.';
 }
@@ -427,7 +450,9 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
               <small>
                 {mode === 'delta'
                   ? 'Equivalent opposite delta, before fees and slippage'
-                  : 'Use the scenario grid above for combined shocks'}
+                  : mode === 'theta'
+                    ? 'Decay accelerates into expiry; this is today’s rate'
+                    : 'Use the scenario grid above for combined shocks'}
               </small>
             </div>
           </div>
@@ -617,8 +642,10 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
                 <span className={styles.inspectorEyebrow}>Selected risk bucket</span>
                 <strong>{fmtStrike(activeBucket.strike)} strike</strong>
                 <span>
-                  {scenarioDisplay(mode, activeBucket.scenarioValue, asset, spotUsd)} under{' '}
-                  {meta.scenario.toLowerCase()}
+                  {scenarioDisplay(mode, activeBucket.scenarioValue, asset, spotUsd)}{' '}
+                  {mode === 'theta'
+                    ? 'over the next 24 hours'
+                    : `under ${meta.scenario.toLowerCase()}`}
                 </span>
               </div>
               <div className={styles.inspectorStat}>

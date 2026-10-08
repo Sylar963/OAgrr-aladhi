@@ -12,6 +12,7 @@ const ROWS: VegaByStrikeRow[] = [
     delta: 0.3,
     vega: 110,
     gamma: 0.0001,
+    theta: -40,
     vanna: 0.002,
     volga: 4,
     contracts: 1,
@@ -23,6 +24,7 @@ const ROWS: VegaByStrikeRow[] = [
     delta: -0.2,
     vega: -30,
     gamma: -0.00004,
+    theta: 15,
     vanna: -0.001,
     volga: -1,
     contracts: 2,
@@ -42,6 +44,10 @@ describe('translateStrikeRisk', () => {
     expect(translateStrikeRisk('gamma', 0.0001, 80_000)).toBe(800);
   });
 
+  it('keeps theta in dollars per day', () => {
+    expect(translateStrikeRisk('theta', -42.5, 85_000)).toBe(-42.5);
+  });
+
   it('turns vanna and volga into five-vol-point shocks', () => {
     expect(translateStrikeRisk('vanna', 0.002, 85_000)).toBe(0.01);
     expect(translateStrikeRisk('volga', 4, 85_000)).toBe(50);
@@ -55,5 +61,11 @@ describe('buildStrikeRiskBuckets', () => {
     expect(bucket?.rawValue).toBeCloseTo(0.1, 8);
     expect(bucket?.scenarioValue).toBeCloseTo(85, 8);
     expect(bucket?.contracts).toBe(3);
+  });
+
+  it('nets theta across rights so a short leg offsets decay paid by a long leg', () => {
+    const [bucket] = buildStrikeRiskBuckets(ROWS, '2026-09-25', 'theta', 85_000);
+    expect(bucket?.rawValue).toBe(-25);
+    expect(bucket?.scenarioValue).toBe(-25);
   });
 });

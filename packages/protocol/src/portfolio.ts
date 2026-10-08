@@ -122,6 +122,7 @@ export const VegaByStrikeRowSchema = z.object({
   delta: z.number(),
   vega: z.number(),
   gamma: z.number(),
+  theta: z.number(),
   vanna: z.number(),
   volga: z.number(),
   contracts: z.number(),

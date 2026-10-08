@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CandlestickSeries,
@@ -12,7 +12,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 
-import { useExpiries } from '@features/chain';
+import { chainKeys } from '@features/chain';
 import { fetchJson } from '@lib/http';
 import { formatExpiry } from '@lib/format';
 import type { SpotCandleResolutionSec, SpotCandlesResponse } from '@shared/common';
@@ -24,6 +24,7 @@ import {
   otmStrangleBreakevens,
   pickNearestExpiry,
   type BeTenorTarget,
+  type ExpiryCandidate,
   type StructureBreakevens,
 } from './breakeven-levels';
 import styles from './BreakevenTaChart.module.css';
@@ -92,16 +93,79 @@ function fmtMovePct(level: number, spot: number): string {
   return `${pct >= 0 ? '+' : '-'}${Math.abs(pct).toFixed(1)}%`;
 }
 
-// Separate query key from the live chain cache: the chain WS patches that cache,
-// and these levels must stay frozen until the user refreshes the snapshot.
-function useSnapshotChains(underlying: string, expiries: string[]) {
-  return useQueries({
-    queries: expiries.map((expiry) => ({
+interface ExpiriesResponse {
+  expiries: string[];
+  timestamps?: ExpiryCandidate[];
+}
+
+type TenorExpiries = Record<BeTenorTarget, string | null>;
+
+function pickTenorExpiries(data: ExpiriesResponse | undefined, nowMs: number): TenorExpiries {
+  const candidates = data?.timestamps ?? data?.expiries.map((expiry) => ({ expiry, expiryTs: null })) ?? [];
+  return Object.fromEntries(
+    BE_TENOR_TARGETS.map((days) => [days, pickNearestExpiry(candidates, days, nowMs)]),
+  ) as TenorExpiries;
+}
+
+// Every TA underlying is loaded up front so switching BTC/ETH only swaps cached data.
+// Snapshot chains use their own key, not the live chain cache the chain WS patches,
+// so the levels stay frozen until the user refreshes the snapshot.
+function usePreloadedSnapshot() {
+  const expiryResults = useQueries({
+    queries: TA_UNDERLYINGS.map((underlying) => ({
+      queryKey: chainKeys.expiries(underlying),
+      queryFn: () => fetchJson<ExpiriesResponse>(`/expiries?underlying=${underlying}`),
+      staleTime: 30_000,
+    })),
+  });
+  const expiriesKey = expiryResults.map((r) => r.dataUpdatedAt).join(',');
+  const tenorsByUnderlying = useMemo(() => {
+    const now = Date.now();
+    return Object.fromEntries(
+      TA_UNDERLYINGS.map((underlying, i) => [underlying, pickTenorExpiries(expiryResults[i]?.data, now)]),
+    ) as Record<TaUnderlying, TenorExpiries>;
+  }, [expiriesKey]);
+
+  const chainTargets = TA_UNDERLYINGS.flatMap((underlying) =>
+    [...new Set(Object.values(tenorsByUnderlying[underlying]).filter((e): e is string => e != null))].map(
+      (expiry) => ({ underlying, expiry }),
+    ),
+  );
+  const chainResults = useQueries({
+    queries: chainTargets.map(({ underlying, expiry }) => ({
       queryKey: ['be-snapshot-chain', underlying, expiry],
       queryFn: () => fetchJson<EnrichedChainResponse>(`/chains?underlying=${underlying}&expiry=${expiry}`),
       staleTime: Infinity,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
+    })),
+  });
+
+  return {
+    tenorsByUnderlying,
+    expiriesErrorFor: (underlying: TaUnderlying) =>
+      expiryResults[TA_UNDERLYINGS.indexOf(underlying)]?.isError ?? false,
+    chainsFor: (underlying: TaUnderlying) =>
+      chainTargets.flatMap((target, i) =>
+        target.underlying === underlying ? [{ expiry: target.expiry, result: chainResults[i]! }] : [],
+      ),
+  };
+}
+
+function usePreloadedCandles(timeframe: Timeframe) {
+  const tf = TIMEFRAMES[timeframe];
+  return useQueries({
+    queries: TA_UNDERLYINGS.map((underlying) => ({
+      queryKey: ['spot-candles', underlying, tf.resolution, tf.buckets],
+      queryFn: () =>
+        fetchJson<SpotCandlesResponse>(
+          `/spot-candles?currency=${underlying}&resolution=${tf.resolution}&buckets=${tf.buckets}`,
+        ),
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+      // Placeholder is per underlying (fixed query index), so a timeframe switch may
+      // briefly show the same coin's previous range but never the other coin's candles.
+      placeholderData: (prev: SpotCandlesResponse | undefined) => prev,
     })),
   });
 }
@@ -126,29 +190,20 @@ export default function BreakevenTaChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const didFitRef = useRef(false);
 
-  const { data: expiriesData, isError: expiriesError } = useExpiries(underlying);
-  const tenorExpiries = useMemo(() => {
-    const now = Date.now();
-    const timestamps = expiriesData?.timestamps ?? [];
-    return Object.fromEntries(
-      BE_TENOR_TARGETS.map((days) => [days, pickNearestExpiry(timestamps, days, now)]),
-    ) as Record<BeTenorTarget, string | null>;
-  }, [expiriesData]);
-  const uniqueExpiries = useMemo(
-    () => [...new Set(Object.values(tenorExpiries).filter((e): e is string => e != null))],
-    [tenorExpiries],
-  );
-
-  const chainResults = useSnapshotChains(underlying, uniqueExpiries);
+  const snapshot = usePreloadedSnapshot();
+  const tenorExpiries = snapshot.tenorsByUnderlying[underlying];
+  const expiriesError = snapshot.expiriesErrorFor(underlying);
+  const chainEntries = snapshot.chainsFor(underlying);
   const chainsByExpiry = new Map<string, EnrichedChainResponse>();
-  chainResults.forEach((result, i) => {
-    if (result.data) chainsByExpiry.set(uniqueExpiries[i]!, result.data);
-  });
-  const chainsLoading = chainResults.some((r) => r.isLoading);
-  const chainsFetching = chainResults.some((r) => r.isFetching);
-  const snapshotAt = chainResults.reduce((max, r) => Math.max(max, r.dataUpdatedAt), 0);
-  const snapshotKey = chainResults.map((r) => r.dataUpdatedAt).join(',');
+  for (const { expiry, result } of chainEntries) {
+    if (result.data) chainsByExpiry.set(expiry, result.data);
+  }
+  const chainsLoading = chainEntries.some(({ result }) => result.isLoading);
+  const chainsFetching = chainEntries.some(({ result }) => result.isFetching);
+  const snapshotAt = chainEntries.reduce((max, { result }) => Math.max(max, result.dataUpdatedAt), 0);
+  const snapshotKey = `${underlying}:${chainEntries.map(({ expiry, result }) => `${expiry}@${result.dataUpdatedAt}`).join(',')}`;
 
   const structures = useMemo(() => {
     const out: Partial<Record<Exclude<LineKey, 'portfolio'>, StructureBreakevens | null>> = {};
@@ -168,22 +223,12 @@ export default function BreakevenTaChart({
   );
   const refSpot = structures.atm15?.refSpotUsd ?? structures.atm30?.refSpotUsd ?? null;
 
-  const tf = TIMEFRAMES[timeframe];
-  const {
-    data: candleData,
-    isLoading: candlesLoading,
-    error: candlesError,
-    refetch: refetchCandles,
-  } = useQuery({
-    queryKey: ['spot-candles', underlying, tf.resolution, tf.buckets],
-    queryFn: () =>
-      fetchJson<SpotCandlesResponse>(
-        `/spot-candles?currency=${underlying}&resolution=${tf.resolution}&buckets=${tf.buckets}`,
-      ),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    placeholderData: (prev: SpotCandlesResponse | undefined) => prev,
-  });
+  const candleResult = usePreloadedCandles(timeframe)[TA_UNDERLYINGS.indexOf(underlying)]!;
+  const candleData = candleResult.data?.currency === underlying ? candleResult.data : undefined;
+  const candlesLoading = candleData == null && !candleResult.isError;
+  const candlesError = candleResult.isError && candleData == null;
+  const candlesPlaceholder = candleResult.isPlaceholderData;
+  const refetchCandles = candleResult.refetch;
 
   const activeLevels = useMemo(() => {
     const levels: Array<{ spec: LineSpec; price: number; side: 'lower' | 'upper' | null }> = [];
@@ -234,8 +279,16 @@ export default function BreakevenTaChart({
   }, []);
 
   useEffect(() => {
+    didFitRef.current = false;
+  }, [underlying, timeframe]);
+
+  useEffect(() => {
     const series = seriesRef.current;
-    if (!series || !candleData) return;
+    if (!series) return;
+    if (!candleData) {
+      series.setData([]);
+      return;
+    }
     series.setData(
       candleData.candles.map((c) => ({
         time: Math.floor(c.timestamp / 1000) as Time,
@@ -245,8 +298,11 @@ export default function BreakevenTaChart({
         close: c.close,
       })),
     );
-    chartRef.current?.timeScale().fitContent();
-  }, [candleData]);
+    if (!didFitRef.current && !candlesPlaceholder) {
+      chartRef.current?.timeScale().fitContent();
+      didFitRef.current = true;
+    }
+  }, [candleData, candlesPlaceholder]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -300,7 +356,7 @@ export default function BreakevenTaChart({
   };
 
   const refreshSnapshot = () => {
-    for (const result of chainResults) void result.refetch();
+    for (const { result } of chainEntries) void result.refetch();
   };
 
   const chipDetail = (spec: LineSpec): { text: string; available: boolean } => {
@@ -353,7 +409,7 @@ export default function BreakevenTaChart({
           {snapshotAt > 0 ? `BE snapshot ${new Date(snapshotAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'BE snapshot —'}
           {refSpot != null && ` · ref spot ${fmtLevel(refSpot)}`}
         </span>
-        <button type="button" className={styles.refresh} onClick={refreshSnapshot} disabled={chainsFetching || uniqueExpiries.length === 0}>
+        <button type="button" className={styles.refresh} onClick={refreshSnapshot} disabled={chainsFetching || chainEntries.length === 0}>
           {chainsFetching ? 'Refreshing…' : 'Refresh snapshot'}
         </button>
       </div>
@@ -387,7 +443,7 @@ export default function BreakevenTaChart({
 
       <div className={styles.chartWrap}>
         <div className={styles.canvas} ref={containerRef} />
-        {candlesLoading && !candleData && <div className={styles.overlay}>Loading spot history…</div>}
+        {candlesLoading && <div className={styles.overlay}>Loading {underlying} spot history…</div>}
         {candlesError && (
           <div className={styles.overlay}>
             <div>Spot history unavailable</div>

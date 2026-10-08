@@ -8,6 +8,7 @@ export { default as InstrumentChart } from './InstrumentChart';
 export type { AttributionBar, AttributionResult, OptionRight } from './pnl-attribution';
 export { attributePnL } from './pnl-attribution';
 export {
+  chainKeys,
   useAllExpiriesGex,
   useChainQuery,
   useExpiries,

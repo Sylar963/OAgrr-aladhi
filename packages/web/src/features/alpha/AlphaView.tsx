@@ -218,6 +218,9 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     regimeDominant,
   });
 
+  const atmIv = analysis.smile?.atmIv ?? null;
+  const impliedMove = atmIv != null && analysis.T != null ? atmIv * Math.sqrt(analysis.T) : null;
+
   const richness = useMemo(
     () => computeSviRichness(analysis.smile, analysis.T),
     [analysis.smile, analysis.T],
@@ -270,6 +273,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         route={selection?.route ?? null}
         underlying={underlying}
         spot={analysis.spot}
+        impliedMove={impliedMove}
         riskBudgetPct={Number(sizing.riskPct)}
         emptyState={!sizing.equity.trim() ? 'equity' : error ? 'market' : 'quote'}
         emptyReason={

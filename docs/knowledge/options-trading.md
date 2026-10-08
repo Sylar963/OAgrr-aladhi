@@ -442,6 +442,10 @@ Alpha currently shows:
   selected expiry and strategy. Not an exhaustive cross-expiry optimizer.
 - Entry bid/ask pricing, known normalized entry fees, quote/size eligibility, and exclusions.
 - Size-adjusted payoff, breakeven, model EV, risk-neutral probability, and expiry scenarios.
+  Expiry scenarios step spot by −2σ…+2σ with σ = ATM IV·√T (lognormal, so −2σ stays above
+  zero), so a high-IV stock and BTC each get moves sized to their own implied range. Fixed
+  ±5/10% is only the fallback when ATM IV is missing. The footnote states the breakeven move in
+  % and σ.
 - Read-only connected portfolio context. Candidate risk is not combined margin approval.
 - Long Put tab: protective puts sized to a manually entered holding (tight floor / balanced /
   crash cover per expiry) and an outright long-put radar. Scan only; no orders.

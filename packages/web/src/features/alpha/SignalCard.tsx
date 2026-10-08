@@ -20,6 +20,8 @@ interface Props {
   emptyReason: string;
   emptyState: 'equity' | 'market' | 'quote';
   riskBudgetPct: number;
+  /** ATM IV × √T: one standard deviation of log return to expiry. */
+  impliedMove?: number | null;
   regime?: RegimeResponse | null;
   onOpenBuilder?: () => void;
 }
@@ -39,6 +41,7 @@ function SignalCard({
   emptyReason,
   emptyState,
   riskBudgetPct,
+  impliedMove = null,
   regime,
   onOpenBuilder,
 }: Props) {
@@ -73,6 +76,7 @@ function SignalCard({
           underlying={underlying}
           spot={spot}
           riskBudgetPct={riskBudgetPct}
+          impliedMove={impliedMove}
           dominant={dominant}
           direction={direction}
           onOpenBuilder={onOpenBuilder}
@@ -88,6 +92,7 @@ function CandidateDashboard({
   underlying,
   spot,
   riskBudgetPct,
+  impliedMove,
   dominant,
   direction,
   onOpenBuilder,
@@ -97,6 +102,7 @@ function CandidateDashboard({
   underlying: string;
   spot: number | null;
   riskBudgetPct: number;
+  impliedMove: number | null;
   dominant: RegimeResponse['dominant'] | null;
   direction: RegimeResponse['direction'] | null;
   onOpenBuilder: (() => void) | undefined;
@@ -203,7 +209,14 @@ function CandidateDashboard({
         <Metric label="Round trip est." value={fmtUsd(candidate.roundTrip)} />
       </div>
 
-      {spot != null && spot > 0 && <ScenarioMeter candidate={candidate} spot={spot} underlying={underlying} />}
+      {spot != null && spot > 0 && (
+        <ScenarioMeter
+          candidate={candidate}
+          spot={spot}
+          underlying={underlying}
+          impliedMove={impliedMove}
+        />
+      )}
 
       <details className={styles.review}>
         <summary>Before trading · 3 checks</summary>
@@ -290,8 +303,12 @@ function PayoffChart({ candidate, spot }: { candidate: VerticalEconomics; spot: 
   const lowStrike = Math.min(candidate.buyStrike, candidate.sellStrike);
   const highStrike = Math.max(candidate.buyStrike, candidate.sellStrike);
   const width = highStrike - lowStrike;
-  const from = lowStrike - width * 0.8;
-  const to = highStrike + width * 0.8;
+  const pad = width * 0.8;
+  const from = Math.max(
+    0,
+    Math.min(lowStrike - pad, spot != null && spot > 0 ? spot - pad : Infinity),
+  );
+  const to = Math.max(highStrike + pad, spot != null && spot > 0 ? spot + pad : 0);
   const chartWidth = 520;
   const chartHeight = 132;
   const padding = 10;
@@ -412,29 +429,45 @@ function ProbabilityDial({ value }: { value: number | null }) {
   );
 }
 
+const FALLBACK_MOVES = [-10, -5, 0, 5, 10].map((pct) => ({ label: null, ret: pct / 100 }));
+const SIGMA_STEPS = [-2, -1, 0, 1, 2];
+
 function ScenarioMeter({
   candidate,
   spot,
   underlying,
+  impliedMove,
 }: {
   candidate: VerticalEconomics;
   spot: number;
   underlying: string;
+  impliedMove: number | null;
 }) {
-  const moves = [-10, -5, 0, 5, 10];
+  const sigma = impliedMove != null && impliedMove > 0 ? impliedMove : null;
+  // Lognormal steps keep −2σ above zero for high-IV names, where a linear −2σ can pass −100%.
+  const moves =
+    sigma == null
+      ? FALLBACK_MOVES
+      : SIGMA_STEPS.map((step) => ({
+          label: step === 0 ? 'spot' : `${step > 0 ? '+' : '−'}${Math.abs(step)}σ`,
+          ret: Math.exp(step * sigma) - 1,
+        }));
+  const breakevenMove = candidate.breakeven / spot - 1;
+  const breakevenSigma = sigma == null ? null : Math.log(candidate.breakeven / spot) / sigma;
   return (
     <details className={styles.scenarios}>
       <summary>{underlying} move at expiry</summary>
       <div className={styles.scenarioGrid}>
-        {moves.map((move) => {
-          const pnl = expiryPnl(candidate, spot * (1 + move / 100));
+        {moves.map(({ label, ret }) => {
+          const price = spot * (1 + ret);
+          const pnl = expiryPnl(candidate, price);
           const magnitude =
             pnl >= 0 ? pnl / candidate.maxProfit : Math.abs(pnl) / candidate.maxLoss;
           return (
-            <div className={styles.scenario} key={move}>
+            <div className={styles.scenario} key={label ?? ret}>
               <span>
-                {move > 0 ? '+' : ''}
-                {move}%
+                {label && <b>{label} </b>}
+                {fmtPct(ret)} · {fmtUsd(price)}
               </span>
               <div className={styles.scenarioTrack}>
                 <i
@@ -448,10 +481,21 @@ function ScenarioMeter({
         })}
       </div>
       <p className={styles.footnote}>
+        Breakeven {fmtUsd(candidate.breakeven)} needs {fmtPct(breakevenMove)}
+        {breakevenSigma != null && ` (${Math.abs(breakevenSigma).toFixed(1)}σ)`}.{' '}
+        {sigma != null
+          ? `1σ = ATM IV × √T = ${(sigma * 100).toFixed(1)}% to expiry. `
+          : 'ATM IV unavailable, so moves are fixed ±5/10%. '}
         Expiry payoff only. Before expiry, time and IV also move the price.
       </p>
     </details>
   );
+}
+
+function fmtPct(ret: number): string {
+  const pct = ret * 100;
+  if (Math.abs(pct) < 0.05) return '0%';
+  return `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(Math.abs(pct) < 10 ? 1 : 0)}%`;
 }
 
 function Metric({

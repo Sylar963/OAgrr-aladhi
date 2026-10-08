@@ -705,3 +705,8 @@
   outline: 1px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+.scenario span b {
+  font-weight: 600;
+  color: var(--text-secondary);
+}

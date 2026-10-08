@@ -15,26 +15,38 @@ const meta = {
 afterEach(cleanup);
 
 describe('ShockHeatmap', () => {
-  it('defaults to live total P&L and offers incremental shock impact', () => {
+  it('centres on now with no additional shock when no entry IV is known', () => {
     render(<ShockHeatmap grid={grid} meta={meta} currentUnrealizedPnl={-12.5} />);
 
-    expect(screen.queryByText('You are here')).toBeNull();
     expect(screen.getByText('Live baseline')).toBeTruthy();
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('-$12.50');
-    expect(screen.getByText('2/2 legs')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Shock impact' }));
-
     expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('$0');
+    expect(screen.getByTestId('open-pnl').textContent).toBe('-$12.50');
+    expect(screen.queryByRole('button', { name: 'Total open P&L' })).toBeNull();
   });
 
-  it('updates the center with live P&L and does not fabricate missing P&L', () => {
-    const view = render(<ShockHeatmap grid={grid} meta={meta} currentUnrealizedPnl={4} />);
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$4.00');
-    view.rerender(<ShockHeatmap grid={grid} meta={meta} currentUnrealizedPnl={7} />);
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$7.00');
-    view.rerender(<ShockHeatmap grid={grid} meta={meta} currentUnrealizedPnl={null} />);
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('—');
+  it('splits open P&L into spot, time, vol and other', () => {
+    render(
+      <ShockHeatmap
+        grid={grid}
+        meta={meta}
+        currentUnrealizedPnl={95.22}
+        attribution={{
+          openPnlUsd: 95.22,
+          spotUsd: 80,
+          timeUsd: 12,
+          volUsd: 2.5,
+          otherUsd: 0.72,
+          unattributedUsd: 0,
+          attributedLegs: 2,
+          totalLegs: 2,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Spot (Δ + Γ)').nextSibling?.textContent).toBe('+$80.00');
+    expect(screen.getByText('Time (Θ)').nextSibling?.textContent).toBe('+$12.00');
+    expect(screen.getByTestId('vol-pnl').textContent).toBe('+$2.50');
+    expect(screen.queryByText(/No fills/)).toBeNull();
   });
 
   it('discloses positions excluded from repricing', () => {
@@ -49,7 +61,7 @@ describe('ShockHeatmap', () => {
     expect(screen.getByRole('status').textContent).toContain('1 leg excluded');
   });
 
-  it('moves the now marker to the vol drift since entry', () => {
+  it('defaults to the entry anchor and moves the now marker to the vol drift', () => {
     const atm = [-5, 0, 5];
     const skew = [-0.1, 0, 0.1];
     const entryGrid = atm.map((a) =>
@@ -74,16 +86,14 @@ describe('ShockHeatmap', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'From entry' }));
-
     const nowCell = screen.getByTestId('current-shock-cell-value').closest('td');
     expect(nowCell?.getAttribute('title')).toContain('ATM +4.2 pts · skew +8');
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$22.00');
+    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$50.00');
     expect(screen.getByText('Entry')).toBeTruthy();
     expect(screen.getByText(/first live IV this server recorded/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Shock impact' }));
-    expect(screen.getByTestId('current-shock-cell-value').textContent).toBe('+$50.00');
+    fireEvent.click(screen.getByRole('button', { name: 'From now' }));
+    expect(screen.getByText('Live baseline')).toBeTruthy();
   });
 
   it('disables the entry anchor when no entry IV is known', () => {

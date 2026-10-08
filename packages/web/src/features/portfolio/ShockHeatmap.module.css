@@ -78,20 +78,22 @@
 }
 
 .referenceStrip {
-  display: grid;
-  grid-template-columns: minmax(210px, 1.45fr) repeat(3, minmax(120px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   border: 1px solid #252b28;
   background: #0a0d0c;
 }
 
 .locationBlock,
 .referenceMetric {
+  flex: 1 1 96px;
   min-width: 0;
   padding: 10px 12px;
   border-right: 1px solid #202522;
 }
 
 .locationBlock {
+  flex: 1.45 1 210px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -130,8 +132,8 @@
   color: #f07b78;
 }
 
-.referenceMetric strong[data-coverage='partial'] {
-  color: var(--matrix-amber);
+.referenceMetric[data-highlight] {
+  box-shadow: inset 0 -2px 0 var(--matrix-amber);
 }
 
 .nowBadge {
@@ -336,10 +338,6 @@
 
   .toggles {
     justify-content: flex-start;
-  }
-
-  .referenceStrip {
-    grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 
   .locationBlock,

@@ -90,4 +90,5 @@ export {
   type FoldContext,
 } from './position-fold.js';
 export { detectStrategyGroups } from './strategy-groups.js';
-export { entryIvFromFills, type EntryFill } from './entry-iv.js';
+export { entryAnchorFromFills, type EntryAnchor, type EntryFill } from './entry-iv.js';
+export { computePnlAttribution } from './pnl-attribution.js';

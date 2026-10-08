@@ -235,6 +235,17 @@ const ShockGridMetaSchema = z.object({
   anchor: z.literal('per_leg_forward'),
 });
 
+const PnlAttributionSchema = z.object({
+  openPnlUsd: z.number(),
+  spotUsd: z.number(),
+  timeUsd: z.number(),
+  volUsd: z.number(),
+  otherUsd: z.number(),
+  unattributedUsd: z.number(),
+  attributedLegs: z.number().int().nonnegative(),
+  totalLegs: z.number().int().nonnegative(),
+});
+
 const EntryVolDriftSchema = z.object({
   atmShiftVolPts: z.number(),
   skewShiftPerLogK: z.number(),
@@ -293,6 +304,7 @@ const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
   shockGridMeta: ShockGridMetaSchema,
   entryShockGrid: z.array(z.array(ShockGridCellSchema)).optional(),
   entryDrift: EntryVolDriftSchema.nullable().optional(),
+  pnlAttribution: PnlAttributionSchema.nullable().optional(),
   strategies: z.array(StrategyGroupSchema),
   accounting: z.object({
     openGrossDebitUsd: z.number().nonnegative(),

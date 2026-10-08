@@ -254,6 +254,7 @@ export default function PortfolioView() {
             meta={metrics?.shockGridMeta ?? null}
             entryGrid={metrics?.entryShockGrid ?? []}
             entryDrift={metrics?.entryDrift ?? null}
+            attribution={metrics?.pnlAttribution ?? null}
             currentUnrealizedPnl={metrics?.totals.unrealizedPnlUsd ?? null}
           />
           <MarketMovement positions={positions} />

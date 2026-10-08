@@ -1,6 +1,11 @@
 import { useState } from 'react';
 
-import type { EntryVolDrift, ShockGridCell, ShockGridMeta } from '@oggregator/protocol';
+import type {
+  EntryVolDrift,
+  PnlAttribution,
+  ShockGridCell,
+  ShockGridMeta,
+} from '@oggregator/protocol';
 
 import styles from './ShockHeatmap.module.css';
 
@@ -9,10 +14,10 @@ interface Props {
   meta: ShockGridMeta | null;
   entryGrid?: ShockGridCell[][];
   entryDrift?: EntryVolDrift | null;
+  attribution?: PnlAttribution | null;
   currentUnrealizedPnl: number | null;
 }
 
-type ValueMode = 'incremental' | 'total';
 type AnchorMode = 'now' | 'entry';
 
 function fmtUsdShort(value: number): string {
@@ -65,10 +70,10 @@ export default function ShockHeatmap({
   meta,
   entryGrid = [],
   entryDrift = null,
+  attribution = null,
   currentUnrealizedPnl,
 }: Props) {
-  const [valueMode, setValueMode] = useState<ValueMode>('total');
-  const [anchorRequested, setAnchorMode] = useState<AnchorMode>('now');
+  const [anchorRequested, setAnchorMode] = useState<AnchorMode>('entry');
 
   const entryAvailable = entryDrift != null && (entryGrid[0]?.length ?? 0) > 0;
   const anchorMode: AnchorMode = anchorRequested === 'entry' && entryAvailable ? 'entry' : 'now';
@@ -78,11 +83,8 @@ export default function ShockHeatmap({
     return <div className={styles.empty}>Add positions to see vol-shock P&amp;L.</div>;
   }
 
-  const openPnl = currentUnrealizedPnl ?? 0;
-  const totalUnavailable = valueMode === 'total' && currentUnrealizedPnl == null;
   const sinceEntryPnl = anchorMode === 'entry' ? (entryDrift?.volPnlUsd ?? 0) : 0;
-  const valueFor = (cell: ShockGridCell): number =>
-    valueMode === 'total' ? openPnl + cell.totalPnlUsd : cell.totalPnlUsd + sinceEntryPnl;
+  const valueFor = (cell: ShockGridCell): number => cell.totalPnlUsd + sinceEntryPnl;
 
   const maxAbs = activeGrid
     .flat()
@@ -145,24 +147,6 @@ export default function ShockHeatmap({
               From entry
             </button>
           </div>
-          <div className={styles.modeToggle} role="group" aria-label="Matrix value mode">
-            <button
-              type="button"
-              data-active={valueMode === 'incremental' || undefined}
-              aria-pressed={valueMode === 'incremental'}
-              onClick={() => setValueMode('incremental')}
-            >
-              Shock impact
-            </button>
-            <button
-              type="button"
-              data-active={valueMode === 'total' || undefined}
-              aria-pressed={valueMode === 'total'}
-              onClick={() => setValueMode('total')}
-            >
-              Total open P&amp;L
-            </button>
-          </div>
         </div>
       </div>
 
@@ -183,28 +167,20 @@ export default function ShockHeatmap({
             )}
           </div>
         </div>
-        <div className={styles.referenceMetric}>
-          <span>Current open P&amp;L</span>
-          <strong data-sign={openPnl >= 0 ? 'positive' : 'negative'}>{currentUnrealizedPnl == null ? 'Unavailable' : fmtUsdShort(openPnl)}</strong>
-        </div>
-        <div className={styles.referenceMetric}>
-          <span>Repricing coverage</span>
-          <strong data-coverage={coverageComplete ? 'complete' : 'partial'}>
-            {pricedLegs}/{totalLegs} legs
-          </strong>
-        </div>
-        {anchorMode === 'entry' ? (
-          <div className={styles.referenceMetric}>
-            <span>Vol P&amp;L {basisLabel.toLowerCase()}</span>
-            <strong data-sign={sinceEntryPnl >= 0 ? 'positive' : 'negative'}>
-              {fmtUsdShort(sinceEntryPnl)}
-            </strong>
-          </div>
-        ) : (
-          <div className={styles.referenceMetric}>
-            <span>Skew anchor</span>
-            <strong>Each leg forward</strong>
-          </div>
+        <Metric label="Open P&L" value={currentUnrealizedPnl} testId="open-pnl" />
+        {attribution != null && attribution.attributedLegs > 0 && (
+          <>
+            <Metric label="Spot (Δ + Γ)" value={attribution.spotUsd} />
+            <Metric label="Time (Θ)" value={attribution.timeUsd} />
+            <Metric label="Vol · square" value={attribution.volUsd} highlight testId="vol-pnl" />
+            <Metric label="Other" value={attribution.otherUsd} />
+            {attribution.attributedLegs < attribution.totalLegs && (
+              <Metric
+                label={`No fills · ${attribution.totalLegs - attribution.attributedLegs} leg${attribution.totalLegs - attribution.attributedLegs === 1 ? '' : 's'}`}
+                value={attribution.unattributedUsd}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -263,15 +239,15 @@ export default function ShockHeatmap({
                     const title = isCurrent
                       ? anchorMode === 'entry'
                         ? `Now · vol drift ${basisLabel.toLowerCase()} ${driftLabel}${driftOffGrid ? ' (beyond grid range, pinned to edge)' : ''} · vol P&L ${fmtUsdShort(sinceEntryPnl)}`
-                        : `Current surface · shock impact ${fmtUsdShort(cell.totalPnlUsd)} · total open P&L ${currentUnrealizedPnl == null ? 'unavailable' : fmtUsdShort(openPnl)}`
-                      : `ATM IV ${fmtAxis(cell.atmShiftVolPts, 1)} vol pts · skew slope ${fmtAxis(cell.skewShiftPerLogK * 100)} vol pts/log-K${anchorMode === 'entry' ? ' from entry' : ''} · ${valueMode === 'total' ? 'total' : 'impact'} ${totalUnavailable ? 'unavailable' : fmtUsdShort(displayValue)}`;
+                        : 'Current surface · no additional shock'
+                      : `ATM IV ${fmtAxis(cell.atmShiftVolPts, 1)} vol pts · skew slope ${fmtAxis(cell.skewShiftPerLogK * 100)} vol pts/log-K${anchorMode === 'entry' ? ' from entry' : ''} · ${fmtUsdShort(displayValue)}`;
 
                     return (
                       <td
                         key={`${cell.atmShiftVolPts}-${cell.skewShiftPerLogK}`}
                         data-current={isCurrent || undefined}
                         data-entry={(isEntry && !isCurrent) || undefined}
-                        style={{ background: totalUnavailable ? '#181c24' : colorFor(displayValue, maxAbs) }}
+                        style={{ background: colorFor(displayValue, maxAbs) }}
                         title={title}
                       >
                         {isCurrent && (
@@ -284,7 +260,7 @@ export default function ShockHeatmap({
                           className={styles.cellValue}
                           {...(isCurrent ? { 'data-testid': 'current-shock-cell-value' } : {})}
                         >
-                          {totalUnavailable ? '—' : fmtUsdShort(displayValue)}
+                          {fmtUsdShort(displayValue)}
                         </span>
                       </td>
                     );
@@ -309,13 +285,39 @@ export default function ShockHeatmap({
         <span><b>Columns</b> skew-slope change in vol points per ln(K/F)</span>
         <span>
           <b>Values</b>{' '}
-          {valueMode === 'total'
-            ? 'current open P&L + move from now to that cell'
-            : anchorMode === 'entry'
-              ? 'vol P&L versus the entry surface'
-              : 'model-consistent change from now'}
+          {anchorMode === 'entry' ? 'vol P&L versus the entry surface' : 'model-consistent change from now'}
         </span>
+        {attribution != null && attribution.attributedLegs > 0 && (
+          <span>
+            <b>Split</b> Black-76 revaluation from entry: spot, then time, then IV. Other is
+            venue mark and fill prices versus the model.
+          </span>
+        )}
       </div>
     </section>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  highlight = false,
+  testId,
+}: {
+  label: string;
+  value: number | null;
+  highlight?: boolean;
+  testId?: string;
+}) {
+  return (
+    <div className={styles.referenceMetric} data-highlight={highlight || undefined}>
+      <span>{label}</span>
+      <strong
+        data-sign={value == null ? undefined : value >= 0 ? 'positive' : 'negative'}
+        {...(testId != null ? { 'data-testid': testId } : {})}
+      >
+        {value == null ? 'Unavailable' : fmtUsdShort(value)}
+      </strong>
+    </div>
   );
 }

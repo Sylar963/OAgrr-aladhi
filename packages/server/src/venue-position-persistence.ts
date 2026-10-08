@@ -1,4 +1,9 @@
-import { entryIvFromFills, type EntryFill, type PositionLeg } from '@oggregator/core';
+import {
+  entryAnchorFromFills,
+  type EntryAnchor,
+  type EntryFill,
+  type PositionLeg,
+} from '@oggregator/core';
 import type {
   ExchangePortfolioTrade,
   PortfolioAccounting,
@@ -56,6 +61,9 @@ export function carryEntryIvs(
       ...leg,
       entryIv: previous.entryIv,
       ...(previous.entryIvSource != null ? { entryIvSource: previous.entryIvSource } : {}),
+      ...(previous.entryIvSource === 'fill'
+        ? { entryTs: previous.entryTs, entryUnderlyingUsd: previous.entryUnderlyingUsd ?? null }
+        : {}),
     };
   });
 }
@@ -127,12 +135,12 @@ export class VenuePositionPersistence {
     return this.hydrated.has(accountId);
   }
 
-  // legId → IV back-solved from the persisted opening fills of each open leg.
-  async resolveFillEntryIvs(
+  // legId → entry anchor back-solved from the persisted opening fills of each open leg.
+  async resolveFillEntryAnchors(
     accountId: string,
     legs: PositionLeg[],
-  ): Promise<Map<string, number>> {
-    const resolved = new Map<string, number>();
+  ): Promise<Map<string, EntryAnchor>> {
+    const resolved = new Map<string, EntryAnchor>();
     const priceAt = this.priceAt;
     if (!this.ledger.enabled || priceAt == null || legs.length === 0) return resolved;
 
@@ -157,8 +165,8 @@ export class VenuePositionPersistence {
           underlyingPriceUsd: await priceAt(trade.underlying, trade.timestampMs).catch(() => null),
         })),
       );
-      const entryIv = entryIvFromFills(leg, fills);
-      if (entryIv != null) resolved.set(leg.legId, entryIv);
+      const anchor = entryAnchorFromFills(leg, fills);
+      if (anchor != null) resolved.set(leg.legId, anchor);
     }
     return resolved;
   }

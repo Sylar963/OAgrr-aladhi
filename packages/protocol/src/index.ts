@@ -197,6 +197,8 @@ export {
   type ShockGridMeta,
   type EntryVolDrift,
   EntryVolDriftSchema,
+  type PnlAttribution,
+  PnlAttributionSchema,
   ShockGridMetaSchema,
   type StrategyGroupLeg,
   StrategyGroupLegSchema,

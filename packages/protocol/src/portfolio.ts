@@ -47,6 +47,9 @@ export const PositionLegSchema = z.object({
   // How a venue leg's entryIv was obtained: back-solved from its opening fills, or
   // the first live IV the server saw. Absent for manual/paper legs.
   entryIvSource: z.enum(['fill', 'first_seen']).optional(),
+  // Underlying price at entryTs, the spot anchor for P&L attribution. Fill-anchored
+  // legs set entryTs to the amount-weighted time of the same opening fills.
+  entryUnderlyingUsd: z.number().positive().nullable().optional(),
   // Realized PnL accumulated by prior partial closes on this leg. Manual
   // upserts that reduce or flip size fold the closed slice into this field
   // instead of dropping it.
@@ -229,6 +232,22 @@ export type ShockGridMeta = z.infer<typeof ShockGridMetaSchema>;
 // Live IV move since each leg's entry IV, fitted as one ATM shift plus one skew tilt
 // across legs (vega-weighted, against ln(K/F)). Venue legs have no trade-time IV, so
 // their entry IV is the first live IV the server saw: basis 'first_seen'.
+// Open P&L since entry, split by full Black-76 revaluation in a fixed order: spot moves
+// (delta + gamma), then time (theta), then IV (vega + skew). `otherUsd` is the gap
+// between venue marks/fills and the model; legs without an entry anchor are
+// `unattributedUsd`. All five parts sum to `openPnlUsd`.
+export const PnlAttributionSchema = z.object({
+  openPnlUsd: z.number(),
+  spotUsd: z.number(),
+  timeUsd: z.number(),
+  volUsd: z.number(),
+  otherUsd: z.number(),
+  unattributedUsd: z.number(),
+  attributedLegs: z.number().int().nonnegative(),
+  totalLegs: z.number().int().nonnegative(),
+});
+export type PnlAttribution = z.infer<typeof PnlAttributionSchema>;
+
 export const EntryVolDriftSchema = z.object({
   atmShiftVolPts: z.number(),
   skewShiftPerLogK: z.number(),
@@ -354,6 +373,7 @@ export const PortfolioMetricsSchema = z.object({
   // Same axes as shockGrid but shocked from entry IV; each cell is the change from now.
   entryShockGrid: z.array(z.array(ShockGridCellSchema)).optional(),
   entryDrift: EntryVolDriftSchema.nullable().optional(),
+  pnlAttribution: PnlAttributionSchema.nullable().optional(),
   strategies: z.array(StrategyGroupSchema),
   accounting: PortfolioAccountingSchema,
 });

@@ -2,6 +2,7 @@ import {
   DerivePrivateClient,
   type DerivePrivateCreds,
   logger,
+  type EntryAnchor,
   type PositionLeg,
   type PositionStore,
   type PositionStoreListener,
@@ -84,9 +85,9 @@ export class DerivePositionStore implements PositionStore {
   }
 
   private async refreshFillEntryIvs(accountId: string): Promise<void> {
-    let resolved: Map<string, number>;
+    let resolved: Map<string, EntryAnchor>;
     try {
-      resolved = await this.persistence.resolveFillEntryIvs(accountId, this.list(accountId));
+      resolved = await this.persistence.resolveFillEntryAnchors(accountId, this.list(accountId));
     } catch (error) {
       logger.warn({ error: String(error), venue: 'derive' }, 'portfolio fill entry IV resolve failed');
       return;
@@ -94,10 +95,24 @@ export class DerivePositionStore implements PositionStore {
     const legs = this.cache.get(accountId);
     if (legs == null) return;
     const changedLegIds: string[] = [];
-    for (const [legId, entryIv] of resolved) {
+    for (const [legId, anchor] of resolved) {
       const leg = legs.get(legId);
-      if (leg == null || (leg.entryIvSource === 'fill' && leg.entryIv === entryIv)) continue;
-      legs.set(legId, { ...leg, entryIv, entryIvSource: 'fill' });
+      if (
+        leg == null ||
+        (leg.entryIvSource === 'fill' &&
+          leg.entryIv === anchor.iv &&
+          leg.entryUnderlyingUsd === anchor.underlyingUsd &&
+          leg.entryTs === anchor.timestampMs)
+      ) {
+        continue;
+      }
+      legs.set(legId, {
+        ...leg,
+        entryIv: anchor.iv,
+        entryIvSource: 'fill',
+        entryUnderlyingUsd: anchor.underlyingUsd,
+        entryTs: anchor.timestampMs,
+      });
       changedLegIds.push(legId);
     }
     if (changedLegIds.length === 0) return;

@@ -3,6 +3,7 @@ import type {
   EntryVolDrift,
   ExpiryBucketRow,
   PortfolioAccounting,
+  PnlAttribution,
   PortfolioMetrics,
   PortfolioPnlCurve,
   PortfolioTotals,
@@ -32,6 +33,7 @@ import {
   computeShockGrid,
   getShockGridMeta,
 } from '../../portfolio/scenarios.js';
+import { computePnlAttribution } from '../../portfolio/pnl-attribution.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
 import type {
   MarkContext,
@@ -326,6 +328,7 @@ export class PortfolioRuntime {
     let shockGridMeta: ShockGridMeta;
     let entryShockGrid: ShockGridCell[][];
     let entryDrift: EntryVolDrift | null;
+    let pnlAttribution: PnlAttribution | null;
     let strategies: StrategyGroup[];
 
     if (positions.length === 0) {
@@ -343,6 +346,7 @@ export class PortfolioRuntime {
       };
       entryShockGrid = [];
       entryDrift = null;
+      pnlAttribution = null;
       strategies = [];
     } else {
       totals = computeTotals(withMarks);
@@ -354,6 +358,7 @@ export class PortfolioRuntime {
       shockGridMeta = getShockGridMeta(withMarks);
       entryShockGrid = computeEntryShockGrid(withMarks, nowMs);
       entryDrift = computeEntryVolDrift(withMarks);
+      pnlAttribution = computePnlAttribution(withMarks);
       strategies = detectStrategyGroups(
         positions,
         new Map(withMarks.map(({ leg, mark }) => [leg.legId, mark])),
@@ -376,6 +381,7 @@ export class PortfolioRuntime {
       shockGridMeta,
       entryShockGrid,
       entryDrift,
+      pnlAttribution,
       strategies,
       accounting,
     };

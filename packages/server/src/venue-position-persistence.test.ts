@@ -127,12 +127,21 @@ describe('VenuePositionPersistence', () => {
     });
     const persistence = new VenuePositionPersistence('thalex', fillLedger, async () => spot);
 
-    const resolved = await persistence.resolveFillEntryIvs('acct', [leg('a')]);
-    expect(resolved.get('a')).toBeCloseTo(0.48, 6);
+    const resolved = await persistence.resolveFillEntryAnchors('acct', [leg('a')]);
+    expect(resolved.get('a')?.iv).toBeCloseTo(0.48, 6);
+    expect(resolved.get('a')?.underlyingUsd).toBe(spot);
   });
 });
 
 describe('carryEntryIvs', () => {
+  it('keeps the fill entry time and spot when the venue restamps entryTs', () => {
+    const prior = new Map([
+      ['a', { ...leg('a'), entryIv: 0.5, entryIvSource: 'fill' as const, entryTs: 7, entryUnderlyingUsd: 90_000 }],
+    ]);
+    const [carried] = carryEntryIvs(prior, [{ ...leg('a'), entryTs: 999 }]);
+    expect(carried).toMatchObject({ entryIv: 0.5, entryTs: 7, entryUnderlyingUsd: 90_000 });
+  });
+
   it('keeps a captured entry IV across venue pushes until the leg flips side', () => {
     const prior = new Map([['a', { ...leg('a'), entryIv: 0.52 }]]);
 

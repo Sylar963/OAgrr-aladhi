@@ -160,6 +160,19 @@ Limits: constant IV, European exercise, no fees, margin, or liquidation paths. A
 is a mark-to-model statement at the short's expiry. It does not promise that the remaining long
 keeps its value afterwards (K5).
 
+## Open P&L attribution (Vol repricing matrix)
+
+Engineering derivation for K6, not a book formula. Each leg with an entry anchor is revalued
+with Black-76 in a fixed order: spot (entry underlying → today's forward, at entry IV and
+entry time), then time (entry → now), then IV (entry → live IV). Other is the remainder:
+venue mark and fill prices versus the model, fees inside average fill prices, multi-fill
+averaging, and today's forward basis. The order matters; cross effects such as vanna land in
+the later step. Venue anchors come from opening fills (LIFO, amount-weighted IV, spot and
+time; spot is the 1m close of the fill minute). Legs without covering fill history, and
+paper/manual legs, are shown as unattributed rather than estimated. The yellow "Now" square
+sits at the fitted ATM/skew drift since entry, so its value is the vol part only. A large
+open P&L next to a small vol part means spot and time made the P&L, not IV.
+
 ## Short ATM straddle: model and gates (Sell Straddle tab)
 
 Engineering derivation, per 1 underlying unit, same venue, same strike K and expiry, linear

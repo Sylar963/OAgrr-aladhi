@@ -46,8 +46,9 @@ const SPOT_COLOR = '#50D2C1';
 // Share of the visible window reserved right of the last candle for the live walls.
 const PROJECTION_FRACTION = 0.15;
 const MIN_PROJECTION_BARS = 8;
-// Keltner-style smoothing window, in candles, for the recorded walls.
-const WALL_SMA_PERIOD = 20;
+// SMA window for the recorded walls, fixed in time so every timeframe smooths
+// over the same span regardless of candle size.
+const WALL_SMA_WINDOW_SEC = 6 * 3600;
 
 function useGexSpotCandles(
   currency: SpotCandleCurrency,
@@ -123,7 +124,7 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
       showHistory && historyData && !candlesStale
         ? smoothWallHistory(
             alignWallHistory(candleTimes, historyData.points, tfSpec.resolution),
-            WALL_SMA_PERIOD,
+            Math.max(1, Math.round(WALL_SMA_WINDOW_SEC / tfSpec.resolution)),
             tfSpec.resolution,
           )
         : [],

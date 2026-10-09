@@ -184,11 +184,12 @@ const CONFIDENCE_ALPHA_FLOOR = 0.35;
 const CALL_RGB = '0, 233, 151';   // #00E997
 const PUT_RGB  = '203, 56, 85';   // #CB3855
 
-export function heatColor(row: HeatRow, maxMagnitude: number): string {
+export function heatColor(row: HeatRow, maxMagnitude: number, alphaScale = 1): string {
   const base = computeOpacity(row.magnitude, maxMagnitude);
-  const alpha = row.confidence === undefined
+  const confidenceAdjusted = row.confidence === undefined
     ? base
     : base * (CONFIDENCE_ALPHA_FLOOR + (1 - CONFIDENCE_ALPHA_FLOOR) * row.confidence);
+  const alpha = confidenceAdjusted * Math.max(0, Math.min(1, alphaScale));
   const rgb = row.dominant === 'call' ? CALL_RGB : PUT_RGB;
   return `rgba(${rgb}, ${alpha.toFixed(3)})`;
 }

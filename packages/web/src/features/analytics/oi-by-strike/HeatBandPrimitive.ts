@@ -13,6 +13,7 @@ import { heatColor, type HeatRow } from './oi-heatmap-utils';
 interface BitmapCoordinatesRenderingScope {
   readonly context: CanvasRenderingContext2D;
   readonly bitmapSize: { readonly width: number; readonly height: number };
+  readonly horizontalPixelRatio: number;
   readonly verticalPixelRatio: number;
 }
 
@@ -20,7 +21,23 @@ interface CanvasRenderingTarget2D {
   useBitmapCoordinateSpace<T>(f: (scope: BitmapCoordinatesRenderingScope) => T): T;
 }
 
-const BAND_THICKNESS_PX = 4;
+export const MIN_BUBBLE_RADIUS_PX = 4;
+export const MAX_BUBBLE_RADIUS_PX = 18;
+export const BUBBLE_EDGE_INSET_PX = 10;
+
+// [offset, alphaScale] pairs. Every stop reuses the row's own RGB so the
+// interpolation never passes through black on its way to transparent.
+export const BUBBLE_FALLOFF_STOPS: readonly (readonly [number, number])[] = [
+  [0, 1],
+  [0.4, 0.6],
+  [0.75, 0.2],
+  [1, 0],
+];
+
+export function bubbleRadiusPx(magnitude: number, maxMagnitude: number): number {
+  const ratio = maxMagnitude > 0 ? Math.max(0, Math.min(1, magnitude / maxMagnitude)) : 0;
+  return MIN_BUBBLE_RADIUS_PX + Math.sqrt(ratio) * (MAX_BUBBLE_RADIUS_PX - MIN_BUBBLE_RADIUS_PX);
+}
 
 class HeatBandRenderer implements IPrimitivePaneRenderer {
   constructor(
@@ -30,17 +47,32 @@ class HeatBandRenderer implements IPrimitivePaneRenderer {
   ) {}
 
   draw(target: CanvasRenderingTarget2D): void {
+    if (this.rows.length === 0) return;
     target.useBitmapCoordinateSpace((scope) => {
-      const { context: ctx, bitmapSize, verticalPixelRatio } = scope;
-      const halfHeightPx = (BAND_THICKNESS_PX / 2) * verticalPixelRatio;
+      const { context: ctx, bitmapSize, horizontalPixelRatio, verticalPixelRatio } = scope;
+      const paneWidth = bitmapSize.width / horizontalPixelRatio;
+      const paneHeight = bitmapSize.height / verticalPixelRatio;
+      const centerX = paneWidth - BUBBLE_EDGE_INSET_PX - MAX_BUBBLE_RADIUS_PX;
+      if (centerX <= 0) return;
 
+      ctx.save();
+      ctx.scale(horizontalPixelRatio, verticalPixelRatio);
       for (const row of this.rows) {
-        const yMedia = this.priceToY(row.strike);
-        if (yMedia === null) continue;
-        const yBitmap = yMedia * verticalPixelRatio;
-        ctx.fillStyle = heatColor(row, this.maxMagnitude);
-        ctx.fillRect(0, yBitmap - halfHeightPx, bitmapSize.width, halfHeightPx * 2);
+        const y = this.priceToY(row.strike);
+        if (y === null || !Number.isFinite(y)) continue;
+        const radius = bubbleRadiusPx(row.magnitude, this.maxMagnitude);
+        if (y + radius < 0 || y - radius > paneHeight) continue;
+
+        const gradient = ctx.createRadialGradient(centerX, y, 0, centerX, y, radius);
+        for (const [offset, alphaScale] of BUBBLE_FALLOFF_STOPS) {
+          gradient.addColorStop(offset, heatColor(row, this.maxMagnitude, alphaScale));
+        }
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(centerX, y, radius, 0, Math.PI * 2);
+        ctx.fill();
       }
+      ctx.restore();
     });
   }
 }

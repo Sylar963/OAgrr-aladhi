@@ -190,6 +190,13 @@ describe('heatColor', () => {
     const m = out.match(/rgba\(0,\s*233,\s*151,\s*([0-9.]+)\)/);
     expect(Number(m![1])).toBeCloseTo(0.05, 2);
   });
+
+  it('scales alpha for radial gradient falloff', () => {
+    const out = heatColor(row('call', 100), 100, 0.55);
+    const m = out.match(/rgba\(0,\s*233,\s*151,\s*([0-9.]+)\)/);
+    expect(Number(m![1])).toBeCloseTo(0.5225, 3);
+    expect(heatColor(row('call', 100), 100, 0)).toContain(', 0.000)');
+  });
 });
 
 describe('heatColor confidence fade', () => {

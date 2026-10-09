@@ -35,3 +35,41 @@ export function alignWallHistory(
   }
   return out;
 }
+
+const LEVEL_KEYS = ['callWall', 'putWall', 'gammaFlip'] as const;
+
+/**
+ * Simple moving average of each level over the trailing `period` candles. The
+ * window restarts after any skipped candle so a recording gap never averages
+ * levels from either side of it; nulls are excluded from the mean, and a level
+ * stays null where its raw value is null so the renderer still breaks there.
+ */
+export function smoothWallHistory(
+  aligned: readonly AlignedWalls[],
+  period: number,
+  resolutionSec: number,
+): AlignedWalls[] {
+  const out: AlignedWalls[] = [];
+  let runStart = 0;
+  for (let i = 0; i < aligned.length; i++) {
+    const cur = aligned[i]!;
+    if (i > 0 && cur.time - aligned[i - 1]!.time > resolutionSec) runStart = i;
+    const from = Math.max(runStart, i - period + 1);
+    const next: AlignedWalls = { time: cur.time, callWall: null, putWall: null, gammaFlip: null };
+    for (const key of LEVEL_KEYS) {
+      if (cur[key] == null) continue;
+      let sum = 0;
+      let n = 0;
+      for (let j = from; j <= i; j++) {
+        const v = aligned[j]![key];
+        if (v != null) {
+          sum += v;
+          n++;
+        }
+      }
+      next[key] = sum / n;
+    }
+    out.push(next);
+  }
+  return out;
+}

@@ -21,7 +21,7 @@ import type { GexStrike } from '@shared/enriched';
 import type { GexWallHistoryResponse } from '@oggregator/protocol';
 
 import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
-import { alignWallHistory } from './gex-wall-history';
+import { alignWallHistory, smoothWallHistory } from './gex-wall-history';
 import { computeGammaWalls } from './gex-wall-utils';
 import styles from './GexView.module.css';
 
@@ -46,6 +46,8 @@ const SPOT_COLOR = '#50D2C1';
 // Share of the visible window reserved right of the last candle for the live walls.
 const PROJECTION_FRACTION = 0.15;
 const MIN_PROJECTION_BARS = 8;
+// Keltner-style smoothing window, in candles, for the recorded walls.
+const WALL_SMA_PERIOD = 20;
 
 function useGexSpotCandles(
   currency: SpotCandleCurrency,
@@ -119,7 +121,11 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
   const history = useMemo(
     () =>
       showHistory && historyData && !candlesStale
-        ? alignWallHistory(candleTimes, historyData.points, tfSpec.resolution)
+        ? smoothWallHistory(
+            alignWallHistory(candleTimes, historyData.points, tfSpec.resolution),
+            WALL_SMA_PERIOD,
+            tfSpec.resolution,
+          )
         : [],
     [showHistory, historyData, candlesStale, candleTimes, tfSpec.resolution],
   );

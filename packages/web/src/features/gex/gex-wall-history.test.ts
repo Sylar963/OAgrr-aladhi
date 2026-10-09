@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GexWallHistoryPoint } from '@oggregator/protocol';
 
-import { alignWallHistory } from './gex-wall-history';
+import { alignWallHistory, smoothWallHistory, type AlignedWalls } from './gex-wall-history';
 
 const HOUR = 3600;
 
@@ -33,5 +33,30 @@ describe('alignWallHistory', () => {
   it('accepts unsorted input', () => {
     const aligned = alignWallHistory([0, 900], [point(950, 2, 1), point(10, 1, 0)], 900);
     expect(aligned.map((a) => a.callWall)).toEqual([1, 2]);
+  });
+});
+
+function aligned(time: number, callWall: number | null, gammaFlip: number | null = null): AlignedWalls {
+  return { time, callWall, putWall: 50, gammaFlip };
+}
+
+describe('smoothWallHistory', () => {
+  it('averages each level over the trailing window', () => {
+    const input = [aligned(0, 100), aligned(HOUR, 110), aligned(2 * HOUR, 120), aligned(3 * HOUR, 130)];
+    const out = smoothWallHistory(input, 3, HOUR);
+    expect(out.map((a) => a.callWall)).toEqual([100, 105, 110, 120]);
+    expect(out.map((a) => a.putWall)).toEqual([50, 50, 50, 50]);
+  });
+
+  it('restarts the window after a recording gap', () => {
+    const input = [aligned(0, 100), aligned(HOUR, 110), aligned(5 * HOUR, 200), aligned(6 * HOUR, 210)];
+    const out = smoothWallHistory(input, 3, HOUR);
+    expect(out.map((a) => a.callWall)).toEqual([100, 105, 200, 205]);
+  });
+
+  it('skips nulls in the mean and keeps null where the raw level is null', () => {
+    const input = [aligned(0, 100, 90), aligned(HOUR, 110, null), aligned(2 * HOUR, 120, 96)];
+    const out = smoothWallHistory(input, 3, HOUR);
+    expect(out.map((a) => a.gammaFlip)).toEqual([90, null, 93]);
   });
 });

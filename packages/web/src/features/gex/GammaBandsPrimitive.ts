@@ -1,6 +1,6 @@
 // Keltner-style gamma bands. Two parts:
-//   • history — recorded call/put walls and flip, step-held per candle, drawn
-//     as moving lines with the channel filled between them;
+//   • history — recorded call/put walls and flip, SMA-smoothed per candle,
+//     drawn as moving lines with the channel filled between them;
 //   • projection — the live walls drawn only to the right of the last candle,
 //     so the current snapshot never pretends to describe past price action.
 
@@ -71,14 +71,15 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
         return x === null || y === null ? null : { x: x * hpr, y: y * vpr };
       };
 
-      fillChannel(context, history, toXY);
+      const gapAfter = gapFlags(history);
+      fillChannel(context, history, gapAfter, toXY);
       for (const level of LEVELS) {
-        const runs = splitRuns(history.map((h) => toXY(h.time, h[level.key])));
+        const runs = splitRuns(history.map((h) => toXY(h.time, h[level.key])), gapAfter);
         context.save();
         context.strokeStyle = level.color;
         context.lineWidth = level.width * hpr;
         if (level.key === 'gammaFlip') context.setLineDash([4 * hpr, 3 * hpr]);
-        for (const run of runs) strokeStep(context, run);
+        for (const run of runs) strokeLine(context, run);
         context.restore();
       }
 
@@ -137,67 +138,64 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
   }
 }
 
-function splitRuns(points: ReadonlyArray<XY | null>): XY[][] {
+// History skips candles inside recording gaps; flag where the spacing exceeds
+// the usual candle step so lines break there instead of bridging the gap.
+function gapFlags(history: readonly AlignedWalls[]): boolean[] {
+  let step = Infinity;
+  for (let i = 1; i < history.length; i++) {
+    const d = history[i]!.time - history[i - 1]!.time;
+    if (d > 0 && d < step) step = d;
+  }
+  return history.map((h, i) => i + 1 < history.length && history[i + 1]!.time - h.time > step);
+}
+
+function splitRuns(points: ReadonlyArray<XY | null>, gapAfter: readonly boolean[]): XY[][] {
   const runs: XY[][] = [];
   let run: XY[] = [];
-  for (const p of points) {
-    if (p) {
-      run.push(p);
-    } else if (run.length > 0) {
+  points.forEach((p, i) => {
+    if (p) run.push(p);
+    if ((!p || gapAfter[i]) && run.length > 0) {
       runs.push(run);
       run = [];
     }
-  }
+  });
   if (run.length > 0) runs.push(run);
   return runs;
 }
 
-// A wall is a discrete strike that jumps between samples, so draw it as a
-// staircase rather than interpolating through prices it never sat at.
-function strokeStep(ctx: CanvasRenderingContext2D, run: readonly XY[]): void {
+function strokeLine(ctx: CanvasRenderingContext2D, run: readonly XY[]): void {
   ctx.beginPath();
   ctx.moveTo(run[0]!.x, run[0]!.y);
-  for (let i = 1; i < run.length; i++) {
-    ctx.lineTo(run[i]!.x, run[i - 1]!.y);
-    ctx.lineTo(run[i]!.x, run[i]!.y);
-  }
+  for (let i = 1; i < run.length; i++) ctx.lineTo(run[i]!.x, run[i]!.y);
   ctx.stroke();
 }
 
 function fillChannel(
   ctx: CanvasRenderingContext2D,
   history: readonly AlignedWalls[],
+  gapAfter: readonly boolean[],
   toXY: (time: number, price: number | null) => XY | null,
 ): void {
-  const pairs = history.map((h) => {
-    const upper = toXY(h.time, h.callWall);
-    const lower = toXY(h.time, h.putWall);
-    return upper && lower ? { upper, lower } : null;
-  });
   ctx.fillStyle = CHANNEL_FILL;
   let run: Array<{ upper: XY; lower: XY }> = [];
   const flush = () => {
     if (run.length > 1) {
       ctx.beginPath();
       ctx.moveTo(run[0]!.upper.x, run[0]!.upper.y);
-      for (let i = 1; i < run.length; i++) {
-        ctx.lineTo(run[i]!.upper.x, run[i - 1]!.upper.y);
-        ctx.lineTo(run[i]!.upper.x, run[i]!.upper.y);
-      }
-      for (let i = run.length - 1; i > 0; i--) {
-        ctx.lineTo(run[i]!.lower.x, run[i]!.lower.y);
-        ctx.lineTo(run[i]!.lower.x, run[i - 1]!.lower.y);
-      }
-      ctx.lineTo(run[0]!.lower.x, run[0]!.lower.y);
+      for (let i = 1; i < run.length; i++) ctx.lineTo(run[i]!.upper.x, run[i]!.upper.y);
+      for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(run[i]!.lower.x, run[i]!.lower.y);
       ctx.closePath();
       ctx.fill();
     }
     run = [];
   };
-  for (const pair of pairs) {
-    if (pair) run.push(pair);
+  history.forEach((h, i) => {
+    const upper = toXY(h.time, h.callWall);
+    const lower = toXY(h.time, h.putWall);
+    if (upper && lower) run.push({ upper, lower });
     else flush();
-  }
+    if (gapAfter[i]) flush();
+  });
   flush();
 }
 

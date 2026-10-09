@@ -18,12 +18,14 @@ import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common
 import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
 
 import styles from '../AnalyticsView.module.css';
-import { HeatBandPrimitive } from './HeatBandPrimitive';
+import { BlockBubblePrimitive } from './BlockBubblePrimitive';
+import { OiProfilePrimitive } from './OiProfilePrimitive';
 import { EmConePrimitive, type EmConeEntry } from './EmConePrimitive';
 import {
   aggregateHeatRows,
   aggregateStrikeOi,
   computeMaxPain,
+  type HeatRow,
   type HeatSide,
   type OiMode,
   type StrikeOi,
@@ -38,7 +40,8 @@ import {
   type ExpectedMove,
   type SignificanceMode,
 } from './oi-em-utils';
-import { useSpotCandles } from './queries';
+import { selectBlockBubbles, type BlockBubble } from './oi-bubble-utils';
+import { useBlockStrikeBuckets, useSpotCandles } from './queries';
 
 const EXPIRY_COLORS = [
   '#00E997', '#CB3855', '#50D2C1', '#F0B90B', '#0052FF',
@@ -74,6 +77,18 @@ const SESSION_BUFFER_CAP = 1440;
 
 interface SessionPoint { ts: number; oi: number }
 
+// Price-line titles render inside the pane against its right edge, so the OI
+// profile is anchored just left of the widest one. Approximates the 11px
+// IBM Plex Mono advance plus the label's horizontal padding.
+const LABEL_CHAR_PX = 6.6;
+const LABEL_PADDING_PX = 16;
+
+function strikeLabelTitle(row: HeatRow): string {
+  return row.confidence === undefined
+    ? row.strike.toLocaleString()
+    : `${row.strike.toLocaleString()} · ${Math.round(row.confidence * 100)}%`;
+}
+
 interface Props {
   chains: EnrichedChainResponse[];
   spotPrice: number | null;
@@ -88,6 +103,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredBubble, setHoveredBubble] = useState<BlockBubble | null>(null);
   // null = auto (nearest expiry with an EM); 'off' = hidden; else a chosen expiry.
   const [coneExpiry, setConeExpiry] = useState<string | null>(null);
 
@@ -95,7 +111,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const didFitRef = useRef(false);
-  const heatPrimitiveRef = useRef<HeatBandPrimitive | null>(null);
+  const profilePrimitiveRef = useRef<OiProfilePrimitive | null>(null);
+  const bubblePrimitiveRef = useRef<BlockBubblePrimitive | null>(null);
   const conePrimitiveRef = useRef<EmConePrimitive | null>(null);
   const strikeLinesRef = useRef<Map<number, IPriceLine>>(new Map());
   const spotLineRef = useRef<IPriceLine | null>(null);
@@ -107,6 +124,10 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
   const tfSpec = TIMEFRAMES[timeframe];
   const { data: candleData, isLoading: candlesLoading, error: candlesError, refetch } =
     useSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
+  const firstCandleSec = candleData?.candles[0]
+    ? Math.floor(candleData.candles[0].timestamp / 1000)
+    : null;
+  const { data: blockData } = useBlockStrikeBuckets(currency, tfSpec.resolution, firstCandleSec);
 
   const sortedExpiries = useMemo(() => chains.map((c) => c.expiry).sort(), [chains]);
   const expiryColorMap = useMemo(
@@ -173,7 +194,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     [chains, hiddenExpiries, spotPrice],
   );
 
-  // A4 colours bands by dealer gamma sign (green = long γ, pins/mean-reverts;
+  // A4 colours the profile by dealer gamma sign (green = long γ, pins/mean-reverts;
   // red = short γ, accelerates) instead of call/put OI dominance.
   const heatRows = useMemo(() => {
     const rows = filterRowsBySignificance(allRows, significantStrikes);
@@ -185,9 +206,19 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     }));
   }, [allRows, significantStrikes, significance, gammaLevels]);
 
+  const blockBubbles = useMemo(
+    () => selectBlockBubbles(blockData?.buckets ?? [], { mode, side, hiddenExpiries }),
+    [blockData, mode, side, hiddenExpiries],
+  );
+
+  const profileRightInsetPx = useMemo(() => {
+    const widest = heatRows.reduce((m, r) => Math.max(m, strikeLabelTitle(r).length), 0);
+    return widest > 0 ? widest * LABEL_CHAR_PX + LABEL_PADDING_PX : 0;
+  }, [heatRows]);
+
   // One cone at a time. Default to the nearest expiry that has an EM; the Cone
   // dropdown overrides it ('off' hides it). Deliberately independent of the
-  // legend's per-expiry band hide/show so bands and cone don't fight.
+  // legend's per-expiry hide/show so the profile and cone don't fight.
   const defaultConeExpiry = useMemo(
     () => sortedExpiries.find((e) => emByExpiry.has(e)) ?? '',
     [sortedExpiries, emByExpiry],
@@ -266,22 +297,27 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       priceLineVisible: false,
     }) as ISeriesApi<'Candlestick', Time>;
 
-    const heatPrimitive = new HeatBandPrimitive();
-    series.attachPrimitive(heatPrimitive);
+    const profilePrimitive = new OiProfilePrimitive();
+    series.attachPrimitive(profilePrimitive);
+    const bubblePrimitive = new BlockBubblePrimitive();
+    series.attachPrimitive(bubblePrimitive);
     const conePrimitive = new EmConePrimitive();
     series.attachPrimitive(conePrimitive);
 
     chartRef.current = chart;
     seriesRef.current = series;
-    heatPrimitiveRef.current = heatPrimitive;
+    profilePrimitiveRef.current = profilePrimitive;
+    bubblePrimitiveRef.current = bubblePrimitive;
     conePrimitiveRef.current = conePrimitive;
 
     chart.subscribeCrosshairMove((param) => {
       if (param.point === undefined || param.time === undefined) {
         setHoveredStrike(null);
+        setHoveredBubble(null);
         setTooltipPos(null);
         return;
       }
+      setHoveredBubble(bubblePrimitive.bubbleAt(param.time as number, param.point.y));
       const price = series.coordinateToPrice(param.point.y);
       if (price === null) return;
       let nearest: number | null = null;
@@ -298,7 +334,8 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      heatPrimitiveRef.current = null;
+      profilePrimitiveRef.current = null;
+      bubblePrimitiveRef.current = null;
       conePrimitiveRef.current = null;
       strikeLinesRef.current.clear();
       spotLineRef.current = null;
@@ -334,8 +371,16 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
 
   // ── Push heat rows + cones to the primitives ────────────────────
   useEffect(() => {
-    heatPrimitiveRef.current?.update(heatRows);
-  }, [heatRows]);
+    profilePrimitiveRef.current?.update(heatRows, {
+      side,
+      colorBy: significance === 'a4-outliers' ? 'gamma' : 'side',
+      rightInsetPx: profileRightInsetPx,
+    });
+  }, [heatRows, side, significance, profileRightInsetPx]);
+
+  useEffect(() => {
+    bubblePrimitiveRef.current?.update(blockBubbles);
+  }, [blockBubbles]);
 
   useEffect(() => {
     if (spotPrice == null || seriesData.lastBarSec == null) return;
@@ -359,9 +404,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
       const labelOptions = {
         axisLabelColor: row.dominant === 'call' ? '#0E3D2C' : '#3D0E1A',
         axisLabelTextColor: row.dominant === 'call' ? '#00E997' : '#CB3855',
-        title: row.confidence === undefined
-          ? row.strike.toLocaleString()
-          : `${row.strike.toLocaleString()} · ${Math.round(row.confidence * 100)}%`,
+        title: strikeLabelTitle(row),
       };
       const existing = lines.get(row.strike);
       if (existing) {
@@ -594,7 +637,10 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
           </div>
         )}
 
-        {hovered && tooltipPos && (
+        {hoveredBubble && tooltipPos && (
+          <BlockTooltip bubble={hoveredBubble} tooltipPos={tooltipPos} fmt={fmt} />
+        )}
+        {!hoveredBubble && hovered && tooltipPos && (
           <HeatTooltip
             data={hovered}
             tooltipPos={tooltipPos}
@@ -605,6 +651,40 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
             fmt={fmt}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+function BlockTooltip({
+  bubble,
+  tooltipPos,
+  fmt,
+}: {
+  bubble: BlockBubble;
+  tooltipPos: { x: number; y: number };
+  fmt: (v: number | null | undefined) => string;
+}) {
+  const time = new Date(bubble.timeSec * 1000).toLocaleString(undefined, {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return (
+    <div
+      className={styles.oiTooltip}
+      style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
+    >
+      <div className={styles.oiTooltipTitle}>{bubble.strike.toLocaleString()} · block flow</div>
+      <div className={styles.oiTooltipZone}>
+        {time} · {bubble.legs} {bubble.legs === 1 ? 'leg' : 'legs'}
+      </div>
+      <div className={styles.oiTooltipHeader}><span /><span>Calls</span><span>Puts</span></div>
+      <div className={styles.oiTooltipRow}>
+        <span className={styles.oiTooltipVenue}>Traded</span>
+        <span className={styles.oiCall}>{fmt(bubble.callValue)}</span>
+        <span className={styles.oiPut}>{fmt(bubble.putValue)}</span>
       </div>
     </div>
   );

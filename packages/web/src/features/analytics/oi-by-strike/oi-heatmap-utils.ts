@@ -184,12 +184,18 @@ const CONFIDENCE_ALPHA_FLOOR = 0.35;
 const CALL_RGB = '0, 233, 151';   // #00E997
 const PUT_RGB  = '203, 56, 85';   // #CB3855
 
+export function confidenceFactor(confidence: number | undefined): number {
+  return confidence === undefined
+    ? 1
+    : CONFIDENCE_ALPHA_FLOOR + (1 - CONFIDENCE_ALPHA_FLOOR) * confidence;
+}
+
+export function sideRgba(side: 'call' | 'put', alpha: number): string {
+  const rgb = side === 'call' ? CALL_RGB : PUT_RGB;
+  return `rgba(${rgb}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+}
+
 export function heatColor(row: HeatRow, maxMagnitude: number, alphaScale = 1): string {
-  const base = computeOpacity(row.magnitude, maxMagnitude);
-  const confidenceAdjusted = row.confidence === undefined
-    ? base
-    : base * (CONFIDENCE_ALPHA_FLOOR + (1 - CONFIDENCE_ALPHA_FLOOR) * row.confidence);
-  const alpha = confidenceAdjusted * Math.max(0, Math.min(1, alphaScale));
-  const rgb = row.dominant === 'call' ? CALL_RGB : PUT_RGB;
-  return `rgba(${rgb}, ${alpha.toFixed(3)})`;
+  const base = computeOpacity(row.magnitude, maxMagnitude) * confidenceFactor(row.confidence);
+  return sideRgba(row.dominant, base * Math.max(0, Math.min(1, alphaScale)));
 }

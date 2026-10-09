@@ -8,7 +8,7 @@ import type {
   SeriesAttachedParameter,
 } from 'lightweight-charts';
 
-import { heatColor, type HeatRow } from './oi-heatmap-utils';
+import { confidenceFactor, sideRgba, type HeatRow, type HeatSide } from './oi-heatmap-utils';
 
 interface BitmapCoordinatesRenderingScope {
   readonly context: CanvasRenderingContext2D;
@@ -21,77 +21,116 @@ interface CanvasRenderingTarget2D {
   useBitmapCoordinateSpace<T>(f: (scope: BitmapCoordinatesRenderingScope) => T): T;
 }
 
-export const MIN_BUBBLE_RADIUS_PX = 4;
-export const MAX_BUBBLE_RADIUS_PX = 18;
-export const BUBBLE_EDGE_INSET_PX = 10;
+export const PROFILE_MAX_WIDTH_FRACTION = 0.2;
+export const PROFILE_MAX_WIDTH_PX = 240;
+export const PROFILE_MIN_BAR_PX = 2;
+export const PROFILE_MAX_BAR_PX = 14;
+export const PROFILE_BAR_FILL = 0.8;
+export const PROFILE_ALPHA = 0.6;
 
-// [offset, alphaScale] pairs. Every stop reuses the row's own RGB so the
-// interpolation never passes through black on its way to transparent.
-export const BUBBLE_FALLOFF_STOPS: readonly (readonly [number, number])[] = [
-  [0, 1],
-  [0.4, 0.6],
-  [0.75, 0.2],
-  [1, 0],
-];
+export type ProfileColorBy = 'side' | 'gamma';
 
-export function bubbleRadiusPx(magnitude: number, maxMagnitude: number): number {
-  const ratio = maxMagnitude > 0 ? Math.max(0, Math.min(1, magnitude / maxMagnitude)) : 0;
-  return MIN_BUBBLE_RADIUS_PX + Math.sqrt(ratio) * (MAX_BUBBLE_RADIUS_PX - MIN_BUBBLE_RADIUS_PX);
+export interface ProfileOptions {
+  side: HeatSide;
+  colorBy: ProfileColorBy;
+  rightInsetPx: number;
 }
 
-class HeatBandRenderer implements IPrimitivePaneRenderer {
-  constructor(
-    private readonly rows: HeatRow[],
-    private readonly maxMagnitude: number,
-    private readonly priceToY: (price: number) => number | null,
-  ) {}
+const DEFAULT_OPTIONS: ProfileOptions = { side: 'both', colorBy: 'side', rightInsetPx: 0 };
+
+interface ProfileContext {
+  rows: readonly HeatRow[];
+  maxMagnitude: number;
+  options: ProfileOptions;
+  priceToY: (price: number) => number | null;
+}
+
+interface Segment {
+  length: number;
+  color: string;
+}
+
+function segmentsFor(row: HeatRow, ctx: ProfileContext, maxLength: number): Segment[] {
+  const scale = ctx.maxMagnitude > 0 ? maxLength / ctx.maxMagnitude : 0;
+  if (ctx.options.colorBy === 'gamma') {
+    return [{
+      length: row.magnitude * scale,
+      color: sideRgba(row.dominant, PROFILE_ALPHA * confidenceFactor(row.confidence)),
+    }];
+  }
+  const call = ctx.options.side === 'puts' ? 0 : row.callOi;
+  const put = ctx.options.side === 'calls' ? 0 : row.putOi;
+  return [
+    { length: call * scale, color: sideRgba('call', PROFILE_ALPHA) },
+    { length: put * scale, color: sideRgba('put', PROFILE_ALPHA) },
+  ];
+}
+
+class OiProfileRenderer implements IPrimitivePaneRenderer {
+  constructor(private readonly ctx: ProfileContext) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    if (this.rows.length === 0) return;
+    const { rows, options, priceToY } = this.ctx;
+    if (rows.length === 0) return;
     target.useBitmapCoordinateSpace((scope) => {
       const { context: ctx, bitmapSize, horizontalPixelRatio, verticalPixelRatio } = scope;
       const paneWidth = bitmapSize.width / horizontalPixelRatio;
       const paneHeight = bitmapSize.height / verticalPixelRatio;
-      const centerX = paneWidth - BUBBLE_EDGE_INSET_PX - MAX_BUBBLE_RADIUS_PX;
-      if (centerX <= 0) return;
+      const anchorX = paneWidth - options.rightInsetPx;
+      const maxLength = Math.min(paneWidth * PROFILE_MAX_WIDTH_FRACTION, PROFILE_MAX_WIDTH_PX, anchorX);
+      if (maxLength <= 0) return;
+
+      const placed: { row: HeatRow; y: number }[] = [];
+      for (const row of rows) {
+        const y = priceToY(row.strike);
+        if (y !== null && Number.isFinite(y)) placed.push({ row, y });
+      }
+      placed.sort((a, b) => a.y - b.y);
 
       ctx.save();
       ctx.scale(horizontalPixelRatio, verticalPixelRatio);
-      for (const row of this.rows) {
-        const y = this.priceToY(row.strike);
-        if (y === null || !Number.isFinite(y)) continue;
-        const radius = bubbleRadiusPx(row.magnitude, this.maxMagnitude);
-        if (y + radius < 0 || y - radius > paneHeight) continue;
+      for (let i = 0; i < placed.length; i++) {
+        const { row, y } = placed[i]!;
+        const gapAbove = i > 0 ? y - placed[i - 1]!.y : Infinity;
+        const gapBelow = i < placed.length - 1 ? placed[i + 1]!.y - y : Infinity;
+        const nearest = Math.min(gapAbove, gapBelow);
+        const thickness = Math.max(
+          PROFILE_MIN_BAR_PX,
+          Math.min(PROFILE_MAX_BAR_PX, Number.isFinite(nearest) ? nearest * PROFILE_BAR_FILL : PROFILE_MAX_BAR_PX),
+        );
+        const top = y - thickness / 2;
+        if (top + thickness < 0 || top > paneHeight) continue;
 
-        const gradient = ctx.createRadialGradient(centerX, y, 0, centerX, y, radius);
-        for (const [offset, alphaScale] of BUBBLE_FALLOFF_STOPS) {
-          gradient.addColorStop(offset, heatColor(row, this.maxMagnitude, alphaScale));
+        let right = anchorX;
+        for (const segment of segmentsFor(row, this.ctx, maxLength)) {
+          if (!(segment.length > 0)) continue;
+          const length = Math.max(1, segment.length);
+          ctx.fillStyle = segment.color;
+          ctx.fillRect(right - length, top, length, thickness);
+          right -= length;
         }
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(centerX, y, radius, 0, Math.PI * 2);
-        ctx.fill();
       }
       ctx.restore();
     });
   }
 }
 
-class HeatBandPaneView implements IPrimitivePaneView {
-  constructor(
-    private readonly rows: HeatRow[],
-    private readonly maxMagnitude: number,
-    private readonly priceToY: (price: number) => number | null,
-  ) {}
+class OiProfilePaneView implements IPrimitivePaneView {
+  constructor(private readonly ctx: ProfileContext) {}
+
+  zOrder(): 'bottom' | 'normal' | 'top' {
+    return 'bottom';
+  }
 
   renderer(): IPrimitivePaneRenderer {
-    return new HeatBandRenderer(this.rows, this.maxMagnitude, this.priceToY);
+    return new OiProfileRenderer(this.ctx);
   }
 }
 
-export class HeatBandPrimitive implements ISeriesPrimitive<Time> {
+export class OiProfilePrimitive implements ISeriesPrimitive<Time> {
   private rows: HeatRow[] = [];
   private maxMagnitude = 1;
+  private options: ProfileOptions = DEFAULT_OPTIONS;
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private requestUpdate: (() => void) | null = null;
 
@@ -105,18 +144,23 @@ export class HeatBandPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate = null;
   }
 
-  update(rows: HeatRow[]): void {
+  update(rows: HeatRow[], options: ProfileOptions = DEFAULT_OPTIONS): void {
     this.rows = rows;
-    this.maxMagnitude = rows.length === 0
-      ? 1
-      : rows.reduce((m, r) => (r.magnitude > m ? r.magnitude : m), 0);
+    this.options = options;
+    this.maxMagnitude = rows.reduce((m, r) => (r.magnitude > m ? r.magnitude : m), 0);
     this.requestUpdate?.();
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
     if (!this.series) return [];
     const series = this.series;
-    const priceToY = (price: number): number | null => series.priceToCoordinate(price);
-    return [new HeatBandPaneView(this.rows, this.maxMagnitude, priceToY)];
+    return [
+      new OiProfilePaneView({
+        rows: this.rows,
+        maxMagnitude: this.maxMagnitude,
+        options: this.options,
+        priceToY: (price) => series.priceToCoordinate(price),
+      }),
+    ];
   }
 }

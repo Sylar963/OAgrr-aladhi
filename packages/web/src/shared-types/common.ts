@@ -79,3 +79,25 @@ export interface SpotCandlesResponse {
   count: number;
   candles: SpotCandle[];
 }
+
+// Mirrors server's BlockStrikeBucketsResponse in packages/server/src/routes/block-strike-buckets.ts.
+export interface BlockStrikeBucket {
+  ts: number; // bucket start, seconds UTC, aligned to the candle resolution
+  strike: number;
+  expiry: string | null;
+  callContracts: number;
+  putContracts: number;
+  callNotionalUsd: number;
+  putNotionalUsd: number;
+  legs: number;
+}
+
+export interface BlockStrikeBucketsResponse {
+  available: boolean;
+  underlying: string;
+  resolution: number;
+  start: number;
+  end: number;
+  truncated: boolean;
+  buckets: BlockStrikeBucket[];
+}

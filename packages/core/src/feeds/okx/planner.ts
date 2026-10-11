@@ -98,6 +98,19 @@ export function removeOkxSubscribedFamily(state: OkxSubscriptionState, family: s
   state.subscribedFamilies.delete(family);
 }
 
+/**
+ * opt-summary is the only push that carries IV/greeks/forward and keeps quiet
+ * strikes fresh, so it must stay up while any ticker of the family is live —
+ * including eager subscriptions that no browser request owns.
+ */
+export function hasOkxTickersForFamily(state: OkxSubscriptionState, family: string): boolean {
+  const prefix = `${family}-`;
+  for (const id of state.subscribedTickers) {
+    if (id.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 export function buildOkxReplayArgs(state: OkxSubscriptionState): object[] {
   return [
     ...[...state.subscribedFamilies].map((family) => ({

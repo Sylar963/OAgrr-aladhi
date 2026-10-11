@@ -90,7 +90,9 @@ export function applyDeribitBookSummary(
     volume24h: safeNum(summary.volume),
     openInterest: normalizedOpenInterest,
     openInterestUsd: null,
-    volume24hUsd: safeNum(summary.volume_usd),
+    // Deribit `volume_usd` is premium traded, not notional. Leave null so
+    // enrichment derives notional (volume × underlying) like every other venue.
+    volume24hUsd: null,
     greeks: {
       ...EMPTY_GREEKS,
       markIv: ivToFraction(summary.mark_iv),

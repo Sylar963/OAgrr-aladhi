@@ -36,6 +36,7 @@ import {
   buildOkxReplayArgs,
   buildOkxUnsubscribeArgs,
   createOkxSubscriptionState,
+  hasOkxTickersForFamily,
   markOkxSubscribed,
   removeOkxSubscribedFamily,
   removeOkxSubscribedInstruments,
@@ -72,6 +73,13 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 // OKX option families with active contracts (confirmed live 2026-03-28).
 // BTC-USDC / ETH-USDC return code 51000 — no options listed there.
 const INST_FAMILIES = ['BTC-USD', 'ETH-USD'] as const;
+
+// The instruments channel pushes every OPTION family; anything outside
+// INST_FAMILIES has no opt-summary feed and OKX rejects subscribing to it.
+function isKnownFamily(raw: OkxInstrument): boolean {
+  const family = raw.instFamily ?? raw.uly ?? raw.instId.split('-').slice(0, 2).join('-');
+  return (INST_FAMILIES as readonly string[]).includes(family);
+}
 
 // OKX enforces a 64KB WebSocket frame limit. Keep batches under 60KB for safety.
 const MAX_SUBSCRIBE_BATCH_BYTES = 60_000;
@@ -358,18 +366,20 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       }
     }
 
-    if (this.activeRequestsForUnderlying(underlying) === 0) {
-      const family = `${underlying}-USD`;
-      if (this.subscriptions.subscribedFamilies.has(family)) {
-        args.push({ channel: 'opt-summary', instFamily: family });
-        removeOkxSubscribedFamily(this.subscriptions, family);
-      }
-    }
-
     removeOkxSubscribedInstruments(
       this.subscriptions,
       instruments.map((instrument) => instrument.exchangeSymbol),
     );
+
+    const family = `${underlying}-USD`;
+    if (
+      this.activeRequestsForUnderlying(underlying) === 0 &&
+      this.subscriptions.subscribedFamilies.has(family) &&
+      !hasOkxTickersForFamily(this.subscriptions, family)
+    ) {
+      args.push({ channel: 'opt-summary', instFamily: family });
+      removeOkxSubscribedFamily(this.subscriptions, family);
+    }
 
     if (args.length === 0 || !this.wsClient?.isConnected) return;
 
@@ -556,6 +566,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
 
     for (const raw of data) {
       if (raw.state && raw.state !== 'live') continue;
+      if (!isKnownFamily(raw)) continue;
       if (this.instrumentMap.has(raw.instId)) continue;
 
       const inst = this.parseInstrument(raw);

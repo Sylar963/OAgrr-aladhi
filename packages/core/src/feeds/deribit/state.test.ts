@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveQuote } from '../shared/sdk-base.js';
 import {
+  applyDeribitBookSummary,
   deribitStaleReconnectCooldownMs,
   shouldForceDeribitStaleReconnect,
   summarizeDeribitSubscribedTickerStaleness,
@@ -117,5 +118,32 @@ describe('Deribit forced-reconnect backoff', () => {
         forcedReconnectStreak: 1,
       }),
     ).toBe(true);
+  });
+});
+
+describe('applyDeribitBookSummary', () => {
+  it('does not store premium-denominated volume_usd as notional volume', () => {
+    // Live BTC-25DEC26-70000-P: volume_usd / volume ≈ mark premium, not spot.
+    const quoteStore = new Map<string, LiveQuote>();
+    applyDeribitBookSummary(
+      quoteStore,
+      {
+        instrument_name: 'BTC-25DEC26-70000-P',
+        volume: 26.1,
+        volume_usd: 33185,
+        open_interest: 100,
+        underlying_price: 83875,
+        mark_price: 0.0149,
+        mark_iv: 45,
+      } as Parameters<typeof applyDeribitBookSummary>[1],
+      0,
+      1,
+      (v) => (typeof v === 'number' ? v / 100 : null),
+      (v) => (typeof v === 'number' ? v : null),
+    );
+
+    const quote = quoteStore.get('BTC-25DEC26-70000-P');
+    expect(quote?.volume24h).toBe(26.1);
+    expect(quote?.volume24hUsd).toBeNull();
   });
 });

@@ -3,10 +3,10 @@ import type { EnrichedChainResponse } from '@shared/enriched';
 
 import {
   computeExpiryRows,
-  computeMaxPainUsd,
   computeSummary,
   computeTopPositions,
   computeVenueRows,
+  venueAtmIvs,
 } from './positioning-utils';
 
 interface Leg {
@@ -91,21 +91,6 @@ describe('computeSummary', () => {
   });
 });
 
-describe('computeMaxPainUsd', () => {
-  it('picks the settlement strike minimising option-holder payout', () => {
-    const c = chain('2026-10-30', 19, [
-      { strike: 90, put: [{ venue: 'deribit', oiUsd: 1_000 }] },
-      { strike: 100, call: [{ venue: 'deribit', oiUsd: 10 }], put: [{ venue: 'deribit', oiUsd: 10 }] },
-      { strike: 110, call: [{ venue: 'deribit', oiUsd: 1_000 }] },
-    ]);
-    expect(computeMaxPainUsd(c)).toBe(100);
-  });
-
-  it('returns null when there is no open interest', () => {
-    expect(computeMaxPainUsd(chain('2026-10-30', 19, [{ strike: 100 }]))).toBeNull();
-  });
-});
-
 describe('computeExpiryRows', () => {
   it('sorts by DTE and computes shares and max-pain distance', () => {
     const far = chain(
@@ -172,9 +157,14 @@ describe('computeVenueRows', () => {
             { venue: 'okx', oiUsd: 100, volUsd: 10, iv: 0.52 },
             { venue: 'bybit', iv: 0.48 },
           ],
+          put: [
+            { venue: 'deribit', iv: 0.5 },
+            { venue: 'okx', iv: 0.52 },
+            { venue: 'bybit', iv: 0.48 },
+          ],
         },
       ],
-      { atmStrike: 100 },
+      { forwardPriceUsd: 100 },
     );
     const rows = computeVenueRows([c]);
     const byVenue = Object.fromEntries(rows.map((r) => [r.venue, r]));
@@ -200,8 +190,41 @@ describe('computeVenueRows', () => {
           ],
         },
       ],
-      { atmStrike: 100 },
+      { forwardPriceUsd: 100 },
     );
     expect(computeVenueRows([c]).every((r) => r.ivGapVp === null)).toBe(true);
+  });
+});
+
+describe('venueAtmIvs', () => {
+  it('interpolates each venue on its own strike grid using OTM wings', () => {
+    // Deribit lists 95/105, OKX lists 90/110; no strike is shared.
+    const c = chain(
+      '2026-10-30',
+      19,
+      [
+        { strike: 90, put: [{ venue: 'okx', iv: 0.6 }], call: [{ venue: 'okx', iv: 0.9 }] },
+        { strike: 95, put: [{ venue: 'deribit', iv: 0.52 }] },
+        { strike: 105, call: [{ venue: 'deribit', iv: 0.48 }] },
+        { strike: 110, call: [{ venue: 'okx', iv: 0.5 }] },
+      ],
+      { forwardPriceUsd: 100 },
+    );
+    const ivs = venueAtmIvs(c);
+    expect(ivs.get('deribit')).toBeCloseTo(0.5);
+    expect(ivs.get('okx')).toBeCloseTo(0.55);
+  });
+
+  it('needs strikes on both sides of the forward within 10%', () => {
+    const c = chain(
+      '2026-10-30',
+      19,
+      [
+        { strike: 95, put: [{ venue: 'deribit', iv: 0.5 }] },
+        { strike: 120, call: [{ venue: 'deribit', iv: 0.5 }] },
+      ],
+      { forwardPriceUsd: 100 },
+    );
+    expect(venueAtmIvs(c).size).toBe(0);
   });
 });

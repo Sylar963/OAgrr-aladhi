@@ -84,18 +84,21 @@ export function aggregateStrikeOi(
     .sort((a, b) => a.strike - b.strike);
 }
 
+// Weighted by USD OI: raw `openInterest` is in venue-native contract units
+// (OKX 0.01 BTC, Deribit 1 BTC), so summing it lets small-contract venues
+// dominate. USD OI at one underlying price is proportional to base quantity.
 export function computeMaxPain(chains: EnrichedChainResponse[]): number | null {
   const strikeOi = new Map<number, { callOi: number; putOi: number }>();
   for (const chain of chains) {
     for (const strike of chain.strikes) {
       const prev = strikeOi.get(strike.strike) ?? { callOi: 0, putOi: 0 };
-      for (const q of Object.values(strike.call.venues)) prev.callOi += q?.openInterest ?? 0;
-      for (const q of Object.values(strike.put.venues)) prev.putOi += q?.openInterest ?? 0;
+      for (const q of Object.values(strike.call.venues)) prev.callOi += q?.openInterestUsd ?? 0;
+      for (const q of Object.values(strike.put.venues)) prev.putOi += q?.openInterestUsd ?? 0;
       strikeOi.set(strike.strike, prev);
     }
   }
 
-  const strikes = [...strikeOi.entries()];
+  const strikes = [...strikeOi.entries()].filter(([, oi]) => oi.callOi > 0 || oi.putOi > 0);
   if (strikes.length === 0) return null;
 
   let minPayout = Infinity;

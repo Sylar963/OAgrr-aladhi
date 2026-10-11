@@ -92,8 +92,9 @@ export default function VenueShare({ chains }: VenueShareProps) {
       )}
 
       <span className={styles.footnote}>
-        ATM IV gap: venue ATM mark IV minus the cross-venue median, averaged over expiries ≥
-        {IV_GAP_MIN_DTE}d · red = richer (sell there), green = cheaper (buy there)
+        ATM IV gap: venue mark IV interpolated at the forward minus the cross-venue median,
+        averaged over expiries ≥{IV_GAP_MIN_DTE}d · red = richer (sell there), green = cheaper
+        (buy there)
       </span>
     </div>
   );

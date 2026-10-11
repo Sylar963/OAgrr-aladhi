@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
-import { aggregateHeatRows, computeOpacity, heatColor } from './oi-heatmap-utils';
+import { aggregateHeatRows, computeMaxPain, computeOpacity, heatColor } from './oi-heatmap-utils';
 import type { HeatRow } from './oi-heatmap-utils';
 
 function venueQuote(openInterest: number, openInterestUsd: number) {
@@ -210,5 +210,30 @@ describe('heatColor confidence fade', () => {
   it('fades a fully naive band to 35% of its opacity', () => {
     const base = alphaOf(heatColor(row('call', 100), 100));
     expect(alphaOf(heatColor({ ...row('call', 100), confidence: 0 }, 100))).toBeCloseTo(base * 0.35, 3);
+  });
+});
+
+describe('computeMaxPain', () => {
+  it('picks the settlement strike minimising option-holder payout', () => {
+    const c = chain('2026-10-30', 19, [
+      { strike: 90, put: { venue: 'deribit', oi: 10, oiUsd: 1_000 } },
+      { strike: 100, call: { venue: 'deribit', oi: 1, oiUsd: 10 }, put: { venue: 'deribit', oi: 1, oiUsd: 10 } },
+      { strike: 110, call: { venue: 'deribit', oi: 10, oiUsd: 1_000 } },
+    ]);
+    expect(computeMaxPain([c])).toBe(100);
+  });
+
+  it('weights by USD OI, not venue-native contract counts', () => {
+    // 1,000 OKX calls of 0.01 BTC (10 BTC) vs 50 Deribit puts of 1 BTC (50 BTC).
+    // Contract counts would make the calls dominate and settle at 90.
+    const c = chain('2026-10-30', 19, [
+      { strike: 90, call: { venue: 'okx', oi: 1_000, oiUsd: 1_000_000 } },
+      { strike: 110, put: { venue: 'deribit', oi: 50, oiUsd: 5_000_000 } },
+    ]);
+    expect(computeMaxPain([c])).toBe(110);
+  });
+
+  it('ignores strikes without open interest and returns null when empty', () => {
+    expect(computeMaxPain([chain('2026-10-30', 19, [{ strike: 100 }])])).toBeNull();
   });
 });

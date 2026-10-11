@@ -6,6 +6,7 @@ import {
   buildOkxReplayArgs,
   buildOkxUnsubscribeArgs,
   createOkxSubscriptionState,
+  hasOkxTickersForFamily,
   markOkxSubscribed,
   removeOkxSubscribedFamily,
   removeOkxSubscribedInstruments,
@@ -121,5 +122,28 @@ describe('OKX planner', () => {
     expect(state.subscribedFamilies.has('BTC-USD')).toBe(false);
     expect(state.subscribedTickers.has('BTC-USD-260328-60000-C')).toBe(false);
     expect(state.subscribedMarkPrice.has('BTC-USD-260328-60000-C')).toBe(false);
+  });
+
+  it('keeps a family live while any of its tickers remain subscribed', () => {
+    const state = createOkxSubscriptionState();
+    markOkxSubscribed(
+      state,
+      buildOkxChainSubscriptionArgs(state, 'BTC', [
+        createInstrument('BTC-USD-260328-60000-C'),
+        createInstrument('BTC-USD-260404-60000-C'),
+      ]),
+    );
+
+    removeOkxSubscribedInstruments(state, ['BTC-USD-260404-60000-C']);
+    expect(hasOkxTickersForFamily(state, 'BTC-USD')).toBe(true);
+
+    removeOkxSubscribedInstruments(state, ['BTC-USD-260328-60000-C']);
+    expect(hasOkxTickersForFamily(state, 'BTC-USD')).toBe(false);
+  });
+
+  it('does not treat another family with a shared prefix as live', () => {
+    const state = createOkxSubscriptionState();
+    state.subscribedTickers.add('BTC-USDC-260328-60000-C');
+    expect(hasOkxTickersForFamily(state, 'BTC-USD')).toBe(false);
   });
 });

@@ -3,12 +3,12 @@
 // Everything is computed from USD notional (`openInterestUsd`, `volume24hUsd`).
 // Raw `openInterest` is in venue-native contract units (OKX/Gate count
 // 0.01-BTC contracts, Deribit 1-BTC, Paradex base coin), so summing it across
-// venues is meaningless. USD OI at one underlying price is proportional to
-// base-coin quantity, which keeps max-pain rankings identical.
+// venues is meaningless.
 
-import type { EnrichedChainResponse, VenueQuote } from '@shared/enriched';
+import type { EnrichedChainResponse, EnrichedStrike, VenueQuote } from '@shared/enriched';
 
 import { computeExpectedMove } from './oi-by-strike/oi-em-utils';
+import { computeMaxPain } from './oi-by-strike/oi-heatmap-utils';
 
 type Quotes = Partial<Record<string, VenueQuote>>;
 
@@ -92,28 +92,6 @@ export interface ExpiryRow {
   expectedMovePct: number | null;
 }
 
-export function computeMaxPainUsd(chain: EnrichedChainResponse): number | null {
-  const rows = chain.strikes
-    .map((s) => ({ strike: s.strike, call: sumOiUsd(s.call.venues), put: sumOiUsd(s.put.venues) }))
-    .filter((r) => r.call > 0 || r.put > 0);
-  if (rows.length === 0) return null;
-
-  let best: number | null = null;
-  let minPayout = Infinity;
-  for (const { strike: settle } of rows) {
-    let payout = 0;
-    for (const r of rows) {
-      if (settle > r.strike) payout += (settle - r.strike) * r.call;
-      else if (settle < r.strike) payout += (r.strike - settle) * r.put;
-    }
-    if (payout < minPayout) {
-      minPayout = payout;
-      best = settle;
-    }
-  }
-  return best;
-}
-
 export function computeExpiryRows(
   chains: EnrichedChainResponse[],
   fallbackSpot: number | null,
@@ -136,7 +114,7 @@ export function computeExpiryRows(
     .filter((r) => r.oiUsd > 0 || r.volUsd > 0)
     .map(({ chain, callOi, putOi, oiUsd, volUsd }) => {
       const spot = chain.stats.forwardPriceUsd ?? fallbackSpot;
-      const maxPain = computeMaxPainUsd(chain);
+      const maxPain = computeMaxPain([chain]);
       const em = spot != null ? computeExpectedMove(chain, spot) : null;
       return {
         expiry: chain.expiry,
@@ -240,23 +218,49 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-function venueAtmIvs(chain: EnrichedChainResponse): Map<string, number> {
-  const out = new Map<string, number>();
-  const atm = chain.stats.atmStrike;
-  if (atm == null) return out;
-  const row = chain.strikes.find((s) => s.strike === atm);
-  if (!row) return out;
+// Venues list different strike grids, so a shared ATM strike would drop most
+// of them. Instead interpolate each venue's own OTM mark IV at the forward.
+const ATM_BRACKET_MAX_REL = 0.1;
 
-  const byVenue = new Map<string, number[]>();
-  for (const side of [row.call.venues, row.put.venues] as Quotes[]) {
-    for (const [venue, q] of Object.entries(side)) {
-      const iv = q?.markIv;
-      if (iv == null || iv <= 0) continue;
-      byVenue.set(venue, [...(byVenue.get(venue) ?? []), iv]);
+function otmIv(venue: string, row: EnrichedStrike, forward: number): number | null {
+  const calls: Quotes = row.call.venues;
+  const puts: Quotes = row.put.venues;
+  const [primary, fallback] = row.strike < forward ? [puts, calls] : [calls, puts];
+  const iv = primary[venue]?.markIv ?? fallback[venue]?.markIv ?? null;
+  return iv != null && iv > 0 ? iv : null;
+}
+
+export function venueAtmIvs(chain: EnrichedChainResponse): Map<string, number> {
+  const out = new Map<string, number>();
+  const forward = chain.stats.forwardPriceUsd;
+  if (forward == null || forward <= 0) return out;
+
+  const below = new Map<string, { strike: number; iv: number }>();
+  const above = new Map<string, { strike: number; iv: number }>();
+  for (const row of chain.strikes) {
+    if (Math.abs(row.strike - forward) / forward > ATM_BRACKET_MAX_REL) continue;
+    const venues = new Set([...Object.keys(row.call.venues), ...Object.keys(row.put.venues)]);
+    for (const venue of venues) {
+      const iv = otmIv(venue, row, forward);
+      if (iv == null) continue;
+      const side = row.strike <= forward ? below : above;
+      const prev = side.get(venue);
+      if (prev == null || Math.abs(row.strike - forward) < Math.abs(prev.strike - forward)) {
+        side.set(venue, { strike: row.strike, iv });
+      }
     }
   }
-  for (const [venue, ivs] of byVenue) {
-    out.set(venue, ivs.reduce((a, b) => a + b, 0) / ivs.length);
+
+  for (const [venue, lo] of below) {
+    if (lo.strike === forward) {
+      out.set(venue, lo.iv);
+      continue;
+    }
+    const hi = above.get(venue);
+    if (hi == null) continue;
+    const span = hi.strike - lo.strike;
+    const w = span > 0 ? (forward - lo.strike) / span : 0;
+    out.set(venue, lo.iv + w * (hi.iv - lo.iv));
   }
   return out;
 }

@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeferredTradeStore } from './deferred-trade-store.js';
 import { SqliteTradeStore } from './sqlite-trade-store.js';
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
@@ -321,6 +323,10 @@ class FakeTradeStore implements TradeStore {
   ): Promise<PersistedTradeRecord[]> {
     const wanted = new Set(keys.map(recordKey));
     return filterRows(this.rows, query).filter((row) => wanted.has(recordKey(row)));
+  }
+
+  async bucketCallPut(_query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    return [];
   }
 
   async summarizeHistory(

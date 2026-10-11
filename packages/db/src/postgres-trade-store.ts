@@ -3,6 +3,8 @@ import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { Pool } from 'pg';
 
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
@@ -17,6 +19,7 @@ import type {
 import type { PersistedTradeRecord } from './types.js';
 
 const INSERT_BATCH_SIZE = 1_000;
+const BUCKET_SLICE_MS = 15 * 24 * 60 * 60 * 1000;
 
 export class PostgresTradeStore implements TradeStore {
   readonly enabled = true;
@@ -312,6 +315,67 @@ export class PostgresTradeStore implements TradeStore {
     await this.pool.end();
   }
 
+  /** Scanned in slices so a 90-day window never runs into the pool's statement timeout. */
+  async bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    return this.withReadSnapshot(async () => {
+      const merged = new Map<string, CallPutBucket>();
+      const endMs = query.endTs.getTime();
+      for (
+        let sliceStart = query.startTs.getTime();
+        sliceStart < endMs;
+        sliceStart += BUCKET_SLICE_MS
+      ) {
+        const slice = await this.bucketCallPutSlice({
+          ...query,
+          startTs: new Date(sliceStart),
+          endTs: new Date(Math.min(sliceStart + BUCKET_SLICE_MS, endMs)),
+        });
+        for (const bucket of slice) {
+          const key = `${bucket.bucketTs.getTime()}|${bucket.optionType}`;
+          const existing = merged.get(key);
+          if (existing == null) {
+            merged.set(key, bucket);
+            continue;
+          }
+          existing.count += bucket.count;
+          existing.contracts += bucket.contracts;
+          existing.premiumUsd += bucket.premiumUsd;
+          existing.notionalUsd += bucket.notionalUsd;
+        }
+      }
+      return [...merged.values()];
+    });
+  }
+
+  private async bucketCallPutSlice(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    const built = buildWhere(query);
+    built.clauses.push('option_type IS NOT NULL');
+    built.values.push(query.resolutionSec);
+    const resolutionParam = `$${built.values.length}`;
+    const result = await this.query<CallPutBucketRow>(
+      `SELECT
+        (floor(extract(epoch FROM trade_ts) / ${resolutionParam}) * ${resolutionParam})::bigint AS bucket_sec,
+        option_type,
+        COUNT(*)::bigint AS count,
+        COALESCE(SUM(contracts), 0)::text AS contracts,
+        COALESCE(SUM(premium_usd), 0)::text AS premium_usd,
+        COALESCE(SUM(notional_usd), 0)::text AS notional_usd
+      FROM flow_trades
+      ${buildWhereSql(built)}
+      GROUP BY 1, 2
+      ORDER BY 1 ASC, 2 ASC`,
+      built.values,
+    );
+    return result.rows.map((row) => ({
+      bucketTs: new Date(Number(row.bucket_sec) * 1000),
+      optionType: row.option_type,
+      count: Number(row.count),
+      contracts: toNumber(row.contracts) ?? 0,
+      premiumUsd: toNumber(row.premium_usd) ?? 0,
+      notionalUsd: toNumber(row.notional_usd) ?? 0,
+    }));
+  }
+
   private query<Row extends QueryResultRow = QueryResultRow>(
     text: string,
     values?: unknown[],
@@ -443,6 +507,15 @@ interface SummaryRow {
   notional_usd: string;
   oldest_ts: Date | null;
   newest_ts: Date | null;
+}
+
+interface CallPutBucketRow {
+  bucket_sec: string;
+  option_type: 'call' | 'put';
+  count: string;
+  contracts: string;
+  premium_usd: string;
+  notional_usd: string;
 }
 
 interface VenueSummaryRow {

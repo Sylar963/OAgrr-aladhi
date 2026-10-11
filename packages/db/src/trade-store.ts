@@ -53,6 +53,24 @@ export interface InstrumentListQuery extends TradeFilterQuery {
   limit: number;
 }
 
+export interface CallPutBucketQuery {
+  mode: PersistedTradeMode;
+  underlying: string;
+  startTs: Date;
+  endTs: Date;
+  resolutionSec: number;
+}
+
+/** Trades with a known option type, grouped by bucket start (UTC, epoch-aligned) and type. */
+export interface CallPutBucket {
+  bucketTs: Date;
+  optionType: 'call' | 'put';
+  count: number;
+  contracts: number;
+  premiumUsd: number;
+  notionalUsd: number;
+}
+
 export interface TradePruneResult {
   deleted: number;
 }
@@ -70,6 +88,7 @@ export interface TradeHistoryReader {
     query: TradeFilterQuery & { mode: PersistedTradeMode },
   ): Promise<TradeHistorySummary>;
   listInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]>;
+  bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]>;
   dispose(): Promise<void>;
 }
 

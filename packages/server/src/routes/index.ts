@@ -7,6 +7,7 @@ import { alphaShortStraddleEvaluationRoute } from './alpha-short-straddle-evalua
 import { alphaStraddleScannerRoute } from './alpha-straddle-scanner.js';
 import { blockFlowRoute } from './block-flow.js';
 import { blockStrikeBucketsRoute } from './block-strike-buckets.js';
+import { callPutFlowRoute } from './call-put-flow.js';
 import { chainsRoute } from './chains.js';
 import { dvolHistoryRoute } from './dvol-history.js';
 import { expiriesRoute } from './expiries.js';
@@ -74,6 +75,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(flowRoute, { prefix: '/api' });
   app.register(blockFlowRoute, { prefix: '/api' });
   app.register(blockStrikeBucketsRoute, { prefix: '/api' });
+  app.register(callPutFlowRoute, { prefix: '/api' });
   app.register(dvolHistoryRoute, { prefix: '/api' });
   app.register(spotCandlesRoute, { prefix: '/api' });
   app.register(instrumentCandlesRoute, { prefix: '/api' });

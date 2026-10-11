@@ -386,4 +386,41 @@ describe('GET /flow/instrument-trades', () => {
       instrument: 'BTC_USDT-20260522-78000-C',
     });
   });
+
+  it('reports isBlock from the stored column, which ingest never copies into raw', async () => {
+    const services = await import('../services.js');
+    vi.mocked(services.tradeStore.loadHistory).mockResolvedValueOnce([
+      {
+        tradeUid: 'deribit:BTC-28MAR26-100000-C:blk',
+        mode: 'live',
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrumentName: 'BTC-28MAR26-100000-C',
+        tradeTs: new Date('2026-05-12T10:00:00Z'),
+        ingestedAt: new Date('2026-05-12T10:00:01Z'),
+        direction: 'buy',
+        contracts: 50,
+        price: 0.04,
+        premiumUsd: 12000,
+        notionalUsd: 240000,
+        referencePriceUsd: 4800,
+        expiry: '2026-03-28',
+        strike: 100000,
+        optionType: 'call',
+        iv: 0.5,
+        markPrice: 0.041,
+        isBlock: true,
+        strategyLabel: null,
+        legs: null,
+        raw: { tradeId: 'blk', size: 50, indexPrice: 4800 },
+      },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/flow/instrument-trades?underlying=BTC&venue=deribit&instrument=BTC-28MAR26-100000-C',
+    });
+
+    expect(res.json().trades[0]).toMatchObject({ isBlock: true });
+  });
 });

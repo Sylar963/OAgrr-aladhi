@@ -1,3 +1,4 @@
+import { type CallPutFlowResponse, CallPutFlowResponseSchema } from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
 
 import { useExpiries } from '@features/chain';
@@ -32,7 +33,12 @@ export function useSurface(underlying: string, venues: string[]) {
 // Raw history is 5-minute samples; a 90d window at full resolution is ~16 MB.
 const IV_HISTORY_RESOLUTION: Record<IvHistoryWindow, string> = { '30d': '15m', '90d': '1h' };
 
-export function useIvHistory(underlying: string, window: IvHistoryWindow, tenor?: IvTenor) {
+export function useIvHistory(
+  underlying: string,
+  window: IvHistoryWindow,
+  tenor?: IvTenor,
+  enabled = true,
+) {
   const tenorParam = tenor ? `&tenor=${tenor}` : '';
   return useQuery({
     queryKey: ['iv-history', underlying, window, tenor ?? 'all'] as const,
@@ -40,10 +46,29 @@ export function useIvHistory(underlying: string, window: IvHistoryWindow, tenor?
       fetchJson<IvHistoryResponse>(
         `/iv-history?underlying=${underlying}&window=${window}&resolution=${IV_HISTORY_RESOLUTION[window]}${tenorParam}`,
       ),
-    enabled: Boolean(underlying),
+    enabled: enabled && Boolean(underlying),
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev: IvHistoryResponse | undefined) => prev,
+  });
+}
+
+export const CALL_PUT_FLOW_RESOLUTION_SEC = 3600;
+
+export function useCallPutFlow(underlying: string, days: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['call-put-flow', underlying, days] as const,
+    queryFn: async () =>
+      CallPutFlowResponseSchema.parse(
+        await fetchJson<unknown>(
+          `/flow/call-put-buckets?underlying=${underlying}&resolution=${CALL_PUT_FLOW_RESOLUTION_SEC}&days=${days}`,
+        ),
+      ),
+    enabled: enabled && Boolean(underlying),
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    placeholderData: (prev: CallPutFlowResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }
 

@@ -1,5 +1,7 @@
 import type { SqliteTradeStore } from './sqlite-trade-store.js';
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   MergeableTradeHistoryReader,
@@ -19,10 +21,25 @@ interface MergedTradeStoreOptions {
 }
 
 const DEFAULT_OVERLAP_BATCH_SIZE = 1_000;
+const REMOTE_BUCKET_CACHE_MAX_ENTRIES = 16;
+const UNKNOWN_HIGH_WATER_BUCKET_TTL_MS = 15 * 60_000;
+
+interface RemoteBucketParts {
+  remote: CallPutBucket[];
+  overlap: CallPutBucket[];
+}
+
+interface RemoteBucketCacheEntry {
+  remoteMax: number | null;
+  startMs: number;
+  loadedAt: number;
+  parts: Promise<RemoteBucketParts>;
+}
 
 export class MergedTradeStore implements TradeHistoryReader {
   private readonly disposeSources: boolean;
   private readonly overlapBatchSize: number;
+  private readonly remoteBucketCache = new Map<string, RemoteBucketCacheEntry>();
 
   constructor(
     private readonly local: SqliteTradeStore,
@@ -85,6 +102,31 @@ export class MergedTradeStore implements TradeHistoryReader {
     });
   }
 
+  /**
+   * With a known high-water mark, remote rows are authoritative up to it and local rows after it.
+   * Local rows at or below the mark are nearly always already uploaded, and checking them key by
+   * key costs a remote round-trip per thousand rows; an unflushed straggler older than the mark
+   * shows up after the next flush instead. Remote buckets only change on flush, which moves the
+   * mark, so they are cached per mark. Callers should align startTs/endTs to the resolution.
+   */
+  async bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    if (this.remote == null || this.excludesRemoteByTime(query)) {
+      return this.local.bucketCallPut(query);
+    }
+    const remoteMax = this.local.getRemoteMaxTradeTs(query.mode);
+    const localQuery =
+      remoteMax == null || query.startTs.getTime() > remoteMax
+        ? query
+        : { ...query, startTs: new Date(remoteMax + 1) };
+    const localBuckets = await this.local.bucketCallPut(localQuery);
+    const { remote, overlap } = await this.remoteBucketParts(query, remoteMax);
+    const startMs = query.startTs.getTime();
+    const endMs = query.endTs.getTime();
+    const inRange = (bucket: CallPutBucket) =>
+      bucket.bucketTs.getTime() >= startMs && bucket.bucketTs.getTime() < endMs;
+    return combineCallPutBuckets(localBuckets, remote.filter(inRange), overlap.filter(inRange));
+  }
+
   async dispose(): Promise<void> {
     if (!this.disposeSources) return;
     await Promise.all([this.local.dispose(), this.remote?.dispose()]);
@@ -117,6 +159,48 @@ export class MergedTradeStore implements TradeHistoryReader {
     const live = this.local.getRemoteMaxTradeTs('live');
     const institutional = this.local.getRemoteMaxTradeTs('institutional');
     return live == null || institutional == null ? null : Math.max(live, institutional);
+  }
+
+  private remoteBucketParts(
+    query: CallPutBucketQuery,
+    remoteMax: number | null,
+  ): Promise<RemoteBucketParts> {
+    const remote = this.remote;
+    if (remote == null) return Promise.resolve({ remote: [], overlap: [] });
+    const key = `${query.mode}|${query.underlying.toUpperCase()}|${query.resolutionSec}`;
+    const now = Date.now();
+    const startMs = query.startTs.getTime();
+    const hit = this.remoteBucketCache.get(key);
+    if (
+      hit != null &&
+      hit.remoteMax === remoteMax &&
+      hit.startMs <= startMs &&
+      (remoteMax != null || now - hit.loadedAt < UNKNOWN_HIGH_WATER_BUCKET_TTL_MS)
+    ) {
+      return hit.parts;
+    }
+
+    const parts =
+      remoteMax == null
+        ? this.withMergedSnapshot(async () => {
+            const overlap = new Map<string, CallPutBucket>();
+            await this.forEachOverlap(query, (record) => addCallPutRecord(overlap, record, query));
+            return { remote: await remote.bucketCallPut(query), overlap: [...overlap.values()] };
+          })
+        : remote
+            .bucketCallPut({ ...query, endTs: new Date(remoteMax + 1) })
+            .then((buckets) => ({ remote: buckets, overlap: [] }));
+    this.remoteBucketCache.delete(key);
+    this.remoteBucketCache.set(key, { remoteMax, startMs, loadedAt: now, parts });
+    while (this.remoteBucketCache.size > REMOTE_BUCKET_CACHE_MAX_ENTRIES) {
+      const oldest = this.remoteBucketCache.keys().next().value;
+      if (oldest == null) break;
+      this.remoteBucketCache.delete(oldest);
+    }
+    parts.catch(() => {
+      if (this.remoteBucketCache.get(key)?.parts === parts) this.remoteBucketCache.delete(key);
+    });
+    return parts;
   }
 
   private async summarizeOverlap(
@@ -208,6 +292,68 @@ function recordKey(record: TradeRecordKey): string {
 
 function toKey(record: PersistedTradeRecord): TradeRecordKey {
   return { tradeUid: record.tradeUid, tradeTs: record.tradeTs };
+}
+
+function callPutKey(bucketTs: Date, optionType: 'call' | 'put'): string {
+  return `${bucketTs.getTime()}|${optionType}`;
+}
+
+function addCallPutRecord(
+  buckets: Map<string, CallPutBucket>,
+  record: PersistedTradeRecord,
+  query: CallPutBucketQuery,
+): void {
+  if (record.optionType == null) return;
+  const resolutionMs = Math.round(query.resolutionSec * 1000);
+  const bucketTs = new Date(Math.floor(record.tradeTs.getTime() / resolutionMs) * resolutionMs);
+  const key = callPutKey(bucketTs, record.optionType);
+  const bucket = buckets.get(key) ?? {
+    bucketTs,
+    optionType: record.optionType,
+    count: 0,
+    contracts: 0,
+    premiumUsd: 0,
+    notionalUsd: 0,
+  };
+  bucket.count += 1;
+  bucket.contracts += record.contracts;
+  bucket.premiumUsd += record.premiumUsd ?? 0;
+  bucket.notionalUsd += record.notionalUsd ?? 0;
+  buckets.set(key, bucket);
+}
+
+function combineCallPutBuckets(
+  local: CallPutBucket[],
+  remote: CallPutBucket[],
+  overlap: CallPutBucket[],
+): CallPutBucket[] {
+  const merged = new Map<string, CallPutBucket>();
+  const add = (bucket: CallPutBucket, sign: 1 | -1) => {
+    const key = callPutKey(bucket.bucketTs, bucket.optionType);
+    const current = merged.get(key) ?? {
+      bucketTs: bucket.bucketTs,
+      optionType: bucket.optionType,
+      count: 0,
+      contracts: 0,
+      premiumUsd: 0,
+      notionalUsd: 0,
+    };
+    current.count += bucket.count * sign;
+    current.contracts += bucket.contracts * sign;
+    current.premiumUsd += bucket.premiumUsd * sign;
+    current.notionalUsd += bucket.notionalUsd * sign;
+    merged.set(key, current);
+  };
+  for (const bucket of remote) add(bucket, 1);
+  for (const bucket of local) add(bucket, 1);
+  for (const bucket of overlap) add(bucket, -1);
+  return [...merged.values()]
+    .filter((bucket) => bucket.count > 0)
+    .sort(
+      (left, right) =>
+        left.bucketTs.getTime() - right.bucketTs.getTime() ||
+        left.optionType.localeCompare(right.optionType),
+    );
 }
 
 interface SummaryAggregate {

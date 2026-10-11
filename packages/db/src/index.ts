@@ -81,6 +81,8 @@ export {
 } from './short-straddle-snapshot-store.js';
 export { SqliteTradeStore } from './sqlite-trade-store.js';
 export type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   MergeableTradeHistoryReader,

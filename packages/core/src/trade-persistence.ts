@@ -39,11 +39,29 @@ export function parseTradeInstrument(instrument: string): ParsedTradeInstrument 
   };
 }
 
+const OKX_CONTRACT_MULTIPLIERS: Record<string, number> = { BTC: 0.01, ETH: 0.1 };
+
+// Trade `size` on Gate.io is a contract count; `price` is per one unit of the underlying.
+// From /api/v4/options/contracts `multiplier`, uniform per underlying (keyed by public name).
+const GATEIO_CONTRACT_MULTIPLIERS: Record<string, number> = {
+  BTC: 0.01,
+  ETH: 0.01,
+  LTC: 1,
+  SOL: 1,
+  DOGE: 1000,
+  ADA: 100,
+  XRP: 10,
+  BNB: 0.1,
+  HYPE: 1,
+  SUI: 10,
+  XAUT: 0.01,
+  XTI: 1,
+};
+
 export function getVenueContractMultiplier(venue: string, underlying: string): number {
-  if (venue !== 'okx') return 1;
   const upper = underlying.toUpperCase();
-  if (upper === 'BTC') return 0.01;
-  if (upper === 'ETH') return 0.1;
+  if (venue === 'okx') return OKX_CONTRACT_MULTIPLIERS[upper] ?? 1;
+  if (venue === 'gateio') return GATEIO_CONTRACT_MULTIPLIERS[upper] ?? 1;
   return 1;
 }
 

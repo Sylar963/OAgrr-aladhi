@@ -56,3 +56,32 @@ export const InstrumentTradeWsServerMessageSchema = z.discriminatedUnion('type',
 ]);
 
 export type InstrumentTradeWsServerMessage = z.infer<typeof InstrumentTradeWsServerMessageSchema>;
+
+export const CALL_PUT_FLOW_RESOLUTIONS = [900, 3600, 14400] as const;
+export const CALL_PUT_FLOW_MAX_DAYS = 90;
+
+/** Screen (non-institutional) flow per bucket; `ts` is the bucket start in epoch seconds. */
+export const CallPutFlowBucketSchema = z.object({
+  ts: z.number(),
+  callCount: z.number(),
+  putCount: z.number(),
+  callContracts: z.number(),
+  putContracts: z.number(),
+  callNotionalUsd: z.number(),
+  putNotionalUsd: z.number(),
+  callPremiumUsd: z.number(),
+  putPremiumUsd: z.number(),
+});
+
+export type CallPutFlowBucket = z.infer<typeof CallPutFlowBucketSchema>;
+
+export const CallPutFlowResponseSchema = z.object({
+  available: z.boolean(),
+  underlying: z.string(),
+  resolution: z.number(),
+  start: z.number(),
+  end: z.number(),
+  buckets: z.array(CallPutFlowBucketSchema),
+});
+
+export type CallPutFlowResponse = z.infer<typeof CallPutFlowResponseSchema>;

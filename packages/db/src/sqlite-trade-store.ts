@@ -13,6 +13,8 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { StringDecoder } from 'node:string_decoder';
 
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   MergeableTradeHistoryReader,
@@ -180,6 +182,40 @@ export class SqliteTradeStore implements MergeableTradeHistoryReader {
 
   async listInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]> {
     return this.selectInstrumentSummaries(query, undefined, query.limit);
+  }
+
+  async bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    const database = this.getDatabase();
+    if (database == null) return [];
+    const where = buildWhere(query);
+    where.clauses.push('option_type IS NOT NULL');
+    const resolutionMs = Math.round(query.resolutionSec * 1000);
+    const rows = database
+      .prepare(
+        `SELECT
+          (trade_ts / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket_ts,
+          option_type,
+          COUNT(*) AS count,
+          COALESCE(SUM(contracts), 0) AS contracts,
+          COALESCE(SUM(premium_usd), 0) AS premium_usd,
+          COALESCE(SUM(notional_usd), 0) AS notional_usd
+        FROM pending_trades ${whereSql(where)}
+        GROUP BY bucket_ts, option_type
+        ORDER BY bucket_ts ASC, option_type ASC`,
+      )
+      .all(resolutionMs, resolutionMs, ...where.values);
+    return rows.map((row) => {
+      const optionType = readOptionType(row, 'option_type');
+      if (optionType == null) throw new Error('call/put bucket without option type');
+      return {
+        bucketTs: new Date(readNumber(row, 'bucket_ts')),
+        optionType,
+        count: readNumber(row, 'count'),
+        contracts: readNumber(row, 'contracts'),
+        premiumUsd: readNumber(row, 'premium_usd'),
+        notionalUsd: readNumber(row, 'notional_usd'),
+      };
+    });
   }
 
   async listAllInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]> {

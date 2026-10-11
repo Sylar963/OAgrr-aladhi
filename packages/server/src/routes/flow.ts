@@ -282,7 +282,7 @@ function mapStoredLiveTrade(row: PersistedTradeRecord): EnrichedTradeEvent | nul
     premiumUsd: row.premiumUsd,
     notionalUsd: row.notionalUsd,
     referencePriceUsd: row.referencePriceUsd,
-    isBlock: getOptionalBoolean(row.raw, 'isBlock') ?? false,
+    isBlock: row.isBlock,
     timestamp: row.tradeTs.getTime(),
   };
 }
@@ -391,11 +391,6 @@ function getOptionalString(raw: Record<string, unknown>, key: string): string | 
 function getOptionalNumber(raw: Record<string, unknown>, key: string): number | null {
   const value = raw[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function getOptionalBoolean(raw: Record<string, unknown>, key: string): boolean | null {
-  const value = raw[key];
-  return typeof value === 'boolean' ? value : null;
 }
 
 function toVenueId(value: string): TradeEvent['venue'] | null {

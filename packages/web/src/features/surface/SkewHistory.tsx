@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { getHistoryCoverage } from './history-coverage';
 import { type IvHistoryWindow, useIvHistory } from './queries';
 import styles from './SkewHistory.module.css';
+import SkewRegime from './SkewRegime';
 import SkewSmileChart from './SkewSmileChart';
 import SkewTimeline from './SkewTimeline';
 import {
@@ -20,6 +21,11 @@ const LOOKBACKS: { key: IvHistoryWindow; label: string }[] = [
   { key: '30d', label: '1M' },
   { key: '90d', label: '3M' },
 ];
+const MODELS = [
+  { key: 'v1', label: 'v1', title: 'Skew levels, percentiles, smile' },
+  { key: 'v2', label: 'v2', title: 'Segmented rolling regime (calls vs puts)' },
+] as const;
+type SkewModel = (typeof MODELS)[number]['key'];
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
 const VS_OPTIONS: { key: string; label: string; days: number }[] = [
@@ -109,6 +115,7 @@ export default function SkewHistory({ underlying }: Props) {
   const [window, setWindow] = useState<IvHistoryWindow>('30d');
   const [tenor, setTenor] = useState<IvTenor>('30d');
   const [vsKey, setVsKey] = useState<string>('7d');
+  const [model, setModel] = useState<SkewModel>('v1');
 
   const { data, isPlaceholderData, isLoading } = useIvHistory(underlying, window, tenor);
   const result = data?.tenors[tenor];
@@ -139,6 +146,21 @@ export default function SkewHistory({ underlying }: Props) {
           {underlying} SKEW
         </span>
         <div className={styles.toggles}>
+          <span className={styles.toggleLabel}>MODEL</span>
+          <div className={styles.toggleGroup}>
+            {MODELS.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                title={m.title}
+                className={styles.toggleBtn}
+                data-active={model === m.key ? 'true' : undefined}
+                onClick={() => setModel(m.key)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
           <span className={styles.toggleLabel} title="Constant-maturity option tenor">
             TENOR
           </span>
@@ -171,66 +193,79 @@ export default function SkewHistory({ underlying }: Props) {
               </button>
             ))}
           </div>
-          <span className={styles.toggleLabel} title="Reference point for the dashed smile and Δ">
-            VS
-          </span>
-          <div className={styles.toggleGroup}>
-            {VS_OPTIONS.map((o) => (
-              <button
-                key={o.key}
-                type="button"
-                className={styles.toggleBtn}
-                data-active={vsKey === o.key ? 'true' : undefined}
-                onClick={() => setVsKey(o.key)}
+          {model === 'v1' && (
+            <>
+              <span
+                className={styles.toggleLabel}
+                title="Reference point for the dashed smile and Δ"
               >
-                {o.label}
-              </button>
-            ))}
-          </div>
+                VS
+              </span>
+              <div className={styles.toggleGroup}>
+                {VS_OPTIONS.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    className={styles.toggleBtn}
+                    data-active={vsKey === o.key ? 'true' : undefined}
+                    onClick={() => setVsKey(o.key)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      <SkewTimeline
-        label="25Δ RR"
-        title="25Δ Risk-Reversal"
-        tip={RR_TIP_BODY}
-        color={RR_COLOR}
-        points={rrPoints}
-        percentile={rrPct}
-        atmText={atmPctText(latestSkewDisplayValue(series, 'rr25d', 'normalized'))}
-        refValue={refPoint?.rr25d != null ? refPoint.rr25d * 100 : null}
-        refTimeMs={refPoint?.ts ?? null}
-        refLabel={vs.label}
-        upLabel="calls bid"
-        downLabel="puts bid"
-        loading={loading}
-      />
-      <SkewTimeline
-        label="25Δ Fly"
-        title="25Δ Butterfly"
-        tip={FLY_TIP_BODY}
-        color={FLY_COLOR}
-        points={flyPoints}
-        percentile={flyPct}
-        atmText={atmPctText(latestSkewDisplayValue(series, 'bfly25d', 'normalized'))}
-        refValue={refPoint?.bfly25d != null ? refPoint.bfly25d * 100 : null}
-        refTimeMs={refPoint?.ts ?? null}
-        refLabel={vs.label}
-        upLabel="wings rich"
-        downLabel="wings cheap"
-        loading={loading}
-      />
+      {model === 'v2' && <SkewRegime underlying={underlying} tenor={tenor} lookback={window} />}
 
-      <TermStrip data={data} active={tenor} />
+      {model === 'v1' && (
+        <>
+          <SkewTimeline
+            label="25Δ RR"
+            title="25Δ Risk-Reversal"
+            tip={RR_TIP_BODY}
+            color={RR_COLOR}
+            points={rrPoints}
+            percentile={rrPct}
+            atmText={atmPctText(latestSkewDisplayValue(series, 'rr25d', 'normalized'))}
+            refValue={refPoint?.rr25d != null ? refPoint.rr25d * 100 : null}
+            refTimeMs={refPoint?.ts ?? null}
+            refLabel={vs.label}
+            upLabel="calls bid"
+            downLabel="puts bid"
+            loading={loading}
+          />
+          <SkewTimeline
+            label="25Δ Fly"
+            title="25Δ Butterfly"
+            tip={FLY_TIP_BODY}
+            color={FLY_COLOR}
+            points={flyPoints}
+            percentile={flyPct}
+            atmText={atmPctText(latestSkewDisplayValue(series, 'bfly25d', 'normalized'))}
+            refValue={refPoint?.bfly25d != null ? refPoint.bfly25d * 100 : null}
+            refTimeMs={refPoint?.ts ?? null}
+            refLabel={vs.label}
+            upLabel="wings rich"
+            downLabel="wings cheap"
+            loading={loading}
+          />
 
-      <SkewSmileChart now={nowSmile} reference={refSmile} referenceLabel={vs.label} />
+          <TermStrip data={data} active={tenor} />
 
-      <div className={styles.foot}>
-        <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
-          {coverage.label}
-        </span>
-        <span className={styles.takeaway}>{describeSkew(rrNow, rrPct, flyNow, flyPct)}</span>
-      </div>
+          <SkewSmileChart now={nowSmile} reference={refSmile} referenceLabel={vs.label} />
+
+          <div className={styles.foot}>
+            <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
+              {coverage.label}
+            </span>
+            <span className={styles.takeaway}>{describeSkew(rrNow, rrPct, flyNow, flyPct)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

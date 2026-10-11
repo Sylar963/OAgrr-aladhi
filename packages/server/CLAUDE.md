@@ -34,6 +34,7 @@ src/
     flow.ts          GET /api/flow?underlying=BTC
     block-flow.ts    GET /api/block-flow?underlying=BTC
     block-strike-buckets.ts  GET /api/block-flow/strike-buckets?underlying=BTC&resolution=3600&start=ISO (blocks by candle × strike × expiry)
+    call-put-flow.ts GET /api/flow/call-put-buckets?underlying=BTC&resolution=3600&days=30 (screen flow call vs put per bucket; remote buckets cached per ingest flush)
     news.ts          GET /api/news
     regime.ts        GET /api/regime?underlying=BTC
     spots.ts         GET /api/spots

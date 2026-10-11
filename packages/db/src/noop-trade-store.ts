@@ -1,4 +1,6 @@
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
@@ -51,6 +53,10 @@ export class NoopTradeStore implements TradeStore {
   }
 
   async listInstruments(_query: InstrumentListQuery): Promise<InstrumentSummary[]> {
+    return [];
+  }
+
+  async bucketCallPut(_query: CallPutBucketQuery): Promise<CallPutBucket[]> {
     return [];
   }
 

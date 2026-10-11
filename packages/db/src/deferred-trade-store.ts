@@ -1,6 +1,8 @@
 import { MergedTradeStore } from './merged-trade-store.js';
 import { SqliteTradeStore } from './sqlite-trade-store.js';
 import type {
+  CallPutBucket,
+  CallPutBucketQuery,
   InstrumentListQuery,
   InstrumentSummary,
   RecentTradeQuery,
@@ -122,6 +124,10 @@ export class DeferredTradeStore implements TradeStore {
 
   async listInstruments(query: InstrumentListQuery): Promise<InstrumentSummary[]> {
     return this.merged.listInstruments(query);
+  }
+
+  async bucketCallPut(query: CallPutBucketQuery): Promise<CallPutBucket[]> {
+    return this.merged.bucketCallPut(query);
   }
 
   async listInstrumentsByNames(

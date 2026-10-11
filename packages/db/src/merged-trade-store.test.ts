@@ -138,6 +138,7 @@ describe('MergedTradeStore', () => {
       },
       listInstruments: (query) => remote.listInstruments(query),
       listInstrumentsByNames: (query, names) => remote.listInstrumentsByNames(query, names),
+      bucketCallPut: (query) => remote.bucketCallPut(query),
       dispose: () => remote.dispose(),
     };
     const merged = new MergedTradeStore(localReader, racingRemote);
@@ -204,6 +205,92 @@ describe('MergedTradeStore', () => {
 
     expect(rows.map((row) => row.tradeUid)).toEqual(['new']);
     await local.dispose();
+  });
+});
+
+describe('MergedTradeStore.bucketCallPut', () => {
+  const query = {
+    mode: 'live' as const,
+    underlying: 'BTC',
+    startTs: new Date(0),
+    endTs: new Date(20_000),
+    resolutionSec: 10,
+  };
+
+  it('takes remote rows up to the high-water mark and local rows after it', async () => {
+    const { local, remote, merged } = stores();
+    const uploaded = trade({ tradeUid: 'uploaded', tradeTs: new Date(2_000), contracts: 2 });
+    local.setRemoteMaxTradeTs('live', 5_000);
+    local.writeMany([
+      uploaded,
+      trade({ tradeUid: 'fresh-same-bucket', tradeTs: new Date(7_000), optionType: 'put' }),
+      trade({ tradeUid: 'fresh', tradeTs: new Date(12_000), contracts: 5, notionalUsd: 7_000 }),
+      trade({ tradeUid: 'no-type', tradeTs: new Date(12_500), optionType: null }),
+    ]);
+    remote.writeMany([
+      uploaded,
+      trade({ tradeUid: 'old-put', tradeTs: new Date(1_000), optionType: 'put', contracts: 3 }),
+    ]);
+
+    const buckets = await merged.bucketCallPut(query);
+
+    expect(
+      buckets.map((b) => [b.bucketTs.getTime(), b.optionType, b.count, b.contracts, b.notionalUsd]),
+    ).toEqual([
+      [0, 'call', 1, 2, 1_000],
+      [0, 'put', 2, 4, 2_000],
+      [10_000, 'call', 1, 5, 7_000],
+    ]);
+    await merged.dispose();
+  });
+
+  it('subtracts synchronized rows when no high-water mark is recorded', async () => {
+    const { local, remote, merged } = stores();
+    const duplicate = trade({ tradeUid: 'dup', tradeTs: new Date(2_000), contracts: 2 });
+    local.writeMany([duplicate, trade({ tradeUid: 'local', tradeTs: new Date(3_000) })]);
+    remote.writeMany([duplicate, trade({ tradeUid: 'remote', tradeTs: new Date(4_000) })]);
+
+    const buckets = await merged.bucketCallPut(query);
+
+    expect(buckets.map((b) => [b.bucketTs.getTime(), b.count, b.contracts])).toEqual([[0, 3, 4]]);
+    await merged.dispose();
+  });
+
+  it('reads the remote store once per high-water mark', async () => {
+    const local = new SqliteTradeStore(tempPath('cache-local.sqlite'));
+    const backing = new SqliteTradeStore(tempPath('cache-remote.sqlite'));
+    let remoteBucketReads = 0;
+    const remote: MergeableTradeHistoryReader = {
+      enabled: true,
+      withReadSnapshot: (operation) => operation(),
+      loadRecent: (q) => backing.loadRecent(q),
+      loadHistory: (q) => backing.loadHistory(q),
+      loadByKeys: (q, keys) => backing.loadByKeys(q, keys),
+      summarizeHistory: (q) => backing.summarizeHistory(q),
+      listInstruments: (q) => backing.listInstruments(q),
+      listInstrumentsByNames: (q, names) => backing.listInstrumentsByNames(q, names),
+      bucketCallPut: (q) => {
+        remoteBucketReads += 1;
+        return backing.bucketCallPut(q);
+      },
+      dispose: () => backing.dispose(),
+    };
+    const merged = new MergedTradeStore(local, remote);
+    local.setRemoteMaxTradeTs('live', 5_000);
+    backing.writeMany([trade({ tradeUid: 'old', tradeTs: new Date(1_000) })]);
+
+    await merged.bucketCallPut(query);
+    local.writeMany([trade({ tradeUid: 'fresh', tradeTs: new Date(12_000) })]);
+    const second = await merged.bucketCallPut({ ...query, startTs: new Date(10_000) });
+    expect(remoteBucketReads).toBe(1);
+    expect(second.map((b) => b.bucketTs.getTime())).toEqual([10_000]);
+
+    backing.writeMany([trade({ tradeUid: 'flushed', tradeTs: new Date(6_000) })]);
+    local.setRemoteMaxTradeTs('live', 6_000);
+    const third = await merged.bucketCallPut(query);
+    expect(remoteBucketReads).toBe(2);
+    expect(third.find((b) => b.bucketTs.getTime() === 0)?.count).toBe(2);
+    await merged.dispose();
   });
 });
 

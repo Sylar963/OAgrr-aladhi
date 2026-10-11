@@ -8,28 +8,25 @@
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
-.bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  height: 48px;
-  flex-shrink: 0;
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--border-default);
-  background: var(--bg-surface);
-}
-.select {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
+.tickerSelect {
+  appearance: none;
+  padding: 0;
   font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
-.delayed {
-  margin-left: auto;
-  font-size: var(--text-2xs);
-  color: var(--text-tertiary);
+.tickerSelect:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.tickerSelect option {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
 }
 .main {
   flex: 1;
@@ -37,23 +34,4 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-.pageNav {
-  display: flex;
-  gap: 4px;
-  margin-left: 8px;
-}
-.pageTab {
-  padding: 4px 12px;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font: inherit;
-  cursor: pointer;
-}
-.pageTab[data-active] {
-  color: var(--text-primary);
-  border-color: var(--accent-primary);
-  background: var(--accent-primary-bg);
 }

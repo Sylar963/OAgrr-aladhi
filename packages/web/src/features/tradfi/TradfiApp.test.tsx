@@ -35,7 +35,7 @@ it('opens the shared Builder in TradFi market mode', async () => {
   });
   render(<TradfiApp />);
 
-  fireEvent.click(screen.getByRole('button', { name: 'Builder' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Builder' }));
 
   expect(await screen.findByText('Builder market: tradfi')).not.toBeNull();
   expect(useAppStore.getState().tradfiPage).toBe('builder');

@@ -190,6 +190,27 @@
   justify-self: end;
 }
 
+.notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.noticeDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
 .iconBtn {
   display: inline-flex;
   align-items: center;
@@ -263,6 +284,20 @@
 
   /* Hide tab pills on mobile — bottom nav handles navigation */
   .pillGroup {
+    display: none;
+  }
+
+  /* TradFi has no bottom nav, so its tabs stay and scroll as a second row. */
+  .pillGroup[data-mobile="scroll"] {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .notice {
     display: none;
   }
 

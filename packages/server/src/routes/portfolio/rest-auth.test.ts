@@ -90,16 +90,11 @@ describe('Portfolio REST auth gate', () => {
     expect(res.json()).toMatchObject({ error: 'unauthorized' });
   });
 
-  it('returns 401 on anonymous POST /portfolio/venue-credentials/derive when persistence is enabled', async () => {
+  it('returns 401 on anonymous POST /portfolio/venue-credentials/derive/session-key when persistence is enabled', async () => {
     storeMock.enabled = true;
     const res = await app.inject({
       method: 'POST',
-      url: '/api/portfolio/venue-credentials/derive',
-      payload: {
-        walletAddress: '0x' + 'a'.repeat(40),
-        signerPrivateKey: '0x' + 'b'.repeat(64),
-        subaccountId: 1,
-      },
+      url: '/api/portfolio/venue-credentials/derive/session-key',
     });
     expect(res.statusCode).toBe(401);
   });

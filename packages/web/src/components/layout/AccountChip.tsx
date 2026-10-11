@@ -11,6 +11,7 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
 
 import styles from './AccountChip.module.css';
 
@@ -125,28 +126,7 @@ export default function AccountChip() {
       return;
     }
 
-    if (venue === 'derive') {
-      setBusy(true);
-      try {
-        const subaccountId = Number(trimmedFields.subaccountId ?? '');
-        if (!Number.isFinite(subaccountId) || subaccountId <= 0) {
-          throw new Error('Subaccount ID must be a positive integer');
-        }
-        await connectVenue('derive', {
-          walletAddress: trimmedFields.walletAddress ?? '',
-          signerPrivateKey: trimmedFields.privateKeyPem ?? '',
-          subaccountId,
-        });
-        markVenueConfigured('derive');
-        refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'connect failed');
-        setBusy(false);
-        return;
-      } finally {
-        setBusy(false);
-      }
-    } else if (venue === 'thalex') {
+    if (venue === 'thalex') {
       setBusy(true);
       try {
         await connectVenue('thalex', {
@@ -231,10 +211,10 @@ export default function AccountChip() {
               {isAccountReady && <div className={styles.divider} />}
               {isAccountReady && (
                 <div className={styles.section}>
-                  <div className={styles.label}>Venue API keys</div>
+                  <div className={styles.label}>Venue connections</div>
                   {configuredVenues.length === 0 ? (
                     <div className={styles.hint}>
-                      No venue keys yet. Add keys to enable per-venue private feeds.
+                      No venues connected yet. Connect one to enable per-venue private feeds.
                     </div>
                   ) : (
                     <div className={styles.venueChipsRow}>
@@ -268,7 +248,7 @@ export default function AccountChip() {
                       setMode('paste');
                     }}
                   >
-                    + Add venue key
+                    + Connect venue
                   </button>
                   {hasUnsupportedConfigured && (
                     <div className={styles.warning}>
@@ -309,12 +289,24 @@ export default function AccountChip() {
                   ))}
                 </select>
               </label>
-              <VenueCredentialForm
-                venue={pasteTarget}
-                values={venueFields}
-                onChange={(key, value) => setVenueFields((prev) => ({ ...prev, [key]: value }))}
-                onSubmit={onPasteVenue}
-              />
+              {PRIVATE_ADAPTER_SPECS[pasteTarget].connectMethod === 'wallet' ? (
+                <DeriveWalletConnect
+                  onConnected={() => {
+                    markVenueConfigured('derive');
+                    refresh();
+                    setError(null);
+                    setMode('home');
+                  }}
+                  onError={setError}
+                />
+              ) : (
+                <VenueCredentialForm
+                  venue={pasteTarget}
+                  values={venueFields}
+                  onChange={(key, value) => setVenueFields((prev) => ({ ...prev, [key]: value }))}
+                  onSubmit={onPasteVenue}
+                />
+              )}
               {busy && <div className={styles.hint}>Connecting…</div>}
               {error != null && <div className={styles.error}>{error}</div>}
             </div>
@@ -379,6 +371,98 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
       <button type="button" className={styles.primaryBtn} onClick={onSubmit}>
         Save {VENUES[venue]?.label ?? venue} keys
       </button>
+    </>
+  );
+}
+
+type WalletStep =
+  | { kind: 'idle' }
+  | { kind: 'working'; message: string }
+  | { kind: 'choose'; session: DeriveWalletSession; subaccountId: number };
+
+interface DeriveWalletConnectProps {
+  onConnected: () => void;
+  onError: (message: string | null) => void;
+}
+
+function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps) {
+  const [step, setStep] = useState<WalletStep>({ kind: 'idle' });
+  const sessionRef = useRef<DeriveWalletSession | null>(null);
+
+  useEffect(() => () => sessionRef.current?.cancel(), []);
+
+  const fail = (caught: unknown) => {
+    sessionRef.current?.cancel();
+    sessionRef.current = null;
+    onError(caught instanceof Error ? caught.message : 'Wallet connection failed');
+    setStep({ kind: 'idle' });
+  };
+
+  const authorize = async (session: DeriveWalletSession, subaccountId: number) => {
+    setStep({ kind: 'working', message: 'Approve the read-only key in your wallet…' });
+    try {
+      await session.authorize(subaccountId);
+      sessionRef.current = null;
+      onConnected();
+    } catch (caught) {
+      fail(caught);
+    }
+  };
+
+  const start = async () => {
+    onError(null);
+    setStep({ kind: 'working', message: 'Sign in to Derive from your wallet…' });
+    try {
+      const { startDeriveWalletConnect } = await import('@lib/wallet/derive-wallet-connect');
+      const session = await startDeriveWalletConnect();
+      sessionRef.current = session;
+      if (session.subaccountIds.length === 1) {
+        await authorize(session, session.subaccountIds[0]!);
+      } else {
+        setStep({ kind: 'choose', session, subaccountId: session.subaccountIds[0]! });
+      }
+    } catch (caught) {
+      fail(caught);
+    }
+  };
+
+  return (
+    <>
+      <div className={styles.hint}>
+        Your wallet signs twice: a Derive sign-in, then a read-only key for oggregator. The key
+        can read positions but cannot trade or withdraw, and your wallet key never leaves the
+        wallet.
+      </div>
+      {step.kind === 'idle' && (
+        <button type="button" className={styles.primaryBtn} onClick={() => void start()}>
+          Connect wallet
+        </button>
+      )}
+      {step.kind === 'working' && <div className={styles.hint}>{step.message}</div>}
+      {step.kind === 'choose' && (
+        <>
+          <label className={styles.field}>
+            <span>Subaccount</span>
+            <select
+              value={step.subaccountId}
+              onChange={(e) => setStep({ ...step, subaccountId: Number(e.target.value) })}
+            >
+              {step.session.subaccountIds.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={() => void authorize(step.session, step.subaccountId)}
+          >
+            Authorize read-only access
+          </button>
+        </>
+      )}
     </>
   );
 }

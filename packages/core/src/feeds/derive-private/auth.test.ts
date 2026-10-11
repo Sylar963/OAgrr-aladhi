@@ -3,7 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 
-import { recoverSignerAddress, signLoginMessage } from './auth.js';
+import { generateSessionKey, recoverSignerAddress, signLoginMessage } from './auth.js';
 
 function makeKeyPair(): { privateKey: string; address: string } {
   const { secretKey, publicKey } = secp256k1.keygen();
@@ -68,5 +68,23 @@ describe('signLoginMessage', () => {
         timestampMs: 1,
       }),
     ).toThrow();
+  });
+});
+
+describe('generateSessionKey', () => {
+  it('returns a key whose login signature recovers to its own address', () => {
+    const sessionKey = generateSessionKey();
+    expect(sessionKey.privateKey).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(sessionKey.address).toMatch(/^0x[0-9a-f]{40}$/);
+    const params = signLoginMessage({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      signerPrivateKey: sessionKey.privateKey,
+      timestampMs: 1_700_000_000_000,
+    });
+    expect(recoverSignerAddress(params.timestamp, params.signature)).toBe(sessionKey.address);
+  });
+
+  it('never repeats a key', () => {
+    expect(generateSessionKey().privateKey).not.toBe(generateSessionKey().privateKey);
   });
 });

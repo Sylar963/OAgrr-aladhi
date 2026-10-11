@@ -101,8 +101,11 @@ export function AccountSessionProvider({ children }: { children: ReactNode }) {
         );
         setAccountId(synchronized.accountId);
         setResolvedUserId(userId);
-        await restoreVenueConnections(token);
+        const restored = await restoreVenueConnections(token);
         if (cancelled) return;
+        for (const connection of restored) {
+          if (!connection.configured) useAppStore.getState().markVenueUnconfigured(connection.venue);
+        }
         setStatus('ready');
       } catch (caught) {
         if (cancelled) return;

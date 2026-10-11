@@ -6,8 +6,10 @@ export type {
   VenueConnectRequest,
 } from './api';
 export {
+  confirmDeriveSessionKey,
   connectVenue,
   disconnectVenue,
+  issueDeriveSessionKey,
   fetchExchangeTrades,
   fetchPositions,
   listVenueConnections,

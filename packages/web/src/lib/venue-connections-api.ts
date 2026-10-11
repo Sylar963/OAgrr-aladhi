@@ -26,28 +26,12 @@ export async function migrateLegacyBrowserVenueCredentials(
   accountId: string,
   token: string,
 ): Promise<void> {
+  // Old builds kept a raw Derive signing key in localStorage. Derive now connects
+  // through the wallet, so the key is dropped rather than uploaded.
+  removeVenueCreds('derive');
+
   if (readLegacyAccountIdentifier() !== accountId) return;
   const migrations: Promise<void>[] = [];
-
-  const derive = loadVenueCreds('derive');
-  if (derive != null) {
-    const walletAddress = derive.fields.walletAddress;
-    const signerPrivateKey = derive.fields.privateKeyPem;
-    const subaccountId = Number(derive.fields.subaccountId);
-    if (walletAddress && signerPrivateKey && Number.isFinite(subaccountId) && subaccountId > 0) {
-      migrations.push(
-        connectVenueRequest(
-          'derive',
-          {
-            walletAddress,
-            signerPrivateKey,
-            subaccountId,
-          },
-          token,
-        ).then(() => removeVenueCreds('derive')),
-      );
-    }
-  }
 
   const thalex = loadVenueCreds('thalex');
   if (thalex != null) {

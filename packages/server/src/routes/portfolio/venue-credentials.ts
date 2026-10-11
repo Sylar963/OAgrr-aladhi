@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { VenueIdSchema, type VenueId } from '@oggregator/protocol';
+import { DeriveSessionKeyConfirmSchema, VenueIdSchema, type VenueId } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 
 import { derivePositionStore } from '../../derive-position-store.js';
+import { pendingDeriveSessionKeys } from '../../derive-session-keys.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { getOrCreatePortfolioRuntime } from '../../portfolio-services.js';
 import { venueCredentialsStore } from '../../trading-services.js';
@@ -14,15 +15,12 @@ import {
   type VenueCredentialCipher,
 } from '../../venue-credential-cipher.js';
 
-const DeriveCredentialsSchema = z.object({
-  walletAddress: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
-  signerPrivateKey: z
-    .string()
-    .regex(/^(0x)?[a-fA-F0-9]{64}$/, 'signerPrivateKey must be 32-byte hex'),
-  subaccountId: z.coerce.number().int().positive(),
-  env: z.enum(['prod', 'test']).optional(),
+const DeriveStoredCredentialsSchema = z.object({
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  sessionPrivateKey: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  publicSessionKey: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  subaccountId: z.number().int().positive(),
+  expirySec: z.number().int().positive(),
 });
 
 const ThalexCredentialsSchema = z.object({
@@ -32,7 +30,7 @@ const ThalexCredentialsSchema = z.object({
   env: z.enum(['prod', 'test']).optional(),
 });
 
-type DeriveCredentials = z.infer<typeof DeriveCredentialsSchema>;
+type DeriveStoredCredentials = z.infer<typeof DeriveStoredCredentialsSchema>;
 type ThalexCredentials = z.infer<typeof ThalexCredentialsSchema>;
 
 function privateAdaptersEnabled(): boolean {
@@ -73,15 +71,21 @@ function getCredentialCipherOrSendError(reply: FastifyReply): VenueCredentialCip
   return cipher;
 }
 
-async function connectDerive(accountId: string, credentials: DeriveCredentials): Promise<void> {
+async function connectDerive(
+  accountId: string,
+  credentials: DeriveStoredCredentials,
+): Promise<void> {
   await derivePositionStore.connect({
     accountId,
     walletAddress: credentials.walletAddress,
-    signerPrivateKey: credentials.signerPrivateKey,
+    signerPrivateKey: credentials.sessionPrivateKey,
     subaccountId: credentials.subaccountId,
-    ...(credentials.env != null && { env: credentials.env }),
   });
   getOrCreatePortfolioRuntime(accountId, 'derive');
+}
+
+function isDeriveSessionKeyExpired(credentials: DeriveStoredCredentials): boolean {
+  return credentials.expirySec * 1000 <= Date.now();
 }
 
 async function connectThalex(accountId: string, credentials: ThalexCredentials): Promise<void> {
@@ -95,19 +99,27 @@ async function connectThalex(accountId: string, credentials: ThalexCredentials):
   getOrCreatePortfolioRuntime(accountId, 'thalex');
 }
 
-async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<boolean> {
+type ReconnectOutcome = 'connected' | 'not_connected' | 'removed';
+
+async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<ReconnectOutcome> {
   const cipher = getVenueCredentialCipher();
-  if (cipher == null) return false;
+  if (cipher == null) return 'not_connected';
   const stored = await venueCredentialsStore.get(accountId, venue);
-  if (stored == null) return false;
+  if (stored == null) return 'removed';
 
   if (venue === 'derive') {
-    const parsed = DeriveCredentialsSchema.safeParse(
+    const parsed = DeriveStoredCredentialsSchema.safeParse(
       cipher.decrypt<unknown>(stored.encryptedCredentials),
     );
-    if (!parsed.success) throw new Error('Stored Derive credentials are invalid');
+    // Rows saved before wallet connect hold a user-pasted signing key; drop them so
+    // the user reconnects through their wallet instead.
+    if (!parsed.success) {
+      await venueCredentialsStore.delete(accountId, venue);
+      return 'removed';
+    }
+    if (isDeriveSessionKeyExpired(parsed.data)) return 'not_connected';
     await connectDerive(accountId, parsed.data);
-    return true;
+    return 'connected';
   }
   if (venue === 'thalex') {
     const parsed = ThalexCredentialsSchema.safeParse(
@@ -115,9 +127,9 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
     );
     if (!parsed.success) throw new Error('Stored Thalex credentials are invalid');
     await connectThalex(accountId, parsed.data);
-    return true;
+    return 'connected';
   }
-  return false;
+  return 'not_connected';
 }
 
 async function disconnectVenue(accountId: string, venue: VenueId): Promise<void> {
@@ -168,8 +180,12 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
           const parsed = VenueIdSchema.safeParse(rawVenue);
           if (!parsed.success) return null;
           try {
-            const connected = await reconnectStoredVenue(accountId, parsed.data);
-            return { venue: parsed.data, configured: true, connected };
+            const outcome = await reconnectStoredVenue(accountId, parsed.data);
+            return {
+              venue: parsed.data,
+              configured: outcome !== 'removed',
+              connected: outcome === 'connected',
+            };
           } catch (error) {
             request.log.warn(
               { accountId, venue: parsed.data, err: String(error) },
@@ -180,6 +196,60 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         }),
       );
       return { venues: results.filter((result) => result != null) };
+    },
+  );
+
+  app.post(
+    '/portfolio/venue-credentials/derive/session-key',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      if (getCredentialCipherOrSendError(reply) == null) return reply;
+      return pendingDeriveSessionKeys.issue(getAccountId(request));
+    },
+  );
+
+  app.post<{ Body: unknown }>(
+    '/portfolio/venue-credentials/derive/session-key/confirm',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const cipher = getCredentialCipherOrSendError(reply);
+      if (cipher == null) return reply;
+      const body = DeriveSessionKeyConfirmSchema.safeParse(request.body);
+      if (!body.success) {
+        return reply.status(400).send({ error: 'invalid_request', issues: body.error.issues });
+      }
+      const accountId = getAccountId(request);
+      const pending = pendingDeriveSessionKeys.get(accountId);
+      if (pending == null) {
+        return reply.status(409).send({
+          error: 'session_key_not_pending',
+          message: 'No Derive session key is waiting for confirmation. Start the wallet connect again.',
+        });
+      }
+      const credentials: DeriveStoredCredentials = {
+        walletAddress: body.data.walletAddress,
+        sessionPrivateKey: pending.sessionKey.privateKey,
+        publicSessionKey: pending.sessionKey.address,
+        subaccountId: body.data.subaccountId,
+        expirySec: pending.grant.expirySec,
+      };
+      try {
+        await connectDerive(accountId, credentials);
+        await venueCredentialsStore.upsert({
+          accountId,
+          venue: 'derive',
+          encryptedCredentials: cipher.encrypt(credentials),
+        });
+        pendingDeriveSessionKeys.consume(accountId);
+        return { venue: 'derive' as const, connected: true, configured: true };
+      } catch (error) {
+        await disconnectVenue(accountId, 'derive').catch(() => {});
+        request.log.warn({ accountId, err: String(error) }, 'derive session key confirm failed');
+        return reply.status(502).send({
+          error: 'connect_failed',
+          message: 'Derive did not accept the session key. Check the wallet and subaccount.',
+        });
+      }
     },
   );
 
@@ -198,14 +268,10 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
 
       try {
         if (venue === 'derive') {
-          const credentials = DeriveCredentialsSchema.parse(request.body);
-          await connectDerive(accountId, credentials);
-          await venueCredentialsStore.upsert({
-            accountId,
-            venue,
-            encryptedCredentials: cipher.encrypt(credentials),
+          return reply.status(400).send({
+            error: 'wallet_connect_required',
+            message: 'Derive connects through your wallet, not a pasted key.',
           });
-          return { venue, connected: true, configured: true };
         }
         if (venue === 'thalex') {
           const credentials = ThalexCredentialsSchema.parse(request.body);

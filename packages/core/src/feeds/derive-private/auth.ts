@@ -60,6 +60,23 @@ export function signLoginMessage(input: SignLoginInput): DeriveLoginParams {
   };
 }
 
+export interface DeriveSessionKeyPair {
+  privateKey: string;
+  address: string;
+}
+
+function addressFromPublicKey(uncompressed: Uint8Array): string {
+  return `0x${bytesToHex(keccak_256(uncompressed.slice(1)).slice(12))}`;
+}
+
+export function generateSessionKey(): DeriveSessionKeyPair {
+  const secretKey = secp256k1.utils.randomSecretKey();
+  return {
+    privateKey: `0x${bytesToHex(secretKey)}`,
+    address: addressFromPublicKey(secp256k1.getPublicKey(secretKey, false)),
+  };
+}
+
 export function recoverSignerAddress(message: string, signatureHex: string): string {
   const hash = eip191Hash(message);
   const sigBytes = hexToBytes(stripHex(signatureHex));
@@ -70,7 +87,5 @@ export function recoverSignerAddress(message: string, signatureHex: string): str
   recoverable[0] = recovery;
   recoverable.set(sigBytes.slice(0, 64), 1);
   const compressed = secp256k1.recoverPublicKey(recoverable, hash, { prehash: false });
-  const uncompressed = secp256k1.Point.fromBytes(compressed).toBytes(false);
-  const addressBytes = keccak_256(uncompressed.slice(1)).slice(12);
-  return `0x${bytesToHex(addressBytes)}`;
+  return addressFromPublicKey(secp256k1.Point.fromBytes(compressed).toBytes(false));
 }

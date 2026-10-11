@@ -1,5 +1,7 @@
 import { getClerkToken } from '@lib/clerk-token';
 import {
+  type DeriveSessionKeyConfirm,
+  type DeriveSessionKeyGrant,
   type ExchangePortfolioVenue,
   type ExchangeTradesResponse,
   type PortfolioMetrics,
@@ -88,13 +90,6 @@ const WebPortfolioSourceSchema = z.custom<PortfolioSource>(
   (value) => SharedPortfolioSourceSchema.safeParse(value).success,
 );
 
-export interface DeriveConnectRequest {
-  walletAddress: string;
-  signerPrivateKey: string;
-  subaccountId: number;
-  env?: 'prod' | 'test';
-}
-
 export interface ThalexConnectRequest {
   kid: string;
   privateKeyPem: string;
@@ -102,7 +97,7 @@ export interface ThalexConnectRequest {
   env?: 'prod' | 'test';
 }
 
-export type VenueConnectRequest = DeriveConnectRequest | ThalexConnectRequest;
+export type VenueConnectRequest = ThalexConnectRequest;
 
 export interface VenueConnectionState {
   venue: VenueId;
@@ -122,6 +117,31 @@ export async function connectVenue(
   token?: string,
 ): Promise<VenueConnectionState> {
   return postJson(`/portfolio/venue-credentials/${venue}`, body, VenueConnectionStateSchema, token);
+}
+
+const DeriveSessionKeyGrantResponseSchema: z.ZodType<DeriveSessionKeyGrant> = z.object({
+  publicSessionKey: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  expirySec: z.number().int().positive(),
+  ipWhitelist: z.array(z.string()),
+  label: z.string(),
+});
+
+export async function issueDeriveSessionKey(): Promise<DeriveSessionKeyGrant> {
+  return postJson(
+    '/portfolio/venue-credentials/derive/session-key',
+    {},
+    DeriveSessionKeyGrantResponseSchema,
+  );
+}
+
+export async function confirmDeriveSessionKey(
+  body: DeriveSessionKeyConfirm,
+): Promise<VenueConnectionState> {
+  return postJson(
+    '/portfolio/venue-credentials/derive/session-key/confirm',
+    body,
+    VenueConnectionStateSchema,
+  );
 }
 
 export async function disconnectVenue(venue: string): Promise<VenueConnectionState> {

@@ -281,6 +281,10 @@ export {
 } from './system-status.js';
 
 export {
+  type DeriveSessionKeyConfirm,
+  DeriveSessionKeyConfirmSchema,
+  type DeriveSessionKeyGrant,
+  DeriveSessionKeyGrantSchema,
   PRIVATE_ADAPTER_SPECS,
   type VenueCredentialFieldKey,
   VenueCredentialFieldKeySchema,

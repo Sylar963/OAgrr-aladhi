@@ -47,7 +47,7 @@ describe('AccountChip', () => {
     render(wrap(<AccountChip />));
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
     expect(screen.getByTestId('sign-in-button')).toBeDefined();
-    expect(screen.queryByText('Venue API keys')).toBeNull();
+    expect(screen.queryByText('Venue connections')).toBeNull();
   });
 
   it('shows account controls only after the account is ready', () => {
@@ -59,7 +59,7 @@ describe('AccountChip', () => {
     render(wrap(<AccountChip />));
     fireEvent.click(screen.getByRole('button', { name: /acct acct_1/i }));
 
-    expect(screen.getByText('Venue API keys')).toBeDefined();
+    expect(screen.getByText('Venue connections')).toBeDefined();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeDefined();
     expect(screen.getByText('Derive')).toBeDefined();
   });
@@ -68,6 +68,6 @@ describe('AccountChip', () => {
     accountSession.status = 'loading';
     render(wrap(<AccountChip />));
     fireEvent.click(screen.getByRole('button', { name: /account loading/i }));
-    expect(screen.queryByText('Venue API keys')).toBeNull();
+    expect(screen.queryByText('Venue connections')).toBeNull();
   });
 });

@@ -13,8 +13,6 @@ export const VenueCredentialFieldKeySchema = z.enum([
   'walletAddress',
   'privateKeyPem',
   'kid',
-  'starknetAccount',
-  'starknetPrivateKey',
 ]);
 export type VenueCredentialFieldKey = z.infer<typeof VenueCredentialFieldKeySchema>;
 
@@ -35,7 +33,15 @@ export const VenuePrivateAdapterSpecSchema = z.object({
   venue: VenueIdSchema,
   status: VenuePrivateAdapterStatusSchema,
   wsEndpoint: z.string(),
-  authScheme: z.enum(['hmac', 'jwt-rs512', 'oauth-client-credentials', 'eip712', 'listen-key', 'jwt-starknet']),
+  authScheme: z.enum([
+    'hmac',
+    'jwt-rs512',
+    'oauth-client-credentials',
+    'eip191-session-key',
+    'listen-key',
+    'siwe-jwt',
+  ]),
+  connectMethod: z.enum(['credentials', 'wallet']),
   positionChannels: z.array(z.string()),
   subscribeMethod: z.string(),
   docsUrl: z.string(),
@@ -43,6 +49,22 @@ export const VenuePrivateAdapterSpecSchema = z.object({
   todos: z.array(z.string()),
 });
 export type VenuePrivateAdapterSpec = z.infer<typeof VenuePrivateAdapterSpecSchema>;
+
+export const DeriveSessionKeyGrantSchema = z.object({
+  publicSessionKey: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  expirySec: z.number().int().positive(),
+  ipWhitelist: z.array(z.string()),
+  label: z.string(),
+});
+export type DeriveSessionKeyGrant = z.infer<typeof DeriveSessionKeyGrantSchema>;
+
+export const DeriveSessionKeyConfirmSchema = z.object({
+  walletAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, 'walletAddress must be a 0x-prefixed Ethereum address'),
+  subaccountId: z.number().int().positive(),
+});
+export type DeriveSessionKeyConfirm = z.infer<typeof DeriveSessionKeyConfirmSchema>;
 
 export const VenueCredentialsSchema = z.object({
   venue: VenueIdSchema,
@@ -74,6 +96,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'planned',
     wsEndpoint: 'wss://www.deribit.com/ws/api/v2',
     authScheme: 'oauth-client-credentials',
+    connectMethod: 'credentials',
     subscribeMethod: 'private/subscribe',
     positionChannels: ['user.portfolio.btc', 'user.portfolio.eth', 'user.changes.option.any.raw'],
     docsUrl: 'https://docs.deribit.com/#authentication',
@@ -106,6 +129,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'planned',
     wsEndpoint: 'wss://ws.okx.com:8443/ws/v5/private',
     authScheme: 'hmac',
+    connectMethod: 'credentials',
     subscribeMethod: 'subscribe',
     positionChannels: ['positions'],
     docsUrl: 'https://www.okx.com/docs-v5/en/#overview-websocket-login',
@@ -133,6 +157,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'planned',
     wsEndpoint: 'wss://nbstream.binance.com/eoptions/ws/{listenKey}',
     authScheme: 'listen-key',
+    connectMethod: 'credentials',
     subscribeMethod: 'POST /eapi/v1/userDataStream (REST) then connect WS to /eoptions/ws/{key}',
     positionChannels: ['ACCOUNT_UPDATE', 'EXECUTION_REPORT'],
     docsUrl: 'https://developers.binance.com/docs/derivatives/option/user-data-streams',
@@ -151,6 +176,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'planned',
     wsEndpoint: 'wss://stream.bybit.com/v5/private',
     authScheme: 'hmac',
+    connectMethod: 'credentials',
     subscribeMethod: 'subscribe',
     positionChannels: ['position'],
     docsUrl: 'https://bybit-exchange.github.io/docs/v5/ws/connect#authentication',
@@ -168,47 +194,20 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     venue: 'derive',
     status: 'available',
     wsEndpoint: 'wss://api.derive.xyz/v3/ws',
-    authScheme: 'eip712',
+    authScheme: 'eip191-session-key',
+    connectMethod: 'wallet',
     subscribeMethod: 'subscribe',
     positionChannels: ['{subaccount_id}.balances'],
-    docsUrl: 'https://docs.derive.xyz/authentication/session-login',
-    credentialFields: [
-      {
-        key: 'walletAddress',
-        label: 'Owner wallet address',
-        placeholder: '0x… (your own wallet, not the old Derive Wallet)',
-        secret: false,
-        required: true,
-      },
-      {
-        key: 'privateKeyPem',
-        label: 'Session signing key',
-        placeholder: '0x… (32-byte hex private key)',
-        secret: true,
-        required: true,
-      },
-      {
-        key: 'subaccountId',
-        label: 'Subaccount ID',
-        placeholder: 'numeric',
-        secret: false,
-        required: true,
-      },
-    ],
-    todos: [
-      'create packages/core/src/feeds/derive-private/ws-client.ts using JsonRpcWsClient (subscribe method)',
-      'public/login with EIP-712 signed message (timestamp + wallet)',
-      'subscribe to "{subaccount_id}.balances" channel',
-      'v3 (2026-10): wallet is the owner EOA/multisig; v2 Derive smart wallets were migrated to it',
-      'normalize Derive numeric-as-string position fields',
-      'add "derive" to PortfolioSource enum',
-    ],
+    docsUrl: 'https://docs.derive.xyz/authentication/session-keys',
+    credentialFields: [],
+    todos: [],
   },
   coincall: {
     venue: 'coincall',
     status: 'planned',
     wsEndpoint: 'wss://ws.coincall.com/options/private',
     authScheme: 'hmac',
+    connectMethod: 'credentials',
     subscribeMethod: 'subscribe',
     positionChannels: ['position'],
     docsUrl: 'https://docs.coincall.com/#websocket-authentication',
@@ -226,6 +225,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'available',
     wsEndpoint: 'wss://thalex.com/ws/api/v2',
     authScheme: 'jwt-rs512',
+    connectMethod: 'credentials',
     subscribeMethod: 'private/subscribe',
     positionChannels: ['account.portfolio', 'account.summary'],
     docsUrl: 'https://thalex.com/docs/#tag/rpc_accounting',
@@ -268,6 +268,7 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     status: 'planned',
     wsEndpoint: 'wss://op-ws.gateio.live/v4/ws/usdt',
     authScheme: 'hmac',
+    connectMethod: 'credentials',
     subscribeMethod: 'subscribe',
     positionChannels: ['options.positions'],
     docsUrl: 'https://www.gate.com/docs/developers/options/ws/en/',
@@ -283,30 +284,16 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
     venue: 'paradex',
     status: 'planned',
     wsEndpoint: 'wss://ws.api.prod.paradex.trade/v1',
-    authScheme: 'jwt-starknet',
+    authScheme: 'siwe-jwt',
+    connectMethod: 'wallet',
     subscribeMethod: 'subscribe',
     positionChannels: ['account', 'positions', 'fills.ALL'],
     docsUrl: 'https://docs.paradex.trade/api/general-information/api-authentication',
-    credentialFields: [
-      {
-        key: 'starknetAccount',
-        label: 'StarkNet account address',
-        placeholder: '0x…',
-        secret: false,
-        required: true,
-      },
-      {
-        key: 'starknetPrivateKey',
-        label: 'StarkNet private key',
-        placeholder: '0x… (or use an EVM-derived subkey)',
-        secret: true,
-        required: true,
-      },
-    ],
+    credentialFields: [],
     todos: [
-      'create packages/core/src/feeds/paradex-private/ws-client.ts using JsonRpcWsClient (subscribeMethod="subscribe")',
-      'POST /v1/auth/{public_key} with StarkNet signature → JWT (5-min, non-extendable; refresh at ~3min)',
-      'WS: send { method: "auth", params: { bearer: JWT } } once per connection',
+      'browser: connect EVM wallet via AppKit; POST /v2/onboarding once, then SIWE-signed POST /v2/auth',
+      'server holds only a Paradex read-only token, never a StarkNet private key',
+      'create packages/core/src/feeds/paradex-private/ws-client.ts; WS: { method: "auth", params: { bearer } }',
       'subscribe to account / positions / fills channels',
       'normalize Paradex position fields → PositionLeg; add "paradex" to PortfolioSource enum',
     ],

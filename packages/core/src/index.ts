@@ -403,6 +403,8 @@ export {
   type DerivePositionsListener,
   signLoginMessage as signDeriveLoginMessage,
   recoverSignerAddress as recoverDeriveSignerAddress,
+  generateSessionKey as generateDeriveSessionKey,
+  type DeriveSessionKeyPair,
 } from './feeds/derive-private/index.js';
 export {
   ThalexPrivateClient,

@@ -36,7 +36,7 @@ When touching venue adapters or adding a new venue, read `packages/core/CLAUDE.m
 
 Structural changes to core/server/ingest should preserve the runtime-first architecture: `@oggregator/core` owns reusable live-data runtimes, while server, ingest, bots, and external apps are consumers.
 
-Zod at I/O boundaries. No `any`. No vendor SDKs. Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.
+Zod at I/O boundaries. No `any`. No vendor SDKs (exception: Reown AppKit + wagmi/viem in `packages/web` for browser wallet connect). Pino logging. IV stored as fractions (0–1+). `pnpm precommit` must pass.
 
 ## Options knowledge and Alpha changes
 

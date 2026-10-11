@@ -15,10 +15,13 @@
   "dependencies": {
     "@clerk/react": "6.16.1",
     "@oggregator/protocol": "workspace:",
+    "@reown/appkit": "1.8.24",
+    "@reown/appkit-adapter-wagmi": "1.8.24",
     "@tanstack/react-query": "5.91.2",
     "@tanstack/react-virtual": "3.13.24",
     "@vercel/analytics": "2.0.1",
     "@vercel/speed-insights": "2.0.0",
+    "@wagmi/core": "3.6.5",
     "lightweight-charts": "5.1.0",
     "plotly.js": "4.1.1",
     "plotly.js-gl3d-dist-min": "4.1.1",
@@ -27,6 +30,8 @@
     "react-markdown": "^10.1.0",
     "react-plotly.js": "4.1.0",
     "remark-gfm": "^4.0.1",
+    "viem": "2.57.4",
+    "wagmi": "3.7.7",
     "zod": "4.3.6",
     "zustand": "5.0.12"
   },

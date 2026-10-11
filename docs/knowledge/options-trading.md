@@ -397,6 +397,31 @@ fee-adjusted ask per unit, T the time to expiry, σ the option's mark IV.
 - `touchProbability`: driftless-GBM barrier-touch odds of reaching the target by T/2 at σ.
 - Advanced view scans 15–45 DTE with spreads ≤ 30%; Guided keeps 15–75 DTE.
 
+## Break-even forecast (Analytics page)
+
+Engineering derivation, not a reviewed book passage. Replaced the "Probability of Expiring
+Above Strike" card on 2026-10-11. That card plotted Deribit/venue-averaged call delta (N(d1),
+premium-adjusted on inverse venues) on an index-spaced strike axis and called it ITM probability.
+At 31 DEC, ATM delta is about 0.61 while N(d2) is about 0.39.
+
+- One expiry per view, Deribit marks only (BTC, ETH). It shows OTM strikes with Black-76
+  |delta| ≤ 0.55. When a side is crowded, it keeps up to 7 strikes nearest the target deltas
+  0.5 → 0.01.
+- Break-even = K ± Black-76 premium (undiscounted, forward F). That premium matched Deribit's
+  USD mark to within 0.2% (27NOV26, 2026-10-11).
+- History: `BreakEvenService` stores one Deribit mark-IV smile per expiry (≤ 120 DTE) per hour
+  and rebuilds each past break-even from (F, K, σ, T). Deribit's `get_mark_price_history` only
+  covers volatility-index strikes (about 5 minutes for others), and hourly trade candles are
+  mostly stale, so no backfill exists. Recording started 2026-10-11. Writes ride the daily
+  deferred flush to `break_even_snapshots`.
+- Projection holds F and σ fixed, so only time decay pulls the break-even onto the strike.
+- **N(d2)** is the risk-neutral chance of finishing beyond the strike. **Hist** is the share of
+  overlapping n-day log moves (n = round(DTE)) in 730 daily closes that finish beyond
+  ln(K/F) after removing the sample mean. Removing the mean keeps the comparison about width
+  and tails rather than the 2024–26 trend. Windows overlap (K4); the card reports the count and
+  about windows/n independent samples. The gap is descriptive. It is not a validated edge, and
+  history is unconditional, so it ignores the current vol regime.
+
 ## Long put and protective put: model (Long Put tab)
 
 Engineering derivation, not a reviewed book passage: none of the sources in the ledger were

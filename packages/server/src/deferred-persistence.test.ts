@@ -2,12 +2,14 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
+  BreakEvenSnapshotStore,
   DealerBookStore,
   GexWallSnapshotStore,
   IvHistoryLoadQuery,
   IvHistoryStorageStats,
   IvHistoryStore,
   OiSnapshotStore,
+  PersistedBreakEvenSnapshot,
   PersistedDealerPosition,
   PersistedGexWallSnapshot,
   PersistedIvHistoryPoint,
@@ -21,6 +23,7 @@ import type {
 } from '@oggregator/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  DeferredBreakEvenSnapshotStore,
   DeferredDealerBookStore,
   DeferredGexWallSnapshotStore,
   DeferredIvHistoryStore,
@@ -962,5 +965,90 @@ describe('DeferredGexWallSnapshotStore', () => {
     const reopened = new DeferredGexWallSnapshotStore(delegate, options(cachePath), noopLog);
     expect(await reopened.loadSince(new Date(0))).toEqual([wall(now)]);
     await reopened.dispose();
+  });
+});
+
+class FakeBreakEvenStore implements BreakEvenSnapshotStore {
+  writes: PersistedBreakEvenSnapshot[][] = [];
+  loads = 0;
+  prunes: Date[] = [];
+
+  constructor(
+    readonly enabled: boolean,
+    private readonly stored: PersistedBreakEvenSnapshot[] = [],
+  ) {}
+
+  async writeMany(rows: PersistedBreakEvenSnapshot[]): Promise<void> {
+    this.writes.push(rows);
+  }
+  async loadActive(expiringAfter: Date): Promise<PersistedBreakEvenSnapshot[]> {
+    this.loads += 1;
+    return this.stored.filter((row) => row.expiryTs >= expiringAfter);
+  }
+  async prune(expiredBefore: Date): Promise<number> {
+    this.prunes.push(expiredBefore);
+    return 0;
+  }
+  async dispose(): Promise<void> {}
+}
+
+describe('DeferredBreakEvenSnapshotStore', () => {
+  const day = 86_400_000;
+  const now = 200 * day;
+  const smile = (slotTs: number, expiryTs = now + 10 * day): PersistedBreakEvenSnapshot => ({
+    underlying: 'BTC',
+    expiry: '1970-07-29',
+    expiryTs: new Date(expiryTs),
+    slotTs: new Date(slotTs),
+    spot: 64_000,
+    forward: 64_150.5,
+    strikes: [60_000, 70_000],
+    markIvs: [0.41, 0.39],
+  });
+  const options = (cachePath: string) => ({
+    cachePath,
+    flushIntervalMs,
+    maxPendingRows: 100,
+    expiryGraceMs: day,
+    now: () => now,
+  });
+
+  it('buffers writes locally and only reaches storage on flush', async () => {
+    const delegate = new FakeBreakEvenStore(true);
+    const store = new DeferredBreakEvenSnapshotStore(delegate, options(tempPath('be.ndjson')), noopLog);
+
+    await store.writeMany([smile(now - 3_600_000), smile(now)]);
+    expect(delegate.writes).toEqual([]);
+    expect(store.pendingCount).toBe(2);
+
+    await store.flush();
+    expect(delegate.writes).toEqual([[smile(now - 3_600_000), smile(now)]]);
+    expect(delegate.prunes).toEqual([new Date(now - day)]);
+    expect(store.pendingCount).toBe(0);
+    await store.dispose();
+  });
+
+  it('survives a restart and merges storage with the local cache', async () => {
+    const cachePath = tempPath('be-restart.ndjson');
+    const delegate = new FakeBreakEvenStore(true, [smile(now - 5 * day)]);
+    const first = new DeferredBreakEvenSnapshotStore(delegate, options(cachePath), noopLog);
+    await first.writeMany([smile(now)]);
+    await first.dispose();
+
+    const second = new DeferredBreakEvenSnapshotStore(delegate, options(cachePath), noopLog);
+    expect(second.pendingCount).toBe(1);
+    expect(await second.loadActive(new Date(now))).toEqual([smile(now - 5 * day), smile(now)]);
+    await second.dispose();
+  });
+
+  it('prunes whole expiries once past the grace period', async () => {
+    const delegate = new FakeBreakEvenStore(false);
+    const store = new DeferredBreakEvenSnapshotStore(delegate, options(tempPath('be-nodb.ndjson')), noopLog);
+    await store.writeMany([smile(now - 20 * day, now - 2 * day), smile(now)]);
+
+    await store.flush();
+    expect(delegate.writes).toEqual([]);
+    expect(await store.loadActive(new Date(0))).toEqual([smile(now)]);
+    await store.dispose();
   });
 });

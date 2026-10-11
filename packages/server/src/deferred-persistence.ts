@@ -14,6 +14,7 @@ import {
 import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type {
+  BreakEvenSnapshotStore,
   DealerBookStore,
   GexWallSnapshotStore,
   IvHistoryHourlyQuery,
@@ -21,6 +22,7 @@ import type {
   IvHistoryStorageStats,
   IvHistoryStore,
   OiSnapshotStore,
+  PersistedBreakEvenSnapshot,
   PersistedDealerPosition,
   PersistedGexWallSnapshot,
   PersistedIvHistoryPoint,
@@ -168,6 +170,20 @@ const GexWallSnapshotSchema = z
     gammaFlip: NullableFiniteNumberSchema,
   })
   .strict();
+
+const BreakEvenSnapshotSchema = z
+  .object({
+    underlying: z.string().min(1),
+    expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    expiryTs: IsoDateSchema,
+    slotTs: IsoDateSchema,
+    spot: FiniteNumberSchema,
+    forward: FiniteNumberSchema,
+    strikes: z.array(FiniteNumberSchema),
+    markIvs: z.array(FiniteNumberSchema),
+  })
+  .strict()
+  .refine((row) => row.strikes.length === row.markIvs.length);
 
 function ensureCacheDir(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -1273,6 +1289,150 @@ export class DeferredGexWallSnapshotStore implements GexWallSnapshotStore {
         const flushed = new Set(batch);
         this.pending = this.pending.filter((row) => !flushed.has(row));
         rewriteOutbox(this.pendingPath, this.pending, encodeGexWallSnapshot);
+      }
+      await this.delegate.prune(cutoff);
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  async dispose(): Promise<void> {
+    this.timer.dispose();
+    if (this.options.flushOnDispose === true) await this.flush();
+    await this.delegate.dispose();
+  }
+}
+
+interface DeferredBreakEvenPersistenceOptions {
+  flushIntervalMs: number;
+  cachePath: string;
+  maxPendingRows: number;
+  /** Rows stay this long past their expiry before pruning. */
+  expiryGraceMs: number;
+  flushOnDispose?: boolean;
+  now?: () => number;
+}
+
+interface SerializedBreakEvenSnapshot
+  extends Omit<PersistedBreakEvenSnapshot, 'slotTs' | 'expiryTs'> {
+  slotTs: string;
+  expiryTs: string;
+}
+
+function breakEvenKey(row: PersistedBreakEvenSnapshot): string {
+  return `${row.underlying.toUpperCase()}:${row.expiry}:${row.slotTs.getTime()}`;
+}
+
+function decodeBreakEvenSnapshot(value: unknown): PersistedBreakEvenSnapshot {
+  return BreakEvenSnapshotSchema.parse(value);
+}
+
+function encodeBreakEvenSnapshot(row: PersistedBreakEvenSnapshot): SerializedBreakEvenSnapshot {
+  return { ...row, slotTs: row.slotTs.toISOString(), expiryTs: row.expiryTs.toISOString() };
+}
+
+// Same shape as the GEX-wall store: the local ndjson cache keeps every live expiry's smiles
+// (and is the whole store without a database), Postgres is read once at startup and written
+// once per flush interval. Retention is by expiry, so pruning drops whole expiries.
+export class DeferredBreakEvenSnapshotStore implements BreakEvenSnapshotStore {
+  readonly enabled: boolean;
+  private cache: PersistedBreakEvenSnapshot[];
+  private pending: PersistedBreakEvenSnapshot[];
+  private readonly pendingPath: string;
+  private readonly now: () => number;
+  private flushing = false;
+  private readonly timer: FlushSchedule;
+
+  constructor(
+    private readonly delegate: BreakEvenSnapshotStore,
+    private readonly options: DeferredBreakEvenPersistenceOptions,
+    private readonly log: DeferredLog,
+  ) {
+    this.enabled = delegate.enabled;
+    this.now = options.now ?? Date.now;
+    this.pendingPath = `${options.cachePath}.pending`;
+    this.cache = readJsonLines(options.cachePath, decodeBreakEvenSnapshot, log);
+    this.pending = !delegate.enabled
+      ? []
+      : existsSync(this.pendingPath)
+        ? readJsonLines(this.pendingPath, decodeBreakEvenSnapshot, log)
+        : [...this.cache];
+    this.timer = new FlushSchedule(
+      options.cachePath,
+      options.flushIntervalMs,
+      () => this.flush(),
+      (err: unknown) => {
+        this.log.warn(
+          { err: describeError(err), pending: this.pending.length },
+          'deferred break-even flush failed',
+        );
+      },
+    );
+  }
+
+  get pendingCount(): number {
+    return this.pending.length;
+  }
+
+  async writeMany(rows: PersistedBreakEvenSnapshot[]): Promise<void> {
+    if (rows.length === 0) return;
+    this.cache.push(...rows);
+    if (this.cache.length > this.options.maxPendingRows) {
+      this.cache.splice(0, this.cache.length - this.options.maxPendingRows);
+      rewriteJsonLines(this.options.cachePath, this.cache, encodeBreakEvenSnapshot);
+    } else {
+      appendJsonLines(this.options.cachePath, rows, encodeBreakEvenSnapshot);
+    }
+    if (!this.delegate.enabled) return;
+    this.pending.push(...rows);
+    if (this.pending.length > this.options.maxPendingRows) {
+      this.pending.splice(0, this.pending.length - this.options.maxPendingRows);
+      rewriteOutbox(this.pendingPath, this.pending, encodeBreakEvenSnapshot);
+    } else {
+      appendJsonLines(this.pendingPath, rows, encodeBreakEvenSnapshot);
+    }
+  }
+
+  async loadActive(expiringAfter: Date): Promise<PersistedBreakEvenSnapshot[]> {
+    const byKey = new Map<string, PersistedBreakEvenSnapshot>();
+    if (this.delegate.enabled) {
+      try {
+        for (const row of await this.delegate.loadActive(expiringAfter)) {
+          byKey.set(breakEvenKey(row), row);
+        }
+      } catch (err: unknown) {
+        this.log.warn({ err: describeError(err) }, 'break-even hydrate from storage failed');
+      }
+    }
+    for (const row of this.cache) {
+      if (row.expiryTs >= expiringAfter) byKey.set(breakEvenKey(row), row);
+    }
+    return [...byKey.values()].sort((a, b) => a.slotTs.getTime() - b.slotTs.getTime());
+  }
+
+  async prune(expiredBefore: Date): Promise<number> {
+    const kept = this.cache.filter((row) => row.expiryTs >= expiredBefore);
+    const removed = this.cache.length - kept.length;
+    if (removed > 0) {
+      this.cache = kept;
+      rewriteJsonLines(this.options.cachePath, this.cache, encodeBreakEvenSnapshot);
+    }
+    return removed;
+  }
+
+  async flush(): Promise<void> {
+    if (this.flushing) return;
+    this.flushing = true;
+    try {
+      const cutoff = new Date(this.now() - this.options.expiryGraceMs);
+      await this.prune(cutoff);
+      if (!this.delegate.enabled) return;
+      const batch = [...this.pending];
+      if (batch.length > 0) {
+        await this.delegate.writeMany(batch);
+        const flushed = new Set(batch);
+        this.pending = this.pending.filter((row) => !flushed.has(row));
+        rewriteOutbox(this.pendingPath, this.pending, encodeBreakEvenSnapshot);
       }
       await this.delegate.prune(cutoff);
     } finally {

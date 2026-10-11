@@ -338,3 +338,15 @@ export {
   type GexWallHistoryResponse,
   GexWallHistoryResponseSchema,
 } from './gex-wall-history.js';
+export {
+  BREAK_EVEN_RESOLUTION_SEC,
+  BREAK_EVEN_UNDERLYINGS,
+  type BreakEvenLine,
+  BreakEvenLineSchema,
+  type BreakEvenPoint,
+  BreakEvenPointSchema,
+  type BreakEvenQuery,
+  BreakEvenQuerySchema,
+  type BreakEvenResponse,
+  BreakEvenResponseSchema,
+} from './break-even.js';

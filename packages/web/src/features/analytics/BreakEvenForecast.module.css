@@ -1,0 +1,162 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.expiryPicker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.expiryPicker select {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+}
+
+.body {
+  display: flex;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.chartArea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 460px;
+}
+
+.chart {
+  position: absolute;
+  inset: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.side {
+  flex: 0 0 auto;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: right;
+  padding: 0 var(--space-2) var(--space-2);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table td {
+  text-align: right;
+  padding: 3px var(--space-2);
+  white-space: nowrap;
+}
+
+.row {
+  cursor: default;
+}
+
+.row[data-active] td {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.spotRow td {
+  color: var(--text-primary);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.spotRow td:last-child {
+  color: var(--text-dim);
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.gap[data-sign="pos"] {
+  color: var(--accent-primary);
+}
+
+.gap[data-sign="neg"] {
+  color: var(--text-tertiary);
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.notes p {
+  margin: 0;
+}
+
+.empty {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 1100px) {
+  .body {
+    flex-direction: column;
+  }
+
+  .chartArea {
+    height: 360px;
+  }
+}

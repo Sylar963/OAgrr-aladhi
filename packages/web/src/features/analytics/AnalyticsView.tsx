@@ -3,7 +3,7 @@ import { AssetPickerButton, Spinner, VenuePickerButton } from '@components/ui';
 import { DvolChart } from '@features/dvol';
 import { useAllExpiriesChain } from './queries';
 import VolCurves from './VolCurves';
-import DeltaCurves from './DeltaCurves';
+import BreakEvenForecast from './BreakEvenForecast';
 import OiSummary from './OiSummary';
 import VenueShare from './VenueShare';
 import TopPositions from './TopPositions';
@@ -46,7 +46,7 @@ export default function AnalyticsView() {
         <TopPositions chains={chains} spotPrice={spotPrice} />
         <ExpiryCalendar chains={chains} spotPrice={spotPrice} />
         <VolCurves chains={chains} spotPrice={spotPrice} />
-        <DeltaCurves chains={chains} spotPrice={spotPrice} />
+        <BreakEvenForecast underlying={underlying} />
         <OiByStrikeCard
           chains={chains}
           spotPrice={spotPrice}

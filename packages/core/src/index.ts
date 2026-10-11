@@ -177,6 +177,21 @@ export {
 } from './services/spot-candles.js';
 export { realizedVol, rollingRealizedVol, type RealizedVolPoint } from './services/realized-vol.js';
 export {
+  black76Delta,
+  type BreakEvenCandidate,
+  breakEvenHistory,
+  breakEvenLevel,
+  type BreakEvenPathPoint,
+  type BreakEvenSmile,
+  daysToExpiry,
+  historicalExceedance,
+  horizonLogReturns,
+  type HorizonReturns,
+  impliedExceedance,
+  projectBreakEven,
+  selectBreakEvenStrikes,
+} from './services/break-even.js';
+export {
   baselineTenorDays,
   buildVolForecastModel,
   buildVolRichness,

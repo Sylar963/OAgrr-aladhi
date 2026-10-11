@@ -175,5 +175,13 @@ export {
   NoopGexWallSnapshotStore,
   PostgresGexWallSnapshotStore,
 } from './gex-wall-snapshot-store.js';
+export type {
+  BreakEvenSnapshotStore,
+  PersistedBreakEvenSnapshot,
+} from './break-even-snapshot-store.js';
+export {
+  NoopBreakEvenSnapshotStore,
+  PostgresBreakEvenSnapshotStore,
+} from './break-even-snapshot-store.js';
 export type { NewsCursor, NewsPageQuery, NewsStore, PersistedNewsItem } from './news-store.js';
 export { NoopNewsStore, PostgresNewsStore } from './news-store.js';

@@ -21,6 +21,7 @@ import {
 } from '@oggregator/core';
 import {
   DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
+  type BreakEvenSnapshotStore,
   type DealerBookStore,
   type GexWallSnapshotStore,
   type IvHistoryStorageStats,
@@ -28,6 +29,7 @@ import {
   type LeadsStore,
   type NewsStore,
   MergedTradeStore,
+  NoopBreakEvenSnapshotStore,
   NoopDealerBookStore,
   NoopGexWallSnapshotStore,
   NoopIvHistoryStore,
@@ -37,6 +39,7 @@ import {
   NoopRegimeStore,
   NoopVenueIvHistoryStore,
   type OiSnapshotStore,
+  PostgresBreakEvenSnapshotStore,
   PostgresDealerBookStore,
   PostgresGexWallSnapshotStore,
   PostgresIvHistoryStore,
@@ -62,6 +65,12 @@ import {
   type IntervalFlowLookup,
 } from './dealer-book-service.js';
 import {
+  BREAK_EVEN_EXPIRY_GRACE_MS,
+  BreakEvenService,
+  smileFromVenueChain,
+} from './break-even-service.js';
+import {
+  DeferredBreakEvenSnapshotStore,
   DeferredDealerBookStore,
   DeferredGexWallSnapshotStore,
   DeferredIvHistoryStore,
@@ -122,6 +131,17 @@ const gexWallsDbFlushIntervalMs = parseNonNegativeMs(
   process.env['GEX_WALLS_DB_FLUSH_INTERVAL_MS'],
   marketDataDbFlushIntervalMs,
   'GEX_WALLS_DB_FLUSH_INTERVAL_MS',
+);
+const breakEvenDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['BREAK_EVEN_DB_FLUSH_INTERVAL_MS'],
+  marketDataDbFlushIntervalMs,
+  'BREAK_EVEN_DB_FLUSH_INTERVAL_MS',
+);
+const breakEvenCacheMaxRows = parsePositiveInteger(
+  process.env['BREAK_EVEN_CACHE_MAX_ROWS'],
+  // BTC + ETH × ~12 expiries ≤ 120 DTE × 24 hourly smiles × up to 120 days.
+  100_000,
+  'BREAK_EVEN_CACHE_MAX_ROWS',
 );
 const newsDbFlushIntervalMs = parseNonNegativeMs(
   process.env['NEWS_DB_FLUSH_INTERVAL_MS'],
@@ -276,6 +296,42 @@ export const gexWallHistoryService = new GexWallHistoryService({
   getInputs: async (underlying) => {
     const { spotPrice, gex } = await getAllExpiriesGex(underlying);
     return { spotPrice, gex };
+  },
+});
+
+async function deribitSmile(underlying: string, expiry: string) {
+  const chain = await getAdapter('deribit').fetchOptionChain({ underlying, expiry });
+  return smileFromVenueChain(chain);
+}
+
+export const breakEvenStore: BreakEvenSnapshotStore = createBreakEvenStore(databaseUrl);
+export const breakEvenService = new BreakEvenService({
+  underlyings: ['BTC', 'ETH'],
+  store: breakEvenStore,
+  listChains: async (underlying) => {
+    const expiries = await getAdapter('deribit').listExpiries(underlying);
+    const smiles = await Promise.all(expiries.map((expiry) => deribitSmile(underlying, expiry)));
+    return smiles.filter((smile) => smile != null);
+  },
+  getChain: deribitSmile,
+  getDailyCloses: async (underlying) => {
+    if (!isSpotCandlesReady()) return [];
+    const candles = await spotCandleService.getCandles(
+      underlying as SpotCandleCurrency,
+      86_400,
+      DAILY_SPOT_HISTORY_DAYS,
+    );
+    return candles.map((candle) => candle.close);
+  },
+  getSpotHistory: async (underlying, stepMs, buckets) => {
+    if (!isSpotCandlesReady()) return [];
+    const resolution = stepMs >= 86_400_000 ? 86_400 : stepMs >= 14_400_000 ? 14_400 : 3_600;
+    const candles = await spotCandleService.getCandles(
+      underlying as SpotCandleCurrency,
+      resolution,
+      buckets,
+    );
+    return candles.map((candle) => ({ ts: candle.timestamp, close: candle.close }));
   },
 });
 
@@ -476,6 +532,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   shortStraddleSnapshotService?.setLogger(log);
   dealerBookService.setLogger(log);
   gexWallHistoryService.setLogger(log);
+  breakEvenService.setLogger(log);
   if (shortStraddleSnapshotsEnabled && !databaseUrl) {
     log.warn({ reason: 'DATABASE_URL missing' }, 'short-straddle snapshot collection disabled');
   }
@@ -584,6 +641,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 
   // Not awaited: the one-time storage hydrate must not hold up readiness.
   void gexWallHistoryService.start().then(() => log.info('GEX-wall history sampler started'));
+  void breakEvenService.start().then(() => log.info('break-even smile sampler started'));
 
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
@@ -611,6 +669,7 @@ export function disposeServiceStores(): void {
   }
   regimeService.dispose();
   gexWallHistoryService.dispose();
+  breakEvenService.dispose();
   newsService?.dispose();
   disposeSettlementJob();
 }
@@ -660,6 +719,24 @@ function createGexWallStore(connectionString: string | undefined): GexWallSnapsh
       maxPendingRows: gexWallsCacheMaxRows,
       retentionMs: GEX_WALL_RETENTION_MS,
       flushOnDispose: parseBoolean(process.env['GEX_WALLS_DB_FLUSH_ON_DISPOSE']),
+    },
+    console,
+  );
+}
+
+function createBreakEvenStore(connectionString: string | undefined): BreakEvenSnapshotStore {
+  const delegate: BreakEvenSnapshotStore = connectionString
+    ? PostgresBreakEvenSnapshotStore.fromConnectionString(connectionString)
+    : new NoopBreakEvenSnapshotStore();
+  if (delegate.enabled && breakEvenDbFlushIntervalMs === 0) return delegate;
+  return new DeferredBreakEvenSnapshotStore(
+    delegate,
+    {
+      flushIntervalMs: breakEvenDbFlushIntervalMs === 0 ? DAY_MS : breakEvenDbFlushIntervalMs,
+      cachePath: process.env['BREAK_EVEN_CACHE_PATH'] ?? '.cache/break-even-snapshots.ndjson',
+      maxPendingRows: breakEvenCacheMaxRows,
+      expiryGraceMs: BREAK_EVEN_EXPIRY_GRACE_MS,
+      flushOnDispose: parseBoolean(process.env['BREAK_EVEN_DB_FLUSH_ON_DISPOSE']),
     },
     console,
   );

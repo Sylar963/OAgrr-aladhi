@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { derivePositionStore } from '../../derive-position-store.js';
+import { paradexPositionStore } from '../../paradex-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { revokePrivateWebSockets } from '../../websocket-security.js';
 import { getUserByToken, syncUser } from '../../user-service.js';
@@ -58,6 +59,7 @@ export async function paperAuthRoute(app: FastifyInstance) {
     await Promise.allSettled([
       derivePositionStore.disconnect(user.accountId),
       thalexPositionStore.disconnect(user.accountId),
+      paradexPositionStore.disconnect(user.accountId),
     ]);
     return reply.status(204).send();
   });

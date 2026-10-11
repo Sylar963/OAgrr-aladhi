@@ -9,6 +9,7 @@ import {
   getOrCreatePortfolioRuntime,
 } from '../../portfolio-services.js';
 import { derivePositionStore } from '../../derive-position-store.js';
+import { paradexPositionStore } from '../../paradex-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { paperTradingStore } from '../../trading-services.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
@@ -83,6 +84,9 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       } else if (source === 'thalex') {
         thalexPositionStore.retain(accountId);
         releasePrivateConnection = () => thalexPositionStore.release(accountId);
+      } else if (source === 'paradex') {
+        paradexPositionStore.retain(accountId);
+        releasePrivateConnection = () => paradexPositionStore.release(accountId);
       }
 
       req.log.info({ accountId, source, underlying }, 'portfolio ws: connected');

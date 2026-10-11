@@ -54,44 +54,68 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
           {effectiveVersion === 'v2' && (
             <InfoTip label="V2 OI Heatmap" title="V2 — EM-Anchored OI Heatmap" align="end">
               <p>
-                <strong>EM cones:</strong> for each visible expiry, the tinted
-                fan from <em>now</em> opens to <strong>spot ± 1σ</strong> (dense)
-                and <strong>spot ± 2σ</strong> (faint) at the expiry. EM is
-                computed from the ATM straddle mid (Brenner–Subrahmanyam ×1.25).
-                If the straddle is too wide or stale, we fall back to interpolated
-                ATM IV — those expiries get a dashed cone outline and an
+                <strong>OI profile:</strong> horizontal bars on the right show
+                open interest at each significant strike, in contracts or USD
+                notional, split by calls (green) and puts (red), or filtered to
+                one side. Only expiries enabled in the legend count; click an
+                expiry to hide it. The yellow dashed <strong>MP</strong> line
+                is max pain for the visible expiries.
+              </p>
+              <p>
+                <strong>EM cone:</strong> one expiry at a time, picked in the
+                <strong> Cone</strong> menu. It defaults to the nearest expiry
+                that has an expected move (EM), and hiding expiries in the
+                legend doesn't change it. The fan opens from spot at
+                <em> now</em> to <strong>spot ± 1σ</strong> (dense) and
+                <strong> spot ± 2σ</strong> (faint) at that expiry. EM is the
+                ATM straddle mid ×1.25 (Brenner–Subrahmanyam). If the best
+                bid/ask is wider than 5% of mid, or the straddle EM is more
+                than 50% away from the ATM-IV estimate, the IV estimate is used
+                instead. Those expiries get a dashed cone outline and an
                 <code> ·iv </code> tag in the legend.
               </p>
               <p>
-                <strong>Significance toggle (A3 / A4):</strong>
+                <strong>Significance toggle (A3 / A4):</strong> both look only
+                at strikes inside each expiry's ±2σ band and combine the
+                results across visible expiries.
                 <br />
-                <strong>A3</strong> (default) — top 5 strikes by OI per expiry,
-                inside its ±2σ band, then unioned across visible expiries.
+                <strong>A3</strong> (default): the 5 strikes with the most OI
+                per expiry.
                 <br />
-                <strong>A4 BETA</strong> — dealer-gamma levels. Strikes whose
-                |GEX| exceeds mean + 1.5σ of the per-expiry distribution, summed
-                across visible expiries. Green = dealers long gamma (pinning),
-                red = short gamma (acceleration). Also draws the γ flip and
-                call/put walls. GEX uses tracked dealer inventory where
-                available, else assumes dealers long calls / short puts. The
-                <strong> %</strong> on each label is the share of that strike's
-                gamma whose dealer sign came from observed taker flow; faded
-                bands lean on the naive assumption. Block trades are not yet
-                attributed.
+                <strong>A4 BETA</strong>: dealer-gamma levels. These are
+                strikes whose |GEX| is above mean + 1.5σ for that expiry.
+                Bars and labels are coloured by net dealer gamma across visible
+                expiries: green = dealers long gamma (price tends to pin), red =
+                short gamma (moves tend to accelerate). A4 also draws the γ
+                flip and the call/put walls. GEX uses tracked dealer inventory
+                where it's available; otherwise it assumes dealers are long
+                calls and short puts. The <strong>%</strong> on each label is
+                the share of that strike's gamma whose dealer side came from
+                observed taker flow. Faded bars rely more on the long-calls /
+                short-puts assumption. Block trades aren't counted in this
+                share because their aggressor side is ambiguous.
+              </p>
+              <p>
+                <strong>Block bubbles:</strong> each bubble is block-trade
+                volume at one strike in one candle. Size and opacity scale with
+                the amount traded, and colour shows whether calls or puts
+                dominate. They use the same contracts/notional, side, and
+                legend filters as the bars.
               </p>
               <p>
                 <strong>Timeframe tabs (1d / 3d / 7d / 30d / 90d):</strong>
-                pick the candle window that matches the expiry you care about.
-                Each tab loads the finest resolution that fits the 1000-candle
-                budget — 5m on 1d/3d, 30m on 7d, 1h on 30d, 4h on 90d. Visible
-                range is symmetric (window past + window future) so cones
-                always have empty space to the right to render in.
+                5m candles on 1d/3d, 30m on 7d, 1h on 30d, 4h on 90d. The chart
+                opens from one window before now to one window after, leaving
+                room on the right for the cone. About 3 windows of history are
+                loaded, so you can scroll left.
               </p>
               <p>
-                Bands are still a <strong>live snapshot</strong>. Hover any
-                strike for an EM-zone classifier, per-expiry EM badge, and a
-                session OI sparkline (in-memory only — clears on refresh).
-                BTC, ETH, and HYPE only.
+                The bars are a <strong>live snapshot</strong> of current OI.
+                Hover a strike to see where it sits against each expiry's ±1σ
+                and ±2σ, its OI by venue and expiry with EM badges, and a
+                session OI sparkline. The sparkline lives in memory only and
+                clears on refresh. Hover a bubble to see its block-trade
+                details. BTC, ETH, and HYPE only.
               </p>
             </InfoTip>
           )}

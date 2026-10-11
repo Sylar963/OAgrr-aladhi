@@ -13,6 +13,7 @@ export const VenueCredentialFieldKeySchema = z.enum([
   'walletAddress',
   'privateKeyPem',
   'kid',
+  'readonlyToken',
 ]);
 export type VenueCredentialFieldKey = z.infer<typeof VenueCredentialFieldKeySchema>;
 
@@ -65,6 +66,18 @@ export const DeriveSessionKeyConfirmSchema = z.object({
   subaccountId: z.number().int().positive(),
 });
 export type DeriveSessionKeyConfirm = z.infer<typeof DeriveSessionKeyConfirmSchema>;
+
+export const ParadexConnectSchema = z.object({
+  readonlyToken: z.string().regex(/^[\w-]+\.[\w-]+\.[\w-]+$/, 'readonlyToken must be a JWT'),
+});
+export type ParadexConnect = z.infer<typeof ParadexConnectSchema>;
+
+export const ParadexTokenSettingsSchema = z.object({
+  expiryDurationSec: z.number().int().positive(),
+  allowedCidrs: z.array(z.string()),
+  name: z.string(),
+});
+export type ParadexTokenSettings = z.infer<typeof ParadexTokenSettingsSchema>;
 
 export const VenueCredentialsSchema = z.object({
   venue: VenueIdSchema,
@@ -282,20 +295,22 @@ export const PRIVATE_ADAPTER_SPECS: Readonly<Record<VenueId, VenuePrivateAdapter
   },
   paradex: {
     venue: 'paradex',
-    status: 'planned',
-    wsEndpoint: 'wss://ws.api.prod.paradex.trade/v1',
+    status: 'available',
+    wsEndpoint: 'https://api.prod.paradex.trade/v1/positions',
     authScheme: 'siwe-jwt',
     connectMethod: 'wallet',
-    subscribeMethod: 'subscribe',
-    positionChannels: ['account', 'positions', 'fills.ALL'],
+    subscribeMethod: 'poll',
+    positionChannels: ['GET /positions'],
     docsUrl: 'https://docs.paradex.trade/api/general-information/api-authentication',
-    credentialFields: [],
-    todos: [
-      'browser: connect EVM wallet via AppKit; POST /v2/onboarding once, then SIWE-signed POST /v2/auth',
-      'server holds only a Paradex read-only token, never a StarkNet private key',
-      'create packages/core/src/feeds/paradex-private/ws-client.ts; WS: { method: "auth", params: { bearer } }',
-      'subscribe to account / positions / fills channels',
-      'normalize Paradex position fields → PositionLeg; add "paradex" to PortfolioSource enum',
+    credentialFields: [
+      {
+        key: 'readonlyToken',
+        label: 'Read-only key',
+        placeholder: 'Paradex → Settings → Key Management → Read-only',
+        secret: true,
+        required: true,
+      },
     ],
+    todos: [],
   },
 };

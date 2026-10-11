@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { credentialsStoreMock, deriveStoreMock } = vi.hoisted(() => {
+const { credentialsStoreMock, deriveStoreMock, paradexStoreMock } = vi.hoisted(() => {
   const rows = new Map<string, string>();
   return {
     credentialsStoreMock: {
@@ -28,6 +28,11 @@ const { credentialsStoreMock, deriveStoreMock } = vi.hoisted(() => {
       disconnect: vi.fn().mockResolvedValue(undefined),
       isConnected: vi.fn(() => false),
     },
+    paradexStoreMock: {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      isConnected: vi.fn(() => false),
+    },
   };
 });
 
@@ -36,6 +41,7 @@ vi.mock('../../trading-services.js', () => ({
   venueCredentialsStore: credentialsStoreMock,
 }));
 vi.mock('../../derive-position-store.js', () => ({ derivePositionStore: deriveStoreMock }));
+vi.mock('../../paradex-position-store.js', () => ({ paradexPositionStore: paradexStoreMock }));
 vi.mock('../../thalex-position-store.js', () => ({
   thalexPositionStore: {
     connect: vi.fn(),
@@ -181,5 +187,92 @@ describe('Derive wallet-connect credential routes', () => {
 
     expect(res.json()).toEqual({ venues: [{ venue: 'derive', configured: true, connected: false }] });
     expect(deriveStoreMock.connect).not.toHaveBeenCalled();
+  });
+});
+
+function paradexToken(claims: Record<string, unknown>): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'ES384' })}.${encode(claims)}.c2ln`;
+}
+
+describe('Paradex read-only key routes', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  const ACCOUNT = '0x43a5c62f23af2e5f90cf390e71914ac1847b48aa728c4f4baf6acbbef876262';
+
+  beforeAll(async () => {
+    vi.stubEnv('PRIVATE_VENUE_ADAPTERS_ENABLED', 'true');
+    vi.stubEnv('VENUE_CREDENTIALS_ENCRYPTION_KEY', Buffer.alloc(32, 9).toString('base64'));
+    app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    vi.unstubAllEnvs();
+  });
+
+  beforeEach(() => {
+    credentialsStoreMock.rows.clear();
+    paradexStoreMock.connect.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('serves the token settings the browser should request', async () => {
+    vi.stubEnv('PARADEX_READONLY_TOKEN_TTL_DAYS', '30');
+    vi.stubEnv('PARADEX_READONLY_TOKEN_ALLOWED_CIDRS', '203.0.113.7/32');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/portfolio/venue-credentials/paradex/token-settings',
+    });
+    expect(res.json()).toEqual({
+      name: 'oggregator read-only',
+      expiryDurationSec: 30 * 86_400,
+      allowedCidrs: ['203.0.113.7/32'],
+    });
+  });
+
+  it('connects with a read-only key and stores it encrypted with its account and expiry', async () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const readonlyToken = paradexToken({ sub: ACCOUNT, exp });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/portfolio/venue-credentials/paradex',
+      payload: { readonlyToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(paradexStoreMock.connect).toHaveBeenCalledWith({ accountId: 'paper-default', readonlyToken });
+    const stored = credentialsStoreMock.rows.get('paper-default:paradex')!;
+    expect(stored).not.toContain(readonlyToken);
+    expect(getVenueCredentialCipher()!.decrypt(stored)).toEqual({
+      readonlyToken,
+      account: ACCOUNT,
+      expiresAtMs: exp * 1000,
+    });
+  });
+
+  it('rejects an expired or malformed key without contacting Paradex', async () => {
+    for (const readonlyToken of [
+      paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) - 1 }),
+      paradexToken({ exp: 1 }),
+    ]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/portfolio/venue-credentials/paradex',
+        payload: { readonlyToken },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(paradexStoreMock.connect).not.toHaveBeenCalled();
+  });
+
+  it('stores nothing when Paradex rejects the key', async () => {
+    paradexStoreMock.connect.mockRejectedValueOnce(new Error('HTTP 401'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/portfolio/venue-credentials/paradex',
+      payload: { readonlyToken: paradexToken({ sub: ACCOUNT, exp: Math.floor(Date.now() / 1000) + 60 }) },
+    });
+    expect(res.statusCode).toBe(502);
+    expect(credentialsStoreMock.rows.size).toBe(0);
   });
 });

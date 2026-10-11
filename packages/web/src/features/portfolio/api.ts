@@ -3,6 +3,8 @@ import {
   type DeriveSessionKeyConfirm,
   type DeriveSessionKeyGrant,
   type ExchangePortfolioVenue,
+  type ParadexConnect,
+  type ParadexTokenSettings,
   type ExchangeTradesResponse,
   type PortfolioMetrics,
   type PortfolioSource,
@@ -97,7 +99,7 @@ export interface ThalexConnectRequest {
   env?: 'prod' | 'test';
 }
 
-export type VenueConnectRequest = ThalexConnectRequest;
+export type VenueConnectRequest = ThalexConnectRequest | ParadexConnect;
 
 export interface VenueConnectionState {
   venue: VenueId;
@@ -141,6 +143,19 @@ export async function confirmDeriveSessionKey(
     '/portfolio/venue-credentials/derive/session-key/confirm',
     body,
     VenueConnectionStateSchema,
+  );
+}
+
+const ParadexTokenSettingsResponseSchema: z.ZodType<ParadexTokenSettings> = z.object({
+  expiryDurationSec: z.number().int().positive(),
+  allowedCidrs: z.array(z.string()),
+  name: z.string(),
+});
+
+export async function fetchParadexTokenSettings(): Promise<ParadexTokenSettings> {
+  return getJson(
+    '/portfolio/venue-credentials/paradex/token-settings',
+    ParadexTokenSettingsResponseSchema,
   );
 }
 

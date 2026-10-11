@@ -1,11 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { DeriveSessionKeyConfirmSchema, VenueIdSchema, type VenueId } from '@oggregator/protocol';
+import { decodeParadexJwtClaims } from '@oggregator/core';
+import {
+  DeriveSessionKeyConfirmSchema,
+  ParadexConnectSchema,
+  type ParadexTokenSettings,
+  VenueIdSchema,
+  type VenueId,
+} from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
 
 import { derivePositionStore } from '../../derive-position-store.js';
 import { pendingDeriveSessionKeys } from '../../derive-session-keys.js';
+import { paradexPositionStore } from '../../paradex-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { getOrCreatePortfolioRuntime } from '../../portfolio-services.js';
 import { venueCredentialsStore } from '../../trading-services.js';
@@ -23,6 +31,12 @@ const DeriveStoredCredentialsSchema = z.object({
   expirySec: z.number().int().positive(),
 });
 
+const ParadexStoredCredentialsSchema = z.object({
+  readonlyToken: z.string().min(1),
+  account: z.string().min(1),
+  expiresAtMs: z.number().int().positive(),
+});
+
 const ThalexCredentialsSchema = z.object({
   kid: z.string().min(1),
   privateKeyPem: z.string().min(1),
@@ -31,7 +45,28 @@ const ThalexCredentialsSchema = z.object({
 });
 
 type DeriveStoredCredentials = z.infer<typeof DeriveStoredCredentialsSchema>;
+type ParadexStoredCredentials = z.infer<typeof ParadexStoredCredentialsSchema>;
 type ThalexCredentials = z.infer<typeof ThalexCredentialsSchema>;
+
+const DEFAULT_PARADEX_TOKEN_TTL_DAYS = 90;
+const MAX_PARADEX_TOKEN_TTL_DAYS = 365;
+
+function paradexTokenSettings(): ParadexTokenSettings {
+  const ttlDays = Number(process.env['PARADEX_READONLY_TOKEN_TTL_DAYS']);
+  return {
+    name: 'oggregator read-only',
+    expiryDurationSec: Math.round(
+      Math.min(
+        Number.isFinite(ttlDays) && ttlDays > 0 ? ttlDays : DEFAULT_PARADEX_TOKEN_TTL_DAYS,
+        MAX_PARADEX_TOKEN_TTL_DAYS,
+      ) * 86_400,
+    ),
+    allowedCidrs: (process.env['PARADEX_READONLY_TOKEN_ALLOWED_CIDRS'] ?? '')
+      .split(',')
+      .map((cidr) => cidr.trim())
+      .filter((cidr) => cidr.length > 0),
+  };
+}
 
 function privateAdaptersEnabled(): boolean {
   const value = process.env['PRIVATE_VENUE_ADAPTERS_ENABLED'];
@@ -84,6 +119,14 @@ async function connectDerive(
   getOrCreatePortfolioRuntime(accountId, 'derive');
 }
 
+async function connectParadex(
+  accountId: string,
+  credentials: ParadexStoredCredentials,
+): Promise<void> {
+  await paradexPositionStore.connect({ accountId, readonlyToken: credentials.readonlyToken });
+  getOrCreatePortfolioRuntime(accountId, 'paradex');
+}
+
 function isDeriveSessionKeyExpired(credentials: DeriveStoredCredentials): boolean {
   return credentials.expirySec * 1000 <= Date.now();
 }
@@ -121,6 +164,15 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
     await connectDerive(accountId, parsed.data);
     return 'connected';
   }
+  if (venue === 'paradex') {
+    const parsed = ParadexStoredCredentialsSchema.safeParse(
+      cipher.decrypt<unknown>(stored.encryptedCredentials),
+    );
+    if (!parsed.success) throw new Error('Stored Paradex credentials are invalid');
+    if (parsed.data.expiresAtMs <= Date.now()) return 'not_connected';
+    await connectParadex(accountId, parsed.data);
+    return 'connected';
+  }
   if (venue === 'thalex') {
     const parsed = ThalexCredentialsSchema.safeParse(
       cipher.decrypt<unknown>(stored.encryptedCredentials),
@@ -137,12 +189,15 @@ async function disconnectVenue(accountId: string, venue: VenueId): Promise<void>
     await derivePositionStore.disconnect(accountId);
   } else if (venue === 'thalex') {
     await thalexPositionStore.disconnect(accountId);
+  } else if (venue === 'paradex') {
+    await paradexPositionStore.disconnect(accountId);
   }
 }
 
 function isVenueConnected(accountId: string, venue: VenueId): boolean {
   if (venue === 'derive') return derivePositionStore.isConnected(accountId);
   if (venue === 'thalex') return thalexPositionStore.isConnected(accountId);
+  if (venue === 'paradex') return paradexPositionStore.isConnected(accountId);
   return false;
 }
 
@@ -198,6 +253,11 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
       return { venues: results.filter((result) => result != null) };
     },
   );
+
+  app.get('/portfolio/venue-credentials/paradex/token-settings', async (_request, reply) => {
+    if (getCredentialCipherOrSendError(reply) == null) return reply;
+    return paradexTokenSettings();
+  });
 
   app.post(
     '/portfolio/venue-credentials/derive/session-key',
@@ -272,6 +332,28 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
             error: 'wallet_connect_required',
             message: 'Derive connects through your wallet, not a pasted key.',
           });
+        }
+        if (venue === 'paradex') {
+          const { readonlyToken } = ParadexConnectSchema.parse(request.body);
+          const claims = decodeParadexJwtClaims(readonlyToken);
+          if (claims == null || claims.exp * 1000 <= Date.now()) {
+            return reply.status(400).send({
+              error: 'invalid_creds',
+              message: 'The Paradex read-only key is malformed or expired.',
+            });
+          }
+          const credentials: ParadexStoredCredentials = {
+            readonlyToken,
+            account: claims.sub,
+            expiresAtMs: claims.exp * 1000,
+          };
+          await connectParadex(accountId, credentials);
+          await venueCredentialsStore.upsert({
+            accountId,
+            venue,
+            encryptedCredentials: cipher.encrypt(credentials),
+          });
+          return { venue, connected: true, configured: true };
         }
         if (venue === 'thalex') {
           const credentials = ThalexCredentialsSchema.parse(request.body);

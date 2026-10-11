@@ -61,6 +61,6 @@ export async function migrateLegacyBrowserVenueCredentials(
   }
 }
 
-export function isPrivateVenue(venue: VenueId): venue is 'derive' | 'thalex' {
-  return venue === 'derive' || venue === 'thalex';
+export function isPrivateVenue(venue: VenueId): venue is 'derive' | 'thalex' | 'paradex' {
+  return venue === 'derive' || venue === 'thalex' || venue === 'paradex';
 }

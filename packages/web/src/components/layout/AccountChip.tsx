@@ -10,7 +10,7 @@ import {
 } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
 
 import styles from './AccountChip.module.css';
@@ -178,7 +178,19 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
       return;
     }
 
-    if (venue === 'thalex') {
+    if (venue === 'paradex') {
+      setBusy(true);
+      try {
+        await connectVenue('paradex', { readonlyToken: trimmedFields.readonlyToken ?? '' });
+        markVenueConfigured('paradex');
+        refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'connect failed');
+        return;
+      } finally {
+        setBusy(false);
+      }
+    } else if (venue === 'thalex') {
       setBusy(true);
       try {
         await connectVenue('thalex', {
@@ -204,7 +216,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
 
   const onRemoveVenue = async (venue: VenueId) => {
     if (!isAccountReady) return;
-    if (venue === 'derive' || venue === 'thalex') {
+    if (venue === 'derive' || venue === 'thalex' || venue === 'paradex') {
       try {
         await disconnectVenue(venue);
         markVenueUnconfigured(venue);
@@ -405,7 +417,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   ))}
                 </select>
               </label>
-              {PRIVATE_ADAPTER_SPECS[pasteTarget].connectMethod === 'wallet' ? (
+              {pasteTarget === 'derive' ? (
                 <DeriveWalletConnect
                   onConnected={() => {
                     markVenueConfigured('derive');
@@ -415,6 +427,23 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   }}
                   onError={setError}
                 />
+              ) : pasteTarget === 'paradex' ? (
+                <ParadexWalletConnect
+                  onConnected={() => {
+                    markVenueConfigured('paradex');
+                    refresh();
+                    setError(null);
+                    setMode('home');
+                  }}
+                  onError={setError}
+                >
+                  <VenueCredentialForm
+                    venue={pasteTarget}
+                    values={venueFields}
+                    onChange={(key, value) => setVenueFields((prev) => ({ ...prev, [key]: value }))}
+                    onSubmit={onPasteVenue}
+                  />
+                </ParadexWalletConnect>
               ) : (
                 <VenueCredentialForm
                   venue={pasteTarget}
@@ -579,6 +608,49 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
           </button>
         </>
       )}
+    </>
+  );
+}
+
+interface ParadexWalletConnectProps {
+  onConnected: () => void;
+  onError: (message: string | null) => void;
+  children: ReactNode;
+}
+
+function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletConnectProps) {
+  const [busy, setBusy] = useState(false);
+
+  const start = async () => {
+    onError(null);
+    setBusy(true);
+    try {
+      const { connectParadexWallet } = await import('@lib/wallet/paradex-wallet-connect');
+      await connectParadexWallet();
+      onConnected();
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : 'Wallet connection failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className={styles.hint}>
+        Your wallet signs one Paradex sign-in, then Paradex issues a read-only key for oggregator.
+        The key can read positions but cannot trade or withdraw.
+      </div>
+      <button
+        type="button"
+        className={styles.primaryBtn}
+        disabled={busy}
+        onClick={() => void start()}
+      >
+        {busy ? 'Waiting for wallet…' : 'Connect wallet'}
+      </button>
+      <div className={styles.hint}>Or paste a Paradex read-only key:</div>
+      {children}
     </>
   );
 }

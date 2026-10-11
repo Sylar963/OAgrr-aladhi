@@ -28,6 +28,7 @@ import type { PortfolioSource } from '@oggregator/protocol';
 import { chainEngines } from './chain-engines.js';
 import { paperPositionStore } from './paper-position-store.js';
 import { derivePositionStore } from './derive-position-store.js';
+import { paradexPositionStore } from './paradex-position-store.js';
 import { thalexPositionStore } from './thalex-position-store.js';
 
 const RUNTIME_IDLE_TTL_MS = 30 * 60 * 1000;
@@ -523,11 +524,12 @@ function storeFor(source: PortfolioSource): PositionStore {
   if (source === 'paper') return paperPositionStore;
   if (source === 'derive') return derivePositionStore;
   if (source === 'thalex') return thalexPositionStore;
+  if (source === 'paradex') return paradexPositionStore;
   return portfolioStore;
 }
 
 function isVenueSource(source: PortfolioSource): boolean {
-  return source === 'paper' || source === 'derive' || source === 'thalex';
+  return source === 'paper' || source === 'derive' || source === 'thalex' || source === 'paradex';
 }
 
 export function getOrCreatePortfolioRuntime(
@@ -591,6 +593,7 @@ export async function disposePortfolioServices(): Promise<void> {
   paperPositionStore.dispose();
   await derivePositionStore.dispose();
   await thalexPositionStore.dispose();
+  await paradexPositionStore.dispose();
   const refs = [...chainRefs.values()];
   chainRefs.clear();
   await Promise.allSettled(

@@ -422,6 +422,13 @@ export {
   type DeriveSessionKeyPair,
 } from './feeds/derive-private/index.js';
 export {
+  ParadexAuthError,
+  ParadexPrivateClient,
+  type ParadexPrivateCreds,
+  type ParadexPositionsListener,
+  decodeParadexJwtClaims,
+} from './feeds/paradex-private/index.js';
+export {
   ThalexPrivateClient,
   type ThalexPrivateCreds,
   type ThalexPositionsListener,

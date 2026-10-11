@@ -9,6 +9,7 @@ export {
   confirmDeriveSessionKey,
   connectVenue,
   disconnectVenue,
+  fetchParadexTokenSettings,
   issueDeriveSessionKey,
   fetchExchangeTrades,
   fetchPositions,

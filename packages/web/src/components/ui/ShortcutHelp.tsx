@@ -20,6 +20,7 @@ const NAVIGATION: Row[] = [
   { label: 'Flow', keys: ['g', 'f'] },
   { label: 'Analytics', keys: ['g', 'y'] },
   { label: 'GEX', keys: ['g', 'x'] },
+  { label: 'News', keys: ['g', 'n'] },
 ];
 
 const ACTIONS: Row[] = [

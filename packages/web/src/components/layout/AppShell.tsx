@@ -23,6 +23,7 @@ const GOTO_MAP: Record<string, TabId> = {
   f: 'flow',
   y: 'analytics',
   x: 'gex',
+  n: 'news',
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -52,7 +53,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
 
-  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set(['trading', 'portfolio', 'analytics']);
+  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set(['trading', 'portfolio', 'analytics', 'news']);
   const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);

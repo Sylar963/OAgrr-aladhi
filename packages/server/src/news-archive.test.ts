@@ -134,6 +134,24 @@ describe('NewsArchive', () => {
     expect(loadPage).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the storage cursor pinned below the cache as new headlines arrive', async () => {
+    const archived = toPersistedNewsItem(newsItem('archived', 90 * DAY_MS));
+    const { store, loadPage } = fakeStore([archived]);
+    const archive = open(store);
+    archive.record([newsItem('a', 3 * 60_000), newsItem('b', 2 * 60_000)]);
+
+    const first = await archive.page({ window: 'latest', cursor: null, limit: 1 });
+    const tail = await archive.page({ window: 'latest', cursor: first.nextCursor, limit: 5 });
+    expect(tail.items.map((i) => i.id)).toEqual(['a', 'archived']);
+
+    archive.record([newsItem('c', 60_000)]);
+    const shifted = await archive.page({ window: 'latest', cursor: null, limit: 1 });
+    await archive.page({ window: 'latest', cursor: shifted.nextCursor, limit: 5 });
+
+    expect(loadPage).toHaveBeenCalledTimes(1);
+    expect(loadPage.mock.calls[0]?.[0].before?.id).toBe('a');
+  });
+
   it('flushes pending rows once and prunes the local cache to its retention', async () => {
     const { store, written } = fakeStore();
     const archive = open(store);

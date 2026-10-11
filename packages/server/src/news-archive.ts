@@ -80,7 +80,7 @@ function compareDesc(a: PersistedNewsItem, b: PersistedNewsItem): number {
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
-function isBefore(row: PersistedNewsItem, cursor: NewsCursor): boolean {
+function isBefore(row: NewsCursor, cursor: NewsCursor): boolean {
   const dt = row.publishedAt.getTime() - cursor.publishedAt.getTime();
   return dt < 0 || (dt === 0 && row.id < cursor.id);
 }
@@ -222,7 +222,12 @@ export class NewsArchive implements NewsArchiveSink {
 
     let rows = local;
     if (needsDelegate) {
-      const remote = await this.loadDelegatePage(window, cursor, since, before, limit);
+      // Storage rows newer than the oldest cached row are already in the cache, so storage is
+      // only asked for what lies below it. That keeps the delegate cursor fixed while new
+      // headlines shift page boundaries, so the memo holds until the next flush.
+      const floor = this.cache.at(-1) ?? null;
+      const delegateBefore = floor && (!before || !isBefore(before, floor)) ? floor : before;
+      const remote = await this.loadDelegatePage(window, since, delegateBefore, limit);
       const byId = new Map<string, PersistedNewsItem>();
       for (const row of remote) byId.set(row.id, row);
       for (const row of local) byId.set(row.id, row);
@@ -271,12 +276,11 @@ export class NewsArchive implements NewsArchiveSink {
 
   private async loadDelegatePage(
     window: NewsWindow,
-    cursor: string | null,
     since: Date,
     before: NewsCursor | null,
     limit: number,
   ): Promise<PersistedNewsItem[]> {
-    const key = `${window}|${cursor ?? ''}|${limit}`;
+    const key = `${window}|${before ? `${before.publishedAt.getTime()}:${before.id}` : ''}|${limit}`;
     const memo = this.dbPages.get(key);
     if (memo) return memo.filter((row) => row.publishedAt >= since);
     try {

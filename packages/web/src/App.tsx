@@ -28,6 +28,7 @@ const TradingView = lazy(() =>
   import('@features/trading').then((m) => ({ default: m.TradingView })),
 );
 const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView })));
+const NewsView = lazy(() => import('@features/news').then((m) => ({ default: m.NewsView })));
 const PortfolioView = lazy(() =>
   import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
 );
@@ -89,6 +90,7 @@ export default function App() {
             {activeTab === 'flow' && <FlowView />}
             {activeTab === 'analytics' && <AnalyticsView />}
             {activeTab === 'gex' && <GexView />}
+            {activeTab === 'news' && <NewsView />}
           </Suspense>
         </ErrorBoundary>
       </div>

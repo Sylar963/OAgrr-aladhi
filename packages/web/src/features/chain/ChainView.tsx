@@ -29,8 +29,6 @@ export default function ChainView() {
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
   const expiryPositions = useExpiryPositions(underlying, activeVenues);
-  const expiryLegs = expiryPositions.get(expiry)?.legs;
-  const strikePositions = useMemo(() => summarizeStrikePositions(expiryLegs ?? []), [expiryLegs]);
   const openPalette = useOpenPalette();
 
   const { data: expiriesData } = useExpiries(underlying);
@@ -41,13 +39,26 @@ export default function ChainView() {
   // underlying / venue change), so the REST fetch is redundant and only races
   // the WS write into the same cache key — causing a visible double-render on
   // every tenor click. Keep REST as bootstrap / fallback when WS isn't live.
-  const { data: chain, isLoading, error } = useChainQuery(underlying, expiry, activeVenues, {
+  // Until the new tenor's data arrives, the previous tenor stays rendered
+  // (dimmed, non-interactive) so the stats strip and table don't unmount.
+  const {
+    data: chain,
+    isLoading,
+    error,
+    isPlaceholderData,
+  } = useChainQuery(underlying, expiry, activeVenues, {
     enabled: connectionState !== 'live',
+    keepPreviousTenor: true,
   });
   const { data: marketStats } = useStats(underlying);
   const { data: richness } = useVolRichness(underlying);
 
   const displayChain = chain;
+  // Table props follow the rendered chain, not the selected tab, so positions,
+  // ATM scroll and price-flash scope stay consistent while a placeholder shows.
+  const displayExpiry = displayChain?.expiry ?? expiry;
+  const expiryLegs = expiryPositions.get(displayExpiry)?.legs;
+  const strikePositions = useMemo(() => summarizeStrikePositions(expiryLegs ?? []), [expiryLegs]);
   const showLoading =
     !displayChain && (isLoading || connectionState === 'live' || connectionState === 'connecting');
 
@@ -105,7 +116,7 @@ export default function ChainView() {
             />
           )}
 
-          <div className={styles.tableArea}>
+          <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
             {showLoading && <Spinner size="lg" label="Loading chain data…" />}
             {error && !displayChain && (
               <EmptyState
@@ -130,7 +141,7 @@ export default function ChainView() {
                 indexPrice={displayChain.stats.indexPriceUsd}
                 activeVenues={activeVenues}
                 myIv={myIvValid ? myIvFloat : null}
-                expiry={expiry}
+                expiry={displayExpiry}
                 underlying={underlying}
               />
             )}
@@ -162,21 +173,23 @@ export default function ChainView() {
         />
 
         {displayChain && (
-          <StatStrip
-            stats={displayChain.stats}
-            underlying={displayChain.underlying}
-            dte={displayChain.dte}
-            connectionState={connectionState}
-            marketStats={marketStats}
-            richness={richness}
-          />
+          <div className={styles.statArea} data-stale={isPlaceholderData}>
+            <StatStrip
+              stats={displayChain.stats}
+              underlying={displayChain.underlying}
+              dte={displayChain.dte}
+              connectionState={connectionState}
+              marketStats={marketStats}
+              richness={richness}
+            />
+          </div>
         )}
 
         <div className={styles.tableControls}>
           <MyIvInput />
         </div>
 
-        <div className={styles.tableArea}>
+        <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
           {showLoading && <Spinner size="lg" label="Loading chain data…" />}
           {error && !displayChain && (
             <EmptyState
@@ -201,7 +214,7 @@ export default function ChainView() {
               indexPrice={displayChain.stats.indexPriceUsd}
               activeVenues={activeVenues}
               myIv={myIvValid ? myIvFloat : null}
-              expiry={expiry}
+              expiry={displayExpiry}
               underlying={underlying}
               positions={strikePositions}
             />

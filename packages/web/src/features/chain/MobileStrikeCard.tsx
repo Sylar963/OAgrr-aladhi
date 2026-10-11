@@ -32,9 +32,10 @@ interface SideSummaryProps {
   itm: boolean;
   venues: string[];
   freshnessNow: number;
+  priceScope: string;
 }
 
-function SideSummary({ side, type, itm, venues, freshnessNow }: SideSummaryProps) {
+function SideSummary({ side, type, itm, venues, freshnessNow, priceScope }: SideSummaryProps) {
   const bestQ = side.bestVenue != null ? (side.venues[side.bestVenue] ?? null) : null;
   const bba = bestBidAsk(side, new Set(venues), freshnessNow);
 
@@ -59,7 +60,7 @@ function SideSummary({ side, type, itm, venues, freshnessNow }: SideSummaryProps
       <div className={styles.sideRow}>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>BID</span>
-          <FlashingPrice text={fmtUsd(bba.bid)} className={styles.metricBid} />
+          <FlashingPrice text={fmtUsd(bba.bid)} className={styles.metricBid} scope={priceScope} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>SPR</span>
@@ -67,7 +68,7 @@ function SideSummary({ side, type, itm, venues, freshnessNow }: SideSummaryProps
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>ASK</span>
-          <FlashingPrice text={fmtUsd(bba.ask)} className={styles.metricAsk} />
+          <FlashingPrice text={fmtUsd(bba.ask)} className={styles.metricAsk} scope={priceScope} />
         </div>
         <div className={styles.sideMetric}>
           <span className={styles.metricLabel}>IV</span>
@@ -176,6 +177,7 @@ export default function MobileStrikeCard({
           itm={callItm}
           venues={venues}
           freshnessNow={freshnessNow}
+          priceScope={`${underlying ?? ''}:${expiry ?? ''}`}
         />
         <SideSummary
           side={strike.put}
@@ -183,6 +185,7 @@ export default function MobileStrikeCard({
           itm={putItm}
           venues={venues}
           freshnessNow={freshnessNow}
+          priceScope={`${underlying ?? ''}:${expiry ?? ''}`}
         />
       </div>
 

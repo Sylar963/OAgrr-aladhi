@@ -5,7 +5,16 @@ import { fmtDelta, fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type MouseEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChainTable.module.css';
 import ExpandedRow from './ExpandedRow';
 import {
@@ -118,19 +127,21 @@ function PriceCell({
   venueId,
   className,
   title,
+  scope,
   onClick,
 }: {
   value: number | null;
   venueId: string | null;
   className: string;
   title: string;
+  scope: string;
   onClick: (event: MouseEvent<HTMLSpanElement>) => void;
 }) {
   const meta = venueId ? VENUES[venueId] : null;
 
   return (
     <span className={className} onClick={onClick} role="button" title={title}>
-      <FlashingPrice text={fmtUsd(value)} />
+      <FlashingPrice text={fmtUsd(value)} scope={scope} />
       {meta?.logo ? <img src={meta.logo} alt="" className={styles.priceVenueLogo} /> : null}
     </span>
   );
@@ -222,6 +233,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
     [strike.put, activeSet, freshnessNow],
   );
   const handleToggle = useCallback(() => onToggle(strike.strike), [onToggle, strike.strike]);
+  const priceScope = `${underlying}:${expiry}`;
 
   return (
     <div className={styles.rowWrap} data-expanded={isExpanded}>
@@ -253,6 +265,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           <IvChip iv={strike.call.bestIv} size="sm" />
         </div>
         <PriceCell
+          scope={priceScope}
           value={callBba.bid}
           venueId={callBba.bidVenue}
           className={`${styles.bidCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ''}`}
@@ -271,6 +284,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           <SpreadPill spreadPct={crossVenueSpreadPct(callBba)} />
         </div>
         <PriceCell
+          scope={priceScope}
           value={callBba.ask}
           venueId={callBba.askVenue}
           className={`${styles.askCell} ${styles.alignRight} ${styles.clickable} ${callItm ? styles.itmCall : ''}`}
@@ -299,6 +313,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
         <PosCell position={putPos} />
 
         <PriceCell
+          scope={priceScope}
           value={putBba.bid}
           venueId={putBba.bidVenue}
           className={`${styles.bidCell} ${styles.clickable} ${putItm ? styles.itmPut : ''}`}
@@ -317,6 +332,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           <SpreadPill spreadPct={crossVenueSpreadPct(putBba)} />
         </div>
         <PriceCell
+          scope={priceScope}
           value={putBba.ask}
           venueId={putBba.askVenue}
           className={`${styles.askCell} ${styles.clickable} ${putItm ? styles.itmPut : ''}`}
@@ -382,7 +398,6 @@ export default function NewChainTable({
   const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
   const atmRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const hasScrolledRef = useRef(false);
   const isMobile = useIsMobile();
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
 
@@ -426,32 +441,27 @@ export default function NewChainTable({
     getItemKey: (i) => strikes[i]?.strike ?? i,
   });
 
-  // Reset scroll flag only on tenor switch — not on every live delta that
-  // adds/changes a strike, and not when a venue toggle reshapes the strike
-  // set. Otherwise the table re-scrolls to ATM mid-session.
-  useEffect(() => {
-    hasScrolledRef.current = false;
-  }, [expiry]);
-
-  // Scroll to ATM once per strike set, not on every live price tick
-  useEffect(() => {
-    if (hasScrolledRef.current) return;
-    const timer = setTimeout(() => {
-      if (!isMobile && atmIndex >= 0) {
-        rowVirtualizer.scrollToIndex(atmIndex, { align: 'center' });
-        hasScrolledRef.current = true;
-        return;
-      }
-      if (atmRef.current && listRef.current) {
-        const listRect = listRef.current.getBoundingClientRect();
-        const atmRect = atmRef.current.getBoundingClientRect();
-        const offset = atmRect.top - listRect.top - listRect.height / 3;
-        listRef.current.scrollTop += offset;
-        hasScrolledRef.current = true;
-      }
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [atmIndex, isMobile, rowVirtualizer]);
+  // Center ATM once per tenor, before paint. A deferred scroll let the browser
+  // paint the previous tenor's scrollTop against the new strike set first —
+  // clamped to the bottom (or blank) when moving to a shorter tenor — then jump.
+  // Keyed on tenor, not strikes, so live deltas and venue toggles don't re-scroll.
+  const scrolledForRef = useRef<string | null>(null);
+  const scrollScope = `${underlying}:${expiry}`;
+  useLayoutEffect(() => {
+    if (scrolledForRef.current === scrollScope) return;
+    if (!isMobile) {
+      if (atmIndex < 0) return;
+      rowVirtualizer.scrollToIndex(atmIndex, { align: 'center' });
+      scrolledForRef.current = scrollScope;
+      return;
+    }
+    if (atmRef.current && listRef.current) {
+      const listRect = listRef.current.getBoundingClientRect();
+      const atmRect = atmRef.current.getBoundingClientRect();
+      listRef.current.scrollTop += atmRect.top - listRect.top - listRect.height / 3;
+      scrolledForRef.current = scrollScope;
+    }
+  }, [scrollScope, atmIndex, isMobile, rowVirtualizer]);
 
   if (strikes.length === 0) {
     return <EmptyState icon="∅" title="No options data for this expiry" />;

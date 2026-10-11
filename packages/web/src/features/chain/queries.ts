@@ -92,7 +92,7 @@ export function useChainQuery(
   underlying: string,
   expiry: string,
   venues: string[],
-  options?: { refetchInterval?: number; enabled?: boolean },
+  options?: { refetchInterval?: number; enabled?: boolean; keepPreviousTenor?: boolean },
 ) {
   const venueParam = venues.length > 0 ? `&venues=${venues.join(',')}` : '';
   return useQuery({
@@ -103,6 +103,12 @@ export function useChainQuery(
       ),
     enabled: Boolean(underlying && expiry) && (options?.enabled ?? true),
     refetchInterval: options?.refetchInterval,
+    // Placeholder applies even while the query is disabled (WS-live), so the
+    // previous tenor stays on screen until the new snapshot lands in cache.
+    placeholderData: options?.keepPreviousTenor
+      ? (prev: EnrichedChainResponse | undefined) =>
+          prev?.underlying === underlying ? prev : undefined
+      : undefined,
   });
 }
 

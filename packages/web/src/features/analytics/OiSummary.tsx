@@ -1,131 +1,69 @@
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { fmtUsdCompact } from '@lib/format';
-import styles from './AnalyticsView.module.css';
-
-interface OiStats {
-  callCount: number;
-  putCount: number;
-  callNotional: number;
-  putNotional: number;
-  callVolume: number;
-  putVolume: number;
-  callVolNotional: number;
-  putVolNotional: number;
-}
-
-function computeOiStats(chains: EnrichedChainResponse[]): OiStats {
-  let callCount = 0,
-    putCount = 0;
-  let callNotional = 0,
-    putNotional = 0;
-  let callVolume = 0,
-    putVolume = 0;
-  let callVolNotional = 0,
-    putVolNotional = 0;
-
-  for (const chain of chains) {
-    for (const s of chain.strikes) {
-      for (const q of Object.values(s.call.venues)) {
-        if (!q) continue;
-        callCount += q.openInterest ?? 0;
-        callNotional += q.openInterestUsd ?? 0;
-        callVolume += q.volume24h ?? 0;
-        callVolNotional += q.volume24hUsd ?? 0;
-      }
-      for (const q of Object.values(s.put.venues)) {
-        if (!q) continue;
-        putCount += q.openInterest ?? 0;
-        putNotional += q.openInterestUsd ?? 0;
-        putVolume += q.volume24h ?? 0;
-        putVolNotional += q.volume24hUsd ?? 0;
-      }
-    }
-  }
-
-  return {
-    callCount,
-    putCount,
-    callNotional,
-    putNotional,
-    callVolume,
-    putVolume,
-    callVolNotional,
-    putVolNotional,
-  };
-}
+import { computeSummary, NEAR_EXPIRY_DAYS } from './positioning-utils';
+import styles from './Positioning.module.css';
 
 interface OiSummaryProps {
   chains: EnrichedChainResponse[];
 }
 
+function fmtRatio(v: number | null): string {
+  return v == null ? '–' : v.toFixed(2);
+}
+
+function fmtShare(v: number | null): string {
+  return v == null ? '–' : `${(v * 100).toFixed(1)}%`;
+}
+
+function pcTone(v: number | null): 'put' | 'call' | undefined {
+  if (v == null) return undefined;
+  if (v > 1.3) return 'put';
+  if (v < 0.7) return 'call';
+  return undefined;
+}
+
 export default function OiSummary({ chains }: OiSummaryProps) {
-  const stats = computeOiStats(chains);
-  const totalCount = stats.callCount + stats.putCount;
-  const totalNotional = stats.callNotional + stats.putNotional;
-  const pcRatio = stats.callCount > 0 ? stats.putCount / stats.callCount : 0;
-  const totalVol = stats.callVolNotional + stats.putVolNotional;
-  const volPcRatio = stats.callVolume > 0 ? stats.putVolume / stats.callVolume : 0;
+  const s = computeSummary(chains);
+
+  const kpis: { label: string; value: string; note: string; tone?: string }[] = [
+    { label: 'Open Interest', value: fmtUsdCompact(s.oiUsd), note: 'USD notional' },
+    { label: '24h Volume', value: fmtUsdCompact(s.volUsd), note: 'USD notional' },
+    {
+      label: 'P/C · OI',
+      value: fmtRatio(s.pcOi),
+      note: 'put $ / call $ held',
+      tone: pcTone(s.pcOi),
+    },
+    {
+      label: 'P/C · 24h Vol',
+      value: fmtRatio(s.pcVol),
+      note: 'put $ / call $ traded',
+      tone: pcTone(s.pcVol),
+    },
+    {
+      label: 'Turnover',
+      value: fmtShare(s.turnover),
+      note: '24h volume / OI',
+    },
+    {
+      label: `Expiring ≤${NEAR_EXPIRY_DAYS}d`,
+      value: fmtShare(s.nearOiShare),
+      note: `${fmtUsdCompact(s.nearOiUsd)} rolls off`,
+      tone: s.nearOiShare != null && s.nearOiShare >= 0.2 ? 'warn' : undefined,
+    },
+  ];
 
   return (
-    <div className={styles.card}>
-      <div className={styles.cardTitle}>Open Interest & Volume Summary</div>
-      <div className={styles.summaryGrid}>
-        <div className={styles.summarySection}>
-          <div className={styles.summarySectionTitle}>Open Interest</div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel} data-type="call">
-              Calls
-            </span>
-            <span className={styles.summaryValue}>{fmtUsdCompact(stats.callCount)}</span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(stats.callNotional)}</span>
-          </div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel} data-type="put">
-              Puts
-            </span>
-            <span className={styles.summaryValue}>{fmtUsdCompact(stats.putCount)}</span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(stats.putNotional)}</span>
-          </div>
-          <div className={styles.summaryRow} data-total>
-            <span className={styles.summaryLabel}>Total</span>
-            <span className={styles.summaryValue}>{fmtUsdCompact(totalCount)}</span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(totalNotional)}</span>
-          </div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel}>P/C Ratio</span>
-            <span className={styles.summaryValue}>{pcRatio.toFixed(2)}</span>
-          </div>
+    <div className={styles.kpiStrip}>
+      {kpis.map((k) => (
+        <div key={k.label} className={styles.kpi}>
+          <span className={styles.kpiLabel}>{k.label}</span>
+          <span className={styles.kpiValue} data-tone={k.tone}>
+            {k.value}
+          </span>
+          <span className={styles.kpiNote}>{k.note}</span>
         </div>
-
-        <div className={styles.summarySection}>
-          <div className={styles.summarySectionTitle}>24h Volume</div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel} data-type="call">
-              Calls
-            </span>
-            <span className={styles.summaryValue}>{fmtUsdCompact(stats.callVolume)}</span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(stats.callVolNotional)}</span>
-          </div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel} data-type="put">
-              Puts
-            </span>
-            <span className={styles.summaryValue}>{fmtUsdCompact(stats.putVolume)}</span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(stats.putVolNotional)}</span>
-          </div>
-          <div className={styles.summaryRow} data-total>
-            <span className={styles.summaryLabel}>Total</span>
-            <span className={styles.summaryValue}>
-              {fmtUsdCompact(stats.callVolume + stats.putVolume)}
-            </span>
-            <span className={styles.summaryMeta}>{fmtUsdCompact(totalVol)}</span>
-          </div>
-          <div className={styles.summaryRow}>
-            <span className={styles.summaryLabel}>P/C Ratio</span>
-            <span className={styles.summaryValue}>{volPcRatio.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }

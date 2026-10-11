@@ -30,6 +30,7 @@ import {
   dvolService,
   flowService,
   gexWallStore,
+  newsArchive,
   indexPriceService,
   ivHistoryService,
   ivHistoryStore,
@@ -222,6 +223,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
     await gexWallStore.dispose();
+    await newsArchive.dispose();
     await venueIvHistoryStore.dispose();
     await tradeStore.dispose();
     await venueCredentialsStore.dispose();

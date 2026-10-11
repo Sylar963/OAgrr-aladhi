@@ -1,5 +1,17 @@
 import type { FastifyInstance } from 'fastify';
-import { newsService } from '../services.js';
+import { z } from 'zod';
+import { decodeNewsCursor, NEWS_WINDOWS } from '../news-archive.js';
+import { newsArchive, newsService } from '../services.js';
+
+const ArchiveQuerySchema = z.object({
+  window: z.enum(NEWS_WINDOWS).default('latest'),
+  cursor: z
+    .string()
+    .max(256)
+    .refine((value) => decodeNewsCursor(value) !== null, 'invalid cursor')
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(48),
+});
 
 export async function newsRoute(app: FastifyInstance) {
   app.get<{ Querystring: { limit?: string; since?: string } }>('/news', async (req, reply) => {
@@ -23,5 +35,14 @@ export async function newsRoute(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid since param' });
     }
     return { count: items.length, items };
+  });
+
+  app.get('/news/archive', async (req, reply) => {
+    const parsed = ArchiveQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message ?? 'bad query' });
+    }
+    const { window, cursor, limit } = parsed.data;
+    return newsArchive.page({ window, cursor: cursor ?? null, limit });
   });
 }

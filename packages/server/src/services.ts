@@ -26,11 +26,13 @@ import {
   type IvHistoryStorageStats,
   type IvHistoryStore,
   type LeadsStore,
+  type NewsStore,
   MergedTradeStore,
   NoopDealerBookStore,
   NoopGexWallSnapshotStore,
   NoopIvHistoryStore,
   NoopLeadsStore,
+  NoopNewsStore,
   NoopOiSnapshotStore,
   NoopRegimeStore,
   NoopVenueIvHistoryStore,
@@ -39,6 +41,7 @@ import {
   PostgresGexWallSnapshotStore,
   PostgresIvHistoryStore,
   PostgresLeadsStore,
+  PostgresNewsStore,
   PostgresOiSnapshotStore,
   PostgresRegimeStore,
   PostgresShortStraddleSnapshotStore,
@@ -71,6 +74,7 @@ import { GEX_WALL_RETENTION_MS, GexWallHistoryService } from './gex-wall-history
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
 import { createVolRichnessSource } from './vol-richness-source.js';
+import { NewsArchive } from './news-archive.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
@@ -118,6 +122,11 @@ const gexWallsDbFlushIntervalMs = parseNonNegativeMs(
   process.env['GEX_WALLS_DB_FLUSH_INTERVAL_MS'],
   marketDataDbFlushIntervalMs,
   'GEX_WALLS_DB_FLUSH_INTERVAL_MS',
+);
+const newsDbFlushIntervalMs = parseNonNegativeMs(
+  process.env['NEWS_DB_FLUSH_INTERVAL_MS'],
+  marketDataDbFlushIntervalMs,
+  'NEWS_DB_FLUSH_INTERVAL_MS',
 );
 const gexWallsCacheMaxRows = parsePositiveInteger(
   process.env['GEX_WALLS_CACHE_MAX_ROWS'],
@@ -269,6 +278,8 @@ export const gexWallHistoryService = new GexWallHistoryService({
     return { spotPrice, gex };
   },
 });
+
+export const newsArchive = createNewsArchive(databaseUrl);
 
 export const regimeStore: RegimeStore = databaseUrl
   ? createRegimeStore(databaseUrl)
@@ -577,7 +588,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   startIvHistoryStorageAlarm(log);
   startSettlementJob(log);
 
-  newsService = createNewsRuntimeFromEnv(process.env, log);
+  newsService = createNewsRuntimeFromEnv(process.env, log, newsArchive);
   if (newsService) {
     try {
       await newsService.start();
@@ -649,6 +660,26 @@ function createGexWallStore(connectionString: string | undefined): GexWallSnapsh
       maxPendingRows: gexWallsCacheMaxRows,
       retentionMs: GEX_WALL_RETENTION_MS,
       flushOnDispose: parseBoolean(process.env['GEX_WALLS_DB_FLUSH_ON_DISPOSE']),
+    },
+    console,
+  );
+}
+
+function createNewsArchive(connectionString: string | undefined): NewsArchive {
+  const delegate: NewsStore = connectionString
+    ? PostgresNewsStore.fromConnectionString(connectionString)
+    : new NoopNewsStore();
+  return new NewsArchive(
+    delegate,
+    {
+      // The archive is also the read cache, so it never runs write-through; 0 keeps it daily.
+      flushIntervalMs: newsDbFlushIntervalMs === 0 ? DAY_MS : newsDbFlushIntervalMs,
+      cachePath: process.env['NEWS_CACHE_PATH'] ?? '.cache/news-items.ndjson',
+      // With Postgres only the 1Y window ever pages past this; without it the cache is the archive.
+      localRetentionMs: (delegate.enabled ? 30 : 90) * DAY_MS,
+      retentionMs: 400 * DAY_MS,
+      maxPendingRows: 100_000,
+      flushOnDispose: parseBoolean(process.env['NEWS_DB_FLUSH_ON_DISPOSE']),
     },
     console,
   );

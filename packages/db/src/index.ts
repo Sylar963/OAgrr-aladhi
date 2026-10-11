@@ -175,3 +175,5 @@ export {
   NoopGexWallSnapshotStore,
   PostgresGexWallSnapshotStore,
 } from './gex-wall-snapshot-store.js';
+export type { NewsCursor, NewsPageQuery, NewsStore, PersistedNewsItem } from './news-store.js';
+export { NoopNewsStore, PostgresNewsStore } from './news-store.js';

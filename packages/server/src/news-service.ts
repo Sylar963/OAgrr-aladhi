@@ -67,17 +67,27 @@ export interface NewsItem {
   createdAt: string;
 }
 
+export interface NewsArchiveSink {
+  recent(limit: number): NewsItem[];
+  record(items: NewsItem[]): void;
+}
+
 export interface NewsRuntimeOptions {
   baseUrl: string;
   secret: string;
   pollIntervalMs?: number;
   cacheCap?: number;
   fetchImpl?: typeof fetch;
+  archive?: NewsArchiveSink;
   log?: FastifyBaseLogger | { warn: (...a: unknown[]) => void; info: (...a: unknown[]) => void };
 }
 
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_CACHE_CAP = 200;
+// Upstream returns its newest N regardless of `since` and caps N at 200, so the first poll
+// after a restart asks for everything it has to close the gap in the archive.
+const BACKFILL_LIMIT = 200;
+const POLL_LIMIT = 50;
 const MAX_BACKOFF_MS = 60_000;
 
 export class NewsRuntime {
@@ -87,6 +97,7 @@ export class NewsRuntime {
   private readonly cacheCap: number;
   private readonly fetchImpl: typeof fetch;
   private readonly log: NewsRuntimeOptions['log'];
+  private readonly archive: NewsArchiveSink | undefined;
 
   private items: NewsItem[] = [];
   private latestTs = 0;
@@ -103,10 +114,12 @@ export class NewsRuntime {
     this.cacheCap = opts.cacheCap ?? DEFAULT_CACHE_CAP;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.log = opts.log;
+    this.archive = opts.archive;
   }
 
   async start(): Promise<void> {
     this.stopped = false;
+    if (this.archive) this.items = this.archive.recent(this.cacheCap);
     await this.poll();
     this.scheduleNext();
   }
@@ -144,7 +157,7 @@ export class NewsRuntime {
   private async poll(): Promise<void> {
     try {
       const url = new URL(`${this.baseUrl}/feed/${this.secret}/twitter`);
-      url.searchParams.set('limit', '50');
+      url.searchParams.set('limit', String(this.latestTs > 0 ? POLL_LIMIT : BACKFILL_LIMIT));
       if (this.latestTs > 0) {
         url.searchParams.set('since', new Date(this.latestTs).toISOString());
       }
@@ -176,6 +189,14 @@ export class NewsRuntime {
         if (t.timestamp > this.latestTs) this.latestTs = t.timestamp;
       }
 
+      if (this.archive && fresh.length > 0) {
+        try {
+          this.archive.record(fresh);
+        } catch (err: unknown) {
+          this.log?.warn?.({ err: String(err) }, 'news archive record failed');
+        }
+      }
+
       if (fresh.length > 0) {
         const seen = new Set(this.items.map((i) => i.id));
         const dedup = fresh.filter((i) => !seen.has(i.id));
@@ -198,9 +219,15 @@ export class NewsRuntime {
 export function createNewsRuntimeFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   log?: NewsRuntimeOptions['log'],
+  archive?: NewsArchiveSink,
 ): NewsRuntime | null {
   const baseUrl = env['OP_FEED_BASE_URL'];
   const secret = env['OP_FEED_SECRET'];
   if (!baseUrl || !secret) return null;
-  return new NewsRuntime(log ? { baseUrl, secret, log } : { baseUrl, secret });
+  return new NewsRuntime({
+    baseUrl,
+    secret,
+    ...(log ? { log } : {}),
+    ...(archive ? { archive } : {}),
+  });
 }

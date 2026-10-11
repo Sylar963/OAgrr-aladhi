@@ -65,7 +65,7 @@ describe('NewsRuntime', () => {
 
     const called = (fetchImpl as unknown as { mock: { calls: [string][] } }).mock.calls[0]![0];
     expect(called).toContain('/feed/SECRET/twitter');
-    expect(called).toContain('limit=50');
+    expect(called).toContain('limit=200');
     expect(called).not.toContain('since=');
   });
 

@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 
-const { getItemsMock } = vi.hoisted(() => ({ getItemsMock: vi.fn() }));
+const { getItemsMock, pageMock } = vi.hoisted(() => ({ getItemsMock: vi.fn(), pageMock: vi.fn() }));
 
 vi.mock('../services.js', () => ({
   get newsService() {
     return { getItems: getItemsMock };
+  },
+  get newsArchive() {
+    return { page: pageMock };
   },
 }));
 
@@ -87,5 +90,47 @@ describe('GET /news', () => {
     const res = await app.inject({ method: 'GET', url: '/news' });
     expect(res.headers).not.toMatchObject({ 'x-op-secret': expect.anything() });
     expect(res.body).not.toMatch(/op[-_]?secret/i);
+  });
+});
+
+describe('GET /news/archive', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeAll(async () => {
+    app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    pageMock.mockReset();
+    pageMock.mockResolvedValue({ items: [], nextCursor: null });
+  });
+
+  it('defaults to the latest window', async () => {
+    const res = await app.inject({ method: 'GET', url: '/news/archive' });
+    expect(res.statusCode).toBe(200);
+    expect(pageMock).toHaveBeenCalledWith({ window: 'latest', cursor: null, limit: 48 });
+  });
+
+  it('passes window, cursor and limit through', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/news/archive?window=7d&cursor=1791685342000:abc&limit=20',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(pageMock).toHaveBeenCalledWith({
+      window: '7d',
+      cursor: '1791685342000:abc',
+      limit: 20,
+    });
+  });
+
+  it.each(['window=2d', 'cursor=nope', 'limit=0', 'limit=500'])('rejects %s', async (query) => {
+    const res = await app.inject({ method: 'GET', url: `/news/archive?${query}` });
+    expect(res.statusCode).toBe(400);
+    expect(pageMock).not.toHaveBeenCalled();
   });
 });

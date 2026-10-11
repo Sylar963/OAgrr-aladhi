@@ -177,7 +177,7 @@ const FIRST_FLUSH_DELAY_MS = 60_000;
 const FLUSH_RETRY_MS = 15 * 60_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
-function describeError(err: unknown): string {
+export function describeError(err: unknown): string {
   if (err instanceof AggregateError && err.errors.length > 0) {
     return `${String(err)}: ${err.errors.map((inner: unknown) => String(inner)).join('; ')}`;
   }
@@ -285,7 +285,7 @@ function decodeJsonLine<T>(
   }
 }
 
-function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
+export function appendJsonLines<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   if (rows.length === 0) return;
   ensureCacheDir(path);
   const descriptor = openSync(path, 'a');
@@ -305,7 +305,7 @@ export function rewriteJsonLines<T>(path: string, rows: T[], encode: (row: T) =>
   writeJsonLinesAtomically(path, rows, encode);
 }
 
-function rewriteOutbox<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
+export function rewriteOutbox<T>(path: string, rows: T[], encode: (row: T) => unknown): void {
   writeJsonLinesAtomically(path, rows, encode);
 }
 

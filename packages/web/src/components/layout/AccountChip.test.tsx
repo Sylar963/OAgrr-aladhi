@@ -11,7 +11,12 @@ const accountSession = {
   endSession: vi.fn(async () => {}),
 };
 
+const clerkUser = {
+  user: null as { primaryEmailAddress: { emailAddress: string } | null } | null,
+};
+
 vi.mock('@clerk/react', () => ({
+  useUser: () => clerkUser,
   SignInButton: ({ children }: { children?: ReactElement }) => (
     <div data-testid="sign-in-button">{children ?? 'Sign in'}</div>
   ),
@@ -40,6 +45,8 @@ describe('AccountChip', () => {
     accountSession.status = 'signed_out';
     accountSession.accountId = null;
     accountSession.userId = null;
+    clerkUser.user = null;
+    localStorage.clear();
     useAppStore.getState().clearAccountSession();
   });
 
@@ -62,6 +69,44 @@ describe('AccountChip', () => {
     expect(screen.getByText('Venue connections')).toBeDefined();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeDefined();
     expect(screen.getByText('Derive')).toBeDefined();
+  });
+
+  it('labels the chip with the signed-in email', () => {
+    accountSession.status = 'ready';
+    accountSession.accountId = 'acct_1';
+    accountSession.userId = 'user_1';
+    clerkUser.user = { primaryEmailAddress: { emailAddress: 'trader@example.com' } };
+    useAppStore.getState().activateAccountSession('acct_1', []);
+
+    render(wrap(<AccountChip />));
+
+    expect(screen.getByRole('button', { name: /trader@example\.com/ })).toBeDefined();
+    expect(screen.queryByText(/acct acct_1/)).toBeNull();
+  });
+
+  it('lets the user replace the email with a custom name and reset it', () => {
+    accountSession.status = 'ready';
+    accountSession.accountId = 'acct_1';
+    accountSession.userId = 'user_1';
+    clerkUser.user = { primaryEmailAddress: { emailAddress: 'trader@example.com' } };
+    useAppStore.getState().activateAccountSession('acct_1', []);
+
+    render(wrap(<AccountChip />));
+    fireEvent.click(screen.getByRole('button', { name: /customize account name/i }));
+    const input = screen.getByRole('textbox', { name: /account display name/i });
+    fireEvent.change(input, { target: { value: 'Roberto' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByRole('button', { name: /roberto/i })).toBeDefined();
+    expect(localStorage.getItem('accountDisplayName:user_1')).toBe('Roberto');
+
+    fireEvent.click(screen.getByRole('button', { name: /customize account name/i }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /account display name/i }), {
+      key: 'Enter',
+    });
+
+    expect(screen.getByRole('button', { name: /trader@example\.com/ })).toBeDefined();
+    expect(localStorage.getItem('accountDisplayName:user_1')).toBeNull();
   });
 
   it('does not expose venue controls while an account is loading', () => {

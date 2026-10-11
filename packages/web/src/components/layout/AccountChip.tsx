@@ -1,4 +1,4 @@
-import { SignInButton } from '@clerk/react';
+import { SignInButton, useUser } from '@clerk/react';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import { VENUES } from '@lib/venue-meta';
@@ -16,6 +16,26 @@ import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
 import styles from './AccountChip.module.css';
 
 type Mode = 'home' | 'paste';
+
+const DISPLAY_NAME_KEY_PREFIX = 'accountDisplayName:';
+
+function readDisplayName(userId: string | null): string | null {
+  if (userId == null) return null;
+  try {
+    return localStorage.getItem(DISPLAY_NAME_KEY_PREFIX + userId);
+  } catch {
+    return null;
+  }
+}
+
+function writeDisplayName(userId: string, name: string | null): void {
+  try {
+    if (name == null) localStorage.removeItem(DISPLAY_NAME_KEY_PREFIX + userId);
+    else localStorage.setItem(DISPLAY_NAME_KEY_PREFIX + userId, name);
+  } catch {
+    // storage unavailable: the name lasts for this page load only
+  }
+}
 
 const CONNECTABLE_VENUE_IDS = VENUE_IDS.filter(
   (venue) => PRIVATE_ADAPTER_SPECS[venue].status === 'available',
@@ -42,6 +62,9 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   const accountSession = useAccountSession();
   const isAccountReady = accountSession.status === 'ready';
   const isSignedOut = accountSession.status === 'signed_out';
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? null;
+  const userId = accountSession.userId;
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('home');
@@ -51,7 +74,30 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(() => readDisplayName(userId));
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDisplayName(readDisplayName(userId));
+    setEditingName(false);
+  }, [userId]);
+
+  const startEditingName = () => {
+    setOpen(false);
+    setNameDraft('');
+    setEditingName(true);
+  };
+
+  const commitName = () => {
+    if (userId == null) return;
+    const trimmed = nameDraft.trim();
+    const next = trimmed.length > 0 ? trimmed : null;
+    writeDisplayName(userId, next);
+    setDisplayName(next);
+    setEditingName(false);
+  };
 
   const refresh = () => {
     void qc.invalidateQueries();
@@ -89,6 +135,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   }, [isAccountReady, isSignedOut, open, pasteTarget]);
 
   const acctShort = accountId != null ? accountId.slice(0, 8) : '';
+  const accountLabel = displayName ?? email ?? `acct ${acctShort}`;
   const configuredVenues = useMemo(
     () => VENUE_IDS.filter((venue) => configuredVenueIds.includes(venue)),
     [configuredVenueIds],
@@ -170,20 +217,55 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
 
   return (
     <div className={styles.wrap} ref={wrapRef} data-tour="account">
-      <button
-        type="button"
-        className={styles.chip}
-        data-signed-in={isAccountReady || undefined}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-      >
-        <span className={styles.dot} />
-        {isSignedOut ? 'Sign in' : accountId ? `acct ${acctShort}` : 'Account loading'}
-        {configuredVenues.length > 0 && (
-          <span className={styles.venueBadge}>+{configuredVenues.length}</span>
+      <div className={styles.chip} data-signed-in={isAccountReady || undefined}>
+        {editingName ? (
+          <>
+            <span className={styles.dot} />
+            <input
+              className={styles.nameInput}
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitName();
+                if (e.key === 'Escape') setEditingName(false);
+              }}
+              onBlur={commitName}
+              placeholder={email ?? 'Your name'}
+              aria-label="Account display name"
+              maxLength={40}
+              autoFocus
+            />
+          </>
+        ) : (
+          <button
+            type="button"
+            className={styles.chipMain}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            title={accountId != null ? accountLabel : undefined}
+          >
+            <span className={styles.dot} />
+            <span className={styles.chipLabel}>
+              {isSignedOut ? 'Sign in' : accountId ? accountLabel : 'Account loading'}
+            </span>
+            {configuredVenues.length > 0 && (
+              <span className={styles.venueBadge}>+{configuredVenues.length}</span>
+            )}
+          </button>
         )}
-      </button>
+        {isAccountReady && !editingName && (
+          <button
+            type="button"
+            className={styles.chipEdit}
+            onClick={startEditingName}
+            aria-label="Customize account name"
+            title="Customize account name"
+          >
+            ×
+          </button>
+        )}
+      </div>
       {open && (
         <div className={styles.popover} role="dialog">
           {mode === 'home' && (
@@ -209,7 +291,10 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                         Sign out
                       </button>
                     )}
-                    {accountId != null && <div className={styles.value}>{accountId}</div>}
+                    <div>
+                      {email != null && <div className={styles.value}>{email}</div>}
+                      {accountId != null && <div className={styles.hint}>{accountId}</div>}
+                    </div>
                   </div>
                 )}
               </div>

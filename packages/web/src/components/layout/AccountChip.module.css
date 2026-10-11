@@ -14,12 +14,69 @@
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
   padding: 4px 10px;
-  cursor: pointer;
 }
 
 .chip:hover {
   border-color: #50d2c1;
   color: #e0e0e0;
+}
+
+.chipMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chipLabel {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipEdit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: -4px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.chipEdit:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nameInput {
+  width: 160px;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  color: #e0e0e0;
+  font: inherit;
+}
+
+.nameInput::placeholder {
+  color: #666;
 }
 
 .chip[data-signed-in] {

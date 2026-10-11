@@ -70,4 +70,22 @@ describe('AccountChip', () => {
     fireEvent.click(screen.getByRole('button', { name: /account loading/i }));
     expect(screen.queryByText('Venue connections')).toBeNull();
   });
+
+  it('"Take the tour" starts the tour and closes the menu', () => {
+    useAppStore.setState({ tourActive: false, tourStep: 0 });
+    render(wrap(<AccountChip />));
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.click(screen.getByText('Take the tour'));
+    expect(useAppStore.getState().tourActive).toBe(true);
+    expect(screen.queryByText('Take the tour')).toBeNull();
+  });
+
+  it('"Keyboard shortcuts" calls onOpenShortcuts and closes the menu', () => {
+    const onOpenShortcuts = vi.fn();
+    render(wrap(<AccountChip onOpenShortcuts={onOpenShortcuts} />));
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.click(screen.getByText(/Keyboard shortcuts/));
+    expect(onOpenShortcuts).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/Keyboard shortcuts/)).toBeNull();
+  });
 });

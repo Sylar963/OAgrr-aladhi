@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 
+export function formatLatency(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+  return formatAgo(ms).replace(' ago', '');
+}
+
 function formatAgo(ms: number): string {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s ago`;
@@ -35,13 +41,12 @@ export default function FreshnessLabel() {
     return <span aria-live="polite">disconnected</span>;
   }
 
-  // Live feed: show raw server→client latency in ms — the pro signal.
   if (connectionState === 'live' && staleMs != null) {
-    return <span>{`${staleMs}ms`}</span>;
+    return <span>{formatLatency(staleMs)}</span>;
   }
 
   // Degraded: fall back to coarse "updated Xs ago" so users see the feed is stuck.
   if (lastUpdateMs == null) return <span>no data</span>;
   const age = Date.now() - lastUpdateMs;
-  return <span>{`updated ${formatAgo(age)}`}</span>;
+  return <span>{formatAgo(age)}</span>;
 }

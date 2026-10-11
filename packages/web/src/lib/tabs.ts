@@ -10,25 +10,30 @@ export type TabId =
   | 'gex'
   | 'news';
 
+export type TabGroup = 'market' | 'trade' | 'research';
+
 export interface TabDef {
   id: TabId;
   label: string;
   slug: string;
   icon: string;
-  badge?: string;
+  group: TabGroup;
+  badge?: 'NEW' | 'LIVE';
 }
 
+export const TAB_GROUPS: readonly TabGroup[] = ['market', 'trade', 'research'];
+
 export const TABS: readonly TabDef[] = [
-  { id: 'chain', label: 'Chain', slug: 'chain', icon: '⟐' },
-  { id: 'alpha', label: 'Alpha', slug: 'alpha', icon: 'α', badge: 'NEW' },
-  { id: 'architect', label: 'Builder', slug: 'builder', icon: '⚙' },
-  { id: 'trading', label: 'Paper', slug: 'paper', icon: '$' },
-  { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', icon: 'Σ', badge: 'NEW' },
-  { id: 'surface', label: 'Volatility', slug: 'volatility', icon: '◈' },
-  { id: 'flow', label: 'Flow', slug: 'flow', icon: '⚡', badge: 'LIVE' },
-  { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎' },
-  { id: 'gex', label: 'GEX', slug: 'gex', icon: '▧' },
-  { id: 'news', label: 'News', slug: 'news', icon: '▤', badge: 'NEW' },
+  { id: 'chain', label: 'Chain', slug: 'chain', icon: '⟐', group: 'market' },
+  { id: 'surface', label: 'Volatility', slug: 'volatility', icon: '◈', group: 'market' },
+  { id: 'gex', label: 'GEX', slug: 'gex', icon: '▧', group: 'market' },
+  { id: 'flow', label: 'Flow', slug: 'flow', icon: '⚡', group: 'market', badge: 'LIVE' },
+  { id: 'architect', label: 'Builder', slug: 'builder', icon: '⚙', group: 'trade' },
+  { id: 'trading', label: 'Paper', slug: 'paper', icon: '$', group: 'trade' },
+  { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', icon: 'Σ', group: 'trade', badge: 'NEW' },
+  { id: 'alpha', label: 'Alpha', slug: 'alpha', icon: 'α', group: 'research', badge: 'NEW' },
+  { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎', group: 'research' },
+  { id: 'news', label: 'News', slug: 'news', icon: '▤', group: 'research', badge: 'NEW' },
 ] as const;
 
 export const DEFAULT_TAB: TabId = 'chain';

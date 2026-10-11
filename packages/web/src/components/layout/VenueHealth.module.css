@@ -1,0 +1,131 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.pill {
+  --health: var(--color-profit);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.pill:hover,
+.pill[aria-expanded="true"] {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.pill[data-level="warn"] {
+  --health: var(--color-warning);
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+.pill[data-level="bad"] {
+  --health: var(--color-loss);
+  color: var(--color-loss);
+  border-color: color-mix(in srgb, var(--color-loss) 45%, transparent);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--health);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--health) 60%, transparent);
+}
+
+.sep {
+  color: var(--text-dim);
+}
+
+.freshness {
+  min-width: 5ch;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 200px;
+  padding: var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.row {
+  --state: var(--color-profit);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+}
+
+.row[data-state="reconnecting"] {
+  --state: var(--color-warning);
+}
+
+.row[data-state="failed"] {
+  --state: var(--color-loss);
+}
+
+.row[data-state="inactive"] {
+  --state: var(--text-disabled);
+  color: var(--text-dim);
+}
+
+.rowDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state);
+}
+
+.rowLabel {
+  flex: 1;
+}
+
+.rowState {
+  color: var(--state);
+}
+
+.row[data-state="inactive"] .rowState {
+  color: var(--text-dim);
+}
+
+@media (max-width: 768px) {
+  .sep,
+  .freshness {
+    display: none;
+  }
+}

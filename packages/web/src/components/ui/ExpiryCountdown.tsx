@@ -7,6 +7,7 @@ import { useAppStore } from '@stores/app-store';
 import styles from './ExpiryCountdown.module.css';
 
 const DROPDOWN_LIMIT = 8;
+const URGENT_MS = 3600 * 1000;
 
 const pad = (n: number) => n.toString().padStart(2, '0');
 
@@ -62,7 +63,7 @@ export default function ExpiryCountdown() {
 
   // Recompute on `now` tick — useMemo keyed on now forces re-render each second.
   const nearestTte = timeToExpiry(nearest.expiry, nearest.expiryTs);
-  const urgent = !nearestTte.expired && nearestTte.totalMs < 6 * 3600 * 1000;
+  const urgent = !nearestTte.expired && nearestTte.totalMs < URGENT_MS;
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
@@ -87,7 +88,7 @@ export default function ExpiryCountdown() {
           {upcoming.map((item, idx) => {
             const tte = timeToExpiry(item.expiry, item.expiryTs);
             const dte = dteDays(item.expiry, item.expiryTs);
-            const isUrgent = !tte.expired && tte.totalMs < 6 * 3600 * 1000;
+            const isUrgent = !tte.expired && tte.totalMs < URGENT_MS;
             const tag = idx === 0 ? '0DTE' : idx === 1 ? '1DTE' : `${dte}d`;
             return (
               <button

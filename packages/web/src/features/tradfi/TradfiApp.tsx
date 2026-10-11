@@ -1,3 +1,4 @@
+import AssetModeToggle from '@components/layout/AssetModeToggle';
 import { Spinner } from '@components/ui';
 import { type TradfiPage, useAppStore } from '@stores/app-store';
 import { lazy, Suspense } from 'react';
@@ -21,7 +22,6 @@ const PAGES: ReadonlyArray<[TradfiPage, string]> = [
 ];
 
 export default function TradfiApp() {
-  const setAssetMode = useAppStore((s) => s.setAssetMode);
   const underlying = useAppStore((s) => s.tradfiUnderlying);
   const setUnderlying = useAppStore((s) => s.setTradfiUnderlying);
   const page = useAppStore((s) => s.tradfiPage);
@@ -32,10 +32,7 @@ export default function TradfiApp() {
   return (
     <div className={styles.root} data-mode="tradfi">
       <header className={styles.bar}>
-        <button className={styles.back} onClick={() => setAssetMode('crypto')}>
-          ← oggregator
-        </button>
-        <span className={styles.brand}>TRADFI</span>
+        <AssetModeToggle />
         <nav className={styles.pageNav}>
           {PAGES.map(([id, label]) => (
             <button

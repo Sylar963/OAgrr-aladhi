@@ -19,15 +19,15 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     target: 'venue-status',
     title: 'Venue status',
-    body: "Live feed health per venue. If it degrades, a status banner tells you what's happening.",
+    body: "Live venue count and feed latency. Click for per-venue status; if it degrades, a banner tells you what's happening.",
   },
   {
     target: 'account',
     title: 'Account',
-    body: 'Connect paper trading and track a live portfolio.',
+    body: 'Connect paper trading, track a live portfolio, and find help.',
   },
   {
     title: "That's the tour",
-    body: 'Reopen it anytime from the ? menu. Press ? for shortcuts.',
+    body: 'Reopen it anytime from the account menu. Press ? for shortcuts.',
   },
 ];

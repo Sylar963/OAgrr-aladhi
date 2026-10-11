@@ -42,8 +42,7 @@
   font-weight: 500;
   letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
-  color: var(--color-warning);
-  text-shadow: 0 0 4px color-mix(in srgb, var(--color-warning) 40%, transparent);
+  color: var(--text-secondary);
 }
 
 .digital[data-urgent="true"] {

@@ -2,7 +2,7 @@ import { SystemNotifications } from '@components/notifications';
 import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
-import type { TabId } from '@lib/tabs';
+import type { TabDef, TabId } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -32,16 +32,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
 }
 
-interface Tab {
-  id: string;
-  label: string;
-  badge?: string;
-}
-
 interface AppShellProps {
   children: ReactNode;
   underlyings: string[];
-  tabs: readonly Tab[];
+  tabs: readonly TabDef[];
 }
 
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {

@@ -28,7 +28,12 @@ function emptyVenueFields(venue: VenueId): Record<VenueCredentialFieldKey, strin
   return fields as Record<VenueCredentialFieldKey, string>;
 }
 
-export default function AccountChip() {
+interface AccountChipProps {
+  onOpenShortcuts?: () => void;
+}
+
+export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
+  const startTour = useAppStore((s) => s.startTour);
   const accountId = useAppStore((s) => s.accountId);
   const configuredVenueIds = useAppStore((state) => state.configuredVenueIds);
   const markVenueConfigured = useAppStore((state) => state.markVenueConfigured);
@@ -260,6 +265,32 @@ export default function AccountChip() {
                   )}
                 </div>
               )}
+              <div className={styles.divider} />
+              <div className={styles.section}>
+                <div className={styles.label}>Help</div>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    setOpen(false);
+                    startTour();
+                  }}
+                >
+                  Take the tour
+                </button>
+                {onOpenShortcuts && (
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      setOpen(false);
+                      onOpenShortcuts();
+                    }}
+                  >
+                    Keyboard shortcuts <kbd className={styles.kbd}>?</kbd>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

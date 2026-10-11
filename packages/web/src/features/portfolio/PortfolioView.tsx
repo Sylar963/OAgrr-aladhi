@@ -259,6 +259,7 @@ export default function PortfolioView() {
           />
           <MarketMovement positions={positions} />
           <PortfolioVegaCurve
+            positions={positions}
             byStrike={metrics?.byStrike ?? []}
             breakEven={metrics?.breakEven ?? []}
             spotUsd={metrics?.pnlCurve.currentSpotUsd ?? null}

@@ -173,6 +173,21 @@ paper/manual legs, are shown as unattributed rather than estimated. The yellow "
 sits at the fitted ATM/skew drift since entry, so its value is the vol part only. A large
 open P&L next to a small vol part means spot and time made the P&L, not IV.
 
+## Greek profile across spot ("Where does my risk live?" curve view)
+
+Engineering derivation, not a book formula. The curve view reprices the selected expiry's
+legs with Black-76 on a spot grid, using spot as the forward (r = 0). The grid spans the
+strikes and spot, padded by about 2.5σ√T (10–60% of spot). Each leg keeps its live IV at
+every price, which is a **sticky-strike** assumption: no smile dynamics and no spot–vol
+correlation. Lines are now, halfway to expiry, and one day before expiry, all at today's
+IV. They show gamma and theta peaking at the strike as time passes, not a forecast. Units
+match the per-strike rows: delta in underlying units, gamma as delta change per 1% spot,
+vega in $ per vol point, theta in $ per day, vanna in delta per vol point. Vol convexity
+plots P&L against a parallel IV shift (±20 points). It compares full repricing with the
+vega-only line, and the gap between them is volga. At spot, the model Greeks can differ a
+little from the venue Greeks behind the strike bars, because of forward basis and venue
+models. The bars are kept as the "By strike" view, which shows each strike's share.
+
 ## Short ATM straddle: model and gates (Sell Straddle tab)
 
 Engineering derivation, per 1 underlying unit, same venue, same strike K and expiry, linear

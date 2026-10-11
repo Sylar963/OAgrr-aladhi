@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
-import type { BreakEvenIvRow, VegaByStrikeRow } from '@oggregator/protocol';
+import type { BreakEvenIvRow, PositionLeg, VegaByStrikeRow } from '@oggregator/protocol';
 
+import GreekProfileChart, { type ProfileLine } from './GreekProfileChart';
+import { buildProfileLegs, buildSpotProfile, buildVolShockProfile } from './greek-profile';
 import { buildStrikeRiskBuckets, type StrikeRiskMode } from './strike-risk';
 import styles from './PortfolioVegaCurve.module.css';
 
@@ -40,10 +42,14 @@ interface ModeMeta {
   question: string;
   scenario: string;
   axis: string;
+  profileAxis: string;
   lesson: string;
 }
 
+type ChartView = 'curve' | 'strikes';
+
 interface Props {
+  positions: PositionLeg[];
   byStrike: VegaByStrikeRow[];
   breakEven: BreakEvenIvRow[];
   spotUsd: number | null;
@@ -68,6 +74,7 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'What is my position worth if spot moves?',
     scenario: 'Spot +1%',
     axis: 'estimated P&L for a +1% spot move',
+    profileAxis: 'Net delta at each spot price: the perp position your options behave like',
     lesson: 'Delta is your options book expressed as a perp position right now.',
   },
   vega: {
@@ -76,6 +83,7 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'What happens if implied volatility rises?',
     scenario: 'IV +1 point',
     axis: 'estimated P&L for a +1 vol-point IV move',
+    profileAxis: 'Dollars gained per +1 vol point of IV, at each spot price',
     lesson: 'A vol point means 60% IV moving to 61%, not a 1% relative change.',
   },
   gamma: {
@@ -84,6 +92,7 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'Does a large spot move help or hurt?',
     scenario: 'Spot ±5%',
     axis: 'curvature P&L for a ±5% spot move',
+    profileAxis: 'Delta change for a 1% spot move, at each spot price',
     lesson:
       'Gamma is the extra curvature beyond your current delta. It has the same sign up or down.',
   },
@@ -93,6 +102,7 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'Am I paying or collecting time decay?',
     scenario: '24 hours pass',
     axis: 'estimated P&L after 24 hours with spot and IV unchanged',
+    profileAxis: 'Dollars of daily decay at each spot price',
     lesson:
       'Theta is the rent on convexity: long options pay it daily, short options collect it. Positive theta usually means short gamma.',
   },
@@ -102,6 +112,7 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'How does an IV move change my perp hedge?',
     scenario: 'IV +5 points',
     axis: 'change in underlying delta after IV rises 5 points',
+    profileAxis: 'Delta change per +1 vol point of IV, at each spot price',
     lesson:
       'Vanna does not directly show P&L; it shows how much your directional hedge can drift as IV changes.',
   },
@@ -111,6 +122,8 @@ const MODE_META: Record<StrikeRiskMode, ModeMeta> = {
     question: 'Does a large IV move add hidden curvature?',
     scenario: 'IV ±5 points',
     axis: 'second-order P&L for a ±5 vol-point IV move',
+    profileAxis:
+      'P&L for a parallel IV shift: full repricing against the vega-only line. The gap is volga.',
     lesson: 'Volga is to volatility what gamma is to spot: the second-order effect after vega.',
   },
 };
@@ -163,6 +176,45 @@ function fmtStrike(value: number): string {
   return value.toLocaleString(undefined, {
     maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
   });
+}
+
+function stepDigits(step: number): number {
+  if (!(step > 0)) return 0;
+  const magnitude = Math.floor(Math.log10(step));
+  const fractionalMantissa = !Number.isInteger(Number((step / 10 ** magnitude).toFixed(6)));
+  return Math.max(0, Math.min(8, -magnitude + (fractionalMantissa ? 1 : 0)));
+}
+
+function isUsdProfile(mode: StrikeRiskMode): boolean {
+  return mode === 'vega' || mode === 'theta' || mode === 'volga';
+}
+
+function profileTick(mode: StrikeRiskMode, value: number, step: number): string {
+  const digits = stepDigits(step);
+  if (isUsdProfile(mode)) return fmtAxisUsd(value, digits);
+  if (value === 0) return '0';
+  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
+}
+
+function profileValue(mode: StrikeRiskMode, value: number, underlying: string): string {
+  switch (mode) {
+    case 'delta':
+      return `${fmtSignedNumber(value)} ${underlying}`;
+    case 'gamma':
+      return `${fmtSignedNumber(value)} Δ / 1%`;
+    case 'vega':
+      return `${fmtUsd(value)} / vol pt`;
+    case 'theta':
+      return `${fmtUsd(value)} / day`;
+    case 'vanna':
+      return `${fmtSignedNumber(value, 6)} Δ / vol pt`;
+    case 'volga':
+      return fmtUsd(value);
+  }
+}
+
+function fmtVolShift(value: number): string {
+  return value === 0 ? 'IV now' : `IV ${value > 0 ? '+' : ''}${fmtNumber(value)} pts`;
 }
 
 function fmtIv(value: number | null | undefined): string {
@@ -247,8 +299,15 @@ function actionLabel(mode: StrikeRiskMode): string {
   return mode === 'delta' ? 'Perp hedge to flatten' : 'Practical action';
 }
 
-export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, underlying }: Props) {
+export default function PortfolioVegaCurve({
+  positions,
+  byStrike,
+  breakEven,
+  spotUsd,
+  underlying,
+}: Props) {
   const [mode, setMode] = useState<StrikeRiskMode>('delta');
+  const [view, setView] = useState<ChartView>('curve');
   const [expiry, setExpiry] = useState<string | null>(null);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [stickyByStrike, setStickyByStrike] = useState<VegaByStrikeRow[] | null>(null);
@@ -365,6 +424,45 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
   }, [activeStrike, buckets, chart]);
   const yTickDigits = chart == null ? 2 : usdDigits(chart.maxAbs);
 
+  const profileLegs = useMemo(
+    () => buildProfileLegs(positions, displayBreakEven, activeExpiry),
+    [activeExpiry, displayBreakEven, positions],
+  );
+  const mixedUnderlyings =
+    new Set(
+      positions.filter((leg) => leg.expiry === activeExpiry).map((leg) => leg.underlying),
+    ).size > 1;
+  const curveUnavailableReason =
+    spotUsd == null || !(spotUsd > 0)
+      ? 'Live spot is missing, so the curve cannot be drawn.'
+      : mixedUnderlyings
+        ? 'Select one underlying to draw its curve.'
+        : profileLegs.legs.length === 0
+          ? 'No leg in this expiry has a live IV to reprice with.'
+          : null;
+  const activeView: ChartView = curveUnavailableReason == null ? view : 'strikes';
+
+  const profile = useMemo(() => {
+    if (curveUnavailableReason != null || spotUsd == null) return null;
+    const nowMs = Date.now();
+    if (mode === 'volga') {
+      const shock = buildVolShockProfile(profileLegs.legs, spotUsd, nowMs);
+      const lines: ProfileLine[] = [
+        { label: 'Full reprice', values: shock.fullPnlUsd, emphasis: 1 },
+        { label: 'Vega only', values: shock.vegaOnlyPnlUsd, emphasis: 0.5, dashed: true },
+      ];
+      return { xs: shock.shiftsVolPts, lines };
+    }
+    const spot = buildSpotProfile(profileLegs.legs, mode, spotUsd, nowMs);
+    const lines: ProfileLine[] = spot.series.map((series, index) => ({
+      label: series.label,
+      values: series.values,
+      emphasis: index === 0 ? 1 : index === 1 ? 0.55 : 0.32,
+      dashed: index > 0,
+    }));
+    return { xs: spot.prices, lines };
+  }, [curveUnavailableReason, mode, profileLegs, spotUsd]);
+
   const activeBreakEvenRows = useMemo(() => {
     if (activeExpiry == null || activeStrike == null) return [];
     return displayBreakEven
@@ -471,29 +569,109 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
           </div>
 
           <div className={styles.chartHeader}>
-            <div>
-              <span className={styles.chartTitle}>Risk concentration by strike</span>
-              <span className={styles.chartAxis}>
-                Bars show{' '}
-                {spotUsd == null && (mode === 'delta' || mode === 'gamma')
-                  ? `raw ${meta.greek}`
-                  : meta.axis}
-              </span>
-            </div>
-            <div className={styles.legend}>
-              <span>
-                <i className={styles.gainSwatch} />
-                gains
-              </span>
-              <span>
-                <i className={styles.lossSwatch} />
-                loses
-              </span>
+            {activeView === 'curve' ? (
+              <div>
+                <span className={styles.chartTitle}>
+                  {mode === 'volga' ? 'P&L across IV shocks' : 'Risk profile across spot'}
+                </span>
+                <span className={styles.chartAxis}>{meta.profileAxis}</span>
+                <span className={styles.chartAxis}>
+                  Black-76, each leg keeps its live IV (sticky strike)
+                  {profileLegs.excluded > 0 &&
+                    ` · ${profileLegs.excluded} leg${profileLegs.excluded === 1 ? '' : 's'} without IV left out`}
+                </span>
+              </div>
+            ) : (
+              <div>
+                <span className={styles.chartTitle}>Risk concentration by strike</span>
+                <span className={styles.chartAxis}>
+                  Bars show{' '}
+                  {spotUsd == null && (mode === 'delta' || mode === 'gamma')
+                    ? `raw ${meta.greek}`
+                    : meta.axis}
+                </span>
+              </div>
+            )}
+            <div className={styles.chartControls}>
+              <div className={styles.legend}>
+                {activeView === 'curve' && profile != null ? (
+                  profile.lines.map((line) => (
+                    <span key={line.label}>
+                      <i
+                        className={styles.lineSwatch}
+                        data-dashed={line.dashed || undefined}
+                        style={{ opacity: line.emphasis }}
+                      />
+                      {line.label}
+                    </span>
+                  ))
+                ) : (
+                  <>
+                    <span>
+                      <i className={styles.gainSwatch} />
+                      gains
+                    </span>
+                    <span>
+                      <i className={styles.lossSwatch} />
+                      loses
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className={styles.viewToggle} aria-label="Chart view">
+                <button
+                  type="button"
+                  aria-pressed={activeView === 'curve'}
+                  disabled={curveUnavailableReason != null}
+                  title={curveUnavailableReason ?? undefined}
+                  onClick={() => setView('curve')}
+                >
+                  Curve
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={activeView === 'strikes'}
+                  onClick={() => setView('strikes')}
+                >
+                  By strike
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className={styles.chartWrap} data-single={buckets.length === 1 || undefined}>
-            {chart != null && (
+          <div
+            className={styles.chartWrap}
+            data-single={(activeView === 'strikes' && buckets.length === 1) || undefined}
+          >
+            {activeView === 'curve' && profile != null && (
+              <GreekProfileChart
+                xs={profile.xs}
+                lines={profile.lines}
+                color={COLORS[mode]}
+                lossColor={LOSS_COLOR}
+                anchorX={mode === 'volga' ? 0 : spotUsd}
+                anchorLabel={
+                  mode === 'volga' || spotUsd == null
+                    ? 'CURRENT IV'
+                    : `SPOT ${fmtStrike(Math.round(spotUsd))}`
+                }
+                markers={
+                  mode === 'volga'
+                    ? []
+                    : buckets.map((bucket) => ({
+                        strike: bucket.strike,
+                        positive: bucket.scenarioValue >= 0,
+                      }))
+                }
+                activeStrike={activeStrike}
+                onSelectStrike={setSelectedStrike}
+                formatX={mode === 'volga' ? fmtVolShift : (value) => fmtStrike(Math.round(value))}
+                formatTick={(value, step) => profileTick(mode, value, step)}
+                formatValue={(value) => profileValue(mode, value, asset)}
+                stale={isStale}
+              />
+            )}
+            {activeView === 'strikes' && chart != null && (
               <svg
                 viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
                 className={`${styles.svg} ${isStale ? styles.svgStale : ''}`}
@@ -629,7 +807,7 @@ export default function PortfolioVegaCurve({ byStrike, breakEven, spotUsd, under
                 })}
               </svg>
             )}
-            {buckets.length === 1 && (
+            {activeView === 'strikes' && buckets.length === 1 && (
               <span className={styles.singleNote}>
                 One strike only—showing its exposure as a bucket; there is no curve to infer yet.
               </span>

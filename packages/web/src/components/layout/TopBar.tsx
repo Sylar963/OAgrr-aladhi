@@ -28,6 +28,8 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
   // Show the TradFi entry only when its backend is reachable: always in dev
   // (the /tradfi-api proxy), and in prod only once VITE_TRADFI_API_BASE is set.
   const tradfiEnabled = import.meta.env.DEV || Boolean(import.meta.env.VITE_TRADFI_API_BASE);
+  // Aggr live charts (separate app); hidden until VITE_AGGR_URL is set.
+  const aggrUrl = import.meta.env.VITE_AGGR_URL;
 
   return (
     <header className={styles.bar}>
@@ -59,6 +61,17 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
             <FreshnessLabel />
           </span>
         </div>
+        {aggrUrl && (
+          <a
+            className={styles.charts}
+            href={aggrUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Live charts (Aggr)"
+          >
+            CHARTS
+          </a>
+        )}
         {tradfiEnabled && (
           <button className={styles.tradfi} onClick={() => setAssetMode('tradfi')} title="TradFi (TastyTrade)">
             TRADFI

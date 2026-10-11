@@ -9,6 +9,7 @@ export default function MobileNav() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeRef = useRef<HTMLButtonElement | null>(null);
+  const aggrUrl = import.meta.env.VITE_AGGR_URL;
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
@@ -32,6 +33,12 @@ export default function MobileNav() {
           </button>
         );
       })}
+      {aggrUrl && (
+        <a className={styles.tab} href={aggrUrl} target="_blank" rel="noopener noreferrer">
+          <span className={styles.icon}>↗</span>
+          <span className={styles.label}>Charts</span>
+        </a>
+      )}
     </nav>
   );
 }

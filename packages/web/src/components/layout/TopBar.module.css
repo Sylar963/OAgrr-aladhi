@@ -142,6 +142,19 @@
 }
 .tradfi:hover { background: #ffc333; }
 
+.charts {
+  color: var(--accent-primary);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
+.charts:hover { background: color-mix(in srgb, var(--accent-primary) 15%, transparent); }
+
 /* ── Mobile responsive ─────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -167,6 +180,11 @@
 
   /* Hide ⌘K on mobile — not relevant for touch */
   .cmdk {
+    display: none;
+  }
+
+  /* Charts link lives in the bottom MobileNav on phones */
+  .charts {
     display: none;
   }
 

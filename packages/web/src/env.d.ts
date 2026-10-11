@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_TRADFI_API_BASE: string;
   readonly VITE_CLERK_PUBLISHABLE_KEY: string;
   readonly VITE_THALEX_REF_URL: string;
+  readonly VITE_AGGR_URL: string;
 }
 
 interface ImportMeta {

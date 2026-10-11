@@ -44,6 +44,7 @@
     transition: color var(--transition-fast);
     position: relative;
     -webkit-tap-highlight-color: transparent;
+    text-decoration: none;
   }
 
   .tab[data-active="true"] {

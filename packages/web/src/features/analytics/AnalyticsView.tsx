@@ -2,7 +2,7 @@ import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, Spinner, VenuePickerButton } from '@components/ui';
 import { DvolChart } from '@features/dvol';
 import { useAllExpiriesChain } from './queries';
-import VolCurves from './VolCurves';
+import { VolCurves } from './vol-curves';
 import BreakEvenForecast from './BreakEvenForecast';
 import OiSummary from './OiSummary';
 import VenueShare from './VenueShare';

@@ -1,0 +1,237 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.resetBtn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.resetBtn:hover {
+  color: var(--text-primary);
+}
+
+/* ── Legend chips ──────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  opacity: 0.35;
+  transition: opacity var(--transition-fast);
+}
+
+.chip[data-visible="true"] {
+  opacity: 1;
+}
+
+.chipSwatch {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 4px 6px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chipSwatch > span {
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.chipLabel {
+  padding: 2px 0;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chipLabel:hover {
+  color: var(--text-primary);
+}
+
+.chip[data-focused="true"] .chipLabel {
+  color: var(--text-primary);
+  border-bottom-color: currentColor;
+}
+
+/* ── Focus summary ─────────────────────────────────── */
+
+.focusBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.focusStat {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.focusStat b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.focusCrossed {
+  color: var(--color-warning);
+}
+
+/* ── Chart ─────────────────────────────────────────── */
+
+.chart {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.svg {
+  display: block;
+  font-family: var(--font-mono);
+}
+
+.grid {
+  stroke: var(--border-subtle);
+  stroke-opacity: 0.5;
+  stroke-width: 1;
+}
+
+.axisText {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+
+.refLine {
+  stroke: var(--text-tertiary);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.refLabel {
+  fill: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.crosshair {
+  stroke: var(--accent-primary);
+  stroke-opacity: 0.5;
+  stroke-width: 1;
+}
+
+/* ── Tooltip ───────────────────────────────────────── */
+
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  min-width: 170px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.ttHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ttDim {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.ttGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--space-3);
+  margin: 6px 0 0;
+}
+
+.ttGrid dt {
+  color: var(--text-dim);
+}
+
+.ttGrid dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ttCrossed {
+  margin-top: 6px;
+  color: var(--color-warning);
+}
+
+.ttVenues {
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.ttVenues th {
+  color: var(--text-dim);
+  font-weight: 400;
+  text-align: right;
+}
+
+.ttVenues td {
+  padding: 1px 0;
+  text-align: right;
+}
+
+.ttVenues td:first-child {
+  text-align: left;
+  padding-right: var(--space-2);
+}
+
+.ttVenues th + th,
+.ttVenues td + td {
+  padding-left: var(--space-2);
+}
+
+.ttSwatch {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  vertical-align: middle;
+}

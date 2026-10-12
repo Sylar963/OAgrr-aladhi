@@ -27,6 +27,11 @@ const MIN_RECONNECT_INTERVAL_MS = 60 * 1000;
 const BASE_RECONNECT_BACKOFF_MS = 2 * 1000;
 const MAX_RECONNECT_BACKOFF_MS = 60 * 1000;
 
+// Chains nobody has requested for this long are unsubscribed, so browsing many tickers
+// doesn't grow the DXLink subscription set for the life of the process.
+const CHAIN_IDLE_MS = 5 * 60 * 1000;
+const CHAIN_SWEEP_INTERVAL_MS = 60 * 1000;
+
 // Per-chain REST-refresh throttle, so repeated /chains polls can't hammer REST.
 const REFRESH_THROTTLE_MS = 15 * 1000;
 
@@ -64,7 +69,8 @@ export class TradfiFeed {
   private lastDataTs = 0;
   private dx: DxLinkClient | null = null;
   private desired: DxSub[] = [];
-  private subscribedChains = new Set<string>();
+  private subscribedChains = new Map<string, { subs: DxSub[]; lastRequestedAt: number }>();
+  private readonly sweepTimer = setInterval(() => this.evictIdleChains(), CHAIN_SWEEP_INTERVAL_MS);
   private quoteOnly = new Set<string>();
   private tokenTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -168,26 +174,45 @@ export class TradfiFeed {
   /** Rebuild the desired subscription set: underlyings + every requested chain. */
   private rebuildDesired(): void {
     const subs: DxSub[] = [...underlyingSubscriptions([...this.underlyings, ...this.quoteOnly])];
-    for (const key of this.subscribedChains) {
-      const sep = key.indexOf('|');
-      const u = key.slice(0, sep);
-      const e = key.slice(sep + 1);
-      const symbols = this.store.instrumentsFor(u, e).map((i) => i.streamerSymbol);
-      subs.push(...chainSubscriptions(symbols));
-    }
+    for (const chain of this.subscribedChains.values()) subs.push(...chain.subs);
     this.desired = subs;
   }
 
-  /** Subscribe a single chain's symbols on demand (idempotent). Survives reconnects. */
+  /**
+   * Subscribe a single chain's symbols on demand (idempotent) and mark it as in use.
+   * Survives reconnects until it goes unrequested for CHAIN_IDLE_MS.
+   */
   ensureChainSubscribed(underlying: string, expiry: string): void {
     const key = `${underlying}|${expiry}`;
-    if (this.subscribedChains.has(key)) return;
-    this.subscribedChains.add(key);
+    const now = Date.now();
+    const existing = this.subscribedChains.get(key);
+    if (existing != null) {
+      existing.lastRequestedAt = now;
+      return;
+    }
     const symbols = this.store.instrumentsFor(underlying, expiry).map((i) => i.streamerSymbol);
     const subs = chainSubscriptions(symbols);
+    this.subscribedChains.set(key, { subs, lastRequestedAt: now });
     this.rebuildDesired();
     if (subs.length > 0) this.dx?.subscribe(subs);
     log.info({ underlying, expiry, subs: subs.length }, 'chain subscription added');
+  }
+
+  /** Unsubscribe chains not requested within CHAIN_IDLE_MS. Returns how many were dropped. */
+  evictIdleChains(now = Date.now()): number {
+    const dropped: DxSub[] = [];
+    let chains = 0;
+    for (const [key, chain] of this.subscribedChains) {
+      if (now - chain.lastRequestedAt <= CHAIN_IDLE_MS) continue;
+      this.subscribedChains.delete(key);
+      dropped.push(...chain.subs);
+      chains += 1;
+    }
+    if (chains === 0) return 0;
+    this.rebuildDesired();
+    this.dx?.unsubscribe(dropped);
+    log.info({ chains, subs: dropped.length, remaining: this.subscribedChains.size }, 'idle chains unsubscribed');
+    return chains;
   }
 
   /**
@@ -227,6 +252,7 @@ export class TradfiFeed {
   }
 
   async dispose(): Promise<void> {
+    clearInterval(this.sweepTimer);
     if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     await this.dx?.disconnect();

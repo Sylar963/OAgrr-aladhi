@@ -42,7 +42,10 @@ export function wsChainRoute(deps: TradfiDeps) {
         }
         deps.feed.ensureChainSubscribed(underlying, expiry);
         const pusher = new ChainPusher(deps.store, (d) => socket.send(d), underlying, expiry, deps.flowBook);
-        const timer = setInterval(() => pusher.tick(), PUSH_INTERVAL_MS);
+        const timer = setInterval(() => {
+          deps.feed.ensureChainSubscribed(underlying, expiry);
+          pusher.tick();
+        }, PUSH_INTERVAL_MS);
         pusher.tick();
         socket.on('close', () => {
           clearInterval(timer);

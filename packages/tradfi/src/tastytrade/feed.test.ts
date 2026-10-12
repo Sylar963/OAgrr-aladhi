@@ -103,6 +103,29 @@ describe('TradfiFeed (REST)', () => {
     await feed.dispose();
   });
 
+  it('unsubscribes chains nobody requested for 5 minutes, keeping requested ones', async () => {
+    const store = new TradfiStore();
+    const rest = stubRest();
+    rest.getQuoteToken = vi.fn(async () => ({ token: 'QT', dxlinkUrl: 'wss://x', expiresAt: null }));
+    const { fakeDx, factory } = fakeDxFactory();
+    const feed = new TradfiFeed(rest as never, store, ['AAPL'], factory);
+    await feed.loadMarkets();
+    await feed.startStreaming();
+
+    feed.ensureChainSubscribed('AAPL', '2026-04-17');
+    const subs = fakeDx.subscribe.mock.calls[0]![0];
+    expect(feed.evictIdleChains(Date.now() + 4 * 60_000)).toBe(0);
+    expect(fakeDx.unsubscribe).not.toHaveBeenCalled();
+
+    expect(feed.evictIdleChains(Date.now() + 6 * 60_000)).toBe(1);
+    expect(fakeDx.unsubscribe).toHaveBeenCalledWith(subs);
+
+    fakeDx.subscribe.mockClear();
+    feed.ensureChainSubscribed('AAPL', '2026-04-17');
+    expect(fakeDx.subscribe).toHaveBeenCalledWith(subs);
+    await feed.dispose();
+  });
+
   it('streams quote-only symbols without loading their chains', async () => {
     const store = new TradfiStore();
     const rest = stubRest();

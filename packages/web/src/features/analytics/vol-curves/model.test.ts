@@ -7,6 +7,7 @@ import {
   computeYDomain,
   defaultFocus,
   defaultXDomain,
+  formatDays,
   formatDeltaLabel,
   isDefaultVisible,
   medianSpreadVol,
@@ -21,12 +22,14 @@ interface Q {
   askIv?: number | null;
   markIv?: number | null;
   oiUsd?: number;
+  bidUsd?: number;
+  askUsd?: number;
 }
 
 function quote(q: Q): VenueQuote {
   return {
-    bid: q.bidIv != null ? 10 : null,
-    ask: q.askIv != null ? 12 : null,
+    bid: q.bidIv != null ? (q.bidUsd ?? 10) : null,
+    ask: q.askIv != null ? (q.askUsd ?? 12) : null,
     mid: 11,
     midRaw: 11,
     bidSize: 1,
@@ -61,11 +64,16 @@ function strike(
   return { strike: k, call: side(call), put: side(put) } as EnrichedStrike;
 }
 
-function chain(expiry: string, dte: number, strikes: EnrichedStrike[]): EnrichedChainResponse {
+function chain(
+  expiry: string,
+  dte: number,
+  strikes: EnrichedStrike[],
+  expiryTs: number | null = null,
+): EnrichedChainResponse {
   return {
     underlying: 'BTC',
     expiry,
-    expiryTs: null,
+    expiryTs,
     dte,
     stats: {
       forwardPriceUsd: 100_000,
@@ -116,12 +124,12 @@ describe('venueQuotes', () => {
 });
 
 describe('buildSmilePoints', () => {
-  it('uses the OTM contract for bid/ask and flags cross-venue crossed markets', () => {
+  it('uses the OTM contract for bid/ask and flags crosses present in both IV and USD', () => {
     const points = buildSmilePoints(
       [
         strike(90_000, { deribit: { bidIv: 0.9, askIv: 0.95, markIv: 0.92 } }, {
-          deribit: { bidIv: 0.6, askIv: 0.62, markIv: 0.61 },
-          okx: { bidIv: 0.63, askIv: 0.66, markIv: 0.64 },
+          deribit: { bidIv: 0.6, askIv: 0.62, markIv: 0.61, bidUsd: 100, askUsd: 110 },
+          okx: { bidIv: 0.63, askIv: 0.66, markIv: 0.64, bidUsd: 115, askUsd: 125 },
         }),
         strike(110_000, { deribit: { bidIv: 0.5, askIv: 0.52, markIv: 0.51 } }),
       ],
@@ -132,10 +140,45 @@ describe('buildSmilePoints', () => {
     expect(below.side).toBe('put');
     expect(below.bestBid).toEqual({ iv: 0.63, venue: 'okx' });
     expect(below.bestAsk).toEqual({ iv: 0.62, venue: 'deribit' });
-    expect(below.crossed).toBe(true);
+    expect(below.cross).toMatchObject({
+      bidVenue: 'okx',
+      askVenue: 'deribit',
+      bidUsd: 115,
+      askUsd: 110,
+    });
+    expect(below.cross!.ivGap).toBeCloseTo(0.01, 9);
     const above = points.find((p) => p.strike === 110_000)!;
     expect(above.side).toBe('call');
-    expect(above.crossed).toBe(false);
+    expect(above.cross).toBeNull();
+  });
+
+  it('ignores a USD-only cross from inverse/linear conversion differences', () => {
+    const [p] = buildSmilePoints(
+      [
+        strike(110_000, {
+          okx: { bidIv: 0.36, askIv: 0.365, markIv: 0.361, bidUsd: 2110, askUsd: 2140 },
+          bybit: { bidIv: 0.365, askIv: 0.366, markIv: 0.365, bidUsd: 2060, askUsd: 2070 },
+        }),
+      ],
+      100_000,
+      30 / 365,
+    );
+    expect(p!.cross).toBeNull();
+  });
+
+  it('does not flag a cross when only the IVs overlap', () => {
+    const [p] = buildSmilePoints(
+      [
+        strike(110_000, {
+          deribit: { bidIv: 0.5, askIv: 0.52, markIv: 0.51, bidUsd: 100, askUsd: 104 },
+          okx: { bidIv: 0.53, askIv: 0.55, markIv: 0.54, bidUsd: 102, askUsd: 106 },
+        }),
+      ],
+      100_000,
+      30 / 365,
+    );
+    expect(p!.bestBid!.iv).toBeGreaterThan(p!.bestAsk!.iv);
+    expect(p!.cross).toBeNull();
   });
 
   it('places strikes on a delta axis that rises with strike', () => {
@@ -170,7 +213,7 @@ describe('putDeltaAbs', () => {
 describe('curve selection', () => {
   const curves = buildCurves(
     [
-      chain('2026-10-13', 1, smileStrikes()),
+      chain('2026-10-13', 2, smileStrikes(), Date.parse('2026-10-13T08:00:00Z')),
       chain('2026-10-16', 4, smileStrikes()),
       chain('2026-11-06', 25, smileStrikes()),
       chain('2026-12-25', 74, smileStrikes()),
@@ -179,8 +222,9 @@ describe('curve selection', () => {
     Date.parse('2026-10-12T08:00:00Z'),
   );
 
-  it('sorts by tenor and hides sub-2-day expiries by default', () => {
-    expect(curves.map((c) => c.dte)).toEqual([1, 4, 25, 74]);
+  it('hides sub-2-day expiries by real time to expiry, not the rounded dte', () => {
+    expect(curves.map((c) => c.dte)).toEqual([2, 4, 25, 74]);
+    expect(curves[0]!.days).toBeCloseTo(1, 6);
     expect(curves.map(isDefaultVisible)).toEqual([false, true, true, true]);
   });
 
@@ -201,6 +245,7 @@ describe('computeYDomain', () => {
       expiry,
       label: expiry,
       dte: 30,
+      days: 30,
       color: 'hsl(180, 55%, 72%)',
       forward: 100_000,
       atmIv: iv,
@@ -212,7 +257,7 @@ describe('computeYDomain', () => {
         x: null,
         bestBid: { iv: iv - 0.01, venue: 'deribit' },
         bestAsk: { iv: iv + 0.5, venue: 'deribit' },
-        crossed: false,
+        cross: null,
         oiUsd: 0,
         venues: [],
       })),
@@ -243,6 +288,11 @@ describe('formatting helpers', () => {
   it('produces round tick steps', () => {
     expect(niceTicks(80_000, 120_000, 4)).toEqual([80_000, 90_000, 100_000, 110_000, 120_000]);
     expect(niceTicks(1, 0, 4)).toEqual([]);
+  });
+
+  it('formats time to expiry in hours under a day', () => {
+    expect(formatDays(0.25)).toBe('6h');
+    expect(formatDays(26.4)).toBe('26d');
   });
 
   it('reports median spread excluding crossed strikes', () => {

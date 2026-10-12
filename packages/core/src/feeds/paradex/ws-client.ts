@@ -117,9 +117,11 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
       right: d.right,
       inverse: false,
       contractSize: 1,
+      contractMultiplierBase: 1,
       contractValueCurrency: d.base,
       tickSize: this.safeNum(d.tickRaw),
       minQty: this.safeNum(d.stepRaw),
+      lotSize: this.safeNum(d.stepRaw),
       makerFee: this.safeNum(d.makerFeeRaw),
       takerFee: this.safeNum(d.takerFeeRaw),
     };

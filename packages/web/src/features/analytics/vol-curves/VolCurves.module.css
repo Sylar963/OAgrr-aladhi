@@ -193,6 +193,7 @@
 }
 
 .ttCrossed {
+  max-width: 220px;
   margin-top: 6px;
   color: var(--color-warning);
 }

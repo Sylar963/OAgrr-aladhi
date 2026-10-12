@@ -15,6 +15,7 @@ export const ATM_BLEND_HALF_WIDTH = 0.025;
 export const MIN_IV = 0.05;
 export const MAX_IV = 5;
 export const SHORT_DATED_DTE = 2;
+export const CROSS_MIN_IV_GAP = 0.0025;
 export const FOCUS_TARGET_DTE = 30;
 export const DEFAULT_STRIKE_BAND = 0.3;
 export const DEFAULT_DELTA_DOMAIN: [number, number] = [0.03, 0.97];
@@ -33,6 +34,15 @@ export interface VenueBest {
   venue: VenueId;
 }
 
+export interface VenueCross {
+  bidVenue: VenueId;
+  askVenue: VenueId;
+  bidUsd: number;
+  askUsd: number;
+  /** Best bid IV minus best ask IV (fraction). */
+  ivGap: number;
+}
+
 export interface SmilePoint {
   strike: number;
   /** OTM contract that supplies bid/ask and venue dots (put below forward, call above). */
@@ -45,7 +55,8 @@ export interface SmilePoint {
   bestBid: VenueBest | null;
   /** Lowest ask IV across venues for the OTM contract. */
   bestAsk: VenueBest | null;
-  crossed: boolean;
+  /** One venue's bid above another's ask on the same contract, before fees. */
+  cross: VenueCross | null;
   oiUsd: number;
   venues: VenueIv[];
 }
@@ -54,6 +65,8 @@ export interface SmileCurve {
   expiry: string;
   label: string;
   dte: number;
+  /** Fractional days to expiry from expiryTs; falls back to dte. */
+  days: number;
   color: string;
   forward: number | null;
   atmIv: number | null;
@@ -122,13 +135,20 @@ export function blendOtm(
 
 // An averaged bid is not a tradable price; the executable market is the best
 // bid and best ask across venues on the same contract.
+//
+// A cross must show up in IV AND in USD. Inverse (coin-settled) and linear
+// venues convert to USD with different reference prices, so a USD-only cross
+// is often conversion noise; each venue backs IV out of its own forward, so a
+// sub-quarter-vol IV-only cross is rounding noise.
 export function venueQuotes(side: EnrichedSide): {
   venues: VenueIv[];
   bestBid: VenueBest | null;
   bestAsk: VenueBest | null;
+  cross: VenueCross | null;
   oiUsd: number;
 } {
   const venues: VenueIv[] = [];
+  const quotes = new Map<VenueId, VenueQuote>();
   let bestBid: VenueBest | null = null;
   let bestAsk: VenueBest | null = null;
   let oiUsd = 0;
@@ -140,11 +160,26 @@ export function venueQuotes(side: EnrichedSide): {
     const askIv = quote.ask != null && quote.ask > 0 ? saneIv(quote.askIv) : null;
     const markIv = saneIv(quote.markIv);
     if (bidIv == null && askIv == null && markIv == null) continue;
+    quotes.set(venue, quote);
     venues.push({ venue, bidIv, markIv, askIv });
     if (bidIv != null && (bestBid == null || bidIv > bestBid.iv)) bestBid = { iv: bidIv, venue };
     if (askIv != null && (bestAsk == null || askIv < bestAsk.iv)) bestAsk = { iv: askIv, venue };
   }
-  return { venues, bestBid, bestAsk, oiUsd };
+  return { venues, bestBid, bestAsk, cross: findCross(bestBid, bestAsk, quotes), oiUsd };
+}
+
+function findCross(
+  bestBid: VenueBest | null,
+  bestAsk: VenueBest | null,
+  quotes: ReadonlyMap<VenueId, VenueQuote>,
+): VenueCross | null {
+  if (bestBid == null || bestAsk == null || bestBid.venue === bestAsk.venue) return null;
+  const ivGap = bestBid.iv - bestAsk.iv;
+  if (ivGap < CROSS_MIN_IV_GAP) return null;
+  const bidUsd = quotes.get(bestBid.venue)?.bid;
+  const askUsd = quotes.get(bestAsk.venue)?.ask;
+  if (bidUsd == null || askUsd == null || bidUsd <= askUsd) return null;
+  return { bidVenue: bestBid.venue, askVenue: bestAsk.venue, bidUsd, askUsd, ivGap };
 }
 
 export function timeToExpiryYears(
@@ -217,11 +252,7 @@ export function buildSmilePoints(
       x: null,
       bestBid: q.bestBid,
       bestAsk: q.bestAsk,
-      crossed:
-        q.bestBid != null &&
-        q.bestAsk != null &&
-        q.bestBid.venue !== q.bestAsk.venue &&
-        q.bestBid.iv > q.bestAsk.iv,
+      cross: q.cross,
       oiUsd: q.oiUsd,
       venues: q.venues,
     });
@@ -255,6 +286,7 @@ export function buildCurves(
         expiry: chain.expiry,
         label: formatExpiry(chain.expiry),
         dte: chain.dte,
+        days: T != null ? T * 365.25 : chain.dte,
         color: tenorColor(i, sorted.length),
         forward,
         atmIv: chain.stats.atmIv,
@@ -265,14 +297,14 @@ export function buildCurves(
     .filter((curve) => curve.points.filter((p) => p.markIv != null).length > 3);
 }
 
-export function isDefaultVisible(curve: Pick<SmileCurve, 'dte'>): boolean {
-  return curve.dte >= SHORT_DATED_DTE;
+export function isDefaultVisible(curve: Pick<SmileCurve, 'days'>): boolean {
+  return curve.days >= SHORT_DATED_DTE;
 }
 
 export function defaultFocus(curves: readonly SmileCurve[]): string | null {
   let best: SmileCurve | null = null;
   for (const c of curves) {
-    if (best == null || Math.abs(c.dte - FOCUS_TARGET_DTE) < Math.abs(best.dte - FOCUS_TARGET_DTE)) {
+    if (best == null || Math.abs(c.days - FOCUS_TARGET_DTE) < Math.abs(best.days - FOCUS_TARGET_DTE)) {
       best = c;
     }
   }
@@ -378,6 +410,10 @@ export function formatStrikeTick(v: number): string {
   return String(v);
 }
 
+export function formatDays(days: number): string {
+  return days < 1 ? `${Math.max(0, Math.round(days * 24))}h` : `${Math.round(days)}d`;
+}
+
 export function formatDeltaLabel(x: number): string {
   if (Math.abs(x - 0.5) < 0.005) return 'ATM';
   return x < 0.5 ? `${Math.round(x * 100)}Δp` : `${Math.round((1 - x) * 100)}Δc`;
@@ -386,7 +422,7 @@ export function formatDeltaLabel(x: number): string {
 export function medianSpreadVol(points: readonly SmilePoint[]): number | null {
   const spreads: number[] = [];
   for (const p of points) {
-    if (p.bestBid != null && p.bestAsk != null && !p.crossed) {
+    if (p.bestBid != null && p.bestAsk != null && p.cross == null) {
       spreads.push(p.bestAsk.iv - p.bestBid.iv);
     }
   }

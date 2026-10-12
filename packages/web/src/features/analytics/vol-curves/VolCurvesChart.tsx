@@ -1,11 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import { fmtIv, fmtUsdCompact } from '@lib/format';
+import { fmtIv, fmtUsd, fmtUsdCompact } from '@lib/format';
 import { venueColor } from '@lib/colors';
 import { VENUES } from '@lib/venue-meta';
 import {
   DELTA_TICKS,
   computeYDomain,
+  formatDays,
   formatDeltaLabel,
   formatStrikeTick,
   nearestPoint,
@@ -337,8 +338,8 @@ export default function VolCurvesChart({
                         x2={px}
                         y1={bidY}
                         y2={askY}
-                        stroke={p.crossed ? CROSSED_COLOR : 'var(--text-tertiary)'}
-                        strokeWidth={p.crossed ? 2 : 1}
+                        stroke={p.cross ? CROSSED_COLOR : 'var(--text-tertiary)'}
+                        strokeWidth={p.cross ? 2 : 1}
                       />
                     )}
                     {bidY != null && (
@@ -347,10 +348,14 @@ export default function VolCurvesChart({
                     {askY != null && (
                       <line x1={px - 3} x2={px + 3} y1={askY} y2={askY} stroke={ASK_COLOR} strokeWidth={2} />
                     )}
-                    {p.crossed && bidY != null && askY != null && (
+                    {p.cross && (bidY != null || askY != null || p.markIv != null) && (
                       <circle
                         cx={px}
-                        cy={(bidY + askY) / 2}
+                        cy={
+                          bidY != null && askY != null
+                            ? (bidY + askY) / 2
+                            : (bidY ?? askY ?? sy(p.markIv!))
+                        }
                         r={5}
                         fill="none"
                         stroke={CROSSED_COLOR}
@@ -441,7 +446,7 @@ function Tooltip({ target }: { target: HoverTarget }) {
     <>
       <div className={styles.ttHead}>
         <span style={{ color: curve.color }}>{curve.label}</span>
-        <span className={styles.ttDim}>{curve.dte}d</span>
+        <span className={styles.ttDim}>{formatDays(curve.days)}</span>
       </div>
       <div className={styles.ttHead}>
         <span>{point.strike.toLocaleString('en-US')}</span>
@@ -468,8 +473,12 @@ function Tooltip({ target }: { target: HoverTarget }) {
         <dt>OI</dt>
         <dd>{point.oiUsd > 0 ? fmtUsdCompact(point.oiUsd) : '–'}</dd>
       </dl>
-      {point.crossed && (
-        <div className={styles.ttCrossed}>Crossed across venues (before fees)</div>
+      {point.cross && (
+        <div className={styles.ttCrossed}>
+          Crossed {(point.cross.ivGap * 100).toFixed(1)} vol before fees: {venueLabel(point.cross.bidVenue)}{' '}
+          bid {fmtUsd(point.cross.bidUsd)} &gt; {venueLabel(point.cross.askVenue)} ask{' '}
+          {fmtUsd(point.cross.askUsd)}
+        </div>
       )}
       {point.venues.length > 0 && (
         <table className={styles.ttVenues}>

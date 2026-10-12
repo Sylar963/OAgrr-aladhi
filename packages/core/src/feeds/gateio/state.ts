@@ -78,9 +78,12 @@ export function buildGateioInstrument(c: GateioContract): CachedInstrument {
     right: parsed.right,
     inverse: false,
     contractSize: num(c.multiplier),
+    contractMultiplierBase: num(c.multiplier),
     contractValueCurrency: parsed.base,
     tickSize: num(c.order_price_round ?? null),
     minQty: c.order_size_min ?? null,
+    // Gate option orders are whole contracts.
+    lotSize: 1,
     makerFee: num(c.maker_fee_rate),
     takerFee: num(c.taker_fee_rate),
   };

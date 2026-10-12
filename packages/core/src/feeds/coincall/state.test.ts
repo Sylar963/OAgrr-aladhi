@@ -136,7 +136,9 @@ describe('buildCoincallInstrument', () => {
       right: 'call',
       inverse: false,
       contractSize: 0.01,
+      contractMultiplierBase: 0.01,
       contractValueCurrency: 'BTC',
+      lotSize: 0.01,
       makerFee: 0.0003,
       takerFee: 0.0004,
     });

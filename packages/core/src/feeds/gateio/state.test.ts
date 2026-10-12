@@ -70,9 +70,11 @@ describe('buildGateioInstrument', () => {
       right: 'call',
       inverse: false,
       contractSize: 0.01,
+      contractMultiplierBase: 0.01,
       contractValueCurrency: 'BTC',
       tickSize: null,
       minQty: 1,
+      lotSize: 1,
       makerFee: 0.0003,
       takerFee: 0.0003,
     };

@@ -215,3 +215,29 @@ describe('ParadexWsAdapter per-market shards', () => {
     ]);
   });
 });
+
+describe('ParadexWsAdapter instrument parsing', () => {
+  it('carries base-unit size rules so enrichment can build execution quotes', () => {
+    const adapter = new TestParadexAdapter();
+    const inst = adapter['parseInstrument']({
+      symbol: 'BTC-USD-16OCT26-86000-C',
+      base_currency: 'BTC',
+      settlement_currency: 'USDC',
+      asset_kind: 'OPTION',
+      option_type: 'CALL',
+      strike_price: '86000',
+      expiry_at: 1792137600000,
+      price_tick_size: '0.01',
+      order_size_increment: '0.001',
+      fee_config: { api_fee: { maker_fee: { fee: '0.0001' }, taker_fee: { fee: '0.0001' } } },
+    });
+    expect(inst).toMatchObject({
+      contractSize: 1,
+      contractMultiplierBase: 1,
+      minQty: 0.001,
+      lotSize: 0.001,
+      makerFee: 0.0001,
+      takerFee: 0.0001,
+    });
+  });
+});

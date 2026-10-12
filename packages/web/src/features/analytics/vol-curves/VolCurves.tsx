@@ -8,6 +8,7 @@ import {
   buildCurves,
   defaultFocus,
   defaultXDomain,
+  formatDays,
   isDefaultVisible,
   medianSpreadVol,
   type SmileCurve,
@@ -84,7 +85,7 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
   if (curves.length === 0) return null;
 
   const pinned = curves.find((c) => c.expiry === pinnedExpiry) ?? null;
-  const crossedCount = pinned?.points.filter((p) => p.crossed).length ?? 0;
+  const crossedCount = pinned?.points.filter((p) => p.cross != null).length ?? 0;
   const shortDatedHidden = curves.some((c) => !isDefaultVisible(c) && !isVisible(c));
 
   const toggleVisible = (c: SmileCurve) => {
@@ -185,7 +186,7 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
                 type="button"
                 className={styles.chipLabel}
                 aria-pressed={isPinned}
-                title={`${curve.dte}d to expiry`}
+                title={`${formatDays(curve.days)} to expiry`}
                 onClick={() => toggleFocus(curve)}
               >
                 {curve.label}
@@ -198,7 +199,7 @@ export default function VolCurves({ chains, spotPrice }: VolCurvesProps) {
       {pinned && (
         <div className={styles.focusBar}>
           <span style={{ color: pinned.color }}>{pinned.label}</span>
-          <span className={styles.focusStat}>{pinned.dte}d</span>
+          <span className={styles.focusStat}>{formatDays(pinned.days)}</span>
           <span className={styles.focusStat}>
             ATM <b>{fmtVol(pinned.atmIv)}</b>
           </span>
@@ -259,8 +260,11 @@ function ReadingGuide({ indexSpot }: { indexSpot: number | null }) {
       </p>
       <p style={{ marginTop: 6 }}>
         <strong style={{ color: 'var(--color-warning)' }}>Crossed</strong> strikes have one
-        venue&apos;s best bid above another venue&apos;s best ask. That is before fees, size limits
-        and settlement-currency differences, so treat it as a lead to check, not a guaranteed edge.
+        venue&apos;s bid above another venue&apos;s ask on the same contract, by at least 0.25 vol
+        AND in USD price. Both are required: coin-settled and USD-settled venues convert to USD with
+        different reference prices, and each venue backs out IV against its own forward. This is
+        before fees, size limits and settlement-currency risk, so treat it as a lead to check, not a
+        guaranteed edge.
       </p>
       <p style={{ marginTop: 6 }}>
         <strong>Delta axis:</strong> plots each expiry by Black-76 forward delta (from its mark IV),

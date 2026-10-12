@@ -351,6 +351,7 @@ export function buildCoincallInstrument(
     right,
     inverse: false,
     contractSize: multiplier,
+    contractMultiplierBase: multiplier,
     // Coincall's `multiplier` is BTC-per-contract (0.01 for BTC, 0.1 for ETH),
     // not USD. Marking this `base` routes normalizeOpenInterestUsd through the
     // `contracts × size × underlying` branch so OI lands in real USD notional.
@@ -358,6 +359,7 @@ export function buildCoincallInstrument(
     contractValueCurrency: base,
     tickSize: cfg?.tickSize ?? item.tickSize,
     minQty: cfg?.minQty ?? item.minQty,
+    lotSize: cfg != null ? 10 ** -cfg.qtyDecimal : null,
     makerFee: cfg?.makerFee ?? null,
     takerFee: cfg?.takerFee ?? null,
   };

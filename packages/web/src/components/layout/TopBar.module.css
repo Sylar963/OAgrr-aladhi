@@ -12,6 +12,10 @@
   flex-shrink: 0;
 }
 
+.modeToggle {
+  display: inline-flex;
+}
+
 .left {
   justify-self: start;
   display: flex;
@@ -20,6 +24,7 @@
 }
 
 .logo {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   text-decoration: none;
@@ -290,13 +295,18 @@
 
 /* ── Laptop / small desktop ── */
 
-@media (max-width: 1279px) {
+@media (max-width: 1919px) {
   .bar {
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
   }
 
   .logo img {
     height: 40px;
+  }
+
+  .pill {
+    padding: 6px var(--space-2);
   }
 
   .right {
@@ -321,6 +331,11 @@
 
   .logo img {
     height: 44px;
+  }
+
+  /* Crypto bar: the mode switch lives in the bottom MobileNav on phones. */
+  .modeToggle {
+    display: none;
   }
 
   /* Hide tab pills on mobile — bottom nav handles navigation */

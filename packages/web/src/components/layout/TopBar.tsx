@@ -76,7 +76,11 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
         <a href="#" className={styles.logo} aria-label="oggregator">
           <img src="/oggregator-logo.svg" alt="oggregator" />
         </a>
-        {tradfiEnabled && <AssetModeToggle />}
+        {tradfiEnabled && (
+          <span className={styles.modeToggle}>
+            <AssetModeToggle />
+          </span>
+        )}
       </div>
 
       <div className={styles.pillGroup} role="tablist" data-tour="views" ref={tabsRef}>

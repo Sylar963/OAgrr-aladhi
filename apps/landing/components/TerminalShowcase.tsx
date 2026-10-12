@@ -121,11 +121,11 @@ function Frame({
 
   return (
     <motion.div
-      className="absolute inset-0 flex items-center justify-center px-6 pb-44 pt-20 sm:px-10"
+      className="absolute inset-0 flex items-center justify-center px-6 pb-52 pt-28 sm:px-10"
       style={{ opacity, scale, y }}
     >
       <div className="flex w-full max-w-6xl justify-center">
-        <AppWindow frame={frame} maxHeight="calc(100svh - 18rem)" />
+        <AppWindow frame={frame} maxHeight="calc(100svh - 23rem)" />
       </div>
     </motion.div>
   );
@@ -158,7 +158,7 @@ function FrameCaption({
 
   return (
     <motion.div
-      className="pointer-events-none absolute inset-x-0 bottom-10 flex justify-center px-6 sm:px-10"
+      className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center px-6 sm:px-10"
       style={{ opacity, y }}
     >
       <div className="max-w-2xl text-center">

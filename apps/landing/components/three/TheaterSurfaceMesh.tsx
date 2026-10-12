@@ -37,7 +37,7 @@ function sampleScene(progress: number) {
 const ivModel = /* glsl */ `
   const float IV_MIN = 30.0;
   const float IV_MAX = 55.0;
-  const float Z_SCALE = 0.075;
+  const float Z_SCALE = 0.1;
 
   // uv.x: put wing (0) → call wing (1); uv.y: front tenor (0) → back tenor (1).
   float computeIv(vec2 p, float t) {
@@ -118,7 +118,7 @@ const fragmentShader = /* glsl */ `
     float rim = pow(1.0 - max(n.z, 0.0), 2.0);
 
     vec3 albedo = thermal((vIv - IV_MIN) / (IV_MAX - IV_MIN));
-    vec3 color = albedo * (0.32 + 0.78 * diffuse) + albedo * rim * 0.25;
+    vec3 color = albedo * (0.22 + 0.62 * diffuse) + albedo * rim * 0.2;
 
     float grid = max(line(vUv.x * 12.0, 1.1), line(vUv.y * 8.0, 1.1));
     color = mix(color, vec3(0.03, 0.04, 0.05), grid * 0.6);
@@ -184,10 +184,10 @@ export function TheaterSurfaceMesh({
 
     const { width, height } = state.viewport;
     const wide = width / height > 1.1;
-    const scale = Math.min(1, width / (wide ? 10.5 : 7.2));
+    const scale = Math.min(0.82, width / (wide ? 13.5 : 7.6));
 
     rig.scale.setScalar(scale);
-    rig.position.x = wide ? width * 0.22 : 0;
+    rig.position.x = wide ? width * 0.2 : 0;
     rig.position.y = (wide ? 0 : -height * 0.2) + Math.sin(elapsed * 0.22) * 0.04;
     rig.rotation.y = smoothed.current.yaw + Math.sin(elapsed * 0.12) * 0.05;
     rig.rotation.x = smoothed.current.tilt;

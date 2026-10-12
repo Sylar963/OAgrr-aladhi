@@ -22,6 +22,7 @@ describe('foldCount', () => {
 
   it('uses the trigger width for the fold level being tested', () => {
     const wideWhenActiveFolded = (k: number) => (k >= 2 ? 200 : 90);
-    expect(foldCount(groups, wideWhenActiveFolded, 600)).toBe(3);
+    expect(foldCount(groups, more, 500)).toBe(2);
+    expect(foldCount(groups, wideWhenActiveFolded, 500)).toBe(3);
   });
 });

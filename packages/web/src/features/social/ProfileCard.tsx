@@ -41,11 +41,11 @@ export default function ProfileCard() {
   const joined = profile.data?.leaderboardVisible ?? false;
   const venues = profile.data?.venues ?? [];
   const broadcastVenue = profile.data?.broadcastVenue ?? null;
-  const selectedVenue =
-    (joined ? broadcastVenue : null) ??
-    (draftVenue && venues.some((v) => v.venue === draftVenue) ? draftVenue : null) ??
-    (broadcastVenue && venues.some((v) => v.venue === broadcastVenue) ? broadcastVenue : null) ??
-    (venues.length === 1 ? venues[0]!.venue : null);
+  const selectedVenue = joined
+    ? broadcastVenue
+    : ((draftVenue && venues.some((v) => v.venue === draftVenue) ? draftVenue : null) ??
+      (broadcastVenue && venues.some((v) => v.venue === broadcastVenue) ? broadcastVenue : null) ??
+      (venues.length === 1 ? venues[0]!.venue : null));
   const broadcastConnected =
     joined && venues.some((v) => v.venue === broadcastVenue && v.connected);
   const error = update.error instanceof Error ? update.error.message : null;
@@ -103,10 +103,12 @@ export default function ProfileCard() {
                     <span className={styles.liveDot} />
                     Sharing on leaderboard
                   </span>
-                ) : (
+                ) : broadcastVenue ? (
                   <span className={styles.waitingBadge}>
-                    Waiting for {broadcastVenue ? venueLabel(broadcastVenue) : 'venue'} connection
+                    Waiting for {venueLabel(broadcastVenue)} connection
                   </span>
+                ) : (
+                  <span className={styles.waitingBadge}>Choose an account to broadcast</span>
                 )}
                 <button
                   className={styles.ghost}

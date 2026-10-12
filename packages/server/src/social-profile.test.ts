@@ -101,6 +101,30 @@ describe('SocialProfileService', () => {
     });
   });
 
+  it('broadcasts the only connected venue of a member who joined without choosing one', async () => {
+    const joined: UserProfileRow = {
+      userId: 'usr_1',
+      handle: 'aladhi',
+      leaderboardVisible: true,
+      broadcastVenue: null,
+      consentedAt: AT,
+      updatedAt: AT,
+    };
+    const single = create({ venues: [{ venue: 'thalex', connected: true }], row: joined });
+    await expect(single.service.view(USER)).resolves.toMatchObject({ broadcastVenue: 'thalex' });
+    expect(single.onChange).toHaveBeenCalledTimes(1);
+
+    const several = create({
+      venues: [
+        { venue: 'thalex', connected: true },
+        { venue: 'derive', connected: true },
+      ],
+      row: joined,
+    });
+    await expect(several.service.view(USER)).resolves.toMatchObject({ broadcastVenue: null });
+    expect(several.store.upsertProfile).not.toHaveBeenCalled();
+  });
+
   it('drops off the leaderboard when the username is removed', async () => {
     let username: string | null = 'aladhi';
     const { service } = create({ username: () => username });

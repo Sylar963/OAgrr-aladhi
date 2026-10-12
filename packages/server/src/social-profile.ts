@@ -70,10 +70,15 @@ export class SocialProfileService {
   }
 
   async view(user: SocialUser): Promise<SocialProfileDto> {
-    const [profile, venues] = await Promise.all([
+    const [synced, venues] = await Promise.all([
       this.sync(user),
       this.listVenueConnections(user.accountId),
     ]);
+    const only = venues.length === 1 ? venues[0]!.venue : null;
+    const profile =
+      synced.leaderboardVisible && !synced.broadcastVenue && only
+        ? await this.save(user.id, { ...synced, broadcastVenue: only })
+        : synced;
     return { ...profile, venues };
   }
 

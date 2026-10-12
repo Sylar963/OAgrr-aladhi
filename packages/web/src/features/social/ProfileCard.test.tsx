@@ -103,4 +103,26 @@ describe('ProfileCard', () => {
     render(wrap(<ProfileCard />));
     expect(await screen.findByText('Waiting for Derive connection')).toBeDefined();
   });
+
+  it('asks a member without a broadcast account to choose one', async () => {
+    api.profile = {
+      ...EMPTY,
+      handle: 'aladhi',
+      leaderboardVisible: true,
+      venues: [
+        { venue: 'derive', connected: true },
+        { venue: 'thalex', connected: true },
+      ],
+    };
+    render(wrap(<ProfileCard />));
+    expect(await screen.findByText('Choose an account to broadcast')).toBeDefined();
+    expect(screen.getByRole('radio', { name: /Thalex/ }).getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(screen.getByRole('radio', { name: /Thalex/ }));
+    await waitFor(() => expect(screen.getByText('Sharing on leaderboard')).toBeDefined());
+    expect(updateSocialProfile).toHaveBeenCalledWith({
+      leaderboardVisible: true,
+      broadcastVenue: 'thalex',
+    });
+  });
 });

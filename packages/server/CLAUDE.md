@@ -40,6 +40,7 @@ src/
     spots.ts         GET /api/spots
     paper/           REST paper trading endpoints
     portfolio/       REST portfolio positions, metrics, scenarios, credentials
+    social/          REST profile + leaderboard, admin chat moderation, WS /ws/social
     ws-chain.ts      WS /ws/chain
     portfolio/ws.ts  WS /ws/portfolio
     paper/ws.ts      WS /ws/paper
@@ -64,5 +65,7 @@ src/
 - **Hermes gets market data two ways** — `assistant-market/` compacts `/api/*` responses (via `app.inject`) into small labeled tables. The portfolio assistant context embeds them as `marketFacts`, and a loopback-only MCP server (`127.0.0.1:${OGG_ASSISTANT_MCP_PORT:-3191}/mcp`, bearer `OGG_ASSISTANT_MCP_TOKEN`) exposes them as read-only tools to the Hermes `portfolio-chat` profile. Per-user portfolio data is reachable only through `oggregator_evaluate_structure` and `oggregator_structure_search`, scoped by a server-minted, in-memory `portfolioRef` (15-minute sliding TTL) from the chat context; the model never supplies account IDs or held legs (see `HERMES.md`).
 
 - **Options book library** — `pnpm --filter @oggregator/server library:build` indexes `docs/*.pdf` into `docs/options-library.sqlite` (FTS5, gitignored). Scanned PDFs without a text layer are skipped. Restart the backend after a rebuild; an open handle keeps reading the replaced file.
+
+- **Social stays off Neon's hot path** — global chat lives in memory with an append-only `.cache/social-chat.ndjson` outbox flushed once a day; the leaderboard marks opted-in paper accounts on demand behind a 5-minute cache; equity snapshots for 7D/30D returns are one batch at 00:05 UTC. Anonymous aliases are an HMAC of user + UTC day (`SOCIAL_CHAT_ANON_SECRET`); user ids never reach chat clients.
 
 - **Live chain runtimes are the cache** — `ChainRuntime.fetchSnapshotData()` returns the delta-maintained snapshot when the runtime has listeners, and rebuilds from the QuoteStore only for idle runtimes. Rebuilding a live runtime broadcasts a full snapshot frame to every viewer, so avoid forcing it from request paths.

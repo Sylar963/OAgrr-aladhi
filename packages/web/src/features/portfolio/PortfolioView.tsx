@@ -23,6 +23,7 @@ import RiskCockpit from './RiskCockpit';
 import ShockHeatmap from './ShockHeatmap';
 import MarketMovement from './MarketMovement';
 import StrategyGroupsPanel from './StrategyGroups';
+import { isEquityHistoryVenue } from './api';
 import { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
@@ -247,6 +248,7 @@ export default function PortfolioView() {
             onOpenBuilder={openInBuilder}
             builderDisabledReason={builderDisabledReason}
             mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
+            equityVenue={isEquityHistoryVenue(source) ? source : null}
           />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
           <ShockHeatmap

@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 
-import type { PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
+import type { EquityHistoryVenue, PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
 import { formatExpiry } from '@lib/format';
 
 import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
+import EquityHistoryChart from './EquityHistoryChart';
 import styles from './PortfolioPnlCurve.module.css';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   mixedExpiries?: boolean;
   onOpenBuilder?: () => void;
   builderDisabledReason?: string | undefined;
+  equityVenue?: EquityHistoryVenue | null;
 }
 
 const WIDTH = 720;
@@ -19,11 +21,12 @@ const HEIGHT = 280;
 const PADDING = { top: 34, right: 16, bottom: 44, left: 64 };
 const TOOLTIP_WIDTH = 150;
 const MODE_STORAGE_KEY = 'portfolioPnlCurveMode';
-type CurveMode = 'payoff' | 'ta';
+type CurveMode = 'payoff' | 'ta' | 'equity';
 
 function loadMode(): CurveMode {
   try {
-    if (localStorage.getItem(MODE_STORAGE_KEY) === 'ta') return 'ta';
+    const stored = localStorage.getItem(MODE_STORAGE_KEY);
+    if (stored === 'ta' || stored === 'equity') return stored;
   } catch {}
   return 'payoff';
 }
@@ -112,10 +115,11 @@ function emptyMessage(status: PortfolioPnlCurveData['status']): string {
   return 'No P/L curve available.';
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null }: Props) {
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
-  const [mode, setMode] = useState<CurveMode>(loadMode);
+  const [storedMode, setMode] = useState<CurveMode>(loadMode);
+  const mode: CurveMode = storedMode === 'equity' && equityVenue == null ? 'payoff' : storedMode;
   const [taUnderlying, setTaUnderlying] = useState<TaUnderlying | null>(null);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
@@ -219,7 +223,9 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         <span className={styles.subtitle}>
           {mode === 'ta'
             ? 'x-axis: time • y-axis: underlying price with structure break-evens'
-            : 'x-axis: underlying price • y-axis: portfolio P&L'}
+            : mode === 'equity'
+              ? 'x-axis: time • y-axis: venue account equity (USD)'
+              : 'x-axis: underlying price • y-axis: portfolio P&L'}
         </span>
       </div>
       <div className={styles.headerRight}>
@@ -230,6 +236,11 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
           <button type="button" role="radio" aria-checked={mode === 'ta'} className={styles.modeButton} data-active={mode === 'ta' || undefined} onClick={() => selectMode('ta')}>
             TA V2
           </button>
+          {equityVenue != null && (
+            <button type="button" role="radio" aria-checked={mode === 'equity'} className={styles.modeButton} data-active={mode === 'equity' || undefined} onClick={() => selectMode('equity')}>
+              Equity
+            </button>
+          )}
         </div>
         {mode === 'payoff' && (
           <div className={styles.legend}>
@@ -241,6 +252,15 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
       </div>
     </div>
   );
+
+  if (mode === 'equity' && equityVenue != null) {
+    return (
+      <div className={styles.wrap}>
+        {header}
+        <EquityHistoryChart venue={equityVenue} />
+      </div>
+    );
+  }
 
   if (mode === 'ta') {
     return (

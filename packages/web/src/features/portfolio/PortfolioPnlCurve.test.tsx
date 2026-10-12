@@ -14,6 +14,10 @@ vi.mock('./BreakevenTaChart', () => ({
   ),
 }));
 
+vi.mock('./EquityHistoryChart', () => ({
+  default: (props: { venue: string }) => <div data-testid="equity-chart">{props.venue}</div>,
+}));
+
 function riskWindow(partial: Partial<ExpiryRiskWindow> & Pick<ExpiryRiskWindow, 'from' | 'until'>): ExpiryRiskWindow {
   return {
     liveLegIds: [],
@@ -143,5 +147,19 @@ describe('PortfolioPnlCurve', () => {
     expect(screen.getByTestId('ta-chart').textContent).toBe('ETH 3100,3900');
     expect(screen.queryByText('Now')).toBeNull();
     expect(localStorage.getItem('portfolioPnlCurveMode')).toBe('ta');
+  });
+
+  it('offers the Equity view only for a signed venue source', () => {
+    const { rerender } = render(<PortfolioPnlCurve forwardDays={0} curve={curve({})} />);
+    expect(screen.queryByRole('radio', { name: 'Equity' })).toBeNull();
+
+    rerender(<PortfolioPnlCurve forwardDays={0} curve={curve({})} equityVenue="thalex" />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Equity' }));
+    expect(screen.getByTestId('equity-chart').textContent).toBe('thalex');
+    expect(localStorage.getItem('portfolioPnlCurveMode')).toBe('equity');
+
+    rerender(<PortfolioPnlCurve forwardDays={0} curve={curve({})} />);
+    expect(screen.queryByTestId('equity-chart')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Payoff' }).getAttribute('aria-checked')).toBe('true');
   });
 });

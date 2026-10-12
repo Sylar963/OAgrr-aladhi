@@ -35,6 +35,10 @@ export interface Venue {
 export interface ShowcaseFrame {
   id: string;
   src: string;
+  path: string;
+  width: number;
+  height: number;
+  cropTop?: number;
   eyebrow: string;
   title: string;
   detail: string;
@@ -198,6 +202,10 @@ export const showcaseFrames: ShowcaseFrame[] = [
   {
     id: 'chain',
     src: '/chainview.png',
+    path: 'chain',
+    width: 1919,
+    height: 954,
+    cropTop: 32,
     eyebrow: '01 · Chain',
     title: 'Every venue, one chain.',
     detail: 'Normalized quotes. Best edge per strike, tagged by venue.',
@@ -205,6 +213,9 @@ export const showcaseFrames: ShowcaseFrame[] = [
   {
     id: 'portfolio',
     src: '/portfolio1.png',
+    path: 'portfolio',
+    width: 1916,
+    height: 743,
     eyebrow: '02 · Portfolio',
     title: 'Greeks across the book.',
     detail: 'Per-venue, per-strategy. PnL that matches the desk.',
@@ -212,6 +223,10 @@ export const showcaseFrames: ShowcaseFrame[] = [
   {
     id: 'route',
     src: '/showcase/route.png',
+    path: 'chain/route',
+    width: 1911,
+    height: 942,
+    cropTop: 30,
     eyebrow: '03 · Route',
     title: 'Best executable price.',
     detail: 'Live spread, depth, latency — across all eight venues.',
@@ -219,6 +234,9 @@ export const showcaseFrames: ShowcaseFrame[] = [
   {
     id: 'feed',
     src: '/showcase/feed.png',
+    path: 'flow',
+    width: 1888,
+    height: 897,
     eyebrow: '04 · Feed',
     title: 'Venue-tagged tape.',
     detail: 'Quotes and fills stream with their source venue end-to-end.',

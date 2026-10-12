@@ -39,10 +39,53 @@ function FramePlate({ frame }: { frame: ShowcaseFrame }) {
       src={frame.src}
       alt={frame.title}
       fill
-      sizes="(min-width: 1024px) 60vw, 100vw"
-      className="object-contain"
+      sizes="(min-width: 1024px) 64rem, 100vw"
+      className="object-cover object-bottom"
       onError={() => setErrored(true)}
     />
+  );
+}
+
+function frameAspect(frame: ShowcaseFrame) {
+  return frame.width / (frame.height - (frame.cropTop ?? 0));
+}
+
+function AppWindow({
+  frame,
+  maxHeight,
+}: {
+  frame: ShowcaseFrame;
+  maxHeight?: string;
+}) {
+  const aspect = frameAspect(frame);
+
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-xl border border-white/[0.09] bg-[#0b0e11] shadow-[0_0_0_1px_rgba(0,0,0,0.6),0_40px_120px_-30px_rgba(0,0,0,0.95),0_0_80px_-20px_rgba(96,165,250,0.12)]"
+      style={maxHeight ? { maxWidth: `calc(${maxHeight} * ${aspect.toFixed(4)})` } : undefined}
+    >
+      <div className="relative flex h-9 items-center border-b border-white/[0.07] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.015))] px-4">
+        <div aria-hidden className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.14]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.14]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.14]" />
+        </div>
+        <span className="absolute left-1/2 -translate-x-1/2 rounded-md border border-white/[0.06] bg-black/30 px-3 py-1 font-[var(--font-mono)] text-[10px] tracking-[0.08em] text-zinc-400">
+          app.oggregator.xyz/<span className="text-zinc-200">{frame.path}</span>
+        </span>
+        <span className="ml-auto hidden items-center gap-1.5 font-[var(--font-mono)] text-[9px] uppercase tracking-[0.28em] text-emerald-400/80 sm:flex">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          live
+        </span>
+      </div>
+      <div className="relative w-full" style={{ aspectRatio: aspect.toFixed(4) }}>
+        <FramePlate frame={frame} />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -78,15 +121,11 @@ function Frame({
 
   return (
     <motion.div
-      className="absolute inset-0 flex items-center justify-center px-6 sm:px-10"
+      className="absolute inset-0 flex items-center justify-center px-6 pb-44 pt-20 sm:px-10"
       style={{ opacity, scale, y }}
     >
-      <div className="relative aspect-[16/10] w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/40 shadow-[0_30px_90px_-40px_rgba(0,0,0,0.9)]">
-        <FramePlate frame={frame} />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,11,13,0.0)_60%,rgba(8,11,13,0.6)_100%)]"
-        />
+      <div className="flex w-full max-w-6xl justify-center">
+        <AppWindow frame={frame} maxHeight="calc(100svh - 18rem)" />
       </div>
     </motion.div>
   );
@@ -153,12 +192,10 @@ function StaticGrid() {
         {showcaseFrames.map((frame) => (
           <article
             key={frame.id}
-            className="landing-panel overflow-hidden rounded-[1.5rem]"
+            className="landing-panel overflow-hidden rounded-[1.5rem] p-3"
           >
-            <div className="relative aspect-[16/10] w-full overflow-hidden border-b border-white/8">
-              <FramePlate frame={frame} />
-            </div>
-            <div className="p-5">
+            <AppWindow frame={frame} />
+            <div className="p-4 pt-5">
               <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]">
                 {frame.eyebrow}
               </p>

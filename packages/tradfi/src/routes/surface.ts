@@ -22,10 +22,10 @@ const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resol
 export function surfaceRoute(deps: TradfiDeps) {
   const cache = new Map<string, { at: number; response: Promise<TradfiSurfaceResponse> }>();
 
-  async function build(underlying: string): Promise<TradfiSurfaceResponse> {
+  async function build(underlying: string, expiries: string[]): Promise<TradfiSurfaceResponse> {
     const now = Date.now();
     const entries: SurfaceGridEntry[] = [];
-    for (const expiry of deps.store.listExpiries(underlying)) {
+    for (const expiry of expiries) {
       const expiryTs = deps.store.instrumentsFor(underlying, expiry)[0]?.expiryTs ?? null;
       if (expiryTs == null || expiryTs <= now) continue;
       deps.feed.ensureChainSubscribed(underlying, expiry);
@@ -58,7 +58,12 @@ export function surfaceRoute(deps: TradfiDeps) {
       }
       const hit = cache.get(underlying);
       if (hit != null && Date.now() - hit.at < CACHE_TTL_MS) return hit.response;
-      const response = build(underlying);
+      // Only listed underlyings reach the cache, so arbitrary query strings can't grow it.
+      const expiries = deps.store.listExpiries(underlying);
+      if (expiries.length === 0) {
+        return reply.status(404).send({ error: `unknown underlying ${underlying}` });
+      }
+      const response = build(underlying, expiries);
       cache.set(underlying, { at: Date.now(), response });
       response.catch(() => cache.delete(underlying));
       return response;

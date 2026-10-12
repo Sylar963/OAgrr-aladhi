@@ -68,6 +68,17 @@ describe('GET /surface', () => {
     await app.close();
   });
 
+  it('404s for an underlying the catalog does not list', async () => {
+    const store = new TradfiStore();
+    seed(store, [Date.now() + 10 * DAY]);
+    const f = feed();
+    const app = buildApp({ store, feed: f });
+    const res = await app.inject({ method: 'GET', url: '/surface?underlying=NOPE' });
+    expect(res.statusCode).toBe(404);
+    expect(f.subscribed).toEqual([]);
+    await app.close();
+  });
+
   it('400s without an underlying and 503s before the catalog loads', async () => {
     const store = new TradfiStore();
     const missing = buildApp({ store, feed: feed() });

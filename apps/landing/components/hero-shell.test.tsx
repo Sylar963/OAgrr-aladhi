@@ -44,6 +44,7 @@ describe('hero shell', () => {
       'Derive',
       'Coincall',
       'Gate.io',
+      'Paradex',
     ]) {
       expect(screen.getAllByText(name).length).toBeGreaterThan(0);
     }

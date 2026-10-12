@@ -11,7 +11,7 @@ export const landingCopy = {
     eyebrow: 'Cross-venue options terminal',
     headline: 'One terminal. Every venue.',
     subheadline:
-      'Trade options across Deribit, OKX, Binance, Bybit, Thalex, Derive, Coincall, and Gate.io — from a single surface.',
+      'Trade options across Deribit, OKX, Binance, Bybit, Thalex, Derive, Coincall, Gate.io, and Paradex — from a single surface.',
     primaryCta: 'Request Access',
     secondaryCta: 'See the terminal',
     surfaceNote:
@@ -35,7 +35,7 @@ export const landingCopy = {
   },
   venues: {
     eyebrow: 'Connected venues',
-    title: 'Eight markets. One terminal.',
+    title: 'Nine markets. One terminal.',
   },
   faq: {
     eyebrow: 'FAQ',

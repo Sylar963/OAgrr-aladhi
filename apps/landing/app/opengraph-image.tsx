@@ -53,7 +53,7 @@ export default function OpengraphImage() {
           One terminal. Every venue.
         </div>
         <div style={{ color: "#aab4bc", fontSize: "30px" }}>
-          Deribit · OKX · Binance · Bybit · Thalex · Derive · Coincall · Gate.io
+          Deribit · OKX · Binance · Bybit · Thalex · Derive · Coincall · Gate.io · Paradex
         </div>
       </div>
     </div>,

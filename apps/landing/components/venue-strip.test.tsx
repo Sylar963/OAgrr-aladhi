@@ -7,7 +7,7 @@ describe('VenueStrip', () => {
   it('renders one logo per venue from explicit logo paths', () => {
     render(<VenueStrip />);
 
-    expect(venues).toHaveLength(8);
+    expect(venues).toHaveLength(9);
     for (const venue of venues) {
       expect(screen.getByAltText(venue.name)).toHaveAttribute('src', venue.logo);
     }

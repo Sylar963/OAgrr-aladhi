@@ -13,7 +13,7 @@ function buildTapeItems(spots: TickerSpots | undefined): TapeItem[] {
   const items: TapeItem[] = [
     {
       label: 'Venues',
-      value: 'Deribit · OKX · Binance · Bybit · Thalex · Derive · Coincall · Gate.io',
+      value: 'Deribit · OKX · Binance · Bybit · Thalex · Derive · Coincall · Gate.io · Paradex',
     },
   ];
 

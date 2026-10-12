@@ -188,11 +188,10 @@ export {
 export type { NewsCursor, NewsPageQuery, NewsStore, PersistedNewsItem } from './news-store.js';
 export { NoopNewsStore, PostgresNewsStore } from './news-store.js';
 export type {
-  AccountBookPosition,
-  AccountBookRow,
+  BroadcasterRow,
   ChatMessageRow,
   ChatModerationRow,
-  PaperEquitySnapshotRow,
+  SocialBroadcastVenue,
   SocialStore,
   UpsertUserProfileInput,
   UserProfileRow,

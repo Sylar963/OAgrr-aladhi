@@ -30,6 +30,7 @@ export class DerivePositionStore implements PositionStore {
   private readonly tradeUnsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly retainCounts = new Map<string, number>();
+  private readonly keptAlive = new Set<string>();
   private readonly persistence = new VenuePositionPersistence(
     'derive',
     exchangePortfolioLedgerStore,
@@ -219,6 +220,18 @@ export class DerivePositionStore implements PositionStore {
     this.retainCounts.set(accountId, (this.retainCounts.get(accountId) ?? 0) + 1);
   }
 
+  /** Pins a connection open across reconnects, e.g. while it is broadcast on the leaderboard. */
+  keepAlive(accountId: string, enabled: boolean): void {
+    if (enabled) {
+      this.keptAlive.add(accountId);
+      const timer = this.disconnectTimers.get(accountId);
+      if (timer != null) clearTimeout(timer);
+      this.disconnectTimers.delete(accountId);
+      return;
+    }
+    if (this.keptAlive.delete(accountId)) this.scheduleDisconnect(accountId);
+  }
+
   release(accountId: string): void {
     const nextCount = Math.max(0, (this.retainCounts.get(accountId) ?? 0) - 1);
     if (nextCount > 0) {
@@ -230,7 +243,13 @@ export class DerivePositionStore implements PositionStore {
   }
 
   private scheduleDisconnect(accountId: string): void {
-    if (!this.clients.has(accountId) || (this.retainCounts.get(accountId) ?? 0) > 0) return;
+    if (
+      !this.clients.has(accountId) ||
+      this.keptAlive.has(accountId) ||
+      (this.retainCounts.get(accountId) ?? 0) > 0
+    ) {
+      return;
+    }
     const current = this.disconnectTimers.get(accountId);
     if (current != null) clearTimeout(current);
     const timer = setTimeout(

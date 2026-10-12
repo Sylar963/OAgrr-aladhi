@@ -1,116 +1,88 @@
-import type { AccountBookRow, PaperEquitySnapshotRow } from '@oggregator/db';
 import { describe, expect, it, vi } from 'vitest';
 
-import { LeaderboardService, markBook } from './social-leaderboard.js';
+import type { Broadcaster } from './social-broadcast.js';
+import { LeaderboardService } from './social-leaderboard.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z');
+const DAY_MS = 86_400_000;
+const LOG = { warn: vi.fn() };
 
-function book(overrides: Partial<AccountBookRow> = {}): AccountBookRow {
-  return {
-    userId: 'usr_a',
-    handle: 'alpha',
-    accountId: 'acct_a',
-    initialCashUsd: 100_000,
-    accountCreatedAt: new Date('2026-08-01T00:00:00.000Z'),
-    cashUsd: 100_000,
-    positions: [],
-    ...overrides,
-  };
-}
+const ALPHA: Broadcaster = {
+  userId: 'usr_a',
+  handle: 'alpha',
+  accountId: 'acct_a',
+  venue: 'derive',
+};
+const BETA: Broadcaster = { userId: 'usr_b', handle: 'beta', accountId: 'acct_b', venue: 'thalex' };
 
-const LONG_CALL = {
-  underlying: 'BTC',
-  expiry: '2026-12-25',
-  strike: 100_000,
-  optionRight: 'call' as const,
-  netQuantity: 1,
-  avgEntryPriceUsd: 1_000,
+const HISTORY: Record<string, Array<{ ts: number; equityUsd: number }>> = {
+  acct_a: [
+    { ts: NOW - 60 * DAY_MS, equityUsd: 10_000 },
+    { ts: NOW - 8 * DAY_MS, equityUsd: 12_000 },
+    { ts: NOW - DAY_MS, equityUsd: 12_600 },
+  ],
+  acct_b: [
+    { ts: NOW - 20 * DAY_MS, equityUsd: 0 },
+    { ts: NOW - 3 * DAY_MS, equityUsd: 5_000 },
+    { ts: NOW - DAY_MS, equityUsd: 6_000 },
+  ],
 };
 
-describe('markBook', () => {
-  it('values unmarked legs at entry price instead of zero', async () => {
-    const shortPut = { ...LONG_CALL, optionRight: 'put' as const, netQuantity: -2 };
-    const marked = await markBook(
-      book({ cashUsd: 102_000, positions: [shortPut] }),
-      async () => null,
-    );
-    expect(marked.equityUsd).toBe(100_000);
-    expect(marked.unmarkedPositions).toBe(1);
-  });
-});
+function create(members: Broadcaster[] = [ALPHA, BETA]) {
+  const registry = { live: vi.fn(async () => members) };
+  const equity = {
+    get: vi.fn(async (accountId: string) => ({ fetchedAt: NOW, points: HISTORY[accountId] ?? [] })),
+  };
+  const service = new LeaderboardService(
+    registry,
+    equity,
+    () => [],
+    LOG,
+    () => NOW,
+  );
+  return { service, registry, equity };
+}
 
 describe('LeaderboardService', () => {
-  function store(books: AccountBookRow[], baselines: PaperEquitySnapshotRow[] = []) {
-    return {
-      listAccountBooks: vi.fn(async () => books),
-      listEquityBaselines: vi.fn(async () => baselines),
-    };
-  }
-
-  it('ranks all-time return against initial cash and flags the viewer', async () => {
-    const fake = store([
-      book(),
-      book({ userId: 'usr_b', handle: 'beta', accountId: 'acct_b', positions: [LONG_CALL] }),
-    ]);
-    const service = new LeaderboardService(
-      fake,
-      async () => 1_500,
-      () => NOW,
-    );
+  it('ranks venue equity growth from the first funded close and flags the viewer', async () => {
+    const { service } = create();
     const result = await service.get('all', 'usr_a');
-    expect(result.entries.map((e) => [e.rank, e.handle, e.returnPct, e.isMe])).toEqual([
-      [1, 'beta', 0.015, false],
-      [2, 'alpha', 0, true],
+    expect(result.entries.map((e) => [e.rank, e.handle, e.venue, e.returnPct, e.isMe])).toEqual([
+      [1, 'alpha', 'derive', 0.26, true],
+      [2, 'beta', 'thalex', 0.2, false],
     ]);
+    expect(result.entries[1]).toMatchObject({
+      equityUsd: 6_000,
+      since: new Date(NOW - 3 * DAY_MS).toISOString(),
+    });
   });
 
-  it('uses snapshots for older accounts and initial cash for accounts reset in the window', async () => {
-    const fake = store(
-      [
-        book({ cashUsd: 110_000 }),
-        book({
-          userId: 'usr_new',
-          handle: 'fresh',
-          accountId: 'acct_new',
-          accountCreatedAt: new Date('2026-10-10T00:00:00.000Z'),
-          cashUsd: 105_000,
-        }),
-        book({ userId: 'usr_old', handle: 'nohistory', accountId: 'acct_old' }),
-      ],
-      [
-        {
-          accountId: 'acct_a',
-          day: '2026-10-05',
-          equityUsd: 100_000,
-          capturedAt: new Date('2026-10-05T00:05:00.000Z'),
-        },
-      ],
-    );
-    const service = new LeaderboardService(
-      fake,
-      async () => null,
-      () => NOW,
-    );
+  it('measures a period from the last close before it starts', async () => {
+    const { service } = create();
     const result = await service.get('7d', null);
     expect(result.entries.map((e) => [e.handle, e.pnlUsd])).toEqual([
-      ['alpha', 10_000],
-      ['fresh', 5_000],
+      ['beta', 1_000],
+      ['alpha', 600],
     ]);
-    expect(fake.listEquityBaselines).toHaveBeenCalledWith(['acct_a', 'acct_old'], '2026-10-05');
   });
 
-  it('caches books until invalidated', async () => {
-    const fake = store([book()]);
-    const service = new LeaderboardService(
-      fake,
-      async () => null,
-      () => NOW,
-    );
+  it('leaves out members whose history cannot be read', async () => {
+    const { service, equity } = create();
+    equity.get.mockImplementation(async (accountId: string) => {
+      if (accountId === 'acct_b') throw new Error('venue down');
+      return { fetchedAt: NOW, points: HISTORY[accountId] ?? [] };
+    });
+    const result = await service.get('all', null);
+    expect(result.entries.map((e) => e.handle)).toEqual(['alpha']);
+  });
+
+  it('caches the member snapshot until invalidated', async () => {
+    const { service, registry } = create();
     await service.get('all', null);
-    await service.get('all', null);
-    expect(fake.listAccountBooks).toHaveBeenCalledTimes(1);
+    await service.get('30d', null);
+    expect(registry.live).toHaveBeenCalledTimes(1);
     service.invalidate();
     await service.get('all', null);
-    expect(fake.listAccountBooks).toHaveBeenCalledTimes(2);
+    expect(registry.live).toHaveBeenCalledTimes(2);
   });
 });

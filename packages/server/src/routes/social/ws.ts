@@ -2,9 +2,9 @@ import { ChatClientMessageSchema, type ChatServerMessage } from '@oggregator/pro
 import type { FastifyInstance } from 'fastify';
 
 import {
+  broadcastRegistry,
   chatService,
   isSocialEnabled,
-  leaderboardService,
   socialProfileService,
   traderStreamService,
 } from '../../social-services.js';
@@ -92,14 +92,14 @@ export async function socialWsRoute(app: FastifyInstance) {
         traderStreamService.unwatch(viewer);
         return;
       }
-      const target = await leaderboardService.findVisible(message.handle);
+      const found = await broadcastRegistry.find(message.handle);
       if (closed) return;
-      if (!target) {
+      if (!found) {
         traderStreamService.unwatch(viewer);
-        send({ type: 'trader_unavailable', handle: message.handle });
+        send({ type: 'trader_unavailable', handle: message.handle, reason: 'left' });
         return;
       }
-      await traderStreamService.watch(viewer, target);
+      await traderStreamService.watch(viewer, found.broadcaster);
       if (closed) traderStreamService.unwatch(viewer);
     }
 

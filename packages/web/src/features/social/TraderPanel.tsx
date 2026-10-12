@@ -4,11 +4,12 @@ import type { PublicTraderDto } from '@oggregator/protocol';
 
 import EquityChart from './EquityChart';
 import styles from './TraderPanel.module.css';
+import VenueTag from './VenueTag';
 
 interface TraderPanelProps {
   handle: string;
   trader: PublicTraderDto | null;
-  unavailable: boolean;
+  unavailable: 'left' | 'waiting' | null;
   onClose: () => void;
 }
 
@@ -34,6 +35,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
       <header className={styles.header}>
         <h3 className={styles.handle}>@{trader?.handle ?? handle}</h3>
         {trader?.isMe && <span className={styles.youTag}>you</span>}
+        {trader && <VenueTag venue={trader.venue} />}
         {trader && (
           <span className={styles.live}>
             <span className={styles.liveDot} />
@@ -45,16 +47,23 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
         </button>
       </header>
 
-      {unavailable ? (
+      {unavailable === 'left' ? (
         <p className={styles.empty}>@{handle} is no longer sharing on the leaderboard.</p>
+      ) : unavailable === 'waiting' ? (
+        <p className={styles.empty}>
+          Waiting for @{handle}'s venue account to connect. Their book streams again once it does.
+        </p>
       ) : !trader ? (
         <Spinner size="md" label={`Loading @${handle}…`} />
       ) : (
         <div className={styles.body}>
           <div className={styles.stats}>
-            <Stat label="Equity" value={fmtUsd(trader.equityUsd)} />
             <Stat
-              label="All-time PnL"
+              label={`Equity · ${fmtDate(trader.equityAsOf)}`}
+              value={fmtUsd(trader.equityUsd)}
+            />
+            <Stat
+              label="PnL since start"
               value={signedUsd(trader.pnlUsd)}
               tone={tone(trader.pnlUsd)}
             />
@@ -66,7 +75,13 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
             <Stat label="Since" value={fmtDate(trader.startedAt)} />
           </div>
 
-          <EquityChart points={trader.equityHistory} baselineUsd={trader.initialCashUsd} />
+          <EquityChart
+            points={trader.equityHistory}
+            baselineUsd={
+              trader.equityHistory.find((point) => point.equityUsd > 0)?.equityUsd ??
+              trader.equityUsd
+            }
+          />
 
           <h4 className={styles.sectionTitle}>Open positions · {trader.openPositions.length}</h4>
           {trader.openPositions.length === 0 ? (
@@ -109,15 +124,21 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
           )}
 
           <h4 className={styles.sectionTitle}>Closed trades · {trader.closedTrades.length}</h4>
-          {trader.closedTrades.length === 0 ? (
-            <p className={styles.empty}>No closed trades yet.</p>
+          {!trader.closedTradesAvailable ? (
+            <p className={styles.empty}>
+              <VenueTag venue={trader.venue} /> does not report fill history.
+            </p>
+          ) : trader.closedTrades.length === 0 ? (
+            <p className={styles.empty}>No closing fills yet.</p>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Trade</th>
-                    <th>Opened</th>
+                    <th>Instrument</th>
+                    <th>Side</th>
+                    <th className={styles.num}>Qty</th>
+                    <th className={styles.num}>Price</th>
                     <th>Closed</th>
                     <th className={styles.num}>Realized</th>
                   </tr>
@@ -126,9 +147,15 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
                   {trader.closedTrades.map((trade) => (
                     <tr key={trade.id}>
                       <td>
-                        {trade.underlying} · {trade.label}
+                        {trade.underlying} {formatExpiry(trade.expiry)}{' '}
+                        {trade.strike.toLocaleString()}
+                        <span className={styles.right} data-right={trade.optionRight}>
+                          {trade.optionRight === 'call' ? 'C' : 'P'}
+                        </span>
                       </td>
-                      <td>{fmtDate(trade.openedAt)}</td>
+                      <td>{trade.direction}</td>
+                      <td className={styles.num}>{trade.amount}</td>
+                      <td className={styles.num}>{fmtUsd(trade.priceUsd)}</td>
                       <td>{fmtDate(trade.closedAt)}</td>
                       <td className={styles.num} data-tone={tone(trade.realizedPnlUsd)}>
                         {signedUsd(trade.realizedPnlUsd)}

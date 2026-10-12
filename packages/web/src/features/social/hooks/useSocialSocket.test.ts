@@ -41,22 +41,24 @@ describe('chatReducer', () => {
 describe('chatReducer trader stream', () => {
   const trader = {
     handle: 'theta',
+    venue: 'derive' as const,
     equityUsd: 100_500,
+    equityAsOf: '2026-10-12T00:00:00.000Z',
     pnlUsd: 500,
     returnPct: 0.005,
     openPositions: [],
     generatedAt: '2026-10-12T12:00:00.000Z',
     isMe: false,
-    initialCashUsd: 100_000,
     startedAt: '2026-10-01T00:00:00.000Z',
     equityHistory: [
       { ts: '2026-10-01T00:00:00.000Z', equityUsd: 100_000 },
-      { ts: '2026-10-12T12:00:00.000Z', equityUsd: 100_500 },
+      { ts: '2026-10-12T00:00:00.000Z', equityUsd: 100_500 },
     ],
     closedTrades: [],
+    closedTradesAvailable: true,
   };
 
-  it('moves the live equity point on each live frame', () => {
+  it('applies live frames without rewriting the venue equity history', () => {
     let state = chatReducer(INITIAL_CHAT_STATE, {
       type: 'server',
       message: { type: 'trader', trader },
@@ -75,7 +77,7 @@ describe('chatReducer trader stream', () => {
       },
     });
     expect(state.trader?.equityUsd).toBe(101_000);
-    expect(state.trader?.equityHistory.map((p) => p.equityUsd)).toEqual([100_000, 101_000]);
+    expect(state.trader?.equityHistory.map((p) => p.equityUsd)).toEqual([100_000, 100_500]);
   });
 
   it('ignores live frames for another trader and clears on unavailable', () => {
@@ -90,9 +92,9 @@ describe('chatReducer trader stream', () => {
     expect(other).toBe(state);
     state = chatReducer(state, {
       type: 'server',
-      message: { type: 'trader_unavailable', handle: 'theta' },
+      message: { type: 'trader_unavailable', handle: 'theta', reason: 'waiting' },
     });
     expect(state.trader).toBeNull();
-    expect(state.traderUnavailable).toBe('theta');
+    expect(state.traderUnavailable).toEqual({ handle: 'theta', reason: 'waiting' });
   });
 });

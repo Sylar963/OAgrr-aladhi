@@ -169,12 +169,6 @@
   color: var(--color-loss) !important;
 }
 
-.unmarked {
-  margin-left: 2px;
-  color: var(--color-warning);
-  cursor: help;
-}
-
 @media (max-width: 640px) {
   .header {
     padding: var(--space-3) var(--space-4);

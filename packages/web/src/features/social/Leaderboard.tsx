@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { useLeaderboard } from './hooks/queries';
 import styles from './Leaderboard.module.css';
+import VenueTag from './VenueTag';
 
 const PERIODS: ReadonlyArray<{ id: LeaderboardPeriod; label: string }> = [
   { id: 'all', label: 'All time' },
@@ -57,7 +58,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
         </div>
         {data && (
           <span className={styles.updated}>
-            Paper accounts · updated{' '}
+            Venue account equity · updated{' '}
             {new Date(data.generatedAt).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -74,11 +75,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
         ) : !data || data.entries.length === 0 ? (
           <EmptyState
             title="No ranked traders yet"
-            detail={
-              period === 'all'
-                ? 'Join above to be the first. Click any trader to watch their book live.'
-                : 'Period returns build from daily equity snapshots taken at 00:05 UTC.'
-            }
+            detail="Members appear once their chosen venue account is connected and reports equity history."
           />
         ) : (
           <table className={styles.table}>
@@ -86,6 +83,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
               <tr>
                 <th className={styles.rank}>#</th>
                 <th>Trader</th>
+                <th>Venue</th>
                 <th className={styles.num}>Return</th>
                 <th className={styles.num}>PnL</th>
                 <th className={styles.num}>Equity</th>
@@ -119,24 +117,26 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                     </button>
                     {entry.isMe && <span className={styles.youTag}>you</span>}
                   </td>
-                  <td className={styles.num} data-tone={tone(entry.returnPct)}>
+                  <td>
+                    <VenueTag venue={entry.venue} />
+                  </td>
+                  <td
+                    className={styles.num}
+                    data-tone={tone(entry.returnPct)}
+                    title={`Since ${new Date(entry.since).toLocaleDateString()}`}
+                  >
                     {fmtReturn(entry.returnPct)}
                   </td>
                   <td className={styles.num} data-tone={tone(entry.pnlUsd)}>
                     {fmtSignedUsd(entry.pnlUsd)}
                   </td>
-                  <td className={styles.num}>{fmtUsd(entry.equityUsd)}</td>
-                  <td className={styles.num}>
-                    {entry.openPositions}
-                    {entry.unmarkedPositions > 0 && (
-                      <span
-                        className={styles.unmarked}
-                        title={`${entry.unmarkedPositions} leg(s) without a live mark, valued at entry price`}
-                      >
-                        *
-                      </span>
-                    )}
+                  <td
+                    className={styles.num}
+                    title={`As of ${new Date(entry.equityAsOf).toLocaleDateString()}`}
+                  >
+                    {fmtUsd(entry.equityUsd)}
                   </td>
+                  <td className={styles.num}>{entry.openPositions}</td>
                 </tr>
               ))}
             </tbody>

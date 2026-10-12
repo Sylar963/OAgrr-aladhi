@@ -35,6 +35,7 @@ Logs "tradfi service listening" then "markets loaded + streaming" once bootstrap
 | GET | `/expiries?underlying=AAPL` | Expiry dates for an underlying |
 | GET | `/chains?underlying=AAPL&expiry=2026-04-17` | Enriched option chain snapshot |
 | WS | `/ws/chain?underlying=AAPL&expiry=2026-04-17` | Live 200ms push of enriched chain |
+| GET | `/sectors` | Sector board: basket moves vs previous close (baskets in `src/sectors/baskets.ts`; their tickers stream quotes even when not in `TRADFI_UNDERLYINGS`) |
 | GET | `/health` | Liveness — always 200; reports uptime, market-open, readiness |
 | GET | `/ready` | Readiness — 200 once catalog loaded + data flowing, else 503 |
 

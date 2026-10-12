@@ -142,7 +142,7 @@ async function connectThalex(accountId: string, credentials: ThalexCredentials):
   getOrCreatePortfolioRuntime(accountId, 'thalex');
 }
 
-type ReconnectOutcome = 'connected' | 'not_connected' | 'removed';
+export type ReconnectOutcome = 'connected' | 'not_connected' | 'removed';
 
 async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<ReconnectOutcome> {
   const cipher = getVenueCredentialCipher();
@@ -184,6 +184,15 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
   return 'not_connected';
 }
 
+/** Reconnects a stored venue connection without a browser session, e.g. for a leaderboard broadcast. */
+export async function restoreStoredVenue(
+  accountId: string,
+  venue: VenueId,
+): Promise<ReconnectOutcome> {
+  if (!privateAdaptersEnabled() || !venueCredentialsStore.enabled) return 'not_connected';
+  return reconnectStoredVenue(accountId, venue);
+}
+
 async function disconnectVenue(accountId: string, venue: VenueId): Promise<void> {
   if (venue === 'derive') {
     await derivePositionStore.disconnect(accountId);
@@ -194,7 +203,7 @@ async function disconnectVenue(accountId: string, venue: VenueId): Promise<void>
   }
 }
 
-function isVenueConnected(accountId: string, venue: VenueId): boolean {
+export function isVenueConnected(accountId: string, venue: VenueId): boolean {
   if (venue === 'derive') return derivePositionStore.isConnected(accountId);
   if (venue === 'thalex') return thalexPositionStore.isConnected(accountId);
   if (venue === 'paradex') return paradexPositionStore.isConnected(accountId);

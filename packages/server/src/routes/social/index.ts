@@ -6,12 +6,12 @@ import {
 } from '@oggregator/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { SocialProfileError } from '../../social-profile.js';
 import {
   chatService,
   isSocialEnabled,
   leaderboardService,
   socialProfileService,
-  UsernameRequiredError,
 } from '../../social-services.js';
 import { requireUser } from '../../user-service.js';
 import { socialWsRoute } from './ws.js';
@@ -62,7 +62,7 @@ export async function socialRoutes(app: FastifyInstance) {
     user.get(
       '/social/profile',
       { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
-      async (req) => socialProfileService.sync(req.user!),
+      async (req) => socialProfileService.view(req.user!),
     );
 
     user.put(
@@ -77,13 +77,10 @@ export async function socialRoutes(app: FastifyInstance) {
           });
         }
         try {
-          return await socialProfileService.setLeaderboardVisible(
-            req.user!,
-            parsed.data.leaderboardVisible,
-          );
+          return await socialProfileService.update(req.user!, parsed.data);
         } catch (error) {
-          if (error instanceof UsernameRequiredError) {
-            return reply.status(409).send({ error: 'username_required', message: error.message });
+          if (error instanceof SocialProfileError) {
+            return reply.status(409).send({ error: error.code, message: error.message });
           }
           throw error;
         }

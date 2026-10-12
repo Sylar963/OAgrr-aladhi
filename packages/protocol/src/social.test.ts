@@ -11,6 +11,21 @@ describe('UpdateSocialProfileRequestSchema', () => {
         .success,
     ).toBe(false);
   });
+
+  it('accepts a broadcast venue only from the supported venues', () => {
+    expect(
+      UpdateSocialProfileRequestSchema.safeParse({
+        leaderboardVisible: true,
+        broadcastVenue: 'derive',
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateSocialProfileRequestSchema.safeParse({
+        leaderboardVisible: true,
+        broadcastVenue: 'paper',
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('ChatClientMessageSchema', () => {

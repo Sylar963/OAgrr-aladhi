@@ -1,9 +1,12 @@
 import { Pool } from 'pg';
 
+export type SocialBroadcastVenue = 'derive' | 'thalex' | 'paradex';
+
 export interface UserProfileRow {
   userId: string;
   handle: string | null;
   leaderboardVisible: boolean;
+  broadcastVenue: SocialBroadcastVenue | null;
   consentedAt: Date | null;
   updatedAt: Date;
 }
@@ -12,34 +15,15 @@ export interface UpsertUserProfileInput {
   userId: string;
   handle: string | null;
   leaderboardVisible: boolean;
+  broadcastVenue: SocialBroadcastVenue | null;
 }
 
-export interface AccountBookPosition {
-  underlying: string;
-  expiry: string;
-  strike: number;
-  optionRight: 'call' | 'put';
-  netQuantity: number;
-  avgEntryPriceUsd: number;
-}
-
-/** Everything needed to mark a user's default paper account to market. */
-export interface AccountBookRow {
+/** A leaderboard member; the venue connection belongs to the user's default account. */
+export interface BroadcasterRow {
   userId: string;
-  handle: string | null;
+  handle: string;
   accountId: string;
-  initialCashUsd: number;
-  accountCreatedAt: Date;
-  cashUsd: number;
-  positions: AccountBookPosition[];
-}
-
-export interface PaperEquitySnapshotRow {
-  accountId: string;
-  /** UTC calendar day, YYYY-MM-DD. */
-  day: string;
-  equityUsd: number;
-  capturedAt: Date;
+  venue: SocialBroadcastVenue;
 }
 
 export interface ChatMessageRow {
@@ -76,14 +60,8 @@ export interface SocialStore {
    * copy held by another profile is released (and that profile leaves the leaderboard).
    */
   upsertProfile(input: UpsertUserProfileInput): Promise<UserProfileRow | null>;
-  /** Default paper accounts of all users, or only of users who opted into the leaderboard. */
-  listAccountBooks(options: { leaderboardOnly: boolean }): Promise<AccountBookRow[]>;
-  getAccountBook(accountId: string): Promise<AccountBookRow | null>;
-  /** Snapshots since the account's last reset, oldest first. */
-  listEquityHistory(accountId: string): Promise<PaperEquitySnapshotRow[]>;
-  /** Earliest snapshot per account on or after `fromDay`, ignoring rows taken before the account's last reset. */
-  listEquityBaselines(accountIds: string[], fromDay: string): Promise<PaperEquitySnapshotRow[]>;
-  upsertEquitySnapshots(rows: PaperEquitySnapshotRow[]): Promise<number>;
+  /** Users who joined the leaderboard with a username and a chosen venue account. */
+  listBroadcasters(): Promise<BroadcasterRow[]>;
   /** Upserts by id so a later soft-delete of an already-flushed message rides the same batch. */
   upsertChatMessages(rows: ChatMessageRow[]): Promise<number>;
   listRecentChatMessages(room: string, limit: number): Promise<ChatMessageRow[]>;
@@ -101,23 +79,8 @@ export class NoopSocialStore implements SocialStore {
   async upsertProfile(_input: UpsertUserProfileInput): Promise<UserProfileRow | null> {
     return null;
   }
-  async listAccountBooks(_options: { leaderboardOnly: boolean }): Promise<AccountBookRow[]> {
+  async listBroadcasters(): Promise<BroadcasterRow[]> {
     return [];
-  }
-  async getAccountBook(_accountId: string): Promise<AccountBookRow | null> {
-    return null;
-  }
-  async listEquityHistory(_accountId: string): Promise<PaperEquitySnapshotRow[]> {
-    return [];
-  }
-  async listEquityBaselines(
-    _accountIds: string[],
-    _fromDay: string,
-  ): Promise<PaperEquitySnapshotRow[]> {
-    return [];
-  }
-  async upsertEquitySnapshots(_rows: PaperEquitySnapshotRow[]): Promise<number> {
-    return 0;
   }
   async upsertChatMessages(_rows: ChatMessageRow[]): Promise<number> {
     return 0;
@@ -139,32 +102,16 @@ interface ProfileRowDb {
   user_id: string;
   handle: string | null;
   leaderboard_visible: boolean;
+  broadcast_venue: SocialBroadcastVenue | null;
   leaderboard_consented_at: Date | null;
   updated_at: Date;
 }
 
-interface AccountBookRowDb {
+interface BroadcasterRowDb {
   user_id: string;
-  handle: string | null;
+  handle: string;
   account_id: string;
-  initial_cash_usd: string;
-  account_created_at: Date;
-  cash_usd: string;
-  positions: Array<{
-    underlying: string;
-    expiry: string;
-    strike: number | string;
-    optionRight: 'call' | 'put';
-    netQuantity: number | string;
-    avgEntryPriceUsd: number | string;
-  }>;
-}
-
-interface EquitySnapshotRowDb {
-  account_id: string;
-  day: string;
-  equity_usd: string;
-  captured_at: Date;
+  broadcast_venue: SocialBroadcastVenue;
 }
 
 interface ChatMessageRowDb {
@@ -191,6 +138,7 @@ function mapProfile(row: ProfileRowDb): UserProfileRow {
     userId: row.user_id,
     handle: row.handle,
     leaderboardVisible: row.leaderboard_visible,
+    broadcastVenue: row.broadcast_venue,
     consentedAt: row.leaderboard_consented_at,
     updatedAt: row.updated_at,
   };
@@ -219,61 +167,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 const PROFILE_COLUMNS =
-  'user_id, handle, leaderboard_visible, leaderboard_consented_at, updated_at';
-
-const ACCOUNT_BOOK_SELECT = `
-  SELECT u.id AS user_id,
-         p.handle,
-         a.id AS account_id,
-         a.initial_cash_usd,
-         a.created_at AS account_created_at,
-         COALESCE(
-           (SELECT SUM(c.delta_usd) FROM paper_cash_ledger c WHERE c.account_id = a.id),
-           0
-         ) AS cash_usd,
-         COALESCE(
-           (SELECT json_agg(json_build_object(
-                     'underlying', pp.underlying,
-                     'expiry', to_char(pp.expiry, 'YYYY-MM-DD'),
-                     'strike', pp.strike,
-                     'optionRight', pp.option_right,
-                     'netQuantity', pp.net_quantity,
-                     'avgEntryPriceUsd', pp.avg_entry_price_usd))
-            FROM paper_positions pp
-            WHERE pp.account_id = a.id AND pp.net_quantity <> 0),
-           '[]'::json
-         ) AS positions
-  FROM users u
-  JOIN paper_accounts a ON a.id = u.default_account_id
-  LEFT JOIN user_profiles p ON p.user_id = u.id`;
-
-function mapAccountBook(row: AccountBookRowDb): AccountBookRow {
-  return {
-    userId: row.user_id,
-    handle: row.handle,
-    accountId: row.account_id,
-    initialCashUsd: Number(row.initial_cash_usd),
-    accountCreatedAt: row.account_created_at,
-    cashUsd: Number(row.cash_usd),
-    positions: row.positions.map((pos) => ({
-      underlying: pos.underlying,
-      expiry: pos.expiry,
-      strike: Number(pos.strike),
-      optionRight: pos.optionRight,
-      netQuantity: Number(pos.netQuantity),
-      avgEntryPriceUsd: Number(pos.avgEntryPriceUsd),
-    })),
-  };
-}
-
-function mapSnapshot(row: EquitySnapshotRowDb): PaperEquitySnapshotRow {
-  return {
-    accountId: row.account_id,
-    day: row.day,
-    equityUsd: Number(row.equity_usd),
-    capturedAt: row.captured_at,
-  };
-}
+  'user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at, updated_at';
 
 const CHAT_COLUMNS = 'id, room, user_id, alias, is_anon, body, created_at, deleted_at';
 
@@ -315,11 +209,13 @@ export class PostgresSocialStore implements SocialStore {
         );
       }
       const res = await client.query<ProfileRowDb>(
-        `INSERT INTO user_profiles (user_id, handle, leaderboard_visible, leaderboard_consented_at)
-         VALUES ($1, $2, $3, CASE WHEN $3 THEN now() END)
+        `INSERT INTO user_profiles
+           (user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at)
+         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN now() END)
          ON CONFLICT (user_id) DO UPDATE
            SET handle = EXCLUDED.handle,
                leaderboard_visible = EXCLUDED.leaderboard_visible,
+               broadcast_venue = EXCLUDED.broadcast_venue,
                leaderboard_consented_at = CASE
                  WHEN EXCLUDED.leaderboard_visible AND NOT user_profiles.leaderboard_visible
                    THEN now()
@@ -327,7 +223,7 @@ export class PostgresSocialStore implements SocialStore {
                END,
                updated_at = now()
          RETURNING ${PROFILE_COLUMNS}`,
-        [input.userId, input.handle, input.leaderboardVisible],
+        [input.userId, input.handle, input.leaderboardVisible, input.broadcastVenue],
       );
       await client.query('COMMIT');
       const row = res.rows[0];
@@ -341,72 +237,22 @@ export class PostgresSocialStore implements SocialStore {
     }
   }
 
-  async listAccountBooks(options: { leaderboardOnly: boolean }): Promise<AccountBookRow[]> {
-    const res = await this.pool.query<AccountBookRowDb>(
-      `${ACCOUNT_BOOK_SELECT}
-       WHERE NOT $1::boolean OR (p.leaderboard_visible AND p.handle IS NOT NULL)`,
-      [options.leaderboardOnly],
+  async listBroadcasters(): Promise<BroadcasterRow[]> {
+    const res = await this.pool.query<BroadcasterRowDb>(
+      `SELECT p.user_id, p.handle, u.default_account_id AS account_id, p.broadcast_venue
+       FROM user_profiles p
+       JOIN users u ON u.id = p.user_id
+       WHERE p.leaderboard_visible
+         AND p.handle IS NOT NULL
+         AND p.broadcast_venue IS NOT NULL
+         AND u.default_account_id IS NOT NULL`,
     );
-    return res.rows.map(mapAccountBook);
-  }
-
-  async getAccountBook(accountId: string): Promise<AccountBookRow | null> {
-    const res = await this.pool.query<AccountBookRowDb>(
-      `${ACCOUNT_BOOK_SELECT}
-       WHERE a.id = $1`,
-      [accountId],
-    );
-    const row = res.rows[0];
-    return row ? mapAccountBook(row) : null;
-  }
-
-  async listEquityHistory(accountId: string): Promise<PaperEquitySnapshotRow[]> {
-    const res = await this.pool.query<EquitySnapshotRowDb>(
-      `SELECT s.account_id, to_char(s.day, 'YYYY-MM-DD') AS day, s.equity_usd, s.captured_at
-       FROM paper_equity_snapshots s
-       JOIN paper_accounts a ON a.id = s.account_id
-       WHERE s.account_id = $1 AND s.captured_at >= a.created_at
-       ORDER BY s.day ASC`,
-      [accountId],
-    );
-    return res.rows.map(mapSnapshot);
-  }
-
-  async listEquityBaselines(
-    accountIds: string[],
-    fromDay: string,
-  ): Promise<PaperEquitySnapshotRow[]> {
-    if (accountIds.length === 0) return [];
-    const res = await this.pool.query<EquitySnapshotRowDb>(
-      `SELECT DISTINCT ON (s.account_id)
-              s.account_id, to_char(s.day, 'YYYY-MM-DD') AS day, s.equity_usd, s.captured_at
-       FROM paper_equity_snapshots s
-       JOIN paper_accounts a ON a.id = s.account_id
-       WHERE s.account_id = ANY($1::text[])
-         AND s.day >= $2::date
-         AND s.captured_at >= a.created_at
-       ORDER BY s.account_id, s.day ASC`,
-      [accountIds, fromDay],
-    );
-    return res.rows.map(mapSnapshot);
-  }
-
-  async upsertEquitySnapshots(rows: PaperEquitySnapshotRow[]): Promise<number> {
-    if (rows.length === 0) return 0;
-    const res = await this.pool.query(
-      `INSERT INTO paper_equity_snapshots (account_id, day, equity_usd, captured_at)
-       SELECT * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::timestamptz[])
-       ON CONFLICT (account_id, day) DO UPDATE
-         SET equity_usd = EXCLUDED.equity_usd,
-             captured_at = EXCLUDED.captured_at`,
-      [
-        rows.map((row) => row.accountId),
-        rows.map((row) => row.day),
-        rows.map((row) => row.equityUsd),
-        rows.map((row) => row.capturedAt),
-      ],
-    );
-    return res.rowCount ?? 0;
+    return res.rows.map((row) => ({
+      userId: row.user_id,
+      handle: row.handle,
+      accountId: row.account_id,
+      venue: row.broadcast_venue,
+    }));
   }
 
   async upsertChatMessages(rows: ChatMessageRow[]): Promise<number> {

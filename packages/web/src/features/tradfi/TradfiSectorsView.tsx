@@ -30,9 +30,10 @@ export function formatMove(change: number | null): string {
 
 function formatPrice(price: number | null): string {
   if (price == null) return '—';
+  const digits = price >= 1000 ? 0 : 2;
   return price.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: price >= 1000 ? 0 : 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
@@ -65,7 +66,7 @@ export default function TradfiSectorsView() {
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Sector Dive</h1>
+        <h1 className={styles.title}>Sectors</h1>
         <p className={styles.subtitle}>
           TastyTrade tape <span className={styles.sep}>|</span> {data.baskets.length} baskets{' '}
           <span className={styles.sep}>|</span> {asOf}

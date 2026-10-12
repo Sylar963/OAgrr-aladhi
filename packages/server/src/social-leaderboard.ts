@@ -1,11 +1,19 @@
-import type { AccountBookRow, PaperEquitySnapshotRow, SocialStore } from '@oggregator/db';
+import type { PositionLeg } from '@oggregator/core';
 import type {
+  EquityHistoryPoint,
   LeaderboardEntryDto,
   LeaderboardPeriod,
   LeaderboardResponse,
+  SocialVenue,
 } from '@oggregator/protocol';
 
-const DAY_MS = 86_400_000;
+import {
+  type Broadcaster,
+  type BroadcastRegistry,
+  summarizeEquity,
+  type VenueEquityCache,
+} from './social-broadcast.js';
+
 const LEADERBOARD_TTL_MS = 5 * 60_000;
 const LEADERBOARD_MAX_ENTRIES = 100;
 
@@ -16,86 +24,35 @@ export type MarkLookup = (key: {
   optionRight: 'call' | 'put';
 }) => Promise<number | null>;
 
-export interface MarkedBook {
-  book: AccountBookRow;
-  equityUsd: number;
+export interface MemberSnapshot {
+  broadcaster: Broadcaster;
+  points: EquityHistoryPoint[];
   openPositions: number;
-  unmarkedPositions: number;
 }
 
 interface RankedEntry extends Omit<LeaderboardEntryDto, 'isMe'> {
   userId: string;
 }
 
-export function utcDay(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-/** Unmarked legs fall back to entry price so an illiquid short cannot show its premium as profit. */
-export async function markBook(book: AccountBookRow, getMark: MarkLookup): Promise<MarkedBook> {
-  const marks = await Promise.all(
-    book.positions.map((pos) =>
-      getMark({
-        underlying: pos.underlying,
-        expiry: pos.expiry,
-        strike: pos.strike,
-        optionRight: pos.optionRight,
-      }).catch(() => null),
-    ),
-  );
-  let inventoryUsd = 0;
-  let unmarkedPositions = 0;
-  for (const [index, pos] of book.positions.entries()) {
-    const mark = marks[index] ?? null;
-    if (mark == null) unmarkedPositions += 1;
-    inventoryUsd += pos.netQuantity * (mark ?? pos.avgEntryPriceUsd);
-  }
-  return {
-    book,
-    equityUsd: book.cashUsd + inventoryUsd,
-    openPositions: book.positions.length,
-    unmarkedPositions,
-  };
-}
-
-export function periodStartDay(period: Exclude<LeaderboardPeriod, 'all'>, nowMs: number): string {
-  const days = period === '7d' ? 7 : 30;
-  return utcDay(nowMs - days * DAY_MS);
-}
-
-/**
- * Baseline equity for a period. Accounts created or reset inside the window start from their
- * initial cash; older accounts use their earliest snapshot in the window, or drop out if none.
- */
-export function periodBaseline(
-  marked: MarkedBook,
-  fromDay: string | null,
-  snapshot: PaperEquitySnapshotRow | undefined,
-): number | null {
-  if (fromDay == null) return marked.book.initialCashUsd;
-  if (utcDay(marked.book.accountCreatedAt.getTime()) >= fromDay) {
-    return marked.book.initialCashUsd;
-  }
-  return snapshot?.equityUsd ?? null;
-}
-
 export function rankEntries(
-  marked: MarkedBook[],
-  baselines: Map<string, number | null>,
+  members: MemberSnapshot[],
+  period: LeaderboardPeriod,
+  nowMs: number,
 ): RankedEntry[] {
   const rows: Array<Omit<RankedEntry, 'rank'>> = [];
-  for (const item of marked) {
-    const baseline = baselines.get(item.book.accountId);
-    if (baseline == null || baseline <= 0 || item.book.handle == null) continue;
-    const pnlUsd = item.equityUsd - baseline;
+  for (const member of members) {
+    const summary = summarizeEquity(member.points, period, nowMs);
+    if (!summary) continue;
     rows.push({
-      userId: item.book.userId,
-      handle: item.book.handle,
-      equityUsd: item.equityUsd,
-      pnlUsd,
-      returnPct: pnlUsd / baseline,
-      openPositions: item.openPositions,
-      unmarkedPositions: item.unmarkedPositions,
+      userId: member.broadcaster.userId,
+      handle: member.broadcaster.handle,
+      venue: member.broadcaster.venue,
+      equityUsd: summary.equityUsd,
+      equityAsOf: new Date(summary.equityAsOf).toISOString(),
+      pnlUsd: summary.pnlUsd,
+      returnPct: summary.returnPct,
+      since: new Date(summary.since).toISOString(),
+      openPositions: member.openPositions,
     });
   }
   rows.sort((a, b) => b.returnPct - a.returnPct || b.pnlUsd - a.pnlUsd);
@@ -104,13 +61,12 @@ export function rankEntries(
 
 interface LeaderboardCache {
   generatedAt: number;
-  marked: MarkedBook[];
-  ranked: Map<LeaderboardPeriod, Promise<RankedEntry[]>>;
+  members: MemberSnapshot[];
 }
 
 /**
- * Computed on demand and cached for five minutes, so an idle leaderboard never touches the database
- * and an active one costs one book query plus one baseline query per period per window.
+ * Ranks members by the equity history their connected venue account reports. Built on demand and
+ * cached for five minutes; members whose venue is not connected are left out until it is.
  */
 export class LeaderboardService {
   private current: LeaderboardCache | null = null;
@@ -118,8 +74,10 @@ export class LeaderboardService {
   private generation = 0;
 
   constructor(
-    private readonly store: Pick<SocialStore, 'listAccountBooks' | 'listEquityBaselines'>,
-    private readonly getMark: MarkLookup,
+    private readonly registry: Pick<BroadcastRegistry, 'live'>,
+    private readonly equity: Pick<VenueEquityCache, 'get'>,
+    private readonly listLegs: (accountId: string, venue: SocialVenue) => PositionLeg[],
+    private readonly log: { warn: (obj: object, msg: string) => void },
     private readonly now: () => number = Date.now,
     private readonly ttlMs = LEADERBOARD_TTL_MS,
   ) {}
@@ -129,30 +87,9 @@ export class LeaderboardService {
     this.generation += 1;
   }
 
-  /** Resolves a handle to an opted-in trader from the cached books, without a query of its own. */
-  async findVisible(
-    handle: string,
-  ): Promise<{ userId: string; accountId: string; handle: string } | null> {
-    const cache = await this.load();
-    const wanted = handle.toLowerCase();
-    const match = cache.marked.find((item) => item.book.handle?.toLowerCase() === wanted);
-    if (!match?.book.handle) return null;
-    return {
-      userId: match.book.userId,
-      accountId: match.book.accountId,
-      handle: match.book.handle,
-    };
-  }
-
   async get(period: LeaderboardPeriod, viewerUserId: string | null): Promise<LeaderboardResponse> {
     const cache = await this.load();
-    let ranked = cache.ranked.get(period);
-    if (!ranked) {
-      ranked = this.rank(cache, period);
-      cache.ranked.set(period, ranked);
-      ranked.catch(() => cache.ranked.delete(period));
-    }
-    const entries = await ranked;
+    const entries = rankEntries(cache.members, period, cache.generatedAt);
     return {
       period,
       generatedAt: new Date(cache.generatedAt).toISOString(),
@@ -167,9 +104,28 @@ export class LeaderboardService {
     if (this.inflight) return this.inflight;
     const generation = this.generation;
     this.inflight = (async () => {
-      const books = await this.store.listAccountBooks({ leaderboardOnly: true });
-      const marked = await Promise.all(books.map((book) => markBook(book, this.getMark)));
-      const next: LeaderboardCache = { generatedAt: this.now(), marked, ranked: new Map() };
+      const live = await this.registry.live();
+      const histories = await Promise.allSettled(
+        live.map((member) => this.equity.get(member.accountId, member.venue)),
+      );
+      const members: MemberSnapshot[] = [];
+      for (const [index, result] of histories.entries()) {
+        const broadcaster = live[index]!;
+        if (result.status === 'rejected') {
+          this.log.warn(
+            { venue: broadcaster.venue, handle: broadcaster.handle, err: String(result.reason) },
+            'leaderboard equity history failed',
+          );
+          continue;
+        }
+        if (!result.value) continue;
+        members.push({
+          broadcaster,
+          points: result.value.points,
+          openPositions: this.listLegs(broadcaster.accountId, broadcaster.venue).length,
+        });
+      }
+      const next: LeaderboardCache = { generatedAt: this.now(), members };
       // A profile change during the load must not be hidden behind this result for a full TTL.
       if (generation === this.generation) this.current = next;
       return next;
@@ -178,50 +134,4 @@ export class LeaderboardService {
     });
     return this.inflight;
   }
-
-  private async rank(cache: LeaderboardCache, period: LeaderboardPeriod): Promise<RankedEntry[]> {
-    const baselines = new Map<string, number | null>();
-    if (period === 'all') {
-      for (const item of cache.marked) {
-        baselines.set(item.book.accountId, periodBaseline(item, null, undefined));
-      }
-      return rankEntries(cache.marked, baselines);
-    }
-    const fromDay = periodStartDay(period, cache.generatedAt);
-    const needsSnapshot = cache.marked.filter(
-      (item) => utcDay(item.book.accountCreatedAt.getTime()) < fromDay,
-    );
-    const snapshots = await this.store.listEquityBaselines(
-      needsSnapshot.map((item) => item.book.accountId),
-      fromDay,
-    );
-    const byAccount = new Map(snapshots.map((row) => [row.accountId, row]));
-    for (const item of cache.marked) {
-      baselines.set(
-        item.book.accountId,
-        periodBaseline(item, fromDay, byAccount.get(item.book.accountId)),
-      );
-    }
-    return rankEntries(cache.marked, baselines);
-  }
-}
-
-/** Marks every user's default account and writes one snapshot row each for `day`. */
-export async function captureEquitySnapshots(
-  store: Pick<SocialStore, 'listAccountBooks' | 'upsertEquitySnapshots'>,
-  getMark: MarkLookup,
-  nowMs: number,
-): Promise<number> {
-  const books = await store.listAccountBooks({ leaderboardOnly: false });
-  const marked = await Promise.all(books.map((book) => markBook(book, getMark)));
-  const day = utcDay(nowMs);
-  const capturedAt = new Date(nowMs);
-  return store.upsertEquitySnapshots(
-    marked.map((item) => ({
-      accountId: item.book.accountId,
-      day,
-      equityUsd: item.equityUsd,
-      capturedAt,
-    })),
-  );
 }

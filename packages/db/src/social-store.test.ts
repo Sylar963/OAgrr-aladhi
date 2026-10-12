@@ -6,7 +6,7 @@ describe('NoopSocialStore', () => {
     const store = new NoopSocialStore();
     expect(store.enabled).toBe(false);
     await expect(store.getProfile('usr_1')).resolves.toBeNull();
-    await expect(store.listAccountBooks({ leaderboardOnly: true })).resolves.toEqual([]);
+    await expect(store.listBroadcasters()).resolves.toEqual([]);
     await expect(store.upsertChatMessages([])).resolves.toBe(0);
     await expect(store.listRecentChatMessages('global', 10)).resolves.toEqual([]);
     await expect(store.dispose()).resolves.toBeUndefined();

@@ -189,7 +189,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   startPortfolioAssistantRetentionCleanup(app.log);
   startPortfolioAssistantMemoryDistillation(app.log);
   startPortfolioAssistantFeedbackFlush();
-  startSocialServices(app.log);
+  startSocialServices();
   bindAssistantMarketData(app);
   app.addHook('onListen', async () => {
     await startAssistantMcpFromEnv(app.log);

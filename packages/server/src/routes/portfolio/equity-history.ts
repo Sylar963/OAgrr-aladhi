@@ -1,21 +1,23 @@
-import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
-
 import {
   type EquityHistoryBasis,
   type EquityHistoryPoint,
-  EquityHistoryRangeSchema,
   type EquityHistoryRange,
+  EquityHistoryRangeSchema,
   type EquityHistoryResponse,
-  EquityHistoryVenueSchema,
   type EquityHistoryVenue,
+  EquityHistoryVenueSchema,
 } from '@oggregator/protocol';
 import { DEFAULT_ACCOUNT_ID } from '@oggregator/trading';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 
 import { derivePositionStore } from '../../derive-position-store.js';
+import { toDailyCloses } from '../../equity-daily-closes.js';
 import { paradexPositionStore } from '../../paradex-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { getRequestAccountId } from '../../user-service.js';
+
+export { toDailyCloses };
 
 const EquityHistoryQuerySchema = z.object({
   venue: z.string(),
@@ -40,14 +42,6 @@ interface CachedHistory {
 
 const cache = new Map<string, CachedHistory>();
 const inFlight = new Map<string, Promise<CachedHistory | null>>();
-
-export function toDailyCloses(points: readonly EquityHistoryPoint[]): EquityHistoryPoint[] {
-  const byDay = new Map<number, EquityHistoryPoint>();
-  for (const point of [...points].sort((a, b) => a.ts - b.ts)) {
-    byDay.set(Math.floor(point.ts / DAY_MS), point);
-  }
-  return [...byDay.values()];
-}
 
 export function sliceRange(
   points: readonly EquityHistoryPoint[],

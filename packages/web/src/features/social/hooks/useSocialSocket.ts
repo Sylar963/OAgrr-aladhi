@@ -21,7 +21,7 @@ export interface ChatState {
   lastError: { code: string; message: string; at: number } | null;
   /** Leaderboard trader currently streamed on this socket. */
   trader: PublicTraderDto | null;
-  traderUnavailable: string | null;
+  traderUnavailable: { handle: string; reason: 'left' | 'waiting' } | null;
 }
 
 type ChatAction =
@@ -72,12 +72,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'trader_live': {
       const trader = state.trader;
       if (!trader || trader.handle !== msg.live.handle) return state;
-      const history = trader.equityHistory.slice(0, -1);
-      history.push({ ts: msg.live.generatedAt, equityUsd: msg.live.equityUsd });
-      return { ...state, trader: { ...trader, ...msg.live, equityHistory: history } };
+      return { ...state, trader: { ...trader, ...msg.live } };
     }
     case 'trader_unavailable':
-      return { ...state, trader: null, traderUnavailable: msg.handle };
+      return {
+        ...state,
+        trader: null,
+        traderUnavailable: { handle: msg.handle, reason: msg.reason },
+      };
     case 'error':
       return { ...state, lastError: { code: msg.code, message: msg.message, at: Date.now() } };
   }

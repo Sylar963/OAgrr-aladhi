@@ -20,8 +20,9 @@ export default function SocialView() {
   const watched = socket.state.trader;
   const trader =
     watched && selected && watched.handle.toLowerCase() === selected.toLowerCase() ? watched : null;
+  const gone = socket.state.traderUnavailable;
   const unavailable =
-    selected != null && socket.state.traderUnavailable?.toLowerCase() === selected.toLowerCase();
+    selected != null && gone?.handle.toLowerCase() === selected.toLowerCase() ? gone.reason : null;
 
   return (
     <div className={styles.view}>

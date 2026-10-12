@@ -30,3 +30,10 @@ export const ParadexJwtClaimsSchema = z
   .object({ sub: z.string().min(1), exp: z.number().int().positive() })
   .passthrough();
 export type ParadexJwtClaims = z.infer<typeof ParadexJwtClaimsSchema>;
+
+// GET /v1/account/history?type=value → parallel arrays of account value and timestamps.
+export const ParadexAccountHistorySchema = z.object({
+  data: z.array(z.number()),
+  timestamps: z.array(z.number()),
+});
+export type ParadexAccountHistory = z.infer<typeof ParadexAccountHistorySchema>;

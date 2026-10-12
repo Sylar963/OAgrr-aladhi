@@ -5,6 +5,7 @@ import {
   type PositionStore,
   type PositionStoreListener,
 } from '@oggregator/core';
+import type { EquityHistoryPoint } from '@oggregator/protocol';
 
 import { carryEntryIvs } from './venue-position-persistence.js';
 
@@ -109,6 +110,11 @@ export class ParadexPositionStore implements PositionStore {
     }
     this.retainCounts.delete(accountId);
     this.scheduleDisconnect(accountId);
+  }
+
+  async fetchEquityHistory(accountId: string, fromMs: number): Promise<EquityHistoryPoint[] | null> {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.fetchEquityHistory(fromMs);
   }
 
   isConnected(accountId: string): boolean {

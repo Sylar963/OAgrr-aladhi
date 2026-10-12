@@ -1,8 +1,13 @@
-import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import { THALEX_OPTION_SYMBOL_RE } from '../thalex/types.js';
-import type { ThalexPortfolioEntry, ThalexTrade } from './types.js';
+import type {
+  ThalexAccountSummary,
+  ThalexPortfolioEntry,
+  ThalexTrade,
+  ThalexTransaction,
+} from './types.js';
 
 const MONTH_TO_NUM: Record<string, string> = {
   JAN: '01',
@@ -132,4 +137,47 @@ export function thalexTradesToPortfolioTrades(
     const normalized = thalexTradeToPortfolioTrade(trade);
     return normalized == null ? [] : [normalized];
   });
+}
+
+const THALEX_STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC']);
+const DAY_MS = 86_400_000;
+
+// Thalex settles every product futures-style each session, so settled cash is equity
+// up to the open session's unrealised P&L. Walks the current balances back through the
+// transaction log and samples each UTC midnight; non-stable assets use today's index.
+export function thalexCashReplayEquity(
+  summary: ThalexAccountSummary,
+  transactions: readonly ThalexTransaction[],
+  fromMs: number,
+  nowMs: number,
+): EquityHistoryPoint[] {
+  const prices = new Map<string, number>();
+  const balances = new Map<string, number>();
+  for (const row of summary.cash) {
+    const price = THALEX_STABLE_ASSETS.has(row.currency) ? 1 : row.collateral_index_price;
+    if (price == null || !Number.isFinite(price)) continue;
+    prices.set(row.currency, price);
+    balances.set(row.currency, row.balance);
+  }
+  const cashValue = () => {
+    let total = 0;
+    for (const [asset, balance] of balances) total += balance * (prices.get(asset) ?? 0);
+    return total;
+  };
+
+  const newestFirst = [...transactions].sort((a, b) => b.time - a.time);
+  const points: EquityHistoryPoint[] = [
+    { ts: nowMs, equityUsd: cashValue() + summary.unrealised_pnl },
+  ];
+  let cursor = 0;
+  for (let boundary = Math.floor(nowMs / DAY_MS) * DAY_MS; boundary >= fromMs; boundary -= DAY_MS) {
+    while (cursor < newestFirst.length && newestFirst[cursor]!.time * 1000 > boundary) {
+      const tx = newestFirst[cursor]!;
+      const balance = balances.get(tx.asset);
+      if (balance != null) balances.set(tx.asset, balance - tx.amount);
+      cursor += 1;
+    }
+    if (boundary < nowMs) points.push({ ts: boundary, equityUsd: cashValue() });
+  }
+  return points.reverse();
 }

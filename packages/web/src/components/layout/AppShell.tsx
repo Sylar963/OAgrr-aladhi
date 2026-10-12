@@ -47,7 +47,13 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
 
-  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set(['trading', 'portfolio', 'analytics', 'news']);
+  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set([
+    'trading',
+    'portfolio',
+    'social',
+    'analytics',
+    'news',
+  ]);
   const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);

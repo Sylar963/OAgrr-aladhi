@@ -97,6 +97,34 @@ export const ExchangeTradesResponseSchema = z.object({
 });
 export type ExchangeTradesResponse = z.infer<typeof ExchangeTradesResponseSchema>;
 
+export const EquityHistoryVenueSchema = z.enum(['derive', 'thalex', 'paradex']);
+export type EquityHistoryVenue = z.infer<typeof EquityHistoryVenueSchema>;
+
+export const EquityHistoryRangeSchema = z.enum(['1M', '3M']);
+export type EquityHistoryRange = z.infer<typeof EquityHistoryRangeSchema>;
+
+export const EquityHistoryPointSchema = z.object({
+  ts: z.number().int().nonnegative(),
+  equityUsd: z.number(),
+});
+export type EquityHistoryPoint = z.infer<typeof EquityHistoryPointSchema>;
+
+// venue_value: the venue's own mark-to-market account value series.
+// cash_replay: daily cash balances rebuilt from the venue's transaction log; only exact
+// where every product is futures-style settled daily (Thalex).
+export const EquityHistoryBasisSchema = z.enum(['venue_value', 'cash_replay']);
+export type EquityHistoryBasis = z.infer<typeof EquityHistoryBasisSchema>;
+
+export const EquityHistoryResponseSchema = z.object({
+  accountId: z.string(),
+  venue: EquityHistoryVenueSchema,
+  range: EquityHistoryRangeSchema,
+  basis: EquityHistoryBasisSchema,
+  fetchedAt: z.number().int().nonnegative(),
+  points: z.array(EquityHistoryPointSchema),
+});
+export type EquityHistoryResponse = z.infer<typeof EquityHistoryResponseSchema>;
+
 export const PortfolioAccountingSchema = z.object({
   openGrossDebitUsd: z.number().nonnegative(),
   openGrossCreditUsd: z.number().nonnegative(),

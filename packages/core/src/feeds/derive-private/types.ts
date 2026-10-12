@@ -57,3 +57,17 @@ export const DeriveJsonRpcEnvelopeSchema = z.object({
   error: z.object({ code: z.number(), message: z.string() }).optional(),
 });
 export type DeriveJsonRpcEnvelope = z.infer<typeof DeriveJsonRpcEnvelopeSchema>;
+
+export const DeriveSubaccountValueSchema = z
+  .object({
+    subaccount_id: z.number().int(),
+    subaccount_value: z.string(),
+    timestamp: z.number(),
+  })
+  .passthrough();
+export type DeriveSubaccountValue = z.infer<typeof DeriveSubaccountValueSchema>;
+
+export const DeriveSubaccountValueHistoryResponseSchema = z.object({
+  subaccount_value_history: z.array(DeriveSubaccountValueSchema),
+  pagination: z.object({ num_pages: z.number().int(), count: z.number().int() }).optional(),
+});

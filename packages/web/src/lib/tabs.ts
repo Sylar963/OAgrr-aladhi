@@ -4,6 +4,7 @@ export type TabId =
   | 'architect'
   | 'trading'
   | 'portfolio'
+  | 'social'
   | 'surface'
   | 'flow'
   | 'analytics'
@@ -31,6 +32,7 @@ export const TABS: readonly TabDef[] = [
   { id: 'architect', label: 'Builder', slug: 'builder', icon: '⚙', group: 'trade' },
   { id: 'trading', label: 'Paper', slug: 'paper', icon: '$', group: 'trade' },
   { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', icon: 'Σ', group: 'trade', badge: 'NEW' },
+  { id: 'social', label: 'Social', slug: 'social', icon: '☍', group: 'trade', badge: 'NEW' },
   { id: 'alpha', label: 'Alpha', slug: 'alpha', icon: 'α', group: 'research', badge: 'NEW' },
   { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎', group: 'research' },
   { id: 'news', label: 'News', slug: 'news', icon: '▤', group: 'research', badge: 'NEW' },

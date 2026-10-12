@@ -1,7 +1,7 @@
-import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
-import type { DerivePosition, DeriveTrade } from './types.js';
+import type { DerivePosition, DeriveSubaccountValue, DeriveTrade } from './types.js';
 
 export function parseDeriveOptionInstrument(name: string): {
   underlying: string;
@@ -117,4 +117,18 @@ export function deriveTradesToPortfolioTrades(
     const normalized = deriveTradeToPortfolioTrade(trade);
     return normalized == null ? [] : [normalized];
   });
+}
+
+// Legacy Derive docs give value-history timestamps in seconds, v3 in milliseconds.
+function deriveTimestampMs(ts: number): number {
+  return Math.round(ts < 1e12 ? ts * 1000 : ts);
+}
+
+export function deriveValueHistoryToPoints(
+  rows: readonly DeriveSubaccountValue[],
+): EquityHistoryPoint[] {
+  return rows
+    .map((row) => ({ ts: deriveTimestampMs(row.timestamp), equityUsd: Number(row.subaccount_value) }))
+    .filter((point) => Number.isFinite(point.equityUsd))
+    .sort((a, b) => a.ts - b.ts);
 }

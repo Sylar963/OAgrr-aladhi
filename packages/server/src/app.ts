@@ -21,6 +21,7 @@ import {
 } from './portfolio-assistant-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
 import { registerRoutes } from './routes/index.js';
+import { disposeSocialServices, startSocialServices } from './social-services.js';
 import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
 import {
   blockFlowService,
@@ -188,6 +189,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   startPortfolioAssistantRetentionCleanup(app.log);
   startPortfolioAssistantMemoryDistillation(app.log);
   startPortfolioAssistantFeedbackFlush();
+  startSocialServices(app.log);
   bindAssistantMarketData(app);
   app.addHook('onListen', async () => {
     await startAssistantMcpFromEnv(app.log);
@@ -221,6 +223,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await disposeChainWarmup();
     await disposePortfolioAssistantServices();
     await disposePortfolioServices();
+    await disposeSocialServices();
     await disposeAdapters(app.log);
     await ivHistoryStore.dispose();
     await gexWallStore.dispose();

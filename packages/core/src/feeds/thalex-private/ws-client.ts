@@ -1,19 +1,26 @@
 import type WebSocket from 'ws';
-import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
-import { thalexPortfolioToLegs, thalexTradesToPortfolioTrades } from './codec.js';
 import {
+  thalexCashReplayEquity,
+  thalexPortfolioToLegs,
+  thalexTradesToPortfolioTrades,
+} from './codec.js';
+import {
+  ThalexAccountSummarySchema,
   ThalexLoginResultSchema,
   ThalexPortfolioEntrySchema,
   ThalexPortfolioNotificationSchema,
   ThalexTradeHistoryNotificationSchema,
   ThalexTradeHistoryResultSchema,
+  ThalexTransactionHistoryResultSchema,
   ThalexSubscribedChannelsSchema,
   type ThalexPortfolioEntry,
   type ThalexTrade,
+  type ThalexTransaction,
 } from './types.js';
 
 const PROD_WS_URL = 'wss://thalex.com/ws/api/v2';
@@ -133,6 +140,33 @@ export class ThalexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  async fetchEquityHistory(fromMs: number, nowMs = Date.now()): Promise<EquityHistoryPoint[]> {
+    const summary = ThalexAccountSummarySchema.safeParse(await this.call('private/account_summary', {}));
+    if (!summary.success) {
+      throw new Error(`[thalex-private] private/account_summary returned an invalid payload: ${summary.error.message}`);
+    }
+    const transactions: ThalexTransaction[] = [];
+    let bookmark: string | undefined;
+    for (let page = 0; page < 100; page += 1) {
+      const result = await this.call('private/transaction_history', {
+        limit: 1_000,
+        sort: 'descending',
+        time_low: fromMs / 1000,
+        ...(bookmark == null ? {} : { bookmark }),
+      });
+      const parsed = ThalexTransactionHistoryResultSchema.safeParse(result);
+      if (!parsed.success) {
+        throw new Error(
+          `[thalex-private] private/transaction_history returned an invalid payload: ${parsed.error.message}`,
+        );
+      }
+      transactions.push(...parsed.data.transactions);
+      bookmark = parsed.data.bookmark ?? undefined;
+      if (bookmark == null) break;
+    }
+    return thalexCashReplayEquity(summary.data, transactions, fromMs, nowMs);
   }
 
   async dispose(): Promise<void> {

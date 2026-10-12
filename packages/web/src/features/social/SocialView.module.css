@@ -1,0 +1,39 @@
+.view {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.side {
+  width: 380px;
+  flex-shrink: 0;
+  min-height: 0;
+  border-left: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 900px) {
+  .view {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .main {
+    flex: none;
+  }
+
+  .side {
+    width: 100%;
+    height: 70vh;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+}

@@ -2,6 +2,9 @@ import { getClerkToken } from '@lib/clerk-token';
 import {
   type DeriveSessionKeyConfirm,
   type DeriveSessionKeyGrant,
+  type EquityHistoryRange,
+  type EquityHistoryResponse,
+  type EquityHistoryVenue,
   type ExchangePortfolioVenue,
   type ParadexConnect,
   type ParadexTokenSettings,
@@ -468,6 +471,30 @@ export function fetchExchangeTrades(query: ExchangeTradesQuery): Promise<Exchang
     right: query.right,
   });
   return getJson(`/portfolio/exchange-trades?${params.toString()}`, ExchangeTradesResponseSchema);
+}
+
+const EquityHistoryVenueValues = ['derive', 'thalex', 'paradex'] as const satisfies readonly EquityHistoryVenue[];
+const EquityHistoryRangeValues = ['1M', '3M'] as const satisfies readonly EquityHistoryRange[];
+
+const EquityHistoryResponseSchema: z.ZodType<EquityHistoryResponse> = z.object({
+  accountId: z.string(),
+  venue: z.enum(EquityHistoryVenueValues),
+  range: z.enum(EquityHistoryRangeValues),
+  basis: z.enum(['venue_value', 'cash_replay']),
+  fetchedAt: z.number(),
+  points: z.array(z.object({ ts: z.number(), equityUsd: z.number() })),
+});
+
+export function isEquityHistoryVenue(source: PortfolioSource): source is EquityHistoryVenue {
+  return (EquityHistoryVenueValues as readonly string[]).includes(source);
+}
+
+export function fetchEquityHistory(
+  venue: EquityHistoryVenue,
+  range: EquityHistoryRange,
+): Promise<EquityHistoryResponse> {
+  const params = new URLSearchParams({ venue, range });
+  return getJson(`/portfolio/equity-history?${params.toString()}`, EquityHistoryResponseSchema);
 }
 
 export function fetchMetrics(

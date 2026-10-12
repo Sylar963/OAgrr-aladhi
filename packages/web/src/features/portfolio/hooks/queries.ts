@@ -1,9 +1,10 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
-import type { PositionLegInput } from '@oggregator/protocol';
+import type { EquityHistoryRange, EquityHistoryVenue, PositionLegInput } from '@oggregator/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   addPosition,
+  fetchEquityHistory,
   fetchMetrics,
   fetchPositions,
   removePosition,
@@ -24,7 +25,21 @@ export const PORTFOLIO_QKEY = {
       source,
       underlying ?? 'all',
     ] as const,
+  equityHistory: (accountId: string, venue: EquityHistoryVenue, range: EquityHistoryRange) =>
+    ['account', accountId, 'portfolio', 'equity-history', venue, range] as const,
 };
+
+export function useEquityHistory(venue: EquityHistoryVenue, range: EquityHistoryRange) {
+  const session = useAccountSession();
+  const accountId = session.accountId ?? 'unresolved';
+  return useQuery({
+    queryKey: PORTFOLIO_QKEY.equityHistory(accountId, venue, range),
+    queryFn: () => fetchEquityHistory(venue, range),
+    enabled: session.status === 'ready',
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
 
 export function usePortfolioPositions(
   source: PortfolioSource = 'manual',

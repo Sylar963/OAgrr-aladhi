@@ -7,7 +7,7 @@ import {
   type PositionStore,
   type PositionStoreListener,
 } from '@oggregator/core';
-import type { PortfolioAccounting } from '@oggregator/protocol';
+import type { EquityHistoryPoint, PortfolioAccounting } from '@oggregator/protocol';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 import { portfolioFillPriceAt } from './portfolio-fill-prices.js';
 import {
@@ -242,6 +242,11 @@ export class DerivePositionStore implements PositionStore {
     );
     timer.unref?.();
     this.disconnectTimers.set(accountId, timer);
+  }
+
+  async fetchEquityHistory(accountId: string, fromMs: number): Promise<EquityHistoryPoint[] | null> {
+    const client = this.clients.get(accountId);
+    return client == null ? null : client.fetchEquityHistory(fromMs);
   }
 
   isConnected(accountId: string): boolean {

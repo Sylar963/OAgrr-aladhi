@@ -25,6 +25,7 @@ import { paperAuthRoute } from './paper/auth.js';
 import { paperRoutes, paperWsRoute } from './paper/index.js';
 import { portfolioRoutes, portfolioWsRoute } from './portfolio/index.js';
 import { regimeRoute } from './regime.js';
+import { socialRoutes, socialWsRoute } from './social/index.js';
 import { spotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
 import { statsRoute } from './stats.js';
@@ -88,8 +89,10 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(paperAuthRoute, { prefix: '/api' });
   app.register(portfolioRoutes, { prefix: '/api' });
   app.register(fundedRoutes, { prefix: '/api' });
+  app.register(socialRoutes, { prefix: '/api' });
   app.register(wsChainRoute);
   app.register(wsInstrumentTradesRoute);
   app.register(paperWsRoute);
   app.register(portfolioWsRoute);
+  app.register(socialWsRoute);
 }

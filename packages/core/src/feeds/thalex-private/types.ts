@@ -70,3 +70,34 @@ export type ThalexLoginResult = z.infer<typeof ThalexLoginResultSchema>;
 
 export const ThalexSubscribedChannelsSchema = z.array(z.string());
 export type ThalexSubscribedChannels = z.infer<typeof ThalexSubscribedChannelsSchema>;
+
+export const ThalexAccountSummarySchema = z
+  .object({
+    cash: z.array(
+      z
+        .object({
+          currency: z.string(),
+          balance: z.number(),
+          collateral_index_price: z.number().nullable().optional(),
+        })
+        .passthrough(),
+    ),
+    unrealised_pnl: z.number(),
+  })
+  .passthrough();
+export type ThalexAccountSummary = z.infer<typeof ThalexAccountSummarySchema>;
+
+export const ThalexTransactionSchema = z
+  .object({
+    time: z.number(),
+    asset: z.string(),
+    amount: z.number(),
+  })
+  .passthrough();
+export type ThalexTransaction = z.infer<typeof ThalexTransactionSchema>;
+
+export const ThalexTransactionHistoryResultSchema = z.object({
+  transactions: z.array(ThalexTransactionSchema),
+  bookmark: z.string().nullable().optional(),
+});
+export type ThalexTransactionHistoryResult = z.infer<typeof ThalexTransactionHistoryResultSchema>;

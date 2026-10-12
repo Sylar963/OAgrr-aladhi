@@ -1,9 +1,9 @@
-import type { PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, PositionLeg } from '@oggregator/protocol';
 
 import { feedLogger } from '../../utils/logger.js';
 import { PARADEX_REST_BASE_URL } from '../shared/endpoints.js';
-import { paradexPositionsToLegs } from './codec.js';
-import { ParadexPositionsResponseSchema } from './types.js';
+import { paradexAccountHistoryToPoints, paradexPositionsToLegs } from './codec.js';
+import { ParadexAccountHistorySchema, ParadexPositionsResponseSchema } from './types.js';
 
 export interface ParadexPrivateCreds {
   readonlyToken: string;
@@ -54,6 +54,17 @@ export class ParadexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  async fetchEquityHistory(fromMs: number): Promise<EquityHistoryPoint[]> {
+    const res = await this.fetchImpl(`${PARADEX_REST_BASE_URL}/account/history?type=value`, {
+      headers: { Authorization: `Bearer ${this.creds.readonlyToken}` },
+    });
+    if (res.status === 401 || res.status === 403) throw new ParadexAuthError(res.status);
+    if (!res.ok) throw new Error(`Paradex account history HTTP ${res.status}`);
+    const parsed = ParadexAccountHistorySchema.safeParse(await res.json());
+    if (!parsed.success) throw new Error(`Paradex account history parse failed: ${parsed.error.message}`);
+    return paradexAccountHistoryToPoints(parsed.data).filter((point) => point.ts >= fromMs);
   }
 
   async dispose(): Promise<void> {

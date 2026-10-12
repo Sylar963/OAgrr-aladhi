@@ -1,7 +1,12 @@
-import type { PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, PositionLeg } from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
-import { ParadexJwtClaimsSchema, type ParadexJwtClaims, type ParadexPosition } from './types.js';
+import {
+  ParadexJwtClaimsSchema,
+  type ParadexAccountHistory,
+  type ParadexJwtClaims,
+  type ParadexPosition,
+} from './types.js';
 
 const MONTHS: Record<string, string> = {
   JAN: '01',
@@ -104,4 +109,19 @@ export function decodeParadexJwtClaims(token: string): ParadexJwtClaims | null {
   } catch {
     return null;
   }
+}
+
+// The account-history docs leave the timestamp unit unspecified.
+function paradexTimestampMs(ts: number): number {
+  return Math.round(ts < 1e12 ? ts * 1000 : ts);
+}
+
+export function paradexAccountHistoryToPoints(history: ParadexAccountHistory): EquityHistoryPoint[] {
+  const points: EquityHistoryPoint[] = [];
+  const count = Math.min(history.data.length, history.timestamps.length);
+  for (let i = 0; i < count; i += 1) {
+    const equityUsd = history.data[i]!;
+    if (Number.isFinite(equityUsd)) points.push({ ts: paradexTimestampMs(history.timestamps[i]!), equityUsd });
+  }
+  return points.sort((a, b) => a.ts - b.ts);
 }

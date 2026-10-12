@@ -2,14 +2,20 @@ import { feedLogger } from '../../utils/logger.js';
 import { DERIVE_TESTNET_WS_URL, DERIVE_WS_URL } from '../shared/endpoints.js';
 import { JsonRpcWsClient } from '../shared/jsonrpc-client.js';
 import { signLoginMessage } from './auth.js';
-import { derivePositionsToLegs, deriveTradesToPortfolioTrades } from './codec.js';
+import {
+  derivePositionsToLegs,
+  deriveTradesToPortfolioTrades,
+  deriveValueHistoryToPoints,
+} from './codec.js';
 import {
   DerivePositionsResponseSchema,
+  DeriveSubaccountValueHistoryResponseSchema,
   DeriveTradeHistoryResponseSchema,
   type DerivePosition,
+  type DeriveSubaccountValue,
   type DeriveTrade,
 } from './types.js';
-import type { ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
 
 
 export interface DerivePrivateCreds {
@@ -22,6 +28,7 @@ export interface DerivePrivateCreds {
 // Balance events fire on fills and settlements, not on mark moves, so venue marks
 // would freeze between trades without a periodic positions refresh.
 const POSITIONS_REFRESH_MS = 15_000;
+const VALUE_HISTORY_PERIOD_SEC = 86_400;
 
 export type DerivePositionsListener = (legs: PositionLeg[]) => void;
 export type DeriveTradesListener = (trades: ExchangePortfolioTrade[]) => void;
@@ -94,6 +101,28 @@ export class DerivePrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  async fetchEquityHistory(fromMs: number, nowMs = Date.now()): Promise<EquityHistoryPoint[]> {
+    const rows: DeriveSubaccountValue[] = [];
+    let totalPages = 1;
+    for (let page = 1; page <= Math.min(totalPages, 20); page += 1) {
+      const raw = await this.client.call('private/get_subaccount_value_history', {
+        subaccount_id: this.creds.subaccountId,
+        period: VALUE_HISTORY_PERIOD_SEC,
+        start_timestamp: fromMs,
+        end_timestamp: nowMs,
+        page,
+        page_size: 1_000,
+      });
+      const parsed = DeriveSubaccountValueHistoryResponseSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new Error(`[derive-private] value history parse failed: ${parsed.error.message}`);
+      }
+      rows.push(...parsed.data.subaccount_value_history);
+      totalPages = Math.max(1, parsed.data.pagination?.num_pages ?? 1);
+    }
+    return deriveValueHistoryToPoints(rows).filter((point) => point.ts >= fromMs);
   }
 
   async dispose(): Promise<void> {

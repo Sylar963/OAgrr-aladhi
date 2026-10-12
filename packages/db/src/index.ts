@@ -187,3 +187,14 @@ export {
 } from './break-even-snapshot-store.js';
 export type { NewsCursor, NewsPageQuery, NewsStore, PersistedNewsItem } from './news-store.js';
 export { NoopNewsStore, PostgresNewsStore } from './news-store.js';
+export type {
+  AccountBookPosition,
+  AccountBookRow,
+  ChatMessageRow,
+  ChatModerationRow,
+  PaperEquitySnapshotRow,
+  SocialStore,
+  UpsertUserProfileInput,
+  UserProfileRow,
+} from './social-store.js';
+export { HandleTakenError, NoopSocialStore, PostgresSocialStore } from './social-store.js';

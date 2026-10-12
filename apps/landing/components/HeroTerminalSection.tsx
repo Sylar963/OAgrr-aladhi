@@ -98,7 +98,6 @@ export function HeroTerminalSection() {
   }, [scrollYProgress, scrollProgress]);
 
   const surfaceScale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.92, 0.84]);
-  const surfaceX = useTransform(scrollYProgress, [0, 0.5, 1], ["0%", "16%", "26%"]);
   const surfaceOpacity = useTransform(scrollYProgress, [0, 0.55, 1], [1, 0.7, 0.55]);
 
   const scrollHintOpacity = useTransform(scrollYProgress, [0, 0.12], [1, 0]);
@@ -128,9 +127,8 @@ export function HeroTerminalSection() {
             : {
                 style: {
                   scale: surfaceScale,
-                  x: surfaceX,
                   opacity: surfaceOpacity,
-                  transformOrigin: "50% 50%",
+                  transformOrigin: "75% 50%",
                 },
               })}
         >
@@ -175,6 +173,10 @@ export function HeroTerminalSection() {
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,11,13,0.5)_0%,rgba(8,11,13,0)_22%,rgba(8,11,13,0)_70%,rgba(8,11,13,0.92)_100%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,11,13,0.55)_0%,rgba(8,11,13,0.2)_100%)] md:bg-[linear-gradient(90deg,rgba(8,11,13,0.92)_0%,rgba(8,11,13,0.7)_32%,rgba(8,11,13,0)_58%)]"
         />
         <div
           aria-hidden

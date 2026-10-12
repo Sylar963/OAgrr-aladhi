@@ -69,19 +69,19 @@ export default function VolSurfaceTheaterCanvas({
   return (
     <div ref={wrapperRef} className="absolute inset-0">
       <Canvas
-        camera={{ fov: 30, position: [4.6, -1.4, 6.8] }}
+        camera={{ fov: 30, position: [0, 4.6, 11] }}
         className="h-full w-full"
-        dpr={[1, 1.5]}
+        dpr={[1, 1.75]}
         frameloop={inView ? "always" : "never"}
         gl={{
-          antialias: false,
+          antialias: true,
           alpha: false,
           depth: true,
           stencil: false,
           powerPreference: "high-performance",
         }}
       >
-        <color attach="background" args={["#0a0a0a"]} />
+        <color attach="background" args={["#080b0d"]} />
         <TheaterSurfaceMesh scrollProgress={scrollProgress} />
       </Canvas>
     </div>

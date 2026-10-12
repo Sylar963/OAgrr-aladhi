@@ -83,6 +83,8 @@ export interface CachedInstrument {
   tickSize: number | null;
   minQty: number | null;
   lotSize?: number | null;
+  /** Smallest order value the venue accepts: size × option mark, in USD. */
+  minNotionalUsd?: number | null;
   makerFee: number | null;
   takerFee: number | null;
 }
@@ -704,6 +706,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
       tickSize: inst.tickSize,
       minQty: inst.minQty,
       lotSize: inst.lotSize ?? null,
+      minNotionalUsd: inst.minNotionalUsd ?? null,
       makerFee: inst.makerFee,
       takerFee: inst.takerFee,
       greeks: q.greeks,

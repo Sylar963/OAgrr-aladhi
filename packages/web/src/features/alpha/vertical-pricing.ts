@@ -182,12 +182,28 @@ function pairIssue(
   )
     return 'Quantity below minimum or off step';
   if (
+    belowMinNotional(b, b.askUsd, input.quantity) ||
+    belowMinNotional(s, s.bidUsd, input.quantity)
+  )
+    return 'Order value below venue minimum';
+  if (
     !positive(b.askSize) ||
     !positive(s.bidSize) ||
     input.quantity > Math.min(b.askSize, s.bidSize)
   )
     return 'Insufficient displayed size';
   return null;
+}
+
+// Venues value an order at its mark; the fill price stands in when no mark is published.
+function belowMinNotional(
+  execution: NonNullable<VenueQuote['execution']>,
+  fillUsd: number | null,
+  quantity: number,
+): boolean {
+  if (!positive(execution.minNotionalUsd)) return false;
+  const priceUsd = positive(execution.markUsd) ? execution.markUsd : fillUsd;
+  return !positive(priceUsd) || quantity * priceUsd < execution.minNotionalUsd - 1e-9;
 }
 
 export function priceVertical(

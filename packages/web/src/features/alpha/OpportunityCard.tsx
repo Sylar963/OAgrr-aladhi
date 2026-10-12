@@ -202,6 +202,7 @@ const REJECTION_LABELS: Record<string, string> = {
   'Stale or missing timestamp': 'Quote too old',
   'Leg timestamps out of sync': 'Leg quotes not synchronized',
   'Quantity below minimum or off step': 'Size below venue minimum',
+  'Order value below venue minimum': 'Order value below venue minimum',
   'Insufficient displayed size': 'Not enough size at quote',
   'No positive payoff after costs': 'Costs consume the payoff',
   'Missing execution metadata / fees': 'Execution data missing',

@@ -77,6 +77,7 @@ export interface NormalizedOptionContract {
   tickSize: number | null;
   minQty: number | null;
   lotSize?: number | null;
+  minNotionalUsd?: number | null;
   makerFee: number | null;
   takerFee: number | null;
   greeks: OptionGreeks;

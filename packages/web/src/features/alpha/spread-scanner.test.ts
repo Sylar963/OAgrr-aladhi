@@ -54,6 +54,17 @@ describe('venue-specific spread scanner', () => {
     i.quantity = q;
     expect(candidates(i)).toHaveLength(0);
   });
+  it('rejects legs whose order value at mark is below the venue minimum notional', () => {
+    const i = input();
+    for (const row of i.chain.strikes)
+      for (const side of [row.call, row.put]) side.venues.thalex!.execution!.minNotionalUsd = 8;
+    // 0.01 BTC: the 81k call marks at $650 → $6.50; every other leg clears $8.
+    const [scan] = scanSpreads(i);
+    expect(scan!.candidates.map((c) => c.kind).sort()).toEqual(['put-credit', 'put-debit']);
+    expect(scan!.rejected['Order value below venue minimum']).toBe(2);
+    i.quantity = 0.02;
+    expect(candidates(i)).toHaveLength(4);
+  });
   it('never pairs legs across venues', () => {
     const i = input();
     const row = i.chain.strikes[1]!;

@@ -10,6 +10,7 @@ export interface ParadexInstrumentDetails {
   expirationTimestampMs: number | null;
   tickRaw: string | null | undefined;
   stepRaw: string | null | undefined;
+  minNotionalRaw: string | null | undefined;
   makerFeeRaw: string | null | undefined;
   takerFeeRaw: string | null | undefined;
 }
@@ -32,6 +33,7 @@ export function paradexInstrumentDetails(market: ParadexMarket): ParadexInstrume
     expirationTimestampMs: market.expiry_at,
     tickRaw: market.price_tick_size,
     stepRaw: market.order_size_increment,
+    minNotionalRaw: market.min_notional,
     makerFeeRaw: market.fee_config?.api_fee?.maker_fee?.fee,
     takerFeeRaw: market.fee_config?.api_fee?.taker_fee?.fee,
   };

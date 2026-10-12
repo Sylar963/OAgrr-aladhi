@@ -125,6 +125,8 @@ export interface VenueExecutionQuote {
   nativePriceTick: number;
   minQuantity: number;
   quantityStep: number;
+  /** Smallest order value the venue accepts per leg: quantity × markUsd. */
+  minNotionalUsd?: number | null;
   bidSize: number | null;
   askSize: number | null;
   bidUsd: number | null;
@@ -232,6 +234,7 @@ export const VenueExecutionQuoteSchema = z.object({
   nativePriceTick: z.number().finite().positive(),
   minQuantity: z.number().finite().positive(),
   quantityStep: z.number().finite().positive(),
+  minNotionalUsd: z.number().finite().positive().nullable().optional(),
   bidSize: z.number().finite().nonnegative().nullable(),
   askSize: z.number().finite().nonnegative().nullable(),
   bidUsd: z.number().finite().positive().nullable(),

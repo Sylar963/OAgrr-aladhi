@@ -58,6 +58,7 @@ export interface VenueExecutionQuote {
   nativePriceTick: number;
   minQuantity: number;
   quantityStep: number;
+  minNotionalUsd?: number | null;
   bidSize: number | null;
   askSize: number | null;
   bidUsd: number | null;
@@ -327,6 +328,7 @@ function buildVenueExecutionQuote(
     nativePriceTick: nativeTick,
     minQuantity,
     quantityStep,
+    minNotionalUsd: positiveFinite(contract.minNotionalUsd),
     bidSize: toBaseSize(contract.quote.bidSize, multiplier),
     askSize: toBaseSize(contract.quote.askSize, multiplier),
     bidUsd: positiveFinite(contract.quote.bid.usdPerBase),

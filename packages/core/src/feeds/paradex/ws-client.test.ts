@@ -229,6 +229,7 @@ describe('ParadexWsAdapter instrument parsing', () => {
       expiry_at: 1792137600000,
       price_tick_size: '0.01',
       order_size_increment: '0.001',
+      min_notional: '20',
       fee_config: { api_fee: { maker_fee: { fee: '0.0001' }, taker_fee: { fee: '0.0001' } } },
     });
     expect(inst).toMatchObject({
@@ -236,6 +237,7 @@ describe('ParadexWsAdapter instrument parsing', () => {
       contractMultiplierBase: 1,
       minQty: 0.001,
       lotSize: 0.001,
+      minNotionalUsd: 20,
       makerFee: 0.0001,
       takerFee: 0.0001,
     });

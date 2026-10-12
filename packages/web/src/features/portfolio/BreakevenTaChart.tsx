@@ -21,6 +21,7 @@ import type { EnrichedChainResponse } from '@shared/enriched';
 import {
   BE_TENOR_TARGETS,
   atmStraddleBreakevens,
+  deltaStrangleBreakevens,
   otmStrangleBreakevens,
   pickNearestExpiry,
   type BeTenorTarget,
@@ -40,7 +41,7 @@ const TIMEFRAMES: Record<Timeframe, { resolution: SpotCandleResolutionSec; bucke
   '180d': { resolution: 86400, buckets: 180 },
 };
 
-type LineKey = 'atm15' | 'otm15' | 'atm30' | 'otm30' | 'portfolio';
+type LineKey = 'atm0' | 'otm0' | 'atm15' | 'otm15' | 'atm30' | 'otm30' | 'portfolio';
 
 interface LineSpec {
   key: LineKey;
@@ -50,6 +51,8 @@ interface LineSpec {
 }
 
 const LINE_SPECS: LineSpec[] = [
+  { key: 'atm0', label: '0DTE ATM straddle', color: '#f472b6', style: LineStyle.Solid },
+  { key: 'otm0', label: '0DTE 25Δ strangle', color: '#2dd4bf', style: LineStyle.Solid },
   { key: 'atm15', label: '15d ATM straddle', color: '#a78bfa', style: LineStyle.Solid },
   { key: 'otm15', label: '15d 25% OTM strangle', color: '#38bdf8', style: LineStyle.Solid },
   { key: 'atm30', label: '30d ATM straddle', color: '#c4b5fd', style: LineStyle.Dashed },
@@ -59,7 +62,15 @@ const LINE_SPECS: LineSpec[] = [
 
 const LINES_STORAGE_KEY = 'portfolioBeTaLines';
 const TIMEFRAME_STORAGE_KEY = 'portfolioBeTaTimeframe';
-const DEFAULT_LINES: Record<LineKey, boolean> = { atm15: true, otm15: true, atm30: true, otm30: true, portfolio: true };
+const DEFAULT_LINES: Record<LineKey, boolean> = {
+  atm0: true,
+  otm0: true,
+  atm15: true,
+  otm15: true,
+  atm30: true,
+  otm30: true,
+  portfolio: true,
+};
 
 function loadLines(): Record<LineKey, boolean> {
   try {
@@ -143,6 +154,9 @@ function usePreloadedSnapshot() {
 
   return {
     tenorsByUnderlying,
+    refetchExpiries: () => {
+      for (const result of expiryResults) void result.refetch();
+    },
     expiriesErrorFor: (underlying: TaUnderlying) =>
       expiryResults[TA_UNDERLYINGS.indexOf(underlying)]?.isError ?? false,
     chainsFor: (underlying: TaUnderlying) =>
@@ -211,7 +225,7 @@ export default function BreakevenTaChart({
       const expiry = tenorExpiries[days];
       const chain = expiry != null ? chainsByExpiry.get(expiry) : undefined;
       out[`atm${days}`] = chain ? atmStraddleBreakevens(chain) : null;
-      out[`otm${days}`] = chain ? otmStrangleBreakevens(chain) : null;
+      out[`otm${days}`] = chain ? (days === 0 ? deltaStrangleBreakevens(chain) : otmStrangleBreakevens(chain)) : null;
     }
     return out;
     // chainsByExpiry is rebuilt every render; snapshotKey changes exactly when its data does.
@@ -221,7 +235,7 @@ export default function BreakevenTaChart({
     () => (portfolioUnderlying === underlying ? portfolioBreakEvensUsd : []),
     [portfolioUnderlying, underlying, portfolioBreakEvensUsd],
   );
-  const refSpot = structures.atm15?.refSpotUsd ?? structures.atm30?.refSpotUsd ?? null;
+  const refSpot = structures.atm15?.refSpotUsd ?? structures.atm30?.refSpotUsd ?? structures.atm0?.refSpotUsd ?? null;
 
   const candleResult = usePreloadedCandles(timeframe)[TA_UNDERLYINGS.indexOf(underlying)]!;
   const candleData = candleResult.data?.currency === underlying ? candleResult.data : undefined;
@@ -356,6 +370,8 @@ export default function BreakevenTaChart({
   };
 
   const refreshSnapshot = () => {
+    // Re-picks tenors too, so the 0DTE line rolls to the next daily after 08:00 UTC settlement.
+    snapshot.refetchExpiries();
     for (const { result } of chainEntries) void result.refetch();
   };
 
@@ -457,7 +473,7 @@ export default function BreakevenTaChart({
       <div className={styles.hint}>
         {expiriesError
           ? 'Expiries unavailable, so structure break-evens cannot be computed.'
-          : 'Break-evens are a frozen snapshot from the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. 25% OTM: put strike − cost and call strike + cost, using strikes nearest 25% from spot. Candles: Deribit perpetual.'}
+          : 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: Deribit perpetual.'}
       </div>
     </div>
   );

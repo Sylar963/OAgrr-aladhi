@@ -5,6 +5,7 @@ import type { EnrichedChainResponse, EnrichedSide, VenueQuote } from '@shared/en
 import {
   atmStraddleBreakevens,
   compositeMidUsd,
+  deltaStrangleBreakevens,
   otmStrangleBreakevens,
   pickNearestExpiry,
 } from './breakeven-levels';
@@ -125,5 +126,47 @@ describe('otmStrangleBreakevens', () => {
 
   it('returns null when one wing has no priced strike', () => {
     expect(otmStrangleBreakevens(chain([{ strike: 75_000, call: side(null), put: side(120) }]))).toBeNull();
+  });
+});
+
+function deltaSide(mid: number, ...deltas: number[]): EnrichedSide {
+  const venues: EnrichedSide['venues'] = {};
+  const ids = ['deribit', 'okx', 'bybit'] as const;
+  deltas.forEach((delta, i) => {
+    venues[ids[i]!] = { mid, delta } as VenueQuote;
+  });
+  return { venues, bestIv: null, bestVenue: null };
+}
+
+describe('deltaStrangleBreakevens', () => {
+  it('uses strikes whose median venue delta is nearest 25Δ', () => {
+    const result = deltaStrangleBreakevens(
+      chain([
+        { strike: 97_000, call: deltaSide(3_100, 0.9), put: deltaSide(60, -0.12, -0.1, -0.11) },
+        { strike: 98_000, call: deltaSide(2_200, 0.8), put: deltaSide(150, -0.24, -0.4, -0.26) },
+        { strike: 100_000, call: deltaSide(700, 0.5), put: deltaSide(700, -0.5) },
+        { strike: 102_000, call: deltaSide(160, 0.27), put: deltaSide(2_100, -0.73) },
+        { strike: 103_000, call: deltaSide(70, 0.13), put: deltaSide(3_000, -0.87) },
+      ]),
+    );
+    expect(result).toMatchObject({
+      kind: 'delta_strangle',
+      putStrike: 98_000,
+      callStrike: 102_000,
+      premiumUsd: 310,
+      lowerUsd: 97_690,
+      upperUsd: 102_310,
+    });
+  });
+
+  it('returns null when venues report no deltas', () => {
+    expect(
+      deltaStrangleBreakevens(
+        chain([
+          { strike: 98_000, call: side(2_200), put: side(150) },
+          { strike: 102_000, call: side(160), put: side(2_100) },
+        ]),
+      ),
+    ).toBeNull();
   });
 });

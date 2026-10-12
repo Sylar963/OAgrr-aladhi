@@ -123,7 +123,7 @@
   color: var(--text-dim);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1279px) {
   .sep,
   .freshness {
     display: none;

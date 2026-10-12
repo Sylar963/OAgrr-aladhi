@@ -1,4 +1,9 @@
-import { type CallPutFlowResponse, CallPutFlowResponseSchema } from '@oggregator/protocol';
+import {
+  type CallPutFlowResponse,
+  CallPutFlowResponseSchema,
+  type TradfiVolHistoryResponse,
+  TradfiVolHistoryResponseSchema,
+} from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
 
 import { useExpiries } from '@features/chain';
@@ -57,6 +62,22 @@ export function useIvHistory(
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev: IvHistoryResponse | undefined) => prev,
+  });
+}
+
+/** Daily close, 30-day IV and realized vol for a TradFi underlying; refreshes with the daily bar. */
+export function useTradfiVolHistory(underlying: string) {
+  return useQuery({
+    queryKey: ['tradfi-vol-history', underlying] as const,
+    queryFn: async () =>
+      TradfiVolHistoryResponseSchema.parse(
+        await tradfiFetchJson<unknown>(`/vol-history?underlying=${encodeURIComponent(underlying)}`),
+      ),
+    enabled: Boolean(underlying),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    placeholderData: (prev: TradfiVolHistoryResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }
 

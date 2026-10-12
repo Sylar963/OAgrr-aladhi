@@ -415,3 +415,11 @@ export {
   type TradfiSectorsResponse,
   TradfiSectorsResponseSchema,
 } from './tradfi-sectors.js';
+export {
+  type TradfiVolHistoryResponse,
+  TradfiVolHistoryResponseSchema,
+  type TradfiVolPoint,
+  TradfiVolPointSchema,
+  type TradfiVolRank,
+  TradfiVolRankSchema,
+} from './tradfi-vol-history.js';

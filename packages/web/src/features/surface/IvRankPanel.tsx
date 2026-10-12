@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import type { TenorRichness } from "@oggregator/protocol";
 
@@ -277,16 +277,18 @@ function RangeBar({
   );
 }
 
-function Chip({
-  tenor,
+export function Chip({
+  label,
   result,
   richness,
   showRichness,
+  samplesTip = SAMPLES_TIP,
 }: {
-  tenor: IvTenor;
+  label: string;
   result: IvHistoryTenorResult | undefined;
   richness: TenorRichness | null;
   showRichness: boolean;
+  samplesTip?: ReactNode;
 }) {
   const series = result?.series ?? [];
   const n = series.filter((p) => p.atmIv != null).length;
@@ -303,13 +305,13 @@ function Chip({
     .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
     .join("");
   const last = points.at(-1);
-  const gradientId = `ivr-spark-${tenor}-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const gradientId = `ivr-spark-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   return (
     <div className={styles.chip} data-level={level}>
       <div className={styles.chipHead}>
         <div>
-          <div className={styles.chipTenor}>{tenor.toUpperCase()} ATM</div>
+          <div className={styles.chipTenor}>{label}</div>
           <div className={styles.chipIv}>{fmtIv(currentIv)}</div>
         </div>
         <HoverTooltip
@@ -387,7 +389,7 @@ function Chip({
           as="span"
           className={styles.badgeTrigger}
           placement="bottom-end"
-          content={SAMPLES_TIP}
+          content={samplesTip}
         >
           n {n}
         </HoverTooltip>
@@ -504,7 +506,7 @@ export default function IvRankPanel({ underlying }: Props) {
         {TENORS.map((t) => (
           <Chip
             key={t}
-            tenor={t}
+            label={`${t.toUpperCase()} ATM`}
             result={data?.tenors[t]}
             richness={
               t === "7d" || t === "30d" ? (richness?.tenors[t] ?? null) : null

@@ -3,7 +3,7 @@ import { CandleStreamer, liveReplayFromTimeMs } from './ws-underlying-candles.js
 import type { RawCandle } from '../tastytrade/candle-codec.js';
 
 function bar(time: number, c: number, over: Partial<RawCandle> = {}): RawCandle {
-  return { symbol: 'SPX{=5m}', flags: 0, time, o: c, h: c, l: c, c, v: 1, ...over };
+  return { symbol: 'SPX{=5m}', flags: 0, time, o: c, h: c, l: c, c, v: 1, iv: NaN, ...over };
 }
 
 describe('CandleStreamer', () => {

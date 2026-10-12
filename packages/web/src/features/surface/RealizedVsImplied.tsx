@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import {
   createChart,
   AreaSeries,
@@ -11,17 +11,33 @@ import {
 import { DropdownPicker } from '@components/ui';
 import { getTokenLogo } from '@lib/token-meta';
 import { useDvolHistory } from '@features/dvol';
+import { useTradfiSelection } from '@features/tradfi';
+import type { TradfiVolHistoryResponse } from '@oggregator/protocol';
+import { useTradfiVolHistory } from './queries';
+import type { SurfaceMarket } from './surface-market';
 import styles from './RealizedVsImplied.module.css';
 
 const CURRENCIES = ['BTC', 'ETH'] as const;
 const IV_COLOR = '#50D2C1';
 const HV_COLOR = '#F7A600';
 
-type DvolData = ReturnType<typeof useDvolHistory>['data'];
+/** IV and HV lines in vol points; the DVOL response already has this shape. */
+interface RvIvSeries {
+  candles: Array<{ timestamp: number; close: number }>;
+  hv: Array<{ timestamp: number; value: number }>;
+}
+
+function tradfiSeries(history: TradfiVolHistoryResponse | undefined): RvIvSeries | undefined {
+  if (!history) return undefined;
+  return {
+    candles: history.series.flatMap((p) => (p.iv == null ? [] : [{ timestamp: p.ts, close: p.iv * 100 }])),
+    hv: history.series.flatMap((p) => (p.rv == null ? [] : [{ timestamp: p.ts, value: p.rv * 100 }])),
+  };
+}
 
 function useRvIvChart(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  data: DvolData,
+  data: RvIvSeries | undefined,
 ) {
   const chartRef = useRef<IChartApi | null>(null);
   const ivRef = useRef<ISeriesApi<'Area'> | null>(null);
@@ -110,17 +126,22 @@ function useRvIvChart(
 
 interface Props {
   defaultUnderlying?: string;
+  market?: SurfaceMarket;
 }
 
-export default function RealizedVsImplied({ defaultUnderlying = 'BTC' }: Props) {
+export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const tradfi = market === 'tradfi';
   const initial = CURRENCIES.includes(defaultUnderlying as (typeof CURRENCIES)[number])
     ? defaultUnderlying
     : 'BTC';
   const [currency, setCurrency] = useState(initial);
-  const { data } = useDvolHistory(currency);
+  const { data: dvol } = useDvolHistory(tradfi ? '' : currency);
+  const { underlying: tradfiUnderlying } = useTradfiSelection(tradfi);
+  const { data: history } = useTradfiVolHistory(tradfi ? tradfiUnderlying : '');
+  const tradfiData = useMemo(() => tradfiSeries(history), [history]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  useRvIvChart(containerRef, data);
+  useRvIvChart(containerRef, tradfi ? tradfiData : dvol);
 
   const logo = getTokenLogo(currency);
 
@@ -128,21 +149,25 @@ export default function RealizedVsImplied({ defaultUnderlying = 'BTC' }: Props) 
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>Realized vs Implied Volatility</span>
-        <DropdownPicker
-          size="sm"
-          value={currency}
-          onChange={setCurrency}
-          icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
-          options={CURRENCIES.map((c) => ({ value: c, label: c }))}
-        />
+        {tradfi ? (
+          <span className={styles.title}>{tradfiUnderlying}</span>
+        ) : (
+          <DropdownPicker
+            size="sm"
+            value={currency}
+            onChange={setCurrency}
+            icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
+            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+          />
+        )}
         <div className={styles.legend}>
           <span className={styles.legendItem}>
             <span className={styles.legendSwatch} style={{ background: IV_COLOR }} />
-            IV (DVOL)
+            IV ({tradfi ? (history?.ivSource ?? 'IVx') : 'DVOL'})
           </span>
           <span className={styles.legendItem}>
             <span className={styles.legendSwatch} style={{ background: HV_COLOR }} />
-            HV (Realized)
+            {tradfi ? `HV ${history?.rvWindowDays ?? 21}d (Realized)` : 'HV (Realized)'}
           </span>
         </div>
       </div>

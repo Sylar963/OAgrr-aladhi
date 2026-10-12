@@ -2,6 +2,8 @@ import { Suspense, lazy } from 'react';
 
 import { Spinner } from '@components/ui';
 import AtmTermStructure from './AtmTermStructure';
+import RealizedVsImplied from './RealizedVsImplied';
+import TradfiIvRankPanel from './TradfiIvRankPanel';
 import VolSmile from './VolSmile';
 import styles from './SurfaceView.module.css';
 
@@ -15,6 +17,14 @@ export default function TradfiSurfaceView() {
           <Suspense fallback={<Spinner size="md" label="Loading 3D surface..." />}>
             <VolSurface3D market="tradfi" />
           </Suspense>
+        </div>
+        <div className={styles.chartsRow}>
+          <div className={`${styles.chartPanel} ${styles.ivRankPanel}`}>
+            <TradfiIvRankPanel />
+          </div>
+          <div className={styles.chartPanel}>
+            <RealizedVsImplied market="tradfi" />
+          </div>
         </div>
         <div className={styles.chartsRow}>
           <div className={styles.chartPanel}>

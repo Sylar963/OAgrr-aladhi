@@ -151,7 +151,7 @@ describe('buildUnderlyingCandlesResponse', () => {
 });
 
 function raw(over: Partial<RawCandle> = {}): RawCandle {
-  return { symbol: 'SPX{=5m}', flags: 0, time: 1781553000000, o: 55.9, h: 56.1, l: 55.8, c: 56.0, v: 3, ...over };
+  return { symbol: 'SPX{=5m}', flags: 0, time: 1781553000000, o: 55.9, h: 56.1, l: 55.8, c: 56.0, v: 3, iv: NaN, ...over };
 }
 
 describe('mapRawCandle', () => {

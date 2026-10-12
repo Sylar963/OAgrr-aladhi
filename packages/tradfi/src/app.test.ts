@@ -188,6 +188,7 @@ describe('tradfi app', () => {
         l: 4.9,
         c: 5.1,
         v: 3,
+        iv: NaN,
       },
     ];
     const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient(bars) });
@@ -231,6 +232,7 @@ describe('tradfi app', () => {
         l: 197,
         c: 198.5,
         v: 1000,
+        iv: NaN,
       },
     ];
     const app = buildApp({ ...seededDeps(), candleClient: makeCandleClient(bars) });

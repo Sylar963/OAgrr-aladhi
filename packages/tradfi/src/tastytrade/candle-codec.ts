@@ -1,12 +1,13 @@
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 
 export const CANDLE_CHANNEL = 1; // dedicated channel on the candle connection
-export const CANDLE_FIELDS = ['eventType', 'eventSymbol', 'eventFlags', 'time', 'open', 'high', 'low', 'close', 'volume'];
+export const CANDLE_FIELDS = ['eventType', 'eventSymbol', 'eventFlags', 'time', 'open', 'high', 'low', 'close', 'volume', 'impVolatility'];
 
 const SNAPSHOT_END = 0x08;
 const SNAPSHOT_SNIP = 0x10;
 
-export interface RawCandle { symbol: string; flags: number; time: number; o: number; h: number; l: number; c: number; v: number; }
+/** `iv` is the underlying's 30-day implied volatility as a fraction; NaN on option and index candles that lack it. */
+export interface RawCandle { symbol: string; flags: number; time: number; o: number; h: number; l: number; c: number; v: number; iv: number; }
 
 function num(v: unknown): number { const n = Number(v); return Number.isFinite(n) ? n : NaN; }
 
@@ -22,7 +23,7 @@ export function parseCandleFrame(frame: unknown): RawCandle[] {
     const symbol = String(flat[i + 1]); // full candle symbol incl. {=period} — used for exact request routing
     out.push({
       symbol, flags: num(flat[i + 2]), time: num(flat[i + 3]),
-      o: num(flat[i + 4]), h: num(flat[i + 5]), l: num(flat[i + 6]), c: num(flat[i + 7]), v: num(flat[i + 8]),
+      o: num(flat[i + 4]), h: num(flat[i + 5]), l: num(flat[i + 6]), c: num(flat[i + 7]), v: num(flat[i + 8]), iv: num(flat[i + 9]),
     });
   }
   return out;

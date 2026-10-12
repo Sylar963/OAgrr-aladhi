@@ -11,6 +11,7 @@ import { gexAllExpiriesRoute } from './routes/gex-all-expiries.js';
 import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 import { underlyingsRoute } from './routes/underlyings.js';
 import { venuesRoute } from './routes/venues.js';
+import { volHistoryRoute } from './routes/vol-history.js';
 import { wsChainRoute } from './routes/ws-chain.js';
 import { wsUnderlyingCandlesRoute } from './routes/ws-underlying-candles.js';
 import type { TradfiFlowBook } from './runtime/flow-book.js';
@@ -46,6 +47,7 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(underlyingCandlesRoute(deps));
   void app.register(gexAllExpiriesRoute(deps));
   void app.register(surfaceRoute(deps));
+  void app.register(volHistoryRoute(deps));
   void app.register(sectorsRoute(deps));
   return app;
 }

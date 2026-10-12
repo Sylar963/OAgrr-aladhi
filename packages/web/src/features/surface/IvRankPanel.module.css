@@ -70,6 +70,10 @@
   gap: var(--space-2);
 }
 
+.grid[data-cols='2'] {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .chip {
   --level-color: var(--text-tertiary);
   display: flex;

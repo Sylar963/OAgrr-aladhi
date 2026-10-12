@@ -6,12 +6,12 @@ import {
 describe('parseCandleFrame', () => {
   it('parses a compact Candle frame, dropping non-finite delimiter bars', () => {
     const frame = { type: 'FEED_DATA', channel: 1, data: ['Candle', [
-      'Candle', '.SPXW260623C7555{=5m}', 4, 1781553000000, 55.9, 55.9, 55.9, 55.9, 1,
-      'Candle', '.SPXW260623C7555{=5m}', 10, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN',
+      'Candle', '.SPXW260623C7555{=5m}', 4, 1781553000000, 55.9, 55.9, 55.9, 55.9, 1, 0.21,
+      'Candle', '.SPXW260623C7555{=5m}', 10, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN', 'NaN',
     ]] };
     const bars = parseCandleFrame(frame);
     expect(bars).toHaveLength(2);
-    expect(bars[0]).toMatchObject({ symbol: '.SPXW260623C7555{=5m}', flags: 4, time: 1781553000000, c: 55.9 });
+    expect(bars[0]).toMatchObject({ symbol: '.SPXW260623C7555{=5m}', flags: 4, time: 1781553000000, c: 55.9, iv: 0.21 });
     expect(Number.isFinite(bars[1]!.c)).toBe(false); // delimiter retained for flag inspection
   });
   it('ignores non-Candle frames', () => {

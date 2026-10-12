@@ -36,10 +36,10 @@ describe('CandleClient', () => {
     const p = client.getCandles('.SPXW260623C7555', '5m', 1_700_000_000_000);
     // server streams a snapshot: one real bar, then a terminal SNAPSHOT_END record
     fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', [
-      'Candle', '.SPXW260623C7555{=5m}', 4, 1781553000000, 55.9, 56.1, 55.8, 56.0, 3,
+      'Candle', '.SPXW260623C7555{=5m}', 4, 1781553000000, 55.9, 56.1, 55.8, 56.0, 3, 'NaN',
     ]] });
     fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', [
-      'Candle', '.SPXW260623C7555{=5m}', 0x0a, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN',
+      'Candle', '.SPXW260623C7555{=5m}', 0x0a, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN', 'NaN',
     ]] });
     const bars = await p;
     expect(bars).toHaveLength(1);
@@ -69,7 +69,7 @@ describe('CandleClient', () => {
     fs.emitOpen(); // socket opens -> SETUP is sent
     fs.emit({ type: 'FEED_CONFIG', channel: 1 });
     const p = client.getCandles('SPY', '5m', 1);
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPY{=5m}', 0, 1781553000000, 1, 1, 1, 1, 9]] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPY{=5m}', 0, 1781553000000, 1, 1, 1, 1, 9, 'NaN']] });
     await vi.advanceTimersByTimeAsync(1000);
     expect((await p)).toHaveLength(1);
     vi.useRealTimers();
@@ -103,9 +103,9 @@ describe('CandleClient live', () => {
     client.subscribeLive('SPX', '5m', 1, (bar) => seen.push(bar.c));
     expect(adds(fs.sent)).toHaveLength(1);
 
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 2, 0, 1.5, 9]] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 2, 0, 1.5, 9, 'NaN']] });
     // a terminal SNAPSHOT_END (NaN) bar must NOT tear the live subscription down
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x0a, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN']] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x0a, 1781553300000, 'NaN', 'NaN', 'NaN', 'NaN', 'NaN', 'NaN']] });
 
     expect(seen).toEqual([1.5]);
     expect(removes(fs.sent)).toHaveLength(0);
@@ -126,7 +126,7 @@ describe('CandleClient live', () => {
     offA();
     expect(removes(fs.sent)).toHaveLength(0);
 
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 2, 1]] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 2, 1, 'NaN']] });
     expect(a).toEqual([]); // A unsubscribed
     expect(b).toEqual([2]);
 
@@ -144,7 +144,7 @@ describe('CandleClient live', () => {
     const p = client.getCandles('SPX', '5m', 1); // one-shot for the same symbol
 
     // one-shot completes -> must NOT remove (live still present)
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x08, 1781553000000, 1, 1, 1, 1, 1]] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0x08, 1781553000000, 1, 1, 1, 1, 1, 'NaN']] });
     await p;
     expect(removes(fs.sent)).toHaveLength(0);
 
@@ -187,7 +187,7 @@ describe('CandleClient live', () => {
     const seen: number[] = [];
     client.subscribeLive('SPX', '5m', 1, (bar) => seen.push(bar.c));
     client.dispose();
-    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 9, 1]] });
+    fs.emit({ type: 'FEED_DATA', channel: 1, data: ['Candle', ['Candle', 'SPX{=5m}', 0, 1781553000000, 1, 1, 1, 9, 1, 'NaN']] });
     expect(seen).toEqual([]);
   });
 });

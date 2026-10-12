@@ -1014,6 +1014,7 @@ describe('enrichment', () => {
       nativePriceTick: 0.0001,
       minQuantity: 0.01,
       quantityStep: 0.01,
+      minNotionalUsd: null,
       bidSize: 0.2,
       askSize: 0.3,
       bidUsd: 2_800,
@@ -1028,6 +1029,8 @@ describe('enrichment', () => {
 
     const contract = row.call.okx;
     if (!contract) throw new Error('missing OKX fixture');
+    contract.minNotionalUsd = 20;
+    expect(enrichComparisonRow(row).call.venues.okx?.execution?.minNotionalUsd).toBe(20);
     contract.contractMultiplierBase = Number.MAX_VALUE;
     contract.minQty = 2;
     expect(enrichComparisonRow(row).call.venues.okx?.execution).toBeNull();

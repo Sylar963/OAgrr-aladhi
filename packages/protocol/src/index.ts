@@ -403,3 +403,11 @@ export {
   type UpdateSocialProfileRequest,
   UpdateSocialProfileRequestSchema,
 } from './social.js';
+export {
+  type TradfiSectorBasket,
+  TradfiSectorBasketSchema,
+  type TradfiSectorQuote,
+  TradfiSectorQuoteSchema,
+  type TradfiSectorsResponse,
+  TradfiSectorsResponseSchema,
+} from './tradfi-sectors.js';

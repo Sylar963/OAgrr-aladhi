@@ -103,6 +103,33 @@ describe('TradfiFeed (REST)', () => {
     await feed.dispose();
   });
 
+  it('streams quote-only symbols without loading their chains', async () => {
+    const store = new TradfiStore();
+    const rest = stubRest();
+    rest.getQuoteToken = vi.fn(async () => ({ token: 'QT', dxlinkUrl: 'wss://x', expiresAt: null }));
+    const { fakeDx } = fakeDxFactory();
+    let desired: () => { type: string; symbol: string }[] = () => [];
+    const factory = (opts: { desiredSubs: typeof desired }) => {
+      desired = opts.desiredSubs;
+      return fakeDx as never;
+    };
+    const feed = new TradfiFeed(rest as never, store, ['AAPL'], factory as never);
+    feed.watchQuotes(['AAPL', 'XOM']);
+    await feed.loadMarkets();
+    await feed.startStreaming();
+
+    expect(rest.getNestedChain).toHaveBeenCalledTimes(1);
+    expect(new Set(desired().map((s) => s.symbol))).toEqual(new Set(['AAPL', 'XOM']));
+
+    feed.watchQuotes(['XOM', 'CVX']);
+    expect(fakeDx.subscribe).toHaveBeenCalledWith([
+      { type: 'Quote', symbol: 'CVX' },
+      { type: 'Trade', symbol: 'CVX' },
+      { type: 'Summary', symbol: 'CVX' },
+    ]);
+    await feed.dispose();
+  });
+
   it('retries with backoff after a failed connection (never dies silently)', async () => {
     vi.useFakeTimers();
     try {

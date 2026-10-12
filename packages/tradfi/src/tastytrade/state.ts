@@ -12,8 +12,19 @@ export function applyEvent(
 
   // Underlying symbol (no option instrument) -> spot price.
   if (inst == null) {
+    if (ev.eventType === 'Summary') {
+      const prevClose = positiveOrNull(ev.prevDayClosePrice);
+      if (prevClose != null) {
+        store.mergeSession(ev.eventSymbol, { prevClose, prevDayId: numOrNull(ev.prevDayId), ts });
+      }
+      return;
+    }
     const price = (ev.eventType === 'Trade' ? ev.price : null) ?? (ev.eventType === 'Quote' ? mid(ev.bidPrice, ev.askPrice) : null);
     if (typeof price === 'number') store.setSpot(ev.eventSymbol, price);
+    if (ev.eventType === 'Trade') {
+      const lastTrade = positiveOrNull(ev.price);
+      if (lastTrade != null) store.mergeSession(ev.eventSymbol, { lastTrade, ts });
+    }
     return;
   }
 
@@ -66,6 +77,11 @@ export function applyEvent(
 
 function numOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function positiveOrNull(v: unknown): number | null {
+  const n = numOrNull(v);
+  return n != null && n > 0 ? n : null;
 }
 
 function mid(bid: unknown, ask: unknown): number | null {

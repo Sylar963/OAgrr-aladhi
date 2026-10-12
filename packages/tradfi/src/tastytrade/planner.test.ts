@@ -9,8 +9,8 @@ describe('planner', () => {
       .toEqual(['Greeks', 'Quote', 'Summary', 'Trade']);
   });
 
-  it('subscribes underlyings to Quote+Trade', () => {
+  it('subscribes underlyings to Quote+Trade+Summary', () => {
     const subs = underlyingSubscriptions(['AAPL']);
-    expect(subs.map((s) => s.type).sort()).toEqual(['Quote', 'Trade']);
+    expect(subs.map((s) => s.type).sort()).toEqual(['Quote', 'Summary', 'Trade']);
   });
 });

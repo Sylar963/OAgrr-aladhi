@@ -3,6 +3,7 @@ import { useAppStore } from '@stores/app-store';
 import { lazy, Suspense } from 'react';
 import TradfiChainView from './TradfiChainView';
 import TradfiGexView from './TradfiGexView';
+import TradfiSectorsView from './TradfiSectorsView';
 import TradfiTopBar from './TradfiTopBar';
 import styles from './TradfiApp.module.css';
 
@@ -29,6 +30,8 @@ export default function TradfiApp() {
           </Suspense>
         ) : page === 'gex' ? (
           <TradfiGexView />
+        ) : page === 'sectors' ? (
+          <TradfiSectorsView />
         ) : page === 'vol' ? (
           <Suspense fallback={<Spinner size="lg" label="Loading TradFi Volatility…" />}>
             <TradfiSurfaceView />

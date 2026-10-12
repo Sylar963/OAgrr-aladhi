@@ -65,6 +65,7 @@ export class TradfiFeed {
   private dx: DxLinkClient | null = null;
   private desired: DxSub[] = [];
   private subscribedChains = new Set<string>();
+  private quoteOnly = new Set<string>();
   private tokenTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnecting = false;
@@ -155,9 +156,18 @@ export class TradfiFeed {
     this.tokenTimer = setTimeout(() => { void this.reconnectStreaming('token-expiry'); }, ttl);
   }
 
+  /** Stream spot + previous close for symbols whose option chains are not loaded. */
+  watchQuotes(symbols: readonly string[]): void {
+    const added = symbols.filter((s) => !this.underlyings.includes(s) && !this.quoteOnly.has(s));
+    if (added.length === 0) return;
+    for (const s of added) this.quoteOnly.add(s);
+    this.rebuildDesired();
+    this.dx?.subscribe(underlyingSubscriptions(added));
+  }
+
   /** Rebuild the desired subscription set: underlyings + every requested chain. */
   private rebuildDesired(): void {
-    const subs: DxSub[] = [...underlyingSubscriptions(this.underlyings)];
+    const subs: DxSub[] = [...underlyingSubscriptions([...this.underlyings, ...this.quoteOnly])];
     for (const key of this.subscribedChains) {
       const sep = key.indexOf('|');
       const u = key.slice(0, sep);

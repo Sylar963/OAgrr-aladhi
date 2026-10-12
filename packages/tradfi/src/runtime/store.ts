@@ -26,10 +26,19 @@ export function emptyQuote(): TradfiLiveQuote {
   };
 }
 
+/** Underlying session state for change-vs-close views. `prevDayId` is days since 1970-01-01. */
+export interface UnderlyingSession {
+  lastTrade: number | null;
+  prevClose: number | null;
+  prevDayId: number | null;
+  ts: number;
+}
+
 export class TradfiStore {
   private quotes = new Map<string, TradfiLiveQuote>();
   private instruments = new Map<string, TradfiInstrument>();
   private spot = new Map<string, number>();
+  private sessions = new Map<string, UnderlyingSession>();
 
   setInstruments(insts: TradfiInstrument[]): void {
     this.instruments.clear();
@@ -88,5 +97,14 @@ export class TradfiStore {
 
   getSpot(underlying: string): number | null {
     return this.spot.get(underlying) ?? null;
+  }
+
+  mergeSession(underlying: string, patch: Partial<UnderlyingSession> & { ts: number }): void {
+    const prev = this.sessions.get(underlying) ?? { lastTrade: null, prevClose: null, prevDayId: null, ts: 0 };
+    this.sessions.set(underlying, { ...prev, ...patch });
+  }
+
+  getSession(underlying: string): UnderlyingSession | undefined {
+    return this.sessions.get(underlying);
   }
 }

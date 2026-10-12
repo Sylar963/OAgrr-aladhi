@@ -8,6 +8,7 @@ import { TradfiStore } from './runtime/store.js';
 import { buildApp } from './app.js';
 import { CandleClient, type CandleSocket } from './tastytrade/candle-client.js';
 import { buildKeepalive } from './tastytrade/codec.js';
+import { sectorSymbols } from './sectors/baskets.js';
 
 function wsCandleSocket(url: string): CandleSocket {
   const ws = new WebSocket(url);
@@ -31,6 +32,7 @@ async function main() {
   const rest = new TastytradeRest({ baseUrl: cfg.baseUrl, userAgent: cfg.userAgent }, auth);
   const store = new TradfiStore();
   const feed = new TradfiFeed(rest, store, cfg.underlyings);
+  feed.watchQuotes(sectorSymbols());
 
   const candleClient = new CandleClient({
     getToken: () => rest.getQuoteToken().then((t) => ({ token: t.token, dxlinkUrl: t.dxlinkUrl })),

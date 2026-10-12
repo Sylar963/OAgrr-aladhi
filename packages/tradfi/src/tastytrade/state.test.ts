@@ -53,6 +53,15 @@ describe('applyEvent', () => {
     applyEvent(s, { eventType: 'Trade', eventSymbol: 'AAPL', price: 198.5, dayVolume: 1000 }, 12);
     expect(s.getSpot('AAPL')).toBe(198.5);
   });
+
+  it('tracks last trade and previous close for an underlying', () => {
+    const s = new TradfiStore();
+    applyEvent(s, { eventType: 'Summary', eventSymbol: 'XOM', openInterest: null, prevDayClosePrice: 100, prevDayId: 20_370 }, 5);
+    applyEvent(s, { eventType: 'Quote', eventSymbol: 'XOM', bidPrice: 101, askPrice: 105, bidSize: 1, askSize: 1 }, 6);
+    applyEvent(s, { eventType: 'Trade', eventSymbol: 'XOM', price: 102, dayVolume: 10, size: 1 }, 7);
+    applyEvent(s, { eventType: 'Summary', eventSymbol: 'XOM', openInterest: null, prevDayClosePrice: null, prevDayId: null }, 8);
+    expect(s.getSession('XOM')).toEqual({ lastTrade: 102, prevClose: 100, prevDayId: 20_370, ts: 7 });
+  });
 });
 
 it('records Lee-Ready-signed flow for option trades when a flow book is passed', () => {

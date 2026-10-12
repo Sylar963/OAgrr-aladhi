@@ -1,7 +1,7 @@
 import type { DxSub, DxEventType } from './codec.js';
 
 const CONTRACT_EVENTS: DxEventType[] = ['Quote', 'Greeks', 'Trade', 'Summary'];
-const UNDERLYING_EVENTS: DxEventType[] = ['Quote', 'Trade'];
+const UNDERLYING_EVENTS: DxEventType[] = ['Quote', 'Trade', 'Summary'];
 
 export function chainSubscriptions(streamerSymbols: string[]): DxSub[] {
   const subs: DxSub[] = [];

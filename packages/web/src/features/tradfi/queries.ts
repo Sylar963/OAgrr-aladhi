@@ -2,6 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 
 import { tradfiFetchJson } from '@lib/tradfi-http';
+import { TradfiSectorsResponseSchema } from '@oggregator/protocol';
 import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 
@@ -20,6 +21,7 @@ export const tradfiKeys = {
   expiries: (underlying: string) => ['tradfi-expiries', underlying] as const,
   chain: (underlying: string, expiry: string) => ['tradfi-chain', underlying, expiry] as const,
   gexAll: (underlying: string) => ['tradfi-gex-all', underlying] as const,
+  sectors: () => ['tradfi-sectors'] as const,
 };
 
 export function fetchTradfiChain(underlying: string, expiry: string) {
@@ -124,5 +126,14 @@ export function useTradfiAllExpiriesGex(underlying: string, enabled = true) {
     enabled: enabled && Boolean(underlying),
     refetchInterval: 5000,
     placeholderData: (prev: TradfiAllExpiriesGexResponse | undefined) => prev,
+  });
+}
+
+export function useTradfiSectors() {
+  return useQuery({
+    queryKey: tradfiKeys.sectors(),
+    queryFn: async () => TradfiSectorsResponseSchema.parse(await tradfiFetchJson<unknown>('/sectors')),
+    refetchInterval: 5_000,
+    placeholderData: (prev) => prev,
   });
 }

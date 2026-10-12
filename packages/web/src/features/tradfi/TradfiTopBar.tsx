@@ -11,6 +11,7 @@ const PAGES: ReadonlyArray<{ id: TradfiPage; label: string; group: TabGroup }> =
   { id: 'chain', label: 'Chain', group: 'market' },
   { id: 'gex', label: 'GEX', group: 'market' },
   { id: 'vol', label: 'Volatility', group: 'market' },
+  { id: 'sectors', label: 'Sectors', group: 'market' },
   { id: 'builder', label: 'Builder', group: 'trade' },
   { id: 'alpha', label: 'Alpha', group: 'research' },
 ];

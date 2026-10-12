@@ -4,7 +4,7 @@ export const ACCEPT_EVENT_FIELDS: Record<DxEventType, string[]> = {
   Quote: ['eventType', 'eventSymbol', 'bidPrice', 'askPrice', 'bidSize', 'askSize'],
   Greeks: ['eventType', 'eventSymbol', 'volatility', 'delta', 'gamma', 'theta', 'rho', 'vega'],
   Trade: ['eventType', 'eventSymbol', 'price', 'dayVolume', 'size'],
-  Summary: ['eventType', 'eventSymbol', 'openInterest', 'prevDayClosePrice'],
+  Summary: ['eventType', 'eventSymbol', 'openInterest', 'prevDayClosePrice', 'prevDayId'],
 };
 
 export interface DxSub {

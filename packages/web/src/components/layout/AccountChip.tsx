@@ -2,6 +2,7 @@ import { SignInButton, useUser } from '@clerk/react';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import { VENUES } from '@lib/venue-meta';
+import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
 import {
   PRIVATE_ADAPTER_SPECS,
   VENUE_IDS,
@@ -11,12 +12,12 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
 
 import styles from './AccountChip.module.css';
 
 type Mode = 'home' | 'paste';
 
+// Names typed before the chip saved to the Clerk username lived only in this browser.
 const DISPLAY_NAME_KEY_PREFIX = 'accountDisplayName:';
 
 function readDisplayName(userId: string | null): string | null {
@@ -35,6 +36,20 @@ function writeDisplayName(userId: string, name: string | null): void {
   } catch {
     // storage unavailable: the name lasts for this page load only
   }
+}
+
+function clerkErrorMessage(error: unknown): string {
+  const first = (
+    error as { errors?: Array<{ code?: string; longMessage?: string; message?: string }> }
+  )?.errors?.[0];
+  if (first?.code === 'form_param_unknown') {
+    return 'Usernames are turned off in Clerk; enable them in the Clerk dashboard';
+  }
+  return (
+    first?.longMessage ??
+    first?.message ??
+    (error instanceof Error ? error.message : 'Could not save username')
+  );
 }
 
 const CONNECTABLE_VENUE_IDS = VENUE_IDS.filter(
@@ -64,6 +79,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   const isSignedOut = accountSession.status === 'signed_out';
   const { user } = useUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? null;
+  const username = user?.username ?? null;
   const userId = accountSession.userId;
 
   const [open, setOpen] = useState(false);
@@ -77,6 +93,8 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   const [displayName, setDisplayName] = useState<string | null>(() => readDisplayName(userId));
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,17 +104,40 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
 
   const startEditingName = () => {
     setOpen(false);
-    setNameDraft('');
+    setNameDraft(username ?? displayName ?? '');
+    setNameError(null);
     setEditingName(true);
   };
 
-  const commitName = () => {
-    if (userId == null) return;
-    const trimmed = nameDraft.trim();
-    const next = trimmed.length > 0 ? trimmed : null;
-    writeDisplayName(userId, next);
-    setDisplayName(next);
+  const cancelEditingName = () => {
     setEditingName(false);
+    setNameError(null);
+  };
+
+  // The chip name is the Clerk username, which also names the user on the leaderboard and in chat.
+  const commitName = async () => {
+    if (userId == null || user == null || savingName) return;
+    const trimmed = nameDraft.trim();
+    if (trimmed.length === 0 || trimmed === username) {
+      if (trimmed.length === 0 && displayName != null) {
+        writeDisplayName(userId, null);
+        setDisplayName(null);
+      }
+      cancelEditingName();
+      return;
+    }
+    setSavingName(true);
+    try {
+      await user.update({ username: trimmed });
+      writeDisplayName(userId, null);
+      setDisplayName(null);
+      cancelEditingName();
+      void qc.invalidateQueries({ queryKey: ['account', userId, 'social'] });
+    } catch (caught) {
+      setNameError(clerkErrorMessage(caught));
+    } finally {
+      setSavingName(false);
+    }
   };
 
   const refresh = () => {
@@ -135,7 +176,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   }, [isAccountReady, isSignedOut, open, pasteTarget]);
 
   const acctShort = accountId != null ? accountId.slice(0, 8) : '';
-  const accountLabel = displayName ?? email ?? `acct ${acctShort}`;
+  const accountLabel = username ?? displayName ?? email ?? `acct ${acctShort}`;
   const configuredVenues = useMemo(
     () => VENUE_IDS.filter((venue) => configuredVenueIds.includes(venue)),
     [configuredVenueIds],
@@ -236,15 +277,22 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
             <input
               className={styles.nameInput}
               value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitName();
-                if (e.key === 'Escape') setEditingName(false);
+              onChange={(e) => {
+                setNameDraft(e.target.value);
+                setNameError(null);
               }}
-              onBlur={commitName}
-              placeholder={email ?? 'Your name'}
-              aria-label="Account display name"
-              maxLength={40}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commitName();
+                if (e.key === 'Escape') cancelEditingName();
+              }}
+              onBlur={() => {
+                if (nameError == null) void commitName();
+              }}
+              placeholder="Choose a username"
+              aria-label="Account username"
+              aria-invalid={nameError != null}
+              maxLength={64}
+              disabled={savingName}
               autoFocus
             />
           </>
@@ -271,13 +319,18 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
             type="button"
             className={styles.chipEdit}
             onClick={startEditingName}
-            aria-label="Customize account name"
-            title="Customize account name"
+            aria-label="Change username"
+            title="Change username"
           >
             ×
           </button>
         )}
       </div>
+      {editingName && nameError && (
+        <p className={styles.nameError} role="alert">
+          {nameError}
+        </p>
+      )}
       {open && (
         <div className={styles.popover} role="dialog">
           {mode === 'home' && (
@@ -574,9 +627,8 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
   return (
     <>
       <div className={styles.hint}>
-        Your wallet signs twice: a Derive sign-in, then a read-only key for oggregator. The key
-        can read positions but cannot trade or withdraw, and your wallet key never leaves the
-        wallet.
+        Your wallet signs twice: a Derive sign-in, then a read-only key for oggregator. The key can
+        read positions but cannot trade or withdraw, and your wallet key never leaves the wallet.
       </div>
       {step.kind === 'idle' && (
         <button type="button" className={styles.primaryBtn} onClick={() => void start()}>

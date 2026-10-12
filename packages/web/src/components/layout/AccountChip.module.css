@@ -79,6 +79,26 @@
   color: #666;
 }
 
+.nameInput[aria-invalid="true"] {
+  color: #f87171;
+}
+
+.nameError {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  max-width: 280px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #f87171;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .chip[data-signed-in] {
   color: #4ade80;
   border-color: rgba(74, 222, 128, 0.3);

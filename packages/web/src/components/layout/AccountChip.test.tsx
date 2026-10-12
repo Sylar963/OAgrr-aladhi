@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,8 +11,14 @@ const accountSession = {
   endSession: vi.fn(async () => {}),
 };
 
+interface FakeClerkUser {
+  primaryEmailAddress: { emailAddress: string } | null;
+  username?: string | null;
+  update?: (params: { username: string }) => Promise<unknown>;
+}
+
 const clerkUser = {
-  user: null as { primaryEmailAddress: { emailAddress: string } | null } | null,
+  user: null as FakeClerkUser | null,
 };
 
 vi.mock('@clerk/react', () => ({
@@ -84,29 +90,59 @@ describe('AccountChip', () => {
     expect(screen.queryByText(/acct acct_1/)).toBeNull();
   });
 
-  it('lets the user replace the email with a custom name and reset it', () => {
+  it('saves the chip name as the Clerk username', async () => {
     accountSession.status = 'ready';
     accountSession.accountId = 'acct_1';
     accountSession.userId = 'user_1';
-    clerkUser.user = { primaryEmailAddress: { emailAddress: 'trader@example.com' } };
+    const update = vi.fn(async ({ username }: { username: string }) => {
+      if (clerkUser.user) clerkUser.user.username = username;
+    });
+    clerkUser.user = {
+      primaryEmailAddress: { emailAddress: 'trader@example.com' },
+      username: null,
+      update,
+    };
+    localStorage.setItem('accountDisplayName:user_1', 'Roberto');
+    useAppStore.getState().activateAccountSession('acct_1', []);
+
+    const view = render(wrap(<AccountChip />));
+    expect(screen.getByRole('button', { name: /roberto/i })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /change username/i }));
+    const input = screen.getByRole('textbox', { name: /account username/i }) as HTMLInputElement;
+    expect(input.value).toBe('Roberto');
+    fireEvent.change(input, { target: { value: 'roberto_trades' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ username: 'roberto_trades' }));
+    view.rerender(wrap(<AccountChip />));
+    expect(await screen.findByRole('button', { name: /roberto_trades/i })).toBeDefined();
+    expect(localStorage.getItem('accountDisplayName:user_1')).toBeNull();
+  });
+
+  it('keeps the editor open with the Clerk error when the username is rejected', async () => {
+    accountSession.status = 'ready';
+    accountSession.accountId = 'acct_1';
+    accountSession.userId = 'user_1';
+    clerkUser.user = {
+      primaryEmailAddress: { emailAddress: 'trader@example.com' },
+      username: null,
+      update: vi.fn(async () => {
+        throw {
+          errors: [{ code: 'form_identifier_exists', longMessage: 'That username is taken.' }],
+        };
+      }),
+    };
     useAppStore.getState().activateAccountSession('acct_1', []);
 
     render(wrap(<AccountChip />));
-    fireEvent.click(screen.getByRole('button', { name: /customize account name/i }));
-    const input = screen.getByRole('textbox', { name: /account display name/i });
-    fireEvent.change(input, { target: { value: 'Roberto' } });
+    fireEvent.click(screen.getByRole('button', { name: /change username/i }));
+    const input = screen.getByRole('textbox', { name: /account username/i });
+    fireEvent.change(input, { target: { value: 'taken' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(screen.getByRole('button', { name: /roberto/i })).toBeDefined();
-    expect(localStorage.getItem('accountDisplayName:user_1')).toBe('Roberto');
-
-    fireEvent.click(screen.getByRole('button', { name: /customize account name/i }));
-    fireEvent.keyDown(screen.getByRole('textbox', { name: /account display name/i }), {
-      key: 'Enter',
-    });
-
-    expect(screen.getByRole('button', { name: /trader@example\.com/ })).toBeDefined();
-    expect(localStorage.getItem('accountDisplayName:user_1')).toBeNull();
+    expect((await screen.findByRole('alert')).textContent).toBe('That username is taken.');
+    expect(screen.getByRole('textbox', { name: /account username/i })).toBeDefined();
   });
 
   it('does not expose venue controls while an account is loading', () => {

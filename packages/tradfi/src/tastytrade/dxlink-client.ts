@@ -1,7 +1,7 @@
 import { TopicWsClient } from '@oggregator/core';
 import type WebSocket from 'ws';
 import {
-  buildAuth, buildChannelRequest, buildFeedSetup, buildKeepalive, buildSetup, buildSubscribe,
+  buildAuth, buildChannelRequest, buildFeedSetup, buildKeepalive, buildSetup, buildSubscribeFrames,
   parseFeedData, type DxEvent, type DxSub,
 } from './codec.js';
 import { feedLogger } from '../logger.js';
@@ -35,7 +35,7 @@ export class DxLinkProtocol {
 
   onMessage(msg: unknown): void {
     if (typeof msg !== 'object' || msg == null) return;
-    const m = msg as { type?: string; state?: string; error?: string };
+    const m = msg as { type?: string; state?: string; error?: string; message?: string };
     switch (m.type) {
       case 'AUTH_STATE':
         if (m.state === 'UNAUTHORIZED') {
@@ -55,16 +55,18 @@ export class DxLinkProtocol {
           log.warn({ error: m.error }, 'dxlink auth error');
           this.o.onAuthError?.();
         } else {
-          log.warn({ error: m.error }, 'dxlink protocol error');
+          log.warn({ error: m.error, detail: m.message }, 'dxlink protocol error');
         }
         return;
       case 'CHANNEL_OPENED':
         this.o.send(buildFeedSetup(this.o.channel));
         return;
       case 'FEED_CONFIG': {
+        // DXLink re-sends FEED_CONFIG after subscription changes; resend the full set only once
+        // per connection, or every new chain re-sends everything.
+        if (this.ready) return;
         this.ready = true;
-        const subs = this.o.desiredSubs();
-        if (subs.length > 0) this.o.send(buildSubscribe(this.o.channel, subs, 'add'));
+        this.send(this.o.desiredSubs(), 'add');
         return;
       }
       case 'FEED_DATA': {
@@ -78,11 +80,15 @@ export class DxLinkProtocol {
   }
 
   subscribe(subs: DxSub[]): void {
-    if (this.ready && subs.length > 0) this.o.send(buildSubscribe(this.o.channel, subs, 'add'));
+    if (this.ready) this.send(subs, 'add');
   }
 
   unsubscribe(subs: DxSub[]): void {
-    if (this.ready && subs.length > 0) this.o.send(buildSubscribe(this.o.channel, subs, 'remove'));
+    if (this.ready) this.send(subs, 'remove');
+  }
+
+  private send(subs: DxSub[], action: 'add' | 'remove'): void {
+    for (const frame of buildSubscribeFrames(this.o.channel, subs, action)) this.o.send(frame);
   }
 }
 

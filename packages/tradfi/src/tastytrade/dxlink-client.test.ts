@@ -61,4 +61,27 @@ describe('DxLinkProtocol state machine', () => {
     proto.onMessage({ type: 'ERROR', error: 'TIMEOUT' });
     expect(onAuthError).not.toHaveBeenCalled();
   });
+
+  it('sends the full subscription set once per connection, split under the frame limit', () => {
+    const sent: Array<{ type: string; add?: unknown[] }> = [];
+    const desired = Array.from({ length: 5_000 }, (_, i) => ({
+      type: 'Greeks' as const,
+      symbol: `.AAOI261016C${i}`,
+    }));
+    const proto = new DxLinkProtocol({
+      channel: 3,
+      token: 'QT',
+      send: (m) => sent.push(m as { type: string; add?: unknown[] }),
+      onData: vi.fn(),
+      desiredSubs: () => desired,
+    });
+    proto.onOpen();
+    proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
+    proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
+
+    const frames = sent.filter((m) => m.type === 'FEED_SUBSCRIPTION');
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.every((f) => JSON.stringify(f).length < 65_536)).toBe(true);
+    expect(frames.flatMap((f) => f.add ?? [])).toEqual(desired);
+  });
 });

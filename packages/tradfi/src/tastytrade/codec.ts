@@ -40,6 +40,34 @@ export function buildSubscribe(channel: number, subs: DxSub[], action: 'add' | '
   };
 }
 
+// DXLink rejects any frame over 64 KiB with INVALID_MESSAGE and then stops serving the session.
+const MAX_SUBSCRIPTION_FRAME_BYTES = 60_000;
+
+/** One or more FEED_SUBSCRIPTION frames, each under DXLink's frame-size limit. */
+export function buildSubscribeFrames(
+  channel: number,
+  subs: DxSub[],
+  action: 'add' | 'remove',
+  maxBytes = MAX_SUBSCRIPTION_FRAME_BYTES,
+): ReturnType<typeof buildSubscribe>[] {
+  const frames: ReturnType<typeof buildSubscribe>[] = [];
+  let batch: DxSub[] = [];
+  let bytes = JSON.stringify(buildSubscribe(channel, [], action)).length;
+  const base = bytes;
+  for (const sub of subs) {
+    const size = JSON.stringify(sub).length + 1;
+    if (batch.length > 0 && bytes + size > maxBytes) {
+      frames.push(buildSubscribe(channel, batch, action));
+      batch = [];
+      bytes = base;
+    }
+    batch.push(sub);
+    bytes += size;
+  }
+  if (batch.length > 0) frames.push(buildSubscribe(channel, batch, action));
+  return frames;
+}
+
 export function buildKeepalive() {
   return { type: 'KEEPALIVE', channel: 0 };
 }

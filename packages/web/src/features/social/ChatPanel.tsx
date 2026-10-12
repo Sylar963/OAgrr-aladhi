@@ -10,7 +10,7 @@ import {
 
 import styles from './ChatPanel.module.css';
 import { useSocialProfile } from './hooks/queries';
-import { useSocialChat } from './hooks/useSocialChat';
+import type { useSocialSocket } from './hooks/useSocialSocket';
 
 const ERROR_VISIBLE_MS = 4_000;
 const STICK_TO_BOTTOM_PX = 80;
@@ -19,8 +19,15 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function ChatPanel() {
-  const { state, send, reconnect } = useSocialChat();
+type SocialSocket = ReturnType<typeof useSocialSocket>;
+
+interface ChatPanelProps {
+  state: SocialSocket['state'];
+  send: SocialSocket['send'];
+  reconnect: SocialSocket['reconnect'];
+}
+
+export default function ChatPanel({ state, send, reconnect }: ChatPanelProps) {
   const profile = useSocialProfile();
   const handle = profile.data?.handle ?? null;
   const [draft, setDraft] = useState('');
@@ -153,7 +160,11 @@ export default function ChatPanel() {
                 Send
               </button>
             </div>
-            {!handle && <p className={styles.notice}>Set a handle to post under your name.</p>}
+            {!handle && (
+              <p className={styles.notice}>
+                Add a username to your account to post under your name.
+              </p>
+            )}
           </>
         )}
       </form>

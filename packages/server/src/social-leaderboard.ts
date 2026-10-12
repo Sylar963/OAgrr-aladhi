@@ -129,6 +129,21 @@ export class LeaderboardService {
     this.generation += 1;
   }
 
+  /** Resolves a handle to an opted-in trader from the cached books, without a query of its own. */
+  async findVisible(
+    handle: string,
+  ): Promise<{ userId: string; accountId: string; handle: string } | null> {
+    const cache = await this.load();
+    const wanted = handle.toLowerCase();
+    const match = cache.marked.find((item) => item.book.handle?.toLowerCase() === wanted);
+    if (!match?.book.handle) return null;
+    return {
+      userId: match.book.userId,
+      accountId: match.book.accountId,
+      handle: match.book.handle,
+    };
+  }
+
   async get(period: LeaderboardPeriod, viewerUserId: string | null): Promise<LeaderboardResponse> {
     const cache = await this.load();
     let ranked = cache.ranked.get(period);

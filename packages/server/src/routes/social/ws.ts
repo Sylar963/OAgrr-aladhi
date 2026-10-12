@@ -1,7 +1,13 @@
 import { ChatClientMessageSchema, type ChatServerMessage } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
 
-import { chatService, isSocialEnabled, socialProfileService } from '../../social-services.js';
+import {
+  chatService,
+  isSocialEnabled,
+  leaderboardService,
+  socialProfileService,
+  traderStreamService,
+} from '../../social-services.js';
 import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 
@@ -10,7 +16,7 @@ const WS_OPEN = 1;
 const ERROR_MESSAGES: Record<string, string> = {
   banned: 'You are banned from chat',
   muted: 'You are muted',
-  handle_required: 'Set a handle in your profile to post under your name',
+  handle_required: 'Set a username on your account to post under your name',
   rate_limited: 'Slow down',
   chat_busy: 'Chat is busy, try again shortly',
   not_found: 'Message not found',
@@ -40,11 +46,13 @@ export async function socialWsRoute(app: FastifyInstance) {
     }
     registerPrivateWebSocket(user.id, socket);
 
+    const viewer = { userId: user.id, send };
     let unsubscribe: (() => void) | null = null;
     let closed = false;
     socket.on('close', () => {
       closed = true;
       unsubscribe?.();
+      traderStreamService.unwatch(viewer);
     });
 
     socket.on('message', (raw: Buffer) => {
@@ -75,14 +83,30 @@ export async function socialWsRoute(app: FastifyInstance) {
         }
         return;
       }
-      const error = await chatService.deleteOwn(user!.id, message.id);
-      if (error) send({ type: 'error', code: error, message: ERROR_MESSAGES[error] ?? '' });
+      if (message.type === 'delete') {
+        const error = await chatService.deleteOwn(user!.id, message.id);
+        if (error) send({ type: 'error', code: error, message: ERROR_MESSAGES[error] ?? '' });
+        return;
+      }
+      if (message.type === 'unwatch') {
+        traderStreamService.unwatch(viewer);
+        return;
+      }
+      const target = await leaderboardService.findVisible(message.handle);
+      if (closed) return;
+      if (!target) {
+        traderStreamService.unwatch(viewer);
+        send({ type: 'trader_unavailable', handle: message.handle });
+        return;
+      }
+      await traderStreamService.watch(viewer, target);
+      if (closed) traderStreamService.unwatch(viewer);
     }
 
     try {
       const profile = await socialProfileService.get(user.id);
       if (closed) return;
-      unsubscribe = await chatService.subscribe({ userId: user.id, send }, profile.handle);
+      unsubscribe = await chatService.subscribe(viewer, profile.handle);
       if (closed) unsubscribe();
     } catch (err) {
       req.log.warn({ err: String(err) }, 'social chat subscribe failed');

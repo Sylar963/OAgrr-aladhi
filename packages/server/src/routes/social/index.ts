@@ -1,5 +1,4 @@
 import { timingSafeEqual } from 'node:crypto';
-import { HandleTakenError } from '@oggregator/db';
 import {
   ChatModerationRequestSchema,
   LeaderboardQuerySchema,
@@ -12,6 +11,7 @@ import {
   isSocialEnabled,
   leaderboardService,
   socialProfileService,
+  UsernameRequiredError,
 } from '../../social-services.js';
 import { requireUser } from '../../user-service.js';
 import { socialWsRoute } from './ws.js';
@@ -59,7 +59,11 @@ export async function socialRoutes(app: FastifyInstance) {
   app.register(async (user) => {
     user.addHook('onRequest', requireUser());
 
-    user.get('/social/profile', async (req) => socialProfileService.get(req.user!.id));
+    user.get(
+      '/social/profile',
+      { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+      async (req) => socialProfileService.sync(req.user!),
+    );
 
     user.put(
       '/social/profile',
@@ -73,10 +77,13 @@ export async function socialRoutes(app: FastifyInstance) {
           });
         }
         try {
-          return await socialProfileService.update(req.user!.id, parsed.data);
+          return await socialProfileService.setLeaderboardVisible(
+            req.user!,
+            parsed.data.leaderboardVisible,
+          );
         } catch (error) {
-          if (error instanceof HandleTakenError) {
-            return reply.status(409).send({ error: 'handle_taken', message: error.message });
+          if (error instanceof UsernameRequiredError) {
+            return reply.status(409).send({ error: 'username_required', message: error.message });
           }
           throw error;
         }

@@ -1,82 +1,126 @@
-import { SocialHandleSchema } from '@oggregator/protocol';
-import { type FormEvent, useEffect, useState } from 'react';
+import { useClerk, useUser } from '@clerk/react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useSocialProfile, useUpdateSocialProfile } from './hooks/queries';
 import styles from './ProfileCard.module.css';
 
+const SHARED_ITEMS = [
+  'Your account username',
+  'Your open positions, streamed live with marks and unrealized PnL',
+  'Your closed trades with realized PnL',
+  'Your all-time equity curve and return',
+];
+
 export default function ProfileCard() {
+  const clerk = useClerk();
   const profile = useSocialProfile();
   const update = useUpdateSocialProfile();
-  const [handle, setHandle] = useState('');
-  const [visible, setVisible] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const { user } = useUser();
+  const clerkUsername = user?.username ?? null;
+  const seenUsername = useRef(clerkUsername);
+  const { refetch } = profile;
 
   useEffect(() => {
-    if (!profile.data) return;
-    setHandle(profile.data.handle ?? '');
-    setVisible(profile.data.leaderboardVisible);
-  }, [profile.data]);
+    if (seenUsername.current === clerkUsername) return;
+    seenUsername.current = clerkUsername;
+    void refetch();
+  }, [clerkUsername, refetch]);
 
-  const dirty =
-    profile.data != null &&
-    ((profile.data.handle ?? '') !== handle.trim() || profile.data.leaderboardVisible !== visible);
+  const handle = profile.data?.handle ?? null;
+  const joined = profile.data?.leaderboardVisible ?? false;
+  const error = update.error instanceof Error ? update.error.message : null;
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = handle.trim();
-    if (trimmed) {
-      const parsed = SocialHandleSchema.safeParse(trimmed);
-      if (!parsed.success) {
-        setLocalError(parsed.error.issues[0]?.message ?? 'Invalid handle');
-        return;
-      }
-    }
-    if (visible && !trimmed) {
-      setLocalError('Pick a handle to appear on the leaderboard');
-      return;
-    }
-    setLocalError(null);
-    update.mutate({ handle: trimmed || null, leaderboardVisible: visible });
+  function join() {
+    update.mutate({ leaderboardVisible: true }, { onSuccess: () => setConfirming(false) });
   }
 
-  const error = localError ?? (update.error instanceof Error ? update.error.message : null);
-
   return (
-    <form className={styles.card} onSubmit={submit}>
+    <section className={styles.card}>
       <div className={styles.row}>
-        <label className={styles.field}>
-          <span className={styles.label}>Handle</span>
-          <span className={styles.inputWrap}>
-            <span className={styles.at}>@</span>
-            <input
-              className={styles.input}
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="your_handle"
-              maxLength={20}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={profile.isLoading}
-            />
-          </span>
-        </label>
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={visible}
-            onChange={(e) => setVisible(e.target.checked)}
-            disabled={profile.isLoading}
-          />
-          <span>Show me on the leaderboard</span>
-        </label>
-        <button className={styles.save} type="submit" disabled={!dirty || update.isPending}>
-          {update.isPending ? 'Saving…' : 'Save'}
-        </button>
+        <div className={styles.identity}>
+          <span className={styles.label}>Username</span>
+          {profile.isLoading ? (
+            <span className={styles.muted}>Loading…</span>
+          ) : handle ? (
+            <span className={styles.handle}>@{handle}</span>
+          ) : (
+            <span className={styles.muted}>No username on your account</span>
+          )}
+        </div>
+
+        {!handle && !profile.isLoading && (
+          <div className={styles.actions}>
+            <button className={styles.secondary} onClick={() => clerk.openUserProfile()}>
+              Set username
+            </button>
+            <button
+              className={styles.ghost}
+              onClick={() => void profile.refetch()}
+              disabled={profile.isFetching}
+            >
+              {profile.isFetching ? 'Checking…' : 'Refresh'}
+            </button>
+          </div>
+        )}
+
+        {handle && (
+          <div className={styles.actions}>
+            {joined ? (
+              <>
+                <span className={styles.liveBadge}>
+                  <span className={styles.liveDot} />
+                  Sharing on leaderboard
+                </span>
+                <button
+                  className={styles.ghost}
+                  onClick={() => update.mutate({ leaderboardVisible: false })}
+                  disabled={update.isPending}
+                >
+                  Leave
+                </button>
+              </>
+            ) : (
+              <button
+                className={styles.primary}
+                onClick={() => setConfirming(true)}
+                disabled={update.isPending}
+              >
+                Join leaderboard
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {confirming && !joined && (
+        <div className={styles.consent} role="dialog" aria-label="Join leaderboard">
+          <p className={styles.consentTitle}>
+            Joining shares your paper account with every signed-in user:
+          </p>
+          <ul className={styles.consentList}>
+            {SHARED_ITEMS.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p className={styles.muted}>You can leave at any time; your stream stops immediately.</p>
+          <div className={styles.actions}>
+            <button className={styles.primary} onClick={join} disabled={update.isPending}>
+              {update.isPending ? 'Joining…' : 'Share & join'}
+            </button>
+            <button className={styles.ghost} onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className={styles.hint} data-error={error != null}>
         {error ??
-          'Your handle is public when you post under your name or join the leaderboard. Anonymous chat posts never show it.'}
+          (handle
+            ? 'Named chat posts and the leaderboard use your account username. Anonymous posts never show it.'
+            : 'Add a username to your account to join the leaderboard or post under your name. Anonymous chat works without one.')}
       </p>
-    </form>
+    </section>
   );
 }

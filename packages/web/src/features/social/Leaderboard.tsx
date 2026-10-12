@@ -28,7 +28,12 @@ function tone(value: number): 'up' | 'down' | 'flat' {
   return 'flat';
 }
 
-export default function Leaderboard() {
+interface LeaderboardProps {
+  selectedHandle: string | null;
+  onSelect: (handle: string) => void;
+}
+
+export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardProps) {
   const [period, setPeriod] = useState<LeaderboardPeriod>('all');
   const { data, isLoading, isError } = useLeaderboard(period);
 
@@ -71,7 +76,7 @@ export default function Leaderboard() {
             title="No ranked traders yet"
             detail={
               period === 'all'
-                ? 'Set a handle and opt in above to be the first.'
+                ? 'Join above to be the first. Click any trader to watch their book live.'
                 : 'Period returns build from daily equity snapshots taken at 00:05 UTC.'
             }
           />
@@ -89,7 +94,13 @@ export default function Leaderboard() {
             </thead>
             <tbody>
               {data.entries.map((entry) => (
-                <tr key={entry.handle} data-me={entry.isMe}>
+                <tr
+                  key={entry.handle}
+                  data-me={entry.isMe}
+                  data-selected={entry.handle === selectedHandle}
+                  className={styles.row}
+                  onClick={() => onSelect(entry.handle)}
+                >
                   <td
                     className={styles.rank}
                     data-podium={entry.rank <= 3 ? entry.rank : undefined}
@@ -97,7 +108,15 @@ export default function Leaderboard() {
                     {entry.rank}
                   </td>
                   <td className={styles.trader}>
-                    @{entry.handle}
+                    <button
+                      className={styles.traderBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect(entry.handle);
+                      }}
+                    >
+                      @{entry.handle}
+                    </button>
                     {entry.isMe && <span className={styles.youTag}>you</span>}
                   </td>
                   <td className={styles.num} data-tone={tone(entry.returnPct)}>

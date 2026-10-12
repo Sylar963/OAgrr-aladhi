@@ -107,6 +107,30 @@
   background: var(--accent-primary-dim);
 }
 
+.row {
+  cursor: pointer;
+}
+
+.table tr[data-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+  background: var(--bg-active);
+}
+
+.traderBtn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.traderBtn:hover,
+.traderBtn:focus-visible {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
 .num {
   text-align: right !important;
 }

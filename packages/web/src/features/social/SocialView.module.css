@@ -13,6 +13,17 @@
   min-height: 0;
 }
 
+.board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.main[data-split="true"] .board {
+  flex: 0 1 38%;
+}
+
 .side {
   width: 380px;
   flex-shrink: 0;
@@ -26,8 +37,13 @@
     overflow-y: auto;
   }
 
-  .main {
+  .main,
+  .main[data-split="true"] .board {
     flex: none;
+  }
+
+  .board {
+    max-height: 60vh;
   }
 
   .side {

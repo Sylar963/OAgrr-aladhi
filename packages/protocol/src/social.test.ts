@@ -1,30 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ChatClientMessageSchema,
-  SocialHandleSchema,
-  UpdateSocialProfileRequestSchema,
-} from './social.js';
-
-describe('SocialHandleSchema', () => {
-  it('accepts plain handles and rejects reserved or malformed ones', () => {
-    expect(SocialHandleSchema.safeParse('theta_trader').success).toBe(true);
-    expect(SocialHandleSchema.safeParse('ab').success).toBe(false);
-    expect(SocialHandleSchema.safeParse('has space').success).toBe(false);
-    expect(SocialHandleSchema.safeParse('Anon42').success).toBe(false);
-    expect(SocialHandleSchema.safeParse('admin_x').success).toBe(false);
-  });
-});
+import { ChatClientMessageSchema, UpdateSocialProfileRequestSchema } from './social.js';
 
 describe('UpdateSocialProfileRequestSchema', () => {
-  it('requires a handle to join the leaderboard', () => {
+  it('only accepts the leaderboard opt-in, never a handle', () => {
+    expect(UpdateSocialProfileRequestSchema.safeParse({ leaderboardVisible: true }).success).toBe(
+      true,
+    );
     expect(
-      UpdateSocialProfileRequestSchema.safeParse({ handle: null, leaderboardVisible: true })
+      UpdateSocialProfileRequestSchema.safeParse({ leaderboardVisible: true, handle: 'spoof' })
         .success,
     ).toBe(false);
-    expect(
-      UpdateSocialProfileRequestSchema.safeParse({ handle: null, leaderboardVisible: false })
-        .success,
-    ).toBe(true);
   });
 });
 

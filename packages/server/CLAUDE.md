@@ -66,6 +66,8 @@ src/
 
 - **Options book library** — `pnpm --filter @oggregator/server library:build` indexes `docs/*.pdf` into `docs/options-library.sqlite` (FTS5, gitignored). Scanned PDFs without a text layer are skipped. Restart the backend after a rebuild; an open handle keeps reading the replaced file.
 
-- **Social stays off Neon's hot path** — global chat lives in memory with an append-only `.cache/social-chat.ndjson` outbox flushed once a day; the leaderboard marks opted-in paper accounts on demand behind a 5-minute cache; equity snapshots for 7D/30D returns are one batch at 00:05 UTC. Anonymous aliases are an HMAC of user + UTC day (`SOCIAL_CHAT_ANON_SECRET`); user ids never reach chat clients.
+- **Social stays off Neon's hot path** — global chat lives in memory with an append-only `.cache/social-chat.ndjson` outbox flushed once a day; the leaderboard marks opted-in paper accounts on demand behind a 5-minute cache; equity snapshots for 7D/30D returns are one batch at 00:05 UTC. Watching a trader (`watch` on `/ws/social`) loads their book once, reloads only after their own paper events, and re-marks from memory every 2s. Anonymous aliases are an HMAC of user + UTC day (`SOCIAL_CHAT_ANON_SECRET`); user ids never reach chat clients.
+
+- **Social handles are the Clerk username** — `GET /api/social/profile` re-reads it through the Clerk Backend API (`CLERK_SECRET_KEY`) and writes `user_profiles` only on change; clients cannot set a handle. Joining the leaderboard is explicit consent to stream open positions, closed trades and equity history (`leaderboard_consented_at`).
 
 - **Live chain runtimes are the cache** — `ChainRuntime.fetchSnapshotData()` returns the delta-maintained snapshot when the runtime has listeners, and rebuilds from the QuoteStore only for idle runtimes. Rebuilding a live runtime broadcasts a full snapshot frame to every viewer, so avoid forcing it from request paths.

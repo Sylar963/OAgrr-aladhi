@@ -1,0 +1,31 @@
+.chart {
+  display: block;
+  width: 100%;
+  height: 140px;
+  --tone: var(--color-profit);
+}
+
+.chart[data-tone="down"] {
+  --tone: var(--color-loss);
+}
+
+.line {
+  stroke: var(--tone);
+  stroke-width: 1.5;
+}
+
+.baseline {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.fillStart {
+  stop-color: var(--tone);
+  stop-opacity: 0.22;
+}
+
+.fillEnd {
+  stop-color: var(--tone);
+  stop-opacity: 0;
+}

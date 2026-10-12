@@ -5,6 +5,7 @@ import {
   type ChatClientMessage,
   type ChatMessageDto,
   ChatServerMessageSchema,
+  type PublicTraderDto,
 } from '@oggregator/protocol';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
@@ -18,10 +19,14 @@ export interface ChatState {
   anonAlias: string | null;
   mutedUntil: string | null;
   lastError: { code: string; message: string; at: number } | null;
+  /** Leaderboard trader currently streamed on this socket. */
+  trader: PublicTraderDto | null;
+  traderUnavailable: string | null;
 }
 
 type ChatAction =
   | { type: 'connection'; connection: ChatConnectionState }
+  | { type: 'clear_trader' }
   | { type: 'server'; message: ReturnType<typeof ChatServerMessageSchema.parse> };
 
 const BASE_DELAY_MS = 1_500;
@@ -36,10 +41,13 @@ export const INITIAL_CHAT_STATE: ChatState = {
   anonAlias: null,
   mutedUntil: null,
   lastError: null,
+  trader: null,
+  traderUnavailable: null,
 };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'connection') return { ...state, connection: action.connection };
+  if (action.type === 'clear_trader') return { ...state, trader: null, traderUnavailable: null };
   const msg = action.message;
   switch (msg.type) {
     case 'hello':
@@ -59,6 +67,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, messages: state.messages.filter((m) => m.id !== msg.id) };
     case 'presence':
       return { ...state, online: msg.online };
+    case 'trader':
+      return { ...state, trader: msg.trader, traderUnavailable: null };
+    case 'trader_live': {
+      const trader = state.trader;
+      if (!trader || trader.handle !== msg.live.handle) return state;
+      const history = trader.equityHistory.slice(0, -1);
+      history.push({ ts: msg.live.generatedAt, equityUsd: msg.live.equityUsd });
+      return { ...state, trader: { ...trader, ...msg.live, equityHistory: history } };
+    }
+    case 'trader_unavailable':
+      return { ...state, trader: null, traderUnavailable: msg.handle };
     case 'error':
       return { ...state, lastError: { code: msg.code, message: msg.message, at: Date.now() } };
   }
@@ -73,13 +92,15 @@ function socialWsUrl(ticket: string): string {
 }
 
 /**
- * Global chat socket. The server ends private sockets every five minutes, so a clean close
- * reconnects with a fresh ticket and receives the history again.
+ * One socket for global chat and the watched leaderboard trader. The server ends private sockets
+ * every five minutes, so a clean close reconnects with a fresh ticket, receives the chat history
+ * again and re-sends the current watch.
  */
-export function useSocialChat(enabled = true) {
+export function useSocialSocket(enabled = true) {
   const session = useAccountSession();
   const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT_STATE);
   const wsRef = useRef<WebSocket | null>(null);
+  const watchedRef = useRef<string | null>(null);
   const [attempt, retry] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
@@ -127,7 +148,12 @@ export function useSocialChat(enabled = true) {
         }
         const parsed = ChatServerMessageSchema.safeParse(raw);
         if (!parsed.success) return;
-        if (parsed.data.type === 'hello') retries = 0;
+        if (parsed.data.type === 'hello') {
+          retries = 0;
+          if (watchedRef.current) {
+            ws.send(JSON.stringify({ type: 'watch', handle: watchedRef.current }));
+          }
+        }
         dispatch({ type: 'server', message: parsed.data });
       };
       ws.onclose = () => {
@@ -158,5 +184,14 @@ export function useSocialChat(enabled = true) {
     return true;
   }, []);
 
-  return { state, send, reconnect: retry };
+  const watch = useCallback(
+    (handle: string | null) => {
+      watchedRef.current = handle;
+      dispatch({ type: 'clear_trader' });
+      send(handle ? { type: 'watch', handle } : { type: 'unwatch' });
+    },
+    [send],
+  );
+
+  return { state, send, watch, reconnect: retry };
 }

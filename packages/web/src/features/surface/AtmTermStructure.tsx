@@ -17,6 +17,7 @@ import { venueColor, deltaColor, deltaLabel } from '@lib/colors';
 import { fmtIv } from '@lib/format';
 import { VENUE_LIST, VENUE_IDS } from '@lib/venue-meta';
 import { useSurface } from './queries';
+import { type SurfaceMarket, useSurfaceUnderlying } from './surface-market';
 import DeltaToggleLegend, { preset25Deltas } from './DeltaToggleLegend';
 import styles from './AtmTermStructure.module.css';
 
@@ -33,6 +34,7 @@ type TenorMode = 'listed' | 'cmm';
 
 interface Props {
   defaultUnderlying?: string;
+  market?: SurfaceMarket;
 }
 
 interface CrosshairState {
@@ -264,8 +266,9 @@ function pickRows(
   };
 }
 
-export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
-  const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
+export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
+    useSurfaceUnderlying(market, defaultUnderlying);
   const containerRef = useRef<HTMLDivElement>(null);
   const multiContainerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -280,7 +283,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
-  const { data } = useSurface(localUnderlying, VENUE_IDS);
+  const { data } = useSurface(localUnderlying, VENUE_IDS, market);
 
   const venuesWithData = VENUE_LIST.filter((v) => {
     const points = data?.venueAtm[v.id];
@@ -378,13 +381,15 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC' }: Props) {
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>ATM Term Structure</span>
-        <DropdownPicker
-          size="sm"
-          value={localUnderlying}
-          onChange={setLocalUnderlying}
-          icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
-          options={underlyings.map((u) => ({ value: u, label: u }))}
-        />
+        {setLocalUnderlying && (
+          <DropdownPicker
+            size="sm"
+            value={localUnderlying}
+            onChange={setLocalUnderlying}
+            icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
+            options={underlyings.map((u) => ({ value: u, label: u }))}
+          />
+        )}
 
         <div className={styles.modeSegmented} role="tablist" aria-label="Term structure mode">
           <button

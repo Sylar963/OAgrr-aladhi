@@ -10,6 +10,7 @@ const TRADFI_PAGES: Record<TradfiPage, true> = {
   builder: true,
   gex: true,
   alpha: true,
+  vol: true,
 };
 
 // Hash route state, discriminated by asset mode. `ticker` is null when no

@@ -19,7 +19,7 @@ import type { TradfiFlowBook } from './flow-book.js';
 // by the crypto VenueId union. We widen "tastytrade" to VenueId at this single
 // boundary — enrichment stores it in Partial<Record<VenueId>> maps keyed by this
 // string, so it flows through to the response as `venues.tastytrade` unchanged.
-const TASTYTRADE_VENUE = 'tastytrade' as VenueId;
+export const TASTYTRADE_VENUE = 'tastytrade' as VenueId;
 
 // tastytrade's per-contract commission ($1 to open) plus the $0.10 clearing fee.
 // A flat estimate: it ignores the $10/leg cap, free closing commission, and
@@ -142,13 +142,12 @@ function toContract(
   };
 }
 
-export function buildChain(
+export function buildVenueChain(
   store: TradfiStore,
   underlying: string,
   expiry: string,
   source: 'ws' | 'rest' = 'ws',
-  flowBook?: TradfiFlowBook,
-): EnrichedChainResponse {
+): VenueOptionChain {
   const insts = store.instrumentsFor(underlying, expiry);
   const spot = store.getSpot(underlying);
   const forward = deriveForward(insts, store, spot) ?? spot;
@@ -159,13 +158,18 @@ export function buildChain(
     contracts[inst.canonical] = toContract(inst, quote, forward, spot, source);
   }
 
-  const venueChain: VenueOptionChain = {
-    venue: TASTYTRADE_VENUE,
-    underlying,
-    expiry,
-    asOf: Date.now(),
-    contracts,
-  };
+  return { venue: TASTYTRADE_VENUE, underlying, expiry, asOf: Date.now(), contracts };
+}
+
+export function buildChain(
+  store: TradfiStore,
+  underlying: string,
+  expiry: string,
+  source: 'ws' | 'rest' = 'ws',
+  flowBook?: TradfiFlowBook,
+): EnrichedChainResponse {
+  const venueChain = buildVenueChain(store, underlying, expiry, source);
+  const { contracts } = venueChain;
 
   // Live-signed dealer book: magnitude from current OI, sign refined by net taker
   // flow. dealerContracts = naiveBase − netFlow, where naiveBase = ±OI. At zero

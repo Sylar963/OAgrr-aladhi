@@ -7,12 +7,14 @@ import {
 
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { useUnderlyings, useExpiries } from '@features/chain';
+import { useTradfiExpiries } from '@features/tradfi';
 import { DropdownPicker } from '@components/ui';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
 import { formatExpiry, dteDays } from '@lib/format';
 import { extractSmile, deltaTickLabel, type XAxisMode } from './smile-utils';
 import { useAllExpiriesSmile } from './queries';
+import { type SurfaceMarket, TRADFI_SURFACE_VENUES, useSurfaceUnderlying } from './surface-market';
 import styles from './VolSmile.module.css';
 
 const EXPIRY_COLORS = [
@@ -45,7 +47,7 @@ function useVolSmileChart(
   containerRef: React.RefObject<HTMLDivElement | null>,
   chains: EnrichedChainResponse[],
   hiddenExpiries: Set<string>,
-  selectedVenue: string,
+  activeVenues: string[],
   xAxisMode: XAxisMode,
   expiries: string[],
 ) {
@@ -65,8 +67,6 @@ function useVolSmileChart(
       timeScale: { borderColor: '#1F2937', tickMarkFormatter: tickFmt },
     });
 
-    const activeVenues = selectedVenue === 'average' ? VENUE_IDS : [selectedVenue];
-
     for (const chain of chains) {
       if (hiddenExpiries.has(chain.expiry)) continue;
       const spot = chain.stats.forwardPriceUsd;
@@ -85,25 +85,34 @@ function useVolSmileChart(
 
     chart.timeScale().fitContent();
     return () => { chart.remove(); };
-  }, [containerRef, chains, hiddenKey, selectedVenue, xAxisMode, expiries]);
+  }, [containerRef, chains, hiddenKey, activeVenues, xAxisMode, expiries]);
 }
 
 interface Props {
   defaultUnderlying?: string;
+  market?: SurfaceMarket;
 }
 
-export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
-  const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
+export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const tradfi = market === 'tradfi';
+  const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
+    useSurfaceUnderlying(market, defaultUnderlying);
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [xAxisMode, setXAxisMode] = useState<XAxisMode>('strike');
   const [selectedVenue, setSelectedVenue] = useState('deribit');
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
-  const { data: expiriesData } = useExpiries(localUnderlying);
-  const expiries = expiriesData?.expiries ?? [];
+  const { data: cryptoExpiries } = useExpiries(tradfi ? '' : localUnderlying);
+  const { data: tradfiExpiries } = useTradfiExpiries(tradfi ? localUnderlying : '');
+  const expiries = (tradfi ? tradfiExpiries : cryptoExpiries)?.expiries ?? [];
 
-  const { data: chains } = useAllExpiriesSmile(localUnderlying, true);
+  const { data: chains } = useAllExpiriesSmile(localUnderlying, true, market);
+  const smileVenues = useMemo(
+    () =>
+      tradfi ? TRADFI_SURFACE_VENUES : selectedVenue === 'average' ? VENUE_IDS : [selectedVenue],
+    [tradfi, selectedVenue],
+  );
 
   // Only Deribit/OKX/Thalex carry BTC+ETH; SOL/DOGE/AAVE/LIT/etc. live on
   // bybit/coincall/binance/derive/gateio. Without this, picking e.g. SOL while
@@ -134,7 +143,7 @@ export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useVolSmileChart(containerRef, chains ?? [], hiddenExpiries, selectedVenue, xAxisMode, expiries);
+  useVolSmileChart(containerRef, chains ?? [], hiddenExpiries, smileVenues, xAxisMode, expiries);
 
   const toggleExpiry = (exp: string) => {
     setHiddenExpiries((prev) => {
@@ -166,19 +175,23 @@ export default function VolSmile({ defaultUnderlying = 'BTC' }: Props) {
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>Vol Smile</span>
-        <DropdownPicker
-          size="sm"
-          value={localUnderlying}
-          onChange={(v: string) => { setLocalUnderlying(v); setHiddenExpiries(new Set()); }}
-          icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
-          options={underlyings.map((u) => ({ value: u, label: u }))}
-        />
-        <DropdownPicker
-          size="sm"
-          value={selectedVenue}
-          onChange={setSelectedVenue}
-          options={venueOptions}
-        />
+        {setLocalUnderlying && (
+          <DropdownPicker
+            size="sm"
+            value={localUnderlying}
+            onChange={(v: string) => { setLocalUnderlying(v); setHiddenExpiries(new Set()); }}
+            icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
+            options={underlyings.map((u) => ({ value: u, label: u }))}
+          />
+        )}
+        {!tradfi && (
+          <DropdownPicker
+            size="sm"
+            value={selectedVenue}
+            onChange={setSelectedVenue}
+            options={venueOptions}
+          />
+        )}
         <div className={styles.xAxisToggle}>
           <button
             type="button"

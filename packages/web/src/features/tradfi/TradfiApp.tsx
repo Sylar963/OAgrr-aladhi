@@ -12,6 +12,9 @@ const ArchitectView = lazy(() =>
 const AlphaView = lazy(() =>
   import('@features/alpha').then((module) => ({ default: module.AlphaView })),
 );
+const TradfiSurfaceView = lazy(() =>
+  import('@features/surface').then((module) => ({ default: module.TradfiSurfaceView })),
+);
 
 export default function TradfiApp() {
   const page = useAppStore((s) => s.tradfiPage);
@@ -26,6 +29,10 @@ export default function TradfiApp() {
           </Suspense>
         ) : page === 'gex' ? (
           <TradfiGexView />
+        ) : page === 'vol' ? (
+          <Suspense fallback={<Spinner size="lg" label="Loading TradFi Volatility…" />}>
+            <TradfiSurfaceView />
+          </Suspense>
         ) : page === 'alpha' ? (
           <Suspense fallback={<Spinner size="lg" label="Loading TradFi Alpha…" />}>
             <AlphaView market="tradfi" />

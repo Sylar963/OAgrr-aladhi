@@ -27,6 +27,7 @@ describe('parseHash', () => {
   it('parses a tradfi page + ticker', () => {
     expect(parseHash('#tradfi/gex/AAPL')).toEqual({ mode: 'tradfi', page: 'gex', ticker: 'AAPL' });
     expect(parseHash('#tradfi/alpha/SPX')).toEqual({ mode: 'tradfi', page: 'alpha', ticker: 'SPX' });
+    expect(parseHash('#tradfi/vol/SPY')).toEqual({ mode: 'tradfi', page: 'vol', ticker: 'SPY' });
     expect(parseHash('#tradfi/chain/TSLA')).toEqual({
       mode: 'tradfi',
       page: 'chain',

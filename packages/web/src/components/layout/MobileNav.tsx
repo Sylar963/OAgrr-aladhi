@@ -8,8 +8,10 @@ import styles from './MobileNav.module.css';
 export default function MobileNav() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setAssetMode = useAppStore((s) => s.setAssetMode);
   const activeRef = useRef<HTMLButtonElement | null>(null);
   const aggrUrl = import.meta.env.VITE_AGGR_URL;
+  const tradfiEnabled = import.meta.env.DEV || Boolean(import.meta.env.VITE_TRADFI_API_BASE);
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
@@ -38,6 +40,12 @@ export default function MobileNav() {
           <span className={styles.icon}>↗</span>
           <span className={styles.label}>Charts</span>
         </a>
+      )}
+      {tradfiEnabled && (
+        <button className={styles.tab} onClick={() => setAssetMode('tradfi')}>
+          <span className={styles.icon}>⇄</span>
+          <span className={styles.label}>TradFi</span>
+        </button>
       )}
     </nav>
   );

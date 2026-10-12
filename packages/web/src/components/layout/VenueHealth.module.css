@@ -71,6 +71,9 @@
 }
 
 .header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-1) var(--space-2) var(--space-2);
   font-family: var(--font-mono);
   font-size: 9px;
@@ -78,6 +81,13 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-tertiary);
+}
+
+.headerLatency {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-secondary);
 }
 
 .row {
@@ -123,7 +133,7 @@
   color: var(--text-dim);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1919px) {
   .sep,
   .freshness {
     display: none;

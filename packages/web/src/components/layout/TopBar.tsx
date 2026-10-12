@@ -1,20 +1,24 @@
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
 import { TAB_GROUPS, type TabDef, type TabGroup } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AccountChip from './AccountChip';
 import AssetModeToggle from './AssetModeToggle';
 import { useSeenTabs } from './seen-tabs';
+import { useTabFold } from './tab-fit';
 import styles from './TopBar.module.css';
 import VenueHealth from './VenueHealth';
-
-const COLLAPSIBLE_GROUP: TabGroup = 'research';
 
 interface TopBarProps {
   tabs: readonly TabDef[];
   onOpenPalette: () => void;
   onOpenShortcuts: () => void;
+}
+
+interface TabGroupEntry {
+  group: TabGroup;
+  tabs: readonly TabDef[];
 }
 
 export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarProps) {
@@ -28,6 +32,29 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
   const tradfiEnabled = import.meta.env.DEV || Boolean(import.meta.env.VITE_TRADFI_API_BASE);
   // Aggr live charts (separate app); hidden until VITE_AGGR_URL is set.
   const aggrUrl = import.meta.env.VITE_AGGR_URL;
+
+  const groups = useMemo<TabGroupEntry[]>(
+    () =>
+      TAB_GROUPS.map((group) => ({ group, tabs: tabs.filter((t) => t.group === group) })).filter(
+        (g) => g.tabs.length > 0,
+      ),
+    [tabs],
+  );
+  const activeGroupIndex = groups.findIndex((g) => g.tabs.some((t) => t.id === activeTab));
+  const activeLabel = tabs.find((t) => t.id === activeTab)?.label ?? 'More';
+
+  const barRef = useRef<HTMLElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const fitRefs = useMemo(
+    () => ({ bar: barRef, left: leftRef, right: rightRef, tabs: tabsRef, measure: measureRef }),
+    [],
+  );
+  const fold = useTabFold(fitRefs, activeGroupIndex);
+  const inlineGroups = groups.slice(0, groups.length - fold);
+  const foldedGroups = groups.slice(groups.length - fold);
 
   const renderTab = (tab: TabDef) => (
     <button
@@ -43,35 +70,30 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
     </button>
   );
 
-  const collapsibleTabs = tabs.filter((t) => t.group === COLLAPSIBLE_GROUP);
-
   return (
-    <header className={styles.bar}>
-      <div className={styles.left}>
+    <header className={styles.bar} ref={barRef}>
+      <div className={styles.left} ref={leftRef}>
         <a href="#" className={styles.logo} aria-label="oggregator">
           <img src="/oggregator-logo.svg" alt="oggregator" />
         </a>
-        {tradfiEnabled && <AssetModeToggle />}
+        {tradfiEnabled && (
+          <span className={styles.modeToggle}>
+            <AssetModeToggle />
+          </span>
+        )}
       </div>
 
-      <div className={styles.pillGroup} role="tablist" data-tour="views">
-        {TAB_GROUPS.map((group, i) => {
-          const groupTabs = tabs.filter((t) => t.group === group);
-          if (groupTabs.length === 0) return null;
-          return (
-            <div
-              key={group}
-              className={styles.group}
-              data-collapsible={group === COLLAPSIBLE_GROUP || undefined}
-            >
-              {i > 0 && <span className={styles.divider} aria-hidden="true" />}
-              {groupTabs.map(renderTab)}
-            </div>
-          );
-        })}
-        {collapsibleTabs.length > 0 && (
+      <div className={styles.pillGroup} role="tablist" data-tour="views" ref={tabsRef}>
+        {inlineGroups.map(({ group, tabs: groupTabs }, i) => (
+          <div key={group} className={styles.group}>
+            {i > 0 && <span className={styles.divider} aria-hidden="true" />}
+            {groupTabs.map(renderTab)}
+          </div>
+        ))}
+        {foldedGroups.length > 0 && (
           <MoreMenu
-            tabs={collapsibleTabs}
+            groups={foldedGroups}
+            showDivider={inlineGroups.length > 0}
             activeTab={activeTab}
             seenTabs={seenTabs}
             onSelect={setActiveTab}
@@ -79,7 +101,24 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
         )}
       </div>
 
-      <div className={styles.right}>
+      {/* Hidden full-width copy of the tabs; useTabFold reads its sizes. */}
+      <div className={styles.measure} ref={measureRef} aria-hidden="true" inert>
+        {groups.map(({ group, tabs: groupTabs }, i) => (
+          <div key={group} className={styles.group} data-measure="group">
+            {i > 0 && <span className={styles.divider} />}
+            {groupTabs.map((tab) => (
+              <span key={tab.id} className={styles.pill} data-active={tab.id === activeTab}>
+                {tab.label}
+                <TabIndicator tab={tab} seen={seenTabs.has(tab.id)} />
+              </span>
+            ))}
+          </div>
+        ))}
+        <MoreTriggerGhost label="More" />
+        <MoreTriggerGhost label={activeLabel} active />
+      </div>
+
+      <div className={styles.right} ref={rightRef}>
         <ExpiryCountdown />
         <VenueHealth />
         {aggrUrl && (
@@ -116,16 +155,31 @@ function TabIndicator({ tab, seen }: { tab: TabDef; seen: boolean }) {
   return null;
 }
 
+function MoreTriggerGhost({ label, active }: { label: string; active?: boolean }) {
+  return (
+    <div className={styles.more} data-measure={active ? 'more-active' : 'more'}>
+      <span className={styles.divider} />
+      <span className={styles.pill} data-active={active}>
+        {label}
+        <span className={styles.caret}>▾</span>
+        <span className={styles.newDot} />
+      </span>
+    </div>
+  );
+}
+
 interface MoreMenuProps {
-  tabs: readonly TabDef[];
+  groups: readonly TabGroupEntry[];
+  showDivider: boolean;
   activeTab: TabDef['id'];
   seenTabs: ReadonlySet<string>;
   onSelect: (id: TabDef['id']) => void;
 }
 
-function MoreMenu({ tabs, activeTab, seenTabs, onSelect }: MoreMenuProps) {
+function MoreMenu({ groups, showDivider, activeTab, seenTabs, onSelect }: MoreMenuProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const tabs = groups.flatMap((g) => g.tabs);
   const activeInMenu = tabs.find((t) => t.id === activeTab);
   const hasUnseen = tabs.some((t) => t.badge === 'NEW' && !seenTabs.has(t.id));
 
@@ -147,7 +201,7 @@ function MoreMenu({ tabs, activeTab, seenTabs, onSelect }: MoreMenuProps) {
 
   return (
     <div className={styles.more} ref={wrapRef}>
-      <span className={styles.divider} aria-hidden="true" />
+      {showDivider && <span className={styles.divider} aria-hidden="true" />}
       <button
         type="button"
         className={styles.pill}
@@ -162,21 +216,26 @@ function MoreMenu({ tabs, activeTab, seenTabs, onSelect }: MoreMenuProps) {
       </button>
       {open && (
         <div className={styles.menu} role="menu">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="menuitem"
-              className={styles.menuItem}
-              data-active={tab.id === activeTab}
-              onClick={() => {
-                onSelect(tab.id);
-                setOpen(false);
-              }}
-            >
-              {tab.label}
-              <TabIndicator tab={tab} seen={seenTabs.has(tab.id)} />
-            </button>
+          {groups.map(({ group, tabs: groupTabs }, i) => (
+            <div key={group} className={styles.menuGroup}>
+              {i > 0 && <span className={styles.menuDivider} aria-hidden="true" />}
+              {groupTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  data-active={tab.id === activeTab}
+                  onClick={() => {
+                    onSelect(tab.id);
+                    setOpen(false);
+                  }}
+                >
+                  {tab.label}
+                  <TabIndicator tab={tab} seen={seenTabs.has(tab.id)} />
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}

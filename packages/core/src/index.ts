@@ -58,14 +58,23 @@ export {
   ULTRA_FINE_DELTA_GRID,
 } from './core/enrichment.js';
 
-export { buildIvSurfaceGrid } from './core/surface-grid.js';
+export {
+  buildIvSurfaceGrid,
+  buildSurfaceAnalytics,
+  buildSurfaceGridEntry,
+} from './core/surface-grid.js';
 export { computeGammaWalls, GEX_WALL_FLOOR_M, type GammaWalls } from './core/gamma-walls.js';
 export {
   computeVenueSurfaceRows,
   computeVenueTenorIvs,
 } from './core/venue-tenor-iv.js';
 export type { VenueTenorIv, VenueTenorIvInput } from './core/venue-tenor-iv.js';
-export type { SurfaceGridEntry, BuildSurfaceGridOptions } from './core/surface-grid.js';
+export type {
+  SurfaceGridEntry,
+  BuildSurfaceGridOptions,
+  SurfaceAnalytics,
+  SurfaceGridEntryOptions,
+} from './core/surface-grid.js';
 
 export {
   computeCmmIvSurface,

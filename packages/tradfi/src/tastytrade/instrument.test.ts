@@ -55,23 +55,46 @@ describe('instrument', () => {
     expect(nestedChainToInstruments(data)).toHaveLength(0);
   });
 
-  it('times expiry at the 16:00 ET close, or 09:30 ET for AM settlement, across DST', () => {
-    const chain = (settlement: string, date: string) => ({
-      items: [{
-        'underlying-symbol': 'SPX',
-        expirations: [{
-          'expiration-date': date,
-          'settlement-type': settlement,
-          strikes: [{ 'strike-price': '5000', call: 'SPX C', 'call-streamer-symbol': '.SPXC' }],
+  it('times expiry at the 16:00 ET close across DST', () => {
+    const ts = (date: string) =>
+      nestedChainToInstruments({
+        items: [{
+          'underlying-symbol': 'SPX',
+          'root-symbol': 'SPXW',
+          expirations: [{
+            'expiration-date': date,
+            'settlement-type': 'PM',
+            strikes: [{ 'strike-price': '5000', call: 'SPXW C', 'call-streamer-symbol': '.SPXWC' }],
+          }],
         }],
-      }],
+      })[0]!.expiryTs;
+    expect(ts('2026-04-17')).toBe(Date.parse('2026-04-17T20:00:00Z'));
+    expect(ts('2026-12-18')).toBe(Date.parse('2026-12-18T21:00:00Z'));
+  });
+
+  it('drops AM-settled expirations and keeps the PM root on the same date', () => {
+    const strike = (root: string) => [{
+      'strike-price': '5000',
+      call: `${root} C`,
+      'call-streamer-symbol': `.${root}C`,
+    }];
+    const insts = nestedChainToInstruments({
+      items: [
+        {
+          'underlying-symbol': 'SPX',
+          'root-symbol': 'SPX',
+          expirations: [{ 'expiration-date': '2026-10-16', 'settlement-type': 'AM', strikes: strike('SPX') }],
+        },
+        {
+          'underlying-symbol': 'SPX',
+          'root-symbol': 'SPXW',
+          expirations: [{ 'expiration-date': '2026-10-16', 'settlement-type': 'PM', strikes: strike('SPXW') }],
+        },
+      ],
     });
-    const ts = (settlement: string, date: string) =>
-      nestedChainToInstruments(chain(settlement, date))[0]!.expiryTs;
-    expect(ts('PM', '2026-04-17')).toBe(Date.parse('2026-04-17T20:00:00Z'));
-    expect(ts('PM', '2026-12-18')).toBe(Date.parse('2026-12-18T21:00:00Z'));
-    expect(ts('AM', '2026-10-16')).toBe(Date.parse('2026-10-16T13:30:00Z'));
-    expect(ts('AM', '2026-12-18')).toBe(Date.parse('2026-12-18T14:30:00Z'));
+    expect(insts).toHaveLength(1);
+    expect(insts[0]!.rootSymbol).toBe('SPXW');
+    expect(insts[0]!.expiryTs).toBe(Date.parse('2026-10-16T20:00:00Z'));
   });
 
   it('parses the tick ladder and picks the tick for a premium', () => {

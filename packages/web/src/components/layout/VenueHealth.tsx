@@ -108,7 +108,12 @@ export default function VenueHealth() {
       </button>
       {open && (
         <div className={styles.popover} role="dialog" aria-label="Venue feed status">
-          <div className={styles.header}>Venue feeds</div>
+          <div className={styles.header}>
+            Venue feeds
+            <span className={styles.headerLatency}>
+              <FreshnessLabel />
+            </span>
+          </div>
           {venues.map((venue) => (
             <div key={venue.id} className={styles.row} data-state={venue.state}>
               <span className={styles.rowDot} />

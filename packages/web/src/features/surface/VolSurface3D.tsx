@@ -10,6 +10,7 @@ import { formatExpiry } from '@lib/format';
 import { Plot, PLOTLY_3D_CONFIG, SCENE_DEFAULTS } from './plotly';
 import { deltaTickLabel } from './smile-utils';
 import { useSurface } from './queries';
+import { type SurfaceMarket, TRADFI_SURFACE_VENUES, useSurfaceUnderlying } from './surface-market';
 import styles from './VolSurface3D.module.css';
 
 type TenorMode = 'listed' | 'cmm';
@@ -132,18 +133,25 @@ function buildCmmGrid(data: IvSurfaceResponse): SurfaceGrid | null {
 
 interface Props {
   defaultUnderlying?: string;
+  market?: SurfaceMarket;
 }
 
-export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
-  const [localUnderlying, setLocalUnderlying] = useState(defaultUnderlying);
+export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const tradfi = market === 'tradfi';
+  const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
+    useSurfaceUnderlying(market, defaultUnderlying);
   const [selectedVenue, setSelectedVenue] = useState('average');
   const [tenorMode, setTenorMode] = useState<TenorMode>('listed');
 
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
 
-  const venues = selectedVenue === 'average' ? VENUE_IDS : [selectedVenue];
-  const { data, isLoading } = useSurface(localUnderlying, venues);
+  const venues = tradfi
+    ? TRADFI_SURFACE_VENUES
+    : selectedVenue === 'average'
+      ? VENUE_IDS
+      : [selectedVenue];
+  const { data, isLoading } = useSurface(localUnderlying, venues, market);
 
   const grid = useMemo(() => {
     if (!data) return null;
@@ -267,19 +275,23 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC' }: Props) {
         <InfoTip label="3D IV Surface" title="3D IV Surface" align="start">
           {SURFACE_TIP_BODY}
         </InfoTip>
-        <DropdownPicker
-          size="sm"
-          value={localUnderlying}
-          onChange={setLocalUnderlying}
-          icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
-          options={underlyings.map((u) => ({ value: u, label: u }))}
-        />
-        <DropdownPicker
-          size="sm"
-          value={selectedVenue}
-          onChange={setSelectedVenue}
-          options={venueOptions}
-        />
+        {setLocalUnderlying && (
+          <DropdownPicker
+            size="sm"
+            value={localUnderlying}
+            onChange={setLocalUnderlying}
+            icon={logo ? <img src={logo} alt="" className={styles.tokenLogo} /> : undefined}
+            options={underlyings.map((u) => ({ value: u, label: u }))}
+          />
+        )}
+        {!tradfi && (
+          <DropdownPicker
+            size="sm"
+            value={selectedVenue}
+            onChange={setSelectedVenue}
+            options={venueOptions}
+          />
+        )}
         <DropdownPicker
           size="sm"
           value={tenorMode}

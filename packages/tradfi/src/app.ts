@@ -5,6 +5,7 @@ import { candlesRoute } from './routes/candles.js';
 import { chainsRoute } from './routes/chains.js';
 import { expiriesRoute } from './routes/expiries.js';
 import { healthRoute } from './routes/health.js';
+import { surfaceRoute } from './routes/surface.js';
 import { gexAllExpiriesRoute } from './routes/gex-all-expiries.js';
 import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 import { underlyingsRoute } from './routes/underlyings.js';
@@ -43,5 +44,6 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(candlesRoute(deps));
   void app.register(underlyingCandlesRoute(deps));
   void app.register(gexAllExpiriesRoute(deps));
+  void app.register(surfaceRoute(deps));
   return app;
 }

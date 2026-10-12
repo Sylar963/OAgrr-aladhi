@@ -41,12 +41,10 @@ function mapSettlement(raw: string | undefined): 'physical' | 'cash' {
   return raw?.toLowerCase() === 'cash' ? 'cash' : 'physical';
 }
 
-// AM-settled index options (SPX, NDX monthlies) settle off the opening print;
-// everything else settles at the 16:00 ET close.
-function expiryTimestamp(expiry: string, settlement: string | undefined): number {
-  return settlement?.toUpperCase() === 'AM'
-    ? easternWallClockToUtcMs(expiry, 9, 30)
-    : easternWallClockToUtcMs(expiry, 16, 0);
+// AM-settled index options (SPX, NDX monthlies) stop trading the day before and settle
+// off a special opening quotation; only PM-settled roots (SPXW, NDXP) are carried for now.
+function isAmSettled(settlement: string | undefined): boolean {
+  return settlement?.toUpperCase() === 'AM';
 }
 
 function easternWallClockToUtcMs(date: string, hour: number, minute: number): number {
@@ -98,8 +96,9 @@ export function nestedChainToInstruments(
     const tickSizes = parseTickSizes(item['tick-sizes']);
 
     for (const exp of item.expirations) {
+      if (isAmSettled(exp['settlement-type'])) continue;
       const expiry = exp['expiration-date'];
-      const expiryTs = expiryTimestamp(expiry, exp['settlement-type']);
+      const expiryTs = easternWallClockToUtcMs(expiry, 16, 0);
       const settlementType = mapSettlement(exp['settlement-type']);
       const expirationType = exp['expiration-type'] ?? null;
 

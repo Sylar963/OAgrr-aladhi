@@ -1,6 +1,9 @@
+/* Side tracks never shrink below their content, so nothing can overlap; spare
+   space splits evenly, which keeps the tabs viewport-centred when they fit. */
 .bar {
+  position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-6);
@@ -9,13 +12,19 @@
   flex-shrink: 0;
 }
 
+.modeToggle {
+  display: inline-flex;
+}
+
 .left {
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
 .logo {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   text-decoration: none;
@@ -33,7 +42,7 @@
   justify-self: center;
   display: flex;
   align-items: center;
-  min-width: 0;
+  max-width: 100%;
   background: color-mix(in srgb, var(--bg-base) 80%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
   border-radius: var(--radius-lg);
@@ -120,27 +129,32 @@
   color: var(--text-dim);
 }
 
-/* Research group folds into "More" on narrower desktops. */
 .more {
   position: relative;
-  display: none;
+  display: flex;
   align-items: center;
 }
 
-@media (max-width: 1439px) {
-  .group[data-collapsible] {
-    display: none;
-  }
+.measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: max-content;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
 
-  .more {
-    display: flex;
-  }
+.measure > * {
+  flex-shrink: 0;
 }
 
 .menu {
   position: absolute;
   top: calc(100% + var(--space-2));
-  right: 0;
+  left: 0;
   z-index: 100;
   min-width: 160px;
   padding: var(--space-1);
@@ -151,6 +165,18 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.menuGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menuDivider {
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border-subtle);
 }
 
 .menuItem {
@@ -267,6 +293,31 @@
   border-radius: var(--radius-sm);
 }
 
+/* ── Laptop / small desktop ── */
+
+@media (max-width: 1919px) {
+  .bar {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .logo img {
+    height: 40px;
+  }
+
+  .pill {
+    padding: 6px var(--space-2);
+  }
+
+  .right {
+    gap: var(--space-2);
+  }
+
+  .kbd {
+    display: none;
+  }
+}
+
 /* ── Mobile responsive ─────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -282,6 +333,11 @@
     height: 44px;
   }
 
+  /* Crypto bar: the mode switch lives in the bottom MobileNav on phones. */
+  .modeToggle {
+    display: none;
+  }
+
   /* Hide tab pills on mobile — bottom nav handles navigation */
   .pillGroup {
     display: none;
@@ -292,7 +348,6 @@
     display: flex;
     grid-column: 1 / -1;
     grid-row: 2;
-    justify-self: stretch;
     overflow-x: auto;
     scrollbar-width: none;
   }

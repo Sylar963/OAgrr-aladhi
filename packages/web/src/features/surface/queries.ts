@@ -5,6 +5,7 @@ import {
   TradfiVolHistoryResponseSchema,
 } from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 
 import { useExpiries } from '@features/chain';
 import { fetchTradfiChain, useTradfiExpiries } from '@features/tradfi';
@@ -50,14 +51,14 @@ export function useIvHistory(
   window: IvHistoryWindow,
   tenor?: IvTenor,
   enabled = true,
+  market: SurfaceMarket = 'crypto',
 ) {
   const tenorParam = tenor ? `&tenor=${tenor}` : '';
+  const path = `/iv-history?underlying=${encodeURIComponent(underlying)}&window=${window}&resolution=${IV_HISTORY_RESOLUTION[window]}${tenorParam}`;
   return useQuery({
-    queryKey: ['iv-history', underlying, window, tenor ?? 'all'] as const,
+    queryKey: [market === 'tradfi' ? 'tradfi-iv-history' : 'iv-history', underlying, window, tenor ?? 'all'] as const,
     queryFn: () =>
-      fetchJson<IvHistoryResponse>(
-        `/iv-history?underlying=${underlying}&window=${window}&resolution=${IV_HISTORY_RESOLUTION[window]}${tenorParam}`,
-      ),
+      market === 'tradfi' ? tradfiFetchJson<IvHistoryResponse>(path) : fetchJson<IvHistoryResponse>(path),
     enabled: enabled && Boolean(underlying),
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -78,6 +79,20 @@ export function useTradfiVolHistory(underlying: string) {
     refetchInterval: 5 * 60_000,
     placeholderData: (prev: TradfiVolHistoryResponse | undefined) =>
       prev?.underlying === underlying ? prev : undefined,
+  });
+}
+
+const TradfiIvHistoryUnderlyingsSchema = z.object({ underlyings: z.array(z.string()) });
+
+/** Tickers the TradFi service records 5-minute IV and skew for. */
+export function useTradfiIvHistoryUnderlyings(enabled = true) {
+  return useQuery({
+    queryKey: ['tradfi-iv-history-underlyings'] as const,
+    queryFn: async () =>
+      TradfiIvHistoryUnderlyingsSchema.parse(await tradfiFetchJson<unknown>('/iv-history/underlyings'))
+        .underlyings,
+    enabled,
+    staleTime: 10 * 60_000,
   });
 }
 

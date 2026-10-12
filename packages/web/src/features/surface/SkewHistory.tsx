@@ -7,6 +7,7 @@ import styles from './SkewHistory.module.css';
 import SkewRegime from './SkewRegime';
 import SkewSmileChart from './SkewSmileChart';
 import SkewTimeline from './SkewTimeline';
+import type { SurfaceMarket } from './surface-market';
 import {
   buildSkewLineData,
   describeSkew,
@@ -38,7 +39,7 @@ const RR_TIP_BODY = (
   <>
     <div>call25 IV − put25 IV.</div>
     <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-      <li>Negative: puts richer than calls → downside fear (usual in BTC/ETH).</li>
+      <li>Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).</li>
       <li>Positive: calls richer → upside FOMO. Near zero = balanced.</li>
       <li>Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.</li>
     </ul>
@@ -109,15 +110,16 @@ function TermStrip({ data, active }: { data: IvHistoryResponse | undefined; acti
 
 interface Props {
   underlying: string;
+  market?: SurfaceMarket;
 }
 
-export default function SkewHistory({ underlying }: Props) {
+export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
   const [window, setWindow] = useState<IvHistoryWindow>('30d');
   const [tenor, setTenor] = useState<IvTenor>('30d');
   const [vsKey, setVsKey] = useState<string>('7d');
   const [model, setModel] = useState<SkewModel>('v1');
 
-  const { data, isPlaceholderData, isLoading } = useIvHistory(underlying, window, tenor);
+  const { data, isPlaceholderData, isLoading } = useIvHistory(underlying, window, tenor, true, market);
   const result = data?.tenors[tenor];
   const series = result?.series ?? [];
   const current = result?.current;
@@ -219,7 +221,7 @@ export default function SkewHistory({ underlying }: Props) {
         </div>
       </div>
 
-      {model === 'v2' && <SkewRegime underlying={underlying} tenor={tenor} lookback={window} />}
+      {model === 'v2' && <SkewRegime underlying={underlying} tenor={tenor} lookback={window} market={market} />}
 
       {model === 'v1' && (
         <>

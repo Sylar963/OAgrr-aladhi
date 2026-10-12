@@ -11,6 +11,7 @@ import {
 } from './queries';
 import styles from './SkewRegime.module.css';
 import SkewRegimeChart, { REGIME_COLORS } from './SkewRegimeChart';
+import type { SurfaceMarket } from './surface-market';
 import {
   computeRegime,
   currentRun,
@@ -73,10 +74,16 @@ interface Props {
   underlying: string;
   tenor: IvTenor;
   lookback: IvHistoryWindow;
+  market?: SurfaceMarket;
 }
 
-export default function SkewRegime({ underlying, tenor, lookback }: Props) {
-  const [source, setSource] = useState<RegimeSource>('contracts');
+// The TradFi service has no trade-flow history, so only the RR source applies there.
+const TRADFI_SOURCES = SOURCES.filter((s) => s.key === 'rr');
+
+export default function SkewRegime({ underlying, tenor, lookback, market = 'crypto' }: Props) {
+  const tradfi = market === 'tradfi';
+  const sources = tradfi ? TRADFI_SOURCES : SOURCES;
+  const [source, setSource] = useState<RegimeSource>(tradfi ? 'rr' : 'contracts');
   const [zoneKey, setZoneKey] = useState('3d');
   const zone = ZONES.find((z) => z.key === zoneKey) ?? ZONES[1]!;
   const lookbackDays = LOOKBACK_DAYS[lookback];
@@ -87,7 +94,7 @@ export default function SkewRegime({ underlying, tenor, lookback }: Props) {
     Math.min(MAX_FLOW_DAYS, lookbackDays + zone.days + 1),
     isFlow,
   );
-  const iv = useIvHistory(underlying, '90d', tenor, !isFlow);
+  const iv = useIvHistory(underlying, '90d', tenor, !isFlow, market);
 
   const nowSec = Math.floor(Date.now() / 1000);
   const series =
@@ -151,7 +158,7 @@ export default function SkewRegime({ underlying, tenor, lookback }: Props) {
       <div className={styles.controls}>
         <span className={styles.controlLabel}>SOURCE</span>
         <div className={styles.toggleGroup}>
-          {SOURCES.map((s) => (
+          {sources.map((s) => (
             <button
               key={s.key}
               type="button"

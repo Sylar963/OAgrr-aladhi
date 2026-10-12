@@ -1,10 +1,12 @@
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import type { IvHistoryService } from '@oggregator/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { candlesRoute } from './routes/candles.js';
 import { chainsRoute } from './routes/chains.js';
 import { expiriesRoute } from './routes/expiries.js';
 import { healthRoute } from './routes/health.js';
+import { ivHistoryRoute } from './routes/iv-history.js';
 import { sectorsRoute } from './routes/sectors.js';
 import { surfaceRoute } from './routes/surface.js';
 import { gexAllExpiriesRoute } from './routes/gex-all-expiries.js';
@@ -12,6 +14,7 @@ import { underlyingCandlesRoute } from './routes/underlying-candles.js';
 import { underlyingsRoute } from './routes/underlyings.js';
 import { venuesRoute } from './routes/venues.js';
 import { volHistoryRoute } from './routes/vol-history.js';
+import { VolHistorySource } from './runtime/vol-history.js';
 import { wsChainRoute } from './routes/ws-chain.js';
 import { wsUnderlyingCandlesRoute } from './routes/ws-underlying-candles.js';
 import type { TradfiFlowBook } from './runtime/flow-book.js';
@@ -30,6 +33,7 @@ export interface TradfiDeps {
   feed: FeedLike;
   candleClient?: CandleClient;
   flowBook?: TradfiFlowBook;
+  ivHistory?: { service: IvHistoryService; underlyings: string[] };
 }
 
 export function buildApp(deps: TradfiDeps): FastifyInstance {
@@ -46,8 +50,10 @@ export function buildApp(deps: TradfiDeps): FastifyInstance {
   void app.register(candlesRoute(deps));
   void app.register(underlyingCandlesRoute(deps));
   void app.register(gexAllExpiriesRoute(deps));
-  void app.register(surfaceRoute(deps));
-  void app.register(volHistoryRoute(deps));
+  const volHistory = deps.candleClient ? new VolHistorySource(deps.candleClient) : undefined;
+  void app.register(surfaceRoute(deps, volHistory));
+  void app.register(volHistoryRoute(deps, volHistory));
+  void app.register(ivHistoryRoute(deps));
   void app.register(sectorsRoute(deps));
   return app;
 }

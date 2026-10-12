@@ -20,8 +20,9 @@ import type {
   RegimeObservationLoadQuery,
   RegimeStore,
   ShortStraddleSnapshotStore,
-} from '@oggregator/db';
+} from './index.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { NoopIvHistoryStore } from './iv-history-store.js';
 import {
   DeferredBreakEvenSnapshotStore,
   DeferredDealerBookStore,
@@ -510,6 +511,23 @@ describe('DeferredIvHistoryStore', () => {
 
     await store.flush();
 
+    expect(delegate.writes).toEqual([[ivPoint]]);
+    await store.dispose();
+  });
+
+  it('keeps the cache and holds the outbox while no database is configured', async () => {
+    const cachePath = tempPath('iv-local.ndjson');
+    const options = { cachePath, flushIntervalMs, maxPendingRows: 100 };
+    const local = new DeferredIvHistoryStore(new NoopIvHistoryStore(), options, noopLog);
+    expect(local.enabled).toBe(true);
+    await local.writeMany([ivPoint]);
+    await local.flush();
+    await local.dispose();
+
+    const delegate = new FakeIvHistoryStore();
+    const store = new DeferredIvHistoryStore(delegate, options, noopLog);
+    expect(await store.loadSince({ underlyings: ['BTC'], since: new Date(0) })).toEqual([ivPoint]);
+    await store.flush();
     expect(delegate.writes).toEqual([[ivPoint]]);
     await store.dispose();
   });

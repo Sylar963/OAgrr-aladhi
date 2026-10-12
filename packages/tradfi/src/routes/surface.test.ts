@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { TradfiStore } from '../runtime/store.js';
+import type { CandleClient } from '../tastytrade/candle-client.js';
 import type { TradfiReadiness } from '../tastytrade/feed.js';
 import type { TradfiInstrument } from '../tastytrade/instrument.js';
 import type { TradfiSurfaceResponse } from './surface.js';
@@ -65,6 +66,27 @@ describe('GET /surface', () => {
     expect(body.surface[0]!.dte).toBe(10);
     expect(body.venueSurfaceFineSmoothed.tastytrade).toEqual(body.surfaceFineSmoothed);
     expect(body.rv30d).toBeNull();
+    expect(body.atmIvTenors['30d']).toBeCloseTo(0.3, 6);
+    expect(body.atmIv30d).toBe(body.atmIvTenors['30d']);
+    await app.close();
+  });
+
+  it('adds 21-day realized vol and the IV − RV spread from daily candles', async () => {
+    const now = Date.now();
+    const store = new TradfiStore();
+    seed(store, [now + 10 * DAY, now + 40 * DAY]);
+    // Alternating ±1% closes realize 0.01 × √252 over every window.
+    const bars = Array.from({ length: 30 }, (_, i) => {
+      const c = 100 * Math.exp(i % 2 === 0 ? 0 : 0.01);
+      return { symbol: 'SPY{=d}', flags: 0, time: i * DAY, o: c, h: c, l: c, c, v: 1, iv: 0.2 };
+    });
+    const candleClient = { isReady: () => true, getCandles: async () => bars } as unknown as CandleClient;
+    const app = buildApp({ store, feed: feed(), candleClient });
+
+    const body = (await app.inject({ method: 'GET', url: '/surface?underlying=SPY' })).json() as TradfiSurfaceResponse;
+    const rv = 0.01 * Math.sqrt(252);
+    expect(body.rv30d).toBeCloseTo(rv, 10);
+    expect(body.vrp30d).toBeCloseTo(0.3 - rv, 6);
     await app.close();
   });
 

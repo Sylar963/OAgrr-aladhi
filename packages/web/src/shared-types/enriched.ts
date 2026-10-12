@@ -103,6 +103,8 @@ export interface IvSurfaceResponse {
   // VRP30d = atmIv30d − rv30d. Positive → IV pricing above realized → option
   // sellers are paid for tail risk. Negative → IV cheap vs realized → caution.
   vrp30d: number | null;
+  // TradFi only: constant-maturity ATM IV per tenor, interpolated from the live surface.
+  atmIvTenors?: Record<IvTenor, number | null>;
 }
 
 // IV history — constant-maturity ATM IV, 25Δ RR, 25Δ butterfly.

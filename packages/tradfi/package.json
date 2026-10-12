@@ -8,14 +8,15 @@
     "build": "tsc",
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "lint": "biome lint .",
-    "typecheck": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && tsc --noEmit",
+    "typecheck": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && pnpm --filter @oggregator/db build && tsc --noEmit",
     "test": "vitest",
-    "test:run": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && vitest run"
+    "test:run": "pnpm --filter @oggregator/protocol build && pnpm --filter @oggregator/core build && pnpm --filter @oggregator/db build && vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
     "@fastify/websocket": "^11.0.0",
     "@oggregator/core": "workspace:*",
+    "@oggregator/db": "workspace:*",
     "@oggregator/protocol": "workspace:^",
     "fastify": "^5.12.5",
     "pino": "^9.0.0",

@@ -37,12 +37,19 @@ These are **templates committed to git**. An engineer applies them on the host b
    TASTYTRADE_REFRESH_TOKEN=...
    TRADFI_PORT=3200
    TRADFI_UNDERLYINGS=SPX,NDX,SPY,QQQ,AAPL,NVDA,TSLA
+   # Optional: IV/skew history. Its own Neon database, never the crypto DATABASE_URL.
+   # Points sit in packages/tradfi/.cache/ and reach Postgres once a day.
+   TRADFI_DATABASE_URL=postgresql://...
+   TRADFI_IV_HISTORY_UNDERLYINGS=SPX,NDX,SPY,QQQ,AAPL,NVDA,TSLA
    ```
 
-3. **Build (protocol → core → tradfi)**
+   With `TRADFI_DATABASE_URL` set, create its schema once: `pnpm db:migrate:tradfi`.
+
+3. **Build (protocol → core → db → tradfi)**
    ```bash
    pnpm --filter @oggregator/protocol build \
      && pnpm --filter @oggregator/core build \
+     && pnpm --filter @oggregator/db build \
      && pnpm --filter @oggregator/tradfi build
    ```
 

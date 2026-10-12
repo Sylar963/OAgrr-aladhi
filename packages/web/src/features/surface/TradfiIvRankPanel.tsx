@@ -5,12 +5,20 @@ import { useTradfiSelection } from '@features/tradfi';
 import type { TradfiVolHistoryResponse, TradfiVolRank } from '@oggregator/protocol';
 import type { IvHistoryPoint, IvHistoryTenorResult } from '@shared/enriched';
 import { Chip } from './IvRankPanel';
-import { useTradfiVolHistory } from './queries';
+import { useSurface, useTradfiVolHistory } from './queries';
+import { TRADFI_SURFACE_VENUES } from './surface-market';
 import VolConeChart, { type ConeIvPoint } from './VolConeChart';
 import styles from './IvRankPanel.module.css';
 
 type Lookback = '6m' | '1y';
 type Field = 'iv' | 'rv';
+
+const CONE_TENORS = [
+  ['7d', 7],
+  ['30d', 30],
+  ['60d', 60],
+  ['90d', 90],
+] as const;
 
 const LOOKBACKS: Lookback[] = ['6m', '1y'];
 
@@ -82,8 +90,8 @@ const CONE_TIP = (
     <ul className={styles.tipList}>
       <li>Darkest band 25–75th pct, then 10–90th, then min–max. Dashed line is the median.</li>
       <li>
-        <b style={{ color: 'var(--accent-primary)' }}>Teal</b>: current 30-day IV and its
-        percentile inside the 30D band.
+        <b style={{ color: 'var(--accent-primary)' }}>Teal</b>: current ATM IV term structure from
+        the live surface, labelled with its percentile inside each band.
       </li>
       <li>
         <b style={{ color: '#f7a600' }}>Orange</b>: realized vol over the trailing window of each
@@ -97,8 +105,11 @@ export default function TradfiIvRankPanel() {
   const { underlying } = useTradfiSelection();
   const [lookback, setLookback] = useState<Lookback>('1y');
   const { data } = useTradfiVolHistory(underlying);
-  const currentIv = data ? (latest(data.series, 'iv')?.iv ?? null) : null;
-  const coneIvPoints: ConeIvPoint[] = currentIv == null ? [] : [{ days: 30, iv: currentIv }];
+  const { data: surface } = useSurface(underlying, TRADFI_SURFACE_VENUES, 'tradfi');
+  const coneIvPoints: ConeIvPoint[] = CONE_TENORS.flatMap(([tenor, days]) => {
+    const iv = surface?.atmIvTenors?.[tenor];
+    return iv == null ? [] : [{ days, iv }];
+  });
   const first = data?.series[0];
 
   return (
@@ -152,7 +163,7 @@ export default function TradfiIvRankPanel() {
           <div className={styles.legend}>
             <span>
               <i className={styles.lgIv} />
-              30D IV
+              ATM IV
             </span>
             <span>
               <i className={styles.lgRv} />

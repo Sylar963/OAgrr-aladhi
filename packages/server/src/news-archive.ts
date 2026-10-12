@@ -9,7 +9,7 @@ import {
   readJsonLines,
   rewriteJsonLines,
   rewriteOutbox,
-} from './deferred-persistence.js';
+} from '@oggregator/db';
 import type { NewsArchiveSink, NewsItem } from './news-service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;

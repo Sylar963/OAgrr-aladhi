@@ -197,3 +197,19 @@ export type {
   UserProfileRow,
 } from './social-store.js';
 export { HandleTakenError, NoopSocialStore, PostgresSocialStore } from './social-store.js';
+export {
+  appendJsonLines,
+  DeferredBreakEvenSnapshotStore,
+  DeferredDealerBookStore,
+  DeferredGexWallSnapshotStore,
+  DeferredIvHistoryStore,
+  type DeferredLog,
+  DeferredOiSnapshotStore,
+  DeferredRegimeStore,
+  DeferredShortStraddleSnapshotStore,
+  describeError,
+  FlushSchedule,
+  readJsonLines,
+  rewriteJsonLines,
+  rewriteOutbox,
+} from './deferred-persistence.js';

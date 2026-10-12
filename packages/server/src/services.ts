@@ -77,7 +77,7 @@ import {
   DeferredOiSnapshotStore,
   DeferredRegimeStore,
   DeferredShortStraddleSnapshotStore,
-} from './deferred-persistence.js';
+} from '@oggregator/db';
 import { getAllExpiriesGex } from './gex-all-expiries.js';
 import { GEX_WALL_RETENTION_MS, GexWallHistoryService } from './gex-wall-history-service.js';
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';

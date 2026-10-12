@@ -22,7 +22,7 @@ import { AssistantMarketDataReader } from './assistant-market/market-data-reader
 import { AssistantRunRegistry } from './assistant-market/assistant-run-registry.js';
 import { OptionsLibrary } from './assistant-market/options-library.js';
 import { type PortfolioRefScope, PortfolioRefStore } from './assistant-market/portfolio-ref.js';
-import { FlushSchedule } from './deferred-persistence.js';
+import { FlushSchedule } from '@oggregator/db';
 import { HermesPortfolioAssistantGateway } from './hermes-portfolio-assistant-gateway.js';
 import { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import { readPortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';

@@ -517,6 +517,13 @@ describe('withFractionalDte', () => {
     expect(row!.dte).toBeCloseTo(3.5);
   });
 
+  it('uses the injected expiry time, such as a 16:00 ET equity close', () => {
+    const now = Date.parse('2026-10-05T20:00:00Z');
+    const close = (expiry: string) => Date.parse(`${expiry}T20:00:00Z`);
+    const [row] = withFractionalDte([makeRow('2026-10-08', 3, 0.5, 0, 0)], now, close);
+    expect(row!.dte).toBeCloseTo(3);
+  });
+
   it('keeps the stored DTE when the expiry cannot be parsed', () => {
     const [row] = withFractionalDte([makeRow('weekly', 4, 0.5, 0, 0)], Date.now());
     expect(row!.dte).toBe(4);

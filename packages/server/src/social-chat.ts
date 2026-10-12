@@ -14,7 +14,7 @@ import {
   FlushSchedule,
   readJsonLines,
   rewriteJsonLines,
-} from './deferred-persistence.js';
+} from '@oggregator/db';
 
 export interface ChatServiceOptions {
   cachePath: string;

@@ -65,6 +65,11 @@ function easternWallClockToUtcMs(date: string, hour: number, minute: number): nu
   return asUtc - (etAsUtc - asUtc);
 }
 
+/** Every carried expiry settles at the 16:00 ET close (AM-settled roots are skipped). */
+export function expiryCloseTs(expiry: string): number {
+  return easternWallClockToUtcMs(expiry, 16, 0);
+}
+
 function parseTickSizes(
   raw: NestedChainResponse['data']['items'][number]['tick-sizes'],
 ): TickSize[] {
@@ -98,7 +103,7 @@ export function nestedChainToInstruments(
     for (const exp of item.expirations) {
       if (isAmSettled(exp['settlement-type'])) continue;
       const expiry = exp['expiration-date'];
-      const expiryTs = easternWallClockToUtcMs(expiry, 16, 0);
+      const expiryTs = expiryCloseTs(expiry);
       const settlementType = mapSettlement(exp['settlement-type']);
       const expirationType = exp['expiration-type'] ?? null;
 

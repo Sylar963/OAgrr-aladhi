@@ -9,6 +9,8 @@ import { buildApp } from './app.js';
 import { CandleClient, type CandleSocket } from './tastytrade/candle-client.js';
 import { buildKeepalive } from './tastytrade/codec.js';
 import { sectorSymbols } from './sectors/baskets.js';
+import { TradfiIvRecorder } from './runtime/iv-recorder.js';
+import { DeferredIvHistoryStore, NoopIvHistoryStore, PostgresIvHistoryStore } from '@oggregator/db';
 
 function wsCandleSocket(url: string): CandleSocket {
   const ws = new WebSocket(url);
@@ -39,7 +41,20 @@ async function main() {
     socketFactory: wsCandleSocket,
   });
 
-  const app = buildApp({ store, feed, candleClient, flowBook: feed.flowBook });
+  // Neon bills while compute is awake: points live in a local cache and reach Postgres once a day.
+  const ivStore = new DeferredIvHistoryStore(
+    cfg.databaseUrl ? PostgresIvHistoryStore.fromConnectionString(cfg.databaseUrl) : new NoopIvHistoryStore(),
+    { flushIntervalMs: 24 * 60 * 60 * 1000, cachePath: cfg.ivHistoryCachePath, maxPendingRows: 250_000 },
+    { warn: (obj, msg) => logger.warn(obj, msg) },
+  );
+  const ivRecorder = new TradfiIvRecorder({
+    store, feed, persistence: ivStore, underlyings: cfg.ivHistoryUnderlyings,
+  });
+
+  const app = buildApp({
+    store, feed, candleClient, flowBook: feed.flowBook,
+    ivHistory: { service: ivRecorder.history, underlyings: cfg.ivHistoryUnderlyings },
+  });
   await app.listen({ port: cfg.port, host: process.env['TRADFI_HOST'] ?? '127.0.0.1' });
   logger.info({ port: cfg.port }, 'tradfi service listening');
 
@@ -47,6 +62,10 @@ async function main() {
     .then(() => feed.startStreaming())
     .then(() => {
       logger.info('markets loaded + streaming');
+      void ivRecorder.start().then(
+        () => logger.info({ underlyings: cfg.ivHistoryUnderlyings, database: cfg.databaseUrl != null }, 'IV history recording'),
+        (err: unknown) => logger.error({ err: String(err) }, 'IV history start failed'),
+      );
       void candleClient.connect().catch((err: unknown) =>
         logger.error({ err: String(err) }, 'candle client connect failed'),
       );
@@ -61,6 +80,8 @@ async function main() {
     void (async () => {
       try {
         candleClient.dispose();
+        ivRecorder.dispose();
+        await ivStore.dispose();
         await feed.dispose();
         await app.close();
       } catch (err: unknown) {

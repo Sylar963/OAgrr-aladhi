@@ -279,6 +279,7 @@ export {
   type IvSurfaceSnapshot,
   type IvHistoryPointSource,
   type PersistedIvHistoryPoint,
+  withFractionalDte,
 } from './services/iv-history.js';
 export {
   TradeRuntime,

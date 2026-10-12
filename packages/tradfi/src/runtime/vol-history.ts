@@ -6,6 +6,7 @@ import type {
   VolConeBand,
 } from '@oggregator/protocol';
 import type { RawCandle } from '../tastytrade/candle-codec.js';
+import type { CandleSource } from './candles.js';
 
 export const TRADING_DAYS_PER_YEAR = 252;
 export const RV_WINDOW_DAYS = 21;
@@ -142,4 +143,49 @@ export function buildVolHistory(
     },
     volCone: volCone(days.map((b) => b.c)),
   };
+}
+
+const CACHE_TTL_MS = 5 * 60_000;
+// DXLink keeps ~3 years of daily candles, and its oldest retained week is not split-adjusted
+// (NVDA 4.61 instead of ~46), so stop two weeks short of it.
+const HISTORY_MS = 1_080 * DAY_MS;
+
+/** Daily vol history per underlying, cached for five minutes and shared by every route. */
+export class VolHistorySource {
+  private readonly cache = new Map<
+    string,
+    { at: number; response: Promise<TradfiVolHistoryResponse | null> }
+  >();
+
+  constructor(private readonly client: CandleSource & { isReady(): boolean }) {}
+
+  isReady(): boolean {
+    return this.client.isReady();
+  }
+
+  /** Callers pass only listed underlyings, so arbitrary symbols never reach the cache. */
+  async get(underlying: string, now = Date.now()): Promise<TradfiVolHistoryResponse | null> {
+    let hit = this.cache.get(underlying);
+    if (hit == null || now - hit.at >= CACHE_TTL_MS) {
+      hit = { at: now, response: this.load(underlying, now) };
+      this.cache.set(underlying, hit);
+    }
+    const body = await hit.response.catch(() => null);
+    if (body == null) this.cache.delete(underlying);
+    return body;
+  }
+
+  private async load(underlying: string, now: number): Promise<TradfiVolHistoryResponse | null> {
+    const from = now - HISTORY_MS;
+    const indexSymbol = IV_INDEX[underlying];
+    const [bars, indexBars] = await Promise.all([
+      this.client.getCandles(underlying, 'd', from),
+      indexSymbol != null ? this.client.getCandles(indexSymbol, 'd', from) : Promise.resolve([]),
+    ]);
+    return buildVolHistory(
+      underlying,
+      bars,
+      indexSymbol != null ? { symbol: indexSymbol, bars: indexBars } : undefined,
+    );
+  }
 }

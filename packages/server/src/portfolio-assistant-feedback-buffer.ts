@@ -11,7 +11,7 @@ import {
   FlushSchedule,
   readJsonLines,
   rewriteJsonLines,
-} from './deferred-persistence.js';
+} from '@oggregator/db';
 
 export interface PortfolioAssistantFeedbackBufferOptions {
   cachePath: string;

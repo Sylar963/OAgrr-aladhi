@@ -94,6 +94,14 @@
   height: 540px;
 }
 
+.note {
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 @media (max-width: 768px) {
   .view {
     padding: var(--space-3);

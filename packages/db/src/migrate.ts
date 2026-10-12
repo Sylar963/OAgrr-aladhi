@@ -9,12 +9,23 @@ setDefaultResultOrder('ipv4first');
 
 const { Pool } = await import('pg');
 
+// The TradFi service keeps its own database, so its schema lives in a separate folder.
+const TARGETS = {
+  main: { dir: '../migrations', env: 'DATABASE_URL' },
+  tradfi: { dir: '../migrations-tradfi', env: 'TRADFI_DATABASE_URL' },
+} as const;
+
+const targetName = process.argv[2] ?? 'main';
+if (targetName !== 'main' && targetName !== 'tradfi') {
+  throw new Error(`unknown migration target ${targetName}; expected main or tradfi`);
+}
+const target = TARGETS[targetName];
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = join(here, '../migrations');
-const databaseUrl = process.env['DATABASE_URL'];
+const migrationsDir = join(here, target.dir);
+const databaseUrl = process.env[target.env];
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run migrations');
+  throw new Error(`${target.env} is required to run ${targetName} migrations`);
 }
 
 const pool = new Pool({ connectionString: databaseUrl });

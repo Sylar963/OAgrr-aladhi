@@ -15,11 +15,13 @@
     "test": "vitest",
     "test:run": "vitest run",
     "migrate": "node --env-file-if-exists=../../.env dist/migrate.js",
+    "migrate:tradfi": "node --env-file-if-exists=../../.env dist/migrate.js tradfi",
     "portfolio-assistant:invite": "node --env-file-if-exists=../../.env dist/create-portfolio-assistant-invite.js",
     "seed:sample": "node --env-file-if-exists=../../.env dist/seed-sample.js"
   },
   "dependencies": {
-    "pg": "8.20.0"
+    "pg": "8.20.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "22.19.15",

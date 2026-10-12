@@ -37,15 +37,17 @@ function flowData() {
   return { available: true, underlying: 'BTC', resolution: 3600, start, end: now, buckets };
 }
 
+const calls = vi.hoisted(() => ({ ivHistory: [] as unknown[][], flow: [] as unknown[][] }));
+
 vi.mock('./queries', () => ({
   CALL_PUT_FLOW_RESOLUTION_SEC: 3600,
-  useCallPutFlow: () => ({
+  useCallPutFlow: (...args: unknown[]) => (calls.flow.push(args), {
     data: flowData(),
     isLoading: false,
     isPlaceholderData: false,
     isError: false,
   }),
-  useIvHistory: () => ({
+  useIvHistory: (...args: unknown[]) => (calls.ivHistory.push(args), {
     data: {
       underlying: 'BTC',
       windowDays: 30,
@@ -70,6 +72,11 @@ vi.mock('./queries', () => ({
     },
   }),
 }));
+
+afterEach(() => {
+  calls.ivHistory.length = 0;
+  calls.flow.length = 0;
+});
 
 describe('SkewHistory', () => {
   it('renders timelines, tenor strip, smile, and controls', () => {
@@ -127,5 +134,16 @@ describe('SkewHistory', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'v1' }));
     expect(screen.getByText('25Δ Fly')).toBeTruthy();
+  });
+
+  it('reads TradFi history and offers only the RR regime source there', () => {
+    render(<SkewHistory underlying="SPX" market="tradfi" />);
+    expect(calls.ivHistory.every((args) => args[4] === 'tradfi')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'v2' }));
+
+    expect(screen.getByRole('button', { name: 'RR' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Contracts' })).toBeNull();
+    expect(calls.ivHistory.at(-1)).toEqual(['SPX', '90d', '30d', true, 'tradfi']);
+    expect(calls.flow.every((args) => args[2] === false)).toBe(true);
   });
 });

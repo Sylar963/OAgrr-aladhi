@@ -89,14 +89,23 @@ export function despikeSkewSeries(series: IvHistoryPoint[]): IvHistoryPoint[] {
   return out;
 }
 
+/** Crypto venues settle at 08:00 UTC. */
+export function cryptoExpiryTime(expiry: string): number {
+  return Date.parse(`${expiry}T08:00:00Z`);
+}
+
 /**
  * IvSurfaceRow.dte is whole days rounded up (display convention). Variance-time interpolation
  * needs real time to expiry, otherwise a weekly 3.1 days out is weighted as 4 and every tenor
- * saw-tooths at the 08:00 UTC roll.
+ * saw-tooths at the expiry roll.
  */
-export function withFractionalDte(surfaces: IvSurfaceRow[], now: number): IvSurfaceRow[] {
+export function withFractionalDte(
+  surfaces: IvSurfaceRow[],
+  now: number,
+  expiryTime: (expiry: string) => number = cryptoExpiryTime,
+): IvSurfaceRow[] {
   return surfaces.map((row) => {
-    const expiryMs = Date.parse(`${row.expiry}T08:00:00Z`);
+    const expiryMs = expiryTime(row.expiry);
     return Number.isFinite(expiryMs) ? { ...row, dte: (expiryMs - now) / MS_PER_DAY } : row;
   });
 }
@@ -256,7 +265,7 @@ export interface IvHistoryDeps {
   /** Builds a fresh IvSurfaceRow[] for the underlying across all listed expiries. */
   getSurfaceGrid: (underlying: string) => Promise<IvSurfaceRow[] | IvSurfaceSnapshot>;
   /** Source of the DVOL 30d seed. Only BTC/ETH are seeded. */
-  dvol: DvolService;
+  dvol?: DvolService;
   /** Optional persistence layer. Core stays storage-agnostic; server wires DB in. */
   store?: IvHistoryPersistence;
 }
@@ -265,6 +274,8 @@ export interface IvHistoryOptions {
   underlyings?: string[];
   intervalMs?: number;
   capacity?: number;
+  /** Expiry timestamp for an ISO expiry date; defaults to the crypto 08:00 UTC settlement. */
+  expiryTime?: (expiry: string) => number;
 }
 
 export type IvHistoryPointSource = 'live_surface' | 'deribit_dvol';
@@ -307,6 +318,7 @@ export class IvHistoryService {
   private readonly underlyings: string[];
   private readonly intervalMs: number;
   private readonly capacity: number;
+  private readonly expiryTime: (expiry: string) => number;
 
   constructor(
     private deps: IvHistoryDeps,
@@ -316,6 +328,7 @@ export class IvHistoryService {
     this.intervalMs = opts.intervalMs ?? 5 * 60 * 1000;
     // 90 days at default 5-minute cadence.
     this.capacity = opts.capacity ?? 90 * 24 * 12;
+    this.expiryTime = opts.expiryTime ?? cryptoExpiryTime;
   }
 
   async start(): Promise<void> {
@@ -379,9 +392,9 @@ export class IvHistoryService {
       }
       const snapshot: IvSurfaceSnapshot = Array.isArray(grid) ? { rows: grid } : grid;
       if (snapshot.rows.length === 0) continue;
-      const surfaces = withFractionalDte(snapshot.rows, now);
+      const surfaces = withFractionalDte(snapshot.rows, now, this.expiryTime);
       const venueRows = [...(snapshot.venueRows?.values() ?? [])].map((rows) =>
-        withFractionalDte(rows, now),
+        withFractionalDte(rows, now, this.expiryTime),
       );
       // For 30d BTC/ETH we align the live "current" with the DVOL-seeded
       // history. DVOL uses Deribit's own variance methodology across multiple
@@ -389,7 +402,7 @@ export class IvHistoryService {
       // introduces a systematic 1–3 vol-point gap that pins rank at 0.
       const dvolAtm =
         underlying === 'BTC' || underlying === 'ETH'
-          ? (this.deps.dvol.getSnapshot?.(underlying)?.current ?? null)
+          ? (this.deps.dvol?.getSnapshot?.(underlying)?.current ?? null)
           : null;
       for (const tenor of TENORS) {
         const days = TENOR_DAYS[tenor];
@@ -494,7 +507,7 @@ export class IvHistoryService {
     for (const underlying of this.underlyings) {
       if (underlying !== 'BTC' && underlying !== 'ETH') continue;
       if (this.getBuffer(underlying, '30d').length > 0) continue;
-      const candles = this.deps.dvol.getHistory(underlying);
+      const candles = this.deps.dvol?.getHistory(underlying) ?? [];
       if (candles.length === 0) {
         log.warn(
           { underlying },

@@ -18,6 +18,8 @@ describe('loadConfig', () => {
   it('parses TRADFI_UNDERLYINGS and TRADFI_PORT', () => {
     const cfg = loadConfig({ ...base, TRADFI_UNDERLYINGS: 'AAPL, SPY ,QQQ', TRADFI_PORT: '4000' });
     expect(cfg.underlyings).toEqual(['AAPL', 'SPY', 'QQQ']);
+    expect(cfg.ivHistoryUnderlyings).toEqual(['SPY', 'QQQ', 'AAPL']);
+    expect(cfg.databaseUrl).toBeNull();
     expect(cfg.port).toBe(4000);
   });
 

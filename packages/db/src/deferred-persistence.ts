@@ -34,7 +34,7 @@ import type {
   RegimeStore,
   ShortStraddleSnapshotLoadQuery,
   ShortStraddleSnapshotStore,
-} from '@oggregator/db';
+} from './index.js';
 import { z } from 'zod';
 
 interface DeferredPersistenceOptions {
@@ -790,8 +790,12 @@ export class DeferredDealerBookStore implements DealerBookStore {
   }
 }
 
+/**
+ * Without a database behind it the store still keeps its local cache, and holds the outbox
+ * until one is configured.
+ */
 export class DeferredIvHistoryStore implements IvHistoryStore {
-  readonly enabled: boolean;
+  readonly enabled = true;
   private cache: PersistedIvHistoryPoint[];
   private pending: PersistedIvHistoryPoint[];
   private readonly pendingPath: string;
@@ -803,7 +807,6 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
     private readonly options: DeferredPersistenceOptions,
     private readonly log: DeferredLog,
   ) {
-    this.enabled = delegate.enabled;
     this.pendingPath = `${options.cachePath}.pending`;
     this.cache = readJsonLines(options.cachePath, decodeIvHistoryPoint, log);
     this.pending = existsSync(this.pendingPath)
@@ -890,7 +893,7 @@ export class DeferredIvHistoryStore implements IvHistoryStore {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing || this.pending.length === 0) return;
+    if (this.flushing || this.pending.length === 0 || !this.delegate.enabled) return;
     this.flushing = true;
     const batch = [...this.pending];
     try {

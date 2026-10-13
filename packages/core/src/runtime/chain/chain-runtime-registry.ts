@@ -1,4 +1,5 @@
 import type { WsSubscriptionRequest } from '../../core/types.js';
+import { VENUE_IDS } from '../../types/common.js';
 import { ChainRuntime, type ChainRuntimeOptions } from './chain-runtime.js';
 
 // Idle runtimes keep upstream venue subscriptions live until reclaimed. A long
@@ -16,8 +17,11 @@ interface ChainRuntimeEntry {
   lastUsedAt: number;
 }
 
+// Canonical order, not alphabetical: the runtime fetches venues in this order, which sets the
+// venue key order inside every snapshot strike, and clients render venues in key order.
 function normalizeVenues(venues: WsSubscriptionRequest['venues']): WsSubscriptionRequest['venues'] {
-  return [...venues].sort();
+  const requested = new Set(venues);
+  return VENUE_IDS.filter((venue) => requested.has(venue));
 }
 
 function runtimeKey(request: WsSubscriptionRequest): string {

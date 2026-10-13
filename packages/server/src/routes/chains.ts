@@ -16,9 +16,10 @@ const CHAIN_RESPONSE_CACHE_TTL_MS = 5_000;
 const chainResponseCache = new ResponseCache(CHAIN_RESPONSE_CACHE_TTL_MS);
 
 function parseVenues(venuesParam: string | undefined): VenueId[] {
-  return venuesParam
-    ? (venuesParam.split(',').filter((venue) => VENUE_IDS.includes(venue as VenueId)) as VenueId[])
-    : getAllAdapters().map((adapter) => adapter.venue);
+  if (!venuesParam) return getAllAdapters().map((adapter) => adapter.venue);
+  const requested = new Set(venuesParam.split(','));
+  // Canonical order keeps the response's venue key order stable across requests sharing the cache.
+  return VENUE_IDS.filter((venue) => requested.has(venue));
 }
 
 export async function chainsRoute(app: FastifyInstance) {

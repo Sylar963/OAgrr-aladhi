@@ -64,3 +64,24 @@ describe('ChainRuntimeRegistry idle cleanup', () => {
     await registry.dispose();
   });
 });
+
+describe('ChainRuntimeRegistry venue order', () => {
+  it('builds runtimes in canonical venue order regardless of request order', async () => {
+    const registry = new ChainRuntimeRegistry({ coordinator: stubCoordinator() as never });
+
+    const first = await registry.acquire({
+      underlying: 'BTC',
+      expiry: '2026-03-27',
+      venues: ['thalex', 'binance', 'deribit', 'okx'],
+    });
+    const second = await registry.acquire({
+      underlying: 'BTC',
+      expiry: '2026-03-27',
+      venues: ['okx', 'deribit', 'thalex', 'binance'],
+    });
+
+    expect(first.runtime).toBe(second.runtime);
+    expect(first.runtime.request.venues).toEqual(['deribit', 'okx', 'binance', 'thalex']);
+    await registry.dispose();
+  });
+});

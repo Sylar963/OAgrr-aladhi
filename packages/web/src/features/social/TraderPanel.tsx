@@ -3,6 +3,7 @@ import { fmtUsd, formatExpiry } from '@lib/format';
 import type { PublicTraderDto } from '@oggregator/protocol';
 
 import EquityChart from './EquityChart';
+import OpenPositions from './OpenPositions';
 import styles from './TraderPanel.module.css';
 import VenueTag from './VenueTag';
 
@@ -87,40 +88,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
           {trader.openPositions.length === 0 ? (
             <p className={styles.empty}>No open positions.</p>
           ) : (
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Instrument</th>
-                    <th className={styles.num}>Qty</th>
-                    <th className={styles.num}>Entry</th>
-                    <th className={styles.num}>Mark</th>
-                    <th className={styles.num}>uPnL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trader.openPositions.map((pos) => (
-                    <tr key={`${pos.underlying}|${pos.expiry}|${pos.strike}|${pos.optionRight}`}>
-                      <td>
-                        {pos.underlying} {formatExpiry(pos.expiry)} {pos.strike.toLocaleString()}
-                        <span className={styles.right} data-right={pos.optionRight}>
-                          {pos.optionRight === 'call' ? 'C' : 'P'}
-                        </span>
-                      </td>
-                      <td className={styles.num} data-tone={tone(pos.netQuantity)}>
-                        {pos.netQuantity > 0 ? '+' : ''}
-                        {pos.netQuantity}
-                      </td>
-                      <td className={styles.num}>{fmtUsd(pos.avgEntryPriceUsd)}</td>
-                      <td className={styles.num}>{fmtUsd(pos.markPriceUsd)}</td>
-                      <td className={styles.num} data-tone={tone(pos.unrealizedPnlUsd)}>
-                        {signedUsd(pos.unrealizedPnlUsd)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <OpenPositions positions={trader.openPositions} />
           )}
 
           <h4 className={styles.sectionTitle}>Closed trades · {trader.closedTrades.length}</h4>

@@ -203,7 +203,7 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
         request,
       });
     } catch (error: unknown) {
-      this.releaseHandler(handlerId);
+      if (this.releaseHandler(handlerId)) this.forgetWorkerHandler(handlerId);
       throw error;
     }
     this.subscriptions.add(subscription);
@@ -213,10 +213,12 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
       if (released) return;
       released = true;
       this.subscriptions.delete(subscription);
-      this.releaseHandler(handlerId);
+      const handlerRetired = this.releaseHandler(handlerId);
       const workerSubscriptionId = subscription.workerSubscriptionId;
-      if (workerSubscriptionId == null) return;
-      await this.host.request({ t: 'unsubscribe', subscriptionId: workerSubscriptionId });
+      if (workerSubscriptionId != null) {
+        await this.host.request({ t: 'unsubscribe', subscriptionId: workerSubscriptionId });
+      }
+      if (handlerRetired) this.forgetWorkerHandler(handlerId);
     };
   }
 
@@ -226,7 +228,7 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
     this.handlerIds.delete(handlers);
     this.handlersById.delete(handlerId);
     this.handlerSubscriptionCounts.delete(handlerId);
-    this.host.send({ t: 'removeDeltaHandler', venue: this.venue, handlerId });
+    this.forgetWorkerHandler(handlerId);
   }
 
   async dispose(): Promise<void> {
@@ -326,15 +328,21 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
     return handlerId;
   }
 
-  private releaseHandler(handlerId: number): void {
+  // True once no subscription holds the handler, which retires its id.
+  private releaseHandler(handlerId: number): boolean {
     const remaining = (this.handlerSubscriptionCounts.get(handlerId) ?? 1) - 1;
     if (remaining > 0) {
       this.handlerSubscriptionCounts.set(handlerId, remaining);
-      return;
+      return false;
     }
     this.handlerSubscriptionCounts.delete(handlerId);
     const handlers = this.handlersById.get(handlerId);
     this.handlersById.delete(handlerId);
     if (handlers != null) this.handlerIds.delete(handlers);
+    return true;
+  }
+
+  private forgetWorkerHandler(handlerId: number): void {
+    this.host.send({ t: 'removeDeltaHandler', venue: this.venue, handlerId });
   }
 }

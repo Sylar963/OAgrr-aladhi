@@ -26,7 +26,11 @@ describe('PerpTickerRuntime', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(String(fetchImpl.mock.calls[0]![0])).toContain('category=linear');
     expect(a).toBe(b);
-    expect(a.tickers.get('XAUUSDT')).toEqual({ symbol: 'XAUUSDT', lastPrice: 4180.5, change24hPct: 0.003 });
+    expect(a.tickers.get('XAUUSDT')).toEqual({
+      symbol: 'XAUUSDT',
+      lastPrice: 4180.5,
+      change24hPct: 0.003,
+    });
     expect(a.tickers.has('DEADUSDT')).toBe(false);
 
     now += 5_000;

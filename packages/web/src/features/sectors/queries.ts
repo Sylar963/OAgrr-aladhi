@@ -1,7 +1,6 @@
+import { fetchJson } from '@lib/http';
 import { CryptoSectorsResponseSchema } from '@oggregator/protocol';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-
-import { fetchJson } from '@lib/http';
 
 export function useCryptoSectors() {
   return useQuery({

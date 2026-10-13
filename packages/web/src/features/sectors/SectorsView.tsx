@@ -50,7 +50,9 @@ export default function SectorsView() {
 
   if (isLoading && !data) return <Spinner size="lg" label="Loading sectors…" />;
   if (!data) {
-    return <div className={styles.empty}>{error ? String(error.message) : 'No sector data yet.'}</div>;
+    return (
+      <div className={styles.empty}>{error ? String(error.message) : 'No sector data yet.'}</div>
+    );
   }
 
   const asOf = data.asOf != null ? `${TIME.format(data.asOf)} UTC` : '—';

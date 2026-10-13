@@ -81,11 +81,11 @@
   border-radius: 4px;
 }
 
-.tile[data-bias='up'] {
+.tile[data-bias="up"] {
   --tile-color: var(--color-profit);
 }
 
-.tile[data-bias='down'] {
+.tile[data-bias="down"] {
   --tile-color: var(--color-loss);
 }
 
@@ -163,11 +163,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-.root [data-tone='up'] {
+.root [data-tone="up"] {
   color: var(--color-profit);
 }
 
-.root [data-tone='down'] {
+.root [data-tone="down"] {
   color: var(--color-loss);
 }
 

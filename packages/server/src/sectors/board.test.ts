@@ -31,7 +31,11 @@ describe('buildSectorBoard', () => {
       tape: [{ symbol: 'US500', label: 'US500 (SPY)', bybit: 'SPYUSDT' }],
       baskets: [
         { id: 'majors', name: 'Majors', members: ['ETH', 'BTC', 'DARK'] },
-        { id: 'memes', name: 'Memes', members: [{ symbol: 'PEPE', bybit: '1000PEPEUSDT', scale: 1000 }] },
+        {
+          id: 'memes',
+          name: 'Memes',
+          members: [{ symbol: 'PEPE', bybit: '1000PEPEUSDT', scale: 1000 }],
+        },
         { id: 'empty', name: 'Empty', members: ['NOPE'] },
       ],
     });
@@ -50,7 +54,12 @@ describe('buildSectorBoard', () => {
     expect(majors.members[1]!.optionVenues).toEqual(['deribit']);
     expect(majors.members[2]).toMatchObject({ last: null, change: null, optionVenues: [] });
     expect(board.baskets[0]!.members[0]!.last).toBeCloseTo(0.000004);
-    expect(board.tape[0]).toMatchObject({ symbol: 'US500', label: 'US500 (SPY)', last: 650, optionVenues: ['paradex'] });
+    expect(board.tape[0]).toMatchObject({
+      symbol: 'US500',
+      label: 'US500 (SPY)',
+      last: 650,
+      optionVenues: ['paradex'],
+    });
     expect(board.venueCount).toBe(2);
     expect(board.asOf).toBe(42);
   });

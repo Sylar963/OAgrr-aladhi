@@ -26,37 +26,30 @@ export interface ChainProjectionDelta {
   };
 }
 
-function quoteTimestamps(venueChains: VenueOptionChain[]): {
-  maxQuoteTs: number;
-  minQuoteTs: number;
-} {
+// Lag is measured from each venue's newest quote, not the chain's oldest: illiquid contracts
+// (empty books, venue timestamps that mark the last book change) can sit untouched for hours
+// while the feed itself is current.
+function snapshotMetaFromChains(venueChains: VenueOptionChain[]): SnapshotMeta {
+  const generatedAt = Date.now();
   let maxQuoteTs = 0;
-  let minQuoteTs = Number.POSITIVE_INFINITY;
+  let staleMs = 0;
+  const venueLagMs: SnapshotMeta['venueLagMs'] = {};
 
   for (const chain of venueChains) {
+    let newestTs = 0;
     for (const contract of Object.values(chain.contracts)) {
       const ts = contract.quote.timestamp ?? 0;
-      if (ts <= 0) continue;
-      if (ts > maxQuoteTs) maxQuoteTs = ts;
-      if (ts < minQuoteTs) minQuoteTs = ts;
+      if (ts > newestTs) newestTs = ts;
     }
+    if (newestTs <= 0) continue;
+    if (newestTs > maxQuoteTs) maxQuoteTs = newestTs;
+    // Venue clocks can run slightly ahead of ours.
+    const lag = Math.max(0, generatedAt - newestTs);
+    venueLagMs[chain.venue] = lag;
+    if (lag > staleMs) staleMs = lag;
   }
 
-  return {
-    maxQuoteTs,
-    minQuoteTs: Number.isFinite(minQuoteTs) ? minQuoteTs : 0,
-  };
-}
-
-function snapshotMetaFromChains(venueChains: VenueOptionChain[]): SnapshotMeta {
-  const { maxQuoteTs, minQuoteTs } = quoteTimestamps(venueChains);
-  const generatedAt = Date.now();
-
-  return {
-    generatedAt,
-    maxQuoteTs,
-    staleMs: minQuoteTs > 0 ? generatedAt - minQuoteTs : 0,
-  };
+  return { generatedAt, maxQuoteTs, staleMs, venueLagMs };
 }
 
 function comparisonRowsMap(

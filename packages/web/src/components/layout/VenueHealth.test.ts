@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { formatLatency } from './FreshnessLabel';
-import { healthLevel, STALE_BAD_MS, STALE_WARN_MS } from './VenueHealth';
+import { healthLevel, lagLevel, slowestVenue, STALE_BAD_MS, STALE_WARN_MS } from './VenueHealth';
 
 describe('healthLevel', () => {
   const live = { connectionState: 'live' as const, staleMs: 120, liveCount: 9, activeCount: 9 };
@@ -29,5 +29,26 @@ describe('formatLatency', () => {
     expect(formatLatency(2_340)).toBe('2.3s');
     expect(formatLatency(64_826)).toBe('1m');
     expect(formatLatency(42_000)).toBe('42s');
+  });
+});
+
+describe('slowestVenue', () => {
+  it('picks the live venue with the oldest newest-quote and ignores venues not live', () => {
+    const venues = [
+      { id: 'deribit', state: 'live' as const },
+      { id: 'thalex', state: 'live' as const },
+      { id: 'coincall', state: 'failed' as const },
+      { id: 'okx', state: 'live' as const },
+    ];
+    const slowest = slowestVenue(venues, { deribit: 300, thalex: 2_100, coincall: 90_000 });
+    expect(slowest?.venue.id).toBe('thalex');
+    expect(slowest?.lagMs).toBe(2_100);
+    expect(slowestVenue(venues, {})).toBeNull();
+  });
+
+  it('grades lag with the same thresholds as the pill', () => {
+    expect(lagLevel(400)).toBe('ok');
+    expect(lagLevel(STALE_WARN_MS)).toBe('warn');
+    expect(lagLevel(STALE_BAD_MS)).toBe('bad');
   });
 });

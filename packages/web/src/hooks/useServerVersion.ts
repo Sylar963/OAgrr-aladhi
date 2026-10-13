@@ -35,6 +35,7 @@ function mapFeedHealth(body: HealthResponse): {
   failedVenueIds: VenueId[];
   venueStates: Record<string, WsConnectionState>;
   staleMs: number | null;
+  venueLagMs: Record<string, number>;
 } | null {
   const summary = body.feeds?.summary;
   const venues = body.feeds?.venues;
@@ -67,6 +68,11 @@ function mapFeedHealth(body: HealthResponse): {
     failedVenueIds,
     venueStates,
     staleMs: summary.lastAnyMessageAgeMs ?? null,
+    venueLagMs: Object.fromEntries(
+      venues.flatMap((venue) =>
+        venue.lastMessageAgeMs != null ? [[venue.venue, venue.lastMessageAgeMs]] : [],
+      ),
+    ),
   };
 }
 
@@ -131,6 +137,7 @@ export function useServerVersion() {
             failedVenues: feedHealth.failedVenues,
             venueStates: feedHealth.venueStates,
             staleMs: feedHealth.staleMs,
+            venueLagMs: feedHealth.venueLagMs,
             lastUpdateMs:
               feedHealth.connectionState === 'live' && feedHealth.staleMs != null
                 ? Date.now() - feedHealth.staleMs

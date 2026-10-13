@@ -23,6 +23,7 @@ interface UseChainWsOptions {
 interface UseChainWsResult {
   connectionState: WsConnectionState;
   staleMs: number | null;
+  venueLagMs: Record<string, number>;
   lastSeq: number;
   failedVenues: VenueFailure[];
   venueStates: Record<string, WsConnectionState>;
@@ -30,9 +31,13 @@ interface UseChainWsResult {
 
 type StatusSnapshot = UseChainWsResult;
 
+// Servers that predate per-venue lag omit the field; a shared empty object keeps the store stable.
+const NO_VENUE_LAG: Record<string, number> = {};
+
 const INITIAL_SNAPSHOT: StatusSnapshot = {
   connectionState: 'closed',
   staleMs: null,
+  venueLagMs: NO_VENUE_LAG,
   lastSeq: 0,
   failedVenues: [],
   venueStates: {},
@@ -53,6 +58,7 @@ function createStatusStore() {
       if (
         merged.connectionState === snap.connectionState &&
         merged.staleMs === snap.staleMs &&
+        merged.venueLagMs === snap.venueLagMs &&
         merged.lastSeq === snap.lastSeq &&
         merged.failedVenues === snap.failedVenues &&
         merged.venueStates === snap.venueStates
@@ -209,6 +215,7 @@ type PendingDelta = PendingPatch & {
   key: ReturnType<typeof chainKeys.chain>;
   seq: number;
   staleMs: number;
+  venueLagMs: Record<string, number>;
 };
 
 /**
@@ -283,7 +290,12 @@ export function useChainWs({
     }
 
     const last = queue[queue.length - 1]!;
-    store.set({ connectionState: 'live', staleMs: last.staleMs, lastSeq: last.seq });
+    store.set({
+      connectionState: 'live',
+      staleMs: last.staleMs,
+      venueLagMs: last.venueLagMs,
+      lastSeq: last.seq,
+    });
   }, [qc, store]);
 
   const scheduleFlush = useCallback(() => {
@@ -368,7 +380,12 @@ export function useChainWs({
             qc.getQueryData<EnrichedChainResponse>(requestedKey) ??
             qc.getQueryData<EnrichedChainResponse>(serverKey) ??
             msg.data;
-          store.set({ connectionState: 'live', staleMs: msg.meta.staleMs, lastSeq: msg.seq });
+          store.set({
+            connectionState: 'live',
+            staleMs: msg.meta.staleMs,
+            venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
+            lastSeq: msg.seq,
+          });
           break;
         }
 
@@ -388,7 +405,11 @@ export function useChainWs({
             msg.type === 'diff'
               ? { kind: 'diff', patch: msg.patch }
               : { kind: 'strikes', patch: msg.patch };
-          const meta = { seq: msg.seq, staleMs: msg.meta.staleMs };
+          const meta = {
+            seq: msg.seq,
+            staleMs: msg.meta.staleMs,
+            venueLagMs: msg.meta.venueLagMs ?? NO_VENUE_LAG,
+          };
           pendingRef.current.push({ ...pending, ...meta, key: serverKey });
           if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
             pendingRef.current.push({ ...pending, ...meta, key: requestedKey });
@@ -527,6 +548,7 @@ export function useChainWs({
     () => ({
       connectionState: snapshot.connectionState,
       staleMs: snapshot.staleMs,
+      venueLagMs: snapshot.venueLagMs,
       lastSeq: snapshot.lastSeq,
       failedVenues: snapshot.failedVenues,
       venueStates: snapshot.venueStates,

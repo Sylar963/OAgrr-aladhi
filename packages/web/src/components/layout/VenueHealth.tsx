@@ -3,7 +3,7 @@ import { VENUE_LIST } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
 
-import FreshnessLabel from './FreshnessLabel';
+import FreshnessLabel, { formatLatency } from './FreshnessLabel';
 import styles from './VenueHealth.module.css';
 
 type VenueState = 'live' | 'reconnecting' | 'failed' | 'inactive';
@@ -26,6 +26,25 @@ interface HealthInput {
   activeCount: number;
 }
 
+export function lagLevel(lagMs: number): HealthLevel {
+  if (lagMs >= STALE_BAD_MS) return 'bad';
+  if (lagMs >= STALE_WARN_MS) return 'warn';
+  return 'ok';
+}
+
+export function slowestVenue<T extends { id: string; state: VenueState }>(
+  venues: readonly T[],
+  venueLagMs: Record<string, number>,
+): { venue: T; lagMs: number } | null {
+  let slowest: { venue: T; lagMs: number } | null = null;
+  for (const venue of venues) {
+    const lagMs = venueLagMs[venue.id];
+    if (venue.state !== 'live' || lagMs == null) continue;
+    if (slowest == null || lagMs > slowest.lagMs) slowest = { venue, lagMs };
+  }
+  return slowest;
+}
+
 export function healthLevel({ connectionState, staleMs, liveCount, activeCount }: HealthInput): HealthLevel {
   if (connectionState === 'error') return 'bad';
   if (activeCount > 0 && liveCount === 0) return 'bad';
@@ -41,6 +60,7 @@ export default function VenueHealth() {
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const venueStates = useAppStore((s) => s.feedStatus.venueStates);
   const staleMs = useAppStore((s) => s.feedStatus.staleMs);
+  const venueLagMs = useAppStore((s) => s.feedStatus.venueLagMs);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -85,6 +105,7 @@ export default function VenueHealth() {
   const activeCount = venues.filter((v) => v.state !== 'inactive').length;
   const liveCount = venues.filter((v) => v.state === 'live').length;
   const level = healthLevel({ connectionState, staleMs, liveCount, activeCount });
+  const slowest = slowestVenue(venues, venueLagMs);
 
   return (
     <div className={styles.wrap} ref={wrapRef} data-tour="venue-status">
@@ -114,13 +135,29 @@ export default function VenueHealth() {
               <FreshnessLabel />
             </span>
           </div>
-          {venues.map((venue) => (
-            <div key={venue.id} className={styles.row} data-state={venue.state}>
-              <span className={styles.rowDot} />
-              <span className={styles.rowLabel}>{venue.label}</span>
-              <span className={styles.rowState}>{STATE_TEXT[venue.state]}</span>
+          {slowest != null && (
+            <div className={styles.slowest}>
+              slowest <span className={styles.slowestVenue}>{slowest.venue.label}</span>
+              <span className={styles.rowLag} data-level={lagLevel(slowest.lagMs)}>
+                {formatLatency(slowest.lagMs)}
+              </span>
             </div>
-          ))}
+          )}
+          {venues.map((venue) => {
+            const lagMs = venue.state === 'live' ? venueLagMs[venue.id] : undefined;
+            return (
+              <div key={venue.id} className={styles.row} data-state={venue.state}>
+                <span className={styles.rowDot} />
+                <span className={styles.rowLabel}>{venue.label}</span>
+                {lagMs != null && (
+                  <span className={styles.rowLag} data-level={lagLevel(lagMs)}>
+                    {formatLatency(lagMs)}
+                  </span>
+                )}
+                <span className={styles.rowState}>{STATE_TEXT[venue.state]}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

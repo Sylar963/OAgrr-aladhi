@@ -18,6 +18,7 @@ beforeEach(() => {
       failedVenues: [],
       venueStates: {},
       staleMs: null,
+      venueLagMs: {},
       lastUpdateMs: null,
     },
   });

@@ -137,24 +137,30 @@ describe('ChainProjection', () => {
     expect(projection.needsReload()).toBe(true);
   });
 
-  it('computes staleMs from the oldest quote timestamp in the snapshot', () => {
+  it('measures lag from each venue newest quote, so dead contracts do not count', () => {
     vi.useFakeTimers();
     vi.setSystemTime(5_000);
 
+    const base = buildChain().contracts['BTC/USD:USDC-260327-70000-C']!;
+    const deribit = buildChain();
+    deribit.contracts['BTC/USD:USDC-260327-70000-P'] = {
+      ...base,
+      symbol: 'BTC/USD:USDC-260327-70000-P',
+      exchangeSymbol: 'BTC-260327-70000-P',
+      right: 'put',
+      quote: { ...base.quote, timestamp: 4_500 },
+    };
     const projection = new ChainProjection('BTC', '2026-03-27');
     projection.loadSnapshot([
-      buildChain(),
+      deribit,
       {
         ...buildChain(),
         venue: 'okx',
         contracts: {
           'BTC/USD:USDC-260327-70000-C': {
-            ...buildChain().contracts['BTC/USD:USDC-260327-70000-C']!,
+            ...base,
             venue: 'okx',
-            quote: {
-              ...buildChain().contracts['BTC/USD:USDC-260327-70000-C']!.quote,
-              timestamp: 2_000,
-            },
+            quote: { ...base.quote, timestamp: 2_000 },
           },
         },
       },
@@ -162,8 +168,9 @@ describe('ChainProjection', () => {
 
     const meta = projection.buildSnapshotMeta();
 
-    expect(meta.maxQuoteTs).toBe(2_000);
-    expect(meta.staleMs).toBe(4_000);
+    expect(meta.maxQuoteTs).toBe(4_500);
+    expect(meta.venueLagMs).toEqual({ deribit: 500, okx: 3_000 });
+    expect(meta.staleMs).toBe(3_000);
 
     vi.useRealTimers();
   });

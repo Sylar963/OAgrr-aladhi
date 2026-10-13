@@ -129,6 +129,38 @@
   color: var(--state);
 }
 
+.rowLag {
+  min-width: 5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.rowLag[data-level="warn"] {
+  color: var(--color-warning);
+}
+
+.rowLag[data-level="bad"] {
+  color: var(--color-loss);
+}
+
+.slowest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+
+.slowestVenue {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
 .row[data-state="inactive"] .rowState {
   color: var(--text-dim);
 }

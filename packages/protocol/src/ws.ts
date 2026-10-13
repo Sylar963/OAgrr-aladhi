@@ -33,7 +33,10 @@ export type WsSubscriptionRequest = z.infer<typeof WsSubscriptionRequestSchema>;
 export const SnapshotMetaSchema = z.object({
   generatedAt: z.number(),
   maxQuoteTs: z.number(),
+  /** Age of the newest quote on the slowest venue. */
   staleMs: z.number(),
+  /** Age of each venue's newest quote. */
+  venueLagMs: z.record(VenueIdSchema, z.number()).optional(),
 });
 
 export type SnapshotMeta = z.infer<typeof SnapshotMetaSchema>;

@@ -45,8 +45,10 @@ export interface FeedStatus {
   failedVenues: VenueFailure[];
   /** Per-venue connection state from live `status` WS events. */
   venueStates: Record<string, WsConnectionState>;
-  /** Age of the most recent snapshot in ms — proxy for data freshness. */
+  /** Age of the newest quote on the slowest venue, in ms. */
   staleMs: number | null;
+  /** Age of each venue's newest quote, in ms. */
+  venueLagMs: Record<string, number>;
   /** Epoch ms when the last live snapshot/delta arrived. */
   lastUpdateMs: number | null;
 }
@@ -150,6 +152,7 @@ export const useAppStore = create<AppState>((set) => ({
     failedVenues: [],
     venueStates: {},
     staleMs: null,
+    venueLagMs: {},
     lastUpdateMs: null,
   },
   accountId: null,

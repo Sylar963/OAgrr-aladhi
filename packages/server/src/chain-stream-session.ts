@@ -52,7 +52,7 @@ function serializeMessage(message: ServerWsMessage): { payload: string; bytes: n
     const { data, ...envelope } = message;
     return serializeWithBody(envelope, 'data', data);
   }
-  if (message.type === 'delta') {
+  if (message.type === 'delta' || message.type === 'diff') {
     const { patch, ...envelope } = message;
     return serializeWithBody(envelope, 'patch', patch);
   }
@@ -78,6 +78,8 @@ interface SessionRuntime {
   getActiveRequest: () => WsSubscriptionRequest;
   getFailedVenues: () => VenueFailure[];
 }
+
+export type ChainPatchFormat = 'strikes' | 'diff';
 
 type SessionSocket = {
   readyState: number;
@@ -105,6 +107,7 @@ export class ChainStreamSession {
     private subscriptionId: string,
     readonly request: WsSubscriptionRequest,
     private readonly log?: SessionLogger,
+    private readonly patchFormat: ChainPatchFormat = 'strikes',
   ) {}
 
   async subscribe(): Promise<void> {
@@ -234,14 +237,25 @@ export class ChainStreamSession {
           return;
         }
         this.lastSentSeq = event.seq;
-        this.sendMessage('delta', {
-          type: 'delta',
-          subscriptionId: this.subscriptionId,
-          seq: event.seq,
-          request: event.request,
-          meta: event.meta,
-          patch: event.patch,
-        });
+        if (this.patchFormat === 'diff') {
+          this.sendMessage('diff', {
+            type: 'diff',
+            subscriptionId: this.subscriptionId,
+            seq: event.seq,
+            request: event.request,
+            meta: event.meta,
+            patch: event.diffPatch(),
+          });
+        } else {
+          this.sendMessage('delta', {
+            type: 'delta',
+            subscriptionId: this.subscriptionId,
+            seq: event.seq,
+            request: event.request,
+            meta: event.meta,
+            patch: event.patch,
+          });
+        }
         this.trackBackpressure(now, 'delta');
         return;
 
@@ -275,7 +289,10 @@ export class ChainStreamSession {
     }
   }
 
-  private sendMessage(kind: 'subscribed' | 'snapshot' | 'delta' | 'status', message: ServerWsMessage): void {
+  private sendMessage(
+    kind: 'subscribed' | 'snapshot' | 'delta' | 'diff' | 'status',
+    message: ServerWsMessage,
+  ): void {
     if (this.socket.readyState !== WS_OPEN) return;
 
     const { payload, bytes } = serializeMessage(message);

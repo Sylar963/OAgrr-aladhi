@@ -5,7 +5,7 @@ import {
   type WsSubscriptionRequest,
 } from '@oggregator/core';
 import { isReady } from '../app.js';
-import { ChainStreamSession } from '../chain-stream-session.js';
+import { ChainStreamSession, type ChainPatchFormat } from '../chain-stream-session.js';
 import { chainEngines } from '../chain-engines.js';
 import { protectWebSocket } from '../websocket-security.js';
 
@@ -50,8 +50,12 @@ export async function wsChainRoute(app: FastifyInstance) {
       await current.dispose();
     }
 
-    async function handleSubscribe(subscriptionId: string, request: WsSubscriptionRequest) {
-      const nextRequestKey = requestKey(request);
+    async function handleSubscribe(
+      subscriptionId: string,
+      request: WsSubscriptionRequest,
+      patchFormat: ChainPatchFormat,
+    ) {
+      const nextRequestKey = `${requestKey(request)}\u0000${patchFormat}`;
       if (session != null && activeRequestKey === nextRequestKey) {
         session.replaceSubscription(subscriptionId);
         return;
@@ -65,7 +69,7 @@ export async function wsChainRoute(app: FastifyInstance) {
 
       if (version !== subscribeVersion) return;
 
-      const nextSession = new ChainStreamSession(socket, subscriptionId, request, log);
+      const nextSession = new ChainStreamSession(socket, subscriptionId, request, log, patchFormat);
       session = nextSession;
       await nextSession.subscribe();
 
@@ -114,7 +118,7 @@ export async function wsChainRoute(app: FastifyInstance) {
       const msg = parsed.data;
 
       if (msg.type === 'subscribe') {
-        handleSubscribe(msg.subscriptionId, msg.request).catch((err: unknown) => {
+        handleSubscribe(msg.subscriptionId, msg.request, msg.patchFormat ?? 'strikes').catch((err: unknown) => {
           log.error({ err: String(err) }, 'subscribe failed');
         });
         return;

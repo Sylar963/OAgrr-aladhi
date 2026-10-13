@@ -299,4 +299,46 @@ describe('ChainStreamSession', () => {
     const largeFrameLog = log.info.mock.calls.find(([, msg]) => msg === 'chain ws large frame');
     expect(largeFrameLog?.[0]).toMatchObject({ bytes: Buffer.byteLength(payloads[0]!) });
   });
+
+  it('sends field-level diff frames to clients that asked for them, and delta frames otherwise', async () => {
+    const listeners: Array<{ onEvent(event: ChainRuntimeEvent): void }> = [];
+    subscribeMock.mockImplementation((nextListener: { onEvent(event: ChainRuntimeEvent): void }) => {
+      listeners.push(nextListener);
+      return vi.fn();
+    });
+    const stats = {
+      forwardPriceUsd: null,
+      indexPriceUsd: null,
+      basisPct: null,
+      atmStrike: null,
+      atmIv: null,
+      putCallOiRatio: null,
+      totalOiUsd: null,
+      skew25d: null,
+      bfly25d: null,
+    };
+    const diffPatch = { stats, strikes: [{ strike: 70_000, call: { bestIv: 0.5 } }] };
+    const diffPatchFn = vi.fn(() => diffPatch);
+    const event: ChainRuntimeEvent = {
+      type: 'delta',
+      seq: 1,
+      request: makeRequest(),
+      meta: { generatedAt: 1, maxQuoteTs: 1, staleMs: 0 },
+      deltas: [],
+      patch: { stats, strikes: [] },
+      diffPatch: diffPatchFn,
+    };
+    const diffSocket = { readyState: 1, bufferedAmount: 0, send: vi.fn(), close: vi.fn() };
+    const legacySocket = { readyState: 1, bufferedAmount: 0, send: vi.fn(), close: vi.fn() };
+
+    await new ChainStreamSession(diffSocket, 'sub-diff', makeRequest(), undefined, 'diff').subscribe();
+    await new ChainStreamSession(legacySocket, 'sub-legacy', makeRequest()).subscribe();
+    for (const listener of listeners) listener.onEvent(event);
+
+    const diffFrame = JSON.parse(diffSocket.send.mock.calls.at(-1)![0] as string);
+    const legacyFrame = JSON.parse(legacySocket.send.mock.calls.at(-1)![0] as string);
+    expect(diffFrame).toMatchObject({ type: 'diff', subscriptionId: 'sub-diff', seq: 1, patch: diffPatch });
+    expect(legacyFrame).toMatchObject({ type: 'delta', subscriptionId: 'sub-legacy', patch: { strikes: [] } });
+    expect(diffPatchFn).toHaveBeenCalledTimes(1);
+  });
 });

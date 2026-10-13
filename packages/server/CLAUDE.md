@@ -59,4 +59,5 @@ src/
 - **Auto-subscribes on first request** — `chains.ts` calls `ensureSubscribed()` per venue/underlying on first `/api/chains` request, opening WS connections lazily.
 
 - **Chain browser transport is WS-first** — `ws-chain.ts` streams from a shared `ChainRuntime` that coalesces venue deltas and pushes enriched strike patches every 500ms (GEX at most every 2s). It does not forward raw exchange ticks one-by-one. Frame bodies are serialized once per runtime event and shared across sessions.
+- **Chain patches are field-level diffs for clients that opt in** — a subscribe with `patchFormat: 'diff'` gets `diff` frames carrying only the venues and fields that changed (`ChainRuntimeDeltaEvent.diffPatch()`, memoized per event). Without the field, clients keep receiving whole-strike `delta` frames, so a stale cached SPA still works. On live BTC 0DTE frames, diffs were 5.9× smaller (387KB → 65KB).
 - **`FEED_WORKER=1` moves chain venue ingest off the main thread** — `adapters.ts` then registers `FeedWorkerHost` proxies instead of in-process adapters. Routes and runtimes are unchanged. Unset it to roll back.

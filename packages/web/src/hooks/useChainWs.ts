@@ -10,6 +10,7 @@ import type {
 import type { WsConnectionState, VenueFailure } from '@oggregator/protocol';
 import { ServerWsMessageSchema } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain/queries';
+import { applyStrikeDiffs } from './chain-diff';
 import { wsUrl } from '@lib/http';
 
 interface UseChainWsOptions {
@@ -170,6 +171,7 @@ function reconcileSnapshotStrikes(
 }
 
 type DeltaMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'delta' }>;
+type DiffMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'diff' }>;
 
 type StatusMsg = Extract<ReturnType<typeof ServerWsMessageSchema.parse>, { type: 'status' }>;
 
@@ -199,12 +201,15 @@ function worstConnectionState(states: Iterable<WsConnectionState>): WsConnection
   return worst;
 }
 
-interface PendingDelta {
+type PendingPatch =
+  | { kind: 'strikes'; patch: DeltaMsg['patch'] }
+  | { kind: 'diff'; patch: DiffMsg['patch'] };
+
+type PendingDelta = PendingPatch & {
   key: ReturnType<typeof chainKeys.chain>;
-  patch: DeltaMsg['patch'];
   seq: number;
   staleMs: number;
-}
+};
 
 /**
  * Subscribes to real-time chain updates via server WebSocket.
@@ -263,7 +268,10 @@ export function useChainWs({
         if (current == null) return current;
         let strikes = current.strikes;
         for (const p of patches) {
-          strikes = mergeStrikes(strikes, p.patch.strikes);
+          strikes =
+            p.kind === 'diff'
+              ? applyStrikeDiffs(strikes, p.patch.strikes)
+              : mergeStrikes(strikes, p.patch.strikes);
         }
         return {
           ...current,
@@ -300,6 +308,7 @@ export function useChainWs({
         type: 'subscribe',
         subscriptionId: subId,
         request: { underlying: u, expiry: e, venues: v },
+        patchFormat: 'diff',
       }),
     );
     lastSubscribeRequestKeyRef.current = key;
@@ -363,7 +372,8 @@ export function useChainWs({
           break;
         }
 
-        case 'delta': {
+        case 'delta':
+        case 'diff': {
           const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
@@ -374,19 +384,14 @@ export function useChainWs({
             paramsRef.current.expiry,
             paramsRef.current.venues,
           );
-          pendingRef.current.push({
-            key: serverKey,
-            patch: msg.patch,
-            seq: msg.seq,
-            staleMs: msg.meta.staleMs,
-          });
+          const pending: PendingPatch =
+            msg.type === 'diff'
+              ? { kind: 'diff', patch: msg.patch }
+              : { kind: 'strikes', patch: msg.patch };
+          const meta = { seq: msg.seq, staleMs: msg.meta.staleMs };
+          pendingRef.current.push({ ...pending, ...meta, key: serverKey });
           if (JSON.stringify(serverKey) !== JSON.stringify(requestedKey)) {
-            pendingRef.current.push({
-              key: requestedKey,
-              patch: msg.patch,
-              seq: msg.seq,
-              staleMs: msg.meta.staleMs,
-            });
+            pendingRef.current.push({ ...pending, ...meta, key: requestedKey });
           }
           scheduleFlush();
           break;

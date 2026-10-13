@@ -54,6 +54,9 @@ export const ClientWsMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('subscribe'),
     subscriptionId: z.string().min(1),
     request: WsSubscriptionRequestSchema,
+    // 'diff' opts into field-level `diff` frames in place of whole-strike `delta` frames.
+    // Absent keeps the original format so a stale cached client never sees a shape it can't apply.
+    patchFormat: z.enum(['strikes', 'diff']).optional(),
   }),
   z.object({
     type: z.literal('unsubscribe'),
@@ -181,6 +184,37 @@ export interface EnrichedChainResponse {
   stats: ChainStats;
   strikes: EnrichedStrike[];
   gex: GexStrike[];
+}
+
+/**
+ * Field-level change to one venue quote: only keys whose value changed are present, merged
+ * into the previous quote. `estimatedFees` and `execution` carry their own changed keys (or the
+ * whole object when the previous value was null). `replace: true` means the payload is the
+ * complete quote and replaces the previous one — sent for new venues and when a key was removed.
+ */
+export type VenueQuoteDiff = Partial<Omit<VenueQuote, 'estimatedFees' | 'execution'>> & {
+  estimatedFees?: Partial<EstimatedFees> | null;
+  execution?: Partial<VenueExecutionQuote> | null;
+  replace?: true;
+};
+
+/** `venues[v] === null` removes that venue from the side. */
+export interface EnrichedSideDiff {
+  venues?: Record<string, VenueQuoteDiff | null>;
+  bestIv?: number | null;
+  bestVenue?: VenueId | null;
+}
+
+export interface EnrichedStrikeDiff {
+  strike: number;
+  call?: EnrichedSideDiff;
+  put?: EnrichedSideDiff;
+}
+
+export interface DeltaDiffPatch {
+  stats: ChainStats;
+  strikes: EnrichedStrikeDiff[];
+  gex?: GexStrike[];
 }
 
 export interface VenueDelta {
@@ -368,6 +402,32 @@ export const DeltaPatchSchema = z.object({
   gex: z.array(GexStrikeSchema).optional(),
 });
 
+const VenueQuoteDiffSchema = VenueQuoteSchema.omit({ estimatedFees: true, execution: true })
+  .partial()
+  .extend({
+    estimatedFees: EstimatedFeesSchema.partial().nullable().optional(),
+    execution: VenueExecutionQuoteSchema.partial().nullable().optional(),
+    replace: z.literal(true).optional(),
+  });
+
+const EnrichedSideDiffSchema = z.object({
+  venues: z.record(z.string(), VenueQuoteDiffSchema.nullable()).optional(),
+  bestIv: NullableNumberSchema.optional(),
+  bestVenue: VenueIdSchema.nullable().optional(),
+});
+
+export const DeltaDiffPatchSchema = z.object({
+  stats: ChainStatsSchema,
+  strikes: z.array(
+    z.object({
+      strike: z.number(),
+      call: EnrichedSideDiffSchema.optional(),
+      put: EnrichedSideDiffSchema.optional(),
+    }),
+  ),
+  gex: z.array(GexStrikeSchema).optional(),
+});
+
 export const ServerWsMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('subscribed'),
@@ -391,6 +451,14 @@ export const ServerWsMessageSchema = z.discriminatedUnion('type', [
     request: WsSubscriptionRequestSchema,
     meta: SnapshotMetaSchema,
     patch: DeltaPatchSchema,
+  }),
+  z.object({
+    type: z.literal('diff'),
+    subscriptionId: z.string(),
+    seq: z.number(),
+    request: WsSubscriptionRequestSchema,
+    meta: SnapshotMetaSchema,
+    patch: DeltaDiffPatchSchema,
   }),
   z.object({
     type: z.literal('status'),

@@ -13,8 +13,10 @@ import {
   type VenueSubscriptionListener,
 } from '../../core/subscription-coordinator.js';
 import type { VenueId } from '../../types/common.js';
+import type { DeltaDiffPatch } from '@oggregator/protocol';
 import { ChainProjection } from './projection.js';
 import { VenueHealthManager } from './health.js';
+import { diffEnrichedStrikes } from './strike-diff.js';
 
 const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
@@ -60,6 +62,11 @@ export interface ChainRuntimeDeltaEvent {
     strikes: EnrichedChainResponse['strikes'];
     gex?: EnrichedChainResponse['gex'];
   };
+  /**
+   * The same change as field-level diffs against the previous snapshot. Computed on first call
+   * and memoized, so every consumer of one event shares (and serializes) a single object.
+   */
+  diffPatch(): DeltaDiffPatch;
 }
 
 export interface ChainRuntimeStatusEvent {
@@ -471,6 +478,8 @@ export class ChainRuntime {
 
     this.seq += 1;
     const snapshot = this.currentSnapshot;
+    const previousStrikes = snapshot?.data.strikes;
+    let diffPatch: DeltaDiffPatch | null = null;
     const event: ChainRuntimeDeltaEvent = {
       type: 'delta',
       seq: this.seq,
@@ -478,6 +487,14 @@ export class ChainRuntime {
       meta: patch.meta,
       deltas: patch.deltas,
       patch: patch.patch,
+      diffPatch: () => {
+        diffPatch ??= {
+          stats: patch.patch.stats,
+          strikes: diffEnrichedStrikes(previousStrikes, patch.patch.strikes),
+          ...(patch.patch.gex != null ? { gex: patch.patch.gex } : {}),
+        };
+        return diffPatch;
+      },
     };
 
     this.currentSnapshot =

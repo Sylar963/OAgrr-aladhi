@@ -238,6 +238,7 @@ describe('useChainWs', () => {
     const msg = JSON.parse(ws.sent[0]!) as Record<string, unknown>;
     expect(msg['type']).toBe('subscribe');
     expect(msg['subscriptionId']).toBeTruthy();
+    expect(msg['patchFormat']).toBe('diff');
     expect(result.current.connectionState).not.toBe('closed');
   });
 
@@ -357,6 +358,47 @@ describe('useChainWs', () => {
     const cached = queryClient.getQueryData(key) as Record<string, unknown> | undefined;
     expect(cached).toBeDefined();
     expect((cached?.['gex'] as Array<Record<string, unknown>>)[0]?.['gexUsdMillions']).toBe(12);
+    expect(hookResult.result.current.lastSeq).toBe(2);
+  });
+
+  it('applies field-level diff frames to the cached chain', async () => {
+    const { hookResult, ws, subId } = await renderAndConnect();
+    const base = snapshot(subId, 1);
+    if (base.type !== 'snapshot') throw new Error('fixture must be a snapshot');
+    base.data.strikes = [
+      {
+        strike: 70_000,
+        call: {
+          venues: { deribit: venueQuote({ bid: 100, ask: 110 }) },
+          bestIv: 0.5,
+          bestVenue: 'deribit',
+        },
+        put: { venues: {}, bestIv: null, bestVenue: null },
+      },
+    ];
+
+    await act(() => {
+      ws.pushMessage(base);
+    });
+    await act(() => {
+      ws.pushMessage({
+        type: 'diff',
+        subscriptionId: subId,
+        seq: 2,
+        request: base.request,
+        meta: base.meta,
+        patch: {
+          stats: base.data.stats,
+          strikes: [{ strike: 70_000, call: { venues: { deribit: { bid: 101 } } } }],
+        },
+      });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(30));
+
+    const cached = queryClient.getQueryData(chainKeys.chain('BTC', '2026-03-27', ['deribit'])) as
+      | { strikes: Array<{ call: { venues: Record<string, { bid: number; ask: number }> } }> }
+      | undefined;
+    expect(cached?.strikes[0]?.call.venues['deribit']).toMatchObject({ bid: 101, ask: 110 });
     expect(hookResult.result.current.lastSeq).toBe(2);
   });
 

@@ -15,6 +15,8 @@ import type {
 const log = feedLogger('feed-worker');
 
 const RESPAWN_DELAY_MS = 1_000;
+const RESTORE_RETRY_BASE_MS = 1_000;
+const RESTORE_RETRY_MAX_MS = 30_000;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -148,6 +150,8 @@ interface ProxySubscription {
   request: ChainRequest;
   handlerId: number;
   workerSubscriptionId: number | null;
+  // Set when the worker that held this subscription died and it has not been replayed yet.
+  needsReplay: boolean;
 }
 
 const DEFAULT_CAPABILITIES: VenueCapabilities = { optionChain: true, greeks: true, websocket: true };
@@ -163,6 +167,10 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
   private readonly subscriptions = new Set<ProxySubscription>();
   private readonly recorders = new Set<QuoteRecorder>();
   private nextHandlerId = 1;
+  private disposed = false;
+  private restoreGeneration = 0;
+  private restoreAttempt = 0;
+  private restoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly venue: VenueId,
@@ -194,7 +202,12 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
 
   async subscribe(request: ChainRequest, handlers: StreamHandlers): Promise<() => Promise<void>> {
     const handlerId = this.retainHandler(handlers);
-    const subscription: ProxySubscription = { request, handlerId, workerSubscriptionId: null };
+    const subscription: ProxySubscription = {
+      request,
+      handlerId,
+      workerSubscriptionId: null,
+      needsReplay: false,
+    };
     try {
       subscription.workerSubscriptionId = await this.host.request<number | null>({
         t: 'subscribe',
@@ -232,6 +245,8 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true;
+    this.clearRestoreRetry();
     this.subscriptions.clear();
     this.recorders.clear();
     await this.call('dispose', []).catch(() => {});
@@ -281,7 +296,10 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
 
   handleWorkerLost(): void {
     this.diagnostics = null;
-    for (const subscription of this.subscriptions) subscription.workerSubscriptionId = null;
+    for (const subscription of this.subscriptions) {
+      subscription.workerSubscriptionId = null;
+      subscription.needsReplay = true;
+    }
     const status: VenueStatus = {
       venue: this.venue,
       state: 'reconnecting',
@@ -291,20 +309,99 @@ export class WorkerVenueAdapter implements OptionVenueAdapter {
     for (const handlers of this.handlersById.values()) handlers.onStatus(status);
   }
 
-  /** Rebuild this venue's worker-side state after a respawn. */
+  /**
+   * Rebuild this venue's worker-side state after a respawn. Each subscription is replayed on its
+   * own; whatever fails is retried with backoff, and its handlers see `down` until it succeeds.
+   */
   async restore(): Promise<void> {
-    if (!this.marketsLoaded) return;
-    await this.call('loadMarkets', [false]);
+    this.clearRestoreRetry();
+    if (!this.marketsLoaded || this.disposed) return;
+    const generation = ++this.restoreGeneration;
+    const isCurrent = (): boolean => generation === this.restoreGeneration && !this.disposed;
+
+    try {
+      await this.call('loadMarkets', [false]);
+    } catch (error: unknown) {
+      if (isCurrent()) this.scheduleRestoreRetry(error, [...this.subscriptions]);
+      return;
+    }
+    if (!isCurrent()) return;
     if (this.recorders.size > 0) {
       this.host.send({ t: 'recorder', venue: this.venue, enabled: true });
     }
-    for (const subscription of this.subscriptions) {
-      subscription.workerSubscriptionId = await this.host.request<number | null>({
-        t: 'subscribe',
-        venue: this.venue,
-        handlerId: subscription.handlerId,
-        request: subscription.request,
+
+    const failed: ProxySubscription[] = [];
+    let lastError: unknown = null;
+    for (const subscription of [...this.subscriptions]) {
+      if (!subscription.needsReplay) continue;
+      let workerSubscriptionId: number | null;
+      try {
+        workerSubscriptionId = await this.host.request<number | null>({
+          t: 'subscribe',
+          venue: this.venue,
+          handlerId: subscription.handlerId,
+          request: subscription.request,
+        });
+      } catch (error: unknown) {
+        failed.push(subscription);
+        lastError = error;
+        continue;
+      }
+      // Released mid-replay, or superseded by a newer restore: the worker-side subscription
+      // this call created belongs to nobody.
+      if (!isCurrent() || !this.subscriptions.has(subscription) || !subscription.needsReplay) {
+        if (workerSubscriptionId != null) {
+          await this.host
+            .request({ t: 'unsubscribe', subscriptionId: workerSubscriptionId })
+            .catch(() => {});
+        }
+        if (!isCurrent()) return;
+        continue;
+      }
+      subscription.workerSubscriptionId = workerSubscriptionId;
+      subscription.needsReplay = false;
+    }
+
+    if (failed.length > 0) {
+      this.scheduleRestoreRetry(lastError, failed);
+      return;
+    }
+    this.restoreAttempt = 0;
+  }
+
+  private scheduleRestoreRetry(error: unknown, affected: ProxySubscription[]): void {
+    const delayMs = Math.min(RESTORE_RETRY_BASE_MS * 2 ** this.restoreAttempt, RESTORE_RETRY_MAX_MS);
+    this.restoreAttempt += 1;
+    log.warn(
+      { venue: this.venue, err: String(error), pending: affected.length, delayMs },
+      'feed worker venue restore incomplete, retrying',
+    );
+
+    const status: VenueStatus = {
+      venue: this.venue,
+      state: 'down',
+      ts: Date.now(),
+      message: 'feed worker restore failed, retrying',
+    };
+    const notified = new Set<number>();
+    for (const subscription of affected) {
+      if (notified.has(subscription.handlerId)) continue;
+      notified.add(subscription.handlerId);
+      this.handlersById.get(subscription.handlerId)?.onStatus(status);
+    }
+
+    this.restoreRetryTimer = setTimeout(() => {
+      this.restoreRetryTimer = null;
+      void this.restore().catch((retryError: unknown) => {
+        log.error({ venue: this.venue, err: String(retryError) }, 'feed worker venue restore failed');
       });
+    }, delayMs);
+  }
+
+  private clearRestoreRetry(): void {
+    if (this.restoreRetryTimer != null) {
+      clearTimeout(this.restoreRetryTimer);
+      this.restoreRetryTimer = null;
     }
   }
 

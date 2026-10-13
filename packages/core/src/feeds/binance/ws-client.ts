@@ -5,7 +5,7 @@ import {
   BINANCE_TICKER,
   BINANCE_TIME,
 } from '../shared/endpoints.js';
-import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
+import { REST_QUOTE, SdkBaseAdapter, type CachedInstrument, type LiveQuote } from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import type { VenueConnectionState } from '../../core/types.js';
 import type { VenueId } from '../../types/common.js';
@@ -561,6 +561,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
         this.emitQuoteUpdate(
           ticker.symbol,
           mergeBinanceRestTicker(prev, ticker, (value) => this.safeNum(value)),
+          REST_QUOTE,
         );
         merged++;
       }
@@ -602,6 +603,7 @@ export class BinanceWsAdapter extends SdkBaseAdapter {
             this.emitQuoteUpdate(
               t.symbol,
               mergeBinanceRestOpenInterest(prev, t, (value) => this.safeNum(value)),
+              REST_QUOTE,
             );
           }
         }

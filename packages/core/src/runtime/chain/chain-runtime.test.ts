@@ -223,6 +223,31 @@ describe('ChainRuntime', () => {
     await runtime.dispose();
   });
 
+  it('logs instead of rejecting when a handle resolved after dispose fails to release', async () => {
+    const acquireGate = deferred<{ release: () => Promise<void> }>();
+    const warn = vi.fn();
+    const runtime = new ChainRuntime('test', request(), {
+      coordinator: { acquire: vi.fn(async () => acquireGate.promise) } as never,
+      log: { warn },
+    });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+
+    const readyPromise = runtime.ready();
+    await Promise.resolve();
+    await runtime.dispose();
+    acquireGate.resolve({ release: async () => Promise.reject(new Error('socket gone')) });
+    await readyPromise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    process.off('unhandledRejection', unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.stringContaining('socket gone') }),
+      'late venue handle release failed',
+    );
+  });
+
   it('keeps the newest snapshot when rebuilds finish out of order', async () => {
     const first = deferred<VenueOptionChain>();
     const second = deferred<VenueOptionChain>();

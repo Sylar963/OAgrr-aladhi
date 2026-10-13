@@ -14,9 +14,16 @@ class FakeVenueAdapter implements WorkerHostedAdapter {
   readonly subscribed: ChainRequest[] = [];
   readonly recorders = new Set<QuoteRecorder>();
   loadCalls = 0;
+  loadFailures = 0;
+  subscribeFailures = new Map<string, number>();
+  subscribeGate: Promise<void> | null = null;
 
   async loadMarkets(): Promise<void> {
     this.loadCalls += 1;
+    if (this.loadFailures > 0) {
+      this.loadFailures -= 1;
+      throw new Error('instrument catalog unavailable');
+    }
   }
   async listUnderlyings(): Promise<string[]> {
     return ['BTC'];
@@ -33,6 +40,12 @@ class FakeVenueAdapter implements WorkerHostedAdapter {
       handlers.onStatus({ venue: 'deribit', state: 'down', ts: 1, message: 'no instruments for request' });
       return async () => {};
     }
+    const failuresLeft = this.subscribeFailures.get(request.expiry) ?? 0;
+    if (failuresLeft > 0) {
+      this.subscribeFailures.set(request.expiry, failuresLeft - 1);
+      throw new Error('subscribe rejected');
+    }
+    if (this.subscribeGate != null) await this.subscribeGate;
     this.subscribed.push(request);
     this.handlers.add(handlers);
     return async () => {
@@ -70,7 +83,7 @@ interface Harness {
 
 const openPorts: MessagePort[] = [];
 
-function startHarness(): Harness {
+function startHarness(onSpawn?: (adapter: FakeVenueAdapter, index: number) => void): Harness {
   const workers: FakeVenueAdapter[] = [];
   let exit: ((code: number) => void) | null = null;
   let stopServer: (() => void) | null = null;
@@ -79,6 +92,7 @@ function startHarness(): Harness {
     const { port1, port2 } = new MessageChannel();
     openPorts.push(port1, port2);
     const adapter = new FakeVenueAdapter();
+    onSpawn?.(adapter, workers.length);
     workers.push(adapter);
     stopServer = serveFeedWorker(port2, () => adapter, { flushIntervalMs: 5, diagnosticsIntervalMs: 10 }).dispose;
     return {
@@ -216,6 +230,61 @@ describe('FeedWorkerHost', () => {
 
     workers[1]!.emitDeltas([delta(BTC_CALL, 7)]);
     await vi.waitFor(() => expect(onDelta).toHaveBeenCalled());
+    await host.shutdown();
+  });
+
+  it('replays the other subscriptions when one fails, then retries the failed one', async () => {
+    const later = { ...REQUEST, expiry: '2026-06-26' };
+    const { host, workers, crash } = startHarness((adapter, index) => {
+      if (index === 1) adapter.subscribeFailures.set(later.expiry, 1);
+    });
+    const adapter = host.adapter('deribit');
+    const statuses: VenueStatus[] = [];
+    await adapter.loadMarkets();
+    await adapter.subscribe(later, { onDelta: () => {}, onStatus: (status) => statuses.push(status) });
+    await adapter.subscribe(REQUEST, { onDelta: () => {}, onStatus: () => {} });
+
+    crash();
+
+    await vi.waitFor(() => expect(workers[1]?.subscribed).toEqual([REQUEST]), { timeout: 3_000 });
+    await vi.waitFor(() => expect(statuses.at(-1)).toMatchObject({ state: 'down' }));
+    await vi.waitFor(() => expect(workers[1]!.subscribed).toEqual([REQUEST, later]), {
+      timeout: 4_000,
+    });
+    await host.shutdown();
+  });
+
+  it('retries the replay when reloading markets fails after a respawn', async () => {
+    const { host, workers, crash } = startHarness((adapter, index) => {
+      if (index === 1) adapter.loadFailures = 1;
+    });
+    const adapter = host.adapter('deribit');
+    await adapter.loadMarkets();
+    await adapter.subscribe(REQUEST, { onDelta: () => {}, onStatus: () => {} });
+
+    crash();
+
+    await vi.waitFor(() => expect(workers[1]?.subscribed).toEqual([REQUEST]), { timeout: 5_000 });
+    expect(workers[1]!.loadCalls).toBe(2);
+    await host.shutdown();
+  });
+
+  it('drops the worker subscription when it is released while being replayed', async () => {
+    let openGate!: () => void;
+    const { host, workers, crash } = startHarness((adapter, index) => {
+      if (index === 1) adapter.subscribeGate = new Promise((resolve) => (openGate = resolve));
+    });
+    const adapter = host.adapter('deribit');
+    await adapter.loadMarkets();
+    const release = await adapter.subscribe(REQUEST, { onDelta: () => {}, onStatus: () => {} });
+
+    crash();
+    await vi.waitFor(() => expect(workers[1]?.loadCalls).toBe(1), { timeout: 3_000 });
+    await release();
+    openGate();
+
+    await vi.waitFor(() => expect(workers[1]!.subscribed).toEqual([REQUEST]));
+    await vi.waitFor(() => expect(workers[1]!.handlers.size).toBe(0));
     await host.shutdown();
   });
 });

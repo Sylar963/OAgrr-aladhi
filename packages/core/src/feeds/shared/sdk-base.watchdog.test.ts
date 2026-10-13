@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SdkBaseAdapter, type CachedInstrument, type LiveQuote } from './sdk-base.js';
+import { REST_QUOTE, SdkBaseAdapter, type CachedInstrument, type LiveQuote } from './sdk-base.js';
 import type { StreamHandlers, VenueCapabilities } from './types.js';
 import type { VenueId } from '../../types/common.js';
 import { EMPTY_GREEKS, type VenueStatus } from '../../core/types.js';
@@ -50,6 +50,10 @@ class WatchdogAdapter extends SdkBaseAdapter {
 
   publishQuote(): void {
     this.emitQuoteUpdates([{ exchangeSymbol: 'BTC-X', quote: makeQuote() }]);
+  }
+
+  publishRestQuote(): void {
+    this.emitQuoteUpdates([{ exchangeSymbol: 'BTC-X', quote: makeQuote() }], REST_QUOTE);
   }
 
   addInstrument(): void {
@@ -134,6 +138,19 @@ describe('SdkBaseAdapter quote-level watchdog', () => {
     expect(adapter.restarts).toBe(1);
     expect(statuses.at(-1)).toMatchObject({ state: 'reconnecting' });
     expect(statuses.at(-1)?.message).toMatch(/no quotes/);
+  });
+
+  it('does not let REST refreshes mask a stream that stopped quoting', () => {
+    const { adapter } = setup();
+    adapter.publishQuote();
+
+    vi.advanceTimersByTime(QUOTE_STALE_MS - 1_000);
+    adapter.publishRestQuote();
+    vi.advanceTimersByTime(1_000);
+    adapter.snapshot.lastActivityAt = Date.now();
+    adapter.check();
+
+    expect(adapter.restarts).toBe(1);
   });
 
   it('leaves a venue alone while quotes keep arriving', () => {

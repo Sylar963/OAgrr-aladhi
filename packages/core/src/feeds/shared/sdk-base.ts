@@ -106,6 +106,13 @@ export interface QuoteRecorderEvent {
 
 export type QuoteRecorder = (event: QuoteRecorderEvent) => void;
 
+export interface QuoteEmitOptions {
+  /** False for REST snapshots and timer-driven refreshes, which must not count as stream liveness. */
+  live?: boolean;
+}
+
+export const REST_QUOTE: QuoteEmitOptions = { live: false };
+
 export interface LiveQuote {
   bidPrice: number | null;
   askPrice: number | null;
@@ -573,13 +580,20 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     }
   }
 
-  protected emitQuoteUpdate(exchangeSymbol: string, quote: LiveQuote): void {
-    this.emitQuoteUpdates([{ exchangeSymbol, quote }]);
+  protected emitQuoteUpdate(
+    exchangeSymbol: string,
+    quote: LiveQuote,
+    options?: QuoteEmitOptions,
+  ): void {
+    this.emitQuoteUpdates([{ exchangeSymbol, quote }], options);
   }
 
-  protected emitQuoteUpdates(updates: Array<{ exchangeSymbol: string; quote: LiveQuote }>): void {
+  protected emitQuoteUpdates(
+    updates: Array<{ exchangeSymbol: string; quote: LiveQuote }>,
+    options: QuoteEmitOptions = {},
+  ): void {
     const deltas: VenueDelta[] = [];
-    if (updates.length > 0) this.lastQuoteAt = Date.now();
+    if (updates.length > 0 && options.live !== false) this.lastQuoteAt = Date.now();
 
     for (const update of updates) {
       if (Date.now() > this.lastWatchdogReconnectAt) {

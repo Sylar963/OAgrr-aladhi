@@ -10,7 +10,7 @@ import {
   GATEIO_OPTIONS_WS_URL,
   GATEIO_REST_BASE_URL,
 } from '../shared/endpoints.js';
-import { type CachedInstrument, type LiveQuote, SdkBaseAdapter } from '../shared/sdk-base.js';
+import { REST_QUOTE, type CachedInstrument, type LiveQuote, SdkBaseAdapter } from '../shared/sdk-base.js';
 import type { StreamHandlers } from '../shared/types.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import {
@@ -239,7 +239,7 @@ export class GateioWsAdapter extends SdkBaseAdapter {
         }
       }
     }
-    if (updates.length > 0) this.emitQuoteUpdates(updates);
+    if (updates.length > 0) this.emitQuoteUpdates(updates, REST_QUOTE);
   }
 
   private async fetchTickerSnapshot(underlying: string): Promise<void> {

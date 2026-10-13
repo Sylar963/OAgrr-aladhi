@@ -11,7 +11,7 @@ import {
   OKX_TICKERS,
   OKX_WS_URL,
 } from '../shared/endpoints.js';
-import { type CachedInstrument, type LiveQuote, SdkBaseAdapter } from '../shared/sdk-base.js';
+import { REST_QUOTE, type CachedInstrument, type LiveQuote, SdkBaseAdapter } from '../shared/sdk-base.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import {
   parseOkxInstrument,
@@ -292,6 +292,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
         this.emitQuoteUpdate(
           item.instId,
           mergeOkxRestOpenInterest(prev, item, (value) => this.safeNum(value)),
+          REST_QUOTE,
         );
         merged++;
       }
@@ -314,6 +315,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
         this.emitQuoteUpdate(
           parsed.instId,
           mergeOkxRestMarkPrice(prev, parsed, (value) => this.safeNum(value)),
+          REST_QUOTE,
         );
         merged++;
       }
@@ -606,6 +608,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
       this.emitQuoteUpdate(
         id,
         mergeOkxOptSummary(prev, item, (value) => this.safeNum(value)),
+        REST_QUOTE,
       );
       return;
     }

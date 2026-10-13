@@ -11,6 +11,7 @@ import {
 } from '../shared/endpoints.js';
 import {
   DEFAULT_SURFACE_COVERAGE,
+  REST_QUOTE,
   SdkBaseAdapter,
   type CachedInstrument,
   type LiveQuote,
@@ -684,7 +685,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
             });
           }
         }
-        if (updates.length > 0) this.emitQuoteUpdates(updates);
+        if (updates.length > 0) this.emitQuoteUpdates(updates, REST_QUOTE);
 
         // 24h volume lives only on the per-symbol detail endpoint — fetch it for the
         // handful of legs that actually have OI or recent trades.
@@ -711,6 +712,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
               this.emptyQuote(),
               Date.now(),
             ),
+            REST_QUOTE,
           );
         }
       }

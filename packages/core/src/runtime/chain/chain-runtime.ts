@@ -320,7 +320,9 @@ export class ChainRuntime {
   private handleVenueAcquired(handle: VenueSubscriptionHandle): void {
     // A handle that resolves after dispose() must still be released.
     if (this.disposed) {
-      void handle.release();
+      handle.release().catch((error: unknown) => {
+        this.log.warn({ err: String(error) }, 'late venue handle release failed');
+      });
       return;
     }
     this.handles.push(handle);
@@ -347,7 +349,6 @@ export class ChainRuntime {
     this.lateVenueRebuildTimer = setTimeout(() => {
       this.lateVenueRebuildTimer = null;
       if (this.disposed) return;
-      this.lastSnapshotBuiltAt = Date.now();
       void this.buildSnapshot().catch((error: unknown) => {
         this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
       });

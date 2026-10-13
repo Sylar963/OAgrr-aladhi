@@ -1,3 +1,4 @@
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import type { IvHistoryService } from '@oggregator/core';
@@ -20,12 +21,14 @@ import { wsUnderlyingCandlesRoute } from './routes/ws-underlying-candles.js';
 import type { TradfiFlowBook } from './runtime/flow-book.js';
 import type { TradfiStore } from './runtime/store.js';
 import type { CandleClient } from './tastytrade/candle-client.js';
-import type { TradfiReadiness } from './tastytrade/feed.js';
+import type { TradfiReadiness, TradfiSubscriptionStats } from './tastytrade/feed.js';
+import type { ChainTier } from './tastytrade/planner.js';
 
 export interface FeedLike {
   readiness(): TradfiReadiness;
-  ensureChainSubscribed(underlying: string, expiry: string): void;
+  ensureChainSubscribed(underlying: string, expiry: string, tier?: ChainTier): void;
   refreshChainQuotes(underlying: string, expiry: string): Promise<number>;
+  subscriptionStats?(): TradfiSubscriptionStats;
 }
 
 export interface TradfiDeps {
@@ -38,6 +41,8 @@ export interface TradfiDeps {
 
 export function buildApp(deps: TradfiDeps): FastifyInstance {
   const app = Fastify({ logger: false });
+  // /surface is ~1 MB of float JSON polled every few seconds; gzip cuts it several-fold.
+  void app.register(compress, { global: true, threshold: 1024 });
   void app.register(cors, { origin: true });
   void app.register(websocket);
   void app.register(venuesRoute);

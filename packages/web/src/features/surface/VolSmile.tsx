@@ -3,17 +3,24 @@ import {
   createChart,
   LineSeries,
   ColorType,
+  type IChartApi,
+  type ISeriesApi,
 } from 'lightweight-charts';
 
-import type { EnrichedChainResponse } from '@shared/enriched';
 import { useUnderlyings, useExpiries } from '@features/chain';
 import { useTradfiExpiries } from '@features/tradfi';
 import { DropdownPicker } from '@components/ui';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
 import { formatExpiry, dteDays } from '@lib/format';
-import { extractSmile, deltaTickLabel, type XAxisMode } from './smile-utils';
-import { useAllExpiriesSmile } from './queries';
+import {
+  extractSmile,
+  deltaTickLabel,
+  smileChainFromRows,
+  type SmileChain,
+  type XAxisMode,
+} from './smile-utils';
+import { useAllExpiriesSmile, useSurface } from './queries';
 import { type SurfaceMarket, TRADFI_SURFACE_VENUES, useSurfaceUnderlying } from './surface-market';
 import styles from './VolSmile.module.css';
 
@@ -45,32 +52,49 @@ const IV_FORMAT = { type: 'custom' as const, formatter: (p: number) => `${p.toFi
 
 function useVolSmileChart(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  chains: EnrichedChainResponse[],
+  chains: SmileChain[],
   hiddenExpiries: Set<string>,
   activeVenues: string[],
   xAxisMode: XAxisMode,
   expiries: string[],
+  viewKey: string,
 ) {
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Line'>[]>([]);
+  const fittedKeyRef = useRef<string | null>(null);
   const hiddenKey = [...hiddenExpiries].sort().join(',');
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || chains.length === 0) return;
-
-    const colors = new Map(expiries.map((e, i) => [e, EXPIRY_COLORS[i % EXPIRY_COLORS.length]!]));
+    if (!container) return;
     const tickFmt = xAxisMode === 'delta'
       ? (v: number) => deltaTickLabel(v)
       : (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v));
-
     const chart = createChart(container, {
       ...CHART_OPTIONS,
       timeScale: { borderColor: '#1F2937', tickMarkFormatter: tickFmt },
     });
+    chartRef.current = chart;
+    fittedKeyRef.current = null;
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = [];
+    };
+  }, [containerRef, xAxisMode]);
 
+  // Refreshes swap series on the live chart instead of rebuilding it, so polling doesn't
+  // flash the panel or reset the user's zoom; the view is refit only when it changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    for (const series of seriesRef.current) chart.removeSeries(series);
+    seriesRef.current = [];
+
+    const colors = new Map(expiries.map((e, i) => [e, EXPIRY_COLORS[i % EXPIRY_COLORS.length]!]));
     for (const chain of chains) {
       if (hiddenExpiries.has(chain.expiry)) continue;
-      const spot = chain.stats.forwardPriceUsd;
-      const points = extractSmile(chain.strikes, activeVenues, spot, xAxisMode);
+      const points = extractSmile(chain.strikes, activeVenues, chain.referencePrice, xAxisMode);
       if (points.length < 3) continue;
 
       const series = chart.addSeries(LineSeries, {
@@ -81,11 +105,15 @@ function useVolSmileChart(
         priceLineVisible: false,
       });
       series.setData(points.map((p) => ({ time: p.strike as unknown as number, value: p.iv })) as never);
+      seriesRef.current.push(series);
     }
 
-    chart.timeScale().fitContent();
-    return () => { chart.remove(); };
-  }, [containerRef, chains, hiddenKey, activeVenues, xAxisMode, expiries]);
+    const fitKey = `${viewKey}|${xAxisMode}|${hiddenKey}`;
+    if (seriesRef.current.length > 0 && fittedKeyRef.current !== fitKey) {
+      chart.timeScale().fitContent();
+      fittedKeyRef.current = fitKey;
+    }
+  }, [chains, hiddenKey, activeVenues, xAxisMode, expiries, viewKey]);
 }
 
 interface Props {
@@ -107,7 +135,26 @@ export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' 
   const { data: tradfiExpiries } = useTradfiExpiries(tradfi ? localUnderlying : '');
   const expiries = (tradfi ? tradfiExpiries : cryptoExpiries)?.expiries ?? [];
 
-  const { data: chains } = useAllExpiriesSmile(localUnderlying, true, market);
+  const { data: cryptoChains } = useAllExpiriesSmile(localUnderlying, !tradfi);
+  // TradFi smiles ride on the surface snapshot: one request, and always consistent with it.
+  const { data: tradfiSurface } = useSurface(
+    tradfi ? localUnderlying : '',
+    TRADFI_SURFACE_VENUES,
+    'tradfi',
+  );
+  const chains = useMemo<SmileChain[]>(
+    () =>
+      tradfi
+        ? (tradfiSurface?.smiles ?? []).map((smile) =>
+            smileChainFromRows(smile, TRADFI_SURFACE_VENUES[0]!),
+          )
+        : (cryptoChains ?? []).map((chain) => ({
+            expiry: chain.expiry,
+            referencePrice: chain.stats.forwardPriceUsd,
+            strikes: chain.strikes,
+          })),
+    [tradfi, tradfiSurface, cryptoChains],
+  );
   const smileVenues = useMemo(
     () =>
       tradfi ? TRADFI_SURFACE_VENUES : selectedVenue === 'average' ? VENUE_IDS : [selectedVenue],
@@ -143,7 +190,15 @@ export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' 
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useVolSmileChart(containerRef, chains ?? [], hiddenExpiries, smileVenues, xAxisMode, expiries);
+  useVolSmileChart(
+    containerRef,
+    chains,
+    hiddenExpiries,
+    smileVenues,
+    xAxisMode,
+    expiries,
+    `${localUnderlying}|${smileVenues.join(',')}`,
+  );
 
   const toggleExpiry = (exp: string) => {
     setHiddenExpiries((prev) => {

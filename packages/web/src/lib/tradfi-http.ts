@@ -1,17 +1,29 @@
 const TRADFI_BASE = import.meta.env.VITE_TRADFI_API_BASE ?? '/tradfi-api';
 const RETRY_DELAY_MS = 1500;
 const MAX_RETRIES = 8;
+// 503s the service clears on its own shortly after a restart. Others (e.g. a chain with
+// no market data yet) won't change within a retry window, so they fail fast.
+const WARMING_UP_ERRORS = new Set(['catalog not loaded', 'candle feed not ready']);
+
+async function isWarmingUp(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.json()) as { error?: unknown } | null;
+    return typeof body?.error === 'string' && WARMING_UP_ERRORS.has(body.error);
+  } catch {
+    return false;
+  }
+}
 
 export async function tradfiFetchJson<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(`${TRADFI_BASE}${path}`);
       if (res.status === 503) {
-        if (attempt < MAX_RETRIES) {
+        if (attempt < MAX_RETRIES && (await isWarmingUp(res))) {
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
           continue;
         }
-        throw new Error('TradFi service still initializing');
+        throw new Error('TradFi service unavailable (503)');
       }
       if (!res.ok) throw new Error(`TradFi API error: ${res.status} ${res.statusText}`);
       return res.json() as Promise<T>;

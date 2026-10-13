@@ -30,3 +30,24 @@ describe('useSurface', () => {
     expect(crypto).toHaveBeenCalledWith('/surface?underlying=BTC&venues=deribit');
   });
 });
+
+describe('useSurface placeholder data', () => {
+  it('does not show the previous ticker\'s surface while the new one loads', async () => {
+    let resolveQqq: (v: unknown) => void = () => {};
+    vi.spyOn(tradfiHttp, 'tradfiFetchJson').mockImplementation(async (path: string) =>
+      path.includes('SPY') ? { underlying: 'SPY' } : new Promise((r) => { resolveQqq = r; }),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const stableWrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+    const { result, rerender } = renderHook(
+      ({ u }: { u: string }) => useSurface(u, ['tastytrade'], 'tradfi'),
+      { wrapper: stableWrapper, initialProps: { u: 'SPY' } },
+    );
+    await waitFor(() => expect(result.current.data?.underlying).toBe('SPY'));
+    rerender({ u: 'QQQ' });
+    expect(result.current.data).toBeUndefined();
+    resolveQqq({ underlying: 'QQQ' });
+    await waitFor(() => expect(result.current.data?.underlying).toBe('QQQ'));
+  });
+});

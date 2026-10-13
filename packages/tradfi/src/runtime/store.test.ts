@@ -52,4 +52,21 @@ describe('TradfiStore', () => {
     expect(emptyQuote().bid).toBeNull();
     expect(emptyQuote().iv).toBeNull();
   });
+
+  it('re-indexes chains when the catalog is replaced', () => {
+    const s = new TradfiStore();
+    s.setInstruments([inst, { ...inst, expiry: '2026-05-15', streamerSymbol: '.AAPL260515C200' }]);
+    expect(s.listExpiries('AAPL')).toEqual(['2026-04-17', '2026-05-15']);
+    s.setInstruments([{ ...inst, underlying: 'MSFT', streamerSymbol: '.MSFT260417C200' }]);
+    expect(s.listUnderlyings()).toEqual(['MSFT']);
+    expect(s.instrumentsFor('AAPL', '2026-04-17')).toHaveLength(0);
+    expect(s.instrumentCount()).toBe(1);
+  });
+
+  it('clears only the fields of a dropped stream', () => {
+    const s = new TradfiStore();
+    s.mergeQuote('.AAPL260417C200', { bid: 5.1, ask: 5.3, iv: 0.4, ts: 7 });
+    s.clearQuoteFields('.AAPL260417C200', ['bid', 'ask']);
+    expect(s.getQuote('.AAPL260417C200')).toMatchObject({ bid: null, ask: null, iv: 0.4, ts: 7 });
+  });
 });

@@ -42,6 +42,8 @@ export function buildSubscribe(channel: number, subs: DxSub[], action: 'add' | '
 
 // DXLink rejects any frame over 64 KiB with INVALID_MESSAGE and then stops serving the session.
 const MAX_SUBSCRIPTION_FRAME_BYTES = 60_000;
+// Small frames let the paced sender spread a large subscription change over time.
+const MAX_SUBSCRIPTION_FRAME_SUBS = 500;
 
 /** One or more FEED_SUBSCRIPTION frames, each under DXLink's frame-size limit. */
 export function buildSubscribeFrames(
@@ -49,6 +51,7 @@ export function buildSubscribeFrames(
   subs: DxSub[],
   action: 'add' | 'remove',
   maxBytes = MAX_SUBSCRIPTION_FRAME_BYTES,
+  maxSubs = MAX_SUBSCRIPTION_FRAME_SUBS,
 ): ReturnType<typeof buildSubscribe>[] {
   const frames: ReturnType<typeof buildSubscribe>[] = [];
   let batch: DxSub[] = [];
@@ -56,7 +59,7 @@ export function buildSubscribeFrames(
   const base = bytes;
   for (const sub of subs) {
     const size = JSON.stringify(sub).length + 1;
-    if (batch.length > 0 && bytes + size > maxBytes) {
+    if (batch.length > 0 && (bytes + size > maxBytes || batch.length >= maxSubs)) {
       frames.push(buildSubscribe(channel, batch, action));
       batch = [];
       bytes = base;

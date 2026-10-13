@@ -105,6 +105,22 @@ export interface IvSurfaceResponse {
   vrp30d: number | null;
   // TradFi only: constant-maturity ATM IV per tenor, interpolated from the live surface.
   atmIvTenors?: Record<IvTenor, number | null>;
+  // TradFi only: per-expiry IV/delta by strike from the same snapshot as the surface.
+  smiles?: ExpirySmile[];
+}
+
+export interface SmileStrikeRow {
+  strike: number;
+  callIv: number | null;
+  callDelta: number | null;
+  putIv: number | null;
+  putDelta: number | null;
+}
+
+export interface ExpirySmile {
+  expiry: string;
+  referencePriceUsd: number | null;
+  strikes: SmileStrikeRow[];
 }
 
 // IV history — constant-maturity ATM IV, 25Δ RR, 25Δ butterfly.

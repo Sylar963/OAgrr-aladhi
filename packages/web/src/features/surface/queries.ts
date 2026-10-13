@@ -8,7 +8,6 @@ import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { useExpiries } from '@features/chain';
-import { fetchTradfiChain, useTradfiExpiries } from '@features/tradfi';
 import { VENUE_IDS } from '@lib/venue-meta';
 import { fetchJson } from '@lib/http';
 import { tradfiFetchJson } from '@lib/tradfi-http';
@@ -27,6 +26,10 @@ export const surfaceKeys = {
     ['surface', underlying, venues.slice().sort().join(',')] as const,
 };
 
+function isWarming(data: IvSurfaceResponse | undefined): boolean {
+  return data?.smiles != null && data.smiles.some((smile) => smile.strikes.length === 0);
+}
+
 export function useSurface(underlying: string, venues: string[], market: SurfaceMarket = 'crypto') {
   const venueParam = venues.length > 0 ? `&venues=${venues.join(',')}` : '';
   const tradfi = market === 'tradfi';
@@ -37,9 +40,12 @@ export function useSurface(underlying: string, venues: string[], market: Surface
         ? tradfiFetchJson<IvSurfaceResponse>(`/surface?underlying=${encodeURIComponent(underlying)}`)
         : fetchJson<IvSurfaceResponse>(`/surface?underlying=${underlying}${venueParam}`),
     enabled: Boolean(underlying),
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-    placeholderData: (prev: IvSurfaceResponse | undefined) => prev,
+    staleTime: 4_000,
+    // Freshly subscribed TradFi chains fill in within seconds; poll fast until they have.
+    refetchInterval: (query) => (tradfi && isWarming(query.state.data) ? 1_000 : 5_000),
+    // Keep the old surface only while refreshing the same ticker; across tickers it is wrong data.
+    placeholderData: (prev: IvSurfaceResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }
 
@@ -62,7 +68,8 @@ export function useIvHistory(
     enabled: enabled && Boolean(underlying),
     staleTime: 30_000,
     refetchInterval: 60_000,
-    placeholderData: (prev: IvHistoryResponse | undefined) => prev,
+    placeholderData: (prev: IvHistoryResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }
 
@@ -115,33 +122,22 @@ export function useCallPutFlow(underlying: string, days: number, enabled: boolea
   });
 }
 
-export function useAllExpiriesSmile(
-  underlying: string,
-  enabled: boolean,
-  market: SurfaceMarket = 'crypto',
-) {
-  const tradfi = market === 'tradfi';
-  const { data: cryptoExpiries } = useExpiries(tradfi ? '' : underlying);
-  const { data: tradfiExpiries } = useTradfiExpiries(tradfi ? underlying : '');
-  const expiries = (tradfi ? tradfiExpiries : cryptoExpiries)?.expiries ?? [];
+export function useAllExpiriesSmile(underlying: string, enabled: boolean) {
+  const { data: expiriesData } = useExpiries(enabled ? underlying : '');
+  const expiries = expiriesData?.expiries ?? [];
   const venueParam = `&venues=${VENUE_IDS.join(',')}`;
 
   return useQuery({
-    queryKey: [tradfi ? 'tradfi-smile-all' : 'smile-all', underlying, expiries.join(',')],
-    queryFn: async (): Promise<EnrichedChainResponse[]> => {
-      const results = await Promise.all(
+    queryKey: ['smile-all', underlying, expiries.join(',')],
+    queryFn: async (): Promise<EnrichedChainResponse[]> =>
+      Promise.all(
         expiries.map((exp) =>
-          tradfi
-            ? fetchTradfiChain(underlying, exp)
-            : fetchJson<EnrichedChainResponse>(
-                `/chains?underlying=${underlying}&expiry=${exp}${venueParam}`,
-              ),
+          fetchJson<EnrichedChainResponse>(`/chains?underlying=${underlying}&expiry=${exp}${venueParam}`),
         ),
-      );
-      return results;
-    },
+      ),
     enabled: Boolean(underlying && expiries.length > 0 && enabled),
     staleTime: 30_000,
-    placeholderData: (prev: EnrichedChainResponse[] | undefined) => prev,
+    placeholderData: (prev: EnrichedChainResponse[] | undefined) =>
+      prev?.[0]?.underlying === underlying ? prev : undefined,
   });
 }

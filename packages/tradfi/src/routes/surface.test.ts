@@ -15,10 +15,15 @@ function feed(catalogLoaded = true) {
     lastDataTs: Date.now(), underlyings: 1, instruments: 1,
   };
   const subscribed: string[] = [];
+  const tiers: (string | undefined)[] = [];
   return {
     subscribed,
+    tiers,
     readiness: () => readiness,
-    ensureChainSubscribed: (_u: string, expiry: string) => void subscribed.push(expiry),
+    ensureChainSubscribed: (_u: string, expiry: string, tier?: string) => {
+      subscribed.push(expiry);
+      tiers.push(tier);
+    },
     refreshChainQuotes: async () => 0,
   };
 }
@@ -62,6 +67,13 @@ describe('GET /surface', () => {
     expect(body.underlying).toBe('SPY');
     expect(body.surface.map((row) => row.expiry)).toEqual(live);
     expect(f.subscribed).toEqual(live);
+    expect(new Set(f.tiers)).toEqual(new Set(['surface']));
+    expect(body.smiles.map((smile) => smile.expiry)).toEqual(live);
+    expect(body.smiles[0]!.referencePriceUsd).toBe(100);
+    expect(body.smiles[0]!.strikes.map((row) => row.strike)).toEqual([95, 100, 105]);
+    expect(body.smiles[0]!.strikes[1]).toEqual({
+      strike: 100, callIv: 0.3, callDelta: 0.5, putIv: 0.3, putDelta: -0.5,
+    });
     expect(body.venueAtm.tastytrade?.map((point) => point.atm)).toEqual([0.3, 0.3]);
     expect(body.surface[0]!.dte).toBe(10);
     expect(body.venueSurfaceFineSmoothed.tastytrade).toEqual(body.surfaceFineSmoothed);
@@ -87,6 +99,23 @@ describe('GET /surface', () => {
     const rv = 0.01 * Math.sqrt(252);
     expect(body.rv30d).toBeCloseTo(rv, 10);
     expect(body.vrp30d).toBeCloseTo(0.3 - rv, 6);
+    await app.close();
+  });
+
+  it('rebuilds a still-warming surface quickly instead of caching it for the full TTL', async () => {
+    const now = Date.now();
+    const store = new TradfiStore();
+    seed(store, [now + 10 * DAY]);
+    const expiry = isoDate(now + 10 * DAY);
+    for (const inst of store.instrumentsFor('SPY', expiry)) store.clearQuoteFields(inst.streamerSymbol, ['iv']);
+    const app = buildApp({ store, feed: feed() });
+
+    const first = (await app.inject({ method: 'GET', url: '/surface?underlying=SPY' })).json() as TradfiSurfaceResponse;
+    expect(first.smiles[0]!.strikes).toEqual([]);
+    for (const inst of store.instrumentsFor('SPY', expiry)) store.mergeQuote(inst.streamerSymbol, { iv: 0.3, ts: 2 });
+    await new Promise((r) => setTimeout(r, 600));
+    const second = (await app.inject({ method: 'GET', url: '/surface?underlying=SPY' })).json() as TradfiSurfaceResponse;
+    expect(second.smiles[0]!.strikes).toHaveLength(3);
     await app.close();
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { averageIv, averageDelta, deltaTickLabel, extractSmile } from './smile-utils';
+import { averageIv, averageDelta, deltaTickLabel, extractSmile, smileChainFromRows } from './smile-utils';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
 type Strike = EnrichedChainResponse['strikes'][number];
@@ -207,5 +207,25 @@ describe('extractSmile — delta mode', () => {
   it('returns empty for empty strikes', () => {
     const result = extractSmile([], ['deribit'], 70000, 'delta');
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('smileChainFromRows', () => {
+  it('feeds TradFi surface rows through the same OTM smile extraction', () => {
+    const chain = smileChainFromRows(
+      {
+        expiry: '2026-11-20',
+        referencePriceUsd: 100,
+        strikes: [
+          { strike: 90, callIv: 0.5, callDelta: 0.9, putIv: 0.32, putDelta: -0.1 },
+          { strike: 100, callIv: 0.25, callDelta: 0.5, putIv: 0.26, putDelta: -0.5 },
+          { strike: 110, callIv: 0.22, callDelta: 0.15, putIv: 0.4, putDelta: -0.85 },
+        ],
+      },
+      'tastytrade',
+    );
+    expect(chain).toMatchObject({ expiry: '2026-11-20', referencePrice: 100 });
+    const points = extractSmile(chain.strikes, ['tastytrade'], chain.referencePrice, 'strike');
+    expect(points.map((p) => p.iv)).toEqual([32, 25, 22]);
   });
 });

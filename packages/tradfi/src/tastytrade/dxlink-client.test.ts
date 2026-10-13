@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DxLinkProtocol } from './dxlink-client.js';
+import { DxLinkProtocol, SUBSCRIBE_FRAME_INTERVAL_MS } from './dxlink-client.js';
 
 describe('DxLinkProtocol state machine', () => {
   it('walks the handshake and emits subscribe after FEED_CONFIG', () => {
@@ -62,26 +62,68 @@ describe('DxLinkProtocol state machine', () => {
     expect(onAuthError).not.toHaveBeenCalled();
   });
 
-  it('sends the full subscription set once per connection, split under the frame limit', () => {
-    const sent: Array<{ type: string; add?: unknown[] }> = [];
-    const desired = Array.from({ length: 5_000 }, (_, i) => ({
-      type: 'Greeks' as const,
-      symbol: `.AAOI261016C${i}`,
-    }));
-    const proto = new DxLinkProtocol({
-      channel: 3,
-      token: 'QT',
-      send: (m) => sent.push(m as { type: string; add?: unknown[] }),
-      onData: vi.fn(),
-      desiredSubs: () => desired,
-    });
-    proto.onOpen();
-    proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
-    proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
+  it('sends the full subscription set once per connection, split under the frame limit and paced', () => {
+    vi.useFakeTimers();
+    try {
+      const sent: Array<{ type: string; add?: unknown[] }> = [];
+      const desired = Array.from({ length: 5_000 }, (_, i) => ({
+        type: 'Greeks' as const,
+        symbol: `.AAOI261016C${i}`,
+      }));
+      const proto = new DxLinkProtocol({
+        channel: 3,
+        token: 'QT',
+        send: (m) => sent.push(m as { type: string; add?: unknown[] }),
+        onData: vi.fn(),
+        desiredSubs: () => desired,
+      });
+      proto.onOpen();
+      proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
+      proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
 
-    const frames = sent.filter((m) => m.type === 'FEED_SUBSCRIPTION');
-    expect(frames.length).toBeGreaterThan(1);
-    expect(frames.every((f) => JSON.stringify(f).length < 65_536)).toBe(true);
-    expect(frames.flatMap((f) => f.add ?? [])).toEqual(desired);
+      const frames = () => sent.filter((m) => m.type === 'FEED_SUBSCRIPTION');
+      expect(frames()).toHaveLength(1);
+      vi.advanceTimersByTime(SUBSCRIBE_FRAME_INTERVAL_MS);
+      expect(frames()).toHaveLength(2);
+
+      vi.runAllTimers();
+      expect(frames().length).toBe(10);
+      expect(frames().every((f) => JSON.stringify(f).length < 65_536)).toBe(true);
+      expect(frames().flatMap((f) => f.add ?? [])).toEqual(desired);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops queued frames when the connection reopens', () => {
+    vi.useFakeTimers();
+    try {
+      const sent: Array<{ type: string }> = [];
+      const desired = Array.from({ length: 2_000 }, (_, i) => ({ type: 'Greeks' as const, symbol: `.X${i}` }));
+      const proto = new DxLinkProtocol({
+        channel: 3, token: 'QT', send: (m) => sent.push(m as { type: string }), onData: vi.fn(),
+        desiredSubs: () => desired,
+      });
+      proto.onMessage({ type: 'FEED_CONFIG', channel: 3 });
+      proto.onOpen();
+      vi.runAllTimers();
+      expect(sent.filter((m) => m.type === 'FEED_SUBSCRIPTION')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports subscription rejections without treating them as auth errors', () => {
+    const onAuthError = vi.fn();
+    const onSubscriptionRejected = vi.fn();
+    const proto = new DxLinkProtocol({
+      channel: 3, token: 'QT', send: () => {}, onData: () => {}, desiredSubs: () => [],
+      onAuthError, onSubscriptionRejected,
+    });
+    proto.onMessage({ type: 'ERROR', error: 'BAD_ACTION', message: 'Your subscription size is too big' });
+    proto.onMessage({ type: 'ERROR', error: 'BAD_ACTION', message: 'Some other action problem' });
+    expect(onSubscriptionRejected).toHaveBeenCalledTimes(1);
+    expect(onSubscriptionRejected).toHaveBeenCalledWith('Your subscription size is too big');
+    expect(onAuthError).not.toHaveBeenCalled();
   });
 });

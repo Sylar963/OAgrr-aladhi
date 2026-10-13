@@ -23,6 +23,7 @@ export function healthRoute(deps: TradfiDeps) {
         fresh,
         ageMs: readiness.lastDataTs > 0 ? now - readiness.lastDataTs : null,
         readiness,
+        subscriptions: deps.feed.subscriptionStats?.() ?? null,
       };
     });
 

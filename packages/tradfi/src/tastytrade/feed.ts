@@ -4,7 +4,9 @@ import type { TradfiStore } from '../runtime/store.js';
 import { feedLogger } from '../logger.js';
 import { applyEvent } from './state.js';
 import { TradfiFlowBook } from '../runtime/flow-book.js';
-import { chainSubscriptions, underlyingSubscriptions } from './planner.js';
+import {
+  type ChainTier, EVENT_QUOTE_FIELDS, planChainSubscriptions, underlyingSubscriptions,
+} from './planner.js';
 import type { DxEvent, DxSub } from './codec.js';
 import type { DxLinkClient } from './dxlink-client.js';
 import { DxLinkClient as RealDxLinkClient } from './dxlink-client.js';
@@ -34,6 +36,39 @@ const CHAIN_SWEEP_INTERVAL_MS = 60 * 1000;
 
 // Per-chain REST-refresh throttle, so repeated /chains polls can't hammer REST.
 const REFRESH_THROTTLE_MS = 15 * 1000;
+// A 403 means the account lacks the market-data entitlement; it won't change within the hour.
+const REST_FORBIDDEN_BACKOFF_MS = 60 * 60 * 1000;
+
+// DXLink refuses subscriptions past an account cap ("subscription size is too big"), first
+// seen at ~100k event subscriptions. Stay under it; a rejection lowers the budget further.
+export const DEFAULT_MAX_SUBSCRIPTIONS = 80_000;
+const MIN_SUBSCRIPTION_BUDGET = 10_000;
+const BUDGET_SHRINK_COOLDOWN_MS = 30 * 1000;
+const RESYNC_DELAY_MS = 5 * 1000;
+// Chains requested this recently are in use and never evicted to make room for others.
+// Must exceed the slowest keep-alive poll (the IV recorder's 60s).
+const ACTIVE_LEASE_MS = 90 * 1000;
+
+interface ChainLease {
+  underlying: string;
+  expiry: string;
+  /** Last request time per tier; the subscribed set is the union of live tiers. */
+  tiers: Map<ChainTier, number>;
+  subs: DxSub[];
+  /** False while the budget could not fit this chain's current tiers. */
+  admitted: boolean;
+}
+
+export interface TradfiSubscriptionStats {
+  subscriptions: number;
+  budget: number;
+  chains: number;
+  deferredChains: number;
+  rejects: number;
+}
+
+const subKey = (s: DxSub) => `${s.type}|${s.symbol}`;
+const lastRequested = (lease: ChainLease) => Math.max(0, ...lease.tiers.values());
 
 const INDEX_UNDERLYINGS = new Set(['SPX', 'NDX', 'RUT', 'VIX']);
 
@@ -68,8 +103,13 @@ export class TradfiFeed {
   private quoteTokenAcquired = false;
   private lastDataTs = 0;
   private dx: DxLinkClient | null = null;
-  private desired: DxSub[] = [];
-  private subscribedChains = new Map<string, { subs: DxSub[]; lastRequestedAt: number }>();
+  private chains = new Map<string, ChainLease>();
+  private chainSubCount = 0;
+  private maxSubscriptions: number;
+  private subscriptionRejects = 0;
+  private lastBudgetShrinkAt = 0;
+  private resyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private restForbiddenUntil = 0;
   private readonly sweepTimer = setInterval(() => this.evictIdleChains(), CHAIN_SWEEP_INTERVAL_MS);
   private quoteOnly = new Set<string>();
   private tokenTimer: ReturnType<typeof setTimeout> | null = null;
@@ -86,9 +126,12 @@ export class TradfiFeed {
     private readonly dxFactory: (opts: {
       url: string; token: string;
       onData: (e: DxEvent[]) => void; desiredSubs: () => DxSub[];
-      onAuthError: () => void;
+      onAuthError: () => void; onSubscriptionRejected: (detail: string) => void;
     }) => DxLinkClient = (opts) => new RealDxLinkClient(opts),
-  ) {}
+    options: { maxSubscriptions?: number | undefined } = {},
+  ) {
+    this.maxSubscriptions = options.maxSubscriptions ?? DEFAULT_MAX_SUBSCRIPTIONS;
+  }
 
   async loadMarkets(): Promise<void> {
     const all: TradfiInstrument[] = [];
@@ -120,8 +163,20 @@ export class TradfiFeed {
       quoteTokenAcquired: this.quoteTokenAcquired,
       streaming: this.dx?.isStreaming() ?? false,
       lastDataTs: this.lastDataTs,
-      underlyings: this.store.listUnderlyings().length,
-      instruments: this.store.allInstruments().length,
+      underlyings: this.store.underlyingCount(),
+      instruments: this.store.instrumentCount(),
+    };
+  }
+
+  subscriptionStats(): TradfiSubscriptionStats {
+    let deferred = 0;
+    for (const lease of this.chains.values()) if (!lease.admitted) deferred += 1;
+    return {
+      subscriptions: this.baseSubCount() + this.chainSubCount,
+      budget: this.maxSubscriptions,
+      chains: this.chains.size,
+      deferredChains: deferred,
+      rejects: this.subscriptionRejects,
     };
   }
 
@@ -141,8 +196,6 @@ export class TradfiFeed {
     // Subscribe lazily: only the underlyings (for spot) up front, plus any chains
     // already requested. Subscribing all ~85k instruments at once overflows the
     // DXLink message limit (INVALID_MESSAGE) and streams data no view consumes.
-    this.rebuildDesired();
-
     this.dx = this.dxFactory({
       url: qt.dxlinkUrl,
       token: qt.token,
@@ -151,12 +204,13 @@ export class TradfiFeed {
         for (const ev of events) applyEvent(this.store, ev, ts, this.flowBook);
         this.lastDataTs = ts;
       },
-      desiredSubs: () => this.desired,
+      desiredSubs: () => this.desiredSubs(),
       // A rejected token means the timer-based refresh is too late; re-auth now.
       onAuthError: () => { void this.reconnectStreaming('auth-error'); },
+      onSubscriptionRejected: (detail) => this.onSubscriptionRejected(detail),
     });
     await this.dx.connect();
-    log.info({ subs: this.desired.length }, 'dxlink streaming started');
+    log.info({ subs: this.baseSubCount() + this.chainSubCount }, 'dxlink streaming started');
 
     const ttl = computeQuoteTokenTtl(qt.expiresAt, Date.now());
     this.tokenTimer = setTimeout(() => { void this.reconnectStreaming('token-expiry'); }, ttl);
@@ -167,52 +221,153 @@ export class TradfiFeed {
     const added = symbols.filter((s) => !this.underlyings.includes(s) && !this.quoteOnly.has(s));
     if (added.length === 0) return;
     for (const s of added) this.quoteOnly.add(s);
-    this.rebuildDesired();
     this.dx?.subscribe(underlyingSubscriptions(added));
   }
 
-  /** Rebuild the desired subscription set: underlyings + every requested chain. */
-  private rebuildDesired(): void {
-    const subs: DxSub[] = [...underlyingSubscriptions([...this.underlyings, ...this.quoteOnly])];
-    for (const chain of this.subscribedChains.values()) subs.push(...chain.subs);
-    this.desired = subs;
+  /** The full subscription set: underlyings + every admitted chain. Sent once per connection. */
+  private desiredSubs(): DxSub[] {
+    const subs: DxSub[] = underlyingSubscriptions([...this.underlyings, ...this.quoteOnly]);
+    for (const lease of this.chains.values()) subs.push(...lease.subs);
+    return subs;
+  }
+
+  private baseSubCount(): number {
+    return underlyingSubscriptions([...this.underlyings, ...this.quoteOnly]).length;
   }
 
   /**
-   * Subscribe a single chain's symbols on demand (idempotent) and mark it as in use.
-   * Survives reconnects until it goes unrequested for CHAIN_IDLE_MS.
+   * Lease a chain at `tier` (idempotent) and keep it streaming until that tier goes
+   * unrequested for CHAIN_IDLE_MS. A chain that doesn't fit the subscription budget stays
+   * leased but deferred, and is retried on its next request or sweep.
    */
-  ensureChainSubscribed(underlying: string, expiry: string): void {
+  ensureChainSubscribed(underlying: string, expiry: string, tier: ChainTier = 'full'): void {
     const key = `${underlying}|${expiry}`;
     const now = Date.now();
-    const existing = this.subscribedChains.get(key);
-    if (existing != null) {
-      existing.lastRequestedAt = now;
-      return;
+    let lease = this.chains.get(key);
+    if (lease == null) {
+      lease = { underlying, expiry, tiers: new Map(), subs: [], admitted: false };
+      this.chains.set(key, lease);
     }
-    const symbols = this.store.instrumentsFor(underlying, expiry).map((i) => i.streamerSymbol);
-    const subs = chainSubscriptions(symbols);
-    this.subscribedChains.set(key, { subs, lastRequestedAt: now });
-    this.rebuildDesired();
-    if (subs.length > 0) this.dx?.subscribe(subs);
-    log.info({ underlying, expiry, subs: subs.length }, 'chain subscription added');
+    const had = lease.tiers.has(tier);
+    lease.tiers.set(tier, now);
+    if (had && lease.admitted) return;
+    this.applyLease(key, lease, now);
   }
 
-  /** Unsubscribe chains not requested within CHAIN_IDLE_MS. Returns how many were dropped. */
+  /** Drop tiers idle past CHAIN_IDLE_MS and retry deferred chains. Returns chains fully dropped. */
   evictIdleChains(now = Date.now()): number {
-    const dropped: DxSub[] = [];
-    let chains = 0;
-    for (const [key, chain] of this.subscribedChains) {
-      if (now - chain.lastRequestedAt <= CHAIN_IDLE_MS) continue;
-      this.subscribedChains.delete(key);
-      dropped.push(...chain.subs);
-      chains += 1;
+    let dropped = 0;
+    let droppedSubs = 0;
+    for (const [key, lease] of this.chains) {
+      let changed = false;
+      for (const [tier, at] of lease.tiers) {
+        if (now - at <= CHAIN_IDLE_MS) continue;
+        lease.tiers.delete(tier);
+        changed = true;
+      }
+      if (lease.tiers.size === 0) {
+        droppedSubs += lease.subs.length;
+        this.dropLease(key, lease);
+        dropped += 1;
+      } else if (changed || !lease.admitted) {
+        this.applyLease(key, lease, now);
+      }
     }
-    if (chains === 0) return 0;
-    this.rebuildDesired();
-    this.dx?.unsubscribe(dropped);
-    log.info({ chains, subs: dropped.length, remaining: this.subscribedChains.size }, 'idle chains unsubscribed');
-    return chains;
+    if (dropped > 0) {
+      log.info({ chains: dropped, subs: droppedSubs, remaining: this.chains.size }, 'idle chains unsubscribed');
+    }
+    return dropped;
+  }
+
+  private applyLease(key: string, lease: ChainLease, now: number): void {
+    const next = planChainSubscriptions(
+      this.store.instrumentsFor(lease.underlying, lease.expiry),
+      lease.tiers.keys(),
+      this.store.getSpot(lease.underlying),
+      now,
+    );
+    const growth = next.length - lease.subs.length;
+    if (growth > 0 && !this.reserve(growth, key, now, false)) {
+      if (lease.admitted || lease.subs.length === 0) {
+        log.warn(
+          { underlying: lease.underlying, expiry: lease.expiry, needed: growth, ...this.subscriptionStats() },
+          'subscription budget full; chain deferred',
+        );
+      }
+      lease.admitted = false;
+      return;
+    }
+    const isNew = lease.subs.length === 0;
+    this.replaceSubs(lease, next);
+    lease.admitted = true;
+    if (isNew) {
+      log.info(
+        { underlying: lease.underlying, expiry: lease.expiry, tiers: [...lease.tiers.keys()], subs: next.length },
+        'chain subscription added',
+      );
+    }
+  }
+
+  /**
+   * Make room for `needed` more chain subscriptions by evicting least-recently-requested
+   * chains. Without `force`, chains still in active use are never evicted.
+   */
+  private reserve(needed: number, exceptKey: string | null, now: number, force: boolean): boolean {
+    let over = this.chainSubCount + needed - Math.max(0, this.maxSubscriptions - this.baseSubCount());
+    if (over <= 0) return true;
+    const victims = [...this.chains]
+      .filter(([k, l]) => k !== exceptKey && l.subs.length > 0 && (force || now - lastRequested(l) > ACTIVE_LEASE_MS))
+      .sort((a, b) => lastRequested(a[1]) - lastRequested(b[1]));
+    for (const [k, l] of victims) {
+      if (over <= 0) break;
+      over -= l.subs.length;
+      this.dropLease(k, l);
+    }
+    return over <= 0;
+  }
+
+  private dropLease(key: string, lease: ChainLease): void {
+    this.replaceSubs(lease, []);
+    this.chains.delete(key);
+  }
+
+  private replaceSubs(lease: ChainLease, next: DxSub[]): void {
+    const prevKeys = new Set(lease.subs.map(subKey));
+    const nextKeys = new Set(next.map(subKey));
+    const added = next.filter((s) => !prevKeys.has(subKey(s)));
+    const removed = lease.subs.filter((s) => !nextKeys.has(subKey(s)));
+    if (removed.length > 0) {
+      this.dx?.unsubscribe(removed);
+      for (const s of removed) this.store.clearQuoteFields(s.symbol, EVENT_QUOTE_FIELDS[s.type]);
+    }
+    if (added.length > 0) this.dx?.subscribe(added);
+    this.chainSubCount += next.length - lease.subs.length;
+    lease.subs = next;
+  }
+
+  /**
+   * DXLink drops a refused frame, so its chains would never stream. "Too big" means the
+   * account cap sits below our budget: lower it and evict down. Either way, re-send the
+   * desired set once the burst settles.
+   */
+  private onSubscriptionRejected(detail: string): void {
+    this.subscriptionRejects += 1;
+    const now = Date.now();
+    if (/too big/i.test(detail) && now - this.lastBudgetShrinkAt > BUDGET_SHRINK_COOLDOWN_MS) {
+      this.lastBudgetShrinkAt = now;
+      const current = this.baseSubCount() + this.chainSubCount;
+      this.maxSubscriptions = Math.max(
+        MIN_SUBSCRIPTION_BUDGET,
+        Math.floor(Math.min(this.maxSubscriptions, current) * 0.8),
+      );
+      this.reserve(0, null, now, true);
+      log.warn({ budget: this.maxSubscriptions, subscriptions: current }, 'dxlink subscription budget lowered');
+    }
+    if (this.resyncTimer != null) return;
+    this.resyncTimer = setTimeout(() => {
+      this.resyncTimer = null;
+      this.dx?.resubscribeAll();
+    }, RESYNC_DELAY_MS);
   }
 
   /**
@@ -253,6 +408,7 @@ export class TradfiFeed {
 
   async dispose(): Promise<void> {
     clearInterval(this.sweepTimer);
+    if (this.resyncTimer) { clearTimeout(this.resyncTimer); this.resyncTimer = null; }
     if (this.tokenTimer) { clearTimeout(this.tokenTimer); this.tokenTimer = null; }
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     await this.dx?.disconnect();
@@ -272,6 +428,7 @@ export class TradfiFeed {
     // hammer REST — at most one attempt per REFRESH_THROTTLE_MS per (underlying,expiry).
     const key = `${underlying}|${expiry}`;
     const nowMs = Date.now();
+    if (nowMs < this.restForbiddenUntil) return 0;
     if (nowMs - (this.lastRefreshAt.get(key) ?? 0) < REFRESH_THROTTLE_MS) return 0;
     this.lastRefreshAt.set(key, nowMs);
 
@@ -279,7 +436,15 @@ export class TradfiFeed {
     const occSymbols = insts.map((i) => i.occSymbol);
     for (let i = 0; i < occSymbols.length; i += MARKET_DATA_BATCH) {
       const batch = occSymbols.slice(i, i + MARKET_DATA_BATCH);
-      const data = await this.rest.getMarketData({ equityOption: batch });
+      let data: Awaited<ReturnType<TastytradeRest['getMarketData']>>;
+      try {
+        data = await this.rest.getMarketData({ equityOption: batch });
+      } catch (err: unknown) {
+        if (!/-> 403\b/.test(String(err))) throw err;
+        this.restForbiddenUntil = Date.now() + REST_FORBIDDEN_BACKOFF_MS;
+        log.warn({ err: String(err) }, 'market-data REST not entitled (403); fallback paused for 1h');
+        return merged;
+      }
       const ts = Date.now();
       for (const d of data) {
         const inst = this.occIndex.get(d.symbol);

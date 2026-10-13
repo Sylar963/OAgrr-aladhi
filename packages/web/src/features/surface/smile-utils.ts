@@ -1,10 +1,38 @@
-import type { EnrichedChainResponse } from '@shared/enriched';
+import type { ExpirySmile } from '@shared/enriched';
 
 export type XAxisMode = 'strike' | 'delta';
 
 export interface SmilePoint {
   strike: number;
   iv: number;
+}
+
+type SmileVenues = Record<string, { markIv?: number | null; delta?: number | null } | undefined>;
+
+/** The strike fields a smile reads; enriched chain strikes satisfy it structurally. */
+export interface SmileStrike {
+  strike: number;
+  call: { venues: SmileVenues };
+  put: { venues: SmileVenues };
+}
+
+export interface SmileChain {
+  expiry: string;
+  referencePrice: number | null;
+  strikes: readonly SmileStrike[];
+}
+
+/** Adapt a TradFi surface smile row set to the shape the smile extractor reads. */
+export function smileChainFromRows(smile: ExpirySmile, venue: string): SmileChain {
+  return {
+    expiry: smile.expiry,
+    referencePrice: smile.referencePriceUsd,
+    strikes: smile.strikes.map((r) => ({
+      strike: r.strike,
+      call: { venues: { [venue]: { markIv: r.callIv, delta: r.callDelta } } },
+      put: { venues: { [venue]: { markIv: r.putIv, delta: r.putDelta } } },
+    })),
+  };
 }
 
 export const DELTA_BUCKET_SIZE = 0.05;
@@ -58,7 +86,7 @@ export function deltaTickLabel(x: number): string {
 }
 
 export function extractSmile(
-  strikes: EnrichedChainResponse['strikes'],
+  strikes: readonly SmileStrike[],
   activeVenues: string[],
   spotPrice: number | null,
   xAxis: XAxisMode,

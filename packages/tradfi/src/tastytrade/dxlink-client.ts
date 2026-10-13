@@ -8,6 +8,10 @@ import { feedLogger } from '../logger.js';
 
 const log = feedLogger('dxlink');
 
+// DXLink answers subscription bursts with BAD_ACTION "subscription rate is too high" and
+// drops them, so frames (≤500 subs each) leave one per interval: ≤5k subs/s.
+export const SUBSCRIBE_FRAME_INTERVAL_MS = 100;
+
 export interface DxLinkProtocolOptions {
   channel: number;
   token: string;
@@ -16,11 +20,17 @@ export interface DxLinkProtocolOptions {
   desiredSubs: () => DxSub[];
   /** Fired when the server rejects our token or reports a protocol error. */
   onAuthError?: (() => void) | undefined;
+  /** Fired when DXLink refuses a subscription change (size or rate limit). */
+  onSubscriptionRejected?: ((detail: string) => void) | undefined;
 }
+
+type SubscribeFrame = ReturnType<typeof buildSubscribeFrames>[number];
 
 export class DxLinkProtocol {
   private ready = false;
   private sentAuth = false;
+  private queue: SubscribeFrame[] = [];
+  private drainTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(private readonly o: DxLinkProtocolOptions) {}
 
   isReady(): boolean {
@@ -30,6 +40,7 @@ export class DxLinkProtocol {
   onOpen(): void {
     this.ready = false;
     this.sentAuth = false;
+    this.clearQueue();
     this.o.send(buildSetup());
   }
 
@@ -54,6 +65,9 @@ export class DxLinkProtocol {
         if (m.error === 'UNAUTHORIZED') {
           log.warn({ error: m.error }, 'dxlink auth error');
           this.o.onAuthError?.();
+        } else if (m.error === 'BAD_ACTION' && /subscription/i.test(m.message ?? '')) {
+          log.warn({ error: m.error, detail: m.message }, 'dxlink subscription rejected');
+          this.o.onSubscriptionRejected?.(m.message ?? '');
         } else {
           log.warn({ error: m.error, detail: m.message }, 'dxlink protocol error');
         }
@@ -87,8 +101,36 @@ export class DxLinkProtocol {
     if (this.ready) this.send(subs, 'remove');
   }
 
+  /** Re-send the whole desired set; DXLink treats adds of live subscriptions as no-ops. */
+  resubscribeAll(): void {
+    if (this.ready) this.send(this.o.desiredSubs(), 'add');
+  }
+
+  dispose(): void {
+    this.clearQueue();
+  }
+
   private send(subs: DxSub[], action: 'add' | 'remove'): void {
-    for (const frame of buildSubscribeFrames(this.o.channel, subs, action)) this.o.send(frame);
+    if (subs.length === 0) return;
+    this.queue.push(...buildSubscribeFrames(this.o.channel, subs, action));
+    this.drain();
+  }
+
+  private drain(): void {
+    if (this.drainTimer != null) return;
+    const frame = this.queue.shift();
+    if (frame == null) return;
+    this.o.send(frame);
+    this.drainTimer = setTimeout(() => {
+      this.drainTimer = null;
+      this.drain();
+    }, SUBSCRIBE_FRAME_INTERVAL_MS);
+  }
+
+  private clearQueue(): void {
+    this.queue = [];
+    if (this.drainTimer != null) clearTimeout(this.drainTimer);
+    this.drainTimer = null;
   }
 }
 
@@ -98,6 +140,7 @@ export interface DxLinkClientOptions {
   onData: (events: DxEvent[]) => void;
   desiredSubs: () => DxSub[];
   onAuthError?: (() => void) | undefined;
+  onSubscriptionRejected?: ((detail: string) => void) | undefined;
 }
 
 const CHANNEL = 3;
@@ -116,6 +159,7 @@ export class DxLinkClient {
       onData: this.o.onData,
       desiredSubs: this.o.desiredSubs,
       onAuthError: this.o.onAuthError,
+      onSubscriptionRejected: this.o.onSubscriptionRejected,
     });
     this.proto = proto;
 
@@ -147,7 +191,12 @@ export class DxLinkClient {
     this.proto?.unsubscribe(subs);
   }
 
+  resubscribeAll(): void {
+    this.proto?.resubscribeAll();
+  }
+
   async disconnect(): Promise<void> {
+    this.proto?.dispose();
     await this.ws?.disconnect();
     this.ws = null;
     this.proto = null;

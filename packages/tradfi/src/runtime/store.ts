@@ -34,23 +34,48 @@ export interface UnderlyingSession {
   ts: number;
 }
 
+const EMPTY_CHAIN: readonly TradfiInstrument[] = [];
+
+const chainKey = (underlying: string, expiry: string) => `${underlying}|${expiry}`;
+
 export class TradfiStore {
   private quotes = new Map<string, TradfiLiveQuote>();
   private instruments = new Map<string, TradfiInstrument>();
+  // The catalog holds ~400k instruments; every chain lookup goes through these indexes.
+  private byChain = new Map<string, TradfiInstrument[]>();
+  private expiriesByUnderlying = new Map<string, string[]>();
+  private underlyings: string[] = [];
   private spot = new Map<string, number>();
   private sessions = new Map<string, UnderlyingSession>();
 
   setInstruments(insts: TradfiInstrument[]): void {
     this.instruments.clear();
-    for (const i of insts) this.instruments.set(i.streamerSymbol, i);
+    this.byChain.clear();
+    const expiries = new Map<string, Set<string>>();
+    for (const i of insts) {
+      this.instruments.set(i.streamerSymbol, i);
+      const key = chainKey(i.underlying, i.expiry);
+      const chain = this.byChain.get(key);
+      if (chain) chain.push(i);
+      else this.byChain.set(key, [i]);
+      const set = expiries.get(i.underlying) ?? new Set<string>();
+      set.add(i.expiry);
+      expiries.set(i.underlying, set);
+    }
+    this.expiriesByUnderlying = new Map([...expiries].map(([u, set]) => [u, [...set].sort()]));
+    this.underlyings = [...expiries.keys()].sort();
   }
 
   allInstruments(): TradfiInstrument[] {
     return [...this.instruments.values()];
   }
 
-  instrumentsFor(underlying: string, expiry: string): TradfiInstrument[] {
-    return this.allInstruments().filter((i) => i.underlying === underlying && i.expiry === expiry);
+  instrumentCount(): number {
+    return this.instruments.size;
+  }
+
+  instrumentsFor(underlying: string, expiry: string): readonly TradfiInstrument[] {
+    return this.byChain.get(chainKey(underlying, expiry)) ?? EMPTY_CHAIN;
   }
 
   getInstrument(streamerSymbol: string): TradfiInstrument | undefined {
@@ -58,13 +83,15 @@ export class TradfiStore {
   }
 
   listUnderlyings(): string[] {
-    return [...new Set(this.allInstruments().map((i) => i.underlying))].sort();
+    return [...this.underlyings];
+  }
+
+  underlyingCount(): number {
+    return this.underlyings.length;
   }
 
   listExpiries(underlying: string): string[] {
-    const set = new Set<string>();
-    for (const i of this.allInstruments()) if (i.underlying === underlying) set.add(i.expiry);
-    return [...set].sort();
+    return [...(this.expiriesByUnderlying.get(underlying) ?? [])];
   }
 
   mergeQuote(streamerSymbol: string, patch: Partial<TradfiLiveQuote> & { ts: number }): void {
@@ -74,6 +101,15 @@ export class TradfiStore {
 
   getQuote(streamerSymbol: string): TradfiLiveQuote | undefined {
     return this.quotes.get(streamerSymbol);
+  }
+
+  /** Null out fields whose stream was dropped, so frozen values don't pass as live. */
+  clearQuoteFields(streamerSymbol: string, fields: readonly (keyof Omit<TradfiLiveQuote, 'ts'>)[]): void {
+    const prev = this.quotes.get(streamerSymbol);
+    if (prev == null) return;
+    const next = { ...prev };
+    for (const f of fields) next[f] = null;
+    this.quotes.set(streamerSymbol, next);
   }
 
   /** True if any instrument in this chain has received at least one quote. */

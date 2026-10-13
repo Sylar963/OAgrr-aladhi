@@ -108,7 +108,7 @@ export class TradfiIvRecorder {
       }
       if (!this.warmSince.has(underlying)) this.warmSince.set(underlying, now);
       for (const expiry of this.selectedExpiries(underlying, now)) {
-        this.deps.feed.ensureChainSubscribed(underlying, expiry);
+        this.deps.feed.ensureChainSubscribed(underlying, expiry, 'surface');
       }
     }
   }

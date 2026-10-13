@@ -33,7 +33,9 @@ async function main() {
   const auth = new OAuth2TokenManager(cfg);
   const rest = new TastytradeRest({ baseUrl: cfg.baseUrl, userAgent: cfg.userAgent }, auth);
   const store = new TradfiStore();
-  const feed = new TradfiFeed(rest, store, cfg.underlyings);
+  const feed = new TradfiFeed(rest, store, cfg.underlyings, undefined, {
+    maxSubscriptions: cfg.dxlinkMaxSubscriptions,
+  });
   feed.watchQuotes(sectorSymbols());
 
   const candleClient = new CandleClient({

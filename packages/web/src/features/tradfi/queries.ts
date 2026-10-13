@@ -45,7 +45,8 @@ export function useTradfiExpiries(underlying: string) {
     queryFn: () => tradfiFetchJson<TradfiExpiriesResponse>(`/expiries?underlying=${underlying}`),
     enabled: Boolean(underlying),
     staleTime: 30_000,
-    placeholderData: (prev: TradfiExpiriesResponse | undefined) => prev,
+    placeholderData: (prev: TradfiExpiriesResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }
 

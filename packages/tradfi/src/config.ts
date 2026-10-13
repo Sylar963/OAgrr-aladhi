@@ -10,6 +10,8 @@ export interface TradfiConfig {
   databaseUrl: string | null;
   ivHistoryUnderlyings: string[];
   ivHistoryCachePath: string;
+  /** Cap on DXLink event subscriptions; the account rejects sets past ~100k. */
+  dxlinkMaxSubscriptions: number | undefined;
 }
 
 const DEFAULT_UNDERLYINGS = ['SPX', 'NDX', 'SPY', 'QQQ', 'AAPL', 'NVDA', 'TSLA'];
@@ -24,6 +26,14 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
     throw new Error(`Missing required env var: ${key}`);
   }
   return value;
+}
+
+function positiveInt(env: NodeJS.ProcessEnv, key: string): number | undefined {
+  const raw = env[key]?.trim();
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`Invalid ${key}: ${raw}`);
+  return n;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): TradfiConfig {
@@ -47,5 +57,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): TradfiConfig {
       (u) => underlyings.includes(u),
     ),
     ivHistoryCachePath: env.TRADFI_IV_HISTORY_CACHE_PATH ?? '.cache/iv-history-points.ndjson',
+    dxlinkMaxSubscriptions: positiveInt(env, 'TRADFI_DXLINK_MAX_SUBS'),
   };
 }

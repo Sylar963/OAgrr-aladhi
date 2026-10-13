@@ -17,6 +17,32 @@ describe('tradfiFetchJson', () => {
     expect(((fetchMock.mock.calls as unknown as [string[]])[0]![0])).toContain('/underlyings');
   });
 
+  it('retries a warming-up 503 until the service is ready', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ error: 'catalog not loaded' }) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: 1 }) });
+      vi.stubGlobal('fetch', fetchMock);
+      const pending = tradfiFetchJson<{ ok: number }>('/surface?underlying=SPY');
+      await vi.advanceTimersByTimeAsync(1500);
+      expect((await pending).ok).toBe(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails fast on a 503 that is not a warm-up state', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false, status: 503, json: async () => ({ error: 'no market data yet' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(tradfiFetchJson('/chains?underlying=SPY&expiry=2026-10-16')).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('throws on non-ok', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, statusText: 'err' })));
     await expect(tradfiFetchJson('/chains')).rejects.toThrow(/500/);

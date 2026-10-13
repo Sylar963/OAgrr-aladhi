@@ -52,7 +52,7 @@ function quoteMark(q: TradfiLiveQuote): number | null {
 // Returns null when no usable ATM pair exists so the caller falls back to spot
 // (which yields basis 0 — the prior behavior, now confined to warming chains).
 function deriveForward(
-  insts: TradfiInstrument[],
+  insts: readonly TradfiInstrument[],
   store: TradfiStore,
   spot: number | null,
 ): number | null {

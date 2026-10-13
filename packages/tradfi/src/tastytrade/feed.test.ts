@@ -183,6 +183,151 @@ describe('TradfiFeed (REST)', () => {
   });
 });
 
+function wideRest(strikes: number[], expiries = ['2026-12-18']) {
+  const rest = stubRest();
+  rest.getNestedChain = vi.fn(async (symbol: string) => ({
+    items: [{
+      'underlying-symbol': symbol, 'root-symbol': symbol, 'shares-per-contract': 100,
+      expirations: expiries.map((exp) => ({
+        'expiration-date': exp, 'settlement-type': 'Physical',
+        strikes: strikes.map((k) => ({
+          'strike-price': `${k}.0`,
+          call: `${symbol}${exp}C${k}`, put: `${symbol}${exp}P${k}`,
+          'call-streamer-symbol': `.${symbol}${exp}C${k}`, 'put-streamer-symbol': `.${symbol}${exp}P${k}`,
+        })),
+      })),
+    }],
+  }));
+  rest.getQuoteToken = vi.fn(async () => ({ token: 'QT', dxlinkUrl: 'wss://x', expiresAt: null }));
+  return rest;
+}
+
+async function streamingFeed(rest: ReturnType<typeof stubRest>, opts: { maxSubscriptions?: number } = {}) {
+  const store = new TradfiStore();
+  const { fakeDx } = fakeDxFactory();
+  let rejected: (detail: string) => void = () => {};
+  const factory = (o: { onSubscriptionRejected: (d: string) => void }) => {
+    rejected = o.onSubscriptionRejected;
+    return fakeDx as never;
+  };
+  const feed = new TradfiFeed(rest as never, store, ['SPX'], factory as never, opts);
+  await feed.loadMarkets();
+  await feed.startStreaming();
+  store.setSpot('SPX', 6500);
+  return { feed, store, fakeDx, reject: (d: string) => rejected(d) };
+}
+
+const strikeRange = (from: number, to: number, step: number) =>
+  Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step);
+
+describe('TradfiFeed subscription tiers and budget', () => {
+  it('subscribes the surface tier as greeks on sampled strikes, and upgrades to full by diff', async () => {
+    const { feed, fakeDx } = await streamingFeed(wideRest(strikeRange(5000, 8000, 5)));
+
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'surface');
+    const surfaceSubs = fakeDx.subscribe.mock.calls[0]![0] as { type: string }[];
+    expect(new Set(surfaceSubs.map((s) => s.type))).toEqual(new Set(['Greeks']));
+    expect(surfaceSubs.length).toBeLessThanOrEqual(120);
+
+    fakeDx.subscribe.mockClear();
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'surface');
+    expect(fakeDx.subscribe).not.toHaveBeenCalled();
+
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'full');
+    const added = fakeDx.subscribe.mock.calls[0]![0] as { type: string; symbol: string }[];
+    expect(added).toHaveLength(601 * 2 * 4 - surfaceSubs.length);
+    expect(feed.subscriptionStats().subscriptions).toBe(3 + 601 * 2 * 4);
+    await feed.dispose();
+  });
+
+  it('drops an idle full tier back to the surface tier and clears its stale quote fields', async () => {
+    const strikes = strikeRange(5000, 8000, 5);
+    const { feed, store, fakeDx } = await streamingFeed(wideRest(strikes));
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'full');
+    const t0 = Date.now();
+    const calls = strikes.map((k) => `.SPX2026-12-18C${k}`);
+    for (const sym of calls) store.mergeQuote(sym, { bid: 1, ask: 2, iv: 0.3, ts: t0 });
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'surface');
+    vi.spyOn(Date, 'now').mockReturnValue(t0 + 4 * 60_000);
+    feed.ensureChainSubscribed('SPX', '2026-12-18', 'surface');
+    vi.restoreAllMocks();
+
+    expect(feed.evictIdleChains(t0 + 6 * 60_000)).toBe(0);
+    expect(fakeDx.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(feed.subscriptionStats()).toMatchObject({ chains: 1 });
+    expect(feed.subscriptionStats().subscriptions).toBeLessThanOrEqual(3 + 120);
+    // Quotes stopped streaming everywhere; greeks survive only on the sampled strikes.
+    expect(calls.every((sym) => store.getQuote(sym)!.bid == null)).toBe(true);
+    const liveIv = calls.filter((sym) => store.getQuote(sym)!.iv != null).length;
+    expect(liveIv).toBeGreaterThan(0);
+    expect(liveIv).toBeLessThanOrEqual(60);
+    await feed.dispose();
+  });
+
+  it('defers a chain that does not fit while others are in use, then admits it once they idle', async () => {
+    const expiries = ['2026-12-18', '2027-01-15'];
+    const { feed, fakeDx } = await streamingFeed(wideRest(strikeRange(6000, 7000, 5), expiries), {
+      maxSubscriptions: 3 + 201 * 2 * 4,
+    });
+    feed.ensureChainSubscribed('SPX', expiries[0]!, 'full');
+    fakeDx.subscribe.mockClear();
+
+    feed.ensureChainSubscribed('SPX', expiries[1]!, 'full');
+    expect(fakeDx.subscribe).not.toHaveBeenCalled();
+    expect(feed.subscriptionStats().deferredChains).toBe(1);
+
+    // First chain idle past the active window but within its lease: evictable for room.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 2 * 60_000);
+    feed.ensureChainSubscribed('SPX', expiries[1]!, 'full');
+    vi.restoreAllMocks();
+    expect(fakeDx.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(fakeDx.subscribe).toHaveBeenCalledTimes(1);
+    expect(feed.subscriptionStats()).toMatchObject({ chains: 1, deferredChains: 0 });
+    await feed.dispose();
+  });
+
+  it('lowers the budget and resyncs when DXLink says the subscription set is too big', async () => {
+    vi.useFakeTimers();
+    try {
+      const { feed, fakeDx, reject } = await streamingFeed(wideRest(strikeRange(5000, 8000, 5)));
+      const resubscribeAll = vi.fn();
+      Object.assign(fakeDx, { resubscribeAll });
+      feed.ensureChainSubscribed('SPX', '2026-12-18', 'full');
+      const before = feed.subscriptionStats().subscriptions;
+
+      reject('Your subscription size is too big');
+      reject('Your subscription size is too big');
+      const stats = feed.subscriptionStats();
+      expect(stats.rejects).toBe(2);
+      expect(stats.budget).toBe(10_000);
+      expect(before).toBeLessThan(10_000);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(resubscribeAll).toHaveBeenCalledTimes(1);
+      await feed.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pauses the REST fallback after a 403 instead of retrying it on every request', async () => {
+    const store = new TradfiStore();
+    const rest = stubRest();
+    rest.getMarketData = vi.fn(async () => {
+      throw new Error('tastytrade GET /market-data/by-type -> 403 {}');
+    });
+    const feed = new TradfiFeed(rest as never, store, ['AAPL']);
+    await feed.loadMarkets();
+    expect(await feed.refreshChainQuotes('AAPL', '2026-04-17')).toBe(0);
+    expect(rest.getMarketData).toHaveBeenCalledTimes(1);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    expect(await feed.refreshChainQuotes('AAPL', '2026-04-17')).toBe(0);
+    vi.restoreAllMocks();
+    expect(rest.getMarketData).toHaveBeenCalledTimes(1);
+    await feed.dispose();
+  });
+});
+
 describe('computeQuoteTokenTtl', () => {
   const now = Date.parse('2026-06-15T00:00:00Z');
 

@@ -64,7 +64,7 @@ export class BlockTradeRuntime {
       this.venueState.set(stream.venue, createBlockVenueState('ws', null));
       stream.connect({
         onTrades: (trades) => {
-          this.recordPollResult(stream.venue, trades.length, null);
+          this.recordPollResult(stream.venue, trades.length);
           this.pushTrades(trades);
         },
         onConnected: () => {
@@ -134,8 +134,12 @@ export class BlockTradeRuntime {
   private async runPoller(poller: BlockVenuePoller, initial: boolean): Promise<void> {
     try {
       const trades = await poller.poll();
-      this.recordPollResult(poller.venue, trades.length, poller.limit ?? null);
-      this.pushTrades(trades);
+      const insertedCount = this.pushTrades(trades);
+      this.recordPollResult(poller.venue, trades.length, {
+        insertedCount,
+        limit: poller.limit ?? null,
+        initial,
+      });
     } catch (err) {
       this.updateVenueState(poller.venue, {
         errors: (this.venueState.get(poller.venue)?.errors ?? 0) + 1,
@@ -154,9 +158,22 @@ export class BlockTradeRuntime {
     this.venueState.set(venue, mergeBlockVenueState(current, patch));
   }
 
-  private recordPollResult(venue: VenueId, tradeCount: number, limit: number | null): void {
+  private recordPollResult(
+    venue: VenueId,
+    tradeCount: number,
+    poll: { insertedCount: number; limit: number | null; initial: boolean } | null = null,
+  ): void {
     const now = Date.now();
     const state = this.venueState.get(venue);
+    const limit = poll?.limit ?? null;
+    // Pollers re-fetch the newest `limit` rows every cycle, so a full page is normal. Trades
+    // can only have been skipped when a full page shares nothing with what earlier polls saw.
+    const possibleGap =
+      poll != null &&
+      !poll.initial &&
+      limit != null &&
+      tradeCount >= limit &&
+      poll.insertedCount >= tradeCount;
 
     this.updateVenueState(venue, {
       connected: true,
@@ -164,18 +181,18 @@ export class BlockTradeRuntime {
       lastStatusAt: now,
       lastPollCount: tradeCount,
       pollLimit: limit,
-      hitLimitCount:
-        limit != null && tradeCount >= limit
-          ? (state?.hitLimitCount ?? 0) + 1
-          : (state?.hitLimitCount ?? 0),
+      hitLimitCount: (state?.hitLimitCount ?? 0) + (possibleGap ? 1 : 0),
     });
 
-    if (limit != null && tradeCount >= limit) {
-      log.warn({ venue, count: tradeCount, limit }, 'block trade poll hit limit');
+    if (possibleGap) {
+      log.warn(
+        { venue, count: tradeCount, limit },
+        'block trade poll page had no overlap with the previous poll, trades may be missing',
+      );
     }
   }
 
-  private pushTrades(trades: BlockTradeEvent[]): void {
+  private pushTrades(trades: BlockTradeEvent[]): number {
     const { inserted, latestByVenue } = insertBlockTrades(
       this.buffer,
       this.seenTradeTimestamps,
@@ -199,6 +216,7 @@ export class BlockTradeRuntime {
         }
       }
     }
+    return inserted.length;
   }
 
   dispose(): void {

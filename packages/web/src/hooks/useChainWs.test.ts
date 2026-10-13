@@ -421,6 +421,52 @@ describe('useChainWs', () => {
     expect(hookResult.result.current.lastSeq).toBe(0);
   });
 
+  it('keeps backing off when the server closes sockets before sending data', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const { hookResult } = await renderAndConnect();
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    expect(MockWebSocket.instances).toHaveLength(2);
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(MockWebSocket.instances).toHaveLength(2);
+    await act(() => vi.advanceTimersByTimeAsync(600));
+    expect(MockWebSocket.instances).toHaveLength(3);
+
+    hookResult.unmount();
+  });
+
+  it('resets the backoff once a snapshot arrives', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const { hookResult } = await renderAndConnect();
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    const reconnected = getLastWs();
+    const subId = (JSON.parse(reconnected.sent[0]!) as Record<string, unknown>)[
+      'subscriptionId'
+    ] as string;
+    await act(() => {
+      reconnected.pushMessage(snapshot(subId, 1));
+    });
+
+    await act(() => {
+      reconnected.onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    expect(MockWebSocket.instances).toHaveLength(3);
+
+    hookResult.unmount();
+  });
+
   it('does not connect when disabled', async () => {
     renderHook(
       () =>

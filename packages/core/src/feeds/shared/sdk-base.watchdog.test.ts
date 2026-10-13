@@ -52,6 +52,37 @@ class WatchdogAdapter extends SdkBaseAdapter {
     this.emitQuoteUpdates([{ exchangeSymbol: 'BTC-X', quote: makeQuote() }]);
   }
 
+  addInstrument(): void {
+    const instrument: CachedInstrument = {
+      symbol: 'BTC/USD:USDT-260327-70000-C',
+      exchangeSymbol: 'BTC-X',
+      base: 'BTC',
+      quote: 'USDT',
+      settle: 'USDT',
+      expiry: '2026-03-27',
+      strike: 70_000,
+      right: 'call',
+      inverse: false,
+      contractSize: 1,
+      tickSize: 0.1,
+      minQty: 0.1,
+      makerFee: 0.0002,
+      takerFee: 0.0005,
+    };
+    this.instruments.push(instrument);
+    this.instrumentMap.set(instrument.exchangeSymbol, instrument);
+    this.symbolIndex.set(instrument.symbol, instrument.exchangeSymbol);
+  }
+
+  async liveBid(): Promise<number | null> {
+    const chain = await this.fetchOptionChain({
+      underlying: 'BTC',
+      expiry: '2026-03-27',
+      venues: ['okx'],
+    });
+    return Object.values(chain.contracts)[0]?.quote.bid.usd ?? null;
+  }
+
   check(): void {
     (this as unknown as { checkFeedLiveness(): void }).checkFeedLiveness();
   }
@@ -190,5 +221,48 @@ describe('SdkBaseAdapter quote-level watchdog', () => {
     adapter.check();
 
     expect(adapter.restarts).toBe(0);
+  });
+});
+
+describe('SdkBaseAdapter disconnected quote cutoff', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function adapterWithQuote(): WatchdogAdapter {
+    const { adapter } = setup();
+    adapter.addInstrument();
+    adapter.publishQuote();
+    return adapter;
+  }
+
+  it('keeps serving quotes through a short reconnect blip', async () => {
+    const adapter = adapterWithQuote();
+    adapter.snapshot = { connected: false, lastActivityAt: Date.now(), connectedAt: 0 };
+
+    vi.advanceTimersByTime(20_000);
+
+    expect(await adapter.liveBid()).not.toBeNull();
+  });
+
+  it('stops serving pre-drop quotes once the socket has been down past the grace', async () => {
+    const adapter = adapterWithQuote();
+    adapter.snapshot = { connected: false, lastActivityAt: Date.now(), connectedAt: 0 };
+
+    vi.advanceTimersByTime(31_000);
+
+    expect(await adapter.liveBid()).toBeNull();
+  });
+
+  it('serves quotes again after reconnecting', async () => {
+    const adapter = adapterWithQuote();
+    adapter.snapshot = { connected: false, lastActivityAt: Date.now(), connectedAt: 0 };
+    vi.advanceTimersByTime(31_000);
+
+    adapter.snapshot = { connected: true, lastActivityAt: Date.now(), connectedAt: Date.now() };
+
+    expect(await adapter.liveBid()).not.toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeParadexMarketSummarySbe } from './sbe.js';
+import { decodeParadexMarketSummarySbe, PARADEX_SBE_IGNORED } from './sbe.js';
 
 const OPTION_FRAME = Buffer.from(
   'f000040001000100686ed8ac055c06000000000000000000d5c69bb61400000039facffe2100000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000008000000000000000006067b6fffffffffffbdae40b00000000000000000000008000000000000000800000000000000080a1ceb90500000000b82600000000000008f5a40200000000f54b0ff8ffffffffb1cf6bfaffffffffc21e060000000000ed3e000000000000f026000000000000000000000000008000000000000000800000000000000080c04347000000000000000000000000000000000000000080155a45432d5553442d33304f435432362d3630302d43',
@@ -39,5 +39,12 @@ describe('decodeParadexMarketSummarySbe', () => {
 
     expect(decodeParadexMarketSummarySbe(heartbeat)).toBeNull();
     expect(decodeParadexMarketSummarySbe(OPTION_FRAME.subarray(0, 100))).toBeNull();
+  });
+
+  it('skips decoding frames for markets the caller does not track', () => {
+    expect(decodeParadexMarketSummarySbe(OPTION_FRAME, () => false)).toBe(PARADEX_SBE_IGNORED);
+    expect(decodeParadexMarketSummarySbe(OPTION_FRAME, () => true)).toMatchObject({
+      symbol: expect.any(String),
+    });
   });
 });

@@ -12,3 +12,9 @@ export function closeSocketQuietly(socket: WebSocket): void {
   socket.on('error', ignoreSocketError);
   socket.close();
 }
+
+/** Strip the query string before logging: signed venues (Coincall) carry the API key and signature there. */
+export function redactWsUrl(url: string): string {
+  const queryAt = url.indexOf('?');
+  return queryAt < 0 ? url : `${url.slice(0, queryAt)}?<redacted>`;
+}

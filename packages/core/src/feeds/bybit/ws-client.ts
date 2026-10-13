@@ -528,6 +528,12 @@ export class BybitWsAdapter extends SdkBaseAdapter {
     for (const client of this.shardClients) client.terminate();
   }
 
+  // The snapshot reports disconnected when any one shard is down, and quotes are not tracked per
+  // shard, so cutting by it would also blank quiet strikes served by healthy shards.
+  protected override disconnectedQuoteCutoff(): number {
+    return 0;
+  }
+
   private sweepExpiredState(): void {
     const removed = this.sweepExpiredInstruments();
     if (removed.length === 0) return;

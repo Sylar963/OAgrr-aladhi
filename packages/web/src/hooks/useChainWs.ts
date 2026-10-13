@@ -323,6 +323,9 @@ export function useChainWs({
 
       switch (msg.type) {
         case 'snapshot': {
+          // The server can accept the socket and close it straight away (not ready, slow client),
+          // so only a delivered snapshot proves the connection and resets the backoff.
+          attemptRef.current = 0;
           const serverKey = chainKeys.chain(
             msg.request.underlying,
             msg.request.expiry,
@@ -435,7 +438,6 @@ export function useChainWs({
     store.set({ connectionState: 'connecting' });
 
     ws.onopen = () => {
-      attemptRef.current = 0;
       sendSubscribe(ws);
     };
 

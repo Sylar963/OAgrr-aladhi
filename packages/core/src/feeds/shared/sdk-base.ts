@@ -38,6 +38,9 @@ const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 // runtime's STALE_AFTER_MS, the point where the UI already shows the venue as stale.
 const DEFAULT_QUOTE_STALENESS_THRESHOLD_MS = 3 * 60 * 1000;
 const DEFAULT_QUOTE_FRESHNESS_MS = 5 * 60 * 1000;
+// A reconnect blip should not blank the chain, but a socket that stays down must not keep
+// serving its last quotes as live for the full freshness window.
+const DISCONNECTED_QUOTE_GRACE_MS = 30_000;
 const SURFACE_COVERAGE_REFRESH_MS = 10 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_EXPIRY_HOUR_UTC = 8;
@@ -380,9 +383,10 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const matching = this.matchingInstruments(request.underlying, request.expiry);
     const contracts: Record<string, NormalizedOptionContract> = {};
     const now = Date.now();
+    const staleAtOrBefore = this.disconnectedQuoteCutoff(now);
 
     for (const inst of matching) {
-      const quote = this.freshQuote(inst.exchangeSymbol, now);
+      const quote = this.freshQuote(inst.exchangeSymbol, now, staleAtOrBefore);
       contracts[inst.symbol] = this.buildContract(inst, quote ?? null);
     }
 
@@ -723,11 +727,23 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     return this.requestRefCounts.size > 0 || this.pinnedChainKeys.size > 0 || this.eagerExpiryCount > 0;
   }
 
-  private freshQuote(exchangeSymbol: string, now: number): LiveQuote | null {
+  private freshQuote(exchangeSymbol: string, now: number, staleAtOrBefore: number): LiveQuote | null {
     const quote = this.quoteStore.get(exchangeSymbol);
     if (quote == null) return null;
     if (quote.timestamp <= 0 || now - quote.timestamp > this.quoteFreshnessMs) return null;
+    if (quote.timestamp <= staleAtOrBefore) return null;
     return quote;
+  }
+
+  /**
+   * Quotes timestamped at or before the returned instant are treated as stale; 0 disables the cut.
+   * The last inbound frame of a dead socket approximates when it dropped.
+   */
+  protected disconnectedQuoteCutoff(now: number): number {
+    const snapshot = this.getFeedConnectionSnapshot();
+    if (snapshot == null || snapshot.connected || snapshot.lastActivityAt <= 0) return 0;
+    if (now - snapshot.lastActivityAt < DISCONNECTED_QUOTE_GRACE_MS) return 0;
+    return snapshot.lastActivityAt;
   }
 
   protected buildContract(

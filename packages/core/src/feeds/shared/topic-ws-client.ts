@@ -2,15 +2,15 @@ import type pino from 'pino';
 import WebSocket from 'ws';
 import { logger } from '../../utils/logger.js';
 import { backoffDelay } from '../../utils/reconnect.js';
-import { closeSocketQuietly } from '../../utils/ws.js';
+import { closeSocketQuietly, redactWsUrl } from '../../utils/ws.js';
 
 const RETRY_AFTER_MAX_ATTEMPTS_MS = 60_000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
-// Resetting the backoff on bare `open` let a socket that opens and immediately drops
-// reconnect every ~1s forever. The attempt counter only resets once a session survives this long.
+// Resetting the backoff on bare `open` would let a socket that opens and immediately drops
+// reconnect every ~1s forever, so the attempt counter only resets once a session survives this long.
 const DEFAULT_STABLE_SESSION_MS = 60_000;
 const MAX_IDLE_CHECK_INTERVAL_MS = 15_000;
 
@@ -146,7 +146,7 @@ export class TopicWsClient {
         this.connectedAt = Date.now();
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
-        this.log.info({ url }, 'ws connected');
+        this.log.info({ url: redactWsUrl(url) }, 'ws connected');
         this.startStableSessionTimer();
         this.startIdleWatch(socket);
         this.startPing();

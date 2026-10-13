@@ -2,7 +2,7 @@ import type pino from 'pino';
 import WebSocket from 'ws';
 import { logger } from '../../utils/logger.js';
 import { backoffDelay, flapBackoffDelay } from '../../utils/reconnect.js';
-import { closeSocketQuietly } from '../../utils/ws.js';
+import { closeSocketQuietly, redactWsUrl } from '../../utils/ws.js';
 
 /**
  * Shared JSON-RPC 2.0 over WebSocket base for Deribit and Derive.
@@ -151,7 +151,7 @@ export class JsonRpcWsClient {
       const timeoutMs = this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
       const handshakeTimer = setTimeout(() => {
         if (settled) return;
-        this.log.warn({ url: this.url, timeoutMs }, 'ws handshake timeout, terminating');
+        this.log.warn({ url: redactWsUrl(this.url), timeoutMs }, 'ws handshake timeout, terminating');
         socket.terminate();
         rejectConnect(new Error(`[${this.label}] handshake timeout after ${timeoutMs}ms`));
       }, timeoutMs);
@@ -163,7 +163,7 @@ export class JsonRpcWsClient {
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
         this.rateLimitFirstHitAt = 0;
-        this.log.info({ url: this.url }, 'ws connected');
+        this.log.info({ url: redactWsUrl(this.url) }, 'ws connected');
         // Note: reconnectAttempts is intentionally NOT reset here. A bare TCP+WS
         // upgrade isn't proof of a working session — resubscribe can still fail
         // immediately. We only reset after a roundtripped subscribe RPC (see

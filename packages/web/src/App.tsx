@@ -28,6 +28,9 @@ const TradingView = lazy(() =>
   import('@features/trading').then((m) => ({ default: m.TradingView })),
 );
 const AlphaView = lazy(() => import('@features/alpha').then((m) => ({ default: m.AlphaView })));
+const SectorsView = lazy(() =>
+  import('@features/sectors').then((m) => ({ default: m.SectorsView })),
+);
 const NewsView = lazy(() => import('@features/news').then((m) => ({ default: m.NewsView })));
 const SocialView = lazy(() => import('@features/social').then((m) => ({ default: m.SocialView })));
 const PortfolioView = lazy(() =>
@@ -94,6 +97,7 @@ export default function App() {
             )}
             {activeTab === 'surface' && <SurfaceView />}
             {activeTab === 'flow' && <FlowView />}
+            {activeTab === 'sectors' && <SectorsView />}
             {activeTab === 'analytics' && <AnalyticsView />}
             {activeTab === 'gex' && <GexView />}
             {activeTab === 'news' && <NewsView />}

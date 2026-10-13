@@ -1,0 +1,54 @@
+import { CryptoSectorsResponseSchema } from '@oggregator/protocol';
+import Fastify from 'fastify';
+import { describe, expect, it, vi } from 'vitest';
+
+const { getSnapshot } = vi.hoisted(() => ({ getSnapshot: vi.fn() }));
+
+vi.mock('@oggregator/core', () => ({
+  getAllAdapters: vi.fn(() => [
+    { venue: 'deribit', listUnderlyings: vi.fn(async () => ['BTC', 'ETH']) },
+    { venue: 'paradex', listUnderlyings: vi.fn(async () => ['BTC', 'XAU']) },
+  ]),
+}));
+vi.mock('../services.js', () => ({ perpTickerService: { getSnapshot } }));
+
+import { sectorsRoute } from './sectors.js';
+
+async function buildApp() {
+  const app = Fastify({ logger: false });
+  await app.register(sectorsRoute);
+  await app.ready();
+  return app;
+}
+
+describe('GET /sectors', () => {
+  it('returns 503 until Bybit tickers have loaded once', async () => {
+    getSnapshot.mockRejectedValueOnce(new Error('HTTP 503'));
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/sectors' });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('serves a schema-valid board with RWA priced from Bybit', async () => {
+    getSnapshot.mockResolvedValueOnce({
+      fetchedAt: 1,
+      tickers: new Map([
+        ['BTCUSDT', { symbol: 'BTCUSDT', lastPrice: 70_000, change24hPct: 0.01 }],
+        ['XAUUSDT', { symbol: 'XAUUSDT', lastPrice: 4_180, change24hPct: 0.004 }],
+      ]),
+    });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/sectors' });
+    expect(res.statusCode).toBe(200);
+    const body = CryptoSectorsResponseSchema.parse(res.json());
+    expect(body.venueCount).toBe(2);
+    const rwa = body.baskets.find((b) => b.id === 'rwa')!;
+    expect(rwa.members[0]).toMatchObject({ symbol: 'XAU', last: 4_180, optionVenues: ['paradex'] });
+    expect(body.baskets.find((b) => b.id === 'majors')!.members[0]!.optionVenues).toEqual([
+      'deribit',
+      'paradex',
+    ]);
+    await app.close();
+  });
+});

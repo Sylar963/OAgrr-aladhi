@@ -26,6 +26,7 @@ import { paperRoutes, paperWsRoute } from './paper/index.js';
 import { portfolioRoutes, portfolioWsRoute } from './portfolio/index.js';
 import { regimeRoute } from './regime.js';
 import { socialRoutes, socialWsRoute } from './social/index.js';
+import { sectorsRoute } from './sectors.js';
 import { spotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
 import { statsRoute } from './stats.js';
@@ -66,6 +67,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(alphaShortStraddleEvaluationRoute, { prefix: '/api' });
   app.register(alphaStraddleScannerRoute, { prefix: '/api' });
   app.register(underlyingsRoute, { prefix: '/api' });
+  app.register(sectorsRoute, { prefix: '/api' });
   app.register(expiriesRoute, { prefix: '/api' });
   app.register(chainsRoute, { prefix: '/api' });
   app.register(gexAllExpiriesRoute, { prefix: '/api' });

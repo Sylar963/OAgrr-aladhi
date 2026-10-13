@@ -53,6 +53,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
     'social',
     'analytics',
     'news',
+    'sectors',
   ]);
   const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
 

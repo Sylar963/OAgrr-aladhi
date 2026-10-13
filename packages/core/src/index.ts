@@ -150,6 +150,10 @@ export {
   type SpotRuntimeOptions,
   type SpotRuntimeSnapshotEvent,
   type SpotSnapshot,
+  type PerpTicker,
+  PerpTickerRuntime,
+  type PerpTickerRuntimeOptions,
+  type PerpTickerSnapshot,
 } from './runtime/spot/index.js';
 
 export {

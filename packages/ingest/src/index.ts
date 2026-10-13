@@ -58,7 +58,6 @@ const UNDERLYINGS = [
   // Gate.io has options for these (+ Binance USDT spot for USD reference).
   'LTC',
   'ADA',
-  'TON',
   'SUI',
   'XAUT',
   // Coincall-listed altcoins with Binance USDT spot for USD reference.
@@ -87,7 +86,6 @@ const SPOT_SYMBOLS = [
   'HYPEUSDT',
   'LTCUSDT',
   'ADAUSDT',
-  'TONUSDT',
   'SUIUSDT',
   'XAUTUSDT',
   'AAVEUSDT',

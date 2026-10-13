@@ -9,7 +9,8 @@ export type TabId =
   | 'flow'
   | 'analytics'
   | 'gex'
-  | 'news';
+  | 'news'
+  | 'sectors';
 
 export type TabGroup = 'market' | 'trade' | 'research';
 
@@ -29,6 +30,7 @@ export const TABS: readonly TabDef[] = [
   { id: 'surface', label: 'Volatility', slug: 'volatility', icon: '◈', group: 'market' },
   { id: 'gex', label: 'GEX', slug: 'gex', icon: '▧', group: 'market' },
   { id: 'flow', label: 'Flow', slug: 'flow', icon: '⚡', group: 'market', badge: 'LIVE' },
+  { id: 'sectors', label: 'Sectors', slug: 'sectors', icon: '▦', group: 'market', badge: 'NEW' },
   { id: 'architect', label: 'Builder', slug: 'builder', icon: '⚙', group: 'trade' },
   { id: 'trading', label: 'Paper', slug: 'paper', icon: '$', group: 'trade' },
   { id: 'portfolio', label: 'Portfolio', slug: 'portfolio', icon: 'Σ', group: 'trade', badge: 'NEW' },

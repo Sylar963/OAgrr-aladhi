@@ -15,6 +15,7 @@ import {
   RegimeService,
   SpotCandleService,
   type SpotCandleCurrency,
+  PerpTickerRuntime,
   SpotRuntime,
   TradeRuntime,
   type VenueId,
@@ -90,6 +91,7 @@ import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.
 
 export const dvolService = new DvolService();
 export const spotService = new SpotRuntime();
+export const perpTickerService = new PerpTickerRuntime();
 export const spotCandleService = new SpotCandleService();
 // Rolling mark + trade buffer for venues with no REST mark-history endpoint
 // (Derive). Fed by every adapter's quote recorder and by TradeRuntime, queried
@@ -557,7 +559,6 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
         'HYPEUSDT',
         'LTCUSDT',
         'ADAUSDT',
-        'TONUSDT',
         'SUIUSDT',
         'XAUTUSDT',
         'AAVEUSDT',

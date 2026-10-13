@@ -408,6 +408,14 @@ export {
   UpdateSocialProfileRequestSchema,
 } from './social.js';
 export {
+  type CryptoSectorBasket,
+  CryptoSectorBasketSchema,
+  type CryptoSectorQuote,
+  CryptoSectorQuoteSchema,
+  type CryptoSectorsResponse,
+  CryptoSectorsResponseSchema,
+} from './crypto-sectors.js';
+export {
   type TradfiSectorBasket,
   TradfiSectorBasketSchema,
   type TradfiSectorQuote,

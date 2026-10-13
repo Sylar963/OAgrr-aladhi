@@ -271,6 +271,39 @@ describe('VenueSubscriptionCoordinator', () => {
     await second.release();
   });
 
+  it('delivers each delta once when several requests share a venue', async () => {
+    const adapter = new MockAdapter();
+    const coordinator = createCoordinator(adapter);
+    const btcDeltas = vi.fn<(deltas: VenueDelta[]) => void>();
+    const ethDeltas = vi.fn<(deltas: VenueDelta[]) => void>();
+
+    const first = await coordinator.acquire(
+      'deribit',
+      { underlying: 'BTC', expiry: '2026-01-01' },
+      { onDelta: btcDeltas },
+    );
+    const second = await coordinator.acquire(
+      'deribit',
+      { underlying: 'ETH', expiry: '2026-01-01' },
+      { onDelta: ethDeltas },
+    );
+
+    // Mirror SdkBaseAdapter: fan out once per distinct registered handler object.
+    const delta: VenueDelta = {
+      venue: 'deribit',
+      symbol: 'BTC/USD:BTC-260101-70000-C',
+      ts: 1,
+    } as VenueDelta;
+    for (const handlers of new Set(adapter.handlers)) handlers.onDelta([delta]);
+
+    expect(new Set(adapter.handlers).size).toBe(1);
+    expect(btcDeltas).toHaveBeenCalledTimes(1);
+    expect(ethDeltas).not.toHaveBeenCalled();
+
+    await first.release();
+    await second.release();
+  });
+
   it('keeps notifying other listeners when one listener throws', async () => {
     const adapter = new MockAdapter();
     const coordinator = createCoordinator(adapter);

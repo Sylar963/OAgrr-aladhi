@@ -13,13 +13,19 @@ import {
   type VenueSubscriptionListener,
 } from '../../core/subscription-coordinator.js';
 import type { VenueId } from '../../types/common.js';
+import type { DeltaDiffPatch } from '@oggregator/protocol';
 import { ChainProjection } from './projection.js';
 import { VenueHealthManager } from './health.js';
+import { diffEnrichedStrikes } from './strike-diff.js';
 
 const PUSH_INTERVAL_MS = 500;
 const MAX_PENDING_DELTAS = 5_000;
 const GEX_DELTA_MIN_INTERVAL_MS = 2_000;
 const MISSED_SYMBOL_REBUILD_MIN_INTERVAL_MS = 10_000;
+// One venue's subscribe round-trip can take up to the JSON-RPC request timeout (30s). The first
+// snapshot goes out after this long with whatever venues are ready; stragglers join via a rebuild.
+const INITIAL_SNAPSHOT_MAX_WAIT_MS = 1_500;
+const LATE_VENUE_REBUILD_DELAY_MS = 250;
 
 interface FailedVenue {
   venue: VenueId;
@@ -56,6 +62,11 @@ export interface ChainRuntimeDeltaEvent {
     strikes: EnrichedChainResponse['strikes'];
     gex?: EnrichedChainResponse['gex'];
   };
+  /**
+   * The same change as field-level diffs against the previous snapshot. Computed on first call
+   * and memoized, so every consumer of one event shares (and serializes) a single object.
+   */
+  diffPatch(): DeltaDiffPatch;
 }
 
 export interface ChainRuntimeStatusEvent {
@@ -145,6 +156,8 @@ export class ChainRuntime {
   private lastGexComputedAt = 0;
   private lastSnapshotBuiltAt = 0;
   private resumeBuild: Promise<void> | null = null;
+  private initialSnapshotBuilt = false;
+  private lateVenueRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly key: string,
@@ -246,6 +259,10 @@ export class ChainRuntime {
       clearInterval(this.pushTimer);
       this.pushTimer = null;
     }
+    if (this.lateVenueRebuildTimer != null) {
+      clearTimeout(this.lateVenueRebuildTimer);
+      this.lateVenueRebuildTimer = null;
+    }
 
     const handles = this.handles.splice(0, this.handles.length);
     await Promise.allSettled(handles.map(async (handle) => handle.release()));
@@ -271,45 +288,70 @@ export class ChainRuntime {
     // coordinator's per-venue operation queue still serializes against any
     // single venue (different runtimes acquiring the same venue), so this
     // does not slam an upstream socket.
-    const acquired = await Promise.allSettled(
+    const acquisitions = Promise.allSettled(
       liveVenues.map((venueId) =>
-        this.coordinator.acquire(
-          venueId,
-          { underlying: this.request.underlying, expiry: this.request.expiry },
-          this.venueListener,
-        ),
+        this.coordinator
+          .acquire(
+            venueId,
+            { underlying: this.request.underlying, expiry: this.request.expiry },
+            this.venueListener,
+          )
+          .then(
+            (handle) => this.handleVenueAcquired(handle),
+            (error: unknown) => this.handleVenueAcquireFailed(venueId, error),
+          ),
       ),
     );
 
-    // Release anything that resolved after dispose() — same guarantee the
-    // sequential version provided.
-    if (this.disposed) {
-      await Promise.allSettled(
-        acquired
-          .filter(
-            (r): r is PromiseFulfilledResult<VenueSubscriptionHandle> =>
-              r.status === 'fulfilled',
-          )
-          .map(async (r) => r.value.release()),
-      );
-      return;
-    }
-
-    acquired.forEach((result, idx) => {
-      const venueId = liveVenues[idx]!;
-      if (result.status === 'fulfilled') {
-        this.handles.push(result.value);
-      } else {
-        const reason =
-          result.reason instanceof Error ? result.reason.message : String(result.reason);
-        this.failedVenues.push({ venue: venueId, reason });
-        this.log.warn({ venue: venueId, err: reason }, 'venue subscribe failed');
-      }
+    let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+    const deadline = new Promise<void>((resolve) => {
+      deadlineTimer = setTimeout(resolve, INITIAL_SNAPSHOT_MAX_WAIT_MS);
     });
+    await Promise.race([acquisitions, deadline]);
+    if (deadlineTimer != null) clearTimeout(deadlineTimer);
+    if (this.disposed) return;
 
+    this.initialSnapshotBuilt = true;
     await this.buildSnapshot();
     // Re-projection starts only when a listener subscribes (ensurePushTimer);
     // an engine with no consumers stays idle instead of looping every 100ms.
+  }
+
+  private handleVenueAcquired(handle: VenueSubscriptionHandle): void {
+    // A handle that resolves after dispose() must still be released.
+    if (this.disposed) {
+      void handle.release();
+      return;
+    }
+    this.handles.push(handle);
+    if (this.initialSnapshotBuilt) this.scheduleLateVenueRebuild();
+  }
+
+  private handleVenueAcquireFailed(venueId: VenueId, error: unknown): void {
+    const reason = error instanceof Error ? error.message : String(error);
+    this.failedVenues.push({ venue: venueId, reason });
+    this.log.warn({ venue: venueId, err: reason }, 'venue subscribe failed');
+    if (!this.initialSnapshotBuilt || this.disposed) return;
+    // Sessions opened before this failure already sent their failedVenues list.
+    const effective = this.venueHealth.ingest({
+      venue: venueId,
+      state: 'down',
+      ts: Date.now(),
+      message: reason,
+    });
+    if (effective != null) this.broadcast({ type: 'status', status: effective });
+  }
+
+  private scheduleLateVenueRebuild(): void {
+    if (this.lateVenueRebuildTimer != null || this.disposed) return;
+    this.lateVenueRebuildTimer = setTimeout(() => {
+      this.lateVenueRebuildTimer = null;
+      if (this.disposed) return;
+      this.lastSnapshotBuiltAt = Date.now();
+      void this.buildSnapshot().catch((error: unknown) => {
+        this.log.warn({ err: String(error) }, 'snapshot rebuild failed');
+      });
+    }, LATE_VENUE_REBUILD_DELAY_MS);
   }
 
   private ensurePushTimer(): void {
@@ -436,6 +478,8 @@ export class ChainRuntime {
 
     this.seq += 1;
     const snapshot = this.currentSnapshot;
+    const previousStrikes = snapshot?.data.strikes;
+    let diffPatch: DeltaDiffPatch | null = null;
     const event: ChainRuntimeDeltaEvent = {
       type: 'delta',
       seq: this.seq,
@@ -443,6 +487,14 @@ export class ChainRuntime {
       meta: patch.meta,
       deltas: patch.deltas,
       patch: patch.patch,
+      diffPatch: () => {
+        diffPatch ??= {
+          stats: patch.patch.stats,
+          strikes: diffEnrichedStrikes(previousStrikes, patch.patch.strikes),
+          ...(patch.patch.gex != null ? { gex: patch.patch.gex } : {}),
+        };
+        return diffPatch;
+      },
     };
 
     this.currentSnapshot =

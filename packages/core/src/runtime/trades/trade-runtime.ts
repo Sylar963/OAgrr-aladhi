@@ -23,33 +23,31 @@ import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
 import { toGateioRestBase } from '../../feeds/gateio/aliases.js';
 import { GateioWsEnvelopeSchema, GateioWsTradeSchema } from '../../feeds/gateio/types.js';
 import { fetchParadexSummaryAll, fetchParadexTrades } from '../../feeds/paradex/rest.js';
+import { TopicWsClient } from '../../feeds/shared/topic-ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { startEventLoopLagMonitor } from '../../utils/event-loop-lag.js';
 import { feedLogger } from '../../utils/logger.js';
-import { backoffDelay } from '../../utils/reconnect.js';
+import { closeSocketQuietly } from '../../utils/ws.js';
 import { createTradeStreamState, mergeTradeStreamState } from './health.js';
 import { filterTradesByMinNotional, pushTradeEvents } from './retention.js';
 import type { TradeEvent, TradeRuntimeHealth, TradeStreamState, VenueStream } from './types.js';
 
 const log = feedLogger('trade-runtime');
 
-// Watchdog fires level:50 and force-closes a connection whose lastMessageAt
-// hasn't advanced within this window. With keepalives sending inbound pongs
-// every 20-180s per venue, a 5-minute gap is unambiguous zombie state.
+// Watchdog fires level:50 and force-closes a connection that has received no
+// frame at all (data, app pong, or WS ping/pong) within this window. Trade prints
+// are too sparse on quiet venues to serve as liveness; keepalive replies every
+// 20-180s per venue make a 5-minute transport gap unambiguous zombie state.
 const STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 30 * 1000;
 const WATCHDOG_TERMINATE_JITTER_MS = 5_000;
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
+const THALEX_TRADE_KEEPALIVE_MS = 30_000;
 const IDLE_UNDERLYING_TTL_MS = 30 * 1000;
 const SEED_PUSH_BATCH_SIZE = 250;
 
 function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-function isRateLimitSignal(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
 }
 
 function sharedConnectionKey(venue: VenueId): string {
@@ -62,11 +60,9 @@ function sharedConnectionKey(venue: VenueId): string {
  */
 export class TradeRuntime {
   private buffers = new Map<string, TradeEvent[]>();
-  private connections = new Map<string, WebSocket>();
+  private connections = new Map<string, TopicWsClient>();
   private keepaliveTimers = new Map<string, ReturnType<typeof setInterval>>();
-  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private watchdogTerminateTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private rateLimitCooldownUntil = new Map<string, number>();
   private reseedTimers = new Map<string, ReturnType<typeof setInterval>>();
   private subscribedUnderlyingsByConnection = new Map<string, Set<string>>();
   private activeUnderlyings = new Set<string>();
@@ -153,17 +149,20 @@ export class TradeRuntime {
 
         this.registerConnectionUnderlying(stream, normalizedUnderlying);
 
-        const ws = this.connections.get(connectionKey);
-        if (ws != null && ws.readyState === WebSocket.OPEN && alreadyRegistered) continue;
+        const client = this.connections.get(connectionKey);
+        if (client != null && client.isConnected && alreadyRegistered) continue;
 
-        if (ws != null && ws.readyState === WebSocket.CONNECTING) continue;
+        // Connecting or waiting out a reconnect backoff: the next open subscribes every
+        // registered underlying, including this one.
+        if (client != null && !client.isConnected) continue;
 
-        if (ws != null && ws.readyState === WebSocket.OPEN && stream.subscribe != null) {
-          stream.subscribe(ws, [normalizedUnderlying]);
+        const socket = client?.socket;
+        if (socket != null && stream.subscribe != null) {
+          stream.subscribe(socket, [normalizedUnderlying]);
           continue;
         }
 
-        if (ws != null) {
+        if (client != null) {
           this.restartConnection(stream, normalizedUnderlying);
           continue;
         }
@@ -306,35 +305,27 @@ export class TradeRuntime {
     if (!this.shouldReconnect) return;
     const now = Date.now();
 
-    for (const [connectionKey, ws] of this.connections) {
+    for (const [connectionKey, client] of this.connections) {
       const subscribedUnderlyings = this.subscribedUnderlyingsByConnection.get(connectionKey);
       if (subscribedUnderlyings == null || subscribedUnderlyings.size === 0) continue;
+      if (!client.isConnected) continue;
 
       const colonIdx = connectionKey.indexOf(':');
       if (colonIdx < 0) continue;
       const venue = connectionKey.slice(0, colonIdx) as VenueId;
 
-      let worstStaleMs = 0;
-      let worstUnderlying: string | null = null;
-      for (const underlying of subscribedUnderlyings) {
-        const state = this.streamState.get(this.streamKey(venue, underlying));
-        if (state == null || !state.connected || state.lastMessageAt == null) continue;
-        const staleMs = now - state.lastMessageAt;
-        if (staleMs > worstStaleMs) {
-          worstStaleMs = staleMs;
-          worstUnderlying = underlying;
-        }
-      }
+      const lastActivityAt = client.lastActivityAtMs || client.connectedAtMs;
+      const staleMs = now - lastActivityAt;
 
-      if (worstStaleMs >= STALENESS_THRESHOLD_MS && worstUnderlying != null) {
+      if (lastActivityAt > 0 && staleMs >= STALENESS_THRESHOLD_MS) {
         if (this.watchdogTerminateTimers.has(connectionKey)) continue;
         const delayMs = Math.floor(Math.random() * WATCHDOG_TERMINATE_JITTER_MS);
         log.error(
           {
             venue,
-            underlying: worstUnderlying,
+            underlying: [...subscribedUnderlyings].join(','),
             connectionKey,
-            staleMs: worstStaleMs,
+            staleMs,
             thresholdMs: STALENESS_THRESHOLD_MS,
             delayMs,
           },
@@ -343,8 +334,8 @@ export class TradeRuntime {
         const timer = setTimeout(() => {
           this.watchdogTerminateTimers.delete(connectionKey);
           if (!this.shouldReconnect) return;
-          if (this.connections.get(connectionKey) !== ws) return;
-          ws.terminate();
+          if (this.connections.get(connectionKey) !== client) return;
+          client.terminate();
         }, delayMs);
         this.watchdogTerminateTimers.set(connectionKey, timer);
         continue;
@@ -426,24 +417,17 @@ export class TradeRuntime {
     );
   }
 
-  private connectStream(stream: VenueStream, underlying: string, attempt = 0): void {
+  private connectStream(stream: VenueStream, underlying: string): void {
     if (!this.shouldReconnect) return;
 
     const key = this.connectionKey(stream, underlying);
-    if (this.connections.has(key) || this.reconnectTimers.has(key)) return;
+    if (this.connections.has(key)) return;
 
     // Seed-only venues carry no socket; ensureUnderlying never routes them here,
     // but guard anyway so the optional url/connect/parse narrow to non-null.
     if (stream.url == null || stream.connect == null || stream.parse == null) return;
     const connect = stream.connect;
     const parse = stream.parse;
-
-    const subscribedUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-    const urlSource = stream.url;
-    const url = typeof urlSource === 'function' ? urlSource() : urlSource;
-    const ws = new WebSocket(url);
-    let didOpen = false;
-    let openedAt = 0;
 
     const stopKeepalive = (): void => {
       const timer = this.keepaliveTimers.get(key);
@@ -452,96 +436,78 @@ export class TradeRuntime {
       this.keepaliveTimers.delete(key);
     };
 
-    ws.on('open', () => {
-      if (this.connections.get(key) !== ws) return;
+    const client: TopicWsClient = new TopicWsClient(stream.url, `trade-stream:${key}`, {
+      rateLimitCooldownMs: RATE_LIMIT_COOLDOWN_MS,
+      onOpen: () => {
+        const socket = client.socket;
+        if (this.connections.get(key) !== client || socket == null) return;
 
-      didOpen = true;
-      openedAt = Date.now();
-      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-      const watchdogTimer = this.watchdogTerminateTimers.get(key);
-      if (watchdogTimer != null) {
-        clearTimeout(watchdogTimer);
-        this.watchdogTerminateTimers.delete(key);
-      }
-      this.rateLimitCooldownUntil.delete(key);
-      this.updateStreamStates(stream.venue, activeUnderlyings, {
-        connected: true,
-        lastStatusAt: Date.now(),
-      });
-      log.info(
-        { venue: stream.venue, underlying: activeUnderlyings.join(',') },
-        'trade stream connected',
-      );
-      connect(ws, activeUnderlyings);
-
-      if (stream.startKeepalive) {
-        const timer = stream.startKeepalive(ws);
-        this.keepaliveTimers.set(key, timer);
-      }
-    });
-
-    ws.on('message', (raw: WebSocket.RawData) => {
-      if (this.connections.get(key) !== ws) return;
-
-      try {
-        const msg = JSON.parse(raw.toString());
-        const now = Date.now();
         const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-        this.updateStreamStates(stream.venue, activeUnderlyings, { lastMessageAt: now });
-
-        const trades = parse(msg, activeUnderlyings);
-        if (trades.length === 0) return;
-
-        const tradesByUnderlying = new Map<string, TradeEvent[]>();
-        for (const trade of trades) {
-          const tradeUnderlying = normalizeTradeUnderlying(trade.underlying);
-          const bucket = tradesByUnderlying.get(tradeUnderlying);
-          if (bucket) bucket.push({ ...trade, underlying: tradeUnderlying });
-          else tradesByUnderlying.set(tradeUnderlying, [{ ...trade, underlying: tradeUnderlying }]);
+        const watchdogTimer = this.watchdogTerminateTimers.get(key);
+        if (watchdogTimer != null) {
+          clearTimeout(watchdogTimer);
+          this.watchdogTerminateTimers.delete(key);
         }
+        this.updateStreamStates(stream.venue, activeUnderlyings, {
+          connected: true,
+          lastStatusAt: Date.now(),
+        });
+        log.info(
+          { venue: stream.venue, underlying: activeUnderlyings.join(',') },
+          'trade stream connected',
+        );
+        connect(socket, activeUnderlyings);
 
-        for (const [tradeUnderlying, underlyingTrades] of tradesByUnderlying) {
-          this.updateStreamState(stream.venue, tradeUnderlying, {
-            lastTradeAt: Math.max(...underlyingTrades.map((trade) => trade.timestamp)),
-          });
-          this.pushTrades(tradeUnderlying, underlyingTrades);
+        stopKeepalive();
+        if (stream.startKeepalive) {
+          this.keepaliveTimers.set(key, stream.startKeepalive(socket));
         }
-      } catch {
-        // Ignore malformed upstream frames.
-      }
-    });
+      },
+      onMessage: (raw: WebSocket.RawData) => {
+        if (this.connections.get(key) !== client) return;
 
-    ws.on('close', (code: number, reason: Buffer) => {
-      if (this.connections.get(key) !== ws) return;
+        try {
+          const msg = JSON.parse(raw.toString());
+          const now = Date.now();
+          const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
+          this.updateStreamStates(stream.venue, activeUnderlyings, { lastMessageAt: now });
 
-      const watchdogTimer = this.watchdogTerminateTimers.get(key);
-      if (watchdogTimer != null) {
-        clearTimeout(watchdogTimer);
-        this.watchdogTerminateTimers.delete(key);
-      }
-      const reasonStr = reason.length > 0 ? reason.toString() : undefined;
-      const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
-      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-      log.warn(
-        {
-          venue: stream.venue,
-          underlying: activeUnderlyings.join(','),
-          closeCode: code,
-          closeReason: reasonStr,
-          uptimeMs,
-        },
-        'trade stream closed',
-      );
-      this.connections.delete(key);
-      this.updateStreamStates(stream.venue, activeUnderlyings, {
-        connected: false,
-        lastStatusAt: Date.now(),
-      });
-      stopKeepalive();
-      ws.removeAllListeners();
+          const trades = parse(msg, activeUnderlyings);
+          if (trades.length === 0) return;
 
-      if (this.shouldReconnect) {
-        const nextAttempt = didOpen ? 0 : attempt + 1;
+          const tradesByUnderlying = new Map<string, TradeEvent[]>();
+          for (const trade of trades) {
+            const tradeUnderlying = normalizeTradeUnderlying(trade.underlying);
+            const bucket = tradesByUnderlying.get(tradeUnderlying);
+            if (bucket) bucket.push({ ...trade, underlying: tradeUnderlying });
+            else tradesByUnderlying.set(tradeUnderlying, [{ ...trade, underlying: tradeUnderlying }]);
+          }
+
+          for (const [tradeUnderlying, underlyingTrades] of tradesByUnderlying) {
+            this.updateStreamState(stream.venue, tradeUnderlying, {
+              lastTradeAt: Math.max(...underlyingTrades.map((trade) => trade.timestamp)),
+            });
+            this.pushTrades(tradeUnderlying, underlyingTrades);
+          }
+        } catch {
+          // Ignore malformed upstream frames.
+        }
+      },
+      onClose: () => {
+        if (this.connections.get(key) !== client) return;
+
+        const watchdogTimer = this.watchdogTerminateTimers.get(key);
+        if (watchdogTimer != null) {
+          clearTimeout(watchdogTimer);
+          this.watchdogTerminateTimers.delete(key);
+        }
+        stopKeepalive();
+        const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
+        this.updateStreamStates(stream.venue, activeUnderlyings, {
+          connected: false,
+          lastStatusAt: Date.now(),
+        });
+        if (!this.shouldReconnect) return;
         for (const subscribedUnderlying of activeUnderlyings) {
           this.updateStreamState(stream.venue, subscribedUnderlying, {
             reconnects:
@@ -549,56 +515,33 @@ export class TradeRuntime {
                 ?.reconnects ?? 0) + 1,
           });
         }
-        const delay = Math.max(backoffDelay(nextAttempt), this.remainingRateLimitCooldownMs(key));
-        if (this.reconnectTimers.has(key)) return;
-        const timer = setTimeout(() => {
-          this.reconnectTimers.delete(key);
-          this.connectStream(stream, activeUnderlyings[0] ?? underlying, nextAttempt);
-        }, delay);
-        this.reconnectTimers.set(key, timer);
-      }
+      },
+      onError: (err) => {
+        if (this.connections.get(key) !== client) return;
+
+        const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
+        for (const subscribedUnderlying of activeUnderlyings) {
+          this.updateStreamState(stream.venue, subscribedUnderlying, {
+            errors:
+              (this.streamState.get(this.streamKey(stream.venue, subscribedUnderlying))?.errors ??
+                0) + 1,
+            lastStatusAt: Date.now(),
+          });
+        }
+        log.warn(
+          { venue: stream.venue, underlying: activeUnderlyings.join(','), err: err.message },
+          'trade stream error',
+        );
+      },
     });
 
-    ws.on('error', (err) => {
-      if (this.connections.get(key) !== ws) return;
-
-      this.noteRateLimit(key, err);
-      const activeUnderlyings = this.getConnectionUnderlyings(stream, underlying);
-
-      for (const subscribedUnderlying of activeUnderlyings) {
-        this.updateStreamState(stream.venue, subscribedUnderlying, {
-          errors:
-            (this.streamState.get(this.streamKey(stream.venue, subscribedUnderlying))?.errors ??
-              0) + 1,
-          lastStatusAt: Date.now(),
-        });
-      }
-      log.warn(
-        { venue: stream.venue, underlying: activeUnderlyings.join(','), err: err.message },
-        'trade stream error',
-      );
-    });
-
-    this.connections.set(key, ws);
+    this.connections.set(key, client);
+    // Failures before open are retried by the client's own close→reconnect path.
+    client.connect().catch(() => {});
   }
 
   private streamKey(venue: VenueId, underlying: string): string {
     return `${venue}:${underlying}`;
-  }
-
-  private remainingRateLimitCooldownMs(key: string): number {
-    return Math.max(0, (this.rateLimitCooldownUntil.get(key) ?? 0) - Date.now());
-  }
-
-  private noteRateLimit(key: string, error: unknown): void {
-    if (!isRateLimitSignal(error)) return;
-
-    const until = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-    const currentUntil = this.rateLimitCooldownUntil.get(key) ?? 0;
-    if (until > currentUntil) {
-      this.rateLimitCooldownUntil.set(key, until);
-    }
-    log.warn({ connectionKey: key, retryAt: until }, 'trade stream rate limited, delaying reconnect');
   }
 
   private connectionKey(stream: VenueStream, underlying: string): string {
@@ -643,12 +586,6 @@ export class TradeRuntime {
   }
 
   private closeConnection(key: string): void {
-    const reconnectTimer = this.reconnectTimers.get(key);
-    if (reconnectTimer != null) {
-      clearTimeout(reconnectTimer);
-      this.reconnectTimers.delete(key);
-    }
-
     const watchdogTimer = this.watchdogTerminateTimers.get(key);
     if (watchdogTimer != null) {
       clearTimeout(watchdogTimer);
@@ -661,11 +598,10 @@ export class TradeRuntime {
       this.keepaliveTimers.delete(key);
     }
 
-    const ws = this.connections.get(key);
-    if (ws == null) return;
+    const client = this.connections.get(key);
+    if (client == null) return;
     this.connections.delete(key);
-    ws.removeAllListeners();
-    ws.close();
+    void client.disconnect();
   }
 
   private updateStreamState(
@@ -723,8 +659,6 @@ export class TradeRuntime {
       this.stopEventLoopMonitor();
       this.stopEventLoopMonitor = null;
     }
-    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
-    this.reconnectTimers.clear();
     for (const timer of this.watchdogTerminateTimers.values()) clearTimeout(timer);
     this.watchdogTerminateTimers.clear();
     for (const timer of this.keepaliveTimers.values()) clearInterval(timer);
@@ -733,10 +667,7 @@ export class TradeRuntime {
     this.reseedTimers.clear();
     for (const timer of this.idleUnderlyingTimers.values()) clearTimeout(timer);
     this.idleUnderlyingTimers.clear();
-    for (const ws of this.connections.values()) {
-      ws.removeAllListeners();
-      ws.close();
-    }
+    for (const client of this.connections.values()) void client.disconnect();
     this.connections.clear();
     this.subscribedUnderlyingsByConnection.clear();
     this.activeUnderlyings.clear();
@@ -1177,17 +1108,15 @@ function fetchDeribitTradesByCurrency(currency: string): Promise<TradeEvent[]> {
 
 function deribitRpcSeed(currency: string): Promise<TradeEvent[]> {
   return new Promise<TradeEvent[]>((resolve) => {
-    const ws = new WebSocket(DERIBIT_WS_URL);
+    const ws = new WebSocket(DERIBIT_WS_URL, { perMessageDeflate: false });
     const timeout = setTimeout(() => {
-      ws.removeAllListeners();
-      ws.close();
+      closeSocketQuietly(ws);
       resolve([]);
     }, 10_000);
 
     const finish = (trades: TradeEvent[]): void => {
       clearTimeout(timeout);
-      ws.removeAllListeners();
-      ws.close();
+      closeSocketQuietly(ws);
       resolve(trades);
     };
 
@@ -1632,7 +1561,7 @@ export const VENUE_STREAMS: VenueStream[] = [
       return trades;
     },
     async seed(underlying) {
-      const ws = new WebSocket(DERIVE_WS_URL);
+      const ws = new WebSocket(DERIVE_WS_URL, { perMessageDeflate: false });
       return new Promise<TradeEvent[]>((resolve) => {
         let settled = false;
         const timeout = setTimeout(() => finish([]), 10_000);
@@ -1640,8 +1569,7 @@ export const VENUE_STREAMS: VenueStream[] = [
           if (settled) return;
           settled = true;
           clearTimeout(timeout);
-          ws.removeAllListeners();
-          ws.close();
+          closeSocketQuietly(ws);
           resolve(trades);
         };
 
@@ -1817,8 +1745,13 @@ export const VENUE_STREAMS: VenueStream[] = [
   {
     venue: 'thalex',
     url: THALEX_MARKET_WS_URL,
-    // Thalex server pings natively — the `ws` client auto-pongs, so no app-level
-    // heartbeat is required (confirmed by feeds/thalex/ws-client.ts).
+    // Thalex needs no app-level heartbeat, but trades on recent_trades can go quiet
+    // for longer than the staleness window. A WS ping guarantees an inbound pong.
+    startKeepalive(ws) {
+      return setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.ping();
+      }, THALEX_TRADE_KEEPALIVE_MS);
+    },
     connect(ws, underlyings) {
       const base = normalizeTradeUnderlying(underlyings[0] ?? '');
       // Channel expects the pair (BTCUSD/ETHUSD), not the bare base. The initial

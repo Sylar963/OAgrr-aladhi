@@ -238,6 +238,7 @@ describe('useChainWs', () => {
     const msg = JSON.parse(ws.sent[0]!) as Record<string, unknown>;
     expect(msg['type']).toBe('subscribe');
     expect(msg['subscriptionId']).toBeTruthy();
+    expect(msg['patchFormat']).toBe('diff');
     expect(result.current.connectionState).not.toBe('closed');
   });
 
@@ -360,6 +361,47 @@ describe('useChainWs', () => {
     expect(hookResult.result.current.lastSeq).toBe(2);
   });
 
+  it('applies field-level diff frames to the cached chain', async () => {
+    const { hookResult, ws, subId } = await renderAndConnect();
+    const base = snapshot(subId, 1);
+    if (base.type !== 'snapshot') throw new Error('fixture must be a snapshot');
+    base.data.strikes = [
+      {
+        strike: 70_000,
+        call: {
+          venues: { deribit: venueQuote({ bid: 100, ask: 110 }) },
+          bestIv: 0.5,
+          bestVenue: 'deribit',
+        },
+        put: { venues: {}, bestIv: null, bestVenue: null },
+      },
+    ];
+
+    await act(() => {
+      ws.pushMessage(base);
+    });
+    await act(() => {
+      ws.pushMessage({
+        type: 'diff',
+        subscriptionId: subId,
+        seq: 2,
+        request: base.request,
+        meta: base.meta,
+        patch: {
+          stats: base.data.stats,
+          strikes: [{ strike: 70_000, call: { venues: { deribit: { bid: 101 } } } }],
+        },
+      });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(30));
+
+    const cached = queryClient.getQueryData(chainKeys.chain('BTC', '2026-03-27', ['deribit'])) as
+      | { strikes: Array<{ call: { venues: Record<string, { bid: number; ask: number }> } }> }
+      | undefined;
+    expect(cached?.strikes[0]?.call.venues['deribit']).toMatchObject({ bid: 101, ask: 110 });
+    expect(hookResult.result.current.lastSeq).toBe(2);
+  });
+
   it('updates cached strikes when only quote freshness changes', async () => {
     const { ws, subId } = await renderAndConnect();
 
@@ -419,6 +461,52 @@ describe('useChainWs', () => {
     });
 
     expect(hookResult.result.current.lastSeq).toBe(0);
+  });
+
+  it('keeps backing off when the server closes sockets before sending data', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const { hookResult } = await renderAndConnect();
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    expect(MockWebSocket.instances).toHaveLength(2);
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(MockWebSocket.instances).toHaveLength(2);
+    await act(() => vi.advanceTimersByTimeAsync(600));
+    expect(MockWebSocket.instances).toHaveLength(3);
+
+    hookResult.unmount();
+  });
+
+  it('resets the backoff once a snapshot arrives', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const { hookResult } = await renderAndConnect();
+
+    await act(() => {
+      getLastWs().onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    const reconnected = getLastWs();
+    const subId = (JSON.parse(reconnected.sent[0]!) as Record<string, unknown>)[
+      'subscriptionId'
+    ] as string;
+    await act(() => {
+      reconnected.pushMessage(snapshot(subId, 1));
+    });
+
+    await act(() => {
+      reconnected.onclose?.();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_050));
+    expect(MockWebSocket.instances).toHaveLength(3);
+
+    hookResult.unmount();
   });
 
   it('does not connect when disabled', async () => {

@@ -4,7 +4,7 @@ import type { BlockTradeEvent } from './types.js';
 
 function makeBlockTrade(partial: Partial<BlockTradeEvent> = {}): BlockTradeEvent {
   return {
-    venue: 'deribit',
+    venue: partial.venue ?? 'deribit',
     tradeId: partial.tradeId ?? `trade-${Math.random()}`,
     timestamp: partial.timestamp ?? Date.now(),
     underlying: partial.underlying ?? 'BTC',
@@ -114,5 +114,44 @@ describe('BlockTradeRuntime', () => {
     pushTrades(runtime, [makeBlockTrade({ tradeId: 'health', timestamp: 1234 })]);
 
     expect(runtime.getHealth()[0]!.lastTradeAt).toBe(1234);
+  });
+
+  it('only flags a full poll page as a possible gap when it shares nothing with earlier polls', async () => {
+    let page = Array.from({ length: 3 }, (_, i) =>
+      makeBlockTrade({ venue: 'okx', tradeId: `okx-${i}`, timestamp: 1_000 + i }),
+    );
+    const poller = { venue: 'okx' as const, intervalMs: 60_000, limit: 3, poll: async () => page };
+    const internals = runtime as unknown as {
+      venueState: Map<string, unknown>;
+      runPoller(poller: unknown, initial: boolean): Promise<void>;
+    };
+    internals.venueState.set('okx', {
+      transport: 'poll',
+      connected: false,
+      lastSuccessAt: null,
+      lastTradeAt: null,
+      lastStatusAt: null,
+      lastPollCount: null,
+      pollLimit: 3,
+      hitLimitCount: 0,
+      reconnects: 0,
+      errors: 0,
+    });
+    const hitLimitCount = () =>
+      runtime.getHealth().find((row) => row.venue === 'okx')!.hitLimitCount;
+
+    await internals.runPoller(poller, true);
+    page = [
+      makeBlockTrade({ venue: 'okx', tradeId: 'okx-3', timestamp: 2_000 }),
+      ...page.slice(1),
+    ];
+    await internals.runPoller(poller, false);
+    expect(hitLimitCount()).toBe(0);
+
+    page = Array.from({ length: 3 }, (_, i) =>
+      makeBlockTrade({ venue: 'okx', tradeId: `okx-new-${i}`, timestamp: 3_000 + i }),
+    );
+    await internals.runPoller(poller, false);
+    expect(hitLimitCount()).toBe(1);
   });
 });

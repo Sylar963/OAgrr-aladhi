@@ -96,6 +96,7 @@ export class DeriveWsAdapter extends SdkBaseAdapter {
     return {
       connected: this.rpc.isConnected,
       lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+      connectedAt: this.rpc.connectedAtMs,
     };
   }
 

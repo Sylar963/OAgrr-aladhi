@@ -10,7 +10,7 @@ import {
 } from '../shared/sdk-base.js';
 import { PacedSender, TopicShardAllocator, aggregateShardState } from '../shared/topic-shards.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
-import { parseParadexRpcResponse, parseParadexSummary } from './codec.js';
+import { parseParadexRpcResponse } from './codec.js';
 import { deriveParadexHealth } from './health.js';
 import {
   PARADEX_SHARD_CAPACITY,
@@ -21,8 +21,9 @@ import {
   paradexSymbolFromChannel,
 } from './planner.js';
 import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaryAll } from './rest.js';
-import { decodeParadexMarketSummarySbe } from './sbe.js';
+import { decodeParadexMarketSummarySbe, PARADEX_SBE_IGNORED } from './sbe.js';
 import { buildParadexQuote, paradexInstrumentDetails } from './state.js';
+import type { ParadexSummary } from './types.js';
 
 const log = feedLogger('paradex');
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60_000;
@@ -60,15 +61,23 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
     if (this.shards.length === 0) return null;
     let connected = true;
     let lastActivityAt = Number.POSITIVE_INFINITY;
+    let connectedAt = 0;
     for (const { client } of this.shards) {
       connected &&= client.isConnected;
       lastActivityAt = Math.min(lastActivityAt, client.lastActivityAtMs || client.connectedAtMs);
+      connectedAt = Math.max(connectedAt, client.connectedAtMs);
     }
-    return { connected, lastActivityAt };
+    return { connected, lastActivityAt, connectedAt };
   }
 
   protected override restartFeedFromWatchdog(): void {
     for (const { client } of this.shards) client.terminate();
+  }
+
+  // The snapshot reports disconnected when any one shard is down, and quotes are not tracked per
+  // shard, so cutting by it would also blank quiet strikes served by healthy shards.
+  protected override disconnectedQuoteCutoff(): number {
+    return 0;
   }
 
   private get wsConnected(): boolean {
@@ -251,7 +260,8 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
   // ─── WS message handlers ─────────────────────────────────────
 
   private handleShardMessage(index: number, raw: WebSocket.RawData): void {
-    const summary = decodeParadexMarketSummarySbe(raw);
+    const summary = decodeParadexMarketSummarySbe(raw, this.isTrackedSymbol);
+    if (summary === PARADEX_SBE_IGNORED) return;
     if (summary != null) {
       this.handleSummary(summary);
       return;
@@ -287,10 +297,9 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
     );
   }
 
-  private handleSummary(data: unknown): void {
-    const summary = parseParadexSummary(data);
-    if (summary == null) return;
-    if (!this.instrumentMap.has(summary.symbol)) return; // ignore perps/spot + unknown
+  private readonly isTrackedSymbol = (symbol: string): boolean => this.instrumentMap.has(symbol);
+
+  private handleSummary(summary: ParadexSummary): void {
     const quote = buildParadexQuote(
       summary,
       (v) => this.safeNum(v),

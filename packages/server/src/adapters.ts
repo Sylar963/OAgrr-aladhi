@@ -10,26 +10,40 @@ import {
   ThalexWsAdapter,
   GateioWsAdapter,
   ParadexWsAdapter,
+  FeedWorkerHost,
   type MarkHistoryBuffer,
+  type OptionVenueAdapter,
   type QuoteRecorderEvent,
   type TradeRuntime,
 } from '@oggregator/core';
 
-const deribitAdapter = new DeribitWsAdapter();
-const deriveAdapter = new DeriveWsAdapter();
-const coincallAdapter = new CoincallWsAdapter();
-const gateioAdapter = new GateioWsAdapter();
+type ChainAdapter = OptionVenueAdapter & {
+  addQuoteRecorder?: (recorder: (event: QuoteRecorderEvent) => void) => () => void;
+};
 
-const adapters = [
+// FEED_WORKER=1 moves socket handling, parsing and normalization for every chain venue onto a
+// worker thread; the main thread keeps only drop-in proxies.
+const feedWorker = process.env['FEED_WORKER'] === '1' ? new FeedWorkerHost() : null;
+
+function chainAdapter(venue: OptionVenueAdapter['venue'], create: () => ChainAdapter): ChainAdapter {
+  return feedWorker != null ? feedWorker.adapter(venue) : create();
+}
+
+const deribitAdapter = chainAdapter('deribit', () => new DeribitWsAdapter());
+const deriveAdapter = chainAdapter('derive', () => new DeriveWsAdapter());
+const coincallAdapter = chainAdapter('coincall', () => new CoincallWsAdapter());
+const gateioAdapter = chainAdapter('gateio', () => new GateioWsAdapter());
+
+const adapters: ChainAdapter[] = [
   deribitAdapter,
-  new OkxWsAdapter(),
-  new BinanceWsAdapter(),
-  new BybitWsAdapter(),
+  chainAdapter('okx', () => new OkxWsAdapter()),
+  chainAdapter('binance', () => new BinanceWsAdapter()),
+  chainAdapter('bybit', () => new BybitWsAdapter()),
   deriveAdapter,
   coincallAdapter,
-  new ThalexWsAdapter(),
+  chainAdapter('thalex', () => new ThalexWsAdapter()),
   gateioAdapter,
-  new ParadexWsAdapter(),
+  chainAdapter('paradex', () => new ParadexWsAdapter()),
 ];
 
 let tradeRuntimeRecorder: (() => void) | null = null;
@@ -44,7 +58,7 @@ export async function bootstrapAdapters(
   log: FastifyBaseLogger,
   deps: AdapterBootstrapDeps = {},
 ) {
-  log.info('loading markets for all venues');
+  log.info({ feedWorker: feedWorker != null }, 'loading markets for all venues');
 
   // Feed the rolling mark buffer from venues whose REST chart sources are
   // either missing or trade-only:
@@ -133,4 +147,5 @@ export async function disposeAdapters(log: FastifyBaseLogger) {
       }
     }),
   );
+  await feedWorker?.shutdown();
 }

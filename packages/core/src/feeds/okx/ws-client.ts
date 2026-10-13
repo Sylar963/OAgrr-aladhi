@@ -143,6 +143,7 @@ export class OkxWsAdapter extends SdkBaseAdapter {
     return {
       connected: client.isConnected,
       lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+      connectedAt: client.connectedAtMs,
     };
   }
 

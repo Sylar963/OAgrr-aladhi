@@ -88,6 +88,8 @@ export class GateioWsAdapter extends SdkBaseAdapter {
   private lastUpdateAt = 0;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private lastQuoteStaleReconnectAt = 0;
+  // checkQuoteStaleness owns quote-level reconnects for this venue.
+  protected override quoteStalenessThresholdMs = null;
   private lastWsErrorLogKey: string | null = null;
   private lastWsErrorLogAt = 0;
 
@@ -123,6 +125,7 @@ export class GateioWsAdapter extends SdkBaseAdapter {
     return {
       connected: client.isConnected,
       lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+      connectedAt: client.connectedAtMs,
     };
   }
 

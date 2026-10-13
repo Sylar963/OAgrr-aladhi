@@ -145,6 +145,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
   private forcedStaleReconnectStreak = 0;
   private publicStatusRefreshPromise: Promise<void> | null = null;
   protected override surfaceCoverage = DEFAULT_SURFACE_COVERAGE;
+  // Subscribed-ticker staleness below is finer-grained than the base quote watchdog.
+  protected override quoteStalenessThresholdMs = null;
 
   // Keep bulk marks live for every underlying at boot, but reserve eager ticker
   // subscriptions for BTC/ETH. Alt underlyings upgrade on demand when a user
@@ -185,6 +187,7 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
     return {
       connected: this.rpc.isConnected,
       lastActivityAt: this.rpc.lastActivityAtMs || this.rpc.connectedAtMs,
+      connectedAt: this.rpc.connectedAtMs,
     };
   }
 

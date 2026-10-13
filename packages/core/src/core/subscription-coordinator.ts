@@ -22,6 +22,12 @@ interface CoordinatedRequestEntry {
 
 interface CoordinatedVenueEntry {
   handlers: StreamHandlers;
+  // Adapters key delta fan-out by handler identity, so every request on a venue must hand them
+  // this same object; a fresh object per request delivered each delta batch once per request.
+  adapterHandlers: StreamHandlers;
+  // Request-scoped statuses are emitted synchronously from inside adapter.subscribe(), and venue
+  // operations are serialized, so the request being subscribed is the only possible target.
+  subscribingRequest: CoordinatedRequestEntry | null;
   requestEntries: Map<string, CoordinatedRequestEntry>;
 }
 
@@ -81,28 +87,17 @@ export class VenueSubscriptionCoordinator {
       entry.requestEntries.set(key, nextRequestEntry);
 
       const adapter = this.resolveAdapter(venue);
+      entry.subscribingRequest = nextRequestEntry;
       try {
         nextRequestEntry.upstreamRelease =
           adapter.subscribe != null
-            ? await adapter.subscribe(request, {
-                onDelta: entry.handlers.onDelta,
-                onStatus: (status: VenueStatus) => {
-                  if (isRequestScopedStatus(status)) {
-                    for (const currentListener of nextRequestEntry.listeners) {
-                      try {
-                        currentListener.onStatus?.(status);
-                      } catch {}
-                    }
-                    return;
-                  }
-
-                  entry.handlers.onStatus(status);
-                },
-              })
+            ? await adapter.subscribe(request, entry.adapterHandlers)
             : async () => {};
       } catch (error: unknown) {
         entry.requestEntries.delete(key);
         throw error;
+      } finally {
+        entry.subscribingRequest = null;
       }
     });
 
@@ -169,6 +164,23 @@ export class VenueSubscriptionCoordinator {
 
     const entry: CoordinatedVenueEntry = {
       requestEntries: new Map(),
+      subscribingRequest: null,
+      adapterHandlers: {
+        onDelta: (deltas: VenueDelta[]) => entry.handlers.onDelta(deltas),
+        onStatus: (status: VenueStatus) => {
+          if (!isRequestScopedStatus(status)) {
+            entry.handlers.onStatus(status);
+            return;
+          }
+          const target = entry.subscribingRequest;
+          if (target == null) return;
+          for (const currentListener of target.listeners) {
+            try {
+              currentListener.onStatus?.(status);
+            } catch {}
+          }
+        },
+      },
       handlers: {
         onDelta: (deltas: VenueDelta[]) => {
           const currentEntry = this.venueEntries.get(venue);

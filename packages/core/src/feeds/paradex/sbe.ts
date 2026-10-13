@@ -8,6 +8,9 @@ const VERSION_ZERO_BLOCK_LENGTH = 216;
 const VERSION_ONE_BLOCK_LENGTH = 240;
 const NULL_INT64 = -(1n << 63n);
 
+/** Returned for a well-formed summary frame whose market the caller does not track. */
+export const PARADEX_SBE_IGNORED = Symbol('paradex-sbe-ignored');
+
 function asBuffer(raw: WebSocket.RawData): Buffer {
   if (Buffer.isBuffer(raw)) return raw;
   if (Array.isArray(raw)) return Buffer.concat(raw);
@@ -34,7 +37,13 @@ function requiredDecimal(buffer: Buffer, bodyOffset: number, scale = 8): string 
   return optionalDecimal(buffer, bodyOffset, scale) ?? '';
 }
 
-export function decodeParadexMarketSummarySbe(raw: WebSocket.RawData): ParadexSummary | null {
+// The binary layout is the validation boundary for these frames; the result is already typed.
+// `accept` runs on the symbol before any decimal is decoded, since the feed also carries
+// perps and untracked markets.
+export function decodeParadexMarketSummarySbe(
+  raw: WebSocket.RawData,
+  accept?: (symbol: string) => boolean,
+): ParadexSummary | typeof PARADEX_SBE_IGNORED | null {
   const buffer = asBuffer(raw);
   if (buffer.length < HEADER_LENGTH) return null;
 
@@ -56,6 +65,7 @@ export function decodeParadexMarketSummarySbe(raw: WebSocket.RawData): ParadexSu
 
   const symbol = buffer.subarray(marketStart, marketEnd).toString('utf8');
   if (symbol.length === 0) return null;
+  if (accept != null && !accept(symbol)) return PARADEX_SBE_IGNORED;
 
   const tsMicros = buffer.readBigInt64LE(HEADER_LENGTH);
   const fundingRatePrecise =

@@ -163,6 +163,66 @@ describe('ChainRuntime', () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
+  it('builds the first snapshot without waiting on a stalled venue, then folds it in', async () => {
+    vi.useFakeTimers();
+    getRegisteredVenuesMock.mockReturnValue(['okx', 'deribit']);
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const slowVenue = deferred<{ release: () => Promise<void> }>();
+    const coordinator = {
+      acquire: vi.fn(async (venueId: string) =>
+        venueId === 'deribit' ? slowVenue.promise : { release: async () => {} },
+      ),
+    };
+    const runtime = new ChainRuntime(
+      'test',
+      { underlying: 'BTC', expiry: '2026-03-27', venues: ['okx', 'deribit'] },
+      { coordinator: coordinator as never },
+    );
+
+    const ready = runtime.ready();
+    await vi.advanceTimersByTimeAsync(1_500);
+    await ready;
+    expect(runtime.getSnapshot()).not.toBeNull();
+    const firstSeq = runtime.getSnapshot()!.seq;
+
+    slowVenue.resolve({ release: async () => {} });
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(runtime.getSnapshot()!.seq).toBeGreaterThan(firstSeq);
+    await runtime.dispose();
+  });
+
+  it('broadcasts a down status when a venue fails after the first snapshot', async () => {
+    vi.useFakeTimers();
+    getRegisteredVenuesMock.mockReturnValue(['okx', 'deribit']);
+    fetchOptionChainMock.mockResolvedValue(makeChain(1_000, 100));
+    const slowVenue = deferred<{ release: () => Promise<void> }>();
+    const coordinator = {
+      acquire: vi.fn(async (venueId: string) =>
+        venueId === 'deribit' ? slowVenue.promise : { release: async () => {} },
+      ),
+    };
+    const runtime = new ChainRuntime(
+      'test',
+      { underlying: 'BTC', expiry: '2026-03-27', venues: ['okx', 'deribit'] },
+      { coordinator: coordinator as never },
+    );
+    const ready = runtime.ready();
+    await vi.advanceTimersByTimeAsync(1_500);
+    await ready;
+    const events: Array<{ type: string; status?: { venue: string; state: string } }> = [];
+    runtime.subscribe({ onEvent: (event) => events.push(event as (typeof events)[number]) });
+
+    slowVenue.reject(new Error('subscribe timed out'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runtime.getFailedVenues()).toEqual([{ venue: 'deribit', reason: 'subscribe timed out' }]);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'status', status: expect.objectContaining({ venue: 'deribit', state: 'down' }) }),
+    );
+    await runtime.dispose();
+  });
+
   it('keeps the newest snapshot when rebuilds finish out of order', async () => {
     const first = deferred<VenueOptionChain>();
     const second = deferred<VenueOptionChain>();

@@ -2,11 +2,17 @@ import type pino from 'pino';
 import WebSocket from 'ws';
 import { logger } from '../../utils/logger.js';
 import { backoffDelay } from '../../utils/reconnect.js';
+import { closeSocketQuietly, redactWsUrl } from '../../utils/ws.js';
 
 const RETRY_AFTER_MAX_ATTEMPTS_MS = 60_000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 20;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 90_000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
+// Resetting the backoff on bare `open` would let a socket that opens and immediately drops
+// reconnect every ~1s forever, so the attempt counter only resets once a session survives this long.
+const DEFAULT_STABLE_SESSION_MS = 60_000;
+const MAX_IDLE_CHECK_INTERVAL_MS = 15_000;
 
 export type PingMessage = string | Record<string, unknown>;
 
@@ -21,6 +27,10 @@ export interface TopicWsClientOptions {
   maxReconnectAttempts?: number;
   reconnectDelayMs?: number;
   rateLimitCooldownMs?: number;
+  handshakeTimeoutMs?: number;
+  stableSessionMs?: number;
+  /** Terminate an open socket that receives no frame (data, ping or pong) for this long. Off when unset. */
+  idleTimeoutMs?: number;
   onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
   onSocket?: (socket: WebSocket) => void;
   getReplayMessages?: () => Array<string | Record<string, unknown>>;
@@ -36,6 +46,9 @@ export class TopicWsClient {
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private stableSessionTimer: ReturnType<typeof setTimeout> | null = null;
+  private idleTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = true;
   private reconnectAttempts = 0;
   private lastActivityAt = 0;
@@ -116,14 +129,26 @@ export class TopicWsClient {
       this.ws = socket;
       this.options.onSocket?.(socket);
 
+      const handshakeTimeoutMs = this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+      this.clearHandshakeTimer();
+      this.handshakeTimer = setTimeout(() => {
+        this.handshakeTimer = null;
+        if (this.ws !== socket || socket.readyState !== WebSocket.CONNECTING) return;
+        this.log.warn({ timeoutMs: handshakeTimeoutMs }, 'ws handshake timeout, terminating');
+        // Aborting the upgrade emits 'error' then 'close'; the close handler schedules the retry.
+        socket.terminate();
+      }, handshakeTimeoutMs);
+
       socket.on('open', () => {
         if (this.ws !== socket) return;
 
+        this.clearHandshakeTimer();
         this.connectedAt = Date.now();
         this.lastActivityAt = this.connectedAt;
         this.rateLimitUntil = 0;
-        this.log.info({ url }, 'ws connected');
-        this.reconnectAttempts = 0;
+        this.log.info({ url: redactWsUrl(url) }, 'ws connected');
+        this.startStableSessionTimer();
+        this.startIdleWatch(socket);
         this.startPing();
         this.options.onStatusChange?.('connected');
 
@@ -189,8 +214,7 @@ export class TopicWsClient {
     if (this.ws != null) {
       const socket = this.ws;
       this.ws = null;
-      this.detachSocket(socket);
-      socket.close();
+      closeSocketQuietly(socket);
     }
   }
 
@@ -277,8 +301,55 @@ export class TopicWsClient {
     }
   }
 
+  private startStableSessionTimer(): void {
+    this.clearStableSessionTimer();
+    this.stableSessionTimer = setTimeout(() => {
+      this.stableSessionTimer = null;
+      this.reconnectAttempts = 0;
+    }, this.options.stableSessionMs ?? DEFAULT_STABLE_SESSION_MS);
+  }
+
+  private clearStableSessionTimer(): void {
+    if (this.stableSessionTimer != null) {
+      clearTimeout(this.stableSessionTimer);
+      this.stableSessionTimer = null;
+    }
+  }
+
+  private startIdleWatch(socket: WebSocket): void {
+    this.stopIdleWatch();
+    const idleTimeoutMs = this.options.idleTimeoutMs;
+    if (idleTimeoutMs == null) return;
+
+    const checkEveryMs = Math.min(MAX_IDLE_CHECK_INTERVAL_MS, Math.max(1_000, idleTimeoutMs / 3));
+    this.idleTimer = setInterval(() => {
+      if (this.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+      const idleMs = Date.now() - this.lastActivityAt;
+      if (idleMs < idleTimeoutMs) return;
+      this.log.warn({ idleMs, idleTimeoutMs }, 'ws idle, terminating');
+      socket.terminate();
+    }, checkEveryMs);
+  }
+
+  private stopIdleWatch(): void {
+    if (this.idleTimer != null) {
+      clearInterval(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private clearHandshakeTimer(): void {
+    if (this.handshakeTimer != null) {
+      clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
+  }
+
   private cleanup(): void {
     this.stopPing();
+    this.stopIdleWatch();
+    this.clearStableSessionTimer();
+    this.clearHandshakeTimer();
     if (this.reconnectTimer != null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

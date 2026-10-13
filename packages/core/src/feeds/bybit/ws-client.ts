@@ -515,11 +515,13 @@ export class BybitWsAdapter extends SdkBaseAdapter {
 
     let connected = true;
     let lastActivityAt = Number.POSITIVE_INFINITY;
+    let connectedAt = 0;
     for (const client of this.shardClients) {
       connected &&= client.isConnected;
       lastActivityAt = Math.min(lastActivityAt, client.lastActivityAtMs || client.connectedAtMs);
+      connectedAt = Math.max(connectedAt, client.connectedAtMs);
     }
-    return { connected, lastActivityAt };
+    return { connected, lastActivityAt, connectedAt };
   }
 
   protected override restartFeedFromWatchdog(): void {

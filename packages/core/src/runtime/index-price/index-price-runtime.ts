@@ -1,8 +1,9 @@
-import WebSocket from 'ws';
+import type WebSocket from 'ws';
 import {
   GATEIO_OPTIONS_UNDERLYINGS,
   GATEIO_REST_BASE_URL,
 } from '../../feeds/shared/endpoints.js';
+import { TopicWsClient } from '../../feeds/shared/topic-ws-client.js';
 import { buildBsInfoSubscribeMessage } from '../../feeds/coincall/planner.js';
 import { CoincallBsInfoMessageSchema } from '../../feeds/coincall/types.js';
 import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
@@ -11,13 +12,14 @@ import { GateioUnderlyingsResponseSchema } from '../../feeds/gateio/types.js';
 import { fetchCoincallInstrumentsForBase } from '../trades/trade-runtime.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
-import { backoffDelay } from '../../utils/reconnect.js';
 
 const log = feedLogger('index-price');
 
 const GATEIO_POLL_INTERVAL_MS = 30 * 1000;
 const GATEIO_REQUEST_TIMEOUT_MS = 10 * 1000;
 const COINCALL_HEARTBEAT_INTERVAL_MS = 15 * 1000;
+// bsInfo pushes roughly every second per symbol, so a minute of silence is a dead socket.
+const COINCALL_IDLE_TIMEOUT_MS = 60 * 1000;
 
 export interface IndexPriceRuntimeStartOptions {
   gateio?: boolean;
@@ -33,19 +35,15 @@ export interface IndexPriceRuntimeStartOptions {
 export class IndexPriceRuntime {
   private prices = new Map<string, number>();
   private gateioTimer: ReturnType<typeof setInterval> | null = null;
-  private coincallWs: WebSocket | null = null;
-  private coincallKeepalive: ReturnType<typeof setInterval> | null = null;
-  private coincallReconnect: ReturnType<typeof setTimeout> | null = null;
+  private coincallClient: TopicWsClient | null = null;
   private coincallSymbolByUnderlying = new Map<string, string>();
   private coincallUnderlyingBySymbol = new Map<string, string>();
-  private shouldReconnect = true;
   private started = false;
 
   async start(opts: IndexPriceRuntimeStartOptions = {}): Promise<void> {
     // Idempotent: a second start() would leak timers and double-open the WS.
     if (this.started) return;
     this.started = true;
-    this.shouldReconnect = true;
 
     if (opts.gateio) {
       void this.refreshGateio();
@@ -67,23 +65,13 @@ export class IndexPriceRuntime {
 
   dispose(): void {
     this.started = false;
-    this.shouldReconnect = false;
     if (this.gateioTimer != null) {
       clearInterval(this.gateioTimer);
       this.gateioTimer = null;
     }
-    if (this.coincallKeepalive != null) {
-      clearInterval(this.coincallKeepalive);
-      this.coincallKeepalive = null;
-    }
-    if (this.coincallReconnect != null) {
-      clearTimeout(this.coincallReconnect);
-      this.coincallReconnect = null;
-    }
-    if (this.coincallWs != null) {
-      this.coincallWs.removeAllListeners();
-      this.coincallWs.close();
-      this.coincallWs = null;
+    if (this.coincallClient != null) {
+      void this.coincallClient.disconnect();
+      this.coincallClient = null;
     }
     this.prices.clear();
     this.coincallSymbolByUnderlying.clear();
@@ -137,79 +125,47 @@ export class IndexPriceRuntime {
     }
   }
 
-  private connectCoincall(attempt = 0): void {
-    if (!this.shouldReconnect || this.coincallSymbolByUnderlying.size === 0) return;
-    if (this.coincallWs != null || this.coincallReconnect != null) return;
+  private connectCoincall(): void {
+    if (!this.started || this.coincallSymbolByUnderlying.size === 0) return;
+    if (this.coincallClient != null) return;
 
-    const ws = new WebSocket(buildSignedWsUrl());
-    let openedAt = 0;
-    this.coincallWs = ws;
-
-    const detachSocket = (): void => {
-      ws.removeAllListeners();
-    };
-
-    ws.on('open', () => {
-      if (this.coincallWs !== ws) return;
-
-      openedAt = Date.now();
-      log.info(
-        { underlyings: [...this.coincallSymbolByUnderlying.keys()].join(',') },
-        'coincall index ws connected',
-      );
-      for (const symbol of this.coincallSymbolByUnderlying.values()) {
-        ws.send(JSON.stringify(buildBsInfoSubscribeMessage(symbol)));
-      }
-      if (this.coincallKeepalive != null) clearInterval(this.coincallKeepalive);
-      this.coincallKeepalive = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ action: 'heartbeat' }));
-        }
-      }, COINCALL_HEARTBEAT_INTERVAL_MS);
+    const client = new TopicWsClient(() => buildSignedWsUrl(), 'coincall-index', {
+      pingIntervalMs: COINCALL_HEARTBEAT_INTERVAL_MS,
+      pingMessage: { action: 'heartbeat' },
+      idleTimeoutMs: COINCALL_IDLE_TIMEOUT_MS,
+      getReplayMessages: () =>
+        [...this.coincallSymbolByUnderlying.values()].map((symbol) =>
+          buildBsInfoSubscribeMessage(symbol),
+        ),
+      onStatusChange: (state) => {
+        if (state !== 'connected') return;
+        log.info(
+          { underlyings: [...this.coincallSymbolByUnderlying.keys()].join(',') },
+          'coincall index ws connected',
+        );
+      },
+      onMessage: (raw: WebSocket.RawData) => this.handleCoincallMessage(raw),
+      onError: (err) => log.warn({ err: err.message }, 'coincall index ws error'),
     });
+    this.coincallClient = client;
+    // Failures before open are retried by the client's own close→reconnect path.
+    client.connect().catch(() => {});
+  }
 
-    ws.on('message', (raw: WebSocket.RawData) => {
-      if (this.coincallWs !== ws) return;
-
-      try {
-        const json = JSON.parse(raw.toString());
-        const parsed = CoincallBsInfoMessageSchema.safeParse(json);
-        if (!parsed.success) return;
-        const symbol = parsed.data.d.s;
-        const up = parsed.data.d.up;
-        if (up == null) return;
-        const underlying = this.coincallUnderlyingBySymbol.get(symbol);
-        if (underlying == null) return;
-        this.prices.set(`coincall:${underlying}`, up);
-      } catch {
-        // Ignore malformed frames.
-      }
-    });
-
-    ws.on('close', () => {
-      if (this.coincallWs !== ws) return;
-
-      this.coincallWs = null;
-      detachSocket();
-      if (this.coincallKeepalive != null) {
-        clearInterval(this.coincallKeepalive);
-        this.coincallKeepalive = null;
-      }
-      if (!this.shouldReconnect) return;
-      const opened = openedAt > 0;
-      const nextAttempt = opened ? 0 : attempt + 1;
-      const delay = backoffDelay(nextAttempt);
-      if (this.coincallReconnect != null) return;
-      this.coincallReconnect = setTimeout(() => {
-        this.coincallReconnect = null;
-        this.connectCoincall(nextAttempt);
-      }, delay);
-    });
-
-    ws.on('error', (err) => {
-      if (this.coincallWs !== ws) return;
-      log.warn({ err: err.message }, 'coincall index ws error');
-    });
+  private handleCoincallMessage(raw: WebSocket.RawData): void {
+    try {
+      const json = JSON.parse(raw.toString());
+      const parsed = CoincallBsInfoMessageSchema.safeParse(json);
+      if (!parsed.success) return;
+      const symbol = parsed.data.d.s;
+      const up = parsed.data.d.up;
+      if (up == null) return;
+      const underlying = this.coincallUnderlyingBySymbol.get(symbol);
+      if (underlying == null) return;
+      this.prices.set(`coincall:${underlying}`, up);
+    } catch {
+      // Ignore malformed frames.
+    }
   }
 }
 

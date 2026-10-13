@@ -1,5 +1,38 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventEmitter } from 'node:events';
+
+const { FakeWebSocket } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { EventEmitter } = require('node:events') as typeof import('node:events');
+  class FakeWebSocket extends EventEmitter {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static instances: FakeWebSocket[] = [];
+    readyState = FakeWebSocket.CONNECTING;
+    terminate = vi.fn();
+    close = vi.fn();
+    send = vi.fn();
+    ping = vi.fn();
+    constructor(public url: string) {
+      super();
+      FakeWebSocket.instances.push(this);
+    }
+    open(): void {
+      this.readyState = FakeWebSocket.OPEN;
+      this.emit('open');
+    }
+    drop(): void {
+      this.readyState = 3;
+      this.emit('close', 1006, Buffer.alloc(0));
+    }
+  }
+  return { FakeWebSocket };
+});
+
+vi.mock('ws', () => ({
+  default: FakeWebSocket,
+}));
+
+import { THALEX_MARKET_WS_URL } from '../../feeds/shared/endpoints.js';
 import {
   TradeRuntime,
   VENUE_STREAMS,
@@ -125,83 +158,87 @@ describe('TradeRuntime — ring buffer', () => {
   });
 });
 
-describe('TradeRuntime — reconnect backoff resets after healthy open', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+describe('TradeRuntime — shared transport liveness', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FakeWebSocket.instances = [];
+  });
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
-  it('schedules next reconnect with attempt=0 when the stream previously opened', async () => {
+  function createOfflineRuntime(): TradeRuntime {
     const runtime = new TradeRuntime();
-    initBuffer(runtime, 'BTC');
+    const internals = runtime as unknown as {
+      seedFromRest(u: string): Promise<void>;
+      startReseedTimersForUnderlying(u: string): void;
+    };
+    vi.spyOn(internals, 'seedFromRest').mockResolvedValue(undefined);
+    vi.spyOn(internals, 'startReseedTimersForUnderlying').mockImplementation(() => {});
+    return runtime;
+  }
 
-    const fakes: EventEmitter[] = [];
-    const attempts: number[] = [];
-
-    const connectSpy = vi
-      .spyOn(
-        runtime as unknown as { connectStream(s: unknown, u: string, attempt: number): void },
-        'connectStream',
-      )
-      .mockImplementation(function (this: TradeRuntime, stream, underlying, attempt = 0) {
-        attempts.push(attempt);
-
-        const fake = new EventEmitter();
-        fakes.push(fake);
-
-        let didOpen = false;
-        const runtimeAny = this as unknown as {
-          connections: Map<string, unknown>;
-          reconnectTimers: Map<string, ReturnType<typeof setTimeout>>;
-          keepaliveTimers: Map<string, unknown>;
-          shouldReconnect: boolean;
-        };
-        const key = `${(stream as { venue: string }).venue}:${underlying}`;
-
-        fake.on('open', () => {
-          didOpen = true;
-          runtimeAny.connections.set(key, fake);
-        });
-
-        fake.on('close', () => {
-          runtimeAny.connections.delete(key);
-          const ka = runtimeAny.keepaliveTimers.get(key);
-          if (ka) {
-            clearInterval(ka as ReturnType<typeof setInterval>);
-            runtimeAny.keepaliveTimers.delete(key);
-          }
-
-          if (runtimeAny.shouldReconnect) {
-            const nextAttempt = didOpen ? 0 : attempt + 1;
-            const delay = Math.min(1000 * 2 ** nextAttempt + Math.random() * 500, 30_000);
-            const timer = setTimeout(() => {
-              runtimeAny.reconnectTimers.delete(key);
-              connectSpy.call(this, stream, underlying, nextAttempt);
-            }, delay);
-            runtimeAny.reconnectTimers.set(key, timer);
-          }
-        });
-      });
-
-    vi.spyOn(
-      runtime as unknown as { seedFromRest(u: string): Promise<void> },
-      'seedFromRest',
-    ).mockResolvedValue(undefined);
-
+  async function startWithOpenThalexStream() {
+    const runtime = createOfflineRuntime();
     await runtime.start(['BTC']);
 
-    const initialCount = attempts.length;
-    expect(attempts.every((attempt) => attempt === 0)).toBe(true);
+    const thalex = FakeWebSocket.instances.find((socket) => socket.url === THALEX_MARKET_WS_URL);
+    expect(thalex).toBeDefined();
+    thalex!.open();
+    await vi.advanceTimersByTimeAsync(0);
+    return { runtime, thalex: thalex! };
+  }
 
-    fakes[0]!.emit('open');
-    fakes[0]!.emit('close');
+  it('keeps a quiet trade stream whose keepalive pongs still arrive', async () => {
+    const { runtime, thalex } = await startWithOpenThalexStream();
+    thalex.ping.mockImplementation(() => thalex.emit('pong'));
 
-    expect(attempts.length).toBe(initialCount);
+    await vi.advanceTimersByTimeAsync(12 * 60 * 1000);
 
+    expect(thalex.ping).toHaveBeenCalled();
+    expect(thalex.terminate).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+
+  it('terminates a trade stream that receives no frames at all', async () => {
+    const { runtime, thalex } = await startWithOpenThalexStream();
+
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+    expect(thalex.terminate).toHaveBeenCalled();
+    runtime.dispose();
+  });
+
+  it('resubscribes on the reconnected socket after a drop', async () => {
+    const { runtime, thalex } = await startWithOpenThalexStream();
+    expect(thalex.send).toHaveBeenCalledWith(expect.stringContaining('recent_trades.BTCUSD.options'));
+
+    thalex.drop();
     await vi.advanceTimersByTimeAsync(2_000);
+    const next = FakeWebSocket.instances.filter((socket) => socket.url === THALEX_MARKET_WS_URL).at(-1)!;
+    expect(next).not.toBe(thalex);
+    next.open();
+    await vi.advanceTimersByTimeAsync(0);
 
-    expect(attempts.length).toBeGreaterThan(initialCount);
-    expect(attempts[attempts.length - 1]).toBe(0);
+    expect(next.send).toHaveBeenCalledWith(expect.stringContaining('recent_trades.BTCUSD.options'));
+    runtime.dispose();
+  });
+
+  it('survives dispose while sockets are still connecting', async () => {
+    const runtime = createOfflineRuntime();
+    await runtime.start(['BTC']);
+    const connecting = [...FakeWebSocket.instances];
+    expect(connecting.length).toBeGreaterThan(0);
 
     runtime.dispose();
+
+    for (const socket of connecting) {
+      expect(() =>
+        socket.emit('error', new Error('WebSocket was closed before the connection was established')),
+      ).not.toThrow();
+    }
   });
 });
 
@@ -220,24 +257,27 @@ describe('TradeRuntime — watchdog reconnect jitter', () => {
       shouldReconnect: boolean;
       connections: Map<
         string,
-        { terminate: () => void; close: () => void; removeAllListeners: () => void }
+        {
+          isConnected: boolean;
+          lastActivityAtMs: number;
+          connectedAtMs: number;
+          terminate: () => void;
+          disconnect: () => Promise<void>;
+        }
       >;
       subscribedUnderlyingsByConnection: Map<string, Set<string>>;
-      streamState: Map<string, { connected: boolean; lastMessageAt: number | null }>;
       checkStreamLiveness(): void;
     };
 
     runtimeAny.shouldReconnect = true;
     runtimeAny.connections.set('okx:BTC', {
+      isConnected: true,
+      lastActivityAtMs: Date.now() - 5 * 60 * 1000 - 1,
+      connectedAtMs: Date.now() - 10 * 60 * 1000,
       terminate,
-      close: vi.fn(),
-      removeAllListeners: vi.fn(),
+      disconnect: vi.fn(async () => {}),
     });
     runtimeAny.subscribedUnderlyingsByConnection.set('okx:BTC', new Set(['BTC']));
-    runtimeAny.streamState.set('okx:BTC', {
-      connected: true,
-      lastMessageAt: Date.now() - 5 * 60 * 1000 - 1,
-    });
 
     vi.spyOn(Math, 'random').mockReturnValue(0);
 

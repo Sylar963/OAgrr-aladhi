@@ -2,6 +2,7 @@ import type pino from 'pino';
 import WebSocket from 'ws';
 import { logger } from '../../utils/logger.js';
 import { backoffDelay, flapBackoffDelay } from '../../utils/reconnect.js';
+import { closeSocketQuietly } from '../../utils/ws.js';
 
 /**
  * Shared JSON-RPC 2.0 over WebSocket base for Deribit and Derive.
@@ -266,8 +267,7 @@ export class JsonRpcWsClient {
     if (this.ws) {
       const socket = this.ws;
       this.ws = null;
-      this.detachSocket(socket);
-      socket.close();
+      closeSocketQuietly(socket);
     }
   }
 

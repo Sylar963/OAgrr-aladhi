@@ -33,6 +33,10 @@ const FEE_CAP: Record<VenueId, number> = {
 
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+// Heartbeat replies keep transport activity fresh on a socket that has stopped delivering
+// quotes, so the transport check alone never fires on most venues. Matches the chain
+// runtime's STALE_AFTER_MS, the point where the UI already shows the venue as stale.
+const DEFAULT_QUOTE_STALENESS_THRESHOLD_MS = 3 * 60 * 1000;
 const DEFAULT_QUOTE_FRESHNESS_MS = 5 * 60 * 1000;
 const SURFACE_COVERAGE_REFRESH_MS = 10 * 60 * 1000;
 const MS_PER_DAY = 86_400_000;
@@ -64,6 +68,7 @@ function expiryDateToMs(expiry: string): number | null {
 interface FeedConnectionSnapshot {
   connected: boolean;
   lastActivityAt: number;
+  connectedAt: number;
 }
 
 export interface CachedInstrument {
@@ -142,6 +147,10 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
   // upstream subscriptions for chains nobody streams; their quotes skip delta building.
   private readonly deltaChainRefCounts = new Map<string, number>();
   protected feedStalenessThresholdMs = DEFAULT_FEED_STALENESS_THRESHOLD_MS;
+  // null opts a venue out, for adapters that run their own quote-level staleness check.
+  protected quoteStalenessThresholdMs: number | null = DEFAULT_QUOTE_STALENESS_THRESHOLD_MS;
+  private lastQuoteAt = 0;
+  private lastQuoteWatchdogRestartAt = 0;
   protected quoteFreshnessMs = DEFAULT_QUOTE_FRESHNESS_MS;
   private feedWatchdogTimer: ReturnType<typeof setInterval> | null = null;
   private surfaceCoverageTimer: ReturnType<typeof setInterval> | null = null;
@@ -566,6 +575,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
 
   protected emitQuoteUpdates(updates: Array<{ exchangeSymbol: string; quote: LiveQuote }>): void {
     const deltas: VenueDelta[] = [];
+    if (updates.length > 0) this.lastQuoteAt = Date.now();
 
     for (const update of updates) {
       if (Date.now() > this.lastWatchdogReconnectAt) {
@@ -665,17 +675,52 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     const snapshot = this.getFeedConnectionSnapshot();
     if (snapshot == null || !snapshot.connected || snapshot.lastActivityAt <= 0) return;
 
-    const staleMs = Date.now() - snapshot.lastActivityAt;
-    if (staleMs < this.feedStalenessThresholdMs) return;
-    if (snapshot.lastActivityAt <= this.lastWatchdogReconnectAt) return;
+    const now = Date.now();
+    const staleMs = now - snapshot.lastActivityAt;
+    if (staleMs >= this.feedStalenessThresholdMs) {
+      if (snapshot.lastActivityAt <= this.lastWatchdogReconnectAt) return;
 
-    this.lastWatchdogReconnectAt = Date.now();
+      this.lastWatchdogReconnectAt = now;
+      recorderLog.error(
+        { venue: this.venue, staleMs, thresholdMs: this.feedStalenessThresholdMs },
+        'feed stale, forcing reconnect',
+      );
+      this.emitStatus('reconnecting', `feed stale after ${Math.round(staleMs / 1000)}s`);
+      this.restartFeedFromWatchdog();
+      return;
+    }
+
+    this.checkQuoteLiveness(snapshot, now);
+  }
+
+  private checkQuoteLiveness(snapshot: FeedConnectionSnapshot, now: number): void {
+    const thresholdMs = this.quoteStalenessThresholdMs;
+    if (thresholdMs == null || !this.expectsQuoteFlow()) return;
+
+    // A fresh connection or a recent restart gets a full window to resubscribe and deliver.
+    const since = Math.max(this.lastQuoteAt, snapshot.connectedAt, this.lastQuoteWatchdogRestartAt);
+    const quietMs = now - since;
+    if (quietMs < thresholdMs) return;
+
+    this.lastQuoteWatchdogRestartAt = now;
     recorderLog.error(
-      { venue: this.venue, staleMs, thresholdMs: this.feedStalenessThresholdMs },
-      'feed stale, forcing reconnect',
+      {
+        venue: this.venue,
+        quietMs,
+        lastQuoteAgeMs: now - this.lastQuoteAt,
+        thresholdMs,
+      },
+      'socket alive but quotes stopped, forcing reconnect',
     );
-    this.emitStatus('reconnecting', `feed stale after ${Math.round(staleMs / 1000)}s`);
+    this.emitStatus('reconnecting', `no quotes for ${Math.round(quietMs / 1000)}s`);
     this.restartFeedFromWatchdog();
+  }
+
+  // Only venues that have delivered quotes before and still hold upstream subscriptions are
+  // expected to keep streaming; an idle adapter with nothing subscribed is legitimately silent.
+  private expectsQuoteFlow(): boolean {
+    if (this.lastQuoteAt <= 0) return false;
+    return this.requestRefCounts.size > 0 || this.pinnedChainKeys.size > 0 || this.eagerExpiryCount > 0;
   }
 
   private freshQuote(exchangeSymbol: string, now: number): LiveQuote | null {

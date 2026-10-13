@@ -1,4 +1,3 @@
-import WebSocket from 'ws';
 import { z } from 'zod';
 import {
   BINANCE_BLOCK_TRADES,
@@ -12,6 +11,7 @@ import {
   OKX_REST_BASE_URL,
   OKX_RFQ_PUBLIC_TRADES,
 } from '../../feeds/shared/endpoints.js';
+import { TopicWsClient } from '../../feeds/shared/topic-ws-client.js';
 import { computeBlockTradeAmounts } from '../../trade-persistence.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
@@ -30,11 +30,9 @@ import type {
 const log = feedLogger('block-trade-runtime');
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
 const DERIBIT_BLOCK_KEEPALIVE_MS = 25_000;
-
-function isRateLimitSignal(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /(^|\D)429(\D|$)|over_limit|rate\s*limit|too many requests/i.test(message);
-}
+const BYBIT_BLOCK_KEEPALIVE_MS = 20_000;
+// Both block sockets answer their keepalive, so a few missed replies means the connection is dead.
+const BLOCK_STREAM_IDLE_TIMEOUT_MS = 90_000;
 
 // ── Runtime configuration ─────────────────────────────────────
 const DERIBIT_SEED_COUNT = 250;
@@ -346,157 +344,121 @@ async function fetchDeribitSeedTrades(): Promise<BlockTradeEvent[]> {
   return trades;
 }
 
-function deribitBlockStream(): BlockVenueStream {
-  let ws: WebSocket | null = null;
-  let shouldReconnect = true;
-  let handlers: BlockVenueStreamHandlers | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
-  let rateLimitUntil = 0;
-
-  function connect(attempt = 0): void {
-    if (!shouldReconnect || ws != null || reconnectTimer != null) return;
-    const socket = new WebSocket(DERIBIT_WS_URL);
-    ws = socket;
-    let didOpen = false;
-    let openedAt = 0;
-
-    const detachSocket = (): void => {
-      socket.removeAllListeners();
-    };
-
-    socket.on('open', () => {
-      if (ws !== socket) return;
-
-      didOpen = true;
-      openedAt = Date.now();
-      rateLimitUntil = 0;
-      handlers?.onConnected();
-      log.info({ venue: 'deribit' }, 'block trade WS connected');
-      socket.send(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'public/subscribe',
-          params: { channels: ['block_rfq.trades.any'] },
-        }),
-      );
-      keepaliveTimer = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(
-            JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'public/test', params: {} }),
-          );
-        }
-      }, DERIBIT_BLOCK_KEEPALIVE_MS);
-    });
-
-    socket.on('message', (raw: WebSocket.RawData) => {
-      if (ws !== socket) return;
-
-      try {
-        const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
-        if (msg['method'] !== 'subscription') return;
-        const params = msg['params'] as Record<string, unknown> | undefined;
-        const data = params?.['data'];
-        if (!data || typeof data !== 'object') return;
-        // Deribit pushes single block_rfq objects, not arrays
-        const items = Array.isArray(data) ? data : [data];
-        const trades: BlockTradeEvent[] = [];
-        for (const item of items) {
-          const parsed = DeribitBlockRfqSchema.safeParse(item);
-          if (!parsed.success) continue;
-          const trade = mapDeribitBlockTrade(parsed.data);
-          if (!trade) continue;
-          trades.push(trade);
-        }
-        if (trades.length > 0) handlers?.onTrades(trades);
-      } catch (err) {
-        log.debug({ err: String(err) }, 'malformed WS frame');
-      }
-    });
-
-    socket.on('close', (code: number, reason: Buffer) => {
-      if (ws !== socket) return;
-
-      ws = null;
-      detachSocket();
-      const reasonStr = reason.length > 0 ? reason.toString() : undefined;
-      const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
+async function seedDeribitBlockTrades(): Promise<BlockTradeEvent[]> {
+  for (let attempt = 0; attempt < DERIBIT_SEED_RETRIES; attempt++) {
+    try {
+      return await fetchDeribitSeedTrades();
+    } catch (err) {
       log.warn(
-        { venue: 'deribit', closeCode: code, closeReason: reasonStr, uptimeMs },
-        'block trade WS closed',
+        {
+          venue: 'deribit',
+          err: String(err),
+          attempt: attempt + 1,
+          retries: DERIBIT_SEED_RETRIES,
+        },
+        'block trade seed failed',
       );
-      handlers?.onDisconnected();
-      if (keepaliveTimer) {
-        clearInterval(keepaliveTimer);
-        keepaliveTimer = null;
-      }
-      if (shouldReconnect) {
-        handlers?.onReconnect();
-        const delay = Math.max(backoffDelay(didOpen ? 0 : attempt + 1), rateLimitUntil - Date.now());
-        if (reconnectTimer != null) return;
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          connect(didOpen ? 0 : attempt + 1);
-        }, delay);
-      }
-    });
-
-    socket.on('error', (err) => {
-      if (ws !== socket) return;
-      if (isRateLimitSignal(err)) {
-        rateLimitUntil = Math.max(rateLimitUntil, Date.now() + RATE_LIMIT_COOLDOWN_MS);
-      }
-      handlers?.onError();
-      log.warn({ venue: 'deribit', err: err.message }, 'block trade WS error');
-    });
-  }
-
-  async function seed(): Promise<BlockTradeEvent[]> {
-    for (let attempt = 0; attempt < DERIBIT_SEED_RETRIES; attempt++) {
-      try {
-        return await fetchDeribitSeedTrades();
-      } catch (err) {
-        log.warn(
-          {
-            venue: 'deribit',
-            err: String(err),
-            attempt: attempt + 1,
-            retries: DERIBIT_SEED_RETRIES,
-          },
-          'block trade seed failed',
-        );
-        if (attempt < DERIBIT_SEED_RETRIES - 1) {
-          await new Promise((r) => setTimeout(r, backoffDelay(attempt)));
-        }
+      if (attempt < DERIBIT_SEED_RETRIES - 1) {
+        await new Promise((r) => setTimeout(r, backoffDelay(attempt)));
       }
     }
-    return [];
   }
+  return [];
+}
+
+interface TopicBlockStreamConfig {
+  venue: VenueId;
+  url: string;
+  subscribeMessage: Record<string, unknown>;
+  pingMessage: Record<string, unknown>;
+  pingIntervalMs: number;
+  parseFrame: (msg: Record<string, unknown>) => BlockTradeEvent[];
+  seed?: () => Promise<BlockTradeEvent[]>;
+}
+
+function topicBlockStream(config: TopicBlockStreamConfig): BlockVenueStream {
+  let client: TopicWsClient | null = null;
 
   return {
-    venue: 'deribit',
-    connect(streamHandlers) {
-      handlers = streamHandlers;
-      connect();
-      void seed().then((trades) => {
-        if (trades.length > 0) {
-          streamHandlers.onTrades(trades);
-        }
+    venue: config.venue,
+    connect(handlers) {
+      if (client != null) return;
+      client = new TopicWsClient(config.url, `block-trades:${config.venue}`, {
+        rateLimitCooldownMs: RATE_LIMIT_COOLDOWN_MS,
+        pingIntervalMs: config.pingIntervalMs,
+        pingMessage: config.pingMessage,
+        idleTimeoutMs: BLOCK_STREAM_IDLE_TIMEOUT_MS,
+        getReplayMessages: () => [config.subscribeMessage],
+        onStatusChange: (state) => {
+          if (state !== 'connected') return;
+          handlers.onConnected();
+          log.info({ venue: config.venue }, 'block trade WS connected');
+        },
+        onMessage: (raw) => {
+          try {
+            const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+            const trades = config.parseFrame(msg);
+            if (trades.length > 0) handlers.onTrades(trades);
+          } catch (err) {
+            log.debug({ venue: config.venue, err: String(err) }, 'malformed WS frame');
+          }
+        },
+        onClose: () => {
+          handlers.onDisconnected();
+          handlers.onReconnect();
+        },
+        onError: (err) => {
+          handlers.onError();
+          log.warn({ venue: config.venue, err: err.message }, 'block trade WS error');
+        },
+      });
+      // Failures before open are retried by the client's own close→reconnect path.
+      client.connect().catch(() => {});
+
+      void config.seed?.().then((trades) => {
+        if (trades.length > 0) handlers.onTrades(trades);
       });
     },
     dispose() {
-      shouldReconnect = false;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      if (keepaliveTimer) clearInterval(keepaliveTimer);
-      keepaliveTimer = null;
-      const socket = ws;
-      ws = null;
-      socket?.removeAllListeners();
-      socket?.close();
+      const current = client;
+      client = null;
+      void current?.disconnect();
     },
   };
+}
+
+function parseDeribitBlockFrame(msg: Record<string, unknown>): BlockTradeEvent[] {
+  if (msg['method'] !== 'subscription') return [];
+  const params = msg['params'] as Record<string, unknown> | undefined;
+  const data = params?.['data'];
+  if (!data || typeof data !== 'object') return [];
+  // Deribit pushes single block_rfq objects, not arrays
+  const items = Array.isArray(data) ? data : [data];
+  const trades: BlockTradeEvent[] = [];
+  for (const item of items) {
+    const parsed = DeribitBlockRfqSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const trade = mapDeribitBlockTrade(parsed.data);
+    if (trade) trades.push(trade);
+  }
+  return trades;
+}
+
+function deribitBlockStream(): BlockVenueStream {
+  return topicBlockStream({
+    venue: 'deribit',
+    url: DERIBIT_WS_URL,
+    subscribeMessage: {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'public/subscribe',
+      params: { channels: ['block_rfq.trades.any'] },
+    },
+    pingMessage: { jsonrpc: '2.0', id: 0, method: 'public/test', params: {} },
+    pingIntervalMs: DERIBIT_BLOCK_KEEPALIVE_MS,
+    parseFrame: parseDeribitBlockFrame,
+    seed: seedDeribitBlockTrades,
+  });
 }
 
 // Deribit combo_id encodes strategy: BTC-STRD-27MAR26-70000, BTC-CS-..., etc.
@@ -585,116 +547,29 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
   };
 }
 
-function bybitBlockStream(): BlockVenueStream {
-  let ws: WebSocket | null = null;
-  let shouldReconnect = true;
-  let handlers: BlockVenueStreamHandlers | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
-  let rateLimitUntil = 0;
+function parseBybitBlockFrame(msg: Record<string, unknown>): BlockTradeEvent[] {
+  const data = msg['data'];
+  if (!data || !Array.isArray(data)) return [];
 
-  function connect(attempt = 0): void {
-    if (!shouldReconnect || ws != null || reconnectTimer != null) return;
-    const socket = new WebSocket(BYBIT_RFQ_WS_URL);
-    ws = socket;
-    let didOpen = false;
-    let openedAt = 0;
-
-    const detachSocket = (): void => {
-      socket.removeAllListeners();
-    };
-
-    socket.on('open', () => {
-      if (ws !== socket) return;
-
-      didOpen = true;
-      openedAt = Date.now();
-      rateLimitUntil = 0;
-      handlers?.onConnected();
-      log.info({ venue: 'bybit' }, 'block trade WS connected');
-      socket.send(JSON.stringify({ op: 'subscribe', args: ['rfq.open.public.trades'] }));
-      keepaliveTimer = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 'ping' }));
-      }, 20_000);
-    });
-
-    socket.on('message', (raw: WebSocket.RawData) => {
-      if (ws !== socket) return;
-
-      try {
-        const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
-        const data = msg['data'];
-        if (!data || !Array.isArray(data)) return;
-
-        const trades: BlockTradeEvent[] = [];
-        for (const item of data) {
-          const parsed = BybitBlockTradeSchema.safeParse(item);
-          if (!parsed.success) continue;
-          const trade = mapBybitBlockTrade(parsed.data);
-          if (!trade) continue;
-          trades.push(trade);
-        }
-        if (trades.length > 0) handlers?.onTrades(trades);
-      } catch (err) {
-        log.debug({ err: String(err) }, 'malformed WS frame');
-      }
-    });
-
-    socket.on('close', (code: number, reason: Buffer) => {
-      if (ws !== socket) return;
-
-      ws = null;
-      detachSocket();
-      const reasonStr = reason.length > 0 ? reason.toString() : undefined;
-      const uptimeMs = openedAt > 0 ? Date.now() - openedAt : undefined;
-      log.warn(
-        { venue: 'bybit', closeCode: code, closeReason: reasonStr, uptimeMs },
-        'block trade WS closed',
-      );
-      handlers?.onDisconnected();
-      if (keepaliveTimer) {
-        clearInterval(keepaliveTimer);
-        keepaliveTimer = null;
-      }
-      if (shouldReconnect) {
-        handlers?.onReconnect();
-        const delay = Math.max(backoffDelay(didOpen ? 0 : attempt + 1), rateLimitUntil - Date.now());
-        if (reconnectTimer != null) return;
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          connect(didOpen ? 0 : attempt + 1);
-        }, delay);
-      }
-    });
-
-    socket.on('error', (err) => {
-      if (ws !== socket) return;
-      if (isRateLimitSignal(err)) {
-        rateLimitUntil = Math.max(rateLimitUntil, Date.now() + RATE_LIMIT_COOLDOWN_MS);
-      }
-      handlers?.onError();
-      log.warn({ venue: 'bybit', err: err.message }, 'block trade WS error');
-    });
+  const trades: BlockTradeEvent[] = [];
+  for (const item of data) {
+    const parsed = BybitBlockTradeSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const trade = mapBybitBlockTrade(parsed.data);
+    if (trade) trades.push(trade);
   }
+  return trades;
+}
 
-  return {
+function bybitBlockStream(): BlockVenueStream {
+  return topicBlockStream({
     venue: 'bybit',
-    connect(streamHandlers) {
-      handlers = streamHandlers;
-      connect();
-    },
-    dispose() {
-      shouldReconnect = false;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      if (keepaliveTimer) clearInterval(keepaliveTimer);
-      keepaliveTimer = null;
-      const socket = ws;
-      ws = null;
-      socket?.removeAllListeners();
-      socket?.close();
-    },
-  };
+    url: BYBIT_RFQ_WS_URL,
+    subscribeMessage: { op: 'subscribe', args: ['rfq.open.public.trades'] },
+    pingMessage: { op: 'ping' },
+    pingIntervalMs: BYBIT_BLOCK_KEEPALIVE_MS,
+    parseFrame: parseBybitBlockFrame,
+  });
 }
 
 // ── OKX (REST poll every 90s) ─────────────────────────────────

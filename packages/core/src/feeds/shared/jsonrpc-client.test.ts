@@ -636,12 +636,14 @@ describe('JsonRpcWsClient', () => {
     const socket = {
       close: vi.fn(),
       removeAllListeners: vi.fn(),
+      on: vi.fn(),
     };
 
     internals.ws = socket;
     await client.disconnect();
 
     expect(socket.removeAllListeners).toHaveBeenCalledOnce();
+    expect(socket.on).toHaveBeenCalledWith('error', expect.any(Function));
     expect(socket.close).toHaveBeenCalledOnce();
     expect(internals.ws).toBeNull();
   });

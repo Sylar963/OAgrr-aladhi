@@ -213,6 +213,7 @@ export class CoincallWsAdapter extends SdkBaseAdapter {
     return {
       connected: client.isConnected,
       lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+      connectedAt: client.connectedAtMs,
     };
   }
 

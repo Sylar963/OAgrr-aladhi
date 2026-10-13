@@ -85,6 +85,7 @@ export class ThalexWsAdapter extends SdkBaseAdapter {
     return {
       connected: client.isConnected,
       lastActivityAt: client.lastActivityAtMs || client.connectedAtMs,
+      connectedAt: client.connectedAtMs,
     };
   }
 

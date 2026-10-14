@@ -160,6 +160,43 @@ function straddleStranglePayoff(legs: PositionLeg[]): {
   };
 }
 
+function expiryPnlAt(legs: PositionLeg[], spot: number): number {
+  return legs.reduce((acc, l) => {
+    const intrinsic =
+      l.optionRight === 'call' ? Math.max(0, spot - l.strike) : Math.max(0, l.strike - spot);
+    return acc + l.size * (intrinsic - l.entryPriceUsd);
+  }, 0);
+}
+
+// Only valid when calls and puts each net to zero size, so the payoff is flat
+// beyond the outer strikes and its extremes sit on strike nodes.
+function balancedPayoff(legs: PositionLeg[]): {
+  maxProfitUsd: number;
+  maxLossUsd: number;
+  breakEvenSpotsUsd: number[];
+} {
+  const strikes = [...new Set(legs.map((l) => l.strike))].sort((a, b) => a - b);
+  const values = strikes.map((k) => expiryPnlAt(legs, k));
+  const breakEvenSpotsUsd: number[] = [];
+  for (let i = 0; i < strikes.length; i += 1) {
+    const k0 = strikes[i]!;
+    const v0 = values[i]!;
+    if (v0 === 0) {
+      breakEvenSpotsUsd.push(k0);
+      continue;
+    }
+    const k1 = strikes[i + 1];
+    const v1 = values[i + 1];
+    if (k1 == null || v1 == null || v1 === 0 || Math.sign(v0) === Math.sign(v1)) continue;
+    breakEvenSpotsUsd.push(k0 + ((k1 - k0) * -v0) / (v1 - v0));
+  }
+  return {
+    maxProfitUsd: Math.max(...values),
+    maxLossUsd: -Math.min(...values),
+    breakEvenSpotsUsd,
+  };
+}
+
 function singleLegPayoff(leg: PositionLeg): {
   maxProfitUsd: number | null;
   maxLossUsd: number | null;
@@ -237,6 +274,9 @@ function buildGroup(
       breakEvenSpotsUsd: payoff?.breakEvenSpotsUsd ?? [],
     };
   }
+  if (kind === 'iron_condor' || kind === 'iron_butterfly') {
+    return { ...base, ...balancedPayoff(legs) };
+  }
   if (kind === 'naked' && legs.length === 1) {
     return { ...base, ...singleLegPayoff(first) };
   }
@@ -255,6 +295,57 @@ const PAIRING_PASSES: ReadonlySet<StrategyKind>[] = [
 
 function withQty(leg: PositionLeg, qty: number): PositionLeg {
   return { ...leg, size: Math.sign(leg.size) * qty };
+}
+
+function spreadQty(trial: PairTrial): number {
+  return Math.abs(trial.legs[0]!.size);
+}
+
+function resized(trial: PairTrial, qty: number): PairTrial {
+  return { kind: trial.kind, legs: trial.legs.map((l) => withQty(l, qty)) };
+}
+
+// Body = the inner strike of a vertical: higher put, lower call.
+function bodyAndWing(trial: PairTrial): { body: PositionLeg; wing: PositionLeg } {
+  const [a, b] = trial.legs as [PositionLeg, PositionLeg];
+  const aIsBody = trial.kind === 'put_spread' ? a.strike > b.strike : a.strike < b.strike;
+  return aIsBody ? { body: a, wing: b } : { body: b, wing: a };
+}
+
+// A put spread and call spread whose bodies share a sign (both short = iron,
+// both long = reverse iron). Bodies may cross, as long as each wing stays
+// outside the opposite body.
+function ironKind(put: PairTrial, call: PairTrial): StrategyKind | null {
+  const p = bodyAndWing(put);
+  const c = bodyAndWing(call);
+  if (Math.sign(p.body.size) !== Math.sign(c.body.size)) return null;
+  if (p.wing.strike >= c.body.strike || c.wing.strike <= p.body.strike) return null;
+  return p.body.strike === c.body.strike ? 'iron_butterfly' : 'iron_condor';
+}
+
+function mergeIronStructures(trials: PairTrial[]): PairTrial[] {
+  const left = trials.map(spreadQty);
+  const ironsByPut = new Map<number, PairTrial[]>();
+  trials.forEach((put, i) => {
+    if (put.kind !== 'put_spread') return;
+    trials.forEach((call, j) => {
+      if (call.kind !== 'call_spread' || left[i]! <= SIZE_EPS || left[j]! <= SIZE_EPS) return;
+      const kind = ironKind(put, call);
+      if (kind == null) return;
+      const qty = Math.min(left[i]!, left[j]!);
+      const legs = [...resized(put, qty).legs, ...resized(call, qty).legs].sort(
+        (a, b) => a.strike - b.strike,
+      );
+      ironsByPut.set(i, [...(ironsByPut.get(i) ?? []), { kind, legs }]);
+      left[i] = left[i]! - qty;
+      left[j] = left[j]! - qty;
+    });
+  });
+  return trials.flatMap((trial, i) => {
+    const irons = ironsByPut.get(i) ?? [];
+    if (left[i]! >= spreadQty(trial) - SIZE_EPS) return [...irons, trial];
+    return left[i]! > SIZE_EPS ? [...irons, resized(trial, left[i]!)] : irons;
+  });
 }
 
 export function detectStrategyGroups(
@@ -277,6 +368,7 @@ export function detectStrategyGroups(
     // Verticals pass first: positions are netted per instrument, so a short leg
     // that hedges a long of the same right must be paired as a defined-risk
     // spread before it can be mistaken for half of a short strangle.
+    const trials: PairTrial[] = [];
     for (const pass of PAIRING_PASSES) {
       for (let i = 0; i < sorted.length; i += 1) {
         const a = sorted[i]!;
@@ -286,11 +378,14 @@ export function detectStrategyGroups(
           const qty = Math.min(left(a), left(b));
           const trial = classifyPair(withQty(a, qty), withQty(b, qty));
           if (trial == null || !pass.has(trial.kind)) continue;
-          result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
+          trials.push(trial);
           remaining.set(a.legId, left(a) - qty);
           remaining.set(b.legId, left(b) - qty);
         }
       }
+    }
+    for (const trial of mergeIronStructures(trials)) {
+      result.push(buildGroup(trial.kind, trial.legs, marksByLeg));
     }
     for (const leg of bucket) {
       if (left(leg) <= SIZE_EPS) continue;

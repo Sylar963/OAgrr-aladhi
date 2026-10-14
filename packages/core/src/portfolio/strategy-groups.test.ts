@@ -210,4 +210,77 @@ describe('detectStrategyGroups', () => {
     expect(shortPut?.maxLossUsd).toBeCloseTo(140_000 - 2_000, 6);
     expect(shortPut?.breakEvenSpotsUsd[0]).toBeCloseTo(69_000, 6);
   });
+  describe('iron structures', () => {
+    const put = 'put' as const;
+    // Bull put 78/83 + bear call 82/87 entered as one credit order of 2,920.
+    const condor = [
+      leg({ legId: 'p78', optionRight: put, strike: 78_000, size: 1, entryPriceUsd: 580 }),
+      leg({ legId: 'p83', optionRight: put, strike: 83_000, size: -1, entryPriceUsd: 2_285 }),
+      leg({ legId: 'c82', strike: 82_000, size: -1, entryPriceUsd: 1_500 }),
+      leg({ legId: 'c87', strike: 87_000, size: 1, entryPriceUsd: 285 }),
+    ];
+
+    it('merges a credit put spread and credit call spread into a short iron condor', () => {
+      const groups = detectStrategyGroups(condor);
+      expect(groups).toHaveLength(1);
+      const g = groups[0]!;
+      expect(g.kind).toBe('iron_condor');
+      expect(g.legs.map((l) => l.strike)).toEqual([78_000, 82_000, 83_000, 87_000]);
+      expect(g.netEntryPremiumUsd).toBeCloseTo(-2_920, 6);
+      expect(g.debitOrCredit).toBe('credit');
+      expect(g.maxProfitUsd).toBeCloseTo(1_920, 6);
+      expect(g.maxLossUsd).toBeCloseTo(2_080, 6);
+      expect(g.breakEvenSpotsUsd).toHaveLength(2);
+      expect(g.breakEvenSpotsUsd[0]).toBeCloseTo(80_080, 6);
+      expect(g.breakEvenSpotsUsd[1]).toBeCloseTo(84_920, 6);
+    });
+
+    it('scales payoff with size', () => {
+      const [g] = detectStrategyGroups(condor.map((l) => ({ ...l, size: l.size * 0.01 })));
+      expect(g?.kind).toBe('iron_condor');
+      expect(g?.maxProfitUsd).toBeCloseTo(19.2, 6);
+      expect(g?.maxLossUsd).toBeCloseTo(20.8, 6);
+      expect(g?.breakEvenSpotsUsd[0]).toBeCloseTo(80_080, 6);
+    });
+
+    it('detects a long iron condor when both bodies are long', () => {
+      const [g] = detectStrategyGroups(condor.map((l) => ({ ...l, size: -l.size })));
+      expect(g?.kind).toBe('iron_condor');
+      expect(g?.debitOrCredit).toBe('debit');
+      expect(g?.maxProfitUsd).toBeCloseTo(2_080, 6);
+      expect(g?.maxLossUsd).toBeCloseTo(1_920, 6);
+    });
+
+    it('detects an iron butterfly when the short bodies share a strike', () => {
+      const legs = [
+        leg({ legId: 'p75', optionRight: put, strike: 75_000, size: 1, entryPriceUsd: 300 }),
+        leg({ legId: 'p80', optionRight: put, strike: 80_000, size: -1, entryPriceUsd: 2_000 }),
+        leg({ legId: 'c80', strike: 80_000, size: -1, entryPriceUsd: 2_100 }),
+        leg({ legId: 'c85', strike: 85_000, size: 1, entryPriceUsd: 350 }),
+      ];
+      const [g] = detectStrategyGroups(legs);
+      expect(g?.kind).toBe('iron_butterfly');
+      expect(g?.maxProfitUsd).toBeCloseTo(3_450, 6);
+      expect(g?.maxLossUsd).toBeCloseTo(5_000 - 3_450, 6);
+      expect(g?.breakEvenSpotsUsd[0]).toBeCloseTo(76_550, 6);
+      expect(g?.breakEvenSpotsUsd[1]).toBeCloseTo(83_450, 6);
+    });
+
+    it('keeps the excess of a larger spread as a vertical', () => {
+      const legs = condor.map((l) =>
+        l.optionRight === 'put' ? { ...l, size: l.size * 2 } : l,
+      );
+      const groups = detectStrategyGroups(legs);
+      expect(groups.map((g) => g.kind)).toEqual(['iron_condor', 'put_spread']);
+      expect(groups[1]?.legs.map((l) => Math.abs(l.size))).toEqual([1, 1]);
+    });
+
+    it('does not merge a credit put spread with a debit call spread', () => {
+      const legs = condor.map((l) =>
+        l.optionRight === 'call' ? { ...l, size: -l.size } : l,
+      );
+      const groups = detectStrategyGroups(legs);
+      expect(groups.map((g) => g.kind).sort()).toEqual(['call_spread', 'put_spread']);
+    });
+  });
 });

@@ -214,7 +214,15 @@ const VegaByStrikeRowSchema = z.object({
 
 const StrategyGroupSchema = z.object({
   groupId: z.string(),
-  kind: z.enum(['naked', 'call_spread', 'put_spread', 'straddle', 'strangle']),
+  kind: z.enum([
+    'naked',
+    'call_spread',
+    'put_spread',
+    'straddle',
+    'strangle',
+    'iron_condor',
+    'iron_butterfly',
+  ]),
   underlying: z.string(),
   expiry: z.string(),
   legIds: z.array(z.string()),

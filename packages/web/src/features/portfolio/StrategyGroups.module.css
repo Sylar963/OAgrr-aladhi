@@ -95,6 +95,11 @@
   color: #a78bfa;
 }
 
+.kind[data-kind='iron_condor'],
+.kind[data-kind='iron_butterfly'] {
+  color: #34d399;
+}
+
 .kind[data-kind='naked'] {
   color: #94a3b8;
 }

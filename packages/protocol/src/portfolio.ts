@@ -350,6 +350,8 @@ export const StrategyKindSchema = z.enum([
   'put_spread',
   'straddle',
   'strangle',
+  'iron_condor',
+  'iron_butterfly',
 ]);
 export type StrategyKind = z.infer<typeof StrategyKindSchema>;
 

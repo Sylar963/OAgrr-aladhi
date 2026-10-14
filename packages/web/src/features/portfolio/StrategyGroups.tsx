@@ -24,6 +24,12 @@ function strategyLabel(group: StrategyGroup): string {
       return (first?.size ?? 0) > 0 ? 'Long straddle' : 'Short straddle';
     case 'strangle':
       return (first?.size ?? 0) > 0 ? 'Long strangle' : 'Short strangle';
+    case 'iron_condor':
+    case 'iron_butterfly': {
+      const name = group.kind === 'iron_condor' ? 'iron condor' : 'iron butterfly';
+      const outer = [...group.legs].sort((a, b) => a.strike - b.strike)[0];
+      return (outer?.size ?? 0) > 0 ? `Short ${name}` : `Long ${name}`;
+    }
     case 'naked':
       return `${(first?.size ?? 0) > 0 ? 'Long' : 'Short'} ${first?.optionRight ?? 'option'}`;
   }

@@ -16,6 +16,6 @@ describe('HeroTerminalSection (reduced motion)', () => {
       screen.getByRole('heading', { level: 1, name: /one terminal\. every venue\./i }),
     ).toBeVisible();
     expect(screen.getByRole('link', { name: /request access/i })).toBeVisible();
-    expect(screen.queryByText(/not a screenshot/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/an illustrative surface/i)).not.toBeInTheDocument();
   });
 });

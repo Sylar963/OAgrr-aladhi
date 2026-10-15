@@ -15,7 +15,7 @@ export const landingCopy = {
     primaryCta: 'Request Access',
     secondaryCta: 'See the terminal',
     surfaceNote:
-      'a real volatility surface — not a screenshot. tilt, skew, term and venue context, recalculated tick-by-tick.',
+      'an illustrative surface. in the terminal, skew, term structure and venue context are rebuilt from live quotes on every venue, every few seconds.',
     proofLabel: 'Connected venues',
   },
   workflow: {

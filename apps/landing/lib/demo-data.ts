@@ -49,7 +49,7 @@ export const workflowSteps: WorkflowStep[] = [
     id: 'surface',
     label: '01',
     title: 'Surface',
-    description: 'Cross-venue IV surface. Tick-by-tick.',
+    description: 'Cross-venue IV surface. Refreshed every few seconds.',
     detail: 'Nine venues. One smile.',
   },
   {

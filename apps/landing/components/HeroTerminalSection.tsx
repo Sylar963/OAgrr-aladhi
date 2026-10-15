@@ -185,7 +185,7 @@ export function HeroTerminalSection() {
 
         <div className="pointer-events-none absolute left-0 right-0 top-7 flex items-center justify-between px-6 sm:px-10">
           <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-[var(--landing-accent)]/80">
-            ◢ surface.live
+            ◢ surface.preview
           </span>
           <span className="font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-400">
             tenor · delta · venue
@@ -254,7 +254,7 @@ export function HeroTerminalSection() {
             <div className="max-w-3xl">
               <span className="inline-flex items-center gap-3 border border-white/15 bg-white/[0.03] px-4 py-2 font-[var(--font-mono)] text-[10px] uppercase tracking-[0.36em] text-zinc-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--landing-accent)] shadow-[0_0_12px_rgba(237,244,246,0.55)]" />
-                surface.live · tick-by-tick
+                surface · illustrative
               </span>
               <p className="mt-12 max-w-xl font-[var(--font-mono)] text-[11px] uppercase leading-6 tracking-[0.32em] text-zinc-400">
                 {landingCopy.hero.surfaceNote}

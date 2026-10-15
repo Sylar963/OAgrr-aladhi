@@ -451,17 +451,21 @@
   border-color: var(--color-loss);
 }
 
+/* Rows share the list's column tracks (subgrid) so every column — the
+   edit/remove buttons especially — lines up regardless of per-row widths. */
 .legsList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: auto auto auto auto auto 1fr 16px 16px;
+  column-gap: 4px;
+  row-gap: 2px;
 }
 
 .legRow {
-  display: flex;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-3);
+  padding: 6px;
   border-radius: 3px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -476,7 +480,6 @@
 
 .legDirection {
   font-weight: 700;
-  min-width: 28px;
   font-size: 10px;
 }
 .legDirection[data-direction="buy"] {
@@ -510,16 +513,20 @@
 }
 .legExpiry {
   color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.15;
 }
 .legPrice {
   color: var(--text-secondary);
   font-weight: 700;
   font-size: var(--text-sm);
-  margin-left: auto;
+  justify-self: end;
+  white-space: nowrap;
 }
+.legEditBtn,
 .legRemove {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -706,6 +713,7 @@
 /* ── Inline leg editing ───────────────────────────────── */
 
 .legRowEditing {
+  grid-column: 1 / -1;
   background: var(--bg-elevated);
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-md);

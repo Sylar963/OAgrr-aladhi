@@ -20,9 +20,13 @@ import {
   type AssistantRunToolSummary,
   emptyAssistantRunToolSummary,
 } from './assistant-market/assistant-run-registry.js';
+import type { StructureSearchPrefetch } from './assistant-market/structure-search-prefetch.js';
 import type { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
-import type { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-builder.js';
+import type {
+  PortfolioAssistantContext,
+  PortfolioAssistantContextBuilder,
+} from './portfolio-assistant-context-builder.js';
 import type { PortfolioAssistantMemoryService } from './portfolio-assistant-memory-service.js';
 import {
   type PortfolioAssistantModelGateway,
@@ -93,6 +97,7 @@ export class PortfolioAssistantConversationService {
     private readonly memory: Pick<PortfolioAssistantMemoryService, 'loadUserMemoryFacts'> | null = null,
     private readonly now: () => number = Date.now,
     private readonly runTelemetry: Pick<PortfolioAssistantRunTelemetryCache, 'record'> | null = null,
+    private readonly structurePrefetch: Pick<StructureSearchPrefetch, 'prefetchForQuestion'> | null = null,
   ) {}
 
   async createPortfolioAssistantThread(
@@ -215,16 +220,14 @@ export class PortfolioAssistantConversationService {
         forwardDays: input.forwardDays,
         userMemoryFacts: (await this.memory?.loadUserMemoryFacts(user.id)) ?? null,
       });
-      const contextMessage = this.promptBuilder.buildPortfolioAssistantContextMessage(context);
-      if (contextMessage.length > this.configuration.maxContextCharacters + 1_000) {
-        throw new PortfolioAssistantServiceError(
-          'portfolio_unavailable',
-          'Portfolio context is too large to explain safely.',
-          503,
-          false,
-        );
-      }
       const historyPage = await this.loadPortfolioAssistantMessages(user.id, threadId);
+      const contextMessage = await this.buildContextMessage(
+        context,
+        input.message,
+        historyPage.messages,
+        user.id,
+        threadId,
+      );
       const exchange = await this.store.beginPortfolioAssistantExchange({
         userId: user.id,
         threadId,
@@ -412,6 +415,56 @@ export class PortfolioAssistantConversationService {
       }
       release();
     }
+  }
+
+  private async buildContextMessage(
+    context: PortfolioAssistantContext,
+    question: string,
+    history: PortfolioAssistantMessage[],
+    userId: string,
+    threadId: string,
+  ): Promise<string> {
+    const limit = this.configuration.maxContextCharacters + 1_000;
+    const plain = this.promptBuilder.buildPortfolioAssistantContextMessage(context);
+    if (plain.length > limit) {
+      throw new PortfolioAssistantServiceError(
+        'portfolio_unavailable',
+        'Portfolio context is too large to explain safely.',
+        503,
+        false,
+      );
+    }
+    if (!this.structurePrefetch) return plain;
+    const earlierUserMessages = history
+      .filter((message) => message.role === 'user' && message.status === 'complete')
+      .map((message) => message.content)
+      .reverse();
+    const prefetched = await this.structurePrefetch.prefetchForQuestion(question, earlierUserMessages, context);
+    if (prefetched === null) return plain;
+    const withFacts =
+      prefetched.facts === null
+        ? null
+        : this.promptBuilder.buildPortfolioAssistantContextMessage({
+            ...context,
+            structureSearchFacts: prefetched.facts,
+          });
+    const included = withFacts !== null && withFacts.length <= limit;
+    logger.info(
+      {
+        userIdHash: createHash('sha256').update(userId).digest('hex'),
+        threadId,
+        view: prefetched.request.view,
+        viewFrom: prefetched.request.viewFrom,
+        budgetFrom: prefetched.request.budgetFrom,
+        outcome: prefetched.outcome,
+        code: prefetched.code,
+        durationMs: prefetched.durationMs,
+        included,
+        addedCharacters: withFacts === null ? 0 : withFacts.length - plain.length,
+      },
+      'portfolio assistant structure search prefetched',
+    );
+    return included ? withFacts : plain;
   }
 
   async deletePortfolioAssistantThread(userId: string, threadId: string): Promise<boolean> {

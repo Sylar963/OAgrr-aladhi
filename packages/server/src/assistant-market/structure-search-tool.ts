@@ -28,6 +28,8 @@ import {
 } from './structure-tool-support.js';
 
 export const STRUCTURE_SEARCH_MAX_EXPIRIES = 6;
+export const STRUCTURE_SEARCH_VERIFY_NOTE =
+  'Verify the chosen candidate with oggregator_evaluate_structure (same legs, sides, sizes and venues, plus portfolioRef) before recommending it.';
 
 export const StructureSearchToolInputSchema = z
   .object({
@@ -344,7 +346,7 @@ export async function runStructureSearchTool(
     result.rankedBy === 'book_reward_to_risk'
       ? 'candidatePnlUsd is the P&L of all proposed legs (repair and view) at the target; bookPnlUsd and worstLossUsd are book-wide. rewardToRisk = bookPnlUsd ÷ book-wide worst loss.'
       : "candidatePnlUsd is the candidate's own P&L at the target; bookPnlUsd and worstLossUsd include the held book when portfolioRef is given. rewardToRisk = candidatePnlUsd ÷ the worst loss the candidate adds.",
-    'Verify the chosen candidate with oggregator_evaluate_structure (same legs, sides, sizes and venues, plus portfolioRef) before recommending it.',
+    STRUCTURE_SEARCH_VERIFY_NOTE,
   );
 
   return {

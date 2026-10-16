@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { MIN_ASSISTANT_MCP_TOKEN_LENGTH } from '../assistant-market/assistant-mcp-server.js';
 import { AssistantMarketDataReader } from '../assistant-market/market-data-reader.js';
 import { OptionsLibrary } from '../assistant-market/options-library.js';
+import type { StructureSearchPrefetchOutcome } from '../assistant-market/structure-search-prefetch.js';
 import { HermesPortfolioAssistantGateway } from '../hermes-portfolio-assistant-gateway.js';
 import {
   type PortfolioAssistantConfiguration,
@@ -77,6 +78,7 @@ const ArgsSchema = z.object({
   samples: z.coerce.number().int().min(1).max(10).default(3),
   concurrency: z.coerce.number().int().min(1).max(MAX_CONCURRENCY).default(1),
   regrade: z.string().min(1).optional(),
+  prefetch: z.enum(['on', 'off']).default('on'),
 });
 type EvalArgs = z.infer<typeof ArgsSchema>;
 
@@ -109,6 +111,18 @@ interface FixtureRun {
   judge: { name: string; score: number; rationale: string } | null;
 }
 
+// The prefetched search is the same tool run, so the structure grader treats it as observed.
+function withPrefetch(
+  tools: AssistantEvalToolObservation,
+  prefetched: StructureSearchPrefetchOutcome | null,
+): AssistantEvalToolObservation {
+  if (prefetched == null) return tools;
+  const evidence = `${tools.evidence}; server prefetch of oggregator_structure_search: ${prefetched.outcome} in ${prefetched.durationMs} ms`;
+  return prefetched.outcome === 'ok'
+    ? { ...tools, observedTools: [...(tools.observedTools ?? []), 'oggregator_structure_search'], evidence }
+    : { ...tools, evidence };
+}
+
 function heldLegs(fixture: AssistantEvalFixture): HeldLegRef[] {
   return fixture.context.positions
     .filter((position) => position.size !== 0)
@@ -131,6 +145,7 @@ function readArgs(argv: string[]): EvalArgs {
       samples: { type: 'string' },
       concurrency: { type: 'string' },
       regrade: { type: 'string' },
+      prefetch: { type: 'string' },
     },
     allowPositionals: false,
     strict: true,
@@ -285,8 +300,21 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   const threadId = `assistant-eval-${env.runId}-${fixture.id}-s${sample}`;
   const requestId = randomUUID();
   const started = env.mcp?.beginRun({ requestId, threadId, context: fixture.context }) ?? null;
-  const context: PortfolioAssistantContext =
+  const baseContext: PortfolioAssistantContext =
     started == null ? fixtureContext(fixture) : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef };
+  const prefetched =
+    env.mcp == null || env.args.prefetch === 'off'
+      ? null
+      : await env.mcp.prefetch.prefetchForQuestion(
+          fixture.question,
+          fixture.history
+            .filter((message) => message.role === 'user')
+            .map((message) => message.content)
+            .reverse(),
+          baseContext,
+        );
+  const context: PortfolioAssistantContext =
+    prefetched?.facts == null ? baseContext : { ...baseContext, structureSearchFacts: prefetched.facts };
   const prompt = buildPrompt(env.builder, fixture, context, threadId);
   const startedAt = Date.now();
   let answer = '';
@@ -313,7 +341,7 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   let toolCalls: EvalRunToolCall[] | null = null;
   if (env.mcp != null) {
     const toolUsage = env.mcp.finishRun(requestId);
-    tools = registryObservation(toolUsage);
+    tools = withPrefetch(registryObservation(toolUsage), prefetched);
     toolCalls = toolUsage.calls;
   } else {
     tools = await journalTools(env.args, fixture.context.portfolioRef, startedAt, finishedAt);
@@ -438,6 +466,7 @@ interface ReportMeta {
   concurrency: number;
   requestTimeoutMs: number | null;
   toolLogs: string;
+  prefetch: 'on' | 'off';
   judge: { name: string } | null;
   runs: FixtureRun[];
 }
@@ -457,7 +486,7 @@ function writeReport(outDirectory: string, name: string, meta: ReportMeta): void
   const markdown = [
     `# Assistant eval ${meta.runId}${name === 'report' ? '' : ` (${name})`}`,
     '',
-    `Model: ${meta.model}. MCP: ${meta.mcp}. Samples per fixture: ${meta.samples}.`,
+    `Model: ${meta.model}. MCP: ${meta.mcp}. Structure search prefetch: ${meta.prefetch}. Samples per fixture: ${meta.samples}.`,
     '',
     `Samples passed: ${overall.passed}/${overall.total} (${percent(overall.rate)}, Wilson 95% ${intervalText(overall)}). ` +
       `Fixtures passing by majority: ${majority}/${fixtures.length}.`,
@@ -487,6 +516,7 @@ const SavedReportSchema = z.object({
   concurrency: z.number().int().positive().default(1),
   requestTimeoutMs: z.number().nullable(),
   toolLogs: z.string(),
+  prefetch: z.enum(['on', 'off']).default('off'),
   runs: z.array(
     z.looseObject({
       fixtureId: z.string(),
@@ -554,6 +584,7 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
     concurrency: saved.concurrency,
     requestTimeoutMs: saved.requestTimeoutMs,
     toolLogs: saved.toolLogs,
+    prefetch: saved.prefetch,
     judge: null,
     runs,
   });
@@ -701,6 +732,7 @@ async function main(): Promise<number> {
     concurrency: args.concurrency,
     requestTimeoutMs: configuration.requestTimeoutMs,
     toolLogs: args.mcp === 'eval' ? 'eval-mcp-registry' : args['tool-logs'],
+    prefetch: args.mcp === 'eval' ? args.prefetch : 'off',
     judge: environment.judge == null ? null : { name: environment.judge.name },
     runs,
   });

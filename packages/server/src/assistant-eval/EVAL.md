@@ -9,7 +9,10 @@ pnpm --filter @oggregator/server eval:assistant -- --regrade .eval-out/<runId>
 
 Flags: `--fixture <id>` (repeatable), `--samples N` (1–10, default 3), `--concurrency N` (1–3, default 1),
 `--timeout-ms`, `--mcp eval|live`, `--mcp-port` (default `OGG_ASSISTANT_EVAL_MCP_PORT` or 3192),
-`--live-api-url` (default `http://127.0.0.1:$PORT`, `none` disables the live proxy), `--out`.
+`--live-api-url` (default `http://127.0.0.1:$PORT`, `none` disables the live proxy), `--out`,
+`--prefetch on|off` (default `on`; `--mcp eval` only: runs the backend's structure-search prefetch on
+the fixture book and counts it as an observed `oggregator_structure_search`, so `off` gives the
+before/after comparison).
 Output goes to `packages/server/.eval-out/<runId>/`: `report.md`, `report.json` and one
 `answers/<fixture>.s<sample>.md` per sample.
 

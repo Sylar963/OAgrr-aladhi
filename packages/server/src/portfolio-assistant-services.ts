@@ -22,6 +22,7 @@ import { AssistantMarketDataReader } from './assistant-market/market-data-reader
 import { AssistantRunRegistry } from './assistant-market/assistant-run-registry.js';
 import { OptionsLibrary } from './assistant-market/options-library.js';
 import { type PortfolioRefScope, PortfolioRefStore } from './assistant-market/portfolio-ref.js';
+import { StructureSearchPrefetch } from './assistant-market/structure-search-prefetch.js';
 import { FlushSchedule } from '@oggregator/db';
 import { HermesPortfolioAssistantGateway } from './hermes-portfolio-assistant-gateway.js';
 import { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
@@ -111,6 +112,7 @@ export const portfolioAssistantConversationService = new PortfolioAssistantConve
   portfolioAssistantMemoryService,
   Date.now,
   runTelemetry,
+  new StructureSearchPrefetch(assistantMarketDataReader, { refs: portfolioRefStore, resolveHeldLegs }),
 );
 
 const FEEDBACK_FLUSH_INTERVAL_MS = 24 * 60 * 60 * 1_000;

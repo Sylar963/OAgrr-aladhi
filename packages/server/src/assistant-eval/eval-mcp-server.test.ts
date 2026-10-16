@@ -187,6 +187,38 @@ describe('eval MCP server', () => {
     mcp.finishRun('r1');
   });
 
+  it('prefetches structure_search for a budget question with the run ref, without an MCP call', async () => {
+    const budget = AssistantEvalFixtureSchema.parse(
+      JSON.parse(readFileSync(new URL('./fixtures/budget-bearish-long-call.json', import.meta.url), 'utf8')),
+    );
+    const mcp = new AssistantEvalMcp({
+      market: syntheticMarketForContext(budget.context),
+      library: new OptionsLibrary(join(tmpdir(), 'ogg-eval-no-library.sqlite')),
+      live: null,
+      log,
+    });
+    const { portfolioRef } = mcp.beginRun({ requestId: 'r1', threadId: 't1', context: budget.context });
+    const prefetched = await mcp.prefetch.prefetchForQuestion(budget.question, [], {
+      ...budget.context,
+      portfolioRef,
+    });
+    expect(prefetched).toMatchObject({ outcome: 'ok', code: null });
+    expect(prefetched?.request).toMatchObject({ view: 'bearish', maxTotalRiskUsd: 2_200 });
+    const result = z
+      .object({
+        source: z.literal('oggregator_structure_search'),
+        evaluatedAt: z.string(),
+        heldBook: z.object({ status: z.literal('included') }),
+        candidates: z.array(z.object({ fits: z.boolean() })),
+        notes: z.array(z.string()),
+      })
+      .parse(prefetched?.facts?.result);
+    expect(result.evaluatedAt).toBe(new Date(FIXTURE_NOW).toISOString());
+    expect(result.candidates.length).toBeGreaterThan(0);
+    expect(result.notes.some((note) => note.startsWith('Verify the chosen candidate'))).toBe(false);
+    expect(mcp.finishRun('r1').calls).toEqual([]);
+  });
+
   it('declares a source for every registered tool', async () => {
     const response = await evalMcp().handler.handle({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     const names = z

@@ -380,6 +380,16 @@ user scope; never accept a model-provided account ID as authorization.
   `breakevenSpotsUsd` (whole dollars), all on one spot path
   (`docs/knowledge/options-trading.md`). In `oggregator_evaluate_structure` output every
   window value is after the proposed legs' fees.
+- `structureSearchFacts` (only on constraint questions): the `oggregator_structure_search` result,
+  run by the backend with this context's `portfolioRef` before Hermes is called, plus the parsed
+  `request` (view, budget, size, and whether each came from the question or an earlier message).
+  `planStructureSearchPrefetch` fills it only when the question (or one of the user's last three
+  messages) names exactly one view (bearish, bullish, long vol, or hedge when the book has
+  uncovered shorts) and a dollar max-loss or total-risk budget; anything ambiguous is left to the
+  model. A failed or 15-second-timed-out search, or one that would push the context over its
+  budget, sends the context without it. Each attempt logs
+  `portfolio assistant structure search prefetched`. It removes the search round trip, and with
+  it the expired-ref and circuit-breaker path, from the most common constraint questions.
 - `toolHints`: fixed strings naming which tools take `portfolioRef` and when to call them.
   They are static guidance, not per-request state.
 

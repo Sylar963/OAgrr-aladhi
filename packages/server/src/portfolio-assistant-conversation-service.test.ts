@@ -6,6 +6,10 @@ import { z } from 'zod';
 
 import { AssistantMcpHandler } from './assistant-market/assistant-mcp-server.js';
 import { AssistantRunRegistry } from './assistant-market/assistant-run-registry.js';
+import type {
+  StructureSearchPrefetch,
+  StructureSearchPrefetchOutcome,
+} from './assistant-market/structure-search-prefetch.js';
 import type { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-builder.js';
@@ -13,6 +17,7 @@ import { PortfolioAssistantConversationService } from './portfolio-assistant-con
 import type {
   PortfolioAssistantModelEvent,
   PortfolioAssistantModelGateway,
+  StreamPortfolioAnswerRequest,
 } from './portfolio-assistant-model-gateway.js';
 import type { PortfolioAssistantPromptBuilder } from './portfolio-assistant-prompt-builder.js';
 import { PortfolioAssistantRunTelemetryCache } from './portfolio-assistant-run-telemetry.js';
@@ -47,6 +52,11 @@ function buildService(
   runs: AssistantRunRegistry,
   mcp: AssistantMcpHandler,
   runTelemetry: PortfolioAssistantRunTelemetryCache | null = null,
+  options: {
+    prefetch?: Pick<StructureSearchPrefetch, 'prefetchForQuestion'>;
+    contextMessages?: string[];
+    maxContextCharacters?: number;
+  } = {},
 ) {
   const store = {
     findOwnedPortfolioAssistantThread: async () => ({
@@ -70,7 +80,8 @@ function buildService(
   const callTool = (name: string, args: Record<string, unknown>) =>
     mcp.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   const gateway = {
-    async *streamPortfolioAnswer(): AsyncIterable<PortfolioAssistantModelEvent> {
+    async *streamPortfolioAnswer(request: StreamPortfolioAnswerRequest): AsyncIterable<PortfolioAssistantModelEvent> {
+      options.contextMessages?.push(request.contextMessage);
       await callTool('test_structure', { portfolioRef: REF });
       await callTool('test_structure', { portfolioRef: REF, legs: 'bad' });
       await callTool('test_market', {});
@@ -81,7 +92,10 @@ function buildService(
   };
   return new PortfolioAssistantConversationService(
     store as unknown as PortfolioAssistantStore,
-    { maxContextCharacters: 100_000, model: 'portfolio-chat' } as PortfolioAssistantConfiguration,
+    {
+      maxContextCharacters: options.maxContextCharacters ?? 100_000,
+      model: 'portfolio-chat',
+    } as PortfolioAssistantConfiguration,
     {
       requirePortfolioAssistantEntitlement: async () => undefined,
     } as unknown as PortfolioAssistantAccessService,
@@ -93,7 +107,8 @@ function buildService(
       }),
     } as unknown as PortfolioAssistantContextBuilder,
     {
-      buildPortfolioAssistantContextMessage: () => 'context',
+      buildPortfolioAssistantContextMessage: (context: Record<string, unknown>) =>
+        context['structureSearchFacts'] == null ? 'context' : `context ${'f'.repeat(2_000)}`,
       buildPortfolioAssistantConversationMessages: (_history: unknown, message: string) => [
         { role: 'user', content: message },
       ],
@@ -108,6 +123,7 @@ function buildService(
     null,
     Date.now,
     runTelemetry,
+    options.prefetch ?? null,
   );
 }
 
@@ -277,5 +293,81 @@ describe('PortfolioAssistantConversationService user memory', () => {
     expect(contextInputs[1]).toMatchObject({ userMemoryFacts: memories['user-2'] });
     expect(JSON.stringify(contextInputs[0])).not.toContain('Deribit');
     expect(JSON.stringify(contextInputs[1])).not.toContain('Thalex');
+  });
+});
+
+describe('PortfolioAssistantConversationService structure search prefetch', () => {
+  const REQUEST = {
+    view: 'bearish' as const,
+    viewFrom: 'question' as const,
+    maxTotalRiskUsd: 2_200,
+    budgetFrom: 'question' as const,
+    targetMovePct: null,
+    size: 1,
+    minDte: 1,
+    maxDte: 45,
+  };
+
+  function prefetchReturning(outcome: StructureSearchPrefetchOutcome | null) {
+    return { prefetchForQuestion: vi.fn(async () => outcome) };
+  }
+
+  async function ask(prefetch: ReturnType<typeof prefetchReturning>, maxContextCharacters?: number) {
+    const runs = new AssistantRunRegistry();
+    const mcp = new AssistantMcpHandler([], { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as FastifyBaseLogger, runs);
+    const contextMessages: string[] = [];
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const service = buildService(runs, mcp, null, {
+      prefetch,
+      contextMessages,
+      ...(maxContextCharacters == null ? {} : { maxContextCharacters }),
+    });
+    for await (const _event of service.streamPortfolioAssistantReply(
+      USER,
+      'thread-1',
+      { clientMessageId: 'client-1', message: 'Bearish trade, max loss $2,200', forwardDays: 7 },
+      new AbortController().signal,
+    ));
+    const line = info.mock.calls.findLast(([, msg]) => msg === 'portfolio assistant structure search prefetched')?.[0];
+    return { contextMessages, line: line as Record<string, unknown> | undefined };
+  }
+
+  it('adds the prefetched search to the context sent to the model', async () => {
+    const prefetch = prefetchReturning({
+      request: REQUEST,
+      facts: { request: REQUEST, result: { candidates: [] } },
+      outcome: 'ok',
+      code: null,
+      durationMs: 12,
+    });
+    const { contextMessages, line } = await ask(prefetch);
+    expect(prefetch.prefetchForQuestion).toHaveBeenCalledWith(
+      'Bearish trade, max loss $2,200',
+      [],
+      expect.objectContaining({ portfolioRef: REF }),
+    );
+    expect(contextMessages[0]?.startsWith('context f')).toBe(true);
+    expect(line).toMatchObject({ outcome: 'ok', included: true, view: 'bearish' });
+  });
+
+  it('sends the plain context when the search fails or would exceed the context budget', async () => {
+    const failed = await ask(
+      prefetchReturning({ request: REQUEST, facts: null, outcome: 'timeout', code: 'timeout', durationMs: 15_000 }),
+    );
+    expect(failed.contextMessages).toEqual(['context']);
+    expect(failed.line).toMatchObject({ outcome: 'timeout', included: false });
+
+    const tooLarge = await ask(
+      prefetchReturning({ request: REQUEST, facts: { request: REQUEST, result: {} }, outcome: 'ok', code: null, durationMs: 5 }),
+      500,
+    );
+    expect(tooLarge.contextMessages).toEqual(['context']);
+    expect(tooLarge.line).toMatchObject({ outcome: 'ok', included: false });
+  });
+
+  it('sends the plain context without a log line when the question is not a constraint question', async () => {
+    const { contextMessages, line } = await ask(prefetchReturning(null));
+    expect(contextMessages).toEqual(['context']);
+    expect(line).toBeUndefined();
   });
 });

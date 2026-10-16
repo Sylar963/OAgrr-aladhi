@@ -22,7 +22,11 @@ import {
 } from '../assistant-market/market-data-reader.js';
 import type { OptionsLibrary } from '../assistant-market/options-library.js';
 import { PortfolioRefStore } from '../assistant-market/portfolio-ref.js';
-import type { HeldLegsWithMarks } from '../assistant-market/structure-tool-support.js';
+import { StructureSearchPrefetch } from '../assistant-market/structure-search-prefetch.js';
+import type {
+  HeldLegsWithMarks,
+  StructureToolPortfolioAccess,
+} from '../assistant-market/structure-tool-support.js';
 import type { PortfolioAssistantContext } from '../portfolio-assistant-context-builder.js';
 import type { SyntheticMarket } from './synthetic-market.js';
 
@@ -220,6 +224,7 @@ export class AssistantEvalMcp {
   readonly runs: AssistantRunRegistry;
   readonly reader: EvalMarketReader;
   readonly handler: AssistantMcpHandler;
+  readonly prefetch: StructureSearchPrefetch;
   private readonly now: () => number;
   private readonly log: FastifyBaseLogger;
   private readonly books = new Map<string, HeldLegsWithMarks>();
@@ -234,13 +239,15 @@ export class AssistantEvalMcp {
     const runs = this.runs;
     this.refs = new PortfolioRefStore({ now: this.now, isActive: (ref) => runs.isRefActive(ref) });
     this.reader = new EvalMarketReader(options.market, options.live);
+    const portfolio: StructureToolPortfolioAccess = {
+      refs: this.refs,
+      resolveHeldLegs: async (scope) => this.books.get(scope.accountId) ?? null,
+    };
+    this.prefetch = new StructureSearchPrefetch(this.reader, portfolio, () => this.reader.market.params.nowMs);
     this.handler = createAssistantMcpHandler({
       reader: this.reader,
       library: options.library,
-      portfolio: {
-        refs: this.refs,
-        resolveHeldLegs: async (scope) => this.books.get(scope.accountId) ?? null,
-      },
+      portfolio,
       runs: this.runs,
       log: options.log,
       toolClock: () => this.reader.market.params.nowMs,

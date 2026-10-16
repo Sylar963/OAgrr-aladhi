@@ -32,6 +32,7 @@ import type {
 import type { CompactChain, CompactSurface } from './assistant-market/market-data-compaction.js';
 import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
+import type { PortfolioAssistantStructureSearchFacts } from './assistant-market/structure-search-prefetch.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantUserMemoryFacts } from './portfolio-assistant-memory.js';
 import { PortfolioAssistantServiceError } from './portfolio-assistant-model-gateway.js';
@@ -180,6 +181,8 @@ export interface PortfolioAssistantContext {
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
   /** Durable preferences of the asking user only; null when nothing is remembered. */
   userMemoryFacts: PortfolioAssistantUserMemoryFacts | null;
+  /** Set per question when it reads as a view plus a book-wide budget. */
+  structureSearchFacts?: PortfolioAssistantStructureSearchFacts | null;
   topContributors: Record<
     'delta' | 'gamma' | 'vega' | 'theta' | 'vanna' | 'volga',
     PortfolioRiskContributor[]

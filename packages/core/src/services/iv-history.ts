@@ -41,10 +41,22 @@ function median(sorted: number[]): number {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-function robustStats(values: number[]): { med: number; threshold: number } {
-  const sorted = [...values].sort((a, b) => a - b);
-  const med = median(sorted);
-  const mad = median(sorted.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
+function sortedMedian(sorted: Float64Array, length: number): number {
+  const mid = length >> 1;
+  return length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+// Runs once per point per skew key over the whole buffer (~26k points × 4 keys × 4 tenors on
+// every refresh), so it reuses scratch arrays instead of allocating and comparator-sorting.
+function robustStats(
+  window: Float64Array,
+  length: number,
+  deviations: Float64Array,
+): { med: number; threshold: number } {
+  const sorted = window.subarray(0, length).sort();
+  const med = sortedMedian(sorted, length);
+  for (let i = 0; i < length; i++) deviations[i] = Math.abs(sorted[i]! - med);
+  const mad = sortedMedian(deviations.subarray(0, length).sort(), length);
   return { med, threshold: Math.max(DESPIKE_FLOOR, DESPIKE_MAD_MULT * 1.4826 * mad) };
 }
 
@@ -59,34 +71,139 @@ function robustStats(values: number[]): { med: number; threshold: number } {
  */
 export function despikeSkewSeries(series: IvHistoryPoint[]): IvHistoryPoint[] {
   const out = series.map((p) => ({ ...p }));
-  const K = DESPIKE_HALF_WINDOW;
+  const scratch = createDespikeScratch(series.length);
   for (const key of SKEW_KEYS) {
-    const idx: number[] = [];
-    for (let i = 0; i < series.length; i++) {
-      const v = series[i]![key];
-      if (v != null && Number.isFinite(v)) idx.push(i);
-    }
-    const valueAt = (j: number) => series[idx[j]!]![key]!;
-    for (let j = K; j < idx.length; j++) {
-      const value = valueAt(j);
-      if (j + K < idx.length) {
-        const window: number[] = [];
-        for (let k = j - K; k <= j + K; k++) window.push(valueAt(k));
-        const { med, threshold } = robustStats(window);
-        if (Math.abs(value - med) > threshold) out[idx[j]!]![key] = null;
-        continue;
-      }
-      const back: number[] = [];
-      for (let k = j - 2 * K; k < j; k++) if (k >= 0) back.push(valueAt(k));
-      const { med, threshold } = robustStats(back);
-      const dev = value - med;
-      if (Math.abs(dev) <= threshold) continue;
-      const nextDev = j + 1 < idx.length ? valueAt(j + 1) - med : null;
-      const confirmed = nextDev != null && Math.sign(nextDev) === Math.sign(dev) && Math.abs(nextDev) > threshold;
-      if (!confirmed) out[idx[j]!]![key] = null;
-    }
+    const count = collectValid(series, key, scratch);
+    applyDecisions(out, key, scratch, count, DESPIKE_HALF_WINDOW, () => {});
   }
   return out;
+}
+
+export interface DespikedSeries {
+  clean: IvHistoryPoint[];
+  length: number;
+  firstTs: number;
+  lastTs: number;
+}
+
+/**
+ * Extends a previous despike result after `raw` gained points at its end and possibly lost
+ * points at its front. Only the last K decisions of each key and the new points can change:
+ * every earlier decision used a centred window that is still fully present and unchanged.
+ * Returns null when `raw` is not such a continuation, so the caller recomputes in full.
+ */
+export function extendDespikedSeries(
+  previous: DespikedSeries,
+  raw: IvHistoryPoint[],
+): IvHistoryPoint[] | null {
+  const K = DESPIKE_HALF_WINDOW;
+  let lastOld = -1;
+  for (let i = raw.length - 1; i >= 0; i--) {
+    if (raw[i]!.ts === previous.lastTs) {
+      lastOld = i;
+      break;
+    }
+    if (raw[i]!.ts < previous.lastTs) break;
+  }
+  if (lastOld < 0) return null;
+  const trimmed = previous.length - 1 - lastOld;
+  if (trimmed < 0 || previous.clean[trimmed]?.ts !== raw[0]?.ts) return null;
+
+  const out = previous.clean.slice(trimmed);
+  for (let i = lastOld + 1; i < raw.length; i++) out.push({ ...raw[i]! });
+  const copied = new Set<number>();
+  const ensureOwn = (pos: number) => {
+    if (pos > lastOld || copied.has(pos)) return;
+    copied.add(pos);
+    out[pos] = { ...out[pos]! };
+  };
+
+  const scratch = createDespikeScratch(raw.length);
+  for (const key of SKEW_KEYS) {
+    const count = collectValid(raw, key, scratch);
+    let countOld = 0;
+    while (countOld < count && scratch.idx[countOld]! <= lastOld) countOld++;
+    // Front trimming turns the new first K entries back into unfiltered raw values.
+    for (let j = 0; j < Math.min(K, count); j++) {
+      const pos = scratch.idx[j]!;
+      if (out[pos]![key] !== scratch.values[j]) {
+        ensureOwn(pos);
+        out[pos]![key] = scratch.values[j]!;
+      }
+    }
+    applyDecisions(out, key, scratch, count, Math.max(K, countOld - K), ensureOwn);
+  }
+  return out;
+}
+
+interface DespikeScratch {
+  idx: Int32Array;
+  values: Float64Array;
+  window: Float64Array;
+  deviations: Float64Array;
+}
+
+function createDespikeScratch(length: number): DespikeScratch {
+  return {
+    idx: new Int32Array(length),
+    values: new Float64Array(length),
+    window: new Float64Array(2 * DESPIKE_HALF_WINDOW + 1),
+    deviations: new Float64Array(2 * DESPIKE_HALF_WINDOW + 1),
+  };
+}
+
+function collectValid(series: IvHistoryPoint[], key: (typeof SKEW_KEYS)[number], scratch: DespikeScratch): number {
+  let count = 0;
+  for (let i = 0; i < series.length; i++) {
+    const v = series[i]![key];
+    if (v != null && Number.isFinite(v)) {
+      scratch.idx[count] = i;
+      scratch.values[count] = v;
+      count++;
+    }
+  }
+  return count;
+}
+
+// Sets every decision from `from` on: null for an outlier, the raw value otherwise.
+function applyDecisions(
+  out: IvHistoryPoint[],
+  key: (typeof SKEW_KEYS)[number],
+  scratch: DespikeScratch,
+  count: number,
+  from: number,
+  beforeWrite: (pos: number) => void,
+): void {
+  const K = DESPIKE_HALF_WINDOW;
+  const { idx, values, window, deviations } = scratch;
+  for (let j = from; j < count; j++) {
+    const value = values[j]!;
+    let outlier: boolean;
+    if (j + K < count) {
+      for (let k = 0; k <= 2 * K; k++) window[k] = values[j - K + k]!;
+      const { med, threshold } = robustStats(window, 2 * K + 1, deviations);
+      outlier = Math.abs(value - med) > threshold;
+    } else {
+      let backLength = 0;
+      for (let k = j - 2 * K; k < j; k++) if (k >= 0) window[backLength++] = values[k]!;
+      const { med, threshold } = robustStats(window, backLength, deviations);
+      const dev = value - med;
+      if (Math.abs(dev) <= threshold) {
+        outlier = false;
+      } else {
+        const nextDev = j + 1 < count ? values[j + 1]! - med : null;
+        const confirmed =
+          nextDev != null && Math.sign(nextDev) === Math.sign(dev) && Math.abs(nextDev) > threshold;
+        outlier = !confirmed;
+      }
+    }
+    const next = outlier ? null : value;
+    const pos = idx[j]!;
+    if (out[pos]![key] !== next) {
+      beforeWrite(pos);
+      out[pos]![key] = next;
+    }
+  }
 }
 
 /** Crypto venues settle at 08:00 UTC. */
@@ -312,7 +429,7 @@ export class IvHistoryService {
   private buffers = new Map<string, IvHistoryPoint[]>();
   private cleaned = new Map<
     string,
-    { length: number; firstTs: number; lastTs: number; series: IvHistoryPoint[] }
+    DespikedSeries
   >();
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly underlyings: string[];
@@ -456,11 +573,11 @@ export class IvHistoryService {
     const lastTs = buf[buf.length - 1]?.ts ?? 0;
     const hit = this.cleaned.get(key);
     if (hit && hit.length === buf.length && hit.firstTs === firstTs && hit.lastTs === lastTs) {
-      return hit.series;
+      return hit.clean;
     }
-    const series = despikeSkewSeries(buf);
-    this.cleaned.set(key, { length: buf.length, firstTs, lastTs, series });
-    return series;
+    const clean = (hit && extendDespikedSeries(hit, buf)) ?? despikeSkewSeries(buf);
+    this.cleaned.set(key, { length: buf.length, firstTs, lastTs, clean });
+    return clean;
   }
 
   private appendPoint(underlying: string, tenor: IvTenor, point: IvHistoryPoint): void {
@@ -526,6 +643,7 @@ export class IvHistoryService {
         bfly10d: null,
       }));
       this.buffers.set(bufferKey(underlying, '30d'), seed.slice(-this.capacity));
+      this.cleaned.delete(bufferKey(underlying, '30d'));
       persisted.push(
         ...seed.slice(-this.capacity).map((point) => ({
           underlying,

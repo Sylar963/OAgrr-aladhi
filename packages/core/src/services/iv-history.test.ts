@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { interpTenor, type IvSurfaceRow } from '../core/enrichment.js';
+import { interpTenor, type IvHistoryPoint, type IvSurfaceRow } from '../core/enrichment.js';
 import {
   despikeSkewSeries,
+  extendDespikedSeries,
   downsampleSeries,
   medianVenueSkew,
   withFractionalDte,
@@ -625,5 +626,132 @@ describe('IvHistoryService venue-robust skew', () => {
     });
     await svc.snapshotOnce(1_000);
     expect(svc.getBuffer('BTC', '30d')[0]!.rr25d).toBeCloseTo(-0.03, 6);
+  });
+});
+
+// Verbatim pre-optimization filter, kept as the oracle for the allocation-free version.
+function referenceDespike(series: IvHistoryPoint[]): IvHistoryPoint[] {
+  const keys = ['rr25d', 'bfly25d', 'rr10d', 'bfly10d'] as const;
+  const K = 6;
+  const median = (sorted: number[]) => {
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  };
+  const robust = (values: number[]) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const med = median(sorted);
+    const mad = median(sorted.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
+    return { med, threshold: Math.max(0.01, 5 * 1.4826 * mad) };
+  };
+  const out = series.map((p) => ({ ...p }));
+  for (const key of keys) {
+    const idx: number[] = [];
+    for (let i = 0; i < series.length; i++) {
+      const v = series[i]![key];
+      if (v != null && Number.isFinite(v)) idx.push(i);
+    }
+    const valueAt = (j: number) => series[idx[j]!]![key]!;
+    for (let j = K; j < idx.length; j++) {
+      const value = valueAt(j);
+      if (j + K < idx.length) {
+        const window: number[] = [];
+        for (let k = j - K; k <= j + K; k++) window.push(valueAt(k));
+        const { med, threshold } = robust(window);
+        if (Math.abs(value - med) > threshold) out[idx[j]!]![key] = null;
+        continue;
+      }
+      const back: number[] = [];
+      for (let k = j - 2 * K; k < j; k++) if (k >= 0) back.push(valueAt(k));
+      const { med, threshold } = robust(back);
+      const dev = value - med;
+      if (Math.abs(dev) <= threshold) continue;
+      const nextDev = j + 1 < idx.length ? valueAt(j + 1) - med : null;
+      const confirmed = nextDev != null && Math.sign(nextDev) === Math.sign(dev) && Math.abs(nextDev) > threshold;
+      if (!confirmed) out[idx[j]!]![key] = null;
+    }
+  }
+  return out;
+}
+
+describe('despikeSkewSeries equivalence', () => {
+  it('matches the reference filter on long random series with gaps, spikes, and steps', () => {
+    let seed = 0x1234567;
+    const rand = () => {
+      seed = (Math.imul(seed ^ (seed >>> 13), 0x5bd1e995) + 0x6d2b79f5) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let trial = 0; trial < 6; trial++) {
+      let level = -0.02;
+      const series = Array.from({ length: 6_000 + trial * 997 }, (_, i): IvHistoryPoint => {
+        if (rand() < 0.002) level += (rand() - 0.5) * 0.08;
+        const pick = (base: number) => {
+          const r = rand();
+          if (r < 0.04) return null;
+          if (r < 0.06) return base + (rand() - 0.5) * 0.4;
+          if (r < 0.065) return 0;
+          return base + (rand() - 0.5) * 0.004;
+        };
+        return {
+          ts: i * 300_000,
+          atmIv: 0.5,
+          rr25d: pick(level),
+          bfly25d: pick(0.02),
+          rr10d: pick(level * 1.8),
+          bfly10d: trial % 2 === 0 ? pick(0.05) : null,
+        };
+      });
+      expect(despikeSkewSeries(series)).toEqual(referenceDespike(series));
+    }
+  });
+});
+
+describe('extendDespikedSeries', () => {
+  it('equals a full recompute after every append and front trim of a capped buffer', () => {
+    let seed = 0xabcdef1;
+    const rand = () => {
+      seed = (Math.imul(seed ^ (seed >>> 13), 0x5bd1e995) + 0x6d2b79f5) >>> 0;
+      return seed / 4294967296;
+    };
+    const capacity = 200;
+    let level = -0.02;
+    let ts = 0;
+    const nextPoint = (): IvHistoryPoint => {
+      if (rand() < 0.01) level += (rand() - 0.5) * 0.08;
+      const pick = (base: number) => {
+        const r = rand();
+        if (r < 0.05) return null;
+        if (r < 0.08) return base + (rand() - 0.5) * 0.4;
+        return base + (rand() - 0.5) * 0.004;
+      };
+      ts += 300_000;
+      return { ts, atmIv: 0.5, rr25d: pick(level), bfly25d: pick(0.02), rr10d: pick(level), bfly10d: null };
+    };
+    const buf: IvHistoryPoint[] = Array.from({ length: 30 }, nextPoint);
+    let cached = {
+      clean: despikeSkewSeries(buf),
+      length: buf.length,
+      firstTs: buf[0]!.ts,
+      lastTs: buf[buf.length - 1]!.ts,
+    };
+    let extended = 0;
+    for (let step = 0; step < 300; step++) {
+      const added = rand() < 0.8 ? 1 : 1 + Math.floor(rand() * 5);
+      for (let i = 0; i < added; i++) buf.push(nextPoint());
+      if (buf.length > capacity) buf.splice(0, buf.length - capacity);
+      const before = cached.clean.map((p) => ({ ...p }));
+      const next = extendDespikedSeries(cached, buf);
+      expect(next).not.toBeNull();
+      expect(next).toEqual(despikeSkewSeries(buf));
+      expect(cached.clean).toEqual(before);
+      extended++;
+      cached = { clean: next!, length: buf.length, firstTs: buf[0]!.ts, lastTs: buf[buf.length - 1]!.ts };
+    }
+    expect(extended).toBe(300);
+  });
+
+  it('declines to extend when the buffer is not a continuation', () => {
+    const buf = Array.from({ length: 40 }, (_, i) => flatPoint(i * 300_000, -0.02));
+    const cached = { clean: despikeSkewSeries(buf), length: 40, firstTs: 0, lastTs: 39 * 300_000 };
+    expect(extendDespikedSeries(cached, buf.map((p) => ({ ...p, ts: p.ts + 1 })))).toBeNull();
   });
 });

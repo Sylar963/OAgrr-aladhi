@@ -21,9 +21,9 @@ import {
   paradexSymbolFromChannel,
 } from './planner.js';
 import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaryAll } from './rest.js';
-import { decodeParadexMarketSummarySbe, PARADEX_SBE_IGNORED } from './sbe.js';
+import { decodeParadexMarketSummaryValues, PARADEX_SBE_IGNORED } from './sbe.js';
 import { buildParadexQuote, paradexInstrumentDetails } from './state.js';
-import type { ParadexSummary } from './types.js';
+import type { ParadexSummary, ParadexSummaryValues } from './types.js';
 
 const log = feedLogger('paradex');
 const INSTRUMENT_REFRESH_INTERVAL_MS = 10 * 60_000;
@@ -260,7 +260,7 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
   // ─── WS message handlers ─────────────────────────────────────
 
   private handleShardMessage(index: number, raw: WebSocket.RawData): void {
-    const summary = decodeParadexMarketSummarySbe(raw, this.isTrackedSymbol);
+    const summary = decodeParadexMarketSummaryValues(raw, this.isTrackedSymbol);
     if (summary === PARADEX_SBE_IGNORED) return;
     if (summary != null) {
       this.handleSummary(summary);
@@ -299,7 +299,7 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
 
   private readonly isTrackedSymbol = (symbol: string): boolean => this.instrumentMap.has(symbol);
 
-  private handleSummary(summary: ParadexSummary): void {
+  private handleSummary(summary: ParadexSummary | ParadexSummaryValues): void {
     const quote = buildParadexQuote(
       summary,
       (v) => this.safeNum(v),

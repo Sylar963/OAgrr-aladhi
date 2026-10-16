@@ -1,5 +1,5 @@
 import type { LiveQuote } from '../shared/sdk-base.js';
-import type { ParadexMarket, ParadexSummary } from './types.js';
+import type { ParadexMarket, ParadexSummary, ParadexSummaryValues } from './types.js';
 
 export interface ParadexInstrumentDetails {
   base: string;
@@ -41,7 +41,7 @@ export function paradexInstrumentDetails(market: ParadexMarket): ParadexInstrume
 
 /** Map a Paradex markets-summary payload (REST element OR WS params.data) into a LiveQuote. */
 export function buildParadexQuote(
-  summary: ParadexSummary,
+  summary: ParadexSummary | ParadexSummaryValues,
   safeNum: (v: unknown) => number | null,
   positiveOrNull: (v: unknown) => number | null,
 ): LiveQuote {

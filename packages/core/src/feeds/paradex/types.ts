@@ -64,6 +64,34 @@ export const ParadexSummarySchema = z
   .passthrough();
 export type ParadexSummary = z.infer<typeof ParadexSummarySchema>;
 
+/** Live SBE summary with decimals already decoded to numbers (same values as parsing the strings). */
+export interface ParadexSummaryValues {
+  symbol: string;
+  mark_price: number | null;
+  underlying_price: number | null;
+  last_traded_price: number | null;
+  volume_24h: number | null;
+  open_interest: number | null;
+  funding_rate: number | null;
+  bid: number | null;
+  ask: number | null;
+  mark_iv: number | null;
+  bid_iv: number | null;
+  ask_iv: number | null;
+  bid_size: number | null;
+  ask_size: number | null;
+  greeks: {
+    delta: number | null;
+    gamma: number | null;
+    vega: number | null;
+    theta: number | null;
+    rho: number | null;
+    volga: number | null;
+    vanna: number | null;
+  };
+  created_at: number;
+}
+
 export const ParadexMarketsResponseSchema = z.object({ results: z.array(ParadexMarketSchema) });
 export const ParadexSummaryResponseSchema = z.object({ results: z.array(ParadexSummarySchema) });
 

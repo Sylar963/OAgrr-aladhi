@@ -85,6 +85,10 @@
   color: #000;
 }
 
+.toggle[data-static] {
+  cursor: default;
+}
+
 .toggle[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;

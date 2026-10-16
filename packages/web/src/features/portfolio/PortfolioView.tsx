@@ -28,11 +28,10 @@ import { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
 
-const FORWARD_OPTIONS: number[] = [0, 1, 3, 7];
+const FORWARD_DAYS = 7;
 const UNDERLYING_OPTIONS = ['all', 'BTC', 'ETH'] as const;
 type UnderlyingOption = (typeof UNDERLYING_OPTIONS)[number];
 const SOURCE_STORAGE_KEY = 'portfolioSource';
-const FORWARD_STORAGE_KEY = 'portfolioForwardDays';
 const UNDERLYING_STORAGE_KEY = 'portfolioUnderlying';
 const DEFAULT_SOURCE: PortfolioSource = 'manual';
 const EMPTY_PNL_CURVE: PortfolioPnlCurveData = {
@@ -56,14 +55,6 @@ function loadStoredSource(): PortfolioSource {
     if (parsed.success) return parsed.data;
   } catch {}
   return DEFAULT_SOURCE;
-}
-
-function loadStoredForwardDays(): number {
-  try {
-    const raw = Number(localStorage.getItem(FORWARD_STORAGE_KEY));
-    if (FORWARD_OPTIONS.includes(raw)) return raw;
-  } catch {}
-  return 0;
 }
 
 function loadStoredUnderlying(): UnderlyingOption {
@@ -105,7 +96,7 @@ function venueSourceOptions(): SourceOption[] {
 
 export default function PortfolioView() {
   const underlying = useAppStore((s) => s.underlying);
-  const [forwardDays, setForwardDays] = useState(loadStoredForwardDays);
+  const forwardDays = FORWARD_DAYS;
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
   const [underlyingFilter, setUnderlyingFilter] = useState<UnderlyingOption>(loadStoredUnderlying);
   const underlyingParam = underlyingFilter === 'all' ? undefined : underlyingFilter;
@@ -155,13 +146,6 @@ export default function PortfolioView() {
     setSource(nextSource);
     try {
       localStorage.setItem(SOURCE_STORAGE_KEY, nextSource);
-    } catch {}
-  };
-
-  const onSelectForwardDays = (days: number) => {
-    setForwardDays(days);
-    try {
-      localStorage.setItem(FORWARD_STORAGE_KEY, String(days));
     } catch {}
   };
 
@@ -220,18 +204,10 @@ export default function PortfolioView() {
               </button>
             ))}
           </div>
-          <div className={styles.toggleGroup} role="radiogroup" aria-label="Forward days">
-            {FORWARD_OPTIONS.map((days) => (
-              <button
-                key={days}
-                type="button"
-                className={styles.toggle}
-                data-active={forwardDays === days || undefined}
-                onClick={() => onSelectForwardDays(days)}
-              >
-                T+{days}d
-              </button>
-            ))}
+          <div className={styles.toggleGroup} aria-label="Forward days">
+            <span className={styles.toggle} data-active data-static>
+              T+{forwardDays}d
+            </span>
           </div>
         </div>
       </div>

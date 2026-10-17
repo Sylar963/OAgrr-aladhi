@@ -1,0 +1,51 @@
+[Unit]
+Description=oggregator execution daemon (holds trading keys; kill switch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ogg-exec
+# Primary group = the client group, so the socket it creates (mode 0660) is usable by the API user.
+Group=ogg-exec-clients
+WorkingDirectory=/opt/ogg-exec/app
+ExecStart=/opt/ogg-exec/node/bin/node dist/main.js
+# Read by systemd as root before dropping privileges.
+EnvironmentFile=/etc/ogg-exec/env
+Environment=NODE_ENV=production
+Environment=EXECUTION_STATE_DIR=/var/lib/ogg-exec
+Environment=EXECUTION_SOCKET_PATH=/run/ogg-exec/exec.sock
+Restart=on-failure
+RestartSec=5
+
+StateDirectory=ogg-exec
+StateDirectoryMode=0700
+RuntimeDirectory=ogg-exec
+RuntimeDirectoryMode=0750
+UMask=0077
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# MemoryDenyWriteExecute is left off: V8's JIT needs writable+executable pages.
+
+[Install]
+WantedBy=multi-user.target

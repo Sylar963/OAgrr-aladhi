@@ -43,6 +43,7 @@ src/
     paper/           REST paper trading endpoints
     portfolio/       REST portfolio positions, metrics, scenarios, credentials
     social/          REST profile + leaderboard, admin chat moderation, WS /ws/social
+    live/            /api/live status|kill|arm|disarm|reset → execution daemon socket (no keys here)
     ws-chain.ts      WS /ws/chain
     portfolio/ws.ts  WS /ws/portfolio
     paper/ws.ts      WS /ws/paper
@@ -64,3 +65,6 @@ src/
 - **Chain patches are field-level diffs for clients that opt in** — a subscribe with `patchFormat: 'diff'` gets `diff` frames carrying only the venues and fields that changed (`ChainRuntimeDeltaEvent.diffPatch()`, memoized per event). Without the field, clients keep receiving whole-strike `delta` frames, so a stale cached SPA still works. On live BTC 0DTE frames, diffs were 5.9× smaller (387KB → 65KB).
 - **`VOL_HEATMAP=0` disables the DVOL liquidity heatmap** — otherwise `services.ts` starts `VolHeatmapRuntime`, which spawns its own worker thread with a dedicated Deribit socket.
 - **`FEED_WORKER=1` moves chain venue ingest off the main thread** — `adapters.ts` then registers `FeedWorkerHost` proxies instead of in-process adapters. Routes and runtimes are unchanged. Unset it to roll back.
+- **Live routes never use the dev auth bypass** — `/api/live/*` goes through `createLiveTraderGuard` (`LIVE_TRADING_ENABLED`, Clerk JWT, `live_trading` entitlement); arm/reset also need a fresh second factor from Clerk's `fva` claim and answer with Clerk's reverification 403 body otherwise. Kill never needs step-up and is exempt from the bootstrap 503 gate.
+- **Venue credential ciphertexts are bound to their row** — `encrypt`/`decrypt` take `venueCredentialContext(accountId, venue)` as AES-GCM AAD. v1 rows (no AAD) still read; `credentials:rewrap` moves them to v2.
+

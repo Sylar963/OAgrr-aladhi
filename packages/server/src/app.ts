@@ -30,6 +30,7 @@ import {
   disposeServiceStores,
   dvolService,
   volHeatmapRuntime,
+  orderBookRuntime,
   flowService,
   gexWallStore,
   breakEvenStore,
@@ -45,7 +46,7 @@ import {
   tradeStore,
 } from './services.js';
 import { paperTradingStore, venueCredentialsStore } from './trading-services.js';
-import { VenueCredentialCipher } from './venue-credential-cipher.js';
+import { cipherFromEnv } from './venue-credential-cipher.js';
 import { allowedOrigins, reportOnlyCsp, trustedProxies } from './security-configuration.js';
 
 export const SERVER_BOOT_TIME = Date.now();
@@ -111,7 +112,7 @@ export function validateProductionAuthConfiguration(env: NodeJS.ProcessEnv): voi
     missing.push('VENUE_CREDENTIALS_ENCRYPTION_KEY');
   }
   if (privateAdaptersEnabled && encryptionKey) {
-    new VenueCredentialCipher(encryptionKey);
+    cipherFromEnv(env);
   }
   if (missing.length > 0) {
     throw new Error(`Missing production authentication configuration: ${missing.join(', ')}`);
@@ -217,6 +218,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     spotCandleService.dispose();
     dvolService.dispose();
     await volHeatmapRuntime?.dispose();
+    await orderBookRuntime?.dispose();
     indexPriceService.dispose();
     ivHistoryService.dispose();
     await shortStraddleSnapshotStore?.dispose();

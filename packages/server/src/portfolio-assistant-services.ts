@@ -47,6 +47,8 @@ const configuration = readPortfolioAssistantConfiguration(process.env);
 const store: PortfolioAssistantStore = process.env['DATABASE_URL']
   ? PostgresPortfolioAssistantStore.fromConnectionString(process.env['DATABASE_URL'])
   : new NoopPortfolioAssistantStore();
+/** Also serves feature entitlements beyond the assistant (e.g. live_trading). */
+export const portfolioAssistantStore = store;
 
 const memoryStore: PortfolioAssistantUserMemoryStore = process.env['DATABASE_URL']
   ? PostgresPortfolioAssistantUserMemoryStore.fromConnectionString(process.env['DATABASE_URL'])

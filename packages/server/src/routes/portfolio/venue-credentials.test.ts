@@ -51,7 +51,7 @@ vi.mock('../../thalex-position-store.js', () => ({
 }));
 vi.mock('../../portfolio-services.js', () => ({ getOrCreatePortfolioRuntime: vi.fn() }));
 
-import { getVenueCredentialCipher } from '../../venue-credential-cipher.js';
+import { getVenueCredentialCipher, venueCredentialContext } from '../../venue-credential-cipher.js';
 import { portfolioVenueCredentialsRoute } from './venue-credentials.js';
 
 const WALLET = '0x' + 'a'.repeat(40);
@@ -124,7 +124,7 @@ describe('Derive wallet-connect credential routes', () => {
 
     const stored = credentialsStoreMock.rows.get('paper-default:derive')!;
     expect(stored).not.toContain(creds.signerPrivateKey.slice(2));
-    expect(getVenueCredentialCipher()!.decrypt(stored)).toMatchObject({
+    expect(getVenueCredentialCipher()!.decrypt(stored, venueCredentialContext('paper-default', 'derive'))).toMatchObject({
       publicSessionKey: grant.publicSessionKey,
       expirySec: grant.expirySec,
     });
@@ -158,7 +158,7 @@ describe('Derive wallet-connect credential routes', () => {
         walletAddress: WALLET,
         signerPrivateKey: '0x' + 'b'.repeat(64),
         subaccountId: 1,
-      }),
+      }, venueCredentialContext('paper-default', 'derive')),
     );
 
     const res = await app.inject({
@@ -180,7 +180,7 @@ describe('Derive wallet-connect credential routes', () => {
         publicSessionKey: '0x' + 'd'.repeat(40),
         subaccountId: 1,
         expirySec: Math.floor(Date.now() / 1000) - 60,
-      }),
+      }, venueCredentialContext('paper-default', 'derive')),
     );
 
     const res = await app.inject({ method: 'POST', url: '/portfolio/venue-credentials/reconnect' });
@@ -243,7 +243,7 @@ describe('Paradex read-only key routes', () => {
     expect(paradexStoreMock.connect).toHaveBeenCalledWith({ accountId: 'paper-default', readonlyToken });
     const stored = credentialsStoreMock.rows.get('paper-default:paradex')!;
     expect(stored).not.toContain(readonlyToken);
-    expect(getVenueCredentialCipher()!.decrypt(stored)).toEqual({
+    expect(getVenueCredentialCipher()!.decrypt(stored, venueCredentialContext('paper-default', 'paradex'))).toEqual({
       readonlyToken,
       account: ACCOUNT,
       expiresAtMs: exp * 1000,

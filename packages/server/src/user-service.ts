@@ -88,6 +88,13 @@ export async function authenticateUser(
   request: FastifyRequest,
   _reply: FastifyReply,
 ): Promise<AuthenticatedUser | null> {
+  return authenticateRequest(request);
+}
+
+/** Bearer-token identity with no dev bypass; the live routes use this directly. */
+export async function authenticateRequest(
+  request: FastifyRequest,
+): Promise<AuthenticatedUser | null> {
   return getUserByToken(bearerToken(request));
 }
 

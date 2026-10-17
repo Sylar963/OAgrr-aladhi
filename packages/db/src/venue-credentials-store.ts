@@ -12,6 +12,15 @@ export interface VenueCredentialsStore {
   get(accountId: string, venue: string): Promise<StoredVenueCredentials | null>;
   upsert(credentials: StoredVenueCredentials): Promise<void>;
   delete(accountId: string, venue: string): Promise<void>;
+  /** Every row, for maintenance scripts such as re-encryption. */
+  listAll(): Promise<StoredVenueCredentials[]>;
+  /** Writes `next` only if the row still holds `expected`; false if it changed meanwhile. */
+  replaceEncrypted(
+    accountId: string,
+    venue: string,
+    expected: string,
+    next: string,
+  ): Promise<boolean>;
   dispose(): Promise<void>;
 }
 
@@ -25,6 +34,17 @@ export class NoopVenueCredentialsStore implements VenueCredentialsStore {
   }
   async upsert(_credentials: StoredVenueCredentials): Promise<void> {}
   async delete(_accountId: string, _venue: string): Promise<void> {}
+  async listAll(): Promise<StoredVenueCredentials[]> {
+    return [];
+  }
+  async replaceEncrypted(
+    _accountId: string,
+    _venue: string,
+    _expected: string,
+    _next: string,
+  ): Promise<boolean> {
+    return false;
+  }
   async dispose(): Promise<void> {}
 }
 
@@ -88,6 +108,38 @@ export class PostgresVenueCredentialsStore implements VenueCredentialsStore {
       accountId,
       venue,
     ]);
+  }
+
+  async listAll(): Promise<StoredVenueCredentials[]> {
+    const result = await this.pool.query<{
+      account_id: string;
+      venue: string;
+      encrypted_credentials: string;
+    }>(
+      `SELECT account_id, venue, encrypted_credentials
+       FROM venue_credentials
+       ORDER BY account_id, venue`,
+    );
+    return result.rows.map((row) => ({
+      accountId: row.account_id,
+      venue: row.venue,
+      encryptedCredentials: row.encrypted_credentials,
+    }));
+  }
+
+  async replaceEncrypted(
+    accountId: string,
+    venue: string,
+    expected: string,
+    next: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE venue_credentials
+       SET encrypted_credentials = $4, updated_at = now()
+       WHERE account_id = $1 AND venue = $2 AND encrypted_credentials = $3`,
+      [accountId, venue, expected, next],
+    );
+    return result.rowCount === 1;
   }
 
   async dispose(): Promise<void> {

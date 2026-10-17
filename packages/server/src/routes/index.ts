@@ -27,6 +27,12 @@ import { paperRoutes, paperWsRoute } from './paper/index.js';
 import { portfolioRoutes, portfolioWsRoute } from './portfolio/index.js';
 import { regimeRoute } from './regime.js';
 import { socialRoutes, socialWsRoute } from './social/index.js';
+import { ExecutionClient } from '../execution-client.js';
+import { portfolioAssistantStore } from '../portfolio-assistant-services.js';
+import { authenticateRequest } from '../user-service.js';
+import { liveRoutes } from './live/index.js';
+import { liquidityRoute } from './liquidity.js';
+import { orderBookRuntime } from '../services.js';
 import { sectorsRoute } from './sectors.js';
 import { spotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
@@ -42,6 +48,8 @@ import { wsInstrumentTradesRoute } from './ws-instrument-trades.js';
 export function shouldBlockApiRequestWhileBootstrapping(url: string): boolean {
   if (!url.startsWith('/api/')) return false;
   if (url.startsWith('/api/paper/auth/')) return false;
+  // The kill switch must work while market data is still loading.
+  if (url.startsWith('/api/live/')) return false;
   if (
     url === '/api/portfolio/venue-credentials' ||
     url.startsWith('/api/portfolio/venue-credentials/')
@@ -84,6 +92,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(callPutFlowRoute, { prefix: '/api' });
   app.register(dvolHistoryRoute, { prefix: '/api' });
   app.register(volHeatmapRoute, { prefix: '/api' });
+  app.register(liquidityRoute, { prefix: '/api', runtime: orderBookRuntime });
   app.register(spotCandlesRoute, { prefix: '/api' });
   app.register(instrumentCandlesRoute, { prefix: '/api' });
   app.register(ivHistoryRoute, { prefix: '/api' });
@@ -96,6 +105,13 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(portfolioRoutes, { prefix: '/api' });
   app.register(fundedRoutes, { prefix: '/api' });
   app.register(socialRoutes, { prefix: '/api' });
+  app.register(liveRoutes, {
+    prefix: '/api',
+    env: process.env,
+    client: ExecutionClient.fromEnv(process.env),
+    authenticate: authenticateRequest,
+    entitlements: portfolioAssistantStore,
+  });
   app.register(wsChainRoute);
   app.register(wsInstrumentTradesRoute);
   app.register(paperWsRoute);

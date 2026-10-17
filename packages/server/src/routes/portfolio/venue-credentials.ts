@@ -20,6 +20,7 @@ import { venueCredentialsStore } from '../../trading-services.js';
 import { getRequestAccountId } from '../../user-service.js';
 import {
   getVenueCredentialCipher,
+  venueCredentialContext,
   type VenueCredentialCipher,
 } from '../../venue-credential-cipher.js';
 
@@ -152,7 +153,7 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
 
   if (venue === 'derive') {
     const parsed = DeriveStoredCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials),
+      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue)),
     );
     // Rows saved before wallet connect hold a user-pasted signing key; drop them so
     // the user reconnects through their wallet instead.
@@ -166,7 +167,7 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
   }
   if (venue === 'paradex') {
     const parsed = ParadexStoredCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials),
+      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue)),
     );
     if (!parsed.success) throw new Error('Stored Paradex credentials are invalid');
     if (parsed.data.expiresAtMs <= Date.now()) return 'not_connected';
@@ -175,7 +176,7 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
   }
   if (venue === 'thalex') {
     const parsed = ThalexCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials),
+      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue)),
     );
     if (!parsed.success) throw new Error('Stored Thalex credentials are invalid');
     await connectThalex(accountId, parsed.data);
@@ -307,7 +308,10 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         await venueCredentialsStore.upsert({
           accountId,
           venue: 'derive',
-          encryptedCredentials: cipher.encrypt(credentials),
+          encryptedCredentials: cipher.encrypt(
+            credentials,
+            venueCredentialContext(accountId, 'derive'),
+          ),
         });
         pendingDeriveSessionKeys.consume(accountId);
         return { venue: 'derive' as const, connected: true, configured: true };
@@ -360,7 +364,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
           await venueCredentialsStore.upsert({
             accountId,
             venue,
-            encryptedCredentials: cipher.encrypt(credentials),
+            encryptedCredentials: cipher.encrypt(credentials, venueCredentialContext(accountId, venue)),
           });
           return { venue, connected: true, configured: true };
         }
@@ -370,7 +374,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
           await venueCredentialsStore.upsert({
             accountId,
             venue,
-            encryptedCredentials: cipher.encrypt(credentials),
+            encryptedCredentials: cipher.encrypt(credentials, venueCredentialContext(accountId, venue)),
           });
           return { venue, connected: true, configured: true };
         }

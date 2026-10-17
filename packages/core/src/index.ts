@@ -320,6 +320,30 @@ export {
   type VolHeatmapRuntimeOptions,
 } from './runtime/vol-heatmap/index.js';
 export {
+  OrderBookCapacityError,
+  type OrderBookLease,
+  OrderBookRuntime,
+  type OrderBookRuntimeOptions,
+  OrderBookUnavailableError,
+} from './runtime/order-book/index.js';
+export type {
+  BookLevel,
+  BookMark,
+  BookSide,
+  BookSyncState,
+  OrderBookSnapshot,
+} from './liquidity/types.js';
+export {
+  costToFill,
+  type DepthBand,
+  type DepthPoint,
+  depthCurve,
+  depthWithin,
+  type FillEstimate,
+  referencePrice,
+} from './liquidity/analytics.js';
+export { isThalexBookInstrument } from './feeds/thalex/book.js';
+export {
   buildBlockTradeUid,
   buildLiveTradeUid,
   computeBlockTradeAmounts,

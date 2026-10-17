@@ -22,6 +22,11 @@ describe('route bootstrap gate', () => {
     ).toBe(false);
   });
 
+  it('keeps the live kill switch available during bootstrap', () => {
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/live/kill')).toBe(false);
+    expect(shouldBlockApiRequestWhileBootstrapping('/api/live/status')).toBe(false);
+  });
+
   it('blocks non-readiness api routes during bootstrap', () => {
     expect(shouldBlockApiRequestWhileBootstrapping('/api/chains')).toBe(true);
     expect(shouldBlockApiRequestWhileBootstrapping('/api/spots')).toBe(true);

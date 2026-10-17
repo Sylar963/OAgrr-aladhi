@@ -11,6 +11,7 @@ import {
   interpBasisToTenor,
   MarkHistoryBuffer,
   VolHeatmapRuntime,
+  OrderBookRuntime,
   type RegimeInputs,
   type RegimePersistence,
   RegimeService,
@@ -97,6 +98,9 @@ export const dvolService = new DvolService();
 // VOL_HEATMAP=0 disables the DVOL liquidity heatmap and its dedicated Deribit socket + worker.
 export const volHeatmapRuntime =
   process.env['VOL_HEATMAP'] === '0' ? null : new VolHeatmapRuntime();
+// ORDER_BOOK=0 disables on-demand Thalex L2 books (/api/liquidity). The worker and its socket only
+// start on the first request.
+export const orderBookRuntime = process.env['ORDER_BOOK'] === '0' ? null : new OrderBookRuntime();
 export const spotService = new SpotRuntime();
 export const perpTickerService = new PerpTickerRuntime();
 export const spotCandleService = new SpotCandleService();

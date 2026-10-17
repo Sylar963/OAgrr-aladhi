@@ -97,6 +97,30 @@ export const ThalexIndexNotificationSchema = z.object({
 });
 export type ThalexIndexNotification = z.infer<typeof ThalexIndexNotificationSchema>;
 
+// ── WS: book.<instrument>.<grouping>.<nlevels>.<delay> notification ──
+// Fixture: feeds/thalex/__fixtures__/book-frames.json (live capture; references/ is local-only).
+// Levels are [price, amount, outright_amount]; amount 0 deletes the level. No sequence number,
+// so a missed frame can only be repaired by resubscribing for a new snapshot.
+
+export const ThalexBookLevelSchema = z.array(z.number()).min(2);
+
+export const ThalexBookSchema = z.object({
+  trades: z.array(z.unknown()).optional(),
+  bid_changes: z.array(ThalexBookLevelSchema).optional(),
+  ask_changes: z.array(ThalexBookLevelSchema).optional(),
+  total_bid_amount: z.number().nullable().optional(),
+  total_ask_amount: z.number().nullable().optional(),
+  time: z.number().nullable().optional(),
+});
+export type ThalexBook = z.infer<typeof ThalexBookSchema>;
+
+export const ThalexBookNotificationSchema = z.object({
+  channel_name: z.string(),
+  notification: ThalexBookSchema,
+  snapshot: z.boolean().optional(),
+});
+export type ThalexBookNotification = z.infer<typeof ThalexBookNotificationSchema>;
+
 // ── WS: RPC responses ────────────────────────────────────────────
 
 export const ThalexSubscribeAckSchema = z.object({

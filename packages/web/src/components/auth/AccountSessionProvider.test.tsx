@@ -157,6 +157,34 @@ describe('AccountSessionProvider', () => {
     expect(screen.queryByText('private-account-content')).toBeNull();
     expect(screen.getByText('Loading account…')).toBeDefined();
   });
+  it('leaves in-flight market queries running when Clerk finishes loading', async () => {
+    const queryClient = new QueryClient();
+    let resolveMarket: (value: string) => void = () => {};
+    const market = queryClient.fetchQuery({
+      queryKey: ['chain', 'BTC'],
+      queryFn: () => new Promise<string>((resolve) => (resolveMarket = resolve)),
+    });
+    const account = queryClient
+      .fetchQuery({
+        queryKey: ['portfolio', 'positions'],
+        queryFn: () => new Promise<string>(() => {}),
+      })
+      .then(
+        () => 'resolved',
+        () => 'cancelled',
+      );
+
+    const { rerender } = render(wrap(<AccountSessionProbe />, queryClient));
+    clerkState.isLoaded = true;
+    rerender(wrap(<AccountSessionProbe />, queryClient));
+    await waitFor(() => expect(screen.getByText('signed_out')).toBeDefined());
+
+    await expect(account).resolves.toBe('cancelled');
+    resolveMarket('chain-data');
+    await expect(market).resolves.toBe('chain-data');
+    expect(queryClient.getQueryData(['chain', 'BTC'])).toBe('chain-data');
+  });
+
   it('rejects a synchronized account belonging to a different Clerk user', async () => {
     clerkState.isLoaded = true;
     clerkState.isSignedIn = true;

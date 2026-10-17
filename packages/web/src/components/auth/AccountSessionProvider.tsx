@@ -31,6 +31,8 @@ interface AccountSession {
 
 const AccountSessionContext = createContext<AccountSession | null>(null);
 
+const ACCOUNT_QUERY_ROOTS = ['account', 'paper', 'portfolio', 'funded'] as const;
+
 export function AccountSessionProvider({ children }: { children: ReactNode }) {
   const { getToken, isLoaded, isSignedIn, signOut, userId } = useAuth();
   const queryClient = useQueryClient();
@@ -46,11 +48,12 @@ export function AccountSessionProvider({ children }: { children: ReactNode }) {
     clearAccountSession();
     setAccountId(null);
     setResolvedUserId(null);
-    void queryClient.cancelQueries();
-    queryClient.removeQueries({ queryKey: ['account'] });
-    queryClient.removeQueries({ queryKey: ['paper'] });
-    queryClient.removeQueries({ queryKey: ['portfolio'] });
-    queryClient.removeQueries({ queryKey: ['funded'] });
+    // Scoped: an unscoped cancel reverts in-flight market queries (gex, surface, chains…) to an
+    // idle pending state that never refetches, which left those pages blank on a cold load.
+    for (const root of ACCOUNT_QUERY_ROOTS) {
+      void queryClient.cancelQueries({ queryKey: [root] });
+      queryClient.removeQueries({ queryKey: [root] });
+    }
   }, [clearAccountSession, queryClient]);
 
   useEffect(() => {

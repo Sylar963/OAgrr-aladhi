@@ -1,6 +1,7 @@
-import type { SpotCandle, SpotCandleCurrency, VolRichness } from '@oggregator/core';
+import type { SpotCandle, VolRichness } from '@oggregator/core';
 import {
   AlphaMarketContextQuerySchema,
+  isSpotCandleUnderlying,
   type AlphaMarketContextResponse,
 } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
@@ -18,8 +19,6 @@ import {
   volRichnessSource,
 } from '../services.js';
 
-const SPOT_HISTORY_UNDERLYINGS = new Set<SpotCandleCurrency>(['BTC', 'ETH', 'HYPE']);
-
 export async function alphaMarketContextRoute(app: FastifyInstance) {
   app.get<{ Querystring: { underlying?: string } }>(
     '/alpha/market-context',
@@ -35,10 +34,10 @@ export async function alphaMarketContextRoute(app: FastifyInstance) {
       const { underlying } = parsed.data;
       const ivHistory = isIvHistoryReady() ? ivHistoryService.query(underlying, 90) : null;
       let candles: SpotCandle[] = [];
-      if (isSpotCandlesReady() && SPOT_HISTORY_UNDERLYINGS.has(underlying as SpotCandleCurrency)) {
+      if (isSpotCandlesReady() && isSpotCandleUnderlying(underlying)) {
         try {
           candles = await spotCandleService.getCandles(
-            underlying as SpotCandleCurrency,
+            underlying,
             86_400,
             DAILY_SPOT_HISTORY_DAYS,
           );

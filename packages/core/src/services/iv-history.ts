@@ -393,6 +393,19 @@ export interface IvHistoryOptions {
   capacity?: number;
   /** Expiry timestamp for an ISO expiry date; defaults to the crypto 08:00 UTC settlement. */
   expiryTime?: (expiry: string) => number;
+  /**
+   * Every other listed underlying, sampled on a slower cadence so long-tail assets get
+   * history without multiplying the surface-grid work and buffer memory of the core loop.
+   * The list is re-resolved on each sweep so newly listed assets join without a restart.
+   */
+  sweep?: IvHistorySweepOptions;
+}
+
+export interface IvHistorySweepOptions {
+  listUnderlyings: () => Promise<string[]>;
+  intervalMs: number;
+  /** Delay before the first sweep; feeds need a few minutes after boot for a full grid. */
+  firstDelayMs?: number;
 }
 
 export type IvHistoryPointSource = 'live_surface' | 'deribit_dvol';
@@ -432,10 +445,14 @@ export class IvHistoryService {
     DespikedSeries
   >();
   private timer: ReturnType<typeof setInterval> | null = null;
+  private sweepTimer: ReturnType<typeof setTimeout> | null = null;
+  private sweepRunning = false;
   private readonly underlyings: string[];
   private readonly intervalMs: number;
   private readonly capacity: number;
+  private readonly sweepCapacity: number;
   private readonly expiryTime: (expiry: string) => number;
+  private readonly sweep: IvHistorySweepOptions | null;
 
   constructor(
     private deps: IvHistoryDeps,
@@ -446,10 +463,16 @@ export class IvHistoryService {
     // 90 days at default 5-minute cadence.
     this.capacity = opts.capacity ?? 90 * 24 * 12;
     this.expiryTime = opts.expiryTime ?? cryptoExpiryTime;
+    this.sweep = opts.sweep ?? null;
+    this.sweepCapacity =
+      this.sweep == null
+        ? this.capacity
+        : Math.ceil((HISTORY_LOAD_DAYS * MS_PER_DAY) / this.sweep.intervalMs);
   }
 
   async start(): Promise<void> {
-    await this.loadPersistedHistory();
+    const sweepUnderlyings = await this.listSweepUnderlyings();
+    await this.loadPersistedHistory([...this.underlyings, ...sweepUnderlyings]);
     await this.seedFromDvol();
     // No snapshot at boot: venue feeds are still reconnecting and replaying subscriptions, so
     // the grid is partial and skew comes out several vol points off (the hourly restart timer
@@ -459,8 +482,17 @@ export class IvHistoryService {
         log.warn({ err: String(err) }, 'IV-history snapshot failed');
       });
     }, this.intervalMs);
+    if (this.sweep != null) {
+      this.scheduleSweep(this.sweep.firstDelayMs ?? this.intervalMs);
+    }
     log.info(
-      { underlyings: this.underlyings, intervalMs: this.intervalMs, capacity: this.capacity },
+      {
+        underlyings: this.underlyings,
+        intervalMs: this.intervalMs,
+        capacity: this.capacity,
+        sweepUnderlyings,
+        sweepIntervalMs: this.sweep?.intervalMs ?? null,
+      },
       'IvHistoryService started',
     );
   }
@@ -469,6 +501,10 @@ export class IvHistoryService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.sweepTimer) {
+      clearTimeout(this.sweepTimer);
+      this.sweepTimer = null;
     }
   }
 
@@ -498,8 +534,44 @@ export class IvHistoryService {
 
   /** Exposed for tests. */
   async snapshotOnce(now: number = Date.now()): Promise<void> {
+    await this.snapshotUnderlyings(this.underlyings, now);
+  }
+
+  /** Exposed for tests. */
+  async sweepOnce(now: number = Date.now()): Promise<void> {
+    await this.snapshotUnderlyings(await this.listSweepUnderlyings(), now);
+  }
+
+  private scheduleSweep(delayMs: number): void {
+    const sweep = this.sweep;
+    if (sweep == null) return;
+    this.sweepTimer = setTimeout(() => {
+      this.sweepOnce()
+        .catch((err: unknown) => {
+          log.warn({ err: String(err) }, 'IV-history sweep failed');
+        })
+        .finally(() => {
+          // dispose() nulls the handle mid-sweep; don't re-arm after that.
+          if (this.sweepTimer != null) this.scheduleSweep(sweep.intervalMs);
+        });
+    }, delayMs);
+  }
+
+  private async listSweepUnderlyings(): Promise<string[]> {
+    if (this.sweep == null) return [];
+    try {
+      const core = new Set(this.underlyings);
+      const listed = await this.sweep.listUnderlyings();
+      return [...new Set(listed)].filter((underlying) => !core.has(underlying)).sort();
+    } catch (err: unknown) {
+      log.warn({ err: String(err) }, 'IV-history sweep underlying list failed');
+      return [];
+    }
+  }
+
+  private async snapshotUnderlyings(underlyings: readonly string[], now: number): Promise<void> {
     const persisted: PersistedIvHistoryPoint[] = [];
-    for (const underlying of this.underlyings) {
+    for (const underlying of underlyings) {
       let grid: IvSurfaceRow[] | IvSurfaceSnapshot;
       try {
         grid = await this.deps.getSurfaceGrid(underlying);
@@ -584,20 +656,21 @@ export class IvHistoryService {
     const key = bufferKey(underlying, tenor);
     const buf = this.buffers.get(key) ?? [];
     buf.push(point);
-    if (buf.length > this.capacity) {
-      buf.splice(0, buf.length - this.capacity);
+    const capacity = this.underlyings.includes(underlying) ? this.capacity : this.sweepCapacity;
+    if (buf.length > capacity) {
+      buf.splice(0, buf.length - capacity);
     }
     this.buffers.set(key, buf);
   }
 
-  private async loadPersistedHistory(): Promise<void> {
+  private async loadPersistedHistory(underlyings: string[]): Promise<void> {
     const store = this.deps.store;
     if (!store?.enabled) return;
 
     const since = new Date(Date.now() - HISTORY_LOAD_DAYS * MS_PER_DAY);
     let points: PersistedIvHistoryPoint[];
     try {
-      points = await store.loadSince({ underlyings: this.underlyings, since });
+      points = await store.loadSince({ underlyings, since });
     } catch (err: unknown) {
       log.warn({ err: String(err) }, 'failed to load persisted IV history');
       return;

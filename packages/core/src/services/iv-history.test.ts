@@ -216,6 +216,58 @@ describe('IvHistoryService', () => {
     }
   });
 
+  it('sweeps every other listed underlying on its own slower cadence', async () => {
+    vi.useFakeTimers();
+    try {
+      const getSurfaceGrid = vi.fn((_underlying: string) =>
+        Promise.resolve([makeRow('e', 30, 0.5, 0.02, 0.01)]),
+      );
+      const listUnderlyings = vi.fn(() => Promise.resolve(['SOL', 'BTC', 'XRP', 'SOL']));
+      const { store } = mockStore();
+      const svc = new IvHistoryService(
+        { getSurfaceGrid, dvol: mockDvol(), store },
+        {
+          underlyings: ['BTC'],
+          intervalMs: 60_000,
+          sweep: { listUnderlyings, intervalMs: 600_000, firstDelayMs: 120_000 },
+        },
+      );
+      await svc.start();
+      expect(store.loadSince).toHaveBeenCalledWith({
+        underlyings: ['BTC', 'SOL', 'XRP'],
+        since: expect.any(Date),
+      });
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(getSurfaceGrid.mock.calls.map(([u]) => u)).toEqual(['BTC', 'BTC', 'SOL', 'XRP']);
+      expect(svc.getBuffer('SOL', '30d')).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(svc.getBuffer('SOL', '30d')).toHaveLength(2);
+      expect(svc.getBuffer('BTC', '30d')).toHaveLength(12);
+
+      svc.dispose();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(svc.getBuffer('SOL', '30d')).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caps swept buffers at 90 days of sweep-cadence points', async () => {
+    const getSurfaceGrid = () => Promise.resolve([makeRow('e', 30, 0.5, 0.02, 0.01)]);
+    const svc = new IvHistoryService(
+      { getSurfaceGrid, dvol: mockDvol() },
+      {
+        underlyings: ['BTC'],
+        sweep: { listUnderlyings: () => Promise.resolve(['SOL']), intervalMs: 30 * 86_400_000 },
+      },
+    );
+    for (let i = 0; i < 5; i++) await svc.sweepOnce(1000 + i);
+    expect(svc.getBuffer('SOL', '30d').map((p) => p.ts)).toEqual([1002, 1003, 1004]);
+    svc.dispose();
+  });
+
   it('loads persisted history before querying and before DVOL fallback', async () => {
     const now = Date.now();
     const { store } = mockStore({

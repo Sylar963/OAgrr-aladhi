@@ -3,12 +3,12 @@ import {
   buildEnrichedChain,
   type EnrichedStrike,
   type SpotCandle,
-  type SpotCandleCurrency,
   type VenueId,
 } from '@oggregator/core';
 import {
   AlphaLongStraddleScannerQuerySchema,
   AlphaStraddleScannerQuerySchema,
+  isSpotCandleUnderlying,
   type AlphaLongStraddleCandidate,
   type AlphaLongStraddleScannerResponse,
   type AlphaStraddleCandidate,
@@ -50,7 +50,6 @@ import {
 } from '../services.js';
 
 const RESPONSE_CACHE_TTL_MS = 5_000;
-const SPOT_HISTORY_UNDERLYINGS = new Set<SpotCandleCurrency>(['BTC', 'ETH', 'HYPE']);
 
 function expiryTimestamp(expiry: string, contractsExpiryTs: Array<number | null>): number | null {
   const reported = contractsExpiryTs.find((ts): ts is number => ts != null);
@@ -107,13 +106,10 @@ function createAtmStraddleScan(app: FastifyInstance) {
   ): Promise<AtmScanResult<C>> {
     const scanNowMs = Date.now();
     let candles: SpotCandle[] = [];
-    if (
-      isSpotCandlesReady() &&
-      SPOT_HISTORY_UNDERLYINGS.has(config.underlying as SpotCandleCurrency)
-    ) {
+    if (isSpotCandlesReady() && isSpotCandleUnderlying(config.underlying)) {
       try {
         candles = await spotCandleService.getCandles(
-          config.underlying as SpotCandleCurrency,
+          config.underlying,
           86_400,
           DAILY_SPOT_HISTORY_DAYS,
         );

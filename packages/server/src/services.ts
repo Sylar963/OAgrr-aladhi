@@ -21,6 +21,7 @@ import {
   TradeRuntime,
   type VenueId,
 } from '@oggregator/core';
+import { isSpotCandleUnderlying } from '@oggregator/protocol';
 import {
   DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
   type BreakEvenSnapshotStore,
@@ -81,6 +82,7 @@ import {
   DeferredShortStraddleSnapshotStore,
 } from '@oggregator/db';
 import { getAllExpiriesGex } from './gex-all-expiries.js';
+import { listPublicUnderlyings } from './public-underlyings.js';
 import { GEX_WALL_RETENTION_MS, GexWallHistoryService } from './gex-wall-history-service.js';
 import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history.js';
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
@@ -169,7 +171,8 @@ const dealerBookCacheMaxRows = parsePositiveInteger(
 );
 const ivHistoryCacheMaxRows = parsePositiveInteger(
   process.env['IV_HISTORY_CACHE_MAX_ROWS'],
-  // 90 days × 288 five-minute samples × 2 underlyings × 4 tenors ≈ 207k, plus DVOL seed rows.
+  // Pending rows between daily flushes: BTC/ETH at 5 min (2.3k/day) plus ~30 swept
+  // underlyings hourly (2.9k/day), so this covers weeks of failed flushes.
   250_000,
   'IV_HISTORY_CACHE_MAX_ROWS',
 );
@@ -214,11 +217,19 @@ export const venueIvBaselineHistory = new VenueIvBaselineHistory(venueIvHistoryS
 const venueIvHistoryCollector = venueIvHistoryStore.enabled
   ? new VenueIvHistoryCollector(venueIvHistoryStore)
   : null;
+const IV_HISTORY_CORE_UNDERLYINGS = ['BTC', 'ETH'];
+const IV_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
 export const ivHistoryService = new IvHistoryService({
   dvol: dvolService,
   store: ivHistoryStore,
   getSurfaceGrid: async (underlying: string) => {
     const entries = await buildIvSurfaceGrid({ underlying });
+    // These collectors write straight to Postgres; the hourly sweep of every other
+    // underlying must not add Neon writes.
+    if (!IV_HISTORY_CORE_UNDERLYINGS.includes(underlying)) {
+      return { rows: entries.map((e) => e.surfaceRow), venueRows: computeVenueSurfaceRows(entries) };
+    }
     if (venueIvHistoryCollector != null) {
       try {
         await venueIvHistoryCollector.collect(entries, underlying);
@@ -239,6 +250,13 @@ export const ivHistoryService = new IvHistoryService({
       }
     }
     return { rows: entries.map((e) => e.surfaceRow), venueRows: computeVenueSurfaceRows(entries) };
+  },
+}, {
+  underlyings: IV_HISTORY_CORE_UNDERLYINGS,
+  sweep: {
+    listUnderlyings: listPublicUnderlyings,
+    intervalMs: IV_HISTORY_SWEEP_INTERVAL_MS,
+    firstDelayMs: 5 * 60 * 1000,
   },
 });
 const localTradeStore = new SqliteTradeStore(
@@ -492,7 +510,6 @@ export function isNewsReady(): boolean {
   return serviceHealth.news;
 }
 
-const SPOT_HISTORY_UNDERLYINGS = new Set<string>(['BTC', 'ETH', 'HYPE']);
 // Two years of daily closes so the 60D/90D vol cone has several independent windows.
 // Shared by the richness reading and the Alpha scanners so their cone percentiles agree.
 export const DAILY_SPOT_HISTORY_DAYS = 730;
@@ -501,8 +518,8 @@ const DVOL_UNDERLYINGS = new Set<string>(['BTC', 'ETH']);
 export const volRichnessSource = createVolRichnessSource({
   now: Date.now,
   getDailyCandles: async (underlying) =>
-    isSpotCandlesReady() && SPOT_HISTORY_UNDERLYINGS.has(underlying)
-      ? spotCandleService.getCandles(underlying as SpotCandleCurrency, 86_400, DAILY_SPOT_HISTORY_DAYS)
+    isSpotCandlesReady() && isSpotCandleUnderlying(underlying)
+      ? spotCandleService.getCandles(underlying, 86_400, DAILY_SPOT_HISTORY_DAYS)
       : [],
   getIvHistory: (underlying, windowDays) =>
     isIvHistoryReady() ? ivHistoryService.query(underlying, windowDays) : null,

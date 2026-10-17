@@ -1,7 +1,8 @@
 .layout {
   --up: var(--color-profit);
   --down: var(--color-loss);
-  --list-w: 300px;
+  --list-w: clamp(330px, 19vw, 400px);
+  --cols-h: 26px;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -115,15 +116,19 @@
 .listCols,
 .optRow {
   display: grid;
-  grid-template-columns: 12px 1fr 44px 112px;
+  grid-template-columns: 12px minmax(0, 1fr) 40px 120px;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-3);
 }
 
 .listCols {
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-1);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--cols-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -135,14 +140,21 @@
   grid-column: 2;
 }
 
+.listCols span:nth-child(2) {
+  text-align: right;
+}
+
 .listCols span:last-child {
+  width: 74px;
   text-align: center;
 }
 
 .listBody {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .optRow {
@@ -178,6 +190,9 @@
 }
 
 .optStrike {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -199,9 +214,9 @@
 }
 
 .optActions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 74px 42px;
   gap: 4px;
-  justify-content: flex-end;
 }
 
 .buyBtn,
@@ -210,11 +225,13 @@
   font-size: var(--text-xs);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  padding: 3px 6px;
+  padding: 3px 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .buyBtn {
-  min-width: 64px;
   font-weight: 700;
   color: var(--side);
   background: color-mix(in srgb, var(--side) 12%, transparent);
@@ -244,7 +261,7 @@
 
 .spotRow {
   position: sticky;
-  top: 0;
+  top: var(--cols-h);
   bottom: 0;
   z-index: 1;
   padding: 4px var(--space-3);

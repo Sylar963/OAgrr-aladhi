@@ -111,13 +111,12 @@ export default function EasyOptionList({
         </button>
       </header>
 
-      <div className={styles.listCols}>
-        <span>Target</span>
-        <span title="Market-implied chance this option ends in the money (from delta)">Odds</span>
-        <span>Cost</span>
-      </div>
-
       <div className={styles.listBody}>
+        <div className={styles.listCols}>
+          <span>Target</span>
+          <span title="Market-implied chance this option ends in the money (from delta)">Odds</span>
+          <span>Cost</span>
+        </div>
         {ordered.map((r, i) => {
           const buyDraft: EasyLegDraft = { type, direction: 'buy', strike: r.strike };
           const sellDraft: EasyLegDraft = { type, direction: 'sell', strike: r.strike };

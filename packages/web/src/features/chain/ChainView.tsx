@@ -16,7 +16,18 @@ import ChainTable from './ChainTable';
 import VenueSidebar from './VenueSidebar';
 import MyIvInput from './MyIvInput';
 import OptionCalculator from './OptionCalculator';
+import EasyChainView from './easy/EasyChainView';
 import styles from './ChainView.module.css';
+
+const EASY_MODE_KEY = 'chain.easyMode';
+
+function readEasyMode(): boolean {
+  try {
+    return localStorage.getItem(EASY_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export default function ChainView() {
   const underlying = useAppStore((s) => s.underlying);
@@ -80,6 +91,15 @@ export default function ChainView() {
   const isMobile = useIsMobile();
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
+  const [easyMode, setEasyMode] = useState(readEasyMode);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(EASY_MODE_KEY, easyMode ? '1' : '0');
+    } catch {
+      // Storage can be unavailable (private mode); the toggle still works for this session.
+    }
+  }, [easyMode]);
 
   const myIvFloat = myIv !== '' ? parseFloat(myIv) / 100 : null;
   const myIvValid = myIvFloat != null && !Number.isNaN(myIvFloat) && myIvFloat > 0;
@@ -186,7 +206,18 @@ export default function ChainView() {
         )}
 
         <div className={styles.tableControls}>
-          <MyIvInput />
+          {!easyMode && <MyIvInput />}
+          <button
+            type="button"
+            className={styles.easyToggle}
+            data-active={easyMode}
+            aria-pressed={easyMode}
+            onClick={() => setEasyMode((v) => !v)}
+            title="Easy mode: build a trade by dragging options onto the price chart"
+          >
+            <span className={styles.easyDot} />
+            Easy mode
+          </button>
         </div>
 
         <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
@@ -207,7 +238,10 @@ export default function ChainView() {
               detail={`No venues returned data for ${underlying} ${expiry}. The expiry may only be listed on venues that are currently unavailable.`}
             />
           )}
-          {displayChain && displayChain.strikes.length > 0 && (
+          {displayChain && displayChain.strikes.length > 0 && easyMode && (
+            <EasyChainView chain={displayChain} underlying={underlying} activeVenues={activeVenues} />
+          )}
+          {displayChain && displayChain.strikes.length > 0 && !easyMode && (
             <ChainTable
               strikes={displayChain.strikes}
               atmStrike={displayChain.stats.atmStrike}

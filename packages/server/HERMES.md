@@ -380,6 +380,15 @@ user scope; never accept a model-provided account ID as authorization.
   `breakevenSpotsUsd` (whole dollars), all on one spot path
   (`docs/knowledge/options-trading.md`). In `oggregator_evaluate_structure` output every
   window value is after the proposed legs' fees.
+- `bookVsMarketFacts` (single-underlying books, `portfolio-assistant-levels.ts`): per risk window,
+  the options market's ±1σ range to that date at ATM IV (matching expiry, else interpolated in total
+  variance), each breakeven's distance, whether it sits inside that range and its lognormal odds,
+  and the profit zones with a profit probability (no skew, forward = spot). Alongside: the top
+  dealer-gamma strikes (`/api/gex-all-expiries`), the busiest traded prices over 365 days
+  (`/api/time-at-price`, smoothed peaks at least 2% apart), the largest open interest per held
+  expiry (from `heldExpiryChains`) and each held strike's implied and historical odds of finishing
+  beyond the strike (`/api/break-even`, BTC and ETH only). A source that fails or times out (5 s)
+  is null with a line in `notes`. About 2.3k characters.
 - `structureSearchFacts` (only on constraint questions): the `oggregator_structure_search` result,
   run by the backend with this context's `portfolioRef` before Hermes is called, plus the parsed
   `request` (view, budget, size, and whether each came from the question or an earlier message).

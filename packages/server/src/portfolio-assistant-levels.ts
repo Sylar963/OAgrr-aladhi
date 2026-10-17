@@ -1,6 +1,6 @@
 import type { BreakEvenResponse, ExpiryRiskWindow, TimeAtPriceResponse } from '@oggregator/protocol';
 
-import type { CompactChain, CompactSurfaceRow, compactGex } from './assistant-market/market-data-compaction.js';
+import type { CompactChain, CompactChainRow, CompactSurfaceRow, compactGex } from './assistant-market/market-data-compaction.js';
 import type { MarketReadResult } from './assistant-market/market-data-reader.js';
 
 const DAY_MS = 86_400_000;
@@ -9,6 +9,7 @@ const EXPIRY_HOUR_UTC = 8;
 const LEVELS_PER_SIDE = 3;
 const PRICE_LEVEL_BAND = 0.25;
 const PRICE_LEVEL_SMOOTHING_BINS = 2;
+const PRICE_LEVEL_MIN_GAP = 0.02;
 const OI_CLUSTERS_PER_SIDE = 3;
 
 export type CompactGex = ReturnType<typeof compactGex>;
@@ -237,15 +238,24 @@ export function supportAndResistance(
     distancePct: distancePct(level.price, spotUsd),
     activity: round(level.bars / busiest, 2),
   });
-  const strongest = (side: typeof peaks) =>
-    [...side].sort((left, right) => right.bars - left.bars).slice(0, LEVELS_PER_SIDE).map(toLevel);
+  // Neighbouring peaks of one congestion zone would otherwise fill every slot with the same level.
+  const strongest = (side: typeof peaks) => {
+    const picked: typeof peaks = [];
+    for (const level of [...side].sort((left, right) => right.bars - left.bars)) {
+      if (picked.length === LEVELS_PER_SIDE) break;
+      if (picked.every((other) => Math.abs(other.price - level.price) >= spotUsd * PRICE_LEVEL_MIN_GAP)) picked.push(level);
+    }
+    return picked.map(toLevel);
+  };
   return {
     support: strongest(peaks.filter((level) => level.price < spotUsd)).sort((left, right) => right.priceUsd - left.priceUsd),
     resistance: strongest(peaks.filter((level) => level.price > spotUsd)).sort((left, right) => left.priceUsd - right.priceUsd),
   };
 }
 
-export function openInterestClusters(chains: readonly Pick<CompactChain, 'expiry' | 'rows'>[]) {
+export function openInterestClusters(
+  chains: readonly { expiry: string; rows: readonly Pick<CompactChainRow, 'strike' | 'side' | 'openInterestContracts'>[] }[],
+) {
   return chains.map((chain) => {
     const side = (right: 'call' | 'put') =>
       chain.rows

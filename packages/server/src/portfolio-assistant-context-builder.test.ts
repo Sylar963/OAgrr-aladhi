@@ -277,6 +277,20 @@ describe('assemblePortfolioAssistantContext', () => {
     expect(compacted.toolHints).toEqual(full.toolHints);
   });
 
+  it('lines the held risk windows up against the market and keeps them through compaction', () => {
+    const context = assembleDiagonal(160_000);
+    const facts = context.bookVsMarketFacts;
+    expect(facts?.underlying).toBe('BTC');
+    expect(facts?.expiryOutlook.map((outlook) => outlook.until)).toEqual(['2026-10-16', '2026-10-30']);
+    expect(facts?.expiryOutlook.map((outlook) => outlook.breakevens.map((breakeven) => breakeven.spotUsd))).toEqual(
+      context.riskBudgetFacts.riskWindows.map((window) => window.breakevenSpotsUsd.map(Math.round)),
+    );
+    // No term structure in this market, so the outlook cannot price a move.
+    expect(facts?.expiryOutlook[0]?.expectedRangeUsd).toBeNull();
+    expect(facts?.gammaLevels).toBeNull();
+    expect(assembleDiagonal(1_000).bookVsMarketFacts).toEqual(facts);
+  });
+
   it('carries the user memory through compaction and defaults to none', () => {
     const memory = {
       items: [{ category: 'risk_budget' as const, text: 'Max loss per trade is $2,000.' }],

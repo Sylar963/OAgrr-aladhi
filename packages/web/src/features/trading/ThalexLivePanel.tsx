@@ -7,6 +7,7 @@ import {
 } from '@features/portfolio';
 import { fmtDelta, fmtNum, fmtUsd } from '@lib/format';
 import { useEffect, useState } from 'react';
+import LiquidityCard from './LiquidityCard';
 import styles from './ThalexLivePanel.module.css';
 
 const THALEX_URL = import.meta.env.VITE_THALEX_REF_URL ?? 'https://thalex.com';
@@ -59,6 +60,8 @@ export default function ThalexLivePanel() {
           </a>
         </div>
       </div>
+
+      <LiquidityCard positions={positions} />
 
       {metrics && <ChallengeMetrics metrics={metrics} />}
     </div>

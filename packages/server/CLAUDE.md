@@ -27,6 +27,7 @@ src/
     surface.ts       GET /api/surface?underlying=BTC
     stats.ts         GET /api/stats?underlying=BTC
     dvol-history.ts  GET /api/dvol-history?currency=BTC
+    liquidity.ts     GET /api/liquidity?instrument=BTC-PERPETUAL&side=buy&size=1 (Thalex L2 fill estimate + depth; ORDER_BOOK=0 disables)
     vol-heatmap.ts   GET /api/vol-heatmap?currency=BTC&hours=6&resolutionSec=60&since=ms (resting vega by IV bucket on Deribit DVOL-window books; in-memory 24h)
     iv-history.ts    GET /api/iv-history?underlying=BTC&window=90d
     vol-richness.ts  GET /api/vol-richness?underlying=BTC (IV vs forecast, cone, intraday z)

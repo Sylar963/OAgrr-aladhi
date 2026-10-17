@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { VenueId } from '../types/common.js';
+import { ReferenceMarkHistoryBuffer } from './__fixtures__/mark-history-buffer.reference.js';
 import { MarkHistoryBuffer, mergeBaseBuckets } from './mark-history-buffer.js';
 
 const MIN = 60_000;
@@ -178,5 +180,101 @@ describe('mergeBaseBuckets', () => {
     ];
     const out = mergeBaseBuckets(minutes, MIN);
     expect(out).toEqual(minutes);
+  });
+});
+
+describe('MarkHistoryBuffer packed storage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('matches the Map-based reference for an in-order workload with rolling, expiry, and eviction', () => {
+    vi.useFakeTimers();
+    let seed = 0x51ed;
+    const rand = () => {
+      seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0;
+      return seed / 4294967296;
+    };
+    const options = {
+      retentionMs: 6 * 60 * MIN,
+      fineRetentionMs: 30 * MIN,
+      coarseBucketMs: 15 * MIN,
+      maxBuckets: 900,
+      sweepIntervalMs: 3 * MIN,
+    };
+    const packed = new MarkHistoryBuffer(options);
+    const reference = new ReferenceMarkHistoryBuffer(options);
+    const venues: VenueId[] = ['deribit', 'derive', 'gateio'];
+    const symbols = Array.from({ length: 14 }, (_, i) => `SYM-${i}`);
+    let now = BASE_TS;
+    let price = 100;
+
+    for (let step = 0; step < 12_000; step++) {
+      now += Math.floor(rand() * 4_000);
+      price = Math.max(1, price + (rand() - 0.5) * 2);
+      const venue = venues[Math.floor(rand() * venues.length)]!;
+      // Fewer symbols trade late in the run so instruments age out and are deleted.
+      const symbol = symbols[Math.floor(rand() * (step > 9_000 ? 4 : symbols.length))]!;
+      // Same-bucket late ticks keep both implementations' bucket order identical.
+      const ts = rand() < 0.1 ? Math.floor(now / MIN) * MIN + Math.floor(rand() * (now % MIN)) : now;
+      if (rand() < 0.75) {
+        packed.recordMark(venue, symbol, ts, price);
+        reference.recordMark(venue, symbol, ts, price);
+      } else {
+        const size = rand() < 0.2 ? 0 : rand() * 3;
+        packed.recordTrade(venue, symbol, ts, price, size);
+        reference.recordTrade(venue, symbol, ts, price, size);
+      }
+
+      if (step % 400 === 399) {
+        vi.setSystemTime(now);
+        expect(packed.stats()).toEqual(reference.stats());
+        for (const v of venues) {
+          for (const sym of symbols) {
+            for (const interval of [MIN, 15 * MIN]) {
+              expect(packed.getMarkCandles(v, sym, interval, 8 * 60 * MIN)).toEqual(
+                reference.getMarkCandles(v, sym, interval, 8 * 60 * MIN),
+              );
+              expect(packed.getTradeCandles(v, sym, interval, 8 * 60 * MIN)).toEqual(
+                reference.getTradeCandles(v, sym, interval, 8 * 60 * MIN),
+              );
+            }
+            expect(packed.hasMark(v, sym)).toBe(reference.hasMark(v, sym));
+          }
+        }
+      }
+    }
+    expect(packed.stats().markBuckets).toBeGreaterThan(0);
+  });
+
+  it('places a late tick that opens an older bucket in time order', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TS + 10 * MIN);
+    const buf = new MarkHistoryBuffer({ retentionMs: 60 * MIN });
+    buf.recordMark('deribit', 'X', BASE_TS + 5 * MIN, 50);
+    buf.recordMark('deribit', 'X', BASE_TS + 7 * MIN, 70);
+    buf.recordMark('deribit', 'X', BASE_TS + 1 * MIN + 10, 10);
+    buf.recordMark('deribit', 'X', BASE_TS + 6 * MIN, 60);
+    buf.recordMark('deribit', 'X', BASE_TS + 6 * MIN + 5, 65);
+    const candles = buf.getMarkCandles('deribit', 'X', MIN, 60 * MIN);
+    expect(candles.map((c) => [c.ts - BASE_TS, c.o, c.h, c.l, c.c])).toEqual([
+      [1 * MIN, 10, 10, 10, 10],
+      [5 * MIN, 50, 50, 50, 50],
+      [6 * MIN, 60, 65, 60, 65],
+      [7 * MIN, 70, 70, 70, 70],
+    ]);
+  });
+
+  it('keeps per-series memory bounded as old buckets expire', () => {
+    vi.useFakeTimers();
+    const buf = new MarkHistoryBuffer({
+      retentionMs: 30 * MIN,
+      fineRetentionMs: 30 * MIN,
+      sweepIntervalMs: MIN,
+    });
+    for (let i = 0; i < 50_000; i++) buf.recordMark('deribit', 'X', BASE_TS + i * MIN, 100 + (i % 7));
+    vi.setSystemTime(BASE_TS + 50_000 * MIN);
+    expect(buf.stats().markBuckets).toBeLessThanOrEqual(32);
+    expect(buf.getMarkCandles('deribit', 'X', MIN, 10 * MIN).length).toBeGreaterThan(0);
   });
 });

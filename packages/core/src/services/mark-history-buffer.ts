@@ -27,9 +27,193 @@ export interface MarkHistoryBufferOptions {
   sweepIntervalMs?: number;
 }
 
+const DEFAULT_BUCKET_MS = 60_000;
+const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_FINE_RETENTION_MS = 60 * 60 * 1000;
+const DEFAULT_COARSE_BUCKET_MS = 60 * 60 * 1000;
+// Feeds record roughly 10k instruments per minute (every Deribit strike ticks a mark), so
+// without the coarse tier and cap the 7-day window would grow without bound.
+const DEFAULT_MAX_BUCKETS = 1_500_000;
+const DEFAULT_SWEEP_INTERVAL_MS = 60_000;
+const EVICTION_HEADROOM = 0.9;
+
+// Six float64 slots per bucket: ts, open, high, low, close, volume. One typed array per series
+// keeps a 1.5M-bucket buffer to a few hundred thousand leaf objects the GC never traces into,
+// instead of 1.5M candle objects plus their Map entries.
+const STRIDE = 6;
+const INITIAL_BUCKETS = 8;
+
+/** Buckets kept sorted by ts in one packed array; expiry and compaction trim the front. */
+class PackedSeries {
+  private data: Float64Array | null = null;
+  private head = 0;
+  private tail = 0;
+
+  get size(): number {
+    return this.tail - this.head;
+  }
+
+  /** Absolute index of the first live bucket whose ts is >= `bucket`. */
+  private lowerBound(bucket: number): number {
+    const data = this.data!;
+    let lo = this.head;
+    let hi = this.tail;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (data[mid * STRIDE]! < bucket) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  // Makes room for one more bucket at the tail: reuse the trimmed front if at most half the
+  // capacity is live, otherwise double.
+  private reserveOne(): void {
+    if (this.data === null) {
+      this.data = new Float64Array(INITIAL_BUCKETS * STRIDE);
+      this.head = 0;
+      this.tail = 0;
+      return;
+    }
+    const capacity = this.data.length / STRIDE;
+    if (this.tail < capacity) return;
+    const size = this.size;
+    if (size + 1 <= capacity / 2) {
+      this.data.copyWithin(0, this.head * STRIDE, this.tail * STRIDE);
+    } else {
+      const next = new Float64Array(capacity * 2 * STRIDE);
+      next.set(this.data.subarray(this.head * STRIDE, this.tail * STRIDE));
+      this.data = next;
+    }
+    this.head = 0;
+    this.tail = size;
+  }
+
+  /** Inserts or merges one candle; returns the slot index of the bucket. */
+  private slotFor(bucket: number): { index: number; existing: boolean } {
+    if (this.data !== null && this.tail > this.head) {
+      const last = this.tail - 1;
+      const lastTs = this.data[last * STRIDE]!;
+      if (bucket === lastTs) return { index: last, existing: true };
+      if (bucket < lastTs) {
+        const at = this.lowerBound(bucket);
+        if (this.data[at * STRIDE] === bucket) return { index: at, existing: true };
+        // Late tick opening an older bucket: shift the newer buckets right by one.
+        const offset = at - this.head;
+        this.reserveOne();
+        const data = this.data!;
+        const insertAt = this.head + offset;
+        data.copyWithin((insertAt + 1) * STRIDE, insertAt * STRIDE, this.tail * STRIDE);
+        this.tail++;
+        return { index: insertAt, existing: false };
+      }
+    }
+    this.reserveOne();
+    return { index: this.tail++, existing: false };
+  }
+
+  addTick(bucket: number, price: number, vol: number): void {
+    const { index, existing } = this.slotFor(bucket);
+    const data = this.data!;
+    const at = index * STRIDE;
+    if (!existing) {
+      data[at] = bucket;
+      data[at + 1] = price;
+      data[at + 2] = price;
+      data[at + 3] = price;
+      data[at + 4] = price;
+      data[at + 5] = vol;
+      return;
+    }
+    if (price > data[at + 2]!) data[at + 2] = price;
+    if (price < data[at + 3]!) data[at + 3] = price;
+    data[at + 4] = price;
+    data[at + 5]! += vol;
+  }
+
+  mergeCandle(slot: number, o: number, h: number, l: number, c: number, vol: number): void {
+    const { index, existing } = this.slotFor(slot);
+    const data = this.data!;
+    const at = index * STRIDE;
+    if (!existing) {
+      data[at] = slot;
+      data[at + 1] = o;
+      data[at + 2] = h;
+      data[at + 3] = l;
+      data[at + 4] = c;
+      data[at + 5] = vol;
+      return;
+    }
+    if (h > data[at + 2]!) data[at + 2] = h;
+    if (l < data[at + 3]!) data[at + 3] = l;
+    data[at + 4] = c;
+    data[at + 5]! += vol;
+  }
+
+  /** Removes buckets older than `cutoff`, passing each to `visit` in time order. */
+  takeBefore(
+    cutoff: number,
+    visit?: (ts: number, o: number, h: number, l: number, c: number, vol: number) => void,
+  ): void {
+    const data = this.data;
+    if (data === null) return;
+    while (this.head < this.tail && data[this.head * STRIDE]! < cutoff) {
+      if (visit) {
+        const at = this.head * STRIDE;
+        visit(data[at]!, data[at + 1]!, data[at + 2]!, data[at + 3]!, data[at + 4]!, data[at + 5]!);
+      }
+      this.head++;
+    }
+    this.releaseIfSparse();
+  }
+
+  private releaseIfSparse(): void {
+    if (this.data === null) return;
+    const size = this.size;
+    if (size === 0) {
+      this.data = null;
+      this.head = 0;
+      this.tail = 0;
+      return;
+    }
+    const capacity = this.data.length / STRIDE;
+    if (capacity > INITIAL_BUCKETS && size * 4 <= capacity) {
+      const next = new Float64Array(Math.max(INITIAL_BUCKETS, size * 2) * STRIDE);
+      next.set(this.data.subarray(this.head * STRIDE, this.tail * STRIDE));
+      this.data = next;
+      this.head = 0;
+      this.tail = size;
+    }
+  }
+
+  forEachKey(visit: (ts: number) => void): void {
+    const data = this.data;
+    if (data === null) return;
+    for (let i = this.head; i < this.tail; i++) visit(data[i * STRIDE]!);
+  }
+
+  candlesSince(since: number): RawCandle[] {
+    const data = this.data;
+    if (data === null) return [];
+    const out: RawCandle[] = [];
+    for (let i = this.lowerBound(since); i < this.tail; i++) {
+      const at = i * STRIDE;
+      out.push({
+        ts: data[at]!,
+        o: data[at + 1]!,
+        h: data[at + 2]!,
+        l: data[at + 3]!,
+        c: data[at + 4]!,
+        vol: data[at + 5]!,
+      });
+    }
+    return out;
+  }
+}
+
 interface CandleSeries {
-  fine: Map<number, RawCandle>;
-  coarse: Map<number, RawCandle>;
+  fine: PackedSeries;
+  coarse: PackedSeries;
 }
 
 interface InstrumentStore {
@@ -37,19 +221,8 @@ interface InstrumentStore {
   trade: CandleSeries;
 }
 
-const DEFAULT_BUCKET_MS = 60_000;
-const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-const DEFAULT_FINE_RETENTION_MS = 60 * 60 * 1000;
-const DEFAULT_COARSE_BUCKET_MS = 60 * 60 * 1000;
-// Feeds record roughly 10k instruments per minute (every Deribit strike ticks a mark), at
-// ~250 bytes of heap per bucket. Without the coarse tier and cap the 7-day window grows by
-// ~140 MB/hour toward tens of GB.
-const DEFAULT_MAX_BUCKETS = 1_500_000;
-const DEFAULT_SWEEP_INTERVAL_MS = 60_000;
-const EVICTION_HEADROOM = 0.9;
-
 function emptySeries(): CandleSeries {
-  return { fine: new Map(), coarse: new Map() };
+  return { fine: new PackedSeries(), coarse: new PackedSeries() };
 }
 
 function seriesSize(series: CandleSeries): number {
@@ -80,7 +253,7 @@ export class MarkHistoryBuffer {
   private readonly coarseBucketMs: number;
   private readonly maxBuckets: number;
   private readonly sweepIntervalMs: number;
-  private readonly stores = new Map<string, InstrumentStore>();
+  private readonly stores = new Map<VenueId, Map<string, InstrumentStore>>();
   private lastSweepTs = Number.NEGATIVE_INFINITY;
 
   constructor(options: MarkHistoryBufferOptions = {}) {
@@ -100,7 +273,7 @@ export class MarkHistoryBuffer {
     if (!Number.isFinite(ts) || ts <= 0) return;
 
     const store = this.ensureStore(venue, exchangeSymbol);
-    appendOhlc(store.mark.fine, this.bucketMs, ts, mark, 0);
+    store.mark.fine.addTick(Math.floor(ts / this.bucketMs) * this.bucketMs, mark, 0);
     this.maybeSweep(ts);
   }
 
@@ -116,7 +289,7 @@ export class MarkHistoryBuffer {
     const vol = Number.isFinite(size) && size > 0 ? size : 0;
 
     const store = this.ensureStore(venue, exchangeSymbol);
-    appendOhlc(store.trade.fine, this.bucketMs, ts, price, vol);
+    store.trade.fine.addTick(Math.floor(ts / this.bucketMs) * this.bucketMs, price, vol);
     this.maybeSweep(ts);
   }
 
@@ -130,7 +303,7 @@ export class MarkHistoryBuffer {
     intervalMs: number,
     rangeMs: number,
   ): RawCandle[] {
-    const store = this.stores.get(this.key(venue, exchangeSymbol));
+    const store = this.stores.get(venue)?.get(exchangeSymbol);
     if (!store) return [];
     return this.queryBucketed(store.mark, intervalMs, rangeMs);
   }
@@ -145,29 +318,33 @@ export class MarkHistoryBuffer {
     intervalMs: number,
     rangeMs: number,
   ): RawCandle[] {
-    const store = this.stores.get(this.key(venue, exchangeSymbol));
+    const store = this.stores.get(venue)?.get(exchangeSymbol);
     if (!store) return [];
     return this.queryBucketed(store.trade, intervalMs, rangeMs);
   }
 
   hasMark(venue: VenueId, exchangeSymbol: string): boolean {
-    const store = this.stores.get(this.key(venue, exchangeSymbol));
+    const store = this.stores.get(venue)?.get(exchangeSymbol);
     return store != null && seriesSize(store.mark) > 0;
   }
 
   hasTrade(venue: VenueId, exchangeSymbol: string): boolean {
-    const store = this.stores.get(this.key(venue, exchangeSymbol));
+    const store = this.stores.get(venue)?.get(exchangeSymbol);
     return store != null && seriesSize(store.trade) > 0;
   }
 
   stats(): { instruments: number; markBuckets: number; tradeBuckets: number } {
+    let instruments = 0;
     let markBuckets = 0;
     let tradeBuckets = 0;
-    for (const store of this.stores.values()) {
-      markBuckets += seriesSize(store.mark);
-      tradeBuckets += seriesSize(store.trade);
+    for (const byVenue of this.stores.values()) {
+      for (const store of byVenue.values()) {
+        instruments++;
+        markBuckets += seriesSize(store.mark);
+        tradeBuckets += seriesSize(store.trade);
+      }
     }
-    return { instruments: this.stores.size, markBuckets, tradeBuckets };
+    return { instruments, markBuckets, tradeBuckets };
   }
 
   clear(): void {
@@ -175,21 +352,21 @@ export class MarkHistoryBuffer {
     this.lastSweepTs = Number.NEGATIVE_INFINITY;
   }
 
-  private key(venue: VenueId, exchangeSymbol: string): string {
-    return `${venue}:${exchangeSymbol}`;
-  }
-
   private ensureStore(venue: VenueId, exchangeSymbol: string): InstrumentStore {
-    const k = this.key(venue, exchangeSymbol);
-    let store = this.stores.get(k);
+    let byVenue = this.stores.get(venue);
+    if (!byVenue) {
+      byVenue = new Map();
+      this.stores.set(venue, byVenue);
+    }
+    let store = byVenue.get(exchangeSymbol);
     if (!store) {
       store = { mark: emptySeries(), trade: emptySeries() };
-      this.stores.set(k, store);
+      byVenue.set(exchangeSymbol, store);
     }
     return store;
   }
 
-  // Sweeping touches every bucket, so it is gated on tick time rather than write count:
+  // Sweeping touches every series, so it is gated on tick time rather than write count:
   // a write-count trigger fires many times per second at feed rates and its cost grows
   // with the buffer.
   private maybeSweep(ts: number): void {
@@ -204,50 +381,37 @@ export class MarkHistoryBuffer {
     // bucket for the current boundary hour then coexists with its remaining fine buckets.
     const fineCutoff = Math.floor((now - this.fineRetentionMs) / this.bucketMs) * this.bucketMs;
     let total = 0;
-    // Insertion order also bounds compaction to buckets that just aged out of the fine window.
-    for (const [k, store] of this.stores) {
-      for (const series of [store.mark, store.trade]) {
-        this.compact(series, fineCutoff);
-        dropBefore(series.coarse, retentionCutoff);
-        dropBefore(series.fine, retentionCutoff);
-        total += seriesSize(series);
+    for (const byVenue of this.stores.values()) {
+      for (const [symbol, store] of byVenue) {
+        for (const series of [store.mark, store.trade]) {
+          this.compact(series, fineCutoff);
+          series.coarse.takeBefore(retentionCutoff);
+          series.fine.takeBefore(retentionCutoff);
+          total += seriesSize(series);
+        }
+        if (seriesSize(store.mark) === 0 && seriesSize(store.trade) === 0) byVenue.delete(symbol);
       }
-      if (seriesSize(store.mark) === 0 && seriesSize(store.trade) === 0) this.stores.delete(k);
     }
     if (total > this.maxBuckets) this.evictOldest(total);
   }
 
   private compact(series: CandleSeries, fineCutoff: number): void {
-    const rolled: RawCandle[] = [];
-    for (const [bucket, candle] of series.fine) {
-      if (bucket >= fineCutoff) break;
-      series.fine.delete(bucket);
-      rolled.push(candle);
-    }
-    if (rolled.length === 0) return;
-    rolled.sort((a, b) => a.ts - b.ts);
-    for (const candle of rolled) {
-      const slot = Math.floor(candle.ts / this.coarseBucketMs) * this.coarseBucketMs;
-      const existing = series.coarse.get(slot);
-      if (!existing) {
-        series.coarse.set(slot, { ...candle, ts: slot });
-        continue;
-      }
-      if (candle.h > existing.h) existing.h = candle.h;
-      if (candle.l < existing.l) existing.l = candle.l;
-      existing.c = candle.c;
-      existing.vol += candle.vol;
-    }
+    const coarseMs = this.coarseBucketMs;
+    series.fine.takeBefore(fineCutoff, (ts, o, h, l, c, vol) => {
+      series.coarse.mergeCandle(Math.floor(ts / coarseMs) * coarseMs, o, h, l, c, vol);
+    });
   }
 
   // Bucket keys are aligned to bucketMs / coarseBucketMs, so a histogram by key has only a
   // few hundred distinct entries even with millions of buckets.
   private evictOldest(total: number): void {
     const counts = new Map<number, number>();
-    for (const store of this.stores.values()) {
-      for (const series of [store.mark, store.trade]) {
-        for (const map of [series.coarse, series.fine]) {
-          for (const bucket of map.keys()) counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    const count = (bucket: number) => counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    for (const byVenue of this.stores.values()) {
+      for (const store of byVenue.values()) {
+        for (const series of [store.mark, store.trade]) {
+          series.coarse.forEachKey(count);
+          series.fine.forEachKey(count);
         }
       }
     }
@@ -263,12 +427,14 @@ export class MarkHistoryBuffer {
       { total, maxBuckets: this.maxBuckets, cutoff },
       'mark history buffer at capacity, evicting oldest buckets',
     );
-    for (const [k, store] of this.stores) {
-      for (const series of [store.mark, store.trade]) {
-        dropBefore(series.coarse, cutoff);
-        dropBefore(series.fine, cutoff);
+    for (const byVenue of this.stores.values()) {
+      for (const [symbol, store] of byVenue) {
+        for (const series of [store.mark, store.trade]) {
+          series.coarse.takeBefore(cutoff);
+          series.fine.takeBefore(cutoff);
+        }
+        if (seriesSize(store.mark) === 0 && seriesSize(store.trade) === 0) byVenue.delete(symbol);
       }
-      if (seriesSize(store.mark) === 0 && seriesSize(store.trade) === 0) this.stores.delete(k);
     }
   }
 
@@ -278,42 +444,22 @@ export class MarkHistoryBuffer {
 
     const cutoff = Date.now() - rangeMs;
     const since = Math.floor(cutoff / this.bucketMs) * this.bucketMs;
-    const sorted = [...series.coarse.values(), ...series.fine.values()]
-      .filter((candle) => candle.ts >= since)
-      .sort((a, b) => a.ts - b.ts);
+    const coarse = series.coarse.candlesSince(since);
+    const fine = series.fine.candlesSince(since);
+    const sorted: RawCandle[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < coarse.length || j < fine.length) {
+      if (j >= fine.length || (i < coarse.length && coarse[i]!.ts <= fine[j]!.ts)) {
+        sorted.push(coarse[i++]!);
+      } else {
+        sorted.push(fine[j++]!);
+      }
+    }
 
     if (intervalMs === this.bucketMs) return sorted;
 
     return mergeBaseBuckets(sorted, intervalMs);
-  }
-}
-
-function appendOhlc(
-  target: Map<number, RawCandle>,
-  bucketMs: number,
-  ts: number,
-  price: number,
-  vol: number,
-): void {
-  const bucket = Math.floor(ts / bucketMs) * bucketMs;
-  const existing = target.get(bucket);
-  if (!existing) {
-    target.set(bucket, { ts: bucket, o: price, h: price, l: price, c: price, vol });
-    return;
-  }
-  if (price > existing.h) existing.h = price;
-  if (price < existing.l) existing.l = price;
-  existing.c = price;
-  existing.vol += vol;
-}
-
-// Maps iterate in insertion order and buckets are created in time order, so scanning stops
-// at the first live bucket and a sweep costs O(expired) rather than O(stored). A rare late
-// tick that opens an older bucket behind newer ones is collected once those ahead expire.
-function dropBefore(map: Map<number, RawCandle>, cutoff: number): void {
-  for (const bucket of map.keys()) {
-    if (bucket >= cutoff) break;
-    map.delete(bucket);
   }
 }
 

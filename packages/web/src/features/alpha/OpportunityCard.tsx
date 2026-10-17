@@ -1,5 +1,5 @@
 import { VenueDot } from '@components/ui';
-import { fmtUsd } from '@lib/format';
+import { fmtStrikeShort, fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
 import type { ReactNode } from 'react';
@@ -195,12 +195,12 @@ export function CandidateRow({
       <span className={styles.strikeRoute}>
         <span>
           <i>S</i>
-          {fmtStrike(candidate.sellStrike)}
+          {fmtStrikeShort(candidate.sellStrike)}
         </span>
         <b />
         <span>
           <i>B</i>
-          {fmtStrike(candidate.buyStrike)}
+          {fmtStrikeShort(candidate.buyStrike)}
           {buyVenue && <VenueDot venueId={buyVenue} />}
         </span>
       </span>
@@ -219,11 +219,6 @@ export function CandidateRow({
   );
 }
 
-function fmtStrike(value: number): string {
-  return value >= 1_000
-    ? `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`
-    : value.toFixed(0);
-}
 
 const REJECTION_LABELS: Record<string, string> = {
   'Missing buy ask / sell bid': 'No tradable bid or ask',

@@ -4,7 +4,7 @@ import type {
   AlphaLongStraddleScannerResponse,
   AlphaLongStraddleVerdict,
 } from '@oggregator/protocol';
-import { fmtUsd, formatExpiry } from '@lib/format';
+import { fmtStrikeShort, fmtUsd, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 
 import { LONG_STRADDLE_STATUS } from './LongStraddleDecisionCard';
@@ -135,11 +135,11 @@ function LongStraddleRow({
       </span>
       <span className={`${cards.strikeRoute} ${styles.longRoute}`}>
         <span>
-          <i>B</i>C {fmtStrike(candidate.strike)}
+          <i>B</i>C {fmtStrikeShort(candidate.strike)}
         </span>
         <b />
         <span>
-          <i>B</i>P {fmtStrike(candidate.strike)}
+          <i>B</i>P {fmtStrikeShort(candidate.strike)}
         </span>
       </span>
       <span className={styles.rowVol}>
@@ -161,8 +161,3 @@ function LongStraddleRow({
   );
 }
 
-function fmtStrike(value: number): string {
-  return value >= 1_000
-    ? `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`
-    : value.toFixed(0);
-}

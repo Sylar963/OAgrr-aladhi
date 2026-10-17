@@ -1,3 +1,4 @@
+import { fmtPrice, fmtStrike } from '@lib/format';
 import InfoTip from '@components/ui/InfoTip';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 import type { EnrichedStrike } from '@shared/enriched';
@@ -139,7 +140,7 @@ export default function SpreadBuilderPanel({
       {forward != null && (
         <div className={styles.paramRow}>
           <div className={styles.paramLabel}>F</div>
-          <div className={styles.paramValue}>{forward.toLocaleString()}</div>
+          <div className={styles.paramValue}>{fmtPrice(forward)}</div>
         </div>
       )}
       {T != null && (
@@ -173,7 +174,7 @@ function StrikeSelect({ value, onChange, strikes, atmStrike, kind }: StrikeSelec
       <option value="">— select strike —</option>
       {strikes.map((s) => {
         const m = moneyness(s, atmStrike, kind);
-        const label = `${s.toLocaleString()}  ${m === 'atm' ? '· ATM' : m === 'itm' ? '· ITM' : '· OTM'}`;
+        const label = `${fmtStrike(s)}  ${m === 'atm' ? '· ATM' : m === 'itm' ? '· ITM' : '· OTM'}`;
         return (
           <option key={s} value={s} data-moneyness={m}>
             {label}

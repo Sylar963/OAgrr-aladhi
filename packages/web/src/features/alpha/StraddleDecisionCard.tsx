@@ -5,7 +5,7 @@ import type {
   AlphaStraddleVerdict,
   ShortStraddleEvaluationResponse,
 } from '@oggregator/protocol';
-import { fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { fmtIv, fmtPct, fmtStrike, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 
 import signal from './SignalCard.module.css';
@@ -190,7 +190,7 @@ function Dashboard({
         <div className={signal.contractLine}>
           <strong>{VENUES[candidate.venue]?.label ?? candidate.venue}</strong>
           <span>
-            sell {candidate.strike.toLocaleString()} C + P · {formatExpiry(candidate.expiry)} ·{' '}
+            sell {fmtStrike(candidate.strike)} C + P · {formatExpiry(candidate.expiry)} ·{' '}
             {candidate.dte.toFixed(1)}D
           </span>
           <span>

@@ -1,3 +1,4 @@
+import { fmtStrike } from '@lib/format';
 import { memo, useMemo, useState, type MouseEvent } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
@@ -271,7 +272,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
             >
               {z != null && (
                 <title>
-                  {p.strike} · IV {(p.blendedIv! * 100).toFixed(1)}% · richness{' '}
+                  {fmtStrike(p.strike)} · IV {(p.blendedIv! * 100).toFixed(1)}% · richness{' '}
                   {z >= 0 ? '+' : ''}
                   {z.toFixed(2)}σ
                 </title>
@@ -321,7 +322,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
           <StrikeMarker
             x={layout.sx(shortDot.strike)}
             y={layout.sy(shortDot.blendedIv!)}
-            label={`S ${shortDot.strike.toLocaleString()} · ${(shortDot.blendedIv! * 100).toFixed(1)}%`}
+            label={`S ${fmtStrike(shortDot.strike)} · ${(shortDot.blendedIv! * 100).toFixed(1)}%`}
             color="var(--color-profit)"
             placement="above"
           />
@@ -330,7 +331,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
           <StrikeMarker
             x={layout.sx(longDot.strike)}
             y={layout.sy(longDot.blendedIv!)}
-            label={`L ${longDot.strike.toLocaleString()} · ${(longDot.blendedIv! * 100).toFixed(1)}%`}
+            label={`L ${fmtStrike(longDot.strike)} · ${(longDot.blendedIv! * 100).toFixed(1)}%`}
             color="var(--color-loss)"
             placement="below"
           />
@@ -404,7 +405,7 @@ function roundToStep(v: number, step: number): number {
 }
 
 function formatStrike(v: number): string {
-  return v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`;
+  return v >= 1000 ? `${Math.round(v / 1000)}k` : fmtStrike(v);
 }
 
 // Uniform Catmull-Rom → cubic Bézier (tension 0.5), endpoints repeated so the

@@ -43,8 +43,9 @@ const STYLE_META: Record<OutcomeStyle, StyleMeta> = {
 
 function suggestedTarget(indexPrice: number | null): number | null {
   if (indexPrice == null || indexPrice <= 0) return null;
-  const step = indexPrice >= 10_000 ? 1_000 : indexPrice >= 1_000 ? 100 : indexPrice >= 100 ? 10 : 1;
-  return Math.ceil((indexPrice * 1.2) / step) * step;
+  // One step below the price's leading digit: $81k → 1,000s, $105 → 10s, $0.08 → 0.001s.
+  const step = 10 ** (Math.floor(Math.log10(indexPrice)) - 1);
+  return Number((Math.ceil((indexPrice * 1.2) / step) * step).toPrecision(12));
 }
 
 function validPositiveNumber(value: string): number | null {
@@ -234,7 +235,7 @@ export default function LottoOutcomeBuilder({
                   aria-invalid={targetInvalid}
                   aria-errormessage={targetInvalid ? 'lotto-target-error' : undefined}
                   value={targetPriceInput}
-                  placeholder={fallbackTarget == null ? 'Target price' : fallbackTarget.toFixed(0)}
+                  placeholder={fallbackTarget == null ? 'Target price' : String(fallbackTarget)}
                   onChange={(event) => onTargetPriceChange(event.target.value)}
                 />
               </div>

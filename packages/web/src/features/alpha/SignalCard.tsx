@@ -1,5 +1,5 @@
 import InfoTip from '@components/ui/InfoTip';
-import { fmtUsd } from '@lib/format';
+import { fmtStrikeShort, fmtUsd, fmtUsdPrice } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
 import { memo } from 'react';
@@ -198,7 +198,7 @@ function CandidateDashboard({
 
       <div className={styles.metricsStrip}>
         <Metric label={debit ? 'Cash paid' : 'Credit kept'} value={fmtUsd(Math.abs(netCash))} />
-        <Metric label="Breakeven" value={fmtUsd(candidate.breakeven)} />
+        <Metric label="Breakeven" value={fmtUsdPrice(candidate.breakeven)} />
         <Metric
           label="Model EV"
           value={fmtUsd(candidate.modelEdge)}
@@ -331,7 +331,7 @@ function PayoffChart({ candidate, spot }: { candidate: VerticalEconomics; spot: 
         className={styles.payoffChart}
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
-        aria-label={`Expiry payoff from ${fmtUsd(from)} to ${fmtUsd(to)}`}
+        aria-label={`Expiry payoff from ${fmtUsdPrice(from)} to ${fmtUsdPrice(to)}`}
       >
         <rect x="0" y="0" width={chartWidth} height={zeroY} className={styles.profitZone} />
         <rect
@@ -362,13 +362,13 @@ function PayoffChart({ candidate, spot }: { candidate: VerticalEconomics; spot: 
         className={styles.axisLabel}
         style={{ left: `${(scaleX(lowStrike) / chartWidth) * 100}%` }}
       >
-        {fmtStrike(lowStrike)}
+        {fmtStrikeShort(lowStrike)}
       </span>
       <span
         className={styles.axisLabel}
         style={{ left: `${(scaleX(highStrike) / chartWidth) * 100}%` }}
       >
-        {fmtStrike(highStrike)}
+        {fmtStrikeShort(highStrike)}
       </span>
       {spotX != null && (
         <span className={styles.spotLabel} style={{ left: `${(spotX / chartWidth) * 100}%` }}>
@@ -467,7 +467,7 @@ function ScenarioMeter({
             <div className={styles.scenario} key={label ?? ret}>
               <span>
                 {label && <b>{label} </b>}
-                {fmtPct(ret)} · {fmtUsd(price)}
+                {fmtPct(ret)} · {fmtUsdPrice(price)}
               </span>
               <div className={styles.scenarioTrack}>
                 <i
@@ -481,7 +481,7 @@ function ScenarioMeter({
         })}
       </div>
       <p className={styles.footnote}>
-        Breakeven {fmtUsd(candidate.breakeven)} needs {fmtPct(breakevenMove)}
+        Breakeven {fmtUsdPrice(candidate.breakeven)} needs {fmtPct(breakevenMove)}
         {breakevenSigma != null && ` (${Math.abs(breakevenSigma).toFixed(1)}σ)`}.{' '}
         {sigma != null
           ? `1σ = ATM IV × √T = ${(sigma * 100).toFixed(1)}% to expiry. `
@@ -525,10 +525,5 @@ function ReviewStep({ number, title, text }: { number: string; title: string; te
   );
 }
 
-function fmtStrike(value: number): string {
-  return value >= 1_000
-    ? `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`
-    : value.toFixed(0);
-}
 
 export default memo(SignalCard);

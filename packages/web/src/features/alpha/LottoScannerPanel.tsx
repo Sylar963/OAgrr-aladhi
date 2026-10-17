@@ -10,7 +10,7 @@ import {
 import { Spinner } from '@components/ui';
 import HoverTooltip from '@components/ui/HoverTooltip';
 import { useStrategyStore } from '@features/architect/strategy-store';
-import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { fmtDelta, fmtIv, fmtPct, fmtStrike, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
@@ -487,7 +487,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                         <div className={styles.contractCell}>
                           <span className={styles.venue}>{VENUES[candidate.venue]?.label ?? candidate.venue}</span>
                           <strong>{candidate.instrument}</strong>
-                          <span>{candidate.dte.toFixed(1)} DTE · K {candidate.strike.toLocaleString()}</span>
+                          <span>{candidate.dte.toFixed(1)} DTE · K {fmtStrike(candidate.strike)}</span>
                         </div>
                         <div className={styles.numericCell}>
                           <strong>{fmtUsd(candidate.mark)}</strong>

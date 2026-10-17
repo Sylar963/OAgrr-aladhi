@@ -20,9 +20,41 @@ function compactNum(v: number): string {
   return v.toFixed(0);
 }
 
+// Underlyings span $81k (BTC) to $0.08 (DOGE): fixed decimals print DOGE spot and strikes as
+// "$0". Prices keep at least 4 significant digits below $1,000 and drop cents above it.
+function priceDecimals(abs: number): number {
+  if (abs >= 1_000 || abs === 0) return 0;
+  return Math.min(10, Math.max(2, 3 - Math.floor(Math.log10(abs))));
+}
+
+/** An underlying price or level (spot, breakeven, target) without a currency sign. */
+export function fmtPrice(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '–';
+  return v.toLocaleString('en-US', { maximumFractionDigits: priceDecimals(Math.abs(v)) });
+}
+
+export function fmtUsdPrice(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '–';
+  return `${v < 0 ? '-' : ''}$${fmtPrice(Math.abs(v))}`;
+}
+
+/** Strikes are listed values, so they print exactly (0.0725, 1.175, 80,250), never rounded. */
+export function fmtStrike(v: number): string {
+  return Number(v.toPrecision(12)).toLocaleString('en-US', { maximumFractionDigits: 10 });
+}
+
+/** Card-sized strike: thousands as "80k"/"80.5k", everything below printed exactly. */
+export function fmtStrikeShort(v: number): string {
+  if (v >= 1_000) return `${(v / 1_000).toFixed(v % 1_000 === 0 ? 0 : 1)}k`;
+  return fmtStrike(v);
+}
+
 export function fmtUsdCompact(v: number | null | undefined): string {
   if (v == null) return '–';
-  return `$${compactNum(v)}`;
+  const abs = Math.abs(v);
+  if (abs >= 1_000 || abs === 0) return `$${compactNum(v)}`;
+  if (abs >= 100) return `${v < 0 ? '-' : ''}$${abs.toFixed(0)}`;
+  return fmtUsdPrice(v);
 }
 
 export function fmtIv(v: number | null | undefined): string {

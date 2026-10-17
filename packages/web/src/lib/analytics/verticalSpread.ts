@@ -1,3 +1,4 @@
+import { fmtUsd } from '@lib/format';
 import type { EnrichedStrike, VenueId, VenueQuote } from '@shared/enriched';
 import {
   black76Price,
@@ -473,12 +474,12 @@ function gateSignal(
   let reasoning: string;
   if (netCredit > 0 && expectedValue > 0 && roc >= rocGate) {
     signal = 'SELL';
-    reasoning = `Favorable: EV $${expectedValue.toFixed(2)}, ROC ${(roc * 100).toFixed(1)}%, Success ${Math.round(prob * 100)}%${regimeSuffix}`;
+    reasoning = `Favorable: EV ${fmtUsd(expectedValue)}, ROC ${(roc * 100).toFixed(1)}%, Success ${Math.round(prob * 100)}%${regimeSuffix}`;
   } else {
     signal = 'AVOID';
     reasoning =
       expectedValue <= 0
-        ? `Negative EV: $${expectedValue.toFixed(2)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
+        ? `Negative EV: ${fmtUsd(expectedValue)} at ${Math.round(prob * 100)}% success${regimeSuffix}`
         : `Low ROC: ${(roc * 100).toFixed(1)}% (gate ${(rocGate * 100).toFixed(0)}%)${regimeSuffix}`;
   }
 

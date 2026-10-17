@@ -13,6 +13,7 @@ import {
   type RegimeInputs,
   type RegimePersistence,
   RegimeService,
+  createWorkerHmmFitter,
   SpotCandleService,
   type SpotCandleCurrency,
   PerpTickerRuntime,
@@ -403,7 +404,7 @@ export const regimeService = new RegimeService(
     store: regimePersistence,
     getRegimeInputs: async (underlying) => buildRegimeInputs(underlying),
   },
-  { intervalMs: 5 * 60 * 1000 },
+  { intervalMs: 5 * 60 * 1000, fitHmm: createWorkerHmmFitter() },
 );
 
 interface RegimePersistedHmm {

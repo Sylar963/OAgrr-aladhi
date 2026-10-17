@@ -277,6 +277,11 @@ export {
   type StandardizationParams,
 } from './services/regime.js';
 export {
+  createWorkerHmmFitter,
+  inProcessHmmFitter,
+  type HmmFitter,
+} from './services/regime-fit.js';
+export {
   fitSvi,
   sviIv,
   sviTotalVariance,

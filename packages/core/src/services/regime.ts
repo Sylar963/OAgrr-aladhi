@@ -1,6 +1,6 @@
 import { feedLogger } from '../utils/logger.js';
+import { type HmmFitter, inProcessHmmFitter } from './regime-fit.js';
 import {
-  fitGaussianHmm,
   smoothedPosteriors,
   type HmmModel,
 } from './regime-hmm.js';
@@ -132,6 +132,9 @@ export interface RegimeServiceOptions {
   // Default 0.5 — for 3 states, that means the leading state must beat the
   // uniform 1/3 by a meaningful margin before we name a winner.
   confidenceFloor?: number;
+  // Defaults to an in-process fit; production passes a worker-thread fitter so Baum-Welch
+  // over the full buffer does not block the event loop.
+  fitHmm?: HmmFitter;
 }
 
 export interface RegimeQueryResult {
@@ -202,6 +205,8 @@ export class RegimeService {
   private readonly maxFitIter: number;
   private readonly fitTol: number;
   private readonly confidenceFloor: number;
+  private readonly fitHmm: HmmFitter;
+  private readonly fitting = new Set<string>();
 
   constructor(
     private readonly deps: RegimeServiceDeps,
@@ -220,6 +225,7 @@ export class RegimeService {
     this.maxFitIter = opts.maxFitIter ?? 100;
     this.fitTol = opts.fitTol ?? 1e-5;
     this.confidenceFloor = opts.confidenceFloor ?? 0.5;
+    this.fitHmm = opts.fitHmm ?? inProcessHmmFitter;
     for (const u of deps.underlyings) this.states.set(u, this.emptyState());
   }
 
@@ -308,11 +314,14 @@ export class RegimeService {
         state.modelFittedAt == null ||
         input.ts - state.modelFittedAt >= this.refitIntervalMs;
 
-      if (state.buffer.length >= this.minSamplesToFit && dueForRefit) {
+      if (state.buffer.length >= this.minSamplesToFit && dueForRefit && !this.fitting.has(underlying)) {
+        this.fitting.add(underlying);
         try {
-          this.refit(underlying, state, input.ts);
+          await this.refit(underlying, state, input.ts);
         } catch (err: unknown) {
           log.warn({ underlying, err: String(err) }, 'regime fit failed');
+        } finally {
+          this.fitting.delete(underlying);
         }
       }
 
@@ -354,11 +363,12 @@ export class RegimeService {
     }
   }
 
-  private refit(underlying: string, state: UnderlyingState, ts: number): void {
+  private async refit(underlying: string, state: UnderlyingState, ts: number): Promise<void> {
     const raw = state.buffer.map((r) => r.features);
     const standardization = fitStandardization(raw);
     const standardized = raw.map((x) => applyStandardization(x, standardization));
-    const fit = fitGaussianHmm(standardized, {
+    const observationCount = state.buffer.length;
+    const fit = await this.fitHmm(standardized, {
       nStates: this.nStates,
       seed: this.seed,
       maxIter: this.maxFitIter,
@@ -375,7 +385,7 @@ export class RegimeService {
         .saveModel({
           underlying,
           fittedAt: ts,
-          observationCount: state.buffer.length,
+          observationCount,
           hmm: fit.model,
           standardization,
           stateLabels,
@@ -387,7 +397,7 @@ export class RegimeService {
     log.info(
       {
         underlying,
-        observationCount: state.buffer.length,
+        observationCount,
         logLikelihood: fit.logLikelihood,
         iterations: fit.iterations,
         labels: stateLabels,

@@ -1,4 +1,6 @@
+import type { VenueId } from '@shared/enriched';
 import { CandidateRow, OpportunityCard, OpportunitySection } from './OpportunityCard';
+import { formatQuantity } from './venue-sizing';
 import type { SpreadCandidate, VenueScan } from './spread-scanner';
 import { VERTICAL_LABELS, type VerticalKind } from './vertical-pricing';
 import styles from './VenueOpportunities.module.css';
@@ -7,6 +9,7 @@ export default function AlphaVenueOpportunities({
   scans,
   kind,
   underlying,
+  quantities,
   sellStrike,
   buyStrike,
   onSelect,
@@ -14,6 +17,8 @@ export default function AlphaVenueOpportunities({
   scans: VenueScan[];
   kind: VerticalKind;
   underlying: string;
+  /** Per-venue auto size; absent when one size applies to every venue. */
+  quantities?: Partial<Record<VenueId, number>>;
   sellStrike: number | null;
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
@@ -38,10 +43,12 @@ export default function AlphaVenueOpportunities({
           (candidate) => candidate.sellStrike === sellStrike && candidate.buyStrike === buyStrike,
         );
         const alternatives = candidates.filter((c) => c.id !== selected?.id).slice(0, 2);
+        const quantity = quantities?.[scan.venue];
         return (
           <OpportunityCard
             key={scan.venue}
             venue={scan.venue}
+            {...(quantity != null && { sizeLabel: `${formatQuantity(quantity)} ${underlying}` })}
             kind={kind}
             kindCandidates={candidates}
             pricedCount={scan.candidates.length}

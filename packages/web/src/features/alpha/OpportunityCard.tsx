@@ -68,6 +68,7 @@ export function OpportunityCard({
   kindCandidates,
   pricedCount,
   rejected,
+  sizeLabel,
   children,
 }: {
   venue: VenueId;
@@ -75,6 +76,8 @@ export function OpportunityCard({
   kindCandidates: readonly VerticalEconomics[];
   pricedCount: number;
   rejected: Record<string, number>;
+  /** Size this card was priced at, when it differs per venue. */
+  sizeLabel?: string;
   children: ReactNode[];
 }) {
   const best = kindCandidates.find((c) => c.status === 'review') ?? kindCandidates[0];
@@ -96,6 +99,12 @@ export function OpportunityCard({
         </span>
       </header>
 
+      {sizeLabel && (
+        <div className={styles.coverageRow}>
+          <span>Size per leg</span>
+          <strong>{sizeLabel}</strong>
+        </div>
+      )}
       <div className={styles.coverageRow}>
         <span>Executable coverage</span>
         <strong>{pricedCount} pairs</strong>

@@ -6,14 +6,9 @@ import { useIsMobile } from '@hooks/useIsMobile';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
-import AlphaTradeSizing, {
-  defaultQuantity,
-  formatQuantity,
-  useAlphaSizing,
-  venueSizeRule,
-} from './AlphaTradeSizing';
+import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
 import LongStraddlePanel from './LongStraddlePanel';
@@ -35,6 +30,12 @@ import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { type AlphaMarket, useAlphaMarketData } from './useAlphaMarketData';
 import { useRegimeQuery } from './useRegimeQuery';
 import { useVerticalSpreadAnalysis } from './useVerticalSpreadAnalysis';
+import {
+  formatQuantity,
+  suggestVenueQuantity,
+  venueSizeRule,
+  type VenueQuantitySuggestion,
+} from './venue-sizing';
 import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
@@ -92,15 +93,22 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
     ? preferredVenue
     : (busiestVenue(chain, scanVenues) ?? scanVenues[0] ?? 'thalex');
   const sizeRule = useMemo(() => venueSizeRule(chain, tradeVenue), [chain, tradeVenue]);
-  const { sizing, update } = useAlphaSizing(
-    market,
-    underlying,
-    sizeRule
-      ? formatQuantity(
-          defaultQuantity(sizeRule, chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd),
-        )
-      : null,
+  const {
+    sizing: storedSizing,
+    update,
+    quantityIsAuto,
+    resetQuantity,
+  } = useAlphaSizing(market, underlying);
+  const venueQuantities = useVenueQuantities(
+    tradfi || !quantityIsAuto || !isSpread ? undefined : chain,
+    scanVenues,
+    Number(storedSizing.reserve),
   );
+  const tradeVenueQuantity = venueQuantities[tradeVenue];
+  const sizing =
+    tradeVenueQuantity != null
+      ? { ...storedSizing, quantity: formatQuantity(tradeVenueQuantity) }
+      : storedSizing;
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 5_000);
@@ -133,7 +141,19 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       nowMs: Date.now(),
     };
   }, [chain, error, underlying, expiry, scanVenues, sizing, isSpread, clock]);
-  const scans = useMemo(() => (scanInput ? scanSpreads(scanInput) : []), [scanInput]);
+  // Auto size: each venue card prices at that venue's own suggested size, so one venue's
+  // minimum (Deribit 10 SOL) or order-value floor (Paradex $20) cannot blank the others.
+  const scans = useMemo(() => {
+    if (!scanInput) return [];
+    if (Object.keys(venueQuantities).length === 0) return scanSpreads(scanInput);
+    return scanInput.venues.flatMap((venue) =>
+      scanSpreads({
+        ...scanInput,
+        venues: [venue],
+        quantity: venueQuantities[venue] ?? scanInput.quantity,
+      }),
+    );
+  }, [scanInput, venueQuantities]);
   const crossScans = useMemo(
     () => (scanInput && scanInput.venues.length > 1 ? scanCrossVenueSpreads(scanInput, scans) : []),
     [scanInput, scans],
@@ -277,6 +297,8 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         underlying={underlying}
         market={market}
         sizeRule={sizeRule}
+        quantityIsAuto={quantityIsAuto}
+        onAutoQuantity={resetQuantity}
       />
     </SpreadBuilderPanel>
   );
@@ -305,6 +327,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         scans={scans}
         kind={kind}
         underlying={underlying}
+        quantities={venueQuantities}
         sellStrike={shortStrike}
         buyStrike={longStrike}
         onSelect={selectSameVenue}
@@ -489,6 +512,38 @@ function findSelection(
     .find((s) => s.sellVenue === sellVenue)
     ?.candidates.find((c) => c.buyVenue === buyVenue && matches(c));
   return candidate ? { id: candidate.id, candidate, route: { sellVenue, buyVenue } } : null;
+}
+
+const SUGGESTION_RETRY_MS = 10_000;
+
+/**
+ * Suggested size per venue for the loaded chain. A suggestion that prices pairs is kept for
+ * the chain's underlying/expiry so the size does not drift with every quote patch; one that
+ * prices nothing (quotes still warming) is retried after SUGGESTION_RETRY_MS.
+ */
+function useVenueQuantities(
+  chain: EnrichedChainResponse | undefined,
+  venues: readonly VenueId[],
+  costReserve: number,
+): Partial<Record<VenueId, number>> {
+  const cache = useRef(new Map<string, VenueQuantitySuggestion & { atMs: number }>());
+  return useMemo(() => {
+    const quantities: Partial<Record<VenueId, number>> = {};
+    if (!chain || !Number.isFinite(costReserve) || costReserve < 0) return quantities;
+    const nowMs = Date.now();
+    for (const venue of venues) {
+      const key = `${chain.underlying}|${chain.expiry}|${venue}|${costReserve}`;
+      let suggestion = cache.current.get(key);
+      if (suggestion == null || (suggestion.pairs === 0 && nowMs - suggestion.atMs > SUGGESTION_RETRY_MS)) {
+        const fresh = suggestVenueQuantity(chain, venue, costReserve, nowMs);
+        if (fresh == null) continue;
+        suggestion = { ...fresh, atMs: nowMs };
+        cache.current.set(key, suggestion);
+      }
+      quantities[venue] = suggestion.quantity;
+    }
+    return quantities;
+  }, [chain, venues, costReserve]);
 }
 
 /** Venue quoting the most options on this chain; a venue can list the asset but not this expiry. */

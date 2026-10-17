@@ -3,7 +3,6 @@ import { useAppStore } from '@stores/app-store';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
-import { defaultQuantity } from './AlphaTradeSizing';
 import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
 
@@ -271,16 +270,25 @@ describe('surgical Alpha enhancements', () => {
     });
     mocks.scan.mockReturnValue([]);
     render(<AlphaView />);
-    // $100 of notional at $40 spot, rounded up onto Bybit's 1-SOL step.
-    expect(mocks.scan).toHaveBeenLastCalledWith(
-      expect.objectContaining({ quantity: 3, venues: ['deribit', 'bybit'] }),
-    );
+    const userScans = () =>
+      mocks.scan.mock.calls.map(([arg]) => arg).filter((arg) => arg.equity === 5000);
+    // Auto size: one scan per listing venue. No pair prices in this mock, so Bybit falls back
+    // to $100 of notional at $40 spot on its 1-SOL step; Deribit has no size data on this chain.
+    expect(userScans().at(-2)).toEqual(expect.objectContaining({ venues: ['deribit'], quantity: 3 }));
+    expect(userScans().at(-1)).toEqual(expect.objectContaining({ venues: ['bybit'], quantity: 3 }));
+    expect(screen.getByLabelText<HTMLInputElement>(/Quantity · SOL per leg/).value).toBe('3');
+    expect(screen.getByText(/Auto: each venue uses the size its book fills best/)).toBeTruthy();
     expect(screen.getByText(/Bybit minimum 1 · step 1/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText(/Quantity · SOL per leg/), { target: { value: '0.5' } });
-    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ quantity: 0.5 }));
+    expect(userScans().at(-1)).toEqual(
+      expect.objectContaining({ venues: ['deribit', 'bybit'], quantity: 0.5 }),
+    );
+    expect(screen.getByText(/Fixed for every venue/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Use 1' }));
-    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ quantity: 1 }));
+    expect(userScans().at(-1)).toEqual(expect.objectContaining({ quantity: 1 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Auto-size per venue' }));
+    expect(userScans().at(-1)).toEqual(expect.objectContaining({ venues: ['bybit'], quantity: 3 }));
 
     act(() => useAppStore.setState({ underlying: 'BTC' }));
     expect(screen.getByLabelText<HTMLInputElement>(/Quantity · BTC per leg/).value).toBe('0.1');
@@ -375,15 +383,5 @@ describe('surgical Alpha enhancements', () => {
       ['sell', 200, 1, 6],
       ['buy', 205, 1, 3.6],
     ]);
-  });
-});
-
-describe('defaultQuantity', () => {
-  it('sizes about $100 of notional on the venue step, never below the minimum', () => {
-    expect(defaultQuantity({ min: 0.01, step: 0.01 }, 105)).toBe(0.96);
-    expect(defaultQuantity({ min: 10, step: 10 }, 105)).toBe(10);
-    expect(defaultQuantity({ min: 100, step: 100 }, 0.08)).toBe(1300);
-    expect(defaultQuantity({ min: 0.01, step: 0.01 }, 81_000)).toBe(0.01);
-    expect(defaultQuantity({ min: 1, step: 1 }, null)).toBe(1);
   });
 });

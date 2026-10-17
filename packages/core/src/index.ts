@@ -290,6 +290,7 @@ export {
 } from './services/svi-fit.js';
 export {
   IvHistoryService,
+  MIN_RANK_HISTORY_DAYS,
   type IvHistoryDeps,
   type IvHistoryOptions,
   type IvHistoryPersistence,

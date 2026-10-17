@@ -26,6 +26,9 @@ const TENOR_BY_DAYS: Record<number, IvTenor | undefined> = {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const HISTORY_LOAD_DAYS = 90;
+// A rank over a few hours of samples reads as an extreme (AAVE showed percentile 100 from
+// three hourly points); swept underlyings only start recording when the server first sees them.
+export const MIN_RANK_HISTORY_DAYS = 7;
 
 function emptyExtrema(): IvHistoryExtrema {
   return { atmIv: null, rr25d: null, bfly25d: null };
@@ -776,9 +779,12 @@ export class IvHistoryService {
     const rrValues = series.map((p) => p.rr25d);
     const flyValues = series.map((p) => p.bfly25d);
 
-    const atmStats = rankAndPercentile(atmValues, latest.atmIv);
-    const rrStats = rankAndPercentile(rrValues, latest.rr25d);
-    const flyStats = rankAndPercentile(flyValues, latest.bfly25d);
+    const firstAtmTs = series.find((p) => p.atmIv != null)?.ts ?? latest.ts;
+    const ranked = latest.ts - firstAtmTs >= MIN_RANK_HISTORY_DAYS * MS_PER_DAY;
+    const unranked: RankPct = { rank: null, percentile: null };
+    const atmStats = ranked ? rankAndPercentile(atmValues, latest.atmIv) : unranked;
+    const rrStats = ranked ? rankAndPercentile(rrValues, latest.rr25d) : unranked;
+    const flyStats = ranked ? rankAndPercentile(flyValues, latest.bfly25d) : unranked;
 
     const min = emptyExtrema();
     const max = emptyExtrema();

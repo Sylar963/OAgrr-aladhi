@@ -55,6 +55,12 @@ function ivChange(series: IvHistoryResponse['tenors']['30d']['series'], days: nu
   return null;
 }
 
+function historyDays(series: IvHistoryResponse['tenors']['30d']['series']): number | null {
+  const first = series.find((point) => point.atmIv != null);
+  const last = series.at(-1);
+  return first == null || last == null ? null : (last.ts - first.ts) / 86_400_000;
+}
+
 function rangeWidthPct(candles: readonly SpotCandle[], days: number): number | null {
   if (candles.length < days) return null;
   const window = candles.slice(-days);
@@ -180,6 +186,7 @@ export function buildAlphaMarketContext(input: AlphaMarketContextInput): AlphaMa
       ivPercentile30d,
       ivChange1d: history30d == null ? null : ivChange(history30d.series, 1),
       ivChange7d: history30d == null ? null : ivChange(history30d.series, 7),
+      ivHistoryDays: history30d == null ? null : historyDays(history30d.series),
     },
     realized: { rv7d, rv30d, vrp7d, vrp30d },
     expectedMoves,

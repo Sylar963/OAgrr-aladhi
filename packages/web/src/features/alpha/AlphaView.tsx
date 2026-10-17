@@ -5,6 +5,7 @@ import { AlphaPortfolioContext } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
+import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
@@ -24,7 +25,12 @@ import {
 import SignalCard, { type ExecutionRoute } from './SignalCard';
 import SpreadBuilderPanel from './SpreadBuilderPanel';
 import StraddleScannerPanel from './StraddleScannerPanel';
-import { type SpreadCandidate, scanSpreads, type VenueScan } from './spread-scanner';
+import {
+  indicativeAtMark,
+  type SpreadCandidate,
+  scanSpreads,
+  type VenueScan,
+} from './spread-scanner';
 import { computeSviRichness } from './sviRichness';
 import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { type AlphaMarket, useAlphaMarketData } from './useAlphaMarketData';
@@ -154,6 +160,11 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       }),
     );
   }, [scanInput, venueQuantities]);
+  const tradeVenueMarkOnly = scans.find((scan) => scan.venue === tradeVenue)?.markOnly ?? false;
+  const markOnlyVenues = useMemo(
+    () => new Set(scans.filter((scan) => scan.markOnly).map((scan) => scan.venue)),
+    [scans],
+  );
   const crossScans = useMemo(
     () => (scanInput && scanInput.venues.length > 1 ? scanCrossVenueSpreads(scanInput, scans) : []),
     [scanInput, scans],
@@ -299,6 +310,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         sizeRule={sizeRule}
         quantityIsAuto={quantityIsAuto}
         onAutoQuantity={resetQuantity}
+        markOnlyVenues={markOnlyVenues}
       />
     </SpreadBuilderPanel>
   );
@@ -318,7 +330,9 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
             ? 'Enter your current account equity in the builder to see dollar risk at your size.'
             : error
               ? 'Chain unavailable. Cached quotes are not used for a trade estimate.'
-              : 'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.'
+              : tradeVenueMarkOnly
+                ? `${VENUES[tradeVenue]?.label ?? tradeVenue} has no bids or asks on ${underlying} options, only marks. Pick a venue with a live book, or get a block quote on the venue.`
+                : 'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.'
         }
         regime={regime ?? null}
         {...(builderLegs && { onOpenBuilder: openInBuilder })}
@@ -328,6 +342,18 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         kind={kind}
         underlying={underlying}
         quantities={venueQuantities}
+        indicativeFor={(venue) =>
+          chain && shortStrike != null && longStrike != null
+            ? indicativeAtMark(
+                chain,
+                venue,
+                kind.startsWith('call') ? 'call' : 'put',
+                shortStrike,
+                longStrike,
+                venueQuantities[venue] ?? Number(sizing.quantity),
+              )
+            : null
+        }
         sellStrike={shortStrike}
         buyStrike={longStrike}
         onSelect={selectSameVenue}

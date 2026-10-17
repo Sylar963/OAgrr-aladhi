@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VenueId } from '@shared/enriched';
 import { input, now } from './spread-scan.fixtures';
-import { scanSpreads } from './spread-scanner';
+import { indicativeAtMark, isMarkOnly, scanSpreads } from './spread-scanner';
 import { black76Price } from '@lib/analytics/blackScholes';
 import { clampedStdev, expiryPnl, rankCandidates, type RankedVertical } from './vertical-pricing';
 
@@ -246,5 +246,41 @@ describe('venue-specific spread scanner', () => {
     expect(withExpiries(am, pm).rejected).toHaveProperty(['Leg expiry times differ']);
     expect(withExpiries(pm, pm).candidates.length).toBeGreaterThan(0);
     expect(withExpiries(am, null).candidates.length).toBeGreaterThan(0);
+  });
+});
+
+describe('mark-only venues', () => {
+  const emptyBook = () => {
+    const i = input();
+    for (const row of i.chain.strikes) {
+      for (const side of [row.call, row.put]) {
+        const quote = side.venues.thalex!;
+        quote.execution = { ...quote.execution!, bidUsd: null, askUsd: null };
+      }
+    }
+    return i;
+  };
+
+  it('flags a venue with marks but no bid or ask anywhere on the chain', () => {
+    expect(isMarkOnly(input().chain, 'thalex')).toBe(false);
+    expect(isMarkOnly(emptyBook().chain, 'thalex')).toBe(true);
+    expect(isMarkOnly(emptyBook().chain, 'deribit')).toBe(false);
+    const scan = scanSpreads(emptyBook())[0]!;
+    expect(scan.markOnly).toBe(true);
+    expect(scan.candidates).toHaveLength(0);
+  });
+
+  it('values the selected vertical at marks before fees, without an entry price', () => {
+    // Fixture marks: 80k call 1050, 81k call 650; 80k put 1050, 81k put 1450 (per BTC).
+    const { chain } = emptyBook();
+    const credit = indicativeAtMark(chain, 'thalex', 'call', 80_000, 81_000, 0.1)!;
+    expect(credit.grossPremium).toBeCloseTo(40, 6);
+    expect(credit.maxProfit).toBeCloseTo(40, 6);
+    expect(credit.maxLoss).toBeCloseTo(60, 6);
+    const debit = indicativeAtMark(chain, 'thalex', 'put', 80_000, 81_000, 0.1)!;
+    expect(debit.grossPremium).toBeCloseTo(-40, 6);
+    expect(debit.maxLoss).toBeCloseTo(40, 6);
+    expect(debit.maxProfit).toBeCloseTo(60, 6);
+    expect(indicativeAtMark(chain, 'thalex', 'call', 80_000, 99_000, 0.1)).toBeNull();
   });
 });

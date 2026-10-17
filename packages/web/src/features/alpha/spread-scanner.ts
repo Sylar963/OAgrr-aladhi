@@ -1,4 +1,4 @@
-import type { VenueId } from '@shared/enriched';
+import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import {
   INVALID_INPUT_REASON,
   LIVE_QUOTE_LIMITS,
@@ -20,6 +20,8 @@ export interface VenueScan {
   venue: VenueId;
   candidates: SpreadCandidate[];
   rejected: Record<string, number>;
+  /** The venue publishes marks for this chain but no bid or ask on any option. */
+  markOnly: boolean;
 }
 
 const DEFAULT_RULES: PricingRules = {
@@ -44,7 +46,12 @@ export function scanSpreads(input: SpreadScanInput): VenueScan[] {
   const ctx = scanContext(input);
   return input.venues.map((venue) => {
     const { rejected, reject } = rejectionCounter();
-    const result: VenueScan = { venue, candidates: [], rejected };
+    const result: VenueScan = {
+      venue,
+      candidates: [],
+      rejected,
+      markOnly: isMarkOnly(input.chain, venue),
+    };
     if (!ctx.valid) {
       reject(INVALID_INPUT_REASON);
       return result;
@@ -69,4 +76,48 @@ export function scanSpreads(input: SpreadScanInput): VenueScan[] {
     rankCandidates(result.candidates);
     return result;
   });
+}
+
+/** Marks but no executable side anywhere on the chain: an empty book (Paradex NEAR, META, XAU). */
+export function isMarkOnly(chain: EnrichedChainResponse, venue: VenueId): boolean {
+  let marked = false;
+  for (const row of chain.strikes) {
+    for (const side of [row.call, row.put]) {
+      const execution = side?.venues[venue]?.execution;
+      if (!execution) continue;
+      if ((execution.bidUsd ?? 0) > 0 || (execution.askUsd ?? 0) > 0) return false;
+      if ((execution.markUsd ?? 0) > 0) marked = true;
+    }
+  }
+  return marked;
+}
+
+export interface MarkIndicative {
+  grossPremium: number;
+  maxProfit: number;
+  maxLoss: number;
+}
+
+/**
+ * The selected vertical valued at venue marks, before fees. Only for display on a mark-only
+ * venue: no order rests at these prices, so it is a reference value, never an entry price.
+ */
+export function indicativeAtMark(
+  chain: EnrichedChainResponse,
+  venue: VenueId,
+  right: 'call' | 'put',
+  sellStrike: number,
+  buyStrike: number,
+  quantity: number,
+): MarkIndicative | null {
+  const mark = (strike: number) =>
+    chain.strikes.find((row) => row.strike === strike)?.[right]?.venues[venue]?.execution?.markUsd;
+  const sellMark = mark(sellStrike);
+  const buyMark = mark(buyStrike);
+  if (sellMark == null || buyMark == null || !(quantity > 0)) return null;
+  const grossPremium = (sellMark - buyMark) * quantity;
+  const width = Math.abs(sellStrike - buyStrike) * quantity;
+  return grossPremium >= 0
+    ? { grossPremium, maxProfit: grossPremium, maxLoss: width - grossPremium }
+    : { grossPremium, maxProfit: width + grossPremium, maxLoss: -grossPremium };
 }

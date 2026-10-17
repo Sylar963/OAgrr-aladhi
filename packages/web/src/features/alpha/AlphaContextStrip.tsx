@@ -18,6 +18,14 @@ interface AlphaContextStripProps {
   loading: boolean;
 }
 
+// Mirrors MIN_RANK_HISTORY_DAYS in core's IvHistoryService, which withholds percentiles until then.
+const MIN_PERCENTILE_HISTORY_DAYS = 7;
+
+function historyBuilding(context: AlphaMarketContextResponse | null): boolean {
+  const days = context?.volatility.ivHistoryDays;
+  return days != null && days < MIN_PERCENTILE_HISTORY_DAYS;
+}
+
 function setupLabel(
   context: AlphaMarketContextResponse | null,
   strategy: AlphaContextStripProps['strategy'],
@@ -51,7 +59,9 @@ export default function AlphaContextStrip({ context, strategy, loading }: AlphaC
         <span>ATM IV 30D</span>
         <strong>{fmtIv(context?.volatility.atmIv30d ?? null)}</strong>
         <small title="Context only: IV against its own 90-day past, not against expected realized volatility.">
-          90d {fmtPercentile(context?.volatility.ivPercentile30d)}
+          {historyBuilding(context)
+            ? `IV history ${(context?.volatility.ivHistoryDays ?? 0).toFixed(1)} / ${MIN_PERCENTILE_HISTORY_DAYS}d`
+            : `90d ${fmtPercentile(context?.volatility.ivPercentile30d)}`}
         </small>
       </div>
       <div

@@ -148,6 +148,7 @@ describe('buildAlphaMarketContext', () => {
 
     expect(result.volatility.state).toBe('compressed');
     expect(result.volatility.ivChange7d).toBeCloseTo(0.05, 8);
+    expect(result.volatility.ivHistoryDays).toBeCloseTo(7, 8);
     expect(result.range.state).toBe('coiled');
     expect(result.expectedMoves[0]!.movePct).toBeCloseTo(4.847, 3);
     expect(result.setup.longCall).toBe('favorable');

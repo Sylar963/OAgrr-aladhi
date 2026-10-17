@@ -104,6 +104,7 @@ export default function AlphaTradeSizing({
   sizeRule,
   quantityIsAuto,
   onAutoQuantity,
+  markOnlyVenues,
 }: {
   sizing: AlphaSizing;
   update: (key: keyof AlphaSizing, value: string) => void;
@@ -115,6 +116,7 @@ export default function AlphaTradeSizing({
   sizeRule: VenueSizeRule | null;
   quantityIsAuto: boolean;
   onAutoQuantity: () => void;
+  markOnlyVenues?: ReadonlySet<VenueId>;
 }) {
   const { defaults, unit } = SIZING[market];
   const quantity = Number(sizing.quantity);
@@ -136,6 +138,7 @@ export default function AlphaTradeSizing({
           {venues.map((v) => (
             <option key={v} value={v}>
               {VENUES[v]?.label ?? v}
+              {markOnlyVenues?.has(v) ? ' (mark only)' : ''}
             </option>
           ))}
         </select>

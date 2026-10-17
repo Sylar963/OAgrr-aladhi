@@ -1,5 +1,6 @@
 import type { VenueId } from '@shared/enriched';
 import { CandidateRow, OpportunityCard, OpportunitySection } from './OpportunityCard';
+import type { MarkIndicative } from './spread-scanner';
 import { formatQuantity } from './venue-sizing';
 import type { SpreadCandidate, VenueScan } from './spread-scanner';
 import { VERTICAL_LABELS, type VerticalKind } from './vertical-pricing';
@@ -10,6 +11,7 @@ export default function AlphaVenueOpportunities({
   kind,
   underlying,
   quantities,
+  indicativeFor,
   sellStrike,
   buyStrike,
   onSelect,
@@ -19,6 +21,7 @@ export default function AlphaVenueOpportunities({
   underlying: string;
   /** Per-venue auto size; absent when one size applies to every venue. */
   quantities?: Partial<Record<VenueId, number>>;
+  indicativeFor?: (venue: VenueId) => MarkIndicative | null;
   sellStrike: number | null;
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
@@ -49,6 +52,8 @@ export default function AlphaVenueOpportunities({
             key={scan.venue}
             venue={scan.venue}
             {...(quantity != null && { sizeLabel: `${formatQuantity(quantity)} ${underlying}` })}
+            markOnly={scan.markOnly}
+            indicative={scan.markOnly ? (indicativeFor?.(scan.venue) ?? null) : null}
             kind={kind}
             kindCandidates={candidates}
             pricedCount={scan.candidates.length}

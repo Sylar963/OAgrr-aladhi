@@ -3,6 +3,7 @@ import { fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
 import type { ReactNode } from 'react';
+import type { MarkIndicative } from './spread-scanner';
 import { VERTICAL_LABELS, type VerticalEconomics, type VerticalKind } from './vertical-pricing';
 import styles from './VenueOpportunities.module.css';
 
@@ -13,6 +14,7 @@ const STATUS = {
   'no-model': { label: 'PRICE ONLY', tone: 'neutral' },
 } as const;
 const NO_PAIR = { label: 'NO PAIR', tone: 'empty' } as const;
+const MARK_ONLY = { label: 'MARK ONLY', tone: 'neutral' } as const;
 
 export function OpportunitySection({
   title,
@@ -69,6 +71,8 @@ export function OpportunityCard({
   pricedCount,
   rejected,
   sizeLabel,
+  markOnly = false,
+  indicative = null,
   children,
 }: {
   venue: VenueId;
@@ -78,10 +82,14 @@ export function OpportunityCard({
   rejected: Record<string, number>;
   /** Size this card was priced at, when it differs per venue. */
   sizeLabel?: string;
+  markOnly?: boolean;
+  /** Selected strikes valued at this venue's marks; shown only for a mark-only venue. */
+  indicative?: MarkIndicative | null;
   children: ReactNode[];
 }) {
   const best = kindCandidates.find((c) => c.status === 'review') ?? kindCandidates[0];
-  const status = best ? STATUS[best.status] : NO_PAIR;
+  const status = best ? STATUS[best.status] : markOnly ? MARK_ONLY : NO_PAIR;
+  const venueLabel = VENUES[venue]?.label ?? venue;
   const rejectedCount = Object.values(rejected).reduce((total, count) => total + count, 0);
   const checked = rejectedCount + pricedCount;
   const coverage = checked === 0 ? 0 : (pricedCount / checked) * 100;
@@ -92,7 +100,7 @@ export function OpportunityCard({
       <header className={styles.venueCardHeader}>
         <span className={styles.venueName}>
           <VenueDot venueId={venue} isBest={status.tone === 'review'} />
-          {VENUES[venue]?.label ?? venue}
+          {venueLabel}
         </span>
         <span className={styles.venueState} data-tone={status.tone}>
           {status.label}
@@ -113,7 +121,19 @@ export function OpportunityCard({
         <span style={{ width: `${Math.max(coverage, pricedCount > 0 ? 3 : 0)}%` }} />
       </div>
 
-      {children.length === 0 ? (
+      {children.length === 0 && markOnly ? (
+        <div className={styles.noPair}>
+          <span aria-hidden="true">≈</span>
+          <div>
+            <strong>Mark only · no orders on {venueLabel}</strong>
+            <small>
+              {indicative
+                ? `At mark, before fees: ${indicative.grossPremium >= 0 ? 'credit' : 'debit'} ${fmtUsd(Math.abs(indicative.grossPremium))} · max loss ${fmtUsd(indicative.maxLoss)}. Reference only, not executable.`
+                : `${venueLabel} publishes marks and IV for these options but no bid or ask.`}
+            </small>
+          </div>
+        </div>
+      ) : children.length === 0 ? (
         <div className={styles.noPair}>
           <span aria-hidden="true">∅</span>
           <div>

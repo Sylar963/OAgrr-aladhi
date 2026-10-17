@@ -43,6 +43,8 @@ export const AlphaMarketContextResponseSchema = z.object({
     ivPercentile30d: NullableNumberSchema,
     ivChange1d: NullableNumberSchema,
     ivChange7d: NullableNumberSchema,
+    // Span of recorded 30D ATM IV; percentiles (and a percentile-based state) need 7 days.
+    ivHistoryDays: NullableNumberSchema.optional(),
   }),
   realized: z.object({
     rv7d: NullableNumberSchema,

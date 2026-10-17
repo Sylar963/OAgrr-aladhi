@@ -1,7 +1,7 @@
 import type { AlphaPutCandidate } from '@oggregator/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { buildProtectionChoices, hedgedPnlAt } from './put-protection';
+import { buildProtectionChoices, defaultHedgeQty, hedgedPnlAt } from './put-protection';
 
 function candidate(strike: number, cost: number, overrides: Partial<AlphaPutCandidate> = {}): AlphaPutCandidate {
   const indexPrice = 100_000;
@@ -98,5 +98,17 @@ describe('hedgedPnlAt', () => {
     const put = candidate(90_000, 1_500);
     expect(hedgedPnlAt(put, put.hedge!, 50_000)).toBe(-11_500);
     expect(hedgedPnlAt(put, put.hedge!, 120_000)).toBe(18_500);
+  });
+});
+
+describe('defaultHedgeQty', () => {
+  it('holds about $10k of each underlying on a 1-2-5 grid', () => {
+    expect(defaultHedgeQty(81_500)).toBe(0.1);
+    expect(defaultHedgeQty(2_426)).toBe(5);
+    expect(defaultHedgeQty(105)).toBe(100);
+    expect(defaultHedgeQty(1.3)).toBe(10_000);
+    expect(defaultHedgeQty(0.08)).toBe(100_000);
+    expect(defaultHedgeQty(156)).toBe(50);
+    expect(defaultHedgeQty(null)).toBeNull();
   });
 });

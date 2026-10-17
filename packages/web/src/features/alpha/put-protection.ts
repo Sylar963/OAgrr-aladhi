@@ -58,3 +58,19 @@ export function buildProtectionChoices(
     { ...cheap, style: 'cheap' },
   ];
 }
+
+// One coin was the old default holding: $81k of BTC but $0.08 of DOGE. A planning example in
+// dollars keeps every ticker comparable; the user's own holding replaces it per ticker.
+const DEFAULT_HOLDING_USD = 10_000;
+
+/** About $10k of the underlying at spot, rounded to the nearest 1-2-5 step in log terms. */
+export function defaultHedgeQty(spotUsd: number | null | undefined): number | null {
+  if (spotUsd == null || !Number.isFinite(spotUsd) || spotUsd <= 0) return null;
+  const raw = DEFAULT_HOLDING_USD / spotUsd;
+  const decade = 10 ** Math.floor(Math.log10(raw));
+  const steps = [1, 2, 5, 10].map((step) => step * decade);
+  const nearest = steps.reduce((best, step) =>
+    Math.abs(Math.log(step / raw)) < Math.abs(Math.log(best / raw)) ? step : best,
+  );
+  return Number(nearest.toPrecision(6));
+}

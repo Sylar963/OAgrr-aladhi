@@ -15,8 +15,15 @@ import { fmtDelta, fmtIv, fmtPct, fmtUsd, fmtUsdCompact, formatExpiry } from '@l
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
-import { buildProtectionChoices, hedgedPnlAt, type ProtectionChoice, type ProtectionStyle } from './put-protection';
+import {
+  buildProtectionChoices,
+  defaultHedgeQty,
+  hedgedPnlAt,
+  type ProtectionChoice,
+  type ProtectionStyle,
+} from './put-protection';
 import { putCandidateToBuilderLeg } from './radar-builder';
+import { useAlphaMarketContext } from './useAlphaMarketContext';
 import { usePutScanner } from './usePutScanner';
 import styles from './LottoScannerPanel.module.css';
 import ob from './LottoOutcomeBuilder.module.css';
@@ -87,6 +94,20 @@ function scannerVenues(venues: string[]): VenueId[] {
 
 function formatQuantity(value: number): string {
   return value >= 100 ? value.toFixed(0) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+const HEDGE_STORAGE_KEY = 'alpha-put-hedge-v1';
+
+function loadHedgeInputs(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HEDGE_STORAGE_KEY) ?? 'null');
+    if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+      );
+    }
+  } catch {}
+  return {};
 }
 
 function validQty(value: string): number | null {
@@ -437,7 +458,20 @@ function ProtectionBuilder({
 
 export default function ProtectivePutPanel({ underlying, venues }: ProtectivePutPanelProps) {
   const [view, setView] = useState<ScannerView>('guided');
-  const [hedgeQtyInput, setHedgeQtyInput] = useState('1');
+  const [hedgeInputs, setHedgeInputs] = useState<Record<string, string>>(loadHedgeInputs);
+  const spot = useAlphaMarketContext(underlying).data?.spotPrice;
+  const suggestedHedge = defaultHedgeQty(spot);
+  const hedgeQtyInput =
+    hedgeInputs[underlying] ?? (suggestedHedge == null ? '' : String(suggestedHedge));
+  function setHedgeQtyInput(value: string) {
+    setHedgeInputs((previous) => {
+      const next = { ...previous, [underlying]: value };
+      try {
+        localStorage.setItem(HEDGE_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
   const [guidedExpiry, setGuidedExpiry] = useState('');
   const [maxFloorPct, setMaxFloorPct] = useState<number>(20);
   const [premiumCap, setPremiumCap] = useState<number>(1_000);
@@ -453,7 +487,7 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
   const buyingPower = Number(buyingPowerInput);
   const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
   const deferredBuyingPower = useDeferredValue(buyingPowerIsValid ? buyingPower : 2_400);
-  const hedgeQty = useDeferredValue(validQty(hedgeQtyInput) ?? 1);
+  const hedgeQty = useDeferredValue(validQty(hedgeQtyInput) ?? suggestedHedge ?? 1);
   const activeVenues = scannerVenues(venues);
   const guided = view === 'guided';
 

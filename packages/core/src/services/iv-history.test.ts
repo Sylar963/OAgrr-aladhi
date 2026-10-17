@@ -151,7 +151,7 @@ describe('IvHistoryService', () => {
     for (let i = 0; i < vols.length; i++) {
       (svc as unknown as { deps: { getSurfaceGrid: (u: string) => Promise<IvSurfaceRow[]> } }).deps.getSurfaceGrid =
         () => Promise.resolve([makeRow('e', 30, vols[i]!, 0, 0)]);
-      await svc.snapshotOnce(now - (vols.length - 1 - i) * days);
+      await svc.snapshotOnce(now - (vols.length - 1 - i) * 3 * days);
     }
     const res = svc.query('BTC', 30);
     const t30 = res.tenors['30d'];
@@ -162,6 +162,33 @@ describe('IvHistoryService', () => {
     expect(t30.atmRank).toBeCloseTo(100, 6);
     // percentile = 4/4 × 100 = 100 (current is the max and counts itself).
     expect(t30.atmPercentile).toBeCloseTo(100, 6);
+    svc.dispose();
+  });
+
+  it('withholds rank and percentile until the series spans a week', async () => {
+    const svc = new IvHistoryService(
+      { getSurfaceGrid: vi.fn(), dvol: mockDvol() },
+      { underlyings: ['SOL'], capacity: 100 },
+    );
+    const setIv = (iv: number) => {
+      (svc as unknown as { deps: { getSurfaceGrid: () => Promise<IvSurfaceRow[]> } }).deps.getSurfaceGrid =
+        () => Promise.resolve([makeRow('e', 30, iv, 0, 0)]);
+    };
+    const now = Date.now();
+    const hour = 3_600_000;
+    for (const [hoursAgo, iv] of [[3, 0.5], [2, 0.6], [1, 0.7]] as const) {
+      setIv(iv);
+      await svc.snapshotOnce(now - hoursAgo * hour);
+    }
+    const early = svc.query('SOL', 90).tenors['30d'];
+    expect(early.current.atmIv).toBeCloseTo(0.7, 6);
+    expect(early.atmPercentile).toBeNull();
+    expect(early.atmRank).toBeNull();
+    expect(early.rrPercentile).toBeNull();
+
+    setIv(0.6);
+    await svc.snapshotOnce(now - 3 * hour + 7 * 24 * hour);
+    expect(svc.query('SOL', 90).tenors['30d'].atmPercentile).not.toBeNull();
     svc.dispose();
   });
 

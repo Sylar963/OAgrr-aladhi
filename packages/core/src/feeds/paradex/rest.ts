@@ -6,7 +6,7 @@ import {
   PARADEX_SYSTEM_TIME,
   PARADEX_TRADES,
 } from '../shared/endpoints.js';
-import { parseParadexMarkets, parseParadexSummaries } from './codec.js';
+import { parseParadexMarkets, parseParadexSummariesWhere } from './codec.js';
 import { ParadexTradesResponseSchema } from './types.js';
 import type { ParadexMarket, ParadexSummary, ParadexTrade } from './types.js';
 
@@ -26,9 +26,11 @@ export async function fetchParadexMarkets(): Promise<ParadexMarket[]> {
   return parseParadexMarkets(await getJson(PARADEX_MARKETS));
 }
 
-/** Bulk dynamic data for every market in one call. */
-export async function fetchParadexSummaryAll(): Promise<ParadexSummary[]> {
-  return parseParadexSummaries(await getJson(`${PARADEX_MARKETS_SUMMARY}?market=ALL`));
+/** Bulk dynamic data in one call, validated only for the markets `accept` keeps. */
+export async function fetchParadexSummaries(
+  accept: (symbol: string) => boolean,
+): Promise<ParadexSummary[]> {
+  return parseParadexSummariesWhere(await getJson(`${PARADEX_MARKETS_SUMMARY}?market=ALL`), accept);
 }
 
 /**

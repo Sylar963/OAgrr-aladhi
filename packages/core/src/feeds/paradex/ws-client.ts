@@ -20,7 +20,7 @@ import {
   paradexSummaryChannel,
   paradexSymbolFromChannel,
 } from './planner.js';
-import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaryAll } from './rest.js';
+import { fetchParadexMarkets, fetchParadexServerTime, fetchParadexSummaries } from './rest.js';
 import { decodeParadexMarketSummaryValues, PARADEX_SBE_IGNORED } from './sbe.js';
 import { buildParadexQuote, paradexInstrumentDetails } from './state.js';
 import type { ParadexSummary, ParadexSummaryValues } from './types.js';
@@ -140,10 +140,9 @@ export class ParadexWsAdapter extends SdkBaseAdapter {
   private async seedQuotes(symbols: Set<string>): Promise<void> {
     if (symbols.size === 0) return;
     try {
-      const summaries = await fetchParadexSummaryAll();
+      const summaries = await fetchParadexSummaries((symbol) => symbols.has(symbol));
       let n = 0;
       for (const s of summaries) {
-        if (!symbols.has(s.symbol)) continue;
         this.quoteStore.set(
           s.symbol,
           buildParadexQuote(

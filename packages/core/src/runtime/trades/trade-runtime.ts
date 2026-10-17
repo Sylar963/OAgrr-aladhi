@@ -22,7 +22,7 @@ import {
 import { buildSignedWsUrl } from '../../feeds/coincall/ws-client.js';
 import { toGateioRestBase } from '../../feeds/gateio/aliases.js';
 import { GateioWsEnvelopeSchema, GateioWsTradeSchema } from '../../feeds/gateio/types.js';
-import { fetchParadexSummaryAll, fetchParadexTrades } from '../../feeds/paradex/rest.js';
+import { fetchParadexSummaries, fetchParadexTrades } from '../../feeds/paradex/rest.js';
 import { TopicWsClient } from '../../feeds/shared/topic-ws-client.js';
 import type { VenueId } from '../../types/common.js';
 import { startEventLoopLagMonitor } from '../../utils/event-loop-lag.js';
@@ -1880,13 +1880,9 @@ export const VENUE_STREAMS: VenueStream[] = [
       // One bulk call gives OI + last-traded for the whole chain; keep only the
       // active option contracts (has OI or has ever traded) so we don't fan out
       // hundreds of empty per-symbol requests for the never-traded majority.
-      const summaries = await fetchParadexSummaryAll();
+      const summaries = await fetchParadexSummaries((symbol) => isParadexOptionSymbol(symbol, base));
       const symbols = summaries
-        .filter(
-          (s) =>
-            isParadexOptionSymbol(s.symbol, base) &&
-            (paradexPositive(s.open_interest) || paradexPositive(s.last_traded_price)),
-        )
+        .filter((s) => paradexPositive(s.open_interest) || paradexPositive(s.last_traded_price))
         .map((s) => s.symbol);
       if (symbols.length === 0) return [];
 

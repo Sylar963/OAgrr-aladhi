@@ -40,6 +40,7 @@ import {
   buildDeribitTickerQuote,
   createDeribitState,
   deribitStaleReconnectCooldownMs,
+  perContract,
   registerDeribitInstrument,
   removeDeribitInstrument,
   shouldForceDeribitStaleReconnect,
@@ -355,8 +356,8 @@ export class DeribitWsAdapter extends SdkBaseAdapter {
       contractMultiplierBase: hasExplicitContractSemantics ? contractSize : null,
       contractValueCurrency: base,
       tickSize: this.safeNum(inst.tick_size),
-      minQty: this.safeNum(inst.min_trade_amount),
-      lotSize: this.safeNum(inst.min_trade_amount),
+      minQty: perContract(this.safeNum(inst.min_trade_amount), contractSize),
+      lotSize: perContract(this.safeNum(inst.min_trade_amount), contractSize),
       makerFee: this.safeNum(inst.maker_commission),
       takerFee: this.safeNum(inst.taker_commission),
     };

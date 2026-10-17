@@ -21,11 +21,19 @@ export function useAlphaMarketData(market: AlphaMarket) {
   const activeVenues = useAppStore((s) => s.activeVenues);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setTradfiPage = useAppStore((s) => s.setTradfiPage);
-  const cryptoVenues = useMemo(
-    () => VENUE_IDS.filter((venue) => activeVenues.includes(venue)),
-    [activeVenues],
-  );
-  const cryptoExpiries = useExpiries(tradfi ? '' : cryptoUnderlying).data?.expiries;
+  const expiriesQuery = useExpiries(tradfi ? '' : cryptoUnderlying);
+  const cryptoExpiries = expiriesQuery.data?.expiries;
+  // Placeholder data is the previous ticker's listing; filtering by it would hide the new ticker's venues.
+  const listing = expiriesQuery.isPlaceholderData ? undefined : expiriesQuery.data?.byVenue;
+  const cryptoVenues = useMemo(() => {
+    const listed =
+      listing == null
+        ? null
+        : new Set(listing.filter((row) => row.expiries.length > 0).map((row) => row.venue));
+    return VENUE_IDS.filter(
+      (venue) => activeVenues.includes(venue) && (listed == null || listed.has(venue)),
+    );
+  }, [activeVenues, listing]);
   const prefetchCrypto = usePrefetchChain(cryptoUnderlying, activeVenues);
   const cryptoChain = useChainQuery(cryptoUnderlying, cryptoExpiry, activeVenues, {
     enabled: !tradfi,

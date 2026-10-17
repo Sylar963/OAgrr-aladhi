@@ -75,6 +75,20 @@
   color: var(--text-tertiary);
 }
 
+.hint [data-invalid] {
+  color: var(--color-warning);
+}
+
+.inlineAction {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .select {
   width: 100%;
   padding: 10px 12px;

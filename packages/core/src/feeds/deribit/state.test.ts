@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LiveQuote } from '../shared/sdk-base.js';
 import {
   applyDeribitBookSummary,
+  buildDeribitTickerQuote,
   deribitStaleReconnectCooldownMs,
   shouldForceDeribitStaleReconnect,
   summarizeDeribitSubscribedTickerStaleness,
@@ -145,5 +146,50 @@ describe('applyDeribitBookSummary', () => {
     const quote = quoteStore.get('BTC-25DEC26-70000-P');
     expect(quote?.volume24h).toBe(26.1);
     expect(quote?.volume24hUsd).toBeNull();
+  });
+});
+
+describe('buildDeribitTickerQuote', () => {
+  const num = (v: unknown) => (typeof v === 'number' ? v : null);
+  const iv = (v: unknown) => (typeof v === 'number' ? v / 100 : null);
+
+  it('counts linear alt book sizes and OI in contracts, not base coin', () => {
+    // Live SOL_USDC-25DEC26-96-C: contract_size 10, best_bid_amount 10 = one contract.
+    const quote = buildDeribitTickerQuote(
+      {
+        instrument_name: 'SOL_USDC-25DEC26-96-C',
+        best_bid_price: 14.7,
+        best_bid_amount: 10,
+        best_ask_price: 15.4,
+        best_ask_amount: 30,
+        mark_price: 15.06,
+        open_interest: 850,
+        timestamp: 1,
+      } as Parameters<typeof buildDeribitTickerQuote>[0],
+      10,
+      num,
+      iv,
+    );
+    expect(quote.bidSize).toBe(1);
+    expect(quote.askSize).toBe(3);
+    expect(quote.openInterest).toBe(85);
+  });
+
+  it('leaves contract-size-1 instruments unchanged', () => {
+    const quote = buildDeribitTickerQuote(
+      {
+        instrument_name: 'BTC-25DEC26-70000-P',
+        best_bid_amount: 2.5,
+        best_ask_amount: 0.1,
+        open_interest: 100,
+        timestamp: 1,
+      } as Parameters<typeof buildDeribitTickerQuote>[0],
+      1,
+      num,
+      iv,
+    );
+    expect(quote.bidSize).toBe(2.5);
+    expect(quote.askSize).toBe(0.1);
+    expect(quote.openInterest).toBe(100);
   });
 });

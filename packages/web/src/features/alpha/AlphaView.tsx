@@ -4,11 +4,16 @@ import { ExpiryBar } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
-import type { VenueId } from '@shared/enriched';
+import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useState } from 'react';
 import AlphaContextStrip from './AlphaContextStrip';
-import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
+import AlphaTradeSizing, {
+  defaultQuantity,
+  formatQuantity,
+  useAlphaSizing,
+  venueSizeRule,
+} from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
 import LongStraddlePanel from './LongStraddlePanel';
@@ -85,8 +90,17 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
   const [preferredBuyVenue, setPreferredBuyVenue] = useState<VenueId | null>(null);
   const tradeVenue = scanVenues.includes(preferredVenue)
     ? preferredVenue
-    : (scanVenues[0] ?? 'thalex');
-  const { sizing, update } = useAlphaSizing(market);
+    : (busiestVenue(chain, scanVenues) ?? scanVenues[0] ?? 'thalex');
+  const sizeRule = useMemo(() => venueSizeRule(chain, tradeVenue), [chain, tradeVenue]);
+  const { sizing, update } = useAlphaSizing(
+    market,
+    underlying,
+    sizeRule
+      ? formatQuantity(
+          defaultQuantity(sizeRule, chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd),
+        )
+      : null,
+  );
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 5_000);
@@ -262,6 +276,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         }}
         underlying={underlying}
         market={market}
+        sizeRule={sizeRule}
       />
     </SpreadBuilderPanel>
   );
@@ -474,6 +489,29 @@ function findSelection(
     .find((s) => s.sellVenue === sellVenue)
     ?.candidates.find((c) => c.buyVenue === buyVenue && matches(c));
   return candidate ? { id: candidate.id, candidate, route: { sellVenue, buyVenue } } : null;
+}
+
+/** Venue quoting the most options on this chain; a venue can list the asset but not this expiry. */
+function busiestVenue(
+  chain: EnrichedChainResponse | undefined,
+  venues: readonly VenueId[],
+): VenueId | null {
+  let best: VenueId | null = null;
+  let bestCount = 0;
+  for (const venue of venues) {
+    let count = 0;
+    for (const strike of chain?.strikes ?? []) {
+      for (const side of [strike.call, strike.put]) {
+        const quote = side?.venues[venue];
+        if (quote?.bid != null || quote?.ask != null) count += 1;
+      }
+    }
+    if (count > bestCount) {
+      best = venue;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 function nearestIndex(strikes: number[], target: number): number {

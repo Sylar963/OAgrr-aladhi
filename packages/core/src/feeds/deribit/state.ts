@@ -64,6 +64,17 @@ export function removeDeribitInstrument(
   return instrument;
 }
 
+/**
+ * Deribit option amounts (OI, book sizes, min trade amount) are in base coin; the rest of
+ * the pipeline counts contracts and scales by contractSize. A no-op for contractSize 1
+ * (BTC/ETH inverse and BTC/ETH_USDC); 10× for SOL_USDC, 1000× for XRP_USDC.
+ */
+export function perContract(amount: number | null, contractSize: number | null): number | null {
+  return amount != null && contractSize != null && contractSize > 0
+    ? amount / contractSize
+    : amount;
+}
+
 export function applyDeribitBookSummary(
   quoteStore: Map<string, LiveQuote>,
   summary: DeribitBookSummary,
@@ -72,11 +83,7 @@ export function applyDeribitBookSummary(
   ivToFraction: (value: unknown) => number | null,
   safeNum: (value: unknown) => number | null,
 ): void {
-  const rawOpenInterest = safeNum(summary.open_interest);
-  const normalizedOpenInterest =
-    rawOpenInterest != null && contractSize != null && contractSize > 0
-      ? rawOpenInterest / contractSize
-      : rawOpenInterest;
+  const normalizedOpenInterest = perContract(safeNum(summary.open_interest), contractSize);
 
   quoteStore.set(summary.instrument_name, {
     bidPrice: safeNum(summary.bid_price),
@@ -167,17 +174,13 @@ export function buildDeribitTickerQuote(
   ivToFraction: (value: unknown) => number | null,
 ): LiveQuote {
   const greeks = ticker.greeks;
-  const rawOpenInterest = safeNum(ticker.open_interest);
-  const normalizedOpenInterest =
-    rawOpenInterest != null && contractSize != null && contractSize > 0
-      ? rawOpenInterest / contractSize
-      : rawOpenInterest;
+  const normalizedOpenInterest = perContract(safeNum(ticker.open_interest), contractSize);
 
   return {
     bidPrice: safeNum(ticker.best_bid_price),
     askPrice: safeNum(ticker.best_ask_price),
-    bidSize: safeNum(ticker.best_bid_amount),
-    askSize: safeNum(ticker.best_ask_amount),
+    bidSize: perContract(safeNum(ticker.best_bid_amount), contractSize),
+    askSize: perContract(safeNum(ticker.best_ask_amount), contractSize),
     markPrice: safeNum(ticker.mark_price),
     lastPrice: safeNum(ticker.last_price),
     underlyingPrice: safeNum(ticker.underlying_price),

@@ -1,8 +1,9 @@
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
+import { defaultQuantity } from './AlphaTradeSizing';
 import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
 
@@ -11,9 +12,10 @@ const mocks = vi.hoisted(() => ({
   tradfiChain: vi.fn(),
   scan: vi.fn(),
   cross: vi.fn(),
+  expiries: vi.fn(),
 }));
 vi.mock('@features/chain', () => ({
-  useExpiries: () => ({ data: { expiries: ['2026-09-25'] } }),
+  useExpiries: mocks.expiries,
   usePrefetchChain: () => vi.fn(),
   useChainQuery: mocks.chain,
   ExpiryBar: () => <div>Original expiry bar</div>,
@@ -91,6 +93,7 @@ const candidate: SpreadCandidate = {
 
 beforeEach(() => {
   localStorage.clear();
+  mocks.expiries.mockReturnValue({ data: { expiries: ['2026-09-25'] } });
   useAppStore.setState({
     underlying: 'BTC',
     expiry: '2026-09-25',
@@ -230,6 +233,59 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getAllByText(/OKX sell → Thalex buy/).length).toBeGreaterThan(0);
     expect(screen.getByText('Portfolio exposure: okx')).toBeTruthy();
   });
+  it('sizes alts from the venue minimum and only scans venues that list the asset', () => {
+    useAppStore.setState({
+      underlying: 'SOL',
+      activeVenues: ['thalex', 'okx', 'bybit', 'deribit'],
+    });
+    localStorage.setItem(
+      'alpha-sizing-v1',
+      JSON.stringify({ equity: '5000', quantity: '0.1', riskPct: '1', reserve: '0.25' }),
+    );
+    mocks.expiries.mockReturnValue({
+      data: {
+        expiries: ['2026-09-25'],
+        byVenue: [
+          { venue: 'thalex', expiries: [] },
+          { venue: 'okx', expiries: [] },
+          { venue: 'bybit', expiries: ['2026-09-25'] },
+          { venue: 'deribit', expiries: ['2026-10-30'] },
+        ],
+      },
+      isPlaceholderData: false,
+    });
+    const bybit = { bid: 1, ask: 1.2, execution: { minQuantity: 1, quantityStep: 1 } };
+    mocks.chain.mockReturnValue({
+      data: {
+        underlying: 'SOL',
+        expiry: '2026-09-25',
+        stats: { atmStrike: 100, indexPriceUsd: 40 },
+        strikes: [100, 105].map((strike) => ({
+          strike,
+          call: { venues: { bybit } },
+          put: { venues: { bybit } },
+        })),
+      },
+      isLoading: false,
+      error: null,
+    });
+    mocks.scan.mockReturnValue([]);
+    render(<AlphaView />);
+    // $100 of notional at $40 spot, rounded up onto Bybit's 1-SOL step.
+    expect(mocks.scan).toHaveBeenLastCalledWith(
+      expect.objectContaining({ quantity: 3, venues: ['deribit', 'bybit'] }),
+    );
+    expect(screen.getByText(/Bybit minimum 1 · step 1/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Quantity · SOL per leg/), { target: { value: '0.5' } });
+    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ quantity: 0.5 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use 1' }));
+    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ quantity: 1 }));
+
+    act(() => useAppStore.setState({ underlying: 'BTC' }));
+    expect(screen.getByLabelText<HTMLInputElement>(/Quantity · BTC per leg/).value).toBe('0.1');
+  });
+
   it('does not present cached candidates after a chain error', () => {
     mocks.chain.mockReturnValue({ ...mocks.chain(), error: new Error('offline') });
     render(<AlphaView />);
@@ -319,5 +375,15 @@ describe('surgical Alpha enhancements', () => {
       ['sell', 200, 1, 6],
       ['buy', 205, 1, 3.6],
     ]);
+  });
+});
+
+describe('defaultQuantity', () => {
+  it('sizes about $100 of notional on the venue step, never below the minimum', () => {
+    expect(defaultQuantity({ min: 0.01, step: 0.01 }, 105)).toBe(0.96);
+    expect(defaultQuantity({ min: 10, step: 10 }, 105)).toBe(10);
+    expect(defaultQuantity({ min: 100, step: 100 }, 0.08)).toBe(1300);
+    expect(defaultQuantity({ min: 0.01, step: 0.01 }, 81_000)).toBe(0.01);
+    expect(defaultQuantity({ min: 1, step: 1 }, null)).toBe(1);
   });
 });

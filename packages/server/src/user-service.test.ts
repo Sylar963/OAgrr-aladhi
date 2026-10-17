@@ -68,6 +68,7 @@ function fakeReply(): FastifyReply & { _status: number; _body: unknown } {
 
 beforeEach(() => {
   vi.resetModules();
+  vi.unstubAllEnvs();
   state.dbEnabled = false;
   state.identity = null;
   state.existingResult = null;
@@ -75,11 +76,29 @@ beforeEach(() => {
 });
 
 describe('requireUser (no-DB fallback)', () => {
-  it('resolves without auth when DB is disabled', async () => {
+  it('resolves without auth when DB is disabled and the dev bypass is set', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '1');
     const { requireUser } = await import('./user-service.js');
     const reply = fakeReply();
     await requireUser()(fakeReq({}), reply);
     expect(reply._status).toBe(200);
+  });
+
+  it('401s when DB is disabled but the dev bypass is not set', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '');
+    const { requireUser } = await import('./user-service.js');
+    const reply = fakeReply();
+    await requireUser()(fakeReq({}), reply);
+    expect(reply._status).toBe(401);
+  });
+
+  it('ignores the dev bypass in production', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '1');
+    vi.stubEnv('NODE_ENV', 'production');
+    const { requireUser } = await import('./user-service.js');
+    const reply = fakeReply();
+    await requireUser()(fakeReq({}), reply);
+    expect(reply._status).toBe(401);
   });
 });
 
@@ -154,10 +173,19 @@ describe('authorizeAccountScope', () => {
     fundedStoreMock.listRunsForUser.mockReset();
   });
 
-  it('falls back to DEFAULT_ACCOUNT_ID when persistence is disabled and no user', async () => {
+  it('falls back to DEFAULT_ACCOUNT_ID under the dev bypass when there is no user', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '1');
     const { authorizeAccountScope } = await import('./user-service.js');
     const id = await authorizeAccountScope(scopeReq(), undefined);
     expect(id).toBe('paper-default');
+  });
+
+  it('refuses to resolve an anonymous request without the dev bypass', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '');
+    const { authorizeAccountScope } = await import('./user-service.js');
+    await expect(authorizeAccountScope(scopeReq(), undefined)).rejects.toThrow(
+      'without authenticated user',
+    );
   });
 
   it('returns the user default when no scope is requested', async () => {

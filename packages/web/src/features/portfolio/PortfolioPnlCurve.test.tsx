@@ -162,4 +162,39 @@ describe('PortfolioPnlCurve', () => {
     expect(screen.queryByTestId('equity-chart')).toBeNull();
     expect(screen.getByRole('radio', { name: 'Payoff' }).getAttribute('aria-checked')).toBe('true');
   });
+
+  it('shows Thalex IM, free margin and the IM breach line when margin is supplied', () => {
+    render(
+      <PortfolioPnlCurve
+        curve={curve({
+          currentSpotUsd: 85_000,
+          points: [
+            { underlyingPriceUsd: 80_000, nowPnlUsd: -100, forwardPnlUsd: null, expiryPnlUsd: -100 },
+            { underlyingPriceUsd: 85_000, nowPnlUsd: 0, forwardPnlUsd: null, expiryPnlUsd: 0 },
+            { underlyingPriceUsd: 90_000, nowPnlUsd: 100, forwardPnlUsd: null, expiryPnlUsd: 100 },
+          ],
+        })}
+        forwardDays={0}
+        margin={{
+          accountId: 'a',
+          venue: 'thalex',
+          initialMarginUsd: 1_200,
+          marginUsd: 1_250,
+          remainingMarginUsd: 50,
+          updatedAt: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('IM $1,200')).toBeTruthy();
+    expect(screen.getByText('free margin $50')).toBeTruthy();
+    expect(screen.getByText('IM breach ≈ 82,500')).toBeTruthy();
+    expect(screen.getByTestId('im-breach-line').textContent).toContain('IM breach ≈ -$50');
+  });
+
+  it('omits margin details without a margin snapshot', () => {
+    render(<PortfolioPnlCurve curve={curve({})} forwardDays={0} />);
+    expect(screen.queryByText(/^IM /)).toBeNull();
+    expect(screen.queryByTestId('im-breach-line')).toBeNull();
+  });
 });

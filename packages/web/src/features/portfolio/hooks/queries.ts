@@ -7,6 +7,7 @@ import {
   fetchEquityHistory,
   fetchMetrics,
   fetchPositions,
+  fetchVenueMargin,
   removePosition,
   type PortfolioSource,
 } from '../api';
@@ -27,7 +28,21 @@ export const PORTFOLIO_QKEY = {
     ] as const,
   equityHistory: (accountId: string, venue: EquityHistoryVenue, range: EquityHistoryRange) =>
     ['account', accountId, 'portfolio', 'equity-history', venue, range] as const,
+  venueMargin: (accountId: string, venue: 'thalex') =>
+    ['account', accountId, 'portfolio', 'venue-margin', venue] as const,
 };
+
+export function useVenueMargin(venue: 'thalex' | null) {
+  const session = useAccountSession();
+  const accountId = session.accountId ?? 'unresolved';
+  return useQuery({
+    queryKey: PORTFOLIO_QKEY.venueMargin(accountId, venue ?? 'thalex'),
+    queryFn: () => fetchVenueMargin(venue ?? 'thalex'),
+    enabled: session.status === 'ready' && venue != null,
+    refetchInterval: 10_000,
+    retry: false,
+  });
+}
 
 export function useEquityHistory(venue: EquityHistoryVenue, range: EquityHistoryRange) {
   const session = useAccountSession();

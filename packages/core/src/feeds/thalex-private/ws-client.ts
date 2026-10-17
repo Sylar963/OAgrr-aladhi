@@ -5,11 +5,14 @@ import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
 import {
+  thalexAccountMargin,
   thalexCashReplayEquity,
   thalexPortfolioToLegs,
   thalexTradesToPortfolioTrades,
+  type ThalexAccountMargin,
 } from './codec.js';
 import {
+  ThalexAccountSummaryNotificationSchema,
   ThalexAccountSummarySchema,
   ThalexLoginResultSchema,
   ThalexPortfolioEntrySchema,
@@ -78,6 +81,7 @@ export class ThalexPrivateClient {
   private latestTrades: ExchangePortfolioTrade[] = [];
   private latestLegs: PositionLeg[] = [];
   private latestEntries: ThalexPortfolioEntry[] = [];
+  private latestMargin: ThalexAccountMargin | null = null;
   private nextId = 1;
   private disposed = false;
   private readonly log = feedLogger('thalex-private');
@@ -111,6 +115,7 @@ export class ThalexPrivateClient {
     const subscribed = await this.privateSubscribe([...PRIVATE_CHANNELS]);
     await this.refreshPortfolio();
     await this.refreshTradeHistory();
+    await this.refreshAccountMargin();
     this.log.info({ channels: subscribed }, 'thalex private subscribed');
   }
 
@@ -140,6 +145,10 @@ export class ThalexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  getLatestMargin(): ThalexAccountMargin | null {
+    return this.latestMargin;
   }
 
   async fetchEquityHistory(fromMs: number, nowMs = Date.now()): Promise<EquityHistoryPoint[]> {
@@ -211,6 +220,21 @@ export class ThalexPrivateClient {
     );
   }
 
+
+  private async refreshAccountMargin(): Promise<void> {
+    try {
+      const summary = ThalexAccountSummarySchema.safeParse(
+        await this.call('private/account_summary', {}),
+      );
+      if (!summary.success) {
+        this.log.warn({ err: summary.error.message }, 'thalex account summary parse failed');
+        return;
+      }
+      this.latestMargin = thalexAccountMargin(summary.data, Date.now());
+    } catch (err) {
+      this.log.warn({ err: String(err) }, 'thalex account summary bootstrap failed');
+    }
+  }
 
   private async refreshTradeHistory(): Promise<void> {
     const trades: ThalexTrade[] = [];
@@ -299,6 +323,15 @@ export class ThalexPrivateClient {
         return;
       }
       this.notifyTrades(thalexTradesToPortfolioTrades(parsed.data.notification));
+      return;
+    }
+    if (msg.channel_name === 'account.summary') {
+      const parsed = ThalexAccountSummaryNotificationSchema.safeParse(msg);
+      if (!parsed.success) {
+        this.log.warn({ err: parsed.error.message }, 'thalex summary notification parse failed');
+        return;
+      }
+      this.latestMargin = thalexAccountMargin(parsed.data.notification, Date.now());
       return;
     }
     if (msg.channel_name !== 'account.portfolio') return;

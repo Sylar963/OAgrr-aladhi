@@ -162,7 +162,7 @@ export function breakEvenIvCurve(legsWithMarks: LegWithMark[]): BreakEvenIvRow[]
 
 export function computeTotals(legsWithMarks: LegWithMark[]): PortfolioTotals {
   const totals: PortfolioTotals = {
-    netDeltaUsd: 0,
+    netDeltaCoin: 0,
     netGammaUsd: 0,
     netVegaUsd: 0,
     netThetaUsd: 0,
@@ -172,7 +172,7 @@ export function computeTotals(legsWithMarks: LegWithMark[]): PortfolioTotals {
   };
 
   for (const { leg, mark } of legsWithMarks) {
-    totals.netDeltaUsd += (mark.delta ?? 0) * leg.size;
+    totals.netDeltaCoin += (mark.delta ?? 0) * leg.size;
     totals.netGammaUsd += (mark.gamma ?? 0) * leg.size;
     totals.netVegaUsd += (mark.vega ?? 0) * leg.size;
     totals.netThetaUsd += (mark.theta ?? 0) * leg.size;

@@ -10,7 +10,7 @@
       "underlying": "BTC",
       "spotUsd": 83886.66,
       "unrealizedPnlUsd": 386.98315095778344,
-      "netDeltaUsd": -0.3297440000397053,
+      "netDeltaCoin": -0.3297440000397053,
       "netThetaUsd": -50.71356315028698,
       "netVegaUsd": 54.4879636532947,
       "openLegCount": 3,
@@ -148,7 +148,7 @@
       }
     ],
     "totals": {
-      "netDeltaUsd": -0.3297440000397053,
+      "netDeltaCoin": -0.3297440000397053,
       "netGammaUsd": 0.000027135200532250937,
       "netVegaUsd": 54.4879636532947,
       "netThetaUsd": -50.71356315028698,
@@ -248,7 +248,7 @@
         "grossDebitUsd": 1450,
         "grossCreditUsd": 0,
         "totals": {
-          "netDeltaUsd": -0.3024594874653692,
+          "netDeltaCoin": -0.3024594874653692,
           "netGammaUsd": 0.00003908724847395092,
           "netVegaUsd": 73.35641424637976,
           "netThetaUsd": -68.22616407230115,
@@ -284,7 +284,7 @@
         "grossDebitUsd": 0,
         "grossCreditUsd": 1600,
         "totals": {
-          "netDeltaUsd": -0.2261275096216836,
+          "netDeltaCoin": -0.2261275096216836,
           "netGammaUsd": -0.000024484757191054968,
           "netVegaUsd": -94.5485201934723,
           "netThetaUsd": 36.338925302046434,
@@ -320,7 +320,7 @@
         "grossDebitUsd": 2050,
         "grossCreditUsd": 0,
         "totals": {
-          "netDeltaUsd": 0.1988429970473475,
+          "netDeltaCoin": 0.1988429970473475,
           "netGammaUsd": 0.000012532709249354986,
           "netVegaUsd": 75.68006960038724,
           "netThetaUsd": -18.82632438003227,
@@ -1264,7 +1264,8 @@
                 "ivPercentile7d": null,
                 "ivPercentile30d": null,
                 "ivChange1d": null,
-                "ivChange7d": null
+                "ivChange7d": null,
+                "ivHistoryDays": null
               },
               "realized": {
                 "rv7d": 0.23770222723610657,
@@ -3413,6 +3414,230 @@
       "persistence": "unavailable"
     },
     "tradeHistoryFacts": null,
+    "bookVsMarketFacts": {
+      "underlying": "BTC",
+      "spotUsd": 83886.66,
+      "expiryOutlook": [
+        {
+          "until": "2026-10-30",
+          "daysToExpiry": 22.83,
+          "atmIv": 0.4157,
+          "atmIvSource": "expiry",
+          "expectedMovePct": 10.4,
+          "expectedRangeUsd": {
+            "low": 75165,
+            "high": 92609
+          },
+          "breakevens": [
+            {
+              "spotUsd": 78620,
+              "movePct": -6.28,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.716
+            }
+          ],
+          "profitZones": [
+            {
+              "fromSpotUsd": null,
+              "toSpotUsd": 78620
+            }
+          ],
+          "profitProbability": 0.284
+        },
+        {
+          "until": "2026-11-27",
+          "daysToExpiry": 50.83,
+          "atmIv": 0.4021,
+          "atmIvSource": "expiry",
+          "expectedMovePct": 15.01,
+          "expectedRangeUsd": {
+            "low": 71299,
+            "high": 96475
+          },
+          "breakevens": [
+            {
+              "spotUsd": 78317,
+              "movePct": -6.64,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.649
+            },
+            {
+              "spotUsd": 89810,
+              "movePct": 7.06,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.298
+            },
+            {
+              "spotUsd": 97553,
+              "movePct": 16.29,
+              "insideExpectedRange": false,
+              "probabilityAbove": 0.14
+            }
+          ],
+          "profitZones": [
+            {
+              "fromSpotUsd": null,
+              "toSpotUsd": 78317
+            },
+            {
+              "fromSpotUsd": 89810,
+              "toSpotUsd": 97553
+            }
+          ],
+          "profitProbability": 0.509
+        },
+        {
+          "until": "2026-12-25",
+          "daysToExpiry": 78.83,
+          "atmIv": 0.4003,
+          "atmIvSource": "expiry",
+          "expectedMovePct": 18.6,
+          "expectedRangeUsd": {
+            "low": 68281,
+            "high": 99492
+          },
+          "breakevens": [
+            {
+              "spotUsd": 78100,
+              "movePct": -6.9,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.615
+            },
+            {
+              "spotUsd": 93800,
+              "movePct": 11.82,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.244
+            },
+            {
+              "spotUsd": 96200,
+              "movePct": 14.68,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.203
+            }
+          ],
+          "profitZones": [
+            {
+              "fromSpotUsd": null,
+              "toSpotUsd": 78100
+            },
+            {
+              "fromSpotUsd": 93800,
+              "toSpotUsd": 96200
+            }
+          ],
+          "profitProbability": 0.426
+        }
+      ],
+      "gammaLevels": null,
+      "priceLevels": null,
+      "openInterestLevels": [
+        {
+          "expiry": "2026-10-30",
+          "calls": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1410
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1383
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1378
+            }
+          ],
+          "puts": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1128
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1107
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1102
+            }
+          ]
+        },
+        {
+          "expiry": "2026-11-27",
+          "calls": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1408
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1392
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1365
+            }
+          ],
+          "puts": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1127
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1114
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1092
+            }
+          ]
+        },
+        {
+          "expiry": "2026-12-25",
+          "calls": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1404
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1401
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1350
+            }
+          ],
+          "puts": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1124
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1120
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1080
+            }
+          ]
+        }
+      ],
+      "heldLegOdds": [],
+      "notes": [
+        "expiryOutlook compares each risk window (riskBudgetFacts.riskWindows) with the move the options market prices to that date: expectedRangeUsd is ±1 standard deviation at atmIv (about 68% under a lognormal), probabilityAbove and profitProbability are lognormal at atmIv with forward = spot and no skew. Market-implied estimates, not forecasts.",
+        "gammaLevels: largest dealer-gamma strikes across expiries (positive and negative GEX); priceLevels: busiest prices by hours traded through them; openInterestLevels: largest open interest per held expiry. All are descriptive levels, not proven support or resistance.",
+        "heldLegOdds: Deribit break-even per held strike; impliedProbBeyondStrike is N(d2) (calls) or N(-d2) (puts), historicalProbBeyondStrike is the share of past same-length moves, trend removed, that finished beyond the strike, a historical frequency, not a forecast.",
+        "gammaLevels unavailable: Oggregator returned not served by the eval market for /api/gex-all-expiries.",
+        "priceLevels unavailable: Oggregator returned not served by the eval market for /api/time-at-price.",
+        "heldLegOdds for 2026-10-30 unavailable: Oggregator returned not served by the eval market for /api/break-even.",
+        "heldLegOdds for 2026-11-27 unavailable: Oggregator returned not served by the eval market for /api/break-even.",
+        "heldLegOdds for 2026-12-25 unavailable: Oggregator returned not served by the eval market for /api/break-even."
+      ]
+    },
     "userMemoryFacts": null,
     "topContributors": {
       "delta": [

@@ -181,3 +181,25 @@ export function thalexCashReplayEquity(
   }
   return points.reverse();
 }
+
+export interface ThalexAccountMargin {
+  initialMarginUsd: number;
+  marginUsd: number;
+  remainingMarginUsd: number;
+  updatedAt: number;
+}
+
+export function thalexAccountMargin(
+  summary: ThalexAccountSummary,
+  nowMs: number,
+): ThalexAccountMargin | null {
+  const { margin, required_margin: required, remaining_margin: remaining } = summary;
+  if (margin == null || required == null || remaining == null) return null;
+  if (![margin, required, remaining].every(Number.isFinite)) return null;
+  return {
+    initialMarginUsd: required,
+    marginUsd: margin,
+    remainingMarginUsd: remaining,
+    updatedAt: nowMs,
+  };
+}

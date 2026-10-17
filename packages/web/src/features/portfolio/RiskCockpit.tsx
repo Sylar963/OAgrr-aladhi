@@ -213,9 +213,9 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             <span className={styles.exposureName}>Direction</span>
             <span className={styles.greek}>Delta</span>
           </div>
-          <strong className={styles.exposureValue}>{fmtNum(totals?.netDeltaUsd)}</strong>
+          <strong className={styles.exposureValue}>{fmtNum(totals?.netDeltaCoin)}</strong>
           <span className={styles.exposureState}>
-            {exposureSide(totals?.netDeltaUsd, 'Long delta', 'Short delta')}
+            {exposureSide(totals?.netDeltaCoin, 'Long delta', 'Short delta')}
           </span>
           <p>Synthetic perp exposure right now.</p>
         </article>

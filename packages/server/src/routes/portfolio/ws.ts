@@ -11,7 +11,7 @@ import {
 import { derivePositionStore } from '../../derive-position-store.js';
 import { paradexPositionStore } from '../../paradex-position-store.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
-import { paperTradingStore } from '../../trading-services.js';
+import { authDevBypassActive } from '../../user-service.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { portfolioEvents } from './events.js';
@@ -47,7 +47,7 @@ export async function portfolioWsRoute(app: FastifyInstance) {
       const ticket = url.searchParams.get('ticket');
 
       let accountId: string;
-      if (paperTradingStore.enabled) {
+      if (!authDevBypassActive()) {
         if (!ticket) {
           send(socket, {
             type: 'error',

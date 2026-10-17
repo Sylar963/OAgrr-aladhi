@@ -39,7 +39,7 @@ function grossPremiums(legs: PositionLeg[]): { grossDebitUsd: number; grossCredi
 
 function emptyTotals(): PortfolioTotals {
   return {
-    netDeltaUsd: 0,
+    netDeltaCoin: 0,
     netGammaUsd: 0,
     netVegaUsd: 0,
     netThetaUsd: 0,

@@ -35,6 +35,12 @@ import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
 import type { PortfolioAssistantStructureSearchFacts } from './assistant-market/structure-search-prefetch.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantUserMemoryFacts } from './portfolio-assistant-memory.js';
+import {
+  buildBookVsMarketFacts,
+  compactLevelInputs,
+  type PortfolioAssistantBookVsMarketFacts,
+  type PortfolioAssistantLevelInputs,
+} from './portfolio-assistant-levels.js';
 import { PortfolioAssistantServiceError } from './portfolio-assistant-model-gateway.js';
 import { bootstrapPortfolioForAccount, getOrCreatePortfolioRuntime } from './portfolio-services.js';
 
@@ -43,7 +49,7 @@ export interface PortfolioAssistantHeadline {
   underlying: string | null;
   spotUsd: number | null;
   unrealizedPnlUsd: number | null;
-  netDeltaUsd: number | null;
+  netDeltaCoin: number | null;
   netThetaUsd: number | null;
   netVegaUsd: number | null;
   openLegCount: number;
@@ -181,6 +187,8 @@ export interface PortfolioAssistantContext {
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
   /** Durable preferences of the asking user only; null when nothing is remembered. */
   userMemoryFacts: PortfolioAssistantUserMemoryFacts | null;
+  /** Held expiries against market-implied moves, dealer-gamma, traded-price and OI levels; null for mixed books. */
+  bookVsMarketFacts: PortfolioAssistantBookVsMarketFacts | null;
   /** Set per question when it reads as a view plus a book-wide budget. */
   structureSearchFacts?: PortfolioAssistantStructureSearchFacts | null;
   topContributors: Record<
@@ -207,6 +215,7 @@ const CHAIN_STRIKE_BAND = 0.15;
 const COMPACT_CHAIN_STRIKE_BAND = 0.07;
 const CHAIN_BOTH_SIDES_BAND = 0.02;
 const TERM_STRUCTURE_EXPIRY_LIMIT = 12;
+const PRICE_LEVEL_LOOKBACK_DAYS = 365;
 const TRADE_LOAD_LIMIT = 1_000;
 export const TRADE_CONTEXT_LIMIT = 100;
 const COMPACT_TRADE_CONTEXT_LIMIT = 30;
@@ -583,9 +592,31 @@ export interface AssemblePortfolioAssistantContextInput {
   marketFacts: PortfolioAssistantMarketFacts;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
   userMemoryFacts?: PortfolioAssistantUserMemoryFacts | null;
+  levelInputs?: PortfolioAssistantLevelInputs | null;
   /** Limitations found while loading inputs, appended after the engine's own. */
   limitations: string[];
   maxContextCharacters: number;
+}
+
+function bookVsMarket(
+  input: AssemblePortfolioAssistantContextInput,
+  positions: Array<{ underlying: string; expiry: string; strike: number; optionRight: 'call' | 'put'; size: number }>,
+  pnlCurve: Pick<PortfolioPnlCurve, 'underlying' | 'currentSpotUsd' | 'status' | 'riskWindows'>,
+): PortfolioAssistantBookVsMarketFacts | null {
+  const underlying = pnlCurve.underlying;
+  const spotUsd = pnlCurve.currentSpotUsd;
+  if (underlying == null || spotUsd == null || pnlCurve.status !== 'ok') return null;
+  const market = input.marketFacts.underlyings.find((facts) => facts.underlying === underlying);
+  return buildBookVsMarketFacts({
+    underlying,
+    spotUsd,
+    nowMs: input.nowMs,
+    riskWindows: pnlCurve.riskWindows,
+    termStructure: market?.termStructure?.rows ?? [],
+    heldExpiryChains: market?.heldExpiryChains ?? [],
+    heldLegs: positions.filter((leg) => leg.underlying === underlying && leg.size !== 0),
+    levels: input.levelInputs?.underlying === underlying ? input.levelInputs : null,
+  });
 }
 
 export function assemblePortfolioAssistantContext(
@@ -631,7 +662,7 @@ export function assemblePortfolioAssistantContext(
       underlying: pnlCurve.underlying ?? input.underlying,
       spotUsd: pnlCurve.currentSpotUsd,
       unrealizedPnlUsd: riskFacts.missingMarkLegIds.length > 0 ? null : totals.unrealizedPnlUsd,
-      netDeltaUsd: totals.netDeltaUsd,
+      netDeltaCoin: totals.netDeltaCoin,
       netThetaUsd: totals.netThetaUsd,
       netVegaUsd: totals.netVegaUsd,
       openLegCount: positions.length,
@@ -668,6 +699,7 @@ export function assemblePortfolioAssistantContext(
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
     userMemoryFacts: input.userMemoryFacts ?? null,
+    bookVsMarketFacts: bookVsMarket(input, positions, pnlCurve),
     topContributors: {
       delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
       gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
@@ -778,6 +810,23 @@ export class PortfolioAssistantContextBuilder {
     return { underlyings: facts, unavailable };
   }
 
+  private async buildLevelInputs(
+    underlying: string | null,
+    positions: Array<{ underlying: string; expiry: string }>,
+  ): Promise<PortfolioAssistantLevelInputs | null> {
+    const reader = this.marketData;
+    if (!reader || underlying == null) return null;
+    const expiries = [...new Set(positions.filter((leg) => leg.underlying === underlying).map((leg) => leg.expiry))]
+      .sort()
+      .slice(0, MARKET_EXPIRY_LIMIT);
+    const [gamma, timeAtPrice, breakEvens] = await Promise.all([
+      reader.gammaExposure(underlying),
+      reader.timeAtPrice(underlying, PRICE_LEVEL_LOOKBACK_DAYS),
+      Promise.all(expiries.map((expiry) => reader.breakEven(underlying, expiry))),
+    ]);
+    return compactLevelInputs(underlying, gamma, timeAtPrice, breakEvens, expiries);
+  }
+
   private async buildTradeHistory(
     input: BuildPortfolioAssistantContextInput,
     limitations: string[],
@@ -827,7 +876,10 @@ export class PortfolioAssistantContextBuilder {
       snapshot.metrics.pnlCurve.currentSpotUsd,
     );
     const limitations: string[] = [];
-    const tradeHistoryFacts = await this.buildTradeHistory(input, limitations);
+    const [tradeHistoryFacts, levelInputs] = await Promise.all([
+      this.buildTradeHistory(input, limitations),
+      this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions),
+    ]);
     return assemblePortfolioAssistantContext({
       source: input.source,
       underlying: input.underlying,
@@ -845,6 +897,7 @@ export class PortfolioAssistantContextBuilder {
       marketFacts,
       tradeHistoryFacts,
       userMemoryFacts: input.userMemoryFacts ?? null,
+      levelInputs,
       limitations,
       maxContextCharacters: this.configuration.maxContextCharacters,
     });

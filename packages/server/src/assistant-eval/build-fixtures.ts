@@ -28,6 +28,7 @@ import {
   TRADE_CONTEXT_LIMIT,
 } from '../portfolio-assistant-context-builder.js';
 import { readPortfolioAssistantConfiguration } from '../portfolio-assistant-configuration.js';
+import type { PortfolioAssistantLevelInputs } from '../portfolio-assistant-levels.js';
 import {
   type AssistantEvalExpect,
   type AssistantEvalExpectedNumber,
@@ -164,6 +165,10 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
     'BTC',
     snapshot.metrics.pnlCurve.currentSpotUsd,
   );
+  const levelInputs: PortfolioAssistantLevelInputs | null = await builder['buildLevelInputs'](
+    snapshot.metrics.pnlCurve.underlying,
+    snapshot.positions,
+  );
 
   const limitations: string[] = [];
   const venue = book.source === 'thalex' || book.source === 'derive' ? book.source : null;
@@ -187,6 +192,7 @@ async function buildContext(book: BookSpec): Promise<PortfolioAssistantContext> 
     horizonScenarios,
     marketFacts,
     tradeHistoryFacts,
+    levelInputs,
     limitations,
     maxContextCharacters: configuration.maxContextCharacters,
   });
@@ -253,7 +259,7 @@ function staleHistory(
     '',
     `- **Unrealized PnL:** ${pnl < 0 ? '-' : ''}${usd(pnl)}`,
     `- **Spot:** ${usd(spot)}`,
-    `- **Net delta:** ${(stale.headline.netDeltaUsd ?? 0).toFixed(3)} BTC`,
+    `- **Net delta:** ${(stale.headline.netDeltaCoin ?? 0).toFixed(3)} BTC`,
     ...extraBullets,
   ].join('\n');
   return [

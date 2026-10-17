@@ -121,6 +121,14 @@ describe('Portfolio REST auth gate', () => {
     expect(res.json()).toMatchObject({ accountId: 'acct_carol', positions: [] });
   });
 
+  it('rejects anonymous access when persistence is disabled without the dev bypass', async () => {
+    storeMock.enabled = false;
+    vi.stubEnv('AUTH_DEV_BYPASS', '');
+    const res = await app.inject({ method: 'GET', url: '/api/portfolio/positions' });
+    vi.unstubAllEnvs();
+    expect(res.statusCode).toBe(401);
+  });
+
   it('allows anonymous access when persistence is disabled (dev mode)', async () => {
     storeMock.enabled = false;
     const res = await app.inject({ method: 'GET', url: '/api/portfolio/positions' });

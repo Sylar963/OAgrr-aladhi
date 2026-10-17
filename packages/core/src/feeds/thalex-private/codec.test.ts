@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { thalexPortfolioEntryToLeg, thalexPortfolioToLegs } from './codec.js';
+import { thalexAccountMargin, thalexPortfolioEntryToLeg, thalexPortfolioToLegs } from './codec.js';
 import type { ThalexPortfolioEntry } from './types.js';
 
 const SAMPLE: ThalexPortfolioEntry = {
@@ -77,5 +77,26 @@ describe('thalexPortfolioEntryToLeg', () => {
     ]);
     expect(legs).toHaveLength(2);
     expect(legs.every((l) => l.source === 'thalex')).toBe(true);
+  });
+});
+
+describe('thalexAccountMargin', () => {
+  it('maps required_margin to initial margin', () => {
+    expect(
+      thalexAccountMargin(
+        {
+          cash: [],
+          unrealised_pnl: 0,
+          margin: 1_000,
+          required_margin: 400,
+          remaining_margin: 600,
+        },
+        123,
+      ),
+    ).toEqual({ initialMarginUsd: 400, marginUsd: 1_000, remainingMarginUsd: 600, updatedAt: 123 });
+  });
+
+  it('returns null when margin fields are absent', () => {
+    expect(thalexAccountMargin({ cash: [], unrealised_pnl: 0 }, 123)).toBeNull();
   });
 });

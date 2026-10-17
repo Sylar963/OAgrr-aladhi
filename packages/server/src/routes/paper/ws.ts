@@ -10,10 +10,10 @@ import type { FastifyInstance } from 'fastify';
 import { fundedStore } from '../../funded-services.js';
 import {
   fillEconomicsRepository,
-  paperTradingStore,
   positionRepository,
   quoteProvider,
 } from '../../trading-services.js';
+import { authDevBypassActive } from '../../user-service.js';
 import { consumeWebSocketTicket } from '../../websocket-ticket-service.js';
 import { protectWebSocket, registerPrivateWebSocket } from '../../websocket-security.js';
 import { paperEvents } from './events.js';
@@ -47,7 +47,7 @@ export async function paperWsRoute(app: FastifyInstance) {
 
     const ticket = new URL(req.url, 'http://localhost').searchParams.get('ticket');
     let accountId: string;
-    if (paperTradingStore.enabled) {
+    if (!authDevBypassActive()) {
       if (!ticket) {
         send(socket, {
           type: 'error',

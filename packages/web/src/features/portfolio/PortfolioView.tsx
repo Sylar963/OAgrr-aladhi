@@ -24,7 +24,7 @@ import ShockHeatmap from './ShockHeatmap';
 import MarketMovement from './MarketMovement';
 import StrategyGroupsPanel from './StrategyGroups';
 import { isEquityHistoryVenue } from './api';
-import { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
+import { usePortfolioMetrics, usePortfolioPositions, useVenueMargin } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
 
@@ -108,6 +108,7 @@ export default function PortfolioView() {
     underlyingParam == null ? { wsLive } : { wsLive, underlying: underlyingParam };
   const { data: positionsData } = usePortfolioPositions(source, positionsOpts);
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
+  const { data: venueMargin } = useVenueMargin(source === 'thalex' ? 'thalex' : null);
 
   const sourceOptions = useMemo(() => [...BASE_SOURCES, ...venueSourceOptions()], []);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';
@@ -225,6 +226,7 @@ export default function PortfolioView() {
             builderDisabledReason={builderDisabledReason}
             mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
             equityVenue={isEquityHistoryVenue(source) ? source : null}
+            margin={source === 'thalex' ? (venueMargin ?? null) : null}
           />
           <StrategyGroupsPanel groups={metrics?.strategies ?? []} />
           <ShockHeatmap

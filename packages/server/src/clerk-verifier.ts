@@ -1,17 +1,35 @@
 import { createRemoteJWKSet, type JWTPayload, type JWTVerifyOptions, jwtVerify } from 'jose';
+import { allowedOrigins } from './security-configuration.js';
+
+/** Minutes since each factor was last verified (Clerk `fva`); null = never or no such factor. */
+export interface FactorAgeMinutes {
+  first: number | null;
+  second: number | null;
+}
 
 export interface ClerkIdentity {
   clerkUserId: string;
   email: string | null;
   displayName: string | null;
+  factorAgeMinutes: FactorAgeMinutes;
 }
 
 type VerifyFn = (token: string) => Promise<{ payload: JWTPayload }>;
+
+function factorAge(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function parseFactorVerificationAge(fva: unknown): FactorAgeMinutes {
+  if (!Array.isArray(fva)) return { first: null, second: null };
+  return { first: factorAge(fva[0]), second: factorAge(fva[1]) };
+}
 
 /** Pure mapping core — testable without network. Returns null on any failure. */
 export async function verifyClerkTokenWith(
   token: string,
   verify: VerifyFn,
+  authorizedParties: readonly string[] | null = null,
 ): Promise<ClerkIdentity | null> {
   if (!token) return null;
   let payload: JWTPayload;
@@ -22,9 +40,19 @@ export async function verifyClerkTokenWith(
   }
   const sub = typeof payload.sub === 'string' ? payload.sub : null;
   if (!sub) return null;
+  // Clerk sets `azp` to the browser origin that requested the token.
+  const azp = payload['azp'];
+  if (azp !== undefined && authorizedParties !== null) {
+    if (typeof azp !== 'string' || !authorizedParties.includes(azp)) return null;
+  }
   const email = typeof payload['email'] === 'string' ? (payload['email'] as string) : null;
   const displayName = typeof payload['name'] === 'string' ? (payload['name'] as string) : null;
-  return { clerkUserId: sub, email, displayName };
+  return {
+    clerkUserId: sub,
+    email,
+    displayName,
+    factorAgeMinutes: parseFactorVerificationAge(payload['fva']),
+  };
 }
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -55,7 +83,9 @@ function getJwtVerificationOptions(): JWTVerifyOptions {
 
 /** Production verifier — caches the JWKS and verifies issuer, expiry, and RS256 signature. */
 export async function verifyClerkToken(token: string): Promise<ClerkIdentity | null> {
-  return verifyClerkTokenWith(token, (value) =>
-    jwtVerify(value, getJwks(), getJwtVerificationOptions()),
+  return verifyClerkTokenWith(
+    token,
+    (value) => jwtVerify(value, getJwks(), getJwtVerificationOptions()),
+    allowedOrigins(process.env),
   );
 }

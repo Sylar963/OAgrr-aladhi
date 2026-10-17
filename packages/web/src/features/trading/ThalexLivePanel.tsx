@@ -107,7 +107,7 @@ function GreeksSummary({ metrics }: { metrics: PortfolioMetrics }) {
   const t = metrics.totals;
   return (
     <div className={styles.metricGrid}>
-      <MetricCard label="Δ Delta" value={fmtDelta(t.netDeltaUsd)} />
+      <MetricCard label="Δ Delta" value={fmtDelta(t.netDeltaCoin)} />
       <MetricCard label="Γ Gamma" value={fmtNum(t.netGammaUsd, 4)} />
       <MetricCard label="Θ Theta" value={fmtUsd(t.netThetaUsd)} />
       <MetricCard label="V Vega" value={fmtUsd(t.netVegaUsd)} />

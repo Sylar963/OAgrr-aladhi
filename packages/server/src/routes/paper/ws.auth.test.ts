@@ -63,6 +63,7 @@ describe('WS /ws/paper auth gate', () => {
 
   beforeEach(() => {
     storeMock.enabled = false;
+    vi.unstubAllEnvs();
     consumeWebSocketTicketMock.mockReset();
     listPositionsMock.mockClear();
     getCashBalanceMock.mockClear();
@@ -110,7 +111,14 @@ describe('WS /ws/paper auth gate', () => {
     ws.terminate();
   });
 
-  it('accepts anonymous connections (default account) when persistence is disabled', async () => {
+  it('closes anonymous connections when persistence is disabled without the dev bypass', async () => {
+    vi.stubEnv('AUTH_DEV_BYPASS', '');
+    const ws = await app.injectWS('/ws/paper');
+    expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
+    expect(consumeWebSocketTicketMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts anonymous connections (default account) under the dev bypass', async () => {
     storeMock.enabled = false;
     const ws = await app.injectWS('/ws/paper');
     await new Promise((r) => setTimeout(r, 100));

@@ -129,6 +129,54 @@ const PayoffFactsSchema = z.object({
   expiryBasis: protocol(ExpiryBasisSchema),
 });
 
+const GammaLevelSchema = z.object({ strike: z.number(), gexUsdMillions: nullableNumber, distancePct: z.number() });
+const PriceLevelSchema = z.object({ priceUsd: z.number(), distancePct: z.number(), activity: z.number() });
+const OiLevelSchema = z.object({ strike: z.number(), openInterestContracts: z.number() });
+
+const BookVsMarketFactsSchema = z.object({
+  underlying: z.string(),
+  spotUsd: z.number(),
+  expiryOutlook: z.array(
+    z.object({
+      until: isoDate,
+      daysToExpiry: z.number(),
+      atmIv: nullableNumber,
+      atmIvSource: z.enum(['expiry', 'interpolated', 'nearest']).nullable(),
+      expectedMovePct: nullableNumber,
+      expectedRangeUsd: z.object({ low: z.number(), high: z.number() }).nullable(),
+      breakevens: z.array(
+        z.object({
+          spotUsd: z.number(),
+          movePct: z.number(),
+          insideExpectedRange: z.boolean().nullable(),
+          probabilityAbove: nullableNumber,
+        }),
+      ),
+      profitZones: z.array(z.object({ fromSpotUsd: nullableNumber, toSpotUsd: nullableNumber })).nullable(),
+      profitProbability: nullableNumber,
+    }),
+  ),
+  gammaLevels: z
+    .object({ netGexUsdMillions: nullableNumber, positive: z.array(GammaLevelSchema), negative: z.array(GammaLevelSchema) })
+    .nullable(),
+  priceLevels: z
+    .object({ lookbackDays: z.number(), support: z.array(PriceLevelSchema), resistance: z.array(PriceLevelSchema) })
+    .nullable(),
+  openInterestLevels: z.array(z.object({ expiry: isoDate, calls: z.array(OiLevelSchema), puts: z.array(OiLevelSchema) })),
+  heldLegOdds: z.array(
+    z.object({
+      expiry: isoDate,
+      strike: z.number(),
+      right: optionRight,
+      breakEvenUsd: z.number(),
+      impliedProbBeyondStrike: z.number(),
+      historicalProbBeyondStrike: nullableNumber,
+      historicalWindows: z.number().int(),
+    }),
+  ),
+  notes: z.array(z.string()),
+});
+
 const RiskBudgetFactsSchema = z.object({
   riskWindows: z.array(protocol(ExpiryRiskWindowSchema)),
   worstLossUsd: nullableNumber,
@@ -151,7 +199,7 @@ const PortfolioAssistantContextSchema = z.object({
     underlying: z.string().nullable(),
     spotUsd: nullableNumber,
     unrealizedPnlUsd: nullableNumber,
-    netDeltaUsd: nullableNumber,
+    netDeltaCoin: nullableNumber,
     netThetaUsd: nullableNumber,
     netVegaUsd: nullableNumber,
     openLegCount: z.number().int().nonnegative(),
@@ -285,6 +333,8 @@ const PortfolioAssistantContextSchema = z.object({
       }),
     })
     .nullable(),
+  // Fixtures written before the levels block have no field; their contexts carry none.
+  bookVsMarketFacts: BookVsMarketFactsSchema.nullable().default(null),
   // Fixtures written before per-user memory have no field; they describe a user with none.
   userMemoryFacts: z
     .object({

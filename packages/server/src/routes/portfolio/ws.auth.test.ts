@@ -80,6 +80,14 @@ describe('WS /ws/portfolio auth gate', () => {
     expect(ws.readyState).toBe(WS_CLOSED);
   });
 
+  it('closes anonymous connections when persistence is disabled without the dev bypass', async () => {
+    storeMock.enabled = false;
+    vi.stubEnv('AUTH_DEV_BYPASS', '');
+    const ws = await app.injectWS('/ws/portfolio');
+    expect(await waitForState(ws, WS_CLOSED)).toBe(WS_CLOSED);
+    vi.unstubAllEnvs();
+  });
+
   it('closes the connection when anonymous and persistence is enabled', async () => {
     storeMock.enabled = true;
     const ws = await app.injectWS('/ws/portfolio');

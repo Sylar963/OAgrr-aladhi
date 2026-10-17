@@ -10,7 +10,7 @@
       "underlying": "BTC",
       "spotUsd": 83886.66,
       "unrealizedPnlUsd": -276.9225079812277,
-      "netDeltaUsd": -0.008604496109575088,
+      "netDeltaCoin": -0.008604496109575088,
       "netThetaUsd": 38.57617129667009,
       "netVegaUsd": -43.28876924911022,
       "openLegCount": 4,
@@ -116,7 +116,7 @@
       }
     ],
     "totals": {
-      "netDeltaUsd": -0.008604496109575088,
+      "netDeltaCoin": -0.008604496109575088,
       "netGammaUsd": -0.000023997242406528174,
       "netVegaUsd": -43.28876924911022,
       "netThetaUsd": 38.57617129667009,
@@ -186,13 +186,15 @@
     ],
     "strategyFacts": [
       {
-        "groupId": "put_spread:ic-oct30-74000-p+ic-oct30-78000-p",
-        "kind": "put_spread",
+        "groupId": "iron_condor:ic-oct30-74000-p+ic-oct30-78000-p+ic-oct30-90000-c+ic-oct30-94000-c",
+        "kind": "iron_condor",
         "underlying": "BTC",
         "expiry": "2026-10-30",
         "legIds": [
           "ic-oct30-74000-p",
-          "ic-oct30-78000-p"
+          "ic-oct30-78000-p",
+          "ic-oct30-90000-c",
+          "ic-oct30-94000-c"
         ],
         "legs": [
           {
@@ -208,37 +210,7 @@
             "optionRight": "put",
             "size": -1,
             "entryPriceUsd": 900
-          }
-        ],
-        "netEntryPremiumUsd": -520,
-        "debitOrCredit": "credit",
-        "maxProfitUsd": 520,
-        "maxLossUsd": 3480,
-        "breakEvenSpotsUsd": [
-          77480
-        ],
-        "grossDebitUsd": 380,
-        "grossCreditUsd": 900,
-        "totals": {
-          "netDeltaUsd": 0.11197176096209915,
-          "netGammaUsd": -0.000012553026978269906,
-          "netVegaUsd": -22.491967024119035,
-          "netThetaUsd": 19.848177055105353,
-          "netVannaUsd": -0.00026544698385775733,
-          "netVolgaUsd": 0.4907501546603935,
-          "unrealizedPnlUsd": -184.97803977459262
-        }
-      },
-      {
-        "groupId": "call_spread:ic-oct30-90000-c+ic-oct30-94000-c",
-        "kind": "call_spread",
-        "underlying": "BTC",
-        "expiry": "2026-10-30",
-        "legIds": [
-          "ic-oct30-90000-c",
-          "ic-oct30-94000-c"
-        ],
-        "legs": [
+          },
           {
             "legId": "ic-oct30-90000-c",
             "strike": 90000,
@@ -254,23 +226,24 @@
             "entryPriceUsd": 480
           }
         ],
-        "netEntryPremiumUsd": -620,
+        "netEntryPremiumUsd": -1140,
         "debitOrCredit": "credit",
-        "maxProfitUsd": 620,
-        "maxLossUsd": 3380,
+        "maxProfitUsd": 1140,
+        "maxLossUsd": 2860,
         "breakEvenSpotsUsd": [
-          90620
+          76860,
+          91140
         ],
-        "grossDebitUsd": 480,
-        "grossCreditUsd": 1100,
+        "grossDebitUsd": 860,
+        "grossCreditUsd": 2000,
         "totals": {
-          "netDeltaUsd": -0.12057625707167424,
-          "netGammaUsd": -0.000011444215428258268,
-          "netVegaUsd": -20.796802224991183,
-          "netThetaUsd": 18.72799424156473,
-          "netVannaUsd": 0.0006884504955667337,
-          "netVolgaUsd": 0.6753819245013641,
-          "unrealizedPnlUsd": -91.94446820663507
+          "netDeltaCoin": -0.008604496109575088,
+          "netGammaUsd": -0.000023997242406528174,
+          "netVegaUsd": -43.28876924911022,
+          "netThetaUsd": 38.57617129667009,
+          "netVannaUsd": 0.00042300351170897633,
+          "netVolgaUsd": 1.1661320791617578,
+          "unrealizedPnlUsd": -276.9225079812277
         }
       }
     ],
@@ -1097,7 +1070,8 @@
                 "ivPercentile7d": null,
                 "ivPercentile30d": null,
                 "ivChange1d": null,
-                "ivChange7d": null
+                "ivChange7d": null,
+                "ivHistoryDays": null
               },
               "realized": {
                 "rv7d": 0.23770222723610657,
@@ -2018,6 +1992,88 @@
       "persistence": "unavailable"
     },
     "tradeHistoryFacts": null,
+    "bookVsMarketFacts": {
+      "underlying": "BTC",
+      "spotUsd": 83886.66,
+      "expiryOutlook": [
+        {
+          "until": "2026-10-30",
+          "daysToExpiry": 22.83,
+          "atmIv": 0.4157,
+          "atmIvSource": "expiry",
+          "expectedMovePct": 10.4,
+          "expectedRangeUsd": {
+            "low": 75165,
+            "high": 92609
+          },
+          "breakevens": [
+            {
+              "spotUsd": 76860,
+              "movePct": -8.38,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.785
+            },
+            {
+              "spotUsd": 91140,
+              "movePct": 8.65,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.198
+            }
+          ],
+          "profitZones": [
+            {
+              "fromSpotUsd": 76860,
+              "toSpotUsd": 91140
+            }
+          ],
+          "profitProbability": 0.587
+        }
+      ],
+      "gammaLevels": null,
+      "priceLevels": null,
+      "openInterestLevels": [
+        {
+          "expiry": "2026-10-30",
+          "calls": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1410
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1383
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1378
+            }
+          ],
+          "puts": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1128
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1107
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1102
+            }
+          ]
+        }
+      ],
+      "heldLegOdds": [],
+      "notes": [
+        "expiryOutlook compares each risk window (riskBudgetFacts.riskWindows) with the move the options market prices to that date: expectedRangeUsd is ±1 standard deviation at atmIv (about 68% under a lognormal), probabilityAbove and profitProbability are lognormal at atmIv with forward = spot and no skew. Market-implied estimates, not forecasts.",
+        "gammaLevels: largest dealer-gamma strikes across expiries (positive and negative GEX); priceLevels: busiest prices by hours traded through them; openInterestLevels: largest open interest per held expiry. All are descriptive levels, not proven support or resistance.",
+        "heldLegOdds: Deribit break-even per held strike; impliedProbBeyondStrike is N(d2) (calls) or N(-d2) (puts), historicalProbBeyondStrike is the share of past same-length moves, trend removed, that finished beyond the strike, a historical frequency, not a forecast.",
+        "gammaLevels unavailable: Oggregator returned not served by the eval market for /api/gex-all-expiries.",
+        "priceLevels unavailable: Oggregator returned not served by the eval market for /api/time-at-price.",
+        "heldLegOdds for 2026-10-30 unavailable: Oggregator returned not served by the eval market for /api/break-even."
+      ]
+    },
     "userMemoryFacts": null,
     "topContributors": {
       "delta": [

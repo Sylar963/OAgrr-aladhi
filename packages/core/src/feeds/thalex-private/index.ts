@@ -4,7 +4,12 @@ export {
   type ThalexPositionsListener,
 } from './ws-client.js';
 export { mintAuthToken } from './auth.js';
-export { thalexPortfolioEntryToLeg, thalexPortfolioToLegs } from './codec.js';
+export {
+  thalexAccountMargin,
+  thalexPortfolioEntryToLeg,
+  thalexPortfolioToLegs,
+  type ThalexAccountMargin,
+} from './codec.js';
 export {
   ThalexPortfolioEntrySchema,
   ThalexPortfolioNotificationSchema,

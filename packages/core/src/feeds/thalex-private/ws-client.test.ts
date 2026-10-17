@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const thalexWsMockState = vi.hoisted(() => ({
   sentPayloads: [] as Array<{ id: number; method: string; params: Record<string, unknown> }>,
+  onMessage: null as ((raw: Buffer) => void) | null,
   loginResult: { account_number: 'main' },
   subscribeResult: ['account.portfolio', 'account.summary', 'account.trade_history'],
   portfolioResult: [
@@ -12,6 +13,24 @@ const thalexWsMockState = vi.hoisted(() => ({
       mark_price: 1900,
     },
   ],
+}));
+
+const ACCOUNT_SUMMARY = vi.hoisted(() => ({
+  cash: [
+    {
+      currency: 'USDT',
+      balance: 1000000004483.9625,
+      collateral_factor: 1,
+      collateral_index_price: null,
+      transactable: true,
+    },
+  ],
+  unrealised_pnl: 491.00977310002116,
+  session_realised_pnl: 0,
+  cash_collateral: 1000000004483.9625,
+  margin: 1000000004994.1586,
+  required_margin: 13123.880458333333,
+  remaining_margin: 999999991870.2781,
 }));
 
 const mintAuthTokenMock = vi.hoisted(() => vi.fn(() => 'jwt-token'));
@@ -31,7 +50,9 @@ vi.mock('../shared/topic-ws-client.js', () => ({
         onStatusChange?: (state: 'connected' | 'reconnecting' | 'down') => void;
         onMessage?: (raw: Buffer) => void;
       },
-    ) {}
+    ) {
+      thalexWsMockState.onMessage = options.onMessage ?? null;
+    }
 
     async connect(): Promise<void> {
       this.isConnected = true;
@@ -63,7 +84,9 @@ vi.mock('../shared/topic-ws-client.js', () => ({
               ? thalexWsMockState.portfolioResult
               : method === 'private/trade_history'
                 ? { trades: [] }
-                : null;
+                : method === 'private/account_summary'
+                  ? ACCOUNT_SUMMARY
+                  : null;
 
       this.options.onMessage?.(Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, result })));
     }
@@ -110,6 +133,7 @@ describe('ThalexPrivateClient', () => {
       'private/subscribe',
       'private/portfolio',
       'private/trade_history',
+      'private/account_summary',
     ]);
     expect(listener).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -130,5 +154,36 @@ describe('ThalexPrivateClient', () => {
         entryPriceUsd: 1850.5,
       }),
     ]);
+  });
+
+  it('tracks initial margin from the bootstrap summary and account.summary notifications', async () => {
+    const client = new ThalexPrivateClient({
+      kid: 'kid-1',
+      privateKeyPem: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
+    });
+
+    await client.start();
+
+    expect(client.getLatestMargin()).toEqual({
+      initialMarginUsd: 13123.880458333333,
+      marginUsd: 1000000004994.1586,
+      remainingMarginUsd: 999999991870.2781,
+      updatedAt: expect.any(Number),
+    });
+
+    thalexWsMockState.onMessage?.(
+      Buffer.from(
+        JSON.stringify({
+          channel_name: 'account.summary',
+          notification: { ...ACCOUNT_SUMMARY, margin: 20_000, required_margin: 15_000, remaining_margin: 5_000 },
+        }),
+      ),
+    );
+
+    expect(client.getLatestMargin()).toMatchObject({
+      initialMarginUsd: 15_000,
+      marginUsd: 20_000,
+      remainingMarginUsd: 5_000,
+    });
   });
 });

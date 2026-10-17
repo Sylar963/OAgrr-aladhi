@@ -16,6 +16,7 @@ import {
   type PositionLegInput,
   VENUE_IDS,
   type VenueId,
+  type VenueMarginResponse,
   type VolShockResult,
   type VolShockScenario,
 } from '@oggregator/protocol';
@@ -190,7 +191,7 @@ export async function restoreVenueConnections(token?: string): Promise<VenueConn
 }
 
 const PortfolioTotalsSchema = z.object({
-  netDeltaUsd: z.number(),
+  netDeltaCoin: z.number(),
   netGammaUsd: z.number(),
   netVegaUsd: z.number(),
   netThetaUsd: z.number(),
@@ -503,6 +504,20 @@ export function fetchEquityHistory(
 ): Promise<EquityHistoryResponse> {
   const params = new URLSearchParams({ venue, range });
   return getJson(`/portfolio/equity-history?${params.toString()}`, EquityHistoryResponseSchema);
+}
+
+const VenueMarginResponseSchema: z.ZodType<VenueMarginResponse> = z.object({
+  accountId: z.string(),
+  venue: z.literal('thalex'),
+  initialMarginUsd: z.number(),
+  marginUsd: z.number(),
+  remainingMarginUsd: z.number(),
+  updatedAt: z.number(),
+});
+
+export function fetchVenueMargin(venue: VenueMarginResponse['venue']): Promise<VenueMarginResponse> {
+  const params = new URLSearchParams({ venue });
+  return getJson(`/portfolio/venue-margin?${params.toString()}`, VenueMarginResponseSchema);
 }
 
 export function fetchMetrics(

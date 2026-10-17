@@ -125,6 +125,17 @@ export const EquityHistoryResponseSchema = z.object({
 });
 export type EquityHistoryResponse = z.infer<typeof EquityHistoryResponseSchema>;
 
+// Thalex `required_margin` is the initial margin; the API does not publish maintenance margin.
+export const VenueMarginResponseSchema = z.object({
+  accountId: z.string(),
+  venue: z.literal('thalex'),
+  initialMarginUsd: z.number(),
+  marginUsd: z.number(),
+  remainingMarginUsd: z.number(),
+  updatedAt: z.number(),
+});
+export type VenueMarginResponse = z.infer<typeof VenueMarginResponseSchema>;
+
 export const PortfolioAccountingSchema = z.object({
   openGrossDebitUsd: z.number().nonnegative(),
   openGrossCreditUsd: z.number().nonnegative(),
@@ -232,7 +243,7 @@ export const VolShockResultSchema = z.object({
 export type VolShockResult = z.infer<typeof VolShockResultSchema>;
 
 export const PortfolioTotalsSchema = z.object({
-  netDeltaUsd: z.number(),
+  netDeltaCoin: z.number(),
   netGammaUsd: z.number(),
   netVegaUsd: z.number(),
   netThetaUsd: z.number(),

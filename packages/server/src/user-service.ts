@@ -1,6 +1,6 @@
 import { DEFAULT_ACCOUNT_ID, DEFAULT_INITIAL_CASH_USD } from '@oggregator/trading';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { verifyClerkToken } from './clerk-verifier.js';
+import { type FactorAgeMinutes, verifyClerkToken } from './clerk-verifier.js';
 import { fundedStore } from './funded-services.js';
 import { paperTradingStore, usersStore } from './trading-services.js';
 
@@ -9,6 +9,19 @@ export interface AuthenticatedUser {
   clerkUserId: string;
   accountId: string;
   label: string;
+  factorAgeMinutes: FactorAgeMinutes;
+}
+
+/**
+ * Local dev without Postgres may skip auth, but only when explicitly asked for and never in
+ * production. A missing DATABASE_URL alone must not open the private routes.
+ */
+export function authDevBypassActive(): boolean {
+  return (
+    !paperTradingStore.enabled &&
+    process.env['NODE_ENV'] !== 'production' &&
+    process.env['AUTH_DEV_BYPASS'] === '1'
+  );
 }
 
 /** Extract the raw Clerk JWT from `Authorization: Bearer <jwt>`, or null. */
@@ -36,6 +49,7 @@ export async function getUserByToken(token: string | null): Promise<Authenticate
       clerkUserId: identity.clerkUserId,
       accountId: existing.defaultAccountId,
       label: existing.displayName ?? identity.email ?? identity.clerkUserId,
+      factorAgeMinutes: identity.factorAgeMinutes,
     };
   }
 
@@ -57,6 +71,7 @@ export async function getUserByToken(token: string | null): Promise<Authenticate
     clerkUserId: identity.clerkUserId,
     accountId: user.defaultAccountId,
     label: user.displayName ?? identity.email ?? identity.clerkUserId,
+    factorAgeMinutes: identity.factorAgeMinutes,
   };
 }
 
@@ -81,7 +96,7 @@ export function requireUser() {
     if (request.url.startsWith('/api/paper/auth/')) {
       return;
     }
-    if (!paperTradingStore.enabled) {
+    if (authDevBypassActive()) {
       return;
     }
     const user = await authenticateUser(request, reply);
@@ -96,13 +111,9 @@ export function requireUser() {
 }
 
 export function getRequestAccountId(req: FastifyRequest, fallback: string): string {
-  if (paperTradingStore.enabled) {
-    if (!req.user) {
-      throw new Error('getRequestAccountId called without authenticated user');
-    }
-    return req.user.accountId;
-  }
-  return req.user?.accountId ?? fallback;
+  if (req.user) return req.user.accountId;
+  if (authDevBypassActive()) return fallback;
+  throw new Error('getRequestAccountId called without authenticated user');
 }
 
 export class AccountScopeError extends Error {
@@ -123,8 +134,8 @@ export async function authorizeAccountScope(
   req: FastifyRequest,
   requested?: string | null,
 ): Promise<string> {
-  if (!paperTradingStore.enabled) {
-    return req.user?.accountId ?? DEFAULT_ACCOUNT_ID;
+  if (!req.user && authDevBypassActive()) {
+    return DEFAULT_ACCOUNT_ID;
   }
   if (!req.user) {
     throw new Error('authorizeAccountScope called without authenticated user');

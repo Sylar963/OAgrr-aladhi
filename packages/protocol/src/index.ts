@@ -172,6 +172,8 @@ export {
   EquityHistoryResponseSchema,
   type EquityHistoryVenue,
   EquityHistoryVenueSchema,
+  type VenueMarginResponse,
+  VenueMarginResponseSchema,
   type ExchangePortfolioTrade,
   ExchangePortfolioTradeSchema,
   type ExchangePortfolioVenue,

@@ -10,7 +10,7 @@
       "underlying": "BTC",
       "spotUsd": 83886.66,
       "unrealizedPnlUsd": 192.05012826729217,
-      "netDeltaUsd": 0.17668253783775054,
+      "netDeltaCoin": 0.17668253783775054,
       "netThetaUsd": -22.65280309049616,
       "netVegaUsd": 58.421285021203296,
       "openLegCount": 1,
@@ -73,7 +73,7 @@
       }
     ],
     "totals": {
-      "netDeltaUsd": 0.17668253783775054,
+      "netDeltaCoin": 0.17668253783775054,
       "netGammaUsd": 0.000014996111806906053,
       "netVegaUsd": 58.421285021203296,
       "netThetaUsd": -22.65280309049616,
@@ -133,7 +133,7 @@
         "grossDebitUsd": 1175,
         "grossCreditUsd": 0,
         "totals": {
-          "netDeltaUsd": 0.17668253783775054,
+          "netDeltaCoin": 0.17668253783775054,
           "netGammaUsd": 0.000014996111806906053,
           "netVegaUsd": 58.421285021203296,
           "netThetaUsd": -22.65280309049616,
@@ -912,7 +912,8 @@
                 "ivPercentile7d": null,
                 "ivPercentile30d": null,
                 "ivChange1d": null,
-                "ivChange7d": null
+                "ivChange7d": null,
+                "ivHistoryDays": null
               },
               "realized": {
                 "rv7d": 0.23770222723610657,
@@ -1776,6 +1777,82 @@
       "persistence": "unavailable"
     },
     "tradeHistoryFacts": null,
+    "bookVsMarketFacts": {
+      "underlying": "BTC",
+      "spotUsd": 83886.66,
+      "expiryOutlook": [
+        {
+          "until": "2026-11-27",
+          "daysToExpiry": 50.83,
+          "atmIv": 0.4021,
+          "atmIvSource": "expiry",
+          "expectedMovePct": 15.01,
+          "expectedRangeUsd": {
+            "low": 71299,
+            "high": 96475
+          },
+          "breakevens": [
+            {
+              "spotUsd": 92350,
+              "movePct": 10.09,
+              "insideExpectedRange": true,
+              "probabilityAbove": 0.237
+            }
+          ],
+          "profitZones": [
+            {
+              "fromSpotUsd": 92350,
+              "toSpotUsd": null
+            }
+          ],
+          "profitProbability": 0.237
+        }
+      ],
+      "gammaLevels": null,
+      "priceLevels": null,
+      "openInterestLevels": [
+        {
+          "expiry": "2026-11-27",
+          "calls": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1408
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1392
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1365
+            }
+          ],
+          "puts": [
+            {
+              "strike": 84000,
+              "openInterestContracts": 1127
+            },
+            {
+              "strike": 85000,
+              "openInterestContracts": 1114
+            },
+            {
+              "strike": 83000,
+              "openInterestContracts": 1092
+            }
+          ]
+        }
+      ],
+      "heldLegOdds": [],
+      "notes": [
+        "expiryOutlook compares each risk window (riskBudgetFacts.riskWindows) with the move the options market prices to that date: expectedRangeUsd is ±1 standard deviation at atmIv (about 68% under a lognormal), probabilityAbove and profitProbability are lognormal at atmIv with forward = spot and no skew. Market-implied estimates, not forecasts.",
+        "gammaLevels: largest dealer-gamma strikes across expiries (positive and negative GEX); priceLevels: busiest prices by hours traded through them; openInterestLevels: largest open interest per held expiry. All are descriptive levels, not proven support or resistance.",
+        "heldLegOdds: Deribit break-even per held strike; impliedProbBeyondStrike is N(d2) (calls) or N(-d2) (puts), historicalProbBeyondStrike is the share of past same-length moves, trend removed, that finished beyond the strike, a historical frequency, not a forecast.",
+        "gammaLevels unavailable: Oggregator returned not served by the eval market for /api/gex-all-expiries.",
+        "priceLevels unavailable: Oggregator returned not served by the eval market for /api/time-at-price.",
+        "heldLegOdds for 2026-11-27 unavailable: Oggregator returned not served by the eval market for /api/break-even."
+      ]
+    },
     "userMemoryFacts": null,
     "topContributors": {
       "delta": [

@@ -467,6 +467,7 @@ export {
   type ThalexPrivateCreds,
   type ThalexPositionsListener,
   mintAuthToken as mintThalexAuthToken,
+  type ThalexAccountMargin,
 } from './feeds/thalex-private/index.js';
 
 // feeds — venue adapters

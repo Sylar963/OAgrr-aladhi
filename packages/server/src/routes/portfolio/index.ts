@@ -8,6 +8,7 @@ import { portfolioPositionsRoute } from './positions.js';
 import { portfolioScenariosRoute } from './scenarios.js';
 import { portfolioTradesRoute } from './trades.js';
 import { portfolioVenueCredentialsRoute } from './venue-credentials.js';
+import { portfolioVenueMarginRoute } from './venue-margin.js';
 import { portfolioWsRoute } from './ws.js';
 
 export async function portfolioRoutes(app: FastifyInstance) {
@@ -17,6 +18,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
   await portfolioScenariosRoute(app);
   await portfolioTradesRoute(app);
   await portfolioEquityHistoryRoute(app);
+  await portfolioVenueMarginRoute(app);
   await portfolioVenueCredentialsRoute(app);
   await portfolioAssistantRoutes(app);
 }

@@ -2,7 +2,11 @@ import {
   AlphaLottoScannerResponseSchema,
   AlphaPutScannerResponseSchema,
   AlphaStraddleScannerResponseSchema,
+  type BreakEvenResponse,
+  BreakEvenResponseSchema,
   FlowTradeSchema,
+  type TimeAtPriceResponse,
+  TimeAtPriceResponseSchema,
 } from '@oggregator/protocol';
 import { z } from 'zod';
 
@@ -413,6 +417,26 @@ export class AssistantMarketDataReader {
     const u = encodeURIComponent(normalizeUnderlying(underlying));
     const result = await this.get(`/api/gex-all-expiries?underlying=${u}`, GexResponseSchema);
     return result.ok ? { ok: true, data: compactGex(result.data) } : result;
+  }
+
+  async timeAtPrice(
+    underlying: string,
+    lookbackDays: number,
+    timeoutMs?: number,
+  ): Promise<MarketReadResult<TimeAtPriceResponse>> {
+    const u = encodeURIComponent(normalizeUnderlying(underlying));
+    return this.get(`/api/time-at-price?underlying=${u}&lookbackDays=${lookbackDays}`, TimeAtPriceResponseSchema, timeoutMs);
+  }
+
+  async breakEven(
+    underlying: string,
+    expiry: string,
+  ): Promise<MarketReadResult<BreakEvenResponse>> {
+    const u = encodeURIComponent(normalizeUnderlying(underlying));
+    return this.get(
+      `/api/break-even?underlying=${u}&expiry=${encodeURIComponent(expiry)}`,
+      BreakEvenResponseSchema,
+    );
   }
 
   async blockFlow(

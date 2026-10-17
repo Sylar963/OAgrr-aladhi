@@ -219,7 +219,7 @@ describe('computeTotals', () => {
     const withMarks = attachMarks(legs, constantMarks);
     const totals = computeTotals(withMarks);
     expect(totals.netVegaUsd).toBeGreaterThan(0);
-    expect(totals.netDeltaUsd).toBeCloseTo(0.5, 6);
+    expect(totals.netDeltaCoin).toBeCloseTo(0.5, 6);
   });
 
   it('unrealizedPnlUsd is zero when mark equals entry price', () => {

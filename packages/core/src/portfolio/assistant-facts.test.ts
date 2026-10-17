@@ -26,7 +26,7 @@ const metrics: PortfolioMetrics = {
   generatedAt: 1,
   forwardDays: 0,
   totals: {
-    netDeltaUsd: -1,
+    netDeltaCoin: -1,
     netGammaUsd: -2,
     netVegaUsd: -3,
     netThetaUsd: 4,

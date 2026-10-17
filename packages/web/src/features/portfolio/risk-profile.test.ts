@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { calculateIvEdge, classifyBook, getParallelVolShock, getSpotShock } from './risk-profile';
 
 const TOTALS: PortfolioTotals = {
-  netDeltaUsd: 0,
+  netDeltaCoin: 0,
   netGammaUsd: 0,
   netVegaUsd: 0,
   netThetaUsd: 0,

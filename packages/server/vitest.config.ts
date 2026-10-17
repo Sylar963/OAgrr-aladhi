@@ -8,5 +8,7 @@ export default defineConfig({
     clearMocks: true,
     restoreMocks: true,
     include: ['src/**/*.test.ts'],
+    // Hermetic route tests run without Postgres; tests that check the fail-closed path unset it.
+    env: { AUTH_DEV_BYPASS: '1' },
   },
 });

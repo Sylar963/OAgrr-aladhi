@@ -1,5 +1,6 @@
 import {
   ThalexPrivateClient,
+  type ThalexAccountMargin,
   type ThalexPrivateCreds,
   logger,
   type EntryAnchor,
@@ -270,6 +271,11 @@ export class ThalexPositionStore implements PositionStore {
 
   isConnected(accountId: string): boolean {
     return this.clients.has(accountId);
+  }
+
+  getMargin(accountId: string): ThalexAccountMargin | null | undefined {
+    const client = this.clients.get(accountId);
+    return client == null ? undefined : client.getLatestMargin();
   }
 
   async dispose(): Promise<void> {

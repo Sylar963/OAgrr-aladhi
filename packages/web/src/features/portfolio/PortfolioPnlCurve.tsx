@@ -1,10 +1,15 @@
 import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 
-import type { EquityHistoryVenue, PortfolioPnlCurve as PortfolioPnlCurveData } from '@oggregator/protocol';
+import type {
+  EquityHistoryVenue,
+  PortfolioPnlCurve as PortfolioPnlCurveData,
+  VenueMarginResponse,
+} from '@oggregator/protocol';
 import { formatExpiry } from '@lib/format';
 
 import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
 import EquityHistoryChart from './EquityHistoryChart';
+import { marginCallPnl, marginCallPrices } from './margin-call';
 import styles from './PortfolioPnlCurve.module.css';
 
 interface Props {
@@ -14,12 +19,14 @@ interface Props {
   onOpenBuilder?: () => void;
   builderDisabledReason?: string | undefined;
   equityVenue?: EquityHistoryVenue | null;
+  margin?: VenueMarginResponse | null;
 }
 
 const WIDTH = 720;
 const HEIGHT = 280;
 const PADDING = { top: 34, right: 16, bottom: 44, left: 64 };
 const TOOLTIP_WIDTH = 150;
+const MARGIN_CALL_COLOR = '#fb923c';
 const MODE_STORAGE_KEY = 'portfolioPnlCurveMode';
 type CurveMode = 'payoff' | 'ta' | 'equity';
 
@@ -49,6 +56,11 @@ function fmtUsd(value: number | null | undefined): string {
   if (rounded === 0) return '$0';
   const sign = rounded > 0 ? '+' : '-';
   return `${sign}$${Math.abs(rounded).toLocaleString()}`;
+}
+
+function fmtMoney(value: number): string {
+  const rounded = Math.round(value);
+  return `${rounded < 0 ? '-' : ''}$${Math.abs(rounded).toLocaleString()}`;
 }
 
 function fmtPct(value: number, digits: number): string {
@@ -115,7 +127,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status']): string {
   return 'No P/L curve available.';
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null }: Props) {
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const [storedMode, setMode] = useState<CurveMode>(loadMode);
@@ -150,6 +162,14 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ? 'same-price scenario low'
         : 'expiry curve low';
 
+  const marginCall = useMemo(() => {
+    const spotUsd = displayCurve.currentSpotUsd;
+    if (margin == null || spotUsd == null || displayCurve.status !== 'ok') return null;
+    const level = marginCallPnl(displayCurve.points, spotUsd, margin.remainingMarginUsd);
+    if (level == null) return null;
+    return { level, ...marginCallPrices(displayCurve.points, spotUsd, level) };
+  }, [displayCurve, margin]);
+
   const chart = useMemo(() => {
     if (displayCurve.status !== 'ok' || displayCurve.points.length === 0) return null;
     const xMin = displayCurve.points[0]?.underlyingPriceUsd ?? 0;
@@ -179,6 +199,8 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
     return {
       toX,
       toY,
+      yMin,
+      yMax,
       fromX: (svgX: number) => xMin + ((svgX - PADDING.left) / innerW) * xSpan,
       zeroY,
       xTicks: ticksWithin(xMin, xMax, niceStep(xSpan, 6)),
@@ -309,6 +331,27 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ) : (
           displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
         )}
+        {margin != null && (
+          <>
+            <span className={styles.metricPill} title="Thalex account-wide initial margin requirement">
+              IM {fmtMoney(margin.initialMarginUsd)}
+            </span>
+            <span
+              className={margin.remainingMarginUsd > 0 ? styles.metricPill : styles.stalePill}
+              title="Thalex account margin minus initial margin"
+            >
+              free margin {fmtMoney(margin.remainingMarginUsd)}
+            </span>
+            {marginCall != null && margin.remainingMarginUsd > 0 && (
+              <span className={styles.metricPill} title="Now-curve prices where account margin reaches IM, holding IM fixed">
+                IM breach{' '}
+                {marginCall.below == null && marginCall.above == null
+                  ? 'none in range'
+                  : `≈ ${[marginCall.below, marginCall.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
+              </span>
+            )}
+          </>
+        )}
         {isStale && <span className={styles.stalePill}>stale · waiting for live marks</span>}
       </div>
 
@@ -425,6 +468,28 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 </text>
               </g>
             )}
+            {marginCall != null && marginCall.level >= chart.yMin && marginCall.level <= chart.yMax && (
+              <g data-testid="im-breach-line">
+                <line
+                  x1={PADDING.left}
+                  x2={WIDTH - PADDING.right}
+                  y1={chart.toY(marginCall.level)}
+                  y2={chart.toY(marginCall.level)}
+                  stroke={MARGIN_CALL_COLOR}
+                  strokeWidth={1}
+                  strokeDasharray="2 4"
+                />
+                <text
+                  x={WIDTH - PADDING.right - 4}
+                  y={chart.toY(marginCall.level) - 4}
+                  textAnchor="end"
+                  fontSize={9}
+                  fill={MARGIN_CALL_COLOR}
+                >
+                  IM breach ≈ {fmtUsd(marginCall.level)}
+                </text>
+              </g>
+            )}
             {chart.forwardPath && (
               <path
                 d={chart.forwardPath}
@@ -467,6 +532,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 point={hovered}
                 spot={spot}
                 forwardDays={forwardDays}
+                marginCallLevel={marginCall?.level ?? null}
                 toX={chart.toX}
                 toY={chart.toY}
               />
@@ -477,6 +543,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
 
       <div className={styles.hint}>
         Hover to read P&amp;L at any price. Break-even markers are based on the expiry curve; shading shows expiry gain and loss.
+        {margin != null && ' IM is Thalex\'s account-wide initial margin, covering every underlying. The IM breach line holds IM fixed as price moves, so treat it as approximate.'}
       </div>
     </div>
   );
@@ -486,11 +553,12 @@ interface HoverReadoutProps {
   point: PortfolioPnlCurveData['points'][number];
   spot: number | null;
   forwardDays: number;
+  marginCallLevel: number | null;
   toX: (value: number) => number;
   toY: (value: number) => number;
 }
 
-function HoverReadout({ point, spot, forwardDays, toX, toY }: HoverReadoutProps) {
+function HoverReadout({ point, spot, forwardDays, marginCallLevel, toX, toY }: HoverReadoutProps) {
   const x = toX(point.underlyingPriceUsd);
   const rows: Array<{ label: string; value: number; color: string }> = [
     { label: 'Now', value: point.nowPnlUsd, color: '#a78bfa' },
@@ -499,8 +567,20 @@ function HoverReadout({ point, spot, forwardDays, toX, toY }: HoverReadoutProps)
     rows.push({ label: `T+${forwardDays}d`, value: point.forwardPnlUsd, color: '#38bdf8' });
   }
   rows.push({ label: 'Expiry', value: point.expiryPnlUsd, color: point.expiryPnlUsd < 0 ? '#f87171' : '#4ade80' });
+  const readoutRows: Array<{ label: string; value: string; color: string }> = rows.map((row) => ({
+    label: row.label,
+    value: fmtUsd(row.value),
+    color: row.color,
+  }));
+  if (marginCallLevel != null) {
+    readoutRows.push({
+      label: 'Free margin',
+      value: fmtMoney(point.nowPnlUsd - marginCallLevel),
+      color: MARGIN_CALL_COLOR,
+    });
+  }
 
-  const boxHeight = 24 + rows.length * 14;
+  const boxHeight = 24 + readoutRows.length * 14;
   const boxX = x + 10 + TOOLTIP_WIDTH > WIDTH - PADDING.right ? x - 10 - TOOLTIP_WIDTH : x + 10;
   const boxY = PADDING.top + 4;
 
@@ -527,13 +607,13 @@ function HoverReadout({ point, spot, forwardDays, toX, toY }: HoverReadoutProps)
           {fmtPct((point.underlyingPriceUsd / spot - 1) * 100, 1)}
         </text>
       )}
-      {rows.map((row, index) => (
+      {readoutRows.map((row, index) => (
         <g key={row.label}>
           <text x={boxX + 8} y={boxY + 31 + index * 14} fontSize={10} fill={row.color}>
             {row.label}
           </text>
           <text x={boxX + TOOLTIP_WIDTH - 8} y={boxY + 31 + index * 14} fontSize={10} fill="#e2e8f0" textAnchor="end">
-            {fmtUsd(row.value)}
+            {row.value}
           </text>
         </g>
       ))}

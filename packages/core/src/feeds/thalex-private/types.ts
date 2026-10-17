@@ -83,9 +83,17 @@ export const ThalexAccountSummarySchema = z
         .passthrough(),
     ),
     unrealised_pnl: z.number(),
+    margin: z.number().optional(),
+    required_margin: z.number().optional(),
+    remaining_margin: z.number().optional(),
   })
   .passthrough();
 export type ThalexAccountSummary = z.infer<typeof ThalexAccountSummarySchema>;
+
+export const ThalexAccountSummaryNotificationSchema = z.object({
+  channel_name: z.literal('account.summary'),
+  notification: ThalexAccountSummarySchema,
+});
 
 export const ThalexTransactionSchema = z
   .object({

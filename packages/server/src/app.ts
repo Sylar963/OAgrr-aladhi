@@ -29,6 +29,7 @@ import {
   dealerBookService,
   disposeServiceStores,
   dvolService,
+  volHeatmapRuntime,
   flowService,
   gexWallStore,
   breakEvenStore,
@@ -215,6 +216,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     spotService.dispose();
     spotCandleService.dispose();
     dvolService.dispose();
+    await volHeatmapRuntime?.dispose();
     indexPriceService.dispose();
     ivHistoryService.dispose();
     await shortStraddleSnapshotStore?.dispose();

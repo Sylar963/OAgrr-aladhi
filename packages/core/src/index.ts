@@ -315,6 +315,11 @@ export {
   type BlockTradeRuntimeHealth,
 } from './runtime/block-trades/index.js';
 export {
+  mergeHeatmapColumns,
+  VolHeatmapRuntime,
+  type VolHeatmapRuntimeOptions,
+} from './runtime/vol-heatmap/index.js';
+export {
   buildBlockTradeUid,
   buildLiveTradeUid,
   computeBlockTradeAmounts,

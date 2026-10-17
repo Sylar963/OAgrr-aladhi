@@ -195,11 +195,15 @@ export const STRUCTURE_SEARCH_MAX_LIMIT = 8;
 export const STRUCTURE_SEARCH_STRIKE_BAND = 0.2;
 export const STRUCTURE_SEARCH_MAX_WIDTH = 0.15;
 /** Wall-clock cap on candidate evaluation; the MCP client gives a tool call 30 seconds. */
-export const STRUCTURE_SEARCH_TIME_BUDGET_MS = 8_000;
+export const STRUCTURE_SEARCH_TIME_BUDGET_MS = 3_000;
+/** Evaluation runs on the server's main thread, so it hands the event loop back this often. */
+const YIELD_INTERVAL_MS = 25;
 const DEFAULT_TARGET_MOVE_PCT = 10;
 const DAY_MS = 86_400_000;
 const SIZE_EPSILON = 1e-9;
 const BREAKEVEN_GRID_STEPS = 400;
+
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 interface QuotedLeg {
   role: StructureSearchLegRole;
@@ -797,9 +801,15 @@ function byRepairQuality(left: StructureSearchRepairOption, right: StructureSear
  * together and ranked by book P&L at the target. When nothing fits, the closest candidates
  * are returned with their shortfall.
  */
-export function searchStructures(input: StructureSearchInput): StructureSearchResult {
+export async function searchStructures(input: StructureSearchInput): Promise<StructureSearchResult> {
   const clock = input.clock ?? (() => performance.now());
   const startedAt = clock();
+  let sliceStartedAt = performance.now();
+  const pause = async () => {
+    if (performance.now() - sliceStartedAt < YIELD_INTERVAL_MS) return;
+    await yieldToEventLoop();
+    sliceStartedAt = performance.now();
+  };
   const budget = input.maxTotalRiskUsd;
   const limit = Math.max(1, Math.min(STRUCTURE_SEARCH_MAX_LIMIT, Math.floor(input.limit)));
   const held = input.held.filter(({ leg }) => leg.underlying === input.underlying);
@@ -911,10 +921,12 @@ export function searchStructures(input: StructureSearchInput): StructureSearchRe
             : null;
     if (heldBook != null && reason != null) {
       ctx.repairMode = true;
-      const options = repairDrafts(ctx, heldBook, held, byKey, buyable).flatMap((draft) => {
+      const options: { draft: RepairDraft; option: StructureSearchRepairOption }[] = [];
+      for (const draft of repairDrafts(ctx, heldBook, held, byKey, buyable)) {
+        await pause();
         const option = evaluateRepair(ctx, draft, held);
-        return option == null ? [] : [{ draft, option }];
-      });
+        if (option != null) options.push({ draft, option });
+      }
       stats.repairsEvaluated = options.length;
       const bounded = options.filter(({ option }) => option.bookWorstLossUsd != null);
       bounded.sort((left, right) => byRepairQuality(left.option, right.option));
@@ -970,6 +982,7 @@ export function searchStructures(input: StructureSearchInput): StructureSearchRe
       );
       break;
     }
+    await pause();
     const candidate = evaluateDraft(ctx, draft, held);
     if (candidate == null) {
       stats.failedEvaluations += 1;

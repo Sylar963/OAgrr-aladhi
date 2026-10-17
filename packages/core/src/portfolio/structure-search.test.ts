@@ -155,8 +155,8 @@ describe('findUncoveredShorts', () => {
 
 // Each search runs hundreds of full book evaluations; leave headroom for a loaded CI runner.
 describe('searchStructures', { timeout: 30_000 }, () => {
-  it('keeps bearish candidates inside the budget and ranks them by reward per unit of risk', () => {
-    const result = search({ maxTotalRiskUsd: 1_500, limit: 8 });
+  it('keeps bearish candidates inside the budget and ranks them by reward per unit of risk', async () => {
+    const result = await search({ maxTotalRiskUsd: 1_500, limit: 8 });
 
     expect(result.status).toBe('ok');
     expect(result.candidates).toHaveLength(8);
@@ -182,8 +182,8 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(scores).toEqual([...scores].sort((left, right) => right - left));
   });
 
-  it('prices a put debit spread at ask/bid and reports its breakeven and liquidity', () => {
-    const result = search({ maxTotalRiskUsd: 100_000, limit: 8 });
+  it('prices a put debit spread at ask/bid and reports its breakeven and liquidity', async () => {
+    const result = await search({ maxTotalRiskUsd: 100_000, limit: 8 });
     const vertical = result.candidates.find((candidate) => candidate.family === 'put_debit_vertical');
     expect(vertical).toBeDefined();
     const [long, short] = vertical?.legs ?? [];
@@ -201,8 +201,8 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     });
   });
 
-  it('returns the nearest infeasible candidates with the budget shortfall when nothing fits', () => {
-    const result = search({ maxTotalRiskUsd: 5 });
+  it('returns the nearest infeasible candidates with the budget shortfall when nothing fits', async () => {
+    const result = await search({ maxTotalRiskUsd: 5 });
 
     expect(result.candidates).toEqual([]);
     expect(result.nearestInfeasible).toHaveLength(3);
@@ -214,8 +214,8 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(gaps).toEqual([...gaps].sort((left, right) => left - right));
   });
 
-  it('drops contracts wider than maxSpreadPct and estimates a fee when the venue gives none', () => {
-    const wide = search({
+  it('drops contracts wider than maxSpreadPct and estimates a fee when the venue gives none', async () => {
+    const wide = await search({
       contracts: chain({ halfSpread: 0.2, fee: null }),
       maxSpreadPct: 50,
       maxTotalRiskUsd: 100_000,
@@ -224,14 +224,14 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(wide.candidates[0]?.legs[0]?.feeSource).toBe('default_estimate');
     expect(wide.candidates[0]?.legs[0]?.feeUsd).toBeGreaterThan(0);
 
-    const strict = search({ contracts: chain({ halfSpread: 0.2 }), maxSpreadPct: 25 });
+    const strict = await search({ contracts: chain({ halfSpread: 0.2 }), maxSpreadPct: 25 });
     expect(strict.stats.illiquidSides).toBeGreaterThan(0);
     expect(strict.candidates).toEqual([]);
     expect(strict.stats.enumerated).toBe(0);
   });
 
-  it('evaluates long-vol structures at both signs of the move and ranks on the weaker side', () => {
-    const result = search({ view: 'long_vol', maxTotalRiskUsd: 100_000, limit: 8 });
+  it('evaluates long-vol structures at both signs of the move and ranks on the weaker side', async () => {
+    const result = await search({ view: 'long_vol', maxTotalRiskUsd: 100_000, limit: 8 });
     expect(result.candidates.length).toBeGreaterThan(0);
     for (const candidate of result.candidates) {
       expect(['long_straddle', 'long_strangle']).toContain(candidate.family);
@@ -240,8 +240,8 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     }
   });
 
-  it('finds the Oct 30 higher-strike cover and the buy-back for the reference book', () => {
-    const result = search({ view: 'hedge_held_shorts', held: REFERENCE_BOOK, maxTotalRiskUsd: 5_000, limit: 8 });
+  it('finds the Oct 30 higher-strike cover and the buy-back for the reference book', async () => {
+    const result = await search({ view: 'hedge_held_shorts', held: REFERENCE_BOOK, maxTotalRiskUsd: 5_000, limit: 8 });
 
     expect(result.status).toBe('ok');
     expect(result.heldBook).toMatchObject({ upsideUnbounded: true, unboundedAfter: '2026-10-16', legCount: 2 });
@@ -268,15 +268,15 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(cover90?.worstLossUsd).toBeCloseTo(Math.min(windowOne, windowTwo) - 10, 2);
   });
 
-  it('requires a held book for the hedge view', () => {
-    expect(search({ view: 'hedge_held_shorts' }).status).toBe('no_held_book');
+  it('requires a held book for the hedge view', async () => {
+    expect((await search({ view: 'hedge_held_shorts' })).status).toBe('no_held_book');
     const covered = [heldLeg('long', '2026-10-30', 85_000, 1, 3_000), heldLeg('short', '2026-10-30', 90_000, -1, 1_000)];
-    expect(search({ view: 'hedge_held_shorts', held: covered }).status).toBe('no_uncovered_shorts');
+    expect((await search({ view: 'hedge_held_shorts', held: covered })).status).toBe('no_uncovered_shorts');
   });
 
-  it('repairs the unbounded reference book first and pairs the repair with each bearish view', () => {
+  it('repairs the unbounded reference book first and pairs the repair with each bearish view', async () => {
     const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
-    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
+    const result = await search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000 });
 
     expect(result.rankedBy).toBe('book_reward_to_risk');
     expect(result.repair?.reason).toBe('unbounded');
@@ -321,9 +321,9 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     expect(best?.worstLossUsd).toBeCloseTo(locked - debit, 2);
   });
 
-  it('returns the repair alone and the closest packages with the exact gap when even the repair exceeds $18', () => {
+  it('returns the repair alone and the closest packages with the exact gap when even the repair exceeds $18', async () => {
     const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
-    const result = search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 18, size: 0.1 });
+    const result = await search({ contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 18, size: 0.1 });
 
     // Bare puts cannot bound the naked call, so only packages are evaluated.
     expect(result.stats.skippedUnbounded).toBeGreaterThan(0);
@@ -343,9 +343,9 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     }
   });
 
-  it('closes legs of a bounded book that is already over budget before adding the view', () => {
+  it('closes legs of a bounded book that is already over budget before adding the view', async () => {
     const bearCall = [heldLeg('short', '2026-10-30', 84_000, -1, 3_000), heldLeg('long', '2026-10-30', 90_000, 1, 1_000)];
-    const result = search({ held: bearCall, maxTotalRiskUsd: 1_300 });
+    const result = await search({ held: bearCall, maxTotalRiskUsd: 1_300 });
 
     expect(result.heldBook?.worstLossUsd).toBeCloseTo(-4_000, 0);
     expect(result.repair?.reason).toBe('over_budget');
@@ -357,9 +357,9 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     }
   });
 
-  it('offers long-vol packages on an unbounded book', () => {
+  it('offers long-vol packages on an unbounded book', async () => {
     const contracts = chain({ expiries: ['2026-10-16', '2026-10-30'], firstStrike: 65_000, strikeStep: 2_000 });
-    const result = search({ view: 'long_vol', contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000, limit: 3 });
+    const result = await search({ view: 'long_vol', contracts, held: REFERENCE_BOOK, maxTotalRiskUsd: 3_000, limit: 3 });
 
     expect(result.repair?.chosen.kind).toBe('close_book');
     expect(result.candidates).toHaveLength(3);
@@ -369,17 +369,35 @@ describe('searchStructures', { timeout: 30_000 }, () => {
     }
   });
 
-  it('stops evaluating at the time budget and says so', () => {
+  it('stops evaluating at the time budget and says so', async () => {
     let now = 0;
-    const result = search({ maxTotalRiskUsd: 100_000, clock: () => (now += 1_000) });
+    const result = await search({ maxTotalRiskUsd: 100_000, clock: () => (now += 1_000) });
     expect(result.stats.stoppedEarly).toBe(true);
     expect(result.stats.evaluated).toBeLessThan(10);
     expect(result.notes.some((note) => note.includes('time budget'))).toBe(true);
   });
 
-  it('evaluates at most the cap, nearest the money first', () => {
+  it('hands the event loop back while evaluating a large chain', async () => {
     const expiries = ['2026-10-09', '2026-10-16', '2026-10-23', '2026-10-30', '2026-11-27', '2026-12-25'];
-    const result = search({ contracts: chain({ expiries, strikeStep: 250 }), maxTotalRiskUsd: 100_000 });
+    let immediates = 0;
+    const tick = () => {
+      immediates += 1;
+      if (immediates < 1_000) setImmediate(tick);
+    };
+    setImmediate(tick);
+    const result = await search({ contracts: chain({ expiries, strikeStep: 250 }), maxTotalRiskUsd: 100_000 });
+
+    expect(result.stats.evaluated).toBeGreaterThan(0);
+    expect(immediates).toBeGreaterThan(1);
+  });
+
+  it('evaluates at most the cap, nearest the money first', async () => {
+    const expiries = ['2026-10-09', '2026-10-16', '2026-10-23', '2026-10-30', '2026-11-27', '2026-12-25'];
+    const result = await search({
+      contracts: chain({ expiries, strikeStep: 250 }),
+      maxTotalRiskUsd: 100_000,
+      clock: () => 0,
+    });
 
     expect(result.stats.enumerated).toBeGreaterThan(STRUCTURE_SEARCH_MAX_CANDIDATES);
     expect(result.stats.evaluated + result.stats.failedEvaluations).toBe(STRUCTURE_SEARCH_MAX_CANDIDATES);

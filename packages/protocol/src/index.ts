@@ -450,3 +450,23 @@ export {
   SPOT_CANDLE_UNDERLYINGS,
   type SpotCandleUnderlying,
 } from './spot-candles.js';
+export {
+  VOL_HEATMAP_BUCKET,
+  VOL_HEATMAP_COLUMN_MS,
+  VOL_HEATMAP_CURRENCIES,
+  VOL_HEATMAP_RESOLUTIONS_SEC,
+  VOL_HEATMAP_RETENTION_MS,
+  VOL_HEATMAP_WINDOW_HOURS,
+  type VolHeatmapCell,
+  VolHeatmapCellSchema,
+  type VolHeatmapColumn,
+  VolHeatmapColumnSchema,
+  type VolHeatmapMeta,
+  VolHeatmapMetaSchema,
+  type VolHeatmapQuery,
+  VolHeatmapQuerySchema,
+  type VolHeatmapResponse,
+  VolHeatmapResponseSchema,
+  type VolHeatmapTrade,
+  VolHeatmapTradeSchema,
+} from './vol-heatmap.js';

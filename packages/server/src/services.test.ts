@@ -61,6 +61,16 @@ vi.mock('@oggregator/core', async (importOriginal) => {
         return [];
       }
     },
+    VolHeatmapRuntime: class {
+      start() {}
+      async dispose() {}
+      getColumns() {
+        return [];
+      }
+      getMeta() {
+        return null;
+      }
+    },
     IvHistoryService: class {
       constructor(options: { getSurfaceGrid: (underlying: string) => Promise<unknown> }) {
         getSurfaceGrid = options.getSurfaceGrid;

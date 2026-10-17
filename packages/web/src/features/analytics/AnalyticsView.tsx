@@ -1,6 +1,6 @@
 import { useAppStore } from '@stores/app-store';
 import { AssetPickerButton, Spinner, VenuePickerButton } from '@components/ui';
-import { DvolChart } from '@features/dvol';
+import { DvolChart, DvolHeatmap } from '@features/dvol';
 import { useAllExpiriesChain } from './queries';
 import { VolCurves } from './vol-curves';
 import BreakEvenForecast from './BreakEvenForecast';
@@ -56,6 +56,9 @@ export default function AnalyticsView() {
         />
         <div className={styles.dvolWrap}>
           <DvolChart />
+        </div>
+        <div className={styles.dvolWrap}>
+          <DvolHeatmap />
         </div>
       </div>
     </div>

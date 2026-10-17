@@ -10,6 +10,7 @@ import {
   IvHistoryService,
   interpBasisToTenor,
   MarkHistoryBuffer,
+  VolHeatmapRuntime,
   type RegimeInputs,
   type RegimePersistence,
   RegimeService,
@@ -93,6 +94,9 @@ import { disposeSettlementJob, startSettlementJob } from './settlement-service.j
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
 
 export const dvolService = new DvolService();
+// VOL_HEATMAP=0 disables the DVOL liquidity heatmap and its dedicated Deribit socket + worker.
+export const volHeatmapRuntime =
+  process.env['VOL_HEATMAP'] === '0' ? null : new VolHeatmapRuntime();
 export const spotService = new SpotRuntime();
 export const perpTickerService = new PerpTickerRuntime();
 export const spotCandleService = new SpotCandleService();
@@ -657,6 +661,8 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   } catch (err: unknown) {
     log.warn({ err: String(err) }, 'dealer book service failed');
   }
+
+  volHeatmapRuntime?.start(['BTC', 'ETH']);
 
   // Not awaited: the one-time storage hydrate must not hold up readiness.
   void gexWallHistoryService.start().then(() => log.info('GEX-wall history sampler started'));

@@ -310,7 +310,7 @@ export async function runStructureSearchTool(
     return { ok: false, code: 'no_spot', error: `No ${underlying} spot price is available to search around.` };
   }
 
-  const result = searchStructures({
+  const result = await searchStructures({
     underlying,
     view: args.view,
     contracts,

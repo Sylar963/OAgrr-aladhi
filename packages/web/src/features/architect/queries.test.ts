@@ -29,10 +29,11 @@ describe('hasUsableSpotCandles', () => {
 });
 
 describe('isSpotCandleCurrency', () => {
-  it('recognizes BTC, ETH, and HYPE; rejects others', () => {
-    expect(isSpotCandleCurrency('BTC')).toBe(true);
-    expect(isSpotCandleCurrency('ETH')).toBe(true);
-    expect(isSpotCandleCurrency('HYPE')).toBe(true);
-    expect(isSpotCandleCurrency('SOL')).toBe(false);
+  it('recognizes every charted chain underlying; rejects unknown symbols', () => {
+    for (const u of ['BTC', 'ETH', 'HYPE', 'SOL', 'CL', 'US500', 'XAUT']) {
+      expect(isSpotCandleCurrency(u)).toBe(true);
+    }
+    expect(isSpotCandleCurrency('AAPL')).toBe(false);
+    expect(isSpotCandleCurrency('btc')).toBe(false);
   });
 });

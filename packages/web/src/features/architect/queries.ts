@@ -1,4 +1,5 @@
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { isSpotCandleUnderlying, type SpotCandleUnderlying } from '@oggregator/protocol';
 
 import { chainKeys } from '@features/chain/queries';
 import { fetchJson } from '@lib/http';
@@ -19,11 +20,8 @@ export interface SpotCandlesResponse {
   candles: SpotCandle[];
 }
 
-export const SPOT_CANDLE_CURRENCIES = ['BTC', 'ETH', 'HYPE'] as const;
-export type SpotCandleCurrency = (typeof SPOT_CANDLE_CURRENCIES)[number];
-
-export function isSpotCandleCurrency(value: string): value is SpotCandleCurrency {
-  return (SPOT_CANDLE_CURRENCIES as readonly string[]).includes(value);
+export function isSpotCandleCurrency(value: string): value is SpotCandleUnderlying {
+  return isSpotCandleUnderlying(value);
 }
 
 export function hasUsableSpotCandles(

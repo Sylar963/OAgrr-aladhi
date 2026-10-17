@@ -1,3 +1,4 @@
+import type { SpotCandleUnderlying } from '@oggregator/protocol';
 import { z } from 'zod';
 import { DERIBIT_REST_BASE_URL } from '../feeds/shared/endpoints.js';
 import { feedLogger } from '../utils/logger.js';
@@ -5,6 +6,52 @@ import { feedLogger } from '../utils/logger.js';
 const log = feedLogger('spot-candles');
 
 export type SpotCandleCurrency = 'BTC' | 'ETH' | 'HYPE';
+
+export type SpotCandleSource =
+  | { venue: 'deribit'; instrument: string }
+  | { venue: 'hyperliquid'; coin: string };
+
+const deribit = (instrument: string): SpotCandleSource => ({ venue: 'deribit', instrument });
+const hyperliquid = (coin: string): SpotCandleSource => ({ venue: 'hyperliquid', coin });
+
+// Perp price history used as the spot proxy per chain underlying. Non-crypto
+// symbols come from Hyperliquid HIP-3 markets on the `xyz` dex; US100, US500
+// and the gold pair use the closest index/commodity perp there (verified
+// within ~0.1% of the chain index when added).
+export const SPOT_CANDLE_SOURCES: Record<SpotCandleUnderlying, SpotCandleSource> = {
+  BTC: deribit('BTC-PERPETUAL'),
+  BTC_USDC: deribit('BTC-PERPETUAL'),
+  ETH: deribit('ETH-PERPETUAL'),
+  ETH_USDC: deribit('ETH-PERPETUAL'),
+  HYPE: hyperliquid('HYPE'),
+  AAVE: hyperliquid('AAVE'),
+  ADA: hyperliquid('ADA'),
+  AVAX: hyperliquid('AVAX'),
+  BNB: hyperliquid('BNB'),
+  DOGE: hyperliquid('DOGE'),
+  ENA: hyperliquid('ENA'),
+  KAS: hyperliquid('KAS'),
+  LIT: hyperliquid('LIT'),
+  LTC: hyperliquid('LTC'),
+  NEAR: hyperliquid('NEAR'),
+  ORDI: hyperliquid('ORDI'),
+  SOL: hyperliquid('SOL'),
+  SUI: hyperliquid('SUI'),
+  TRUMP: hyperliquid('TRUMP'),
+  TRX: hyperliquid('TRX'),
+  WLFI: hyperliquid('WLFI'),
+  XRP: hyperliquid('XRP'),
+  ZEC: hyperliquid('ZEC'),
+  CL: hyperliquid('xyz:CL'),
+  META: hyperliquid('xyz:META'),
+  MSTR: hyperliquid('xyz:MSTR'),
+  MU: hyperliquid('xyz:MU'),
+  SPCX: hyperliquid('xyz:SPCX'),
+  US100: hyperliquid('xyz:XYZ100'),
+  US500: hyperliquid('xyz:SP500'),
+  XAU: hyperliquid('xyz:GOLD'),
+  XAUT: hyperliquid('xyz:GOLD'),
+};
 export type SpotCandleResolutionSec = 60 | 300 | 900 | 1800 | 3600 | 14400 | 86400;
 
 export interface SpotCandle {
@@ -118,12 +165,10 @@ export function downsampleCandles(candles: SpotCandle[], bucketMs: number): Spot
 }
 
 /**
- * On-demand fetcher for perpetual klines used as a spot proxy on the chart:
- * Deribit for BTC/ETH, Hyperliquid for HYPE. The frontend layers live chain
+ * On-demand fetcher for perpetual klines used as a spot proxy on the chart,
+ * routed per underlying by SPOT_CANDLE_SOURCES. The frontend layers live chain
  * spot updates onto these historical bars, so this service only needs to keep
- * the history window reasonably fresh per resolution tier. Other underlyings
- * (e.g. SOL) are unsupported here and the caller must handle them as an empty
- * result.
+ * the history window reasonably fresh per resolution tier.
  */
 const PRICE_AT_CACHE_MAX = 5_000;
 const HISTORY_POINTS_PER_CALL = 4_800;
@@ -148,7 +193,7 @@ export class SpotCandleService {
   }
 
   async getCandles(
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
   ): Promise<SpotCandle[]> {
@@ -160,10 +205,7 @@ export class SpotCandleService {
     }
 
     try {
-      const candles =
-        currency === 'HYPE'
-          ? await this.fetchFromHyperliquid(currency, resolutionSec, buckets)
-          : await this.fetchFromDeribit(currency, resolutionSec, buckets);
+      const candles = await this.fetchFromSource(currency, resolutionSec, buckets);
       // Don't cache empty results: a transient Deribit error or schema drift
       // would otherwise lock every requester into "no data" for the full TTL.
       if (candles.length > 0) {
@@ -198,7 +240,7 @@ export class SpotCandleService {
    * history is shorter than requested.
    */
   async getCandleHistory(
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
     resolutionSec: SpotCandleResolutionSec,
     spanMs: number,
   ): Promise<SpotCandle[]> {
@@ -210,11 +252,7 @@ export class SpotCandleService {
       ranges.push({ start: Math.max(start, chunkEnd - chunkMs), end: chunkEnd });
     }
     const chunks = await Promise.all(
-      ranges.map((range) =>
-        currency === 'HYPE'
-          ? this.fetchFromHyperliquid(currency, resolutionSec, 0, range)
-          : this.fetchFromDeribit(currency, resolutionSec, 0, range),
-      ),
+      ranges.map((range) => this.fetchFromSource(currency, resolutionSec, 0, range)),
     );
     const byTs = new Map<number, SpotCandle>();
     for (const chunk of chunks) {
@@ -227,17 +265,14 @@ export class SpotCandleService {
 
   // Close of the 1m candle covering timestampMs, for pricing past fills. Minutes
   // never change once closed, so hits are cached without a TTL.
-  async getPriceAt(currency: SpotCandleCurrency, timestampMs: number): Promise<number | null> {
+  async getPriceAt(currency: SpotCandleUnderlying, timestampMs: number): Promise<number | null> {
     const minuteMs = Math.floor(timestampMs / 60_000) * 60_000;
     const key = `${currency}|${minuteMs}`;
     const cached = this.priceAtCache.get(key);
     if (cached != null) return cached;
 
     const range = { start: minuteMs - 120_000, end: minuteMs + 60_000 };
-    const candles =
-      currency === 'HYPE'
-        ? await this.fetchFromHyperliquid(currency, 60, 0, range)
-        : await this.fetchFromDeribit(currency, 60, 0, range);
+    const candles = await this.fetchFromSource(currency, 60, 0, range);
     let best: SpotCandle | null = null;
     for (const candle of candles) {
       if (candle.timestamp > minuteMs) continue;
@@ -249,8 +284,21 @@ export class SpotCandleService {
     return best.close;
   }
 
+  private fetchFromSource(
+    currency: SpotCandleUnderlying,
+    resolutionSec: SpotCandleResolutionSec,
+    buckets: number,
+    range?: { start: number; end: number },
+  ): Promise<SpotCandle[]> {
+    const source = SPOT_CANDLE_SOURCES[currency];
+    return source.venue === 'hyperliquid'
+      ? this.fetchFromHyperliquid(currency, source.coin, resolutionSec, buckets, range)
+      : this.fetchFromDeribit(currency, source.instrument, resolutionSec, buckets, range);
+  }
+
   private async fetchFromDeribit(
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
+    instrument: string,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
     range?: { start: number; end: number },
@@ -262,7 +310,6 @@ export class SpotCandleService {
 
     const end = range?.end ?? Date.now();
     const start = range?.start ?? end - resolutionSec * 1000 * buckets;
-    const instrument = `${currency}-PERPETUAL`;
     const params = new URLSearchParams({
       instrument_name: instrument,
       start_timestamp: String(start),
@@ -304,7 +351,7 @@ export class SpotCandleService {
    */
   private async fetchDeribitWithRetry(
     url: string,
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
     resolutionSec: SpotCandleResolutionSec,
   ): Promise<Response> {
     const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total
@@ -344,7 +391,8 @@ export class SpotCandleService {
   }
 
   private async fetchFromHyperliquid(
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
+    coin: string,
     resolutionSec: SpotCandleResolutionSec,
     buckets: number,
     range?: { start: number; end: number },
@@ -354,7 +402,7 @@ export class SpotCandleService {
     const body = JSON.stringify({
       type: 'candleSnapshot',
       req: {
-        coin: currency,
+        coin,
         interval: RESOLUTION_TO_HYPERLIQUID[resolutionSec],
         startTime: start,
         endTime: end,
@@ -389,7 +437,7 @@ export class SpotCandleService {
   private async fetchHyperliquidWithRetry(
     url: string,
     body: string,
-    currency: SpotCandleCurrency,
+    currency: SpotCandleUnderlying,
     resolutionSec: SpotCandleResolutionSec,
   ): Promise<Response> {
     const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total

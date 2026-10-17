@@ -273,3 +273,41 @@ describe('SpotCandleService — Hyperliquid (HYPE)', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('SpotCandleService — source routing', () => {
+  let svc: SpotCandleService;
+  const fetchSpy = vi.fn();
+
+  beforeEach(() => {
+    svc = new SpotCandleService();
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(async (url: string) =>
+      url.includes('hyperliquid') ? jsonResponse([]) : jsonResponse(makeKlinesPayload([1])),
+    );
+  });
+  afterEach(() => {
+    svc.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['SOL', 'SOL'],
+    ['CL', 'xyz:CL'],
+    ['US100', 'xyz:XYZ100'],
+    ['US500', 'xyz:SP500'],
+    ['XAUT', 'xyz:GOLD'],
+  ] as const)('requests %s from Hyperliquid as %s', async (underlying, coin) => {
+    await svc.getCandles(underlying, 3600, 24);
+    const [url, init] = fetchSpy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('https://api.hyperliquid.xyz/info');
+    expect(JSON.parse(init.body as string).req.coin).toBe(coin);
+  });
+
+  it('charts the USDC-settled BTC chain from the BTC perpetual on Deribit', async () => {
+    await svc.getCandles('BTC_USDC', 3600, 24);
+    const url = fetchSpy.mock.calls[0]![0] as string;
+    expect(url).toContain('get_tradingview_chart_data');
+    expect(url).toContain('instrument_name=BTC-PERPETUAL');
+  });
+});

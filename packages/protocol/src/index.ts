@@ -445,3 +445,8 @@ export {
   type TradfiVolRank,
   TradfiVolRankSchema,
 } from './tradfi-vol-history.js';
+export {
+  isSpotCandleUnderlying,
+  SPOT_CANDLE_UNDERLYINGS,
+  type SpotCandleUnderlying,
+} from './spot-candles.js';

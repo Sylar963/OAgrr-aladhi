@@ -133,13 +133,15 @@ export default function EasyPayoffChart({
   );
   const spec = easyCandleSpec(timeframe, specLegs);
   const available = isSpotCandleCurrency(underlying);
-  const { data: candleData, isLoading } = useSpotCandles(
+  const { data: candleData, isLoading, isError } = useSpotCandles(
     underlying,
     spec.resolutionSec,
     spec.buckets,
     spec.refetchIntervalMs,
   );
   const deadlineSec = Math.floor(expiryMs / 1000);
+  const noHistory =
+    !available || (!isLoading && (isError || candleData?.candles.length === 0));
 
   useEffect(() => {
     const container = containerRef.current;
@@ -389,9 +391,10 @@ export default function EasyPayoffChart({
           {spot != null && <span className={styles.toolSpot}>{underlying} {fmtUsd(spot)}</span>}
         </div>
 
-        {!available && (
+        {noHistory && (
           <div className={styles.chartNotice}>
-            Price history isn’t available for {underlying}. Your trade summary below still works.
+            Price history isn’t available for {underlying} right now. Your trade summary below
+            still works.
           </div>
         )}
         {available && isLoading && (
@@ -400,7 +403,7 @@ export default function EasyPayoffChart({
           </div>
         )}
 
-        {legs.length === 0 && available && !isLoading && (
+        {legs.length === 0 && !noHistory && !isLoading && (
           <div className={styles.dropHint}>
             <div className={styles.dropHintTitle}>Drag an option here</div>
             <div className={styles.dropHintText}>

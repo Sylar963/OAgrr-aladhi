@@ -27,6 +27,7 @@ src/
     surface.ts       GET /api/surface?underlying=BTC
     stats.ts         GET /api/stats?underlying=BTC
     dvol-history.ts  GET /api/dvol-history?currency=BTC
+    vol-heatmap.ts   GET /api/vol-heatmap?currency=BTC&hours=6&resolutionSec=60&since=ms (resting vega by IV bucket on Deribit DVOL-window books; in-memory 24h)
     iv-history.ts    GET /api/iv-history?underlying=BTC&window=90d
     vol-richness.ts  GET /api/vol-richness?underlying=BTC (IV vs forecast, cone, intraday z)
     spot-candles.ts  GET /api/spot-candles?underlying=BTC
@@ -61,4 +62,5 @@ src/
 
 - **Chain browser transport is WS-first** — `ws-chain.ts` streams from a shared `ChainRuntime` that coalesces venue deltas and pushes enriched strike patches every 500ms (GEX at most every 2s). It does not forward raw exchange ticks one-by-one. Frame bodies are serialized once per runtime event and shared across sessions.
 - **Chain patches are field-level diffs for clients that opt in** — a subscribe with `patchFormat: 'diff'` gets `diff` frames carrying only the venues and fields that changed (`ChainRuntimeDeltaEvent.diffPatch()`, memoized per event). Without the field, clients keep receiving whole-strike `delta` frames, so a stale cached SPA still works. On live BTC 0DTE frames, diffs were 5.9× smaller (387KB → 65KB).
+- **`VOL_HEATMAP=0` disables the DVOL liquidity heatmap** — otherwise `services.ts` starts `VolHeatmapRuntime`, which spawns its own worker thread with a dedicated Deribit socket.
 - **`FEED_WORKER=1` moves chain venue ingest off the main thread** — `adapters.ts` then registers `FeedWorkerHost` proxies instead of in-process adapters. Routes and runtimes are unchanged. Unset it to roll back.

@@ -75,6 +75,8 @@ export default function DvolHeatmap() {
   const heatRef = useRef<HeatApi | null>(null);
   const dvolRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bucketPctRef = useRef(0.25);
+  const fittedViewRef = useRef<string | null>(null);
+  const viewKey = `${currency}:${window.label}`;
 
   useEffect(() => {
     const container = chartRef.current;
@@ -148,12 +150,13 @@ export default function DvolHeatmap() {
         .filter((c) => c.dvol != null)
         .map((c) => ({ time: (c.t / 1000) as UTCTimestamp, value: c.dvol! * 100 })),
     );
-  }, [columns, bucketPct, side]);
-
-  useEffect(() => {
-    chartApiRef.current?.timeScale().applyOptions({ secondsVisible: window.resolutionSec < 60 });
-    chartApiRef.current?.timeScale().fitContent();
-  }, [window, currency]);
+    // Fit once per currency/window, when its first data lands, so polls don't reset the user's zoom.
+    if (columns.length > 0 && fittedViewRef.current !== viewKey) {
+      fittedViewRef.current = viewKey;
+      chartApiRef.current?.timeScale().applyOptions({ secondsVisible: window.resolutionSec < 60 });
+      chartApiRef.current?.timeScale().fitContent();
+    }
+  }, [columns, bucketPct, side, viewKey, window.resolutionSec]);
 
   const last = columns.at(-1);
   const { bid: bidWall, ask: askWall } = walls(last, bucketPct);

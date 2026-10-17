@@ -63,18 +63,19 @@ export function weightedIvRange(
 
 const STOPS: ReadonlyArray<readonly [number, readonly [number, number, number]]> = [
   [0, [8, 20, 48]],
-  [0.25, [21, 101, 192]],
-  [0.5, [38, 198, 218]],
-  [0.75, [255, 213, 79]],
+  [0.3, [21, 101, 192]],
+  [0.55, [38, 198, 218]],
+  [0.8, [255, 213, 79]],
   [1, [255, 255, 255]],
 ];
-const LOG_GAIN = 20;
+// Below 1, so thin levels stay visible without the dense core band saturating to white.
+const GAMMA = 0.75;
 
-/** Dark blue → cyan → yellow → white, log-compressed so thin levels stay visible. */
+/** Dark blue → cyan → yellow → white. */
 export function heatColor(ratio: number): string | null {
   const r = Math.min(1, Math.max(0, ratio));
-  const t = Math.log1p(LOG_GAIN * r) / Math.log1p(LOG_GAIN);
-  if (t < 0.04) return null;
+  const t = r ** GAMMA;
+  if (t < 0.03) return null;
   let i = 1;
   while (i < STOPS.length - 1 && STOPS[i]![0] < t) i++;
   const [t0, c0] = STOPS[i - 1]!;

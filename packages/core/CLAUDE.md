@@ -18,7 +18,7 @@ src/
   feeds/{venue}/    ws-client.ts, codec.ts, planner.ts, state.ts, health.ts, types.ts
   feeds/shared/     BaseAdapter, SdkBaseAdapter, JsonRpcWsClient, TopicWsClient
   portfolio/        position store, greeks aggregation, scenarios, pnl curve
-  runtime/          chain, spot, trades, block-trades, portfolio
+  runtime/          chain, spot, trades, block-trades, portfolio, vol-heatmap
   core/             canonical types, aggregator, enrichment, registry, symbol
   services/         dvol only
   types/common.ts   VenueId, OptionRight, DataSource, UnixMs
@@ -47,4 +47,5 @@ src/
 - **Feed liveness is checked at two levels** — the transport watchdog (no inbound frame for 5 min) and a quote watchdog in `SdkBaseAdapter` (socket alive but no quotes for 3 min while subscriptions exist). Heartbeat replies keep transport activity fresh on a silent socket, so the quote check is the one that catches it on most venues. Deribit and Gate.io opt out (`quoteStalenessThresholdMs = null`) because they run finer-grained checks of their own.
 - **Every runtime socket goes through `TopicWsClient` or `JsonRpcWsClient`** — the trade tape, block trades and the Coincall index stream included. The shared clients carry the handshake timeout, stable-session backoff reset, optional idle timeout and the safe close (`utils/ws.ts`). Closing a CONNECTING socket with no `'error'` listener throws and kills the process.
 - **One handler object per venue in the coordinator** — adapters dedupe delta fan-out by handler identity. Passing a fresh object per request delivered every delta batch once per active request.
+- **Vol heatmap runs on its own worker and Deribit socket** — `runtime/vol-heatmap/` streams top-10 option books (`book.*.none.10.agg2`) for the DVOL window (two expiries around 30d, OTM strikes within ±0.5σ), inverts each level to IV against the expiry forward from the ATM call's ticker, and weights by vega. It is kept off the chain feed's Deribit session because many fast channels there once made Deribit's data go stale. Columns live only in memory (24h); Deribit has no historical books to backfill.
 - **Optional feed worker** — `feeds/worker/` hosts the chain adapters on a worker thread behind `WorkerVenueAdapter` proxies (`FEED_WORKER=1` in the server). The worker batches deltas and quote-recorder marks every 50ms. A crashed worker is respawned, and markets, recorders and subscriptions are replayed.

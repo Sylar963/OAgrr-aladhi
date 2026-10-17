@@ -126,6 +126,7 @@ export function downsampleCandles(candles: SpotCandle[], bucketMs: number): Spot
  * result.
  */
 const PRICE_AT_CACHE_MAX = 5_000;
+const HISTORY_POINTS_PER_CALL = 4_800;
 
 export class SpotCandleService {
   private readonly cache = new Map<string, CacheEntry>();
@@ -189,6 +190,39 @@ export class SpotCandleService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Candles over `spanMs` ending now, paged because Deribit returns at most ~5000 points
+   * per call (newest first). Hyperliquid only keeps its latest 5000 candles, so HYPE
+   * history is shorter than requested.
+   */
+  async getCandleHistory(
+    currency: SpotCandleCurrency,
+    resolutionSec: SpotCandleResolutionSec,
+    spanMs: number,
+  ): Promise<SpotCandle[]> {
+    const end = Date.now();
+    const start = end - spanMs;
+    const chunkMs = resolutionSec * 1000 * HISTORY_POINTS_PER_CALL;
+    const ranges: { start: number; end: number }[] = [];
+    for (let chunkEnd = end; chunkEnd > start; chunkEnd -= chunkMs) {
+      ranges.push({ start: Math.max(start, chunkEnd - chunkMs), end: chunkEnd });
+    }
+    const chunks = await Promise.all(
+      ranges.map((range) =>
+        currency === 'HYPE'
+          ? this.fetchFromHyperliquid(currency, resolutionSec, 0, range)
+          : this.fetchFromDeribit(currency, resolutionSec, 0, range),
+      ),
+    );
+    const byTs = new Map<number, SpotCandle>();
+    for (const chunk of chunks) {
+      for (const candle of chunk) {
+        if (candle.timestamp >= start) byTs.set(candle.timestamp, candle);
+      }
+    }
+    return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
   }
 
   // Close of the 1m candle covering timestampMs, for pricing past fills. Minutes

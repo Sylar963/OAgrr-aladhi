@@ -149,6 +149,37 @@ describe('SpotCandleService — stale fallback on upstream failure', () => {
   it('downsampleCandles returns empty for empty input', () => {
     expect(downsampleCandles([], 14_400_000)).toEqual([]);
   });
+
+  it('pages long history under the per-call point cap and merges chunks in order', async () => {
+    const hourMs = 3_600_000;
+    const now = Date.now();
+    fetchSpy.mockImplementation(async (url: string) => {
+      const params = new URL(url).searchParams;
+      const start = Number(params.get('start_timestamp'));
+      const end = Number(params.get('end_timestamp'));
+      const first = Math.ceil(start / hourMs) * hourMs;
+      const ticks: number[] = [];
+      for (let ts = first; ts <= end; ts += hourMs) ticks.push(ts);
+      const values = ticks.map((ts) => ts / hourMs);
+      return jsonResponse({
+        result: { status: 'ok', ticks, open: values, high: values, low: values, close: values },
+      });
+    });
+
+    const candles = await svc.getCandleHistory('BTC', 3600, 730 * 24 * hourMs);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    for (const [url] of fetchSpy.mock.calls as [string][]) {
+      const params = new URL(url).searchParams;
+      const span = Number(params.get('end_timestamp')) - Number(params.get('start_timestamp'));
+      expect(span / hourMs).toBeLessThanOrEqual(5_000);
+    }
+    const timestamps = candles.map((c) => c.timestamp);
+    expect(new Set(timestamps).size).toBe(timestamps.length);
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+    expect(timestamps[0]).toBeGreaterThanOrEqual(now - 730 * 24 * hourMs);
+    expect(candles.length).toBeGreaterThanOrEqual(730 * 24 - 1);
+  });
 });
 
 describe('SpotCandleService — Hyperliquid (HYPE)', () => {

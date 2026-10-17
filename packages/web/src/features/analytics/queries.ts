@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { BreakEvenResponse } from '@oggregator/protocol';
+import type { BreakEvenResponse, TimeAtPriceResponse } from '@oggregator/protocol';
 import { fetchJson } from '@lib/http';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { useExpiries } from '@features/chain/queries';
@@ -45,5 +45,21 @@ export function useBreakEven(underlying: string, expiry: string | null, enabled:
     retry: false,
     placeholderData: (prev: BreakEvenResponse | undefined) =>
       prev?.underlying === underlying && prev.expiry === expiry ? prev : undefined,
+  });
+}
+
+export function useTimeAtPrice(underlying: string, lookbackDays: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['time-at-price', underlying, lookbackDays],
+    queryFn: () =>
+      fetchJson<TimeAtPriceResponse>(
+        `/time-at-price?underlying=${underlying}&lookbackDays=${lookbackDays}`,
+      ),
+    enabled,
+    staleTime: 10 * 60_000,
+    refetchInterval: 15 * 60_000,
+    retry: false,
+    placeholderData: (prev: TimeAtPriceResponse | undefined) =>
+      prev?.underlying === underlying ? prev : undefined,
   });
 }

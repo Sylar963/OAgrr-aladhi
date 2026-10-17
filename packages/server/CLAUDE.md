@@ -31,6 +31,7 @@ src/
     vol-richness.ts  GET /api/vol-richness?underlying=BTC (IV vs forecast, cone, intraday z)
     spot-candles.ts  GET /api/spot-candles?underlying=BTC
     break-even.ts    GET /api/break-even?underlying=BTC&expiry=2026-11-27 (Deribit break-evens: hourly recorded history, projection, N(d2) vs historical frequency)
+    time-at-price.ts GET /api/time-at-price?underlying=BTC&lookbackDays=730 (hourly bars per price level + mean 7d Parkinson vol per price bin; paged Deribit 1h history)
     flow.ts          GET /api/flow?underlying=BTC
     block-flow.ts    GET /api/block-flow?underlying=BTC
     block-strike-buckets.ts  GET /api/block-flow/strike-buckets?underlying=BTC&resolution=3600&start=ISO (blocks by candle × strike × expiry)

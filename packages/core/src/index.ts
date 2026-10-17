@@ -190,6 +190,15 @@ export {
 } from './services/spot-candles.js';
 export { realizedVol, rollingRealizedVol, type RealizedVolPoint } from './services/realized-vol.js';
 export {
+  buildTimeAtPrice,
+  niceStep,
+  type TimeAtPriceCandle,
+  type TimeAtPriceLevel,
+  type TimeAtPriceOptions,
+  type TimeAtPriceProfile,
+  type VolByPriceLevel,
+} from './services/time-at-price.js';
+export {
   black76Delta,
   type BreakEvenCandidate,
   breakEvenHistory,

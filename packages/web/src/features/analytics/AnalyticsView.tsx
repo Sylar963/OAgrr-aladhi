@@ -10,6 +10,7 @@ import TopPositions from './TopPositions';
 import ExpiryCalendar from './ExpiryCalendar';
 import styles from './AnalyticsView.module.css';
 import { OiByStrikeCard } from './oi-by-strike';
+import { TimeAtPrice } from './time-at-price';
 
 export default function AnalyticsView() {
   const underlying = useAppStore((s) => s.underlying);
@@ -47,6 +48,7 @@ export default function AnalyticsView() {
         <ExpiryCalendar chains={chains} spotPrice={spotPrice} />
         <VolCurves chains={chains} spotPrice={spotPrice} />
         <BreakEvenForecast underlying={underlying} />
+        <TimeAtPrice underlying={underlying} />
         <OiByStrikeCard
           chains={chains}
           spotPrice={spotPrice}

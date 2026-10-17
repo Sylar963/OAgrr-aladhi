@@ -376,6 +376,15 @@ export {
   BreakEvenResponseSchema,
 } from './break-even.js';
 export {
+  TIME_AT_PRICE_LOOKBACK_DAYS,
+  TIME_AT_PRICE_RESOLUTION_SEC,
+  TIME_AT_PRICE_UNDERLYINGS,
+  type TimeAtPriceQuery,
+  TimeAtPriceQuerySchema,
+  type TimeAtPriceResponse,
+  TimeAtPriceResponseSchema,
+} from './time-at-price.js';
+export {
   CHAT_GLOBAL_ROOM,
   CHAT_MESSAGE_MAX_CHARS,
   type ChatClientMessage,

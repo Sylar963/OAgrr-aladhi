@@ -31,6 +31,7 @@ import { spotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
 import { statsRoute } from './stats.js';
 import { surfaceRoute } from './surface.js';
+import { timeAtPriceRoute } from './time-at-price.js';
 import { underlyingsRoute } from './underlyings.js';
 import { venuesRoute } from './venues.js';
 import { volRichnessRoute } from './vol-richness.js';
@@ -73,6 +74,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(gexAllExpiriesRoute, { prefix: '/api' });
   app.register(gexWallHistoryRoute, { prefix: '/api' });
   app.register(breakEvenRoute, { prefix: '/api' });
+  app.register(timeAtPriceRoute, { prefix: '/api' });
   app.register(surfaceRoute, { prefix: '/api' });
   app.register(statsRoute, { prefix: '/api' });
   app.register(flowRoute, { prefix: '/api' });

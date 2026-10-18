@@ -6,7 +6,13 @@ import type {
   EstimatedFees,
 } from './types.js';
 import { type BookLookup, type DealerPosition, dealerGammaContracts } from './dealer-book.js';
-import { computeGexProfile, GEX_PER_PCT_MOVE, type GexProfilePoint } from './gex-profile.js';
+import {
+  bsGamma,
+  computeGexProfile,
+  GEX_PER_PCT_MOVE,
+  type GexProfilePoint,
+  gexTimeToExpiryYears,
+} from './gex-profile.js';
 
 // 2 vol points — avoids noise-driven flips on nearly-flat surfaces
 const TERM_STRUCTURE_THRESHOLD = 0.02;
@@ -641,14 +647,22 @@ export function computeChainStats(
  * long-calls/short-puts prior. Each venue contribution uses that venue's own
  * spot/index reference when available. This avoids anchoring multi-venue GEX
  * to whichever venue happened to arrive first.
+ *
+ * With `expiryMs`, gamma is re-priced from each quote's mark IV. Deribit rounds
+ * greeks to 5 decimals while OTM BTC gammas are ~1e-5, so its reported gamma
+ * on the largest open-interest strikes is off by 25–70% or reads exactly 0.
+ * The venue gamma is used only when a quote has no mark IV.
  */
 export function computeGex(
   rows: ComparisonRow[],
   strikes: EnrichedStrike[],
   fallbackSpotPrice: number,
   bookLookup?: BookLookup,
+  expiryMs?: number,
+  nowMs: number = Date.now(),
 ): GexStrike[] {
   const result: GexStrike[] = [];
+  const tYears = expiryMs != null ? gexTimeToExpiryYears(expiryMs, nowMs) : null;
 
   const rowByStrike = new Map<number, ComparisonRow>(rows.map((r) => [r.strike, r]));
 
@@ -662,17 +676,21 @@ export function computeGex(
       const side = s[right];
       for (const venueKey of Object.keys(side.venues) as VenueId[]) {
         const vq = side.venues[venueKey];
-        if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
-          continue;
-        }
+        if (vq === undefined || vq.openInterest === null) continue;
         const original = row?.[right][venueKey];
         const size = original?.contractSize ?? 1;
         const venueSpot =
           original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
+        const forward = original?.quote.underlyingPriceUsd ?? venueSpot;
+        const gamma =
+          tYears != null && vq.markIv != null && vq.markIv > 0 && forward > 0
+            ? bsGamma(forward, s.strike, vq.markIv, tYears)
+            : vq.gamma;
+        if (gamma === null) continue;
         const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
         const qty = dealerGammaContracts(pos, vq.openInterest, right);
         const contrib =
-          (qty * vq.gamma * size * venueSpot * venueSpot * GEX_PER_PCT_MOVE) / 1_000_000;
+          (qty * gamma * size * venueSpot * venueSpot * GEX_PER_PCT_MOVE) / 1_000_000;
         netGex += contrib;
         grossGex += Math.abs(contrib);
         flowGex += Math.abs(contrib) * flowFraction(pos);
@@ -1019,6 +1037,7 @@ export function buildEnrichedChain(
   rows: ComparisonRow[],
   venueChains: VenueOptionChain[],
   bookLookup?: BookLookup,
+  options: { repriceGamma?: boolean } = {},
 ): EnrichedChainResponse {
   const strikes = rows.map(enrichComparisonRow);
   const stats = computeChainStats(strikes, venueChains);
@@ -1026,14 +1045,15 @@ export function buildEnrichedChain(
   const dte = computeDte(expiry, expiryTs);
 
   const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-  const gex = computeGex(rows, strikes, spotPrice, bookLookup);
-  const gexProfile = computeGexProfile(
+  const expiryMs = expiryTs ?? new Date(expiry + 'T08:00:00Z').getTime();
+  const gex = computeGex(
     rows,
     strikes,
     spotPrice,
-    expiryTs ?? new Date(expiry + 'T08:00:00Z').getTime(),
     bookLookup,
+    options.repriceGamma === false ? undefined : expiryMs,
   );
+  const gexProfile = computeGexProfile(rows, strikes, spotPrice, expiryMs, bookLookup);
 
   return {
     underlying,

@@ -170,6 +170,35 @@ describe('computeGexProfile', () => {
   });
 });
 
+describe('computeGex with an expiry', () => {
+  it('re-prices gamma from mark IV instead of trusting rounded venue greeks', () => {
+    const { rows, strikes } = fixture();
+    const exact = computeGex(rows, strikes, SPOT);
+    // Deribit sends gamma rounded to 5 decimals: OTM BTC strikes read 1e-5 or 0.
+    for (const s of strikes) {
+      for (const q of Object.values({ ...s.call.venues, ...s.put.venues })) {
+        if (q?.gamma != null) q.gamma = Math.round(q.gamma * 1e5) / 1e5;
+      }
+    }
+    const rounded = computeGex(rows, strikes, SPOT);
+    const repriced = computeGex(rows, strikes, SPOT, undefined, EXPIRY, NOW);
+    expect(rounded.some((g, i) => Math.abs(g.gexUsdMillions / exact[i]!.gexUsdMillions - 1) > 0.1)).toBe(true);
+    repriced.forEach((g, i) => expect(g.gexUsdMillions).toBeCloseTo(exact[i]!.gexUsdMillions, 9));
+  });
+
+  it('falls back to the venue gamma when a quote has no mark IV', () => {
+    const { rows, strikes } = fixture();
+    for (const s of strikes) {
+      for (const q of Object.values({ ...s.call.venues, ...s.put.venues })) {
+        if (q) q.markIv = null;
+      }
+    }
+    const withExpiry = computeGex(rows, strikes, SPOT, undefined, EXPIRY, NOW);
+    const venueOnly = computeGex(rows, strikes, SPOT);
+    expect(withExpiry).toEqual(venueOnly);
+  });
+});
+
 describe('combineGexProfile', () => {
   it('sums profiles pointwise in move order', () => {
     expect(

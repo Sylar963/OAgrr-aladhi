@@ -199,5 +199,9 @@ export function buildChain(
     : undefined;
 
   const comparison = buildComparisonChain(underlying, expiry, [venueChain]);
-  return buildEnrichedChain(underlying, expiry, comparison.rows, [venueChain], lookup);
+  // TastyTrade greeks are unrounded and model trading-day time; re-pricing them with a
+  // calendar-time Black-Scholes would understate gamma by ~20%.
+  return buildEnrichedChain(underlying, expiry, comparison.rows, [venueChain], lookup, {
+    repriceGamma: false,
+  });
 }

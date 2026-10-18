@@ -291,3 +291,20 @@ from the ring buffer. Resets on restart — accepted degraded mode.
 - "Dealer = passive side" is an assumption; genuine dealer-initiated or
   inter-dealer aggressive flow is misattributed. This is inherent to all
   flow-based dealer-positioning models without a real positioning feed.
+
+## Revision 2026-10-18
+
+- **Flow source:** interval flow comes from `DealerFlowTape` (`packages/server/src/dealer-flow-tape.ts`),
+  which records every live print for 6 h via `TradeRuntime.subscribe`. The shared 2 000-print ring
+  buffer held ~50 min of BTC and lost coverage under bursts. After a restart the gap is backfilled
+  from the ingest worker's local SQLite spool, never Postgres (Neon must stay asleep). Coverage is
+  explicit (`coveredFrom`); an interval opening before it falls back to the naive prior.
+- **Block trades** are included with their taker side: every ingested venue prints blocks from an
+  RFQ where the taker is the requester.
+- **Units:** GEX is $M per 1% spot move (`γ × S² × 0.01`); earlier values were per 100% move.
+- **Gamma:** re-priced from mark IV (Deribit greeks are rounded to 5 decimals).
+- **Gamma flip:** zero crossing of total dealer GEX across a ±20% spot grid (`gexProfile`), replacing
+  the cumulative-by-strike proxy, which could sit above spot while dealers were long gamma at spot.
+- **Measured state:** ~17% of BTC gross gamma is flow-attributed; the rest is open interest that
+  predates the book. The UI shows this share per wall and fades bars by it.
+

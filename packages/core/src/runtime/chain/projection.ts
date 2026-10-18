@@ -152,14 +152,10 @@ export class ChainProjection {
     if (options.includeGex === true) {
       const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
       const rows = [...this.comparisonRows.values()];
-      patch.gex = computeGex(rows, strikes, spotPrice, this.bookLookup);
-      patch.gexProfile = computeGexProfile(
-        rows,
-        strikes,
-        spotPrice,
-        pickExpiryTs(venueChains) ?? new Date(this.expiry + 'T08:00:00Z').getTime(),
-        this.bookLookup,
-      );
+      const expiryMs =
+        pickExpiryTs(venueChains) ?? new Date(this.expiry + 'T08:00:00Z').getTime();
+      patch.gex = computeGex(rows, strikes, spotPrice, this.bookLookup, expiryMs);
+      patch.gexProfile = computeGexProfile(rows, strikes, spotPrice, expiryMs, this.bookLookup);
     }
 
     return {

@@ -27,10 +27,14 @@ const YEAR_MS = 365 * 86_400_000;
 const MIN_TTE_MS = 3_600_000;
 const INV_SQRT_2PI = 1 / Math.sqrt(2 * Math.PI);
 
-function bsGamma(forward: number, strike: number, iv: number, tYears: number): number {
+export function bsGamma(forward: number, strike: number, iv: number, tYears: number): number {
   const volSqrtT = iv * Math.sqrt(tYears);
   const d1 = (Math.log(forward / strike) + 0.5 * volSqrtT * volSqrtT) / volSqrtT;
   return (INV_SQRT_2PI * Math.exp(-0.5 * d1 * d1)) / (forward * volSqrtT);
+}
+
+export function gexTimeToExpiryYears(expiryMs: number, nowMs: number): number {
+  return Math.max(expiryMs - nowMs, MIN_TTE_MS) / YEAR_MS;
 }
 
 /**
@@ -47,7 +51,7 @@ export function computeGexProfile(
   nowMs: number = Date.now(),
 ): GexProfilePoint[] {
   const totals = new Float64Array(GEX_PROFILE_MOVES.length);
-  const tYears = Math.max(expiryMs - nowMs, MIN_TTE_MS) / YEAR_MS;
+  const tYears = gexTimeToExpiryYears(expiryMs, nowMs);
   const rowByStrike = new Map<number, ComparisonRow>(rows.map((r) => [r.strike, r]));
 
   for (const s of strikes) {
@@ -56,7 +60,7 @@ export function computeGexProfile(
       const side = s[right];
       for (const venueKey of Object.keys(side.venues) as VenueId[]) {
         const vq = side.venues[venueKey];
-        if (vq === undefined || vq.openInterest === null || vq.gamma === null) continue;
+        if (vq === undefined || vq.openInterest === null) continue;
         if (vq.markIv == null || !(vq.markIv > 0)) continue;
         const original = row?.[right][venueKey];
         const venueSpot =

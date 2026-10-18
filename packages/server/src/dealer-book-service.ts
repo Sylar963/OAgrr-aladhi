@@ -3,6 +3,7 @@ import {
   type BookLookup,
   bootstrapNaivePosition,
   type DealerPosition,
+  OI_EPSILON,
   type OiSnapshotInput,
   type VenueId,
   type VenueOptionChain,
@@ -18,6 +19,7 @@ import type { IntervalFlow } from './dealer-flow-tape.js';
 
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 const SNAPSHOT_RETENTION_MS = 35 * 24 * 60 * 60 * 1000;
+const OI_LAG_LOOKBACK_MS = 30 * 60 * 1000;
 
 export interface DealerBookServiceOptions {
   underlyings: string[];
@@ -269,6 +271,17 @@ export class DealerBookService {
             prior.lastSnapshotTs,
             tickTs,
           );
+          // Venues publish OI minutes after the trades that moved it, so an opening can land in
+          // the interval after its prints (5% of OKX and over half of Derive increments).
+          if (!flow.hasFlow && input.openInterest - prior.lastOi > OI_EPSILON) {
+            flow = await this.opts.fetchIntervalFlow(
+              input.venue,
+              contract.exchangeSymbol,
+              underlying,
+              prior.lastSnapshotTs - OI_LAG_LOOKBACK_MS,
+              tickTs,
+            );
+          }
         } catch (err) {
           this.opts.log.warn(
             { venue: input.venue, symbol: input.symbol, err: String(err) },

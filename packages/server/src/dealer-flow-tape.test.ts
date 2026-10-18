@@ -133,6 +133,32 @@ describe('DealerFlowTape', () => {
     expect(tape.coveredFrom('BTC')).toBe(7_000);
   });
 
+  it('drops a venue\'s flow for intervals that touch a stream outage', () => {
+    let now = 10_000;
+    const tape = new DealerFlowTape(['BTC'], 100_000, () => now);
+    tape.markRecording('BTC', 0);
+    tape.record('BTC', trade('C', 'buy', 1, 1_500));
+    tape.record('BTC', trade('C', 'buy', 1, 5_500));
+    tape.record('BTC', trade('C', 'buy', 1, 5_500, 'okx'));
+    tape.setStreamState('BTC', 'deribit', true, 0, 1_000);
+    tape.setStreamState('BTC', 'deribit', false, 2_000, 2_500);
+    tape.setStreamState('BTC', 'deribit', false, 2_500, 3_000);
+    tape.setStreamState('BTC', 'deribit', true, 3_000, 3_500);
+    const lookup = tape.lookup('BTC');
+    expect(lookup('deribit', 'C', 1_000, 1_900)).toEqual({ netFlow: 1, hasFlow: true });
+    expect(lookup('deribit', 'C', 1_000, 6_000).hasFlow).toBe(false);
+    expect(lookup('deribit', 'C', 3_500, 6_000)).toEqual({ netFlow: 1, hasFlow: true });
+    expect(lookup('okx', 'C', 1_000, 6_000)).toEqual({ netFlow: 1, hasFlow: true });
+  });
+
+  it('treats a venue that is still down as a gap up to now', () => {
+    const tape = new DealerFlowTape(['BTC'], 100_000, () => 10_000);
+    tape.markRecording('BTC', 0);
+    tape.record('BTC', trade('C', 'buy', 1, 9_000));
+    tape.setStreamState('BTC', 'deribit', false, 8_000, 8_100);
+    expect(tape.lookup('BTC')('deribit', 'C', 5_000, 10_000).hasFlow).toBe(false);
+  });
+
   describe('backfill', () => {
     function record(ts: number, side: 'buy' | 'sell', contracts: number): PersistedTradeRecord {
       return {
@@ -195,6 +221,18 @@ describe('DealerFlowTape', () => {
         netFlow: records.length - 1,
         hasFlow: true,
       });
+    });
+
+    it('starts coverage after a quiet stretch where ingest was down', async () => {
+      const MIN = 60_000;
+      const now = 300 * MIN;
+      const tape = new DealerFlowTape(['BTC'], 1_000 * MIN, () => now);
+      tape.markRecording('BTC', 200 * MIN);
+      const records = [record(10 * MIN, 'buy', 1)];
+      for (let t = 100 * MIN; t < 140 * MIN; t += MIN) records.push(record(t, 'buy', 1));
+      for (let t = 170 * MIN; t < 200 * MIN; t += MIN) records.push(record(t, 'buy', 1));
+      await tape.backfill('BTC', spool(records), 100 * MIN);
+      expect(tape.coveredFrom('BTC')).toBe(170 * MIN);
     });
 
     it('leaves coverage alone when the spool was flushed past the gap start', async () => {

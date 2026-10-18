@@ -2,6 +2,7 @@ import type { PersistedGexWallSnapshot } from '@oggregator/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildGexWallPoint,
+  GAMMA_FLIP_PROFILE_SINCE_MS,
   GEX_WALL_SLOT_MS,
   GexWallHistoryService,
   type GexWallInputs,
@@ -143,8 +144,9 @@ describe('GexWallHistoryService', () => {
 
     await service.start();
     expect(store.loadSince).toHaveBeenCalledTimes(1);
+    // Synthetic clock sits before the flip-method cutover, so the stored flip is dropped.
     expect(service.query('BTC', 30).points).toEqual([
-      { ts: now - 2 * DAY_MS, spot: 2, callWall: 3, putWall: 1, gammaFlip: 2 },
+      { ts: now - 2 * DAY_MS, spot: 2, callWall: 3, putWall: 1, gammaFlip: null },
     ]);
     expect(service.query('BTC', 90).points).toHaveLength(2);
 
@@ -159,5 +161,30 @@ describe('GexWallHistoryService', () => {
     service.dispose();
     await vi.advanceTimersByTimeAsync(2 * SLOT);
     expect(getInputs).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('flip method cutover', () => {
+  it('drops stored flips from the cumulative-proxy era and keeps later ones', async () => {
+    const now = GAMMA_FLIP_PROFILE_SINCE_MS + DAY_MS;
+    const row = (slotTs: number, gammaFlip: number): PersistedGexWallSnapshot => ({
+      underlying: 'BTC',
+      slotTs: new Date(slotTs),
+      spot: 80_000,
+      callWall: 90_000,
+      putWall: 78_000,
+      gammaFlip,
+    });
+    const { service } = makeService(
+      async () => ({ spotPrice: null, gex: [] }),
+      () => now,
+      [row(GAMMA_FLIP_PROFILE_SINCE_MS - SLOT, 86_500), row(GAMMA_FLIP_PROFILE_SINCE_MS, 80_100)],
+    );
+    await service.start();
+    service.dispose();
+    expect(service.query('BTC', 2).points.map((p) => [p.callWall, p.gammaFlip])).toEqual([
+      [90_000, null],
+      [90_000, 80_100],
+    ]);
   });
 });

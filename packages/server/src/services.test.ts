@@ -51,6 +51,9 @@ vi.mock('@oggregator/core', async (importOriginal) => {
       subscribe() {
         return () => {};
       }
+      getHealth() {
+        return [];
+      }
     },
     BlockTradeRuntime: class {
       start() {

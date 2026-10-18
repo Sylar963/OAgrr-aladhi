@@ -50,13 +50,18 @@ export function nextSampleDelay(now: number): number {
   return slotStart(now - SAMPLE_OFFSET_MS) + GEX_WALL_SLOT_MS + SAMPLE_OFFSET_MS - now;
 }
 
+// Rows before this slot hold the cumulative-by-strike flip proxy, which could sit on the
+// wrong side of spot; they can't be recomputed (no stored profile), so they read as no flip.
+export const GAMMA_FLIP_PROFILE_SINCE_MS = Date.UTC(2026, 9, 18, 5, 30);
+
 function toPoint(row: PersistedGexWallSnapshot): GexWallHistoryPoint {
+  const ts = row.slotTs.getTime();
   return {
-    ts: row.slotTs.getTime(),
+    ts,
     spot: row.spot,
     callWall: row.callWall,
     putWall: row.putWall,
-    gammaFlip: row.gammaFlip,
+    gammaFlip: ts < GAMMA_FLIP_PROFILE_SINCE_MS ? null : row.gammaFlip,
   };
 }
 

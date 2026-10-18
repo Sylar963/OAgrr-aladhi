@@ -1053,7 +1053,9 @@ export function buildEnrichedChain(
     bookLookup,
     options.repriceGamma === false ? undefined : expiryMs,
   );
-  const gexProfile = computeGexProfile(rows, strikes, spotPrice, expiryMs, bookLookup);
+  const gexProfile = computeGexProfile(rows, strikes, spotPrice, expiryMs, bookLookup, Date.now(), {
+    anchorToVenueGamma: options.repriceGamma === false,
+  });
 
   return {
     underlying,

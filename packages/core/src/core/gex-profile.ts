@@ -49,6 +49,7 @@ export function computeGexProfile(
   expiryMs: number,
   bookLookup?: BookLookup,
   nowMs: number = Date.now(),
+  options: { anchorToVenueGamma?: boolean } = {},
 ): GexProfilePoint[] {
   const totals = new Float64Array(GEX_PROFILE_MOVES.length);
   const tYears = gexTimeToExpiryYears(expiryMs, nowMs);
@@ -70,7 +71,13 @@ export function computeGexProfile(
         const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
         const qty = dealerGammaContracts(pos, vq.openInterest, right);
         if (qty === 0) continue;
-        const scale = (qty * (original?.contractSize ?? 1) * GEX_PER_PCT_MOVE) / 1_000_000;
+        let scale = (qty * (original?.contractSize ?? 1) * GEX_PER_PCT_MOVE) / 1_000_000;
+        // Keeps the venue's own gamma at spot when its model differs from calendar-time
+        // Black-Scholes (TastyTrade runs ~20% higher); the grid only borrows BS for the shape.
+        if (options.anchorToVenueGamma && vq.gamma != null) {
+          const atSpot = bsGamma(forward, s.strike, vq.markIv, tYears);
+          if (atSpot > 0) scale *= vq.gamma / atSpot;
+        }
         for (let i = 0; i < GEX_PROFILE_MOVES.length; i++) {
           const shift = 1 + GEX_PROFILE_MOVES[i]!;
           const spot = venueSpot * shift;

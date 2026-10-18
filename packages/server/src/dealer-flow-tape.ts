@@ -33,9 +33,14 @@ interface UnderlyingTape {
   uids: Set<string>;
   /** Earliest ts from which the tape holds every print; Infinity until recording starts. */
   coveredFrom: number;
+  /** Per venue, spans where its trade stream was down; `to` is Infinity while still down. */
+  gaps: Map<VenueId, Array<{ from: number; to: number }>>;
 }
 
 const BACKFILL_PAGE_SIZE = 2_000;
+// BTC/ETH print every few seconds across venues; a quieter stretch in the spool means the
+// ingest worker was down, not that nobody traded.
+const SPOOL_MAX_QUIET_MS = 20 * 60 * 1000;
 
 const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -55,6 +60,7 @@ function bookKey(venue: VenueId, symbol: string): string {
 export function indexIntervalFlow(
   trades: readonly TapeTrade[],
   coveredFrom: number,
+  gaps: ReadonlyMap<VenueId, ReadonlyArray<{ from: number; to: number }>> = new Map(),
 ): IntervalFlowLookup {
   const byContract = new Map<string, TapeTrade[]>();
   for (const t of trades) {
@@ -65,6 +71,9 @@ export function indexIntervalFlow(
   }
   return (venue, exchangeSymbol, fromTs, toTs) => {
     if (coveredFrom > fromTs) return { netFlow: 0, hasFlow: false };
+    for (const gap of gaps.get(venue) ?? []) {
+      if (gap.from <= toTs && gap.to > fromTs) return { netFlow: 0, hasFlow: false };
+    }
     let net = 0;
     let matched = false;
     for (const t of byContract.get(bookKey(venue, exchangeSymbol)) ?? []) {
@@ -113,7 +122,12 @@ export class DealerFlowTape {
     private readonly now: () => number = () => Date.now(),
   ) {
     for (const u of underlyings) {
-      this.tapes.set(u.toUpperCase(), { trades: [], uids: new Set(), coveredFrom: Infinity });
+      this.tapes.set(u.toUpperCase(), {
+        trades: [],
+        uids: new Set(),
+        coveredFrom: Infinity,
+        gaps: new Map(),
+      });
     }
   }
 
@@ -130,14 +144,35 @@ export class DealerFlowTape {
     if (tape && ts < tape.coveredFrom) tape.coveredFrom = ts;
   }
 
+  /**
+   * Feeds the venue's trade-stream state. A disconnect opens a gap from `sinceTs` (the last time
+   * the stream was known up) that closes on reconnect; intervals touching it get no flow for
+   * that venue, since REST reseeds after a reconnect are not guaranteed to cover the outage.
+   */
+  setStreamState(
+    underlying: string,
+    venue: VenueId,
+    connected: boolean,
+    sinceTs: number,
+    nowTs: number,
+  ): void {
+    const tape = this.tapes.get(underlying.toUpperCase());
+    if (!tape) return;
+    const list = tape.gaps.get(venue) ?? [];
+    const open = list.length > 0 && list[list.length - 1]!.to === Infinity;
+    if (!connected && !open) list.push({ from: sinceTs, to: Infinity });
+    else if (connected && open) list[list.length - 1]!.to = nowTs;
+    tape.gaps.set(venue, list);
+  }
+
   coveredFrom(underlying: string): number {
     return this.tapes.get(underlying.toUpperCase())?.coveredFrom ?? Infinity;
   }
 
   /**
    * Fills the gap before live recording started from the ingest worker's SQLite spool. The
-   * spool deletes rows after each daily upload, so coverage is only extended when it still
-   * holds a print at or before `fromTs`.
+   * spool deletes rows after each upload, so coverage is only extended when it still holds a
+   * print at or before `fromTs`, and never back across a quiet stretch where ingest was down.
    */
   async backfill(underlying: string, store: TradeHistoryReader, fromTs: number): Promise<void> {
     const key = underlying.toUpperCase();
@@ -157,6 +192,8 @@ export class DealerFlowTape {
 
     let beforeTs = new Date(untilTs);
     let beforeUid: string | undefined;
+    let coveredFrom = startTs;
+    let newerTs = untilTs;
     while (true) {
       const page = await store.loadHistory({
         mode: 'live',
@@ -166,14 +203,20 @@ export class DealerFlowTape {
         ...(beforeUid != null ? { beforeUid } : {}),
         limit: BACKFILL_PAGE_SIZE,
       });
-      for (const record of page) this.record(key, tapeTradeFromRecord(record));
+      for (const record of page) {
+        const ts = record.tradeTs.getTime();
+        if (newerTs - ts > SPOOL_MAX_QUIET_MS && coveredFrom < newerTs) coveredFrom = newerTs;
+        newerTs = ts;
+        this.record(key, tapeTradeFromRecord(record));
+      }
       if (page.length < BACKFILL_PAGE_SIZE) break;
       const last = page[page.length - 1]!;
       beforeTs = last.tradeTs;
       beforeUid = last.tradeUid;
       await yieldToEventLoop();
     }
-    tape.coveredFrom = startTs;
+    if (newerTs - startTs > SPOOL_MAX_QUIET_MS && coveredFrom < newerTs) coveredFrom = newerTs;
+    if (coveredFrom < tape.coveredFrom) tape.coveredFrom = coveredFrom;
   }
 
   /** Prunes prints older than the retention window and indexes what is left. */
@@ -189,6 +232,11 @@ export class DealerFlowTape {
       });
     }
     if (tape.coveredFrom < cutoff) tape.coveredFrom = cutoff;
-    return indexIntervalFlow(tape.trades, tape.coveredFrom);
+    for (const [venue, list] of tape.gaps) {
+      const kept = list.filter((gap) => gap.to >= cutoff);
+      if (kept.length === 0) tape.gaps.delete(venue);
+      else tape.gaps.set(venue, kept);
+    }
+    return indexIntervalFlow(tape.trades, tape.coveredFrom, tape.gaps);
   }
 }

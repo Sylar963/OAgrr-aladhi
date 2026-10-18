@@ -158,6 +158,23 @@ describe('computeGexProfile', () => {
     }
   });
 
+  it('anchors each curve to the venue gamma at spot when asked', () => {
+    const { rows, strikes } = fixture();
+    for (const s of strikes) {
+      for (const q of Object.values({ ...s.call.venues, ...s.put.venues })) {
+        if (q?.gamma != null) q.gamma *= 1.2;
+      }
+    }
+    const venueTotal = computeGex(rows, strikes, SPOT).reduce((sum, g) => sum + g.gexUsdMillions, 0);
+    const plain = computeGexProfile(rows, strikes, SPOT, EXPIRY, undefined, NOW);
+    const anchored = computeGexProfile(rows, strikes, SPOT, EXPIRY, undefined, NOW, {
+      anchorToVenueGamma: true,
+    });
+    const at0 = (p: typeof plain) => p.find((x) => x.movePct === 0)!.gexUsdMillions;
+    expect(at0(plain)).not.toBeCloseTo(venueTotal, 3);
+    expect(at0(anchored)).toBeCloseTo(venueTotal, 9);
+  });
+
   it('skips quotes without a mark IV', () => {
     const { rows, strikes } = fixture();
     for (const s of strikes) {

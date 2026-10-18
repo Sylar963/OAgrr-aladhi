@@ -296,6 +296,21 @@ const DEALER_FLOW_RETENTION_MS = 6 * 60 * 60 * 1000;
 const dealerFlowTape = new DealerFlowTape(FLOW_ALWAYS_ON_UNDERLYINGS, DEALER_FLOW_RETENTION_MS);
 flowService.subscribe((trade) => dealerFlowTape.record(trade.underlying, tapeTradeFromEvent(trade)));
 
+const TRADE_STREAM_POLL_MS = 5_000;
+let tradeStreamPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function startTradeStreamGapTracking(): void {
+  let lastPollTs = Date.now();
+  tradeStreamPollTimer = setInterval(() => {
+    const now = Date.now();
+    for (const h of flowService.getHealth()) {
+      dealerFlowTape.setStreamState(h.underlying, h.venue, h.connected, lastPollTs, now);
+    }
+    lastPollTs = now;
+  }, TRADE_STREAM_POLL_MS);
+  tradeStreamPollTimer.unref?.();
+}
+
 let flowIndex: { underlying: string; toTs: number; lookup: IntervalFlowLookup } | null = null;
 export const dealerBookService = new DealerBookService({
   underlyings: [...FLOW_ALWAYS_ON_UNDERLYINGS],
@@ -642,6 +657,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     for (const underlying of FLOW_ALWAYS_ON_UNDERLYINGS) {
       dealerFlowTape.markRecording(underlying, recordingFrom);
     }
+    startTradeStreamGapTracking();
     serviceHealth.flow = true;
     log.info('flow service started');
   } else log.warn({ err: String(flow.reason) }, 'flow service failed');
@@ -719,6 +735,10 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 }
 
 export function disposeServiceStores(): void {
+  if (tradeStreamPollTimer) {
+    clearInterval(tradeStreamPollTimer);
+    tradeStreamPollTimer = null;
+  }
   if (ivHistoryStorageAlarmTimer) {
     clearInterval(ivHistoryStorageAlarmTimer);
     ivHistoryStorageAlarmTimer = null;

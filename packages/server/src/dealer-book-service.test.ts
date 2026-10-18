@@ -172,3 +172,36 @@ it('hands the oldest warmed snapshot ts to prepareFlow before the first tick', a
   await svc.dispose();
   expect(calls).toEqual(['prepare:3000', 'tick']);
 });
+
+it('signs an OI increment from the prior 30 min of flow when its own interval had no prints', async () => {
+  const windows: Array<[number, number]> = [];
+  let tick = 0;
+  const chain = (oi: number): VenueOptionChain => {
+    const c = callContract(oi);
+    return { venue: 'deribit', underlying: 'BTC', expiry: '2026-06-30', asOf: 1, contracts: { [c.symbol]: c } };
+  };
+  const svc = new DealerBookService({
+    underlyings: ['BTC'],
+    oiSnapshotStore: new NoopOiSnapshotStore(),
+    dealerBookStore: new NoopDealerBookStore(),
+    listExpiries: async () => ['2026-06-30'],
+    listVenues: () => ['deribit'],
+    fetchChain: async () => chain(tick === 0 ? 100 : 130),
+    fetchIntervalFlow: async (_venue, _symbol, _underlying, fromTs, toTs) => {
+      windows.push([fromTs, toTs]);
+      return toTs - fromTs > 900_000 ? { netFlow: 5, hasFlow: true } : { netFlow: 0, hasFlow: false };
+    },
+    now: () => ++tick * 900_000,
+    log: { info: () => {}, warn: () => {} },
+  });
+  await svc.runTick();
+  await svc.runTick();
+  expect(windows).toEqual([
+    [900_000, 1_800_000],
+    [900_000 - 1_800_000, 1_800_000],
+  ]);
+  const pos = svc.lookup('deribit', 'BTC-30JUN26-70000-C');
+  expect(pos?.dealerContracts).toBe(100 - 30);
+  expect(pos?.flowContracts).toBe(30);
+});
+

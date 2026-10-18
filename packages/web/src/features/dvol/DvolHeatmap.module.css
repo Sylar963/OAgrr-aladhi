@@ -215,6 +215,11 @@
   color: var(--text-secondary);
 }
 
+.statLabel,
+.statValue {
+  white-space: nowrap;
+}
+
 .statValue[data-side="bid"] {
   color: var(--color-profit);
 }

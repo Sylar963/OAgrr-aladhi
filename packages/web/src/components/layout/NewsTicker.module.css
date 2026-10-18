@@ -67,6 +67,18 @@
   text-transform: uppercase;
 }
 
+.chip[data-tier="watch"] .category {
+  color: var(--color-warning);
+}
+
+.chip[data-tier="critical"] .category {
+  color: var(--color-loss);
+}
+
+.chip[data-tier="critical"] .secondary {
+  color: var(--text-primary);
+}
+
 .primary {
   color: var(--text-primary);
   font-weight: 600;

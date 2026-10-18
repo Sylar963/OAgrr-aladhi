@@ -211,6 +211,53 @@
   border-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
+.card[data-tier="watch"] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-warning) 9%, var(--bg-surface)),
+    var(--bg-surface) 85%
+  );
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+}
+
+.card[data-tier="critical"] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-loss) 16%, var(--bg-surface)),
+    var(--bg-surface) 85%
+  );
+  border-color: color-mix(in srgb, var(--color-loss) 65%, transparent);
+}
+
+.card[data-tier="watch"] .tag,
+.row[data-tier="watch"] .rowTag {
+  color: var(--color-warning);
+}
+
+.card[data-tier="critical"] .tag,
+.row[data-tier="critical"] .rowTag {
+  color: var(--color-loss);
+}
+
+.card[data-repeat="true"] .headline,
+.row[data-repeat="true"] .rowTitle {
+  color: var(--text-secondary);
+}
+
+.cardMarkers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.marker {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
 .cardTop {
   display: flex;
   align-items: center;
@@ -396,8 +443,22 @@
   background: var(--bg-elevated);
 }
 
+.rows[data-editable="true"] .row {
+  grid-template-columns: 52px 130px minmax(0, 1fr) 160px 68px;
+}
+
 .row[data-fresh="true"] {
   box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.row[data-tier="watch"] {
+  background: color-mix(in srgb, var(--color-warning) 5%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.row[data-tier="critical"] {
+  background: color-mix(in srgb, var(--color-loss) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-loss);
 }
 
 .rowTime {
@@ -408,6 +469,10 @@
 }
 
 .rowTag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -416,6 +481,124 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.actionsCell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.pinBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.pinBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.pinBtn[data-active="true"] {
+  color: var(--accent-primary);
+}
+
+.pinBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ── Pinned headlines ────────────────────────────────── */
+
+.pinnedBar {
+  list-style: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.pinnedItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--accent-primary);
+}
+
+.pinnedTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinnedTitle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pinnedMeta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+.unpinBtn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.unpinBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.pinnedHint,
+.pinError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.pinError {
+  color: var(--color-loss);
 }
 
 .rowBody {
@@ -500,7 +683,22 @@
     grid-area: source;
   }
 
-  .row > .shareBtn {
+  .row > .actionsCell {
     grid-area: share;
+    flex-direction: column;
+  }
+
+  .rows[data-editable="true"] .row {
+    grid-template-columns: 44px minmax(0, 1fr) 32px;
+  }
+
+  .pinnedBar,
+  .pinnedHint,
+  .pinError {
+    padding-inline: var(--space-4);
+  }
+
+  .pinnedMeta {
+    display: none;
   }
 }

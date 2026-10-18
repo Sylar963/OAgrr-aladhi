@@ -25,6 +25,15 @@ export function categoryLabel(ruleTag: string | null): string {
   return (ruleTag ?? 'news').replace(/[_-]+/g, ' ').toUpperCase();
 }
 
+// The upstream rule tag is the same for nearly every headline, so the strongest relevance tag says
+// more when there is one.
+export function headlineLabel(item: {
+  ruleTag: string | null;
+  relevance?: { tags: string[] } | undefined;
+}): string {
+  return categoryLabel(item.relevance?.tags[0] ?? item.ruleTag);
+}
+
 function plural(n: number, unit: string): string {
   return `${n} ${unit}${n === 1 ? '' : 's'} ago`;
 }

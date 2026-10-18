@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryLabel, dayLabel, splitHeadline, timeAgo } from './news-format';
+import { categoryLabel, dayLabel, headlineLabel, splitHeadline, timeAgo } from './news-format';
 
 describe('splitHeadline', () => {
   it('strips t.co links', () => {
@@ -26,6 +26,16 @@ describe('categoryLabel', () => {
   it('humanizes rule tags', () => {
     expect(categoryLabel('brain-fastlane')).toBe('BRAIN FASTLANE');
     expect(categoryLabel(null)).toBe('NEWS');
+  });
+});
+
+describe('headlineLabel', () => {
+  it('prefers the strongest relevance tag over the rule tag', () => {
+    expect(headlineLabel({ ruleTag: 'brain-fastlane', relevance: { tags: ['crypto-incident', 'war'] } })).toBe(
+      'CRYPTO INCIDENT',
+    );
+    expect(headlineLabel({ ruleTag: 'brain-fastlane', relevance: { tags: [] } })).toBe('BRAIN FASTLANE');
+    expect(headlineLabel({ ruleTag: 'brain-fastlane' })).toBe('BRAIN FASTLANE');
   });
 });
 

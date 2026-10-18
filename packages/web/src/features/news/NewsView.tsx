@@ -2,15 +2,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Spinner } from '@components/ui';
 
+import type { NewsPin } from '@oggregator/protocol';
+
 import {
   categoryLabel,
   clockTime,
   dayKey,
   dayLabel,
+  headlineLabel,
   splitHeadline,
   timeAgo,
 } from './news-format';
-import { type ArchivedNewsItem, NEWS_WINDOWS, type NewsWindow, useNewsArchive } from './queries';
+import {
+  type ArchivedNewsItem,
+  NEWS_WINDOWS,
+  type NewsWindow,
+  useNewsArchive,
+  useNewsPins,
+  usePinMutation,
+} from './queries';
 import styles from './NewsView.module.css';
 
 type Layout = 'grid' | 'list';
@@ -94,6 +104,68 @@ function ListIcon() {
   );
 }
 
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        d="M9 3h6l-1 6 4 4H6l4-4-1-6ZM12 13v8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+interface PinControl {
+  canEdit: boolean;
+  full: boolean;
+  pinnedIds: ReadonlySet<string>;
+  busy: boolean;
+  toggle: (id: string, pinned: boolean) => void;
+}
+
+function PinButton({ item, pins }: { item: ArchivedNewsItem; pins: PinControl }) {
+  const pinned = pins.pinnedIds.has(item.id);
+  if (!pins.canEdit) return null;
+  const blocked = !pinned && pins.full;
+  const label = pinned ? 'Unpin headline' : blocked ? 'Unpin one first (max 3)' : 'Pin headline';
+  return (
+    <button
+      type="button"
+      className={styles.pinBtn}
+      data-active={pinned}
+      disabled={pins.busy || blocked}
+      onClick={() => pins.toggle(item.id, pinned)}
+      aria-pressed={pinned}
+      aria-label={label}
+      title={label}
+    >
+      <PinIcon />
+    </button>
+  );
+}
+
+function relevanceTitle(item: ArchivedNewsItem): string | undefined {
+  const r = item.relevance;
+  if (!r) return undefined;
+  const parts = [`Relevance ${r.score}/100`];
+  if (r.tags.length > 0) parts.push(r.tags.map((t) => categoryLabel(t)).join(', '));
+  if (r.pinId) parts.push(r.pinId === item.id ? 'pinned' : 'related to a pin');
+  if (r.repeat) parts.push('already known');
+  return parts.join(' · ');
+}
+
+function RelevanceMarker({ item }: { item: ArchivedNewsItem }) {
+  const r = item.relevance;
+  if (!r) return null;
+  if (r.pinId === item.id) return <span className={styles.marker}>PINNED</span>;
+  if (r.repeat) return <span className={styles.marker}>KNOWN</span>;
+  if (r.pinId) return <span className={styles.marker}>PIN STORY</span>;
+  return null;
+}
+
 function ShareButton({ item }: { item: ArchivedNewsItem }) {
   const [copied, setCopied] = useState(false);
 
@@ -146,15 +218,25 @@ function SourceBadge({ item }: { item: ArchivedNewsItem }) {
   );
 }
 
-function NewsCard({ item, now }: { item: ArchivedNewsItem; now: number }) {
+function NewsCard({ item, now, pins }: { item: ArchivedNewsItem; now: number; pins: PinControl }) {
   const { title, summary } = splitHeadline(item.text);
   const fresh = now - item.timestamp < FRESH_MS;
 
   return (
-    <article className={styles.card} data-fresh={fresh}>
+    <article
+      className={styles.card}
+      data-fresh={fresh}
+      data-tier={item.relevance?.tier ?? 'normal'}
+      data-repeat={item.relevance?.repeat ?? false}
+    >
       <div className={styles.cardTop}>
-        <span className={styles.tag}>{categoryLabel(item.ruleTag)}</span>
-        {fresh && <span className={styles.freshPill}>NEW</span>}
+        <span className={styles.tag} title={relevanceTitle(item)}>
+          {headlineLabel(item)}
+        </span>
+        <span className={styles.cardMarkers}>
+          <RelevanceMarker item={item} />
+          {fresh && <span className={styles.freshPill}>NEW</span>}
+        </span>
       </div>
       <a className={styles.headline} href={item.url} target="_blank" rel="noopener noreferrer">
         {title}
@@ -172,16 +254,24 @@ function NewsCard({ item, now }: { item: ArchivedNewsItem; now: number }) {
             {timeAgo(item.timestamp, now)}
           </time>
         </div>
-        <ShareButton item={item} />
+        <div className={styles.actionsCell}>
+          <PinButton item={item} pins={pins} />
+          <ShareButton item={item} />
+        </div>
       </footer>
     </article>
   );
 }
 
-function NewsRow({ item, now }: { item: ArchivedNewsItem; now: number }) {
+function NewsRow({ item, now, pins }: { item: ArchivedNewsItem; now: number; pins: PinControl }) {
   const { title, summary } = splitHeadline(item.text);
   return (
-    <li className={styles.row} data-fresh={now - item.timestamp < FRESH_MS}>
+    <li
+      className={styles.row}
+      data-fresh={now - item.timestamp < FRESH_MS}
+      data-tier={item.relevance?.tier ?? 'normal'}
+      data-repeat={item.relevance?.repeat ?? false}
+    >
       <time
         className={styles.rowTime}
         dateTime={new Date(item.timestamp).toISOString()}
@@ -189,7 +279,10 @@ function NewsRow({ item, now }: { item: ArchivedNewsItem; now: number }) {
       >
         {clockTime(item.timestamp)}
       </time>
-      <span className={styles.rowTag}>{categoryLabel(item.ruleTag)}</span>
+      <span className={styles.rowTag} title={relevanceTitle(item)}>
+        {headlineLabel(item)}
+        <RelevanceMarker item={item} />
+      </span>
       <div className={styles.rowBody}>
         <a className={styles.rowTitle} href={item.url} target="_blank" rel="noopener noreferrer">
           {title}
@@ -197,12 +290,23 @@ function NewsRow({ item, now }: { item: ArchivedNewsItem; now: number }) {
         {summary && <span className={styles.rowSummary}>{summary}</span>}
       </div>
       <SourceBadge item={item} />
-      <ShareButton item={item} />
+      <div className={styles.actionsCell}>
+        <PinButton item={item} pins={pins} />
+        <ShareButton item={item} />
+      </div>
     </li>
   );
 }
 
-function NewsList({ items, now }: { items: ArchivedNewsItem[]; now: number }) {
+function NewsList({
+  items,
+  now,
+  pins,
+}: {
+  items: ArchivedNewsItem[];
+  now: number;
+  pins: PinControl;
+}) {
   const groups = useMemo(() => {
     const out: { key: number; items: ArchivedNewsItem[] }[] = [];
     for (const item of items) {
@@ -219,14 +323,59 @@ function NewsList({ items, now }: { items: ArchivedNewsItem[]; now: number }) {
       {groups.map((group) => (
         <section key={group.key}>
           <h3 className={styles.dayHeader}>{dayLabel(group.key, now)}</h3>
-          <ul className={styles.rows}>
+          <ul className={styles.rows} data-editable={pins.canEdit}>
             {group.items.map((item) => (
-              <NewsRow key={item.id} item={item} now={now} />
+              <NewsRow key={item.id} item={item} now={now} pins={pins} />
             ))}
           </ul>
         </section>
       ))}
     </div>
+  );
+}
+
+function PinnedBar({ pins, control, now }: { pins: NewsPin[]; control: PinControl; now: number }) {
+  if (pins.length === 0) {
+    return control.canEdit ? (
+      <div className={styles.pinnedHint}>
+        <PinIcon />
+        Pin up to 3 headlines that define the moment. Related news is lifted, and retellings fade as
+        the story ages.
+      </div>
+    ) : null;
+  }
+  return (
+    <ul className={styles.pinnedBar} aria-label="Pinned headlines">
+      {pins.map((pin) => (
+        <li key={pin.id} className={styles.pinnedItem}>
+          <PinIcon />
+          <a
+            className={styles.pinnedTitle}
+            href={pin.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {splitHeadline(pin.text).title}
+          </a>
+          <span className={styles.pinnedMeta}>
+            {pin.handle ? `@${pin.handle} · ` : ''}
+            {timeAgo(pin.timestamp, now)}
+          </span>
+          {control.canEdit && (
+            <button
+              type="button"
+              className={styles.unpinBtn}
+              disabled={control.busy}
+              onClick={() => control.toggle(pin.id, true)}
+              aria-label="Unpin headline"
+              title="Unpin"
+            >
+              ×
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -239,6 +388,20 @@ export default function NewsView() {
 
   const { data, error, isPending, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useNewsArchive(range);
+  const { data: pinData } = useNewsPins();
+  const pinMutation = usePinMutation();
+
+  const pins = pinData?.pins ?? [];
+  const pinControl = useMemo<PinControl>(
+    () => ({
+      canEdit: pinData?.canEdit ?? false,
+      full: (pinData?.pins.length ?? 0) >= (pinData?.max ?? 3),
+      pinnedIds: new Set(pinData?.pins.map((p) => p.id)),
+      busy: pinMutation.isPending,
+      toggle: (id, pinned) => pinMutation.mutate({ id, pinned }),
+    }),
+    [pinData, pinMutation.isPending, pinMutation.mutate],
+  );
 
   const items = useMemo(() => {
     const seen = new Set<string>();
@@ -336,6 +499,13 @@ export default function NewsView() {
         </div>
       </header>
 
+      <PinnedBar pins={pins} control={pinControl} now={now} />
+      {pinMutation.error && (
+        <div className={styles.pinError} role="alert">
+          {pinMutation.error.message}
+        </div>
+      )}
+
       <div ref={scrollRef} className={styles.scroll}>
         {isPending ? (
           <div className={styles.center}>
@@ -348,11 +518,11 @@ export default function NewsView() {
         ) : layout === 'grid' ? (
           <div className={styles.grid}>
             {items.map((item) => (
-              <NewsCard key={item.id} item={item} now={now} />
+              <NewsCard key={item.id} item={item} now={now} pins={pinControl} />
             ))}
           </div>
         ) : (
-          <NewsList items={items} now={now} />
+          <NewsList items={items} now={now} pins={pinControl} />
         )}
 
         <div ref={sentinelRef} className={styles.footer}>

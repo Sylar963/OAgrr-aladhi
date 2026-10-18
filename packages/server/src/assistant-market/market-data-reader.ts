@@ -5,6 +5,7 @@ import {
   type BreakEvenResponse,
   BreakEvenResponseSchema,
   FlowTradeSchema,
+  type NewsRelevance,
   type TimeAtPriceResponse,
   TimeAtPriceResponseSchema,
 } from '@oggregator/protocol';
@@ -28,6 +29,15 @@ import {
   SurfaceResponseSchema,
 } from './market-data-compaction.js';
 import { codeForHttpStatus, type ToolErrorCode } from './tool-errors.js';
+
+// Protocol schemas are zod 3 and cannot nest in these zod 4 objects; the annotation keeps them in step.
+const NewsRelevanceSchema: z.ZodType<NewsRelevance> = z.object({
+  score: z.number(),
+  tier: z.enum(['critical', 'watch', 'normal']),
+  tags: z.array(z.string()),
+  pinId: z.string().nullable(),
+  repeat: z.boolean(),
+});
 
 export type MarketInjector = (path: string) => Promise<{ statusCode: number; body: unknown }>;
 
@@ -184,6 +194,7 @@ export class AssistantMarketDataReader {
                 url: z.string(),
                 source: z.string(),
                 timestamp: z.number(),
+                relevance: NewsRelevanceSchema.optional(),
               }),
             ),
           }),

@@ -1,3 +1,4 @@
+import type { NewsRelevanceTier } from '@oggregator/protocol';
 import type { NewsItem, SpotItem } from '@shared/news';
 import type { Sponsor } from '@lib/sponsors';
 
@@ -6,6 +7,8 @@ export type TickerItem =
       kind: 'news';
       id: string;
       ruleTag: string | null;
+      label: string | null;
+      tier: NewsRelevanceTier;
       handle: string | null;
       text: string;
       url: string;
@@ -58,6 +61,8 @@ export function mergeTickerItems({
       kind: 'news',
       id: `news:${n.id}`,
       ruleTag: n.ruleTag,
+      label: n.relevance?.tags[0] ?? n.ruleTag,
+      tier: n.relevance?.tier ?? 'normal',
       handle: n.handle,
       text: n.text,
       url: n.url,

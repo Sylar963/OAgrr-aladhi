@@ -1,3 +1,5 @@
+import type { NewsRelevance } from '@oggregator/protocol';
+
 export interface NewsItem {
   id: string;
   text: string;
@@ -8,6 +10,7 @@ export interface NewsItem {
   timestamp: number;
   classification: 'GOOD' | 'BAD';
   createdAt: string;
+  relevance?: NewsRelevance;
 }
 
 export interface SpotItem {

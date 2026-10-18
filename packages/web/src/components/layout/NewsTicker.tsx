@@ -82,10 +82,11 @@ function TickerChip({ item }: { item: TickerItem }) {
   }
 
   if (item.kind === 'news') {
-    const category = (item.ruleTag ?? 'NEWS').toUpperCase().replace(/[_-]/g, ' ');
+    const category = (item.label ?? 'NEWS').toUpperCase().replace(/[_-]/g, ' ');
     return (
       <a
         className={`${styles.chip} ${styles.chipLink}`}
+        data-tier={item.tier}
         href={item.url}
         target="_blank"
         rel="noopener"

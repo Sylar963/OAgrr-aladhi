@@ -57,6 +57,8 @@ export const LeaderboardEntryDtoSchema = z.object({
   returnPct: z.number(),
   /** Start of the equity history the period was measured from. */
   since: z.string().datetime(),
+  /** When the trader first joined the leaderboard. */
+  sharingSince: z.string().datetime(),
   openPositions: z.number().int().nonnegative(),
   isMe: z.boolean(),
 });
@@ -129,7 +131,10 @@ export type TraderLiveDto = z.infer<typeof TraderLiveDtoSchema>;
 /** Full view of a leaderboard trader: sent on watch and whenever their book changes. */
 export const PublicTraderDtoSchema = TraderLiveDtoSchema.extend({
   isMe: z.boolean(),
+  /** First funded equity close in the venue history. */
   startedAt: z.string().datetime(),
+  /** When the trader first joined the leaderboard. */
+  sharingSince: z.string().datetime(),
   /** Daily account equity closes from the venue, oldest first. */
   equityHistory: z.array(EquityPointDtoSchema),
   closedTrades: z.array(PublicClosedTradeDtoSchema),

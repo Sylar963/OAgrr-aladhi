@@ -214,8 +214,11 @@ export class TraderStreamService {
     if (!entry.data || watchers.length === 0) return;
     const { equity, closedTrades } = entry.data;
     const live = await this.computeLive(entry.target, entry.data);
-    const startedAt = new Date(equity.points[0]?.ts ?? equity.fetchedAt).toISOString();
-    const equityHistory = equity.points.map((point) => ({
+    const firstFunded = equity.points.findIndex((point) => point.equityUsd > 0);
+    const funded = firstFunded < 0 ? [] : equity.points.slice(firstFunded);
+    const startedAt = new Date(funded[0]?.ts ?? equity.fetchedAt).toISOString();
+    const sharingSince = entry.target.sharingSince.toISOString();
+    const equityHistory = funded.map((point) => ({
       ts: new Date(point.ts).toISOString(),
       equityUsd: point.equityUsd,
     }));
@@ -226,6 +229,7 @@ export class TraderStreamService {
           ...live,
           isMe: watcher.userId === entry.target.userId,
           startedAt,
+          sharingSince,
           equityHistory,
           closedTrades: closedTrades ?? [],
           closedTradesAvailable: closedTrades != null,

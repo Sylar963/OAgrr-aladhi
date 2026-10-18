@@ -38,7 +38,7 @@ src/
     block-flow.ts    GET /api/block-flow?underlying=BTC
     block-strike-buckets.ts  GET /api/block-flow/strike-buckets?underlying=BTC&resolution=3600&start=ISO (blocks by candle × strike × expiry)
     call-put-flow.ts GET /api/flow/call-put-buckets?underlying=BTC&resolution=3600&days=30 (screen flow call vs put per bucket; remote buckets cached per ingest flush)
-    news.ts          GET /api/news
+    news.ts          GET /api/news, /api/news/archive (items carry `relevance` from news-relevance.ts); GET|POST|DELETE /api/news/pins (max 3, edits limited to NEWS_CURATOR_CLERK_IDS, stored in .cache/news-pins.ndjson)
     regime.ts        GET /api/regime?underlying=BTC
     spots.ts         GET /api/spots
     paper/           REST paper trading endpoints

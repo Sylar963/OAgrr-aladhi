@@ -50,6 +50,7 @@ describe('chatReducer trader stream', () => {
     generatedAt: '2026-10-12T12:00:00.000Z',
     isMe: false,
     startedAt: '2026-10-01T00:00:00.000Z',
+    sharingSince: '2026-10-01T00:00:00.000Z',
     equityHistory: [
       { ts: '2026-10-01T00:00:00.000Z', equityUsd: 100_000 },
       { ts: '2026-10-12T00:00:00.000Z', equityUsd: 100_500 },

@@ -27,7 +27,12 @@ function tone(value: number | null): 'up' | 'down' | 'flat' {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '–';
-  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const date = new Date(iso);
+  return date.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+  });
 }
 
 export default function TraderPanel({ handle, trader, unavailable, onClose }: TraderPanelProps) {
@@ -64,7 +69,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
               value={fmtUsd(trader.equityUsd)}
             />
             <Stat
-              label="PnL since start"
+              label={`PnL since ${fmtDate(trader.startedAt)}`}
               value={signedUsd(trader.pnlUsd)}
               tone={tone(trader.pnlUsd)}
             />
@@ -73,7 +78,7 @@ export default function TraderPanel({ handle, trader, unavailable, onClose }: Tr
               value={`${trader.returnPct > 0 ? '+' : ''}${(trader.returnPct * 100).toFixed(2)}%`}
               tone={tone(trader.returnPct)}
             />
-            <Stat label="Since" value={fmtDate(trader.startedAt)} />
+            <Stat label="Sharing since" value={fmtDate(trader.sharingSince)} />
           </div>
 
           <EquityChart

@@ -12,8 +12,15 @@ const ALPHA: Broadcaster = {
   handle: 'alpha',
   accountId: 'acct_a',
   venue: 'derive',
+  sharingSince: new Date('2026-10-01T00:00:00.000Z'),
 };
-const BETA: Broadcaster = { userId: 'usr_b', handle: 'beta', accountId: 'acct_b', venue: 'thalex' };
+const BETA: Broadcaster = {
+  userId: 'usr_b',
+  handle: 'beta',
+  accountId: 'acct_b',
+  venue: 'thalex',
+  sharingSince: new Date('2026-10-09T00:00:00.000Z'),
+};
 
 const HISTORY: Record<string, Array<{ ts: number; equityUsd: number }>> = {
   acct_a: [
@@ -54,6 +61,7 @@ describe('LeaderboardService', () => {
     expect(result.entries[1]).toMatchObject({
       equityUsd: 6_000,
       since: new Date(NOW - 3 * DAY_MS).toISOString(),
+      sharingSince: '2026-10-09T00:00:00.000Z',
     });
   });
 

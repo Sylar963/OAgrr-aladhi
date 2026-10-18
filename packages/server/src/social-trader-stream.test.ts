@@ -7,7 +7,13 @@ import { TraderStreamService } from './social-trader-stream.js';
 const NOW = Date.parse('2026-10-12T12:00:00.000Z');
 const DAY_MS = 86_400_000;
 
-const TARGET = { userId: 'usr_t', accountId: 'acct_t', handle: 'theta', venue: 'derive' as const };
+const TARGET = {
+  userId: 'usr_t',
+  accountId: 'acct_t',
+  handle: 'theta',
+  venue: 'derive' as const,
+  sharingSince: new Date('2026-10-03T00:00:00.000Z'),
+};
 
 const LEG: PositionLeg = {
   legId: 'leg_1',
@@ -37,6 +43,7 @@ function deps(overrides: Partial<ConstructorParameters<typeof TraderStreamServic
     loadEquity: vi.fn(async () => ({
       fetchedAt: NOW,
       points: [
+        { ts: NOW - 30 * DAY_MS, equityUsd: 0 },
         { ts: NOW - 10 * DAY_MS, equityUsd: 10_000 },
         { ts: NOW - DAY_MS, equityUsd: 11_000 },
       ],
@@ -92,6 +99,7 @@ describe('TraderStreamService', () => {
       pnlUsd: 1_000,
       returnPct: 0.1,
       startedAt: new Date(NOW - 10 * DAY_MS).toISOString(),
+      sharingSince: '2026-10-03T00:00:00.000Z',
       closedTradesAvailable: true,
       closedTrades: [{ id: 'fill_1', realizedPnlUsd: 250 }],
     });

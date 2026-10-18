@@ -8,6 +8,8 @@ export interface UserProfileRow {
   leaderboardVisible: boolean;
   broadcastVenue: SocialBroadcastVenue | null;
   consentedAt: Date | null;
+  /** First time the user joined the leaderboard; kept when they leave and rejoin. */
+  sharingSince: Date | null;
   updatedAt: Date;
 }
 
@@ -24,6 +26,7 @@ export interface BroadcasterRow {
   handle: string;
   accountId: string;
   venue: SocialBroadcastVenue;
+  sharingSince: Date;
 }
 
 export interface ChatMessageRow {
@@ -104,6 +107,7 @@ interface ProfileRowDb {
   leaderboard_visible: boolean;
   broadcast_venue: SocialBroadcastVenue | null;
   leaderboard_consented_at: Date | null;
+  leaderboard_since: Date | null;
   updated_at: Date;
 }
 
@@ -112,6 +116,7 @@ interface BroadcasterRowDb {
   handle: string;
   account_id: string;
   broadcast_venue: SocialBroadcastVenue;
+  sharing_since: Date;
 }
 
 interface ChatMessageRowDb {
@@ -140,6 +145,7 @@ function mapProfile(row: ProfileRowDb): UserProfileRow {
     leaderboardVisible: row.leaderboard_visible,
     broadcastVenue: row.broadcast_venue,
     consentedAt: row.leaderboard_consented_at,
+    sharingSince: row.leaderboard_since,
     updatedAt: row.updated_at,
   };
 }
@@ -167,7 +173,8 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 const PROFILE_COLUMNS =
-  'user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at, updated_at';
+  'user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at, ' +
+  'leaderboard_since, updated_at';
 
 const CHAT_COLUMNS = 'id, room, user_id, alias, is_anon, body, created_at, deleted_at';
 
@@ -210,8 +217,9 @@ export class PostgresSocialStore implements SocialStore {
       }
       const res = await client.query<ProfileRowDb>(
         `INSERT INTO user_profiles
-           (user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at)
-         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN now() END)
+           (user_id, handle, leaderboard_visible, broadcast_venue, leaderboard_consented_at,
+            leaderboard_since)
+         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN now() END, CASE WHEN $3 THEN now() END)
          ON CONFLICT (user_id) DO UPDATE
            SET handle = EXCLUDED.handle,
                leaderboard_visible = EXCLUDED.leaderboard_visible,
@@ -221,6 +229,10 @@ export class PostgresSocialStore implements SocialStore {
                    THEN now()
                  ELSE user_profiles.leaderboard_consented_at
                END,
+               leaderboard_since = COALESCE(
+                 user_profiles.leaderboard_since,
+                 CASE WHEN EXCLUDED.leaderboard_visible THEN now() END
+               ),
                updated_at = now()
          RETURNING ${PROFILE_COLUMNS}`,
         [input.userId, input.handle, input.leaderboardVisible, input.broadcastVenue],
@@ -239,7 +251,9 @@ export class PostgresSocialStore implements SocialStore {
 
   async listBroadcasters(): Promise<BroadcasterRow[]> {
     const res = await this.pool.query<BroadcasterRowDb>(
-      `SELECT p.user_id, p.handle, u.default_account_id AS account_id, p.broadcast_venue
+      `SELECT p.user_id, p.handle, u.default_account_id AS account_id, p.broadcast_venue,
+              COALESCE(p.leaderboard_since, p.leaderboard_consented_at, p.updated_at)
+                AS sharing_since
        FROM user_profiles p
        JOIN users u ON u.id = p.user_id
        WHERE p.leaderboard_visible
@@ -252,6 +266,7 @@ export class PostgresSocialStore implements SocialStore {
       handle: row.handle,
       accountId: row.account_id,
       venue: row.broadcast_venue,
+      sharingSince: row.sharing_since,
     }));
   }
 

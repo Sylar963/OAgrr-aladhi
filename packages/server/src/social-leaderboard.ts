@@ -52,6 +52,7 @@ export function rankEntries(
       pnlUsd: summary.pnlUsd,
       returnPct: summary.returnPct,
       since: new Date(summary.since).toISOString(),
+      sharingSince: member.broadcaster.sharingSince.toISOString(),
       openPositions: member.openPositions,
     });
   }

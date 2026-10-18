@@ -105,7 +105,10 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   >
                     {entry.rank}
                   </td>
-                  <td className={styles.trader}>
+                  <td
+                    className={styles.trader}
+                    title={`Sharing since ${new Date(entry.sharingSince).toLocaleDateString()}`}
+                  >
                     <button
                       className={styles.traderBtn}
                       onClick={(e) => {
@@ -123,7 +126,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   <td
                     className={styles.num}
                     data-tone={tone(entry.returnPct)}
-                    title={`Since ${new Date(entry.since).toLocaleDateString()}`}
+                    title={`Measured from ${new Date(entry.since).toLocaleDateString()}`}
                   >
                     {fmtReturn(entry.returnPct)}
                   </td>

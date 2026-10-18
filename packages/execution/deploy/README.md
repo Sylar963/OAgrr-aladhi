@@ -58,7 +58,9 @@ Save the PEM to a file readable by `ogg-exec` only, import it (O7), then delete 
 
 ## O4 - Clerk
 
-Session token v2 enabled; MFA enabled on the operator account (step-up needs a second factor).
+Session token v2 enabled. Clerk MFA is **not** needed (charter D10): step-up is a fresh Clerk
+password/email-code entry plus an authenticator code the daemon checks. Enroll the operator's
+authenticator app after the daemon is installed (see "Enroll the authenticator" below).
 
 ## O5 - alert channels
 
@@ -107,8 +109,22 @@ sudo -u ogg-exec bash -c 'set -a; . /etc/ogg-exec/env
   cd /opt/ogg-exec/app && exec /opt/ogg-exec/node/bin/node dist/cli/keys-import.js'
 ```
 
+Enroll the authenticator (once per user; replaces Clerk MFA):
+
+```bash
+sudo -u ogg-exec bash -c 'set -a; . /etc/ogg-exec/env
+  EXECUTION_STATE_DIR=/var/lib/ogg-exec; EXECUTION_SOCKET_PATH=/run/ogg-exec/exec.sock; set +a
+  cd /opt/ogg-exec/app && exec /opt/ogg-exec/node/bin/node dist/cli/totp-enroll.js'
+```
+
+It prints an `otpauth://` URI and the key once, then asks for a current code from the app and
+stores the secret only if the code matches. Clear the terminal scrollback afterwards.
+
 ## Exit check
 
-1. `GET /api/live/status` → `keyBound: true`, `alerts.testDelivered: true`, `journal.chainOk: true`.
+1. `GET /api/live/status` → `keyBound: true`, `stepUpEnrolled: true`, `alerts.testDelivered: true`,
+   `journal.chainOk: true`.
 2. `POST /api/live/kill` → Telegram + email arrive; `state: killed`.
-3. Restart `ogg-exec` → still `killed`. `POST /api/live/reset` (asks for step-up) → `disarmed`.
+3. Restart `ogg-exec` → still `killed`. `POST /api/live/reset` with `{reason, otp}` (Clerk asks
+   you to re-enter your password if it's been over 10 minutes) → `disarmed`.
+4. A wrong `otp` returns 403; five wrong codes return 429 for 15 minutes.

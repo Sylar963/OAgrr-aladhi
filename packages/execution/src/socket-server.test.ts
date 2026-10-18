@@ -19,6 +19,7 @@ const status: LiveStatus = {
   killedReason: 'manual',
   keyBound: true,
   tradingKeys: [],
+  stepUpEnrolled: true,
   venue: { name: 'stub', connected: false },
   alerts: { telegramConfigured: true, emailConfigured: true, testDelivered: true },
   journal: { lastSeq: 1, chainOk: true },
@@ -116,9 +117,9 @@ describe('CommandServer.handleLine', () => {
     });
     const { server } = setup(execute);
     const idempotencyKey = randomUUID();
-    const response = await server.handleLine(line({ type: 'arm' }, { idempotencyKey }));
+    const response = await server.handleLine(line({ type: 'arm', otp: '123456' }, { idempotencyKey }));
     expect(response).toEqual({ ok: false, error: { code: 'not_bound', message: 'No key' } });
-    await server.handleLine(line({ type: 'arm' }, { idempotencyKey }));
+    await server.handleLine(line({ type: 'arm', otp: '123456' }, { idempotencyKey }));
     expect(execute).toHaveBeenCalledTimes(1);
   });
 

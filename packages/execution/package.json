@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "keys:import": "tsx src/cli/keys-import.ts",
+    "totp:enroll": "tsx src/cli/totp-enroll.ts",
     "lint": "biome lint .",
     "typecheck": "pnpm --filter @oggregator/protocol build && tsc --noEmit",
     "test": "vitest",

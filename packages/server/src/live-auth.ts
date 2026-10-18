@@ -36,13 +36,17 @@ export function reverificationErrorBody(afterMinutes: number) {
     clerk_error: {
       type: 'forbidden',
       reason: 'reverification-error',
-      metadata: { reverification: { level: 'second_factor', afterMinutes } },
+      metadata: { reverification: { level: 'first_factor', afterMinutes } },
     },
   } as const;
 }
 
-export function hasFreshSecondFactor(user: AuthenticatedUser, maxMinutes: number): boolean {
-  const age = user.factorAgeMinutes?.second;
+/**
+ * Clerk half of step-up (charter D10): a recent password or email-code entry. The second half,
+ * an authenticator code, is checked by the execution daemon, so Clerk MFA is not required.
+ */
+export function hasFreshFirstFactor(user: AuthenticatedUser, maxMinutes: number): boolean {
+  const age = user.factorAgeMinutes?.first;
   return age != null && age <= maxMinutes;
 }
 
@@ -87,7 +91,7 @@ export function createLiveTraderGuard(deps: LiveAuthDependencies) {
 export function requireStepUp(env: NodeJS.ProcessEnv) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const maxMinutes = stepUpMaxMinutes(env);
-    if (!request.user || !hasFreshSecondFactor(request.user, maxMinutes)) {
+    if (!request.user || !hasFreshFirstFactor(request.user, maxMinutes)) {
       reply.status(403).send(reverificationErrorBody(maxMinutes));
     }
   };

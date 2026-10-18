@@ -1,4 +1,4 @@
-import type { KillScope } from '@oggregator/protocol';
+import type { KillScope, LiveActor } from '@oggregator/protocol';
 
 export interface KillReport {
   /** Calls made, in order, so the journal shows exactly what the kill did. */
@@ -8,35 +8,48 @@ export interface KillReport {
 }
 
 /**
- * Venue side of the daemon. L2 implements it for Thalex: cancel conditional orders, then bots,
- * then the session, then everything else, then verify.
+ * Venue side of the daemon. One Thalex session per trading key (charter §10), so every call is
+ * per actor. L2 implements it for Thalex: cancel conditional orders, then bots, then the session,
+ * then everything else, then verify.
  */
 export interface VenueGateway {
   readonly name: string;
-  connected(): boolean;
-  killAll(scope: KillScope): Promise<KillReport>;
+  connected(actor: LiveActor): boolean;
+  /** `global` scope = every subaccount of this actor, never another actor's. */
+  killAll(actor: LiveActor, scope: KillScope): Promise<KillReport>;
+  /** Daemon-wide stop, raised only by the daemon itself: every session of every actor. */
+  killEverything(): Promise<KillReport>;
 }
 
 /** L0 stand-in: records kills, talks to nothing. */
 export class StubVenueGateway implements VenueGateway {
   readonly name = 'stub';
-  readonly kills: KillScope[] = [];
+  readonly kills: Array<{ actor: LiveActor | 'all'; scope: KillScope }> = [];
 
-  connected(): boolean {
+  connected(_actor: LiveActor): boolean {
     return false;
   }
 
-  async killAll(scope: KillScope): Promise<KillReport> {
-    this.kills.push(scope);
-    return {
-      steps: [
-        'cancel_all_conditional_orders',
-        'cancel_all_bots',
-        'cancel_session',
-        'cancel_all',
-        'verify',
-      ].map((step) => `stub:${step}`),
-      remaining: [],
-    };
+  async killAll(actor: LiveActor, scope: KillScope): Promise<KillReport> {
+    this.kills.push({ actor, scope });
+    return stubReport();
   }
+
+  async killEverything(): Promise<KillReport> {
+    this.kills.push({ actor: 'all', scope: { kind: 'global' } });
+    return stubReport();
+  }
+}
+
+function stubReport(): KillReport {
+  return {
+    steps: [
+      'cancel_all_conditional_orders',
+      'cancel_all_bots',
+      'cancel_session',
+      'cancel_all',
+      'verify',
+    ].map((step) => `stub:${step}`),
+    remaining: [],
+  };
 }

@@ -22,7 +22,12 @@ export interface LiveRouteDependencies {
   entitlements: EntitlementReader;
 }
 
-const ReasonBodySchema = z.object({ reason: z.string().trim().min(1).max(280) });
+const ReasonSchema = z.string().trim().min(1).max(280);
+// Same shape as the protocol's StepUpCodeSchema; the daemon re-validates and does the real check.
+const OtpSchema = z.string().trim().regex(/^\d{6}$/);
+const ReasonBodySchema = z.object({ reason: ReasonSchema });
+const ArmBodySchema = z.object({ otp: OtpSchema });
+const ResetBodySchema = z.object({ reason: ReasonSchema, otp: OtpSchema });
 const KillBodySchema = z.object({
   reason: z.string().trim().min(1).max(280).default('Kill switch from the terminal'),
   scope: z.unknown().optional(),
@@ -34,6 +39,9 @@ const HTTP_STATUS: Record<ExecutionErrorCode, number> = {
   not_bound: 409,
   alerts_unavailable: 409,
   killed: 409,
+  step_up_failed: 403,
+  step_up_not_enrolled: 409,
+  step_up_locked: 429,
   // The API and daemon disagree about the shared secret or clock: a deployment fault, not the user's.
   unauthenticated: 502,
   stale_request: 502,
@@ -111,10 +119,14 @@ export async function liveRoutes(app: FastifyInstance, deps: LiveRouteDependenci
     return dispatch(request, res, { type: 'kill', scope: scope.data, reason: body.data.reason });
   });
 
-  app.post(
+  app.post<{ Body: unknown }>(
     '/live/arm',
     { onRequest: guard, preHandler: stepUp, config: writeLimit },
-    (request, res) => dispatch(request, res, { type: 'arm' }),
+    (request, res) => {
+      const body = ArmBodySchema.safeParse(request.body);
+      if (!body.success) return res.status(400).send({ error: 'invalid_request' });
+      return dispatch(request, res, { type: 'arm', otp: body.data.otp });
+    },
   );
 
   app.post<{ Body: unknown }>('/live/disarm', { onRequest: guard, config: writeLimit }, (request, res) => {
@@ -127,9 +139,13 @@ export async function liveRoutes(app: FastifyInstance, deps: LiveRouteDependenci
     '/live/reset',
     { onRequest: guard, preHandler: stepUp, config: writeLimit },
     (request, res) => {
-      const body = ReasonBodySchema.safeParse(request.body);
+      const body = ResetBodySchema.safeParse(request.body);
       if (!body.success) return res.status(400).send({ error: 'invalid_request' });
-      return dispatch(request, res, { type: 'reset', reason: body.data.reason });
+      return dispatch(request, res, {
+        type: 'reset',
+        reason: body.data.reason,
+        otp: body.data.otp,
+      });
     },
   );
 }

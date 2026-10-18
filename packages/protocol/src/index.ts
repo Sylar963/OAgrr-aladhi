@@ -504,6 +504,7 @@ export {
   LiveStatusSchema,
   type LiveTradingKey,
   LiveTradingKeySchema,
+  StepUpCodeSchema,
   type UnsignedExecutionEnvelope,
 } from './execution.js';
 export {

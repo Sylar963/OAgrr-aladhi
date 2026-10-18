@@ -71,7 +71,9 @@ describe('execution daemon', () => {
     const response = await send(cfg, { type: 'kill', scope: { kind: 'global' }, reason: 'drill' });
 
     expect(response).toMatchObject({ ok: true, status: { state: 'killed', killedReason: 'drill' } });
-    expect((daemon.gateway as StubVenueGateway).kills).toEqual([{ kind: 'global' }]);
+    expect((daemon.gateway as StubVenueGateway).kills).toEqual([
+      { actor: { clerkUserId: 'user_1', accountId: 'acct_1' }, scope: { kind: 'global' } },
+    ]);
     expect(daemon.journal.lastOfType(['killed'])?.actor).toBe('user_1/acct_1');
     const urls = fetchFn.mock.calls.map((call) => (call as unknown as [string])[0]);
     expect(urls.filter((u) => u.includes('api.telegram.org')).length).toBeGreaterThanOrEqual(2);
@@ -83,7 +85,7 @@ describe('execution daemon', () => {
     const fetchFn = vi.fn(async () => new Response('{}', { status: 200 }));
     running.push(await startDaemon(cfg, pino({ level: 'silent' }), fetchFn));
 
-    expect(await send(cfg, { type: 'arm' })).toMatchObject({
+    expect(await send(cfg, { type: 'arm', otp: '123456' })).toMatchObject({
       ok: false,
       error: { code: 'not_bound' },
     });

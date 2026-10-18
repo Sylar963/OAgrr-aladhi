@@ -218,6 +218,7 @@ const LiveStatusResponseSchema: z.ZodType<LiveStatus> = z.object({
       }),
     )
     .default([]),
+  stepUpEnrolled: z.boolean().default(false),
   venue: z.object({ name: z.string(), connected: z.boolean() }),
   alerts: z.object({
     telegramConfigured: z.boolean(),

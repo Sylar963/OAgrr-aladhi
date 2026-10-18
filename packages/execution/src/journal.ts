@@ -40,6 +40,7 @@ CREATE TRIGGER IF NOT EXISTS journal_no_update BEFORE UPDATE ON journal
   BEGIN SELECT RAISE(ABORT, 'journal is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS journal_no_delete BEFORE DELETE ON journal
   BEGIN SELECT RAISE(ABORT, 'journal is append-only'); END;
+CREATE INDEX IF NOT EXISTS journal_actor_type ON journal (actor, type, seq);
 
 CREATE TABLE IF NOT EXISTS idempotency (
   account_id TEXT NOT NULL,
@@ -126,6 +127,19 @@ export class Journal {
     const row = this.db
       .prepare(`SELECT * FROM journal WHERE type IN (${placeholders}) ORDER BY seq DESC LIMIT 1`)
       .get(...types) as JournalRow | undefined;
+    return row ? toEntry(row) : null;
+  }
+
+  /** Most recent entry of the given types written by any of the given actors. */
+  lastOfTypeFor(types: readonly string[], actors: readonly string[]): JournalEntry | null {
+    const typeSlots = types.map(() => '?').join(',');
+    const actorSlots = actors.map(() => '?').join(',');
+    const row = this.db
+      .prepare(
+        `SELECT * FROM journal WHERE type IN (${typeSlots}) AND actor IN (${actorSlots})
+         ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(...types, ...actors) as JournalRow | undefined;
     return row ? toEntry(row) : null;
   }
 

@@ -97,8 +97,8 @@ describe('live trader guard', () => {
 
 describe('step-up', () => {
   it.each([
-    ['no second factor', { first: 2, second: null }],
-    ['stale second factor', { first: 2, second: 11 }],
+    ['a first factor never verified', { first: null, second: null }],
+    ['a stale first factor, even with a fresh second factor', { first: 11, second: 1 }],
   ])('rejects %s with the Clerk reverification body', async (_label, factorAgeMinutes) => {
     const app = await buildApp({ user: { ...operator, factorAgeMinutes } });
     const res = await app.inject({ method: 'POST', url: '/live/arm' });
@@ -107,13 +107,13 @@ describe('step-up', () => {
       clerk_error: {
         type: 'forbidden',
         reason: 'reverification-error',
-        metadata: { reverification: { level: 'second_factor', afterMinutes: 10 } },
+        metadata: { reverification: { level: 'first_factor', afterMinutes: 10 } },
       },
     });
   });
 
-  it('passes with a fresh second factor', async () => {
-    const app = await buildApp({ user: { ...operator, factorAgeMinutes: { first: 9, second: 4 } } });
+  it('passes with a fresh first factor and no second factor at all (no Clerk MFA)', async () => {
+    const app = await buildApp({ user: { ...operator, factorAgeMinutes: { first: 9, second: null } } });
     const res = await app.inject({ method: 'POST', url: '/live/arm' });
     expect(res.statusCode).toBe(200);
   });

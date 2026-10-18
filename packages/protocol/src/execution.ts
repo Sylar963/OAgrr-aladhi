@@ -17,12 +17,15 @@ export type KillScope = z.infer<typeof KillScopeSchema>;
 
 const ReasonSchema = z.string().min(1).max(280);
 
+/** Authenticator-app code. Verified by the daemon only; the API passes it through (charter D10). */
+export const StepUpCodeSchema = z.string().regex(/^\d{6}$/);
+
 export const ExecutionCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('status') }),
-  z.object({ type: z.literal('arm') }),
+  z.object({ type: z.literal('arm'), otp: StepUpCodeSchema }),
   z.object({ type: z.literal('disarm'), reason: ReasonSchema }),
   z.object({ type: z.literal('kill'), scope: KillScopeSchema, reason: ReasonSchema }),
-  z.object({ type: z.literal('reset'), reason: ReasonSchema }),
+  z.object({ type: z.literal('reset'), reason: ReasonSchema, otp: StepUpCodeSchema }),
 ]);
 export type ExecutionCommand = z.infer<typeof ExecutionCommandSchema>;
 
@@ -54,6 +57,7 @@ export const LiveStatusSchema = z.object({
   killedReason: z.string().nullable(),
   keyBound: z.boolean(),
   tradingKeys: z.array(LiveTradingKeySchema).default([]),
+  stepUpEnrolled: z.boolean().default(false),
   venue: z.object({
     name: z.string(),
     connected: z.boolean(),
@@ -78,6 +82,9 @@ export const ExecutionErrorCodeSchema = z.enum([
   'not_bound',
   'alerts_unavailable',
   'killed',
+  'step_up_failed',
+  'step_up_not_enrolled',
+  'step_up_locked',
   'internal',
 ]);
 export type ExecutionErrorCode = z.infer<typeof ExecutionErrorCodeSchema>;

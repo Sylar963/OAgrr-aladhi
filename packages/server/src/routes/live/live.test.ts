@@ -20,6 +20,7 @@ const status: LiveStatus = {
   killedReason: null,
   keyBound: true,
   tradingKeys: [],
+  stepUpEnrolled: false,
   venue: { name: 'stub', connected: false },
   alerts: { telegramConfigured: true, emailConfigured: true, testDelivered: true },
   journal: { lastSeq: 3, chainOk: true },
@@ -75,26 +76,60 @@ describe('/api/live routes', () => {
     );
   });
 
-  it('requires step-up to arm and reset', async () => {
+  it('requires a fresh Clerk first factor to arm and reset', async () => {
     const c = client({ ok: true, status });
     const app = await buildApp({
       client: c,
-      user: { ...operator, factorAgeMinutes: { first: 1, second: null } },
+      user: { ...operator, factorAgeMinutes: { first: 11, second: null } },
     });
 
-    expect((await app.inject({ method: 'POST', url: '/api/live/arm' })).statusCode).toBe(403);
-    expect(
-      (await app.inject({ method: 'POST', url: '/api/live/reset', payload: { reason: 'ok' } }))
-        .statusCode,
-    ).toBe(403);
+    const arm = await app.inject({ method: 'POST', url: '/api/live/arm', payload: { otp: '123456' } });
+    expect(arm.statusCode).toBe(403);
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/api/live/reset',
+      payload: { reason: 'ok', otp: '123456' },
+    });
+    expect(reset.statusCode).toBe(403);
     expect(c.send).not.toHaveBeenCalled();
+  });
+
+  it('passes the authenticator code through to the daemon and rejects a malformed one', async () => {
+    const c = client({ ok: true, status });
+    const app = await buildApp({ client: c });
+
+    expect((await app.inject({ method: 'POST', url: '/api/live/arm', payload: {} })).statusCode).toBe(400);
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/live/arm', payload: { otp: '12ab56' } })).statusCode,
+    ).toBe(400);
+    await app.inject({ method: 'POST', url: '/api/live/arm', payload: { otp: ' 123456 ' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/live/reset',
+      payload: { reason: 'checked', otp: '654321' },
+    });
+
+    expect(c.send.mock.calls.map((call) => call[1])).toEqual([
+      { type: 'arm', otp: '123456' },
+      { type: 'reset', reason: 'checked', otp: '654321' },
+    ]);
+  });
+
+  it.each([
+    ['step_up_failed', 403],
+    ['step_up_not_enrolled', 409],
+    ['step_up_locked', 429],
+  ] as const)('maps the daemon step-up error %s to %i', async (code, httpStatus) => {
+    const app = await buildApp({ client: client({ ok: false, error: { code, message: 'no' } }) });
+    const res = await app.inject({ method: 'POST', url: '/api/live/arm', payload: { otp: '123456' } });
+    expect(res.statusCode).toBe(httpStatus);
   });
 
   it('maps daemon errors to HTTP statuses', async () => {
     const app = await buildApp({
       client: client({ ok: false, error: { code: 'not_bound', message: 'No key' } }),
     });
-    const res = await app.inject({ method: 'POST', url: '/api/live/arm' });
+    const res = await app.inject({ method: 'POST', url: '/api/live/arm', payload: { otp: '123456' } });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: 'not_bound', message: 'No key' });
   });

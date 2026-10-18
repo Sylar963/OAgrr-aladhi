@@ -33,6 +33,16 @@ describe('ExecutionEnvelopeSchema', () => {
     ).toBe(false);
     expect(ExecutionEnvelopeSchema.safeParse({ ...base, hmac: 'nothex' }).success).toBe(false);
   });
+
+  it('requires a six-digit step-up code on arm and reset, never on kill', () => {
+    const parse = (command: unknown) => ExecutionEnvelopeSchema.safeParse({ ...base, command }).success;
+    expect(parse({ type: 'arm' })).toBe(false);
+    expect(parse({ type: 'arm', otp: '12345' })).toBe(false);
+    expect(parse({ type: 'arm', otp: '123456' })).toBe(true);
+    expect(parse({ type: 'reset', reason: 'checked', otp: '123456' })).toBe(true);
+    expect(parse({ type: 'reset', reason: 'checked' })).toBe(false);
+    expect(parse({ type: 'kill', scope: { kind: 'global' }, reason: 'manual' })).toBe(true);
+  });
 });
 
 describe('LiveStatusSchema', () => {
@@ -46,7 +56,7 @@ describe('LiveStatusSchema', () => {
   };
 
   it('reads a status from a daemon that predates per-environment keys as holding none', () => {
-    expect(LiveStatusSchema.parse(status).tradingKeys).toEqual([]);
+    expect(LiveStatusSchema.parse(status)).toMatchObject({ tradingKeys: [], stepUpEnrolled: false });
   });
 
   it('carries each held trading key by environment', () => {

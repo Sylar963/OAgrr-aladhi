@@ -7,6 +7,7 @@ import { LiveControl } from './control.js';
 import { Journal } from './journal.js';
 import { KeyStore } from './key-store.js';
 import { CommandServer } from './socket-server.js';
+import { StepUpSecretStore, StepUpVerifier } from './step-up.js';
 import { StubVenueGateway, type VenueGateway } from './venue-gateway.js';
 
 const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -59,25 +60,23 @@ export async function startDaemon(
     throw new JournalCorruptError(broken);
   }
 
-  const keys = new KeyStore(config.stateDir, new KeyCipher(config.keyId, config.keyEncryptionKey));
+  const cipher = new KeyCipher(config.keyId, config.keyEncryptionKey);
+  const keys = new KeyStore(config.stateDir, cipher);
+  const stepUp = new StepUpVerifier({ secrets: new StepUpSecretStore(config.stateDir, cipher), journal });
   const gateway: VenueGateway = new StubVenueGateway();
-  const control = new LiveControl({ journal, alerter, keys, gateway });
+  const control = new LiveControl({ journal, alerter, keys, gateway, stepUp });
   const server = new CommandServer({ control, journal, hmacKey: config.hmacKey, log });
 
-  journal.append('system', 'daemon_started', {
-    pid: process.pid,
-    venue: gateway.name,
-    state: control.current,
-  });
+  journal.append('system', 'daemon_started', { pid: process.pid, venue: gateway.name });
   await server.listen(config.socketPath);
-  log.info({ socket: config.socketPath, state: control.current }, 'execution daemon listening');
+  log.info({ socket: config.socketPath }, 'execution daemon listening');
 
   const test = await alerter.sendTest();
   journal.append('system', 'alert_test', { delivered: test.delivered, failed: test.failed });
   await alerter.send({
     event: 'daemon_restart',
     severity: 'info',
-    message: `Execution daemon started (${control.current}).`,
+    message: 'Execution daemon started; every user is disarmed until they arm again.',
   });
 
   const digestTimer = setInterval(() => {
@@ -94,7 +93,7 @@ export async function startDaemon(
       stopped = true;
       clearInterval(digestTimer);
       await server.close();
-      journal.append('system', 'daemon_stopped', { reason, state: control.current });
+      journal.append('system', 'daemon_stopped', { reason });
       journal.close();
     },
   };

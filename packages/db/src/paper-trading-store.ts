@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export interface PaperUserRow {
   id: string;
@@ -293,7 +294,7 @@ export class PostgresPaperTradingStore implements PaperTradingStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresPaperTradingStore {
-    return new PostgresPaperTradingStore(new Pool({ connectionString }));
+    return new PostgresPaperTradingStore(createPgPool({ connectionString }));
   }
 
   async ensureAccount(row: PaperAccountRow): Promise<void> {

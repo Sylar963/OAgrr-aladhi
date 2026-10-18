@@ -2,6 +2,7 @@ import { setDefaultResultOrder } from 'node:dns';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createPgPool } from './pg-pool.js';
 
 // WSL2 + Neon: AAAA records aren't routable here. pg calls dns.lookup() with no
 // family option, so we change the process-wide default before pg loads.
@@ -28,7 +29,7 @@ if (!databaseUrl) {
   throw new Error(`${target.env} is required to run ${targetName} migrations`);
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = createPgPool({ connectionString: databaseUrl });
 const MIGRATION_LOCK_ID = 4_259_103;
 
 try {

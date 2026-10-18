@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 500;
 const COLUMNS_PER_ROW = 6;
@@ -38,7 +39,7 @@ export class PostgresGexWallSnapshotStore implements GexWallSnapshotStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresGexWallSnapshotStore {
-    return new PostgresGexWallSnapshotStore(new Pool({ connectionString }));
+    return new PostgresGexWallSnapshotStore(createPgPool({ connectionString }));
   }
 
   async writeMany(rows: PersistedGexWallSnapshot[]): Promise<void> {

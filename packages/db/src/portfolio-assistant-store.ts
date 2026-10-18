@@ -1,4 +1,5 @@
-import { Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export type UserEntitlementStatus = 'enabled' | 'revoked';
 export type PortfolioAssistantMessageRole = 'user' | 'assistant';
@@ -255,7 +256,7 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
 
   static fromConnectionString(connectionString: string): PostgresPortfolioAssistantStore {
     return new PostgresPortfolioAssistantStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

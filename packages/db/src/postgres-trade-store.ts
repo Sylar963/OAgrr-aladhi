@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
-import { Pool } from 'pg';
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 import type {
   CallPutBucket,
@@ -17,6 +16,7 @@ import type {
   TradeVenueSummary,
 } from './trade-store.js';
 import type { PersistedTradeRecord } from './types.js';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 1_000;
 const BUCKET_SLICE_MS = 15 * 24 * 60 * 60 * 1000;
@@ -30,7 +30,7 @@ export class PostgresTradeStore implements TradeStore {
 
   static fromConnectionString(connectionString: string): PostgresTradeStore {
     return new PostgresTradeStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

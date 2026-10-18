@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export interface UserRow {
   id: string;
@@ -76,7 +77,7 @@ export class PostgresUsersStore implements UsersStore {
 
   static fromConnectionString(connectionString: string): PostgresUsersStore {
     return new PostgresUsersStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

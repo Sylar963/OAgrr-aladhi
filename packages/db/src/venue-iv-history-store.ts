@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 500;
 
@@ -44,7 +45,7 @@ export class PostgresVenueIvHistoryStore implements VenueIvHistoryStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresVenueIvHistoryStore {
-    return new PostgresVenueIvHistoryStore(new Pool({ connectionString }));
+    return new PostgresVenueIvHistoryStore(createPgPool({ connectionString }));
   }
 
   async writeMany(points: PersistedVenueIvHistoryPoint[]): Promise<void> {

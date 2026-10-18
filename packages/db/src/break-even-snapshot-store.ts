@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 200;
 const COLUMNS_PER_ROW = 8;
@@ -42,7 +43,7 @@ export class PostgresBreakEvenSnapshotStore implements BreakEvenSnapshotStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresBreakEvenSnapshotStore {
-    return new PostgresBreakEvenSnapshotStore(new Pool({ connectionString }));
+    return new PostgresBreakEvenSnapshotStore(createPgPool({ connectionString }));
   }
 
   async writeMany(rows: PersistedBreakEvenSnapshot[]): Promise<void> {

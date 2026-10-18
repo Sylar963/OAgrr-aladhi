@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 100;
 export const DEFAULT_IV_HISTORY_SIZE_WARN_BYTES = 10 * 1024 * 1024 * 1024;
@@ -86,7 +87,7 @@ export class PostgresIvHistoryStore implements IvHistoryStore {
     connectionString: string,
     thresholdBytes: number = DEFAULT_IV_HISTORY_SIZE_WARN_BYTES,
   ): PostgresIvHistoryStore {
-    return new PostgresIvHistoryStore(new Pool({ connectionString }), thresholdBytes);
+    return new PostgresIvHistoryStore(createPgPool({ connectionString }), thresholdBytes);
   }
 
   async writeMany(points: PersistedIvHistoryPoint[]): Promise<void> {

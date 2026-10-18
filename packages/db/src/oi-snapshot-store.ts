@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 200;
 
@@ -35,7 +36,7 @@ export class PostgresOiSnapshotStore implements OiSnapshotStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresOiSnapshotStore {
-    return new PostgresOiSnapshotStore(new Pool({ connectionString }));
+    return new PostgresOiSnapshotStore(createPgPool({ connectionString }));
   }
 
   async writeMany(rows: PersistedOiSnapshot[]): Promise<void> {

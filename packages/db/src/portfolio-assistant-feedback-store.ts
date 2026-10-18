@@ -1,4 +1,5 @@
-import { Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export type PortfolioAssistantFeedbackVoteValue = 'up' | 'down';
 
@@ -131,7 +132,7 @@ export class PostgresPortfolioAssistantFeedbackStore implements PortfolioAssista
 
   static fromConnectionString(connectionString: string): PostgresPortfolioAssistantFeedbackStore {
     return new PostgresPortfolioAssistantFeedbackStore(
-      new Pool({
+      createPgPool({
         connectionString,
         max: 2,
         connectionTimeoutMillis: 10_000,
@@ -243,7 +244,7 @@ export class PostgresPortfolioAssistantFeedbackReportSource
     connectionString: string,
   ): PostgresPortfolioAssistantFeedbackReportSource {
     return new PostgresPortfolioAssistantFeedbackReportSource(
-      new Pool({
+      createPgPool({
         connectionString,
         max: 1,
         connectionTimeoutMillis: 10_000,

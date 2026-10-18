@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 100;
 const FIELD_COUNT = 37;
@@ -75,7 +76,7 @@ export class PostgresShortStraddleSnapshotStore implements ShortStraddleSnapshot
   static fromConnectionString(connectionString: string): PostgresShortStraddleSnapshotStore {
     return new PostgresShortStraddleSnapshotStore(
       () =>
-        new Pool({
+        createPgPool({
           connectionString,
           max: 1,
           connectionTimeoutMillis: 5_000,

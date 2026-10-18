@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export type SocialBroadcastVenue = 'derive' | 'thalex' | 'paradex';
 
@@ -185,7 +186,7 @@ export class PostgresSocialStore implements SocialStore {
 
   static fromConnectionString(connectionString: string): PostgresSocialStore {
     return new PostgresSocialStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

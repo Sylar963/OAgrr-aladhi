@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { setDefaultResultOrder } from 'node:dns';
+import { createPgPool } from './pg-pool.js';
 
 setDefaultResultOrder('ipv4first');
 
@@ -19,7 +20,7 @@ const { Pool } = await import('pg');
 const code = `OGG-PA-${randomBytes(18).toString('base64url')}`;
 const digest = createHmac('sha256', inviteHashSecret).update(code).digest('hex');
 const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000);
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = createPgPool({ connectionString: databaseUrl });
 
 try {
   await pool.query(

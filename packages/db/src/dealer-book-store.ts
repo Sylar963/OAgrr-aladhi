@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const UPSERT_BATCH_SIZE = 200;
 
@@ -69,7 +70,7 @@ export class PostgresDealerBookStore implements DealerBookStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresDealerBookStore {
-    return new PostgresDealerBookStore(new Pool({ connectionString }));
+    return new PostgresDealerBookStore(createPgPool({ connectionString }));
   }
 
   async loadAll(underlyings: string[]): Promise<PersistedDealerPosition[]> {

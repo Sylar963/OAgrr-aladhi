@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export type ExchangePortfolioVenue = 'derive' | 'thalex';
 
@@ -159,7 +160,7 @@ export class PostgresExchangePortfolioLedgerStore implements ExchangePortfolioLe
   static fromConnectionString(connectionString: string): PostgresExchangePortfolioLedgerStore {
     return new PostgresExchangePortfolioLedgerStore(
       () =>
-        new Pool({
+        createPgPool({
           connectionString,
           max: 2,
           connectionTimeoutMillis: 5_000,

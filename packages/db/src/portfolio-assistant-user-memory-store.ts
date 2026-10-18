@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export const PORTFOLIO_ASSISTANT_MEMORY_MAX_ITEMS = 12;
 export const PORTFOLIO_ASSISTANT_MEMORY_MAX_CONTENT_CHARS = 1_500;
@@ -163,7 +164,7 @@ export class PostgresPortfolioAssistantUserMemoryStore implements PortfolioAssis
 
   static fromConnectionString(connectionString: string): PostgresPortfolioAssistantUserMemoryStore {
     return new PostgresPortfolioAssistantUserMemoryStore(
-      new Pool({
+      createPgPool({
         connectionString,
         max: 2,
         connectionTimeoutMillis: 10_000,

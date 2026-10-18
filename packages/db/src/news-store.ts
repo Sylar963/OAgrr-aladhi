@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 const INSERT_BATCH_SIZE = 500;
 const COLUMNS_PER_ROW = 8;
@@ -51,7 +52,7 @@ export class PostgresNewsStore implements NewsStore {
   constructor(private readonly pool: Pool) {}
 
   static fromConnectionString(connectionString: string): PostgresNewsStore {
-    return new PostgresNewsStore(new Pool({ connectionString }));
+    return new PostgresNewsStore(createPgPool({ connectionString }));
   }
 
   async writeMany(rows: PersistedNewsItem[]): Promise<void> {

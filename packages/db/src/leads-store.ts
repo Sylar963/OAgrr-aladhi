@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export interface LeadRow {
   id: string;
@@ -51,7 +52,7 @@ export class PostgresLeadsStore implements LeadsStore {
 
   static fromConnectionString(connectionString: string): PostgresLeadsStore {
     return new PostgresLeadsStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

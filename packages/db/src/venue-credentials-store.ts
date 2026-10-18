@@ -1,4 +1,5 @@
-import { Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { createPgPool } from './pg-pool.js';
 
 export type VenueEnvironment = 'prod' | 'test';
 
@@ -114,7 +115,7 @@ export class PostgresVenueCredentialsStore implements VenueCredentialsStore {
 
   static fromConnectionString(connectionString: string): PostgresVenueCredentialsStore {
     return new PostgresVenueCredentialsStore(
-      new Pool({
+      createPgPool({
         connectionString,
         connectionTimeoutMillis: 10_000,
         statement_timeout: 15_000,

@@ -90,6 +90,8 @@ import { IvBaselineHistory, VenueIvBaselineHistory } from './iv-baseline-history
 import { VenueIvHistoryCollector } from './venue-iv-history-collector.js';
 import { createVolRichnessSource } from './vol-richness-source.js';
 import { NewsArchive } from './news-archive.js';
+import { NewsPinStore } from './news-pins.js';
+import { NewsRelevanceEngine } from './news-relevance.js';
 import { createNewsRuntimeFromEnv, type NewsRuntime } from './news-service.js';
 import { disposeSettlementJob, startSettlementJob } from './settlement-service.js';
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
@@ -365,6 +367,15 @@ export const breakEvenService = new BreakEvenService({
 });
 
 export const newsArchive = createNewsArchive(databaseUrl);
+export const newsPins = new NewsPinStore(
+  process.env['NEWS_PINS_PATH'] ?? '.cache/news-pins.ndjson',
+  console,
+);
+export const newsRelevance = new NewsRelevanceEngine({
+  history: (fromMs, toMs) => newsArchive.between(fromMs, toMs),
+  pins: () => newsPins.list(),
+  pinsVersion: () => newsPins.version,
+});
 
 export const regimeStore: RegimeStore = databaseUrl
   ? createRegimeStore(databaseUrl)

@@ -179,6 +179,23 @@ export class NewsArchive implements NewsArchiveSink {
     return this.cache.slice(0, limit).map(toNewsItem);
   }
 
+  find(id: string): NewsItem | null {
+    if (!this.ids.has(id)) return null;
+    const row = this.cache.find((r) => r.id === id);
+    return row ? toNewsItem(row) : null;
+  }
+
+  between(fromMs: number, toMs: number): NewsItem[] {
+    const out: NewsItem[] = [];
+    for (const row of this.cache) {
+      const ts = row.publishedAt.getTime();
+      if (ts > toMs) continue;
+      if (ts < fromMs) break;
+      out.push(toNewsItem(row));
+    }
+    return out;
+  }
+
   record(items: NewsItem[]): void {
     const rows: PersistedNewsItem[] = [];
     for (const item of items) {

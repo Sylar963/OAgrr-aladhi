@@ -25,7 +25,7 @@ export function authDevBypassActive(): boolean {
 }
 
 /** Extract the raw Clerk JWT from `Authorization: Bearer <jwt>`, or null. */
-function bearerToken(request: FastifyRequest): string | null {
+export function bearerToken(request: FastifyRequest): string | null {
   const header = request.headers['authorization'];
   if (typeof header !== 'string') return null;
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());

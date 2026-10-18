@@ -129,6 +129,19 @@ export {
   LeadCaptureRequestSchema,
 } from './leads.js';
 export {
+  NEWS_PIN_LIMIT,
+  type NewsPin,
+  NewsPinSchema,
+  type NewsPinsResponse,
+  NewsPinsResponseSchema,
+  type NewsRelevance,
+  NewsRelevanceSchema,
+  type NewsRelevanceTier,
+  NewsRelevanceTierSchema,
+  type PinNewsRequest,
+  PinNewsRequestSchema,
+} from './news.js';
+export {
   type CreatePaperTradeNoteRequest,
   CreatePaperTradeNoteRequestSchema,
   type CreatePaperTradeRequest,

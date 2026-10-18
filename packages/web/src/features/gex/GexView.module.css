@@ -535,3 +535,40 @@
   font-size: var(--text-xs);
   color: var(--text-dim);
 }
+
+.levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.level {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.levelValue {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.levelValue[data-type="positive"] {
+  color: var(--color-profit);
+}
+
+.levelValue[data-type="negative"] {
+  color: var(--color-loss);
+}
+
+.levelValue[data-low-confidence="true"] {
+  color: var(--color-warning);
+}

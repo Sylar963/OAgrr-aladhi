@@ -63,12 +63,13 @@ import {
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
+import { DealerBookService } from './dealer-book-service.js';
 import {
-  DealerBookService,
-  indexIntervalFlow,
+  DealerFlowTape,
   type IntervalFlow,
   type IntervalFlowLookup,
-} from './dealer-book-service.js';
+  tapeTradeFromEvent,
+} from './dealer-flow-tape.js';
 import {
   BREAK_EVEN_EXPIRY_GRACE_MS,
   BreakEvenService,
@@ -290,6 +291,11 @@ export const dealerBookStore: DealerBookStore = databaseUrl
   ? createDealerBookStore(databaseUrl)
   : new NoopDealerBookStore();
 
+// Longer than any realistic gap between book ticks (15 min) plus a restart.
+const DEALER_FLOW_RETENTION_MS = 6 * 60 * 60 * 1000;
+const dealerFlowTape = new DealerFlowTape(FLOW_ALWAYS_ON_UNDERLYINGS, DEALER_FLOW_RETENTION_MS);
+flowService.subscribe((trade) => dealerFlowTape.record(trade.underlying, tapeTradeFromEvent(trade)));
+
 let flowIndex: { underlying: string; toTs: number; lookup: IntervalFlowLookup } | null = null;
 export const dealerBookService = new DealerBookService({
   underlyings: [...FLOW_ALWAYS_ON_UNDERLYINGS],
@@ -312,9 +318,15 @@ export const dealerBookService = new DealerBookService({
   fetchIntervalFlow: async (venue, exchangeSymbol, underlying, fromTs, toTs): Promise<IntervalFlow> => {
     // Every contract in a tick shares toTs, so the tape is indexed once per underlying per tick.
     if (flowIndex?.underlying !== underlying || flowIndex.toTs !== toTs) {
-      flowIndex = { underlying, toTs, lookup: indexIntervalFlow(flowService.getTrades(underlying)) };
+      flowIndex = { underlying, toTs, lookup: dealerFlowTape.lookup(underlying) };
     }
     return flowIndex.lookup(venue, exchangeSymbol, fromTs, toTs);
+  },
+  // Local spool only: reading the merged store would wake the Neon compute.
+  prepareFlow: async (sinceTs) => {
+    for (const underlying of FLOW_ALWAYS_ON_UNDERLYINGS) {
+      await dealerFlowTape.backfill(underlying, localTradeStore, sinceTs);
+    }
   },
 });
 
@@ -325,8 +337,8 @@ export const gexWallHistoryService = new GexWallHistoryService({
   underlyings: ['BTC', 'ETH', 'HYPE'],
   store: gexWallStore,
   getInputs: async (underlying) => {
-    const { spotPrice, gex } = await getAllExpiriesGex(underlying);
-    return { spotPrice, gex };
+    const { spotPrice, gex, gexProfile } = await getAllExpiriesGex(underlying);
+    return { spotPrice, gex, gexProfile };
   },
 });
 
@@ -626,6 +638,10 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
   } else log.warn({ err: String(spot.reason) }, 'spot service failed');
 
   if (flow.status === 'fulfilled') {
+    const recordingFrom = Date.now();
+    for (const underlying of FLOW_ALWAYS_ON_UNDERLYINGS) {
+      dealerFlowTape.markRecording(underlying, recordingFrom);
+    }
     serviceHealth.flow = true;
     log.info('flow service started');
   } else log.warn({ err: String(flow.reason) }, 'flow service failed');

@@ -6,8 +6,9 @@ import { VENUE_IDS } from '@lib/venue-meta';
 import type { SpotCandleCurrency } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import GexBandsChart from './GexBandsChart';
+import { computeGammaWalls, flowAttributedShare, formatGexM, gexAtSpot } from './gex-wall-utils';
 import styles from './GexView.module.css';
 
 type Mode = 'all' | string;
@@ -55,16 +56,26 @@ export default function GexView() {
   });
 
   const gex: GexStrike[] = isAll ? (allGex?.gex ?? []) : (chain?.gex ?? []);
+  const gexProfile = isAll ? allGex?.gexProfile : chain?.gexProfile;
   const spotPrice = isAll ? (allGex?.spotPrice ?? null) : (chain?.stats.forwardPriceUsd ?? null);
   const isLoading = isAll ? allLoading : chainLoading;
+
+  const walls = useMemo(
+    () => computeGammaWalls(gex, spotPrice, gexProfile),
+    [gex, spotPrice, gexProfile],
+  );
+  const netAtSpot = gexAtSpot(gexProfile);
+  const flowShare = flowAttributedShare(gex);
+  const flowShareAt = (strike: number | null) =>
+    strike == null ? undefined : gex.find((g) => g.strike === strike)?.flowShare;
 
   const barsRef = useRef<HTMLDivElement | null>(null);
   const spotRowRef = useRef<HTMLDivElement | null>(null);
   const hasCenteredBarsRef = useRef(false);
 
-  const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1);
+  const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1e-9);
   const sorted = [...gex].sort((a, b) => b.strike - a.strike);
-  const nonzero = gex.filter((g) => Math.abs(g.gexUsdMillions) > 0.001);
+  const nonzero = gex.filter((g) => Math.abs(g.gexUsdMillions) > 1e-6);
   const spotStrike =
     spotPrice != null
       ? nonzero.reduce<number | null>((best, row) => {
@@ -126,7 +137,9 @@ export default function GexView() {
               </button>
             </div>
           </div>
-          <span className={styles.subtitle}>Dealer hedging pressure per strike in $M</span>
+          <span className={styles.subtitle}>
+            Dealer gamma per strike · $M of hedging per 1% spot move
+          </span>
         </div>
         {spotPrice != null && <div className={styles.spotBadge}>Spot: {fmtUsd(spotPrice)}</div>}
       </div>
@@ -183,6 +196,45 @@ export default function GexView() {
               </span>
             </button>
           ) : null}
+          <div className={styles.levels}>
+            {netAtSpot != null && (
+              <span
+                className={styles.level}
+                title="Total dealer GEX at the current spot. Positive: dealers long gamma (dampening). Negative: short gamma (amplifying)."
+              >
+                Net at spot
+                <span
+                  className={styles.levelValue}
+                  data-type={netAtSpot >= 0 ? 'positive' : 'negative'}
+                >
+                  {formatGexM(netAtSpot)} · {netAtSpot >= 0 ? 'long γ' : 'short γ'}
+                </span>
+              </span>
+            )}
+            <span
+              className={styles.level}
+              title="Spot level where total dealer GEX changes sign, found by re-pricing every contract's gamma across ±20% of spot"
+            >
+              Flip
+              <span className={styles.levelValue}>
+                {walls.gammaFlip != null ? Math.round(walls.gammaFlip).toLocaleString() : '—'}
+              </span>
+            </span>
+            <WallLevel label="Call wall" strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
+            <WallLevel label="Put wall" strike={walls.putWall} flowShare={flowShareAt(walls.putWall)} />
+            {flowShare != null && (
+              <span
+                className={styles.level}
+                title="Share of gross gamma whose dealer sign comes from observed taker flow. The rest is open interest that predates the flow book, signed by the naive prior (dealers long calls, short puts)."
+              >
+                Flow-attributed
+                <span className={styles.levelValue} data-low-confidence={flowShare < 0.5}>
+                  {Math.round(flowShare * 100)}%
+                </span>
+              </span>
+            )}
+          </div>
+
           {(!isMobile || showExplain) && (
             <div className={styles.explain}>
               <span className={styles.explainItem} data-type="positive">
@@ -196,14 +248,17 @@ export default function GexView() {
                 bigger swings
               </span>
               <span className={styles.explainFormula}>
-                GEX per strike = dealer position × Gamma × Spot² × contract size, summed across
-                venues. Dealer position is reconstructed from net flow: open-interest changes are
-                signed by the aggressor side of trades (taker buys ⇒ dealer short).
+                GEX per strike = dealer position × Gamma × Spot² × 1% × contract size, summed
+                across venues. New open interest is signed by the taker side of screen and block
+                trades in each 15-min interval (taker buys ⇒ dealer short). The flip re-prices
+                every contract&apos;s gamma across spot levels and marks where the total changes
+                sign.
               </span>
               <span className={styles.explainCaveat}>
-                Sign is inferred from observed flow, not the call/put assumption. Strikes with no
-                attributed flow yet fall back to the open-interest approximation. Treat GEX as a
-                directional indicator, not ground truth.
+                Open interest that predates the flow book keeps the naive sign (dealers long calls,
+                short puts) until it closes or expires — see Flow-attributed. Faded bars and
+                amber shares are mostly that prior. Treat GEX as a directional indicator, not
+                ground truth.
               </span>
             </div>
           )}
@@ -211,6 +266,7 @@ export default function GexView() {
           {effectiveVersion === 'bands' ? (
             <GexBandsChart
               gex={gex}
+              gexProfile={gexProfile}
               spotPrice={spotPrice}
               currency={underlying as SpotCandleCurrency}
               showHistory={isAll && allVenues}
@@ -232,6 +288,9 @@ export default function GexView() {
                   const pct = (Math.abs(g.gexUsdMillions) / maxMagnitude) * 100;
                   const positive = g.gexUsdMillions >= 0;
                   const isNearSpot = g.strike === spotStrike;
+                  const flowPct =
+                    g.flowShare !== undefined ? ` · ${Math.round(g.flowShare * 100)}% flow` : '';
+                  const barOpacity = g.flowShare !== undefined ? 0.35 + 0.65 * g.flowShare : 1;
 
                   return (
                     <div
@@ -250,8 +309,8 @@ export default function GexView() {
                             <div
                               className={styles.bar}
                               data-type="negative"
-                              style={{ width: `${pct}%` }}
-                              title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                              style={{ width: `${pct}%`, opacity: barOpacity }}
+                              title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%${flowPct}`}
                             />
                           )}
                         </div>
@@ -261,16 +320,13 @@ export default function GexView() {
                             <div
                               className={styles.bar}
                               data-type="positive"
-                              style={{ width: `${pct}%` }}
-                              title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                              style={{ width: `${pct}%`, opacity: barOpacity }}
+                              title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%${flowPct}`}
                             />
                           )}
                         </div>
                       </div>
-                      <div className={styles.valueLabel}>
-                        {positive ? '+' : ''}
-                        {g.gexUsdMillions.toFixed(1)}M
-                      </div>
+                      <div className={styles.valueLabel}>{formatGexM(g.gexUsdMillions)}</div>
                     </div>
                   );
                 })}
@@ -280,5 +336,31 @@ export default function GexView() {
         </>
       )}
     </div>
+  );
+}
+
+function WallLevel({
+  label,
+  strike,
+  flowShare,
+}: {
+  label: string;
+  strike: number | null;
+  flowShare: number | undefined;
+}) {
+  return (
+    <span className={styles.level}>
+      {label}
+      <span className={styles.levelValue}>{strike != null ? strike.toLocaleString() : '—'}</span>
+      {strike != null && flowShare !== undefined && (
+        <span
+          className={styles.levelValue}
+          data-low-confidence={flowShare < 0.5}
+          title="Share of this strike's gamma signed by observed flow"
+        >
+          {Math.round(flowShare * 100)}% flow
+        </span>
+      )}
+    </span>
   );
 }

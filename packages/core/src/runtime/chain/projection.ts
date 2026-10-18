@@ -7,7 +7,9 @@ import {
   enrichComparisonRow,
   type EnrichedChainResponse,
   type EnrichedStrike,
+  pickExpiryTs,
 } from '../../core/enrichment.js';
+import { computeGexProfile } from '../../core/gex-profile.js';
 import type {
   ComparisonRow,
   SnapshotMeta,
@@ -23,6 +25,7 @@ export interface ChainProjectionDelta {
     stats: EnrichedChainResponse['stats'];
     strikes: EnrichedStrike[];
     gex?: EnrichedChainResponse['gex'];
+    gexProfile?: EnrichedChainResponse['gexProfile'];
   };
 }
 
@@ -148,10 +151,13 @@ export class ChainProjection {
     };
     if (options.includeGex === true) {
       const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
-      patch.gex = computeGex(
-        [...this.comparisonRows.values()],
+      const rows = [...this.comparisonRows.values()];
+      patch.gex = computeGex(rows, strikes, spotPrice, this.bookLookup);
+      patch.gexProfile = computeGexProfile(
+        rows,
         strikes,
         spotPrice,
+        pickExpiryTs(venueChains) ?? new Date(this.expiry + 'T08:00:00Z').getTime(),
         this.bookLookup,
       );
     }

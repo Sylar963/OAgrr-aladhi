@@ -1,4 +1,5 @@
 import { EmptyState, Spinner } from '@components/ui';
+import { formatGexM } from '@features/gex';
 import styles from '@features/gex/GexView.module.css';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
 import type { GexStrike } from '@shared/enriched';
@@ -31,14 +32,15 @@ export default function TradfiGexView() {
   const { data: allGex, isLoading: allLoading } = useTradfiAllExpiriesGex(underlying, isAll);
 
   const gex: GexStrike[] = isAll ? (allGex?.gex ?? []) : (chain?.gex ?? []);
+  const gexProfile = isAll ? allGex?.gexProfile : chain?.gexProfile;
   const spotPrice = isAll
     ? (allGex?.spotPrice ?? null)
     : (chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? null);
   const isLoading = isAll ? allLoading : chainLoading;
 
-  const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1);
+  const maxMagnitude = Math.max(...gex.map((g) => Math.abs(g.gexUsdMillions)), 1e-9);
   const sorted = [...gex].sort((a, b) => b.strike - a.strike);
-  const nonzero = gex.filter((g) => Math.abs(g.gexUsdMillions) > 0.001);
+  const nonzero = gex.filter((g) => Math.abs(g.gexUsdMillions) > 1e-6);
   const spotStrike =
     spotPrice != null
       ? nonzero.reduce<number | null>((best, row) => {
@@ -98,7 +100,9 @@ export default function TradfiGexView() {
               </button>
             </div>
           </div>
-          <span className={styles.subtitle}>Dealer hedging pressure per strike in $M</span>
+          <span className={styles.subtitle}>
+            Dealer gamma per strike · $M of hedging per 1% spot move
+          </span>
         </div>
         {spotPrice != null && <div className={styles.spotBadge}>Spot: {fmtUsd(spotPrice)}</div>}
       </div>
@@ -139,7 +143,12 @@ export default function TradfiGexView() {
           detail="Open interest and flow populate once the chain has warmed."
         />
       ) : version === 'bands' ? (
-        <TradfiGexBandsChart underlying={underlying} gex={gex} spotPrice={spotPrice} />
+        <TradfiGexBandsChart
+          underlying={underlying}
+          gex={gex}
+          gexProfile={gexProfile}
+          spotPrice={spotPrice}
+        />
       ) : (
         <div className={styles.chart}>
           <div className={styles.axis}>
@@ -174,7 +183,7 @@ export default function TradfiGexView() {
                           className={styles.bar}
                           data-type="negative"
                           style={{ width: `${pct}%` }}
-                          title={`${g.strike}: ${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                          title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%`}
                         />
                       )}
                     </div>
@@ -185,15 +194,12 @@ export default function TradfiGexView() {
                           className={styles.bar}
                           data-type="positive"
                           style={{ width: `${pct}%` }}
-                          title={`${g.strike}: +${g.gexUsdMillions.toFixed(1)}M USD GEX`}
+                          title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%`}
                         />
                       )}
                     </div>
                   </div>
-                  <div className={styles.valueLabel}>
-                    {positive ? '+' : ''}
-                    {g.gexUsdMillions.toFixed(1)}M
-                  </div>
+                  <div className={styles.valueLabel}>{formatGexM(g.gexUsdMillions)}</div>
                 </div>
               );
             })}

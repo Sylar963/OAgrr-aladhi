@@ -493,6 +493,7 @@ export class ChainRuntime {
           stats: patch.patch.stats,
           strikes: diffEnrichedStrikes(previousStrikes, patch.patch.strikes),
           ...(patch.patch.gex != null ? { gex: patch.patch.gex } : {}),
+          ...(patch.patch.gexProfile != null ? { gexProfile: patch.patch.gexProfile } : {}),
         };
         return diffPatch;
       },
@@ -511,6 +512,7 @@ export class ChainRuntime {
               stats: patch.patch.stats,
               strikes: mergeEnrichedStrikes(snapshot.data.strikes, patch.patch.strikes),
               gex: patch.patch.gex ?? snapshot.data.gex,
+              gexProfile: patch.patch.gexProfile ?? snapshot.data.gexProfile,
             },
           };
 

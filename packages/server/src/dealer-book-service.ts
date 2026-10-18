@@ -14,13 +14,10 @@ import type {
   PersistedOiSnapshot,
 } from '@oggregator/db';
 
+import type { IntervalFlow } from './dealer-flow-tape.js';
+
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 const SNAPSHOT_RETENTION_MS = 35 * 24 * 60 * 60 * 1000;
-
-export interface IntervalFlow {
-  netFlow: number;
-  hasFlow: boolean;
-}
 
 export interface DealerBookServiceOptions {
   underlyings: string[];
@@ -40,70 +37,14 @@ export interface DealerBookServiceOptions {
     fromTs: number,
     toTs: number,
   ) => Promise<IntervalFlow>;
+  /**
+   * Runs once after the book is warmed from storage and before the first tick, with the oldest
+   * warmed snapshot ts, so the flow source can backfill the restart gap.
+   */
+  prepareFlow?: (sinceTs: number) => Promise<void>;
   now?: () => number;
   intervalMs?: number;
   log?: { info: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
-}
-
-export interface TapeTrade {
-  venue: VenueId;
-  instrument: string;
-  side: 'buy' | 'sell';
-  size: number;
-  timestamp: number;
-  isBlock: boolean;
-}
-
-export type IntervalFlowLookup = (
-  venue: VenueId,
-  exchangeSymbol: string,
-  fromTs: number,
-  toTs: number,
-) => IntervalFlow;
-
-/**
- * Indexes a trade tape once so each contract's net taker flow only scans that contract's
- * trades. The dealer-book tick looks up thousands of contracts; scanning the whole tape for
- * each one stalled the event loop for ~25 s per tick and dropped venue websockets.
- * Coverage is judged on the venue's whole tape: a contract that simply didn't trade earlier is
- * still covered, but a buffer that starts after fromTs may have dropped trades. Block trades are
- * excluded because their aggressor sign is ambiguous.
- */
-export function indexIntervalFlow(trades: readonly TapeTrade[]): IntervalFlowLookup {
-  const earliestByVenue = new Map<VenueId, number>();
-  const byContract = new Map<string, TapeTrade[]>();
-  for (const t of trades) {
-    const earliest = earliestByVenue.get(t.venue);
-    if (earliest === undefined || t.timestamp < earliest) earliestByVenue.set(t.venue, t.timestamp);
-    if (t.isBlock) continue;
-    const key = bookKey(t.venue, t.instrument);
-    const list = byContract.get(key);
-    if (list) list.push(t);
-    else byContract.set(key, [t]);
-  }
-  return (venue, exchangeSymbol, fromTs, toTs) => {
-    const earliest = earliestByVenue.get(venue) ?? Infinity;
-    if (earliest > fromTs) return { netFlow: 0, hasFlow: false };
-    let net = 0;
-    let matched = false;
-    for (const t of byContract.get(bookKey(venue, exchangeSymbol)) ?? []) {
-      if (t.timestamp <= fromTs || t.timestamp > toTs) continue;
-      net += t.side === 'buy' ? t.size : -t.size;
-      matched = true;
-    }
-    return matched ? { netFlow: net, hasFlow: true } : { netFlow: 0, hasFlow: false };
-  };
-}
-
-/** Net taker flow for one contract over (fromTs, toTs]; see indexIntervalFlow. */
-export function netIntervalFlow(
-  trades: readonly TapeTrade[],
-  venue: VenueId,
-  exchangeSymbol: string,
-  fromTs: number,
-  toTs: number,
-): IntervalFlow {
-  return indexIntervalFlow(trades)(venue, exchangeSymbol, fromTs, toTs);
 }
 
 const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -174,6 +115,7 @@ export class DealerBookService {
   async start(): Promise<void> {
     if (this.timer) return; // already started; don't stack intervals
     await this.warmFromStore();
+    await this.prepareFlow();
     await this.runTick();
     this.timer = setInterval(() => {
       void this.runTick();
@@ -198,6 +140,17 @@ export class DealerBookService {
       }
     } catch (err) {
       this.opts.log.warn({ err: String(err) }, 'dealer book warm-from-store failed');
+    }
+  }
+
+  private async prepareFlow(): Promise<void> {
+    if (!this.opts.prepareFlow || this.book.size === 0) return;
+    let sinceTs = Infinity;
+    for (const pos of this.book.values()) sinceTs = Math.min(sinceTs, pos.lastSnapshotTs);
+    try {
+      await this.opts.prepareFlow(sinceTs);
+    } catch (err) {
+      this.opts.log.warn({ err: String(err) }, 'dealer book flow backfill failed');
     }
   }
 

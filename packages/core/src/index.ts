@@ -63,7 +63,19 @@ export {
   buildSurfaceAnalytics,
   buildSurfaceGridEntry,
 } from './core/surface-grid.js';
-export { computeGammaWalls, GEX_WALL_FLOOR_M, type GammaWalls } from './core/gamma-walls.js';
+export {
+  computeGammaFlip,
+  computeGammaWalls,
+  GEX_WALL_FLOOR_M,
+  type GammaWalls,
+} from './core/gamma-walls.js';
+export {
+  computeGexProfile,
+  combineGexProfile,
+  GEX_PER_PCT_MOVE,
+  GEX_PROFILE_MOVES,
+  type GexProfilePoint,
+} from './core/gex-profile.js';
 export {
   computeVenueSurfaceRows,
   computeVenueTenorIvs,

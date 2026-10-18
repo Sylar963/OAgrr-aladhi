@@ -7,7 +7,7 @@ import {
 } from '@features/gex';
 import gexStyles from '@features/gex/GexView.module.css';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
-import type { GexStrike } from '@shared/enriched';
+import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import {
   CandlestickSeries,
   ColorType,
@@ -39,10 +39,11 @@ const RANGES: Array<{ range: InstrumentCandleRange; interval: InstrumentCandleIn
 interface Props {
   underlying: string;
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
   spotPrice: number | null;
 }
 
-export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Props) {
+export default function TradfiGexBandsChart({ underlying, gex, gexProfile, spotPrice }: Props) {
   const [rangeIdx, setRangeIdx] = useState(2); // default 30d
   const sel = RANGES[rangeIdx]!;
 
@@ -61,7 +62,10 @@ export default function TradfiGexBandsChart({ underlying, gex, spotPrice }: Prop
     range: sel.range,
   });
 
-  const walls = useMemo(() => computeGammaWalls(gex, spotPrice), [gex, spotPrice]);
+  const walls = useMemo(
+    () => computeGammaWalls(gex, spotPrice, gexProfile),
+    [gex, spotPrice, gexProfile],
+  );
 
   // Mount/unmount.
   useEffect(() => {

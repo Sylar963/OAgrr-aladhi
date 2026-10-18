@@ -285,6 +285,7 @@ export function useChainWs({
           stats: last.patch.stats,
           strikes,
           gex: last.patch.gex ?? current.gex,
+          gexProfile: last.patch.gexProfile ?? current.gexProfile,
         };
       });
     }

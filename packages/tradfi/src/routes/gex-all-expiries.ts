@@ -1,4 +1,4 @@
-import { combineGex, type GexStrike } from '@oggregator/core';
+import { combineGex, combineGexProfile, type GexProfilePoint, type GexStrike } from '@oggregator/core';
 import type { FastifyInstance } from 'fastify';
 import type { TradfiDeps } from '../app.js';
 import { buildChain } from '../runtime/chain.js';
@@ -8,6 +8,7 @@ export interface TradfiAllExpiriesGexResponse {
   expiries: string[];
   spotPrice: number | null;
   gex: GexStrike[];
+  gexProfile: GexProfilePoint[];
 }
 
 export function gexAllExpiriesRoute(deps: TradfiDeps) {
@@ -27,7 +28,7 @@ export function gexAllExpiriesRoute(deps: TradfiDeps) {
 
         const expiries = deps.store.listExpiries(underlying);
         if (expiries.length === 0) {
-          return { underlying, expiries: [], spotPrice: null, gex: [] };
+          return { underlying, expiries: [], spotPrice: null, gex: [], gexProfile: [] };
         }
 
         const snapshots = expiries.map((expiry) => {
@@ -36,11 +37,12 @@ export function gexAllExpiriesRoute(deps: TradfiDeps) {
         });
 
         const gex = combineGex(snapshots.map((s) => s.gex));
+        const gexProfile = combineGexProfile(snapshots.map((s) => s.gexProfile));
         const first = snapshots[0];
         const spotPrice =
           first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
 
-        return { underlying, expiries, spotPrice, gex };
+        return { underlying, expiries, spotPrice, gex, gexProfile };
       },
     );
   };

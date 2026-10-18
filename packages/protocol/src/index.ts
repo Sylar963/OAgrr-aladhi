@@ -350,6 +350,7 @@ export {
   type EnrichedSide,
   type EnrichedStrike,
   type EstimatedFees,
+  type GexProfilePoint,
   type GexStrike,
   type DeltaDiffPatch,
   DeltaDiffPatchSchema,

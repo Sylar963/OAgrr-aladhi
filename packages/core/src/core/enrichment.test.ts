@@ -277,7 +277,7 @@ describe('enrichment', () => {
 
     const gex = computeGex(rows, strikes, 65_000);
     expect(gex).toHaveLength(1);
-    expect(gex[0]!.gexUsdMillions).toBeCloseTo(735, 6);
+    expect(gex[0]!.gexUsdMillions).toBeCloseTo(7.35, 8);
   });
 
   it('computes OKX inverse GEX from contract-count OI without double-applying ctMult', () => {
@@ -347,7 +347,7 @@ describe('enrichment', () => {
     ];
 
     const gex = computeGex(rows, strikes, 67_000);
-    expect(gex[0]!.gexUsdMillions).toBeCloseTo(123.4475, 6);
+    expect(gex[0]!.gexUsdMillions).toBeCloseTo(1.234475, 8);
   });
 
   it('builds IV surface points from price-based ATM and nearest strikes to target deltas', () => {

@@ -7,7 +7,7 @@
 // so it can be unit-tested in isolation.
 
 import type { EnrichedChainResponse, EnrichedStrike, VenueQuote } from '@shared/enriched';
-import { computeGammaWalls, type GammaWalls } from '@features/gex';
+import { computeGammaWalls, type GammaWalls, sumGexProfiles } from '@features/gex';
 
 import type { HeatRow, OiMode, HeatSide } from './oi-heatmap-utils';
 
@@ -279,7 +279,10 @@ export function computeVisibleGammaLevels(
     flowShareByStrike.set(strike, acc.gross > 0 ? acc.flow / acc.gross : 0);
   }
   const gex = [...netGexByStrike].map(([strike, gexUsdMillions]) => ({ strike, gexUsdMillions }));
-  return { ...computeGammaWalls(gex, spot), netGexByStrike, flowShareByStrike };
+  const profile = sumGexProfiles(
+    chains.filter((chain) => !hiddenExpiries.has(chain.expiry)).map((chain) => chain.gexProfile),
+  );
+  return { ...computeGammaWalls(gex, spot, profile), netGexByStrike, flowShareByStrike };
 }
 
 // Convenience wrapper: filters a HeatRow[] to only the significant strikes.

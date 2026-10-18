@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GexStrike } from './enrichment.js';
-import { computeGammaWalls } from './gamma-walls.js';
+import { computeGammaFlip, computeGammaWalls } from './gamma-walls.js';
+import type { GexProfilePoint } from './gex-profile.js';
 
-// Worked example: spot 61,800. Call wall = 70k (+120), put wall = 57.5k (-85),
-// flip interpolated between 67.5k (cum -50) and 70k (cum +70) -> ~68,541.67.
 const SAMPLE: GexStrike[] = [
   { strike: 55_000, gexUsdMillions: -40 },
   { strike: 57_500, gexUsdMillions: -85 },
@@ -15,6 +14,9 @@ const SAMPLE: GexStrike[] = [
   { strike: 75_000, gexUsdMillions: 15 },
 ];
 
+const profile = (pairs: [number, number][]): GexProfilePoint[] =>
+  pairs.map(([movePct, gexUsdMillions]) => ({ movePct, gexUsdMillions }));
+
 describe('computeGammaWalls', () => {
   it('picks max-positive call wall above spot and most-negative put wall below', () => {
     const w = computeGammaWalls(SAMPLE, 61_800);
@@ -22,63 +24,54 @@ describe('computeGammaWalls', () => {
     expect(w.putWall).toBe(57_500);
   });
 
-  it('interpolates the gamma flip at the cumulative zero-cross', () => {
-    const w = computeGammaWalls(SAMPLE, 61_800);
-    expect(w.gammaFlip).toBeCloseTo(68_541.67, 1);
+  it('has no flip without a profile', () => {
+    expect(computeGammaWalls(SAMPLE, 61_800).gammaFlip).toBeNull();
+  });
+
+  it('takes the flip from the profile zero crossing', () => {
+    const p = profile([
+      [-0.01, -10],
+      [-0.005, -2],
+      [0, 6],
+    ]);
+    expect(computeGammaWalls(SAMPLE, 80_000, p).gammaFlip).toBeCloseTo(80_000 * (1 - 0.00375), 6);
   });
 
   it('returns nulls when spot is null or gex is empty', () => {
-    expect(computeGammaWalls(SAMPLE, null)).toEqual({
-      callWall: null,
-      putWall: null,
-      gammaFlip: null,
-    });
-    expect(computeGammaWalls([], 61_800)).toEqual({
-      callWall: null,
-      putWall: null,
-      gammaFlip: null,
-    });
-  });
-
-  it('omits the flip when cumulative GEX never crosses zero (all positive)', () => {
-    const allPos: GexStrike[] = [
-      { strike: 60_000, gexUsdMillions: 10 },
-      { strike: 70_000, gexUsdMillions: 40 },
-    ];
-    const w = computeGammaWalls(allPos, 61_800);
-    expect(w.gammaFlip).toBeNull();
-    expect(w.callWall).toBe(70_000);
-    expect(w.putWall).toBeNull(); // 60k is positive, not a (negative) put wall
+    const empty = { callWall: null, putWall: null, gammaFlip: null };
+    expect(computeGammaWalls(SAMPLE, null)).toEqual(empty);
+    expect(computeGammaWalls([], 61_800)).toEqual(empty);
   });
 
   it('ignores sub-floor noise strikes when choosing a wall', () => {
     const noisy: GexStrike[] = [
-      { strike: 65_000, gexUsdMillions: 0.4 }, // above spot but below the 1M floor
-      { strike: 55_000, gexUsdMillions: -0.3 }, // below spot but below the floor
+      { strike: 65_000, gexUsdMillions: 0.004 },
+      { strike: 55_000, gexUsdMillions: -0.003 },
     ];
     const w = computeGammaWalls(noisy, 61_800);
     expect(w.callWall).toBeNull();
     expect(w.putWall).toBeNull();
   });
+});
 
-  it('places the flip at the strike where cumulative GEX reaches exactly zero', () => {
-    const exact: GexStrike[] = [
-      { strike: 60_000, gexUsdMillions: -50 },
-      { strike: 65_000, gexUsdMillions: 50 }, // cum: -50 -> 0 exactly at 65k
-      { strike: 70_000, gexUsdMillions: 20 },
-    ];
-    // prevCum -50, cum 0: weight |prevCum|/denom = 50/50 = 1 -> lo + (hi-lo)*1 = hi = 65k
-    expect(computeGammaWalls(exact, 61_800).gammaFlip).toBeCloseTo(65_000, 6);
+describe('computeGammaFlip', () => {
+  it('is null when total GEX keeps one sign', () => {
+    expect(computeGammaFlip(profile([[-0.01, 3], [0, 5], [0.01, 2]]), 100)).toBeNull();
   });
 
-  it('picks the zero-cross nearest spot when deep OTM strikes cross first', () => {
-    const tails: GexStrike[] = [
-      { strike: 10_000, gexUsdMillions: 5 },
-      { strike: 15_000, gexUsdMillions: -10 },
-      { strike: 80_000, gexUsdMillions: -20 },
-      { strike: 85_000, gexUsdMillions: 60 },
-    ];
-    // Crossings near 12.5k (deep OTM) and 80k + 5k * 25/60 ~ 82,083.33 (near spot).
-    expect(computeGammaWalls(tails, 84_000).gammaFlip).toBeCloseTo(82_083.33, 1);
+  it('sits below spot when dealers are long gamma at spot', () => {
+    const flip = computeGammaFlip(profile([[-0.04, -50], [-0.02, 20], [0, 130], [0.02, 90]]), 81_746);
+    expect(flip).not.toBeNull();
+    expect(flip!).toBeLessThan(81_746);
+  });
+
+  it('picks the crossing nearest spot', () => {
+    const p = profile([
+      [-0.2, 5],
+      [-0.19, -5],
+      [-0.01, -1],
+      [0.01, 1],
+    ]);
+    expect(computeGammaFlip(p, 100)).toBeCloseTo(100, 6);
   });
 });

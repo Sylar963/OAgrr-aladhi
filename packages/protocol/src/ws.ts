@@ -157,11 +157,18 @@ export interface EnrichedStrike {
   put: EnrichedSide;
 }
 
+/** `gexUsdMillions` is dealer dollar gamma in $M per 1% spot move. */
 export interface GexStrike {
   strike: number;
   gexUsdMillions: number;
   /** 0–1 share of gross gamma whose dealer sign came from observed taker flow. */
   flowShare?: number;
+}
+
+/** Total dealer GEX ($M per 1%) if spot moved by `movePct`; its zero crossing is the gamma flip. */
+export interface GexProfilePoint {
+  movePct: number;
+  gexUsdMillions: number;
 }
 
 export interface ChainStats {
@@ -187,6 +194,7 @@ export interface EnrichedChainResponse {
   stats: ChainStats;
   strikes: EnrichedStrike[];
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
 }
 
 /**
@@ -218,6 +226,7 @@ export interface DeltaDiffPatch {
   stats: ChainStats;
   strikes: EnrichedStrikeDiff[];
   gex?: GexStrike[];
+  gexProfile?: GexProfilePoint[];
 }
 
 export interface VenueDelta {
@@ -329,6 +338,11 @@ const GexStrikeSchema = z.object({
   flowShare: z.number().min(0).max(1).optional(),
 });
 
+const GexProfilePointSchema = z.object({
+  movePct: z.number(),
+  gexUsdMillions: z.number(),
+});
+
 const ChainStatsSchema = z.object({
   forwardPriceUsd: NullableNumberSchema,
   indexPriceUsd: NullableNumberSchema,
@@ -349,6 +363,7 @@ export const EnrichedChainResponseSchema = z.object({
   stats: ChainStatsSchema,
   strikes: z.array(EnrichedStrikeSchema),
   gex: z.array(GexStrikeSchema),
+  gexProfile: z.array(GexProfilePointSchema).optional(),
 });
 
 const PremiumValueSchema = z.object({
@@ -403,6 +418,7 @@ export const DeltaPatchSchema = z.object({
   stats: ChainStatsSchema,
   strikes: z.array(EnrichedStrikeSchema),
   gex: z.array(GexStrikeSchema).optional(),
+  gexProfile: z.array(GexProfilePointSchema).optional(),
 });
 
 const VenueQuoteDiffSchema = VenueQuoteSchema.omit({ estimatedFees: true, execution: true })
@@ -429,6 +445,7 @@ export const DeltaDiffPatchSchema = z.object({
     }),
   ),
   gex: z.array(GexStrikeSchema).optional(),
+  gexProfile: z.array(GexProfilePointSchema).optional(),
 });
 
 export const ServerWsMessageSchema = z.discriminatedUnion('type', [

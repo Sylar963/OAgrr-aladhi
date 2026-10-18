@@ -2,6 +2,8 @@ import {
   buildComparisonChain,
   buildEnrichedChain,
   combineGex,
+  combineGexProfile,
+  type GexProfilePoint,
   type GexStrike,
   getAdapter,
   getAllAdapters,
@@ -20,6 +22,7 @@ export interface AllExpiriesGex {
   expiries: string[];
   spotPrice: number | null;
   gex: GexStrike[];
+  gexProfile: GexProfilePoint[];
 }
 
 export function parseGexVenues(venuesParam: string | undefined): VenueId[] {
@@ -43,7 +46,7 @@ async function computeAllExpiriesGex(
 ): Promise<AllExpiriesGex> {
   const expiries = await collectUnderlyingExpiries(underlying);
   if (expiries.length === 0) {
-    return { underlying, expiries: [], spotPrice: null, gex: [] };
+    return { underlying, expiries: [], spotPrice: null, gex: [], gexProfile: [] };
   }
 
   const snapshots = await Promise.all(
@@ -65,11 +68,12 @@ async function computeAllExpiriesGex(
   );
 
   const aggregated = combineGex(snapshots.map((snap) => snap.gex));
+  const gexProfile = combineGexProfile(snapshots.map((snap) => snap.gexProfile));
   const first = snapshots[0];
   const spotPrice =
     first != null ? (first.stats.indexPriceUsd ?? first.stats.forwardPriceUsd) : null;
 
-  return { underlying, expiries, spotPrice, gex: aggregated };
+  return { underlying, expiries, spotPrice, gex: aggregated, gexProfile };
 }
 
 /** All-expiry, multi-venue GEX profile shared by `/gex-all-expiries` and the wall sampler. */

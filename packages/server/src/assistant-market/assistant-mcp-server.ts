@@ -188,7 +188,7 @@ export function buildAssistantMcpTools(
     tool({
       name: 'oggregator_gamma_exposure',
       description:
-        'Dealer gamma exposure (GEX) across all expiries: net GEX and the strikes with the largest positive and negative gamma, in USD millions.',
+        'Dealer gamma exposure (GEX) across all expiries: net GEX and the strikes with the largest positive and negative gamma, in USD millions of dealer hedging per 1% spot move.',
       input: z.object({ underlying }),
       run: async (args) => unwrap(await reader.gammaExposure(args.underlying)),
     }),

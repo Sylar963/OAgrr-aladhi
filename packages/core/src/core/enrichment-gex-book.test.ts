@@ -97,8 +97,8 @@ describe('computeGex book awareness', () => {
     const lookup: BookLookup = (_v, symbol) => book[symbol];
     const real = computeGex(rows(), strikes(), 70000, lookup);
     // call: qty -100 → callGex -100*g; put: qty -(-100)=+100 → putGex +100*g
-    // strikeGex = callGex - putGex = (-100 - 100) * 0.0001 * 70000^2 / 1e6
-    const term = (0.0001 * 70000 * 70000) / 1_000_000;
+    // strikeGex = callGex - putGex = (-100 - 100) * 0.0001 * 70000^2 * 0.01 / 1e6
+    const term = (0.0001 * 70000 * 70000 * 0.01) / 1_000_000;
     expect(real[0]?.gexUsdMillions).toBeCloseTo(-200 * term, 9);
   });
 

@@ -72,10 +72,18 @@ describe('buildGexWallPoint', () => {
     expect(buildGexWallPoint(0, { spotPrice: 61_800, gex: [] })).toBeNull();
   });
 
-  it('computes walls for a valid profile', () => {
-    const point = buildGexWallPoint(SLOT, { spotPrice: 61_800, gex: GEX });
+  it('computes walls, taking the flip from the spot profile', () => {
+    const gexProfile = [
+      { movePct: -0.01, gexUsdMillions: -3 },
+      { movePct: 0, gexUsdMillions: 1 },
+    ];
+    const point = buildGexWallPoint(SLOT, { spotPrice: 61_800, gex: GEX, gexProfile });
     expect(point).toMatchObject({ ts: SLOT, spot: 61_800, callWall: 70_000, putWall: 57_500 });
-    expect(point?.gammaFlip).toBeCloseTo(68_541.67, 1);
+    expect(point?.gammaFlip).toBeCloseTo(61_800 * (1 - 0.0025), 6);
+  });
+
+  it('records no flip when the profile is missing', () => {
+    expect(buildGexWallPoint(SLOT, { spotPrice: 61_800, gex: GEX })?.gammaFlip).toBeNull();
   });
 });
 

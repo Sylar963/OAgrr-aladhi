@@ -428,12 +428,25 @@ describe('computeVisibleGammaLevels', () => {
     b.gex = [{ strike: 82_000, gexUsdMillions: 6 }];
     const hidden = chain('2026-06-26', 60, []);
     hidden.gex = [{ strike: 82_000, gexUsdMillions: -100 }];
+    a.gexProfile = [
+      { movePct: -0.01, gexUsdMillions: -4 },
+      { movePct: 0, gexUsdMillions: 2 },
+    ];
+    b.gexProfile = [
+      { movePct: -0.01, gexUsdMillions: 0 },
+      { movePct: 0, gexUsdMillions: 2 },
+    ];
+    hidden.gexProfile = [
+      { movePct: -0.01, gexUsdMillions: 100 },
+      { movePct: 0, gexUsdMillions: 100 },
+    ];
 
     const levels = computeVisibleGammaLevels([a, b, hidden], new Set(['2026-06-26']), 80_000);
     expect(levels.netGexByStrike.get(82_000)).toBe(12);
     expect(levels.callWall).toBe(82_000);
     expect(levels.putWall).toBe(78_000);
-    expect(levels.gammaFlip).not.toBeNull();
+    // Visible profile: -4 at -1%, +4 at 0% → crosses at -0.5%.
+    expect(levels.gammaFlip).toBeCloseTo(79_600, 6);
   });
 
   it('blends flowShare by |GEX| and skips strikes without attribution data', () => {

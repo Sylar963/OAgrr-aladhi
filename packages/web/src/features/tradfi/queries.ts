@@ -3,7 +3,7 @@ import { useCallback, useEffect } from 'react';
 
 import { tradfiFetchJson } from '@lib/tradfi-http';
 import { TradfiSectorsResponseSchema } from '@oggregator/protocol';
-import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
+import type { EnrichedChainResponse, GexProfilePoint, GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 
 const NONE: string[] = [];
@@ -115,6 +115,7 @@ export interface TradfiAllExpiriesGexResponse {
   expiries: string[];
   spotPrice: number | null;
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
 }
 
 export function useTradfiAllExpiriesGex(underlying: string, enabled = true) {

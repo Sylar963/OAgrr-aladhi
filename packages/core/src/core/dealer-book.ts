@@ -37,6 +37,19 @@ export interface OiSnapshotInput {
 /** Synchronous lookup of the current book position, injected into computeGex. */
 export type BookLookup = (venue: VenueId, symbol: string) => DealerPosition | undefined;
 
+/**
+ * Dealer long-gamma contracts for one contract: the book position when one exists, else the
+ * naive prior (dealers long calls, short puts).
+ */
+export function dealerGammaContracts(
+  pos: DealerPosition | undefined,
+  openInterest: number,
+  right: OptionRight,
+): number {
+  if (pos) return pos.dealerContracts;
+  return right === 'call' ? openInterest : -openInterest;
+}
+
 /** Sub-contract OI noise below this is treated as zero change. */
 export const OI_EPSILON = 1e-6;
 

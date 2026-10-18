@@ -43,6 +43,13 @@ export {
   computeGex,
   combineGex,
 } from './enrichment.js';
+export {
+  computeGexProfile,
+  combineGexProfile,
+  GEX_PER_PCT_MOVE,
+  GEX_PROFILE_MOVES,
+  type GexProfilePoint,
+} from './gex-profile.js';
 
 export type {
   EnrichedChainResponse,

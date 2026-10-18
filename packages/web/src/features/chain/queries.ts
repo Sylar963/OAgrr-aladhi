@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { fetchJson } from '@lib/http';
-import type { EnrichedChainResponse, GexStrike } from '@shared/enriched';
+import type { EnrichedChainResponse, GexProfilePoint, GexStrike } from '@shared/enriched';
 
 // ── Response types matching the live API ──────────────────────────────────
 
@@ -41,6 +41,7 @@ export interface AllExpiriesGexResponse {
   expiries: string[];
   spotPrice: number | null;
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────────

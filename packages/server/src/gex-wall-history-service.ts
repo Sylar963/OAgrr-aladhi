@@ -1,4 +1,4 @@
-import { computeGammaWalls, type GexStrike } from '@oggregator/core';
+import { computeGammaWalls, type GexProfilePoint, type GexStrike } from '@oggregator/core';
 import type { GexWallSnapshotStore, PersistedGexWallSnapshot } from '@oggregator/db';
 import {
   GEX_WALL_HISTORY_MAX_DAYS,
@@ -17,6 +17,7 @@ const INITIAL_SAMPLE_DELAY_MS = 60_000;
 export interface GexWallInputs {
   spotPrice: number | null;
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
 }
 
 interface GexWallLog {
@@ -42,7 +43,7 @@ export function buildGexWallPoint(
 ): GexWallHistoryPoint | null {
   const spot = inputs.spotPrice;
   if (inputs.gex.length === 0 || spot == null || !Number.isFinite(spot)) return null;
-  return { ts: slotTs, spot, ...computeGammaWalls(inputs.gex, spot) };
+  return { ts: slotTs, spot, ...computeGammaWalls(inputs.gex, spot, inputs.gexProfile) };
 }
 
 export function nextSampleDelay(now: number): number {

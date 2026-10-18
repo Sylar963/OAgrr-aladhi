@@ -100,9 +100,9 @@ describe('computeGex — adversarial cases', () => {
     //   deribit: size 1.0 (Deribit-style 1 BTC contract)
     //   coincall: size 0.01 (mini contract)
     // Expected: per-venue (OI × Γ × size × S²)/1e6 summed independently.
-    //   deribit  = 10 × 0.001 × 1.0 × 70_000² / 1e6 = 49.0
-    //   coincall = 10 × 0.001 × 0.01 × 70_000² / 1e6 = 0.49
-    //   total call GEX = 49.49; no puts; expected ≈ 49.49
+    //   deribit  = 10 × 0.001 × 1.0 × 70_000² × 0.01 / 1e6 = 0.49
+    //   coincall = 10 × 0.001 × 0.01 × 70_000² × 0.01 / 1e6 = 0.0049
+    //   total call GEX = 0.4949; no puts; expected ≈ 0.4949
     const rows: ComparisonRow[] = [
       {
         strike: STRIKE,
@@ -145,14 +145,14 @@ describe('computeGex — adversarial cases', () => {
 
     const result = computeGex(rows, strikes, SPOT);
     expect(result).toHaveLength(1);
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(49.49, 6);
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(0.4949, 8);
   });
 
   it('skips a venue with null gamma and keeps the contribution of the other venue at the same strike', () => {
     const STRIKE = 70_000;
     const SPOT = 70_000;
     // deribit has full data, okx has null gamma → only deribit should contribute.
-    //   deribit = 5 × 0.002 × 1.0 × 70_000² / 1e6 = 49.0
+    //   deribit = 5 × 0.002 × 1.0 × 70_000² × 0.01 / 1e6 = 0.49
     const rows: ComparisonRow[] = [
       {
         strike: STRIKE,
@@ -195,7 +195,7 @@ describe('computeGex — adversarial cases', () => {
 
     const result = computeGex(rows, strikes, SPOT);
     expect(result).toHaveLength(1);
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(49.0, 6);
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(0.49, 8);
   });
 
   it('skips a venue with null openInterest even when gamma is present', () => {
@@ -243,7 +243,7 @@ describe('computeGex — adversarial cases', () => {
     ];
 
     const result = computeGex(rows, strikes, SPOT);
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(49.0, 6);
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(0.49, 8);
   });
 
   it('returns 0 GEX for a strike where every venue has either null OI or null gamma', () => {
@@ -298,8 +298,8 @@ describe('computeGex — adversarial cases', () => {
     const STRIKE = 70_000;
     const FALLBACK_SPOT = 60_000; // intentionally wrong — should be ignored
     // deribit reports spot = 70_000, okx reports spot = 71_000.
-    //   deribit call:  10 × 0.001 × 1.0 × 70_000² / 1e6 = 49.0
-    //   okx call:      20 × 0.001 × 0.01 × 71_000² / 1e6 ≈ 1.0082
+    //   deribit call:  10 × 0.001 × 1.0 × 70_000² × 0.01 / 1e6 = 0.49
+    //   okx call:      20 × 0.001 × 0.01 × 71_000² / 1e6 ≈ 0.010082
     //   total ≈ 50.0082
     const rows: ComparisonRow[] = [
       {
@@ -342,7 +342,7 @@ describe('computeGex — adversarial cases', () => {
     ];
 
     const result = computeGex(rows, strikes, FALLBACK_SPOT);
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(50.0082, 4);
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(0.500082, 6);
   });
 
   it('falls back to spot only when a venue is missing both index and underlying price', () => {
@@ -375,8 +375,8 @@ describe('computeGex — adversarial cases', () => {
     ];
 
     const result = computeGex(rows, strikes, FALLBACK_SPOT);
-    // 10 × 0.001 × 1.0 × 70_000² / 1e6 = 49.0 using the fallback.
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(49.0, 6);
+    // 10 × 0.001 × 1.0 × 70_000² × 0.01 / 1e6 = 0.49 using the fallback.
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(0.49, 8);
   });
 
   it('subtracts put gamma from call gamma with the standard sign convention', () => {
@@ -420,8 +420,8 @@ describe('computeGex — adversarial cases', () => {
     ];
 
     const result = computeGex(rows, strikes, SPOT);
-    // call = 49, put = 147 → net = -98
-    expect(result[0]!.gexUsdMillions).toBeCloseTo(-98.0, 6);
+    // call = 0.49, put = 1.47 → net = -0.98
+    expect(result[0]!.gexUsdMillions).toBeCloseTo(-0.98, 8);
   });
 });
 

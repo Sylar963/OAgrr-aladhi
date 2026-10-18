@@ -17,7 +17,7 @@ import type {
   SpotCandleResolutionSec,
   SpotCandlesResponse,
 } from '@shared/common';
-import type { GexStrike } from '@shared/enriched';
+import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import type { GexWallHistoryResponse } from '@oggregator/protocol';
 
 import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
@@ -83,12 +83,19 @@ function useGexWallHistory(currency: SpotCandleCurrency, days: number, enabled: 
 
 interface Props {
   gex: GexStrike[];
+  gexProfile?: GexProfilePoint[];
   spotPrice: number | null;
   currency: SpotCandleCurrency;
   showHistory: boolean;
 }
 
-export default function GexBandsChart({ gex, spotPrice, currency, showHistory }: Props) {
+export default function GexBandsChart({
+  gex,
+  gexProfile,
+  spotPrice,
+  currency,
+  showHistory,
+}: Props) {
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TIMEFRAME);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +114,10 @@ export default function GexBandsChart({ gex, spotPrice, currency, showHistory }:
     refetch,
   } = useGexSpotCandles(currency, tfSpec.resolution, tfSpec.buckets);
 
-  const walls = useMemo(() => computeGammaWalls(gex, spotPrice), [gex, spotPrice]);
+  const walls = useMemo(
+    () => computeGammaWalls(gex, spotPrice, gexProfile),
+    [gex, spotPrice, gexProfile],
+  );
 
   const { data: historyData } = useGexWallHistory(
     currency,

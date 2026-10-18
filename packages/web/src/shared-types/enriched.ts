@@ -4,6 +4,7 @@ export type {
   EnrichedSide,
   EnrichedStrike,
   EstimatedFees,
+  GexProfilePoint,
   GexStrike,
   VenueConnectionState,
   VenueFailure,

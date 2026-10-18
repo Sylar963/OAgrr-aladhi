@@ -5,7 +5,8 @@ import type {
   ComparisonRow,
   EstimatedFees,
 } from './types.js';
-import type { BookLookup, DealerPosition } from './dealer-book.js';
+import { type BookLookup, type DealerPosition, dealerGammaContracts } from './dealer-book.js';
+import { computeGexProfile, GEX_PER_PCT_MOVE, type GexProfilePoint } from './gex-profile.js';
 
 // 2 vol points — avoids noise-driven flips on nearly-flat surfaces
 const TERM_STRUCTURE_THRESHOLD = 0.02;
@@ -211,6 +212,8 @@ export interface EnrichedChainResponse {
   stats: ChainStats;
   strikes: EnrichedStrike[];
   gex: GexStrike[];
+  /** Total dealer GEX across a ±20% spot grid; its zero crossing is the gamma flip. */
+  gexProfile: GexProfilePoint[];
 }
 
 // ── Internal helpers ──────────────────────────────────────────────
@@ -630,13 +633,14 @@ export function computeChainStats(
 }
 
 /**
- * Computes gamma exposure (GEX) per strike in USD millions.
+ * Computes dealer gamma exposure (GEX) per strike in USD millions per 1% spot move.
  *
- * GEX = Σ(OI × gamma × contractSize × spot²) / 1_000_000
+ * GEX = Σ(dealer contracts × gamma × contractSize × spot² × 0.01) / 1_000_000
  *
- * Each venue contribution uses that venue's own spot/index reference when
- * available. This avoids anchoring multi-venue GEX to whichever venue happened
- * to arrive first.
+ * Dealer contracts come from the flow book when one exists, else the naive
+ * long-calls/short-puts prior. Each venue contribution uses that venue's own
+ * spot/index reference when available. This avoids anchoring multi-venue GEX
+ * to whichever venue happened to arrive first.
  */
 export function computeGex(
   rows: ComparisonRow[],
@@ -650,52 +654,34 @@ export function computeGex(
 
   for (const s of strikes) {
     const row = rowByStrike.get(s.strike);
-    let callGex = 0;
-    let putGex = 0;
+    let netGex = 0;
     let grossGex = 0;
     let flowGex = 0;
 
-    for (const venueKey of Object.keys(s.call.venues) as VenueId[]) {
-      const vq = s.call.venues[venueKey];
-      if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
-        continue;
+    for (const right of ['call', 'put'] as const) {
+      const side = s[right];
+      for (const venueKey of Object.keys(side.venues) as VenueId[]) {
+        const vq = side.venues[venueKey];
+        if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
+          continue;
+        }
+        const original = row?.[right][venueKey];
+        const size = original?.contractSize ?? 1;
+        const venueSpot =
+          original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
+        const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
+        const qty = dealerGammaContracts(pos, vq.openInterest, right);
+        const contrib =
+          (qty * vq.gamma * size * venueSpot * venueSpot * GEX_PER_PCT_MOVE) / 1_000_000;
+        netGex += contrib;
+        grossGex += Math.abs(contrib);
+        flowGex += Math.abs(contrib) * flowFraction(pos);
       }
-      const original = row?.call[venueKey];
-      const size = original?.contractSize ?? 1;
-      const venueSpot =
-        original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
-      // Calls: dealerContracts is already +long-gamma. Naive prior = +OI.
-      const qty = pos ? pos.dealerContracts : vq.openInterest;
-      const contrib = (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
-      callGex += contrib;
-      grossGex += Math.abs(contrib);
-      flowGex += Math.abs(contrib) * flowFraction(pos);
-    }
-
-    for (const venueKey of Object.keys(s.put.venues) as VenueId[]) {
-      const vq = s.put.venues[venueKey];
-      if (vq === undefined || vq.openInterest === null || vq.gamma === null) {
-        continue;
-      }
-      const original = row?.put[venueKey];
-      const size = original?.contractSize ?? 1;
-      const venueSpot =
-        original?.quote.indexPriceUsd ?? original?.quote.underlyingPriceUsd ?? fallbackSpotPrice;
-      const pos = original && bookLookup ? bookLookup(venueKey, original.symbol) : undefined;
-      // putGex is SUBTRACTED below. dealerContracts means "+ = dealer long the
-      // option (long gamma)", so negate it here to keep that meaning. Naive
-      // prior = +OI (→ subtracted → −OI contribution), preserving call−put.
-      const qty = pos ? -pos.dealerContracts : vq.openInterest;
-      const contrib = (qty * vq.gamma * size * venueSpot * venueSpot) / 1_000_000;
-      putGex += contrib;
-      grossGex += Math.abs(contrib);
-      flowGex += Math.abs(contrib) * flowFraction(pos);
     }
 
     result.push({
       strike: s.strike,
-      gexUsdMillions: callGex - putGex,
+      gexUsdMillions: netGex,
       flowShare: grossGex > 0 ? flowGex / grossGex : 0,
     });
   }
@@ -1041,6 +1027,13 @@ export function buildEnrichedChain(
 
   const spotPrice = stats.indexPriceUsd ?? stats.forwardPriceUsd ?? 0;
   const gex = computeGex(rows, strikes, spotPrice, bookLookup);
+  const gexProfile = computeGexProfile(
+    rows,
+    strikes,
+    spotPrice,
+    expiryTs ?? new Date(expiry + 'T08:00:00Z').getTime(),
+    bookLookup,
+  );
 
   return {
     underlying,
@@ -1050,5 +1043,6 @@ export function buildEnrichedChain(
     stats,
     strikes,
     gex,
+    gexProfile,
   };
 }

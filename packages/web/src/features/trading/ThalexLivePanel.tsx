@@ -1,5 +1,6 @@
 import type { PortfolioMetrics, PositionLeg } from '@features/portfolio';
 import {
+  ThalexNetworkBadge,
   usePortfolioMetrics,
   usePortfolioPositions,
   usePortfolioWs,
@@ -34,7 +35,9 @@ export default function ThalexLivePanel() {
     <div className={styles.panel}>
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
-          <span>Thalex Live Account</span>
+          <span className={styles.headerTitle}>
+            Thalex Account <ThalexNetworkBadge />
+          </span>
           <span>{connectionState}</span>
         </div>
 

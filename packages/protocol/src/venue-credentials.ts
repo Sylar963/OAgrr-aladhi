@@ -51,6 +51,35 @@ export const VenuePrivateAdapterSpecSchema = z.object({
 });
 export type VenuePrivateAdapterSpec = z.infer<typeof VenuePrivateAdapterSpecSchema>;
 
+/** Venue network a key belongs to. Thalex mainnet and testnet keys are separate. */
+export const VenueEnvironmentSchema = z.enum(['prod', 'test']);
+export type VenueEnvironment = z.infer<typeof VenueEnvironmentSchema>;
+
+/**
+ * One stored Thalex key per environment. Keys saved through the portfolio are read-only;
+ * trading keys are held by the execution daemon and never pass through the API.
+ */
+export const ThalexKeySlotSchema = z.object({
+  environment: VenueEnvironmentSchema,
+  configured: z.boolean(),
+  /** The slot the portfolio connects to. At most one is active. */
+  active: z.boolean(),
+  connected: z.boolean(),
+  /** Last characters of the key id, enough to tell keys apart. */
+  kidHint: z.string().nullable(),
+  account: z.string().nullable(),
+});
+export type ThalexKeySlot = z.infer<typeof ThalexKeySlotSchema>;
+
+export const ThalexKeySlotsSchema = z.object({
+  venue: z.literal('thalex'),
+  slots: z.array(ThalexKeySlotSchema),
+});
+export type ThalexKeySlots = z.infer<typeof ThalexKeySlotsSchema>;
+
+export const VenueActivateSchema = z.object({ environment: VenueEnvironmentSchema });
+export type VenueActivate = z.infer<typeof VenueActivateSchema>;
+
 export const DeriveSessionKeyGrantSchema = z.object({
   publicSessionKey: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   expirySec: z.number().int().positive(),

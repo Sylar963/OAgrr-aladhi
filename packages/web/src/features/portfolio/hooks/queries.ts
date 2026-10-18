@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addPosition,
   fetchEquityHistory,
+  fetchLiveTradingAvailability,
   fetchMetrics,
+  fetchThalexKeySlots,
   fetchPositions,
   fetchVenueMargin,
   removePosition,
@@ -30,6 +32,8 @@ export const PORTFOLIO_QKEY = {
     ['account', accountId, 'portfolio', 'equity-history', venue, range] as const,
   venueMargin: (accountId: string, venue: 'thalex') =>
     ['account', accountId, 'portfolio', 'venue-margin', venue] as const,
+  thalexKeys: (accountId: string) => ['account', accountId, 'portfolio', 'thalex-keys'] as const,
+  liveTrading: (accountId: string) => ['account', accountId, 'live-trading'] as const,
 };
 
 export function useVenueMargin(venue: 'thalex' | null) {
@@ -112,5 +116,30 @@ export function useRemovePosition() {
         });
       }
     },
+  });
+}
+
+/** Which Thalex network each stored read-only key belongs to, and which one the portfolio uses. */
+export function useThalexKeySlots(enabled = true) {
+  const session = useAccountSession();
+  const accountId = session.accountId ?? 'unresolved';
+  return useQuery({
+    queryKey: PORTFOLIO_QKEY.thalexKeys(accountId),
+    queryFn: fetchThalexKeySlots,
+    enabled: session.status === 'ready' && enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useLiveTradingAvailability(enabled = true) {
+  const session = useAccountSession();
+  const accountId = session.accountId ?? 'unresolved';
+  return useQuery({
+    queryKey: PORTFOLIO_QKEY.liveTrading(accountId),
+    queryFn: fetchLiveTradingAvailability,
+    enabled: session.status === 'ready' && enabled,
+    staleTime: 30_000,
+    retry: false,
   });
 }

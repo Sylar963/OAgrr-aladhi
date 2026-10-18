@@ -22,9 +22,17 @@ function assertKeyId(keyId: string): void {
   }
 }
 
-/** Binds a ciphertext to its row, so a payload copied to another account or venue won't decrypt. */
-export function venueCredentialContext(accountId: string, venue: string): string {
-  return `venue_credentials|${accountId}|${venue}`;
+/**
+ * Binds a ciphertext to its row, so a payload copied to another account, venue or environment
+ * won't decrypt. Mainnet keeps the pre-environment context so existing rows still read.
+ */
+export function venueCredentialContext(
+  accountId: string,
+  venue: string,
+  environment: 'prod' | 'test' = 'prod',
+): string {
+  const base = `venue_credentials|${accountId}|${venue}`;
+  return environment === 'prod' ? base : `${base}|${environment}`;
 }
 
 export interface VenueCredentialCipherOptions {

@@ -53,7 +53,9 @@ vi.mock('../../thalex-position-store.js', () => ({
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     isConnected: () => false,
+    environment: () => null,
   },
+  ledgerMatchesSession: () => true,
 }));
 
 import { portfolioRoutes } from './index.js';

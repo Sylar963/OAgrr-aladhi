@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, ExecutionEnvelopeSchema } from './execution.js';
+import { canonicalJson, ExecutionEnvelopeSchema, LiveStatusSchema } from './execution.js';
 
 describe('canonicalJson', () => {
   it('sorts keys at every depth and drops undefined', () => {
@@ -32,5 +32,37 @@ describe('ExecutionEnvelopeSchema', () => {
       ExecutionEnvelopeSchema.safeParse({ ...base, command: { type: 'withdraw' } }).success,
     ).toBe(false);
     expect(ExecutionEnvelopeSchema.safeParse({ ...base, hmac: 'nothex' }).success).toBe(false);
+  });
+});
+
+describe('LiveStatusSchema', () => {
+  const status = {
+    state: 'disarmed',
+    killedReason: null,
+    keyBound: false,
+    venue: { name: 'stub', connected: false },
+    alerts: { telegramConfigured: false, emailConfigured: false, testDelivered: false },
+    journal: { lastSeq: 0, chainOk: true },
+  };
+
+  it('reads a status from a daemon that predates per-environment keys as holding none', () => {
+    expect(LiveStatusSchema.parse(status).tradingKeys).toEqual([]);
+  });
+
+  it('carries each held trading key by environment', () => {
+    const parsed = LiveStatusSchema.parse({
+      ...status,
+      keyBound: true,
+      tradingKeys: [{ environment: 'test', kidHint: 'a1b2', venueAccount: 'A0001' }],
+    });
+    expect(parsed.tradingKeys).toEqual([
+      { environment: 'test', kidHint: 'a1b2', venueAccount: 'A0001' },
+    ]);
+    expect(() =>
+      LiveStatusSchema.parse({
+        ...status,
+        tradingKeys: [{ environment: 'staging', kidHint: 'x', venueAccount: 'A' }],
+      }),
+    ).toThrow();
   });
 });

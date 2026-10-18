@@ -4,6 +4,8 @@ import {
   VenueCredentialsSchema,
   VenuePrivateAdapterSpecSchema,
   PRIVATE_ADAPTER_SPECS,
+  ThalexKeySlotsSchema,
+  VenueActivateSchema,
 } from './venue-credentials.js';
 
 describe('VenueCredentialsSchema', () => {
@@ -52,5 +54,20 @@ describe('PRIVATE_ADAPTER_SPECS', () => {
     for (const [venue, spec] of Object.entries(PRIVATE_ADAPTER_SPECS)) {
       expect(spec.venue).toBe(venue);
     }
+  });
+});
+
+describe('Thalex key slots', () => {
+  it('accepts one slot per environment and rejects unknown environments', () => {
+    const slots = {
+      venue: 'thalex',
+      slots: [
+        { environment: 'prod', configured: true, active: true, connected: true, kidHint: '9f3c', account: null },
+        { environment: 'test', configured: false, active: false, connected: false, kidHint: null, account: null },
+      ],
+    };
+    expect(ThalexKeySlotsSchema.parse(slots)).toEqual(slots);
+    expect(VenueActivateSchema.safeParse({ environment: 'staging' }).success).toBe(false);
+    expect(VenueActivateSchema.parse({ environment: 'test' })).toEqual({ environment: 'test' });
   });
 });

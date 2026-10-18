@@ -19,6 +19,7 @@ const status: LiveStatus = {
   state: 'disarmed',
   killedReason: null,
   keyBound: true,
+  tradingKeys: [],
   venue: { name: 'stub', connected: false },
   alerts: { telegramConfigured: true, emailConfigured: true, testDelivered: true },
   journal: { lastSeq: 3, chainOk: true },

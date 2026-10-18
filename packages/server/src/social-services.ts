@@ -5,7 +5,7 @@ import { type SocialVenue, SocialVenueSchema } from '@oggregator/protocol';
 import { fetchClerkUsername } from './clerk-users.js';
 import { derivePositionStore } from './derive-position-store.js';
 import { paradexPositionStore } from './paradex-position-store.js';
-import { isVenueConnected, restoreStoredVenue } from './routes/portfolio/venue-credentials.js';
+import { isMainnetVenueConnected, restoreStoredVenue } from './routes/portfolio/venue-credentials.js';
 import {
   BroadcastRegistry,
   type VenueAccountAccess,
@@ -38,13 +38,17 @@ const VENUE_STORES = {
   paradex: paradexPositionStore,
 } as const;
 
+// Social reads only mainnet sessions; a testnet session must never reach the leaderboard.
+const onTestnet = (accountId: string, venue: SocialVenue) =>
+  venue === 'thalex' && thalexPositionStore.environment(accountId) === 'test';
+
 const venueAccess: VenueAccountAccess = {
-  isConnected: (accountId, venue) => isVenueConnected(accountId, venue),
+  isConnected: (accountId, venue) => isMainnetVenueConnected(accountId, venue),
   restore: (accountId, venue) => restoreStoredVenue(accountId, venue),
   keepAlive: (accountId, venue, enabled) => VENUE_STORES[venue].keepAlive(accountId, enabled),
-  listLegs: (accountId, venue) => VENUE_STORES[venue].list(accountId),
-  fetchEquityHistory: (accountId, venue, fromMs) =>
-    VENUE_STORES[venue].fetchEquityHistory(accountId, fromMs),
+  listLegs: (accountId, venue) => (onTestnet(accountId, venue) ? [] : VENUE_STORES[venue].list(accountId)),
+  fetchEquityHistory: async (accountId, venue, fromMs) =>
+    onTestnet(accountId, venue) ? null : VENUE_STORES[venue].fetchEquityHistory(accountId, fromMs),
   loadTrades: async (accountId, venue, limit) => {
     if (venue === 'paradex' || !exchangePortfolioLedgerStore.enabled) return null;
     return exchangePortfolioLedgerStore.loadTrades(accountId, venue, limit);
@@ -107,7 +111,7 @@ async function listSocialVenues(accountId: string) {
   return stored.flatMap((raw) => {
     const parsed = SocialVenueSchema.safeParse(raw);
     return parsed.success
-      ? [{ venue: parsed.data, connected: isVenueConnected(accountId, parsed.data) }]
+      ? [{ venue: parsed.data, connected: isMainnetVenueConnected(accountId, parsed.data) }]
       : [];
   });
 }

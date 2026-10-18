@@ -6,6 +6,11 @@ import {
   DeriveSessionKeyConfirmSchema,
   ParadexConnectSchema,
   type ParadexTokenSettings,
+  type ThalexKeySlot,
+  type ThalexKeySlots,
+  VenueActivateSchema,
+  type VenueEnvironment,
+  VenueEnvironmentSchema,
   VenueIdSchema,
   type VenueId,
 } from '@oggregator/protocol';
@@ -132,15 +137,64 @@ function isDeriveSessionKeyExpired(credentials: DeriveStoredCredentials): boolea
   return credentials.expirySec * 1000 <= Date.now();
 }
 
-async function connectThalex(accountId: string, credentials: ThalexCredentials): Promise<void> {
+async function connectThalex(
+  accountId: string,
+  credentials: ThalexCredentials,
+  environment: VenueEnvironment,
+): Promise<void> {
   await thalexPositionStore.connect({
     accountId,
     kid: credentials.kid,
     privateKeyPem: credentials.privateKeyPem,
     ...(credentials.account != null && { account: credentials.account }),
-    ...(credentials.env != null && { env: credentials.env }),
+    env: environment,
   });
   getOrCreatePortfolioRuntime(accountId, 'thalex');
+}
+
+const VENUE_ENVIRONMENTS: readonly VenueEnvironment[] = ['prod', 'test'];
+
+function decryptThalexSlot(
+  cipher: VenueCredentialCipher,
+  accountId: string,
+  environment: VenueEnvironment,
+  encryptedCredentials: string,
+): ThalexCredentials {
+  const parsed = ThalexCredentialsSchema.safeParse(
+    cipher.decrypt<unknown>(
+      encryptedCredentials,
+      venueCredentialContext(accountId, 'thalex', environment),
+    ),
+  );
+  if (!parsed.success) throw new Error('Stored Thalex credentials are invalid');
+  return parsed.data;
+}
+
+async function listThalexKeySlots(
+  cipher: VenueCredentialCipher,
+  accountId: string,
+): Promise<ThalexKeySlots> {
+  const stored = await venueCredentialsStore.listSlots(accountId, 'thalex');
+  const connectedEnvironment = thalexPositionStore.environment(accountId);
+  const slots = VENUE_ENVIRONMENTS.map((environment): ThalexKeySlot => {
+    const slot = stored.find((row) => row.environment === environment);
+    if (slot == null) {
+      return { environment, configured: false, active: false, connected: false, kidHint: null, account: null };
+    }
+    let credentials: ThalexCredentials | null = null;
+    try {
+      credentials = decryptThalexSlot(cipher, accountId, environment, slot.encryptedCredentials);
+    } catch {}
+    return {
+      environment,
+      configured: true,
+      active: slot.active,
+      connected: slot.active && connectedEnvironment === environment,
+      kidHint: credentials == null ? null : credentials.kid.slice(-4),
+      account: credentials?.account ?? null,
+    };
+  });
+  return { venue: 'thalex', slots };
 }
 
 export type ReconnectOutcome = 'connected' | 'not_connected' | 'removed';
@@ -149,7 +203,11 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
   const cipher = getVenueCredentialCipher();
   if (cipher == null) return 'not_connected';
   const stored = await venueCredentialsStore.get(accountId, venue);
-  if (stored == null) return 'removed';
+  if (stored == null) {
+    // Slots can exist with none active, e.g. after the active one was removed.
+    const slots = await venueCredentialsStore.listSlots(accountId, venue);
+    return slots.length > 0 ? 'not_connected' : 'removed';
+  }
 
   if (venue === 'derive') {
     const parsed = DeriveStoredCredentialsSchema.safeParse(
@@ -175,22 +233,29 @@ async function reconnectStoredVenue(accountId: string, venue: VenueId): Promise<
     return 'connected';
   }
   if (venue === 'thalex') {
-    const parsed = ThalexCredentialsSchema.safeParse(
-      cipher.decrypt<unknown>(stored.encryptedCredentials, venueCredentialContext(accountId, venue)),
+    const credentials = decryptThalexSlot(
+      cipher,
+      accountId,
+      stored.environment,
+      stored.encryptedCredentials,
     );
-    if (!parsed.success) throw new Error('Stored Thalex credentials are invalid');
-    await connectThalex(accountId, parsed.data);
+    await connectThalex(accountId, credentials, stored.environment);
     return 'connected';
   }
   return 'not_connected';
 }
 
-/** Reconnects a stored venue connection without a browser session, e.g. for a leaderboard broadcast. */
+/**
+ * Reconnects a stored venue connection without a browser session, e.g. for a leaderboard
+ * broadcast. Only mainnet: a testnet slot is never restored for anyone else to see.
+ */
 export async function restoreStoredVenue(
   accountId: string,
   venue: VenueId,
 ): Promise<ReconnectOutcome> {
   if (!privateAdaptersEnabled() || !venueCredentialsStore.enabled) return 'not_connected';
+  const active = await venueCredentialsStore.get(accountId, venue);
+  if (active != null && active.environment !== 'prod') return 'not_connected';
   return reconnectStoredVenue(accountId, venue);
 }
 
@@ -209,6 +274,20 @@ export function isVenueConnected(accountId: string, venue: VenueId): boolean {
   if (venue === 'thalex') return thalexPositionStore.isConnected(accountId);
   if (venue === 'paradex') return paradexPositionStore.isConnected(accountId);
   return false;
+}
+
+/** True only for a mainnet session; anything shown to other users must use this. */
+export function isMainnetVenueConnected(accountId: string, venue: VenueId): boolean {
+  if (venue === 'thalex' && thalexPositionStore.environment(accountId) !== 'prod') return false;
+  return isVenueConnected(accountId, venue);
+}
+
+async function restoreActiveSlot(accountId: string, request: FastifyRequest): Promise<void> {
+  try {
+    await reconnectStoredVenue(accountId, 'thalex');
+  } catch (error) {
+    request.log.warn({ accountId, err: String(error) }, 'thalex restore after failed connect failed');
+  }
 }
 
 export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
@@ -370,11 +449,16 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         }
         if (venue === 'thalex') {
           const credentials = ThalexCredentialsSchema.parse(request.body);
-          await connectThalex(accountId, credentials);
+          const environment = credentials.env ?? 'prod';
+          await connectThalex(accountId, credentials, environment);
           await venueCredentialsStore.upsert({
             accountId,
             venue,
-            encryptedCredentials: cipher.encrypt(credentials, venueCredentialContext(accountId, venue)),
+            environment,
+            encryptedCredentials: cipher.encrypt(
+              { ...credentials, env: environment },
+              venueCredentialContext(accountId, venue, environment),
+            ),
           });
           return { venue, connected: true, configured: true };
         }
@@ -384,6 +468,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         });
       } catch (error) {
         await disconnectVenue(accountId, venue).catch(() => {});
+        if (venue === 'thalex') await restoreActiveSlot(accountId, request);
         if (error instanceof z.ZodError) {
           return reply.status(400).send({ error: 'invalid_creds', issues: error.issues });
         }
@@ -395,7 +480,7 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
     },
   );
 
-  app.delete<{ Params: { venue: string } }>(
+  app.delete<{ Params: { venue: string }; Querystring: { environment?: string } }>(
     '/portfolio/venue-credentials/:venue',
     async (request, reply) => {
       if (!getCredentialStoreOrSendError(reply)) return reply;
@@ -403,17 +488,84 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
       if (!venueParsed.success) {
         return reply.status(400).send({ error: 'invalid_venue' });
       }
-      const accountId = getAccountId(request);
-      await venueCredentialsStore.delete(accountId, venueParsed.data);
-      try {
-        await disconnectVenue(accountId, venueParsed.data);
-      } catch (error) {
-        request.log.warn(
-          { accountId, venue: venueParsed.data, err: String(error) },
-          'venue disconnect failed after credential deletion',
-        );
+      const venue = venueParsed.data;
+      const environmentParsed = VenueEnvironmentSchema.optional().safeParse(
+        request.query.environment,
+      );
+      if (!environmentParsed.success) {
+        return reply.status(400).send({ error: 'invalid_environment' });
       }
-      return { venue: venueParsed.data, connected: false, configured: false };
+      const environment = environmentParsed.data;
+      const accountId = getAccountId(request);
+      await venueCredentialsStore.delete(accountId, venue, environment);
+      const sessionUsedRemovedKey =
+        environment == null ||
+        venue !== 'thalex' ||
+        thalexPositionStore.environment(accountId) === environment;
+      if (sessionUsedRemovedKey) {
+        try {
+          await disconnectVenue(accountId, venue);
+        } catch (error) {
+          request.log.warn(
+            { accountId, venue, err: String(error) },
+            'venue disconnect failed after credential deletion',
+          );
+        }
+      }
+      const remaining =
+        environment == null ? [] : await venueCredentialsStore.listSlots(accountId, venue);
+      return {
+        venue,
+        connected: isVenueConnected(accountId, venue),
+        configured: remaining.length > 0,
+      };
+    },
+  );
+
+  app.get('/portfolio/venue-credentials/thalex/keys', async (request, reply) => {
+    const cipher = getCredentialCipherOrSendError(reply);
+    if (cipher == null) return reply;
+    return listThalexKeySlots(cipher, getAccountId(request));
+  });
+
+  app.post<{ Body: unknown }>(
+    '/portfolio/venue-credentials/thalex/activate',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const cipher = getCredentialCipherOrSendError(reply);
+      if (cipher == null) return reply;
+      const body = VenueActivateSchema.safeParse(request.body);
+      if (!body.success) {
+        return reply.status(400).send({ error: 'invalid_request', issues: body.error.issues });
+      }
+      const { environment } = body.data;
+      const accountId = getAccountId(request);
+      const slot = await venueCredentialsStore.get(accountId, 'thalex', environment);
+      if (slot == null) {
+        return reply.status(404).send({
+          error: 'slot_not_configured',
+          message: `No Thalex ${environment === 'prod' ? 'mainnet' : 'testnet'} key is saved.`,
+        });
+      }
+      try {
+        const credentials = decryptThalexSlot(
+          cipher,
+          accountId,
+          environment,
+          slot.encryptedCredentials,
+        );
+        await connectThalex(accountId, credentials, environment);
+        await venueCredentialsStore.activate(accountId, 'thalex', environment);
+      } catch (error) {
+        request.log.warn({ accountId, environment, err: String(error) }, 'thalex switch failed');
+        await disconnectVenue(accountId, 'thalex').catch(() => {});
+        await restoreActiveSlot(accountId, request);
+        return reply.status(502).send({
+          error: 'connect_failed',
+          message: 'Thalex did not accept that key. The previous connection was kept.',
+        });
+      }
+      return listThalexKeySlots(cipher, accountId);
     },
   );
 
@@ -426,10 +578,10 @@ export async function portfolioVenueCredentialsRoute(app: FastifyInstance) {
         return reply.status(400).send({ error: 'invalid_venue' });
       }
       const accountId = getAccountId(request);
-      const configured = await venueCredentialsStore.get(accountId, venueParsed.data);
+      const slots = await venueCredentialsStore.listSlots(accountId, venueParsed.data);
       return {
         venue: venueParsed.data,
-        configured: configured != null,
+        configured: slots.length > 0,
         connected: isVenueConnected(accountId, venueParsed.data),
       };
     },

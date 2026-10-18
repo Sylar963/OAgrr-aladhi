@@ -308,6 +308,14 @@ export {
   type ParadexTokenSettings,
   ParadexTokenSettingsSchema,
   PRIVATE_ADAPTER_SPECS,
+  type ThalexKeySlot,
+  ThalexKeySlotSchema,
+  type ThalexKeySlots,
+  ThalexKeySlotsSchema,
+  type VenueActivate,
+  VenueActivateSchema,
+  type VenueEnvironment,
+  VenueEnvironmentSchema,
   type VenueCredentialFieldKey,
   VenueCredentialFieldKeySchema,
   type VenueCredentialFieldSpec,
@@ -494,6 +502,8 @@ export {
   LiveControlStateSchema,
   type LiveStatus,
   LiveStatusSchema,
+  type LiveTradingKey,
+  LiveTradingKeySchema,
   type UnsignedExecutionEnvelope,
 } from './execution.js';
 export {

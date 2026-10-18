@@ -1,5 +1,5 @@
 import { createCipheriv, randomBytes } from 'node:crypto';
-import type { StoredVenueCredentials } from '@oggregator/db';
+import type { StoredVenueCredentialSlot } from '@oggregator/db';
 import { describe, expect, it } from 'vitest';
 import { VenueCredentialCipher, venueCredentialContext } from './venue-credential-cipher.js';
 import { rewrapVenueCredentials } from './venue-credential-rewrap.js';
@@ -14,15 +14,29 @@ function legacyEncrypt(rawKey: string, value: unknown): string {
   return ['v1', iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), ct.toString('base64url')].join('.');
 }
 
-function memoryStore(rows: StoredVenueCredentials[]) {
-  const data = new Map(rows.map((r) => [`${r.accountId}:${r.venue}`, { ...r }]));
+type Row = Omit<StoredVenueCredentialSlot, 'environment' | 'active'> &
+  Partial<Pick<StoredVenueCredentialSlot, 'environment'>>;
+
+function memoryStore(rows: Row[]) {
+  const data = new Map(
+    rows.map((r) => {
+      const slot: StoredVenueCredentialSlot = { environment: 'prod', active: true, ...r };
+      return [`${r.accountId}:${r.venue}:${slot.environment}`, slot];
+    }),
+  );
   return {
     data,
     async listAll() {
       return [...data.values()].map((r) => ({ ...r }));
     },
-    async replaceEncrypted(accountId: string, venue: string, expected: string, next: string) {
-      const row = data.get(`${accountId}:${venue}`);
+    async replaceEncrypted(
+      accountId: string,
+      venue: string,
+      environment: string,
+      expected: string,
+      next: string,
+    ) {
+      const row = data.get(`${accountId}:${venue}:${environment}`);
       if (!row || row.encryptedCredentials !== expected) return false;
       row.encryptedCredentials = next;
       return true;
@@ -54,7 +68,7 @@ describe('rewrapVenueCredentials', () => {
       expect(row.encryptedCredentials.startsWith('v2.k2.')).toBe(true);
     }
     expect(
-      cipher.decrypt(store.data.get('a1:thalex')!.encryptedCredentials, venueCredentialContext('a1', 'thalex')),
+      cipher.decrypt(store.data.get('a1:thalex:prod')!.encryptedCredentials, venueCredentialContext('a1', 'thalex')),
     ).toEqual({ kid: 'K1' });
 
     const second = await rewrapVenueCredentials(store, cipher);
@@ -68,7 +82,27 @@ describe('rewrapVenueCredentials', () => {
 
     const report = await rewrapVenueCredentials(store, cipher);
 
-    expect(report.failed).toHaveLength(1);
-    expect(store.data.get('a1:thalex')!.encryptedCredentials).toBe(unreadable);
+    expect(report.failed).toEqual([
+      expect.objectContaining({ accountId: 'a1', venue: 'thalex', environment: 'prod' }),
+    ]);
+    expect(store.data.get('a1:thalex:prod')!.encryptedCredentials).toBe(unreadable);
+  });
+
+  it('re-encrypts a testnet slot under its own environment context', async () => {
+    const old = new VenueCredentialCipher(keyA, { keyId: 'k1' });
+    const cipher = new VenueCredentialCipher(keyB, { keyId: 'k2', previousKeys: { k1: keyA } });
+    const store = memoryStore([
+      {
+        accountId: 'a1',
+        venue: 'thalex',
+        environment: 'test',
+        encryptedCredentials: old.encrypt({ kid: 'T' }, venueCredentialContext('a1', 'thalex', 'test')),
+      },
+    ]);
+
+    expect(await rewrapVenueCredentials(store, cipher)).toMatchObject({ rewrapped: 1, failed: [] });
+    const rewrapped = store.data.get('a1:thalex:test')!.encryptedCredentials;
+    expect(cipher.decrypt(rewrapped, venueCredentialContext('a1', 'thalex', 'test'))).toEqual({ kid: 'T' });
+    expect(() => cipher.decrypt(rewrapped, venueCredentialContext('a1', 'thalex'))).toThrow();
   });
 });

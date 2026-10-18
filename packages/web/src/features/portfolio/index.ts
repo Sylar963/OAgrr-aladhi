@@ -1,11 +1,13 @@
 export type { PortfolioMetrics, PositionLeg } from '@oggregator/protocol';
 export type {
+  LiveTradingAvailability,
   PortfolioSource,
   ThalexConnectRequest,
   VenueConnectionState,
   VenueConnectRequest,
 } from './api';
 export {
+  activateThalexEnvironment,
   confirmDeriveSessionKey,
   connectVenue,
   disconnectVenue,
@@ -17,7 +19,14 @@ export {
   restoreVenueConnections,
   venueStatus,
 } from './api';
-export { usePortfolioMetrics, usePortfolioPositions } from './hooks/queries';
+export {
+  PORTFOLIO_QKEY,
+  useLiveTradingAvailability,
+  usePortfolioMetrics,
+  usePortfolioPositions,
+  useThalexKeySlots,
+} from './hooks/queries';
+export { default as ThalexNetworkBadge } from './ThalexNetworkBadge';
 export { usePortfolioWs } from './hooks/usePortfolioWs';
 export { default as PortfolioView } from './PortfolioView';
 export { default as AlphaPortfolioContext } from './AlphaPortfolioContext';

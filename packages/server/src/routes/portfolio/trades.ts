@@ -7,6 +7,7 @@ import {
   type ExchangeTradesResponse,
 } from '@oggregator/protocol';
 
+import { ledgerMatchesSession } from '../../thalex-position-store.js';
 import { exchangePortfolioLedgerStore } from '../../trading-services.js';
 import { getRequestAccountId } from '../../user-service.js';
 
@@ -34,7 +35,7 @@ export async function portfolioTradesRoute(app: FastifyInstance) {
     const { underlying, expiry, strike, right } = parsed.data;
     const accountId = getRequestAccountId(req, DEFAULT_ACCOUNT_ID);
 
-    if (!exchangePortfolioLedgerStore.enabled) {
+    if (!exchangePortfolioLedgerStore.enabled || !ledgerMatchesSession(accountId, venue)) {
       const empty: ExchangeTradesResponse = { accountId, venue, ledgerEnabled: false, trades: [] };
       return empty;
     }

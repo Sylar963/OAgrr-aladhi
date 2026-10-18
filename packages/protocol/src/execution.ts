@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { VenueEnvironmentSchema } from './venue-credentials.js';
+
 /** Who is asking. Set by the API from the verified Clerk session, never from the browser. */
 export const LiveActorSchema = z.object({
   clerkUserId: z.string().min(1).max(128),
@@ -39,10 +41,19 @@ export type UnsignedExecutionEnvelope = Omit<ExecutionEnvelope, 'hmac'>;
 export const LiveControlStateSchema = z.enum(['disarmed', 'armed', 'killed']);
 export type LiveControlState = z.infer<typeof LiveControlStateSchema>;
 
+/** A trading key the daemon holds for the asking operator. Never includes key material. */
+export const LiveTradingKeySchema = z.object({
+  environment: VenueEnvironmentSchema,
+  kidHint: z.string(),
+  venueAccount: z.string(),
+});
+export type LiveTradingKey = z.infer<typeof LiveTradingKeySchema>;
+
 export const LiveStatusSchema = z.object({
   state: LiveControlStateSchema,
   killedReason: z.string().nullable(),
   keyBound: z.boolean(),
+  tradingKeys: z.array(LiveTradingKeySchema).default([]),
   venue: z.object({
     name: z.string(),
     connected: z.boolean(),

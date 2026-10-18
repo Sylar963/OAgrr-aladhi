@@ -153,8 +153,10 @@ export {
 export type { ProvisionUserInput, UpsertUserInput, UserRow, UsersStore } from './users-store.js';
 export { NoopUsersStore, PostgresUsersStore } from './users-store.js';
 export type {
+  StoredVenueCredentialSlot,
   StoredVenueCredentials,
   VenueCredentialsStore,
+  VenueEnvironment,
 } from './venue-credentials-store.js';
 export {
   NoopVenueCredentialsStore,

@@ -17,7 +17,7 @@ function okSink(name: AlertSink['name']): AlertSink & { events: string[] } {
   } };
 }
 
-const boundKey = { kid: 'K1' } as TradingKeyMetadata;
+const boundKey = { kid: 'kid-0042a1b2', env: 'test', venueAccount: 'A0001' } as TradingKeyMetadata;
 
 async function setup(options: { alertsReady?: boolean; journal?: Journal; gateway?: VenueGateway } = {}) {
   const telegram = okSink('telegram');
@@ -105,10 +105,11 @@ describe('LiveControl', () => {
     const status = control.status(owner);
     expect(status).toMatchObject({
       keyBound: true,
+      tradingKeys: [{ environment: 'test', kidHint: 'a1b2', venueAccount: 'A0001' }],
       venue: { name: 'stub', connected: false },
       alerts: { telegramConfigured: true, emailConfigured: true, testDelivered: true },
       journal: { chainOk: true },
     });
-    expect(control.status(stranger).keyBound).toBe(false);
+    expect(control.status(stranger)).toMatchObject({ keyBound: false, tradingKeys: [] });
   });
 });

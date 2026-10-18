@@ -27,6 +27,7 @@ import { isEquityHistoryVenue } from './api';
 import { usePortfolioMetrics, usePortfolioPositions, useVenueMargin } from './hooks/queries';
 import { usePortfolioWs } from './hooks/usePortfolioWs';
 import styles from './PortfolioView.module.css';
+import ThalexNetworkBadge from './ThalexNetworkBadge';
 
 const FORWARD_DAYS = 7;
 const UNDERLYING_OPTIONS = ['all', 'BTC', 'ETH'] as const;
@@ -184,6 +185,7 @@ export default function PortfolioView() {
               </button>
             ))}
           </div>
+          {source === 'thalex' && <ThalexNetworkBadge />}
           <span
             className={styles.status}
             data-state={connectionState}

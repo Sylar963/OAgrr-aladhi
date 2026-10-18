@@ -9,12 +9,15 @@ import {
   type ParadexConnect,
   type ParadexTokenSettings,
   type ExchangeTradesResponse,
+  type LiveStatus,
   type PortfolioMetrics,
   type PortfolioSource,
   PortfolioSourceSchema as SharedPortfolioSourceSchema,
   type PositionLeg,
   type PositionLegInput,
+  type ThalexKeySlots,
   VENUE_IDS,
+  type VenueEnvironment,
   type VenueId,
   type VenueMarginResponse,
   type VolShockResult,
@@ -163,8 +166,80 @@ export async function fetchParadexTokenSettings(): Promise<ParadexTokenSettings>
   );
 }
 
-export async function disconnectVenue(venue: string): Promise<VenueConnectionState> {
-  return deleteRequest(`/portfolio/venue-credentials/${venue}`, VenueConnectionStateSchema);
+/** Without an environment every stored key of the venue is removed. */
+export async function disconnectVenue(
+  venue: string,
+  environment?: VenueEnvironment,
+): Promise<VenueConnectionState> {
+  const query = environment == null ? '' : `?environment=${environment}`;
+  return deleteRequest(`/portfolio/venue-credentials/${venue}${query}`, VenueConnectionStateSchema);
+}
+
+const VenueEnvironmentSchema = z.enum(['prod', 'test']);
+
+const ThalexKeySlotsSchema: z.ZodType<ThalexKeySlots> = z.object({
+  venue: z.literal('thalex'),
+  slots: z.array(
+    z.object({
+      environment: VenueEnvironmentSchema,
+      configured: z.boolean(),
+      active: z.boolean(),
+      connected: z.boolean(),
+      kidHint: z.string().nullable(),
+      account: z.string().nullable(),
+    }),
+  ),
+});
+
+export async function fetchThalexKeySlots(): Promise<ThalexKeySlots> {
+  return getJson('/portfolio/venue-credentials/thalex/keys', ThalexKeySlotsSchema);
+}
+
+export async function activateThalexEnvironment(
+  environment: VenueEnvironment,
+): Promise<ThalexKeySlots> {
+  return postJson(
+    '/portfolio/venue-credentials/thalex/activate',
+    { environment },
+    ThalexKeySlotsSchema,
+  );
+}
+
+const LiveStatusResponseSchema: z.ZodType<LiveStatus> = z.object({
+  state: z.enum(['disarmed', 'armed', 'killed']),
+  killedReason: z.string().nullable(),
+  keyBound: z.boolean(),
+  tradingKeys: z
+    .array(
+      z.object({
+        environment: VenueEnvironmentSchema,
+        kidHint: z.string(),
+        venueAccount: z.string(),
+      }),
+    )
+    .default([]),
+  venue: z.object({ name: z.string(), connected: z.boolean() }),
+  alerts: z.object({
+    telegramConfigured: z.boolean(),
+    emailConfigured: z.boolean(),
+    testDelivered: z.boolean(),
+  }),
+  journal: z.object({ lastSeq: z.number(), chainOk: z.boolean() }),
+}) as z.ZodType<LiveStatus>;
+
+export type LiveTradingAvailability =
+  | { kind: 'off' }
+  | { kind: 'not_entitled' }
+  | { kind: 'daemon_unavailable' }
+  | { kind: 'ready'; status: LiveStatus };
+
+/** Trading keys are only visible through the execution daemon, behind the live-trading gate. */
+export async function fetchLiveTradingAvailability(): Promise<LiveTradingAvailability> {
+  const res = await fetch(`${API_BASE}/live/status`, { headers: await getHeaders() });
+  if (res.status === 404) return { kind: 'off' };
+  if (res.status === 401 || res.status === 403) return { kind: 'not_entitled' };
+  if (res.status === 503) return { kind: 'daemon_unavailable' };
+  return { kind: 'ready', status: await parseResponse(res, LiveStatusResponseSchema, '/live/status') };
 }
 
 export async function venueStatus(venue: string): Promise<VenueConnectionState> {

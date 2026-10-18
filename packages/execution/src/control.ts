@@ -78,10 +78,16 @@ export class LiveControl {
 
   status(actor: LiveActor): LiveStatus {
     const configured = this.deps.alerter.configured;
+    const keys = this.deps.keys.findForActor(actor);
     return {
       state: this.state,
       killedReason: this.killedReason,
-      keyBound: this.deps.keys.findForActor(actor).length > 0,
+      keyBound: keys.length > 0,
+      tradingKeys: keys.map((key) => ({
+        environment: key.env,
+        kidHint: key.kid.slice(-4),
+        venueAccount: key.venueAccount,
+      })),
       venue: { name: this.deps.gateway.name, connected: this.deps.gateway.connected() },
       alerts: {
         telegramConfigured: configured.telegram,

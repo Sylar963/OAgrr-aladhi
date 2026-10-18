@@ -1,5 +1,6 @@
 import { SignInButton, useUser } from '@clerk/react';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { ThalexNetworkBadge } from '@features/portfolio';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import { VENUES } from '@lib/venue-meta';
 import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
@@ -14,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './AccountChip.module.css';
+import ThalexKeyManager from './ThalexKeyManager';
 
 type Mode = 'home' | 'paste';
 
@@ -231,23 +233,6 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
       } finally {
         setBusy(false);
       }
-    } else if (venue === 'thalex') {
-      setBusy(true);
-      try {
-        await connectVenue('thalex', {
-          kid: trimmedFields.kid ?? '',
-          privateKeyPem: trimmedFields.privateKeyPem ?? '',
-          ...((trimmedFields.account ?? '') !== '' ? { account: trimmedFields.account } : {}),
-        });
-        markVenueConfigured('thalex');
-        refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'connect failed');
-        setBusy(false);
-        return;
-      } finally {
-        setBusy(false);
-      }
     }
 
     setVenueFields(emptyVenueFields(venue));
@@ -257,7 +242,14 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
 
   const onRemoveVenue = async (venue: VenueId) => {
     if (!isAccountReady) return;
-    if (venue === 'derive' || venue === 'thalex' || venue === 'paradex') {
+    // Thalex can hold a mainnet and a testnet key; removal is per network in the key manager.
+    if (venue === 'thalex') {
+      setPasteTarget('thalex');
+      setError(null);
+      setMode('paste');
+      return;
+    }
+    if (venue === 'derive' || venue === 'paradex') {
       try {
         await disconnectVenue(venue);
         markVenueUnconfigured(venue);
@@ -376,6 +368,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                       {configuredVenues.map((venue) => (
                         <div key={venue} className={styles.venueChip}>
                           <span>{VENUES[venue]?.label ?? venue}</span>
+                          {venue === 'thalex' && <ThalexNetworkBadge />}
                           <span
                             className={styles.venueChipStatus}
                             data-status={PRIVATE_ADAPTER_SPECS[venue].status}
@@ -386,9 +379,10 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                             type="button"
                             className={styles.venueChipRemove}
                             onClick={() => onRemoveVenue(venue)}
-                            aria-label={`remove ${venue}`}
+                            aria-label={venue === 'thalex' ? 'manage thalex keys' : `remove ${venue}`}
+                            title={venue === 'thalex' ? 'Manage Thalex keys' : undefined}
                           >
-                            ×
+                            {venue === 'thalex' ? '⚙' : '×'}
                           </button>
                         </div>
                       ))}
@@ -497,6 +491,15 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                     onSubmit={onPasteVenue}
                   />
                 </ParadexWalletConnect>
+              ) : pasteTarget === 'thalex' ? (
+                <ThalexKeyManager
+                  onChanged={(anyKeyStored) => {
+                    if (anyKeyStored) markVenueConfigured('thalex');
+                    else markVenueUnconfigured('thalex');
+                    refresh();
+                  }}
+                  onError={setError}
+                />
               ) : (
                 <VenueCredentialForm
                   venue={pasteTarget}

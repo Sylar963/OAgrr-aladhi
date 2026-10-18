@@ -5,7 +5,7 @@ export interface RewrapReport {
   rewrapped: number;
   current: number;
   changedConcurrently: number;
-  failed: Array<{ accountId: string; venue: string; error: string }>;
+  failed: Array<{ accountId: string; venue: string; environment: string; error: string }>;
 }
 
 /** Re-encrypts every legacy or retired-key row with the current key and its row context. */
@@ -19,13 +19,14 @@ export async function rewrapVenueCredentials(
       report.current += 1;
       continue;
     }
-    const context = venueCredentialContext(row.accountId, row.venue);
+    const context = venueCredentialContext(row.accountId, row.venue, row.environment);
     try {
       const plaintext = cipher.decrypt<unknown>(row.encryptedCredentials, context);
       const next = cipher.encrypt(plaintext, context);
       const replaced = await store.replaceEncrypted(
         row.accountId,
         row.venue,
+        row.environment,
         row.encryptedCredentials,
         next,
       );
@@ -35,6 +36,7 @@ export async function rewrapVenueCredentials(
       report.failed.push({
         accountId: row.accountId,
         venue: row.venue,
+        environment: row.environment,
         error: error instanceof Error ? error.message : String(error),
       });
     }

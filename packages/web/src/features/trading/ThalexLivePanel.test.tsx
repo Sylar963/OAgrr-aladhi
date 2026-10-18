@@ -12,6 +12,7 @@ vi.mock('@features/portfolio', () => ({
   usePortfolioMetrics: () => ({ data: { metrics: null, positions: state.positions } }),
   usePortfolioWs: () => ({ connectionState: 'open', lastSeq: 0, lastError: null }),
   venueStatus: vi.fn(async () => ({ venue: 'thalex', connected: state.connected })),
+  ThalexNetworkBadge: () => null,
 }));
 
 import ThalexLivePanel from './ThalexLivePanel';

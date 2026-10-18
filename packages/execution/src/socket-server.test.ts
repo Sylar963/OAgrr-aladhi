@@ -18,6 +18,7 @@ const status: LiveStatus = {
   state: 'killed',
   killedReason: 'manual',
   keyBound: true,
+  tradingKeys: [],
   venue: { name: 'stub', connected: false },
   alerts: { telegramConfigured: true, emailConfigured: true, testDelivered: true },
   journal: { lastSeq: 1, chainOk: true },

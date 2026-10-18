@@ -8,7 +8,8 @@ import {
   type PositionStore,
   type PositionStoreListener,
 } from '@oggregator/core';
-import type { EquityHistoryPoint, PortfolioAccounting } from '@oggregator/protocol';
+import { NoopExchangePortfolioLedgerStore } from '@oggregator/db';
+import type { EquityHistoryPoint, PortfolioAccounting, VenueEnvironment } from '@oggregator/protocol';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 import { portfolioFillPriceAt } from './portfolio-fill-prices.js';
 import {
@@ -32,13 +33,31 @@ export class ThalexPositionStore implements PositionStore {
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly retainCounts = new Map<string, number>();
   private readonly keptAlive = new Set<string>();
-  private readonly persistence = new VenuePositionPersistence(
+  private readonly mainnetPersistence = new VenuePositionPersistence(
     'thalex',
     exchangePortfolioLedgerStore,
     portfolioFillPriceAt,
   );
+  // The ledger is keyed by (account, venue) with no environment, so testnet positions and fills
+  // stay in memory rather than mixing into the mainnet history.
+  private readonly testnetPersistence = new VenuePositionPersistence(
+    'thalex',
+    new NoopExchangePortfolioLedgerStore(),
+  );
+  private readonly environments = new Map<string, VenueEnvironment>();
+  private readonly lifecycle = new Map<string, Promise<void>>();
   private readonly hydrateTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  private persistence(accountId: string): VenuePositionPersistence {
+    return this.environments.get(accountId) === 'test'
+      ? this.testnetPersistence
+      : this.mainnetPersistence;
+  }
+
+  /** The connected session's network, or null when the account has no Thalex session. */
+  environment(accountId: string): VenueEnvironment | null {
+    return this.clients.has(accountId) ? (this.environments.get(accountId) ?? 'prod') : null;
+  }
 
   list(accountId: string): PositionLeg[] {
     const legs = this.cache.get(accountId);
@@ -64,7 +83,7 @@ export class ThalexPositionStore implements PositionStore {
     };
   }
   getAccounting(accountId: string, underlying?: string): PortfolioAccounting {
-    return this.persistence.getAccounting(accountId, this.list(accountId), underlying);
+    return this.persistence(accountId).getAccounting(accountId, this.list(accountId), underlying);
   }
 
   recordEntryIvs(accountId: string, entryIvs: ReadonlyMap<string, number>): void {
@@ -81,7 +100,7 @@ export class ThalexPositionStore implements PositionStore {
   }
 
   private persistCurrent(accountId: string): void {
-    void this.persistence.persistPositions(accountId, this.list(accountId)).catch((error) => {
+    void this.persistence(accountId).persistPositions(accountId, this.list(accountId)).catch((error) => {
       logger.error({ error: String(error), venue: 'thalex' }, 'portfolio snapshot persistence failed');
     });
   }
@@ -89,7 +108,7 @@ export class ThalexPositionStore implements PositionStore {
   private async refreshFillEntryIvs(accountId: string): Promise<void> {
     let resolved: Map<string, EntryAnchor>;
     try {
-      resolved = await this.persistence.resolveFillEntryAnchors(accountId, this.list(accountId));
+      resolved = await this.persistence(accountId).resolveFillEntryAnchors(accountId, this.list(accountId));
     } catch (error) {
       logger.warn({ error: String(error), venue: 'thalex' }, 'portfolio fill entry IV resolve failed');
       return;
@@ -124,7 +143,7 @@ export class ThalexPositionStore implements PositionStore {
 
   private async tryHydrate(accountId: string): Promise<boolean> {
     try {
-      const persisted = await this.persistence.hydrate(accountId);
+      const persisted = await this.persistence(accountId).hydrate(accountId);
       const current = this.list(accountId);
       if (current.length === 0) {
         this.applyLegs(accountId, persisted);
@@ -147,7 +166,7 @@ export class ThalexPositionStore implements PositionStore {
     if (delay == null) return;
     const timer = setTimeout(() => {
       this.hydrateTimers.delete(accountId);
-      if (!this.clients.has(accountId) || this.persistence.isHydrated(accountId)) return;
+      if (!this.clients.has(accountId) || this.persistence(accountId).isHydrated(accountId)) return;
       void this.tryHydrate(accountId).then((ok) => {
         if (!ok) this.scheduleHydrateRetry(accountId, attempt + 1);
       });
@@ -157,39 +176,72 @@ export class ThalexPositionStore implements PositionStore {
   }
 
 
-  async connect(creds: ThalexPositionStoreCreds): Promise<void> {
-    await this.disconnect(creds.accountId);
-    const hydrated = await this.tryHydrate(creds.accountId);
+  // Connects and disconnects for one account run one at a time. Overlapping connects (a page-load
+  // reconnect racing a network switch) would otherwise leave two clients writing to one cache.
+  private serialize(accountId: string, work: () => Promise<void>): Promise<void> {
+    const previous = this.lifecycle.get(accountId) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(work);
+    this.lifecycle.set(accountId, next);
+    void next
+      .finally(() => {
+        if (this.lifecycle.get(accountId) === next) this.lifecycle.delete(accountId);
+      })
+      .catch(() => {});
+    return next;
+  }
 
+  connect(creds: ThalexPositionStoreCreds): Promise<void> {
+    return this.serialize(creds.accountId, () => this.connectNow(creds));
+  }
+
+  disconnect(accountId: string): Promise<void> {
+    return this.serialize(accountId, () => this.disconnectNow(accountId));
+  }
+
+  private async connectNow(creds: ThalexPositionStoreCreds): Promise<void> {
+    const { accountId } = creds;
+    await this.disconnectNow(accountId);
+    const environment = creds.env ?? 'prod';
+    if ((this.environments.get(accountId) ?? 'prod') !== environment) {
+      this.cache.delete(accountId);
+      this.broadcast(accountId, []);
+    }
+    this.environments.set(accountId, environment);
+    // Pinned to this session so a callback can never reach the other network's ledger.
+    const persistence = this.persistence(accountId);
+    const hydrated = await this.tryHydrate(accountId);
 
     const client = new ThalexPrivateClient(creds);
+    const isCurrent = () => this.clients.get(accountId) === client;
     const unsubscribe = client.subscribe((incoming) => {
-      const legs = carryEntryIvs(this.cache.get(creds.accountId), incoming);
-      this.applyLegs(creds.accountId, legs);
-      void this.persistence.persistPositions(creds.accountId, legs).catch((error) => {
+      if (!isCurrent()) return;
+      const legs = carryEntryIvs(this.cache.get(accountId), incoming);
+      this.applyLegs(accountId, legs);
+      void persistence.persistPositions(accountId, legs).catch((error) => {
         logger.error({ error: String(error), venue: 'thalex' }, 'portfolio snapshot persistence failed');
       });
     });
-    this.clients.set(creds.accountId, client);
-    if (!hydrated) this.scheduleHydrateRetry(creds.accountId, 0);
     const unsubscribeTrades = client.subscribeTrades((trades) => {
-      void this.persistence.persistTrades(creds.accountId, trades).then(
+      if (!isCurrent()) return;
+      void persistence.persistTrades(accountId, trades).then(
         () => {
-          this.broadcast(creds.accountId, []);
-          void this.refreshFillEntryIvs(creds.accountId);
+          this.broadcast(accountId, []);
+          void this.refreshFillEntryIvs(accountId);
         },
         (error) => {
           logger.error({ error: String(error), venue: 'thalex' }, 'portfolio trade persistence failed');
         },
       );
     });
-    this.unsubscribes.set(creds.accountId, unsubscribe);
+    this.clients.set(accountId, client);
+    this.unsubscribes.set(accountId, unsubscribe);
+    this.tradeUnsubscribes.set(accountId, unsubscribeTrades);
+    if (!hydrated) this.scheduleHydrateRetry(accountId, 0);
     await client.start();
-    this.scheduleDisconnect(creds.accountId);
-    this.tradeUnsubscribes.set(creds.accountId, unsubscribeTrades);
+    this.scheduleDisconnect(accountId);
   }
 
-  async disconnect(accountId: string): Promise<void> {
+  private async disconnectNow(accountId: string): Promise<void> {
     const timer = this.disconnectTimers.get(accountId);
     if (timer != null) clearTimeout(timer);
     const hydrateTimer = this.hydrateTimers.get(accountId);
@@ -197,21 +249,17 @@ export class ThalexPositionStore implements PositionStore {
     this.hydrateTimers.delete(accountId);
     this.disconnectTimers.delete(accountId);
     this.retainCounts.delete(accountId);
-    const unsubscribe = this.unsubscribes.get(accountId);
-    if (unsubscribe != null) {
-      unsubscribe();
-      this.unsubscribes.delete(accountId);
-    }
+    this.unsubscribes.get(accountId)?.();
+    this.unsubscribes.delete(accountId);
+    this.tradeUnsubscribes.get(accountId)?.();
+    this.tradeUnsubscribes.delete(accountId);
     const client = this.clients.get(accountId);
-    if (client != null) {
-    const tradeUnsubscribe = this.tradeUnsubscribes.get(accountId);
-    if (tradeUnsubscribe != null) {
-      tradeUnsubscribe();
-      this.tradeUnsubscribes.delete(accountId);
+    this.clients.delete(accountId);
+    // Testnet legs are never persisted, so nothing should keep showing them once the session ends.
+    if (this.environments.get(accountId) === 'test' && this.cache.delete(accountId)) {
+      this.broadcast(accountId, []);
     }
-      this.clients.delete(accountId);
-      await client.dispose();
-    }
+    if (client != null) await client.dispose();
   }
 
   retain(accountId: string): void {
@@ -313,3 +361,11 @@ export class ThalexPositionStore implements PositionStore {
 }
 
 export const thalexPositionStore = new ThalexPositionStore();
+
+/**
+ * The exchange ledger holds mainnet fills only. While an account's Thalex session is on testnet,
+ * those fills don't describe the positions on screen.
+ */
+export function ledgerMatchesSession(accountId: string, venue: string): boolean {
+  return venue !== 'thalex' || thalexPositionStore.environment(accountId) !== 'test';
+}

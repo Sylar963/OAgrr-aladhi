@@ -1,0 +1,27 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge[data-network='prod'] {
+  color: var(--color-profit);
+}
+
+/* Testnet must never be mistaken for the real account. */
+.badge[data-network='test'] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.offline {
+  font-weight: 400;
+  color: var(--text-dim);
+}

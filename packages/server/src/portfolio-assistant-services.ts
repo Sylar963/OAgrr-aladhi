@@ -41,6 +41,7 @@ import {
   recordPortfolioAssistantFeedbackFlush,
   setPortfolioAssistantFeedbackPending,
 } from './runtime-metrics.js';
+import { ledgerMatchesSession } from './thalex-position-store.js';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 
 const configuration = readPortfolioAssistantConfiguration(process.env);
@@ -91,6 +92,7 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   exchangePortfolioLedgerStore,
   Date.now,
   portfolioRefStore,
+  ledgerMatchesSession,
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);

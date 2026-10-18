@@ -737,6 +737,8 @@ export class PortfolioAssistantContextBuilder {
     private readonly tradeLedger: ExchangePortfolioLedgerStore | null = null,
     private readonly now: () => number = Date.now,
     private readonly portfolioRefs: PortfolioRefStore = new PortfolioRefStore(),
+    private readonly ledgerMatchesSession: (accountId: string, venue: string) => boolean = () =>
+      true,
   ) {}
 
   private async buildMarketFacts(
@@ -834,6 +836,10 @@ export class PortfolioAssistantContextBuilder {
     if (!isLedgerVenue(input.source)) return null;
     if (!this.tradeLedger?.enabled) {
       limitations.push('Venue trade history is unavailable because the trade ledger is not configured.');
+      return null;
+    }
+    if (!this.ledgerMatchesSession(input.accountId, input.source)) {
+      limitations.push('Venue trade history is not shown for a testnet session; the ledger holds mainnet fills only.');
       return null;
     }
     try {

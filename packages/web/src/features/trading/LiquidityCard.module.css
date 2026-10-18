@@ -98,7 +98,7 @@
 }
 
 .warn {
-  color: var(--red);
+  color: var(--color-loss);
 }
 
 .table {
@@ -131,9 +131,9 @@
 }
 
 .bid {
-  color: var(--green);
+  color: var(--color-profit);
 }
 
 .ask {
-  color: var(--red);
+  color: var(--color-loss);
 }

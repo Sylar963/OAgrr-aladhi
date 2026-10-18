@@ -23,7 +23,8 @@ export const VolHeatmapQuerySchema = z.object({
     .transform((value) => value.toUpperCase())
     .pipe(z.enum(VOL_HEATMAP_CURRENCIES)),
   hours: oneOf(VOL_HEATMAP_WINDOW_HOURS, 'hours').default(6),
-  resolutionSec: oneOf(VOL_HEATMAP_RESOLUTIONS_SEC, 'resolutionSec').default(60),
+  /** Omit to let the server pick the finest resolution that keeps the window's data readable. */
+  resolutionSec: oneOf(VOL_HEATMAP_RESOLUTIONS_SEC, 'resolutionSec').optional(),
   /** Epoch ms; only columns whose (resolution-aligned) start is at or after this are returned. */
   since: z.coerce.number().int().nonnegative().optional(),
 });
@@ -42,6 +43,8 @@ export const VolHeatmapTradeSchema = z.object({
   side: z.enum(['buy', 'sell']),
   /** IV as a fraction. */
   iv: z.number(),
+  /** Skew-adjusted IV (see `adjCells`); null when the option had no two-sided book. */
+  adjIv: z.number().nullable(),
   amount: z.number(),
   /** USD per one vol point (amount × vega). */
   vega: z.number(),
@@ -53,6 +56,13 @@ export const VolHeatmapColumnSchema = z.object({
   /** Last DVOL print in the column, as a fraction. */
   dvol: z.number().nullable(),
   cells: z.array(VolHeatmapCellSchema),
+  /**
+   * Same vega placed at `iv − mid(option) + atmMid`: each order's distance from its own option's
+   * mid IV, re-centred on the 30d ATM mid. Removes the smile so strikes line up.
+   */
+  adjCells: z.array(VolHeatmapCellSchema),
+  /** Book-implied 30d ATM mid IV (fraction), averaged over the column. */
+  atmMid: z.number().nullable(),
   trades: z.array(VolHeatmapTradeSchema),
 });
 

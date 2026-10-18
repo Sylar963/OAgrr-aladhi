@@ -7,23 +7,23 @@ import { mergeHeatmapTail, type HeatmapWindow } from './heatmap-model';
 const HEATMAP_POLL_MS = 15_000;
 const HOUR_MS = 3_600_000;
 
-/** Polls only the tail after the first load; the server re-sends the slot that was still filling. */
+/**
+ * Polls only the tail after the first load; the server re-sends the slot that was still filling.
+ * The server picks the resolution from how much data the window holds, so when that changes the
+ * tail no longer lines up with the cached columns and the whole window is refetched.
+ */
 export function useVolHeatmap(currency: string, window: HeatmapWindow) {
   const queryClient = useQueryClient();
-  const queryKey = ['vol-heatmap', currency, window.hours, window.resolutionSec] as const;
+  const queryKey = ['vol-heatmap', currency, window.hours] as const;
   return useQuery({
     queryKey,
     queryFn: async () => {
+      const base = `/vol-heatmap?currency=${currency}&hours=${window.hours}`;
       const prev = queryClient.getQueryData<VolHeatmapResponse>(queryKey);
       const lastT = prev?.columns.at(-1)?.t;
-      const params = new URLSearchParams({
-        currency,
-        hours: String(window.hours),
-        resolutionSec: String(window.resolutionSec),
-      });
-      if (lastT != null) params.set('since', String(lastT));
-      const next = await fetchJson<VolHeatmapResponse>(`/vol-heatmap?${params}`);
-      if (prev == null || lastT == null) return next;
+      if (prev == null || lastT == null) return fetchJson<VolHeatmapResponse>(base);
+      const next = await fetchJson<VolHeatmapResponse>(`${base}&since=${lastT}`);
+      if (next.resolutionSec !== prev.resolutionSec) return fetchJson<VolHeatmapResponse>(base);
       return {
         ...next,
         columns: mergeHeatmapTail(prev.columns, next.columns, next.asOf - window.hours * HOUR_MS),

@@ -7,6 +7,8 @@ const column = (t: number, cells: VolHeatmapColumn['cells'] = []): VolHeatmapCol
   t,
   dvol: null,
   cells,
+  adjCells: [],
+  atmMid: null,
   trades: [],
 });
 
@@ -27,9 +29,14 @@ describe('mergeHeatmapTail', () => {
 describe('heatScaleMax', () => {
   it('uses a high percentile of the chosen side, ignoring empty cells', () => {
     const cols = [column(0, [[140, 10, 0], [141, 20, 5], [142, 0, 1000]])];
-    expect(heatScaleMax(cols, 'bids', 0.5)).toBe(20);
-    expect(heatScaleMax(cols, 'asks', 0.99)).toBe(1000);
+    expect(heatScaleMax(cols, 'bids', 'raw', 0.5)).toBe(20);
+    expect(heatScaleMax(cols, 'asks', 'raw', 0.99)).toBe(1000);
     expect(heatScaleMax([], 'all')).toBe(1);
+  });
+
+  it('reads the skew-adjusted cells in skew view', () => {
+    const cols = [{ ...column(0, [[140, 10, 0]]), adjCells: [[139, 70, 0]] as VolHeatmapColumn['cells'] }];
+    expect(heatScaleMax(cols, 'bids', 'skew')).toBe(70);
   });
 });
 
@@ -51,6 +58,11 @@ describe('walls', () => {
   it('finds the largest level per side', () => {
     const c = column(0, [[144, 300, 0], [146, 900, 10], [152, 0, 700]]);
     expect(walls(c, 0.25)).toEqual({ bid: [36.5, 900], ask: [38, 700] });
+  });
+
+  it('uses the adjusted cells in skew view', () => {
+    const c = { ...column(0, [[144, 300, 0]]), adjCells: [[142, 50, 0], [150, 0, 60]] as VolHeatmapColumn['cells'] };
+    expect(walls(c, 0.25, 'skew')).toEqual({ bid: [35.5, 50], ask: [37.5, 60] });
   });
 });
 

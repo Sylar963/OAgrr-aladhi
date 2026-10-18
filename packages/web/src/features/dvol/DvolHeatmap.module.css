@@ -183,7 +183,11 @@
   width: 16px;
   height: 2px;
   border-radius: 1px;
-  background: var(--accent-primary);
+  background: #ff4fd8;
+}
+
+.legendLine[data-type="atm"] {
+  background: repeating-linear-gradient(90deg, #f2f2f2 0 4px, transparent 4px 7px);
 }
 
 .legendDot {

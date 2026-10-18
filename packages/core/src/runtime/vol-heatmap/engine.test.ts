@@ -101,6 +101,69 @@ describe('VolHeatmapEngine', () => {
     engine.clearBooks();
     engine.sample(NOW + 15_000);
 
-    expect(engine.flush(NOW + 15_000)).toEqual({ t: NOW + 15_000, dvol: 0.375, cells: [], trades: [] });
+    expect(engine.flush(NOW + 15_000)).toEqual({
+      t: NOW + 15_000,
+      dvol: 0.375,
+      cells: [],
+      adjCells: [],
+      atmMid: null,
+      trades: [],
+    });
+  });
+});
+
+describe('VolHeatmapEngine skew adjustment', () => {
+  const NEAR = Date.UTC(2026, 10, 6, 8);
+  const T_NEAR = (NEAR - NOW) / (365 * 86_400_000);
+  const nearAtm: HeatmapInstrument = { name: 'BTC-6NOV26-82000-C', strike: 82_000, right: 'call', expiry: NEAR };
+  const nearPrice = (iv: number) => price76(F, nearAtm.strike, iv, T_NEAR, 'call') / F;
+
+  it('places each level at its distance from its own mid, re-centred on the ATM mid', () => {
+    // The put trades 4 vols over the ATM call (skew); adjusted, both books share one centre.
+    const engine = engineWith(CALL, PUT);
+    engine.setInstruments([CALL, PUT], new Map([[EXPIRY, CALL.name]]));
+    engine.applyBook(CALL.name, [[btcPrice(CALL, 0.355), 10]], [[btcPrice(CALL, 0.365), 10]]);
+    engine.applyBook(PUT.name, [[btcPrice(PUT, 0.39), 6]], [[btcPrice(PUT, 0.41), 6]]);
+    engine.sample(NOW);
+    const column = engine.flush(NOW);
+
+    expect(column.atmMid).toBeCloseTo(0.36, 6);
+    expect(column.cells.map(([b]) => b)).toEqual([142, 146, 156, 164]);
+    // Put: 0.39 − 0.40 + 0.36 = 0.35 → 140, 0.41 − 0.40 + 0.36 = 0.37 → 148.
+    expect(column.adjCells.map(([b, bid, ask]) => [b, bid > 0, ask > 0])).toEqual([
+      [140, true, false],
+      [142, true, false],
+      [146, false, true],
+      [148, false, true],
+    ]);
+  });
+
+  it('interpolates the anchor to 30 days in total variance across the two expiries', () => {
+    const engine = engineWith(CALL, nearAtm);
+    engine.applyForward(NEAR, F);
+    engine.setInstruments([CALL, nearAtm], new Map([[EXPIRY, CALL.name], [NEAR, nearAtm.name]]));
+    engine.applyBook(CALL.name, [[btcPrice(CALL, 0.39), 1]], [[btcPrice(CALL, 0.41), 1]]);
+    engine.applyBook(nearAtm.name, [[nearPrice(0.34), 1]], [[nearPrice(0.36), 1]]);
+    engine.sample(NOW);
+
+    const t30 = 30 / 365;
+    const w = 0.35 ** 2 * T_NEAR + ((0.4 ** 2 * T - 0.35 ** 2 * T_NEAR) * (t30 - T_NEAR)) / (T - T_NEAR);
+    expect(engine.flush(NOW).atmMid).toBeCloseTo(Math.sqrt(w / t30), 6);
+  });
+
+  it('leaves one-sided books out of the adjusted view and tags trades with an adjusted IV', () => {
+    const engine = engineWith(CALL, PUT);
+    engine.setInstruments([CALL, PUT], new Map([[EXPIRY, CALL.name]]));
+    engine.applyBook(CALL.name, [[btcPrice(CALL, 0.355), 10]], [[btcPrice(CALL, 0.365), 10]]);
+    engine.applyBook(PUT.name, [[btcPrice(PUT, 0.39), 6]], []);
+    engine.sample(NOW);
+    engine.addTrade({ t: NOW, instrument: CALL.name, side: 'buy', price: 0, amount: 1, iv: 0.37 });
+    engine.addTrade({ t: NOW, instrument: PUT.name, side: 'sell', price: 0, amount: 1, iv: 0.4 });
+    const column = engine.flush(NOW);
+
+    expect(column.cells.some(([b]) => b === 156)).toBe(true);
+    expect(column.adjCells.map(([b]) => b)).toEqual([142, 146]);
+    expect(column.trades[0]!.adjIv).toBeCloseTo(0.37, 6);
+    expect(column.trades[1]!.adjIv).toBeNull();
   });
 });

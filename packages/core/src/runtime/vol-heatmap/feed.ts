@@ -171,7 +171,7 @@ export class VolHeatmapFeed {
       const removed = [...state.channels].filter((c) => !next.has(c));
       const added = [...next].filter((c) => !state.channels.has(c));
 
-      state.engine.setInstruments(selection.instruments);
+      state.engine.setInstruments(selection.instruments, selection.forwardSources);
       state.forwardSources = forwardSources;
       if (removed.length > 0) await this.rpc.unsubscribe(removed);
       for (let i = 0; i < added.length; i += SUBSCRIBE_BATCH_SIZE) {

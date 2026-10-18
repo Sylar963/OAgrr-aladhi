@@ -121,44 +121,72 @@ export class VolHeatmapRuntime {
 
 /**
  * Coarsens columns onto a `resolutionMs` grid. Cell vega is averaged over the base columns
- * present in each slot (a gap does not dilute it), trades are concatenated and DVOL keeps the
- * slot's last print.
+ * present in each slot (a gap does not dilute it), trades are concatenated and DVOL / ATM mid
+ * keep the slot's last value.
  */
 export function mergeHeatmapColumns(
   columns: readonly VolHeatmapColumn[],
   resolutionMs: number,
 ): VolHeatmapColumn[] {
   const out: VolHeatmapColumn[] = [];
-  let slot: { t: number; count: number; bid: Map<number, number>; ask: Map<number, number>; dvol: number | null; trades: VolHeatmapColumn['trades'] } | null = null;
+  let slot: {
+    t: number;
+    count: number;
+    raw: CellSums;
+    adjusted: CellSums;
+    dvol: number | null;
+    atmMid: number | null;
+    trades: VolHeatmapColumn['trades'];
+  } | null = null;
 
   const close = (): void => {
     if (slot == null) return;
-    const cells: VolHeatmapCell[] = [];
-    const buckets = new Set<number>([...slot.bid.keys(), ...slot.ask.keys()]);
-    for (const bucket of [...buckets].sort((a, b) => a - b)) {
-      cells.push([
-        bucket,
-        Math.round((slot.bid.get(bucket) ?? 0) / slot.count),
-        Math.round((slot.ask.get(bucket) ?? 0) / slot.count),
-      ]);
-    }
-    out.push({ t: slot.t, dvol: slot.dvol, cells, trades: slot.trades });
+    out.push({
+      t: slot.t,
+      dvol: slot.dvol,
+      cells: slot.raw.average(slot.count),
+      adjCells: slot.adjusted.average(slot.count),
+      atmMid: slot.atmMid,
+      trades: slot.trades,
+    });
   };
 
   for (const column of columns) {
     const t = Math.floor(column.t / resolutionMs) * resolutionMs;
     if (slot == null || slot.t !== t) {
       close();
-      slot = { t, count: 0, bid: new Map(), ask: new Map(), dvol: null, trades: [] };
+      slot = { t, count: 0, raw: new CellSums(), adjusted: new CellSums(), dvol: null, atmMid: null, trades: [] };
     }
     slot.count++;
-    for (const [bucket, bid, ask] of column.cells) {
-      if (bid > 0) slot.bid.set(bucket, (slot.bid.get(bucket) ?? 0) + bid);
-      if (ask > 0) slot.ask.set(bucket, (slot.ask.get(bucket) ?? 0) + ask);
-    }
+    slot.raw.add(column.cells);
+    slot.adjusted.add(column.adjCells);
     if (column.dvol != null) slot.dvol = column.dvol;
+    if (column.atmMid != null) slot.atmMid = column.atmMid;
     for (const trade of column.trades) slot.trades.push(trade);
   }
   close();
   return out;
+}
+
+class CellSums {
+  private readonly bid = new Map<number, number>();
+  private readonly ask = new Map<number, number>();
+
+  add(cells: readonly VolHeatmapCell[]): void {
+    for (const [bucket, bid, ask] of cells) {
+      if (bid > 0) this.bid.set(bucket, (this.bid.get(bucket) ?? 0) + bid);
+      if (ask > 0) this.ask.set(bucket, (this.ask.get(bucket) ?? 0) + ask);
+    }
+  }
+
+  average(count: number): VolHeatmapCell[] {
+    const buckets = new Set<number>([...this.bid.keys(), ...this.ask.keys()]);
+    return [...buckets]
+      .sort((a, b) => a - b)
+      .map((bucket) => [
+        bucket,
+        Math.round((this.bid.get(bucket) ?? 0) / count),
+        Math.round((this.ask.get(bucket) ?? 0) / count),
+      ]);
+  }
 }

@@ -1,11 +1,17 @@
 import type { VolHeatmapColumn } from '@oggregator/protocol';
 
 export type HeatSide = 'all' | 'bids' | 'asks';
+/** `raw`: each order at its own IV. `skew`: at its distance from its option's mid, re-centred on the 30d ATM mid. */
+export type HeatView = 'raw' | 'skew';
+
+export function viewCells(column: VolHeatmapColumn, view: HeatView): VolHeatmapColumn['cells'] {
+  return view === 'skew' ? column.adjCells : column.cells;
+}
 
 export const HEATMAP_WINDOWS = [
-  { hours: 1, resolutionSec: 15, label: '1H' },
-  { hours: 6, resolutionSec: 60, label: '6H' },
-  { hours: 24, resolutionSec: 300, label: '24H' },
+  { hours: 1, label: '1H' },
+  { hours: 6, label: '6H' },
+  { hours: 24, label: '24H' },
 ] as const;
 
 export type HeatmapWindow = (typeof HEATMAP_WINDOWS)[number];
@@ -25,10 +31,15 @@ export function cellValue(bid: number, ask: number, side: HeatSide): number {
 }
 
 /** Colour-scale ceiling: a high percentile, so one outsized level doesn't wash out the rest. */
-export function heatScaleMax(columns: readonly VolHeatmapColumn[], side: HeatSide, percentile = 0.99): number {
+export function heatScaleMax(
+  columns: readonly VolHeatmapColumn[],
+  side: HeatSide,
+  view: HeatView = 'raw',
+  percentile = 0.99,
+): number {
   const values: number[] = [];
   for (const column of columns) {
-    for (const [, bid, ask] of column.cells) {
+    for (const [, bid, ask] of viewCells(column, view)) {
       const v = cellValue(bid, ask, side);
       if (v > 0) values.push(v);
     }
@@ -45,7 +56,7 @@ export function heatScaleMax(columns: readonly VolHeatmapColumn[], side: HeatSid
 export function weightedIvRange(
   cells: VolHeatmapColumn['cells'],
   bucketPct: number,
-  tail = 0.03,
+  tail = 0.08,
 ): { low: number; high: number } | null {
   let total = 0;
   for (const [, bid, ask] of cells) total += bid + ask;
@@ -87,10 +98,10 @@ export function heatColor(ratio: number): string | null {
 }
 
 /** Largest resting level per side in a column, as `[ivPct, vega]`. */
-export function walls(column: VolHeatmapColumn | undefined, bucketPct: number) {
+export function walls(column: VolHeatmapColumn | undefined, bucketPct: number, view: HeatView = 'raw') {
   let bid: [number, number] | null = null;
   let ask: [number, number] | null = null;
-  for (const [bucket, b, a] of column?.cells ?? []) {
+  for (const [bucket, b, a] of column != null ? viewCells(column, view) : []) {
     if (b > (bid?.[1] ?? 0)) bid = [bucket * bucketPct, b];
     if (a > (ask?.[1] ?? 0)) ask = [bucket * bucketPct, a];
   }

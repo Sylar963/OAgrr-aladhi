@@ -9,22 +9,24 @@ const column = (t: number, cells: VolHeatmapColumn['cells'], dvol: number | null
   t,
   dvol,
   cells,
+  adjCells: [],
+  atmMid: null,
   trades: [],
 });
 
 describe('mergeHeatmapColumns', () => {
-  it('averages cells over the columns present in each slot', () => {
+  it('averages raw and skew-adjusted cells over the columns present in each slot', () => {
     const merged = mergeHeatmapColumns(
       [
-        column(0, [[148, 100, 0]], 0.37),
+        { ...column(0, [[148, 100, 0]], 0.37), adjCells: [[146, 40, 0]], atmMid: 0.365 },
         column(15_000, [[148, 50, 10]]),
         column(60_000, [[150, 0, 30]], 0.38),
       ],
       60_000,
     );
     expect(merged).toEqual([
-      { t: 0, dvol: 0.37, cells: [[148, 75, 5]], trades: [] },
-      { t: 60_000, dvol: 0.38, cells: [[150, 0, 30]], trades: [] },
+      { t: 0, dvol: 0.37, cells: [[148, 75, 5]], adjCells: [[146, 20, 0]], atmMid: 0.365, trades: [] },
+      { t: 60_000, dvol: 0.38, cells: [[150, 0, 30]], adjCells: [], atmMid: null, trades: [] },
     ]);
   });
 });

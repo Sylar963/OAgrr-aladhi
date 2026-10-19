@@ -1,10 +1,23 @@
-import type { StrategyGroup } from '@oggregator/protocol';
+import type { PositionLeg, StrategyGroup } from '@oggregator/protocol';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
+import {
+  type CloseEstimate,
+  type CloseLegQuote,
+  closeLegParams,
+  estimateClose,
+  fetchCloseLiquidity,
+  indexCloseItems,
+} from './close-liquidity';
 import { fmtUsdSigned } from './format';
 import styles from './StrategyGroups.module.css';
 
+const CLOSE_REFRESH_MS = 3_000;
+
 interface Props {
   groups: StrategyGroup[];
+  positions: PositionLeg[];
 }
 
 function strategyLabel(group: StrategyGroup): string {
@@ -77,7 +90,125 @@ function netSide(net: number): 'credit' | 'debit' | 'flat' {
   return 'flat';
 }
 
-export default function StrategyGroupsPanel({ groups }: Props) {
+function fmtPrice(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 });
+}
+
+function closeLegLine({ label, query, item }: CloseLegQuote): string {
+  const verb = query.side === 'sell' ? 'Sell' : 'Buy';
+  const fill = item?.quote?.fill;
+  const mark = item?.quote?.mark?.markPrice;
+  const at = fill?.vwap != null ? `@ ${fmtPrice(fill.vwap)}` : 'no price';
+  const vsMark = mark != null ? ` (mark ${fmtPrice(mark)})` : '';
+  return `${verb} ${query.size} ${label} ${at}${vsMark}`;
+}
+
+function CloseCell({ estimate }: { estimate: CloseEstimate }) {
+  switch (estimate.status) {
+    case 'loading':
+      return (
+        <span role="cell" className={styles.close} data-state="muted">
+          …
+        </span>
+      );
+    case 'unavailable':
+      return (
+        <span role="cell" className={styles.close} data-state="muted">
+          —<small>{estimate.reason}</small>
+        </span>
+      );
+    case 'no_market':
+      return (
+        <span
+          role="cell"
+          className={styles.close}
+          data-state="warn"
+          title={estimate.legs.map(closeLegLine).join('\n')}
+        >
+          {"Can't cross"}
+          {estimate.problems.map((p) => (
+            <small key={p}>{p}</small>
+          ))}
+        </span>
+      );
+    case 'ok': {
+      const slip = estimate.slippageUsd;
+      const pct = estimate.slippagePct;
+      return (
+        <span
+          role="cell"
+          className={styles.close}
+          data-side={netSide(estimate.cashUsd)}
+          title={estimate.legs.map(closeLegLine).join('\n')}
+        >
+          {fmtCashFlow(estimate.cashUsd)}
+          {slip != null && (
+            <small data-slip={pct != null && pct >= 10 ? 'high' : undefined}>
+              slip {fmtAmount(Math.abs(slip))}
+              {pct != null ? ` · ${pct.toFixed(1)}%` : ''} vs mark
+            </small>
+          )}
+        </span>
+      );
+    }
+  }
+}
+
+function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
+  const ok = estimates.filter((e) => e.status === 'ok');
+  if (estimates.some((e) => e.status === 'loading')) {
+    return (
+      <span role="cell" className={styles.close} data-state="muted">
+        …
+      </span>
+    );
+  }
+  if (ok.length === 0) {
+    return (
+      <span role="cell" className={styles.close} data-state="muted">
+        —
+      </span>
+    );
+  }
+  const cash = ok.reduce((acc, e) => acc + e.cashUsd, 0);
+  const slip = ok.every((e) => e.slippageUsd != null)
+    ? ok.reduce((acc, e) => acc + (e.slippageUsd ?? 0), 0)
+    : null;
+  const excluded = estimates.length - ok.length;
+  return (
+    <span role="cell" className={styles.close} data-side={netSide(cash)}>
+      {fmtCashFlow(cash)}
+      {slip != null && <small>slip {fmtAmount(Math.abs(slip))} vs mark</small>}
+      {excluded > 0 && (
+        <small data-slip="high">
+          excl. {excluded} not crossable
+        </small>
+      )}
+    </span>
+  );
+}
+
+export default function StrategyGroupsPanel({ groups, positions }: Props) {
+  const positionsById = useMemo(
+    () => new Map(positions.map((p) => [p.legId, p])),
+    [positions],
+  );
+  const legParams = useMemo(
+    () => closeLegParams(groups, positionsById),
+    [groups, positionsById],
+  );
+  const closeQuery = useQuery({
+    queryKey: ['liquidity-close', legParams],
+    queryFn: () => fetchCloseLiquidity(legParams),
+    enabled: legParams.length > 0,
+    refetchInterval: CLOSE_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+  const closeItems = useMemo(() => indexCloseItems(closeQuery.data), [closeQuery.data]);
+  const closeLoaded = closeQuery.data != null || closeQuery.isError;
+
   if (groups.length === 0) return null;
 
   const ordered = [
@@ -88,13 +219,17 @@ export default function StrategyGroupsPanel({ groups }: Props) {
   const totalReceived = groups.reduce((acc, g) => acc + g.grossCreditUsd, 0);
   const totalNet = totalReceived - totalPaid;
   const structureCount = groups.length - groups.filter((g) => g.kind === 'naked').length;
+  const closeEstimates = new Map(
+    groups.map((g) => [g.groupId, estimateClose(g, positionsById, closeItems, closeLoaded)]),
+  );
 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.title}>Strategies &amp; premium</span>
         <span className={styles.subtitle}>
-          {structureCount} structure{structureCount === 1 ? '' : 's'} detected · entry premium
+          {structureCount} structure{structureCount === 1 ? '' : 's'} detected · entry premium · to
+          close = crossing the Thalex book now
         </span>
       </div>
       <div className={styles.tableScroll}>
@@ -107,10 +242,12 @@ export default function StrategyGroupsPanel({ groups }: Props) {
             <span role="columnheader">Net</span>
             <span role="columnheader">Max P / L</span>
             <span role="columnheader">BE spot</span>
+            <span role="columnheader">To close</span>
           </div>
           {ordered.map((group) => {
             const net = -group.netEntryPremiumUsd;
             const side = netSide(net);
+            const close = closeEstimates.get(group.groupId) ?? { status: 'loading' };
             return (
               <div key={group.groupId} className={styles.row} role="row">
                 <span role="rowheader" className={styles.kind} data-kind={group.kind}>
@@ -138,6 +275,7 @@ export default function StrategyGroupsPanel({ groups }: Props) {
                 <span role="cell" className={styles.be}>
                   {fmtSpot(group.breakEvenSpotsUsd)}
                 </span>
+                <CloseCell estimate={close} />
               </div>
             );
           })}
@@ -156,6 +294,7 @@ export default function StrategyGroupsPanel({ groups }: Props) {
             </span>
             <span role="cell" />
             <span role="cell" />
+            <TotalCloseCell estimates={[...closeEstimates.values()]} />
           </div>
         </div>
       </div>

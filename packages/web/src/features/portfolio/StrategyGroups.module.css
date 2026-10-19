@@ -35,7 +35,7 @@
 
 .table {
   display: flex;
-  min-width: 760px;
+  min-width: 900px;
   flex-direction: column;
 }
 
@@ -43,7 +43,7 @@
   display: grid;
   grid-template-columns:
     minmax(130px, 1.3fr) minmax(140px, 1.4fr) repeat(3, minmax(80px, 1fr))
-    minmax(110px, 1fr) minmax(90px, 1fr);
+    minmax(110px, 1fr) minmax(90px, 1fr) minmax(130px, 1.2fr);
   gap: 10px;
   align-items: baseline;
   padding: 7px 10px;
@@ -62,7 +62,8 @@
   text-transform: uppercase;
 }
 
-.row[data-head] span:nth-child(n + 3):nth-child(-n + 5) {
+.row[data-head] span:nth-child(n + 3):nth-child(-n + 5),
+.row[data-head] span:nth-child(8) {
   text-align: right;
 }
 
@@ -128,6 +129,41 @@
 
 .be {
   color: #cbd5e1;
+}
+
+.close {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.close[data-side='credit'] {
+  color: #4ade80;
+}
+
+.close[data-side='debit'] {
+  color: #f87171;
+}
+
+.close[data-state='muted'] {
+  color: #68706e;
+  font-weight: 400;
+}
+
+.close[data-state='warn'] {
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.close[data-state='warn'] small {
+  color: #fbbf24;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.close small[data-slip='high'] {
+  color: #fbbf24;
 }
 
 .empty {

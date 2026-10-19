@@ -53,7 +53,7 @@ describe('PayoffChartV3 (render)', () => {
 
   it('shows the empty hint when there are no legs', () => {
     const { container } = renderChart([]);
-    expect(container.textContent).toContain('click a rung');
+    expect(container.textContent).toContain('Click the chart');
   });
 
   it('renders an SVG (not a canvas) so jsdom can introspect it', () => {
@@ -72,23 +72,24 @@ describe('PayoffChartV3 (render)', () => {
     expect(Number(rect.getAttribute('height'))).toBeGreaterThan(40);
   });
 
-  it('renders two lego studs per block, on the growth edge (call up, put down)', () => {
+  it('grows call boxes up from the strike line and put boxes down from it', () => {
     const { container } = renderChart([
       makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }),
       makeLeg({ id: 'leg-2', type: 'put', direction: 'buy', strike: 100, entryPrice: 3 }),
     ]);
+    const strikeY = Number(
+      container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!.getAttribute('y1'),
+    );
     const callBody = container.querySelector('[data-leg-id="leg-1"] rect')!;
-    const callStuds = container.querySelectorAll('[data-leg-id="leg-1"] [data-stud]');
-    expect(callStuds.length).toBe(2);
-    // Call brick: studs protrude above the body's top edge.
-    expect(Number(callStuds[0]!.getAttribute('y'))).toBeLessThan(Number(callBody.getAttribute('y')));
-
+    const callBottom = Number(callBody.getAttribute('y')) + Number(callBody.getAttribute('height'));
+    expect(callBottom).toBeCloseTo(strikeY, 5);
     const putBody = container.querySelector('[data-leg-id="leg-2"] rect')!;
-    const putStuds = container.querySelectorAll('[data-leg-id="leg-2"] [data-stud]');
-    expect(putStuds.length).toBe(2);
-    // Put brick: studs protrude below the body's bottom edge.
-    const putBottom = Number(putBody.getAttribute('y')) + Number(putBody.getAttribute('height'));
-    expect(Number(putStuds[0]!.getAttribute('y'))).toBeGreaterThanOrEqual(putBottom);
+    expect(Number(putBody.getAttribute('y'))).toBeCloseTo(strikeY, 5);
+  });
+
+  it('pins each position to the price axis with an exact strike tag', () => {
+    const { container } = renderChart([makeLeg({ id: 'leg-1', strike: 100 })]);
+    expect(container.querySelector('[data-strike-tag="leg-1"]')!.textContent).toBe('100');
   });
 
   it('draws nearby strikes as labeled rungs', () => {
@@ -514,8 +515,8 @@ describe('PayoffChartV3 (placement)', () => {
 
 describe('PayoffChartV3 (tenor columns)', () => {
   // Calendar axis: now pinned 28 days before each evenly spaced expiry. Default
-  // jsdom size 600×400 → plotLeft 48, plotW 488 → expiry lines ≈ 211 / 373 / 536,
-  // segment midpoints ≈ 129 / 292 / 455.
+  // jsdom size 600×400 → plotLeft 52, plotW 476 → expiry lines ≈ 211 / 369 / 528,
+  // segment midpoints ≈ 131 / 290 / 449.
   const TENORS = ['2026-06-29', '2026-07-27', '2026-08-24'];
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -567,20 +568,38 @@ describe('PayoffChartV3 (tenor columns)', () => {
       makeLeg({ id: 'near', strike: 100, expiry: TENORS[0] }),
       makeLeg({ id: 'far', direction: 'sell', strike: 100, expiry: TENORS[2] }),
     ]);
-    const nearX = Number(container.querySelector('[data-leg-id="near"] rect')!.getAttribute('x'));
-    const farX = Number(container.querySelector('[data-leg-id="far"] rect')!.getAttribute('x'));
-    // Expiry lines two segments apart (≈ 325px) — blocks sit flush left of each.
-    expect(farX - nearX).toBeGreaterThan(300);
+    const rightEdge = (id: string) => {
+      const r = container.querySelector(`[data-leg-id="${id}"] rect`)!;
+      return Number(r.getAttribute('x')) + Number(r.getAttribute('width'));
+    };
+    // Both start at now; expiry edges sit two segments apart (≈ 317px).
+    expect(rightEdge('far') - rightEdge('near')).toBeGreaterThan(300);
   });
 
-  it('sits each block flush against its expiry line', () => {
+  it('spans each position box from now to its expiry line', () => {
     const { container } = renderTenors([makeLeg({ id: 'leg-1', expiry: TENORS[1] })]);
     const lineX = Number(container.querySelector(`[data-expiry-line="${TENORS[1]}"]`)!.getAttribute('x1'));
     const rect = container.querySelector('[data-leg-id="leg-1"] rect')!;
-    const right = Number(rect.getAttribute('x')) + Number(rect.getAttribute('width'));
-    expect(lineX).toBeCloseTo(48 + (488 * 2) / 3, 0);
-    expect(lineX - right).toBeGreaterThanOrEqual(0);
-    expect(lineX - right).toBeLessThan(6);
+    const left = Number(rect.getAttribute('x'));
+    const right = left + Number(rect.getAttribute('width'));
+    expect(lineX).toBeCloseTo(52 + (476 * 2) / 3, 0);
+    expect(right).toBeCloseTo(lineX, 5);
+    expect(left).toBeLessThan(55);
+  });
+
+  it('drags a box rightward from its expiry edge onto the next tenor', () => {
+    const onTenor = vi.fn();
+    const { container } = renderTenors(
+      [makeLeg({ id: 'leg-1', strike: 100, expiry: TENORS[0] })],
+      { onLegTenorDrag: onTenor, strikes: [100] },
+    );
+    const svg = container.querySelector('svg')!;
+    // Grabbed near "now" (far left of the box): the gesture still moves the
+    // expiry edge by the pointer's travel, not to the column under the pointer.
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 60, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 220, clientY: 200, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 220, clientY: 200 });
+    expect(onTenor).toHaveBeenCalledWith('leg-1', TENORS[1], 100);
   });
 
   it('paints a price × time P&L grid with profit and loss cells', () => {
@@ -624,8 +643,8 @@ describe('PayoffChartV3 (tenor columns)', () => {
     );
     const svg = container.querySelector('svg')!;
     fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 129, clientY: 200 });
-    fireEvent.pointerMove(svg, { clientX: 292, clientY: 200, buttons: 1 });
-    fireEvent.pointerUp(svg, { clientX: 292, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 290, clientY: 200, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 290, clientY: 200 });
     expect(onTenor).toHaveBeenCalledTimes(1);
     expect(onTenor).toHaveBeenCalledWith('leg-1', TENORS[1], 100);
     expect(onStrike).not.toHaveBeenCalled();
@@ -651,9 +670,81 @@ describe('PayoffChartV3 (tenor columns)', () => {
     const onAdd = vi.fn();
     const { container } = renderTenors([], { onAddLegAtStrike: onAdd });
     const svg = container.querySelector('svg')!;
-    fireEvent.click(svg, { clientX: 455, clientY: 200 });
+    fireEvent.click(svg, { clientX: 449, clientY: 200 });
     fireEvent.click(container.querySelector('[data-add="buy-call"]')!);
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd.mock.calls[0]![4]).toBe(TENORS[2]);
+  });
+});
+
+describe('PayoffChartV3 (price history)', () => {
+  const TENORS = ['2026-06-29', '2026-07-27'];
+  const HOUR = 3_600_000;
+  const NOW = Date.parse('2026-06-01T08:00:00Z');
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(NOW));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function candles(n: number, base: number, swing: number) {
+    return Array.from({ length: n }, (_, i) => {
+      const open = base + Math.sin(i / 3) * swing;
+      const close = base + Math.sin((i + 1) / 3) * swing;
+      return {
+        timestamp: NOW - (n - i) * HOUR,
+        open,
+        close,
+        high: Math.max(open, close) + 0.5,
+        low: Math.min(open, close) - 0.5,
+      };
+    });
+  }
+
+  function renderHistory(extra: Record<string, unknown> = {}) {
+    return render(
+      <PayoffChartV3
+        points={[]}
+        breakevens={[103]}
+        spotPrice={100}
+        legs={[makeLeg({ id: 'leg-1', strike: 100, expiry: TENORS[0] })]}
+        netDebit={-3}
+        strikes={[80, 90, 95, 100, 105, 110, 120]}
+        tenors={TENORS}
+        activeTenor={TENORS[0]}
+        candles={candles(200, 100, 2)}
+        candleIntervalLabel="1H"
+        {...extra}
+      />,
+    );
+  }
+
+  it('draws candles left of now and starts positions at now', () => {
+    const { container } = renderHistory();
+    const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
+    const candleEls = [...container.querySelectorAll('[data-candle] rect')];
+    expect(candleEls.length).toBeGreaterThan(10);
+    // Only as many bars as fit the history pane.
+    expect(candleEls.length).toBeLessThan(200);
+    for (const c of candleEls) {
+      expect(Number(c.getAttribute('x')) + Number(c.getAttribute('width'))).toBeLessThanOrEqual(nowX);
+    }
+    const box = container.querySelector('[data-leg-id="leg-1"] rect')!;
+    expect(Number(box.getAttribute('x'))).toBeGreaterThanOrEqual(nowX);
+    expect(Number(box.getAttribute('x'))).toBeLessThan(nowX + 4);
+    expect(container.textContent).toContain('price · 1H');
+  });
+
+  it('widens the price window so the visible candles stay on-screen', () => {
+    const { container } = renderHistory({ candles: candles(200, 100, 18) });
+    const labels = [...container.querySelectorAll('text')].map((t) => t.textContent);
+    expect(labels).toContain('80');
+    expect(labels).toContain('120');
+  });
+
+  it('has no history pane without candles', () => {
+    const { container } = renderHistory({ candles: [] });
+    expect(container.querySelector('[data-now-line]')).toBeNull();
+    expect(container.querySelector('[data-testid="price-history"]')).toBeNull();
   });
 });

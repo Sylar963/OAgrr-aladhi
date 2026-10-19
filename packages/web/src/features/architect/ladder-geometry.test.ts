@@ -6,7 +6,6 @@ import {
   deriveLadderDomain,
   derivePriceDomain,
   deriveTenorColumns,
-  formatPriceTick,
   legToBlock,
   makePriceScale,
   buildPnlGrid,
@@ -19,7 +18,6 @@ import {
   netPnlReadout,
   pnlAtTime,
   packLanes,
-  packLanesByTenor,
 } from './ladder-geometry';
 
 function makeLeg(over: Partial<Leg> = {}): Leg {
@@ -91,6 +89,12 @@ describe('derivePriceDomain', () => {
 describe('deriveLadderDomain', () => {
   const strikes = [80, 90, 95, 100, 105, 110, 120];
 
+  it('keeps context prices (visible candle range) inside the window', () => {
+    const d = deriveLadderDomain([], [], 100, strikes, 40, [70, 135]);
+    expect(d.priceMin).toBeLessThanOrEqual(70);
+    expect(d.priceMax).toBeGreaterThanOrEqual(135);
+  });
+
   it('zooms far tighter than the wide payoff-curve range (de-compresses blocks)', () => {
     const block = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }));
     const d = deriveLadderDomain([block], [103], 100, strikes);
@@ -155,6 +159,10 @@ describe('deriveLadderDomain', () => {
 });
 
 describe('legToBlock', () => {
+  it('prints large strikes exactly with thousands separators', () => {
+    expect(legToBlock(makeLeg({ strike: 82500 })).label).toBe('+1 C 82,500');
+  });
+
   it('long call: block spans strike → strike+premium, far edge above', () => {
     const b = legToBlock(makeLeg({ type: 'call', direction: 'buy', strike: 100, entryPrice: 3, quantity: 1 }));
     expect(b.legBreakeven).toBeCloseTo(103);
@@ -371,38 +379,6 @@ describe('deriveTenorColumns', () => {
 
   it('clamps to the listed expiries when fewer than maxCols exist', () => {
     expect(deriveTenorColumns(['e1', 'e2'], [], 'e1')).toEqual(['e1', 'e2']);
-  });
-});
-
-describe('packLanesByTenor', () => {
-  it('same-span blocks in different tenors do not contend for lanes', () => {
-    const near = legToBlock(makeLeg({ id: 'near', strike: 100, entryPrice: 5, expiry: 'e1' }));
-    const far = legToBlock(makeLeg({ id: 'far', strike: 100, entryPrice: 5, expiry: 'e2' }));
-    const lanes = packLanesByTenor([near, far]);
-    expect(lanes.get('near')).toEqual({ lane: 0, lanesInTenor: 1 });
-    expect(lanes.get('far')).toEqual({ lane: 0, lanesInTenor: 1 });
-  });
-
-  it('overlapping blocks in the SAME tenor still fan into separate lanes', () => {
-    const a = legToBlock(makeLeg({ id: 'a', direction: 'buy', strike: 100, entryPrice: 5 }));
-    const b = legToBlock(makeLeg({ id: 'b', direction: 'sell', strike: 100, entryPrice: 5 }));
-    const lanes = packLanesByTenor([a, b]);
-    expect(new Set([lanes.get('a')!.lane, lanes.get('b')!.lane]).size).toBe(2);
-    expect(lanes.get('a')!.lanesInTenor).toBe(2);
-  });
-});
-
-describe('formatPriceTick', () => {
-  it('uses k-format above 1000 and decimals scaled to span', () => {
-    expect(formatPriceTick(64000, 4000, 66000)).toBe('64.0k');
-    expect(formatPriceTick(100, 40, 120)).toBe('100');
-    expect(formatPriceTick(0.52, 0.3, 0.7)).toBe('0.520'); // V1 pickDecimals: span 0.3 → 3 dp
-  });
-
-  it('decides k-format from the axis max so ticks straddling 1000 stay consistent', () => {
-    // Same axis (max 1200): both sides of 1000 must use one format (V1-faithful).
-    expect(formatPriceTick(950, 400, 1200)).toBe('0.950k');
-    expect(formatPriceTick(1150, 400, 1200)).toBe('1.150k');
   });
 });
 

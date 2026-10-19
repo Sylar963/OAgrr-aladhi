@@ -11,6 +11,8 @@
   --lego-profit: var(--color-profit);
   --lego-loss: var(--color-loss);
   --lego-be: var(--color-warning);
+  --lego-up: var(--color-profit);
+  --lego-down: var(--color-loss);
 }
 
 /* Overlays (cards, chip, picker) anchor to the SVG's coordinate space, not the
@@ -41,6 +43,17 @@
 .tenorLabel[data-active='true'] {
   color: var(--accent-primary);
 }
+.historyLabel {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
 .tenorDte {
   font-size: 8px;
   opacity: 0.7;
@@ -59,20 +72,17 @@
   pointer-events: none;
 }
 
-/* Blocks: a group per leg. Lift + glow on hover/active. */
+/* Position boxes: a group per leg. Boxes span now→expiry, so hover glows
+   instead of scaling (a 3% scale on a full-width box is a visible jump). */
 .block {
   cursor: grab;
   transition:
-    transform var(--transition-fast),
     filter var(--transition-fast),
     opacity var(--transition-fast);
-  transform-box: fill-box;
-  transform-origin: center;
 }
 .block:hover,
 .block[data-active='true'] {
-  transform: translateY(-2px) scale(1.03);
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+  filter: brightness(1.25) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.6));
 }
 .block[data-dragging='true'] {
   cursor: grabbing;
@@ -180,12 +190,12 @@
 }
 
 @keyframes legoDropIn {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes legoRemove {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.8); }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 @keyframes legoRise {
   from { opacity: 0; transform: translateY(6px); }

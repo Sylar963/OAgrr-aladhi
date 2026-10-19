@@ -1,4 +1,5 @@
 import { black76Price } from '@lib/analytics/blackScholes';
+import { fmtStrike } from '@lib/format';
 
 import { pnlAtPrice, type Leg, type PayoffPoint } from './payoff';
 
@@ -60,6 +61,7 @@ export interface LadderDomain {
  * sliver. This zooms to the strategy itself: spot, every block edge and break-even,
  * widened by a context margin so blocks read as blocks. `rungs` are the available
  * strikes inside that window (capped to the `maxRungs` nearest spot for dense chains).
+ * `contextPrices` (e.g. the visible candle range) must also stay on-screen.
  */
 export function deriveLadderDomain(
   blocks: LadderBlock[],
@@ -67,8 +69,10 @@ export function deriveLadderDomain(
   spotPrice: number,
   strikes: number[],
   maxRungs = 40,
+  contextPrices: number[] = [],
 ): LadderDomain {
   const action: number[] = [spotPrice];
+  for (const p of contextPrices) if (Number.isFinite(p) && p > 0) action.push(p);
   for (const b of blocks) action.push(b.spanLowPrice, b.spanHighPrice);
   for (const be of breakevens) if (Number.isFinite(be)) action.push(be);
   let lo = Math.min(...action);
@@ -104,13 +108,15 @@ export interface LadderBlock {
   strike: number;
   /** Leg expiry — the block's column on the tenor (horizontal) axis. */
   expiry: string;
+  /** Absolute per-contract premium paid or received. */
+  premium: number;
   /** This leg's own break-even: strike ± premium. */
   legBreakeven: number;
   /** Lower price edge of the block (= min(strike, legBreakeven)). */
   spanLowPrice: number;
   /** Upper price edge of the block (= max(strike, legBreakeven)). */
   spanHighPrice: number;
-  /** Compact label, e.g. "+1 C 100" / "−2 P 95". */
+  /** Compact label, e.g. "+1 C 100" / "−2 P 82,500". */
   label: string;
 }
 
@@ -122,7 +128,7 @@ export function legToBlock(leg: Leg): LadderBlock {
   const spanHighPrice = Math.max(leg.strike, legBreakeven);
   const sign = leg.direction === 'buy' ? '+' : '−'; // U+2212 minus, matches app typography
   const typeChar = leg.type === 'call' ? 'C' : 'P';
-  const label = `${sign}${leg.quantity} ${typeChar} ${leg.strike}`;
+  const label = `${sign}${leg.quantity} ${typeChar} ${fmtStrike(leg.strike)}`;
   return {
     legId: leg.id,
     type: leg.type,
@@ -130,6 +136,7 @@ export function legToBlock(leg: Leg): LadderBlock {
     quantity: leg.quantity,
     strike: leg.strike,
     expiry: leg.expiry,
+    premium,
     legBreakeven,
     spanLowPrice,
     spanHighPrice,
@@ -248,33 +255,6 @@ export function deriveTenorColumns(
   return [...allExpiries.slice(loIdx, hiIdx + 1), ...unknown];
 }
 
-export interface TenorLaneItem extends LaneItem {
-  expiry: string;
-}
-
-/**
- * Lane packing scoped to each tenor column: blocks only contend for horizontal
- * offset with overlapping blocks in the SAME column. Returns each key's lane
- * plus the column's lane count so the caller can center the fan.
- */
-export function packLanesByTenor(
-  items: TenorLaneItem[],
-): Map<string, { lane: number; lanesInTenor: number }> {
-  const byTenor = new Map<string, TenorLaneItem[]>();
-  for (const item of items) {
-    const group = byTenor.get(item.expiry);
-    if (group) group.push(item);
-    else byTenor.set(item.expiry, [item]);
-  }
-  const out = new Map<string, { lane: number; lanesInTenor: number }>();
-  for (const group of byTenor.values()) {
-    const lanes = packLanes(group);
-    const lanesInTenor = lanes.size > 0 ? Math.max(...lanes.values()) + 1 : 1;
-    for (const [key, lane] of lanes) out.set(key, { lane, lanesInTenor });
-  }
-  return out;
-}
-
 /**
  * A long+short of the same type fused into one connected "spread block" — the
  * defined-risk corridor between two strikes (solid long edge, capped short edge).
@@ -349,7 +329,7 @@ export function buildLadderUnits(legs: Leg[]): LadderUnit[] {
         lowStrike,
         highStrike,
         quantity: lo.quantity,
-        label: `${qty}${typeChar} ${lowStrike}/${highStrike}`,
+        label: `${qty}${typeChar} ${fmtStrike(lowStrike)}/${fmtStrike(highStrike)}`,
         longBlock: legToBlock(lo),
         shortBlock: legToBlock(sh),
       });
@@ -377,32 +357,6 @@ export function netPnlReadout(
   const pnl = atMs != null ? pnlAtTime(legs, price, atMs) : pnlAtPrice(legs, price);
   const cost = Math.abs(netDebit);
   return { pnl, pct: cost > 0 ? (pnl / cost) * 100 : null };
-}
-
-/** True when a price is large enough to render with a 'k' suffix. Ported from V1. */
-export function shouldUseKFormat(maxPrice: number): boolean {
-  return maxPrice >= 1000;
-}
-
-/** Decimal places for a price tick, scaled by axis span. Ported from V1. */
-export function pickDecimals(span: number, useK: boolean): number {
-  const effective = useK ? span / 1000 : span;
-  if (effective >= 10) return 0;
-  if (effective >= 2) return 1;
-  if (effective >= 0.5) return 2;
-  if (effective >= 0.05) return 3;
-  return 4;
-}
-
-/**
- * Format a price-axis tick label, sub-$1 safe. k-format is decided from the
- * axis max (V1-faithful) so every tick on an axis uses one format — deciding
- * per tick would mix "950" and "1.1k" on a domain straddling 1000.
- */
-export function formatPriceTick(price: number, span: number, axisMax: number): string {
-  const useK = shouldUseKFormat(axisMax);
-  const dp = pickDecimals(span, useK);
-  return useK ? `${(price / 1000).toFixed(dp)}k` : price.toFixed(dp);
 }
 
 const MS_PER_DAY = 86_400_000;

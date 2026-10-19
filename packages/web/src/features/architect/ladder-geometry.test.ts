@@ -18,7 +18,6 @@ import {
   netPnlReadout,
   pnlAtTime,
   packLanes,
-  packLanesByTenor,
   brickColors,
   structureGamma,
 } from './ladder-geometry';
@@ -382,24 +381,6 @@ describe('deriveTenorColumns', () => {
 
   it('clamps to the listed expiries when fewer than maxCols exist', () => {
     expect(deriveTenorColumns(['e1', 'e2'], [], 'e1')).toEqual(['e1', 'e2']);
-  });
-});
-
-describe('packLanesByTenor', () => {
-  it('same-span blocks in different tenors do not contend for lanes', () => {
-    const near = legToBlock(makeLeg({ id: 'near', strike: 100, entryPrice: 5, expiry: 'e1' }));
-    const far = legToBlock(makeLeg({ id: 'far', strike: 100, entryPrice: 5, expiry: 'e2' }));
-    const lanes = packLanesByTenor([near, far]);
-    expect(lanes.get('near')).toEqual({ lane: 0, lanesInTenor: 1 });
-    expect(lanes.get('far')).toEqual({ lane: 0, lanesInTenor: 1 });
-  });
-
-  it('overlapping blocks in the SAME tenor still fan into separate lanes', () => {
-    const a = legToBlock(makeLeg({ id: 'a', direction: 'buy', strike: 100, entryPrice: 5 }));
-    const b = legToBlock(makeLeg({ id: 'b', direction: 'sell', strike: 100, entryPrice: 5 }));
-    const lanes = packLanesByTenor([a, b]);
-    expect(new Set([lanes.get('a')!.lane, lanes.get('b')!.lane]).size).toBe(2);
-    expect(lanes.get('a')!.lanesInTenor).toBe(2);
   });
 });
 

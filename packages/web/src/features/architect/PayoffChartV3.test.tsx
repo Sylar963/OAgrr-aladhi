@@ -378,12 +378,12 @@ describe('PayoffChartV3 (vertical spread snap)', () => {
     expect(group.querySelector('[data-leg-id="short"]')).not.toBeNull();
   });
 
-  it('renders the short leg as a translucent piece and the long leg solid', () => {
+  it('renders bricks translucent, the short leg fainter than the long', () => {
     const { container } = renderSpread();
-    const shortBody = container.querySelector('[data-leg-id="short"] [data-brick-body]')!;
-    const longBody = container.querySelector('[data-leg-id="long"] [data-brick-body]')!;
-    expect(Number(shortBody.getAttribute('fill-opacity'))).toBeLessThan(1);
-    expect(Number(longBody.getAttribute('fill-opacity'))).toBe(1);
+    const op = (id: string) =>
+      Number(container.querySelector(`[data-leg-id="${id}"] [data-brick-body]`)!.getAttribute('fill-opacity'));
+    expect(op('long')).toBeLessThan(1);
+    expect(op('short')).toBeLessThan(op('long'));
   });
 
   it('drags a leg block and fires onLegStrikeDrag for that leg only', () => {
@@ -550,15 +550,17 @@ describe('PayoffChartV3 (placement)', () => {
 });
 
 describe('PayoffChartV3 (tenor columns)', () => {
-  // Calendar axis: now pinned 28 days before each evenly spaced expiry. Default
-  // jsdom size 600×400 → plotLeft 52, plotW 476 → expiry lines ≈ 211 / 369 / 528,
-  // segment midpoints ≈ 131 / 290 / 449.
+  // Calendar axis: now pinned 28 days before each evenly spaced expiry. Bricks
+  // reserve a pane left of now, so pixel positions are read from the DOM.
   const TENORS = ['2026-06-29', '2026-07-27', '2026-08-24'];
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-06-01T08:00:00Z'));
   });
   afterEach(() => vi.useRealTimers());
+
+  const lineX = (c: HTMLElement, tenor: string) =>
+    Number(c.querySelector(`[data-expiry-line="${tenor}"]`)!.getAttribute('x1'));
 
   function renderTenors(legs: Leg[], extra: Record<string, unknown> = {}) {
     return render(
@@ -599,27 +601,30 @@ describe('PayoffChartV3 (tenor columns)', () => {
     expect(container.querySelector('[data-tenor]')).toBeNull();
   });
 
-  it('places calendar legs in their own tenor columns (distinct x)', () => {
+  it('stands calendar legs side by side, each lifeline ending at its own expiry', () => {
     const { container } = renderTenors([
       makeLeg({ id: 'near', strike: 100, expiry: TENORS[0] }),
       makeLeg({ id: 'far', direction: 'sell', strike: 100, expiry: TENORS[2] }),
     ]);
-    const rightEdge = (id: string) => {
-      const r = container.querySelector(`[data-leg-id="${id}"] rect`)!;
-      return Number(r.getAttribute('x')) + Number(r.getAttribute('width'));
-    };
-    // Both start at now; expiry edges sit two segments apart (≈ 317px).
-    expect(rightEdge('far') - rightEdge('near')).toBeGreaterThan(300);
+    const bodyX = (id: string) =>
+      Number(container.querySelector(`[data-leg-id="${id}"] [data-brick-body]`)!.getAttribute('x'));
+    expect(Math.abs(bodyX('far') - bodyX('near'))).toBeGreaterThanOrEqual(96);
+    const end = (id: string) =>
+      Number(container.querySelector(`[data-leg-id="${id}"] [data-strike-line]`)!.getAttribute('x2'));
+    expect(end('near')).toBeCloseTo(lineX(container, TENORS[0]!), 5);
+    expect(end('far')).toBeCloseTo(lineX(container, TENORS[2]!), 5);
   });
 
-  it('parks each brick flush against its expiry line', () => {
+  it('places each brick on the price pane left of now, lifeline to its expiry', () => {
     const { container } = renderTenors([makeLeg({ id: 'leg-1', expiry: TENORS[1] })]);
-    const lineX = Number(container.querySelector(`[data-expiry-line="${TENORS[1]}"]`)!.getAttribute('x1'));
+    const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
     const body = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
     const right = Number(body.getAttribute('x')) + Number(body.getAttribute('width'));
-    expect(lineX).toBeCloseTo(52 + (476 * 2) / 3, 0);
-    expect(lineX - right).toBeGreaterThanOrEqual(0);
-    expect(lineX - right).toBeLessThan(6);
+    expect(right).toBeLessThan(nowX);
+    const life = container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!;
+    expect(Number(life.getAttribute('x1'))).toBeCloseTo(right, 5);
+    expect(Number(life.getAttribute('x2'))).toBeCloseTo(lineX(container, TENORS[1]!), 5);
+    expect(container.querySelector('[data-leg-id="leg-1"] [data-expiry-cap]')).not.toBeNull();
   });
 
   it('drags a box rightward from its expiry edge onto the next tenor', () => {
@@ -665,7 +670,10 @@ describe('PayoffChartV3 (tenor columns)', () => {
 
   it('crosshair reads P&L at the hovered date', () => {
     const { container } = renderTenors([makeLeg({ expiry: TENORS[2] })]);
-    fireEvent.pointerMove(container.querySelector('svg')!, { clientX: 211, clientY: 200 });
+    fireEvent.pointerMove(container.querySelector('svg')!, {
+      clientX: lineX(container, TENORS[0]!),
+      clientY: 200,
+    });
     expect(container.querySelector('[data-testid="crosshair-chip"]')!.textContent).toContain('29 JUN');
   });
 
@@ -677,9 +685,11 @@ describe('PayoffChartV3 (tenor columns)', () => {
       { onLegTenorDrag: onTenor, onLegStrikeDrag: onStrike, strikes: [100] },
     );
     const svg = container.querySelector('svg')!;
-    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 129, clientY: 200 });
-    fireEvent.pointerMove(svg, { clientX: 290, clientY: 200, buttons: 1 });
-    fireEvent.pointerUp(svg, { clientX: 290, clientY: 200 });
+    // Sideways travel of one column's width moves the expiry one column out.
+    const step = lineX(container, TENORS[1]!) - lineX(container, TENORS[0]!);
+    fireEvent.pointerDown(container.querySelector('[data-leg-id="leg-1"]')!, { clientX: 100, clientY: 200 });
+    fireEvent.pointerMove(svg, { clientX: 100 + step, clientY: 200, buttons: 1 });
+    fireEvent.pointerUp(svg, { clientX: 100 + step, clientY: 200 });
     expect(onTenor).toHaveBeenCalledTimes(1);
     expect(onTenor).toHaveBeenCalledWith('leg-1', TENORS[1], 100);
     expect(onStrike).not.toHaveBeenCalled();
@@ -705,7 +715,8 @@ describe('PayoffChartV3 (tenor columns)', () => {
     const onAdd = vi.fn();
     const { container } = renderTenors([], { onAddLegAtStrike: onAdd });
     const svg = container.querySelector('svg')!;
-    fireEvent.click(svg, { clientX: 449, clientY: 200 });
+    const midFar = (lineX(container, TENORS[1]!) + lineX(container, TENORS[2]!)) / 2;
+    fireEvent.click(svg, { clientX: midFar, clientY: 200 });
     fireEvent.click(container.querySelector('[data-add="buy-call"]')!);
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd.mock.calls[0]![4]).toBe(TENORS[2]);
@@ -754,7 +765,7 @@ describe('PayoffChartV3 (price history)', () => {
     );
   }
 
-  it('draws candles left of now and places bricks in the future pane', () => {
+  it('draws candles left of now with the bricks placed over them', () => {
     const { container } = renderHistory();
     const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
     const candleEls = [...container.querySelectorAll('[data-candle] rect')];
@@ -765,10 +776,10 @@ describe('PayoffChartV3 (price history)', () => {
       expect(Number(c.getAttribute('x')) + Number(c.getAttribute('width'))).toBeLessThanOrEqual(nowX);
     }
     const brick = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
-    expect(Number(brick.getAttribute('x'))).toBeGreaterThan(nowX);
-    // The order line runs from now to the brick.
-    const line = container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!;
-    expect(Number(line.getAttribute('x1'))).toBe(nowX);
+    const left = Number(brick.getAttribute('x'));
+    const firstCandleX = Math.min(...candleEls.map((c) => Number(c.getAttribute('x'))));
+    expect(left).toBeGreaterThan(firstCandleX);
+    expect(left + Number(brick.getAttribute('width'))).toBeLessThan(nowX);
     expect(container.textContent).toContain('price · 1H');
   });
 
@@ -779,9 +790,9 @@ describe('PayoffChartV3 (price history)', () => {
     expect(labels).toContain('120');
   });
 
-  it('has no history pane without candles', () => {
+  it('draws no candles without price history, but still reserves the brick pane', () => {
     const { container } = renderHistory({ candles: [] });
-    expect(container.querySelector('[data-now-line]')).toBeNull();
     expect(container.querySelector('[data-testid="price-history"]')).toBeNull();
+    expect(container.querySelector('[data-now-line]')).not.toBeNull();
   });
 });

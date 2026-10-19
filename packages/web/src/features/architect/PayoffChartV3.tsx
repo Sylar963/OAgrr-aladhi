@@ -16,7 +16,6 @@ import {
   nearestAtmIv,
   netPnlReadout,
   packLanes,
-  packLanesByTenor,
   brickColors,
   spreadKey,
   type BrickColor,
@@ -57,13 +56,11 @@ interface PayoffChartV3Props {
 
 const PAD = { top: 18, right: 72, bottom: 18, left: 52 };
 /** Share of the plot width given to price history when candles are present. */
-const HISTORY_FRAC = 0.3;
+const HISTORY_FRAC = 0.36;
 const CANDLE_STEP = 7;
 /** A 1×4 brick seen side-on: four studs on its growth edge. */
 const BLOCK_W = 96;
-const LANE_STEP = BLOCK_W + 8;
-/** Horizontal offset between overlapping bricks fanned within one tenor column. */
-const FAN_STEP = 16;
+const LANE_STEP = BLOCK_W + 10;
 const MIN_BLOCK_PX = 22;
 const STUDS = 4;
 const STUD_W = 13;
@@ -165,9 +162,44 @@ export default function PayoffChartV3({
   const plotRight = w - PAD.right;
   const plotW = Math.max(1, plotRight - plotLeft);
 
-  // Past | future split: candles fill the left pane up to "now", the trade's
-  // boxes live to the right of it.
-  const histW = candles.length > 0 ? Math.round(plotW * HISTORY_FRAC) : 0;
+  const viewLegs = useMemo(
+    () =>
+      drag
+        ? legs.map((l) =>
+            l.id === drag.legId ? { ...l, strike: drag.strike, expiry: drag.expiry } : l,
+          )
+        : legs,
+    [legs, drag],
+  );
+  const viewBreakevens = useMemo(
+    () => (drag ? computeMetrics(viewLegs, spotPrice).breakevens : breakevens),
+    [drag, viewLegs, spotPrice, breakevens],
+  );
+  const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
+
+  // Render units fuse clean verticals into one spread. Every brick is placed on
+  // the price chart at "now"; lanes pack by price span so overlapping bricks
+  // (calendars, same-strike legs) stand side by side instead of on top.
+  const units = useMemo(() => buildLadderUnits(viewLegs), [viewLegs]);
+  const lanes = useMemo(
+    () =>
+      packLanes(
+        units.map((u) =>
+          u.kind === 'spread'
+            ? { legId: spreadKey(u.spread), spanLowPrice: u.spread.lowStrike, spanHighPrice: u.spread.highStrike }
+            : { legId: u.block.legId, spanLowPrice: u.block.spanLowPrice, spanHighPrice: u.block.spanHighPrice },
+        ),
+      ),
+    [units],
+  );
+  const laneCount = lanes.size > 0 ? Math.max(...lanes.values()) + 1 : 0;
+
+  // Past | future split. The price pane left of "now" is where bricks are placed,
+  // over the latest candles; each brick's lifeline runs right to its expiry.
+  const brickPaneW = laneCount > 0 ? laneCount * LANE_STEP + 16 : 0;
+  const histW = Math.round(
+    Math.min(plotW * 0.5, Math.max(candles.length > 0 ? plotW * HISTORY_FRAC : 0, brickPaneW)),
+  );
   const nowX = plotLeft + histW;
   const futureW = Math.max(1, plotRight - nowX);
   const shownCandles = useMemo(
@@ -185,20 +217,6 @@ export default function PayoffChartV3({
     return [lo, hi];
   }, [shownCandles]);
 
-  const viewLegs = useMemo(
-    () =>
-      drag
-        ? legs.map((l) =>
-            l.id === drag.legId ? { ...l, strike: drag.strike, expiry: drag.expiry } : l,
-          )
-        : legs,
-    [legs, drag],
-  );
-  const viewBreakevens = useMemo(
-    () => (drag ? computeMetrics(viewLegs, spotPrice).breakevens : breakevens),
-    [drag, viewLegs, spotPrice, breakevens],
-  );
-  const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
 
   const domain = useMemo(
     () => deriveLadderDomain(blocks, viewBreakevens, spotPrice, strikes, undefined, candleRange),
@@ -245,13 +263,6 @@ export default function PayoffChartV3({
   const nowLabelCrowded =
     tenorScale != null && [...headerTenors].some((t) => (tenorScale.xExpiry(t) ?? 0) - nowX < 44);
 
-  const futureCenterX = nowX + futureW / 2;
-  // Bricks park flush against their expiry line, inside the segment they live in.
-  const blockCenterX = (tenor: string): number | null => {
-    const xe = tenorScale?.xExpiry(tenor);
-    if (xe == null) return null;
-    return Math.max(nowX + BLOCK_W / 2 + 2, xe - BLOCK_W / 2 - 2);
-  };
   const nearestTenor = (xPx: number): string | null => {
     if (!tenorScale) return null;
     let best: string | null = null;
@@ -266,49 +277,9 @@ export default function PayoffChartV3({
     return best;
   };
 
-  // Render units fuse clean verticals into one spread; lanes pack by each unit's
-  // price span so overlapping bricks get their own horizontal offset. In tenor
-  // mode bricks only contend for lanes within their own column.
-  const units = useMemo(() => buildLadderUnits(viewLegs), [viewLegs]);
-  const laneItems = useMemo(
-    () =>
-      units.map((u) =>
-        u.kind === 'spread'
-          ? {
-              legId: spreadKey(u.spread),
-              expiry: u.spread.expiry,
-              spanLowPrice: u.spread.lowStrike,
-              spanHighPrice: u.spread.highStrike,
-            }
-          : {
-              legId: u.block.legId,
-              expiry: u.block.expiry,
-              spanLowPrice: u.block.spanLowPrice,
-              spanHighPrice: u.block.spanHighPrice,
-            },
-      ),
-    [units],
-  );
-  const lanes = useMemo(() => (tenorScale ? null : packLanes(laneItems)), [tenorScale, laneItems]);
-  const laneCount = useMemo(() => (lanes?.size ? Math.max(...lanes.values()) + 1 : 1), [lanes]);
-  const tenorLanes = useMemo(
-    () => (tenorScale ? packLanesByTenor(laneItems) : null),
-    [tenorScale, laneItems],
-  );
-  const unitX = (key: string, expiry: string): number => {
-    if (tenorScale) {
-      const cx = blockCenterX(expiry) ?? futureCenterX;
-      const info = tenorLanes?.get(key);
-      const lane = info?.lane ?? 0;
-      const fan = info?.lanesInTenor ?? 1;
-      return cx - BLOCK_W / 2 + (lane - (fan - 1) / 2) * FAN_STEP;
-    }
-    const lane = lanes?.get(key) ?? 0;
-    const groupW = (laneCount - 1) * LANE_STEP;
-    return futureCenterX - groupW / 2 - BLOCK_W / 2 + lane * LANE_STEP;
-  };
-  const cardLeft = (expiry: string) =>
-    Math.min((blockCenterX(expiry) ?? futureCenterX) + BLOCK_W / 2 + 8, w - 150);
+  const unitX = (key: string): number => nowX - 8 - BLOCK_W - (lanes.get(key) ?? 0) * LANE_STEP;
+  const expiryXOf = (expiry: string): number => tenorScale?.xExpiry(expiry) ?? plotRight - 2;
+  const cardLeft = Math.min(nowX + 8, w - 150);
   const colors = useMemo(() => brickColors(viewLegs, spotPrice, nowMs), [viewLegs, spotPrice, nowMs]);
   const zones = useMemo(
     () => buildLadderZones(viewLegs, viewBreakevens, spotPrice),
@@ -554,7 +525,7 @@ export default function PayoffChartV3({
       block={block}
       color={colors.get(block.legId) ?? 'yellow'}
       x={x}
-      nowX={nowX}
+      expiryX={expiryXOf(block.expiry)}
       histLeft={plotLeft}
       tagX={plotRight + 2}
       yOf={scale.y}
@@ -633,9 +604,6 @@ export default function PayoffChartV3({
               </linearGradient>
             </g>
           ))}
-          <filter id="lego-shadow" x="-10%" y="-20%" width="120%" height="160%">
-            <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#000" floodOpacity="0.55" />
-          </filter>
           <clipPath id="lego-history-clip">
             <rect x={plotLeft} y={plotTop} width={histW} height={plotH} />
           </clipPath>
@@ -766,7 +734,7 @@ export default function PayoffChartV3({
           if (u.kind === 'spread') {
             const sp = u.spread;
             const key = spreadKey(sp);
-            const x = unitX(key, sp.expiry);
+            const x = unitX(key);
             const spreadActive =
               hoverSpreadKey === key || drag?.legId === sp.longLegId || drag?.legId === sp.shortLegId;
             const cTop = clampY(sp.highStrike, scale.y, plotTop, plotBottom);
@@ -801,7 +769,7 @@ export default function PayoffChartV3({
           }
           return renderBrick(
             u.block,
-            unitX(u.block.legId, u.block.expiry),
+            unitX(u.block.legId),
             hoverLegId === u.block.legId || drag?.legId === u.block.legId,
             {
               onEnter: () => setHoverLegId(u.block.legId),
@@ -831,7 +799,7 @@ export default function PayoffChartV3({
         <div
           className={s.card}
           style={{
-            left: cardLeft(hoveredLeg.expiry),
+            left: cardLeft,
             top: scale.y(hoveredLeg.strike) - 40,
           }}
         >
@@ -853,7 +821,7 @@ export default function PayoffChartV3({
           return (
             <div
               className={s.card}
-              style={{ left: cardLeft(hoveredSpread.expiry), top: midY - 48 }}
+              style={{ left: cardLeft, top: midY - 48 }}
             >
               <div className={s.cardTitle}>{hoveredSpread.label} spread</div>
               <div>long +{lLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {fmtStrike(lLeg.strike)}</div>
@@ -901,8 +869,8 @@ interface BrickProps {
   block: LadderBlock;
   color: BrickColor;
   x: number;
-  /** x of "now" — the strike's order line runs from here to the brick. */
-  nowX: number;
+  /** x of the leg's expiry — the brick's lifeline ends here. */
+  expiryX: number;
   /** Left edge of the history pane — the order line extends faintly back to it. */
   histLeft: number;
   /** Left edge of the right-axis price tag. */
@@ -922,15 +890,16 @@ interface BrickProps {
 }
 
 /**
- * One leg as a side-on 1×4 LEGO brick placed on the chart at its expiry. The
- * face spans strike → break-even; studs sit on the growth edge (calls up, puts
- * down). Long legs are solid plastic, short legs translucent "trans" pieces.
+ * One leg as a side-on 1×4 LEGO brick placed on the price chart at "now", with
+ * a lifeline to its expiry. The face spans strike → break-even; studs sit on the
+ * growth edge (calls up, puts down). Bricks are translucent so price shows
+ * through; short legs are the fainter "trans" pieces.
  */
 function Brick({
   block,
   color,
   x,
-  nowX,
+  expiryX,
   histLeft,
   tagX,
   yOf,
@@ -961,7 +930,7 @@ function Brick({
   const isCall = block.type === 'call';
   const isLong = block.direction === 'buy';
   const pal = BRICK[color];
-  const plastic = isLong ? 1 : 0.55;
+  const plastic = isLong ? 0.5 : 0.26;
   const clamp = (y: number) => Math.max(plotTop, Math.min(plotBottom, y));
 
   const yStrike = clamp(yOf(block.strike));
@@ -999,11 +968,15 @@ function Brick({
         onDragStart(e);
       }}
     >
-      {/* Order line: faint through the history pane, solid from now to the brick */}
-      <line x1={histLeft} y1={yStrike} x2={nowX} y2={yStrike} stroke={pal.base} strokeWidth={1} strokeDasharray="2 3" opacity={0.4} pointerEvents="none" />
-      <line data-strike-line="true" x1={nowX} y1={yStrike} x2={x} y2={yStrike} stroke={pal.base} strokeWidth={1.2} opacity={0.75} pointerEvents="none" />
+      {/* Order line back through the price pane, lifeline forward to expiry */}
+      <line x1={histLeft} y1={yStrike} x2={x} y2={yStrike} stroke={pal.base} strokeWidth={1} strokeDasharray="2 3" opacity={0.4} pointerEvents="none" />
+      <line data-strike-line="true" x1={x + BLOCK_W} y1={yStrike} x2={expiryX} y2={yStrike} stroke={pal.light} strokeWidth={1.5} opacity={0.85} pointerEvents="none" />
+      <g data-expiry-cap="true" pointerEvents="none">
+        <line x1={expiryX} y1={yStrike - 7} x2={expiryX} y2={yStrike + 7} stroke={pal.light} strokeWidth={2.5} />
+        <circle cx={expiryX} cy={yStrike} r={3} fill={pal.base} stroke={pal.light} strokeWidth={1} />
+      </g>
 
-      <g filter="url(#lego-shadow)">
+      <g>
         <rect
           data-brick-body="true"
           x={x}
@@ -1013,8 +986,9 @@ function Brick({
           rx={2.5}
           fill={`url(#lego-face-${color})`}
           fillOpacity={plastic}
-          stroke={pal.dark}
-          strokeWidth={1}
+          stroke={pal.light}
+          strokeOpacity={0.9}
+          strokeWidth={1.2}
         />
         {studXs.map((sx) => (
           <rect
@@ -1026,15 +1000,16 @@ function Brick({
             height={STUD_H}
             rx={1.5}
             fill={`url(#lego-stud-${color})`}
-            fillOpacity={plastic}
-            stroke={pal.dark}
+            fillOpacity={plastic + 0.15}
+            stroke={pal.light}
+            strokeOpacity={0.9}
             strokeWidth={0.8}
           />
         ))}
       </g>
       {/* Moulding: lit top edge, shaded bottom lip, and a glint on trans pieces */}
       <rect x={x + 2} y={yTop + 1.5} width={BLOCK_W - 4} height={1.2} rx={0.6} fill="#fff" opacity={0.45} pointerEvents="none" />
-      <rect x={x + 1} y={yBottom - 3} width={BLOCK_W - 2} height={2} fill={pal.dark} opacity={0.6} pointerEvents="none" />
+      <rect x={x + 1} y={yBottom - 3} width={BLOCK_W - 2} height={2} fill={pal.dark} opacity={0.35} pointerEvents="none" />
       {!isLong && (
         <path
           d={`M${x + 10},${yBottom - 3} L${x + 22},${yTop + 3} L${x + 30},${yTop + 3} L${x + 18},${yBottom - 3} Z`}
@@ -1046,7 +1021,11 @@ function Brick({
       <text
         x={x + (BLOCK_W - 14) / 2}
         y={ay + 3.5}
-        fill={pal.text}
+        fill="#fff"
+        stroke="#000"
+        strokeOpacity={0.6}
+        strokeWidth={2.5}
+        paintOrder="stroke"
         fontSize="10"
         fontWeight={700}
         textAnchor="middle"
@@ -1054,7 +1033,7 @@ function Brick({
       >
         {block.label}
       </text>
-      <polygon points={arrow} fill={pal.text} opacity={0.85} pointerEvents="none" />
+      <polygon points={arrow} fill="#fff" stroke="#000" strokeOpacity={0.5} strokeWidth={1} opacity={0.9} pointerEvents="none" />
 
       {onRemove && (
         <g data-remove-leg={block.legId} style={{ cursor: 'pointer' }} onClick={onRemove}>

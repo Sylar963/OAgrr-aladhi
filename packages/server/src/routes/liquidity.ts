@@ -53,6 +53,8 @@ export function buildLiquidityQuote(
           indexPrice: book.mark.indexPrice,
           delta: book.mark.delta,
           iv: book.mark.iv,
+          collarLow: book.mark.collarLow,
+          collarHigh: book.mark.collarHigh,
           ageMs: Math.max(0, now - book.mark.receivedAt),
         }
       : null,

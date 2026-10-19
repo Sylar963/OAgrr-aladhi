@@ -6,9 +6,11 @@ import {
   type CloseEstimate,
   type CloseLegQuote,
   closeLegParams,
+  collarLimit,
   estimateClose,
   fetchCloseLiquidity,
   indexCloseItems,
+  markPrice,
 } from './close-liquidity';
 import { fmtUsdSigned } from './format';
 import styles from './StrategyGroups.module.css';
@@ -103,6 +105,33 @@ function closeLegLine({ label, query, item }: CloseLegQuote): string {
   return `${verb} ${query.size} ${label} ${at}${vsMark}`;
 }
 
+function workingLegLine(leg: CloseLegQuote): string {
+  const verb = leg.query.side === 'sell' ? 'Sell' : 'Buy';
+  const fill = leg.item?.quote?.fill;
+  const mark = leg.item ? markPrice(leg.item) : null;
+  const collar = collarLimit(leg);
+  const book =
+    fill?.fullyFilled === true && fill.vwap != null
+      ? `crosses @ ${fmtPrice(fill.vwap)}`
+      : `${leg.query.side === 'buy' ? 'no ask' : 'no bid'} for full size`;
+  const parts = [book];
+  if (mark != null) parts.push(`mark ${fmtPrice(mark)}`);
+  if (collar != null) {
+    parts.push(`${leg.query.side === 'buy' ? 'max bid' : 'min ask'} ${fmtPrice(collar)} (collar)`);
+  }
+  return `${verb} ${leg.query.size} ${leg.label}: ${parts.join(' · ')}`;
+}
+
+function workingTitle(legs: CloseLegQuote[], markCashUsd: number | null): string {
+  const lines = legs.map(workingLegLine);
+  lines.push(
+    markCashUsd != null
+      ? `Package at mark ${fmtCashFlow(markCashUsd)}: work a combo limit there, or send these legs as an RFQ.`
+      : 'No mark on every leg: send these legs as an RFQ for a price.',
+  );
+  return lines.join('\n');
+}
+
 function CloseCell({ estimate }: { estimate: CloseEstimate }) {
   switch (estimate.status) {
     case 'loading':
@@ -123,12 +152,16 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
           role="cell"
           className={styles.close}
           data-state="warn"
-          title={estimate.legs.map(closeLegLine).join('\n')}
+          title={workingTitle(estimate.legs, estimate.markCashUsd)}
         >
           {"Can't cross"}
           {estimate.problems.map((p) => (
             <small key={p}>{p}</small>
           ))}
+          {estimate.markCashUsd != null && (
+            <small data-hint>limit at mark {fmtCashFlow(estimate.markCashUsd)}</small>
+          )}
+          <small data-hint>or RFQ on Thalex</small>
         </span>
       );
     case 'ok': {

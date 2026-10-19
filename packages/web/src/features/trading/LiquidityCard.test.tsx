@@ -24,7 +24,7 @@ const response = {
   asOf: 1,
   bookAgeMs: 120,
   exchangeTs: 1,
-  mark: { markPrice: 100.5, indexPrice: 100.4, delta: 1, iv: null, ageMs: 10 },
+  mark: { markPrice: 100.5, indexPrice: 100.4, delta: 1, iv: null, collarLow: null, collarHigh: null, ageMs: 10 },
   bestBid: 100,
   bestAsk: 101,
   spread: 1,

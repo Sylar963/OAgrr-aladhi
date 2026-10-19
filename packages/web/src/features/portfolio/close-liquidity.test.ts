@@ -6,7 +6,7 @@ import type {
 } from '@oggregator/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { closeLegParams, estimateClose, indexCloseItems } from './close-liquidity';
+import { closeLegParams, collarLimit, estimateClose, indexCloseItems } from './close-liquidity';
 
 const LONG_85 = 'thalex:BTC-23OCT26-85000-P';
 const SHORT_88 = 'thalex:BTC-23OCT26-88000-P';
@@ -83,7 +83,15 @@ function item(
       mark:
         markPrice == null
           ? null
-          : { markPrice, indexPrice: null, delta: null, iv: null, ageMs: 0 },
+          : {
+              markPrice,
+              indexPrice: null,
+              delta: null,
+              iv: null,
+              collarLow: markPrice * 0.9,
+              collarHigh: markPrice * 1.1,
+              ageMs: 0,
+            },
       bestBid: null,
       bestAsk: null,
       spread: null,
@@ -168,6 +176,13 @@ describe('estimateClose', () => {
       true,
     );
     expect(estimate).toMatchObject({ status: 'no_market', problems: ['no ask on 88,000P'] });
+    if (estimate.status !== 'no_market') return;
+    // Package at mark: sell 85P at 3263.47, buy 88P at 6124.35.
+    expect(estimate.markCashUsd).toBeCloseTo(-85.8264, 6);
+    const short88 = estimate.legs.find((l) => l.label === '88,000P')!;
+    const long85 = estimate.legs.find((l) => l.label === '85,000P')!;
+    expect(collarLimit(short88)).toBeCloseTo(6124.35 * 1.1, 6);
+    expect(collarLimit(long85)).toBeCloseTo(3263.47 * 0.9, 6);
   });
 
   it('flags a book too thin for the size', () => {

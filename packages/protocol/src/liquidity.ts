@@ -60,6 +60,9 @@ export const LiquidityResponseSchema = z.object({
       indexPrice: z.number().nullable(),
       delta: z.number().nullable(),
       iv: z.number().nullable(),
+      // Thalex rejects new bids above collarHigh and new asks below collarLow.
+      collarLow: z.number().nullable().default(null),
+      collarHigh: z.number().nullable().default(null),
       ageMs: z.number(),
     })
     .nullable(),

@@ -162,6 +162,10 @@
   letter-spacing: 0;
 }
 
+.close[data-state='warn'] small[data-hint] {
+  color: #cbd5e1;
+}
+
 .close small[data-slip='high'] {
   color: #fbbf24;
 }

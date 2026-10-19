@@ -157,6 +157,17 @@ describe('GET /api/liquidity/close', () => {
     expect(r.release).toHaveBeenCalledTimes(2);
   });
 
+  it('passes the venue price collars through', async () => {
+    const collared = book();
+    collared.mark = { ...collared.mark!, collarLow: 90, collarHigh: 110 };
+    const app = await buildApp(runtime(async () => collared));
+    const res = await app.inject({ url: legs('buy:1:BTC-PERPETUAL') });
+    expect(LiquidityCloseResponseSchema.parse(res.json()).items[0]?.quote?.mark).toMatchObject({
+      collarLow: 90,
+      collarHigh: 110,
+    });
+  });
+
   it('accepts a single leg param', async () => {
     const app = await buildApp(runtime(async () => book()));
     const res = await app.inject({ url: legs('buy:1:BTC-23OCT26-84000-C') });

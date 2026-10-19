@@ -25,7 +25,13 @@ export interface CloseLegQuote {
 export type CloseEstimate =
   | { status: 'loading' }
   | { status: 'unavailable'; reason: string }
-  | { status: 'no_market'; problems: string[]; legs: CloseLegQuote[] }
+  | {
+      status: 'no_market';
+      problems: string[];
+      /** The whole package at mark: the fair price to work a limit order or RFQ at. */
+      markCashUsd: number | null;
+      legs: CloseLegQuote[];
+    }
   | {
       status: 'ok';
       /** Cash to cross every leg now; negative means you pay. */
@@ -95,7 +101,7 @@ const ERROR_TEXT: Record<NonNullable<LiquidityCloseItem['error']>, string> = {
   disposed: 'books offline',
 };
 
-function markPrice(item: LiquidityCloseItem): number | null {
+export function markPrice(item: LiquidityCloseItem): number | null {
   const quote = item.quote;
   if (quote == null) return null;
   if (quote.mark != null && quote.mark.markPrice > 0) return quote.mark.markPrice;
@@ -144,7 +150,7 @@ export function estimateClose(
     const mark = markPrice(leg.item!);
     markCashUsd = markCashUsd == null || mark == null ? null : markCashUsd + sign * mark * leg.query.size;
   }
-  if (problems.length > 0) return { status: 'no_market', problems, legs };
+  if (problems.length > 0) return { status: 'no_market', problems, markCashUsd, legs };
 
   const slippageUsd = markCashUsd == null ? null : markCashUsd - cashUsd;
   const slippagePct =
@@ -158,4 +164,11 @@ export async function fetchCloseLiquidity(params: string[]): Promise<LiquidityCl
   const search = new URLSearchParams(params.map((leg) => ['leg', leg]));
   const body = await fetchJson<unknown>(`/liquidity/close?${search.toString()}`);
   return LiquidityCloseResponseSchema.parse(body);
+}
+
+/** The furthest a limit order on this leg may go before Thalex rejects it. */
+export function collarLimit(leg: CloseLegQuote): number | null {
+  const mark = leg.item?.quote?.mark;
+  if (mark == null) return null;
+  return leg.query.side === 'buy' ? mark.collarHigh : mark.collarLow;
 }

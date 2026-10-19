@@ -177,9 +177,10 @@ export default function PayoffChartV3({
   );
   const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
 
-  // Render units fuse clean verticals into one spread. Every brick is placed on
-  // the price chart at "now"; lanes pack by price span so overlapping bricks
-  // (calendars, same-strike legs) stand side by side instead of on top.
+  // Render units fuse clean verticals into one spread. Every brick is placed at
+  // "now" — the trade is being made at the current time and price; lanes pack by
+  // price span so overlapping bricks (calendars, same-strike legs) stand side
+  // by side instead of on top.
   const units = useMemo(() => buildLadderUnits(viewLegs), [viewLegs]);
   const lanes = useMemo(
     () =>
@@ -194,12 +195,9 @@ export default function PayoffChartV3({
   );
   const laneCount = lanes.size > 0 ? Math.max(...lanes.values()) + 1 : 0;
 
-  // Past | future split. The price pane left of "now" is where bricks are placed,
-  // over the latest candles; each brick's lifeline runs right to its expiry.
-  const brickPaneW = laneCount > 0 ? laneCount * LANE_STEP + 16 : 0;
-  const histW = Math.round(
-    Math.min(plotW * 0.5, Math.max(candles.length > 0 ? plotW * HISTORY_FRAC : 0, brickPaneW)),
-  );
+  // Past | future split: candles fill the pane up to "now"; bricks are placed
+  // on the "now" line and their lifelines run right to expiry.
+  const histW = candles.length > 0 ? Math.round(plotW * HISTORY_FRAC) : 0;
   const nowX = plotLeft + histW;
   const futureW = Math.max(1, plotRight - nowX);
   const shownCandles = useMemo(
@@ -277,9 +275,9 @@ export default function PayoffChartV3({
     return best;
   };
 
-  const unitX = (key: string): number => nowX - 8 - BLOCK_W - (lanes.get(key) ?? 0) * LANE_STEP;
+  const unitX = (key: string): number => nowX + 2 + (lanes.get(key) ?? 0) * LANE_STEP;
   const expiryXOf = (expiry: string): number => tenorScale?.xExpiry(expiry) ?? plotRight - 2;
-  const cardLeft = Math.min(nowX + 8, w - 150);
+  const cardLeft = Math.min(nowX + 2 + Math.max(1, laneCount) * LANE_STEP, w - 150);
   const colors = useMemo(() => brickColors(viewLegs, spotPrice, nowMs), [viewLegs, spotPrice, nowMs]);
   const zones = useMemo(
     () => buildLadderZones(viewLegs, viewBreakevens, spotPrice),
@@ -890,8 +888,8 @@ interface BrickProps {
 }
 
 /**
- * One leg as a side-on 1×4 LEGO brick placed on the price chart at "now", with
- * a lifeline to its expiry. The face spans strike → break-even; studs sit on the
+ * One leg as a side-on 1×4 LEGO brick placed at "now" and its strike — the
+ * trade as if made right now — with a lifeline on to its expiry. The face spans strike → break-even; studs sit on the
  * growth edge (calls up, puts down). Bricks are translucent so price shows
  * through; short legs are the fainter "trans" pieces.
  */
@@ -970,7 +968,7 @@ function Brick({
     >
       {/* Order line back through the price pane, lifeline forward to expiry */}
       <line x1={histLeft} y1={yStrike} x2={x} y2={yStrike} stroke={pal.base} strokeWidth={1} strokeDasharray="2 3" opacity={0.4} pointerEvents="none" />
-      <line data-strike-line="true" x1={x + BLOCK_W} y1={yStrike} x2={expiryX} y2={yStrike} stroke={pal.light} strokeWidth={1.5} opacity={0.85} pointerEvents="none" />
+      <line data-strike-line="true" x1={x + BLOCK_W} y1={yStrike} x2={Math.max(x + BLOCK_W, expiryX)} y2={yStrike} stroke={pal.light} strokeWidth={1.5} opacity={0.85} pointerEvents="none" />
       <g data-expiry-cap="true" pointerEvents="none">
         <line x1={expiryX} y1={yStrike - 7} x2={expiryX} y2={yStrike + 7} stroke={pal.light} strokeWidth={2.5} />
         <circle cx={expiryX} cy={yStrike} r={3} fill={pal.base} stroke={pal.light} strokeWidth={1} />

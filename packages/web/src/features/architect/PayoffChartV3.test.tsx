@@ -615,14 +615,19 @@ describe('PayoffChartV3 (tenor columns)', () => {
     expect(end('far')).toBeCloseTo(lineX(container, TENORS[2]!), 5);
   });
 
-  it('places each brick on the price pane left of now, lifeline to its expiry', () => {
+  it('anchors each brick at now and its strike, lifeline on to its expiry', () => {
     const { container } = renderTenors([makeLeg({ id: 'leg-1', expiry: TENORS[1] })]);
-    const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
+    // No candles → no history pane, so "now" is the plot's left edge (PAD.left).
+    const nowX = 52;
     const body = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
-    const right = Number(body.getAttribute('x')) + Number(body.getAttribute('width'));
-    expect(right).toBeLessThan(nowX);
+    const left = Number(body.getAttribute('x'));
+    expect(left - nowX).toBeGreaterThanOrEqual(0);
+    expect(left - nowX).toBeLessThan(4);
+    const strikeY = Number(container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!.getAttribute('y1'));
+    // Call brick: its bottom edge sits on the strike.
+    expect(Number(body.getAttribute('y')) + Number(body.getAttribute('height'))).toBeCloseTo(strikeY, 5);
     const life = container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!;
-    expect(Number(life.getAttribute('x1'))).toBeCloseTo(right, 5);
+    expect(Number(life.getAttribute('x1'))).toBeCloseTo(left + Number(body.getAttribute('width')), 5);
     expect(Number(life.getAttribute('x2'))).toBeCloseTo(lineX(container, TENORS[1]!), 5);
     expect(container.querySelector('[data-leg-id="leg-1"] [data-expiry-cap]')).not.toBeNull();
   });
@@ -765,7 +770,7 @@ describe('PayoffChartV3 (price history)', () => {
     );
   }
 
-  it('draws candles left of now with the bricks placed over them', () => {
+  it('draws candles left of now and anchors bricks on the now line', () => {
     const { container } = renderHistory();
     const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
     const candleEls = [...container.querySelectorAll('[data-candle] rect')];
@@ -777,9 +782,8 @@ describe('PayoffChartV3 (price history)', () => {
     }
     const brick = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
     const left = Number(brick.getAttribute('x'));
-    const firstCandleX = Math.min(...candleEls.map((c) => Number(c.getAttribute('x'))));
-    expect(left).toBeGreaterThan(firstCandleX);
-    expect(left + Number(brick.getAttribute('width'))).toBeLessThan(nowX);
+    expect(left).toBeGreaterThanOrEqual(nowX);
+    expect(left).toBeLessThan(nowX + 4);
     expect(container.textContent).toContain('price · 1H');
   });
 
@@ -790,9 +794,9 @@ describe('PayoffChartV3 (price history)', () => {
     expect(labels).toContain('120');
   });
 
-  it('draws no candles without price history, but still reserves the brick pane', () => {
+  it('has no history pane without candles', () => {
     const { container } = renderHistory({ candles: [] });
     expect(container.querySelector('[data-testid="price-history"]')).toBeNull();
-    expect(container.querySelector('[data-now-line]')).not.toBeNull();
+    expect(container.querySelector('[data-now-line]')).toBeNull();
   });
 });

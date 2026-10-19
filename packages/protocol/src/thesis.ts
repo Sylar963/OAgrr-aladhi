@@ -125,8 +125,8 @@ export type ThesisDiffKey = z.infer<typeof ThesisDiffKeySchema>;
 
 export const ThesisDiffRowSchema = z.object({
   key: ThesisDiffKeySchema,
-  then: NullableNumber,
-  now: NullableNumber,
+  before: NullableNumber,
+  after: NullableNumber,
   /** Null when either side is missing; such rows are not counted. */
   material: z.boolean().nullable(),
 });

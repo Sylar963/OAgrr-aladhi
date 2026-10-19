@@ -8,17 +8,22 @@ import type {
 
 import { THESIS_DIFF_THRESHOLDS } from './constants.js';
 
-function signFlipped(then: number, now: number): boolean {
-  return then !== 0 && now !== 0 && Math.sign(then) !== Math.sign(now);
+function signFlipped(before: number, after: number): boolean {
+  return before !== 0 && after !== 0 && Math.sign(before) !== Math.sign(after);
 }
 
 function row(
   key: ThesisDiffKey,
-  then: number | null,
-  now: number | null,
-  material: (then: number, now: number) => boolean,
+  before: number | null,
+  after: number | null,
+  material: (before: number, after: number) => boolean,
 ): ThesisDiffRow {
-  return { key, then, now, material: then == null || now == null ? null : material(then, now) };
+  return {
+    key,
+    before,
+    after,
+    material: before == null || after == null ? null : material(before, after),
+  };
 }
 
 /** What changed since the thesis was written. A material row is a change, not a reason to flip. */

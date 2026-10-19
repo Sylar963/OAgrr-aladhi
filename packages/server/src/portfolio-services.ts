@@ -620,3 +620,32 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000).unref?.();
+
+export async function getChainStats(
+  underlying: string,
+  expiry: string,
+): Promise<EnrichedChainResponse['stats'] | null> {
+  await ensureChain(underlying, expiry);
+  return chainRefs.get(chainKey(underlying, expiry))?.snapshot?.stats ?? null;
+}
+
+/** Whether `listPositions` reflects the account's real book for this source right now. */
+export function isPositionSourceLive(accountId: string, source: PortfolioSource): boolean {
+  if (source === 'thalex') return thalexPositionStore.isConnected(accountId);
+  if (source === 'derive') return derivePositionStore.isConnected(accountId);
+  if (source === 'paradex') return paradexPositionStore.isConnected(accountId);
+  return true;
+}
+
+const WATCHED_POSITION_SOURCES = ['manual', 'paper', 'thalex', 'derive', 'paradex'] as const;
+
+export function subscribePositionStores(
+  listener: (accountId: string, source: PortfolioSource) => void,
+): () => void {
+  const unsubscribes = WATCHED_POSITION_SOURCES.map((source) =>
+    storeFor(source).subscribe((event) => listener(event.accountId, source)),
+  );
+  return () => {
+    for (const unsubscribe of unsubscribes) unsubscribe();
+  };
+}

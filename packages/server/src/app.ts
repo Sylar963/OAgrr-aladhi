@@ -20,6 +20,7 @@ import {
   startPortfolioAssistantRetentionCleanup,
 } from './portfolio-assistant-services.js';
 import { disposePortfolioServices } from './portfolio-services.js';
+import { disposeThesisServices } from './thesis-services.js';
 import { registerRoutes } from './routes/index.js';
 import { disposeSocialServices, startSocialServices } from './social-services.js';
 import { disposeRuntimeMetrics, startRuntimeMetrics } from './runtime-metrics.js';
@@ -226,6 +227,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     disposeServiceStores();
     await disposeChainWarmup();
     await disposePortfolioAssistantServices();
+    await disposeThesisServices();
     await disposePortfolioServices();
     await disposeSocialServices();
     await disposeAdapters(app.log);

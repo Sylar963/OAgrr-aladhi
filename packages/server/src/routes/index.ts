@@ -38,6 +38,8 @@ import { spotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
 import { statsRoute } from './stats.js';
 import { surfaceRoute } from './surface.js';
+import { thesisRoutes } from './thesis.js';
+import { thesisService } from '../thesis-services.js';
 import { timeAtPriceRoute } from './time-at-price.js';
 import { underlyingsRoute } from './underlyings.js';
 import { venuesRoute } from './venues.js';
@@ -103,6 +105,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(paperRoutes, { prefix: '/api' });
   app.register(paperAuthRoute, { prefix: '/api' });
   app.register(portfolioRoutes, { prefix: '/api' });
+  app.register(thesisRoutes(thesisService), { prefix: '/api' });
   app.register(fundedRoutes, { prefix: '/api' });
   app.register(socialRoutes, { prefix: '/api' });
   app.register(liveRoutes, {

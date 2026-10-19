@@ -11,6 +11,7 @@ import {
 
 import { useAppStore } from '@stores/app-store';
 import { portfolioToBuilderLegs, useStrategyStore } from '@features/architect';
+import { FlipBanner } from '@features/thesis';
 import { VENUES } from '@lib/venue-meta';
 
 import { PortfolioAssistantPanel } from './assistant';
@@ -216,6 +217,8 @@ export default function PortfolioView() {
       </div>
 
       <div className={styles.sourceNote}>{activeNote}</div>
+
+      <FlipBanner underlying={underlyingFilter === 'all' ? null : underlyingFilter} />
 
       <RiskCockpit metrics={metrics} positions={positions} />
 

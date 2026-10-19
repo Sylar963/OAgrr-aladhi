@@ -47,6 +47,7 @@ interface PayoffChartV2Props {
   projectionKey: string;
   profitFrontiers: ProfitFrontier[];
   expiryMarks: ExpiryMark[];
+  invalidationLevel?: number | null;
 }
 
 export interface CandleSpec {
@@ -170,6 +171,7 @@ export default function PayoffChartV2({
   projectionKey,
   profitFrontiers,
   expiryMarks,
+  invalidationLevel = null,
 }: PayoffChartV2Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -342,7 +344,19 @@ export default function PayoffChartV2({
       });
       priceLinesRef.current.push(spotLine);
     }
-  }, [breakevens, spotPrice]);
+
+    if (invalidationLevel != null && invalidationLevel > 0) {
+      const thesisLine = series.createPriceLine({
+        price: invalidationLevel,
+        color: '#FEF9A0',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: 'INVALID',
+      });
+      priceLinesRef.current.push(thesisLine);
+    }
+  }, [breakevens, spotPrice, invalidationLevel]);
 
   // Push zones to the chart-canvas primitive. The primitive itself recomputes
   // pixel coordinates on every chart redraw via updateAllViews, so there is

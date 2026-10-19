@@ -18,7 +18,12 @@ import {
 import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
-import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
+import {
+  isSpotCandleUnderlying,
+  type InstrumentCandleInterval,
+  type InstrumentCandleRange,
+  type ThesisGateLeg,
+} from '@oggregator/protocol';
 import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import { useStrategyStore } from './strategy-store';
 import {
@@ -60,6 +65,7 @@ import {
 import VenueSlideover from './VenueSlideover';
 import type { StrategyRouting } from '@features/builder/round-trip';
 import { legsToOrderRequest, useCreateTrade } from '@features/trading';
+import { ThesisSection, useThesisGateState } from '@features/thesis';
 import StrategyTemplates, {
   buildTemplateVariant,
   clearActiveTemplateDrag,
@@ -395,6 +401,10 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
   async function handleSendToPaper(routing?: StrategyRouting) {
     if (market === 'tradfi' || pricedLegs.length === 0) return;
+    if (thesisGated) {
+      setPaperStatus('Resolve the thesis gate first.');
+      return;
+    }
     setPaperStatus(null);
     try {
       const req = legsToOrderRequest(pricedLegs, underlying, pricingVenues, routing);
@@ -557,6 +567,30 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     [analyticsLegs, spotPrice],
   );
   const strategyName = useMemo(() => detectStrategy(pricedLegs), [pricedLegs]);
+
+  const thesisEnabled = market !== 'tradfi' && isSpotCandleUnderlying(underlying);
+  const thesisLegs = useMemo((): ThesisGateLeg[] | null => {
+    if (!thesisEnabled) return null;
+    const gateLegs = pricedLegs.flatMap((leg): ThesisGateLeg[] =>
+      /^\d{4}-\d{2}-\d{2}$/.test(leg.expiry) && leg.strike > 0 && leg.quantity > 0
+        ? [
+            {
+              expiry: leg.expiry,
+              strike: leg.strike,
+              optionRight: leg.type,
+              side: leg.direction,
+              size: leg.quantity * (leg.contractMultiplier ?? 1),
+              premiumUsd: Math.max(0, leg.entryPrice),
+              iv: leg.iv != null && leg.iv > 0 ? leg.iv : null,
+            },
+          ]
+        : [],
+    );
+    return gateLegs.length > 0 ? gateLegs.slice(0, 40) : null;
+  }, [pricedLegs, thesisEnabled]);
+  const thesisState = useThesisGateState(underlying, thesisLegs);
+  const thesisGated = thesisEnabled && thesisState.gated;
+  const nearestLegExpiry = thesisLegs?.map((leg) => leg.expiry).sort()[0] ?? null;
 
   const baseDte = useMemo(() => {
     if (pricedLegs.length === 0) return 30;
@@ -966,11 +1000,13 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               <button
                 className={styles.compareBtn}
                 onClick={() => handleSendToPaper()}
-                disabled={market === 'tradfi' || createTrade.isPending}
+                disabled={market === 'tradfi' || createTrade.isPending || thesisGated}
                 title={
                   market === 'tradfi'
                     ? 'TradFi paper execution is not connected yet'
-                    : undefined
+                    : thesisGated
+                      ? 'Resolve the thesis gate first.'
+                      : undefined
                 }
                 style={{ marginTop: 8 }}
               >
@@ -1077,6 +1113,16 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                 </div>
               ) : (
                 <>
+                  {thesisEnabled && (
+                    <ThesisSection
+                      underlying={underlying}
+                      state={thesisState}
+                      expiryOptions={allExpiries}
+                      breakevens={metrics?.breakevens ?? []}
+                      spotUsd={spotPrice}
+                      nearestExpiry={nearestLegExpiry}
+                    />
+                  )}
                   <div className={styles.chartTitleRow}>
                     <div className={styles.chartTitleBlock}>
                       <div className={styles.chartTitle}>
@@ -1190,7 +1236,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         <button
                           className={styles.projSnapBtn}
                           onClick={handleSnapshot}
-                          disabled={liveGhostPaths.length === 0}
+                          disabled={liveGhostPaths.length === 0 || thesisGated}
+                          title={thesisGated ? 'Resolve the thesis gate first.' : undefined}
                         >
                           ⎙ Snapshot
                         </button>
@@ -1235,6 +1282,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
                         profitFrontiers={profitFrontiers}
                         expiryMarks={expiryMarks}
+                        invalidationLevel={thesisEnabled ? thesisState.invalidationLevel : null}
                       />
                     </>
                   ) : (

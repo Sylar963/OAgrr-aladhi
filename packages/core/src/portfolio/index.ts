@@ -40,6 +40,7 @@ export {
   type PortfolioHorizonScenarios,
 } from './pnl-curve.js';
 export { analyzeExpiryStructure, type ExpiryRiskWindow } from './expiry-structure.js';
+export { expiryInstantMs, yearsUntil } from './horizon-valuation.js';
 export {
   DEFAULT_TAKER_FEE_PREMIUM_CAP,
   DEFAULT_TAKER_FEE_RATE,

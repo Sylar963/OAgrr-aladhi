@@ -381,6 +381,37 @@ export {
   yearsToExpiry,
 } from './feeds/thalex/bs-solver.js';
 
+// thesis gate (pure)
+export {
+  atRiskBandUsd,
+  classifyBias,
+  classifyBook,
+  contextDiff,
+  firedCandle,
+  gateDecision,
+  isBeyondLevel,
+  oppositeDirection,
+  rebaseToMark,
+  thesisStatus,
+  THESIS_AT_RISK_FLOOR_PCT,
+  THESIS_AT_RISK_MOVE_FRACTION,
+  THESIS_BIAS_THRESHOLD,
+  THESIS_DIFF_THRESHOLDS,
+  THESIS_GATE_SHOWN_DEDUPE_MS,
+  THESIS_MIN_BAND_PCT,
+  THESIS_MIN_PNL_USD,
+  THESIS_REVERSAL_COOLDOWN_MS,
+  THESIS_WAIT_MS,
+  type ClassifyBookInput,
+  type GateDecision,
+  type GateDecisionInput,
+  type ThesisCandle,
+  type ThesisLegWithMark,
+  type ThesisRule,
+  type ThesisStatusInput,
+} from './thesis/index.js';
+export { expiryInstantMs } from './portfolio/index.js';
+
 // portfolio module
 export type {
   PositionLeg,

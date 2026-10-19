@@ -215,3 +215,11 @@ export {
   rewriteJsonLines,
   rewriteOutbox,
 } from './deferred-persistence.js';
+export {
+  NoopThesisStore,
+  type PersistedThesis,
+  type PersistedThesisEvent,
+  PostgresThesisStore,
+  type ThesisLoadQuery,
+  type ThesisStore,
+} from './thesis-store.js';

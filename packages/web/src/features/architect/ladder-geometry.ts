@@ -255,6 +255,33 @@ export function deriveTenorColumns(
   return [...allExpiries.slice(loIdx, hiIdx + 1), ...unknown];
 }
 
+export interface TenorLaneItem extends LaneItem {
+  expiry: string;
+}
+
+/**
+ * Lane packing scoped to each tenor column: blocks only contend for horizontal
+ * offset with overlapping blocks in the SAME column. Returns each key's lane
+ * plus the column's lane count so the caller can center the fan.
+ */
+export function packLanesByTenor(
+  items: TenorLaneItem[],
+): Map<string, { lane: number; lanesInTenor: number }> {
+  const byTenor = new Map<string, TenorLaneItem[]>();
+  for (const item of items) {
+    const group = byTenor.get(item.expiry);
+    if (group) group.push(item);
+    else byTenor.set(item.expiry, [item]);
+  }
+  const out = new Map<string, { lane: number; lanesInTenor: number }>();
+  for (const group of byTenor.values()) {
+    const lanes = packLanes(group);
+    const lanesInTenor = lanes.size > 0 ? Math.max(...lanes.values()) + 1 : 1;
+    for (const [key, lane] of lanes) out.set(key, { lane, lanesInTenor });
+  }
+  return out;
+}
+
 /**
  * A long+short of the same type fused into one connected "spread block" — the
  * defined-risk corridor between two strikes (solid long edge, capped short edge).
@@ -536,4 +563,34 @@ export function nearestAtmIv(legs: Leg[], spotPrice: number): number | null {
     if (!best || Math.abs(l.strike - spotPrice) < Math.abs(best.strike - spotPrice)) best = l;
   }
   return best?.iv ?? null;
+}
+
+export type BrickColor = 'green' | 'red' | 'yellow' | 'orange';
+
+/**
+ * Net structure gamma at spot, now — a finite-difference second derivative of the
+ * model P&L, so it works when venue greeks are missing.
+ */
+export function structureGamma(legs: Leg[], spotPrice: number, nowMs: number): number {
+  if (legs.length === 0 || !(spotPrice > 0)) return 0;
+  const h = spotPrice * 0.005;
+  const up = pnlAtTime(legs, spotPrice + h, nowMs);
+  const mid = pnlAtTime(legs, spotPrice, nowMs);
+  const down = pnlAtTime(legs, spotPrice - h, nowMs);
+  return (up - 2 * mid + down) / (h * h);
+}
+
+/**
+ * Brick colour per leg. A net short-gamma structure is all orange; otherwise
+ * (long vol) long calls are green, long puts red and sold legs yellow.
+ */
+export function brickColors(legs: Leg[], spotPrice: number, nowMs: number): Map<string, BrickColor> {
+  const shortGamma = structureGamma(legs, spotPrice, nowMs) < 0;
+  const out = new Map<string, BrickColor>();
+  for (const l of legs) {
+    if (shortGamma) out.set(l.id, 'orange');
+    else if (l.direction === 'sell') out.set(l.id, 'yellow');
+    else out.set(l.id, l.type === 'call' ? 'green' : 'red');
+  }
+  return out;
 }

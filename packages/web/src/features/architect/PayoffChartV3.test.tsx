@@ -87,6 +87,42 @@ describe('PayoffChartV3 (render)', () => {
     expect(Number(putBody.getAttribute('y'))).toBeCloseTo(strikeY, 5);
   });
 
+  it('puts four studs on the growth edge: call bricks up, put bricks down', () => {
+    const { container } = renderChart([
+      makeLeg({ id: 'leg-1', type: 'call', direction: 'buy', strike: 100, entryPrice: 3 }),
+      makeLeg({ id: 'leg-2', type: 'put', direction: 'sell', strike: 100, entryPrice: 3 }),
+    ]);
+    const callBody = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
+    const callStuds = [...container.querySelectorAll('[data-leg-id="leg-1"] [data-stud]')];
+    expect(callStuds).toHaveLength(4);
+    for (const st of callStuds) {
+      expect(Number(st.getAttribute('y'))).toBeLessThan(Number(callBody.getAttribute('y')));
+    }
+    const putBody = container.querySelector('[data-leg-id="leg-2"] [data-brick-body]')!;
+    const putBottom = Number(putBody.getAttribute('y')) + Number(putBody.getAttribute('height'));
+    const putStuds = [...container.querySelectorAll('[data-leg-id="leg-2"] [data-stud]')];
+    expect(putStuds).toHaveLength(4);
+    for (const st of putStuds) expect(Number(st.getAttribute('y'))).toBeGreaterThanOrEqual(putBottom);
+  });
+
+  it('colours a long strangle green call / red put', () => {
+    const { container } = renderChart([
+      makeLeg({ id: 'c', type: 'call', direction: 'buy', strike: 105 }),
+      makeLeg({ id: 'p', type: 'put', direction: 'buy', strike: 95 }),
+    ]);
+    expect(container.querySelector('[data-leg-id="c"]')!.getAttribute('data-color')).toBe('green');
+    expect(container.querySelector('[data-leg-id="p"]')!.getAttribute('data-color')).toBe('red');
+  });
+
+  it('colours a short-gamma structure orange', () => {
+    const { container } = renderChart([
+      makeLeg({ id: 'c', type: 'call', direction: 'sell', strike: 105 }),
+      makeLeg({ id: 'p', type: 'put', direction: 'sell', strike: 95 }),
+    ]);
+    const colors = [...container.querySelectorAll('[data-leg-id]')].map((g) => g.getAttribute('data-color'));
+    expect(colors).toEqual(['orange', 'orange']);
+  });
+
   it('pins each position to the price axis with an exact strike tag', () => {
     const { container } = renderChart([makeLeg({ id: 'leg-1', strike: 100 })]);
     expect(container.querySelector('[data-strike-tag="leg-1"]')!.textContent).toBe('100');
@@ -342,12 +378,12 @@ describe('PayoffChartV3 (vertical spread snap)', () => {
     expect(group.querySelector('[data-leg-id="short"]')).not.toBeNull();
   });
 
-  it('renders the short leg with the standalone short look (hatched, not a bar)', () => {
+  it('renders the short leg as a translucent piece and the long leg solid', () => {
     const { container } = renderSpread();
-    const shortRect = container.querySelector('[data-leg-id="short"] rect')!;
-    expect(shortRect.getAttribute('fill')).toContain('hatch');
-    const longRect = container.querySelector('[data-leg-id="long"] rect')!;
-    expect(longRect.getAttribute('fill')).toBe('var(--lego-call)');
+    const shortBody = container.querySelector('[data-leg-id="short"] [data-brick-body]')!;
+    const longBody = container.querySelector('[data-leg-id="long"] [data-brick-body]')!;
+    expect(Number(shortBody.getAttribute('fill-opacity'))).toBeLessThan(1);
+    expect(Number(longBody.getAttribute('fill-opacity'))).toBe(1);
   });
 
   it('drags a leg block and fires onLegStrikeDrag for that leg only', () => {
@@ -576,15 +612,14 @@ describe('PayoffChartV3 (tenor columns)', () => {
     expect(rightEdge('far') - rightEdge('near')).toBeGreaterThan(300);
   });
 
-  it('spans each position box from now to its expiry line', () => {
+  it('parks each brick flush against its expiry line', () => {
     const { container } = renderTenors([makeLeg({ id: 'leg-1', expiry: TENORS[1] })]);
     const lineX = Number(container.querySelector(`[data-expiry-line="${TENORS[1]}"]`)!.getAttribute('x1'));
-    const rect = container.querySelector('[data-leg-id="leg-1"] rect')!;
-    const left = Number(rect.getAttribute('x'));
-    const right = left + Number(rect.getAttribute('width'));
+    const body = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
+    const right = Number(body.getAttribute('x')) + Number(body.getAttribute('width'));
     expect(lineX).toBeCloseTo(52 + (476 * 2) / 3, 0);
-    expect(right).toBeCloseTo(lineX, 5);
-    expect(left).toBeLessThan(55);
+    expect(lineX - right).toBeGreaterThanOrEqual(0);
+    expect(lineX - right).toBeLessThan(6);
   });
 
   it('drags a box rightward from its expiry edge onto the next tenor', () => {
@@ -719,7 +754,7 @@ describe('PayoffChartV3 (price history)', () => {
     );
   }
 
-  it('draws candles left of now and starts positions at now', () => {
+  it('draws candles left of now and places bricks in the future pane', () => {
     const { container } = renderHistory();
     const nowX = Number(container.querySelector('[data-now-line]')!.getAttribute('x1'));
     const candleEls = [...container.querySelectorAll('[data-candle] rect')];
@@ -729,9 +764,11 @@ describe('PayoffChartV3 (price history)', () => {
     for (const c of candleEls) {
       expect(Number(c.getAttribute('x')) + Number(c.getAttribute('width'))).toBeLessThanOrEqual(nowX);
     }
-    const box = container.querySelector('[data-leg-id="leg-1"] rect')!;
-    expect(Number(box.getAttribute('x'))).toBeGreaterThanOrEqual(nowX);
-    expect(Number(box.getAttribute('x'))).toBeLessThan(nowX + 4);
+    const brick = container.querySelector('[data-leg-id="leg-1"] [data-brick-body]')!;
+    expect(Number(brick.getAttribute('x'))).toBeGreaterThan(nowX);
+    // The order line runs from now to the brick.
+    const line = container.querySelector('[data-leg-id="leg-1"] [data-strike-line]')!;
+    expect(Number(line.getAttribute('x1'))).toBe(nowX);
     expect(container.textContent).toContain('price · 1H');
   });
 

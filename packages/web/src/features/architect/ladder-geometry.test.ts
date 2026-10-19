@@ -18,6 +18,9 @@ import {
   netPnlReadout,
   pnlAtTime,
   packLanes,
+  packLanesByTenor,
+  brickColors,
+  structureGamma,
 } from './ladder-geometry';
 
 function makeLeg(over: Partial<Leg> = {}): Leg {
@@ -379,6 +382,56 @@ describe('deriveTenorColumns', () => {
 
   it('clamps to the listed expiries when fewer than maxCols exist', () => {
     expect(deriveTenorColumns(['e1', 'e2'], [], 'e1')).toEqual(['e1', 'e2']);
+  });
+});
+
+describe('packLanesByTenor', () => {
+  it('same-span blocks in different tenors do not contend for lanes', () => {
+    const near = legToBlock(makeLeg({ id: 'near', strike: 100, entryPrice: 5, expiry: 'e1' }));
+    const far = legToBlock(makeLeg({ id: 'far', strike: 100, entryPrice: 5, expiry: 'e2' }));
+    const lanes = packLanesByTenor([near, far]);
+    expect(lanes.get('near')).toEqual({ lane: 0, lanesInTenor: 1 });
+    expect(lanes.get('far')).toEqual({ lane: 0, lanesInTenor: 1 });
+  });
+
+  it('overlapping blocks in the SAME tenor still fan into separate lanes', () => {
+    const a = legToBlock(makeLeg({ id: 'a', direction: 'buy', strike: 100, entryPrice: 5 }));
+    const b = legToBlock(makeLeg({ id: 'b', direction: 'sell', strike: 100, entryPrice: 5 }));
+    const lanes = packLanesByTenor([a, b]);
+    expect(new Set([lanes.get('a')!.lane, lanes.get('b')!.lane]).size).toBe(2);
+    expect(lanes.get('a')!.lanesInTenor).toBe(2);
+  });
+});
+
+describe('brickColors', () => {
+  const now = Date.parse('2026-12-01T08:00:00Z');
+  const leg = (id: string, type: 'call' | 'put', direction: 'buy' | 'sell', strike: number) =>
+    makeLeg({ id, type, direction, strike, expiry: '2026-12-25', entryPrice: 3, iv: 0.5 });
+
+  it('colours a long-vol structure green calls, red puts, yellow sold wings', () => {
+    const legs = [
+      leg('sp', 'put', 'sell', 85),
+      leg('lp', 'put', 'buy', 95),
+      leg('lc', 'call', 'buy', 105),
+      leg('sc', 'call', 'sell', 115),
+    ];
+    expect(structureGamma(legs, 100, now)).toBeGreaterThan(0);
+    const c = brickColors(legs, 100, now);
+    expect(c.get('lc')).toBe('green');
+    expect(c.get('lp')).toBe('red');
+    expect(c.get('sp')).toBe('yellow');
+    expect(c.get('sc')).toBe('yellow');
+  });
+
+  it('colours every brick of a short-gamma structure orange', () => {
+    const legs = [
+      leg('lp', 'put', 'buy', 85),
+      leg('sp', 'put', 'sell', 95),
+      leg('sc', 'call', 'sell', 105),
+      leg('lc', 'call', 'buy', 115),
+    ];
+    expect(structureGamma(legs, 100, now)).toBeLessThan(0);
+    expect(new Set(brickColors(legs, 100, now).values())).toEqual(new Set(['orange']));
   });
 });
 

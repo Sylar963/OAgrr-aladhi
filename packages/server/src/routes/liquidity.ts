@@ -10,13 +10,8 @@ import {
 import {
   LIQUIDITY_DEPTH_BANDS_PCT,
   LIQUIDITY_LADDER_LEVELS,
-  type LiquidityCloseError,
-  type LiquidityCloseItem,
-  LiquidityCloseQuerySchema,
-  type LiquidityCloseResponse,
   type LiquidityQuery,
   LiquidityQuerySchema,
-  type LiquidityQuote,
   type LiquidityResponse,
 } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
@@ -28,11 +23,11 @@ export interface LiquidityRouteOptions {
   now?: () => number;
 }
 
-export function buildLiquidityQuote(
+export function buildLiquidityResponse(
   book: OrderBookSnapshot,
   query: LiquidityQuery,
   now: number,
-): LiquidityQuote {
+): LiquidityResponse {
   const bestBid = book.bids[0]?.price ?? null;
   const bestAsk = book.asks[0]?.price ?? null;
   const spread = bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
@@ -63,26 +58,10 @@ export function buildLiquidityQuote(
     spread,
     spreadPct: spread !== null && mid ? (spread / mid) * 100 : null,
     fill: costToFill(book, query.side, query.size),
-  };
-}
-
-export function buildLiquidityResponse(
-  book: OrderBookSnapshot,
-  query: LiquidityQuery,
-  now: number,
-): LiquidityResponse {
-  return {
-    ...buildLiquidityQuote(book, query, now),
     depth: depthWithin(book, LIQUIDITY_DEPTH_BANDS_PCT),
     bids: book.bids.slice(0, LIQUIDITY_LADDER_LEVELS),
     asks: book.asks.slice(0, LIQUIDITY_LADDER_LEVELS),
   };
-}
-
-function closeError(error: unknown): LiquidityCloseError {
-  if (error instanceof OrderBookCapacityError) return 'capacity';
-  if (error instanceof OrderBookUnavailableError) return error.reason;
-  throw error;
 }
 
 export async function liquidityRoute(app: FastifyInstance, options: LiquidityRouteOptions) {
@@ -126,46 +105,6 @@ export async function liquidityRoute(app: FastifyInstance, options: LiquidityRou
         throw error;
       } finally {
         lease.release();
-      }
-    },
-  );
-
-  // Every leg of a book in one request, so a panel can poll all its legs without tripping
-  // the per-instrument route's rate limit. Leases are taken together so the books warm in parallel.
-  app.get(
-    '/liquidity/close',
-    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
-    async (req, reply) => {
-      const runtime = options.runtime;
-      if (runtime == null) {
-        return reply.status(503).send({ error: 'order books disabled' });
-      }
-      const parsed = LiquidityCloseQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        return reply
-          .status(400)
-          .send({ error: 'invalid liquidity query', details: parsed.error.flatten() });
-      }
-
-      const leases: Array<ReturnType<typeof runtime.acquire>> = [];
-      try {
-        const pending = parsed.data.leg.map(async (query): Promise<LiquidityCloseItem> => {
-          const base = { instrument: query.instrument, side: query.side, size: query.size };
-          if (!isThalexBookInstrument(query.instrument)) {
-            return { ...base, quote: null, error: 'unsupported' };
-          }
-          try {
-            leases.push(runtime.acquire(query.instrument));
-            const book = await runtime.waitForBook(query.instrument, BOOK_WAIT_MS);
-            return { ...base, quote: buildLiquidityQuote(book, query, now()), error: null };
-          } catch (error) {
-            return { ...base, quote: null, error: closeError(error) };
-          }
-        });
-        const body: LiquidityCloseResponse = { asOf: now(), items: await Promise.all(pending) };
-        return body;
-      } finally {
-        for (const lease of leases) lease.release();
       }
     },
   );

@@ -3,7 +3,7 @@ import {
   type OrderBookSnapshot,
   OrderBookUnavailableError,
 } from '@oggregator/core';
-import { LiquidityCloseResponseSchema, LiquidityResponseSchema } from '@oggregator/protocol';
+import { LiquidityResponseSchema } from '@oggregator/protocol';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { liquidityRoute } from './liquidity.js';
@@ -128,89 +128,5 @@ describe('GET /api/liquidity', () => {
   it('503s when order books are disabled', async () => {
     const app = await buildApp(null);
     expect((await app.inject({ url: '/api/liquidity?instrument=BTC-PERPETUAL&side=buy&size=1' })).statusCode).toBe(503);
-  });
-});
-
-describe('GET /api/liquidity/close', () => {
-  const legs = (...params: string[]) =>
-    `/api/liquidity/close?${params.map((p) => `leg=${encodeURIComponent(p)}`).join('&')}`;
-
-  it('estimates every leg in one request and releases every lease', async () => {
-    const r = runtime(async () => book());
-    const app = await buildApp(r);
-
-    const res = await app.inject({ url: legs('sell:2:BTC-PERPETUAL', 'buy:0.5:ETH-PERPETUAL') });
-
-    expect(res.statusCode).toBe(200);
-    const body = LiquidityCloseResponseSchema.parse(res.json());
-    expect(body.items).toHaveLength(2);
-    expect(body.items[0]).toMatchObject({
-      instrument: 'BTC-PERPETUAL',
-      side: 'sell',
-      size: 2,
-      error: null,
-      quote: { bestBid: 100, fill: { filled: 2, vwap: 99.5 } },
-    });
-    expect(body.items[1]?.quote?.fill).toMatchObject({ filled: 0.5, vwap: 101 });
-    expect(body.items[0]?.quote).not.toHaveProperty('bids');
-    expect(r.acquire).toHaveBeenCalledTimes(2);
-    expect(r.release).toHaveBeenCalledTimes(2);
-  });
-
-  it('passes the venue price collars through', async () => {
-    const collared = book();
-    collared.mark = { ...collared.mark!, collarLow: 90, collarHigh: 110 };
-    const app = await buildApp(runtime(async () => collared));
-    const res = await app.inject({ url: legs('buy:1:BTC-PERPETUAL') });
-    expect(LiquidityCloseResponseSchema.parse(res.json()).items[0]?.quote?.mark).toMatchObject({
-      collarLow: 90,
-      collarHigh: 110,
-    });
-  });
-
-  it('accepts a single leg param', async () => {
-    const app = await buildApp(runtime(async () => book()));
-    const res = await app.inject({ url: legs('buy:1:BTC-23OCT26-84000-C') });
-    expect(res.statusCode).toBe(200);
-    expect(LiquidityCloseResponseSchema.parse(res.json()).items).toHaveLength(1);
-  });
-
-  it('reports per-leg failures without failing the batch', async () => {
-    const r = runtime(async () => {
-      throw new OrderBookUnavailableError('BTC-01JAN20-1000-C', 'timeout');
-    });
-    const app = await buildApp(r);
-
-    const res = await app.inject({ url: legs('sell:1:SOL-PERPETUAL', 'buy:1:BTC-01JAN20-1000-C') });
-
-    expect(res.statusCode).toBe(200);
-    const body = LiquidityCloseResponseSchema.parse(res.json());
-    expect(body.items.map((i) => i.error)).toEqual(['unsupported', 'timeout']);
-    expect(r.acquire).toHaveBeenCalledOnce();
-    expect(r.release).toHaveBeenCalledOnce();
-  });
-
-  it('reports capacity per leg', async () => {
-    const r = runtime(async () => book());
-    r.acquire.mockImplementation(() => {
-      throw new OrderBookCapacityError(40);
-    });
-    const app = await buildApp(r);
-    const res = await app.inject({ url: legs('sell:1:BTC-PERPETUAL') });
-    expect(LiquidityCloseResponseSchema.parse(res.json()).items[0]?.error).toBe('capacity');
-  });
-
-  it('validates the legs', async () => {
-    const r = runtime(async () => book());
-    const app = await buildApp(r);
-    expect((await app.inject({ url: '/api/liquidity/close' })).statusCode).toBe(400);
-    expect((await app.inject({ url: legs('hold:1:BTC-PERPETUAL') })).statusCode).toBe(400);
-    expect((await app.inject({ url: legs('sell:0:BTC-PERPETUAL') })).statusCode).toBe(400);
-    expect(r.acquire).not.toHaveBeenCalled();
-  });
-
-  it('503s when order books are disabled', async () => {
-    const app = await buildApp(null);
-    expect((await app.inject({ url: legs('sell:1:BTC-PERPETUAL') })).statusCode).toBe(503);
   });
 });

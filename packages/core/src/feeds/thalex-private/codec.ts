@@ -50,6 +50,22 @@ export function parseThalexOptionInstrument(name: string): {
   return { underlying, expiry, strike, optionRight };
 }
 
+const NUM_TO_MONTH = Object.fromEntries(Object.entries(MONTH_TO_NUM).map(([mon, num]) => [num, mon]));
+
+/** Inverse of `parseThalexOptionInstrument`: BTC-23OCT26-84000-C. */
+export function formatThalexOptionInstrument(leg: {
+  underlying: string;
+  expiry: string;
+  strike: number;
+  optionRight: 'call' | 'put';
+}): string | null {
+  const [year, month, day] = leg.expiry.split('-');
+  const mon = month != null ? NUM_TO_MONTH[month] : undefined;
+  if (year == null || mon == null || day == null) return null;
+  const right = leg.optionRight === 'call' ? 'C' : 'P';
+  return `${leg.underlying.toUpperCase()}-${day}${mon}${year.slice(2)}-${leg.strike}-${right}`;
+}
+
 export function thalexPortfolioEntryToLeg(
   entry: ThalexPortfolioEntry,
   nowMs: number = Date.now(),

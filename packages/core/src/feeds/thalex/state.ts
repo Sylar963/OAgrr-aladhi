@@ -1,5 +1,6 @@
 import type { CachedInstrument, LiveQuote } from '../shared/sdk-base.js';
 import type { OptionRight } from '../../types/common.js';
+import { THALEX_OPTION_FEE_RATE } from '../../core/fees.js';
 import {
   THALEX_OPTION_SYMBOL_RE,
   type ThalexInstrument,
@@ -163,9 +164,7 @@ export function buildThalexInstrument(
     contractValueCurrency: base,
     tickSize: item.tick_size ?? null,
     minQty: item.min_order_amount ?? item.volume_tick_size ?? null,
-    // Public Tier 1 estimate; account discounts and combo reductions apply at execution.
-    // https://thalex.com/trading-information/fees (verified 2026-09-18)
-    makerFee: 0.00015,
-    takerFee: 0.00015,
+    makerFee: THALEX_OPTION_FEE_RATE,
+    takerFee: THALEX_OPTION_FEE_RATE,
   };
 }

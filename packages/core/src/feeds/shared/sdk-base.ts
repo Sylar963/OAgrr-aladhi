@@ -15,21 +15,7 @@ import type {
 } from '../../core/types.js';
 import { EMPTY_GREEKS } from '../../core/types.js';
 import type { VenueId, OptionRight } from '../../types/common.js';
-
-// Fee cap: limits fee to this fraction of the option premium.
-// Without it, OTM options with tiny premiums would have absurdly high fees
-// relative to their price (e.g. 0.03% × $70K underlying = $21 on a $5 option).
-const FEE_CAP: Record<VenueId, number> = {
-  deribit: 0.125, // 12.5% of option price
-  okx: 0.125, // 12.5% of option price
-  bybit: 0.125, // 12.5% of option price
-  binance: 0.1, // 10% of option price
-  derive: 0.125, // 12.5% of option premium
-  coincall: 0.125, // 12.5% of option premium
-  thalex: 0.125, // 12.5% of option premium
-  gateio: 0.125, // venue-published price_limit_fee_rate on every options contract
-  paradex: 0.125, // fee_config.api_fee fee_cap = 0.125 on every options market (verified live 2026-06-08)
-};
+import { VENUE_FEE_CAP } from '../../core/fees.js';
 
 const FEED_WATCHDOG_INTERVAL_MS = 30_000;
 const DEFAULT_FEED_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
@@ -898,7 +884,7 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
     if (underlyingPriceUsd == null || optionPriceUsd == null) return null;
 
     const size = inst.contractSize ?? 1;
-    const cap = FEE_CAP[this.venue];
+    const cap = VENUE_FEE_CAP[this.venue];
 
     const makerBase = inst.makerFee * underlyingPriceUsd * size;
     const takerBase = inst.takerFee * underlyingPriceUsd * size;

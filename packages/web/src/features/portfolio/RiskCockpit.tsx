@@ -1,5 +1,12 @@
-import type { PortfolioMetrics, PositionLeg } from '@oggregator/protocol';
+import type { PortfolioCloseNow, PortfolioMetrics, PositionLeg } from '@oggregator/protocol';
 
+import {
+  CLOSE_NOW_COMBO_NOTE,
+  CLOSE_NOW_TOOLTIP,
+  coverageNote,
+  fmtAge,
+  giveBackLevel,
+} from './close-now';
 import { fmtNum, fmtUsdSigned } from './format';
 import {
   calculateIvEdge,
@@ -105,6 +112,66 @@ function PremiumRow({ label, note, debitUsd, creditUsd }: PremiumRowProps) {
   );
 }
 
+function fmtTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function CloseNowMetric({ closeNow }: { closeNow: PortfolioCloseNow | null | undefined }) {
+  if (closeNow == null) {
+    return (
+      <div className={styles.closeNow} title={CLOSE_NOW_TOOLTIP}>
+        <span className={styles.metricLabel}>Close-now P&amp;L</span>
+        <span className={styles.metricFoot}>order books off</span>
+      </div>
+    );
+  }
+  const total = closeNow.portfolio;
+  const level = giveBackLevel(total.giveBackPct);
+  const coverage = coverageNote(total);
+  const staleAge = total.stale
+    ? Math.max(0, ...closeNow.legs.filter((l) => l.stale).map((l) => l.bookAgeMs ?? 0))
+    : null;
+  const foot = [
+    staleAge != null ? `stale · book ${fmtAge(staleAge)} old` : null,
+    coverage,
+    total.feesUsd > 0 ? `fees ${fmtUsdSigned(-total.feesUsd)}` : null,
+  ].filter((part): part is string => part != null);
+  return (
+    <div
+      className={styles.closeNow}
+      data-stale={total.stale || undefined}
+      title={`${CLOSE_NOW_TOOLTIP}\n${CLOSE_NOW_COMBO_NOTE}`}
+    >
+      <span className={styles.metricLabel}>Close-now P&amp;L</span>
+      <div className={styles.closeNowRow}>
+        <strong
+          className={styles.closeNowValue}
+          data-sign={(total.closeNowPnlUsd ?? 0) >= 0 ? 'positive' : 'negative'}
+        >
+          {fmtUsdSigned(total.closeNowPnlUsd)}
+        </strong>
+        <span className={styles.closeNowStat}>
+          <small>Exit cost</small>
+          {total.exitCostUsd == null ? '—' : fmtUsdSigned(-total.exitCostUsd)}
+        </span>
+        <span className={styles.closeNowStat} data-giveback={level ?? undefined}>
+          <small>Give-back</small>
+          {total.giveBackPct == null ? '—' : `${total.giveBackPct.toFixed(0)}%`}
+        </span>
+      </div>
+      {total.peak != null && (
+        <span className={styles.metricFoot}>
+          peak {fmtUsdSigned(total.peak.closeNowPnlUsd)} at {fmtTime(total.peak.atMs)}
+          {total.peak.markPnlUsd != null ? ` (mark ${fmtUsdSigned(total.peak.markPnlUsd)})` : ''}
+        </span>
+      )}
+      <span className={styles.metricFoot}>
+        {foot.length > 0 ? foot.join(' · ') : 'taker close on holding venue, after fees'}
+      </span>
+    </div>
+  );
+}
+
 export default function RiskCockpit({ metrics, positions }: Props) {
   const totals = metrics?.totals ?? null;
   const accounting = metrics?.accounting ?? null;
@@ -135,6 +202,7 @@ export default function RiskCockpit({ metrics, positions }: Props) {
               {fmtUsdSigned(totals?.unrealizedPnlUsd)}
             </strong>
             <span className={styles.metricFoot}>mark to entry</span>
+            <CloseNowMetric closeNow={metrics?.closeNow} />
           </div>
           <div className={styles.headlineMetric}>
             <span className={styles.metricLabel}>IV edge</span>

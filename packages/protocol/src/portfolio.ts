@@ -400,6 +400,114 @@ export const StrategyGroupSchema = z.object({
 });
 export type StrategyGroup = z.infer<typeof StrategyGroupSchema>;
 
+// Close-now: what closing every leg right now as a taker on the holding venue's book would
+// realize, after fees. Read-only analytics next to the mark-based P&L; never smoothed.
+export const CloseNowLegStatusSchema = z.enum([
+  'ok',
+  // Book is too thin for the full size; the filled part is priced at its VWAP.
+  'partial',
+  // Long with an empty bid side: closable value is 0.
+  'no_bid',
+  // Short with an empty ask side: the leg cannot be bought back.
+  'no_ask',
+  // Holding venue has no depth book in this deployment yet.
+  'unsupported_venue',
+  'book_unavailable',
+]);
+export type CloseNowLegStatus = z.infer<typeof CloseNowLegStatusSchema>;
+
+export const CloseNowUnavailableReasonSchema = z.enum([
+  'loading',
+  // Thalex refused the subscribe: the instrument is not listed, or the IP is at its
+  // unauthenticated-connection limit (the feed does not tell the two apart).
+  'rejected',
+  'capacity',
+  'unsynchronized',
+  'crossed',
+  'silent',
+]);
+export type CloseNowUnavailableReason = z.infer<typeof CloseNowUnavailableReasonSchema>;
+
+export const CloseNowSpreadSchema = z.object({
+  bidUsd: z.number().nullable(),
+  askUsd: z.number().nullable(),
+  // (ask − bid) / reference mark, in percent.
+  widthPct: z.number().nullable(),
+  // Median width over the recent sampling window; null until enough samples exist.
+  typicalWidthPct: z.number().nullable(),
+  // widthPct / typicalWidthPct: >1 means wider than this strike usually is.
+  widthVsTypical: z.number().nullable(),
+});
+export type CloseNowSpread = z.infer<typeof CloseNowSpreadSchema>;
+
+export const CloseNowPeakSchema = z.object({
+  closeNowPnlUsd: z.number(),
+  atMs: z.number().int(),
+  // Mark P&L at the same moment, so a peak can be read against the mark that kept rising.
+  markPnlUsd: z.number().nullable(),
+});
+export type CloseNowPeak = z.infer<typeof CloseNowPeakSchema>;
+
+export const CloseNowLegSchema = z.object({
+  legId: z.string(),
+  venue: VenueIdSchema.nullable(),
+  instrument: z.string().nullable(),
+  status: CloseNowLegStatusSchema,
+  unavailableReason: CloseNowUnavailableReasonSchema.nullable(),
+  side: z.enum(['buy', 'sell']),
+  size: z.number().positive(),
+  filledSize: z.number().nonnegative(),
+  exitVwapUsd: z.number().nullable(),
+  feesUsd: z.number().nonnegative(),
+  // Cash from closing what the book fills, after fees: positive received, negative paid.
+  exitCashUsd: z.number().nullable(),
+  venueMarkUsd: z.number().nullable(),
+  // Furthest limit price the venue accepts on the closing side (Thalex collar).
+  collarLimitUsd: z.number().nullable(),
+  markPnlUsd: z.number().nullable(),
+  // Null when part of a short cannot be bought back: that slice has no executable price.
+  closeNowPnlUsd: z.number().nullable(),
+  exitCostUsd: z.number().nullable(),
+  // exitCost / markPnl in percent, only when mark P&L is a gain.
+  giveBackPct: z.number().nullable(),
+  spread: CloseNowSpreadSchema.nullable(),
+  // Values come from the last usable book; the current one is unsynchronized, crossed or silent.
+  stale: z.boolean(),
+  bookAgeMs: z.number().int().nonnegative().nullable(),
+  peak: CloseNowPeakSchema.nullable(),
+});
+export type CloseNowLeg = z.infer<typeof CloseNowLegSchema>;
+
+export const CloseNowAggregateSchema = z.object({
+  markPnlUsd: z.number().nullable(),
+  // Sum over legs with a close-now value; see pricedLegCount and complete.
+  closeNowPnlUsd: z.number().nullable(),
+  exitCostUsd: z.number().nullable(),
+  giveBackPct: z.number().nullable(),
+  exitCashUsd: z.number().nullable(),
+  feesUsd: z.number().nonnegative(),
+  legCount: z.number().int().nonnegative(),
+  pricedLegCount: z.number().int().nonnegative(),
+  // Every leg priced and fully closable, so exit cost and give-back are meaningful.
+  complete: z.boolean(),
+  stale: z.boolean(),
+  peak: CloseNowPeakSchema.nullable(),
+});
+export type CloseNowAggregate = z.infer<typeof CloseNowAggregateSchema>;
+
+export const CloseNowStrategySchema = CloseNowAggregateSchema.extend({
+  groupId: z.string(),
+});
+export type CloseNowStrategy = z.infer<typeof CloseNowStrategySchema>;
+
+export const PortfolioCloseNowSchema = z.object({
+  computedAt: z.number().int(),
+  legs: z.array(CloseNowLegSchema),
+  strategies: z.array(CloseNowStrategySchema),
+  portfolio: CloseNowAggregateSchema,
+});
+export type PortfolioCloseNow = z.infer<typeof PortfolioCloseNowSchema>;
+
 export const PortfolioMetricsSchema = z.object({
   accountId: z.string(),
   generatedAt: z.number().int(),
@@ -417,6 +525,8 @@ export const PortfolioMetricsSchema = z.object({
   pnlAttribution: PnlAttributionSchema.nullable().optional(),
   strategies: z.array(StrategyGroupSchema),
   accounting: PortfolioAccountingSchema,
+  // Null when the deployment has no order-book runtime (ORDER_BOOK=0).
+  closeNow: PortfolioCloseNowSchema.nullable().optional(),
 });
 export type PortfolioMetrics = z.infer<typeof PortfolioMetricsSchema>;
 

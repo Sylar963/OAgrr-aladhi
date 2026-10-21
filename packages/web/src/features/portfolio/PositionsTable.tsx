@@ -1,7 +1,8 @@
-import type { BreakEvenIvRow, PositionLeg } from '@oggregator/protocol';
+import type { BreakEvenIvRow, CloseNowLeg, PositionLeg } from '@oggregator/protocol';
 
 import { useIsMobile } from '@hooks/useIsMobile';
 
+import { CLOSE_NOW_TOOLTIP, fmtAge, legFillStatus, spreadNote, staleNote } from './close-now';
 import MobilePositionCard from './MobilePositionCard';
 import { useRemovePosition } from './hooks/queries';
 import styles from './PositionsTable.module.css';
@@ -9,6 +10,7 @@ import styles from './PositionsTable.module.css';
 interface Props {
   positions: PositionLeg[];
   breakEven: BreakEvenIvRow[];
+  closeNow?: CloseNowLeg[];
   readOnly?: boolean;
   emptyMessage?: string;
 }
@@ -35,6 +37,29 @@ function fmtPct(value: number | null | undefined): string {
   return `${sign}${(value * 100).toFixed(2)}%`;
 }
 
+function CloseNowCell({ leg }: { leg: CloseNowLeg | undefined }) {
+  if (leg == null) return <td className={styles.closeNow}>—</td>;
+  const priced = leg.exitVwapUsd != null;
+  const title = [
+    CLOSE_NOW_TOOLTIP,
+    leg.closeNowPnlUsd != null ? `Close-now P&L ${fmtUsd(leg.closeNowPnlUsd)}` : null,
+    leg.feesUsd > 0 ? `Fees ${fmtUsd(leg.feesUsd)}` : null,
+    spreadNote(leg),
+    staleNote(leg),
+  ]
+    .filter((line): line is string => line != null)
+    .join('\n');
+  return (
+    <td className={styles.closeNow} data-status={leg.status} data-stale={leg.stale || undefined} title={title}>
+      {priced ? fmtUsd(leg.exitVwapUsd) : '—'}
+      <small>
+        {legFillStatus(leg)}
+        {leg.bookAgeMs != null ? ` · ${fmtAge(leg.bookAgeMs)}` : ''}
+      </small>
+    </td>
+  );
+}
+
 function beNoteLabel(note: BreakEvenIvRow['beNote']): string | null {
   if (note === 'capped') return '>300%';
   if (note === 'below_intrinsic') return '< intrinsic';
@@ -55,12 +80,14 @@ function beNoteTitle(note: BreakEvenIvRow['beNote']): string | undefined {
 export default function PositionsTable({
   positions,
   breakEven,
+  closeNow,
   readOnly = false,
   emptyMessage,
 }: Props) {
   const removePosition = useRemovePosition();
   const isMobile = useIsMobile();
   const breakEvenByLegId = new Map(breakEven.map((row) => [row.legId, row]));
+  const closeNowByLegId = new Map((closeNow ?? []).map((row) => [row.legId, row]));
 
   if (positions.length === 0) {
     const fallback = readOnly ? 'No open positions.' : 'No positions yet — add a leg below.';
@@ -100,6 +127,7 @@ export default function PositionsTable({
           <th>Live IV</th>
           <th>Break-even IV</th>
           <th>IV Cushion</th>
+          {closeNow != null && <th title={CLOSE_NOW_TOOLTIP}>Close now</th>}
           <th></th>
         </tr>
       </thead>
@@ -162,6 +190,7 @@ export default function PositionsTable({
               <td className={cushionClass} title={noteTitle}>
                 {noteLabel != null ? '—' : fmtPct(be?.ivCushionPct)}
               </td>
+              {closeNow != null && <CloseNowCell leg={closeNowByLegId.get(leg.legId)} />}
               <td>
                 {readOnly ? null : (
                   <button

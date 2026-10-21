@@ -233,7 +233,10 @@ export default function PortfolioView() {
             equityVenue={isEquityHistoryVenue(source) ? source : null}
             margin={source === 'thalex' ? (venueMargin ?? null) : null}
           />
-          <StrategyGroupsPanel groups={metrics?.strategies ?? []} positions={positions} />
+          <StrategyGroupsPanel
+            groups={metrics?.strategies ?? []}
+            closeNow={metrics?.closeNow ?? null}
+          />
           <ShockHeatmap
             grid={metrics?.shockGrid ?? []}
             meta={metrics?.shockGridMeta ?? null}
@@ -254,6 +257,7 @@ export default function PortfolioView() {
             <PositionsTable
               positions={positions}
               breakEven={metrics?.breakEven ?? []}
+              {...(metrics?.closeNow != null && { closeNow: metrics.closeNow.legs })}
               readOnly={isReadOnly}
               {...(emptyMessage != null && { emptyMessage })}
             />

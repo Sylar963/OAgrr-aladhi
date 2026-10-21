@@ -4,6 +4,7 @@ import type {
   ExpiryBucketRow,
   PortfolioAccounting,
   PnlAttribution,
+  PortfolioCloseNow,
   PortfolioMetrics,
   PortfolioPnlCurve,
   PortfolioTotals,
@@ -33,6 +34,7 @@ import {
   computeShockGrid,
   getShockGridMeta,
 } from '../../portfolio/scenarios.js';
+import { CloseNowTracker, type ExitBookSource } from '../../portfolio/close-now.js';
 import { computePnlAttribution } from '../../portfolio/pnl-attribution.js';
 import { detectStrategyGroups } from '../../portfolio/strategy-groups.js';
 import type {
@@ -42,6 +44,9 @@ import type {
 } from '../../portfolio/types.js';
 
 const PUSH_INTERVAL_MS = 200;
+// Close-now walks real books and is deliberately unsmoothed, so it is throttled instead:
+// metrics still push every 200ms but reuse the last close-now result in between.
+const CLOSE_NOW_INTERVAL_MS = 1_000;
 
 export interface PortfolioSnapshotEvent {
   type: 'snapshot';
@@ -93,6 +98,9 @@ export interface PortfolioRuntimeOptions {
   // When set, the runtime emits metrics only for legs whose `underlying`
   // matches. Used by the UI's per-asset view. Omit to include every leg.
   underlyingFilter?: string;
+  // Holding-venue books for close-now P&L. Omit to leave `metrics.closeNow` null.
+  exitBooks?: ExitBookSource;
+  closeNowIntervalMs?: number;
 }
 
 function emptyTotals(): PortfolioTotals {
@@ -156,6 +164,10 @@ export class PortfolioRuntime {
   private readonly listeners = new Set<PortfolioRuntimeListener>();
   private readonly now: () => number;
   private readonly underlyingFilter: string | undefined;
+  private readonly exitBooks: ExitBookSource | undefined;
+  private readonly closeNowIntervalMs: number;
+  private readonly closeNowTracker = new CloseNowTracker();
+  private closeNow: { at: number; legsKey: string; value: PortfolioCloseNow | null } | null = null;
 
   private pushTimer: ReturnType<typeof setInterval> | null = null;
   private storeUnsubscribe: (() => void) | null = null;
@@ -178,6 +190,8 @@ export class PortfolioRuntime {
     this.forwardDays = options.forwardDays ?? 0;
     this.now = options.now ?? Date.now;
     this.underlyingFilter = options.underlyingFilter;
+    this.exitBooks = options.exitBooks;
+    this.closeNowIntervalMs = options.closeNowIntervalMs ?? CLOSE_NOW_INTERVAL_MS;
   }
 
   start(): void {
@@ -257,7 +271,34 @@ export class PortfolioRuntime {
     }
     this.storeUnsubscribe?.();
     this.chainUnsubscribe?.();
+    this.exitBooks?.dispose();
     this.listeners.clear();
+  }
+
+  private computeCloseNow(
+    withMarks: Array<{ leg: PositionLeg; mark: MarkContext }>,
+    strategies: StrategyGroup[],
+  ): PortfolioCloseNow | null {
+    const exitBooks = this.exitBooks;
+    if (exitBooks == null) return null;
+    const now = this.now();
+    // A changed leg set must not wait out the throttle with a result for the old legs.
+    const legsKey = withMarks.map(({ leg }) => `${leg.legId}:${leg.size}`).join(',');
+    const cached = this.closeNow;
+    if (cached != null && cached.legsKey === legsKey && now - cached.at < this.closeNowIntervalMs) {
+      return cached.value;
+    }
+    let value: PortfolioCloseNow | null;
+    try {
+      const legs = withMarks.map(({ leg }) => leg);
+      exitBooks.sync(legs);
+      value = this.closeNowTracker.compute(withMarks, strategies, (leg) => exitBooks.lookup(leg), now);
+    } catch (err: unknown) {
+      logger.error({ err, accountId: this.accountId }, 'portfolio close-now failed');
+      value = cached?.value ?? null;
+    }
+    this.closeNow = { at: now, legsKey, value };
+    return value;
   }
 
   private collectLegsWithMarks(): {
@@ -384,6 +425,7 @@ export class PortfolioRuntime {
       pnlAttribution,
       strategies,
       accounting,
+      closeNow: this.computeCloseNow(withMarks, strategies),
     };
     return { positions, metrics };
   }

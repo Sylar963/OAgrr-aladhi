@@ -1,3 +1,4 @@
+export { type ExitBookRuntime, ThalexExitBooks } from './exit-books.js';
 export {
   OrderBookCapacityError,
   type OrderBookLease,

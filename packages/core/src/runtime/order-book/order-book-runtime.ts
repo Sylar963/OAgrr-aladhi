@@ -122,6 +122,11 @@ export class OrderBookRuntime {
     return this.books.get(instrument) ?? null;
   }
 
+  /** Thalex acknowledged the subscribe but left this instrument out (not listed). */
+  isRejected(instrument: string): boolean {
+    return this.rejected.has(instrument);
+  }
+
   /** Resolves with the first synced book; rejects if Thalex refuses the instrument or on timeout. */
   waitForBook(instrument: string, timeoutMs: number): Promise<OrderBookSnapshot> {
     const current = this.books.get(instrument);

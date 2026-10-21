@@ -1,6 +1,7 @@
 import type { ExpiryRiskWindow, PositionLeg } from '@oggregator/protocol';
 
 import type { VenueId } from '../types/common.js';
+import { cappedTakerFeeUsd } from '../core/fees.js';
 import { analyzeExpiryStructure } from './expiry-structure.js';
 import { expiryInstantMs } from './horizon-valuation.js';
 import { buildPortfolioHorizonScenarios } from './pnl-curve.js';
@@ -131,7 +132,7 @@ export interface StructureEvaluation {
 
 const DAY_MS = 86_400_000;
 // Highest standard taker rate among venues without per-instrument fees (OKX, Bybit, Binance:
-// 0.05% of underlying) with the 12.5% premium cap most venues apply (see FEE_CAP in sdk-base).
+// 0.05% of underlying) with the 12.5% premium cap most venues apply (see VENUE_FEE_CAP in core/fees).
 export const DEFAULT_TAKER_FEE_RATE = 0.0005;
 export const DEFAULT_TAKER_FEE_PREMIUM_CAP = 0.125;
 const PAYOFF_SPOT_MOVES_PCT = [-20, -15, -10, -5, 0, 5, 10, 15, 20];
@@ -168,10 +169,12 @@ function midOf(quote: ProposedLegQuote | null): number | null {
 
 /** Per contract. Without an underlying price the premium cap alone bounds the fee from above. */
 export function defaultTakerFeeUsd(premiumUsd: number, underlyingPriceUsd: number | null): number {
-  const cap = DEFAULT_TAKER_FEE_PREMIUM_CAP * Math.max(0, premiumUsd);
-  return underlyingPriceUsd != null && underlyingPriceUsd > 0
-    ? Math.min(DEFAULT_TAKER_FEE_RATE * underlyingPriceUsd, cap)
-    : cap;
+  return cappedTakerFeeUsd(
+    DEFAULT_TAKER_FEE_RATE,
+    DEFAULT_TAKER_FEE_PREMIUM_CAP,
+    premiumUsd,
+    underlyingPriceUsd,
+  );
 }
 
 function evaluateLeg(leg: ProposedStructureLeg, index: number): EvaluatedProposedLeg {

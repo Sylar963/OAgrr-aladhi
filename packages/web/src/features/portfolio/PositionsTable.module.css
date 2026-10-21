@@ -96,3 +96,24 @@
   font-style: italic;
   cursor: help;
 }
+
+.closeNow {
+  white-space: nowrap;
+  cursor: help;
+}
+
+.closeNow small {
+  display: block;
+  color: #878c8f;
+  font-size: 10px;
+}
+
+.closeNow[data-status='no_bid'] small,
+.closeNow[data-status='no_ask'] small,
+.closeNow[data-status='partial'] small {
+  color: #fbbf24;
+}
+
+.closeNow[data-stale] {
+  opacity: 0.45;
+}

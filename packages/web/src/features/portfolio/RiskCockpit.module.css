@@ -139,6 +139,72 @@
   color: #ef6177;
 }
 
+.closeNow {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #2b3331;
+}
+
+.closeNow[data-stale] .closeNowValue,
+.closeNow[data-stale] .closeNowStat {
+  opacity: 0.45;
+}
+
+.closeNowRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-top: 4px;
+}
+
+.closeNowValue {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.closeNowValue[data-sign='positive'] {
+  color: var(--color-profit);
+}
+
+.closeNowValue[data-sign='negative'] {
+  color: #ef6177;
+}
+
+.closeNowStat {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.closeNowStat small {
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.closeNowStat[data-giveback='ok'] {
+  color: var(--color-profit);
+}
+
+.closeNowStat[data-giveback='warn'] {
+  color: #f5b84b;
+}
+
+.closeNowStat[data-giveback='alert'] {
+  color: #ef6177;
+}
+
 .metricFoot {
   overflow: hidden;
   margin-top: 3px;

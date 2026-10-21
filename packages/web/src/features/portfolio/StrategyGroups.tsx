@@ -1,25 +1,19 @@
-import type { PositionLeg, StrategyGroup } from '@oggregator/protocol';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import type { PortfolioCloseNow, StrategyGroup } from '@oggregator/protocol';
 
 import {
   type CloseEstimate,
   type CloseLegQuote,
-  closeLegParams,
   collarLimit,
   estimateClose,
-  fetchCloseLiquidity,
-  indexCloseItems,
   markPrice,
 } from './close-liquidity';
+import { CLOSE_NOW_COMBO_NOTE, CLOSE_NOW_TOOLTIP, giveBackLevel } from './close-now';
 import { fmtUsdSigned } from './format';
 import styles from './StrategyGroups.module.css';
 
-const CLOSE_REFRESH_MS = 3_000;
-
 interface Props {
   groups: StrategyGroup[];
-  positions: PositionLeg[];
+  closeNow: PortfolioCloseNow | null;
 }
 
 function strategyLabel(group: StrategyGroup): string {
@@ -96,30 +90,28 @@ function fmtPrice(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 });
 }
 
-function closeLegLine({ label, query, item }: CloseLegQuote): string {
-  const verb = query.side === 'sell' ? 'Sell' : 'Buy';
-  const fill = item?.quote?.fill;
-  const mark = item?.quote?.mark?.markPrice;
-  const at = fill?.vwap != null ? `@ ${fmtPrice(fill.vwap)}` : 'no price';
-  const vsMark = mark != null ? ` (mark ${fmtPrice(mark)})` : '';
-  return `${verb} ${query.size} ${label} ${at}${vsMark}`;
+function closeLegLine({ label, side, size, quote }: CloseLegQuote): string {
+  const verb = side === 'sell' ? 'Sell' : 'Buy';
+  const at = quote.exitVwapUsd != null ? `@ ${fmtPrice(quote.exitVwapUsd)}` : 'no price';
+  const vsMark = quote.venueMarkUsd != null ? ` (mark ${fmtPrice(quote.venueMarkUsd)})` : '';
+  return `${verb} ${size} ${label} ${at}${vsMark}`;
 }
 
 function workingLegLine(leg: CloseLegQuote): string {
-  const verb = leg.query.side === 'sell' ? 'Sell' : 'Buy';
-  const fill = leg.item?.quote?.fill;
-  const mark = leg.item ? markPrice(leg.item) : null;
+  const verb = leg.side === 'sell' ? 'Sell' : 'Buy';
+  const { quote } = leg;
+  const mark = markPrice(quote);
   const collar = collarLimit(leg);
   const book =
-    fill?.fullyFilled === true && fill.vwap != null
-      ? `crosses @ ${fmtPrice(fill.vwap)}`
-      : `${leg.query.side === 'buy' ? 'no ask' : 'no bid'} for full size`;
+    quote.status === 'ok' && quote.exitVwapUsd != null
+      ? `crosses @ ${fmtPrice(quote.exitVwapUsd)}`
+      : `${leg.side === 'buy' ? 'no ask' : 'no bid'} for full size`;
   const parts = [book];
   if (mark != null) parts.push(`mark ${fmtPrice(mark)}`);
   if (collar != null) {
-    parts.push(`${leg.query.side === 'buy' ? 'max bid' : 'min ask'} ${fmtPrice(collar)} (collar)`);
+    parts.push(`${leg.side === 'buy' ? 'max bid' : 'min ask'} ${fmtPrice(collar)} (collar)`);
   }
-  return `${verb} ${leg.query.size} ${leg.label}: ${parts.join(' · ')}`;
+  return `${verb} ${leg.size} ${leg.label}: ${parts.join(' · ')}`;
 }
 
 function workingTitle(legs: CloseLegQuote[], markCashUsd: number | null): string {
@@ -167,12 +159,15 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
     case 'ok': {
       const slip = estimate.slippageUsd;
       const pct = estimate.slippagePct;
+      const strategy = estimate.strategy;
+      const level = giveBackLevel(strategy?.giveBackPct);
       return (
         <span
           role="cell"
           className={styles.close}
           data-side={netSide(estimate.cashUsd)}
-          title={estimate.legs.map(closeLegLine).join('\n')}
+          data-stale={estimate.stale || undefined}
+          title={[...estimate.legs.map(closeLegLine), CLOSE_NOW_COMBO_NOTE].join('\n')}
         >
           {fmtCashFlow(estimate.cashUsd)}
           {slip != null && (
@@ -181,6 +176,13 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
               {pct != null ? ` · ${pct.toFixed(1)}%` : ''} vs mark
             </small>
           )}
+          {strategy?.closeNowPnlUsd != null && (
+            <small data-giveback={level ?? undefined}>
+              P&amp;L {fmtCashFlow(strategy.closeNowPnlUsd)}
+              {strategy.giveBackPct != null ? ` · gives back ${strategy.giveBackPct.toFixed(0)}%` : ''}
+            </small>
+          )}
+          {estimate.stale && <small data-hint>stale book</small>}
         </span>
       );
     }
@@ -221,27 +223,7 @@ function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
   );
 }
 
-export default function StrategyGroupsPanel({ groups, positions }: Props) {
-  const positionsById = useMemo(
-    () => new Map(positions.map((p) => [p.legId, p])),
-    [positions],
-  );
-  const legParams = useMemo(
-    () => closeLegParams(groups, positionsById),
-    [groups, positionsById],
-  );
-  const closeQuery = useQuery({
-    queryKey: ['liquidity-close', legParams],
-    queryFn: () => fetchCloseLiquidity(legParams),
-    enabled: legParams.length > 0,
-    refetchInterval: CLOSE_REFRESH_MS,
-    refetchIntervalInBackground: false,
-    placeholderData: keepPreviousData,
-    retry: false,
-  });
-  const closeItems = useMemo(() => indexCloseItems(closeQuery.data), [closeQuery.data]);
-  const closeLoaded = closeQuery.data != null || closeQuery.isError;
-
+export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
   if (groups.length === 0) return null;
 
   const ordered = [
@@ -252,9 +234,7 @@ export default function StrategyGroupsPanel({ groups, positions }: Props) {
   const totalReceived = groups.reduce((acc, g) => acc + g.grossCreditUsd, 0);
   const totalNet = totalReceived - totalPaid;
   const structureCount = groups.length - groups.filter((g) => g.kind === 'naked').length;
-  const closeEstimates = new Map(
-    groups.map((g) => [g.groupId, estimateClose(g, positionsById, closeItems, closeLoaded)]),
-  );
+  const closeEstimates = new Map(groups.map((g) => [g.groupId, estimateClose(g, closeNow)]));
 
   return (
     <div className={styles.wrap}>
@@ -262,7 +242,7 @@ export default function StrategyGroupsPanel({ groups, positions }: Props) {
         <span className={styles.title}>Strategies &amp; premium</span>
         <span className={styles.subtitle}>
           {structureCount} structure{structureCount === 1 ? '' : 's'} detected · entry premium · to
-          close = crossing the Thalex book now
+          close = crossing the Thalex book now, after fees
         </span>
       </div>
       <div className={styles.tableScroll}>
@@ -275,7 +255,9 @@ export default function StrategyGroupsPanel({ groups, positions }: Props) {
             <span role="columnheader">Net</span>
             <span role="columnheader">Max P / L</span>
             <span role="columnheader">BE spot</span>
-            <span role="columnheader">To close</span>
+            <span role="columnheader" title={CLOSE_NOW_TOOLTIP}>
+              To close
+            </span>
           </div>
           {ordered.map((group) => {
             const net = -group.netEntryPremiumUsd;

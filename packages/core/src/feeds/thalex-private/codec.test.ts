@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatThalexOptionInstrument,
+  parseThalexOptionInstrument,
   thalexAccountEquity,
   thalexAccountMargin,
   thalexCashTransactions,
@@ -16,6 +18,16 @@ const SAMPLE: ThalexPortfolioEntry = {
   mark_price: 1900,
   delta: 0.6,
 };
+
+describe('formatThalexOptionInstrument', () => {
+  it('round-trips with the instrument parser', () => {
+    for (const name of ['BTC-27NOV26-110000-C', 'ETH-02JAN27-3250-P']) {
+      const parsed = parseThalexOptionInstrument(name);
+      expect(parsed).not.toBeNull();
+      expect(formatThalexOptionInstrument(parsed!)).toBe(name);
+    }
+  });
+});
 
 describe('thalexPortfolioEntryToLeg', () => {
   it('parses a long call with DDMMMYY date', () => {

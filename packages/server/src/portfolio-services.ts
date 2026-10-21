@@ -1,7 +1,9 @@
 import {
   type ChainSurfaceProvider,
   InMemoryPositionStore,
+  type ExitBookRuntime,
   PortfolioRuntime,
+  ThalexExitBooks,
   VENUE_IDS,
   delta76,
   fitSvi,
@@ -512,6 +514,14 @@ interface RuntimeEntry {
 
 const portfolioRuntimes = new Map<string, RuntimeEntry>();
 
+// Set once at boot from the shared order-book runtime; null when ORDER_BOOK=0, which leaves
+// close-now P&L off. Each portfolio runtime gets its own lease holder over the same books.
+let exitBookRuntime: ExitBookRuntime | null = null;
+
+export function setPortfolioExitBookRuntime(runtime: ExitBookRuntime | null): void {
+  exitBookRuntime = runtime;
+}
+
 function runtimeKey(
   accountId: string,
   source: PortfolioSource,
@@ -548,6 +558,7 @@ export function getOrCreatePortfolioRuntime(
     markProvider: portfolioMarkProvider,
     chainSurface: portfolioChainSurface,
     ...(underlying != null ? { underlyingFilter: underlying } : {}),
+    ...(exitBookRuntime != null ? { exitBooks: new ThalexExitBooks(exitBookRuntime) } : {}),
   });
 
   const unsubscribe = store.subscribe((event) => {

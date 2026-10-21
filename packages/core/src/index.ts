@@ -332,11 +332,13 @@ export {
   type VolHeatmapRuntimeOptions,
 } from './runtime/vol-heatmap/index.js';
 export {
+  type ExitBookRuntime,
   OrderBookCapacityError,
   type OrderBookLease,
   OrderBookRuntime,
   type OrderBookRuntimeOptions,
   OrderBookUnavailableError,
+  ThalexExitBooks,
 } from './runtime/order-book/index.js';
 export type {
   BookLevel,
@@ -499,7 +501,21 @@ export {
   type PortfolioRiskMetric,
   type FoldContext,
   detectStrategyGroups,
+  aggregateCloseNow,
+  bookProblem,
+  CLOSE_NOW_BOOK_SILENCE_MS,
+  CLOSE_NOW_MIN_GIVE_BACK_BASE_USD,
+  CLOSE_NOW_SPREAD_MIN_SAMPLES,
+  CLOSE_NOW_SPREAD_SAMPLE_MS,
+  CLOSE_NOW_SPREAD_WINDOW_MS,
+  CloseNowTracker,
+  evaluateCloseNowLeg,
+  type ExitBookLookup,
+  type ExitBookSource,
+  exitInstrumentOf,
+  exitVenueOf,
 } from './portfolio/index.js';
+export { cappedTakerFeeUsd, THALEX_OPTION_FEE_RATE, VENUE_FEE_CAP } from './core/fees.js';
 export {
   PortfolioRuntime,
   type ChainSurfaceProvider,

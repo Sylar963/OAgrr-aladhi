@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryPositionStore } from '../../portfolio/in-memory-store.js';
+import type { ExitBookLookup } from '../../portfolio/close-now.js';
 import type { MarkContext, MarkProvider } from '../../portfolio/types.js';
 import {
   PortfolioRuntime,
@@ -272,5 +273,74 @@ describe('PortfolioRuntime', () => {
       message: 'mark provider boom',
     });
     runtime.dispose();
+  });
+});
+
+describe('PortfolioRuntime close-now', () => {
+  function exitBooks() {
+    return {
+      sync: vi.fn(),
+      lookup: vi.fn((): ExitBookLookup => ({ kind: 'unavailable', reason: 'loading' })),
+      dispose: vi.fn(),
+    };
+  }
+
+  it('leaves closeNow null without an exit-book source', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    const runtime = new PortfolioRuntime({ accountId: ACCOUNT, store, markProvider, now: () => NOW });
+    expect(runtime.computeMetricsAt(0).metrics.closeNow).toBeNull();
+  });
+
+  it('recomputes close-now at most once per interval, unless the legs change', () => {
+    let now = NOW;
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    const books = exitBooks();
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => now,
+      exitBooks: books,
+      closeNowIntervalMs: 1_000,
+    });
+
+    runtime.computeMetricsAt(0);
+    now += 200;
+    runtime.computeMetricsAt(0);
+    expect(books.sync).toHaveBeenCalledTimes(1);
+
+    now += 1_000;
+    runtime.computeMetricsAt(0);
+    expect(books.sync).toHaveBeenCalledTimes(2);
+
+    store.upsert(ACCOUNT, makeLeg(75_000, -1));
+    const { metrics } = runtime.computeMetricsAt(0);
+    expect(books.sync).toHaveBeenCalledTimes(3);
+    expect(metrics.closeNow?.legs).toHaveLength(2);
+
+    runtime.dispose();
+    expect(books.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('does not change the mark-based open P&L', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    store.upsert(ACCOUNT, makeLeg(80_000, -2));
+    const plain = new PortfolioRuntime({ accountId: ACCOUNT, store, markProvider, now: () => NOW });
+    const withBooks = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store,
+      markProvider,
+      now: () => NOW,
+      exitBooks: exitBooks(),
+    });
+
+    const base = plain.computeMetricsAt(0).metrics;
+    const next = withBooks.computeMetricsAt(0).metrics;
+    expect(next.totals).toEqual(base.totals);
+    expect(next.strategies).toEqual(base.strategies);
+    expect(next.closeNow?.portfolio.markPnlUsd).toBeCloseTo(base.totals.unrealizedPnlUsd);
   });
 });

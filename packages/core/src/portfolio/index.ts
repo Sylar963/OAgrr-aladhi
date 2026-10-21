@@ -93,3 +93,18 @@ export {
 export { detectStrategyGroups } from './strategy-groups.js';
 export { entryAnchorFromFills, type EntryAnchor, type EntryFill } from './entry-iv.js';
 export { computePnlAttribution } from './pnl-attribution.js';
+export {
+  aggregateCloseNow,
+  bookProblem,
+  CLOSE_NOW_BOOK_SILENCE_MS,
+  CLOSE_NOW_MIN_GIVE_BACK_BASE_USD,
+  CLOSE_NOW_SPREAD_MIN_SAMPLES,
+  CLOSE_NOW_SPREAD_SAMPLE_MS,
+  CLOSE_NOW_SPREAD_WINDOW_MS,
+  CloseNowTracker,
+  evaluateCloseNowLeg,
+  type ExitBookLookup,
+  type ExitBookSource,
+  exitInstrumentOf,
+  exitVenueOf,
+} from './close-now.js';

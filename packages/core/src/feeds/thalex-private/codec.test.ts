@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { thalexAccountMargin, thalexPortfolioEntryToLeg, thalexPortfolioToLegs } from './codec.js';
+import {
+  thalexAccountEquity,
+  thalexAccountMargin,
+  thalexCashTransactions,
+  thalexPortfolioEntryToLeg,
+  thalexPortfolioToLegs,
+} from './codec.js';
 import type { ThalexPortfolioEntry } from './types.js';
 
 const SAMPLE: ThalexPortfolioEntry = {
@@ -98,5 +104,66 @@ describe('thalexAccountMargin', () => {
 
   it('returns null when margin fields are absent', () => {
     expect(thalexAccountMargin({ cash: [], unrealised_pnl: 0 }, 123)).toBeNull();
+  });
+});
+
+describe('thalexAccountEquity', () => {
+  it('values cash at the index and keeps session realised P&L apart from unrealised', () => {
+    const equity = thalexAccountEquity(
+      {
+        cash: [
+          { currency: 'USDC', balance: 150 },
+          { currency: 'BTC', balance: 0.0001, collateral_index_price: 100_000 },
+          { currency: 'ETH', balance: 1, collateral_index_price: null },
+        ],
+        unrealised_pnl: 5,
+        session_realised_pnl: 40.95,
+        margin: 165,
+        required_margin: 0,
+        remaining_margin: 165,
+      },
+      1_000,
+    );
+    expect(equity.cash.map((row) => row.valueUsd)).toEqual([150, 10, null]);
+    expect(equity.cashUsd).toBe(160);
+    expect(equity.unrealisedPnlUsd).toBe(5);
+    expect(equity.sessionRealisedPnlUsd).toBe(40.95);
+    expect(equity.marginUsd).toBe(165);
+    expect(equity.updatedAt).toBe(1_000);
+  });
+
+  it('reports missing optional summary fields as null', () => {
+    const equity = thalexAccountEquity({ cash: [], unrealised_pnl: 0 }, 0);
+    expect(equity.sessionRealisedPnlUsd).toBeNull();
+    expect(equity.marginUsd).toBeNull();
+  });
+});
+
+describe('thalexCashTransactions', () => {
+  it('sorts newest first and converts seconds to milliseconds', () => {
+    const rows = thalexCashTransactions([
+      { time: 10, asset: 'USDC', amount: -1, transaction_type: 'withdrawal fee' },
+      {
+        time: 20.5,
+        asset: 'USDC',
+        amount: 40.95,
+        transaction_type: 'session settlement',
+        instrument_name: 'BTC-23OCT26-88000-P',
+        balance_after: 190.95,
+        description: 'Session settlement',
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        ts: 20_500,
+        type: 'session settlement',
+        asset: 'USDC',
+        amount: 40.95,
+        instrument: 'BTC-23OCT26-88000-P',
+        balanceAfter: 190.95,
+        description: 'Session settlement',
+      },
+      { ts: 10_000, type: 'withdrawal fee', asset: 'USDC', amount: -1, instrument: null, balanceAfter: null, description: null },
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import {
   InMemoryPositionStore,
   PortfolioRuntime,
   type PositionLeg,
+  type ThalexAccountLedger,
 } from '@oggregator/core';
 import type { PortfolioPnlCurve, ShockGridCell } from '@oggregator/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,7 @@ vi.mock('./portfolio-services.js', () => ({
 const services = await import('./portfolio-services.js');
 const {
   assemblePortfolioAssistantContext,
+  buildAccountEquityFacts,
   buildRiskBudgetFacts,
   CONTEXT_COMPACTED_LIMITATION,
   PORTFOLIO_ASSISTANT_TOOL_HINTS,
@@ -335,5 +337,102 @@ describe('PortfolioAssistantContextBuilder', () => {
     expect(context.riskBudgetFacts.uncoveredShorts.map((short) => short.legId)).toEqual([
       'short-oct30-85000-c',
     ]);
+  });
+});
+
+function thalexLedger(transactionCount = 1): ThalexAccountLedger {
+  return {
+    equity: {
+      cash: [{ asset: 'USDC', balance: 165.123456789, indexPriceUsd: 1, valueUsd: 165.123456789 }],
+      cashUsd: 165.123456789,
+      unrealisedPnlUsd: 0,
+      sessionRealisedPnlUsd: 40.951,
+      marginUsd: 165.12,
+      requiredMarginUsd: 0,
+      remainingMarginUsd: 165.12,
+      updatedAt: NOW,
+    },
+    transactions: Array.from({ length: transactionCount }, (_, index) => ({
+      ts: NOW - index * 60_000,
+      type: 'session settlement',
+      asset: 'USDC',
+      amount: -1.5,
+      instrument: 'BTC-23OCT26-88000-P',
+      balanceAfter: 165.12,
+      description: 'x'.repeat(400),
+    })),
+    equityHistory: [
+      { ts: NOW - 86_400_000, equityUsd: 184.004 },
+      { ts: NOW, equityUsd: 165.123 },
+    ],
+  };
+}
+
+describe('buildAccountEquityFacts', () => {
+  it('gives the equity breakdown, daily equity and cash ledger', () => {
+    const facts = buildAccountEquityFacts(thalexLedger(), 'mainnet');
+    expect(facts.equityUsd).toBe(165.12);
+    expect(facts.sessionRealisedPnlUsd).toBe(40.95);
+    expect(facts.cash[0]?.balance).toBe(165.12345679);
+    expect(facts.dailyEquity.map((point) => point.equityUsd)).toEqual([184, 165.12]);
+    expect(facts.transactions[0]).toMatchObject({ type: 'session settlement', amount: -1.5, balanceAfter: 165.12 });
+    expect(facts.transactions[0]?.description).toHaveLength(160);
+    expect(facts.basis).toContain('sessionRealisedPnlUsd');
+  });
+
+  it('caps the listed transactions and flags truncation', () => {
+    const facts = buildAccountEquityFacts(thalexLedger(5), 'testnet', 3);
+    expect(facts.transactions).toHaveLength(3);
+    expect(facts.transactionsTruncated).toBe(true);
+    expect(facts.network).toBe('testnet');
+  });
+});
+
+describe('PortfolioAssistantContextBuilder account equity', () => {
+  beforeEach(() => {
+    vi.mocked(services.getOrCreatePortfolioRuntime).mockReturnValue(diagonalRuntime());
+  });
+
+  function builderWith(fetchAccountLedger: (accountId: string, fromMs: number) => Promise<unknown>) {
+    return new PortfolioAssistantContextBuilder(
+      readPortfolioAssistantConfiguration({}),
+      null,
+      null,
+      () => NOW,
+      new PortfolioRefStore({ now: () => NOW }),
+      () => true,
+      { fetchAccountLedger: fetchAccountLedger as never },
+    );
+  }
+
+  it('attaches Thalex account equity for a thalex book', async () => {
+    const fetchAccountLedger = vi.fn(async () => ({ ledger: thalexLedger(), network: 'mainnet' as const }));
+    const context = await builderWith(fetchAccountLedger).buildPortfolioAssistantContext({
+      accountId: ACCOUNT,
+      source: 'thalex',
+      underlying: 'BTC',
+      forwardDays: 0,
+    });
+    expect(fetchAccountLedger).toHaveBeenCalledWith(ACCOUNT, NOW - 14 * 86_400_000);
+    expect(context.accountEquityFacts?.equityUsd).toBe(165.12);
+  });
+
+  it('skips other sources and names a failed load', async () => {
+    const manual = await builderWith(vi.fn()).buildPortfolioAssistantContext({
+      accountId: ACCOUNT,
+      source: 'manual',
+      underlying: 'BTC',
+      forwardDays: 0,
+    });
+    expect(manual.accountEquityFacts).toBeNull();
+
+    const failed = await builderWith(vi.fn(async () => Promise.reject(new Error('down')))).buildPortfolioAssistantContext({
+      accountId: ACCOUNT,
+      source: 'thalex',
+      underlying: 'BTC',
+      forwardDays: 0,
+    });
+    expect(failed.accountEquityFacts).toBeNull();
+    expect(failed.limitations).toContain('Thalex account equity and cash transactions could not be loaded.');
   });
 });

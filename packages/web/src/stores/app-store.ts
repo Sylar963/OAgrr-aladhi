@@ -59,6 +59,8 @@ export interface SessionNotice {
   kind: SessionNoticeKind;
   /** Only set for 'idle-warning' — epoch ms when hard logout will fire. */
   autoLogoutAtMs?: number;
+  /** Only set for 'server-updated' — epoch ms when the page auto-reloads. */
+  reloadAtMs?: number;
 }
 
 export type ToastTone = 'info' | 'success' | 'warning';

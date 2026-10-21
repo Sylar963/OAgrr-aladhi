@@ -12,6 +12,15 @@
   animation: fadeIn var(--transition-base);
 }
 
+.corner {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 1000;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+}
+
 .panel {
   width: 100%;
   max-width: 440px;
@@ -143,6 +152,10 @@
 }
 
 @media (max-width: 768px) {
+  .corner {
+    right: 16px;
+    bottom: 16px;
+  }
   .actions {
     flex-direction: column-reverse;
   }

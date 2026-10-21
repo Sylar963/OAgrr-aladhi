@@ -8,6 +8,7 @@ import {
   type PortfolioRiskContributor,
   type PositionLeg,
   rankPortfolioRiskContributors,
+  type ThalexAccountLedger,
   type UncoveredShort,
 } from '@oggregator/core';
 import type {
@@ -157,6 +158,44 @@ export interface PortfolioAssistantShockFacts {
   meta: ShockGridMeta;
 }
 
+export interface PortfolioAssistantCashTransactionFact {
+  at: string;
+  type: string | null;
+  asset: string;
+  amount: number;
+  instrument: string | null;
+  balanceAfter: number | null;
+  description: string | null;
+}
+
+export interface PortfolioAssistantAccountEquityFacts {
+  venue: 'thalex';
+  network: 'mainnet' | 'testnet';
+  asOf: string;
+  basis: string;
+  equityUsd: number;
+  cashUsd: number;
+  unrealisedPnlUsd: number;
+  sessionRealisedPnlUsd: number | null;
+  marginUsd: number | null;
+  requiredMarginUsd: number | null;
+  remainingMarginUsd: number | null;
+  cash: Array<{ asset: string; balance: number; indexPriceUsd: number | null; valueUsd: number | null }>;
+  /** Settled cash at each 00:00 UTC, oldest first, ending with the live equity. */
+  dailyEquity: Array<{ at: string; equityUsd: number }>;
+  /** Cash ledger entries in the window, newest first. */
+  transactions: PortfolioAssistantCashTransactionFact[];
+  transactionsTruncated: boolean;
+  windowDays: number;
+}
+
+export interface PortfolioAssistantAccountLedgerReader {
+  fetchAccountLedger(
+    accountId: string,
+    fromMs: number,
+  ): Promise<{ ledger: ThalexAccountLedger; network: 'mainnet' | 'testnet' } | null>;
+}
+
 export interface PortfolioAssistantContext {
   headline: PortfolioAssistantHeadline;
   schemaVersion: 1;
@@ -185,6 +224,8 @@ export interface PortfolioAssistantContext {
   shockFacts: PortfolioAssistantShockFacts | null;
   accountingFacts: PortfolioAccounting | null;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
+  /** Venue account equity, cash holdings, margin and the cash ledger; null when the source has none. */
+  accountEquityFacts: PortfolioAssistantAccountEquityFacts | null;
   /** Durable preferences of the asking user only; null when nothing is remembered. */
   userMemoryFacts: PortfolioAssistantUserMemoryFacts | null;
   /** Held expiries against market-implied moves, dealer-gamma, traded-price and OI levels; null for mixed books. */
@@ -220,6 +261,13 @@ const TRADE_LOAD_LIMIT = 1_000;
 export const TRADE_CONTEXT_LIMIT = 100;
 const COMPACT_TRADE_CONTEXT_LIMIT = 30;
 const PAYOFF_POINT_STRIDE = 3;
+export const ACCOUNT_LEDGER_WINDOW_DAYS = 14;
+export const ACCOUNT_TRANSACTION_LIMIT = 60;
+const COMPACT_ACCOUNT_TRANSACTION_LIMIT = 20;
+const DESCRIPTION_MAX_CHARS = 160;
+const DAY_MS = 86_400_000;
+const ACCOUNT_EQUITY_BASIS =
+  'equityUsd = cashUsd + unrealisedPnlUsd, the same formula as the portfolio equity chart. It does not add sessionRealisedPnlUsd: P&L realised by closing positions in the current Thalex session reaches cash only at the session settlement transaction. cashUsd values non-stable assets at today\'s index. marginUsd is Thalex\'s own margin figure (cash holdings plus unrealised P&L).';
 const SHOCK_TRIM_BUDGET_SHARE = 0.6;
 const SHOCK_MAX_ATM_SHIFT_VOL_PTS = 10;
 const SHOCK_MAX_SKEW_SHIFT_PER_LOG_K = 0.25;
@@ -379,6 +427,53 @@ function outOfTheMoneyChain(
 
 function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function roundAmount(value: number): number {
+  return Math.round(value * 1e8) / 1e8;
+}
+
+export function buildAccountEquityFacts(
+  ledger: ThalexAccountLedger,
+  network: 'mainnet' | 'testnet',
+  limit: number = ACCOUNT_TRANSACTION_LIMIT,
+): PortfolioAssistantAccountEquityFacts {
+  const { equity } = ledger;
+  const nullableCents = (value: number | null) => (value == null ? null : roundCents(value));
+  return {
+    venue: 'thalex',
+    network,
+    asOf: new Date(equity.updatedAt).toISOString(),
+    basis: ACCOUNT_EQUITY_BASIS,
+    equityUsd: roundCents(equity.cashUsd + equity.unrealisedPnlUsd),
+    cashUsd: roundCents(equity.cashUsd),
+    unrealisedPnlUsd: roundCents(equity.unrealisedPnlUsd),
+    sessionRealisedPnlUsd: nullableCents(equity.sessionRealisedPnlUsd),
+    marginUsd: nullableCents(equity.marginUsd),
+    requiredMarginUsd: nullableCents(equity.requiredMarginUsd),
+    remainingMarginUsd: nullableCents(equity.remainingMarginUsd),
+    cash: equity.cash.map((row) => ({
+      asset: row.asset,
+      balance: roundAmount(row.balance),
+      indexPriceUsd: nullableCents(row.indexPriceUsd),
+      valueUsd: nullableCents(row.valueUsd),
+    })),
+    dailyEquity: ledger.equityHistory.map((point) => ({
+      at: new Date(point.ts).toISOString(),
+      equityUsd: roundCents(point.equityUsd),
+    })),
+    transactions: ledger.transactions.slice(0, limit).map((tx) => ({
+      at: new Date(tx.ts).toISOString(),
+      type: tx.type,
+      asset: tx.asset,
+      amount: roundAmount(tx.amount),
+      instrument: tx.instrument,
+      balanceAfter: tx.balanceAfter == null ? null : roundAmount(tx.balanceAfter),
+      description: tx.description == null ? null : tx.description.slice(0, DESCRIPTION_MAX_CHARS),
+    })),
+    transactionsTruncated: ledger.transactions.length > limit,
+    windowDays: ACCOUNT_LEDGER_WINDOW_DAYS,
+  };
 }
 
 function compactHorizonScenarios(
@@ -555,6 +650,16 @@ export function compactPortfolioAssistantContext(
               context.tradeHistoryFacts.trades.length > COMPACT_TRADE_CONTEXT_LIMIT,
             totals: summarizeTradeFacts(context.tradeHistoryFacts.trades.slice(0, COMPACT_TRADE_CONTEXT_LIMIT)),
           },
+    accountEquityFacts:
+      context.accountEquityFacts == null
+        ? null
+        : {
+            ...context.accountEquityFacts,
+            transactions: context.accountEquityFacts.transactions.slice(0, COMPACT_ACCOUNT_TRANSACTION_LIMIT),
+            transactionsTruncated:
+              context.accountEquityFacts.transactionsTruncated ||
+              context.accountEquityFacts.transactions.length > COMPACT_ACCOUNT_TRANSACTION_LIMIT,
+          },
     marketFacts: {
       ...context.marketFacts,
       underlyings: context.marketFacts.underlyings.map((facts) => {
@@ -591,6 +696,7 @@ export interface AssemblePortfolioAssistantContextInput {
   horizonScenarios: PortfolioHorizonScenarios | null;
   marketFacts: PortfolioAssistantMarketFacts;
   tradeHistoryFacts: PortfolioAssistantTradeHistoryFacts | null;
+  accountEquityFacts?: PortfolioAssistantAccountEquityFacts | null;
   userMemoryFacts?: PortfolioAssistantUserMemoryFacts | null;
   levelInputs?: PortfolioAssistantLevelInputs | null;
   /** Limitations found while loading inputs, appended after the engine's own. */
@@ -698,6 +804,7 @@ export function assemblePortfolioAssistantContext(
     shockFacts: toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
+    accountEquityFacts: input.accountEquityFacts ?? null,
     userMemoryFacts: input.userMemoryFacts ?? null,
     bookVsMarketFacts: bookVsMarket(input, positions, pnlCurve),
     topContributors: {
@@ -739,7 +846,35 @@ export class PortfolioAssistantContextBuilder {
     private readonly portfolioRefs: PortfolioRefStore = new PortfolioRefStore(),
     private readonly ledgerMatchesSession: (accountId: string, venue: string) => boolean = () =>
       true,
+    private readonly accountLedger: PortfolioAssistantAccountLedgerReader | null = null,
   ) {}
+
+  private async buildAccountEquity(
+    input: BuildPortfolioAssistantContextInput,
+    limitations: string[],
+  ): Promise<PortfolioAssistantAccountEquityFacts | null> {
+    if (input.source !== 'thalex' || this.accountLedger == null) return null;
+    try {
+      const result = await this.accountLedger.fetchAccountLedger(
+        input.accountId,
+        this.now() - ACCOUNT_LEDGER_WINDOW_DAYS * DAY_MS,
+      );
+      if (result == null) {
+        limitations.push('Thalex account equity is unavailable because no Thalex session is connected.');
+        return null;
+      }
+      const facts = buildAccountEquityFacts(result.ledger, result.network);
+      if (facts.transactionsTruncated) {
+        limitations.push(
+          `accountEquityFacts lists the ${ACCOUNT_TRANSACTION_LIMIT} most recent cash transactions of the last ${ACCOUNT_LEDGER_WINDOW_DAYS} days.`,
+        );
+      }
+      return facts;
+    } catch {
+      limitations.push('Thalex account equity and cash transactions could not be loaded.');
+      return null;
+    }
+  }
 
   private async buildMarketFacts(
     positions: Array<{ underlying: string; expiry: string; strike: number }>,
@@ -882,9 +1017,10 @@ export class PortfolioAssistantContextBuilder {
       snapshot.metrics.pnlCurve.currentSpotUsd,
     );
     const limitations: string[] = [];
-    const [tradeHistoryFacts, levelInputs] = await Promise.all([
+    const [tradeHistoryFacts, levelInputs, accountEquityFacts] = await Promise.all([
       this.buildTradeHistory(input, limitations),
       this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions),
+      this.buildAccountEquity(input, limitations),
     ]);
     return assemblePortfolioAssistantContext({
       source: input.source,
@@ -902,6 +1038,7 @@ export class PortfolioAssistantContextBuilder {
       horizonScenarios,
       marketFacts,
       tradeHistoryFacts,
+      accountEquityFacts,
       userMemoryFacts: input.userMemoryFacts ?? null,
       levelInputs,
       limitations,

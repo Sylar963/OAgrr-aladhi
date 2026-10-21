@@ -83,6 +83,8 @@ export const ThalexAccountSummarySchema = z
         .passthrough(),
     ),
     unrealised_pnl: z.number(),
+    session_realised_pnl: z.number().optional(),
+    cash_collateral: z.number().optional(),
     margin: z.number().optional(),
     required_margin: z.number().optional(),
     remaining_margin: z.number().optional(),
@@ -100,6 +102,10 @@ export const ThalexTransactionSchema = z
     time: z.number(),
     asset: z.string(),
     amount: z.number(),
+    transaction_type: z.string().optional(),
+    instrument_name: z.string().optional(),
+    description: z.string().optional(),
+    balance_after: z.number().optional(),
   })
   .passthrough();
 export type ThalexTransaction = z.infer<typeof ThalexTransactionSchema>;

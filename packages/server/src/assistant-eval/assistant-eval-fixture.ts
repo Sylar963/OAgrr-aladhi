@@ -335,6 +335,44 @@ const PortfolioAssistantContextSchema = z.object({
     .nullable(),
   // Fixtures written before the levels block have no field; their contexts carry none.
   bookVsMarketFacts: BookVsMarketFactsSchema.nullable().default(null),
+  accountEquityFacts: z
+    .object({
+      venue: z.literal('thalex'),
+      network: z.enum(['mainnet', 'testnet']),
+      asOf: z.string(),
+      basis: z.string(),
+      equityUsd: z.number(),
+      cashUsd: z.number(),
+      unrealisedPnlUsd: z.number(),
+      sessionRealisedPnlUsd: nullableNumber,
+      marginUsd: nullableNumber,
+      requiredMarginUsd: nullableNumber,
+      remainingMarginUsd: nullableNumber,
+      cash: z.array(
+        z.object({
+          asset: z.string(),
+          balance: z.number(),
+          indexPriceUsd: nullableNumber,
+          valueUsd: nullableNumber,
+        }),
+      ),
+      dailyEquity: z.array(z.object({ at: z.string(), equityUsd: z.number() })),
+      transactions: z.array(
+        z.object({
+          at: z.string(),
+          type: z.string().nullable(),
+          asset: z.string(),
+          amount: z.number(),
+          instrument: z.string().nullable(),
+          balanceAfter: nullableNumber,
+          description: z.string().nullable(),
+        }),
+      ),
+      transactionsTruncated: z.boolean(),
+      windowDays: z.number().int().positive(),
+    })
+    .nullable()
+    .default(null),
   // Fixtures written before per-user memory have no field; they describe a user with none.
   userMemoryFacts: z
     .object({

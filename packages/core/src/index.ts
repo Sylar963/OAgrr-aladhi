@@ -534,7 +534,11 @@ export {
   type ThalexPrivateCreds,
   type ThalexPositionsListener,
   mintAuthToken as mintThalexAuthToken,
+  type ThalexAccountEquity,
+  type ThalexAccountLedger,
   type ThalexAccountMargin,
+  type ThalexCashHolding,
+  type ThalexCashTransaction,
 } from './feeds/thalex-private/index.js';
 
 // feeds — venue adapters

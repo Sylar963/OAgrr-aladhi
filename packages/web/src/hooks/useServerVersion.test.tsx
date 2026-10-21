@@ -5,10 +5,11 @@
 import { useAppStore } from '@stores/app-store';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useServerVersion } from './useServerVersion';
+import { SERVER_UPDATE_RELOAD_DELAY_MS, useServerVersion } from './useServerVersion';
 
 beforeEach(() => {
   useAppStore.setState({
+    sessionNotice: null,
     announcement: null,
     activeTab: 'flow',
     feedStatus: {
@@ -25,6 +26,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -126,6 +128,28 @@ describe('useServerVersion', () => {
       connectionState: 'stale',
       staleMs: 600_000,
     });
+    unmount();
+  });
+
+  it('schedules a delayed reload when the server bootTime changes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ bootTime: 1 }) })
+      .mockResolvedValue({ ok: true, json: async () => ({ bootTime: 2 }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { unmount } = renderHook(() => useServerVersion());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(useAppStore.getState().sessionNotice).toBeNull();
+
+    const before = Date.now();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await waitFor(() => {
+      expect(useAppStore.getState().sessionNotice?.kind).toBe('server-updated');
+    });
+    const reloadAtMs = useAppStore.getState().sessionNotice?.reloadAtMs ?? 0;
+    expect(reloadAtMs - before).toBeGreaterThanOrEqual(SERVER_UPDATE_RELOAD_DELAY_MS);
     unmount();
   });
 });

@@ -27,7 +27,10 @@ import { FlushSchedule } from '@oggregator/db';
 import { HermesPortfolioAssistantGateway } from './hermes-portfolio-assistant-gateway.js';
 import { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import { readPortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
-import { PortfolioAssistantContextBuilder } from './portfolio-assistant-context-builder.js';
+import {
+  type PortfolioAssistantAccountLedgerReader,
+  PortfolioAssistantContextBuilder,
+} from './portfolio-assistant-context-builder.js';
 import { PortfolioAssistantConversationService } from './portfolio-assistant-conversation-service.js';
 import { PortfolioAssistantFeedbackBuffer } from './portfolio-assistant-feedback-buffer.js';
 import { PortfolioAssistantFeedbackService } from './portfolio-assistant-feedback-service.js';
@@ -41,7 +44,7 @@ import {
   recordPortfolioAssistantFeedbackFlush,
   setPortfolioAssistantFeedbackPending,
 } from './runtime-metrics.js';
-import { ledgerMatchesSession } from './thalex-position-store.js';
+import { ledgerMatchesSession, thalexPositionStore } from './thalex-position-store.js';
 import { exchangePortfolioLedgerStore } from './trading-services.js';
 
 const configuration = readPortfolioAssistantConfiguration(process.env);
@@ -86,6 +89,13 @@ export const portfolioAssistantAccessService = new PortfolioAssistantAccessServi
   configuration,
   gateway,
 );
+const thalexAccountLedger: PortfolioAssistantAccountLedgerReader = {
+  async fetchAccountLedger(accountId, fromMs) {
+    const ledger = await thalexPositionStore.fetchAccountLedger(accountId, fromMs);
+    if (ledger == null) return null;
+    return { ledger, network: thalexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet' };
+  },
+};
 const contextBuilder = new PortfolioAssistantContextBuilder(
   configuration,
   assistantMarketDataReader,
@@ -93,6 +103,7 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   Date.now,
   portfolioRefStore,
   ledgerMatchesSession,
+  thalexAccountLedger,
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);

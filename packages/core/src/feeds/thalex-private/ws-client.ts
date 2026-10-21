@@ -5,13 +5,18 @@ import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
 import { mintAuthToken } from './auth.js';
 import {
+  thalexAccountEquity,
   thalexAccountMargin,
   thalexCashReplayEquity,
+  thalexCashTransactions,
   thalexPortfolioToLegs,
   thalexTradesToPortfolioTrades,
+  type ThalexAccountEquity,
   type ThalexAccountMargin,
+  type ThalexCashTransaction,
 } from './codec.js';
 import {
+  type ThalexAccountSummary,
   ThalexAccountSummaryNotificationSchema,
   ThalexAccountSummarySchema,
   ThalexLoginResultSchema,
@@ -56,6 +61,12 @@ export interface ThalexPrivateCreds {
   env?: 'prod' | 'test';
 }
 
+export interface ThalexAccountLedger {
+  equity: ThalexAccountEquity;
+  transactions: ThalexCashTransaction[];
+  equityHistory: EquityHistoryPoint[];
+}
+
 export type ThalexPositionsListener = (legs: PositionLeg[]) => void;
 
 export type ThalexTradesListener = (trades: ExchangePortfolioTrade[]) => void;
@@ -82,6 +93,7 @@ export class ThalexPrivateClient {
   private latestLegs: PositionLeg[] = [];
   private latestEntries: ThalexPortfolioEntry[] = [];
   private latestMargin: ThalexAccountMargin | null = null;
+  private latestEquity: ThalexAccountEquity | null = null;
   private nextId = 1;
   private disposed = false;
   private readonly log = feedLogger('thalex-private');
@@ -151,11 +163,20 @@ export class ThalexPrivateClient {
     return this.latestMargin;
   }
 
+  getLatestAccountEquity(): ThalexAccountEquity | null {
+    return this.latestEquity;
+  }
+
   async fetchEquityHistory(fromMs: number, nowMs = Date.now()): Promise<EquityHistoryPoint[]> {
+    return (await this.fetchAccountLedger(fromMs, nowMs)).equityHistory;
+  }
+
+  async fetchAccountLedger(fromMs: number, nowMs = Date.now()): Promise<ThalexAccountLedger> {
     const summary = ThalexAccountSummarySchema.safeParse(await this.call('private/account_summary', {}));
     if (!summary.success) {
       throw new Error(`[thalex-private] private/account_summary returned an invalid payload: ${summary.error.message}`);
     }
+    this.applyAccountSummary(summary.data);
     const transactions: ThalexTransaction[] = [];
     let bookmark: string | undefined;
     for (let page = 0; page < 100; page += 1) {
@@ -175,7 +196,11 @@ export class ThalexPrivateClient {
       bookmark = parsed.data.bookmark ?? undefined;
       if (bookmark == null) break;
     }
-    return thalexCashReplayEquity(summary.data, transactions, fromMs, nowMs);
+    return {
+      equity: thalexAccountEquity(summary.data, nowMs),
+      transactions: thalexCashTransactions(transactions),
+      equityHistory: thalexCashReplayEquity(summary.data, transactions, fromMs, nowMs),
+    };
   }
 
   async dispose(): Promise<void> {
@@ -230,7 +255,7 @@ export class ThalexPrivateClient {
         this.log.warn({ err: summary.error.message }, 'thalex account summary parse failed');
         return;
       }
-      this.latestMargin = thalexAccountMargin(summary.data, Date.now());
+      this.applyAccountSummary(summary.data);
     } catch (err) {
       this.log.warn({ err: String(err) }, 'thalex account summary bootstrap failed');
     }
@@ -331,7 +356,7 @@ export class ThalexPrivateClient {
         this.log.warn({ err: parsed.error.message }, 'thalex summary notification parse failed');
         return;
       }
-      this.latestMargin = thalexAccountMargin(parsed.data.notification, Date.now());
+      this.applyAccountSummary(parsed.data.notification);
       return;
     }
     if (msg.channel_name !== 'account.portfolio') return;
@@ -343,6 +368,12 @@ export class ThalexPrivateClient {
     this.applyPortfolio(parsed.data.notification, parsed.data.snapshot === true);
   }
 
+
+  private applyAccountSummary(summary: ThalexAccountSummary): void {
+    const nowMs = Date.now();
+    this.latestMargin = thalexAccountMargin(summary, nowMs);
+    this.latestEquity = thalexAccountEquity(summary, nowMs);
+  }
 
   private notifyTrades(trades: ExchangePortfolioTrade[]): void {
     if (trades.length === 0) return;

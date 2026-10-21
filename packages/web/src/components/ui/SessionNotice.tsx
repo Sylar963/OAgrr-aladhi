@@ -21,10 +21,17 @@ export default function SessionNotice() {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (notice?.kind !== 'idle-warning') return;
+    if (notice?.kind !== 'idle-warning' && notice?.kind !== 'server-updated') return;
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
   }, [notice?.kind]);
+
+  const reloadAtMs = notice?.kind === 'server-updated' ? notice.reloadAtMs : undefined;
+  useEffect(() => {
+    if (reloadAtMs == null) return;
+    const id = setTimeout(reload, Math.max(0, reloadAtMs - Date.now()));
+    return () => clearTimeout(id);
+  }, [reloadAtMs]);
 
   if (!notice) return null;
 
@@ -32,7 +39,7 @@ export default function SessionNotice() {
 
   if (notice.kind === 'server-updated') {
     return (
-      <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={styles.corner} role="alertdialog" aria-labelledby={titleId}>
         <div className={styles.panel} data-kind="server-updated">
           <div className={styles.header}>
             <span className={styles.icon} aria-hidden>
@@ -43,12 +50,18 @@ export default function SessionNotice() {
             </span>
           </div>
           <p className={styles.body}>
-            The server has been updated with improvements and fixes. Refresh the page
-            to load the latest version — your current view may be running on stale data.
+            The server has been updated with improvements and fixes. The page will
+            refresh automatically to load the latest version.
           </p>
+          {reloadAtMs != null && (
+            <div className={styles.countdown}>
+              <span>Refreshing in</span>
+              <span className={styles.countdownValue}>{formatCountdown(reloadAtMs - now)}</span>
+            </div>
+          )}
           <div className={styles.actions}>
             <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={reload}>
-              Refresh now
+              Update now
             </button>
           </div>
         </div>

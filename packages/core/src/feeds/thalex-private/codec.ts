@@ -182,6 +182,71 @@ export function thalexCashReplayEquity(
   return points.reverse();
 }
 
+export interface ThalexCashHolding {
+  asset: string;
+  balance: number;
+  indexPriceUsd: number | null;
+  valueUsd: number | null;
+}
+
+export interface ThalexAccountEquity {
+  cash: ThalexCashHolding[];
+  cashUsd: number;
+  unrealisedPnlUsd: number;
+  sessionRealisedPnlUsd: number | null;
+  marginUsd: number | null;
+  requiredMarginUsd: number | null;
+  remainingMarginUsd: number | null;
+  updatedAt: number;
+}
+
+export function thalexAccountEquity(summary: ThalexAccountSummary, nowMs: number): ThalexAccountEquity {
+  const cash = summary.cash.map((row) => {
+    const price = THALEX_STABLE_ASSETS.has(row.currency) ? 1 : (row.collateral_index_price ?? null);
+    const indexPriceUsd = price != null && Number.isFinite(price) ? price : null;
+    return {
+      asset: row.currency,
+      balance: row.balance,
+      indexPriceUsd,
+      valueUsd: indexPriceUsd == null ? null : row.balance * indexPriceUsd,
+    };
+  });
+  return {
+    cash,
+    cashUsd: cash.reduce((total, row) => total + (row.valueUsd ?? 0), 0),
+    unrealisedPnlUsd: summary.unrealised_pnl,
+    sessionRealisedPnlUsd: summary.session_realised_pnl ?? null,
+    marginUsd: summary.margin ?? null,
+    requiredMarginUsd: summary.required_margin ?? null,
+    remainingMarginUsd: summary.remaining_margin ?? null,
+    updatedAt: nowMs,
+  };
+}
+
+export interface ThalexCashTransaction {
+  ts: number;
+  type: string | null;
+  asset: string;
+  amount: number;
+  instrument: string | null;
+  balanceAfter: number | null;
+  description: string | null;
+}
+
+export function thalexCashTransactions(transactions: readonly ThalexTransaction[]): ThalexCashTransaction[] {
+  return [...transactions]
+    .sort((a, b) => b.time - a.time)
+    .map((tx) => ({
+      ts: Math.round(tx.time * 1000),
+      type: tx.transaction_type ?? null,
+      asset: tx.asset,
+      amount: tx.amount,
+      instrument: tx.instrument_name ?? null,
+      balanceAfter: tx.balance_after ?? null,
+      description: tx.description ?? null,
+    }));
+}
+
 export interface ThalexAccountMargin {
   initialMarginUsd: number;
   marginUsd: number;

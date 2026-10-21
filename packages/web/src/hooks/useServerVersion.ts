@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const POLL_INTERVAL_MS = 30_000;
+export const SERVER_UPDATE_RELOAD_DELAY_MS = 60_000;
 
 interface HealthResponse {
   bootTime?: number;
@@ -92,7 +93,7 @@ function createTimeoutSignal(timeoutMs: number): {
  * Polls /api/health and raises a 'server-updated' session notice when the
  * server's bootTime changes after the first successful observation. A bootTime
  * change means the server restarted and may be running new code — the client
- * bundle could be stale.
+ * bundle could be stale, so the page auto-reloads after a short countdown.
  */
 export function useServerVersion() {
   const setSessionNotice = useAppStore((s) => s.setSessionNotice);
@@ -123,7 +124,10 @@ export function useServerVersion() {
             body.bootTime !== initialBootRef.current &&
             currentNoticeKind !== 'server-updated'
           ) {
-            setSessionNotice({ kind: 'server-updated' });
+            setSessionNotice({
+              kind: 'server-updated',
+              reloadAtMs: Date.now() + SERVER_UPDATE_RELOAD_DELAY_MS,
+            });
           }
         }
 

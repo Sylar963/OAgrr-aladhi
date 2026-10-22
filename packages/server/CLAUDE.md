@@ -43,7 +43,8 @@ src/
     spots.ts         GET /api/spots
     paper/           REST paper trading endpoints
     portfolio/       REST portfolio positions, metrics, scenarios, credentials
-    social/          REST profile + leaderboard, admin chat moderation, WS /ws/social
+    social/          REST profile + leaderboard + shared-thesis feed (/social/theses), admin chat moderation, WS /ws/social
+    thesis.ts        /api/thesis CRUD, flip gate, POST /thesis/:id/share (needs an account username)
     live/            /api/live status|kill|arm|disarm|reset → execution daemon socket (no keys here)
     ws-chain.ts      WS /ws/chain
     portfolio/ws.ts  WS /ws/portfolio

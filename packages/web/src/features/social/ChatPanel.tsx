@@ -52,9 +52,10 @@ export default function ChatPanel({ state, send, reconnect, open = true, onMinim
     if (list && stickRef.current) list.scrollTop = list.scrollHeight;
   }, [state.messages, open]);
 
+  const docked = onMinimize != null;
   useEffect(() => {
-    if (open && onMinimize) inputRef.current?.focus();
-  }, [open, onMinimize]);
+    if (open && docked) inputRef.current?.focus();
+  }, [open, docked]);
 
   const postingAnon = anon || !handle;
   const muted = state.mutedUntil != null && Date.parse(state.mutedUntil) > now;

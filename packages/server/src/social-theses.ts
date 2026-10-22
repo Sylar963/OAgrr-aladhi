@@ -1,8 +1,8 @@
-import type { PublicThesisDto, PublicThesisFeed } from '@oggregator/protocol';
+import type { PublicThesisDto, PublicThesisFeed } from "@oggregator/protocol";
 
-import type { SharedThesis } from './thesis-service.js';
+import type { SharedThesis } from "./thesis-service.js";
 
-type FeedEntry = Omit<PublicThesisDto, 'isMe'> & { userId: string };
+type FeedEntry = Omit<PublicThesisDto, "isMe"> & { userId: string };
 
 export interface SocialThesisFeedOptions {
   shared: (limit: number) => Promise<SharedThesis[]>;
@@ -30,7 +30,10 @@ export class SocialThesisFeed {
     const entries = await this.entries();
     return {
       generatedAt: this.cached?.at ?? this.now(),
-      theses: entries.map(({ userId, ...entry }) => ({ ...entry, isMe: userId === viewerId })),
+      theses: entries.map(({ userId, ...entry }) => ({
+        ...entry,
+        isMe: userId === viewerId,
+      })),
     };
   }
 
@@ -58,36 +61,42 @@ export class SocialThesisFeed {
     const handles = new Map<string, string | null>();
     for (const { thesis } of shared) {
       if (!handles.has(thesis.share.userId)) {
-        handles.set(thesis.share.userId, await this.options.handleOf(thesis.share.userId));
+        handles.set(
+          thesis.share.userId,
+          await this.options.handleOf(thesis.share.userId),
+        );
       }
     }
-    const entries = shared.flatMap(({ thesis, status, spotUsd }): FeedEntry[] => {
-      const handle = handles.get(thesis.share.userId);
-      if (!handle) return [];
-      return [
-        {
-          id: thesis.id,
-          userId: thesis.share.userId,
-          handle,
-          underlying: thesis.underlying,
-          direction: thesis.direction,
-          horizonExpiry: thesis.horizonExpiry,
-          level: thesis.level,
-          confirmSec: thesis.confirmSec,
-          reason: thesis.reason,
-          state: thesis.state,
-          status: status?.status ?? null,
-          roomPct: status?.roomPct ?? null,
-          spotAtCreation: thesis.contextAtCreation.spotUsd,
-          spotUsd,
-          createdAt: thesis.createdAt,
-          sharedAt: thesis.share.sharedAt,
-          endedAt: thesis.endedAt,
-          endNote: thesis.endNote,
-        },
-      ];
-    });
-    if (generation === this.generation) this.cached = { at: startedAt, entries };
+    const entries = shared.flatMap(
+      ({ thesis, status, spotUsd }): FeedEntry[] => {
+        const handle = handles.get(thesis.share.userId);
+        if (!handle) return [];
+        return [
+          {
+            id: thesis.id,
+            userId: thesis.share.userId,
+            handle,
+            underlying: thesis.underlying,
+            direction: thesis.direction,
+            horizonExpiry: thesis.horizonExpiry,
+            level: thesis.level,
+            confirmSec: thesis.confirmSec,
+            reason: thesis.reason,
+            state: thesis.state,
+            status: status?.status ?? null,
+            roomPct: status?.roomPct ?? null,
+            spotAtCreation: thesis.contextAtCreation.spotUsd,
+            spotUsd,
+            createdAt: thesis.createdAt,
+            sharedAt: thesis.share.sharedAt,
+            endedAt: thesis.endedAt,
+            endNote: thesis.endNote,
+          },
+        ];
+      },
+    );
+    if (generation === this.generation)
+      this.cached = { at: startedAt, entries };
     return entries;
   }
 }

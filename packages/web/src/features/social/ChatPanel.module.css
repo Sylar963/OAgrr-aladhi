@@ -62,6 +62,27 @@
   cursor: pointer;
 }
 
+.minimize {
+  margin-left: auto;
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.minimize:hover {
+  color: var(--text-primary);
+}
+
+.retry + .minimize {
+  margin-left: 0;
+}
+
 .list {
   flex: 1;
   min-height: 0;

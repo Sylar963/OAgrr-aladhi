@@ -143,6 +143,22 @@ describe('ThalexPositionStore environments', () => {
     expect(events).toContainEqual([]);
   });
 
+  it('offers only a live mainnet session key to the order-book login', async () => {
+    const changes = vi.fn();
+    store.subscribeMainnetKeys(changes);
+
+    await store.connect({ accountId: 't1', kid: 'kt', privateKeyPem: 'pt', env: 'test' });
+    expect(store.mainnetBookAuth()).toBeNull();
+
+    await store.connect({ accountId: 'a1', kid: 'k1', privateKeyPem: 'p1', account: 'ACC' });
+    expect(store.mainnetBookAuth()).toEqual({ kid: 'k1', privateKeyPem: 'p1', account: 'ACC' });
+    expect(changes).toHaveBeenCalledTimes(1);
+
+    await store.disconnect('a1');
+    expect(store.mainnetBookAuth()).toBeNull();
+    expect(changes).toHaveBeenCalledTimes(2);
+  });
+
   it('reports no environment once disconnected', async () => {
     await store.connect({ accountId: 'a1', kid: 'k', privateKeyPem: 'p', env: 'test' });
     await store.disconnect('a1');

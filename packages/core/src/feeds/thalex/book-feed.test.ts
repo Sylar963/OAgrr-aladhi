@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrderBookSnapshot } from '../../liquidity/types.js';
 import { type BookSocket, type BookSocketOptions, ThalexBookFeed } from './book-feed.js';
@@ -160,5 +161,47 @@ describe('ThalexBookFeed', () => {
     vi.advanceTimersByTime(100);
     expect(books).toHaveLength(1);
     void feed.stop();
+  });
+});
+
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const AUTH = {
+  kid: 'kid-1',
+  privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+};
+
+describe('ThalexBookFeed login', () => {
+  it('logs in on connect and subscribes only once the login is answered', () => {
+    const { feed, socket } = setup();
+    feed.setAuth(AUTH);
+    feed.add(PERP);
+    feed.add('BTC-25DEC26');
+
+    const login = socket().sent[0]!;
+    expect(login['method']).toBe('public/login');
+    expect(socket().sent).toHaveLength(1);
+
+    socket().push({ id: login['id'], result: { account_number: 'A1' } });
+    expect(socket().lastSubscribe()['params']).toEqual({
+      channels: [bookChannel, `ticker.${PERP}.1000ms`, 'book.BTC-25DEC26.none.10.100ms', 'ticker.BTC-25DEC26.1000ms'],
+    });
+  });
+
+  it('still subscribes when the login is refused', () => {
+    const { feed, socket } = setup();
+    feed.setAuth(AUTH);
+    feed.add(PERP);
+    const login = socket().sent[0]!;
+    socket().push({ id: login['id'], error: { code: 1, message: 'bad token' } });
+    expect(socket().lastSubscribe()).toBeDefined();
+  });
+
+  it('reconnects with the new login when the key changes', async () => {
+    const { feed, socket } = setup();
+    feed.add(PERP);
+    socket().sent = [];
+    feed.setAuth(AUTH);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(socket().sent[0]?.['method']).toBe('public/login');
   });
 });

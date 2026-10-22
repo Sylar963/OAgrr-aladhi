@@ -12,6 +12,7 @@ import {
   isSocialEnabled,
   leaderboardService,
   socialProfileService,
+  socialThesisFeed,
 } from '../../social-services.js';
 import { requireUser } from '../../user-service.js';
 import { socialWsRoute } from './ws.js';
@@ -94,6 +95,12 @@ export async function socialRoutes(app: FastifyInstance) {
       }
       return leaderboardService.get(parsed.data.period, req.user!.id);
     });
+
+    user.get(
+      '/social/theses',
+      { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+      async (req) => socialThesisFeed.get(req.user!.id),
+    );
   });
 }
 

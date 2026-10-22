@@ -1,9 +1,14 @@
-import type { BookFeedStatus, ThalexBookFeedEvents } from '../../feeds/thalex/book-feed.js';
+import type {
+  BookFeedStatus,
+  ThalexBookAuth,
+  ThalexBookFeedEvents,
+} from '../../feeds/thalex/book-feed.js';
 import type { OrderBookSnapshot } from '../../liquidity/types.js';
 
 export type OrderBookWorkerRequest =
   | { t: 'add'; instrument: string }
   | { t: 'remove'; instrument: string }
+  | { t: 'auth'; auth: ThalexBookAuth | null }
   | { t: 'stop' };
 
 export type OrderBookWorkerEvent =
@@ -19,6 +24,7 @@ export interface OrderBookPort {
 export interface OrderBookFeedLike {
   add(instrument: string): void;
   remove(instrument: string): void;
+  setAuth(auth: ThalexBookAuth | null): void;
   stop(): Promise<void>;
 }
 
@@ -37,6 +43,7 @@ export function serveOrderBookWorker(
     const message = raw as OrderBookWorkerRequest;
     if (message.t === 'add') feed.add(message.instrument);
     else if (message.t === 'remove') feed.remove(message.instrument);
+    else if (message.t === 'auth') feed.setAuth(message.auth);
     else if (message.t === 'stop') void feed.stop();
   });
 }

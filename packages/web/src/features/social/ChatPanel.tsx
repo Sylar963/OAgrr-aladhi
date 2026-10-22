@@ -25,15 +25,19 @@ interface ChatPanelProps {
   state: SocialSocket['state'];
   send: SocialSocket['send'];
   reconnect: SocialSocket['reconnect'];
+  /** The panel stays mounted while docked closed so a draft survives; reopening re-pins the list. */
+  open?: boolean;
+  onMinimize?: () => void;
 }
 
-export default function ChatPanel({ state, send, reconnect }: ChatPanelProps) {
+export default function ChatPanel({ state, send, reconnect, open = true, onMinimize }: ChatPanelProps) {
   const profile = useSocialProfile();
   const handle = profile.data?.handle ?? null;
   const [draft, setDraft] = useState('');
   const [anon, setAnon] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const stickRef = useRef(true);
 
   useEffect(() => {
@@ -46,7 +50,11 @@ export default function ChatPanel({ state, send, reconnect }: ChatPanelProps) {
   useLayoutEffect(() => {
     const list = listRef.current;
     if (list && stickRef.current) list.scrollTop = list.scrollHeight;
-  }, [state.messages]);
+  }, [state.messages, open]);
+
+  useEffect(() => {
+    if (open && onMinimize) inputRef.current?.focus();
+  }, [open, onMinimize]);
 
   const postingAnon = anon || !handle;
   const muted = state.mutedUntil != null && Date.parse(state.mutedUntil) > now;
@@ -83,6 +91,16 @@ export default function ChatPanel({ state, send, reconnect }: ChatPanelProps) {
         {state.connection === 'error' && (
           <button className={styles.retry} onClick={reconnect}>
             Retry
+          </button>
+        )}
+        {onMinimize && (
+          <button
+            className={styles.minimize}
+            onClick={onMinimize}
+            aria-label="Minimize chat"
+            title="Minimize (Esc)"
+          >
+            ▾
           </button>
         )}
       </header>
@@ -131,6 +149,7 @@ export default function ChatPanel({ state, send, reconnect }: ChatPanelProps) {
         ) : (
           <>
             <textarea
+              ref={inputRef}
               className={styles.input}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

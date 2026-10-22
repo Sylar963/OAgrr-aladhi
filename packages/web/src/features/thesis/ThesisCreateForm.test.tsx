@@ -55,6 +55,7 @@ describe('ThesisCreateForm', () => {
       level: 85_105,
       confirmSec: 86400,
       reason: 'Failed rally, expect 80k before expiry.',
+      share: false,
     });
   });
 });

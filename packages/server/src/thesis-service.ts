@@ -42,6 +42,7 @@ import {
   type ThesisPendingFlip,
   type ThesisRecord,
   ThesisRecordSchema,
+  type ThesisShare,
   type ThesisStatusDetail,
   type ThesisStructureClass,
   type ThesisView,
@@ -82,6 +83,13 @@ export interface ThesisServiceOptions {
   bookSources: readonly PortfolioSource[];
   log: DeferredLog & { info: (obj: object, msg: string) => void };
   now?: () => number;
+}
+
+export interface SharedThesis {
+  thesis: ThesisRecord & { share: ThesisShare };
+  /** Null once the thesis ended. */
+  status: ThesisStatusDetail | null;
+  spotUsd: number | null;
 }
 
 export class ThesisError extends Error {
@@ -215,6 +223,28 @@ export class ThesisService {
     return { active, reversalCooldowns };
   }
 
+  /** Shared theses, newest first; active ones are re-evaluated so their status is current. */
+  async shared(limit: number): Promise<SharedThesis[]> {
+    await this.ready();
+    const theses = [...this.theses.values()]
+      .filter((thesis): thesis is SharedThesis['thesis'] => thesis.share != null)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+    return Promise.all(
+      theses.map(async (thesis): Promise<SharedThesis> => {
+        if (thesis.state !== 'active') {
+          return { thesis, status: null, spotUsd: await this.spot(thesis.underlying) };
+        }
+        const view = await this.view(thesis, false);
+        return {
+          thesis: { ...view.thesis, share: thesis.share },
+          status: view.thesis.state === 'active' ? view.status : null,
+          spotUsd: view.status.spotUsd,
+        };
+      }),
+    );
+  }
+
   async gateCheck(accountId: string, req: ThesisGateCheckRequest): Promise<ThesisGateCheckResponse> {
     await this.ready();
     const underlying = req.underlying.toUpperCase();
@@ -331,7 +361,13 @@ export class ThesisService {
 
   // ── Writes ───────────────────────────────────────────────────────────
 
-  async create(accountId: string, input: ThesisCreateRequest, bypassCooldown = false): Promise<ThesisView> {
+  /** `shareAs` is the social user to publish under; callers check that the user has a username. */
+  async create(
+    accountId: string,
+    input: ThesisCreateRequest,
+    bypassCooldown = false,
+    shareAs: string | null = null,
+  ): Promise<ThesisView> {
     await this.ready();
     const req = ThesisCreateRequestSchema.parse(input);
     const underlying = req.underlying.toUpperCase();
@@ -384,9 +420,10 @@ export class ThesisService {
       createdAt: nowMs,
       endedAt: null,
       endNote: null,
+      share: shareAs == null ? null : { userId: shareAs, sharedAt: nowMs },
     };
     this.putThesis(thesis);
-    this.append(thesis, 'created', { spotUsd });
+    this.append(thesis, 'created', { spotUsd, shared: shareAs != null });
     return this.view(thesis, true);
   }
 
@@ -419,9 +456,10 @@ export class ThesisService {
     }
     const before = thesis.state === 'active' ? await this.view(thesis, true) : null;
     if (before != null) thesis = before.thesis;
+    const shareAs = req.newThesis.share === false ? null : (thesis.share?.userId ?? null);
     if (thesis.state === 'invalidated' || thesis.state === 'expired') {
       // The rule fired or the horizon passed: a new opposite thesis is not a flip against it.
-      return this.create(accountId, { ...req.newThesis, underlying: thesis.underlying }, true);
+      return this.create(accountId, { ...req.newThesis, underlying: thesis.underlying }, true, shareAs);
     }
     const nowMs = this.now();
     const inReversal = thesis.state === 'ended_early' && this.isInReversalCooldown(thesis, nowMs);
@@ -437,7 +475,7 @@ export class ThesisService {
       );
     }
 
-    const nextThesis = await this.createAfterFlip(accountId, thesis, req);
+    const nextThesis = await this.createAfterFlip(accountId, thesis, req, shareAs);
     const kind: ThesisEventKind = req.late ? 'flip_logged_late' : waitCompleted ? 'flip_after_wait' : 'override';
     if (thesis.state === 'active') {
       this.putThesis({
@@ -472,6 +510,20 @@ export class ThesisService {
     this.putThesis(updated);
     this.append(updated, 'level_tightened', { from: thesis.level, to: level });
     return this.view(updated, true);
+  }
+
+  /** Publishing needs an active thesis; withdrawing works at any time. */
+  async setShared(accountId: string, id: string, shareAs: string | null): Promise<ThesisView> {
+    await this.ready();
+    const thesis = shareAs == null ? this.owned(accountId, id) : this.ownedActive(accountId, id);
+    if ((shareAs == null) === (thesis.share == null)) return this.view(thesis, thesis.state === 'active');
+    const updated: ThesisRecord = {
+      ...thesis,
+      share: shareAs == null ? null : { userId: shareAs, sharedAt: this.now() },
+    };
+    this.putThesis(updated);
+    this.append(updated, shareAs == null ? 'unshared' : 'shared', {});
+    return this.view(updated, updated.state === 'active');
   }
 
   async end(accountId: string, id: string, note: string | undefined): Promise<ThesisView> {
@@ -819,12 +871,13 @@ export class ThesisService {
     accountId: string,
     previous: ThesisRecord,
     req: ThesisFlipRequest,
+    shareAs: string | null,
   ): Promise<ThesisView> {
     // The old thesis is still active here, so free the slot only once the new one validates.
     const wasActive = previous.state === 'active';
     if (wasActive) this.theses.set(previous.id, { ...previous, state: 'overridden' });
     try {
-      return await this.create(accountId, { ...req.newThesis, underlying: previous.underlying }, true);
+      return await this.create(accountId, { ...req.newThesis, underlying: previous.underlying }, true, shareAs);
     } catch (err) {
       if (wasActive) this.theses.set(previous.id, previous);
       throw err;

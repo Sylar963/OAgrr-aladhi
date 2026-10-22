@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { endThesis, tightenThesis } from './api';
+import { endThesis, shareThesis, tightenThesis } from './api';
 import type { UnderlyingThesis } from './hooks';
 import { useThesisRefresh } from './hooks';
 import { fmtDuration, fmtExpiry, fmtPrice, STATUS_LABEL, wrongIfText } from './format';
@@ -76,6 +76,16 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
         )}
         {nothingToDo && <span className={styles.nothing}>nothing to do</span>}
         <span className={styles.stripSpacer} />
+        <button
+          type="button"
+          className={styles.stripBtn}
+          data-shared={thesis.share != null || undefined}
+          disabled={busy}
+          title={thesis.share != null ? 'Shared on Social. Click to withdraw it.' : 'Publish on Social under your username'}
+          onClick={() => void run(() => shareThesis(thesis.id, thesis.share == null))}
+        >
+          {thesis.share != null ? 'Shared' : 'Share'}
+        </button>
         <button type="button" className={styles.stripBtn} onClick={() => setEditing(editing === 'tighten' ? null : 'tighten')}>
           Tighten
         </button>

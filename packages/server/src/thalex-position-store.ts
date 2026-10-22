@@ -2,6 +2,7 @@ import {
   ThalexPrivateClient,
   type ThalexAccountLedger,
   type ThalexAccountMargin,
+  type ThalexBookAuth,
   type ThalexPrivateCreds,
   logger,
   type EntryAnchor,
@@ -48,6 +49,9 @@ export class ThalexPositionStore implements PositionStore {
   private readonly environments = new Map<string, VenueEnvironment>();
   private readonly lifecycle = new Map<string, Promise<void>>();
   private readonly hydrateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Keys of live mainnet sessions, newest last; the public order-book socket logs in with one.
+  private readonly mainnetKeys = new Map<string, ThalexBookAuth>();
+  private readonly keyListeners = new Set<() => void>();
 
   private persistence(accountId: string): VenuePositionPersistence {
     return this.environments.get(accountId) === 'test'
@@ -239,7 +243,38 @@ export class ThalexPositionStore implements PositionStore {
     this.tradeUnsubscribes.set(accountId, unsubscribeTrades);
     if (!hydrated) this.scheduleHydrateRetry(accountId, 0);
     await client.start();
+    if (environment === 'prod' && isCurrent()) {
+      this.mainnetKeys.delete(accountId);
+      this.mainnetKeys.set(accountId, {
+        kid: creds.kid,
+        privateKeyPem: creds.privateKeyPem,
+        ...(creds.account != null ? { account: creds.account } : {}),
+      });
+      this.notifyKeys();
+    }
     this.scheduleDisconnect(accountId);
+  }
+
+  /** The newest live mainnet session's key, or null when no mainnet session is connected. */
+  mainnetBookAuth(): ThalexBookAuth | null {
+    return [...this.mainnetKeys.values()].at(-1) ?? null;
+  }
+
+  subscribeMainnetKeys(listener: () => void): () => void {
+    this.keyListeners.add(listener);
+    return () => {
+      this.keyListeners.delete(listener);
+    };
+  }
+
+  private notifyKeys(): void {
+    for (const listener of this.keyListeners) {
+      try {
+        listener();
+      } catch (error) {
+        logger.error({ error: String(error), venue: 'thalex' }, 'thalex key listener failed');
+      }
+    }
   }
 
   private async disconnectNow(accountId: string): Promise<void> {
@@ -256,6 +291,7 @@ export class ThalexPositionStore implements PositionStore {
     this.tradeUnsubscribes.delete(accountId);
     const client = this.clients.get(accountId);
     this.clients.delete(accountId);
+    if (this.mainnetKeys.delete(accountId)) this.notifyKeys();
     // Testnet legs are never persisted, so nothing should keep showing them once the session ends.
     if (this.environments.get(accountId) === 'test' && this.cache.delete(accountId)) {
       this.broadcast(accountId, []);

@@ -4,6 +4,8 @@ import {
   type LeaderboardPeriod,
   type LeaderboardResponse,
   LeaderboardResponseSchema,
+  type PublicThesisFeed,
+  PublicThesisFeedSchema,
   type SocialProfileDto,
   SocialProfileDtoSchema,
   type UpdateSocialProfileRequest,
@@ -42,4 +44,8 @@ export async function getLeaderboard(period: LeaderboardPeriod): Promise<Leaderb
   return LeaderboardResponseSchema.parse(
     await fetchJson<unknown>(`/social/leaderboard?period=${period}`),
   );
+}
+
+export async function getThesisFeed(): Promise<PublicThesisFeed> {
+  return PublicThesisFeedSchema.parse(await fetchJson<unknown>('/social/theses'));
 }

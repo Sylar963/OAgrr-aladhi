@@ -40,6 +40,7 @@ import { statsRoute } from './stats.js';
 import { surfaceRoute } from './surface.js';
 import { thesisRoutes } from './thesis.js';
 import { thesisService } from '../thesis-services.js';
+import { isSocialEnabled, socialProfileService, socialThesisFeed } from '../social-services.js';
 import { timeAtPriceRoute } from './time-at-price.js';
 import { underlyingsRoute } from './underlyings.js';
 import { venuesRoute } from './venues.js';
@@ -105,7 +106,17 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(paperRoutes, { prefix: '/api' });
   app.register(paperAuthRoute, { prefix: '/api' });
   app.register(portfolioRoutes, { prefix: '/api' });
-  app.register(thesisRoutes(thesisService), { prefix: '/api' });
+  app.register(
+    thesisRoutes(thesisService, {
+      blocker: async (user) => {
+        if (!isSocialEnabled()) return 'Social features need DATABASE_URL';
+        const profile = await socialProfileService.sync(user);
+        return profile.handle ? null : 'Set a username on your account to share theses';
+      },
+      changed: () => socialThesisFeed.invalidate(),
+    }),
+    { prefix: '/api' },
+  );
   app.register(fundedRoutes, { prefix: '/api' });
   app.register(socialRoutes, { prefix: '/api' });
   app.register(liveRoutes, {

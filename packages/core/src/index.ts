@@ -357,6 +357,7 @@ export {
   referencePrice,
 } from './liquidity/analytics.js';
 export { isThalexBookInstrument } from './feeds/thalex/book.js';
+export type { ThalexBookAuth } from './feeds/thalex/book-feed.js';
 export {
   buildBlockTradeUid,
   buildLiveTradeUid,

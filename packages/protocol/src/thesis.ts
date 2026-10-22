@@ -47,6 +47,13 @@ export type ThesisMarketContext = z.infer<typeof ThesisMarketContextSchema>;
 
 const ExpiryDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+export const ThesisShareSchema = z.object({
+  /** Social user whose username the thesis is published under. */
+  userId: z.string().min(1),
+  sharedAt: z.number(),
+});
+export type ThesisShare = z.infer<typeof ThesisShareSchema>;
+
 export const ThesisRecordSchema = z.object({
   id: z.string().uuid(),
   accountId: z.string().min(1),
@@ -62,6 +69,7 @@ export const ThesisRecordSchema = z.object({
   createdAt: z.number(),
   endedAt: NullableNumber,
   endNote: z.string().max(THESIS_MAX_TEXT_CHARS).nullable(),
+  share: ThesisShareSchema.nullable().default(null),
 });
 export type ThesisRecord = z.infer<typeof ThesisRecordSchema>;
 
@@ -81,6 +89,8 @@ export const ThesisEventKindSchema = z.enum([
   'invalidated',
   'expired',
   'level_tightened',
+  'shared',
+  'unshared',
 ]);
 export type ThesisEventKind = z.infer<typeof ThesisEventKindSchema>;
 
@@ -102,6 +112,8 @@ export const ThesisCreateRequestSchema = z.object({
   confirmSec: ThesisConfirmSecSchema.default(86400),
   reason: z.string().trim().min(THESIS_MIN_REASON_CHARS).max(THESIS_MAX_TEXT_CHARS),
   linkedSnapshotId: z.string().max(100).nullable().optional(),
+  /** Publish on the Social feed under the account username. A flip keeps the old thesis's choice unless false. */
+  share: z.boolean().optional(),
 });
 export type ThesisCreateRequest = z.input<typeof ThesisCreateRequestSchema>;
 
@@ -119,6 +131,9 @@ export const ThesisEndRequestSchema = z.object({
 });
 
 export const ThesisTightenRequestSchema = z.object({ level: z.number().positive() });
+
+export const ThesisShareRequestSchema = z.object({ shared: z.boolean() });
+export type ThesisShareRequest = z.infer<typeof ThesisShareRequestSchema>;
 
 export const ThesisDiffKeySchema = z.enum(['spot', 'dvol', 'atmIv', 'skew25d', 'netGex']);
 export type ThesisDiffKey = z.infer<typeof ThesisDiffKeySchema>;
@@ -237,3 +252,33 @@ export const ThesisGateCheckResponseSchema = z.object({
   view: ThesisViewSchema.nullable(),
 });
 export type ThesisGateCheckResponse = z.infer<typeof ThesisGateCheckResponseSchema>;
+
+/** A thesis its author shared on the Social feed. */
+export const PublicThesisDtoSchema = z.object({
+  id: z.string().uuid(),
+  handle: z.string(),
+  isMe: z.boolean(),
+  underlying: z.string(),
+  direction: ThesisDirectionSchema,
+  horizonExpiry: ExpiryDateSchema,
+  level: z.number().positive(),
+  confirmSec: ThesisConfirmSecSchema,
+  reason: z.string(),
+  state: ThesisStateSchema,
+  /** Live rule status while active; null once the thesis ended. */
+  status: ThesisStatusSchema.nullable(),
+  roomPct: NullableNumber,
+  spotAtCreation: NullableNumber,
+  spotUsd: NullableNumber,
+  createdAt: z.number(),
+  sharedAt: z.number(),
+  endedAt: NullableNumber,
+  endNote: z.string().nullable(),
+});
+export type PublicThesisDto = z.infer<typeof PublicThesisDtoSchema>;
+
+export const PublicThesisFeedSchema = z.object({
+  generatedAt: z.number(),
+  theses: z.array(PublicThesisDtoSchema),
+});
+export type PublicThesisFeed = z.infer<typeof PublicThesisFeedSchema>;

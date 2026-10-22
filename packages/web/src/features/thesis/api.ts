@@ -66,3 +66,4 @@ export const backToThesis = action('back-to-thesis');
 export const endThesis = (id: string, note?: string) => action('end')(id, note ? { note } : {});
 export const tightenThesis = (id: string, level: number) => action('tighten')(id, { level });
 export const flipThesis = (id: string, body: ThesisFlipRequest) => action('flip')(id, body);
+export const shareThesis = (id: string, shared: boolean) => action('share')(id, { shared });

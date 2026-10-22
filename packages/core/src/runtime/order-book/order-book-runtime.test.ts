@@ -1,6 +1,6 @@
 import { MessageChannel } from 'node:worker_threads';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ThalexBookFeedEvents } from '../../feeds/thalex/book-feed.js';
+import type { ThalexBookAuth, ThalexBookFeedEvents } from '../../feeds/thalex/book-feed.js';
 import type { OrderBookSnapshot } from '../../liquidity/types.js';
 import {
   OrderBookCapacityError,
@@ -33,6 +33,7 @@ interface FakeWorker {
   feed: {
     add: ReturnType<typeof vi.fn<(instrument: string) => void>>;
     remove: ReturnType<typeof vi.fn<(instrument: string) => void>>;
+    setAuth: ReturnType<typeof vi.fn<(auth: ThalexBookAuth | null) => void>>;
     stop: ReturnType<typeof vi.fn<() => Promise<void>>>;
   };
   events: ThalexBookFeedEvents;
@@ -50,6 +51,7 @@ function harness() {
       worker.feed = {
         add: vi.fn<(instrument: string) => void>(),
         remove: vi.fn<(instrument: string) => void>(),
+        setAuth: vi.fn<(auth: ThalexBookAuth | null) => void>(),
         stop: vi.fn<() => Promise<void>>(async () => {}),
       };
       return worker.feed;
@@ -175,5 +177,22 @@ describe('OrderBookRuntime', () => {
     workers[0]!.events.onBook(book('BTC-PERPETUAL'));
     await flushPorts();
     expect(runtime.getBook('BTC-PERPETUAL')).toBeNull();
+  });
+
+  it('passes the login to the worker and replays it before re-adding books after a crash', async () => {
+    const { spawn, workers } = harness();
+    const runtime = new OrderBookRuntime({ spawn, respawnDelayMs: 1 });
+    const auth = { kid: 'k', privateKeyPem: 'pem' };
+    runtime.setAuth(auth);
+    runtime.acquire('BTC-PERPETUAL');
+    await flushPorts();
+    expect(workers[0]?.feed.setAuth).toHaveBeenCalledWith(auth);
+
+    workers[0]!.crash();
+    await new Promise((r) => setTimeout(r, 20));
+    const next = workers[1]!.feed;
+    expect(next.setAuth).toHaveBeenCalledWith(auth);
+    expect(next.setAuth.mock.invocationCallOrder[0]).toBeLessThan(next.add.mock.invocationCallOrder[0]!);
+    await runtime.dispose();
   });
 });

@@ -41,6 +41,7 @@ const view: ThesisView = {
     createdAt: Date.now() - 11 * 86_400_000,
     endedAt: null,
     endNote: null,
+    share: null,
   },
   status: {
     status: 'INTACT',

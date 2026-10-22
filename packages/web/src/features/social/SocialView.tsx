@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
-import ChatPanel from './ChatPanel';
+import ChatDock from './ChatDock';
 import { useSocialSocket } from './hooks/useSocialSocket';
 import Leaderboard from './Leaderboard';
 import ProfileCard from './ProfileCard';
 import styles from './SocialView.module.css';
+import ThesisFeed from './ThesisFeed';
 import TraderPanel from './TraderPanel';
 
 export default function SocialView() {
@@ -26,23 +27,31 @@ export default function SocialView() {
 
   return (
     <div className={styles.view}>
-      <div className={styles.main} data-split={selected != null}>
-        <ProfileCard />
-        <div className={styles.board}>
-          <Leaderboard selectedHandle={selected} onSelect={(handle) => select(handle)} />
+      <ProfileCard />
+      <div className={styles.body}>
+        <div className={styles.main} data-split={selected != null}>
+          <div className={styles.board}>
+            <Leaderboard selectedHandle={selected} onSelect={(handle) => select(handle)} />
+          </div>
+          {selected && (
+            <TraderPanel
+              handle={selected}
+              trader={trader}
+              unavailable={unavailable}
+              onClose={() => select(null)}
+            />
+          )}
         </div>
-        {selected && (
-          <TraderPanel
-            handle={selected}
-            trader={trader}
-            unavailable={unavailable}
-            onClose={() => select(null)}
+        <aside className={styles.theses}>
+          <ThesisFeed
+            selectedHandle={selected}
+            onSelectTrader={(handle) => {
+              if (handle.toLowerCase() !== selected?.toLowerCase()) select(handle);
+            }}
           />
-        )}
+        </aside>
       </div>
-      <aside className={styles.side}>
-        <ChatPanel state={socket.state} send={socket.send} reconnect={socket.reconnect} />
-      </aside>
+      <ChatDock state={socket.state} send={socket.send} reconnect={socket.reconnect} />
     </div>
   );
 }

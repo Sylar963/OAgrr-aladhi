@@ -22,6 +22,7 @@ export default function ThesisCreateForm({
 }: ThesisCreateFormProps) {
   const refresh = useThesisRefresh();
   const [values, setValues] = useState(initial);
+  const [share, setShare] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +42,7 @@ export default function ThesisCreateForm({
         level: Number(values.level),
         confirmSec: values.confirmSec,
         reason: values.reason.trim(),
+        share,
       });
       await refresh();
       onClose();
@@ -55,6 +57,10 @@ export default function ThesisCreateForm({
     <div className={styles.card}>
       <div className={styles.cardTitle}>Set your {underlying} thesis</div>
       <ThesisFields values={values} onChange={setValues} expiryOptions={expiryOptions} />
+      <label className={styles.shareToggle}>
+        <input type="checkbox" checked={share} onChange={(event) => setShare(event.target.checked)} />
+        <span>Share on Social under your username</span>
+      </label>
       {error && <div className={styles.error}>{error}</div>}
       <div className={styles.actions}>
         <button type="button" className={styles.primaryBtn} onClick={() => void submit()} disabled={busy}>

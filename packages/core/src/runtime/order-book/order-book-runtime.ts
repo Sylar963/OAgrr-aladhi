@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import type { BookFeedStatus } from '../../feeds/thalex/book-feed.js';
+import type { BookFeedStatus, ThalexBookAuth } from '../../feeds/thalex/book-feed.js';
 import type { OrderBookSnapshot } from '../../liquidity/types.js';
 import { feedLogger } from '../../utils/logger.js';
 import type { OrderBookPort, OrderBookWorkerEvent, OrderBookWorkerRequest } from './worker-protocol.js';
@@ -78,6 +78,7 @@ export class OrderBookRuntime {
   private handle: OrderBookWorkerHandle | null = null;
   private respawnTimer: ReturnType<typeof setTimeout> | null = null;
   private feedStatus: BookFeedStatus | 'idle' = 'idle';
+  private auth: ThalexBookAuth | null = null;
   private disposed = false;
 
   constructor(options: OrderBookRuntimeOptions = {}) {
@@ -116,6 +117,18 @@ export class OrderBookRuntime {
         this.release(instrument);
       },
     };
+  }
+
+  /**
+   * Logs the book socket in so it is not counted against Thalex's per-IP cap on
+   * unauthenticated sockets. Null goes back to an anonymous socket.
+   */
+  setAuth(auth: ThalexBookAuth | null): void {
+    if (this.disposed) return;
+    this.auth = auth;
+    // Refusals under the old session say nothing about the new one.
+    this.rejected.clear();
+    this.handle?.port.postMessage({ t: 'auth', auth } satisfies OrderBookWorkerRequest);
   }
 
   getBook(instrument: string): OrderBookSnapshot | null {
@@ -211,6 +224,9 @@ export class OrderBookRuntime {
   private launch(): void {
     const handle = this.spawn();
     this.handle = handle;
+    if (this.auth != null) {
+      handle.port.postMessage({ t: 'auth', auth: this.auth } satisfies OrderBookWorkerRequest);
+    }
     handle.port.on('message', (message) => this.receive(message as OrderBookWorkerEvent));
     handle.onExit((code) => {
       if (this.disposed || this.handle !== handle) return;

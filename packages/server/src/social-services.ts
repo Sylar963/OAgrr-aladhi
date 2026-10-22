@@ -14,8 +14,10 @@ import {
 import { ChatService } from './social-chat.js';
 import { LeaderboardService, type MarkLookup } from './social-leaderboard.js';
 import { SocialProfileService } from './social-profile.js';
+import { SocialThesisFeed } from './social-theses.js';
 import { TraderStreamService } from './social-trader-stream.js';
 import { thalexPositionStore } from './thalex-position-store.js';
+import { thesisService } from './thesis-services.js';
 import {
   exchangePortfolioLedgerStore,
   quoteProvider,
@@ -25,6 +27,8 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const LEDGER_LOAD_LIMIT = 500;
 const CLOSED_TRADES_LIMIT = 50;
+const THESIS_FEED_LIMIT = 100;
+const THESIS_FEED_TTL_MS = 30_000;
 
 export const socialStore: SocialStore = process.env['DATABASE_URL']
   ? PostgresSocialStore.fromConnectionString(process.env['DATABASE_URL'])
@@ -126,6 +130,13 @@ export const socialProfileService = new SocialProfileService(
     traderStreamService.revoke(userId);
   },
 );
+
+export const socialThesisFeed = new SocialThesisFeed({
+  shared: (limit) => thesisService.shared(limit),
+  handleOf: async (userId) => (await socialProfileService.get(userId)).handle,
+  limit: THESIS_FEED_LIMIT,
+  ttlMs: THESIS_FEED_TTL_MS,
+});
 
 export const chatService = new ChatService(
   socialStore,

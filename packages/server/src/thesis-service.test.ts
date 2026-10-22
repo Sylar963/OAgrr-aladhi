@@ -347,4 +347,52 @@ describe('ThesisService', () => {
     await expect(service.end('acct_other', thesis.id, undefined)).rejects.toMatchObject({ code: 'not_found' });
     expect((await service.list('acct_other')).active).toHaveLength(0);
   });
+
+  it('shares a thesis, carries the share across a flip, and keeps ended theses in the feed', async () => {
+    const { service, clock } = harness();
+    const { thesis } = await service.create(ACCOUNT, bearishThesis);
+    expect(await service.shared(10)).toHaveLength(0);
+
+    const shared = await service.setShared(ACCOUNT, thesis.id, 'user_1');
+    expect(shared.thesis.share).toMatchObject({ userId: 'user_1' });
+    const [entry] = await service.shared(10);
+    expect(entry).toMatchObject({ thesis: { id: thesis.id }, status: { status: 'INTACT' }, spotUsd: 84_000 });
+    clock.now += HOUR_MS;
+
+    const next = await service.flip(ACCOUNT, thesis.id, {
+      reason: 'Spot reclaimed 84k on rising volume and the funding reset; I no longer expect 80k.',
+      confirmation: THESIS_FLIP_CONFIRMATION,
+      newThesis: {
+        direction: 'bullish',
+        horizonExpiry: '2026-10-30',
+        level: 81_500,
+        reason: 'Reclaim of 84k holds; wrong below 81.5k.',
+      },
+    });
+    expect(next.thesis.share).toMatchObject({ userId: 'user_1' });
+    const feed = await service.shared(10);
+    expect(feed.map((item) => [item.thesis.id, item.thesis.state, item.status?.status ?? null])).toEqual([
+      [next.thesis.id, 'active', 'INTACT'],
+      [thesis.id, 'overridden', null],
+    ]);
+
+    await service.setShared(ACCOUNT, thesis.id, null);
+    expect((await service.shared(10)).map((item) => item.thesis.id)).toEqual([next.thesis.id]);
+    await expect(service.setShared(ACCOUNT, thesis.id, 'user_1')).rejects.toMatchObject({ code: 'not_active' });
+    await expect(service.setShared('acct_other', next.thesis.id, null)).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('reads records written before sharing existed as unshared', async () => {
+    const store = new RecordingStore();
+    const first = harness({ store });
+    const { thesis } = await first.service.create(ACCOUNT, bearishThesis);
+    await first.service.flush();
+    const persisted = store.theses.get(thesis.id)!;
+    const { share: _share, ...legacy } = persisted.record as Record<string, unknown>;
+    store.theses.set(thesis.id, { ...persisted, record: legacy });
+
+    const second = harness({ store });
+    const [view] = (await second.service.list(ACCOUNT)).active;
+    expect(view?.thesis.share).toBeNull();
+  });
 });

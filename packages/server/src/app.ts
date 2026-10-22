@@ -20,6 +20,7 @@ import {
   startPortfolioAssistantRetentionCleanup,
 } from './portfolio-assistant-services.js';
 import { disposePortfolioServices, setPortfolioExitBookRuntime } from './portfolio-services.js';
+import { thalexPositionStore } from './thalex-position-store.js';
 import { disposeThesisServices } from './thesis-services.js';
 import { registerRoutes } from './routes/index.js';
 import { disposeSocialServices, startSocialServices } from './social-services.js';
@@ -188,6 +189,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   setPortfolioExitBookRuntime(orderBookRuntime);
+  // The anonymous book socket is refused once this IP is at Thalex's unauthenticated cap;
+  // it logs in with the user's own mainnet portfolio key while that session is live.
+  const bookRuntime = orderBookRuntime;
+  const unsubscribeBookAuth =
+    bookRuntime == null
+      ? () => {}
+      : thalexPositionStore.subscribeMainnetKeys(() =>
+          bookRuntime.setAuth(thalexPositionStore.mainnetBookAuth()),
+        );
   registerRoutes(app);
   startRuntimeMetrics(app.log);
   startPortfolioAssistantRetentionCleanup(app.log);
@@ -220,6 +230,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     spotCandleService.dispose();
     dvolService.dispose();
     await volHeatmapRuntime?.dispose();
+    unsubscribeBookAuth();
     await orderBookRuntime?.dispose();
     indexPriceService.dispose();
     ivHistoryService.dispose();

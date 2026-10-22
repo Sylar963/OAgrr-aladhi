@@ -3,6 +3,7 @@ import type { OrderBookSnapshot } from '../../liquidity/types.js';
 import { feedLogger } from '../../utils/logger.js';
 import { THALEX_MARKET_WS_URL } from '../shared/endpoints.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
+import { mintAuthToken } from '../thalex-private/auth.js';
 import {
   instrumentFromBookChannel,
   instrumentFromTickerChannel,
@@ -45,6 +46,16 @@ export interface BookSocketOptions {
   getReplayMessages(): Array<Record<string, unknown>>;
 }
 
+/**
+ * Thalex caps unauthenticated sockets per IP and refuses subscribes past the cap; a logged-in
+ * socket is not counted. Market data only: the session never sends private requests.
+ */
+export interface ThalexBookAuth {
+  kid: string;
+  privateKeyPem: string;
+  account?: string;
+}
+
 export interface ThalexBookFeedOptions {
   depth?: number;
   flushIntervalMs?: number;
@@ -76,6 +87,9 @@ export class ThalexBookFeed {
   private readonly socket: BookSocket;
   private generation = 1;
   private nextId = 1;
+  private auth: ThalexBookAuth | null = null;
+  // Set while a login is in flight; subscribes wait for its reply.
+  private loginId: number | null = null;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
 
@@ -97,12 +111,28 @@ export class ThalexBookFeed {
     return [...this.books.keys()];
   }
 
+  /** Changing the login reconnects, since a session cannot log out or switch keys. */
+  setAuth(auth: ThalexBookAuth | null): void {
+    const unchanged =
+      auth?.kid === this.auth?.kid &&
+      auth?.privateKeyPem === this.auth?.privateKeyPem &&
+      auth?.account === this.auth?.account;
+    if (unchanged || this.stopped) return;
+    this.auth = auth;
+    if (!this.socket.isConnected) return;
+    void this.socket
+      .disconnect()
+      .then(() => (this.books.size > 0 && !this.stopped ? this.socket.connect() : undefined))
+      .catch((err: unknown) => log.warn({ err: String(err) }, 'reconnect after login change failed'));
+  }
+
   add(instrument: string): void {
     if (this.stopped || this.books.has(instrument)) return;
     this.books.set(instrument, new ThalexBookState(instrument, this.depth));
     this.startFlushing();
     if (this.socket.isConnected) {
-      this.socket.send(this.subscribeMessage(this.channelsFor(instrument)));
+      // A pending login subscribes every held instrument once it is answered.
+      if (this.loginId === null) this.socket.send(this.subscribeMessage(this.channelsFor(instrument)));
     } else {
       this.socket.connect().catch((err: unknown) => log.warn({ err: String(err) }, 'connect failed'));
     }
@@ -152,6 +182,28 @@ export class ThalexBookFeed {
 
   private replayMessages(): Array<Record<string, unknown>> {
     this.pendingSubscribes.clear();
+    this.loginId = null;
+    const login = this.loginMessage();
+    return login != null ? [login] : this.subscribeAllMessages();
+  }
+
+  private loginMessage(): Record<string, unknown> | null {
+    if (this.auth == null) return null;
+    let token: string;
+    try {
+      token = mintAuthToken({ kid: this.auth.kid, privateKeyPem: this.auth.privateKeyPem });
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : String(err) }, 'book login token failed');
+      return null;
+    }
+    const id = this.nextId++;
+    this.loginId = id;
+    const params: Record<string, unknown> = { token };
+    if (this.auth.account != null) params['account'] = this.auth.account;
+    return { method: 'public/login', id, params };
+  }
+
+  private subscribeAllMessages(): Array<Record<string, unknown>> {
     const channels = this.instruments().flatMap((i) => this.channelsFor(i));
     const messages: Array<Record<string, unknown>> = [];
     for (let i = 0; i < channels.length; i += MAX_CHANNELS_PER_BATCH) {
@@ -216,6 +268,18 @@ export class ThalexBookFeed {
   }
 
   private handleRpcReply(json: unknown): void {
+    const id = (json as { id?: unknown }).id;
+    if (this.loginId !== null && id === this.loginId) {
+      this.loginId = null;
+      const failed = ThalexRpcErrorSchema.safeParse(json);
+      if (failed.success) {
+        log.warn({ code: failed.data.error.code, message: failed.data.error.message }, 'book login failed');
+      } else {
+        log.info('book socket logged in');
+      }
+      for (const message of this.subscribeAllMessages()) this.socket.send(message);
+      return;
+    }
     const ack = ThalexSubscribeAckSchema.safeParse(json);
     if (ack.success && typeof ack.data.id === 'number') {
       const requested = this.pendingSubscribes.get(ack.data.id);

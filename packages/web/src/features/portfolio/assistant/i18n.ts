@@ -1,7 +1,5 @@
 import { defineMessages, translate, type Locale } from '@lib/i18n';
 
-import { PortfolioAssistantApiError } from './api';
-
 const errorMessages = defineMessages(
   {
     assistant_not_enabled: 'Portfolio Assistant is temporarily unavailable.',
@@ -81,9 +79,9 @@ export function assistantErrorFrom(
   locale: Locale,
   scope?: 'invite',
 ): string {
-  if (error instanceof PortfolioAssistantApiError) {
-    return assistantErrorText(error.code, error.message, locale, scope);
+  if (error instanceof Error) {
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : null;
+    return assistantErrorText(code, error.message, locale, scope);
   }
-  if (error instanceof Error) return error.message;
   return translate(errorMessages, fallbackCode, undefined, locale);
 }

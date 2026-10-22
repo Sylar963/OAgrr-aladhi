@@ -7,7 +7,7 @@ import { usePortfolioAssistantFeedback } from './hooks';
 import { PortfolioAssistantMessageBubble } from './PortfolioAssistantMessageBubble';
 import styles from './PortfolioAssistantPanel.module.css';
 
-const messages = defineMessages(
+const transcriptMessages = defineMessages(
   {
     loading: 'Loading conversation&',
     aria: 'Portfolio Assistant conversation',
@@ -27,7 +27,7 @@ export function PortfolioAssistantTranscript({
   isLoading: boolean;
   feedbackThreadId?: string | null;
 }) {
-  const t = useT(messages);
+  const t = useT(transcriptMessages);
   const endRef = useRef<HTMLDivElement>(null);
   const feedback = usePortfolioAssistantFeedback(feedbackThreadId);
   useEffect(() => {

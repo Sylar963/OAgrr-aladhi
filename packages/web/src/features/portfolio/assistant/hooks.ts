@@ -1,4 +1,5 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { getLocale } from '@lib/i18n';
 import type {
   PortfolioAssistantFeedback,
   PortfolioAssistantFeedbackList,
@@ -198,7 +199,7 @@ export function usePortfolioAssistantConversation(
       try {
         await streamPortfolioAssistantMessage(
           threadId,
-          { clientMessageId, message: content, forwardDays },
+          { clientMessageId, message: content, forwardDays, locale: getLocale() },
           controller.signal,
           onEvent,
         );

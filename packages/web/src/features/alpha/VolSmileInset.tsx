@@ -30,7 +30,7 @@ const messages = defineMessages(
     whatToLookFor: 'What to look for:',
     peakTitle: 'Short leg sitting on a peak',
     peakText:
-      '(rich IV vs. neighbours) = you're selling expensive vol — the structural edge for credit spreads.',
+      "(rich IV vs. neighbours) = you're selling expensive vol — the structural edge for credit spreads.",
     belowTitle: 'Short below the curve',
     belowText: '= selling cheap vol; the signal can still gate SELL but the edge is thin.',
     troughTitle: 'Long sitting on a trough',

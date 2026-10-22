@@ -11,6 +11,7 @@ import { Spinner } from '@components/ui';
 import HoverTooltip from '@components/ui/HoverTooltip';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { fmtDelta, fmtIv, fmtPct, fmtStrike, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
@@ -30,19 +31,220 @@ const ADVANCED_MAX_DTE = 45;
 const ADVANCED_MAX_SPREAD_PCT = 30;
 type ScannerView = 'guided' | 'advanced';
 
-const CONTROL_TIPS = {
-  mark: 'The sticker price used to filter the board. Your real buy-in is the ask, which can be higher.',
-  otm: 'How far the market must climb just to touch the strike. Farther out means a cheaper long shot, but a harder hit.',
-  bankroll: 'Your total bankroll for sizing. The scanner shows what fits; it never places an order.',
-} as const;
+const messages = defineMessages(
+  {
+    tipMark: 'The sticker price used to filter the board. Your real buy-in is the ask, which can be higher.',
+    tipOtm: 'How far the market must climb just to touch the strike. Farther out means a cheaper long shot, but a harder hit.',
+    tipBankroll: 'Your total bankroll for sizing. The scanner shows what fits; it never places an order.',
+    tipPrice: 'MARK is the table estimate. ASK is the quoted price before taker fees.',
+    tipVolatility: 'IV is how much movement the option market is pricing in. Higher IV usually means a more expensive bet.',
+    tipBreakeven:
+      "OTM is the climb to the strike. BE uses the current ask plus the estimated taker fee when available. The odds are the risk-neutral chance of finishing above BE at expiry, from the option's own IV.",
+    tipTarget:
+      'The move that makes the option worth 10× your ask-paid entry if it lands halfway to expiry and you sell at the bid. The odds are the risk-neutral chance of touching that level by then. Model estimates, not guarantees.',
+    tipCapacity:
+      'How many contracts your bankroll can cover at fee-adjusted ask, capped by quoted ask size. Reserved also uses a safety buffer.',
+    atmIvUnavailable: 'ATM IV unavailable',
+    within15: 'within 1.5 implied moves',
+    between15and2: '1.5–2 implied moves',
+    over2: 'over 2 implied moves',
+    theHand: 'THE HAND · LONG CALL',
+    upBefore: '{underlying} UP BEFORE {expiry}',
+    handIntro:
+      'You are paying for a shot at a fast upside run. Like drawing to a big hand, your buy-in is capped, but the clock can fold you even when you guessed the direction right.',
+    buyIn: 'BUY-IN',
+    estimatedEntry: '{value} estimated entry',
+    askNoFee: '{ask} ask; fee unavailable and excluded.',
+    askPlusFee: '{ask} ask + {fee} taker fee.',
+    venueMinimum: 'Venue minimum costs {value}.',
+    profitLine: 'PROFIT LINE AT EXPIRY',
+    above: '{underlying} above {price}',
+    climb: 'That is a {pct} climb from now · about {odds} risk-neutral odds.',
+    bustLine: 'BUST LINE AT EXPIRY',
+    atOrBelow: '{underlying} at or below {price}',
+    bustText: 'The call expires worth $0 and the full buy-in is lost.',
+    tenXOut: '10× OUT:',
+    noScenario: 'The model cannot price this scenario.',
+    tenXNear:
+      '{underlying} near {price} ({pct}) within {days} days, about {odds} odds of touching it.',
+    assumes: 'Assumes unchanged IV and a sale at the bid ({haircut} vs fair); not an expiry payout.',
+    maxLoss: 'MAX LOSS: 100% OF WHAT YOU PAY · NO LOSS BEYOND THE PREMIUM',
+    eyebrow: '{underlying} · {n} ACTIVE VENUES · LONG CALLS',
+    ownUpside: 'Own the upside',
+    lottoRadar: 'Lotto radar',
+    guidedDescription: 'Define one possible future, cap what you can lose, and compare ways to own it.',
+    advancedDescription:
+      'Ranked by the 10× move, landing halfway to expiry and sold at the bid, in ATM implied-move units. Hover a contract for the poker read.',
+    viewAria: 'Lotto radar view',
+    guided: 'Guided',
+    advancedRadar: 'Advanced radar',
+    scanOnly: 'SCAN ONLY',
+    maxContractMark: 'Max contract mark',
+    minOtm: 'Min OTM',
+    buyingPower: 'Buying power',
+    buyingPowerAria: 'Scanner buying power',
+    budgetError: 'Enter $1 to $10,000,000.',
+    spreadRule: '≤50% spread',
+    reserveRule: '1.2× reserve',
+    invalidBuyingPower: 'Enter valid buying power to run the advanced scan.',
+    scanning: 'Scanning {n} venues…',
+    noVenues: 'No supported active venues are available for this scan.',
+    scannerUnavailable: 'Scanner unavailable: {error}',
+    requestFailed: 'request failed',
+    refreshFailed: 'Refresh failed; showing the scan from {time}.',
+    now: '{underlying} NOW',
+    horizon: 'HORIZON',
+    horizonDays: '15–75 DAYS',
+    liveCalls: 'LIVE CALLS',
+    availableDates: 'AVAILABLE DATES',
+    liveVenues: 'LIVE VENUES',
+    index: 'INDEX',
+    avgForward: 'AVG FORWARD',
+    expiries: 'EXPIRIES',
+    matches: 'MATCHES',
+    scannedVenues: 'SCANNED VENUES',
+    refreshing: 'REFRESHING',
+    partialData: 'Partial or no scan data from {venues}.',
+    noLiquid: 'No liquid {underlying} calls match these mark, moneyness, DTE, and venue limits.',
+    venueContract: 'Venue / contract',
+    markAsk: 'Mark / ask',
+    ivImplied: 'IV / implied',
+    tenXMove: '10× move',
+    capacity: 'Capacity',
+    rowAria: 'Select {instrument} and show its plain-language bet explanation',
+    askWide: '{ask} ask · {pct} wide',
+    finishAbove: '{odds} finish above',
+    implied: '{n} implied',
+    touch: '{context} · {odds} touch',
+    reserved: '{n} reserved',
+    footerCapacity: 'Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.',
+    footerScans:
+      'Scans {min}–{max} DTE with spreads up to {spread}%. Targets measure return on estimated entry cost if the move lands halfway to expiry, IV is unchanged, and you sell at the bid.',
+    footerOdds: "Odds are risk-neutral estimates from the option's IV, not forecasts.",
+    footerGuided:
+      'Guided scans 15–75 DTE for one-month and two-month calls. Payouts use intrinsic value at expiry; unknown venue fees are excluded.',
+    footerNoOrder: 'No order is sent. Most short-dated OTM calls expire worthless.',
+    perContract: '{size} {underlying} / contract',
+    minSettle: 'min {qty} · {settle}',
+    inverse: 'inverse',
+    minOrder: 'min order {value}',
+    venueForward: 'venue forward',
+    spotProxy: 'spot proxy',
+    xAsk: '{n}× ASK',
+    touchIn: '{odds} touch in {days}d',
+    expiryIntrinsicValue: 'expiry intrinsic {value}',
+    expiryIntrinsic: 'EXPIRY INTRINSIC',
+    askSize: 'ASK SIZE {value}',
+    openBuilder: 'Open in Builder V2',
+  },
+  {
+    tipMark: 'El precio de referencia usado para filtrar el tablero. Tu entrada real es el ask, que puede ser mayor.',
+    tipOtm: 'Cuánto debe subir el mercado solo para tocar el strike. Más lejos significa una apuesta más barata, pero más difícil de acertar.',
+    tipBankroll: 'Tu capital total para dimensionar. El escáner muestra lo que cabe; nunca envía una orden.',
+    tipPrice: 'MARK es la estimación de la tabla. ASK es el precio cotizado antes de comisiones taker.',
+    tipVolatility: 'La IV es cuánto movimiento descuenta el mercado de opciones. Una IV más alta suele significar una apuesta más cara.',
+    tipBreakeven:
+      'OTM es la subida hasta el strike. BE usa el ask actual más la comisión taker estimada cuando está disponible. Las probabilidades son la chance neutral al riesgo de terminar sobre el BE al vencimiento, según la propia IV de la opción.',
+    tipTarget:
+      'El movimiento que hace que la opción valga 10× tu entrada pagada al ask si llega a mitad del camino al vencimiento y vendes en el bid. Las probabilidades son la chance neutral al riesgo de tocar ese nivel para entonces. Estimaciones del modelo, no garantías.',
+    tipCapacity:
+      'Cuántos contratos cubre tu capital al ask ajustado por comisiones, limitado por el tamaño cotizado del ask. Reservado también usa un margen de seguridad.',
+    atmIvUnavailable: 'ATM IV no disponible',
+    within15: 'dentro de 1.5 movimientos implícitos',
+    between15and2: '1.5–2 movimientos implícitos',
+    over2: 'más de 2 movimientos implícitos',
+    theHand: 'LA MANO · LONG CALL',
+    upBefore: '{underlying} SUBE ANTES DEL {expiry}',
+    handIntro:
+      'Pagas por una oportunidad de una subida rápida. Como apostar a una gran mano, tu entrada está limitada, pero el reloj puede hacerte perder aun si acertaste la dirección.',
+    buyIn: 'ENTRADA',
+    estimatedEntry: '{value} de entrada estimada',
+    askNoFee: '{ask} ask; comisión no disponible y excluida.',
+    askPlusFee: '{ask} ask + {fee} de comisión taker.',
+    venueMinimum: 'El mínimo del exchange cuesta {value}.',
+    profitLine: 'LÍNEA DE GANANCIA AL VENCIMIENTO',
+    above: '{underlying} sobre {price}',
+    climb: 'Es una subida de {pct} desde ahora · probabilidad neutral al riesgo de aprox. {odds}.',
+    bustLine: 'LÍNEA DE PÉRDIDA TOTAL AL VENCIMIENTO',
+    atOrBelow: '{underlying} en o bajo {price}',
+    bustText: 'El call vence valiendo $0 y se pierde toda la entrada.',
+    tenXOut: 'SALIDA 10×:',
+    noScenario: 'El modelo no puede valorar este escenario.',
+    tenXNear:
+      '{underlying} cerca de {price} ({pct}) en {days} días, con aprox. {odds} de probabilidad de tocarlo.',
+    assumes: 'Supone IV sin cambios y venta en el bid ({haircut} vs justo); no es un pago al vencimiento.',
+    maxLoss: 'PÉRDIDA MÁX.: 100% DE LO QUE PAGAS · NINGUNA PÉRDIDA MÁS ALLÁ DE LA PRIMA',
+    eyebrow: '{underlying} · {n} EXCHANGES ACTIVOS · LONG CALLS',
+    ownUpside: 'Captura el alza',
+    lottoRadar: 'Radar lotto',
+    guidedDescription: 'Define un futuro posible, limita lo que puedes perder y compara formas de capturarlo.',
+    advancedDescription:
+      'Ordenado por el movimiento 10×, llegando a mitad del camino al vencimiento y vendido en el bid, en unidades de movimiento implícito ATM. Pasa el cursor sobre un contrato para la lectura de póker.',
+    viewAria: 'Vista del radar lotto',
+    guided: 'Guiado',
+    advancedRadar: 'Radar avanzado',
+    scanOnly: 'SOLO ESCANEO',
+    maxContractMark: 'Mark máx. por contrato',
+    minOtm: 'OTM mín.',
+    buyingPower: 'Poder de compra',
+    buyingPowerAria: 'Poder de compra del escáner',
+    budgetError: 'Ingresa de $1 a $10,000,000.',
+    spreadRule: 'spread ≤50%',
+    reserveRule: 'reserva 1.2×',
+    invalidBuyingPower: 'Ingresa un poder de compra válido para ejecutar el escaneo avanzado.',
+    scanning: 'Escaneando {n} exchanges…',
+    noVenues: 'No hay exchanges activos compatibles para este escaneo.',
+    scannerUnavailable: 'Escáner no disponible: {error}',
+    requestFailed: 'falló la solicitud',
+    refreshFailed: 'Falló la actualización; se muestra el escaneo de las {time}.',
+    now: '{underlying} AHORA',
+    horizon: 'HORIZONTE',
+    horizonDays: '15–75 DÍAS',
+    liveCalls: 'CALLS EN VIVO',
+    availableDates: 'FECHAS DISPONIBLES',
+    liveVenues: 'EXCHANGES EN VIVO',
+    index: 'ÍNDICE',
+    avgForward: 'FORWARD PROM.',
+    expiries: 'VENCIMIENTOS',
+    matches: 'COINCIDENCIAS',
+    scannedVenues: 'EXCHANGES ESCANEADOS',
+    refreshing: 'ACTUALIZANDO',
+    partialData: 'Datos de escaneo parciales o ausentes de {venues}.',
+    noLiquid: 'Ningún call líquido de {underlying} cumple estos límites de mark, moneyness, DTE y exchange.',
+    venueContract: 'Exchange / contrato',
+    markAsk: 'Mark / ask',
+    ivImplied: 'IV / implícito',
+    tenXMove: 'Movimiento 10×',
+    capacity: 'Capacidad',
+    rowAria: 'Selecciona {instrument} y muestra la explicación simple de la apuesta',
+    askWide: '{ask} ask · {pct} de ancho',
+    finishAbove: '{odds} termina sobre',
+    implied: '{n} implícitos',
+    touch: '{context} · {odds} toque',
+    reserved: '{n} reservados',
+    footerCapacity: 'La capacidad usa el ask ajustado por comisiones y el tamaño cotizado; la cantidad reservada también incluye el margen de 1.2×.',
+    footerScans:
+      'Escanea {min}–{max} DTE con spreads de hasta {spread}%. Los objetivos miden el retorno sobre el costo de entrada estimado si el movimiento llega a mitad del camino al vencimiento, la IV no cambia y vendes en el bid.',
+    footerOdds: 'Las probabilidades son estimaciones neutrales al riesgo a partir de la IV de la opción, no pronósticos.',
+    footerGuided:
+      'El modo guiado escanea 15–75 DTE para calls a uno y dos meses. Los pagos usan el valor intrínseco al vencimiento; se excluyen las comisiones desconocidas del exchange.',
+    footerNoOrder: 'No se envía ninguna orden. La mayoría de los calls OTM de corto plazo vencen sin valor.',
+    perContract: '{size} {underlying} / contrato',
+    minSettle: 'mín. {qty} · {settle}',
+    inverse: 'inverso',
+    minOrder: 'orden mín. {value}',
+    venueForward: 'forward del exchange',
+    spotProxy: 'proxy de spot',
+    xAsk: '{n}× ASK',
+    touchIn: '{odds} toque en {days}d',
+    expiryIntrinsicValue: 'intrínseco al vencimiento {value}',
+    expiryIntrinsic: 'INTRÍNSECO AL VENCIMIENTO',
+    askSize: 'TAMAÑO ASK {value}',
+    openBuilder: 'Abrir en Builder V2',
+  },
+);
 
-const COLUMN_TIPS = {
-  price: 'MARK is the table estimate. ASK is the quoted price before taker fees.',
-  volatility: 'IV is how much movement the option market is pricing in. Higher IV usually means a more expensive bet.',
-  breakeven: 'OTM is the climb to the strike. BE uses the current ask plus the estimated taker fee when available. The odds are the risk-neutral chance of finishing above BE at expiry, from the option\'s own IV.',
-  target: 'The move that makes the option worth 10× your ask-paid entry if it lands halfway to expiry and you sell at the bid. The odds are the risk-neutral chance of touching that level by then. Model estimates, not guarantees.',
-  capacity: 'How many contracts your bankroll can cover at fee-adjusted ask, capped by quoted ask size. Reserved also uses a safety buffer.',
-} as const;
+type T = Translate<typeof messages.en>;
 
 interface LottoScannerPanelProps {
   underlying: string;
@@ -60,12 +262,12 @@ function scannerVenues(venues: string[]): VenueId[] {
   });
 }
 
-function moveContext(target: AlphaLottoTarget | null): string {
+function moveContext(target: AlphaLottoTarget | null, t: T): string {
   const ratio = target?.impliedMoveMultiple;
-  if (ratio == null) return 'ATM IV unavailable';
-  if (ratio <= 1.5) return 'within 1.5 implied moves';
-  if (ratio <= 2) return '1.5–2 implied moves';
-  return 'over 2 implied moves';
+  if (ratio == null) return t('atmIvUnavailable');
+  if (ratio <= 1.5) return t('within15');
+  if (ratio <= 2) return t('between15and2');
+  return t('over2');
 }
 
 function fmtChance(probability: number | null): string {
@@ -178,54 +380,71 @@ function MetricTip({ label, tip, placement = 'bottom-start' }: MetricTipProps) {
 }
 
 function CallBetTooltip({ candidate }: { candidate: AlphaLottoCandidate }) {
+  const t = useT(messages);
   const tenX = targetFor(candidate, 10);
   const expiry = formatExpiry(candidate.expiry);
 
   return (
     <div className={styles.betTooltip}>
       <div className={styles.betTooltipHeader}>
-        <span>THE HAND · LONG CALL</span>
-        <strong>{candidate.underlying} UP BEFORE {expiry.toUpperCase()}</strong>
+        <span>{t('theHand')}</span>
+        <strong>{t('upBefore', { underlying: candidate.underlying, expiry: expiry.toUpperCase() })}</strong>
       </div>
-      <p>
-        You are paying for a shot at a fast upside run. Like drawing to a big hand, your buy-in is capped,
-        but the clock can fold you even when you guessed the direction right.
-      </p>
+      <p>{t('handIntro')}</p>
       <div className={styles.betLines}>
         <div data-tone="stake">
-          <span>BUY-IN</span>
-          <strong>{fmtUsd(candidate.entryCost)} estimated entry</strong>
+          <span>{t('buyIn')}</span>
+          <strong>{t('estimatedEntry', { value: fmtUsd(candidate.entryCost) })}</strong>
           <small>
             {candidate.takerFee == null
-              ? `${fmtUsd(candidate.ask)} ask; fee unavailable and excluded.`
-              : `${fmtUsd(candidate.ask)} ask + ${fmtUsd(candidate.takerFee)} taker fee.`}
+              ? t('askNoFee', { ask: fmtUsd(candidate.ask) })
+              : t('askPlusFee', { ask: fmtUsd(candidate.ask), fee: fmtUsd(candidate.takerFee) })}
           </small>
-          <small>Venue minimum costs {fmtUsd(candidate.minimumOrderCost)}.</small>
+          <small>{t('venueMinimum', { value: fmtUsd(candidate.minimumOrderCost) })}</small>
         </div>
         <div data-tone="win">
-          <span>PROFIT LINE AT EXPIRY</span>
-          <strong>{candidate.underlying} above {fmtUsdCompact(candidate.breakEvenPrice)}</strong>
-          <small>That is a {fmtPct(candidate.breakEvenMovePct, 1)} climb from now · about {fmtChance(candidate.probabilityAboveBreakEven)} risk-neutral odds.</small>
+          <span>{t('profitLine')}</span>
+          <strong>
+            {t('above', {
+              underlying: candidate.underlying,
+              price: fmtUsdCompact(candidate.breakEvenPrice),
+            })}
+          </strong>
+          <small>
+            {t('climb', {
+              pct: fmtPct(candidate.breakEvenMovePct, 1),
+              odds: fmtChance(candidate.probabilityAboveBreakEven),
+            })}
+          </small>
         </div>
         <div data-tone="bust">
-          <span>BUST LINE AT EXPIRY</span>
-          <strong>{candidate.underlying} at or below {fmtUsdCompact(candidate.strike)}</strong>
-          <small>The call expires worth $0 and the full buy-in is lost.</small>
+          <span>{t('bustLine')}</span>
+          <strong>
+            {t('atOrBelow', { underlying: candidate.underlying, price: fmtUsdCompact(candidate.strike) })}
+          </strong>
+          <small>{t('bustText')}</small>
         </div>
       </div>
       <div className={styles.betFootnote}>
-        <strong>10× OUT:</strong>{' '}
+        <strong>{t('tenXOut')}</strong>{' '}
         {tenX?.modelUnderlyingPrice == null
-          ? 'The model cannot price this scenario.'
-          : `${candidate.underlying} near ${fmtUsdCompact(tenX.modelUnderlyingPrice)} (${fmtPct(tenX.modelMovePct, 1)}) within ${tenX.horizonDays.toFixed(1)} days, about ${fmtChance(tenX.touchProbability)} odds of touching it.`}{' '}
-        Assumes unchanged IV and a sale at the bid ({tenX == null ? '—' : `−${tenX.exitHaircutPct.toFixed(1)}%`} vs fair); not an expiry payout.
+          ? t('noScenario')
+          : t('tenXNear', {
+              underlying: candidate.underlying,
+              price: fmtUsdCompact(tenX.modelUnderlyingPrice),
+              pct: fmtPct(tenX.modelMovePct, 1),
+              days: tenX.horizonDays.toFixed(1),
+              odds: fmtChance(tenX.touchProbability),
+            })}{' '}
+        {t('assumes', { haircut: tenX == null ? '—' : `−${tenX.exitHaircutPct.toFixed(1)}%` })}
       </div>
-      <div className={styles.maxLoss}>MAX LOSS: 100% OF WHAT YOU PAY · NO LOSS BEYOND THE PREMIUM</div>
+      <div className={styles.maxLoss}>{t('maxLoss')}</div>
     </div>
   );
 }
 
 export default function LottoScannerPanel({ underlying, venues }: LottoScannerPanelProps) {
+  const t = useT(messages);
   const [view, setView] = useState<ScannerView>('guided');
   const [advancedLimit, setAdvancedLimit] = useState(20);
   const [premiumCap, setPremiumCap] = useState(400);
@@ -282,24 +501,22 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       <header className={styles.header}>
         <div>
           <div className={styles.eyebrow}>
-            {underlying} · {activeVenues.length} ACTIVE VENUES · LONG CALLS
+            {t('eyebrow', { underlying, n: activeVenues.length })}
           </div>
-          <h2 className={styles.title}>{view === 'guided' ? 'Own the upside' : 'Lotto radar'}</h2>
+          <h2 className={styles.title}>{view === 'guided' ? t('ownUpside') : t('lottoRadar')}</h2>
           <p className={styles.description}>
-            {view === 'guided'
-              ? 'Define one possible future, cap what you can lose, and compare ways to own it.'
-              : 'Ranked by the 10× move, landing halfway to expiry and sold at the bid, in ATM implied-move units. Hover a contract for the poker read.'}
+            {view === 'guided' ? t('guidedDescription') : t('advancedDescription')}
           </p>
         </div>
         <div className={styles.headerActions}>
-          <div className={styles.viewSwitch} role="group" aria-label="Lotto radar view">
+          <div className={styles.viewSwitch} role="group" aria-label={t('viewAria')}>
             <button
               type="button"
               data-active={view === 'guided'}
               aria-pressed={view === 'guided'}
               onClick={() => setView('guided')}
             >
-              Guided
+              {t('guided')}
             </button>
             <button
               type="button"
@@ -310,10 +527,10 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                 setView('advanced');
               }}
             >
-              Advanced radar
+              {t('advancedRadar')}
             </button>
           </div>
-          <span className={styles.scanOnly}>SCAN ONLY</span>
+          <span className={styles.scanOnly}>{t('scanOnly')}</span>
           {view === 'advanced' && (
             <button
               type="button"
@@ -330,7 +547,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       {view === 'advanced' && (
         <div className={styles.controls}>
           <fieldset className={styles.controlGroup}>
-            <legend><MetricTip label="Max contract mark" tip={CONTROL_TIPS.mark} /></legend>
+            <legend><MetricTip label={t('maxContractMark')} tip={t('tipMark')} /></legend>
             <div className={styles.presetRow}>
               {PREMIUM_PRESETS.map((value) => (
                 <button
@@ -345,7 +562,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             </div>
           </fieldset>
           <fieldset className={styles.controlGroup}>
-            <legend><MetricTip label="Min OTM" tip={CONTROL_TIPS.otm} /></legend>
+            <legend><MetricTip label={t('minOtm')} tip={t('tipOtm')} /></legend>
             <div className={styles.presetRow}>
               {OTM_PRESETS.map((value) => (
                 <button
@@ -360,13 +577,13 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             </div>
           </fieldset>
           <label className={styles.budgetControl} data-invalid={!buyingPowerIsValid || undefined}>
-            <span><MetricTip label="Buying power" tip={CONTROL_TIPS.bankroll} /></span>
+            <span><MetricTip label={t('buyingPower')} tip={t('tipBankroll')} /></span>
             <div className={styles.inputShell}>
               <span>$</span>
               <input
                 inputMode="decimal"
                 value={buyingPowerInput}
-                aria-label="Scanner buying power"
+                aria-label={t('buyingPowerAria')}
                 aria-invalid={!buyingPowerIsValid}
                 aria-errormessage={!buyingPowerIsValid ? 'lotto-advanced-budget-error' : undefined}
                 onChange={(event) => setBuyingPowerInput(event.target.value)}
@@ -374,41 +591,43 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             </div>
             {!buyingPowerIsValid && (
               <small id="lotto-advanced-budget-error" className={styles.controlError} role="alert">
-                Enter $1 to $10,000,000.
+                {t('budgetError')}
               </small>
             )}
           </label>
           <div className={styles.fixedRules}>
             <span>4–14 DTE</span>
-            <span>≤50% spread</span>
-            <span>1.2× reserve</span>
+            <span>{t('spreadRule')}</span>
+            <span>{t('reserveRule')}</span>
           </div>
         </div>
       )}
 
       {view === 'advanced' && !buyingPowerIsValid && (
-        <div className={styles.message}>Enter valid buying power to run the advanced scan.</div>
+        <div className={styles.message}>{t('invalidBuyingPower')}</div>
       )}
 
       {query.isLoading && !data && (view === 'guided' || buyingPowerIsValid) && (
         <div className={styles.loading}>
-          <Spinner size="sm" label={`Scanning ${activeVenues.length} venues…`} />
+          <Spinner size="sm" label={t('scanning', { n: activeVenues.length })} />
         </div>
       )}
 
       {activeVenues.length === 0 && (
-        <div className={styles.message}>No supported active venues are available for this scan.</div>
+        <div className={styles.message}>{t('noVenues')}</div>
       )}
 
       {query.error && !data && (
         <div className={styles.message} data-tone="error">
-          Scanner unavailable: {query.error instanceof Error ? query.error.message : 'request failed'}
+          {t('scannerUnavailable', {
+            error: query.error instanceof Error ? query.error.message : t('requestFailed'),
+          })}
         </div>
       )}
 
       {query.error && data && (
         <div className={styles.message} data-tone="error">
-          Refresh failed; showing the scan from {new Date(data.generatedAt).toLocaleTimeString()}.
+          {t('refreshFailed', { time: new Date(data.generatedAt).toLocaleTimeString() })}
         </div>
       )}
 
@@ -417,26 +636,28 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
           <div className={styles.marketStrip}>
             {view === 'guided' ? (
               <>
-                <span>{underlying} NOW <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
-                <span>HORIZON <strong>15–75 DAYS</strong></span>
-                <span>LIVE CALLS <strong>{data.candidates.length}</strong></span>
-                <span>AVAILABLE DATES <strong>{data.eligibleExpiries.length}</strong></span>
-                <span>LIVE VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+                <span>{t('now', { underlying })} <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
+                <span>{t('horizon')} <strong>{t('horizonDays')}</strong></span>
+                <span>{t('liveCalls')} <strong>{data.candidates.length}</strong></span>
+                <span>{t('availableDates')} <strong>{data.eligibleExpiries.length}</strong></span>
+                <span>{t('liveVenues')} <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
               </>
             ) : (
               <>
-                <span>INDEX <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
-                <span>AVG FORWARD <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
-                <span>EXPIRIES <strong>{data.eligibleExpiries.length}</strong></span>
-                <span>MATCHES <strong>{data.candidates.length}</strong></span>
-                <span>SCANNED VENUES <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
+                <span>{t('index')} <strong>{fmtUsdCompact(data.indexPrice)}</strong></span>
+                <span>{t('avgForward')} <strong>{fmtUsdCompact(data.forwardPrice)}</strong></span>
+                <span>{t('expiries')} <strong>{data.eligibleExpiries.length}</strong></span>
+                <span>{t('matches')} <strong>{data.candidates.length}</strong></span>
+                <span>{t('scannedVenues')} <strong>{data.venueStatus.filter((status) => status.scannedContracts > 0).length}/{data.venues.length}</strong></span>
               </>
             )}
-            {query.isFetching && <span className={styles.refreshing}>REFRESHING</span>}
+            {query.isFetching && <span className={styles.refreshing}>{t('refreshing')}</span>}
           </div>
           {unavailableVenues.length > 0 && (
             <div className={styles.venueWarning}>
-              Partial or no scan data from {unavailableVenues.map((status) => VENUES[status.venue]?.label ?? status.venue).join(', ')}.
+              {t('partialData', {
+                venues: unavailableVenues.map((status) => VENUES[status.venue]?.label ?? status.venue).join(', '),
+              })}
             </div>
           )}
 
@@ -457,19 +678,19 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
             />
           ) : data.candidates.length === 0 ? (
             <div className={styles.message}>
-              No liquid {underlying} calls match these mark, moneyness, DTE, and venue limits.
+              {t('noLiquid', { underlying })}
             </div>
           ) : (
             <div className={styles.results}>
               <div className={styles.tableScroll}>
                 <div className={styles.table}>
                   <div className={styles.tableHeader}>
-                    <div>Venue / contract</div>
-                    <div><MetricTip label="Mark / ask" tip={COLUMN_TIPS.price} /></div>
-                    <div><MetricTip label="IV / implied" tip={COLUMN_TIPS.volatility} /></div>
-                    <div><MetricTip label="OTM / BE" tip={COLUMN_TIPS.breakeven} /></div>
-                    <div><MetricTip label="10× move" tip={COLUMN_TIPS.target} /></div>
-                    <div><MetricTip label="Capacity" tip={COLUMN_TIPS.capacity} placement="bottom-end" /></div>
+                    <div>{t('venueContract')}</div>
+                    <div><MetricTip label={t('markAsk')} tip={t('tipPrice')} /></div>
+                    <div><MetricTip label={t('ivImplied')} tip={t('tipVolatility')} /></div>
+                    <div><MetricTip label="OTM / BE" tip={t('tipBreakeven')} /></div>
+                    <div><MetricTip label={t('tenXMove')} tip={t('tipTarget')} /></div>
+                    <div><MetricTip label={t('capacity')} tip={t('tipCapacity')} placement="bottom-end" /></div>
                   </div>
                   {data.candidates.map((candidate) => {
                     const key = `${candidate.venue}:${candidate.instrument}`;
@@ -479,7 +700,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                         as="button"
                         className={styles.row}
                         dataSelected={selected != null && key === `${selected.venue}:${selected.instrument}` ? 'true' : 'false'}
-                        ariaLabel={`Select ${candidate.instrument} and show its plain-language bet explanation`}
+                        ariaLabel={t('rowAria', { instrument: candidate.instrument })}
                         content={<CallBetTooltip candidate={candidate} />}
                         key={key}
                         onActivate={() => setSelectedKey(key)}
@@ -491,7 +712,7 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                         </div>
                         <div className={styles.numericCell}>
                           <strong>{fmtUsd(candidate.mark)}</strong>
-                          <span>{fmtUsd(candidate.ask)} ask · {fmtPct(candidate.spreadPct, 1)} wide</span>
+                          <span>{t('askWide', { ask: fmtUsd(candidate.ask), pct: fmtPct(candidate.spreadPct, 1) })}</span>
                         </div>
                         <div className={styles.numericCell}>
                           <strong>{fmtIv(candidate.markIv)}</strong>
@@ -500,16 +721,21 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
                         <div className={styles.numericCell}>
                           <strong>{fmtPct(candidate.otmPct, 1)}</strong>
                           <span>BE {fmtPct(candidate.breakEvenMovePct, 1)}</span>
-                          <small>{fmtChance(candidate.probabilityAboveBreakEven)} finish above</small>
+                          <small>{t('finishAbove', { odds: fmtChance(candidate.probabilityAboveBreakEven) })}</small>
                         </div>
                         <div className={styles.targetCell}>
                           <strong>{fmtPct(tenX?.modelMovePct ?? null, 1)}</strong>
-                          <span>{tenX?.impliedMoveMultiple == null ? '—' : `${tenX.impliedMoveMultiple.toFixed(2)} implied`}</span>
-                          <small>{moveContext(tenX)} · {fmtChance(tenX?.touchProbability ?? null)} touch</small>
+                          <span>{tenX?.impliedMoveMultiple == null ? '—' : t('implied', { n: tenX.impliedMoveMultiple.toFixed(2) })}</span>
+                          <small>
+                            {t('touch', {
+                              context: moveContext(tenX, t),
+                              odds: fmtChance(tenX?.touchProbability ?? null),
+                            })}
+                          </small>
                         </div>
                         <div className={styles.capacityCell}>
                           <strong>{formatQuantity(candidate.quantityAtAsk)}</strong>
-                          <span>{formatQuantity(candidate.conservativeQuantity)} reserved</span>
+                          <span>{t('reserved', { n: formatQuantity(candidate.conservativeQuantity) })}</span>
                         </div>
                       </HoverTooltip>
                     );
@@ -527,15 +753,21 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
       <footer className={styles.footer}>
         {view === 'advanced' && (
           <>
-            <span>Capacity uses fee-adjusted ask and quoted size; reserve quantity also includes the 1.2× buffer.</span>
-            <span>Scans {ADVANCED_MIN_DTE}–{ADVANCED_MAX_DTE} DTE with spreads up to {ADVANCED_MAX_SPREAD_PCT}%. Targets measure return on estimated entry cost if the move lands halfway to expiry, IV is unchanged, and you sell at the bid.</span>
-            <span>Odds are risk-neutral estimates from the option&apos;s IV, not forecasts.</span>
+            <span>{t('footerCapacity')}</span>
+            <span>
+              {t('footerScans', {
+                min: ADVANCED_MIN_DTE,
+                max: ADVANCED_MAX_DTE,
+                spread: ADVANCED_MAX_SPREAD_PCT,
+              })}
+            </span>
+            <span>{t('footerOdds')}</span>
           </>
         )}
         {view === 'guided' && (
-          <span>Guided scans 15–75 DTE for one-month and two-month calls. Payouts use intrinsic value at expiry; unknown venue fees are excluded.</span>
+          <span>{t('footerGuided')}</span>
         )}
-        <span>No order is sent. Most short-dated OTM calls expire worthless.</span>
+        <span>{t('footerNoOrder')}</span>
       </footer>
     </section>
   );
@@ -547,6 +779,7 @@ interface CandidateInspectorProps {
 }
 
 function CandidateInspector({ candidate, onOpenBuilder }: CandidateInspectorProps) {
+  const t = useT(messages);
   return (
     <aside className={styles.inspector}>
       <div className={styles.inspectorHeader}>
@@ -555,27 +788,30 @@ function CandidateInspector({ candidate, onOpenBuilder }: CandidateInspectorProp
           <strong>{candidate.instrument}</strong>
         </div>
         <div className={styles.inspectorMeta}>
-          <span>{candidate.contractSize} {candidate.underlying} / contract</span>
-          <span>min {candidate.minQty} · {candidate.inverse ? 'inverse' : candidate.settle}</span>
-          <span>min order {fmtUsd(candidate.minimumOrderCost)}</span>
-          <span>{candidate.referenceSource === 'venue-forward' ? 'venue forward' : 'spot proxy'}</span>
+          <span>{t('perContract', { size: candidate.contractSize, underlying: candidate.underlying })}</span>
+          <span>{t('minSettle', { qty: candidate.minQty, settle: candidate.inverse ? t('inverse') : candidate.settle })}</span>
+          <span>{t('minOrder', { value: fmtUsd(candidate.minimumOrderCost) })}</span>
+          <span>{candidate.referenceSource === 'venue-forward' ? t('venueForward') : t('spotProxy')}</span>
         </div>
       </div>
       <div className={styles.targetGrid}>
         {candidate.targets.map((target) => (
           <div key={target.multiple}>
-            <span>{target.multiple}× ASK</span>
+            <span>{t('xAsk', { n: target.multiple })}</span>
             <strong>{fmtUsdCompact(target.modelUnderlyingPrice)}</strong>
             <small>
-              {fmtPct(target.modelMovePct, 1)} · {target.impliedMoveMultiple == null ? '—' : `${target.impliedMoveMultiple.toFixed(2)} implied`}
+              {fmtPct(target.modelMovePct, 1)} ·{' '}
+              {target.impliedMoveMultiple == null ? '—' : t('implied', { n: target.impliedMoveMultiple.toFixed(2) })}
             </small>
-            <small>{fmtChance(target.touchProbability)} touch in {target.horizonDays.toFixed(1)}d</small>
-            <small>expiry intrinsic {fmtUsdCompact(target.intrinsicUnderlyingPrice)}</small>
+            <small>
+              {t('touchIn', { odds: fmtChance(target.touchProbability), days: target.horizonDays.toFixed(1) })}
+            </small>
+            <small>{t('expiryIntrinsicValue', { value: fmtUsdCompact(target.intrinsicUnderlyingPrice) })}</small>
           </div>
         ))}
       </div>
       <div className={styles.shockGrid}>
-        <span>EXPIRY INTRINSIC</span>
+        <span>{t('expiryIntrinsic')}</span>
         {candidate.shocks.map((shock) => (
           <div key={shock.movePct}>
             <span>+{shock.movePct}%</span>
@@ -587,14 +823,14 @@ function CandidateInspector({ candidate, onOpenBuilder }: CandidateInspectorProp
       <div className={styles.greeksLine}>
         <span>Δ {fmtDelta(candidate.delta)}</span>
         <span>IV {fmtIv(candidate.markIv)}</span>
-        <span>ASK SIZE {candidate.askSize ?? '—'}</span>
+        <span>{t('askSize', { value: candidate.askSize ?? '—' })}</span>
       </div>
       <button
         type="button"
         className={styles.builderButton}
         onClick={() => onOpenBuilder(candidate)}
       >
-        <span>Open in Builder V2</span>
+        <span>{t('openBuilder')}</span>
         <span aria-hidden="true">↗</span>
       </button>
     </aside>

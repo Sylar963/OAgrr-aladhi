@@ -30,8 +30,8 @@ const messages = defineMessages(
     breakEvenIv: 'Break-even IV',
     ivCushion: 'IV Cushion',
     closeNow: 'Close now',
-    longLeg: 'Long leg: ${v} paid per contract.',
-    shortLeg: 'Short leg: ${v} received per contract.',
+    longLeg: 'Long leg: {v} paid per contract.',
+    shortLeg: 'Short leg: {v} received per contract.',
     entryIvModel: 'Entry IV back-solved from entry price + forward at upsert time',
   },
   {
@@ -52,8 +52,8 @@ const messages = defineMessages(
     breakEvenIv: 'IV breakeven',
     ivCushion: 'Colchón IV',
     closeNow: 'Cerrar ahora',
-    longLeg: 'Leg long: ${v} pagados por contrato.',
-    shortLeg: 'Leg short: ${v} recibidos por contrato.',
+    longLeg: 'Leg long: {v} pagados por contrato.',
+    shortLeg: 'Leg short: {v} recibidos por contrato.',
     entryIvModel: 'IV de entrada despejada del precio de entrada + forward al momento de guardar',
   },
 );
@@ -197,7 +197,7 @@ export default function PositionsTable({
           const noteLabel = beNoteLabel(be?.beNote, tl);
           const noteTitle = beNoteTitle(be?.beNote, tl);
           const debitOrCredit = leg.size > 0 ? tl('debit') : tl('credit');
-          const entryPrice = leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 });
+          const entryPrice = `$${leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
           const debitOrCreditTitle =
             leg.size > 0 ? t('longLeg', { v: entryPrice }) : t('shortLeg', { v: entryPrice });
           return (

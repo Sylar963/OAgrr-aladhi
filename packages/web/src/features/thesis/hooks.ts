@@ -1,7 +1,7 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import type { ThesisGateLeg, ThesisView } from '@oggregator/protocol';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { checkThesisGate, fetchTheses } from './api';
 
@@ -47,15 +47,22 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
+/** Leg identity without live premium/IV, so price ticks don't create a new gate query. */
+export function gateStructureKey(legs: ThesisGateLeg[] | null): string | null {
+  if (legs == null || legs.length === 0) return null;
+  return JSON.stringify(legs.map(({ expiry, strike, optionRight, side, size }) => [expiry, strike, optionRight, side, size]));
+}
+
 export function useThesisGate(underlying: string, legs: ThesisGateLeg[] | null) {
   const session = useAccountSession();
-  const key = legs == null || legs.length === 0 ? null : JSON.stringify(legs);
-  const debouncedKey = useDebounced(key, GATE_DEBOUNCE_MS);
+  const debouncedKey = useDebounced(gateStructureKey(legs), GATE_DEBOUNCE_MS);
+  const latestLegs = useRef(legs);
+  latestLegs.current = legs;
   return useQuery({
     queryKey: [...thesisQueryKey(session.accountId), 'gate', underlying, debouncedKey],
-    queryFn: () =>
-      checkThesisGate({ underlying, legs: JSON.parse(debouncedKey ?? '[]') as ThesisGateLeg[] }),
+    queryFn: () => checkThesisGate({ underlying, legs: latestLegs.current ?? [] }),
     enabled: session.status === 'ready' && debouncedKey != null,
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

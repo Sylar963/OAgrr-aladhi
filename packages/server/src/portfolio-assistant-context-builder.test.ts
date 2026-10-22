@@ -345,6 +345,7 @@ function thalexLedger(transactionCount = 1): ThalexAccountLedger {
     equity: {
       cash: [{ asset: 'USDC', balance: 165.123456789, indexPriceUsd: 1, valueUsd: 165.123456789 }],
       cashUsd: 165.123456789,
+      equityUsd: 206.074456789,
       unrealisedPnlUsd: 0,
       sessionRealisedPnlUsd: 40.951,
       marginUsd: 165.12,
@@ -371,7 +372,7 @@ function thalexLedger(transactionCount = 1): ThalexAccountLedger {
 describe('buildAccountEquityFacts', () => {
   it('gives the equity breakdown, daily equity and cash ledger', () => {
     const facts = buildAccountEquityFacts(thalexLedger(), 'mainnet');
-    expect(facts.equityUsd).toBe(165.12);
+    expect(facts.equityUsd).toBe(206.07);
     expect(facts.sessionRealisedPnlUsd).toBe(40.95);
     expect(facts.cash[0]?.balance).toBe(165.12345679);
     expect(facts.dailyEquity.map((point) => point.equityUsd)).toEqual([184, 165.12]);
@@ -414,7 +415,7 @@ describe('PortfolioAssistantContextBuilder account equity', () => {
       forwardDays: 0,
     });
     expect(fetchAccountLedger).toHaveBeenCalledWith(ACCOUNT, NOW - 14 * 86_400_000);
-    expect(context.accountEquityFacts?.equityUsd).toBe(165.12);
+    expect(context.accountEquityFacts?.equityUsd).toBe(206.07);
   });
 
   it('skips other sources and names a failed load', async () => {

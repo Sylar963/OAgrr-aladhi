@@ -87,8 +87,12 @@ export class ThalexPositionStore implements PositionStore {
       this.listeners.delete(listener);
     };
   }
+  // The ledger sums each fill's position_pnl, which Thalex books against the session start price,
+  // so it misses what earlier settlements paid out. The client's daily-mark figure replaces it.
   getAccounting(accountId: string, underlying?: string): PortfolioAccounting {
-    return this.persistence(accountId).getAccounting(accountId, this.list(accountId), underlying);
+    const accounting = this.persistence(accountId).getAccounting(accountId, this.list(accountId), underlying);
+    const realized = this.clients.get(accountId)?.getRealizedPnl(underlying) ?? null;
+    return realized == null ? accounting : { ...accounting, realizedPnlUsd: realized };
   }
 
   recordEntryIvs(accountId: string, entryIvs: ReadonlyMap<string, number>): void {
@@ -238,8 +242,14 @@ export class ThalexPositionStore implements PositionStore {
         },
       );
     });
+    const unsubscribeSettlements = client.subscribeSettlements(() => {
+      if (isCurrent()) this.broadcast(accountId, []);
+    });
     this.clients.set(accountId, client);
-    this.unsubscribes.set(accountId, unsubscribe);
+    this.unsubscribes.set(accountId, () => {
+      unsubscribe();
+      unsubscribeSettlements();
+    });
     this.tradeUnsubscribes.set(accountId, unsubscribeTrades);
     if (!hydrated) this.scheduleHydrateRetry(accountId, 0);
     await client.start();

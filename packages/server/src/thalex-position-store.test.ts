@@ -6,6 +6,8 @@ const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
   class FakeThalexClient {
     positions: Listener<unknown[]> | null = null;
     trades: Listener<unknown[]> | null = null;
+    settlements: (() => void) | null = null;
+    realizedPnl: number | null = null;
     constructor(readonly creds: { env?: string }) {
       clients.push(this);
     }
@@ -16,6 +18,13 @@ const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
     subscribeTrades(listener: Listener<unknown[]>) {
       this.trades = listener;
       return () => {};
+    }
+    subscribeSettlements(listener: () => void) {
+      this.settlements = listener;
+      return () => {};
+    }
+    getRealizedPnl() {
+      return this.realizedPnl;
     }
     async start() {}
     async dispose() {}
@@ -164,6 +173,20 @@ describe('ThalexPositionStore environments', () => {
     await store.disconnect('a1');
     expect(store.environment('a1')).toBeNull();
   });
+
+  it('reports the client\'s daily-mark realised P&L over the fill ledger sum once it has loaded', async () => {
+    await store.connect({ accountId: 'a1', kid: 'k', privateKeyPem: 'p' });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    expect(store.getAccounting('a1').realizedPnlUsd).toBe(0);
+
+    clients[0]!.realizedPnl = -15;
+    clients[0]!.settlements!();
+
+    expect(store.getAccounting('a1').realizedPnlUsd).toBe(-15);
+    expect(listener).toHaveBeenCalledWith({ accountId: 'a1', changedLegIds: [] });
+  });
 });
 
 describe('ledgerMatchesSession', () => {
@@ -178,4 +201,5 @@ describe('ledgerMatchesSession', () => {
     expect(ledgerMatchesSession('a1', 'derive')).toBe(true);
     expect(ledgerMatchesSession('a2', 'thalex')).toBe(true);
   });
+
 });

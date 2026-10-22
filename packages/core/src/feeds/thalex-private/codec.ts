@@ -4,6 +4,7 @@ import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import { THALEX_OPTION_SYMBOL_RE } from '../thalex/types.js';
 import type {
   ThalexAccountSummary,
+  ThalexDailyMark,
   ThalexPortfolioEntry,
   ThalexTrade,
   ThalexTransaction,
@@ -157,10 +158,32 @@ export function thalexTradesToPortfolioTrades(
 
 const THALEX_STABLE_ASSETS = new Set(['USD', 'USDT', 'USDC']);
 const DAY_MS = 86_400_000;
+const SETTLEMENT_OFFSET_MS = 8 * 3_600_000;
+// Settlement transactions are stamped a little after 08:00 UTC; inside this window they still
+// belong to that morning's settlement.
+const SETTLEMENT_WINDOW_MS = 3_600_000;
+const SETTLEMENT_TRANSACTION_TYPES = new Set(['session settlement', 'perpetual funding']);
 
-// Thalex settles every product futures-style each session, so settled cash is equity
-// up to the open session's unrealised P&L. Walks the current balances back through the
-// transaction log and samples each UTC midnight; non-stable assets use today's index.
+/** The latest 08:00 UTC session settlement at or before `ms`. */
+export function thalexSettlementBoundary(ms: number): number {
+  return Math.floor((ms - SETTLEMENT_OFFSET_MS) / DAY_MS) * DAY_MS + SETTLEMENT_OFFSET_MS;
+}
+
+function settledAtMs(tx: ThalexTransaction): number {
+  const ms = tx.time * 1000;
+  if (tx.transaction_type == null || !SETTLEMENT_TRANSACTION_TYPES.has(tx.transaction_type)) return ms;
+  const boundary = thalexSettlementBoundary(ms);
+  return ms - boundary <= SETTLEMENT_WINDOW_MS ? boundary : ms;
+}
+
+// Session P&L, realised or not, only reaches cash at the 08:00 UTC settlement.
+function unsettledPnl(summary: ThalexAccountSummary): number {
+  return summary.unrealised_pnl + (summary.session_realised_pnl ?? 0);
+}
+
+// Thalex settles every product futures-style each session, so right after the 08:00 UTC
+// settlement cash is the whole equity. Walks the current balances back through the
+// transaction log and samples each settlement; non-stable assets use today's index.
 export function thalexCashReplayEquity(
   summary: ThalexAccountSummary,
   transactions: readonly ThalexTransaction[],
@@ -181,14 +204,16 @@ export function thalexCashReplayEquity(
     return total;
   };
 
-  const newestFirst = [...transactions].sort((a, b) => b.time - a.time);
+  const newestFirst = transactions
+    .map((tx) => ({ tx, at: settledAtMs(tx) }))
+    .sort((a, b) => b.at - a.at);
   const points: EquityHistoryPoint[] = [
-    { ts: nowMs, equityUsd: cashValue() + summary.unrealised_pnl },
+    { ts: nowMs, equityUsd: cashValue() + unsettledPnl(summary) },
   ];
   let cursor = 0;
-  for (let boundary = Math.floor(nowMs / DAY_MS) * DAY_MS; boundary >= fromMs; boundary -= DAY_MS) {
-    while (cursor < newestFirst.length && newestFirst[cursor]!.time * 1000 > boundary) {
-      const tx = newestFirst[cursor]!;
+  for (let boundary = thalexSettlementBoundary(nowMs); boundary >= fromMs; boundary -= DAY_MS) {
+    while (cursor < newestFirst.length && newestFirst[cursor]!.at > boundary) {
+      const { tx } = newestFirst[cursor]!;
       const balance = balances.get(tx.asset);
       if (balance != null) balances.set(tx.asset, balance - tx.amount);
       cursor += 1;
@@ -208,6 +233,8 @@ export interface ThalexCashHolding {
 export interface ThalexAccountEquity {
   cash: ThalexCashHolding[];
   cashUsd: number;
+  /** Cash plus the session's unsettled P&L: unrealised and session-realised. */
+  equityUsd: number;
   unrealisedPnlUsd: number;
   sessionRealisedPnlUsd: number | null;
   marginUsd: number | null;
@@ -227,9 +254,11 @@ export function thalexAccountEquity(summary: ThalexAccountSummary, nowMs: number
       valueUsd: indexPriceUsd == null ? null : row.balance * indexPriceUsd,
     };
   });
+  const cashUsd = cash.reduce((total, row) => total + (row.valueUsd ?? 0), 0);
   return {
     cash,
-    cashUsd: cash.reduce((total, row) => total + (row.valueUsd ?? 0), 0),
+    cashUsd,
+    equityUsd: cashUsd + unsettledPnl(summary),
     unrealisedPnlUsd: summary.unrealised_pnl,
     sessionRealisedPnlUsd: summary.session_realised_pnl ?? null,
     marginUsd: summary.margin ?? null,
@@ -261,6 +290,52 @@ export function thalexCashTransactions(transactions: readonly ThalexTransaction[
       balanceAfter: tx.balance_after ?? null,
       description: tx.description ?? null,
     }));
+}
+
+export interface ThalexRealizedPnlInput {
+  dailyMarks: readonly ThalexDailyMark[];
+  trades: readonly ExchangePortfolioTrade[];
+  entries: readonly ThalexPortfolioEntry[];
+  underlying?: string;
+}
+
+// Realised option P&L against average cost, so realised plus (mark − average_price) × size
+// adds up to the account's total P&L. Thalex books P&L against a start price that resets to
+// the mark at every settlement: the daily marks hold every settled session, fills after the
+// last mark hold this session's closes, and (average_price − start_price) × position takes
+// back the part of still-open legs that settlements already paid out. Null when an open leg
+// lacks either price.
+export function thalexRealizedPnl({
+  dailyMarks,
+  trades,
+  entries,
+  underlying,
+}: ThalexRealizedPnlInput): number | null {
+  const inScope = (instrumentName: string) => {
+    const parsed = parseThalexOptionInstrument(instrumentName);
+    return parsed != null && (underlying == null || parsed.underlying === underlying);
+  };
+  let total = 0;
+  let settledThroughMs = 0;
+  for (const mark of dailyMarks) {
+    settledThroughMs = Math.max(settledThroughMs, mark.time * 1000);
+    if (inScope(mark.instrument_name)) total += mark.realized_position_pnl;
+  }
+  for (const trade of trades) {
+    if (trade.timestampMs <= settledThroughMs) continue;
+    if (underlying != null && trade.underlying !== underlying) continue;
+    total += trade.realizedPnlUsd ?? 0;
+  }
+  for (const entry of entries) {
+    if (entry.position === 0 || !inScope(entry.instrument_name)) continue;
+    const average = entry.average_price;
+    const start = entry.start_price;
+    if (average == null || start == null || !Number.isFinite(average) || !Number.isFinite(start)) {
+      return null;
+    }
+    total += (average - start) * entry.position;
+  }
+  return total;
 }
 
 export interface ThalexAccountMargin {

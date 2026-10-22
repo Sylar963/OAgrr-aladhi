@@ -192,9 +192,38 @@ describe('PortfolioPnlCurve', () => {
     expect(screen.getByTestId('im-breach-line').textContent).toContain('IM breach ≈ -$50');
   });
 
+  it('draws the liquidation line where margin reaches 70% of IM', () => {
+    render(
+      <PortfolioPnlCurve
+        curve={curve({
+          currentSpotUsd: 85_000,
+          points: [
+            { underlyingPriceUsd: 80_000, nowPnlUsd: -100, forwardPnlUsd: null, expiryPnlUsd: -100 },
+            { underlyingPriceUsd: 85_000, nowPnlUsd: 0, forwardPnlUsd: null, expiryPnlUsd: 0 },
+            { underlyingPriceUsd: 90_000, nowPnlUsd: 100, forwardPnlUsd: null, expiryPnlUsd: 100 },
+          ],
+        })}
+        forwardDays={0}
+        margin={{
+          accountId: 'a',
+          venue: 'thalex',
+          initialMarginUsd: 1_200,
+          marginUsd: 900,
+          remainingMarginUsd: -300,
+          updatedAt: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Liquidation ≈ 82,000')).toBeTruthy();
+    expect(screen.getByTestId('liquidation-line').textContent).toContain('Liquidation ≈ -$60');
+    expect(screen.queryByTestId('im-breach-line')).toBeNull();
+  });
+
   it('omits margin details without a margin snapshot', () => {
     render(<PortfolioPnlCurve curve={curve({})} forwardDays={0} />);
     expect(screen.queryByText(/^IM /)).toBeNull();
     expect(screen.queryByTestId('im-breach-line')).toBeNull();
+    expect(screen.queryByTestId('liquidation-line')).toBeNull();
   });
 });

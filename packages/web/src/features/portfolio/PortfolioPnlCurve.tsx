@@ -10,7 +10,7 @@ import { defineMessages, useT, type Translate } from '@lib/i18n';
 
 import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
 import EquityHistoryChart from './EquityHistoryChart';
-import { marginCallPnl, marginCallPrices } from './margin-call';
+import { liquidationBufferUsd, marginCallPnl, marginCallPrices } from './margin-call';
 import styles from './PortfolioPnlCurve.module.css';
 
 interface Props {
@@ -28,6 +28,7 @@ const HEIGHT = 280;
 const PADDING = { top: 34, right: 16, bottom: 44, left: 64 };
 const TOOLTIP_WIDTH = 150;
 const MARGIN_CALL_COLOR = '#fb923c';
+const LIQUIDATION_COLOR = '#ef4444';
 const MODE_STORAGE_KEY = 'portfolioPnlCurveMode';
 type CurveMode = 'payoff' | 'ta' | 'equity';
 
@@ -67,9 +68,14 @@ const messages = defineMessages(
     mixedExpiries:
       'Multiple expiries: the expiry curve assumes the same settlement price at every date. Its low point is not a portfolio-wide maximum-loss or margin guarantee. Review each expiry separately.',
     imBreachLine: 'IM breach ≈ {v}',
+    liquidationTitle:
+      'Now-curve prices where account margin reaches maintenance margin (70% of IM), holding IM fixed. Thalex liquidates below it.',
+    liquidation: 'Liquidation',
+    liquidationLine: 'Liquidation ≈ {v}',
+    liquidationRow: 'To liquidation',
     hint: 'Hover to read P&L at any price. Break-even markers are based on the expiry curve; shading shows expiry gain and loss.',
     hintMargin:
-      " IM is Thalex's account-wide initial margin, covering every underlying. The IM breach line holds IM fixed as price moves, so treat it as approximate.",
+      " IM is Thalex's account-wide initial margin, covering every underlying. Below IM new risk is rejected; below maintenance margin (70% of IM) Thalex liquidates. Both lines hold IM fixed as price moves, so treat them as approximate.",
     freeMarginRow: 'Free margin',
   },
   {
@@ -108,9 +114,14 @@ const messages = defineMessages(
     mixedExpiries:
       'Varios vencimientos: la curva al vencimiento asume el mismo precio de liquidación en cada fecha. Su punto mínimo no es una garantía de pérdida máxima ni de margen para todo el portafolio. Revisa cada vencimiento por separado.',
     imBreachLine: 'Ruptura de IM ≈ {v}',
+    liquidationTitle:
+      'Precios de la curva actual donde el margen de la cuenta llega al margen de mantenimiento (70% del IM), manteniendo el IM fijo. Thalex liquida por debajo de él.',
+    liquidation: 'Liquidación',
+    liquidationLine: 'Liquidación ≈ {v}',
+    liquidationRow: 'Hasta liquidación',
     hint: 'Pasa el cursor para leer el P&L a cualquier precio. Los marcadores de breakeven se basan en la curva al vencimiento; el sombreado muestra ganancia y pérdida al vencimiento.',
     hintMargin:
-      ' El IM es el margen inicial de toda la cuenta de Thalex, que cubre todos los subyacentes. La línea de ruptura de IM mantiene el IM fijo mientras se mueve el precio, así que tómala como aproximada.',
+      ' El IM es el margen inicial de toda la cuenta de Thalex, que cubre todos los subyacentes. Por debajo del IM se rechaza riesgo nuevo; por debajo del margen de mantenimiento (70% del IM) Thalex liquida. Ambas líneas mantienen el IM fijo mientras se mueve el precio, así que tómalas como aproximadas.',
     freeMarginRow: 'Margen libre',
   },
 );
@@ -254,6 +265,16 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
     const spotUsd = displayCurve.currentSpotUsd;
     if (margin == null || spotUsd == null || displayCurve.status !== 'ok') return null;
     const level = marginCallPnl(displayCurve.points, spotUsd, margin.remainingMarginUsd);
+    if (level == null) return null;
+    return { level, ...marginCallPrices(displayCurve.points, spotUsd, level) };
+  }, [displayCurve, margin]);
+
+  const liquidation = useMemo(() => {
+    const spotUsd = displayCurve.currentSpotUsd;
+    if (margin == null || spotUsd == null || displayCurve.status !== 'ok') return null;
+    const bufferUsd = liquidationBufferUsd(margin.marginUsd, margin.initialMarginUsd);
+    if (bufferUsd <= 0) return null;
+    const level = marginCallPnl(displayCurve.points, spotUsd, bufferUsd);
     if (level == null) return null;
     return { level, ...marginCallPrices(displayCurve.points, spotUsd, level) };
   }, [displayCurve, margin]);
@@ -438,6 +459,14 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                   : `≈ ${[marginCall.below, marginCall.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
               </span>
             )}
+            {liquidation != null && (
+              <span className={styles.metricPill} title={t('liquidationTitle')}>
+                {t('liquidation')}{' '}
+                {liquidation.below == null && liquidation.above == null
+                  ? t('noneInRange')
+                  : `≈ ${[liquidation.below, liquidation.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
+              </span>
+            )}
           </>
         )}
         {isStale && <span className={styles.stalePill}>{t('stale')}</span>}
@@ -578,6 +607,28 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 </text>
               </g>
             )}
+            {liquidation != null && liquidation.level >= chart.yMin && liquidation.level <= chart.yMax && (
+              <g data-testid="liquidation-line">
+                <line
+                  x1={PADDING.left}
+                  x2={WIDTH - PADDING.right}
+                  y1={chart.toY(liquidation.level)}
+                  y2={chart.toY(liquidation.level)}
+                  stroke={LIQUIDATION_COLOR}
+                  strokeWidth={1}
+                  strokeDasharray="6 3"
+                />
+                <text
+                  x={WIDTH - PADDING.right - 4}
+                  y={chart.toY(liquidation.level) - 4}
+                  textAnchor="end"
+                  fontSize={9}
+                  fill={LIQUIDATION_COLOR}
+                >
+                  {t('liquidationLine', { v: fmtUsd(liquidation.level) })}
+                </text>
+              </g>
+            )}
             {chart.forwardPath && (
               <path
                 d={chart.forwardPath}
@@ -621,6 +672,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                 spot={spot}
                 forwardDays={forwardDays}
                 marginCallLevel={marginCall?.level ?? null}
+                liquidationLevel={liquidation?.level ?? null}
                 toX={chart.toX}
                 toY={chart.toY}
               />
@@ -642,11 +694,12 @@ interface HoverReadoutProps {
   spot: number | null;
   forwardDays: number;
   marginCallLevel: number | null;
+  liquidationLevel: number | null;
   toX: (value: number) => number;
   toY: (value: number) => number;
 }
 
-function HoverReadout({ point, spot, forwardDays, marginCallLevel, toX, toY }: HoverReadoutProps) {
+function HoverReadout({ point, spot, forwardDays, marginCallLevel, liquidationLevel, toX, toY }: HoverReadoutProps) {
   const t = useT(messages);
   const x = toX(point.underlyingPriceUsd);
   const rows: Array<{ label: string; value: number; color: string }> = [
@@ -666,6 +719,13 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, toX, toY }: H
       label: t('freeMarginRow'),
       value: fmtMoney(point.nowPnlUsd - marginCallLevel),
       color: MARGIN_CALL_COLOR,
+    });
+  }
+  if (liquidationLevel != null) {
+    readoutRows.push({
+      label: t('liquidationRow'),
+      value: fmtMoney(point.nowPnlUsd - liquidationLevel),
+      color: LIQUIDATION_COLOR,
     });
   }
 

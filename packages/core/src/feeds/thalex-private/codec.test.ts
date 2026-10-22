@@ -8,7 +8,9 @@ import {
   thalexCashTransactions,
   thalexPortfolioEntryToLeg,
   thalexPortfolioToLegs,
+  thalexRealizedPnl,
 } from './codec.js';
+import type { ExchangePortfolioTrade } from '@oggregator/protocol';
 import type { ThalexPortfolioEntry } from './types.js';
 
 const SAMPLE: ThalexPortfolioEntry = {
@@ -138,6 +140,7 @@ describe('thalexAccountEquity', () => {
     );
     expect(equity.cash.map((row) => row.valueUsd)).toEqual([150, 10, null]);
     expect(equity.cashUsd).toBe(160);
+    expect(equity.equityUsd).toBeCloseTo(160 + 5 + 40.95, 9);
     expect(equity.unrealisedPnlUsd).toBe(5);
     expect(equity.sessionRealisedPnlUsd).toBe(40.95);
     expect(equity.marginUsd).toBe(165);
@@ -177,5 +180,57 @@ describe('thalexCashTransactions', () => {
       },
       { ts: 10_000, type: 'withdrawal fee', asset: 'USDC', amount: -1, instrument: null, balanceAfter: null, description: null },
     ]);
+  });
+});
+
+describe('thalexRealizedPnl', () => {
+  const SETTLED_AT = Date.UTC(2026, 9, 21, 8);
+  const close = (pnl: number, timestampMs: number): ExchangePortfolioTrade => ({
+    venue: 'thalex',
+    tradeId: `t-${timestampMs}`,
+    orderId: null,
+    groupId: null,
+    instrumentName: 'BTC-21APR26-75000-C',
+    underlying: 'BTC',
+    expiry: '2026-04-21',
+    strike: 75000,
+    optionRight: 'call',
+    direction: 'sell',
+    amount: 1,
+    priceUsd: 1_300,
+    feeUsd: null,
+    realizedPnlUsd: pnl,
+    liquidityRole: null,
+    timestampMs,
+  });
+
+  it('realises a close held across a settlement against average cost, not the reset start price', () => {
+    // Bought 3 @ 1000, settled at 1150, then sold 1 @ 1300 this session.
+    const realized = thalexRealizedPnl({
+      dailyMarks: [
+        {
+          time: SETTLED_AT / 1000,
+          instrument_name: 'BTC-21APR26-75000-C',
+          position: 3,
+          mark_price: 1_150,
+          realized_position_pnl: 450,
+        },
+      ],
+      trades: [close(150, SETTLED_AT + 3_600_000)],
+      entries: [
+        { instrument_name: 'BTC-21APR26-75000-C', position: 2, average_price: 1_000, start_price: 1_150 },
+      ],
+    });
+    expect(realized).toBe(300);
+  });
+
+  it('is null when an open leg has no start price', () => {
+    expect(
+      thalexRealizedPnl({
+        dailyMarks: [],
+        trades: [],
+        entries: [{ instrument_name: 'BTC-21APR26-75000-C', position: 1, average_price: 1_000 }],
+      }),
+    ).toBeNull();
   });
 });

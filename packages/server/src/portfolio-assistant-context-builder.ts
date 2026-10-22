@@ -181,7 +181,7 @@ export interface PortfolioAssistantAccountEquityFacts {
   requiredMarginUsd: number | null;
   remainingMarginUsd: number | null;
   cash: Array<{ asset: string; balance: number; indexPriceUsd: number | null; valueUsd: number | null }>;
-  /** Settled cash at each 00:00 UTC, oldest first, ending with the live equity. */
+  /** Cash right after each 08:00 UTC settlement, oldest first, ending with the live equity. */
   dailyEquity: Array<{ at: string; equityUsd: number }>;
   /** Cash ledger entries in the window, newest first. */
   transactions: PortfolioAssistantCashTransactionFact[];
@@ -267,7 +267,7 @@ const COMPACT_ACCOUNT_TRANSACTION_LIMIT = 20;
 const DESCRIPTION_MAX_CHARS = 160;
 const DAY_MS = 86_400_000;
 const ACCOUNT_EQUITY_BASIS =
-  'equityUsd = cashUsd + unrealisedPnlUsd, the same formula as the portfolio equity chart. It does not add sessionRealisedPnlUsd: P&L realised by closing positions in the current Thalex session reaches cash only at the session settlement transaction. cashUsd values non-stable assets at today\'s index. marginUsd is Thalex\'s own margin figure (cash holdings plus unrealised P&L).';
+  'equityUsd = cashUsd + unrealisedPnlUsd + sessionRealisedPnlUsd, the same formula as the portfolio equity chart. Both P&L terms are unsettled: they reach cash at the 08:00 UTC session settlement transaction, so a close mid-session moves its gain from unrealisedPnlUsd to sessionRealisedPnlUsd and equityUsd stays put. cashUsd values non-stable assets at today\'s index. marginUsd is Thalex\'s own margin figure (collateral after collateral factors plus unsettled P&L).';
 const SHOCK_TRIM_BUDGET_SHARE = 0.6;
 const SHOCK_MAX_ATM_SHIFT_VOL_PTS = 10;
 const SHOCK_MAX_SKEW_SHIFT_PER_LOG_K = 0.25;
@@ -445,7 +445,7 @@ export function buildAccountEquityFacts(
     network,
     asOf: new Date(equity.updatedAt).toISOString(),
     basis: ACCOUNT_EQUITY_BASIS,
-    equityUsd: roundCents(equity.cashUsd + equity.unrealisedPnlUsd),
+    equityUsd: roundCents(equity.equityUsd),
     cashUsd: roundCents(equity.cashUsd),
     unrealisedPnlUsd: roundCents(equity.unrealisedPnlUsd),
     sessionRealisedPnlUsd: nullableCents(equity.sessionRealisedPnlUsd),

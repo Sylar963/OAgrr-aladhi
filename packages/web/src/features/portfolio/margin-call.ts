@@ -14,15 +14,23 @@ export function nowPnlAt(points: readonly CurvePoint[], price: number): number |
   return null;
 }
 
-// Account margin falls to IM once the book loses the venue's remaining margin from where
-// it stands at spot. IM itself is held fixed, so the level is an approximation.
+// Account margin falls to a requirement once the book loses the buffer above it from where it
+// stands at spot: the remaining margin for IM, the liquidation buffer for maintenance margin.
+// The requirement itself is held fixed, so the level is an approximation.
 export function marginCallPnl(
   points: readonly CurvePoint[],
   spot: number,
-  remainingMarginUsd: number,
+  bufferUsd: number,
 ): number | null {
   const atSpot = nowPnlAt(points, spot);
-  return atSpot == null ? null : atSpot - remainingMarginUsd;
+  return atSpot == null ? null : atSpot - bufferUsd;
+}
+
+// Thalex liquidates below maintenance margin, which it sets at 70% of initial margin.
+export const THALEX_MAINTENANCE_MARGIN_RATIO = 0.7;
+
+export function liquidationBufferUsd(marginUsd: number, initialMarginUsd: number): number {
+  return marginUsd - THALEX_MAINTENANCE_MARGIN_RATIO * initialMarginUsd;
 }
 
 export function marginCallPrices(

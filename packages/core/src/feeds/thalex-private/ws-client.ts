@@ -10,6 +10,8 @@ import {
   thalexCashReplayEquity,
   thalexCashTransactions,
   thalexPortfolioToLegs,
+  thalexRealizedPnl,
+  thalexSettlementBoundary,
   thalexTradesToPortfolioTrades,
   type ThalexAccountEquity,
   type ThalexAccountMargin,
@@ -19,6 +21,7 @@ import {
   type ThalexAccountSummary,
   ThalexAccountSummaryNotificationSchema,
   ThalexAccountSummarySchema,
+  ThalexDailyMarkHistoryResultSchema,
   ThalexLoginResultSchema,
   ThalexPortfolioEntrySchema,
   ThalexPortfolioNotificationSchema,
@@ -26,6 +29,7 @@ import {
   ThalexTradeHistoryResultSchema,
   ThalexTransactionHistoryResultSchema,
   ThalexSubscribedChannelsSchema,
+  type ThalexDailyMark,
   type ThalexPortfolioEntry,
   type ThalexTrade,
   type ThalexTransaction,
@@ -35,6 +39,10 @@ const PROD_WS_URL = 'wss://thalex.com/ws/api/v2';
 const TEST_WS_URL = 'wss://testnet.thalex.com/ws/api/v2';
 const PRIVATE_CHANNELS = ['account.portfolio', 'account.summary', 'account.trade_history'] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
+const DAY_MS = 86_400_000;
+// Re-read the daily marks shortly after each 08:00 UTC settlement, then once more in case
+// the first read raced the settlement run.
+const DAILY_MARK_REFRESH_DELAYS_MS = [60_000, 5 * 60_000];
 
 function assertSubscribedChannels(result: unknown, channels: readonly string[]): string[] {
   const parsed = ThalexSubscribedChannelsSchema.safeParse(result);
@@ -94,6 +102,9 @@ export class ThalexPrivateClient {
   private latestEntries: ThalexPortfolioEntry[] = [];
   private latestMargin: ThalexAccountMargin | null = null;
   private latestEquity: ThalexAccountEquity | null = null;
+  private dailyMarks: ThalexDailyMark[] | null = null;
+  private dailyMarkTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly settlementListeners = new Set<() => void>();
   private nextId = 1;
   private disposed = false;
   private readonly log = feedLogger('thalex-private');
@@ -128,6 +139,7 @@ export class ThalexPrivateClient {
     await this.refreshPortfolio();
     await this.refreshTradeHistory();
     await this.refreshAccountMargin();
+    await this.refreshDailyMarks();
     this.log.info({ channels: subscribed }, 'thalex private subscribed');
   }
 
@@ -157,6 +169,25 @@ export class ThalexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  /** Fires when newly settled daily marks change realised P&L. */
+  subscribeSettlements(listener: () => void): () => void {
+    this.settlementListeners.add(listener);
+    return () => {
+      this.settlementListeners.delete(listener);
+    };
+  }
+
+  /** Realised option P&L against average cost; null until the daily marks have loaded. */
+  getRealizedPnl(underlying?: string): number | null {
+    if (this.dailyMarks == null) return null;
+    return thalexRealizedPnl({
+      dailyMarks: this.dailyMarks,
+      trades: this.latestTrades,
+      entries: this.latestEntries,
+      ...(underlying != null ? { underlying } : {}),
+    });
   }
 
   getLatestMargin(): ThalexAccountMargin | null {
@@ -205,6 +236,9 @@ export class ThalexPrivateClient {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    if (this.dailyMarkTimer != null) clearTimeout(this.dailyMarkTimer);
+    this.dailyMarkTimer = null;
+    this.settlementListeners.clear();
     this.listeners.clear();
     this.tradeListeners.clear();
     this.rejectAllPending('disposed');
@@ -259,6 +293,62 @@ export class ThalexPrivateClient {
     } catch (err) {
       this.log.warn({ err: String(err) }, 'thalex account summary bootstrap failed');
     }
+  }
+
+  private async refreshDailyMarks(): Promise<void> {
+    if (this.disposed) return;
+    try {
+      const known = this.dailyMarks ?? [];
+      const latestSec = known.reduce((max, mark) => Math.max(max, mark.time), 0);
+      const fetched: ThalexDailyMark[] = [];
+      let bookmark: string | undefined;
+      for (let page = 0; page < 100; page += 1) {
+        const result = await this.call('private/daily_mark_history', {
+          limit: 1_000,
+          time_low: latestSec,
+          ...(bookmark == null ? {} : { bookmark }),
+        });
+        const parsed = ThalexDailyMarkHistoryResultSchema.safeParse(result);
+        if (!parsed.success) {
+          throw new Error(
+            `[thalex-private] private/daily_mark_history returned an invalid payload: ${parsed.error.message}`,
+          );
+        }
+        fetched.push(...parsed.data.daily_marks);
+        bookmark = parsed.data.bookmark ?? undefined;
+        if (bookmark == null) break;
+      }
+      const byKey = new Map(known.map((mark) => [`${mark.instrument_name}|${mark.time}`, mark]));
+      for (const mark of fetched) byKey.set(`${mark.instrument_name}|${mark.time}`, mark);
+      const changed = this.dailyMarks == null || byKey.size !== known.length;
+      this.dailyMarks = [...byKey.values()];
+      if (changed) {
+        for (const listener of this.settlementListeners) {
+          try {
+            listener();
+          } catch {}
+        }
+      }
+      this.log.info({ dailyMarks: this.dailyMarks.length, added: byKey.size - known.length }, 'thalex daily marks ok');
+    } catch (err) {
+      this.log.warn({ err: String(err) }, 'thalex daily mark history failed');
+    }
+    this.scheduleDailyMarkRefresh();
+  }
+
+  private scheduleDailyMarkRefresh(): void {
+    if (this.disposed) return;
+    if (this.dailyMarkTimer != null) clearTimeout(this.dailyMarkTimer);
+    const nowMs = Date.now();
+    const settlement = thalexSettlementBoundary(nowMs);
+    const nextAt = [settlement, settlement + DAY_MS]
+      .flatMap((at) => DAILY_MARK_REFRESH_DELAYS_MS.map((delay) => at + delay))
+      .find((at) => at > nowMs)!;
+    this.dailyMarkTimer = setTimeout(() => {
+      this.dailyMarkTimer = null;
+      void this.refreshDailyMarks();
+    }, nextAt - nowMs);
+    this.dailyMarkTimer.unref?.();
   }
 
   private async refreshTradeHistory(): Promise<void> {

@@ -5,6 +5,7 @@ export const ThalexPortfolioEntrySchema = z
     instrument_name: z.string(),
     position: z.number(),
     average_price: z.number().nullable().optional(),
+    start_price: z.number().nullable().optional(),
     mark_price: z.number().nullable().optional(),
     delta: z.number().nullable().optional(),
     gamma: z.number().nullable().optional(),
@@ -115,3 +116,20 @@ export const ThalexTransactionHistoryResultSchema = z.object({
   bookmark: z.string().nullable().optional(),
 });
 export type ThalexTransactionHistoryResult = z.infer<typeof ThalexTransactionHistoryResultSchema>;
+
+export const ThalexDailyMarkSchema = z
+  .object({
+    time: z.number(),
+    instrument_name: z.string(),
+    position: z.number(),
+    mark_price: z.number(),
+    realized_position_pnl: z.number(),
+    realized_funding_pnl: z.number().optional(),
+  })
+  .passthrough();
+export type ThalexDailyMark = z.infer<typeof ThalexDailyMarkSchema>;
+
+export const ThalexDailyMarkHistoryResultSchema = z.object({
+  daily_marks: z.array(ThalexDailyMarkSchema),
+  bookmark: z.string().nullable().optional(),
+});

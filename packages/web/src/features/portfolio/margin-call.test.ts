@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { marginCallPnl, marginCallPrices, nowPnlAt } from './margin-call';
+import { liquidationBufferUsd, marginCallPnl, marginCallPrices, nowPnlAt } from './margin-call';
 
 const points = [
   { underlyingPriceUsd: 60_000, nowPnlUsd: -1_000, forwardPnlUsd: null, expiryPnlUsd: -1_000 },
@@ -24,5 +24,10 @@ describe('margin call helpers', () => {
 
   it('reports no breach when the curve never reaches the level', () => {
     expect(marginCallPrices(points, 80_000, -5_000)).toEqual({ below: null, above: null });
+  });
+
+  it('measures the liquidation buffer down to maintenance margin at 70% of IM', () => {
+    expect(liquidationBufferUsd(1_000, 1_000)).toBeCloseTo(300, 9);
+    expect(liquidationBufferUsd(500, 1_000)).toBeCloseTo(-200, 9);
   });
 });

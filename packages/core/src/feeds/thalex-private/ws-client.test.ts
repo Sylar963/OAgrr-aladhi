@@ -12,7 +12,9 @@ const thalexWsMockState = vi.hoisted(() => ({
       average_price: 1850.5,
       mark_price: 1900,
     },
-  ],
+  ] as Array<Record<string, unknown>>,
+  tradeHistoryResult: { trades: [] as Array<Record<string, unknown>> },
+  dailyMarksResult: { daily_marks: [] as Array<Record<string, unknown>>, bookmark: null },
 }));
 
 const ACCOUNT_SUMMARY = vi.hoisted(() => ({
@@ -83,10 +85,12 @@ vi.mock('../shared/topic-ws-client.js', () => ({
             : method === 'private/portfolio'
               ? thalexWsMockState.portfolioResult
               : method === 'private/trade_history'
-                ? { trades: [] }
+                ? thalexWsMockState.tradeHistoryResult
                 : method === 'private/account_summary'
                   ? ACCOUNT_SUMMARY
-                  : null;
+                  : method === 'private/daily_mark_history'
+                    ? thalexWsMockState.dailyMarksResult
+                    : null;
 
       this.options.onMessage?.(Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, result })));
     }
@@ -109,6 +113,8 @@ afterEach(() => {
       mark_price: 1900,
     },
   ];
+  thalexWsMockState.tradeHistoryResult = { trades: [] };
+  thalexWsMockState.dailyMarksResult = { daily_marks: [], bookmark: null };
 });
 
 describe('ThalexPrivateClient', () => {
@@ -134,6 +140,7 @@ describe('ThalexPrivateClient', () => {
       'private/portfolio',
       'private/trade_history',
       'private/account_summary',
+      'private/daily_mark_history',
     ]);
     expect(listener).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -185,5 +192,44 @@ describe('ThalexPrivateClient', () => {
       marginUsd: 20_000,
       remainingMarginUsd: 5_000,
     });
+  });
+
+  it('reports realised P&L from the daily marks, this session\'s closes and open legs\' settled part', async () => {
+    const settledAt = Date.UTC(2026, 9, 21, 8);
+    thalexWsMockState.portfolioResult = [
+      {
+        instrument_name: 'BTC-21APR26-75000-C',
+        position: 2,
+        average_price: 1_000,
+        start_price: 1_150,
+        mark_price: 1_200,
+      },
+    ];
+    thalexWsMockState.dailyMarksResult = {
+      daily_marks: [
+        { time: settledAt / 1000, instrument_name: 'BTC-21APR26-75000-C', position: 2, mark_price: 1_150, realized_position_pnl: 300 },
+        { time: settledAt / 1000, instrument_name: 'ETH-21APR26-3000-P', position: 0, mark_price: 50, realized_position_pnl: -40 },
+        { time: settledAt / 1000, instrument_name: 'BTC-PERPETUAL', position: 1, mark_price: 100_000, realized_position_pnl: 999 },
+      ],
+      bookmark: null,
+    };
+    thalexWsMockState.tradeHistoryResult = {
+      trades: [
+        { trade_id: 'before', instrument_name: 'BTC-21APR26-80000-C', direction: 'sell', price: 500, amount: 1, time: settledAt / 1000 - 60, position_pnl: 70 },
+        { trade_id: 'after', instrument_name: 'BTC-21APR26-80000-C', direction: 'sell', price: 600, amount: 1, time: settledAt / 1000 + 60, position_pnl: 25 },
+      ],
+    };
+    const client = new ThalexPrivateClient({
+      kid: 'kid-1',
+      privateKeyPem: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
+    });
+
+    expect(client.getRealizedPnl()).toBeNull();
+    await client.start();
+
+    expect(client.getRealizedPnl()).toBe(300 - 40 + 25 + (1_000 - 1_150) * 2);
+    expect(client.getRealizedPnl('BTC')).toBe(300 + 25 + (1_000 - 1_150) * 2);
+    expect(client.getRealizedPnl('ETH')).toBe(-40);
+    await client.dispose();
   });
 });

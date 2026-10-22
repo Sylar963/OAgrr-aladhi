@@ -1,6 +1,7 @@
 import { EmptyState, Spinner } from '@components/ui';
 import { ChainTable, ExpiryBar, StatStrip } from '@features/chain';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { defineMessages, useT } from '@lib/i18n';
 import { useEffect, useState } from 'react';
 import { useTradfiChain, useTradfiSelection } from './queries';
 import styles from './TradfiChainView.module.css';
@@ -9,7 +10,27 @@ import { openTradfiChartPopout } from './tradfi-chart-popout';
 
 const TRADFI_VENUES = ['tastytrade'];
 
+const messages = defineMessages(
+  {
+    loading: 'Loading TradFi chain…',
+    failed: 'Failed to load TradFi chain',
+    serviceHint: 'Is the TradFi service running on :3200?',
+    noOptions: 'No options data',
+    noData: 'No data for {underlying} {expiry}.',
+    chartLabel: '{underlying} {strike} {type} chart',
+  },
+  {
+    loading: 'Cargando cadena TradFi…',
+    failed: 'No se pudo cargar la cadena TradFi',
+    serviceHint: '¿El servicio TradFi está corriendo en :3200?',
+    noOptions: 'Sin datos de opciones',
+    noData: 'Sin datos para {underlying} {expiry}.',
+    chartLabel: 'Gráfico {underlying} {strike} {type}',
+  },
+);
+
 export default function TradfiChainView() {
+  const t = useT(messages);
   const isMobile = useIsMobile();
   const [modal, setModal] = useState<TradfiChartPanelData | null>(null);
   const { underlying, expiry, setExpiry, expiries, cycleUnderlying } = useTradfiSelection();
@@ -61,21 +82,21 @@ export default function TradfiChainView() {
       )}
 
       <div className={styles.tableArea}>
-        {isLoading && !chain && <Spinner size="lg" label="Loading TradFi chain…" />}
+        {isLoading && !chain && <Spinner size="lg" label={t('loading')} />}
         {error && !chain && (
           <EmptyState
             icon="⚠"
-            title="Failed to load TradFi chain"
+            title={t('failed')}
             detail={
-              error instanceof Error ? error.message : 'Is the TradFi service running on :3200?'
+              error instanceof Error ? error.message : t('serviceHint')
             }
           />
         )}
         {chain && chain.strikes.length === 0 && (
           <EmptyState
             icon="∅"
-            title="No options data"
-            detail={`No data for ${underlying} ${expiry}.`}
+            title={t('noOptions')}
+            detail={t('noData', { underlying, expiry })}
           />
         )}
         {chain && chain.strikes.length > 0 && (
@@ -100,7 +121,11 @@ export default function TradfiChainView() {
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={`${modal.underlying} ${modal.strike} ${modal.type.toUpperCase()} chart`}
+            aria-label={t('chartLabel', {
+              underlying: modal.underlying,
+              strike: modal.strike,
+              type: modal.type.toUpperCase(),
+            })}
           >
             <TradfiChartPanel
               data={modal}

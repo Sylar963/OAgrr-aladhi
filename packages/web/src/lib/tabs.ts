@@ -1,3 +1,6 @@
+import { defineMessages, useT } from '@lib/i18n';
+import { useMemo } from 'react';
+
 export type TabId =
   | 'chain'
   | 'alpha'
@@ -39,6 +42,43 @@ export const TABS: readonly TabDef[] = [
   { id: 'analytics', label: 'Analytics', slug: 'analytics', icon: '◎', group: 'research' },
   { id: 'news', label: 'News', slug: 'news', icon: '▤', group: 'research', badge: 'NEW' },
 ] as const;
+
+const tabMessages = defineMessages(
+  {
+    chain: 'Chain',
+    surface: 'Volatility',
+    gex: 'GEX',
+    flow: 'Flow',
+    sectors: 'Sectors',
+    architect: 'Builder',
+    trading: 'Paper',
+    portfolio: 'Portfolio',
+    social: 'Social',
+    alpha: 'Alpha',
+    analytics: 'Analytics',
+    news: 'News',
+  } satisfies Record<TabId, string>,
+  {
+    chain: 'Cadena',
+    surface: 'Volatilidad',
+    gex: 'GEX',
+    flow: 'Flujo',
+    sectors: 'Sectores',
+    architect: 'Constructor',
+    trading: 'Paper',
+    portfolio: 'Portafolio',
+    social: 'Social',
+    alpha: 'Alpha',
+    analytics: 'Analítica',
+    news: 'Noticias',
+  },
+);
+
+/** TABS with labels in the active language. */
+export function useTabs(): readonly TabDef[] {
+  const t = useT(tabMessages);
+  return useMemo(() => TABS.map((tab) => ({ ...tab, label: t(tab.id) })), [t]);
+}
 
 export const DEFAULT_TAB: TabId = 'chain';
 

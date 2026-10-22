@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  PortfolioAssistantApiError,
   createPortfolioAssistantThread,
   deletePortfolioAssistantThread,
   fetchPortfolioAssistantAccess,
@@ -100,6 +101,7 @@ export interface PortfolioAssistantConversationState {
   isLoading: boolean;
   isStreaming: boolean;
   error: string | null;
+  errorCode: string | null;
   sendMessage: (message: string, forwardDays: number) => Promise<void>;
   stop: () => void;
 }
@@ -120,6 +122,7 @@ export function usePortfolioAssistantConversation(
   const [messages, setMessages] = useState<PortfolioAssistantMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -163,6 +166,7 @@ export function usePortfolioAssistantConversation(
       );
     } else if (event.type === 'error') {
       setError(event.message);
+      setErrorCode(event.code);
       setMessages((current) =>
         current.map((item) => (item.status === 'streaming' ? { ...item, status: 'failed' } : item)),
       );
@@ -187,6 +191,7 @@ export function usePortfolioAssistantConversation(
         },
       ]);
       setError(null);
+      setErrorCode(null);
       setIsStreaming(true);
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -200,6 +205,13 @@ export function usePortfolioAssistantConversation(
       } catch (caught) {
         if (!(caught instanceof DOMException && caught.name === 'AbortError')) {
           setError(caught instanceof Error ? caught.message : 'Could not ask Hermes.');
+          setErrorCode(
+            caught instanceof PortfolioAssistantApiError
+              ? caught.code
+              : caught instanceof Error
+                ? null
+                : 'ask_failed',
+          );
         }
       } finally {
         controllerRef.current = null;
@@ -212,7 +224,7 @@ export function usePortfolioAssistantConversation(
 
   const stop = useCallback(() => controllerRef.current?.abort(), []);
 
-  return { messages, isLoading: query.isLoading, isStreaming, error, sendMessage, stop };
+  return { messages, isLoading: query.isLoading, isStreaming, error, errorCode, sendMessage, stop };
 }
 
 export function usePortfolioAssistantMemory(enabled = true) {

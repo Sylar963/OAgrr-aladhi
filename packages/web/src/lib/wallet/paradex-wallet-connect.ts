@@ -1,6 +1,9 @@
 import { connectVenue, fetchParadexTokenSettings } from '@features/portfolio/api';
 
+import { translate } from '@lib/i18n';
+
 import { connectWallet, signWalletMessage } from './appkit';
+import { walletMessages } from './i18n';
 import {
   buildParadexSiweAuthMessage,
   createParadexReadonlyToken,
@@ -11,9 +14,7 @@ import {
 
 export class ParadexStarknetAccountError extends Error {
   constructor() {
-    super(
-      'This wallet’s Paradex account was created before wallet sign-in, so it cannot connect this way. Create a read-only key in Paradex (Settings → Key Management → Read-only) and paste it below.',
-    );
+    super(translate(walletMessages, 'paradexStarknet'));
     this.name = 'ParadexStarknetAccountError';
   }
 }
@@ -30,7 +31,7 @@ export async function connectParadexWallet(): Promise<void> {
   const walletAddress = await connectWallet();
   const account = await lookupParadexEvmAccount(PARADEX_PROD, walletAddress);
   if (account.kind === 'starknet_linked') throw new ParadexStarknetAccountError();
-  if (account.kind === 'not_onboarded') throw new Error('This wallet has no Paradex account.');
+  if (account.kind === 'not_onboarded') throw new Error(translate(walletMessages, 'noParadexAccount'));
 
   const settings = await fetchParadexTokenSettings();
   const siweMessage = buildParadexSiweAuthMessage({

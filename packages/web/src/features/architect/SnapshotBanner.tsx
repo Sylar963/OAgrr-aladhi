@@ -1,6 +1,49 @@
 import { useEffect, useState } from 'react';
 
+import { defineMessages, useT, type Translate } from '@lib/i18n';
+
 import styles from './Architect.module.css';
+
+const messages = defineMessages(
+  {
+    secondsAgo: '{s}s ago',
+    minutesAgo: '{m}m {s}s ago',
+    retrying: 'Retrying live history…',
+    fetchingUpstream: 'fetching from upstream',
+    unavailable: 'Live history unavailable',
+    fetchFailed: 'upstream candle fetch failed',
+    retry: 'Retry',
+    stale: 'History sync stale',
+    showingCached: 'last refresh failed — showing cached candles',
+    loading: 'Loading live chart…',
+    noHistory: 'No live history available',
+    emptyUpstream: 'upstream returned empty data',
+    switching: 'Switching live window…',
+    windowCandles: '{window} window · {interval} candles',
+    refreshing: 'Refreshing Deribit perp history…',
+    active: 'Deribit perp history active',
+    windowCandlesSync: '{window} window · {interval} candles · sync {age}',
+  },
+  {
+    secondsAgo: 'hace {s}s',
+    minutesAgo: 'hace {m}m {s}s',
+    retrying: 'Reintentando historial en vivo…',
+    fetchingUpstream: 'obteniendo desde la fuente',
+    unavailable: 'Historial en vivo no disponible',
+    fetchFailed: 'falló la descarga de velas de la fuente',
+    retry: 'Reintentar',
+    stale: 'Sincronización de historial desactualizada',
+    showingCached: 'falló la última actualización — mostrando velas en caché',
+    loading: 'Cargando gráfico en vivo…',
+    noHistory: 'No hay historial en vivo disponible',
+    emptyUpstream: 'la fuente devolvió datos vacíos',
+    switching: 'Cambiando ventana en vivo…',
+    windowCandles: 'ventana {window} · velas {interval}',
+    refreshing: 'Actualizando historial del perp de Deribit…',
+    active: 'Historial del perp de Deribit activo',
+    windowCandlesSync: 'ventana {window} · velas {interval} · sinc. {age}',
+  },
+);
 
 interface SnapshotBannerProps {
   dataUpdatedAt: number;
@@ -15,11 +58,11 @@ interface SnapshotBannerProps {
   onRetry?: () => void;
 }
 
-function formatAge(seconds: number): string {
+function formatAge(seconds: number, t: Translate<typeof messages.en>): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  if (m === 0) return `${s}s ago`;
-  return `${m}m ${s.toString().padStart(2, '0')}s ago`;
+  if (m === 0) return t('secondsAgo', { s });
+  return t('minutesAgo', { m, s: s.toString().padStart(2, '0') });
 }
 
 export default function SnapshotBanner({
@@ -34,6 +77,7 @@ export default function SnapshotBanner({
   isEmpty = false,
   onRetry,
 }: SnapshotBannerProps) {
+  const t = useT(messages);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -46,8 +90,8 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Retrying live history…</span>
-        <span className={styles.snapshotSecondary}>fetching from upstream</span>
+        <span className={styles.snapshotPrimary}>{t('retrying')}</span>
+        <span className={styles.snapshotSecondary}>{t('fetchingUpstream')}</span>
       </div>
     );
   }
@@ -58,13 +102,13 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Live history unavailable</span>
+        <span className={styles.snapshotPrimary}>{t('unavailable')}</span>
         <span className={styles.snapshotSecondary}>
-          {errorMessage ?? 'upstream candle fetch failed'}
+          {errorMessage ?? t('fetchFailed')}
         </span>
         {onRetry && (
           <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
-            Retry
+            {t('retry')}
           </button>
         )}
       </div>
@@ -77,13 +121,13 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>History sync stale</span>
+        <span className={styles.snapshotPrimary}>{t('stale')}</span>
         <span className={styles.snapshotSecondary}>
-          {errorMessage ?? 'last refresh failed — showing cached candles'}
+          {errorMessage ?? t('showingCached')}
         </span>
         {onRetry && (
           <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
-            Retry
+            {t('retry')}
           </button>
         )}
       </div>
@@ -94,7 +138,7 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span>Loading live chart…</span>
+        <span>{t('loading')}</span>
       </div>
     );
   }
@@ -105,11 +149,11 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="error">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>No live history available</span>
-        <span className={styles.snapshotSecondary}>upstream returned empty data</span>
+        <span className={styles.snapshotPrimary}>{t('noHistory')}</span>
+        <span className={styles.snapshotSecondary}>{t('emptyUpstream')}</span>
         {onRetry && (
           <button type="button" className={styles.snapshotRetry} onClick={onRetry}>
-            Retry
+            {t('retry')}
           </button>
         )}
       </div>
@@ -122,22 +166,28 @@ export default function SnapshotBanner({
     return (
       <div className={styles.snapshotBanner} data-state="loading">
         <span className={styles.snapshotDot} />
-        <span className={styles.snapshotPrimary}>Switching live window…</span>
-        <span className={styles.snapshotSecondary}>{windowLabel} window · {intervalLabel} candles</span>
+        <span className={styles.snapshotPrimary}>{t('switching')}</span>
+        <span className={styles.snapshotSecondary}>
+          {t('windowCandles', { window: windowLabel, interval: intervalLabel })}
+        </span>
       </div>
     );
   }
 
   const elapsed = dataUpdatedAt ? Date.now() - dataUpdatedAt : 0;
   const seconds = Math.floor(elapsed / 1000);
-  const livePrimary = isFetching ? 'Refreshing Deribit perp history…' : 'Deribit perp history active';
+  const livePrimary = isFetching ? t('refreshing') : t('active');
 
   return (
     <div className={styles.snapshotBanner} data-state={isFetching ? 'loading' : 'fresh'}>
       <span className={styles.snapshotDot} />
       <span className={styles.snapshotPrimary}>{livePrimary}</span>
       <span className={styles.snapshotSecondary}>
-        {windowLabel} window · {intervalLabel} candles · sync {formatAge(seconds)}
+        {t('windowCandlesSync', {
+          window: windowLabel,
+          interval: intervalLabel,
+          age: formatAge(seconds, t),
+        })}
       </span>
     </div>
   );

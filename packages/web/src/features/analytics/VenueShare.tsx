@@ -1,7 +1,9 @@
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { fmtUsdCompact } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { computeVenueRows, IV_GAP_MIN_DTE } from './positioning-utils';
+import { positioningMessages } from './i18n';
 import styles from './Positioning.module.css';
 
 interface VenueShareProps {
@@ -25,31 +27,30 @@ function gapClass(v: number | null): string | undefined {
 }
 
 export default function VenueShare({ chains }: VenueShareProps) {
+  const t = useT(positioningMessages);
   const rows = computeVenueRows(chains);
   const maxShare = Math.max(...rows.map((r) => r.oiShare ?? 0), 0.0001);
 
   return (
     <div className={styles.card} data-half>
       <div className={styles.cardHead}>
-        <span className={styles.cardTitle}>Venue Share & Pricing</span>
-        <span className={styles.cardSubtitle}>
-          Market share, activity, and ATM IV vs cross-venue median
-        </span>
+        <span className={styles.cardTitle}>{t('venueTitle')}</span>
+        <span className={styles.cardSubtitle}>{t('venueSubtitle')}</span>
       </div>
 
       {rows.length === 0 ? (
-        <div className={styles.empty}>No venue data.</div>
+        <div className={styles.empty}>{t('noVenueData')}</div>
       ) : (
         <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Venue</th>
-                <th>OI Share</th>
-                <th>OI</th>
-                <th>Vol Share</th>
-                <th>Turnover</th>
-                <th>ATM IV Gap</th>
+                <th>{t('venue')}</th>
+                <th>{t('oiShare')}</th>
+                <th>{t('oi')}</th>
+                <th>{t('volShare')}</th>
+                <th>{t('turnover')}</th>
+                <th>{t('atmIvGap')}</th>
               </tr>
             </thead>
             <tbody>
@@ -78,7 +79,7 @@ export default function VenueShare({ chains }: VenueShareProps) {
                     <td
                       className={gapClass(r.ivGapVp)}
                       title={
-                        r.ivGapSamples > 0 ? `averaged over ${r.ivGapSamples} expiries` : undefined
+                        r.ivGapSamples > 0 ? t('gapSamples', { n: r.ivGapSamples }) : undefined
                       }
                     >
                       {fmtGap(r.ivGapVp)}
@@ -91,11 +92,7 @@ export default function VenueShare({ chains }: VenueShareProps) {
         </div>
       )}
 
-      <span className={styles.footnote}>
-        ATM IV gap: venue mark IV interpolated at the forward minus the cross-venue median,
-        averaged over expiries ≥{IV_GAP_MIN_DTE}d · red = richer (sell there), green = cheaper
-        (buy there)
-      </span>
+      <span className={styles.footnote}>{t('venueFootnote', { n: IV_GAP_MIN_DTE })}</span>
     </div>
   );
 }

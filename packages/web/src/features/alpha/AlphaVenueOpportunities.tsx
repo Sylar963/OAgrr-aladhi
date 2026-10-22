@@ -1,10 +1,31 @@
+import { defineMessages, useT } from '@lib/i18n';
 import type { VenueId } from '@shared/enriched';
+import { alphaMessages, VERTICAL_LABEL_KEYS } from './i18n';
 import { CandidateRow, OpportunityCard, OpportunitySection } from './OpportunityCard';
 import type { MarkIndicative } from './spread-scanner';
 import { formatQuantity } from './venue-sizing';
 import type { SpreadCandidate, VenueScan } from './spread-scanner';
-import { VERTICAL_LABELS, type VerticalKind } from './vertical-pricing';
+import type { VerticalKind } from './vertical-pricing';
 import styles from './VenueOpportunities.module.css';
+
+const messages = defineMessages(
+  {
+    title: 'Same-venue spreads',
+    subtitle: 'Both legs execute on one venue',
+    emptyHint: 'Enter account equity to map each venue.',
+    note: 'Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your loss limit; within budget, rows are ordered by EV per standard deviation of expiry P&L.',
+    settlesIn: 'settles in {underlying}',
+    premium: '{value} {underlying} premium',
+  },
+  {
+    title: 'Spreads en un solo exchange',
+    subtitle: 'Ambas patas se ejecutan en un exchange',
+    emptyHint: 'Ingresa el capital de la cuenta para mapear cada exchange.',
+    note: 'Verde significa “revisar”, no “comprar”. El ranking usa bid/ask en vivo, comisiones conocidas, tu tamaño y tu límite de pérdida; dentro del presupuesto, las filas se ordenan por EV por desviación estándar del P&L al vencimiento.',
+    settlesIn: 'liquida en {underlying}',
+    premium: 'prima de {value} {underlying}',
+  },
+);
 
 export default function AlphaVenueOpportunities({
   scans,
@@ -26,6 +47,8 @@ export default function AlphaVenueOpportunities({
   buyStrike: number | null;
   onSelect: (candidate: SpreadCandidate) => void;
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const visibleCount = scans.reduce(
     (total, scan) => total + scan.candidates.filter((candidate) => candidate.kind === kind).length,
     0,
@@ -33,11 +56,11 @@ export default function AlphaVenueOpportunities({
 
   return (
     <OpportunitySection
-      title="Same-venue spreads"
-      subtitle="Both legs execute on one venue"
+      title={t('title')}
+      subtitle={t('subtitle')}
       count={visibleCount}
-      emptyHint="Enter account equity to map each venue."
-      note="Green means “inspect,” not “buy.” Ranking uses live bid/ask, known fees, your size and your loss limit; within budget, rows are ordered by EV per standard deviation of expiry P&L."
+      emptyHint={t('emptyHint')}
+      note={t('note')}
       isEmpty={scans.length === 0}
     >
       {scans.map((scan) => {
@@ -63,15 +86,17 @@ export default function AlphaVenueOpportunities({
               <CandidateRow
                 key={candidate.id}
                 candidate={candidate}
-                title={candidate === selected ? 'Selected' : VERTICAL_LABELS[candidate.kind]}
+                title={ta(candidate === selected ? 'selected' : VERTICAL_LABEL_KEYS[candidate.kind])}
                 selected={candidate === selected}
                 detail={
                   candidate.basePremium != null && (
                     <span className={styles.settlementNote}>
-                      <span>settles in {underlying}</span>
+                      <span>{t('settlesIn', { underlying })}</span>
                       <span>
-                        {candidate.basePremium > 0 ? '+' : ''}
-                        {candidate.basePremium.toFixed(4)} {underlying} premium
+                        {t('premium', {
+                          value: `${candidate.basePremium > 0 ? '+' : ''}${candidate.basePremium.toFixed(4)}`,
+                          underlying,
+                        })}
                       </span>
                     </span>
                   )

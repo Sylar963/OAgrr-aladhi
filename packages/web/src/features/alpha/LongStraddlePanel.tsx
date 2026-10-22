@@ -10,9 +10,11 @@ import {
 import { Spinner } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { fmtIv } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
+import { alphaMessages } from './i18n';
 import LongStraddleDecisionCard from './LongStraddleDecisionCard';
 import LongStraddleVenueCards, { longStraddleKey } from './LongStraddleVenueCards';
 import { longStraddleToBuilderLegs } from './radar-builder';
@@ -26,6 +28,35 @@ const DTE_PRESETS = [
   { label: '1–45D', minDte: 1, maxDte: 45 },
 ] as const;
 const MAX_SPREAD_PCT = 10;
+
+const messages = defineMessages(
+  {
+    eyebrow: '{underlying} · {n} ACTIVE VENUES · LONG ATM STRADDLES',
+    title: 'Buy cheap volatility, when the forecast pays for it',
+    description:
+      'Buyable IV at the asks after fees, compared with the same realized-vol forecast the Sell Straddle tab uses, and the vol cone. A straddle has to be priced below the forecast by more than the fair band, and low on the cone, before it can be a buy candidate.',
+    maxLossBudget: 'Max-loss budget',
+    maxLossAria: 'Percent of equity that the debit may use',
+    invalidSizing: 'Enter positive equity and a max-loss budget between 0 and 100%.',
+    cappedLoss:
+      'Loss is capped at the debit paid. Size is fitted to the budget, not a recommendation. No order is sent.',
+    countBuy: '{n} BUY',
+    countExpensive: '{n} EXPENSIVE',
+  },
+  {
+    eyebrow: '{underlying} · {n} EXCHANGES ACTIVOS · LONG STRADDLES ATM',
+    title: 'Compra volatilidad barata, cuando el pronóstico la paga',
+    description:
+      'IV comprable en los asks después de comisiones, comparada con el mismo pronóstico de vol realizada que usa la pestaña Vender straddle, y el cono de vol. Un straddle debe tener un precio por debajo del pronóstico por más de la banda justa, y estar bajo en el cono, antes de ser candidato a compra.',
+    maxLossBudget: 'Presupuesto de pérdida máx.',
+    maxLossAria: 'Porcentaje del capital que puede usar el débito',
+    invalidSizing: 'Ingresa un capital positivo y un presupuesto de pérdida máx. entre 0 y 100%.',
+    cappedLoss:
+      'La pérdida está limitada al débito pagado. El tamaño se ajusta al presupuesto, no es una recomendación. No se envía ninguna orden.',
+    countBuy: '{n} COMPRAR',
+    countExpensive: '{n} CAROS',
+  },
+);
 
 function scannerVenues(venues: string[]): VenueId[] {
   return venues.flatMap((venue) => {
@@ -45,6 +76,8 @@ interface LongStraddlePanelProps {
 }
 
 export default function LongStraddlePanel({ underlying, venues }: LongStraddlePanelProps) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const [dtePreset, setDtePreset] = useState(3);
   const [equityInput, setEquityInput] = useState('10000');
   const [riskInput, setRiskInput] = useState('1');
@@ -93,21 +126,17 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
       <header className={styles.header}>
         <div>
           <div className={styles.eyebrow}>
-            {underlying} · {activeVenues.length} ACTIVE VENUES · LONG ATM STRADDLES
+            {t('eyebrow', { underlying, n: activeVenues.length })}
           </div>
-          <h2 className={styles.title}>Buy cheap volatility, when the forecast pays for it</h2>
-          <p className={styles.description}>
-            Buyable IV at the asks after fees, compared with the same realized-vol forecast the Sell
-            Straddle tab uses, and the vol cone. A straddle has to be priced below the forecast by
-            more than the fair band, and low on the cone, before it can be a buy candidate.
-          </p>
+          <h2 className={styles.title}>{t('title')}</h2>
+          <p className={styles.description}>{t('description')}</p>
         </div>
-        <span className={styles.scanOnly}>SCAN ONLY</span>
+        <span className={styles.scanOnly}>{ta('scanOnly')}</span>
       </header>
 
       <div className={styles.controls}>
         <fieldset className={styles.controlGroup}>
-          <legend>Expiry window</legend>
+          <legend>{ta('expiryWindow')}</legend>
           <div className={styles.presetRow}>
             {DTE_PRESETS.map((preset, index) => (
               <button
@@ -123,25 +152,25 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
           </div>
         </fieldset>
         <label className={styles.inputControl} data-invalid={equity == null || undefined}>
-          <span>Equity</span>
+          <span>{ta('equity')}</span>
           <div className={styles.inputShell}>
             <span>$</span>
             <input
               inputMode="decimal"
               value={equityInput}
-              aria-label="Account equity for straddle sizing"
+              aria-label={ta('equityAria')}
               aria-invalid={equity == null}
               onChange={(event) => setEquityInput(event.target.value)}
             />
           </div>
         </label>
         <label className={styles.inputControl} data-invalid={riskPct == null || undefined}>
-          <span>Max-loss budget</span>
+          <span>{t('maxLossBudget')}</span>
           <div className={styles.inputShell}>
             <input
               inputMode="decimal"
               value={riskInput}
-              aria-label="Percent of equity that the debit may use"
+              aria-label={t('maxLossAria')}
               aria-invalid={riskPct == null}
               onChange={(event) => setRiskInput(event.target.value)}
             />
@@ -149,29 +178,31 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
           </div>
         </label>
         <div className={styles.fixedRules}>
-          <span>ATM strike per venue/expiry</span>
-          <span>≤{MAX_SPREAD_PCT}% straddle spread</span>
+          <span>{ta('atmStrikePerVenue')}</span>
+          <span>{ta('maxStraddleSpread', { pct: MAX_SPREAD_PCT })}</span>
         </div>
       </div>
 
       {!sizingValid && (
         <div className={styles.message} data-tone="error">
-          Enter positive equity and a max-loss budget between 0 and 100%.
+          {t('invalidSizing')}
         </div>
       )}
       {activeVenues.length === 0 && (
-        <div className={styles.message}>No supported active venues are available for this scan.</div>
+        <div className={styles.message}>{ta('noSupportedVenues')}</div>
       )}
       {query.isLoading && !data && sizingValid && (
         <div className={styles.message}>
-          <Spinner size="sm" label={`Scanning ${activeVenues.length} venues…`} />
+          <Spinner size="sm" label={ta('scanningVenues', { n: activeVenues.length })} />
         </div>
       )}
       {query.error && (
         <div className={styles.message} data-tone="error">
           {data
-            ? `Refresh failed; showing the scan from ${new Date(data.generatedAt).toLocaleTimeString()}.`
-            : `Scanner unavailable: ${query.error instanceof Error ? query.error.message : 'request failed'}`}
+            ? ta('refreshFailed', { time: new Date(data.generatedAt).toLocaleTimeString() })
+            : ta('scannerUnavailable', {
+                error: query.error instanceof Error ? query.error.message : ta('requestFailed'),
+              })}
         </div>
       )}
 
@@ -180,14 +211,17 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
           <RegimeStrip data={data} refreshing={query.isFetching} />
           {unavailableVenues.length > 0 && (
             <div className={styles.venueWarning}>
-              Partial or no scan data from{' '}
-              {unavailableVenues.map((status) => VENUES[status.venue]?.label ?? status.venue).join(', ')}.
+              {ta('partialScanData', {
+                venues: unavailableVenues
+                  .map((status) => VENUES[status.venue]?.label ?? status.venue)
+                  .join(', '),
+              })}
             </div>
           )}
           <div className={styles.decisionStack}>
             <LongStraddleDecisionCard
               candidate={selected}
-              emptyReason={`No executable ${underlying} ATM straddles in this window. Check spreads, fees, and quote freshness, or widen the expiry window.`}
+              emptyReason={ta('noStraddlesInWindow', { underlying })}
               budgetUsd={(data.config.equity * data.config.riskPct) / 100}
               onOpenBuilder={openInBuilder}
             />
@@ -202,11 +236,12 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
 
       <footer className={styles.footer}>
         <span>
-          The forecast decays 7D realized vol toward the {data?.forecast.longRunDays || 180}D level
-          with a {data?.forecast.halfLifeDays ?? 14}-day half-life. That half-life is an assumption
-          not fitted to BTC, and the forecast is not an event model.
+          {ta('forecastFooter', {
+            longRun: data?.forecast.longRunDays || 180,
+            halfLife: data?.forecast.halfLifeDays ?? 14,
+          })}
         </span>
-        <span>Loss is capped at the debit paid. Size is fitted to the budget, not a recommendation. No order is sent.</span>
+        <span>{t('cappedLoss')}</span>
       </footer>
     </section>
   );
@@ -219,6 +254,8 @@ function RegimeStrip({
   data: AlphaLongStraddleScannerResponse;
   refreshing: boolean;
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const counts: Record<AlphaLongStraddleVerdict, number> = {
     'buy-candidate': 0,
     watch: 0,
@@ -235,7 +272,7 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        LONG-RUN <strong>{fmtIv(data.forecast.longRunVol)}</strong>
+        {ta('longRun')} <strong>{fmtIv(data.forecast.longRunVol)}</strong>
       </span>
       <span>
         ATM IV 7D / 30D{' '}
@@ -244,7 +281,7 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        IV RANK 30D{' '}
+        {ta('ivRank30d')}{' '}
         <strong>
           {data.context.ivPercentile30d == null
             ? '—'
@@ -252,17 +289,17 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        TERM <strong>{data.context.termStructure.toUpperCase()}</strong>
+        {ta('term')} <strong>{data.context.termStructure.toUpperCase()}</strong>
       </span>
       <span>
-        SPOT <strong>{data.context.spotState.replaceAll('-', ' ').toUpperCase()}</strong>
+        {ta('spotLabel')} <strong>{data.context.spotState.replaceAll('-', ' ').toUpperCase()}</strong>
       </span>
       <span className={styles.counts}>
-        <strong data-verdict="buy-candidate">{counts['buy-candidate']} BUY</strong>
-        <strong data-verdict="watch">{counts.watch} WATCH</strong>
-        <strong data-verdict="expensive">{counts.expensive} EXPENSIVE</strong>
+        <strong data-verdict="buy-candidate">{t('countBuy', { n: counts['buy-candidate'] })}</strong>
+        <strong data-verdict="watch">{ta('countWatch', { n: counts.watch })}</strong>
+        <strong data-verdict="expensive">{t('countExpensive', { n: counts.expensive })}</strong>
       </span>
-      {refreshing && <span className={styles.refreshing}>REFRESHING</span>}
+      {refreshing && <span className={styles.refreshing}>{ta('refreshing')}</span>}
     </div>
   );
 }

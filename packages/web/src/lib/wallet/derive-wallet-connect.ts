@@ -1,4 +1,5 @@
 import { confirmDeriveSessionKey, issueDeriveSessionKey } from '@features/portfolio/api';
+import { translate } from '@lib/i18n';
 import type { Address } from 'viem';
 
 import { connectWallet, signWalletMessage, signWalletTypedData } from './appkit';
@@ -8,6 +9,7 @@ import {
   DeriveRpcSocket,
   setSessionKeyParams,
 } from './derive-session-key';
+import { walletMessages } from './i18n';
 
 export interface DeriveWalletSession {
   walletAddress: Address;
@@ -36,12 +38,12 @@ export async function startDeriveWalletConnect(): Promise<DeriveWalletSession> {
         signature,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Derive login failed';
-      throw new Error(`${reason}. If the sign-in took long to approve, try again.`);
+      const reason = error instanceof Error ? error.message : translate(walletMessages, 'deriveLoginFailed');
+      throw new Error(translate(walletMessages, 'retryHint', { reason }));
     }
     const login = DeriveLoginResultSchema.safeParse(loginResult);
     if (!login.success || login.data.length === 0) {
-      throw new Error('This wallet has no Derive subaccounts.');
+      throw new Error(translate(walletMessages, 'noDeriveSubaccounts'));
     }
 
     return {

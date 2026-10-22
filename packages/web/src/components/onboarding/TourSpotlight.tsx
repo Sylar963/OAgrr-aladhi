@@ -1,8 +1,9 @@
 import { useIsMobile } from '@hooks/useIsMobile';
+import { useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useState } from 'react';
 import styles from './TourSpotlight.module.css';
-import { TOUR_STEPS } from './tour-steps';
+import { TOUR_STEPS, tourMessages } from './tour-steps';
 
 const TOOLTIP_WIDTH = 280;
 // Upper-bound estimate of tooltip height; used to keep it clear of the bottom edge.
@@ -10,6 +11,7 @@ const TOOLTIP_MAX_HEIGHT = 200;
 const GAP = 12;
 
 export default function TourSpotlight() {
+  const t = useT(tourMessages);
   const tourActive = useAppStore((s) => s.tourActive);
   const tourStep = useAppStore((s) => s.tourStep);
   const nextStep = useAppStore((s) => s.nextStep);
@@ -66,7 +68,7 @@ export default function TourSpotlight() {
       };
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={step.title}>
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={t(step.title)}>
       {centered ? (
         <div className={styles.backdrop} />
       ) : (
@@ -79,10 +81,13 @@ export default function TourSpotlight() {
         className={centered ? `${styles.tooltip} ${styles.tooltipCentered}` : styles.tooltip}
         style={tooltipStyle}
       >
-        <div className={styles.tipTitle}>{step.title}</div>
-        <p className={styles.tipBody}>{step.body}</p>
+        <div className={styles.tipTitle}>{t(step.title)}</div>
+        <p className={styles.tipBody}>{t(step.body)}</p>
         <div className={styles.tipFooter}>
-          <span className={styles.dots} aria-label={`Step ${tourStep + 1} of ${TOUR_STEPS.length}`}>
+          <span
+            className={styles.dots}
+            aria-label={t('step', { n: tourStep + 1, total: TOUR_STEPS.length })}
+          >
             {TOUR_STEPS.map((s, i) => (
               <span
                 key={s.title}
@@ -93,11 +98,11 @@ export default function TourSpotlight() {
           </span>
           <span className={styles.tipActions}>
             <button type="button" className={styles.skipBtn} onClick={endTour}>
-              Skip
+              {t('skip')}
             </button>
             {tourStep > 0 && (
               <button type="button" className={styles.navBtn} onClick={prevStep}>
-                Back
+                {t('back')}
               </button>
             )}
             <button
@@ -105,7 +110,7 @@ export default function TourSpotlight() {
               className={`${styles.navBtn} ${styles.navBtnPrimary}`}
               onClick={onNext}
             >
-              {isLast ? 'Done' : 'Next'}
+              {isLast ? t('done') : t('next')}
             </button>
           </span>
         </div>

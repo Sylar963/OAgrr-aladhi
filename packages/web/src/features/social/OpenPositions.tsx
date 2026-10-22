@@ -1,8 +1,10 @@
 import { useSpots } from '@hooks/useSpots';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import type { PublicPositionDto } from '@oggregator/protocol';
 import { useId, useMemo, useState, type PointerEvent } from 'react';
 
+import { socialMessages } from './i18n';
 import styles from './OpenPositions.module.css';
 import {
   groupPositions,
@@ -13,6 +15,43 @@ import {
   strategyName,
   type PositionGroup,
 } from './position-payoff';
+
+const messages = defineMessages(
+  {
+    unrealized: 'Unrealized',
+    netCredit: 'Net credit',
+    netDebit: 'Net debit',
+    legs: 'Legs',
+    legsValue: '{long} long · {short} short',
+    expiries: 'Expiries',
+    groupPositions: '{underlying} {expiry} positions',
+    expiring: 'expiring',
+    maxProfit: 'Max profit',
+    maxLoss: 'Max loss',
+    unlimited: 'Unlimited',
+    breakeven: 'Breakeven',
+    payoffAtExpiry: 'Payoff at expiry',
+    spot: 'spot',
+    payoffAria: 'Payoff at expiry by underlying price',
+  },
+  {
+    unrealized: 'No realizado',
+    netCredit: 'Crédito neto',
+    netDebit: 'Débito neto',
+    legs: 'Patas',
+    legsValue: '{long} long · {short} short',
+    expiries: 'Vencimientos',
+    groupPositions: 'Posiciones {underlying} {expiry}',
+    expiring: 'vence hoy',
+    maxProfit: 'Ganancia máx.',
+    maxLoss: 'Pérdida máx.',
+    unlimited: 'Ilimitada',
+    breakeven: 'Breakeven',
+    payoffAtExpiry: 'Payoff al vencimiento',
+    spot: 'spot',
+    payoffAria: 'Payoff al vencimiento según el precio del subyacente',
+  },
+);
 
 const WIDTH = 320;
 const HEIGHT = 96;
@@ -36,6 +75,7 @@ function compactPrice(price: number): string {
 }
 
 export default function OpenPositions({ positions }: { positions: PublicPositionDto[] }) {
+  const t = useT(messages);
   const { data: spots } = useSpots();
   const groups = useMemo(() => groupPositions(positions), [positions]);
   const pnlScale = Math.max(1e-9, ...positions.map((leg) => Math.abs(leg.unrealizedPnlUsd ?? 0)));
@@ -52,13 +92,16 @@ export default function OpenPositions({ positions }: { positions: PublicPosition
   return (
     <div className={styles.root}>
       <div className={styles.summary}>
-        <Metric label="Unrealized" value={signedUsd(totalPnl)} tone={tone(totalPnl)} />
+        <Metric label={t('unrealized')} value={signedUsd(totalPnl)} tone={tone(totalPnl)} />
         <Metric
-          label={netPremium >= 0 ? 'Net credit' : 'Net debit'}
+          label={netPremium >= 0 ? t('netCredit') : t('netDebit')}
           value={signedUsd(Math.abs(netPremium)).replace('+', '')}
         />
-        <Metric label="Legs" value={`${longs} long · ${positions.length - longs} short`} />
-        <Metric label="Expiries" value={String(groups.length)} />
+        <Metric
+          label={t('legs')}
+          value={t('legsValue', { long: longs, short: positions.length - longs })}
+        />
+        <Metric label={t('expiries')} value={String(groups.length)} />
       </div>
 
       <div className={styles.grid}>
@@ -102,21 +145,26 @@ function GroupCard({
       ),
     [group.legs],
   );
+  const t = useT(messages);
+  const locale = useLocale();
   const summary = useMemo(() => payoffSummary(legs), [legs]);
   const dte = dteDays(group.expiry);
 
   return (
-    <article className={styles.card} aria-label={`${group.underlying} ${group.expiry} positions`}>
+    <article
+      className={styles.card}
+      aria-label={t('groupPositions', { underlying: group.underlying, expiry: group.expiry })}
+    >
       <header className={styles.cardHeader}>
         <div className={styles.cardTitle}>
           <span className={styles.instrument}>
             {group.underlying} {formatExpiry(group.expiry)}
           </span>
           <span className={styles.dte} data-near={dte <= 2}>
-            {dte === 0 ? 'expiring' : `${dte}d`}
+            {dte === 0 ? t('expiring') : `${dte}d`}
           </span>
         </div>
-        <span className={styles.strategy}>{strategyName(legs)}</span>
+        <span className={styles.strategy}>{strategyName(legs, locale)}</span>
         <span className={styles.groupPnl} data-tone={tone(group.unrealizedPnlUsd)}>
           {signedUsd(group.unrealizedPnlUsd)}
         </span>
@@ -126,19 +174,19 @@ function GroupCard({
 
       <dl className={styles.facts}>
         <div>
-          <dt>Max profit</dt>
+          <dt>{t('maxProfit')}</dt>
           <dd data-tone="up">
-            {summary.maxProfitUsd == null ? 'Unlimited' : signedUsd(summary.maxProfitUsd)}
+            {summary.maxProfitUsd == null ? t('unlimited') : signedUsd(summary.maxProfitUsd)}
           </dd>
         </div>
         <div>
-          <dt>Max loss</dt>
+          <dt>{t('maxLoss')}</dt>
           <dd data-tone="down">
-            {summary.maxLossUsd == null ? 'Unlimited' : signedUsd(summary.maxLossUsd)}
+            {summary.maxLossUsd == null ? t('unlimited') : signedUsd(summary.maxLossUsd)}
           </dd>
         </div>
         <div>
-          <dt>Breakeven</dt>
+          <dt>{t('breakeven')}</dt>
           <dd>
             {summary.breakevens.length
               ? summary.breakevens.map((price) => compactPrice(price)).join(' / ')
@@ -157,6 +205,7 @@ function GroupCard({
 }
 
 function LegRow({ leg, pnlScale }: { leg: PublicPositionDto; pnlScale: number }) {
+  const ts = useT(socialMessages);
   const long = leg.netQuantity > 0;
   const pnl = leg.unrealizedPnlUsd;
   const width = pnl == null ? 0 : Math.min(100, (Math.abs(pnl) / pnlScale) * 100);
@@ -168,7 +217,7 @@ function LegRow({ leg, pnlScale }: { leg: PublicPositionDto; pnlScale: number })
   return (
     <li className={styles.leg}>
       <span className={styles.side} data-side={long ? 'long' : 'short'}>
-        {long ? 'Long' : 'Short'}
+        {long ? ts('long') : ts('short')}
       </span>
       <span className={styles.legQty}>{Math.abs(leg.netQuantity)}</span>
       <span className={styles.legStrike}>
@@ -207,6 +256,7 @@ function PayoffChart({
   spot: number | null;
   breakevens: number[];
 }) {
+  const t = useT(messages);
   const clipId = useId();
   const [hover, setHover] = useState<number | null>(null);
   const [from, to] = payoffRange(legs, spot, breakevens);
@@ -237,7 +287,7 @@ function PayoffChart({
   return (
     <div className={styles.payoff}>
       <div className={styles.payoffHead}>
-        <span>Payoff at expiry</span>
+        <span>{t('payoffAtExpiry')}</span>
         {hover != null ? (
           <span className={styles.readout}>
             @ {compactPrice(hover)}
@@ -245,7 +295,7 @@ function PayoffChart({
           </span>
         ) : spotInRange ? (
           <span className={styles.readout}>
-            spot {compactPrice(spot)}
+            {t('spot')} {compactPrice(spot)}
             <span data-tone={tone(payoffAt(legs, spot))}>{signedUsd(payoffAt(legs, spot))}</span>
           </span>
         ) : null}
@@ -256,7 +306,7 @@ function PayoffChart({
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           preserveAspectRatio="none"
           role="img"
-          aria-label="Payoff at expiry by underlying price"
+          aria-label={t('payoffAria')}
         >
           <defs>
             <clipPath id={`${clipId}-up`}>

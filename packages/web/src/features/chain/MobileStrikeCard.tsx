@@ -1,10 +1,16 @@
 import { IvChip, SpreadPill } from '@components/ui';
 import { fmtDelta, fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
 import { FlashingPrice } from './FlashingPrice';
 import styles from './MobileStrikeCard.module.css';
 import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
+
+const messages = defineMessages(
+  { callChart: 'Call chart', putChart: 'Put chart' },
+  { callChart: 'Gráfico call', putChart: 'Gráfico put' },
+);
 
 interface MobileStrikeCardProps {
   strike: EnrichedStrike;
@@ -150,6 +156,7 @@ export default function MobileStrikeCard({
   expiry,
   chartOverride,
 }: MobileStrikeCardProps) {
+  const t = useT(messages);
   const callItm = indexPrice != null && strike.strike < indexPrice;
   const putItm = indexPrice != null && strike.strike > indexPrice;
   const venues = Object.keys(strike.call.venues).filter((v) => activeVenues.includes(v));
@@ -200,7 +207,7 @@ export default function MobileStrikeCard({
                   chartOverride({ underlying, expiry, strike: strike.strike, type: 'call' })
                 }
               >
-                Call chart
+                {t('callChart')}
               </button>
               <button
                 type="button"
@@ -209,7 +216,7 @@ export default function MobileStrikeCard({
                   chartOverride({ underlying, expiry, strike: strike.strike, type: 'put' })
                 }
               >
-                Put chart
+                {t('putChart')}
               </button>
             </div>
           )}

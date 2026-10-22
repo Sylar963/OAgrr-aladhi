@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
+import { useLocale, useT } from '@lib/i18n';
 import type { IvTenor } from '@shared/enriched';
 
 import {
@@ -9,6 +10,7 @@ import {
   useCallPutFlow,
   useIvHistory,
 } from './queries';
+import { skewMessages, surfaceMessages } from './i18n';
 import styles from './SkewRegime.module.css';
 import SkewRegimeChart, { REGIME_COLORS } from './SkewRegimeChart';
 import type { SurfaceMarket } from './surface-market';
@@ -29,19 +31,13 @@ import {
   shareText,
 } from './skew-regime';
 
-const SOURCES: { key: RegimeSource; label: string; title: string }[] = [
-  {
-    key: 'contracts',
-    label: 'Contracts',
-    title: 'Call minus put contracts traded (underlying units)',
-  },
-  {
-    key: 'notional',
-    label: 'Notional',
-    title: 'Call minus put notional traded (contracts × spot, USD)',
-  },
-  { key: 'premium', label: 'Premium', title: 'Call minus put premium paid (USD)' },
-  { key: 'rr', label: 'RR', title: '25Δ risk-reversal of the selected tenor (vol points)' },
+type SourceLabelKey = 'srcContracts' | 'srcNotional' | 'srcPremium' | 'srcRr';
+
+const SOURCES: { key: RegimeSource; label: SourceLabelKey; title: `${SourceLabelKey}Title` }[] = [
+  { key: 'contracts', label: 'srcContracts', title: 'srcContractsTitle' },
+  { key: 'notional', label: 'srcNotional', title: 'srcNotionalTitle' },
+  { key: 'premium', label: 'srcPremium', title: 'srcPremiumTitle' },
+  { key: 'rr', label: 'srcRr', title: 'srcRrTitle' },
 ];
 const ZONES: { key: string; label: string; days: number }[] = [
   { key: '1d', label: '1d', days: 1 },
@@ -51,24 +47,21 @@ const ZONES: { key: string; label: string; days: number }[] = [
 const LOOKBACK_DAYS: Record<IvHistoryWindow, number> = { '30d': 30, '90d': 90 };
 const MAX_FLOW_DAYS = 90;
 
-const TIP_BODY = (
-  <>
-    <div>Calls minus puts, compared with its own recent range.</div>
-    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-      <li>Line: trailing average of the selected source (6h for flow, 1h for RR).</li>
-      <li>
-        Dotted zones: mean ± {REGIME_K}σ of the line over the previous zone window. Only earlier
-        data is used, so past colours never change.
-      </li>
-      <li>
-        Blue: broke above the upper zone (calls in demand vs. recent norm). Red: broke below the
-        lower zone (puts in demand). A regime ends halfway back to the mean.
-      </li>
-      <li>Flow: screen trades across venues and expiries, block duplicates excluded.</li>
-      <li>Descriptive regime read, not a forecast.</li>
-    </ul>
-  </>
-);
+function TipBody() {
+  const t = useT(skewMessages);
+  return (
+    <>
+      <div>{t('tip0')}</div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+        <li>{t('tip1')}</li>
+        <li>{t('tip2', { k: REGIME_K })}</li>
+        <li>{t('tip3')}</li>
+        <li>{t('tip4')}</li>
+        <li>{t('tip5')}</li>
+      </ul>
+    </>
+  );
+}
 
 interface Props {
   underlying: string;
@@ -81,6 +74,9 @@ interface Props {
 const TRADFI_SOURCES = SOURCES.filter((s) => s.key === 'rr');
 
 export default function SkewRegime({ underlying, tenor, lookback, market = 'crypto' }: Props) {
+  const t = useT(skewMessages);
+  const ts = useT(surfaceMessages);
+  const locale = useLocale();
   const tradfi = market === 'tradfi';
   const sources = tradfi ? TRADFI_SOURCES : SOURCES;
   const [source, setSource] = useState<RegimeSource>(tradfi ? 'rr' : 'contracts');
@@ -124,18 +120,18 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
   const last = points.at(-1);
 
   let status: string | null = null;
-  if (unavailable) status = 'trade history store unavailable';
-  else if (loading && points.length < 2) status = isFlow ? 'loading flow history…' : 'loading…';
-  else if (flow.isError && isFlow) status = 'flow history failed to load';
-  else if (points.length < 2) status = 'insufficient history';
+  if (unavailable) status = t('storeUnavailable');
+  else if (loading && points.length < 2) status = isFlow ? t('loadingFlow') : ts('loading');
+  else if (flow.isError && isFlow) status = t('flowFailed');
+  else if (points.length < 2) status = ts('insufficientHistory');
 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <span className={styles.name}>
-          REGIME
-          <InfoTip label="Regime" title="Segmented rolling skew regime" align="start">
-            {TIP_BODY}
+          {t('regime')}
+          <InfoTip label={t('regimeLabel')} title={t('regimeTitle')} align="start">
+            <TipBody />
           </InfoTip>
         </span>
         {run && (
@@ -143,11 +139,13 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
             className={styles.chip}
             style={{ color: REGIME_COLORS[run.regime], borderColor: REGIME_COLORS[run.regime] }}
           >
-            {regimeLabel(run.regime)}
+            {regimeLabel(run.regime, locale)}
           </span>
         )}
         {run && last && (
-          <span className={styles.sub}>for {formatDuration(last.time - run.since)}</span>
+          <span className={styles.sub}>
+            {t('forDuration', { d: formatDuration(last.time - run.since) })}
+          </span>
         )}
         {last && (
           <span className={styles.value}>{formatRegimeValue(last.value, source, underlying)}</span>
@@ -156,30 +154,30 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
       </div>
 
       <div className={styles.controls}>
-        <span className={styles.controlLabel}>SOURCE</span>
+        <span className={styles.controlLabel}>{t('source')}</span>
         <div className={styles.toggleGroup}>
           {sources.map((s) => (
             <button
               key={s.key}
               type="button"
-              title={s.title}
+              title={t(s.title)}
               className={styles.toggleBtn}
               data-active={source === s.key ? 'true' : undefined}
               onClick={() => setSource(s.key)}
             >
-              {s.label}
+              {t(s.label)}
             </button>
           ))}
         </div>
-        <span className={styles.controlLabel} title="Window the rolling zones are built from">
-          ZONES
+        <span className={styles.controlLabel} title={t('zonesTitle')}>
+          {t('zones')}
         </span>
         <div className={styles.toggleGroup}>
           {ZONES.map((z) => (
             <button
               key={z.key}
               type="button"
-              aria-label={`${z.label} zone window`}
+              aria-label={t('zoneAria', { label: z.label })}
               className={styles.toggleBtn}
               data-active={zoneKey === z.key ? 'true' : undefined}
               onClick={() => setZoneKey(z.key)}
@@ -196,22 +194,22 @@ export default function SkewRegime({ underlying, tenor, lookback, market = 'cryp
         {(['risk-on', 'neutral', 'risk-off'] as const).map((r) => (
           <span key={r} className={styles.legendItem}>
             <span className={styles.swatch} style={{ background: REGIME_COLORS[r] }} />
-            {regimeLabel(r)}
+            {regimeLabel(r, locale)}
           </span>
         ))}
         <span className={styles.legendItem}>
           <span className={styles.zoneSwatch} />
-          zones ±{REGIME_K}σ / {zone.label}
+          {t('zonesLegend', { k: REGIME_K, label: zone.label })}
         </span>
         <span className={styles.scope}>
-          {isFlow ? 'screen flow · all expiries · 1h buckets' : `${tenor} constant-maturity RR`}
+          {isFlow ? t('scopeFlow') : t('scopeRr', { tenor })}
         </span>
       </div>
 
       <div className={styles.foot}>
-        <span className={styles.share}>{shareText(regimeShare(points))}</span>
+        <span className={styles.share}>{shareText(regimeShare(points), locale)}</span>
         <span className={styles.takeaway}>
-          {points.length >= 2 ? describeRegime(points, source, underlying, zone.label) : ''}
+          {points.length >= 2 ? describeRegime(points, source, underlying, zone.label, locale) : ''}
         </span>
       </div>
     </div>

@@ -1,11 +1,62 @@
 import type { BreakEvenIvRow, CloseNowLeg, PositionLeg } from '@oggregator/protocol';
 
 import { useIsMobile } from '@hooks/useIsMobile';
+import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
 
-import { CLOSE_NOW_TOOLTIP, fmtAge, legFillStatus, spreadNote, staleNote } from './close-now';
+import { closeNowMessages, fmtAge, legFillStatus, spreadNote, staleNote } from './close-now';
+import { legMessages } from './i18n';
 import MobilePositionCard from './MobilePositionCard';
 import { useRemovePosition } from './hooks/queries';
 import styles from './PositionsTable.module.css';
+
+type LegT = Translate<typeof legMessages.en>;
+
+const messages = defineMessages(
+  {
+    closeNowPnl: 'Close-now P&L {v}',
+    fees: 'Fees {v}',
+    emptyReadOnly: 'No open positions.',
+    empty: 'No positions yet — add a leg below.',
+    underlying: 'Underlying',
+    expiry: 'Expiry',
+    strike: 'Strike',
+    right: 'R',
+    size: 'Size',
+    entryUsd: 'Entry $',
+    debitCredit: 'D/C',
+    entryIv: 'Entry IV',
+    markUsd: 'Mark $',
+    liveIv: 'Live IV',
+    breakEvenIv: 'Break-even IV',
+    ivCushion: 'IV Cushion',
+    closeNow: 'Close now',
+    longLeg: 'Long leg: ${v} paid per contract.',
+    shortLeg: 'Short leg: ${v} received per contract.',
+    entryIvModel: 'Entry IV back-solved from entry price + forward at upsert time',
+  },
+  {
+    closeNowPnl: 'P&L al cerrar ahora {v}',
+    fees: 'Comisiones {v}',
+    emptyReadOnly: 'No hay posiciones abiertas.',
+    empty: 'Aún no hay posiciones — agrega un leg abajo.',
+    underlying: 'Subyacente',
+    expiry: 'Vencimiento',
+    strike: 'Strike',
+    right: 'T',
+    size: 'Tamaño',
+    entryUsd: 'Entrada $',
+    debitCredit: 'D/C',
+    entryIv: 'IV entrada',
+    markUsd: 'Mark $',
+    liveIv: 'IV en vivo',
+    breakEvenIv: 'IV breakeven',
+    ivCushion: 'Colchón IV',
+    closeNow: 'Cerrar ahora',
+    longLeg: 'Leg long: ${v} pagados por contrato.',
+    shortLeg: 'Leg short: ${v} recibidos por contrato.',
+    entryIvModel: 'IV de entrada despejada del precio de entrada + forward al momento de guardar',
+  },
+);
 
 interface Props {
   positions: PositionLeg[];
@@ -38,14 +89,17 @@ function fmtPct(value: number | null | undefined): string {
 }
 
 function CloseNowCell({ leg }: { leg: CloseNowLeg | undefined }) {
+  const t = useT(messages);
+  const tc = useT(closeNowMessages);
+  const locale = useLocale();
   if (leg == null) return <td className={styles.closeNow}>—</td>;
   const priced = leg.exitVwapUsd != null;
   const title = [
-    CLOSE_NOW_TOOLTIP,
-    leg.closeNowPnlUsd != null ? `Close-now P&L ${fmtUsd(leg.closeNowPnlUsd)}` : null,
-    leg.feesUsd > 0 ? `Fees ${fmtUsd(leg.feesUsd)}` : null,
-    spreadNote(leg),
-    staleNote(leg),
+    tc('tooltip'),
+    leg.closeNowPnlUsd != null ? t('closeNowPnl', { v: fmtUsd(leg.closeNowPnlUsd) }) : null,
+    leg.feesUsd > 0 ? t('fees', { v: fmtUsd(leg.feesUsd) }) : null,
+    spreadNote(leg, locale),
+    staleNote(leg, locale),
   ]
     .filter((line): line is string => line != null)
     .join('\n');
@@ -53,27 +107,24 @@ function CloseNowCell({ leg }: { leg: CloseNowLeg | undefined }) {
     <td className={styles.closeNow} data-status={leg.status} data-stale={leg.stale || undefined} title={title}>
       {priced ? fmtUsd(leg.exitVwapUsd) : '—'}
       <small>
-        {legFillStatus(leg)}
+        {legFillStatus(leg, locale)}
         {leg.bookAgeMs != null ? ` · ${fmtAge(leg.bookAgeMs)}` : ''}
       </small>
     </td>
   );
 }
 
-function beNoteLabel(note: BreakEvenIvRow['beNote']): string | null {
+function beNoteLabel(note: BreakEvenIvRow['beNote'], t: LegT): string | null {
   if (note === 'capped') return '>300%';
-  if (note === 'below_intrinsic') return '< intrinsic';
-  if (note === 'above_upper') return '> upper';
+  if (note === 'below_intrinsic') return t('belowIntrinsic');
+  if (note === 'above_upper') return t('aboveUpper');
   return null;
 }
 
-function beNoteTitle(note: BreakEvenIvRow['beNote']): string | undefined {
-  if (note === 'capped')
-    return 'position needs unrealistic vol to recover entry — time decay dominated';
-  if (note === 'below_intrinsic')
-    return 'entry below current no-arb floor (intrinsic); recovery requires spot move, not vol';
-  if (note === 'above_upper')
-    return 'entry above option upper bound; cannot be priced at any positive vol';
+function beNoteTitle(note: BreakEvenIvRow['beNote'], t: LegT): string | undefined {
+  if (note === 'capped') return t('cappedTitle');
+  if (note === 'below_intrinsic') return t('belowIntrinsicTitle');
+  if (note === 'above_upper') return t('aboveUpperTitle');
   return undefined;
 }
 
@@ -84,13 +135,16 @@ export default function PositionsTable({
   readOnly = false,
   emptyMessage,
 }: Props) {
+  const t = useT(messages);
+  const tl = useT(legMessages);
+  const tc = useT(closeNowMessages);
   const removePosition = useRemovePosition();
   const isMobile = useIsMobile();
   const breakEvenByLegId = new Map(breakEven.map((row) => [row.legId, row]));
   const closeNowByLegId = new Map((closeNow ?? []).map((row) => [row.legId, row]));
 
   if (positions.length === 0) {
-    const fallback = readOnly ? 'No open positions.' : 'No positions yet — add a leg below.';
+    const fallback = readOnly ? t('emptyReadOnly') : t('empty');
     return <div className={styles.empty}>{emptyMessage ?? fallback}</div>;
   }
 
@@ -115,19 +169,19 @@ export default function PositionsTable({
     <table className={styles.table}>
       <thead>
         <tr>
-          <th>Underlying</th>
-          <th>Expiry</th>
-          <th>Strike</th>
-          <th>R</th>
-          <th>Size</th>
-          <th>Entry $</th>
-          <th>D/C</th>
-          <th>Entry IV</th>
-          <th>Mark $</th>
-          <th>Live IV</th>
-          <th>Break-even IV</th>
-          <th>IV Cushion</th>
-          {closeNow != null && <th title={CLOSE_NOW_TOOLTIP}>Close now</th>}
+          <th>{t('underlying')}</th>
+          <th>{t('expiry')}</th>
+          <th>{t('strike')}</th>
+          <th>{t('right')}</th>
+          <th>{t('size')}</th>
+          <th>{t('entryUsd')}</th>
+          <th>{t('debitCredit')}</th>
+          <th>{t('entryIv')}</th>
+          <th>{t('markUsd')}</th>
+          <th>{t('liveIv')}</th>
+          <th>{t('breakEvenIv')}</th>
+          <th>{t('ivCushion')}</th>
+          {closeNow != null && <th title={tc('tooltip')}>{t('closeNow')}</th>}
           <th></th>
         </tr>
       </thead>
@@ -140,13 +194,12 @@ export default function PositionsTable({
               : be.ivCushionPct >= 0
                 ? styles.cushionPos
                 : styles.cushionNeg;
-          const noteLabel = beNoteLabel(be?.beNote);
-          const noteTitle = beNoteTitle(be?.beNote);
-          const debitOrCredit = leg.size > 0 ? 'Dr' : 'Cr';
+          const noteLabel = beNoteLabel(be?.beNote, tl);
+          const noteTitle = beNoteTitle(be?.beNote, tl);
+          const debitOrCredit = leg.size > 0 ? tl('debit') : tl('credit');
+          const entryPrice = leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 });
           const debitOrCreditTitle =
-            leg.size > 0
-              ? `Long leg: $${leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} paid per contract.`
-              : `Short leg: $${leg.entryPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} received per contract.`;
+            leg.size > 0 ? t('longLeg', { v: entryPrice }) : t('shortLeg', { v: entryPrice });
           return (
             <tr key={leg.legId}>
               <td>{leg.underlying}</td>
@@ -165,7 +218,7 @@ export default function PositionsTable({
                 className={leg.entryIvIsModel === true ? styles.ivModel : undefined}
                 title={
                   leg.entryIvIsModel === true
-                    ? 'Entry IV back-solved from entry price + forward at upsert time'
+                    ? t('entryIvModel')
                     : undefined
                 }
               >
@@ -176,7 +229,7 @@ export default function PositionsTable({
               <td
                 className={be?.currentIvIsModel === true ? styles.ivModel : undefined}
                 title={
-                  be?.currentIvIsModel === true ? 'fair value from smile fit' : undefined
+                  be?.currentIvIsModel === true ? tl('fairValue') : undefined
                 }
               >
                 {fmtIv(be?.currentIv)}
@@ -198,7 +251,7 @@ export default function PositionsTable({
                     className={styles.remove}
                     onClick={() => removePosition.mutate(leg.legId)}
                     disabled={removePosition.isPending}
-                    aria-label={`remove ${leg.legId}`}
+                    aria-label={tl('remove', { id: leg.legId })}
                   >
                     ×
                   </button>

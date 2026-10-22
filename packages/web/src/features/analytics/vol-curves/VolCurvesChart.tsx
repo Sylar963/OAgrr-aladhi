@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { fmtIv, fmtUsd, fmtUsdCompact } from '@lib/format';
 import { venueColor } from '@lib/colors';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import {
   DELTA_TICKS,
@@ -18,6 +19,34 @@ import {
   type XAxisMode,
 } from './model';
 import styles from './VolCurves.module.css';
+
+const messages = defineMessages(
+  {
+    mark: 'Mark',
+    bestBid: 'Best bid',
+    bestAsk: 'Best ask',
+    spread: 'Spread',
+    oi: 'OI',
+    vol: '{v} vol',
+    crossed: 'Crossed {gap} vol before fees: {bidVenue} bid {bid} > {askVenue} ask {ask}',
+    bid: 'bid',
+    markCol: 'mark',
+    ask: 'ask',
+  },
+  {
+    mark: 'Mark',
+    bestBid: 'Mejor bid',
+    bestAsk: 'Mejor ask',
+    spread: 'Spread',
+    oi: 'OI',
+    vol: '{v} vol',
+    crossed:
+      'Cruzado {gap} vol antes de comisiones: bid {bidVenue} {bid} > ask {askVenue} {ask}',
+    bid: 'bid',
+    markCol: 'mark',
+    ask: 'ask',
+  },
+);
 
 const MARGIN = { top: 10, right: 48, bottom: 24, left: 8 };
 const ZOOM_STEP = 1.15;
@@ -438,6 +467,7 @@ export default function VolCurvesChart({
 }
 
 function Tooltip({ target }: { target: HoverTarget }) {
+  const t = useT(messages);
   const { curve, point } = target;
   const spread =
     point.bestBid != null && point.bestAsk != null ? point.bestAsk.iv - point.bestBid.iv : null;
@@ -456,28 +486,32 @@ function Tooltip({ target }: { target: HoverTarget }) {
         </span>
       </div>
       <dl className={styles.ttGrid}>
-        <dt>Mark</dt>
+        <dt>{t('mark')}</dt>
         <dd>{fmtIv(point.markIv)}</dd>
-        <dt style={{ color: BID_COLOR }}>Best bid</dt>
+        <dt style={{ color: BID_COLOR }}>{t('bestBid')}</dt>
         <dd>
           {fmtIv(point.bestBid?.iv)}
           {point.bestBid && <span className={styles.ttDim}> {venueLabel(point.bestBid.venue)}</span>}
         </dd>
-        <dt style={{ color: ASK_COLOR }}>Best ask</dt>
+        <dt style={{ color: ASK_COLOR }}>{t('bestAsk')}</dt>
         <dd>
           {fmtIv(point.bestAsk?.iv)}
           {point.bestAsk && <span className={styles.ttDim}> {venueLabel(point.bestAsk.venue)}</span>}
         </dd>
-        <dt>Spread</dt>
-        <dd>{spread != null ? `${(spread * 100).toFixed(1)} vol` : '–'}</dd>
-        <dt>OI</dt>
+        <dt>{t('spread')}</dt>
+        <dd>{spread != null ? t('vol', { v: (spread * 100).toFixed(1) }) : '–'}</dd>
+        <dt>{t('oi')}</dt>
         <dd>{point.oiUsd > 0 ? fmtUsdCompact(point.oiUsd) : '–'}</dd>
       </dl>
       {point.cross && (
         <div className={styles.ttCrossed}>
-          Crossed {(point.cross.ivGap * 100).toFixed(1)} vol before fees: {venueLabel(point.cross.bidVenue)}{' '}
-          bid {fmtUsd(point.cross.bidUsd)} &gt; {venueLabel(point.cross.askVenue)} ask{' '}
-          {fmtUsd(point.cross.askUsd)}
+          {t('crossed', {
+            gap: (point.cross.ivGap * 100).toFixed(1),
+            bidVenue: venueLabel(point.cross.bidVenue),
+            bid: fmtUsd(point.cross.bidUsd),
+            askVenue: venueLabel(point.cross.askVenue),
+            ask: fmtUsd(point.cross.askUsd),
+          })}
         </div>
       )}
       {point.venues.length > 0 && (
@@ -485,9 +519,9 @@ function Tooltip({ target }: { target: HoverTarget }) {
           <thead>
             <tr>
               <th />
-              <th>bid</th>
-              <th>mark</th>
-              <th>ask</th>
+              <th>{t('bid')}</th>
+              <th>{t('markCol')}</th>
+              <th>{t('ask')}</th>
             </tr>
           </thead>
           <tbody>

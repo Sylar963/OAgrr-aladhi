@@ -1,4 +1,5 @@
 import type { WsConnectionState } from '@oggregator/protocol';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_LIST } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
@@ -12,12 +13,28 @@ export type HealthLevel = 'ok' | 'warn' | 'bad';
 export const STALE_WARN_MS = 5_000;
 export const STALE_BAD_MS = 30_000;
 
-const STATE_TEXT: Record<VenueState, string> = {
-  live: 'live',
-  reconnecting: 'reconnecting',
-  failed: 'disconnected',
-  inactive: 'off',
-};
+const messages = defineMessages(
+  {
+    live: 'live',
+    reconnecting: 'reconnecting',
+    failed: 'disconnected',
+    inactive: 'off',
+    pillLabel: 'Feed health: {live} of {active} venues live',
+    popoverLabel: 'Venue feed status',
+    header: 'Venue feeds',
+    slowest: 'slowest',
+  },
+  {
+    live: 'en vivo',
+    reconnecting: 'reconectando',
+    failed: 'desconectado',
+    inactive: 'apagado',
+    pillLabel: 'Estado del feed: {live} de {active} exchanges en vivo',
+    popoverLabel: 'Estado de feeds por exchange',
+    header: 'Feeds por exchange',
+    slowest: 'más lento',
+  },
+);
 
 interface HealthInput {
   connectionState: WsConnectionState;
@@ -55,6 +72,7 @@ export function healthLevel({ connectionState, staleMs, liveCount, activeCount }
 }
 
 export default function VenueHealth() {
+  const t = useT(messages);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const failedVenueIds = useAppStore((s) => s.feedStatus.failedVenueIds);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
@@ -116,7 +134,7 @@ export default function VenueHealth() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={`Feed health: ${liveCount} of ${activeCount} venues live`}
+        aria-label={t('pillLabel', { live: liveCount, active: activeCount })}
       >
         <span className={styles.dot} />
         <span className={styles.count}>
@@ -128,16 +146,16 @@ export default function VenueHealth() {
         </span>
       </button>
       {open && (
-        <div className={styles.popover} role="dialog" aria-label="Venue feed status">
+        <div className={styles.popover} role="dialog" aria-label={t('popoverLabel')}>
           <div className={styles.header}>
-            Venue feeds
+            {t('header')}
             <span className={styles.headerLatency}>
               <FreshnessLabel />
             </span>
           </div>
           {slowest != null && (
             <div className={styles.slowest}>
-              slowest <span className={styles.slowestVenue}>{slowest.venue.label}</span>
+              {t('slowest')} <span className={styles.slowestVenue}>{slowest.venue.label}</span>
               <span className={styles.rowLag} data-level={lagLevel(slowest.lagMs)}>
                 {formatLatency(slowest.lagMs)}
               </span>
@@ -154,7 +172,7 @@ export default function VenueHealth() {
                     {formatLatency(lagMs)}
                   </span>
                 )}
-                <span className={styles.rowState}>{STATE_TEXT[venue.state]}</span>
+                <span className={styles.rowState}>{t(venue.state)}</span>
               </div>
             );
           })}

@@ -1,3 +1,6 @@
+import { useT } from '@lib/i18n';
+
+import { skewMessages, surfaceMessages } from './i18n';
 import styles from './SkewSmileChart.module.css';
 import type { SmilePoint } from './skew-history-utils';
 import { useMeasuredWidth } from './use-measured-width';
@@ -21,12 +24,14 @@ const PAD_T = 18;
 const PAD_B = 26;
 
 export default function SkewSmileChart({ now, reference, referenceLabel }: Props) {
+  const t = useT(skewMessages);
+  const ts = useT(surfaceMessages);
   const [wrapRef, W] = useMeasuredWidth<HTMLDivElement>(W_FALLBACK);
 
   if (now.length === 0) {
     return (
       <div className={styles.wrap} ref={wrapRef}>
-        <div className={styles.empty}>insufficient data</div>
+        <div className={styles.empty}>{ts('insufficientData')}</div>
       </div>
     );
   }
@@ -63,7 +68,7 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
         width="100%"
         height={H}
         role="img"
-        aria-label="volatility smile"
+        aria-label={t('smileAria')}
       >
         {gridIvs.map((iv) => (
           <g key={iv.toFixed(2)}>
@@ -126,8 +131,8 @@ export default function SkewSmileChart({ now, reference, referenceLabel }: Props
       </svg>
       <div className={styles.caption}>
         {reference && reference.length > 0
-          ? `solid = now · dashed = ${referenceLabel} · labels = IV and change in vol pts · tilt = RR · lift = Fly`
-          : `solid = now · no history for ${referenceLabel}`}
+          ? t('smileCaption', { ref: referenceLabel })
+          : t('smileNoHistory', { ref: referenceLabel })}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import {
 import type { EnrichedChainResponse } from '@shared/enriched';
 import type { SpotCandleCurrency, SpotCandleResolutionSec } from '@shared/common';
 import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
+import { useT } from '@lib/i18n';
 
 import styles from '../AnalyticsView.module.css';
 import { BlockBubblePrimitive } from './BlockBubblePrimitive';
@@ -42,6 +43,7 @@ import {
 } from './oi-em-utils';
 import { selectBlockBubbles, type BlockBubble } from './oi-bubble-utils';
 import { useBlockStrikeBuckets, useSpotCandles } from './queries';
+import { oiMessages } from './i18n';
 
 const EXPIRY_COLORS = [
   '#00E997', '#CB3855', '#50D2C1', '#F0B90B', '#0052FF',
@@ -96,6 +98,7 @@ interface Props {
 }
 
 export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
+  const t = useT(oiMessages);
   const [mode, setMode] = useState<OiMode>('contracts');
   const [side, setSide] = useState<HeatSide>('both');
   const [significance, setSignificance] = useState<SignificanceMode>('a3-topk');
@@ -472,9 +475,9 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     if (significance !== 'a4-outliers') return;
     const { gammaFlip, callWall, putWall } = gammaLevels;
     const levels: { price: number | null; color: string; title: string }[] = [
-      { price: gammaFlip, color: '#F7A600', title: 'γ FLIP' },
-      { price: callWall, color: '#00E997', title: 'CALL WALL' },
-      { price: putWall, color: '#CB3855', title: 'PUT WALL' },
+      { price: gammaFlip, color: '#F7A600', title: t('gammaFlip') },
+      { price: callWall, color: '#00E997', title: t('callWall') },
+      { price: putWall, color: '#CB3855', title: t('putWall') },
     ];
     for (const { price, color, title } of levels) {
       if (price == null) continue;
@@ -487,7 +490,7 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         title,
       }));
     }
-  }, [significance, gammaLevels]);
+  }, [significance, gammaLevels, t]);
 
   // ── Session OI buffer (in-memory, clears on unmount/currency change) ──
   useEffect(() => {
@@ -545,13 +548,13 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
     <div>
       <div className={styles.heatControls}>
         <div className={styles.oiToggle}>
-          <button className={styles.oiToggleBtn} data-active={mode === 'contracts' || undefined} onClick={() => setMode('contracts')}>Contracts</button>
-          <button className={styles.oiToggleBtn} data-active={mode === 'notional'  || undefined} onClick={() => setMode('notional')}>Notional</button>
+          <button className={styles.oiToggleBtn} data-active={mode === 'contracts' || undefined} onClick={() => setMode('contracts')}>{t('contracts')}</button>
+          <button className={styles.oiToggleBtn} data-active={mode === 'notional'  || undefined} onClick={() => setMode('notional')}>{t('notional')}</button>
         </div>
         <div className={styles.oiToggle}>
-          <button className={styles.oiToggleBtn} data-active={side === 'calls' || undefined} onClick={() => setSide('calls')}>Calls</button>
-          <button className={styles.oiToggleBtn} data-active={side === 'puts'  || undefined} onClick={() => setSide('puts')}>Puts</button>
-          <button className={styles.oiToggleBtn} data-active={side === 'both'  || undefined} onClick={() => setSide('both')}>Both</button>
+          <button className={styles.oiToggleBtn} data-active={side === 'calls' || undefined} onClick={() => setSide('calls')}>{t('calls')}</button>
+          <button className={styles.oiToggleBtn} data-active={side === 'puts'  || undefined} onClick={() => setSide('puts')}>{t('puts')}</button>
+          <button className={styles.oiToggleBtn} data-active={side === 'both'  || undefined} onClick={() => setSide('both')}>{t('both')}</button>
         </div>
         <div className={styles.oiToggle}>
           <button className={styles.oiToggleBtn} data-active={significance === 'a3-topk' || undefined} onClick={() => setSignificance('a3-topk')}>A3</button>
@@ -583,12 +586,12 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
                   : 'transparent',
             }}
           />
-          Cone
+          {t('cone')}
           <select
             value={effectiveConeExpiry === '' ? 'off' : effectiveConeExpiry}
             onChange={(e) => setConeExpiry(e.target.value)}
           >
-            <option value="off">Off</option>
+            <option value="off">{t('off')}</option>
             {sortedExpiries.map((e) => (
               <option key={e} value={e}>
                 {formatExpiry(e)}
@@ -623,18 +626,16 @@ export default function OiHeatmap({ chains, spotPrice, currency }: Props) {
         <div className={styles.heatChartCanvas} ref={containerRef} />
 
         {candlesLoading && !candleData && (
-          <div className={styles.heatStatusOverlay}>Loading spot history…</div>
+          <div className={styles.heatStatusOverlay}>{t('loadingSpot')}</div>
         )}
         {candlesError && (
           <div className={styles.heatStatusOverlay}>
-            <div>Spot history unavailable</div>
-            <button onClick={() => void refetch()}>Retry</button>
+            <div>{t('spotUnavailable')}</div>
+            <button onClick={() => void refetch()}>{t('retry')}</button>
           </div>
         )}
         {allHidden && (
-          <div className={styles.heatStatusOverlay}>
-            All expiries hidden — re-enable one in the legend above.
-          </div>
+          <div className={styles.heatStatusOverlay}>{t('allHidden')}</div>
         )}
 
         {hoveredBubble && tooltipPos && (
@@ -665,6 +666,7 @@ function BlockTooltip({
   tooltipPos: { x: number; y: number };
   fmt: (v: number | null | undefined) => string;
 }) {
+  const t = useT(oiMessages);
   const time = new Date(bubble.timeSec * 1000).toLocaleString(undefined, {
     month: 'short',
     day: '2-digit',
@@ -676,13 +678,15 @@ function BlockTooltip({
       className={styles.oiTooltip}
       style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
     >
-      <div className={styles.oiTooltipTitle}>{bubble.strike.toLocaleString()} · block flow</div>
-      <div className={styles.oiTooltipZone}>
-        {time} · {bubble.legs} {bubble.legs === 1 ? 'leg' : 'legs'}
+      <div className={styles.oiTooltipTitle}>
+        {t('blockFlow', { strike: bubble.strike.toLocaleString() })}
       </div>
-      <div className={styles.oiTooltipHeader}><span /><span>Calls</span><span>Puts</span></div>
+      <div className={styles.oiTooltipZone}>
+        {time} · {t(bubble.legs === 1 ? 'legs_one' : 'legs_other', { n: bubble.legs })}
+      </div>
+      <div className={styles.oiTooltipHeader}><span /><span>{t('calls')}</span><span>{t('puts')}</span></div>
       <div className={styles.oiTooltipRow}>
-        <span className={styles.oiTooltipVenue}>Traded</span>
+        <span className={styles.oiTooltipVenue}>{t('traded')}</span>
         <span className={styles.oiCall}>{fmt(bubble.callValue)}</span>
         <span className={styles.oiPut}>{fmt(bubble.putValue)}</span>
       </div>
@@ -707,12 +711,13 @@ function HeatTooltip({
   sparkline: SessionPoint[];
   fmt: (v: number | null | undefined) => string;
 }) {
+  const t = useT(oiMessages);
   const insideExpiries = data.expiries.filter((ep) => zones.get(ep.expiry) === 'inside-1sigma');
   const summary = insideExpiries.length > 0
-    ? `Inside ±1σ for: ${insideExpiries.map((ep) => ep.expiry).join(', ')}`
+    ? t('inside1', { expiries: insideExpiries.map((ep) => ep.expiry).join(', ') })
     : data.expiries.some((ep) => zones.get(ep.expiry) === 'inside-2sigma')
-      ? 'Inside ±2σ (no expiry inside ±1σ)'
-      : 'Outside ±2σ for all visible expiries';
+      ? t('inside2')
+      : t('outside2');
   return (
     <div
       className={styles.oiTooltip}
@@ -723,8 +728,8 @@ function HeatTooltip({
       <div className={styles.oiTooltipColumns}>
         {data.venues.length > 0 && (
           <div className={styles.oiTooltipCol}>
-            <div className={styles.oiTooltipSection}>By Venue</div>
-            <div className={styles.oiTooltipHeader}><span /><span>Calls</span><span>Puts</span></div>
+            <div className={styles.oiTooltipSection}>{t('byVenue')}</div>
+            <div className={styles.oiTooltipHeader}><span /><span>{t('calls')}</span><span>{t('puts')}</span></div>
             {data.venues.map((v) => (
               <div key={v.venue} className={styles.oiTooltipRow}>
                 <span className={styles.oiTooltipVenue}>{v.venue}</span>
@@ -736,8 +741,8 @@ function HeatTooltip({
         )}
         {data.expiries.length > 0 && (
           <div className={styles.oiTooltipCol}>
-            <div className={styles.oiTooltipSection}>By Expiry · EM</div>
-            <div className={styles.oiTooltipHeader}><span /><span>Calls</span><span>Puts</span></div>
+            <div className={styles.oiTooltipSection}>{t('byExpiryEm')}</div>
+            <div className={styles.oiTooltipHeader}><span /><span>{t('calls')}</span><span>{t('puts')}</span></div>
             {data.expiries.map((ep) => {
               const em = emByExpiry.get(ep.expiry);
               return (
@@ -765,6 +770,7 @@ function HeatTooltip({
 }
 
 function SessionSparkline({ points }: { points: SessionPoint[] }) {
+  const t = useT(oiMessages);
   const width = 160;
   const height = 28;
   const xs = points.map((_, i) => (i / (points.length - 1)) * width);
@@ -780,7 +786,7 @@ function SessionSparkline({ points }: { points: SessionPoint[] }) {
   const trendUp = last >= first;
   return (
     <div className={styles.oiTooltipSparkline}>
-      <span className={styles.oiTooltipSparkLabel}>Session OI</span>
+      <span className={styles.oiTooltipSparkLabel}>{t('sessionOi')}</span>
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         <path d={d} fill="none" stroke={trendUp ? '#00E997' : '#CB3855'} strokeWidth={1.25} />
       </svg>

@@ -1,3 +1,5 @@
+import { defineMessages, translate, useLocale, type Locale } from '@lib/i18n';
+
 import styles from './StrategyIcon.module.css';
 
 interface StrategyIconProps {
@@ -28,35 +30,83 @@ const STRATEGY_PATHS: Record<string, string> = {
   COMBO: 'M2,10 L8,2 L12,14 L18,6',
 };
 
-const STRATEGY_LABELS: Record<string, string> = {
-  CALL: 'Call',
-  PUT: 'Put',
-  STRADDLE: 'Straddle',
-  STRANGLE: 'Strangle',
-  CALL_SPREAD: 'Call Spread',
-  PUT_SPREAD: 'Put Spread',
-  CALL_BUTTERFLY: 'Butterfly',
-  PUT_BUTTERFLY: 'Butterfly',
-  CALL_BUTTERFLY_SPREAD: 'Butterfly',
-  PUT_BUTTERFLY_SPREAD: 'Butterfly',
-  IRON_CONDOR: 'Iron Condor',
-  IRON_BUTTERFLY: 'Iron Fly',
-  CALL_CALENDAR_SPREAD: 'Calendar',
-  PUT_CALENDAR_SPREAD: 'Calendar',
-  CALL_DIAGONAL: 'Diagonal',
-  PUT_DIAGONAL: 'Diagonal',
-  CALL_RATIO: 'Ratio',
-  PUT_RATIO: 'Ratio',
-  COMBO: 'Combo',
-  CUSTOM: 'Custom',
+const messages = defineMessages(
+  {
+    call: 'Call',
+    put: 'Put',
+    straddle: 'Straddle',
+    strangle: 'Strangle',
+    callSpread: 'Call Spread',
+    putSpread: 'Put Spread',
+    butterfly: 'Butterfly',
+    ironCondor: 'Iron Condor',
+    ironFly: 'Iron Fly',
+    calendar: 'Calendar',
+    diagonal: 'Diagonal',
+    ratio: 'Ratio',
+    combo: 'Combo',
+    custom: 'Custom',
+    single: 'Single',
+  },
+  {
+    call: 'Call',
+    put: 'Put',
+    straddle: 'Straddle',
+    strangle: 'Strangle',
+    callSpread: 'Call Spread',
+    putSpread: 'Put Spread',
+    butterfly: 'Butterfly',
+    ironCondor: 'Iron Condor',
+    ironFly: 'Iron Fly',
+    calendar: 'Calendario',
+    diagonal: 'Diagonal',
+    ratio: 'Ratio',
+    combo: 'Combo',
+    custom: 'Personalizada',
+    single: 'Simple',
+  },
+);
+
+type StrategyLabelKey = keyof typeof messages.en;
+
+const STRATEGY_LABELS: Record<string, StrategyLabelKey> = {
+  CALL: 'call',
+  PUT: 'put',
+  STRADDLE: 'straddle',
+  STRANGLE: 'strangle',
+  CALL_SPREAD: 'callSpread',
+  PUT_SPREAD: 'putSpread',
+  CALL_BUTTERFLY: 'butterfly',
+  PUT_BUTTERFLY: 'butterfly',
+  CALL_BUTTERFLY_SPREAD: 'butterfly',
+  PUT_BUTTERFLY_SPREAD: 'butterfly',
+  IRON_CONDOR: 'ironCondor',
+  IRON_BUTTERFLY: 'ironFly',
+  CALL_CALENDAR_SPREAD: 'calendar',
+  PUT_CALENDAR_SPREAD: 'calendar',
+  CALL_DIAGONAL: 'diagonal',
+  PUT_DIAGONAL: 'diagonal',
+  CALL_RATIO: 'ratio',
+  PUT_RATIO: 'ratio',
+  COMBO: 'combo',
+  CUSTOM: 'custom',
 };
 
-export function getStrategyLabel(strategy: string | null, legType?: string): string {
-  if (!strategy) return legType === 'CALL' ? 'Call' : legType === 'PUT' ? 'Put' : 'Single';
-  return STRATEGY_LABELS[strategy] ?? strategy;
+export function getStrategyLabel(
+  strategy: string | null,
+  legType: string | undefined,
+  locale: Locale,
+): string {
+  if (!strategy) {
+    const key = legType === 'CALL' ? 'call' : legType === 'PUT' ? 'put' : 'single';
+    return translate(messages, key, undefined, locale);
+  }
+  const key = STRATEGY_LABELS[strategy];
+  return key ? translate(messages, key, undefined, locale) : strategy;
 }
 
 export default function StrategyIcon({ strategy, size = 20 }: StrategyIconProps) {
+  const locale = useLocale();
   const path = strategy ? STRATEGY_PATHS[strategy] : null;
 
   if (!path) {
@@ -74,7 +124,7 @@ export default function StrategyIcon({ strategy, size = 20 }: StrategyIconProps)
       height={size}
       viewBox="0 0 20 16"
       fill="none"
-      aria-label={getStrategyLabel(strategy)}
+      aria-label={getStrategyLabel(strategy, undefined, locale)}
     >
       <path
         d={path}

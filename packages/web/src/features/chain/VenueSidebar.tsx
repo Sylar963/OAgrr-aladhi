@@ -2,8 +2,26 @@ import { memo, useMemo, type CSSProperties } from 'react';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { venueColor, venueGradient } from '@lib/colors';
 import { fmtUsdCompact } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import type { VenueFailure } from '@oggregator/protocol';
 import styles from './VenueSidebar.module.css';
+
+const messages = defineMessages(
+  {
+    venues: 'Venues',
+    failed: 'Failed: {reason}',
+    live: 'Live',
+    inactive: 'Inactive',
+    settlement: 'Settlement',
+  },
+  {
+    venues: 'Exchanges',
+    failed: 'Falló: {reason}',
+    live: 'En vivo',
+    inactive: 'Inactivo',
+    settlement: 'Liquidación',
+  },
+);
 
 interface VenueSidebarProps {
   activeVenues: string[];
@@ -18,6 +36,7 @@ function VenueSidebar({
   venueOi,
   failedVenues = [],
 }: VenueSidebarProps) {
+  const t = useT(messages);
   const activeSet = useMemo(() => new Set<string>(activeVenues), [activeVenues]);
   const { failedSet, failedMap } = useMemo(
     () => ({
@@ -28,7 +47,7 @@ function VenueSidebar({
   );
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.header}>Venues</div>
+      <div className={styles.header}>{t('venues')}</div>
       <div className={styles.list}>
         {VENUE_LIST.map((venue) => {
           const active = activeSet.has(venue.id);
@@ -49,7 +68,7 @@ function VenueSidebar({
               data-active={active}
               data-failed={failed || undefined}
               style={itemStyle}
-              title={failed ? `Failed: ${reason}` : undefined}
+              title={failed ? t('failed', { reason: reason ?? '' }) : undefined}
             >
               <input
                 type="checkbox"
@@ -76,7 +95,7 @@ function VenueSidebar({
               <span
                 className={styles.statusDot}
                 data-state={failed ? 'failed' : active ? 'live' : undefined}
-                title={failed ? `Failed: ${reason}` : active ? 'Live' : 'Inactive'}
+                title={failed ? t('failed', { reason: reason ?? '' }) : active ? t('live') : t('inactive')}
               />
             </label>
           );
@@ -85,7 +104,7 @@ function VenueSidebar({
 
       <div className={styles.footer}>
         <div className={styles.settleNote}>
-          <span className={styles.settleLabel}>Settlement</span>
+          <span className={styles.settleLabel}>{t('settlement')}</span>
           <div className={styles.settleItems}>
             <span>Deribit · USDC</span>
             <span>OKX · USDC</span>

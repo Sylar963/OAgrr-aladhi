@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { getTokenLogo } from '@lib/token-meta';
 import { dteDays, formatExpiry, fmtUsdCompact } from '@lib/format';
+import { useLocale } from '@lib/i18n';
 
 import type { ExpiryPositionBadge } from './expiry-positions';
 import styles from './ExpiryBar.module.css';
@@ -33,6 +34,7 @@ export default function ExpiryBar({
   onPrefetch,
   positions,
 }: ExpiryBarProps) {
+  const locale = useLocale();
   const logo = getTokenLogo(underlying);
   const tabsRef = useRef<HTMLDivElement>(null);
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,7 +128,7 @@ export default function ExpiryBar({
               onPointerLeave={clearPrefetchTimer}
               onPointerDown={() => e !== selected && onPrefetch?.(e)}
             >
-              <span className={styles.tabLabel}>{formatExpiry(e)}</span>
+              <span className={styles.tabLabel}>{formatExpiry(e, locale)}</span>
               <span className={styles.dteBadge} data-urgent={dte <= 1}>
                 {dte}d
               </span>

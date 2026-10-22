@@ -1,7 +1,9 @@
 import { type MouseEvent, useState } from 'react';
 
 import { COLORS } from '@lib/colors';
+import { useLocale, useT } from '@lib/i18n';
 
+import { skewMessages } from './i18n';
 import styles from './SkewRegime.module.css';
 import {
   formatRegimeValue,
@@ -95,6 +97,8 @@ function segments(
 }
 
 export default function SkewRegimeChart({ points, source, underlying }: Props) {
+  const t = useT(skewMessages);
+  const locale = useLocale();
   const [wrapRef, width] = useMeasuredWidth<HTMLDivElement>(W_FALLBACK);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const fmt = (v: number) => formatRegimeValue(v, source, underlying);
@@ -129,11 +133,11 @@ export default function SkewRegimeChart({ points, source, underlying }: Props) {
   const onMove = (e: MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * W;
-    const t = tMin + ((x - PAD_L) / (W - PAD_L - PAD_R)) * tSpan;
+    const time = tMin + ((x - PAD_L) / (W - PAD_L - PAD_R)) * tSpan;
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < points.length; i++) {
-      const dist = Math.abs(points[i]!.time - t);
+      const dist = Math.abs(points[i]!.time - time);
       if (dist < bestDist) {
         bestDist = dist;
         best = i;
@@ -148,9 +152,9 @@ export default function SkewRegimeChart({ points, source, underlying }: Props) {
         {hover
           ? `${fmtTime(hover.time)} · ${fmt(hover.value)}${
               hover.lower != null && hover.upper != null
-                ? ` · zones ${fmt(hover.lower)} … ${fmt(hover.upper)}`
+                ? t('readoutZones', { lower: fmt(hover.lower), upper: fmt(hover.upper) })
                 : ''
-            } · ${hover.regime ? regimeLabel(hover.regime) : 'warming up'}`
+            } · ${hover.regime ? regimeLabel(hover.regime, locale) : t('warmingUp')}`
           : ''}
       </div>
       <svg
@@ -158,7 +162,7 @@ export default function SkewRegimeChart({ points, source, underlying }: Props) {
         width="100%"
         height={H}
         role="img"
-        aria-label="segmented rolling regime"
+        aria-label={t('regimeAria')}
         onMouseMove={onMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
@@ -198,20 +202,20 @@ export default function SkewRegimeChart({ points, source, underlying }: Props) {
           {fmt(lo)}
         </text>
         <text x={W - PAD_R - 2} y={PAD_T + 7} textAnchor="end" className={styles.semantic}>
-          calls ↑
+          {t('callsUp')}
         </text>
         <text x={W - PAD_R - 2} y={H - PAD_B} textAnchor="end" className={styles.semantic}>
-          puts ↓
+          {t('putsDown')}
         </text>
-        {ticks.map((t, i) => (
+        {ticks.map((tick, i) => (
           <text
-            key={t}
-            x={toX(t)}
+            key={tick}
+            x={toX(tick)}
             y={H - 4}
             textAnchor={i === 0 ? 'start' : i === X_TICKS - 1 ? 'end' : 'middle'}
             className={styles.axis}
           >
-            {fmtTick(t)}
+            {fmtTick(tick)}
           </text>
         ))}
         <circle

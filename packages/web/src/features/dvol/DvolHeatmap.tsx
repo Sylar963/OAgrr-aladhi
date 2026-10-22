@@ -15,6 +15,7 @@ import type { VolHeatmapColumn } from '@oggregator/protocol';
 
 import { useAppStore } from '@stores/app-store';
 import { EmptyState, Spinner } from '@components/ui';
+import { defineMessages, useT } from '@lib/i18n';
 import {
   fmtVega,
   HEATMAP_WINDOWS,
@@ -32,14 +33,74 @@ import styles from './DvolHeatmap.module.css';
 const CURRENCIES = ['BTC', 'ETH'] as const;
 const DVOL_LINE_COLOR = '#FF4FD8';
 const ATM_LINE_COLOR = '#F2F2F2';
-const VIEWS: ReadonlyArray<{ id: HeatView; label: string }> = [
-  { id: 'skew', label: 'Skew-adj' },
-  { id: 'raw', label: 'Raw' },
+
+const messages = defineMessages(
+  {
+    viewSkew: 'Skew-adj',
+    viewRaw: 'Raw',
+    sideAll: 'All',
+    sideBids: 'Bids',
+    sideAsks: 'Offers',
+    title: 'DVOL Liquidity Heatmap',
+    subtitleSkew:
+      'Resting vega ($ per vol pt) by distance from each option’s mid IV, centred on the 30d ATM mid',
+    subtitleRaw: 'Resting vega ($ per vol pt) on Deribit books by IV',
+    metaOptions: ' · {n} options · {expiries}',
+    columns: ' · {res} columns',
+    bookAtm30: 'Book ATM (30d)',
+    buyPrints: 'Buy prints',
+    sellPrints: 'Sell prints',
+    hover: '{level} · bids {bid} · offers {ask}',
+    bookAtm: 'Book ATM',
+    bidWall: 'Bid wall',
+    offerWall: 'Offer wall',
+    unavailable: 'Heatmap unavailable',
+    collecting: 'Collecting order books',
+    unavailableDetail:
+      'The heatmap API did not respond. The backend may not be running this version yet.',
+    collectingDetail:
+      'Deribit serves no historical books, so the heatmap fills from when the server started.',
+    resetZoom: 'Reset zoom',
+  },
+  {
+    viewSkew: 'Ajust. skew',
+    viewRaw: 'Bruto',
+    sideAll: 'Todo',
+    sideBids: 'Bids',
+    sideAsks: 'Asks',
+    title: 'Mapa de calor de liquidez DVOL',
+    subtitleSkew:
+      'Vega en libro ($ por punto de vol) según distancia a la mid IV de cada opción, centrado en la mid ATM a 30d',
+    subtitleRaw: 'Vega en libro ($ por punto de vol) en los libros de Deribit por IV',
+    metaOptions: ' · {n} opciones · {expiries}',
+    columns: ' · columnas de {res}',
+    bookAtm30: 'ATM del libro (30d)',
+    buyPrints: 'Prints de compra',
+    sellPrints: 'Prints de venta',
+    hover: '{level} · bids {bid} · asks {ask}',
+    bookAtm: 'ATM del libro',
+    bidWall: 'Muro de bids',
+    offerWall: 'Muro de asks',
+    unavailable: 'Mapa de calor no disponible',
+    collecting: 'Recopilando libros de órdenes',
+    unavailableDetail:
+      'La API del mapa de calor no respondió. Es posible que el backend aún no ejecute esta versión.',
+    collectingDetail:
+      'Deribit no ofrece libros históricos, así que el mapa de calor se llena desde que arrancó el servidor.',
+    resetZoom: 'Restablecer zoom',
+  },
+);
+
+type MessageKey = keyof typeof messages.en;
+
+const VIEWS: ReadonlyArray<{ id: HeatView; label: MessageKey }> = [
+  { id: 'skew', label: 'viewSkew' },
+  { id: 'raw', label: 'viewRaw' },
 ];
-const SIDES: ReadonlyArray<{ id: HeatSide; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'bids', label: 'Bids' },
-  { id: 'asks', label: 'Offers' },
+const SIDES: ReadonlyArray<{ id: HeatSide; label: MessageKey }> = [
+  { id: 'all', label: 'sideAll' },
+  { id: 'bids', label: 'sideBids' },
+  { id: 'asks', label: 'sideAsks' },
 ];
 
 type HeatApi = ISeriesApi<
@@ -74,6 +135,7 @@ function toBar(column: VolHeatmapColumn, bucketPct: number, view: HeatView): Hea
 }
 
 export default function DvolHeatmap() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.underlying);
   const [currency, setCurrency] = useState<string>(
     CURRENCIES.includes(underlying as (typeof CURRENCIES)[number]) ? underlying : 'BTC',
@@ -227,7 +289,7 @@ export default function DvolHeatmap() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.titleRow}>
-            <span className={styles.title}>DVOL Liquidity Heatmap</span>
+            <span className={styles.title}>{t('title')}</span>
             <div className={styles.picker}>
               {CURRENCIES.map((c) => (
                 <button key={c} className={styles.pickerBtn} data-active={c === currency} onClick={() => setCurrency(c)}>
@@ -245,24 +307,24 @@ export default function DvolHeatmap() {
             <div className={styles.picker}>
               {VIEWS.map((v) => (
                 <button key={v.id} className={styles.pickerBtn} data-active={v.id === view} onClick={() => setView(v.id)}>
-                  {v.label}
+                  {t(v.label)}
                 </button>
               ))}
             </div>
             <div className={styles.picker}>
               {SIDES.map((s) => (
                 <button key={s.id} className={styles.pickerBtn} data-active={s.id === side} onClick={() => setSide(s.id)}>
-                  {s.label}
+                  {t(s.label)}
                 </button>
               ))}
             </div>
           </div>
           <span className={styles.subtitle}>
-            {view === 'skew'
-              ? 'Resting vega ($ per vol pt) by distance from each option’s mid IV, centred on the 30d ATM mid'
-              : 'Resting vega ($ per vol pt) on Deribit books by IV'}
-            {meta ? ` · ${meta.instruments} options · ${meta.expiries.join(' / ')}` : ''}
-            {data ? ` · ${resolutionSec < 60 ? `${resolutionSec}s` : `${resolutionSec / 60}m`} columns` : ''}
+            {view === 'skew' ? t('subtitleSkew') : t('subtitleRaw')}
+            {meta ? t('metaOptions', { n: meta.instruments, expiries: meta.expiries.join(' / ') }) : ''}
+            {data
+              ? t('columns', { res: resolutionSec < 60 ? `${resolutionSec}s` : `${resolutionSec / 60}m` })
+              : ''}
           </span>
           <div className={styles.legend}>
             <span className={styles.legendLine} />
@@ -270,16 +332,16 @@ export default function DvolHeatmap() {
             {view === 'skew' && (
               <>
                 <span className={styles.legendLine} data-type="atm" />
-                <span className={styles.legendText}>Book ATM (30d)</span>
+                <span className={styles.legendText}>{t('bookAtm30')}</span>
               </>
             )}
             <span className={styles.legendDot} data-side="buy" />
-            <span className={styles.legendText}>Buy prints</span>
+            <span className={styles.legendText}>{t('buyPrints')}</span>
             <span className={styles.legendDot} data-side="sell" />
-            <span className={styles.legendText}>Sell prints</span>
+            <span className={styles.legendText}>{t('sellPrints')}</span>
             {hover && (
               <span className={styles.hover}>
-                {fmtLevel(hover.iv)} · bids {fmtVega(hover.bid)} · offers {fmtVega(hover.ask)}
+                {t('hover', { level: fmtLevel(hover.iv), bid: fmtVega(hover.bid), ask: fmtVega(hover.ask) })}
               </span>
             )}
           </div>
@@ -294,18 +356,18 @@ export default function DvolHeatmap() {
           </div>
           {atmPct != null && (
             <div className={styles.stat}>
-              <span className={styles.statLabel}>Book ATM</span>
+              <span className={styles.statLabel}>{t('bookAtm')}</span>
               <span className={styles.statValue}>{atmPct.toFixed(2)}%</span>
             </div>
           )}
           <div className={styles.stat}>
-            <span className={styles.statLabel}>Bid wall</span>
+            <span className={styles.statLabel}>{t('bidWall')}</span>
             <span className={styles.statValue} data-side="bid">
               {bidWall ? `${fmtLevel(bidWall[0])} · ${fmtVega(bidWall[1])}` : '—'}
             </span>
           </div>
           <div className={styles.stat}>
-            <span className={styles.statLabel}>Offer wall</span>
+            <span className={styles.statLabel}>{t('offerWall')}</span>
             <span className={styles.statValue} data-side="ask">
               {askWall ? `${fmtLevel(askWall[0])} · ${fmtVega(askWall[1])}` : '—'}
             </span>
@@ -323,11 +385,9 @@ export default function DvolHeatmap() {
           <div className={styles.chartOverlay}>
             <EmptyState
               icon={error != null ? '⚠' : '◌'}
-              title={error != null ? 'Heatmap unavailable' : 'Collecting order books'}
+              title={error != null ? t('unavailable') : t('collecting')}
               detail={
-                error != null
-                  ? 'The heatmap API did not respond. The backend may not be running this version yet.'
-                  : 'Deribit serves no historical books, so the heatmap fills from when the server started.'
+                error != null ? t('unavailableDetail') : t('collectingDetail')
               }
             />
           </div>
@@ -336,7 +396,7 @@ export default function DvolHeatmap() {
         <button
           className={styles.resetBtn}
           onClick={() => chartApiRef.current?.timeScale().fitContent()}
-          title="Reset zoom"
+          title={t('resetZoom')}
         >
           ⟲
         </button>

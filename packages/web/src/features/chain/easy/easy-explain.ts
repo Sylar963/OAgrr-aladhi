@@ -1,6 +1,9 @@
 import { pnlAtPrice, type Leg, type PriceZone } from '@features/architect';
 import { normCdf } from '@lib/analytics/blackScholes';
 import { fmtUsd } from '@lib/format';
+import { translate, type Locale } from '@lib/i18n';
+
+import { easyMessages, type EasyMessageKey } from './i18n';
 
 export interface EasyLegDraft {
   type: 'call' | 'put';
@@ -76,46 +79,53 @@ function fmtPrice(v: number): string {
   return `$${v.toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 0 : 2 })}`;
 }
 
-export function legTitle(leg: Pick<Leg, 'type' | 'direction' | 'strike'>): string {
-  const verb = leg.direction === 'buy' ? 'Buy' : 'Sell';
-  const view = leg.type === 'call' ? '▲ UP' : '▼ DOWN';
+export function legTitle(leg: Pick<Leg, 'type' | 'direction' | 'strike'>, locale: Locale): string {
+  const verb = translate(easyMessages, leg.direction === 'buy' ? 'legBuy' : 'legSell', undefined, locale);
+  const view = translate(easyMessages, leg.type === 'call' ? 'legUp' : 'legDown', undefined, locale);
   return `${verb} ${view} ${fmtPrice(leg.strike)}`;
 }
 
-export function describeLeg(leg: Leg, underlying: string): string {
+export function describeLeg(leg: Leg, underlying: string, locale: Locale): string {
   const qty = leg.quantity * (leg.contractMultiplier ?? 1);
   const premium = leg.entryPrice * qty;
   const above = leg.type === 'call';
   const be = above ? leg.strike + leg.entryPrice : leg.strike - leg.entryPrice;
-  const side = above ? 'above' : 'below';
-  if (leg.direction === 'buy') {
-    return `You pay ${fmtUsd(premium)} now. It pays out if ${underlying} ends ${side} ${fmtPrice(leg.strike)}, and you're in profit past ${fmtPrice(be)}. The most you can lose is the ${fmtUsd(premium)} you paid.`;
-  }
-  return `You collect ${fmtUsd(premium)} now. You keep it if ${underlying} stays ${above ? 'below' : 'above'} ${fmtPrice(leg.strike)}, and you start losing money if it ends ${side} ${fmtPrice(be)}.`;
+  const vars = {
+    premium: fmtUsd(premium),
+    underlying,
+    strike: fmtPrice(leg.strike),
+    be: fmtPrice(be),
+  };
+  const key: EasyMessageKey =
+    leg.direction === 'buy'
+      ? above
+        ? 'describeBuyAbove'
+        : 'describeBuyBelow'
+      : above
+        ? 'describeSellCall'
+        : 'describeSellPut';
+  return translate(easyMessages, key, vars, locale);
 }
 
-const STRATEGY_BLURBS: Record<string, string> = {
-  'Long Call': 'A bet that the price goes up. Your risk is limited to what you paid.',
-  'Long Put': 'A bet that the price goes down. Your risk is limited to what you paid.',
-  'Short Call': 'You get paid to bet the price will NOT rise much. Losses can be unlimited if it rallies.',
-  'Short Put': 'You get paid to bet the price will NOT fall much. A big drop can mean a big loss.',
-  'Bull Call Spread': 'A cheaper bet on the price going up. Both your profit and your loss are capped.',
-  'Bear Call Spread': 'You get paid upfront if the price stays below a level. Both profit and loss are capped.',
-  'Bear Put Spread': 'A cheaper bet on the price going down. Both your profit and your loss are capped.',
-  'Bull Put Spread': 'You get paid upfront if the price stays above a level. Both profit and loss are capped.',
-  'Long Straddle': 'A bet on a BIG move in either direction. You lose if the price stays still.',
-  'Long Strangle': 'A cheaper bet on a BIG move in either direction. The move needs to be bigger.',
-  'Short Straddle': 'You get paid if the price stays calm. A big move either way can mean a big loss.',
-  'Short Strangle': 'You get paid if the price stays inside a range. A big move can mean a big loss.',
-  'Iron Condor': 'You get paid if the price stays inside a range. Losses are capped on both sides.',
-  'Iron Butterfly': 'You get paid if the price pins near one level. Losses are capped on both sides.',
-  'Call Butterfly': 'A cheap bet that the price ends near the middle strike.',
-  'Put Butterfly': 'A cheap bet that the price ends near the middle strike.',
+const STRATEGY_BLURBS: Record<string, EasyMessageKey> = {
+  'Long Call': 'blurbLongCall',
+  'Long Put': 'blurbLongPut',
+  'Short Call': 'blurbShortCall',
+  'Short Put': 'blurbShortPut',
+  'Bull Call Spread': 'blurbBullCallSpread',
+  'Bear Call Spread': 'blurbBearCallSpread',
+  'Bear Put Spread': 'blurbBearPutSpread',
+  'Bull Put Spread': 'blurbBullPutSpread',
+  'Long Straddle': 'blurbLongStraddle',
+  'Long Strangle': 'blurbLongStrangle',
+  'Short Straddle': 'blurbShortStraddle',
+  'Short Strangle': 'blurbShortStrangle',
+  'Iron Condor': 'blurbIronCondor',
+  'Iron Butterfly': 'blurbIronButterfly',
+  'Call Butterfly': 'blurbButterfly',
+  'Put Butterfly': 'blurbButterfly',
 };
 
-export function describeStrategy(name: string): string {
-  return (
-    STRATEGY_BLURBS[name] ??
-    'A custom combination. Read the green and red zones on the chart: green is where you make money at expiry.'
-  );
+export function describeStrategy(name: string, locale: Locale): string {
+  return translate(easyMessages, STRATEGY_BLURBS[name] ?? 'blurbCustom', undefined, locale);
 }

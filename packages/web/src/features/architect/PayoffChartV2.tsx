@@ -17,6 +17,7 @@ import { Spinner } from '@components/ui';
 import type { Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import { dteDays, fmtUsd } from '@lib/format';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
 import type { GhostPath, GhostPathKind } from './ghost-paths';
@@ -29,7 +30,34 @@ const GHOST_RGB: Record<'profit' | 'loss', string> = {
   profit: '0,233,151',
   loss: '203,56,85',
 };
-const GHOST_LABEL: Record<GhostPathKind, string> = { up: '↑ up', down: '↓ down', theta: 'θ flat' };
+const messages = defineMessages(
+  {
+    ghost_up: '↑ up',
+    ghost_down: '↓ down',
+    ghost_theta: 'θ flat',
+    invalid: 'INVALID',
+    noHistory: 'No spot price history for this underlying',
+    v1Accurate: 'The V1 expiry view stays accurate.',
+    switchToV1: 'Switch back to V1',
+    snapshotAgo: 'snapshot · {ago}',
+    profitFrontier: 'PROFIT FRONTIER',
+    ivShift: 'IV {iv}% ({shift} pts)',
+    frontierNote: 'Above = modeled profit before exit costs',
+  },
+  {
+    ghost_up: '↑ alza',
+    ghost_down: '↓ baja',
+    ghost_theta: 'θ plano',
+    invalid: 'INVÁLIDO',
+    noHistory: 'Sin historial de precio spot para este subyacente',
+    v1Accurate: 'La vista de vencimiento V1 sigue siendo precisa.',
+    switchToV1: 'Volver a V1',
+    snapshotAgo: 'captura · {ago}',
+    profitFrontier: 'FRONTERA DE GANANCIA',
+    ivShift: 'IV {iv}% ({shift} pts)',
+    frontierNote: 'Arriba = ganancia modelada antes de costos de salida',
+  },
+);
 const rgba = (rgb: string, a: number) => `rgba(${rgb},${a})`;
 
 interface PayoffChartV2Props {
@@ -173,6 +201,8 @@ export default function PayoffChartV2({
   expiryMarks,
   invalidationLevel = null,
 }: PayoffChartV2Props) {
+  const t = useT(messages);
+  const locale = useLocale();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -352,11 +382,11 @@ export default function PayoffChartV2({
         lineWidth: 2,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: 'INVALID',
+        title: t('invalid'),
       });
       priceLinesRef.current.push(thesisLine);
     }
-  }, [breakevens, spotPrice, invalidationLevel]);
+  }, [breakevens, spotPrice, invalidationLevel, t]);
 
   // Push zones to the chart-canvas primitive. The primitive itself recomputes
   // pixel coordinates on every chart redraw via updateAllViews, so there is
@@ -417,6 +447,7 @@ export default function PayoffChartV2({
           path.candles,
           breakevens,
           expiryMarks[0]?.expiryMs ?? path.candles.at(-1)!.timestamp,
+          locale,
         );
         const towardUp = path.targetPrice >= path.candles[0]!.open;
         ghostMarkersRef.current.get(path.kind)?.setMarkers(
@@ -451,7 +482,7 @@ export default function PayoffChartV2({
     } else if (preservedRange) {
       timeScale.setVisibleLogicalRange(preservedRange);
     }
-  }, [ghostPaths, showProjections, projectionKey, breakevens, expiryMarks]);
+  }, [ghostPaths, showProjections, projectionKey, breakevens, expiryMarks, locale]);
 
   // Expiry lines are positioned off the last time point on the shared scale,
   // which the projection and frontier series extend past the last real candle.
@@ -512,10 +543,10 @@ export default function PayoffChartV2({
   if (!available) {
     return (
       <div className={styles.chartV2EmptyState}>
-        <div className={styles.chartV2EmptyTitle}>No spot price history for this underlying</div>
-        <div className={styles.chartV2EmptyDetail}>The V1 expiry view stays accurate.</div>
+        <div className={styles.chartV2EmptyTitle}>{t('noHistory')}</div>
+        <div className={styles.chartV2EmptyDetail}>{t('v1Accurate')}</div>
         <button className={styles.chartV2EmptyBtn} onClick={onSwitchToV1}>
-          Switch back to V1
+          {t('switchToV1')}
         </button>
       </div>
     );
@@ -533,12 +564,14 @@ export default function PayoffChartV2({
         {showProjections && ghostPaths.length > 0 && (
           <div className={styles.ghostLegend}>
             {snapshotMeta && (
-              <div className={styles.ghostLegendSnap}>snapshot · {snapshotMeta.agoLabel}</div>
+              <div className={styles.ghostLegendSnap}>
+                {t('snapshotAgo', { ago: snapshotMeta.agoLabel })}
+              </div>
             )}
             {ghostPaths.map((p) => (
               <div key={p.kind} className={styles.ghostLegendRow}>
                 <span className={styles.ghostLegendDot} data-profit={p.isProfit} />
-                <span className={styles.ghostLegendLabel}>{GHOST_LABEL[p.kind]}</span>
+                <span className={styles.ghostLegendLabel}>{t(`ghost_${p.kind}`)}</span>
                 <span className={styles.ghostLegendPnl} data-profit={p.isProfit}>
                   {fmtUsd(p.pnlAtExpiry)}
                 </span>
@@ -548,18 +581,21 @@ export default function PayoffChartV2({
         )}
         {showProjections && profitFrontiers.length > 0 && (
           <div className={styles.frontierLegend}>
-            <strong>PROFIT FRONTIER</strong>
+            <strong>{t('profitFrontier')}</strong>
             {profitFrontiers.map((frontier) => (
               <div key={frontier.kind} className={styles.frontierLegendRow}>
                 <span data-kind={frontier.kind} />
                 <span>
                   {frontier.kind === 'base'
                     ? `IV ${Math.round(frontier.iv * 100)}%`
-                    : `IV ${Math.round(frontier.iv * 100)}% (${frontier.ivShiftPct > 0 ? '+' : ''}${frontier.ivShiftPct} pts)`}
+                    : t('ivShift', {
+                        iv: Math.round(frontier.iv * 100),
+                        shift: `${frontier.ivShiftPct > 0 ? '+' : ''}${frontier.ivShiftPct}`,
+                      })}
                 </span>
               </div>
             ))}
-            <small>Above = modeled profit before exit costs</small>
+            <small>{t('frontierNote')}</small>
           </div>
         )}
       </div>

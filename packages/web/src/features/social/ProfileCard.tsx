@@ -1,4 +1,5 @@
 import { useClerk, useUser } from '@clerk/react';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import type { SocialVenue } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
@@ -7,18 +8,92 @@ import { useSocialProfile, useUpdateSocialProfile } from './hooks/queries';
 import styles from './ProfileCard.module.css';
 import VenueTag, { venueLabel } from './VenueTag';
 
-function sharedItems(venue: SocialVenue): string[] {
+const messages = defineMessages(
+  {
+    sharedUsername: 'Your account username',
+    sharedPositions: 'Your {venue} open positions, streamed live with marks and unrealized PnL',
+    sharedNoFills: 'Closing fills are not shown: Paradex does not report fill history',
+    sharedFills: 'Your {venue} closing fills with realized PnL',
+    sharedEquity:
+      'Your {venue} account equity history and return, as the venue reports it (deposits and withdrawals included)',
+    username: 'Username',
+    loading: 'Loading…',
+    noUsername: 'No username on your account',
+    setUsername: 'Set username',
+    checking: 'Checking…',
+    refresh: 'Refresh',
+    sharing: 'Sharing on leaderboard',
+    waitingFor: 'Waiting for {venue} connection',
+    chooseAccount: 'Choose an account to broadcast',
+    leave: 'Leave',
+    join: 'Join leaderboard',
+    broadcastAccount: 'Broadcast account',
+    noVenue:
+      'No venue account connected. Connect Derive, Thalex or Paradex from the account menu; paper accounts are not ranked.',
+    connected: 'Connected',
+    notConnected: 'Not connected right now',
+    consentTitle: 'Joining shares your {venue} account with every signed-in user:',
+    consentStream:
+      'The connection stays open while you are listed, so your book keeps streaming after you close the app. You can leave at any time; your stream stops immediately.',
+    joining: 'Joining…',
+    shareJoin: 'Share & join',
+    cancel: 'Cancel',
+    chooseFirst: 'Choose which venue account to broadcast first.',
+    hintHandle:
+      'Named chat posts and the leaderboard use your account username. Anonymous posts never show it.',
+    hintNoHandle:
+      'Add a username to your account to join the leaderboard or post under your name. Anonymous chat works without one.',
+  },
+  {
+    sharedUsername: 'Tu nombre de usuario',
+    sharedPositions:
+      'Tus posiciones abiertas en {venue}, transmitidas en vivo con mark y PnL no realizado',
+    sharedNoFills: 'No se muestran ejecuciones de cierre: Paradex no reporta historial de ejecuciones',
+    sharedFills: 'Tus ejecuciones de cierre en {venue} con PnL realizado',
+    sharedEquity:
+      'Tu historial de equity y retorno de la cuenta de {venue}, tal como lo reporta el exchange (incluye depósitos y retiros)',
+    username: 'Usuario',
+    loading: 'Cargando…',
+    noUsername: 'Tu cuenta no tiene nombre de usuario',
+    setUsername: 'Definir usuario',
+    checking: 'Verificando…',
+    refresh: 'Actualizar',
+    sharing: 'Compartiendo en el ranking',
+    waitingFor: 'Esperando conexión de {venue}',
+    chooseAccount: 'Elige una cuenta para transmitir',
+    leave: 'Salir',
+    join: 'Unirse al ranking',
+    broadcastAccount: 'Cuenta transmitida',
+    noVenue:
+      'No hay cuenta de exchange conectada. Conecta Derive, Thalex o Paradex desde el menú de cuenta; las cuentas Paper no entran al ranking.',
+    connected: 'Conectada',
+    notConnected: 'Sin conexión en este momento',
+    consentTitle: 'Al unirte compartes tu cuenta de {venue} con todos los usuarios que iniciaron sesión:',
+    consentStream:
+      'La conexión permanece abierta mientras estés en la lista, así que tu libro sigue transmitiéndose aunque cierres la app. Puedes salir cuando quieras; tu transmisión se detiene de inmediato.',
+    joining: 'Uniéndote…',
+    shareJoin: 'Compartir y unirse',
+    cancel: 'Cancelar',
+    chooseFirst: 'Primero elige qué cuenta de exchange transmitir.',
+    hintHandle:
+      'Los mensajes con nombre en el chat y el ranking usan tu nombre de usuario. Los mensajes anónimos nunca lo muestran.',
+    hintNoHandle:
+      'Agrega un nombre de usuario a tu cuenta para unirte al ranking o publicar con tu nombre. El chat anónimo funciona sin él.',
+  },
+);
+
+function sharedItems(venue: SocialVenue, t: Translate<typeof messages.en>): string[] {
+  const name = venueLabel(venue);
   return [
-    'Your account username',
-    `Your ${venueLabel(venue)} open positions, streamed live with marks and unrealized PnL`,
-    venue === 'paradex'
-      ? 'Closing fills are not shown: Paradex does not report fill history'
-      : `Your ${venueLabel(venue)} closing fills with realized PnL`,
-    `Your ${venueLabel(venue)} account equity history and return, as the venue reports it (deposits and withdrawals included)`,
+    t('sharedUsername'),
+    t('sharedPositions', { venue: name }),
+    venue === 'paradex' ? t('sharedNoFills') : t('sharedFills', { venue: name }),
+    t('sharedEquity', { venue: name }),
   ];
 }
 
 export default function ProfileCard() {
+  const t = useT(messages);
   const clerk = useClerk();
   const profile = useSocialProfile();
   const update = useUpdateSocialProfile();
@@ -69,27 +144,27 @@ export default function ProfileCard() {
     <section className={styles.card}>
       <div className={styles.row}>
         <div className={styles.identity}>
-          <span className={styles.label}>Username</span>
+          <span className={styles.label}>{t('username')}</span>
           {profile.isLoading ? (
-            <span className={styles.muted}>Loading…</span>
+            <span className={styles.muted}>{t('loading')}</span>
           ) : handle ? (
             <span className={styles.handle}>@{handle}</span>
           ) : (
-            <span className={styles.muted}>No username on your account</span>
+            <span className={styles.muted}>{t('noUsername')}</span>
           )}
         </div>
 
         {!handle && !profile.isLoading && (
           <div className={styles.actions}>
             <button className={styles.secondary} onClick={() => clerk.openUserProfile()}>
-              Set username
+              {t('setUsername')}
             </button>
             <button
               className={styles.ghost}
               onClick={() => void profile.refetch()}
               disabled={profile.isFetching}
             >
-              {profile.isFetching ? 'Checking…' : 'Refresh'}
+              {profile.isFetching ? t('checking') : t('refresh')}
             </button>
           </div>
         )}
@@ -101,21 +176,21 @@ export default function ProfileCard() {
                 {broadcastConnected ? (
                   <span className={styles.liveBadge}>
                     <span className={styles.liveDot} />
-                    Sharing on leaderboard
+                    {t('sharing')}
                   </span>
                 ) : broadcastVenue ? (
                   <span className={styles.waitingBadge}>
-                    Waiting for {venueLabel(broadcastVenue)} connection
+                    {t('waitingFor', { venue: venueLabel(broadcastVenue) })}
                   </span>
                 ) : (
-                  <span className={styles.waitingBadge}>Choose an account to broadcast</span>
+                  <span className={styles.waitingBadge}>{t('chooseAccount')}</span>
                 )}
                 <button
                   className={styles.ghost}
                   onClick={() => update.mutate({ leaderboardVisible: false })}
                   disabled={update.isPending}
                 >
-                  Leave
+                  {t('leave')}
                 </button>
               </>
             ) : (
@@ -124,7 +199,7 @@ export default function ProfileCard() {
                 onClick={() => setConfirming(true)}
                 disabled={update.isPending || venues.length === 0}
               >
-                Join leaderboard
+                {t('join')}
               </button>
             )}
           </div>
@@ -134,14 +209,11 @@ export default function ProfileCard() {
       {handle && !profile.isLoading && (
         <div className={styles.row}>
           <div className={styles.identity}>
-            <span className={styles.label}>Broadcast account</span>
+            <span className={styles.label}>{t('broadcastAccount')}</span>
             {venues.length === 0 ? (
-              <span className={styles.muted}>
-                No venue account connected. Connect Derive, Thalex or Paradex from the account menu;
-                paper accounts are not ranked.
-              </span>
+              <span className={styles.muted}>{t('noVenue')}</span>
             ) : (
-              <div className={styles.venues} role="radiogroup" aria-label="Broadcast account">
+              <div className={styles.venues} role="radiogroup" aria-label={t('broadcastAccount')}>
                 {venues.map((entry) => (
                   <button
                     key={entry.venue}
@@ -151,7 +223,7 @@ export default function ProfileCard() {
                     data-active={entry.venue === selectedVenue}
                     onClick={() => chooseVenue(entry.venue)}
                     disabled={update.isPending}
-                    title={entry.connected ? 'Connected' : 'Not connected right now'}
+                    title={entry.connected ? t('connected') : t('notConnected')}
                   >
                     <VenueTag venue={entry.venue} />
                     <span className={styles.venueDot} data-connected={entry.connected} />
@@ -164,39 +236,34 @@ export default function ProfileCard() {
       )}
 
       {confirming && !joined && selectedVenue && (
-        <div className={styles.consent} role="dialog" aria-label="Join leaderboard">
+        <div className={styles.consent} role="dialog" aria-label={t('join')}>
           <p className={styles.consentTitle}>
-            Joining shares your {venueLabel(selectedVenue)} account with every signed-in user:
+            {t('consentTitle', { venue: venueLabel(selectedVenue) })}
           </p>
           <ul className={styles.consentList}>
-            {sharedItems(selectedVenue).map((item) => (
+            {sharedItems(selectedVenue, t).map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
-          <p className={styles.muted}>
-            The connection stays open while you are listed, so your book keeps streaming after you
-            close the app. You can leave at any time; your stream stops immediately.
-          </p>
+          <p className={styles.muted}>{t('consentStream')}</p>
           <div className={styles.actions}>
             <button className={styles.primary} onClick={join} disabled={update.isPending}>
-              {update.isPending ? 'Joining…' : 'Share & join'}
+              {update.isPending ? t('joining') : t('shareJoin')}
             </button>
             <button className={styles.ghost} onClick={() => setConfirming(false)}>
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </div>
       )}
 
       {confirming && !joined && !selectedVenue && venues.length > 0 && (
-        <p className={styles.hint}>Choose which venue account to broadcast first.</p>
+        <p className={styles.hint}>{t('chooseFirst')}</p>
       )}
 
       <p className={styles.hint} data-error={error != null}>
         {error ??
-          (handle
-            ? 'Named chat posts and the leaderboard use your account username. Anonymous posts never show it.'
-            : 'Add a username to your account to join the leaderboard or post under your name. Anonymous chat works without one.')}
+          (handle ? t('hintHandle') : t('hintNoHandle'))}
       </p>
     </section>
   );

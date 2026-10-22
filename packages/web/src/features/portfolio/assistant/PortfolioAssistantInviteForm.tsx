@@ -1,9 +1,27 @@
 import { type FormEvent, useState } from 'react';
 
+import { defineMessages, useLocale, useT } from '@lib/i18n';
+
 import { redeemPortfolioAssistantInvite } from './api';
+import { assistantErrorFrom } from './i18n';
 import styles from './PortfolioAssistantPanel.module.css';
 
+const messages = defineMessages(
+  {
+    label: 'Beta invite code',
+    checking: 'Checking&',
+    unlock: 'Unlock',
+  },
+  {
+    label: 'Código de invitación beta',
+    checking: 'Verificando…',
+    unlock: 'Desbloquear',
+  },
+);
+
 export function PortfolioAssistantInviteForm({ onRedeemed }: { onRedeemed: () => Promise<void> }) {
+  const t = useT(messages);
+  const locale = useLocale();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -18,7 +36,7 @@ export function PortfolioAssistantInviteForm({ onRedeemed }: { onRedeemed: () =>
       setCode('');
       await onRedeemed();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not redeem invite.');
+      setError(assistantErrorFrom(caught, 'invite_failed', locale, 'invite'));
     } finally {
       setSubmitting(false);
     }
@@ -26,7 +44,7 @@ export function PortfolioAssistantInviteForm({ onRedeemed }: { onRedeemed: () =>
 
   return (
     <form className={styles.inviteForm} onSubmit={submit}>
-      <label htmlFor="portfolio-assistant-invite">Beta invite code</label>
+      <label htmlFor="portfolio-assistant-invite">{t('label')}</label>
       <div className={styles.inviteRow}>
         <input
           id="portfolio-assistant-invite"
@@ -37,7 +55,7 @@ export function PortfolioAssistantInviteForm({ onRedeemed }: { onRedeemed: () =>
           onChange={(event) => setCode(event.target.value)}
         />
         <button type="submit" disabled={submitting || code.trim().length < 12}>
-          {submitting ? 'Checking&' : 'Unlock'}
+          {submitting ? t('checking') : t('unlock')}
         </button>
       </div>
       {error && (

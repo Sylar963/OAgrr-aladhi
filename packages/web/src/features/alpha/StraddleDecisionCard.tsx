@@ -6,53 +6,169 @@ import type {
   ShortStraddleEvaluationResponse,
 } from '@oggregator/protocol';
 import { fmtIv, fmtPct, fmtStrike, fmtUsd, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 
+import { alphaMessages, type AlphaT } from './i18n';
 import signal from './SignalCard.module.css';
 import styles from './StraddleScannerPanel.module.css';
 
+export const straddleMessages = defineMessages(
+  {
+    sellCandidateLabel: 'CHECK SETUP',
+    sellCandidateMessage: 'Premium clears every gate · verify thesis',
+    watchLabel: 'WATCH',
+    watchMessage: 'Rich on price · regime or data caveat',
+    cheapLabel: "CHEAP · DON'T SELL",
+    cheapMessage: 'Premium does not pay for the vol',
+    noForecastLabel: 'NO FORECAST',
+    noForecastMessage: 'Cannot judge premium',
+    iv_below_hurdle:
+      'Sellable IV (bids, after fees) is not above the higher of the forecast and matched-horizon realized vol. Edge is implied minus future realized (Sinclair p. 87).',
+    negative_model_edge:
+      'Net credit is below the straddle’s value at the forecast vol, so the model expects to pay out more than it collects.',
+    below_cone_median:
+      'Sellable IV is below the median realized vol for this horizon. That is cheap versus the vol cone (Sinclair pp. 39–41).',
+    below_cone_p75:
+      'Sellable IV is below the 75th percentile of the vol cone. It is not historically rich for this horizon.',
+    cone_unavailable: 'Not enough spot history to build the vol cone for this horizon.',
+    premium_not_above_normal:
+      'IV minus forecast is not above the usual implied-minus-subsequent-realized spread. That is ordinary insurance premium, which Sinclair (pp. 41–43) says is not a good enough reason to sell.',
+    premium_baseline_unknown:
+      'Too little IV history to measure the usual premium for this tenor. It is treated as unknown, not zero.',
+    term_backwardation:
+      'Front IV is above 30D IV. Turbulent regime: rich vol can be rich for a reason (Sinclair pp. 15–16; Bennett pp. 138–139).',
+    spot_breaking_out: 'Spot is outside its 20-day range. Realized vol may be about to re-rate.',
+    realized_accelerating:
+      '7D realized vol is more than 1.25× the 30D level. The recent move may not be over.',
+    gamma_window: 'Under two days to expiry. Gamma dominates and small moves swing P&L sharply.',
+    size_below_minimum:
+      'The risk budget or top-of-book size cannot cover the venue minimum at this stress level.',
+    forecast_unavailable: 'No realized-vol forecast is available, so premium cannot be judged.',
+    gateIvAboveForecast: 'IV above forecast',
+    gateCone: 'Vol cone ≥ p75',
+    gateUsualPremium: 'Above usual premium',
+    venueHistory: 'venue history',
+    allVenues: 'all venues',
+    gateCalm: 'Calm regime',
+    title: 'Premium · forecast · stress risk',
+    tipGreen:
+      'Green means the premium clears the forecast, vol-cone and usual-premium gates and the stress loss fits your budget. It still needs a thesis and an execution check.',
+    tipPayoff:
+      "The payoff is at expiry. Stress loss is a scenario, not a maximum: a short straddle's loss is unbounded.",
+    sellContract: 'sell {strike} C + P · {expiry} ·',
+    shortVol: 'short vol',
+    shortStraddle: 'short straddle',
+    atSigma: 'at {sigma}σ',
+    stressBudgetUsed: 'Stress budget used',
+    stress: 'Stress {value}',
+    creditStress: 'Credit / stress loss',
+    move: '±{pct} move',
+    premiumGates: 'Premium gates',
+    sellIv: 'Sell IV',
+    insideBe: 'Inside BE (model)',
+    passNote:
+      'It clears all three gates: IV above the matched forecast, at least p75 on the vol cone, and above the usual premium. That supports a sell, but it is not proof of an edge. Record the thesis before trading.',
+    evidenceHeading: 'WALK-FORWARD EVIDENCE · ATM ~7D · BIDS IN, ASKS OUT, FEES',
+    evidenceUnavailable: 'Evidence collection is unavailable on this server.',
+    loading: 'Loading…',
+    collectingSamples: 'Collecting samples for this venue yet. Nothing here validates an edge.',
+    noCompletedSamples: 'No completed samples for this venue yet. Nothing here validates an edge.',
+    footnote:
+      'Daily breakeven move {daily} vs forecast {forecast}. Premium concentrates near the strike, an argument for strangles (Sinclair p. 97). Being right on vol can still lose on the path (pp. 92–93), so size below full Kelly (p. 109).',
+    payoffAria: 'Short straddle expiry payoff from {from} to {to}',
+    stepLiveStraddle: 'Live straddle',
+  },
+  {
+    sellCandidateLabel: 'REVISAR SETUP',
+    sellCandidateMessage: 'La prima pasa todos los filtros · verifica la tesis',
+    watchLabel: 'VIGILAR',
+    watchMessage: 'Cara en precio · advertencia de régimen o datos',
+    cheapLabel: 'BARATA · NO VENDER',
+    cheapMessage: 'La prima no paga la volatilidad',
+    noForecastLabel: 'SIN PRONÓSTICO',
+    noForecastMessage: 'No se puede juzgar la prima',
+    iv_below_hurdle:
+      'La IV vendible (bids, después de comisiones) no supera el mayor entre el pronóstico y la vol realizada al mismo horizonte. El edge es la implícita menos la realizada futura (Sinclair p. 87).',
+    negative_model_edge:
+      'El crédito neto está por debajo del valor del straddle a la vol pronosticada, así que el modelo espera pagar más de lo que cobra.',
+    below_cone_median:
+      'La IV vendible está por debajo de la vol realizada mediana para este horizonte. Es barata frente al cono de vol (Sinclair pp. 39–41).',
+    below_cone_p75:
+      'La IV vendible está por debajo del percentil 75 del cono de vol. No es históricamente cara para este horizonte.',
+    cone_unavailable: 'No hay suficiente historial de spot para construir el cono de vol en este horizonte.',
+    premium_not_above_normal:
+      'La IV menos el pronóstico no supera el spread habitual entre implícita y realizada posterior. Es una prima de seguro ordinaria, que según Sinclair (pp. 41–43) no es razón suficiente para vender.',
+    premium_baseline_unknown:
+      'Hay muy poco historial de IV para medir la prima habitual en este plazo. Se trata como desconocida, no como cero.',
+    term_backwardation:
+      'La IV de corto plazo está por encima de la IV 30D. Régimen turbulento: la vol cara puede estar cara por una razón (Sinclair pp. 15–16; Bennett pp. 138–139).',
+    spot_breaking_out: 'El spot está fuera de su rango de 20 días. La vol realizada podría estar por recalibrarse.',
+    realized_accelerating:
+      'La vol realizada 7D supera 1.25× el nivel 30D. El movimiento reciente podría no haber terminado.',
+    gamma_window: 'Menos de dos días al vencimiento. Gamma domina y movimientos pequeños mueven el P&L con fuerza.',
+    size_below_minimum:
+      'El presupuesto de riesgo o el tamaño del top of book no cubren el mínimo del exchange en este nivel de estrés.',
+    forecast_unavailable: 'No hay pronóstico de vol realizada disponible, así que no se puede juzgar la prima.',
+    gateIvAboveForecast: 'IV sobre el pronóstico',
+    gateCone: 'Cono de vol ≥ p75',
+    gateUsualPremium: 'Sobre la prima habitual',
+    venueHistory: 'historial del exchange',
+    allVenues: 'todos los exchanges',
+    gateCalm: 'Régimen calmo',
+    title: 'Prima · pronóstico · riesgo de estrés',
+    tipGreen:
+      'Verde significa que la prima pasa los filtros de pronóstico, cono de vol y prima habitual, y que la pérdida de estrés cabe en tu presupuesto. Aún necesita una tesis y una revisión de ejecución.',
+    tipPayoff:
+      'El payoff es al vencimiento. La pérdida de estrés es un escenario, no un máximo: la pérdida de un short straddle es ilimitada.',
+    sellContract: 'vender {strike} C + P · {expiry} ·',
+    shortVol: 'short vol',
+    shortStraddle: 'short straddle',
+    atSigma: 'a {sigma}σ',
+    stressBudgetUsed: 'Presupuesto de estrés usado',
+    stress: 'Estrés {value}',
+    creditStress: 'Crédito / pérdida de estrés',
+    move: 'movimiento ±{pct}',
+    premiumGates: 'Filtros de prima',
+    sellIv: 'IV de venta',
+    insideBe: 'Dentro de BE (modelo)',
+    passNote:
+      'Pasa los tres filtros: IV sobre el pronóstico equivalente, al menos p75 en el cono de vol y sobre la prima habitual. Eso respalda una venta, pero no prueba un edge. Registra la tesis antes de operar.',
+    evidenceHeading: 'EVIDENCIA WALK-FORWARD · ATM ~7D · ENTRADA EN BIDS, SALIDA EN ASKS, COMISIONES',
+    evidenceUnavailable: 'La recolección de evidencia no está disponible en este servidor.',
+    loading: 'Cargando…',
+    collectingSamples: 'Recolectando muestras para este exchange. Nada aquí valida un edge.',
+    noCompletedSamples: 'Aún no hay muestras completas para este exchange. Nada aquí valida un edge.',
+    footnote:
+      'Movimiento diario de breakeven {daily} vs pronóstico {forecast}. La prima se concentra cerca del strike, un argumento a favor de los strangles (Sinclair p. 97). Acertar en la vol aún puede perder por la trayectoria (pp. 92–93), así que dimensiona por debajo del Kelly completo (p. 109).',
+    payoffAria: 'Payoff al vencimiento del short straddle de {from} a {to}',
+    stepLiveStraddle: 'Straddle en vivo',
+  },
+);
+
+type StraddleKey = keyof typeof straddleMessages.en;
+
 export const STRADDLE_STATUS: Record<
   AlphaStraddleVerdict,
-  { label: string; tone: 'review' | 'neutral' | 'danger'; message: string }
+  { label: StraddleKey; tone: 'review' | 'neutral' | 'danger'; message: StraddleKey }
 > = {
   'sell-candidate': {
-    label: 'CHECK SETUP',
+    label: 'sellCandidateLabel',
     tone: 'review',
-    message: 'Premium clears every gate · verify thesis',
+    message: 'sellCandidateMessage',
   },
-  watch: { label: 'WATCH', tone: 'neutral', message: 'Rich on price · regime or data caveat' },
-  cheap: { label: "CHEAP · DON'T SELL", tone: 'danger', message: 'Premium does not pay for the vol' },
-  'no-forecast': { label: 'NO FORECAST', tone: 'neutral', message: 'Cannot judge premium' },
-};
-
-export const FLAG_TEXT: Record<AlphaStraddleFlag, string> = {
-  iv_below_hurdle:
-    'Sellable IV (bids, after fees) is not above the higher of the forecast and matched-horizon realized vol. Edge is implied minus future realized (Sinclair p. 87).',
-  negative_model_edge:
-    'Net credit is below the straddle’s value at the forecast vol, so the model expects to pay out more than it collects.',
-  below_cone_median:
-    'Sellable IV is below the median realized vol for this horizon. That is cheap versus the vol cone (Sinclair pp. 39–41).',
-  below_cone_p75:
-    'Sellable IV is below the 75th percentile of the vol cone. It is not historically rich for this horizon.',
-  cone_unavailable: 'Not enough spot history to build the vol cone for this horizon.',
-  premium_not_above_normal:
-    'IV minus forecast is not above the usual implied-minus-subsequent-realized spread. That is ordinary insurance premium, which Sinclair (pp. 41–43) says is not a good enough reason to sell.',
-  premium_baseline_unknown:
-    'Too little IV history to measure the usual premium for this tenor. It is treated as unknown, not zero.',
-  term_backwardation:
-    'Front IV is above 30D IV. Turbulent regime: rich vol can be rich for a reason (Sinclair pp. 15–16; Bennett pp. 138–139).',
-  spot_breaking_out: 'Spot is outside its 20-day range. Realized vol may be about to re-rate.',
-  realized_accelerating:
-    '7D realized vol is more than 1.25× the 30D level. The recent move may not be over.',
-  gamma_window: 'Under two days to expiry. Gamma dominates and small moves swing P&L sharply.',
-  size_below_minimum:
-    'The risk budget or top-of-book size cannot cover the venue minimum at this stress level.',
-  forecast_unavailable: 'No realized-vol forecast is available, so premium cannot be judged.',
+  watch: { label: 'watchLabel', tone: 'neutral', message: 'watchMessage' },
+  cheap: { label: 'cheapLabel', tone: 'danger', message: 'cheapMessage' },
+  'no-forecast': { label: 'noForecastLabel', tone: 'neutral', message: 'noForecastMessage' },
 };
 
 type GateState = 'pass' | 'fail' | 'warn';
 
-function gates(candidate: AlphaStraddleCandidate) {
+function gates(
+  candidate: AlphaStraddleCandidate,
+  t: (key: StraddleKey) => string,
+  ta: AlphaT,
+) {
   const has = (flag: AlphaStraddleFlag) => candidate.flags.includes(flag);
   const regimeFlags: AlphaStraddleFlag[] = [
     'term_backwardation',
@@ -62,7 +178,7 @@ function gates(candidate: AlphaStraddleCandidate) {
   ];
   const rows: Array<{ label: string; detail: string; state: GateState }> = [
     {
-      label: 'IV above forecast',
+      label: t('gateIvAboveForecast'),
       detail: `${fmtIv(candidate.sellIv)} vs ${fmtIv(candidate.hurdleVol)}`,
       state:
         has('forecast_unavailable') || has('iv_below_hurdle') || has('negative_model_edge')
@@ -70,24 +186,27 @@ function gates(candidate: AlphaStraddleCandidate) {
           : 'pass',
     },
     {
-      label: 'Vol cone ≥ p75',
+      label: t('gateCone'),
       detail:
-        candidate.conePercentile == null ? 'no cone' : `p${candidate.conePercentile.toFixed(0)}`,
+        candidate.conePercentile == null ? ta('noCone') : `p${candidate.conePercentile.toFixed(0)}`,
       state: has('below_cone_median') ? 'fail' : has('below_cone_p75') || has('cone_unavailable') ? 'warn' : 'pass',
     },
     {
-      label: 'Above usual premium',
+      label: t('gateUsualPremium'),
       detail:
         candidate.excessEdge == null
-          ? 'unknown'
+          ? ta('unknown')
           : `${(candidate.excessEdge * 100).toFixed(1)}pt · ${
-              candidate.premiumBaseline.source === 'venue' ? 'venue history' : 'all venues'
+              candidate.premiumBaseline.source === 'venue' ? t('venueHistory') : t('allVenues')
             }`,
       state: has('premium_not_above_normal') ? 'fail' : has('premium_baseline_unknown') ? 'warn' : 'pass',
     },
     {
-      label: 'Calm regime',
-      detail: regimeFlags.filter(has).length === 0 ? 'no flags' : `${regimeFlags.filter(has).length} flag(s)`,
+      label: t('gateCalm'),
+      detail:
+        regimeFlags.filter(has).length === 0
+          ? ta('noFlags')
+          : ta('flagCount', { n: regimeFlags.filter(has).length }),
       state: regimeFlags.some(has) ? 'warn' : 'pass',
     },
   ];
@@ -115,6 +234,8 @@ export default function StraddleDecisionCard({
   evidenceUnavailable,
   onOpenBuilder,
 }: StraddleDecisionCardProps) {
+  const t = useT(straddleMessages);
+  const ta = useT(alphaMessages);
   return (
     <section
       className={signal.card}
@@ -130,18 +251,12 @@ export default function StraddleDecisionCard({
     >
       <header className={signal.header}>
         <div>
-          <span className={signal.eyebrow}>Straddle decision</span>
-          <h2 className={signal.title}>Premium · forecast · stress risk</h2>
+          <span className={signal.eyebrow}>{ta('straddleDecision')}</span>
+          <h2 className={signal.title}>{t('title')}</h2>
         </div>
-        <InfoTip label="How to read this screen" title="A filter, not an instruction" align="end">
-          <p>
-            Green means the premium clears the forecast, vol-cone and usual-premium gates and the
-            stress loss fits your budget. It still needs a thesis and an execution check.
-          </p>
-          <p>
-            The payoff is at expiry. Stress loss is a scenario, not a maximum: a short straddle's
-            loss is unbounded.
-          </p>
+        <InfoTip label={ta('howToRead')} title={ta('filterNotInstruction')} align="end">
+          <p>{t('tipGreen')}</p>
+          <p>{t('tipPayoff')}</p>
         </InfoTip>
       </header>
       {candidate == null ? (
@@ -170,6 +285,9 @@ function Dashboard({
 }: Omit<StraddleDecisionCardProps, 'candidate' | 'emptyState' | 'emptyReason'> & {
   candidate: AlphaStraddleCandidate;
 }) {
+  const t = useT(straddleMessages);
+  const ta = useT(alphaMessages);
+  const gateRows = gates(candidate, t, ta);
   const status = STRADDLE_STATUS[candidate.verdict];
   const sized = candidate.suggestedQuantity > 0;
   const quantity = sized ? candidate.suggestedQuantity : candidate.minQuantity;
@@ -183,42 +301,47 @@ function Dashboard({
         <div className={signal.statusLockup} data-tone={status.tone}>
           <span className={signal.statusBeacon} aria-hidden="true" />
           <div>
-            <strong>{status.label}</strong>
-            <span>{status.message}</span>
+            <strong>{t(status.label)}</strong>
+            <span>{t(status.message)}</span>
           </div>
         </div>
         <div className={signal.contractLine}>
           <strong>{VENUES[candidate.venue]?.label ?? candidate.venue}</strong>
           <span>
-            sell {fmtStrike(candidate.strike)} C + P · {formatExpiry(candidate.expiry)} ·{' '}
+            {t('sellContract', {
+              strike: fmtStrike(candidate.strike),
+              expiry: formatExpiry(candidate.expiry),
+            })}{' '}
             {candidate.dte.toFixed(1)}D
           </span>
           <span>
             {quantity} {candidate.underlying}
-            {sized ? '' : ' (venue min)'}
+            {sized ? '' : ta('venueMin')}
           </span>
-          <span className={signal.direction}>short vol</span>
+          <span className={signal.direction}>{t('shortVol')}</span>
         </div>
       </div>
 
       <div className={signal.visualGrid}>
         <div className={`${signal.visualPanel} ${signal.payoffPanel}`}>
           <div className={signal.panelHeader}>
-            <span>Expiry payoff</span>
-            <strong>short straddle</strong>
+            <span>{ta('expiryPayoff')}</span>
+            <strong>{t('shortStraddle')}</strong>
           </div>
           <StraddlePayoff candidate={candidate} quantity={quantity} />
           <div className={signal.payoffLegend}>
             <span data-kind="loss">
-              −{fmtUsd(stressUsd)} at {stressSigma}σ
+              −{fmtUsd(stressUsd)} {t('atSigma', { sigma: stressSigma })}
             </span>
-            <span data-kind="profit">+{fmtUsd(quantity * candidate.netCredit)} max profit</span>
+            <span data-kind="profit">
+              +{fmtUsd(quantity * candidate.netCredit)} {ta('maxProfit')}
+            </span>
           </div>
         </div>
 
         <div className={signal.visualPanel}>
           <div className={signal.panelHeader}>
-            <span>Stress budget used</span>
+            <span>{t('stressBudgetUsed')}</span>
             <strong data-kind={budgetUse != null && budgetUse > 100 ? 'loss' : 'profit'}>
               {budgetUse == null ? '—' : `${budgetUse.toFixed(0)}%`}
             </strong>
@@ -239,16 +362,16 @@ function Dashboard({
             </div>
             {budgetUse != null && budgetUse > 100 && (
               <span className={signal.overflowLabel}>
-                +{(budgetUse - 100).toFixed(0)}% over limit
+                {ta('overLimit', { pct: (budgetUse - 100).toFixed(0) })}
               </span>
             )}
           </div>
           <div className={signal.meterLabels}>
-            <span>Stress {fmtUsd(stressUsd)}</span>
-            <span>Limit {fmtUsd(budgetUsd)}</span>
+            <span>{t('stress', { value: fmtUsd(stressUsd) })}</span>
+            <span>{ta('limit', { value: fmtUsd(budgetUsd) })}</span>
           </div>
           <div className={signal.balanceBlock}>
-            <span className={signal.miniLabel}>Credit / stress loss</span>
+            <span className={signal.miniLabel}>{t('creditStress')}</span>
             <div className={signal.balanceBar}>
               <span
                 className={signal.lossBalance}
@@ -260,19 +383,21 @@ function Dashboard({
               />
             </div>
             <div className={signal.meterLabels}>
-              <span>±{fmtPct(candidate.stressMovePct, 1)} move</span>
-              <span>book {candidate.topOfBookQuantity}</span>
+              <span>{t('move', { pct: fmtPct(candidate.stressMovePct, 1) })}</span>
+              <span>{ta('book', { n: candidate.topOfBookQuantity })}</span>
             </div>
           </div>
         </div>
 
         <div className={signal.visualPanel}>
           <div className={signal.panelHeader}>
-            <span>Premium gates</span>
-            <strong>{gates(candidate).filter((gate) => gate.state === 'pass').length}/4 pass</strong>
+            <span>{t('premiumGates')}</span>
+            <strong>
+              {ta('gatesPass', { n: gateRows.filter((gate) => gate.state === 'pass').length })}
+            </strong>
           </div>
           <ul className={styles.gateList}>
-            {gates(candidate).map((gate) => (
+            {gateRows.map((gate) => (
               <li key={gate.label} data-state={gate.state}>
                 <span aria-hidden="true">
                   {gate.state === 'pass' ? '✓' : gate.state === 'fail' ? '✕' : '!'}
@@ -286,56 +411,53 @@ function Dashboard({
       </div>
 
       <div className={signal.metricsStrip}>
-        <Metric label="Credit kept" value={fmtUsd(candidate.netCredit * quantity)} />
+        <Metric label={ta('creditKept')} value={fmtUsd(candidate.netCredit * quantity)} />
         <Metric
-          label="Breakevens"
+          label={ta('breakevens')}
           value={`${fmtUsdCompact(candidate.breakevenLow)}–${fmtUsdCompact(candidate.breakevenHigh)}`}
         />
-        <Metric label="Sell IV" value={`${fmtIv(candidate.sellIv)} / ${fmtIv(candidate.hurdleVol)}`} />
+        <Metric label={t('sellIv')} value={`${fmtIv(candidate.sellIv)} / ${fmtIv(candidate.hurdleVol)}`} />
         <Metric
-          label="Model edge"
+          label={ta('modelEdge')}
           value={fmtUsd(candidate.modelEdgeUsd == null ? null : candidate.modelEdgeUsd * quantity)}
           tone={candidate.modelEdgeUsd != null && candidate.modelEdgeUsd > 0 ? 'profit' : 'loss'}
         />
         <Metric
-          label="Inside BE (model)"
+          label={t('insideBe')}
           value={
             candidate.probInsideAtForecast == null
               ? '—'
               : fmtPct(candidate.probInsideAtForecast * 100, 0)
           }
         />
-        <Metric label="Entry fees" value={fmtUsd(candidate.entryFees * quantity)} />
+        <Metric label={ta('entryFees')} value={fmtUsd(candidate.entryFees * quantity)} />
       </div>
 
       <details className={signal.review}>
         <summary>
-          Why this verdict ·{' '}
-          {candidate.flags.length === 0 ? 'all gates pass' : `${candidate.flags.length} flags`}
+          {ta('whyVerdict')} ·{' '}
+          {candidate.flags.length === 0
+            ? ta('allGatesPass')
+            : ta('flagsCount', { n: candidate.flags.length })}
         </summary>
         {candidate.flags.length === 0 ? (
-          <p className={styles.passNote}>
-            It clears all three gates: IV above the matched forecast, at least p75 on the vol cone,
-            and above the usual premium. That supports a sell, but it is not proof of an edge.
-            Record the thesis before trading.
-          </p>
+          <p className={styles.passNote}>{t('passNote')}</p>
         ) : (
           <ul className={styles.flagList}>
             {candidate.flags.map((flag) => (
-              <li key={flag}>{FLAG_TEXT[flag]}</li>
+              <li key={flag}>{t(flag)}</li>
             ))}
           </ul>
         )}
         <div className={styles.evidence}>
-          <span>WALK-FORWARD EVIDENCE · ATM ~7D · BIDS IN, ASKS OUT, FEES</span>
+          <span>{t('evidenceHeading')}</span>
           {evidenceUnavailable ? (
-            <small>Evidence collection is unavailable on this server.</small>
+            <small>{t('evidenceUnavailable')}</small>
           ) : evidence == null ? (
-            <small>Loading…</small>
+            <small>{t('loading')}</small>
           ) : segments.length === 0 ? (
             <small>
-              {evidence.status === 'collecting' ? 'Collecting' : 'No completed'} samples for this
-              venue yet. Nothing here validates an edge.
+              {t(evidence.status === 'collecting' ? 'collectingSamples' : 'noCompletedSamples')}
             </small>
           ) : (
             <div className={styles.evidenceGrid}>
@@ -352,10 +474,10 @@ function Dashboard({
           )}
         </div>
         <p className={signal.footnote}>
-          Daily breakeven move {fmtPct(candidate.dailyBreakevenMovePct, 2)} vs forecast{' '}
-          {fmtPct(candidate.forecastDailyMovePct, 2)}. Premium concentrates near the strike, an
-          argument for strangles (Sinclair p. 97). Being right on vol can still lose on the path
-          (pp. 92–93), so size below full Kelly (p. 109).
+          {t('footnote', {
+            daily: fmtPct(candidate.dailyBreakevenMovePct, 2),
+            forecast: fmtPct(candidate.forecastDailyMovePct, 2),
+          })}
         </p>
       </details>
 
@@ -364,7 +486,7 @@ function Dashboard({
         className={styles.builderButton}
         onClick={() => onOpenBuilder(candidate)}
       >
-        <span>Open both legs in Builder V2</span>
+        <span>{ta('openInBuilder')}</span>
         <span aria-hidden="true">↗</span>
       </button>
     </>
@@ -400,6 +522,7 @@ function StraddlePayoff({
   const points = [from, K, to].map((price) => `${scaleX(price)},${scaleY(pnl(price))}`).join(' ');
   const zeroY = scaleY(0);
   const forwardX = scaleX(candidate.forwardPrice);
+  const t = useT(straddleMessages);
   const labels = [
     { price: candidate.breakevenLow, text: fmtUsdCompact(candidate.breakevenLow) },
     { price: K, text: fmtUsdCompact(K) },
@@ -412,7 +535,7 @@ function StraddlePayoff({
         className={signal.payoffChart}
         viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
-        aria-label={`Short straddle expiry payoff from ${fmtUsd(from)} to ${fmtUsd(to)}`}
+        aria-label={t('payoffAria', { from: fmtUsd(from), to: fmtUsd(to) })}
       >
         <rect x="0" y="0" width={chartWidth} height={zeroY} className={signal.profitZone} />
         <rect
@@ -466,10 +589,12 @@ function EmptyState({
   state: StraddleDecisionCardProps['emptyState'];
   reason: string;
 }) {
+  const t = useT(straddleMessages);
+  const ta = useT(alphaMessages);
   const steps = [
-    { label: 'Account size', state: state === 'equity' ? 'active' : 'done' },
-    { label: 'Live straddle', state: state === 'equity' ? 'waiting' : 'blocked' },
-    { label: 'Risk map', state: 'waiting' },
+    { label: ta('stepAccountSize'), state: state === 'equity' ? 'active' : 'done' },
+    { label: t('stepLiveStraddle'), state: state === 'equity' ? 'waiting' : 'blocked' },
+    { label: ta('stepRiskMap'), state: 'waiting' },
   ] as const;
   return (
     <div className={signal.emptyState}>
@@ -479,10 +604,10 @@ function EmptyState({
       <div className={signal.emptyCopy}>
         <strong>
           {state === 'equity'
-            ? 'Set your account size'
+            ? ta('setAccountSize')
             : state === 'market'
-              ? 'Market data unavailable'
-              : 'No executable straddle'}
+              ? ta('marketUnavailable')
+              : ta('noExecutableStraddle')}
         </strong>
         <p>{reason}</p>
       </div>

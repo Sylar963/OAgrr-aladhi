@@ -3,9 +3,27 @@ import { useState, useRef, useEffect } from 'react';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { DropdownPicker } from '@components/ui';
 import { formatExpiry, dteDays } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { useStrategyStore } from './strategy-store';
 import { repriceLeg } from './reprice';
 import styles from './Architect.module.css';
+
+const messages = defineMessages(
+  {
+    buy: 'BUY',
+    sell: 'SELL',
+    baseQty: 'Base qty',
+    strike: 'Strike',
+    add: '+ Add',
+  },
+  {
+    buy: 'COMPRA',
+    sell: 'VENTA',
+    baseQty: 'Cant. base',
+    strike: 'Strike',
+    add: '+ Agregar',
+  },
+);
 
 interface LegInputProps {
   chain: EnrichedChainResponse | null;
@@ -24,6 +42,7 @@ export default function LegInput({
   activeVenues,
   onExpiryChange,
 }: LegInputProps) {
+  const t = useT(messages);
   const addLeg = useStrategyStore((s) => s.addLeg);
   const [type, setType] = useState<'call' | 'put'>('call');
   const [direction, setDirection] = useState<'buy' | 'sell'>('buy');
@@ -84,7 +103,7 @@ export default function LegInput({
             data-type="buy"
             onClick={() => setDirection('buy')}
           >
-            BUY
+            {t('buy')}
           </button>
           <button
             className={styles.toggleBtn}
@@ -92,7 +111,7 @@ export default function LegInput({
             data-type="sell"
             onClick={() => setDirection('sell')}
           >
-            SELL
+            {t('sell')}
           </button>
         </div>
 
@@ -100,7 +119,7 @@ export default function LegInput({
           type="text"
           inputMode="decimal"
           className={styles.legInputField}
-          placeholder="Base qty"
+          placeholder={t('baseQty')}
           value={qty}
           onChange={(e) => {
             const cleaned = e.target.value.replace(/[^\d.]/g, '');
@@ -119,7 +138,7 @@ export default function LegInput({
             type="text"
             inputMode="decimal"
             className={styles.legInputField}
-            placeholder={atmStrike ? atmStrike.toLocaleString() : 'Strike'}
+            placeholder={atmStrike ? atmStrike.toLocaleString() : t('strike')}
             value={strikeInput}
             onChange={(e) => {
               const cleaned = e.target.value.replace(/[^\d.]/g, '');
@@ -182,7 +201,7 @@ export default function LegInput({
         />
 
         <button className={styles.addLegBtn} onClick={handleAdd}>
-          + Add
+          {t('add')}
         </button>
       </div>
     </div>

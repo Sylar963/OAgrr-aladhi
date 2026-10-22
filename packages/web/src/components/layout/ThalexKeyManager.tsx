@@ -4,6 +4,7 @@ import {
   useLiveTradingAvailability,
   useThalexKeySlots,
 } from '@features/portfolio';
+import { defineMessages, useT } from '@lib/i18n';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import type { ThalexKeySlot, VenueEnvironment } from '@oggregator/protocol';
 import { useState } from 'react';
@@ -14,6 +15,88 @@ type Access = 'read_only' | 'trading';
 
 const ENVIRONMENTS: readonly VenueEnvironment[] = ['prod', 'test'];
 const NETWORK_LABEL: Record<VenueEnvironment, string> = { prod: 'Mainnet', test: 'Testnet' };
+
+const messages = defineMessages(
+  {
+    failed: '{label} failed',
+    missing: 'Missing: Key ID (kid), RSA private key (PEM)',
+    saving: 'Saving',
+    switchingTo: 'Switching to {network}',
+    removing: 'Removing',
+    loadError: "Couldn't load which keys are saved. The server may be running an older build.",
+    thalexKeys: 'Thalex keys',
+    readOnly: 'Read-only',
+    trading: 'Trading',
+    network: 'Network',
+    access: 'Access',
+    tradingNotice1:
+      'Trading keys never go through the browser or this server. The operator installs them on the execution daemon host with',
+    tradingNotice2: ', where they stay encrypted and only the daemon can use them. See',
+    kid: 'Key ID (kid) *',
+    kidPlaceholder: 'from thalex dashboard',
+    pem: 'RSA private key (PEM) *',
+    accountNumber: 'Account number',
+    accountPlaceholder: 'optional: connect a non-default account',
+    confirm:
+      'This key has trading and withdrawals turned off in Thalex. Thalex does not let a key report its own permissions, so this cannot be checked automatically.',
+    replaces: 'Replaces the saved {network} key and switches the portfolio to it.',
+    save: 'Save {network} read-only key',
+    unknown: 'unknown',
+    none: 'none',
+    inUse: 'in use',
+    inUseOffline: 'in use · offline',
+    saved: 'saved',
+    use: 'use',
+    removeKeyAria: 'remove key',
+    removeKey: 'Remove this key',
+    offTitle: 'Live trading is disabled on this deployment',
+    off: 'off',
+    notEntitled: 'This account is not enabled for live trading',
+    daemonUnreachable: 'The execution daemon is not reachable',
+    daemonDown: 'daemon down',
+    onDaemon: 'on daemon',
+  },
+  {
+    failed: '{label} falló',
+    missing: 'Falta: Key ID (kid), clave privada RSA (PEM)',
+    saving: 'Guardando',
+    switchingTo: 'Cambiando a {network}',
+    removing: 'Eliminando',
+    loadError:
+      'No se pudo cargar qué claves están guardadas. Puede que el servidor tenga una versión anterior.',
+    thalexKeys: 'Claves de Thalex',
+    readOnly: 'Solo lectura',
+    trading: 'Trading',
+    network: 'Red',
+    access: 'Acceso',
+    tradingNotice1:
+      'Las claves de trading nunca pasan por el navegador ni por este servidor. El operador las instala en el host del daemon de ejecución con',
+    tradingNotice2: ', donde quedan cifradas y solo el daemon puede usarlas. Consulta',
+    kid: 'Key ID (kid) *',
+    kidPlaceholder: 'desde el panel de thalex',
+    pem: 'Clave privada RSA (PEM) *',
+    accountNumber: 'Número de cuenta',
+    accountPlaceholder: 'opcional: conecta una cuenta que no sea la predeterminada',
+    confirm:
+      'Esta clave tiene el trading y los retiros desactivados en Thalex. Thalex no permite que una clave informe sus propios permisos, así que esto no se puede verificar automáticamente.',
+    replaces: 'Reemplaza la clave de {network} guardada y cambia el portafolio a ella.',
+    save: 'Guardar clave de solo lectura de {network}',
+    unknown: 'desconocido',
+    none: 'ninguna',
+    inUse: 'en uso',
+    inUseOffline: 'en uso · offline',
+    saved: 'guardada',
+    use: 'usar',
+    removeKeyAria: 'quitar clave',
+    removeKey: 'Quitar esta clave',
+    offTitle: 'El trading en vivo está desactivado en este despliegue',
+    off: 'apagado',
+    notEntitled: 'Esta cuenta no está habilitada para trading en vivo',
+    daemonUnreachable: 'No se puede contactar al daemon de ejecución',
+    daemonDown: 'daemon caído',
+    onDaemon: 'en daemon',
+  },
+);
 
 interface ThalexKeyManagerProps {
   /** Called after any change, with whether a Thalex key is still stored. */
@@ -27,6 +110,7 @@ interface ThalexKeyManagerProps {
  * accepts one.
  */
 export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManagerProps) {
+  const t = useT(messages);
   const slotsQuery = useThalexKeySlots();
   const tradingQuery = useLiveTradingAvailability();
   const slots = slotsQuery.data?.slots ?? [];
@@ -54,7 +138,7 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
       onChanged(refreshed.data?.slots.some((slot) => slot.configured) ?? true);
       return true;
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : `${label} failed`);
+      onError(caught instanceof Error ? caught.message : t('failed', { label }));
       return false;
     } finally {
       setBusy(null);
@@ -63,10 +147,10 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
 
   const save = async () => {
     if (kid.trim() === '' || privateKeyPem.trim() === '') {
-      onError('Missing: Key ID (kid), RSA private key (PEM)');
+      onError(t('missing'));
       return;
     }
-    const saved = await run('Saving', () =>
+    const saved = await run(t('saving'), () =>
       connectVenue('thalex', {
         kid: kid.trim(),
         privateKeyPem: privateKeyPem.trim(),
@@ -88,15 +172,15 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
     <div className={styles.wrap}>
       {slotsQuery.isError && (
         <div className={styles.unknown} role="alert">
-          Couldn&apos;t load which keys are saved. The server may be running an older build.
+          {t('loadError')}
         </div>
       )}
-      <table className={styles.matrix} aria-label="Thalex keys">
+      <table className={styles.matrix} aria-label={t('thalexKeys')}>
         <thead>
           <tr>
             <th />
-            <th>Read-only</th>
-            <th>Trading</th>
+            <th>{t('readOnly')}</th>
+            <th>{t('trading')}</th>
           </tr>
         </thead>
         <tbody>
@@ -111,12 +195,12 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
                   slot={slotFor(environment)}
                   busy={busy != null}
                   onUse={() =>
-                    void run(`Switching to ${NETWORK_LABEL[environment]}`, () =>
+                    void run(t('switchingTo', { network: NETWORK_LABEL[environment] }), () =>
                       activateThalexEnvironment(environment),
                     )
                   }
                   onRemove={() =>
-                    void run('Removing', () => disconnectVenue('thalex', environment))
+                    void run(t('removing'), () => disconnectVenue('thalex', environment))
                   }
                 />
               </td>
@@ -130,7 +214,7 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
 
       <div className={styles.controls}>
         <Segmented
-          label="Network"
+          label={t('network')}
           value={network}
           options={ENVIRONMENTS.map((environment) => ({
             value: environment,
@@ -139,11 +223,11 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
           onChange={setNetwork}
         />
         <Segmented
-          label="Access"
+          label={t('access')}
           value={access}
           options={[
-            { value: 'read_only', label: 'Read-only' },
-            { value: 'trading', label: 'Trading' },
+            { value: 'read_only', label: t('readOnly') },
+            { value: 'trading', label: t('trading') },
           ]}
           onChange={setAccess}
         />
@@ -151,23 +235,22 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
 
       {access === 'trading' ? (
         <div className={styles.notice}>
-          Trading keys never go through the browser or this server. The operator installs them on
-          the execution daemon host with <code>keys-import</code>, where they stay encrypted and
-          only the daemon can use them. See <code>packages/execution/deploy/README.md</code>.
+          {t('tradingNotice1')} <code>keys-import</code>
+          {t('tradingNotice2')} <code>packages/execution/deploy/README.md</code>.
         </div>
       ) : (
         <>
           <label className={styles.field}>
-            <span>Key ID (kid) *</span>
+            <span>{t('kid')}</span>
             <input
               value={kid}
               onChange={(e) => setKid(e.target.value)}
-              placeholder="from thalex dashboard"
+              placeholder={t('kidPlaceholder')}
               autoComplete="off"
             />
           </label>
           <label className={styles.field}>
-            <span>RSA private key (PEM) *</span>
+            <span>{t('pem')}</span>
             <textarea
               value={privateKeyPem}
               onChange={(e) => setPrivateKeyPem(e.target.value)}
@@ -178,11 +261,11 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
             />
           </label>
           <label className={styles.field}>
-            <span>Account number</span>
+            <span>{t('accountNumber')}</span>
             <input
               value={account}
               onChange={(e) => setAccount(e.target.value)}
-              placeholder="optional: connect a non-default account"
+              placeholder={t('accountPlaceholder')}
               autoComplete="off"
             />
           </label>
@@ -192,15 +275,11 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
               checked={confirmedReadOnly}
               onChange={(e) => setConfirmedReadOnly(e.target.checked)}
             />
-            <span>
-              This key has trading and withdrawals turned off in Thalex. Thalex does not let a key
-              report its own permissions, so this cannot be checked automatically.
-            </span>
+            <span>{t('confirm')}</span>
           </label>
           {savedSlot?.configured && (
             <div className={styles.hint}>
-              Replaces the saved {NETWORK_LABEL[network].toLowerCase()} key and switches the
-              portfolio to it.
+              {t('replaces', { network: NETWORK_LABEL[network].toLowerCase() })}
             </div>
           )}
           <button
@@ -210,7 +289,7 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
             disabled={!confirmedReadOnly || busy != null}
             onClick={() => void save()}
           >
-            Save {NETWORK_LABEL[network].toLowerCase()} read-only key
+            {t('save', { network: NETWORK_LABEL[network].toLowerCase() })}
           </button>
         </>
       )}
@@ -232,17 +311,18 @@ function ReadOnlyCell({
   onUse: () => void;
   onRemove: () => void;
 }) {
-  if (unknown) return <span className={styles.warn}>unknown</span>;
-  if (slot == null || !slot.configured) return <span className={styles.none}>none</span>;
+  const t = useT(messages);
+  if (unknown) return <span className={styles.warn}>{t('unknown')}</span>;
+  if (slot == null || !slot.configured) return <span className={styles.none}>{t('none')}</span>;
   return (
     <span className={styles.cell}>
       <span className={styles.state} data-state={slot.active ? 'active' : 'saved'}>
-        {slot.active ? (slot.connected ? 'in use' : 'in use · offline') : 'saved'}
+        {slot.active ? (slot.connected ? t('inUse') : t('inUseOffline')) : t('saved')}
       </span>
       {slot.kidHint != null && <span className={styles.kid}>…{slot.kidHint}</span>}
       {!slot.active && (
         <button type="button" className={styles.linkBtn} disabled={busy} onClick={onUse}>
-          use
+          {t('use')}
         </button>
       )}
       <button
@@ -250,8 +330,8 @@ function ReadOnlyCell({
         className={styles.removeBtn}
         disabled={busy}
         onClick={onRemove}
-        aria-label="remove key"
-        title="Remove this key"
+        aria-label={t('removeKeyAria')}
+        title={t('removeKey')}
       >
         ×
       </button>
@@ -266,21 +346,36 @@ function TradingCell({
   environment: VenueEnvironment;
   availability: LiveTradingAvailability | undefined;
 }) {
+  const t = useT(messages);
   if (availability == null) return <span className={styles.none}>…</span>;
   if (availability.kind === 'off') {
-    return <span className={styles.none} title="Live trading is disabled on this deployment">off</span>;
+    return (
+      <span className={styles.none} title={t('offTitle')}>
+        {t('off')}
+      </span>
+    );
   }
   if (availability.kind === 'not_entitled') {
-    return <span className={styles.none} title="This account is not enabled for live trading">—</span>;
+    return (
+      <span className={styles.none} title={t('notEntitled')}>
+        —
+      </span>
+    );
   }
   if (availability.kind === 'daemon_unavailable') {
-    return <span className={styles.warn} title="The execution daemon is not reachable">daemon down</span>;
+    return (
+      <span className={styles.warn} title={t('daemonUnreachable')}>
+        {t('daemonDown')}
+      </span>
+    );
   }
   const key = availability.status.tradingKeys.find((k) => k.environment === environment);
-  if (key == null) return <span className={styles.none}>none</span>;
+  if (key == null) return <span className={styles.none}>{t('none')}</span>;
   return (
     <span className={styles.cell}>
-      <span className={styles.state} data-state="daemon">on daemon</span>
+      <span className={styles.state} data-state="daemon">
+        {t('onDaemon')}
+      </span>
       <span className={styles.kid}>…{key.kidHint}</span>
     </span>
   );

@@ -1,5 +1,6 @@
 import { useAppStore } from '@stores/app-store';
 import { useOpenPalette } from '@components/layout/palette-context';
+import { useLocale } from '@lib/i18n';
 import { getTokenLogo, getUnderlyingDisplayMeta } from '@lib/token-meta';
 import { useUnderlyings } from '@features/chain/queries';
 
@@ -10,8 +11,9 @@ export default function AssetPickerButton() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const openPalette = useOpenPalette();
+  const locale = useLocale();
   const logo = getTokenLogo(underlying);
-  const display = getUnderlyingDisplayMeta(underlying, underlyings);
+  const display = getUnderlyingDisplayMeta(underlying, underlyings, locale);
 
   return (
     <button className={styles.btn} onClick={openPalette} title={display.sublabel}>

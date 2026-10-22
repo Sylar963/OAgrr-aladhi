@@ -287,6 +287,8 @@ export {
   PortfolioAssistantMemoryItemSchema,
   PortfolioAssistantMemorySchema,
   type PortfolioAssistantMessage,
+  type PortfolioAssistantLocale,
+  PortfolioAssistantLocaleSchema,
   type PortfolioAssistantMessagePage,
   PortfolioAssistantMessagePageSchema,
   PortfolioAssistantMessageSchema,

@@ -1,5 +1,6 @@
 import AssetModeToggle from '@components/layout/AssetModeToggle';
 import styles from '@components/layout/TopBar.module.css';
+import { defineMessages, useT } from '@lib/i18n';
 import { TAB_GROUPS, type TabGroup } from '@lib/tabs';
 import { type TradfiPage, useAppStore } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
@@ -7,13 +8,40 @@ import { useEffect, useRef } from 'react';
 import { useTradfiUnderlyings } from './queries';
 import tradfiStyles from './TradfiApp.module.css';
 
-const PAGES: ReadonlyArray<{ id: TradfiPage; label: string; group: TabGroup }> = [
-  { id: 'chain', label: 'Chain', group: 'market' },
-  { id: 'gex', label: 'GEX', group: 'market' },
-  { id: 'vol', label: 'Volatility', group: 'market' },
-  { id: 'sectors', label: 'Sectors', group: 'market' },
-  { id: 'builder', label: 'Builder', group: 'trade' },
-  { id: 'alpha', label: 'Alpha', group: 'research' },
+const messages = defineMessages(
+  {
+    chain: 'Chain',
+    gex: 'GEX',
+    vol: 'Volatility',
+    sectors: 'Sectors',
+    builder: 'Builder',
+    alpha: 'Alpha',
+    delayedTitle: 'TastyTrade market data is delayed 15 minutes',
+    delayed: '15-min delayed',
+    underlying: 'Underlying',
+    switchUnderlying: 'Switch underlying (⌘K)',
+  },
+  {
+    chain: 'Cadena',
+    gex: 'GEX',
+    vol: 'Volatilidad',
+    sectors: 'Sectores',
+    builder: 'Constructor',
+    alpha: 'Alpha',
+    delayedTitle: 'Los datos de mercado de TastyTrade tienen 15 minutos de retraso',
+    delayed: 'Retraso de 15 min',
+    underlying: 'Subyacente',
+    switchUnderlying: 'Cambiar subyacente (⌘K)',
+  },
+);
+
+const PAGES: ReadonlyArray<{ id: TradfiPage; group: TabGroup }> = [
+  { id: 'chain', group: 'market' },
+  { id: 'gex', group: 'market' },
+  { id: 'vol', group: 'market' },
+  { id: 'sectors', group: 'market' },
+  { id: 'builder', group: 'trade' },
+  { id: 'alpha', group: 'research' },
 ];
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -23,6 +51,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export default function TradfiTopBar() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.tradfiUnderlying);
   const setUnderlying = useAppStore((s) => s.setTradfiUnderlying);
   const page = useAppStore((s) => s.tradfiPage);
@@ -74,7 +103,7 @@ export default function TradfiTopBar() {
                   data-active={page === p.id}
                   onClick={() => setPage(p.id)}
                 >
-                  {p.label}
+                  {t(p.id)}
                 </button>
               ))}
             </div>
@@ -83,9 +112,9 @@ export default function TradfiTopBar() {
       </div>
 
       <div className={styles.right}>
-        <span className={styles.notice} title="TastyTrade market data is delayed 15 minutes">
+        <span className={styles.notice} title={t('delayedTitle')}>
           <span className={styles.noticeDot} />
-          15-min delayed
+          {t('delayed')}
         </span>
         <div className={styles.cmdk} data-tour="asset-picker">
           <select
@@ -93,8 +122,8 @@ export default function TradfiTopBar() {
             className={tradfiStyles.tickerSelect}
             value={underlying}
             onChange={(e) => setUnderlying(e.target.value)}
-            aria-label="Underlying"
-            title="Switch underlying (⌘K)"
+            aria-label={t('underlying')}
+            title={t('switchUnderlying')}
           >
             {underlyings.map((u) => (
               <option key={u} value={u}>

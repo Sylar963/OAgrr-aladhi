@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { InstrumentCandlesResponse, VenueId } from '@oggregator/protocol';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
+import { defineMessages, useT } from '@lib/i18n';
 import type { ChartPanel } from './chart-panels-store.js';
 import { instrumentCandlesKey, useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
 import { useCandleCountdown } from './candle-countdown.js';
@@ -23,6 +24,37 @@ import {
 export { INTERVALS, RANGES };
 
 export type ChartPanelData = Omit<ChartPanel, 'id'>;
+
+const messages = defineMessages(
+  {
+    close: 'Close',
+    price: 'Price',
+    attribution: 'Attribution',
+    nextBar: 'Next {interval} bar closes in {countdown}',
+    myFills: 'My fills on {venue} (paper + live)',
+    entries: 'Entries',
+    loading: 'loading…',
+    errorRetry: 'error — retry',
+    noHistory: 'No historical data for this strike on {venue}',
+    attributionUnavailable: 'Attribution unavailable for {underlying} (BTC / ETH only)',
+    computing: 'computing attribution…',
+    insufficient: 'insufficient option / forward data overlap',
+  },
+  {
+    close: 'Cerrar',
+    price: 'Precio',
+    attribution: 'Atribución',
+    nextBar: 'La próxima vela de {interval} cierra en {countdown}',
+    myFills: 'Mis ejecuciones en {venue} (paper + live)',
+    entries: 'Entradas',
+    loading: 'cargando…',
+    errorRetry: 'error — reintentar',
+    noHistory: 'Sin datos históricos para este strike en {venue}',
+    attributionUnavailable: 'Atribución no disponible para {underlying} (solo BTC / ETH)',
+    computing: 'calculando atribución…',
+    insufficient: 'datos insuficientes de opción / forward superpuestos',
+  },
+);
 
 export type ChartPanelStyles = Readonly<Record<string, string>>;
 
@@ -60,6 +92,7 @@ export function useStrikeVenues(
 }
 
 export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }: ChartPanelViewProps) {
+  const t = useT(messages);
   const qc = useQueryClient();
   const strikeVenues = useStrikeVenues(data.underlying, data.expiry, data.strike, data.type);
   const [anchor, setAnchor] = useState<Timeframe>({ interval: data.interval, range: data.range });
@@ -159,7 +192,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
           )}
         </span>
         {onClose && (
-          <button type="button" onClick={onClose} aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} aria-label={t('close')}>✕</button>
         )}
       </div>
       <div className={styles.toolbar}>
@@ -168,12 +201,12 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
             type="button"
             data-active={data.chartMode === 'price' || undefined}
             onClick={() => onPatch({ chartMode: 'price' })}
-          >Price</button>
+          >{t('price')}</button>
           <button
             type="button"
             data-active={data.chartMode === 'attribution' || undefined}
             onClick={() => onPatch({ chartMode: 'attribution' })}
-          >Attribution</button>
+          >{t('attribution')}</button>
         </div>
         <div className={styles.intervals}>
           {INTERVALS.map((i) => (
@@ -184,7 +217,7 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
               onClick={() => selectTimeframe({ interval: i })}
             >{i}</button>
           ))}
-          <span className={styles.countdown} title={`Next ${data.interval} bar closes in ${countdown}`}>
+          <span className={styles.countdown} title={t('nextBar', { interval: data.interval, countdown })}>
             {countdown}
           </span>
         </div>
@@ -217,9 +250,9 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
           <button
             type="button"
             data-active={data.overlays.entries !== false || undefined}
-            title={`My fills on ${VENUES[data.venue]?.shortLabel ?? data.venue} (paper + live)`}
+            title={t('myFills', { venue: VENUES[data.venue]?.shortLabel ?? data.venue })}
             onClick={() => onPatch({ overlays: { ...data.overlays, entries: data.overlays.entries === false } })}
-          >Entries{entries.length > 0 ? ` ${entries.length}` : ''}</button>
+          >{t('entries')}{entries.length > 0 ? ` ${entries.length}` : ''}</button>
         </div>
         {strikeVenues.length > 0 && (
           <div className={styles.venueDots}>
@@ -237,11 +270,11 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
       <div className={styles.body}>
         {data.chartMode === 'price' ? (
           <>
-            {(isLoading || fallingBack) && <div className={styles.empty}>loading…</div>}
-            {error && !fallingBack && <div className={styles.empty}>error — retry</div>}
+            {(isLoading || fallingBack) && <div className={styles.empty}>{t('loading')}</div>}
+            {error && !fallingBack && <div className={styles.empty}>{t('errorRetry')}</div>}
             {!isLoading && !error && !fallingBack && candles.length === 0 && (
               <div className={styles.empty}>
-                No historical data for this strike on {VENUES[data.venue]?.shortLabel ?? data.venue}
+                {t('noHistory', { venue: VENUES[data.venue]?.shortLabel ?? data.venue })}
               </div>
             )}
             {!isLoading && !error && candles.length > 0 && (
@@ -259,16 +292,16 @@ export function ChartPanelView({ data, styles, onPatch, onSwitchVenue, onClose }
         ) : (
           <>
             {attribution.unsupportedUnderlying && (
-              <div className={styles.empty}>Attribution unavailable for {data.underlying} (BTC / ETH only)</div>
+              <div className={styles.empty}>{t('attributionUnavailable', { underlying: data.underlying })}</div>
             )}
             {!attribution.unsupportedUnderlying && attribution.isLoading && (
-              <div className={styles.empty}>computing attribution…</div>
+              <div className={styles.empty}>{t('computing')}</div>
             )}
             {!attribution.unsupportedUnderlying && attribution.error && (
-              <div className={styles.empty}>error — retry</div>
+              <div className={styles.empty}>{t('errorRetry')}</div>
             )}
             {!attribution.unsupportedUnderlying && attribution.insufficientData && (
-              <div className={styles.empty}>insufficient option / forward data overlap</div>
+              <div className={styles.empty}>{t('insufficient')}</div>
             )}
             {attribution.result && (
               <>

@@ -1,6 +1,12 @@
+import { defineMessages, useT } from '@lib/i18n';
 import { type ActiveNotice, SEVERITY_ICON } from '@lib/system-status';
 
 import styles from './StatusBanner.module.css';
+
+const messages = defineMessages(
+  { startsIn: 'in {time}', dismiss: 'Dismiss' },
+  { startsIn: 'en {time}', dismiss: 'Descartar' },
+);
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -20,6 +26,7 @@ interface StatusBannerProps {
 }
 
 export default function StatusBanner({ notice, now, onDismiss }: StatusBannerProps) {
+  const t = useT(messages);
   const scheduled = notice.startsAt != null && notice.startsAt > now;
   const countdownMs = scheduled ? notice.startsAt! - now : null;
   const role = notice.severity === 'outage' || notice.severity === 'degraded' ? 'alert' : 'status';
@@ -33,11 +40,11 @@ export default function StatusBanner({ notice, now, onDismiss }: StatusBannerPro
         <span className={styles.title}>{notice.title}</span>
         {notice.message && <span className={styles.message}>{notice.message}</span>}
         {countdownMs != null && (
-          <span className={styles.countdown}>in {formatCountdown(countdownMs)}</span>
+          <span className={styles.countdown}>{t('startsIn', { time: formatCountdown(countdownMs) })}</span>
         )}
       </span>
       {notice.dismissible && (
-        <button type="button" className={styles.close} aria-label="Dismiss" onClick={onDismiss}>
+        <button type="button" className={styles.close} aria-label={t('dismiss')} onClick={onDismiss}>
           ✕
         </button>
       )}

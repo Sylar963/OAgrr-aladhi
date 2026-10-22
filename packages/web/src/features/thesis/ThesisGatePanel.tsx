@@ -1,20 +1,23 @@
 import type { ThesisGateCheckResponse, ThesisView } from '@oggregator/protocol';
+import { useLocale, useT } from '@lib/i18n';
 import { useState } from 'react';
 
 import { keepThesis, waitThesis } from './api';
 import FlipForm from './FlipForm';
 import {
-  DIFF_LABEL,
+  classificationLabel,
+  diffLabel,
   fmtAge,
   fmtDiffValue,
   fmtDuration,
   fmtExpiry,
   fmtPrice,
   fmtUsdSigned,
-  STATUS_LABEL,
+  statusLabel,
   wrongIfText,
 } from './format';
 import { useThesisRefresh } from './hooks';
+import { thesisMessages } from './i18n';
 import styles from './Thesis.module.css';
 
 interface ThesisGatePanelProps {
@@ -26,24 +29,26 @@ interface ThesisGatePanelProps {
 }
 
 function DiffTable({ view }: { view: ThesisView }) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   if (view.diff == null) return null;
   return (
     <table className={styles.diffTable}>
       <thead>
         <tr>
-          <th>Since you wrote it</th>
-          <th>Then</th>
-          <th>Now</th>
+          <th>{t('sinceYouWrote')}</th>
+          <th>{t('then')}</th>
+          <th>{t('now')}</th>
           <th />
         </tr>
       </thead>
       <tbody>
         {view.diff.rows.map((row) => (
           <tr key={row.key} data-material={row.material === true || undefined}>
-            <td>{DIFF_LABEL[row.key]}</td>
+            <td>{diffLabel(row.key, locale)}</td>
             <td>{fmtDiffValue(row.key, row.before)}</td>
             <td>{fmtDiffValue(row.key, row.after)}</td>
-            <td>{row.material == null ? 'n/a' : row.material ? 'changed' : 'same'}</td>
+            <td>{row.material == null ? t('na') : row.material ? t('changed') : t('same')}</td>
           </tr>
         ))}
       </tbody>
@@ -52,6 +57,8 @@ function DiffTable({ view }: { view: ThesisView }) {
 }
 
 export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipLevel }: ThesisGatePanelProps) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const refresh = useThesisRefresh();
   const [mode, setMode] = useState<'choose' | 'flip' | 'kept'>('choose');
   const [busy, setBusy] = useState(false);
@@ -70,7 +77,7 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
       await refresh();
       setMode(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
+      setError(err instanceof Error ? err.message : t('requestFailed'));
     } finally {
       setBusy(false);
     }
@@ -80,9 +87,9 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
     return (
       <div className={styles.keptBar} role="status">
         <span className={styles.keptDot} />
-        Thesis intact — nothing to do. Snapshot and Send to paper stay off for this structure.
+        {t('keptBar')}
         <button type="button" className={styles.linkBtn} onClick={() => setMode('choose')}>
-          Show why
+          {t('showWhy')}
         </button>
       </div>
     );
@@ -92,51 +99,62 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
   const roomText =
     status.spotUsd == null || room == null
       ? null
-      : `spot ${fmtPrice(status.spotUsd)} is ${Math.abs(room * 100).toFixed(1)}% ${
-          (thesis.direction === 'bearish') === room >= 0 ? 'below' : 'above'
-        } ${fmtPrice(thesis.level)}`;
+      : t((thesis.direction === 'bearish') === room >= 0 ? 'roomBelow' : 'roomAbove', {
+          spot: fmtPrice(status.spotUsd),
+          pct: Math.abs(room * 100).toFixed(1),
+          level: fmtPrice(thesis.level),
+        });
+  const direction = classificationLabel(thesis.direction, locale);
+  const expiryLabel = fmtExpiry(thesis.horizonExpiry, locale);
 
   return (
-    <section className={styles.gate} aria-label="Thesis gate">
+    <section className={styles.gate} aria-label={t('thesisGate')}>
       <div className={styles.gateHeader}>
-        <span className={styles.gateTag}>Thesis gate</span>
+        <span className={styles.gateTag}>{t('thesisGate')}</span>
         {reversal
-          ? `You ended your ${thesis.direction} ${underlying} thesis ${fmtAge(thesis.endedAt ?? thesis.createdAt)}. Reversing within 24h needs the override.`
-          : `This ${target} structure goes against your ${thesis.direction} ${underlying} thesis.`}
+          ? t('reversalHeader', {
+              direction,
+              underlying,
+              age: fmtAge(thesis.endedAt ?? thesis.createdAt, locale),
+            })
+          : t('againstHeader', { target: classificationLabel(target, locale), direction, underlying })}
       </div>
 
       <blockquote className={styles.quote}>
-        <span className={styles.quoteMeta}>{fmtAge(thesis.createdAt)} you wrote:</span>{' '}
+        <span className={styles.quoteMeta}>{t('youWrote', { age: fmtAge(thesis.createdAt, locale) })}</span>{' '}
         <strong className={styles.direction} data-direction={thesis.direction}>
-          {thesis.direction === 'bearish' ? 'Bearish' : 'Bullish'} {underlying}
+          {thesis.direction === 'bearish' ? t('bearish') : t('bullish')} {underlying}
         </strong>{' '}
-        until {fmtExpiry(thesis.horizonExpiry)}. Because: “{thesis.reason}” I'm wrong if{' '}
-        {wrongIfText(thesis.direction, thesis.level, thesis.confirmSec)}.
+        {t('quoteUntil', { date: expiryLabel })} “{thesis.reason}”{' '}
+        {t('quoteWrongIf', { rule: wrongIfText(thesis.direction, thesis.level, thesis.confirmSec, locale) })}
       </blockquote>
 
       {!reversal && (
         <div className={styles.statusLine}>
           <span className={styles.statusChip} data-status={status.status}>
-            {STATUS_LABEL[status.status]}
+            {statusLabel(status.status, locale)}
           </span>
           {roomText && <span>{roomText}</span>}
-          <span>{fmtDuration(status.msToHorizon)} left</span>
+          <span>{t('left', { d: fmtDuration(status.msToHorizon) })}</span>
         </div>
       )}
 
       {!reversal && <DiffTable view={view} />}
 
       <div className={styles.structureLine}>
-        This structure: up {fmtUsdSigned(gate.proposed.upPnlUsd)} / down {fmtUsdSigned(gate.proposed.downPnlUsd)}
-        {gate.proposed.movePct != null && ` on a ±${gate.proposed.movePct.toFixed(1)}% move`} by{' '}
-        {fmtExpiry(thesis.horizonExpiry)} → <strong>{gate.proposed.classification}</strong>.
+        {t('structureUpDown', {
+          up: fmtUsdSigned(gate.proposed.upPnlUsd),
+          down: fmtUsdSigned(gate.proposed.downPnlUsd),
+        })}
+        {gate.proposed.movePct != null && ` ${t('structureMove', { pct: gate.proposed.movePct.toFixed(1) })}`}{' '}
+        {t('structureBy', { date: expiryLabel })}{' '}
+        <strong>{classificationLabel(gate.proposed.classification, locale)}</strong>.
         {gate.heldBookNote && <span className={styles.note}> {gate.heldBookNote}</span>}
       </div>
 
       {!reversal && view.diff != null && (
         <div className={styles.verdict}>
-          {view.diff.materialCount} of {view.diff.comparedCount} changed materially. The rule you wrote has not
-          fired.
+          {t('verdict', { m: view.diff.materialCount, n: view.diff.comparedCount })}
         </div>
       )}
 
@@ -161,12 +179,12 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
             disabled={busy}
             onClick={() => void run(() => keepThesis(thesis.id), 'kept')}
           >
-            Keep my thesis
+            {t('keepThesis')}
           </button>
           {!reversal &&
             (waitRunning && view.cooldown ? (
               <span className={styles.waitNote}>
-                Waiting · {fmtDuration(view.cooldown.endsAt - Date.now())} left
+                {t('waitingLeft', { d: fmtDuration(view.cooldown.endsAt - Date.now()) })}
               </span>
             ) : view.waitCompleted ? null : (
               <button
@@ -175,11 +193,11 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
                 disabled={busy}
                 onClick={() => void run(() => waitThesis(thesis.id), 'choose')}
               >
-                Wait 24h
+                {t('wait24h')}
               </button>
             ))}
           <button type="button" className={styles.ghostBtn} disabled={busy} onClick={() => setMode('flip')}>
-            {view.waitCompleted ? 'Flip (wait finished)' : 'Flip now'}
+            {view.waitCompleted ? t('flipWaitFinished') : t('flipNow')}
           </button>
         </div>
       )}

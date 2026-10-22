@@ -1,4 +1,38 @@
+import { defineMessages, type Locale, translate } from '@lib/i18n';
 import type { IvHistoryPoint } from '@shared/enriched';
+
+const messages = defineMessages(
+  {
+    pct: '{ord} pct',
+    noHistory: 'no history yet',
+    typical: 'typical for the lookback ({pct})',
+    extreme: '{label} ({pct})',
+    balanced: 'Calls ≈ puts',
+    putsOver: 'Puts over calls by {v}vp',
+    callsOver: 'Calls over puts by {v}vp',
+    putsBid: 'puts unusually bid',
+    callsBid: 'calls unusually bid',
+    rrLine: '{level}: {rel}.',
+    tails: 'Tails {rel}.',
+    cheap: 'unusually cheap',
+    rich: 'unusually rich',
+  },
+  {
+    pct: 'p{n}',
+    noHistory: 'aún sin historial',
+    typical: 'típico para el periodo ({pct})',
+    extreme: '{label} ({pct})',
+    balanced: 'Calls ≈ puts',
+    putsOver: 'Puts sobre calls por {v}vp',
+    callsOver: 'Calls sobre puts por {v}vp',
+    putsBid: 'puts inusualmente demandados',
+    callsBid: 'calls inusualmente demandados',
+    rrLine: '{level}: {rel}.',
+    tails: 'Colas: {rel}.',
+    cheap: 'inusualmente baratas',
+    rich: 'inusualmente caras',
+  },
+);
 
 export type SkewDisplayMode = 'raw' | 'normalized' | 'zscore';
 export type SkewMetricKey = 'rr25d' | 'bfly25d';
@@ -163,11 +197,28 @@ export function ordinal(n: number): string {
   return `${v}${suffix}`;
 }
 
-function relativeTo(percentile: number | null, low: string, high: string): string {
-  if (percentile == null) return 'no history yet';
-  if (percentile >= 85) return `${high} (${ordinal(percentile)} pct)`;
-  if (percentile <= 15) return `${low} (${ordinal(percentile)} pct)`;
-  return `typical for the lookback (${ordinal(percentile)} pct)`;
+/** Percentile with its unit, e.g. "72nd pct" (en) or "p72" (es). */
+export function formatPercentile(n: number, locale: Locale = 'en'): string {
+  return translate(messages, 'pct', { ord: ordinal(n), n: Math.round(n) }, locale);
+}
+
+/** Bare percentile for dense cells: "72nd" (en) or "p72" (es). */
+export function shortPercentile(n: number, locale: Locale = 'en'): string {
+  return locale === 'en' ? ordinal(n) : formatPercentile(n, locale);
+}
+
+function relativeTo(
+  percentile: number | null,
+  low: 'putsBid' | 'cheap',
+  high: 'callsBid' | 'rich',
+  locale: Locale,
+): string {
+  if (percentile == null) return translate(messages, 'noHistory', undefined, locale);
+  const pct = formatPercentile(percentile, locale);
+  const extreme = percentile >= 85 ? high : percentile <= 15 ? low : null;
+  if (extreme == null) return translate(messages, 'typical', { pct }, locale);
+  const label = translate(messages, extreme, undefined, locale);
+  return translate(messages, 'extreme', { label, pct }, locale);
 }
 
 /** Plain-language read of RR/Fly level and where it sits in the lookback. Inputs in vol points. */
@@ -176,19 +227,22 @@ export function describeSkew(
   rrPct: number | null,
   flyVp: number | null,
   flyPct: number | null,
+  locale: Locale = 'en',
 ): string {
   const parts: string[] = [];
   if (rrVp != null) {
     const level =
       Math.abs(rrVp) < 0.25
-        ? 'Calls ≈ puts'
+        ? translate(messages, 'balanced', undefined, locale)
         : rrVp < 0
-          ? `Puts over calls by ${Math.abs(rrVp).toFixed(1)}vp`
-          : `Calls over puts by ${rrVp.toFixed(1)}vp`;
-    parts.push(`${level}: ${relativeTo(rrPct, 'puts unusually bid', 'calls unusually bid')}.`);
+          ? translate(messages, 'putsOver', { v: Math.abs(rrVp).toFixed(1) }, locale)
+          : translate(messages, 'callsOver', { v: rrVp.toFixed(1) }, locale);
+    const rel = relativeTo(rrPct, 'putsBid', 'callsBid', locale);
+    parts.push(translate(messages, 'rrLine', { level, rel }, locale));
   }
   if (flyVp != null) {
-    parts.push(`Tails ${relativeTo(flyPct, 'unusually cheap', 'unusually rich')}.`);
+    const rel = relativeTo(flyPct, 'cheap', 'rich', locale);
+    parts.push(translate(messages, 'tails', { rel }, locale));
   }
   return parts.join(' ');
 }

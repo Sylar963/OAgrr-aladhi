@@ -17,6 +17,7 @@ import {
 } from '@features/tradfi/use-tradfi-underlying-candles-live';
 import { useChainWs } from '@hooks/useChainWs';
 import { fmtUsd, formatExpiry, dteDays } from '@lib/format';
+import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import {
   isSpotCandleUnderlying,
@@ -74,13 +75,140 @@ import StrategyTemplates, {
 import LegInput from './LegInput';
 import styles from './Architect.module.css';
 
-function formatAgo(ms: number): string {
+const messages = defineMessages(
+  {
+    justNow: 'just now',
+    minsAgo: '{n}m ago',
+    hrsAgo: '{n}h ago',
+    daysAgo: '{n}d ago',
+    strike: 'Strike',
+    expiry: 'Expiry',
+    side: 'Side',
+    buy: 'BUY',
+    sell: 'SELL',
+    done: 'Done',
+    editLeg: 'Edit leg',
+    removeLeg: 'Remove leg',
+    bestRoute: 'Best route',
+    oneVenue: '1 venue',
+    nVenues: '{n} venues',
+    only: 'Only',
+    resolveThesis: 'Resolve the thesis gate first.',
+    filledOn: 'Filled on {venue} - switching to Paper tab',
+    paperFailed: 'Paper order failed',
+    emptyUpstream: 'upstream returned empty data',
+    builder: 'Builder',
+    clear: 'Clear',
+    compareVenues: 'Compare Venues',
+    route: 'Route',
+    noLegsQuoted: 'No legs have a quote on {venue}.',
+    someLegsUnquoted: '{n} of {total} legs have no quote on {venue}.',
+    pickAnotherVenue: 'Pick another venue or switch to Best route.',
+    tradfiPaperOff: 'TradFi paper execution is not connected yet',
+    sending: 'Sending…',
+    sendToPaper: 'Send to paper',
+    emptyLegs: 'Pick a template, add custom legs, or drag strikes on the chart.',
+    dropToApply: 'Drop to apply strategy',
+    dragHint: 'Drag a strategy here, or select from the templates above',
+    titleV1: 'P&L at Expiry',
+    titleV2: 'Live Spot vs Break-even Zones',
+    titleV3: 'Lego Ladder',
+    chartMeta: '{range} window · {interval} candles · tenor-led',
+    atExpiry: 'At expiry',
+    projectionsOn: 'Projections on',
+    projectionsOff: 'Projections off',
+    snapshot: '⎙ Snapshot',
+    live: 'Live',
+    metrics: 'Metrics',
+    debit: 'Debit',
+    credit: 'Credit',
+    net: 'Net',
+    maxProfit: 'Max Profit',
+    maxLoss: 'Max Loss',
+    breakeven: 'Breakeven',
+    greeks: 'Greeks',
+    legsReporting: '{n}/{total} legs reporting',
+    scenarios: 'Scenarios',
+    reset: 'Reset',
+    frontierHint:
+      'Move IV to draw a blue comparison path. Time decay runs left to right; both paths meet the expiry break-even.',
+    share: 'Share',
+    shareEmpty: 'Build a strategy to share',
+    copied: 'Copied',
+    copy: 'Copy',
+  },
+  {
+    justNow: 'ahora',
+    minsAgo: 'hace {n}m',
+    hrsAgo: 'hace {n}h',
+    daysAgo: 'hace {n}d',
+    strike: 'Strike',
+    expiry: 'Venc.',
+    side: 'Lado',
+    buy: 'COMPRA',
+    sell: 'VENTA',
+    done: 'Listo',
+    editLeg: 'Editar pata',
+    removeLeg: 'Quitar pata',
+    bestRoute: 'Mejor ruta',
+    oneVenue: '1 exchange',
+    nVenues: '{n} exchanges',
+    only: 'Solo',
+    resolveThesis: 'Primero resuelve el filtro de tesis.',
+    filledOn: 'Ejecutado en {venue} - cambiando a la pestaña Paper',
+    paperFailed: 'La orden paper falló',
+    emptyUpstream: 'la fuente devolvió datos vacíos',
+    builder: 'Constructor',
+    clear: 'Limpiar',
+    compareVenues: 'Comparar exchanges',
+    route: 'Ruta',
+    noLegsQuoted: 'Ninguna pata tiene cotización en {venue}.',
+    someLegsUnquoted: '{n} de {total} patas no tienen cotización en {venue}.',
+    pickAnotherVenue: 'Elige otro exchange o cambia a Mejor ruta.',
+    tradfiPaperOff: 'La ejecución paper de TradFi aún no está conectada',
+    sending: 'Enviando…',
+    sendToPaper: 'Enviar a paper',
+    emptyLegs: 'Elige una plantilla, agrega patas personalizadas o arrastra strikes en el gráfico.',
+    dropToApply: 'Suelta para aplicar la estrategia',
+    dragHint: 'Arrastra una estrategia aquí o elige una de las plantillas de arriba',
+    titleV1: 'P&L al vencimiento',
+    titleV2: 'Spot en vivo vs zonas de breakeven',
+    titleV3: 'Escalera Lego',
+    chartMeta: 'ventana {range} · velas {interval} · según tenor',
+    atExpiry: 'Al vencimiento',
+    projectionsOn: 'Proyecciones: sí',
+    projectionsOff: 'Proyecciones: no',
+    snapshot: '⎙ Captura',
+    live: 'En vivo',
+    metrics: 'Métricas',
+    debit: 'Débito',
+    credit: 'Crédito',
+    net: 'Neto',
+    maxProfit: 'Ganancia máx.',
+    maxLoss: 'Pérdida máx.',
+    breakeven: 'Breakeven',
+    greeks: 'Greeks',
+    legsReporting: '{n}/{total} patas reportando',
+    scenarios: 'Escenarios',
+    reset: 'Restablecer',
+    frontierHint:
+      'Mueve la IV para trazar una ruta de comparación azul. El decaimiento temporal va de izquierda a derecha; ambas rutas llegan al breakeven del vencimiento.',
+    share: 'Compartir',
+    shareEmpty: 'Arma una estrategia para compartir',
+    copied: 'Copiado',
+    copy: 'Copiar',
+  },
+);
+
+type T = Translate<typeof messages.en>;
+
+function formatAgo(ms: number, t: T): string {
   const mins = Math.round((Date.now() - ms) / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('justNow');
+  if (mins < 60) return t('minsAgo', { n: mins });
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.round(hrs / 24)}d ago`;
+  if (hrs < 24) return t('hrsAgo', { n: hrs });
+  return t('daysAgo', { n: Math.round(hrs / 24) });
 }
 
 // ── Inline-editable leg row ──────────────────────────────────────────────────
@@ -138,6 +266,7 @@ function resolveBuilderExpiry(preferredExpiry: string, expiries: string[]): stri
 }
 
 function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
+  const t = useT(messages);
   const [editing, setEditing] = useState(false);
 
   function stepStrike(delta: number) {
@@ -160,7 +289,7 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
     return (
       <div className={styles.legRowEditing}>
         <div className={styles.legEditRow}>
-          <span className={styles.legEditLabel}>Strike</span>
+          <span className={styles.legEditLabel}>{t('strike')}</span>
           <button className={styles.legStepBtn} onClick={() => stepStrike(-1)}>
             −
           </button>
@@ -170,17 +299,17 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
           </button>
         </div>
         <div className={styles.legEditRow}>
-          <span className={styles.legEditLabel}>Expiry</span>
+          <span className={styles.legEditLabel}>{t('expiry')}</span>
           <span className={styles.legStepVal}>{formatExpiry(leg.expiry)}</span>
         </div>
         <div className={styles.legEditRow}>
-          <span className={styles.legEditLabel}>Side</span>
+          <span className={styles.legEditLabel}>{t('side')}</span>
           <button
             className={styles.legStepBtn}
             onClick={toggleDirection}
             style={{ width: 'auto', padding: '0 6px' }}
           >
-            {leg.direction === 'buy' ? 'BUY' : 'SELL'}
+            {leg.direction === 'buy' ? t('buy') : t('sell')}
           </button>
           <button
             className={styles.legStepBtn}
@@ -191,7 +320,7 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
           </button>
           <div className={styles.legEditActions}>
             <button className={styles.legEditSave} onClick={() => setEditing(false)}>
-              Done
+              {t('done')}
             </button>
           </div>
         </div>
@@ -202,7 +331,7 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
   return (
     <div className={styles.legRow} data-direction={leg.direction}>
       <span className={styles.legDirection} data-direction={leg.direction}>
-        {leg.direction === 'buy' ? 'BUY' : 'SELL'}
+        {leg.direction === 'buy' ? t('buy') : t('sell')}
       </span>
       <span className={styles.legQty}>{leg.quantity}×</span>
       <span className={styles.legStrike}>{leg.strike.toLocaleString()}</span>
@@ -211,10 +340,10 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
       </span>
       <span className={styles.legExpiry}>{formatExpiry(leg.expiry)}</span>
       <span className={styles.legPrice}>{fmtUsd(leg.entryPrice)}</span>
-      <button className={styles.legEditBtn} onClick={() => setEditing(true)} title="Edit leg">
+      <button className={styles.legEditBtn} onClick={() => setEditing(true)} title={t('editLeg')}>
         ✎
       </button>
-      <button className={styles.legRemove} onClick={onRemove} title="Remove leg">
+      <button className={styles.legRemove} onClick={onRemove} title={t('removeLeg')}>
         ×
       </button>
     </div>
@@ -228,6 +357,8 @@ interface ArchitectViewProps {
 }
 
 export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps) {
+  const t = useT(messages);
+  const locale = useLocale();
   const cryptoUnderlying = useAppStore((s) => s.underlying);
   const cryptoExpiry = useAppStore((s) => s.expiry);
   const cryptoVenues = useAppStore((s) => s.activeVenues);
@@ -385,24 +516,24 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     () => [
       {
         value: BEST_ROUTE_VALUE,
-        label: 'Best route',
+        label: t('bestRoute'),
         meta:
           activeVenues.length === 1
-            ? VENUES[activeVenues[0] ?? '']?.label ?? '1 venue'
-            : `${activeVenues.length} venues`,
+            ? VENUES[activeVenues[0] ?? '']?.label ?? t('oneVenue')
+            : t('nVenues', { n: activeVenues.length }),
       },
       ...activeVenues.flatMap((venueId) => {
         const venue = VENUES[venueId];
-        return venue ? [{ value: venue.id, label: venue.label, meta: 'Only' }] : [];
+        return venue ? [{ value: venue.id, label: venue.label, meta: t('only') }] : [];
       }),
     ],
-    [activeVenues],
+    [activeVenues, t],
   );
 
   async function handleSendToPaper(routing?: StrategyRouting) {
     if (market === 'tradfi' || pricedLegs.length === 0) return;
     if (thesisGated) {
-      setPaperStatus('Resolve the thesis gate first.');
+      setPaperStatus(t('resolveThesis'));
       return;
     }
     setPaperStatus(null);
@@ -418,12 +549,12 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
       const fillSummary =
         filledVenues.length === 1
           ? VENUES[filledVenues[0] ?? '']?.label ?? filledVenues[0]
-          : `${filledVenues.length} venues`;
-      setPaperStatus(`Filled on ${fillSummary} - switching to Paper tab`);
+          : t('nVenues', { n: filledVenues.length });
+      setPaperStatus(t('filledOn', { venue: fillSummary ?? '' }));
       setShowVenues(false);
       setTimeout(() => setActiveTab('trading'), 400);
     } catch (err) {
-      setPaperStatus(err instanceof Error ? err.message : 'Paper order failed');
+      setPaperStatus(err instanceof Error ? err.message : t('paperFailed'));
     }
   }
 
@@ -699,7 +830,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const spotCandlesEmpty = spotCandlesData != null && spotCandlesData.candles.length === 0;
   const spotCandlesFailureMessage =
     spotCandlesEmpty
-      ? 'upstream returned empty data'
+      ? t('emptyUpstream')
       : spotCandlesError instanceof Error
         ? spotCandlesError.message
         : null;
@@ -747,9 +878,9 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
   const expiryKey = [...new Set(pricedLegs.map((l) => l.expiry))].sort().join(',');
   const expiryMarks = useMemo(
-    () => buildExpiryMarks(expiryKey ? expiryKey.split(',') : [], market, Date.now()),
+    () => buildExpiryMarks(expiryKey ? expiryKey.split(',') : [], market, Date.now(), locale),
     // lastBarMs advances once per candle, which keeps the time-left labels fresh.
-    [expiryKey, market, lastBarMs],
+    [expiryKey, market, lastBarMs, locale],
   );
 
   const liveGhostPaths = useMemo(
@@ -819,8 +950,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   }, [selectedSnapshot, liveGhostPaths]);
 
   const snapshotMeta = useMemo(
-    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt) } : null),
-    [selectedSnapshot],
+    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt, t) } : null),
+    [selectedSnapshot, t],
   );
 
   const handleSnapshot = useCallback(() => {
@@ -879,6 +1010,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
       builderExpiry,
       dragged.template,
       dragged.variant,
+      locale,
     );
     if (!result.ok) {
       setBuilderError(result.error.message);
@@ -897,7 +1029,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
       <div className={styles.mainArea}>
         <div className={styles.header}>
           <div className={styles.titleRow}>
-            <span className={styles.title}>Builder</span>
+            <span className={styles.title}>{t('builder')}</span>
             {market === 'tradfi' ? (
               <DropdownPicker
                 size="sm"
@@ -949,7 +1081,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                 <div className={styles.legsSectionHeader}>
                   <span className={styles.strategyName}>{strategyName}</span>
                   <button className={styles.clearBtn} onClick={clearLegs}>
-                    Clear
+                    {t('clear')}
                   </button>
                 </div>
 
@@ -973,13 +1105,13 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
             {legs.length > 0 && (
               <button className={styles.compareBtn} onClick={() => setShowVenues(true)}>
-                Compare Venues
+                {t('compareVenues')}
               </button>
             )}
 
             {legs.length > 0 && (
               <div className={styles.paperTradeControls}>
-                <span className={styles.paperTradeLabel}>Route</span>
+                <span className={styles.paperTradeLabel}>{t('route')}</span>
                 <DropdownPicker
                   options={routeOptions}
                   value={routeVenue}
@@ -988,9 +1120,13 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                 {unroutableLegs.length > 0 && (
                   <div className={styles.routeUnroutable}>
                     {unroutableLegs.length === legs.length
-                      ? `No legs have a quote on ${VENUES[routeVenue]?.label ?? routeVenue}.`
-                      : `${unroutableLegs.length} of ${legs.length} legs have no quote on ${VENUES[routeVenue]?.label ?? routeVenue}.`}{' '}
-                    Pick another venue or switch to Best route.
+                      ? t('noLegsQuoted', { venue: VENUES[routeVenue]?.label ?? routeVenue })
+                      : t('someLegsUnquoted', {
+                          n: unroutableLegs.length,
+                          total: legs.length,
+                          venue: VENUES[routeVenue]?.label ?? routeVenue,
+                        })}{' '}
+                    {t('pickAnotherVenue')}
                   </div>
                 )}
               </div>
@@ -1003,14 +1139,14 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                 disabled={market === 'tradfi' || createTrade.isPending || thesisGated}
                 title={
                   market === 'tradfi'
-                    ? 'TradFi paper execution is not connected yet'
+                    ? t('tradfiPaperOff')
                     : thesisGated
-                      ? 'Resolve the thesis gate first.'
+                      ? t('resolveThesis')
                       : undefined
                 }
                 style={{ marginTop: 8 }}
               >
-                {createTrade.isPending ? 'Sending…' : 'Send to paper'}
+                {createTrade.isPending ? t('sending') : t('sendToPaper')}
               </button>
             )}
 
@@ -1022,7 +1158,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
             {legs.length === 0 && (
               <div className={styles.emptyLegs}>
-                Pick a template, add custom legs, or drag strikes on the chart.
+                {t('emptyLegs')}
               </div>
             )}
           </div>
@@ -1106,8 +1242,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                     <span className={styles.chartDropIcon}>{dragOver ? '+' : '↕'}</span>
                     <span className={styles.chartDropText}>
                       {dragOver
-                        ? 'Drop to apply strategy'
-                        : 'Drag a strategy here, or select from the templates above'}
+                        ? t('dropToApply')
+                        : t('dragHint')}
                     </span>
                   </div>
                 </div>
@@ -1127,14 +1263,17 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                     <div className={styles.chartTitleBlock}>
                       <div className={styles.chartTitle}>
                         {variant === 'v1'
-                          ? 'P&L at Expiry'
+                          ? t('titleV1')
                           : variant === 'v2'
-                            ? 'Live Spot vs Break-even Zones'
-                            : 'Lego Ladder'}
+                            ? t('titleV2')
+                            : t('titleV3')}
                       </div>
                       {variant === 'v2' && (
                         <div className={styles.chartTitleMeta}>
-                          {candleRangeLabel} window · {candleIntervalLabel} candles · tenor-led
+                          {t('chartMeta', {
+                            range: candleRangeLabel,
+                            interval: candleIntervalLabel,
+                          })}
                         </div>
                       )}
                     </div>
@@ -1184,7 +1323,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         <div className={styles.scenarioLegend}>
                           <span className={styles.legendItem}>
                             <span className={`${styles.legendDot} ${styles.legendDotBase}`} />
-                            <span className={styles.legendLabel}>At expiry</span>
+                            <span className={styles.legendLabel}>{t('atExpiry')}</span>
                           </span>
                           {ivShift !== 0 && (
                             <span className={styles.legendItem}>
@@ -1231,15 +1370,15 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                           data-active={showProjections}
                           onClick={() => setShowProjections((v) => !v)}
                         >
-                          Projections {showProjections ? 'on' : 'off'}
+                          {showProjections ? t('projectionsOn') : t('projectionsOff')}
                         </button>
                         <button
                           className={styles.projSnapBtn}
                           onClick={handleSnapshot}
                           disabled={liveGhostPaths.length === 0 || thesisGated}
-                          title={thesisGated ? 'Resolve the thesis gate first.' : undefined}
+                          title={thesisGated ? t('resolveThesis') : undefined}
                         >
-                          ⎙ Snapshot
+                          {t('snapshot')}
                         </button>
                         {snapshots.length > 0 && (
                           <select
@@ -1247,10 +1386,10 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                             value={selectedSnapshotId ?? ''}
                             onChange={(e) => setSelectedSnapshotId(e.target.value || null)}
                           >
-                            <option value="">Live</option>
+                            <option value="">{t('live')}</option>
                             {snapshots.map((s) => (
                               <option key={s.id} value={s.id}>
-                                {s.structureLabel} · {formatAgo(s.createdAt)}
+                                {s.structureLabel} · {formatAgo(s.createdAt, t)}
                               </option>
                             ))}
                           </select>
@@ -1310,17 +1449,17 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
           <div className={styles.rightCol}>
             <div className={styles.rightSection}>
-              <span className={styles.rightSectionTitle}>Metrics</span>
+              <span className={styles.rightSectionTitle}>{t('metrics')}</span>
               <div className={styles.metricsGrid}>
                 <div className={styles.metricCard}>
                   <span className={styles.metricCardLabel}>
                     {metrics
                       ? metrics.netDebit < 0
-                        ? 'Debit'
+                        ? t('debit')
                         : metrics.netDebit > 0
-                          ? 'Credit'
-                          : 'Net'
-                      : 'Net'}
+                          ? t('credit')
+                          : t('net')
+                      : t('net')}
                   </span>
                   <span
                     className={styles.metricCardVal}
@@ -1331,7 +1470,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   </span>
                 </div>
                 <div className={styles.metricCard}>
-                  <span className={styles.metricCardLabel}>Max Profit</span>
+                  <span className={styles.metricCardLabel}>{t('maxProfit')}</span>
                   <span
                     className={styles.metricCardVal}
                     data-positive={metrics ? 'true' : undefined}
@@ -1340,7 +1479,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   </span>
                 </div>
                 <div className={styles.metricCard}>
-                  <span className={styles.metricCardLabel}>Max Loss</span>
+                  <span className={styles.metricCardLabel}>{t('maxLoss')}</span>
                   <span
                     className={styles.metricCardVal}
                     data-negative={metrics ? 'true' : undefined}
@@ -1349,7 +1488,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   </span>
                 </div>
                 <div className={styles.metricCard}>
-                  <span className={styles.metricCardLabel}>Breakeven</span>
+                  <span className={styles.metricCardLabel}>{t('breakeven')}</span>
                   <span className={styles.metricCardVal}>
                     {metrics && metrics.breakevens.length > 0
                       ? metrics.breakevens.map((b) => fmtUsd(b)).join(', ')
@@ -1363,7 +1502,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               className={styles.rightSection}
               data-partial={metrics ? metrics.greeksMissingLegs > 0 : undefined}
             >
-              <span className={styles.rightSectionTitle}>Greeks</span>
+              <span className={styles.rightSectionTitle}>{t('greeks')}</span>
               <div className={styles.greeksGrid}>
                 <div className={styles.greekCard}>
                   <span className={styles.greekCardLabel}>Δ</span>
@@ -1392,7 +1531,10 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               </div>
               {metrics && metrics.greeksMissingLegs > 0 && (
                 <span className={styles.greeksPartial}>
-                  {legs.length - metrics.greeksMissingLegs}/{legs.length} legs reporting
+                  {t('legsReporting', {
+                    n: legs.length - metrics.greeksMissingLegs,
+                    total: legs.length,
+                  })}
                 </span>
               )}
             </div>
@@ -1401,7 +1543,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               <div
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
               >
-                <span className={styles.rightSectionTitle}>Scenarios</span>
+                <span className={styles.rightSectionTitle}>{t('scenarios')}</span>
                 {hasScenarios && (
                   <button
                     className={styles.sliderReset}
@@ -1410,7 +1552,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                       setDteShift(0);
                     }}
                   >
-                    Reset
+                    {t('reset')}
                   </button>
                 )}
               </div>
@@ -1438,8 +1580,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
               {variant === 'v2' ? (
                 <div className={styles.frontierHint}>
-                  Move IV to draw a blue comparison path. Time decay runs left to right; both paths
-                  meet the expiry break-even.
+                  {t('frontierHint')}
                 </div>
               ) : (
                 <div className={styles.sliderRow}>
@@ -1466,7 +1607,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
             </div>
 
             <div className={styles.rightSection}>
-              <span className={styles.rightSectionTitle}>Share</span>
+              <span className={styles.rightSectionTitle}>{t('share')}</span>
               <div className={styles.shareBar}>
                 <span className={styles.shareUrl}>
                   {pricedLegs.length > 0
@@ -1477,14 +1618,14 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                           ? `#tradfi/builder/${underlying}`
                           : `#builder/${underlying}`,
                       )
-                    : 'Build a strategy to share'}
+                    : t('shareEmpty')}
                 </span>
                 {pricedLegs.length > 0 &&
                   (copied ? (
-                    <span className={styles.shareCopied}>Copied</span>
+                    <span className={styles.shareCopied}>{t('copied')}</span>
                   ) : (
                     <button className={styles.shareBtn} onClick={handleCopyUrl}>
-                      Copy
+                      {t('copy')}
                     </button>
                   ))}
               </div>

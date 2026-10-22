@@ -10,6 +10,7 @@ import {
 import { useUnderlyings, useExpiries } from '@features/chain';
 import { useTradfiExpiries } from '@features/tradfi';
 import { DropdownPicker } from '@components/ui';
+import { defineMessages, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
 import { formatExpiry, dteDays } from '@lib/format';
@@ -47,6 +48,11 @@ const CHART_OPTIONS = {
   handleScale: { mouseWheel: true, pinch: true },
   handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
 } as const;
+
+const messages = defineMessages(
+  { title: 'Vol Smile', average: 'Average', all: 'All' },
+  { title: 'Smile de vol', average: 'Promedio', all: 'Todos' },
+);
 
 const IV_FORMAT = { type: 'custom' as const, formatter: (p: number) => `${p.toFixed(1)}%` };
 
@@ -122,6 +128,7 @@ interface Props {
 }
 
 export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const t = useT(messages);
   const tradfi = market === 'tradfi';
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
     useSurfaceUnderlying(market, defaultUnderlying);
@@ -220,7 +227,7 @@ export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' 
   const logo = getTokenLogo(localUnderlying);
 
   const venueOptions = [
-    { value: 'average', label: 'Average' },
+    { value: 'average', label: t('average') },
     ...VENUE_LIST.filter((v) => venuesForUnderlying == null || venuesForUnderlying.has(v.id)).map(
       (v) => ({ value: v.id, label: v.label }),
     ),
@@ -229,7 +236,7 @@ export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>Vol Smile</span>
+        <span className={styles.title}>{t('title')}</span>
         {setLocalUnderlying && (
           <DropdownPicker
             size="sm"
@@ -276,7 +283,7 @@ export default function VolSmile({ defaultUnderlying = 'BTC', market = 'crypto' 
             onClick={toggleAll}
           >
             <span className={styles.expiryLine} style={{ background: '#888' }} />
-            <span className={styles.expiryLabel}>All</span>
+            <span className={styles.expiryLabel}>{t('all')}</span>
           </button>
           {expiries.map((exp) => {
             const active = !hiddenExpiries.has(exp);

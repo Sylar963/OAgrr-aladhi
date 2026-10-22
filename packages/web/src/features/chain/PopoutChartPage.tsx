@@ -6,6 +6,7 @@ import {
   type VenueId,
 } from '@oggregator/protocol';
 import { VENUES } from '@lib/venue-meta';
+import { defineMessages, useT } from '@lib/i18n';
 import { useChainQuery } from './queries.js';
 import { useChainWs } from '@hooks/useChainWs';
 import { parsePopoutParams } from './chart-popout-url.js';
@@ -13,14 +14,20 @@ import { CHART_SUPPORTED_VENUES } from './instrument-symbol.js';
 import { ChartPanelView, INTERVALS, RANGES, type ChartPanelData } from './ChartPanelView.js';
 import styles from './PopoutChartPage.module.css';
 
+const messages = defineMessages(
+  { invalid: 'Invalid popout URL.' },
+  { invalid: 'URL de ventana emergente no válida.' },
+);
+
 function isVenueId(v: string): v is VenueId {
   return (VENUE_IDS as readonly string[]).includes(v);
 }
 
 export default function PopoutChartPage() {
+  const t = useT(messages);
   const initial = useMemo(() => parsePopoutParams(window.location.search), []);
   if (!initial || !isVenueId(initial.venue)) {
-    return <div className={styles.error}>Invalid popout URL.</div>;
+    return <div className={styles.error}>{t('invalid')}</div>;
   }
   return <PopoutInner initial={initial as Omit<typeof initial, 'venue'> & { venue: VenueId }} />;
 }

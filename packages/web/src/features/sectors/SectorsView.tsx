@@ -1,10 +1,42 @@
 import { Spinner } from '@components/ui';
+import { defineMessages, useT } from '@lib/i18n';
 import type { CryptoSectorBasket, CryptoSectorQuote } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
 import { type CSSProperties, useState } from 'react';
 
 import { useCryptoSectors } from './queries';
 import styles from './SectorsView.module.css';
+
+const messages = defineMessages(
+  {
+    loading: 'Loading sectors…',
+    noData: 'No sector data yet.',
+    title: 'Sectors',
+    perps: 'Bybit perps',
+    baskets: '{n} baskets',
+    note: 'Rolling 24h move. Sorted by basket average; tag = rank, breadth, median. Right column = options venues listing the asset (of {n}).',
+    meta: '{rank} {green}/{priced} green · med {median}',
+    openChain: 'Open {symbol} chain',
+    optionsOn: 'Options on {venues}',
+    noOptions: 'No options venue',
+    less: 'less ▴',
+    more: '+{n} more ▾',
+  },
+  {
+    loading: 'Cargando sectores…',
+    noData: 'Aún no hay datos de sectores.',
+    title: 'Sectores',
+    perps: 'Perps de Bybit',
+    baskets: '{n} canastas',
+    note: 'Movimiento móvil de 24h. Ordenado por promedio de la canasta; etiqueta = posición, amplitud, mediana. Columna derecha = exchanges de opciones que listan el activo (de {n}).',
+    meta: '{rank} {green}/{priced} en verde · med {median}',
+    openChain: 'Abrir cadena de {symbol}',
+    optionsOn: 'Opciones en {venues}',
+    noOptions: 'Sin exchange de opciones',
+    less: 'menos ▴',
+    more: '+{n} más ▾',
+  },
+);
 
 const COLLAPSED_ROWS = 4;
 // Crypto baskets swing harder than equity ones; a ±8% mean renders at full tint.
@@ -46,12 +78,13 @@ export function collapsedMembers(members: CryptoSectorQuote[]): CryptoSectorQuot
 }
 
 export default function SectorsView() {
+  const t = useT(messages);
   const { data, isLoading, error } = useCryptoSectors();
 
-  if (isLoading && !data) return <Spinner size="lg" label="Loading sectors…" />;
+  if (isLoading && !data) return <Spinner size="lg" label={t('loading')} />;
   if (!data) {
     return (
-      <div className={styles.empty}>{error ? String(error.message) : 'No sector data yet.'}</div>
+      <div className={styles.empty}>{error ? String(error.message) : t('noData')}</div>
     );
   }
 
@@ -60,14 +93,13 @@ export default function SectorsView() {
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Sectors</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>
-          Bybit perps <span className={styles.sep}>|</span> {data.baskets.length} baskets{' '}
+          {t('perps')} <span className={styles.sep}>|</span> {t('baskets', { n: data.baskets.length })}{' '}
           <span className={styles.sep}>|</span> {asOf}
         </p>
         <p className={styles.note}>
-          Rolling 24h move. Sorted by basket average; tag = rank, breadth, median. Right column =
-          options venues listing the asset (of {data.venueCount}).
+          {t('note', { n: data.venueCount })}
         </p>
       </header>
 
@@ -91,6 +123,7 @@ export default function SectorsView() {
 }
 
 function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueCount: number }) {
+  const t = useT(messages);
   const [expanded, setExpanded] = useState(false);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -119,8 +152,12 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
         </span>
       </div>
       <div className={styles.tileMeta}>
-        {basket.rank != null ? `#${basket.rank}` : '#—'} {basket.green}/{basket.priced} green · med{' '}
-        {formatMove(basket.median)}
+        {t('meta', {
+          rank: basket.rank != null ? `#${basket.rank}` : '#—',
+          green: basket.green,
+          priced: basket.priced,
+          median: formatMove(basket.median),
+        })}
       </div>
       <ul className={styles.rows}>
         {rows.map((m) => (
@@ -130,7 +167,7 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
                 type="button"
                 className={styles.symbolLink}
                 onClick={() => open(m.symbol)}
-                title={`Open ${m.symbol} chain`}
+                title={t('openChain', { symbol: m.symbol })}
               >
                 {m.label}
               </button>
@@ -142,8 +179,8 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
               className={styles.venues}
               title={
                 m.optionVenues.length > 0
-                  ? `Options on ${m.optionVenues.join(', ')}`
-                  : 'No options venue'
+                  ? t('optionsOn', { venues: m.optionVenues.join(', ') })
+                  : t('noOptions')
               }
             >
               {m.optionVenues.length > 0 ? `${m.optionVenues.length}/${venueCount}` : ''}
@@ -156,7 +193,7 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
       </ul>
       {(hidden > 0 || expanded) && basket.members.length > COLLAPSED_ROWS && (
         <button type="button" className={styles.more} onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'less ▴' : `+${hidden} more ▾`}
+          {expanded ? t('less') : t('more', { n: hidden })}
         </button>
       )}
     </section>

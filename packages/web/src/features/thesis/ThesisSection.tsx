@@ -1,9 +1,11 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
+import { useT } from '@lib/i18n';
 import type { ThesisDirection, ThesisGateLeg, ThesisView } from '@oggregator/protocol';
 import { useState } from 'react';
 
 import FlipBanner from './FlipBanner';
 import { gateStructureKey, useThesisFor, useThesisGate } from './hooks';
+import { thesisMessages } from './i18n';
 import ThesisCreateForm from './ThesisCreateForm';
 import ThesisGatePanel from './ThesisGatePanel';
 import ThesisStrip from './ThesisStrip';
@@ -58,6 +60,7 @@ export default function ThesisSection({
   nearestExpiry,
 }: ThesisSectionProps) {
   const session = useAccountSession();
+  const t = useT(thesisMessages);
   const [creating, setCreating] = useState(false);
   if (session.status !== 'ready') return null;
 
@@ -105,7 +108,7 @@ export default function ThesisSection({
       )}
       {gate?.decision === 'unknown' && (thesis.active != null || thesis.reversal != null) && (
         <div className={styles.note}>
-          Thesis check could not classify this structure ({gate.proposed.note ?? 'missing data'}).
+          {t('cannotClassify', { note: gate.proposed.note ?? t('missingData') })}
         </div>
       )}
     </div>

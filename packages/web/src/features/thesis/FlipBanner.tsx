@@ -1,19 +1,29 @@
 import type { ThesisView } from '@oggregator/protocol';
+import { intlLocale, type Locale, useLocale, useT } from '@lib/i18n';
 import { useState } from 'react';
 
 import { backToThesis } from './api';
 import FlipForm from './FlipForm';
-import { fmtPrice } from './format';
+import { classificationLabel, fmtPrice } from './format';
 import { useTheses, useThesisRefresh } from './hooks';
+import { thesisMessages } from './i18n';
 import styles from './Thesis.module.css';
 
-function fmtWhen(ms: number): string {
+function fmtWhen(ms: number, locale: Locale): string {
   return new Date(ms)
-    .toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    .toLocaleString(locale === 'en' ? 'en-GB' : intlLocale(locale), {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    .replace(/\./g, '')
     .toUpperCase();
 }
 
 function FlipBannerItem({ view }: { view: ThesisView }) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const refresh = useThesisRefresh();
   const [logging, setLogging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +34,18 @@ function FlipBannerItem({ view }: { view: ThesisView }) {
   return (
     <div className={styles.banner} role="alert">
       <div>
-        Your {thesis.underlying} {flip.source} book turned {flip.classification} against your intact{' '}
-        {thesis.direction} thesis (detected {fmtWhen(flip.detectedAt)}).{' '}
+        {t('bannerBookTurned', {
+          underlying: thesis.underlying,
+          source: flip.source,
+          classification: classificationLabel(flip.classification, locale),
+          direction: classificationLabel(thesis.direction, locale),
+          when: fmtWhen(flip.detectedAt, locale),
+        })}{' '}
         {flip.backToThesis
-          ? `Waiting for the book to return to ${thesis.direction}.`
-          : `You wrote: wrong only if price closes ${thesis.direction === 'bearish' ? 'above' : 'below'} ${fmtPrice(thesis.level)}.`}
+          ? t('bannerWaiting', { direction: classificationLabel(thesis.direction, locale) })
+          : t(thesis.direction === 'bearish' ? 'bannerWroteAbove' : 'bannerWroteBelow', {
+              level: fmtPrice(thesis.level),
+            })}
       </div>
       {error && <div className={styles.error}>{error}</div>}
       {logging ? (
@@ -45,7 +62,7 @@ function FlipBannerItem({ view }: { view: ThesisView }) {
       ) : (
         <div className={styles.actions}>
           <button type="button" className={styles.ghostBtn} onClick={() => setLogging(true)}>
-            Log it as a flip
+            {t('logAsFlip')}
           </button>
           {!flip.backToThesis && (
             <button
@@ -54,10 +71,10 @@ function FlipBannerItem({ view }: { view: ThesisView }) {
               onClick={() =>
                 void backToThesis(thesis.id)
                   .then(() => refresh())
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Request failed'))
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : t('requestFailed')))
               }
             >
-              Back to my thesis
+              {t('backToThesis')}
             </button>
           )}
         </div>

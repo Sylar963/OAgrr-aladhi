@@ -1,6 +1,8 @@
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { fmtUsdCompact } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { computeSummary, NEAR_EXPIRY_DAYS } from './positioning-utils';
+import { positioningMessages } from './i18n';
 import styles from './Positioning.module.css';
 
 interface OiSummaryProps {
@@ -23,32 +25,47 @@ function pcTone(v: number | null): 'put' | 'call' | undefined {
 }
 
 export default function OiSummary({ chains }: OiSummaryProps) {
+  const t = useT(positioningMessages);
   const s = computeSummary(chains);
 
-  const kpis: { label: string; value: string; note: string; tone?: string }[] = [
-    { label: 'Open Interest', value: fmtUsdCompact(s.oiUsd), note: 'USD notional' },
-    { label: '24h Volume', value: fmtUsdCompact(s.volUsd), note: 'USD notional' },
+  const kpis: { id: string; label: string; value: string; note: string; tone?: string }[] = [
     {
-      label: 'P/C · OI',
+      id: 'oi',
+      label: t('kpiOpenInterest'),
+      value: fmtUsdCompact(s.oiUsd),
+      note: t('noteUsdNotional'),
+    },
+    {
+      id: 'vol',
+      label: t('kpiVolume24h'),
+      value: fmtUsdCompact(s.volUsd),
+      note: t('noteUsdNotional'),
+    },
+    {
+      id: 'pcOi',
+      label: t('kpiPcOi'),
       value: fmtRatio(s.pcOi),
-      note: 'put $ / call $ held',
+      note: t('notePcHeld'),
       tone: pcTone(s.pcOi),
     },
     {
-      label: 'P/C · 24h Vol',
+      id: 'pcVol',
+      label: t('kpiPcVol'),
       value: fmtRatio(s.pcVol),
-      note: 'put $ / call $ traded',
+      note: t('notePcTraded'),
       tone: pcTone(s.pcVol),
     },
     {
-      label: 'Turnover',
+      id: 'turnover',
+      label: t('turnover'),
       value: fmtShare(s.turnover),
-      note: '24h volume / OI',
+      note: t('noteTurnover'),
     },
     {
-      label: `Expiring ≤${NEAR_EXPIRY_DAYS}d`,
+      id: 'near',
+      label: t('kpiExpiring', { n: NEAR_EXPIRY_DAYS }),
       value: fmtShare(s.nearOiShare),
-      note: `${fmtUsdCompact(s.nearOiUsd)} rolls off`,
+      note: t('noteRollsOff', { amount: fmtUsdCompact(s.nearOiUsd) }),
       tone: s.nearOiShare != null && s.nearOiShare >= 0.2 ? 'warn' : undefined,
     },
   ];
@@ -56,7 +73,7 @@ export default function OiSummary({ chains }: OiSummaryProps) {
   return (
     <div className={styles.kpiStrip}>
       {kpis.map((k) => (
-        <div key={k.label} className={styles.kpi}>
+        <div key={k.id} className={styles.kpi}>
           <span className={styles.kpiLabel}>{k.label}</span>
           <span className={styles.kpiValue} data-tone={k.tone}>
             {k.value}

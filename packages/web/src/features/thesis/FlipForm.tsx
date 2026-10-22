@@ -3,10 +3,12 @@ import {
   THESIS_MIN_FLIP_REASON_CHARS,
   type ThesisRecord,
 } from '@oggregator/protocol';
+import { useLocale, useT } from '@lib/i18n';
 import { useState } from 'react';
 
 import { flipThesis } from './api';
 import { useThesisRefresh } from './hooks';
+import { thesisMessages } from './i18n';
 import { type ThesisFieldValues, ThesisFields, validateThesisFields } from './ThesisFields';
 import styles from './Thesis.module.css';
 
@@ -33,6 +35,8 @@ export default function FlipForm({
   onCancel,
   onDone,
 }: FlipFormProps) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const refresh = useThesisRefresh();
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -48,16 +52,16 @@ export default function FlipForm({
 
   async function submit() {
     if (reason.trim().length < THESIS_MIN_FLIP_REASON_CHARS) {
-      setError(`Say what changed (at least ${THESIS_MIN_FLIP_REASON_CHARS} characters).`);
+      setError(t('sayWhatChanged', { n: THESIS_MIN_FLIP_REASON_CHARS }));
       return;
     }
     if (needsConfirmation && confirmation.trim() !== THESIS_FLIP_CONFIRMATION) {
-      setError(`Type "${THESIS_FLIP_CONFIRMATION}" exactly.`);
+      setError(t('typeExactly', { phrase: THESIS_FLIP_CONFIRMATION }));
       return;
     }
-    const invalid = validateThesisFields(values, spotUsd);
+    const invalid = validateThesisFields(values, spotUsd, locale);
     if (invalid) {
-      setError(`New thesis: ${invalid}`);
+      setError(t('newThesisError', { error: invalid }));
       return;
     }
     setBusy(true);
@@ -78,7 +82,7 @@ export default function FlipForm({
       await refresh();
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Flip failed');
+      setError(err instanceof Error ? err.message : t('flipFailed'));
     } finally {
       setBusy(false);
     }
@@ -87,24 +91,24 @@ export default function FlipForm({
   return (
     <div className={styles.flipForm}>
       <label className={styles.fieldColumn}>
-        <span className={styles.fieldLabel}>What changed?</span>
+        <span className={styles.fieldLabel}>{t('whatChanged')}</span>
         <textarea
           className={styles.textarea}
           rows={2}
           value={reason}
-          placeholder="Name the evidence that broke your thesis. A bounce inside your range is not evidence."
+          placeholder={t('whatChangedPlaceholder')}
           onChange={(event) => setReason(event.target.value)}
         />
         <span className={styles.counter}>
           {reason.trim().length}/{THESIS_MIN_FLIP_REASON_CHARS}
         </span>
       </label>
-      <div className={styles.cardSubtitle}>Your new thesis (it gets its own invalidation level)</div>
+      <div className={styles.cardSubtitle}>{t('newThesisSubtitle')}</div>
       <ThesisFields values={values} onChange={setValues} expiryOptions={expiryOptions} lockDirection />
       {needsConfirmation && (
         <label className={styles.fieldColumn}>
           <span className={styles.fieldLabel}>
-            Type <code className={styles.code}>{THESIS_FLIP_CONFIRMATION}</code>
+            {t('type')} <code className={styles.code}>{THESIS_FLIP_CONFIRMATION}</code>
           </span>
           <input
             className={styles.input}
@@ -117,10 +121,10 @@ export default function FlipForm({
       {error && <div className={styles.error}>{error}</div>}
       <div className={styles.actions}>
         <button type="button" className={styles.dangerBtn} onClick={() => void submit()} disabled={busy}>
-          {busy ? 'Flipping…' : late ? 'Log the flip' : 'Flip'}
+          {busy ? t('flipping') : late ? t('logTheFlip') : t('flip')}
         </button>
         <button type="button" className={styles.ghostBtn} onClick={onCancel} disabled={busy}>
-          Back
+          {t('back')}
         </button>
       </div>
     </div>

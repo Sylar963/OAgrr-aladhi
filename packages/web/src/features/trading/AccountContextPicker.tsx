@@ -1,21 +1,46 @@
 import { useFundedRuns } from '@features/funded';
 import { venueStatus } from '@features/portfolio';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { type ActiveContext, useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
 import styles from './AccountContextPicker.module.css';
 
-function shortLabel(ctx: ActiveContext): string {
+const messages = defineMessages(
+  {
+    challenge: 'Challenge',
+    live: 'Live',
+    paper: 'Paper',
+    account: 'Account',
+    simPaper: 'Sim Paper',
+    simChallenge: 'Sim Challenge',
+    fundedLive: 'Funded Live',
+    startChallenge: '+ Start challenge',
+  },
+  {
+    challenge: 'Desafío',
+    live: 'Real',
+    paper: 'Paper',
+    account: 'Cuenta',
+    simPaper: 'Sim Paper',
+    simChallenge: 'Sim Desafío',
+    fundedLive: 'Fondeada real',
+    startChallenge: '+ Iniciar desafío',
+  },
+);
+
+function shortLabel(ctx: ActiveContext, t: Translate<typeof messages.en>): string {
   switch (ctx.kind) {
     case 'challenge':
-      return 'Challenge';
+      return t('challenge');
     case 'thalex':
-      return 'Live';
+      return t('live');
     default:
-      return 'Paper';
+      return t('paper');
   }
 }
 
 export default function AccountContextPicker() {
+  const t = useT(messages);
   const runs = useFundedRuns();
   const run = runs.data?.runs?.[0] ?? null;
 
@@ -66,14 +91,14 @@ export default function AccountContextPicker() {
     <div className={styles.picker} data-open={open || undefined} ref={rootRef}>
       <button
         type="button"
-        aria-label="Account"
+        aria-label={t('account')}
         aria-expanded={open}
         aria-haspopup="menu"
         className={styles.trigger}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={styles.triggerHint}>Account</span>
-        <span className={styles.label}>{shortLabel(activeContext)}</span>
+        <span className={styles.triggerHint}>{t('account')}</span>
+        <span className={styles.label}>{shortLabel(activeContext, t)}</span>
         <span className={styles.chevron} data-open={open || undefined}>
           ▾
         </span>
@@ -89,7 +114,7 @@ export default function AccountContextPicker() {
             data-active={activeContext.kind === 'paper' || undefined}
             onClick={() => choose({ kind: 'paper' })}
           >
-            Sim Paper
+            {t('simPaper')}
           </button>
           {run != null ? (
             <button
@@ -100,7 +125,7 @@ export default function AccountContextPicker() {
               data-active={activeContext.kind === 'challenge' || undefined}
               onClick={() => choose({ kind: 'challenge', runId: run.id })}
             >
-              Sim Challenge
+              {t('simChallenge')}
             </button>
           ) : null}
           {thalexConnected ? (
@@ -112,7 +137,7 @@ export default function AccountContextPicker() {
               data-active={activeContext.kind === 'thalex' || undefined}
               onClick={() => choose({ kind: 'thalex' })}
             >
-              Funded Live
+              {t('fundedLive')}
             </button>
           ) : null}
           <button
@@ -124,7 +149,7 @@ export default function AccountContextPicker() {
               choose(run != null ? { kind: 'challenge', runId: run.id } : { kind: 'challenge' })
             }
           >
-            + Start challenge
+            {t('startChallenge')}
           </button>
         </div>
       ) : null}

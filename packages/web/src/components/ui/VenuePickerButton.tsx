@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_LIST, VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import styles from './VenuePickerButton.module.css';
@@ -22,6 +23,8 @@ function setOpen(next: boolean | ((prev: boolean) => boolean)) {
   for (const cb of _listeners) cb();
 }
 
+const messages = defineMessages({ all: 'All' }, { all: 'Todos' });
+
 interface VenuePickerButtonProps {
   venueIds?: string[];
   activeVenueIds?: string[];
@@ -37,6 +40,7 @@ export default function VenuePickerButton({
   label,
   readOnly = false,
 }: VenuePickerButtonProps = {}) {
+  const t = useT(messages);
   const storeActiveVenues = useAppStore((s) => s.activeVenues);
   const storeToggleVenue = useAppStore((s) => s.toggleVenue);
   const venues = venueIds
@@ -87,7 +91,7 @@ export default function VenuePickerButton({
           ))}
         </span>
         <span className={styles.count}>
-          {label ?? (allActive ? 'All' : activeVenues.length.toString())}
+          {label ?? (allActive ? t('all') : activeVenues.length.toString())}
         </span>
         <span className={styles.chevron} data-open={open || undefined}>
           ▾

@@ -1,5 +1,7 @@
 import type { PortfolioCloseNow, StrategyGroup } from '@oggregator/protocol';
 
+import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
+
 import {
   type CloseEstimate,
   type CloseLegQuote,
@@ -7,7 +9,7 @@ import {
   estimateClose,
   markPrice,
 } from './close-liquidity';
-import { CLOSE_NOW_COMBO_NOTE, CLOSE_NOW_TOOLTIP, giveBackLevel } from './close-now';
+import { closeNowMessages, giveBackLevel } from './close-now';
 import { fmtUsdSigned } from './format';
 import styles from './StrategyGroups.module.css';
 
@@ -16,31 +18,153 @@ interface Props {
   closeNow: PortfolioCloseNow | null;
 }
 
-function strategyLabel(group: StrategyGroup): string {
+const messages = defineMessages(
+  {
+    bullCallSpread: 'Bull call spread',
+    bearCallSpread: 'Bear call spread',
+    bearPutSpread: 'Bear put spread',
+    bullPutSpread: 'Bull put spread',
+    longStraddle: 'Long straddle',
+    shortStraddle: 'Short straddle',
+    longStrangle: 'Long strangle',
+    shortStrangle: 'Short strangle',
+    shortIronCondor: 'Short iron condor',
+    longIronCondor: 'Long iron condor',
+    shortIronButterfly: 'Short iron butterfly',
+    longIronButterfly: 'Long iron butterfly',
+    longNaked: 'Long {right}',
+    shortNaked: 'Short {right}',
+    option: 'option',
+    sell: 'Sell',
+    buy: 'Buy',
+    noPrice: 'no price',
+    markParen: ' (mark {v})',
+    crossesAt: 'crosses @ {v}',
+    noAskFull: 'no ask for full size',
+    noBidFull: 'no bid for full size',
+    mark: 'mark {v}',
+    maxBidCollar: 'max bid {v} (collar)',
+    minAskCollar: 'min ask {v} (collar)',
+    packageAtMark:
+      'Package at mark {v}: work a combo limit there, or send these legs as an RFQ.',
+    noMarkAll: 'No mark on every leg: send these legs as an RFQ for a price.',
+    cantCross: "Can't cross",
+    limitAtMark: 'limit at mark {v}',
+    rfqOnThalex: 'or RFQ on Thalex',
+    slip: 'slip {v}',
+    vsMark: ' vs mark',
+    givesBack: ' · gives back {pct}%',
+    staleBook: 'stale book',
+    slipVsMark: 'slip {v} vs mark',
+    excluded: 'excl. {n} not crossable',
+    title: 'Strategies & premium',
+    subtitle_one:
+      '{n} structure detected · entry premium · to close = crossing the Thalex book now, after fees',
+    subtitle_other:
+      '{n} structures detected · entry premium · to close = crossing the Thalex book now, after fees',
+    tableAria: 'Detected strategies and premium',
+    structure: 'Structure',
+    legs: 'Legs',
+    paid: 'Paid',
+    received: 'Received',
+    net: 'Net',
+    maxPL: 'Max P / L',
+    beSpot: 'BE spot',
+    toClose: 'To close',
+    net_credit: 'net credit',
+    net_debit: 'net debit',
+    net_flat: 'net flat',
+    openBook: 'Open book',
+  },
+  {
+    bullCallSpread: 'Call spread alcista',
+    bearCallSpread: 'Call spread bajista',
+    bearPutSpread: 'Put spread bajista',
+    bullPutSpread: 'Put spread alcista',
+    longStraddle: 'Long straddle',
+    shortStraddle: 'Short straddle',
+    longStrangle: 'Long strangle',
+    shortStrangle: 'Short strangle',
+    shortIronCondor: 'Short iron condor',
+    longIronCondor: 'Long iron condor',
+    shortIronButterfly: 'Short iron butterfly',
+    longIronButterfly: 'Long iron butterfly',
+    longNaked: 'Long {right}',
+    shortNaked: 'Short {right}',
+    option: 'opción',
+    sell: 'Vender',
+    buy: 'Comprar',
+    noPrice: 'sin precio',
+    markParen: ' (mark {v})',
+    crossesAt: 'cruza @ {v}',
+    noAskFull: 'sin ask para el tamaño completo',
+    noBidFull: 'sin bid para el tamaño completo',
+    mark: 'mark {v}',
+    maxBidCollar: 'bid máx. {v} (collar)',
+    minAskCollar: 'ask mín. {v} (collar)',
+    packageAtMark:
+      'Paquete a mark {v}: trabaja un límite combo ahí, o envía estos legs como RFQ.',
+    noMarkAll: 'No todos los legs tienen mark: envía estos legs como RFQ para obtener precio.',
+    cantCross: 'No se puede cruzar',
+    limitAtMark: 'límite a mark {v}',
+    rfqOnThalex: 'o RFQ en Thalex',
+    slip: 'slippage {v}',
+    vsMark: ' vs mark',
+    givesBack: ' · devuelve {pct}%',
+    staleBook: 'libro desactualizado',
+    slipVsMark: 'slippage {v} vs mark',
+    excluded: 'excl. {n} no cruzables',
+    title: 'Estrategias y prima',
+    subtitle_one:
+      '{n} estructura detectada · prima de entrada · para cerrar = cruzar el libro de Thalex ahora, después de comisiones',
+    subtitle_other:
+      '{n} estructuras detectadas · prima de entrada · para cerrar = cruzar el libro de Thalex ahora, después de comisiones',
+    tableAria: 'Estrategias detectadas y prima',
+    structure: 'Estructura',
+    legs: 'Legs',
+    paid: 'Pagado',
+    received: 'Recibido',
+    net: 'Neto',
+    maxPL: 'Máx. P / L',
+    beSpot: 'Spot BE',
+    toClose: 'Para cerrar',
+    net_credit: 'crédito neto',
+    net_debit: 'débito neto',
+    net_flat: 'neto plano',
+    openBook: 'Libro abierto',
+  },
+);
+
+type T = Translate<typeof messages.en>;
+
+function strategyLabel(group: StrategyGroup, t: T): string {
   const long = group.legs.find((l) => l.size > 0);
   const short = group.legs.find((l) => l.size < 0);
   const first = group.legs[0];
   switch (group.kind) {
     case 'call_spread':
       return long != null && short != null && long.strike < short.strike
-        ? 'Bull call spread'
-        : 'Bear call spread';
+        ? t('bullCallSpread')
+        : t('bearCallSpread');
     case 'put_spread':
       return long != null && short != null && long.strike > short.strike
-        ? 'Bear put spread'
-        : 'Bull put spread';
+        ? t('bearPutSpread')
+        : t('bullPutSpread');
     case 'straddle':
-      return (first?.size ?? 0) > 0 ? 'Long straddle' : 'Short straddle';
+      return (first?.size ?? 0) > 0 ? t('longStraddle') : t('shortStraddle');
     case 'strangle':
-      return (first?.size ?? 0) > 0 ? 'Long strangle' : 'Short strangle';
+      return (first?.size ?? 0) > 0 ? t('longStrangle') : t('shortStrangle');
     case 'iron_condor':
     case 'iron_butterfly': {
-      const name = group.kind === 'iron_condor' ? 'iron condor' : 'iron butterfly';
+      const condor = group.kind === 'iron_condor';
       const outer = [...group.legs].sort((a, b) => a.strike - b.strike)[0];
-      return (outer?.size ?? 0) > 0 ? `Short ${name}` : `Long ${name}`;
+      if ((outer?.size ?? 0) > 0) return condor ? t('shortIronCondor') : t('shortIronButterfly');
+      return condor ? t('longIronCondor') : t('longIronButterfly');
     }
     case 'naked':
-      return `${(first?.size ?? 0) > 0 ? 'Long' : 'Short'} ${first?.optionRight ?? 'option'}`;
+      return t((first?.size ?? 0) > 0 ? 'longNaked' : 'shortNaked', {
+        right: first?.optionRight ?? t('option'),
+      });
   }
 }
 
@@ -90,41 +214,43 @@ function fmtPrice(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 });
 }
 
-function closeLegLine({ label, side, size, quote }: CloseLegQuote): string {
-  const verb = side === 'sell' ? 'Sell' : 'Buy';
-  const at = quote.exitVwapUsd != null ? `@ ${fmtPrice(quote.exitVwapUsd)}` : 'no price';
-  const vsMark = quote.venueMarkUsd != null ? ` (mark ${fmtPrice(quote.venueMarkUsd)})` : '';
+function closeLegLine({ label, side, size, quote }: CloseLegQuote, t: T): string {
+  const verb = side === 'sell' ? t('sell') : t('buy');
+  const at = quote.exitVwapUsd != null ? `@ ${fmtPrice(quote.exitVwapUsd)}` : t('noPrice');
+  const vsMark = quote.venueMarkUsd != null ? t('markParen', { v: fmtPrice(quote.venueMarkUsd) }) : '';
   return `${verb} ${size} ${label} ${at}${vsMark}`;
 }
 
-function workingLegLine(leg: CloseLegQuote): string {
-  const verb = leg.side === 'sell' ? 'Sell' : 'Buy';
+function workingLegLine(leg: CloseLegQuote, t: T): string {
+  const verb = leg.side === 'sell' ? t('sell') : t('buy');
   const { quote } = leg;
   const mark = markPrice(quote);
   const collar = collarLimit(leg);
   const book =
     quote.status === 'ok' && quote.exitVwapUsd != null
-      ? `crosses @ ${fmtPrice(quote.exitVwapUsd)}`
-      : `${leg.side === 'buy' ? 'no ask' : 'no bid'} for full size`;
+      ? t('crossesAt', { v: fmtPrice(quote.exitVwapUsd) })
+      : t(leg.side === 'buy' ? 'noAskFull' : 'noBidFull');
   const parts = [book];
-  if (mark != null) parts.push(`mark ${fmtPrice(mark)}`);
+  if (mark != null) parts.push(t('mark', { v: fmtPrice(mark) }));
   if (collar != null) {
-    parts.push(`${leg.side === 'buy' ? 'max bid' : 'min ask'} ${fmtPrice(collar)} (collar)`);
+    parts.push(t(leg.side === 'buy' ? 'maxBidCollar' : 'minAskCollar', { v: fmtPrice(collar) }));
   }
   return `${verb} ${leg.size} ${leg.label}: ${parts.join(' · ')}`;
 }
 
-function workingTitle(legs: CloseLegQuote[], markCashUsd: number | null): string {
-  const lines = legs.map(workingLegLine);
+function workingTitle(legs: CloseLegQuote[], markCashUsd: number | null, t: T): string {
+  const lines = legs.map((leg) => workingLegLine(leg, t));
   lines.push(
     markCashUsd != null
-      ? `Package at mark ${fmtCashFlow(markCashUsd)}: work a combo limit there, or send these legs as an RFQ.`
-      : 'No mark on every leg: send these legs as an RFQ for a price.',
+      ? t('packageAtMark', { v: fmtCashFlow(markCashUsd) })
+      : t('noMarkAll'),
   );
   return lines.join('\n');
 }
 
 function CloseCell({ estimate }: { estimate: CloseEstimate }) {
+  const t = useT(messages);
+  const tc = useT(closeNowMessages);
   switch (estimate.status) {
     case 'loading':
       return (
@@ -144,16 +270,16 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
           role="cell"
           className={styles.close}
           data-state="warn"
-          title={workingTitle(estimate.legs, estimate.markCashUsd)}
+          title={workingTitle(estimate.legs, estimate.markCashUsd, t)}
         >
-          {"Can't cross"}
+          {t('cantCross')}
           {estimate.problems.map((p) => (
             <small key={p}>{p}</small>
           ))}
           {estimate.markCashUsd != null && (
-            <small data-hint>limit at mark {fmtCashFlow(estimate.markCashUsd)}</small>
+            <small data-hint>{t('limitAtMark', { v: fmtCashFlow(estimate.markCashUsd) })}</small>
           )}
-          <small data-hint>or RFQ on Thalex</small>
+          <small data-hint>{t('rfqOnThalex')}</small>
         </span>
       );
     case 'ok': {
@@ -167,22 +293,23 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
           className={styles.close}
           data-side={netSide(estimate.cashUsd)}
           data-stale={estimate.stale || undefined}
-          title={[...estimate.legs.map(closeLegLine), CLOSE_NOW_COMBO_NOTE].join('\n')}
+          title={[...estimate.legs.map((leg) => closeLegLine(leg, t)), tc('comboNote')].join('\n')}
         >
           {fmtCashFlow(estimate.cashUsd)}
           {slip != null && (
             <small data-slip={pct != null && pct >= 10 ? 'high' : undefined}>
-              slip {fmtAmount(Math.abs(slip))}
-              {pct != null ? ` · ${pct.toFixed(1)}%` : ''} vs mark
+              {t('slip', { v: fmtAmount(Math.abs(slip)) })}
+              {pct != null ? ` · ${pct.toFixed(1)}%` : ''}
+              {t('vsMark')}
             </small>
           )}
           {strategy?.closeNowPnlUsd != null && (
             <small data-giveback={level ?? undefined}>
               P&amp;L {fmtCashFlow(strategy.closeNowPnlUsd)}
-              {strategy.giveBackPct != null ? ` · gives back ${strategy.giveBackPct.toFixed(0)}%` : ''}
+              {strategy.giveBackPct != null ? t('givesBack', { pct: strategy.giveBackPct.toFixed(0) }) : ''}
             </small>
           )}
-          {estimate.stale && <small data-hint>stale book</small>}
+          {estimate.stale && <small data-hint>{t('staleBook')}</small>}
         </span>
       );
     }
@@ -190,6 +317,7 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
 }
 
 function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
+  const t = useT(messages);
   const ok = estimates.filter((e) => e.status === 'ok');
   if (estimates.some((e) => e.status === 'loading')) {
     return (
@@ -213,17 +341,18 @@ function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
   return (
     <span role="cell" className={styles.close} data-side={netSide(cash)}>
       {fmtCashFlow(cash)}
-      {slip != null && <small>slip {fmtAmount(Math.abs(slip))} vs mark</small>}
+      {slip != null && <small>{t('slipVsMark', { v: fmtAmount(Math.abs(slip)) })}</small>}
       {excluded > 0 && (
-        <small data-slip="high">
-          excl. {excluded} not crossable
-        </small>
+        <small data-slip="high">{t('excluded', { n: excluded })}</small>
       )}
     </span>
   );
 }
 
 export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
+  const t = useT(messages);
+  const tc = useT(closeNowMessages);
+  const locale = useLocale();
   if (groups.length === 0) return null;
 
   const ordered = [
@@ -234,29 +363,28 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
   const totalReceived = groups.reduce((acc, g) => acc + g.grossCreditUsd, 0);
   const totalNet = totalReceived - totalPaid;
   const structureCount = groups.length - groups.filter((g) => g.kind === 'naked').length;
-  const closeEstimates = new Map(groups.map((g) => [g.groupId, estimateClose(g, closeNow)]));
+  const closeEstimates = new Map(groups.map((g) => [g.groupId, estimateClose(g, closeNow, locale)]));
 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>Strategies &amp; premium</span>
+        <span className={styles.title}>{t('title')}</span>
         <span className={styles.subtitle}>
-          {structureCount} structure{structureCount === 1 ? '' : 's'} detected · entry premium · to
-          close = crossing the Thalex book now, after fees
+          {t(structureCount === 1 ? 'subtitle_one' : 'subtitle_other', { n: structureCount })}
         </span>
       </div>
       <div className={styles.tableScroll}>
-        <div className={styles.table} role="table" aria-label="Detected strategies and premium">
+        <div className={styles.table} role="table" aria-label={t('tableAria')}>
           <div className={styles.row} role="row" data-head>
-            <span role="columnheader">Structure</span>
-            <span role="columnheader">Legs</span>
-            <span role="columnheader">Paid</span>
-            <span role="columnheader">Received</span>
-            <span role="columnheader">Net</span>
-            <span role="columnheader">Max P / L</span>
-            <span role="columnheader">BE spot</span>
-            <span role="columnheader" title={CLOSE_NOW_TOOLTIP}>
-              To close
+            <span role="columnheader">{t('structure')}</span>
+            <span role="columnheader">{t('legs')}</span>
+            <span role="columnheader">{t('paid')}</span>
+            <span role="columnheader">{t('received')}</span>
+            <span role="columnheader">{t('net')}</span>
+            <span role="columnheader">{t('maxPL')}</span>
+            <span role="columnheader">{t('beSpot')}</span>
+            <span role="columnheader" title={tc('tooltip')}>
+              {t('toClose')}
             </span>
           </div>
           {ordered.map((group) => {
@@ -266,7 +394,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             return (
               <div key={group.groupId} className={styles.row} role="row">
                 <span role="rowheader" className={styles.kind} data-kind={group.kind}>
-                  {strategyLabel(group)}
+                  {strategyLabel(group, t)}
                   <small>
                     {group.underlying} · {group.expiry}
                   </small>
@@ -282,7 +410,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
                 </span>
                 <span role="cell" className={styles.num} data-side={side}>
                   {fmtCashFlow(net)}
-                  <small>net {side}</small>
+                  <small>{t(`net_${side}`)}</small>
                 </span>
                 <span role="cell" className={styles.maxRange}>
                   {`+${fmtUsd(group.maxProfitUsd)} / -${fmtUsd(group.maxLossUsd)}`}
@@ -295,7 +423,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             );
           })}
           <div className={styles.row} role="row" data-total>
-            <span role="rowheader">Open book</span>
+            <span role="rowheader">{t('openBook')}</span>
             <span role="cell" />
             <span role="cell" className={styles.num}>
               {fmtCashFlow(-totalPaid)}
@@ -305,7 +433,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             </span>
             <span role="cell" className={styles.num} data-side={netSide(totalNet)}>
               {fmtCashFlow(totalNet)}
-              <small>net {netSide(totalNet)}</small>
+              <small>{t(`net_${netSide(totalNet)}`)}</small>
             </span>
             <span role="cell" />
             <span role="cell" />

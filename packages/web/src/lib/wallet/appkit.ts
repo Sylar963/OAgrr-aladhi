@@ -10,6 +10,10 @@ import {
 } from '@wagmi/core';
 import { getAddress, type Address, type Hex } from 'viem';
 
+import { translate } from '@lib/i18n';
+
+import { walletMessages } from './i18n';
+
 interface WalletKit {
   modal: AppKit;
   adapter: WagmiAdapter;
@@ -21,7 +25,7 @@ function getWalletKit(): WalletKit {
   if (kit != null) return kit;
   const projectId = import.meta.env.VITE_REOWN_PROJECT_ID;
   if (!projectId) {
-    throw new Error('Wallet connect is not configured on this deployment.');
+    throw new Error(translate(walletMessages, 'notConfigured'));
   }
   const networks: [typeof mainnet] = [mainnet];
   const adapter = new WagmiAdapter({ networks, projectId });
@@ -81,7 +85,7 @@ export async function connectWallet(): Promise<Address> {
           return;
         }
         if (opened && connectedAddress(adapter) == null) {
-          finish(() => reject(new Error('Wallet connection was cancelled.')));
+          finish(() => reject(new Error(translate(walletMessages, 'cancelled'))));
         }
       }),
     );

@@ -1,6 +1,7 @@
 import type { Leg as StrategyLeg } from '@features/architect/payoff';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { dteDays, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import type { TabId } from '@lib/tabs';
 import type { PaperFillDto, PaperTradeDetailDto, PaperTradeLegDto } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
@@ -16,6 +17,116 @@ import {
 import PaperHelpPopover from './PaperHelpPopover';
 import styles from './PaperTraderPanel.module.css';
 
+const messages = defineMessages(
+  {
+    openTrades: 'Open trades',
+    noOpenTrades: 'No open trades. Send a strategy from Builder.',
+    legs: '· {n} legs',
+    premium: 'Premium',
+    spot: 'Spot',
+    liveFeed: 'Live feed',
+    selectTrade: 'Select a trade to inspect risk, execution, journal, and history.',
+    opened: '{strategy} · opened {ts}',
+    reduce50: 'Reduce 50%',
+    rollInBuilder: 'Roll in Builder',
+    closeTrade: 'Close Trade',
+    status: 'Status',
+    netPremium: 'Net Premium',
+    fees: 'Fees',
+    realizedNet: 'Realized (net)',
+    unrealized: 'Unrealized',
+    totalPnl: 'Total PnL',
+    positionRisk: 'Position risk',
+    leg: 'Leg',
+    baseQty: 'Base Qty',
+    avg: 'Avg',
+    mark: 'Mark',
+    dte: 'DTE',
+    iv: 'IV',
+    source: 'Source',
+    pnl: 'P&L',
+    executionDetails: 'Execution details',
+    time: 'Time',
+    venue: 'Venue',
+    fill: 'Fill',
+    mid: 'Mid',
+    edge: 'Edge',
+    tradeJournal: 'Trade journal',
+    kindNote: 'Note',
+    kindThesis: 'Thesis',
+    kindInvalidation: 'Invalidation',
+    kindReview: 'Review',
+    tagsPlaceholder: 'tags, comma separated',
+    notePlaceholder: 'Write the setup, what changed, or what you learned from the trade.',
+    addNote: 'Add note',
+    tradeTimeline: 'Trade timeline',
+    closedTrades: 'Closed trades',
+    noClosedTrades: 'No closed trades yet.',
+    trade: 'Trade',
+    openedCol: 'Opened',
+    closedCol: 'Closed',
+    debit: 'Debit',
+    credit: 'Credit',
+  },
+  {
+    openTrades: 'Trades abiertos',
+    noOpenTrades: 'No hay trades abiertos. Envía una estrategia desde el Constructor.',
+    legs: '· {n} patas',
+    premium: 'Prima',
+    spot: 'Spot',
+    liveFeed: 'Feed en vivo',
+    selectTrade: 'Selecciona un trade para ver riesgo, ejecución, diario e historial.',
+    opened: '{strategy} · abierto {ts}',
+    reduce50: 'Reducir 50%',
+    rollInBuilder: 'Rolar en Constructor',
+    closeTrade: 'Cerrar trade',
+    status: 'Estado',
+    netPremium: 'Prima neta',
+    fees: 'Comisiones',
+    realizedNet: 'Realizado (neto)',
+    unrealized: 'No realizado',
+    totalPnl: 'PnL total',
+    positionRisk: 'Riesgo de la posición',
+    leg: 'Pata',
+    baseQty: 'Cant. base',
+    avg: 'Prom.',
+    mark: 'Mark',
+    dte: 'DTE',
+    iv: 'IV',
+    source: 'Fuente',
+    pnl: 'P&L',
+    executionDetails: 'Detalles de ejecución',
+    time: 'Hora',
+    venue: 'Exchange',
+    fill: 'Ejecución',
+    mid: 'Mid',
+    edge: 'Ventaja',
+    tradeJournal: 'Diario del trade',
+    kindNote: 'Nota',
+    kindThesis: 'Tesis',
+    kindInvalidation: 'Invalidación',
+    kindReview: 'Revisión',
+    tagsPlaceholder: 'etiquetas, separadas por coma',
+    notePlaceholder: 'Escribe el setup, qué cambió o qué aprendiste del trade.',
+    addNote: 'Agregar nota',
+    tradeTimeline: 'Cronología del trade',
+    closedTrades: 'Trades cerrados',
+    noClosedTrades: 'Aún no hay trades cerrados.',
+    trade: 'Trade',
+    openedCol: 'Abierto',
+    closedCol: 'Cerrado',
+    debit: 'Débito',
+    credit: 'Crédito',
+  },
+);
+
+const NOTE_KIND_KEYS = {
+  note: 'kindNote',
+  thesis: 'kindThesis',
+  invalidation: 'kindInvalidation',
+  review: 'kindReview',
+} as const;
+
 type PaperTraderPanelProps = {
   selectedTradeId: string | null;
   setSelectedTradeId: (id: string | null) => void;
@@ -25,6 +136,7 @@ export default function PaperTraderPanel({
   selectedTradeId,
   setSelectedTradeId,
 }: PaperTraderPanelProps) {
+  const t = useT(messages);
   const { data: openTradesData } = useTrades('open', 100);
   const { data: closedTradesData } = useTrades('closed', 100);
   const { data: activityData } = useActivity(50);
@@ -54,12 +166,12 @@ export default function PaperTraderPanel({
       <section className={styles.sidebar}>
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
-            <span>Open trades</span>
+            <span>{t('openTrades')}</span>
             <span>{openTrades.length}</span>
           </div>
           <div className={styles.tradeList}>
             {openTrades.length === 0 ? (
-              <div className={styles.empty}>No open trades. Send a strategy from Builder.</div>
+              <div className={styles.empty}>{t('noOpenTrades')}</div>
             ) : (
               openTrades.map((trade) => (
                 <button
@@ -74,7 +186,7 @@ export default function PaperTraderPanel({
                       <div className={styles.tradeMetaLine}>
                         <span>{trade.strategyName}</span>
                         <PremiumFlowBadge netPremiumUsd={trade.netPremiumUsd} />
-                        <span>&middot; {trade.openLegs} legs</span>
+                        <span>{t('legs', { n: trade.openLegs })}</span>
                       </div>
                     </div>
                     <div
@@ -90,9 +202,9 @@ export default function PaperTraderPanel({
                     </div>
                   </div>
                   <div className={styles.tradeStatsRow}>
-                    <MiniStat label="Premium" value={fmtUsd(trade.netPremiumUsd)} />
+                    <MiniStat label={t('premium')} value={fmtUsd(trade.netPremiumUsd)} />
                     <MiniStat
-                      label="Spot"
+                      label={t('spot')}
                       value={fmtUsd(trade.currentSpotUsd ?? trade.entrySpotUsd)}
                     />
                   </div>
@@ -104,7 +216,7 @@ export default function PaperTraderPanel({
 
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
-            <span>Live feed</span>
+            <span>{t('liveFeed')}</span>
             <span>{activityData?.activity.length ?? 0}</span>
           </div>
           <div className={styles.feedList}>
@@ -124,7 +236,7 @@ export default function PaperTraderPanel({
         {!liveTrade ? (
           <div className={styles.section}>
             <div className={styles.empty}>
-              Select a trade to inspect risk, execution, journal, and history.
+              {t('selectTrade')}
             </div>
           </div>
         ) : (
@@ -134,7 +246,10 @@ export default function PaperTraderPanel({
                 <div>
                   <div className={styles.detailTitle}>{liveTrade.label}</div>
                   <div className={styles.detailSubtitle}>
-                    {liveTrade.strategyName} · opened {formatTs(liveTrade.openedAt)}
+                    {t('opened', {
+                      strategy: liveTrade.strategyName,
+                      ts: formatTs(liveTrade.openedAt),
+                    })}
                   </div>
                 </div>
                 <div className={styles.actionRow}>
@@ -143,7 +258,7 @@ export default function PaperTraderPanel({
                     disabled={reduceTrade.isPending || liveTrade.status !== 'open'}
                     onClick={() => reduceTrade.mutate({ tradeId: liveTrade.id, fraction: 0.5 })}
                   >
-                    Reduce 50%
+                    {t('reduce50')}
                   </button>
                   <button
                     className={styles.secondaryButton}
@@ -152,34 +267,34 @@ export default function PaperTraderPanel({
                       rollTradeInBuilder(liveTrade, replaceLegs, setUnderlying, setActiveTab)
                     }
                   >
-                    Roll in Builder
+                    {t('rollInBuilder')}
                   </button>
                   <button
                     className={styles.primaryButton}
                     disabled={closeTrade.isPending || liveTrade.status !== 'open'}
                     onClick={() => closeTrade.mutate(liveTrade.id)}
                   >
-                    Close Trade
+                    {t('closeTrade')}
                   </button>
                 </div>
               </div>
 
               <div className={styles.metricGrid}>
-                <MetricCard label="Status" value={liveTrade.status.toUpperCase()} />
-                <MetricCard label="Net Premium" value={fmtUsd(liveTrade.netPremiumUsd)} />
-                <MetricCard label="Fees" value={fmtUsd(liveTrade.feesUsd)} />
+                <MetricCard label={t('status')} value={liveTrade.status.toUpperCase()} />
+                <MetricCard label={t('netPremium')} value={fmtUsd(liveTrade.netPremiumUsd)} />
+                <MetricCard label={t('fees')} value={fmtUsd(liveTrade.feesUsd)} />
                 <MetricCard
-                  label="Realized (net)"
+                  label={t('realizedNet')}
                   value={fmtUsd(liveTrade.realizedPnlUsd)}
                   tone={tone(liveTrade.realizedPnlUsd)}
                 />
                 <MetricCard
-                  label="Unrealized"
+                  label={t('unrealized')}
                   value={fmtUsd(liveTrade.unrealizedPnlUsd)}
                   tone={tone(liveTrade.unrealizedPnlUsd)}
                 />
                 <MetricCard
-                  label="Total PnL"
+                  label={t('totalPnl')}
                   value={fmtUsd(liveTrade.totalPnlUsd)}
                   tone={tone(liveTrade.totalPnlUsd)}
                 />
@@ -187,18 +302,18 @@ export default function PaperTraderPanel({
             </div>
 
             <div className={styles.section}>
-              <div className={styles.sectionHeader}>Position risk</div>
+              <div className={styles.sectionHeader}>{t('positionRisk')}</div>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Leg</th>
-                    <th className={styles.rightAlign}>Base Qty</th>
-                    <th className={styles.rightAlign}>Avg</th>
-                    <th className={styles.rightAlign}>Mark</th>
-                    <th className={styles.rightAlign}>DTE</th>
-                    <th className={styles.rightAlign}>IV</th>
-                    <th>Source</th>
-                    <th className={styles.rightAlign}>P&L</th>
+                    <th>{t('leg')}</th>
+                    <th className={styles.rightAlign}>{t('baseQty')}</th>
+                    <th className={styles.rightAlign}>{t('avg')}</th>
+                    <th className={styles.rightAlign}>{t('mark')}</th>
+                    <th className={styles.rightAlign}>{t('dte')}</th>
+                    <th className={styles.rightAlign}>{t('iv')}</th>
+                    <th>{t('source')}</th>
+                    <th className={styles.rightAlign}>{t('pnl')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -224,17 +339,17 @@ export default function PaperTraderPanel({
 
             <div className={styles.twoColumn}>
               <div className={styles.section}>
-                <div className={styles.sectionHeader}>Execution details</div>
+                <div className={styles.sectionHeader}>{t('executionDetails')}</div>
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Time</th>
-                      <th>Venue</th>
-                      <th>Leg</th>
-                      <th className={styles.rightAlign}>Fill</th>
-                      <th className={styles.rightAlign}>Mid</th>
-                      <th className={styles.rightAlign}>Edge</th>
-                      <th className={styles.rightAlign}>Fees</th>
+                      <th>{t('time')}</th>
+                      <th>{t('venue')}</th>
+                      <th>{t('leg')}</th>
+                      <th className={styles.rightAlign}>{t('fill')}</th>
+                      <th className={styles.rightAlign}>{t('mid')}</th>
+                      <th className={styles.rightAlign}>{t('edge')}</th>
+                      <th className={styles.rightAlign}>{t('fees')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -261,26 +376,26 @@ export default function PaperTraderPanel({
               </div>
 
               <div className={styles.section}>
-                <div className={styles.sectionHeader}>Trade journal</div>
+                <div className={styles.sectionHeader}>{t('tradeJournal')}</div>
                 <div className={styles.noteComposer}>
                   <select
                     value={noteKind}
                     onChange={(event) => setNoteKind(event.target.value as typeof noteKind)}
                   >
-                    <option value="note">Note</option>
-                    <option value="thesis">Thesis</option>
-                    <option value="invalidation">Invalidation</option>
-                    <option value="review">Review</option>
+                    <option value="note">{t('kindNote')}</option>
+                    <option value="thesis">{t('kindThesis')}</option>
+                    <option value="invalidation">{t('kindInvalidation')}</option>
+                    <option value="review">{t('kindReview')}</option>
                   </select>
                   <input
                     value={noteTags}
                     onChange={(event) => setNoteTags(event.target.value)}
-                    placeholder="tags, comma separated"
+                    placeholder={t('tagsPlaceholder')}
                   />
                   <textarea
                     value={noteContent}
                     onChange={(event) => setNoteContent(event.target.value)}
-                    placeholder="Write the setup, what changed, or what you learned from the trade."
+                    placeholder={t('notePlaceholder')}
                   />
                   <button
                     className={styles.primaryButton}
@@ -308,14 +423,14 @@ export default function PaperTraderPanel({
                       );
                     }}
                   >
-                    Add note
+                    {t('addNote')}
                   </button>
                 </div>
                 <div className={styles.noteList}>
                   {liveTrade.notes.map((note) => (
                     <div key={note.id} className={styles.noteCard}>
                       <div className={styles.noteHeader}>
-                        <span>{note.kind.toUpperCase()}</span>
+                        <span>{t(NOTE_KIND_KEYS[note.kind]).toUpperCase()}</span>
                         <span>{formatTs(note.createdAt)}</span>
                       </div>
                       <div className={styles.noteBody}>{note.content}</div>
@@ -335,7 +450,7 @@ export default function PaperTraderPanel({
             </div>
 
             <div className={styles.section}>
-              <div className={styles.sectionHeader}>Trade timeline</div>
+              <div className={styles.sectionHeader}>{t('tradeTimeline')}</div>
               <div className={styles.feedList}>
                 {liveTrade.activity.map((item) => (
                   <div key={item.id} className={styles.feedItem}>
@@ -350,22 +465,22 @@ export default function PaperTraderPanel({
 
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
-            <span>Closed trades</span>
+            <span>{t('closedTrades')}</span>
             <span>{closedTrades.length}</span>
           </div>
           {closedTrades.length === 0 ? (
-            <div className={styles.empty}>No closed trades yet.</div>
+            <div className={styles.empty}>{t('noClosedTrades')}</div>
           ) : (
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Trade</th>
-                  <th>Status</th>
-                  <th>Opened</th>
-                  <th>Closed</th>
-                  <th className={styles.rightAlign}>Premium</th>
-                  <th className={styles.rightAlign}>Fees</th>
-                  <th className={styles.rightAlign}>Realized (net)</th>
+                  <th>{t('trade')}</th>
+                  <th>{t('status')}</th>
+                  <th>{t('openedCol')}</th>
+                  <th>{t('closedCol')}</th>
+                  <th className={styles.rightAlign}>{t('premium')}</th>
+                  <th className={styles.rightAlign}>{t('fees')}</th>
+                  <th className={styles.rightAlign}>{t('realizedNet')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -424,11 +539,12 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 }
 
 function PremiumFlowBadge({ netPremiumUsd }: { netPremiumUsd: number }) {
+  const t = useT(messages);
   const kind = premiumFlowKind(netPremiumUsd);
   if (kind == null) return null;
   return (
     <span className={styles.premiumFlowBadge} data-kind={kind}>
-      <span className={styles.premiumFlowLabel}>{kind === 'debit' ? 'Debit' : 'Credit'}</span>
+      <span className={styles.premiumFlowLabel}>{kind === 'debit' ? t('debit') : t('credit')}</span>
       <span className={styles.premiumFlowValue}>{fmtUsd(Math.abs(netPremiumUsd))}</span>
     </span>
   );

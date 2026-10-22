@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import type { PositionLegInput } from '@oggregator/protocol';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import { useAddPosition } from './hooks/queries';
 import styles from './PositionForm.module.css';
 
@@ -10,20 +12,75 @@ interface Props {
   defaultUnderlying?: string;
 }
 
+const messages = defineMessages(
+  {
+    underlyingRequired: 'underlying is required',
+    expiryFormat: 'expiry must be YYYY-MM-DD',
+    strikePositive: 'strike must be a positive number',
+    sizeNonZero: 'size must be a non-zero number',
+    entryPositive: 'entry price must be > 0',
+    invalidForm: 'invalid form',
+    failed: 'failed',
+    underlying: 'Underlying',
+    expiry: 'Expiry',
+    strike: 'Strike',
+    right: 'Right',
+    size: 'Size',
+    sizePlaceholder: '1 (negative = short)',
+    entryUsd: 'Entry $',
+    entryIv: 'Entry IV %',
+    adding: 'Adding…',
+    addLeg: 'Add leg',
+  },
+  {
+    underlyingRequired: 'el subyacente es obligatorio',
+    expiryFormat: 'el vencimiento debe ser AAAA-MM-DD',
+    strikePositive: 'el strike debe ser un número positivo',
+    sizeNonZero: 'el tamaño debe ser un número distinto de cero',
+    entryPositive: 'el precio de entrada debe ser > 0',
+    invalidForm: 'formulario inválido',
+    failed: 'falló',
+    underlying: 'Subyacente',
+    expiry: 'Vencimiento',
+    strike: 'Strike',
+    right: 'Tipo',
+    size: 'Tamaño',
+    sizePlaceholder: '1 (negativo = short)',
+    entryUsd: 'Entrada $',
+    entryIv: 'IV entrada %',
+    adding: 'Agregando…',
+    addLeg: 'Agregar leg',
+  },
+);
+
+const FORM_ISSUES = [
+  'underlyingRequired',
+  'expiryFormat',
+  'strikePositive',
+  'sizeNonZero',
+  'entryPositive',
+] as const;
+type FormIssue = (typeof FORM_ISSUES)[number];
+
 const PositionFormSchema = z.object({
-  underlying: z.string().min(1, 'underlying is required').transform((v) => v.trim()),
-  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expiry must be YYYY-MM-DD'),
-  strike: z.coerce.number().positive('strike must be a positive number'),
+  underlying: z.string().min(1, 'underlyingRequired' satisfies FormIssue).transform((v) => v.trim()),
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expiryFormat' satisfies FormIssue),
+  strike: z.coerce.number().positive('strikePositive' satisfies FormIssue),
   optionRight: z.enum(['call', 'put']),
-  size: z.coerce.number().refine((v) => v !== 0, 'size must be a non-zero number'),
-  entryPriceUsd: z.coerce.number().positive('entry price must be > 0'),
+  size: z.coerce.number().refine((v) => v !== 0, 'sizeNonZero' satisfies FormIssue),
+  entryPriceUsd: z.coerce.number().positive('entryPositive' satisfies FormIssue),
   entryIvPct: z.preprocess(
     (v) => (v == null || (typeof v === 'string' && v.trim().length === 0) ? null : v),
     z.union([z.null(), z.coerce.number().min(0).max(500)]),
   ),
 });
 
+function isFormIssue(message: string): message is FormIssue {
+  return (FORM_ISSUES as readonly string[]).includes(message);
+}
+
 export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
+  const t = useT(messages);
   const [underlying, setUnderlying] = useState(defaultUnderlying);
   const [expiry, setExpiry] = useState('');
   const [strike, setStrike] = useState('');
@@ -51,7 +108,9 @@ export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
 
     if (!parsed.success) {
       const first = parsed.error.issues[0];
-      setError(first?.message ?? 'invalid form');
+      setError(
+        first == null ? t('invalidForm') : isFormIssue(first.message) ? t(first.message) : first.message,
+      );
       return;
     }
 
@@ -74,7 +133,7 @@ export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
       setEntryPrice('');
       setEntryIvPct('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'failed');
+      setError(err instanceof Error ? err.message : t('failed'));
     }
   };
 
@@ -82,44 +141,44 @@ export default function PositionForm({ defaultUnderlying = 'BTC' }: Props) {
     <form className={styles.form} onSubmit={submit}>
       <div className={styles.row}>
         <label className={styles.field}>
-          <span>Underlying</span>
+          <span>{t('underlying')}</span>
           <input value={underlying} onChange={(e) => setUnderlying(e.target.value.toUpperCase())} placeholder="BTC" />
         </label>
         <label className={styles.field}>
-          <span>Expiry</span>
+          <span>{t('expiry')}</span>
           <input value={expiry} onChange={(e) => setExpiry(e.target.value)} placeholder="2026-06-27" />
         </label>
       </div>
       <div className={styles.row}>
         <label className={styles.field}>
-          <span>Strike</span>
+          <span>{t('strike')}</span>
           <input value={strike} onChange={(e) => setStrike(e.target.value)} placeholder="70000" inputMode="decimal" />
         </label>
         <label className={styles.field}>
-          <span>Right</span>
+          <span>{t('right')}</span>
           <select value={optionRight} onChange={(e) => setOptionRight(e.target.value as 'call' | 'put')}>
             <option value="call">Call</option>
             <option value="put">Put</option>
           </select>
         </label>
         <label className={styles.field}>
-          <span>Size</span>
-          <input value={size} onChange={(e) => setSize(e.target.value)} placeholder="1 (negative = short)" inputMode="decimal" />
+          <span>{t('size')}</span>
+          <input value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('sizePlaceholder')} inputMode="decimal" />
         </label>
       </div>
       <div className={styles.row}>
         <label className={styles.field}>
-          <span>Entry $</span>
+          <span>{t('entryUsd')}</span>
           <input value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} placeholder="2500" inputMode="decimal" />
         </label>
         <label className={styles.field}>
-          <span>Entry IV %</span>
+          <span>{t('entryIv')}</span>
           <input value={entryIvPct} onChange={(e) => setEntryIvPct(e.target.value)} placeholder="62" inputMode="decimal" />
         </label>
       </div>
       {error != null && <div className={styles.error}>{error}</div>}
       <button type="submit" className={styles.submit} disabled={addPosition.isPending}>
-        {addPosition.isPending ? 'Adding…' : 'Add leg'}
+        {addPosition.isPending ? t('adding') : t('addLeg')}
       </button>
     </form>
   );

@@ -2,8 +2,45 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { MobileDrawer } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
+import {
+  defineMessages,
+  intlLocale,
+  useLocale,
+  useT,
+  type Locale,
+  type Translate,
+} from '@lib/i18n';
 import type { HistoryRange, HistorySummary } from './queries';
 import styles from './DateRangePicker.module.css';
+
+const messages = defineMessages(
+  {
+    dateError: 'Use YYYY-MM-DD or a valid short date.',
+    timeError: 'Use HH:mm, 9, 09:00, or 9pm.',
+    start: 'Start',
+    end: 'End',
+    fullRange: 'Full range',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
+    apply: 'Apply',
+    rangeTitle: 'History Range',
+    selectRange: 'Select history range',
+  },
+  {
+    dateError: 'Usa YYYY-MM-DD o una fecha corta válida.',
+    timeError: 'Usa HH:mm, 9, 09:00 o 9pm.',
+    start: 'Inicio',
+    end: 'Fin',
+    fullRange: 'Rango completo',
+    prevMonth: 'Mes anterior',
+    nextMonth: 'Mes siguiente',
+    apply: 'Aplicar',
+    rangeTitle: 'Rango del historial',
+    selectRange: 'Selecciona el rango del historial',
+  },
+);
+
+type InputErrorKey = 'dateError' | 'timeError';
 
 interface DateRangePickerProps {
   range: HistoryRange;
@@ -14,7 +51,7 @@ interface DateRangePickerProps {
 type ActiveField = 'start' | 'end';
 type InputKey = keyof DraftInputs;
 
-type InputErrors = Partial<Record<InputKey, string>>;
+type InputErrors = Partial<Record<InputKey, InputErrorKey>>;
 
 interface DraftRange {
   startDate: string;
@@ -31,6 +68,8 @@ interface DraftInputs {
 }
 
 export default function DateRangePicker({ range, bounds, onApply }: DateRangePickerProps) {
+  const t = useT(messages);
+  const locale = useLocale();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [activeField, setActiveField] = useState<ActiveField>('start');
@@ -56,7 +95,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
     if (!parsedDraft) return buildRangeFromDraft(localDraft, startBound, endBound);
     return buildRangeFromDraft(parsedDraft, startBound, endBound);
   }, [endBound, inputs, localDraft, startBound]);
-  const appliedPreview = formatTriggerLabel(previewRange);
+  const appliedPreview = formatTriggerLabel(previewRange, locale, t);
   const hasErrors = Object.keys(validationErrors).length > 0;
 
   useEffect(() => {
@@ -158,7 +197,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
   ) {
     const parsed = parseDateInput(value);
     if (!parsed) {
-      setErrors((prev) => ({ ...prev, [key]: 'Use YYYY-MM-DD or a valid short date.' }));
+      setErrors((prev) => ({ ...prev, [key]: 'dateError' }));
       return;
     }
 
@@ -178,7 +217,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
   ) {
     const parsed = parseTimeInput(value);
     if (parsed == null) {
-      setErrors((prev) => ({ ...prev, [key]: 'Use HH:mm, 9, 09:00, or 9pm.' }));
+      setErrors((prev) => ({ ...prev, [key]: 'timeError' }));
       return;
     }
 
@@ -191,18 +230,18 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
     setInputs((prev) => ({ ...prev, [key]: formatHour(parsed) }));
   }
 
-  const triggerLabel = formatTriggerLabel(effectiveRange);
+  const triggerLabel = formatTriggerLabel(effectiveRange, locale, t);
   const canGoPrev = canMoveMonth(monthCursor.month, -1, startBound);
   const canGoNext = canMoveMonth(monthCursor.month, 1, endBound);
   const pickerBody = (
     <form className={styles.panelBody} onSubmit={handleSubmit}>
       <div className={styles.inputsRow}>
         <FieldBlock
-          label="Start"
+          label={t('start')}
           dateValue={inputs.startDateText}
           timeValue={inputs.startTimeText}
-          dateError={errors.startDateText}
-          timeError={errors.startTimeText}
+          dateError={errors.startDateText && t(errors.startDateText)}
+          timeError={errors.startTimeText && t(errors.startTimeText)}
           onDateChange={(value) => handleInputChange('startDateText', value)}
           onTimeChange={(value) => handleInputChange('startTimeText', value)}
           onDateCommit={(value) => commitDateInput('startDate', 'startDateText', value)}
@@ -211,11 +250,11 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
         />
 
         <FieldBlock
-          label="End"
+          label={t('end')}
           dateValue={inputs.endDateText}
           timeValue={inputs.endTimeText}
-          dateError={errors.endDateText}
-          timeError={errors.endTimeText}
+          dateError={errors.endDateText && t(errors.endDateText)}
+          timeError={errors.endTimeText && t(errors.endTimeText)}
           onDateChange={(value) => handleInputChange('endDateText', value)}
           onTimeChange={(value) => handleInputChange('endTimeText', value)}
           onDateCommit={(value) => commitDateInput('endDate', 'endDateText', value)}
@@ -231,7 +270,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
           className={styles.fullRangeBtn}
           onClick={() => syncDraft(parseDraftRange(boundsRange))}
         >
-          Full range
+          {t('fullRange')}
         </button>
       </div>
 
@@ -241,24 +280,24 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
           className={styles.navBtn}
           disabled={!canGoPrev}
           onClick={() => monthCursor.shiftMonth(-1)}
-          aria-label="Previous month"
+          aria-label={t('prevMonth')}
         >
           ‹
         </button>
-        <span className={styles.monthLabel}>{formatMonthLabel(monthCursor.month)}</span>
+        <span className={styles.monthLabel}>{formatMonthLabel(monthCursor.month, locale)}</span>
         <button
           type="button"
           className={styles.navBtn}
           disabled={!canGoNext}
           onClick={() => monthCursor.shiftMonth(1)}
-          aria-label="Next month"
+          aria-label={t('nextMonth')}
         >
           ›
         </button>
       </div>
 
       <div className={styles.weekdays}>
-        {WEEKDAYS.map((day) => (
+        {WEEKDAYS[locale].map((day) => (
           <span key={day}>{day}</span>
         ))}
       </div>
@@ -288,7 +327,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
       <div className={styles.footer}>
         <span className={styles.preview}>{appliedPreview}</span>
         <button type="submit" className={styles.applyBtn} disabled={hasErrors}>
-          Apply
+          {t('apply')}
         </button>
       </div>
     </form>
@@ -305,7 +344,7 @@ export default function DateRangePicker({ range, bounds, onApply }: DateRangePic
       {open && !isMobile ? <div className={styles.panel}>{pickerBody}</div> : null}
 
       {isMobile ? (
-        <MobileDrawer open={open} onClose={() => setOpen(false)} title="History Range">
+        <MobileDrawer open={open} onClose={() => setOpen(false)} title={t('rangeTitle')}>
           {pickerBody}
         </MobileDrawer>
       ) : null}
@@ -438,13 +477,10 @@ function buildDraftFromInputs(inputs: DraftInputs): DraftRange | null {
 
 function validateInputs(inputs: DraftInputs): InputErrors {
   const next: InputErrors = {};
-  if (!parseDateInput(inputs.startDateText))
-    next.startDateText = 'Use YYYY-MM-DD or a valid short date.';
-  if (!parseDateInput(inputs.endDateText))
-    next.endDateText = 'Use YYYY-MM-DD or a valid short date.';
-  if (parseTimeInput(inputs.startTimeText) == null)
-    next.startTimeText = 'Use HH:mm, 9, 09:00, or 9pm.';
-  if (parseTimeInput(inputs.endTimeText) == null) next.endTimeText = 'Use HH:mm, 9, 09:00, or 9pm.';
+  if (!parseDateInput(inputs.startDateText)) next.startDateText = 'dateError';
+  if (!parseDateInput(inputs.endDateText)) next.endDateText = 'dateError';
+  if (parseTimeInput(inputs.startTimeText) == null) next.startTimeText = 'timeError';
+  if (parseTimeInput(inputs.endTimeText) == null) next.endTimeText = 'timeError';
   return next;
 }
 
@@ -496,15 +532,19 @@ function getVisibleMonth(draft: DraftRange, boundsRange: HistoryRange): string {
   );
 }
 
-function formatTriggerLabel(range: HistoryRange): string {
-  if (!range.start || !range.end) return 'Select history range';
+function formatTriggerLabel(
+  range: HistoryRange,
+  locale: Locale,
+  t: Translate<typeof messages.en>,
+): string {
+  if (!range.start || !range.end) return t('selectRange');
   const end = new Date(new Date(range.end).getTime() - 1).toISOString();
-  return `${formatShortDateTime(range.start)} → ${formatShortDateTime(end)}`;
+  return `${formatShortDateTime(range.start, locale)} → ${formatShortDateTime(end, locale)}`;
 }
 
-function formatShortDateTime(value: string): string {
+function formatShortDateTime(value: string, locale: Locale): string {
   const date = new Date(value);
-  return `${formatShortDate(date)} ${date.toISOString().slice(11, 16)} UTC`;
+  return `${formatShortDate(date, locale)} ${date.toISOString().slice(11, 16)} UTC`;
 }
 
 function formatLongDate(value: string): string {
@@ -517,8 +557,8 @@ function formatLongDate(value: string): string {
   });
 }
 
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString('en-GB', {
+function formatShortDate(date: Date, locale: Locale): string {
+  return date.toLocaleDateString(locale === 'es' ? intlLocale(locale) : 'en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -526,9 +566,9 @@ function formatShortDate(date: Date): string {
   });
 }
 
-function formatMonthLabel(month: string): string {
+function formatMonthLabel(month: string, locale: Locale): string {
   const date = new Date(`${month}-01T00:00:00.000Z`);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(intlLocale(locale), {
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
@@ -631,7 +671,10 @@ function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const WEEKDAYS: Record<Locale, string[]> = {
+  en: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+  es: ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
+};
 const MONTH_INDEX: Record<string, number> = {
   jan: 0,
   feb: 1,

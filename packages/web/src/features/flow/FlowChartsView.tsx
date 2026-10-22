@@ -1,5 +1,6 @@
 import { AssetPickerButton, EmptyState, Spinner } from '@components/ui';
 import { fmtIv } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_IDS, VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import {
@@ -21,6 +22,58 @@ import { InstrumentPicker } from './InstrumentPicker';
 import type { HistoryRange, TradeEvent } from './queries';
 import { useFlowHistorySummary } from './queries';
 import { mergeInstrumentTrades, useInstrumentTradesLive } from './use-instrument-trades-live';
+import { flowMessages } from './i18n';
+
+const messages = defineMessages(
+  {
+    needsStorage: 'Charts require trade history storage',
+    needsStorageDetail: 'TRADE_STORE_URL is not configured on the server.',
+    loadingInstruments: 'Loading instruments…',
+    noInstruments: 'No traded instruments for {venue} in this range',
+    noInstrumentsDetail: 'Try a wider window or a different venue.',
+    pickInstrument: 'Pick an instrument',
+    pickInstrumentDetail: 'Use the picker above to choose an option contract.',
+    trades: 'Trades',
+    notional: 'Notional',
+    last: 'Last',
+    lastIv: 'Last IV',
+    buySell: 'Buy/Sell',
+    noInstrumentTrades: 'No trades for this instrument in range',
+    noInstrumentTradesDetail: 'Try a wider time range.',
+    time: 'Time',
+    side: 'Side',
+    size: 'Size',
+    price: 'Price',
+    premium: 'Premium',
+    buy: 'Buy',
+    sell: 'Sell',
+    blockOutline: 'Block (outline)',
+  },
+  {
+    needsStorage: 'Los gráficos requieren almacenamiento del historial de trades',
+    needsStorageDetail: 'TRADE_STORE_URL no está configurado en el servidor.',
+    loadingInstruments: 'Cargando instrumentos…',
+    noInstruments: 'No hay instrumentos operados en {venue} en este rango',
+    noInstrumentsDetail: 'Prueba un período más amplio u otro exchange.',
+    pickInstrument: 'Elige un instrumento',
+    pickInstrumentDetail: 'Usa el selector de arriba para elegir un contrato de opción.',
+    trades: 'Trades',
+    notional: 'Nocional',
+    last: 'Último',
+    lastIv: 'Última IV',
+    buySell: 'Compra/Venta',
+    noInstrumentTrades: 'No hay trades de este instrumento en el rango',
+    noInstrumentTradesDetail: 'Prueba un rango de tiempo más amplio.',
+    time: 'Hora',
+    side: 'Lado',
+    size: 'Tamaño',
+    price: 'Precio',
+    premium: 'Prima',
+    buy: 'Compra',
+    sell: 'Venta',
+    blockOutline: 'Block (contorno)',
+  },
+);
 
 function optionTypeFromInstrument(instrument: string): 'C' | 'P' | null {
   const match = instrument.match(/-([CP])(?:-|$)/);
@@ -72,6 +125,8 @@ export default function FlowChartsView({
   onPresetChange,
   onRangeChange,
 }: FlowChartsViewProps) {
+  const t = useT(messages);
+  const tf = useT(flowMessages);
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const [selectedVenue, setSelectedVenue] = useState<string>(() => activeVenues[0] ?? 'deribit');
@@ -331,20 +386,20 @@ export default function FlowChartsView({
 
       {!instrumentsAvailable ? (
         <EmptyState
-          title="Charts require trade history storage"
-          detail="TRADE_STORE_URL is not configured on the server."
+          title={t('needsStorage')}
+          detail={t('needsStorageDetail')}
         />
       ) : instrumentsQuery.isLoading ? (
-        <Spinner size="lg" label="Loading instruments…" />
+        <Spinner size="lg" label={t('loadingInstruments')} />
       ) : instruments.length === 0 ? (
         <EmptyState
-          title={`No traded instruments for ${VENUES[selectedVenue]?.label ?? selectedVenue} in this range`}
-          detail="Try a wider window or a different venue."
+          title={t('noInstruments', { venue: VENUES[selectedVenue]?.label ?? selectedVenue })}
+          detail={t('noInstrumentsDetail')}
         />
       ) : !selectedInstrument ? (
         <EmptyState
-          title="Pick an instrument"
-          detail="Use the picker above to choose an option contract."
+          title={t('pickInstrument')}
+          detail={t('pickInstrumentDetail')}
         />
       ) : (
         <div className={styles.chartCard}>
@@ -353,17 +408,17 @@ export default function FlowChartsView({
             {stats ? (
               <div className={styles.stats}>
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Trades</span>
+                  <span className={styles.statLabel}>{t('trades')}</span>
                   <span className={styles.statValue}>{stats.count}</span>
                 </div>
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Notional</span>
+                  <span className={styles.statLabel}>{t('notional')}</span>
                   <span className={styles.statValue}>
                     ${Math.round(stats.totalNotional).toLocaleString()}
                   </span>
                 </div>
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Last</span>
+                  <span className={styles.statLabel}>{t('last')}</span>
                   <span className={styles.statValue}>
                     {stats.lastPrice != null
                       ? `$${stats.lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
@@ -371,13 +426,13 @@ export default function FlowChartsView({
                   </span>
                 </div>
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Last IV</span>
+                  <span className={styles.statLabel}>{t('lastIv')}</span>
                   <span className={styles.statValue}>
                     {stats.lastIv != null ? fmtIv(stats.lastIv) : '–'}
                   </span>
                 </div>
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Buy/Sell</span>
+                  <span className={styles.statLabel}>{t('buySell')}</span>
                   <span className={styles.statValue}>
                     {stats.buyPct.toFixed(0)}% / {stats.sellPct.toFixed(0)}%
                   </span>
@@ -401,8 +456,8 @@ export default function FlowChartsView({
             {!tradesQuery.isLoading && trades.length === 0 ? (
               <div className={styles.chartOverlay}>
                 <EmptyState
-                  title="No trades for this instrument in range"
-                  detail="Try a wider time range."
+                  title={t('noInstrumentTrades')}
+                  detail={t('noInstrumentTradesDetail')}
                 />
               </div>
             ) : null}
@@ -413,23 +468,23 @@ export default function FlowChartsView({
                 role="status"
               >
                 <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>Time</span>
+                  <span className={styles.tooltipLabel}>{t('time')}</span>
                   <span className={styles.tooltipValue}>
                     {new Date(hoverTrade.timestamp).toLocaleTimeString('en-GB', { hour12: false })}
                   </span>
                 </div>
                 <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>Side</span>
+                  <span className={styles.tooltipLabel}>{t('side')}</span>
                   <span className={styles.tooltipValue} data-side={hoverTrade.side}>
-                    {hoverTrade.side.toUpperCase()}
+                    {hoverTrade.side === 'buy' ? tf('buy') : tf('sell')}
                   </span>
                 </div>
                 <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>Size</span>
+                  <span className={styles.tooltipLabel}>{t('size')}</span>
                   <span className={styles.tooltipValue}>{hoverTrade.size}</span>
                 </div>
                 <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>Price</span>
+                  <span className={styles.tooltipLabel}>{t('price')}</span>
                   <span className={styles.tooltipValue}>
                     {(() => {
                       const p = optionPremiumUsd(hoverTrade);
@@ -446,7 +501,7 @@ export default function FlowChartsView({
                   </span>
                 </div>
                 <div className={styles.tooltipRow}>
-                  <span className={styles.tooltipLabel}>Premium</span>
+                  <span className={styles.tooltipLabel}>{t('premium')}</span>
                   <span className={styles.tooltipValue}>
                     {hoverTrade.premiumUsd != null
                       ? `$${Math.round(hoverTrade.premiumUsd).toLocaleString()}`
@@ -463,13 +518,13 @@ export default function FlowChartsView({
           </div>
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="buy" /> Buy
+              <span className={styles.legendDot} data-side="buy" /> {t('buy')}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="sell" /> Sell
+              <span className={styles.legendDot} data-side="sell" /> {t('sell')}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-block /> Block (outline)
+              <span className={styles.legendDot} data-block /> {t('blockOutline')}
             </span>
           </div>
         </div>

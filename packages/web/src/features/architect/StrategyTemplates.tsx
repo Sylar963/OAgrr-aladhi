@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { formatExpiry } from '@lib/format';
+import { defineMessages, getLocale, translate, useLocale, useT, type Locale } from '@lib/i18n';
 import type { EnrichedChainResponse } from '@shared/enriched';
 import type { Leg } from './payoff';
 import MiniPayoff, { STRATEGY_SHAPES } from './MiniPayoff';
@@ -12,6 +13,85 @@ type Category = 'all' | 'directional' | 'volatility' | 'income';
 type VariantId = 'buy' | 'sell';
 
 type BuiltLeg = Omit<Leg, 'id'>;
+
+const messages = defineMessages(
+  {
+    buy: 'Buy',
+    sell: 'Sell',
+    helperLongCall: 'Long call',
+    helperShortCall: 'Short call',
+    helperLongPut: 'Long put',
+    helperShortPut: 'Short put',
+    helperCallDebitSpread: 'Call debit spread',
+    helperCallCreditSpread: 'Call credit spread',
+    helperPutDebitSpread: 'Put debit spread',
+    helperPutCreditSpread: 'Put credit spread',
+    helperLongStraddle: 'Long straddle',
+    helperShortStraddle: 'Short straddle',
+    helperLongStrangle: 'Long strangle',
+    helperShortStrangle: 'Short strangle',
+    helperCreditIronCondor: 'Credit iron condor',
+    helperReverseIronCondor: 'Reverse iron condor',
+    helperLongButterfly: 'Long butterfly',
+    helperShortButterfly: 'Short butterfly',
+    categoryAll: 'All',
+    categoryDirectional: 'Directional',
+    categoryVolatility: 'Volatility',
+    categoryIncome: 'Income',
+    legs_one: '{n} leg',
+    legs_other: '{n} legs',
+    verbBuy: 'buy',
+    verbSell: 'sell',
+    missingLeg: '{verb} {type} {strike} (no live {side})',
+    thisExpiry: 'this expiry',
+    couldNotBuild: '{name} could not be built on {expiry}.',
+    missingDetail: '{name} on {expiry}: {detail}.',
+    noStrikes: 'No strikes are available for {expiry} yet.',
+    strikeCoverage:
+      '{name} needs wider strike coverage than {expiry} currently has. Try a later expiry.',
+    chainLoading: 'Builder is still loading the option chain. Try again in a moment.',
+    pickExpiry: 'Pick an expiry before applying a strategy.',
+  },
+  {
+    buy: 'Comprar',
+    sell: 'Vender',
+    helperLongCall: 'Long call',
+    helperShortCall: 'Short call',
+    helperLongPut: 'Long put',
+    helperShortPut: 'Short put',
+    helperCallDebitSpread: 'Call spread de débito',
+    helperCallCreditSpread: 'Call spread de crédito',
+    helperPutDebitSpread: 'Put spread de débito',
+    helperPutCreditSpread: 'Put spread de crédito',
+    helperLongStraddle: 'Long straddle',
+    helperShortStraddle: 'Short straddle',
+    helperLongStrangle: 'Long strangle',
+    helperShortStrangle: 'Short strangle',
+    helperCreditIronCondor: 'Iron condor de crédito',
+    helperReverseIronCondor: 'Iron condor inverso',
+    helperLongButterfly: 'Long butterfly',
+    helperShortButterfly: 'Short butterfly',
+    categoryAll: 'Todas',
+    categoryDirectional: 'Direccional',
+    categoryVolatility: 'Volatilidad',
+    categoryIncome: 'Ingresos',
+    legs_one: '{n} pata',
+    legs_other: '{n} patas',
+    verbBuy: 'comprar',
+    verbSell: 'vender',
+    missingLeg: '{verb} {type} {strike} (sin {side} en vivo)',
+    thisExpiry: 'este vencimiento',
+    couldNotBuild: 'No se pudo armar {name} en {expiry}.',
+    missingDetail: '{name} en {expiry}: {detail}.',
+    noStrikes: 'Aún no hay strikes disponibles para {expiry}.',
+    strikeCoverage:
+      '{name} necesita más cobertura de strikes de la que tiene {expiry} ahora. Prueba un vencimiento posterior.',
+    chainLoading: 'El constructor aún está cargando la cadena de opciones. Intenta de nuevo en un momento.',
+    pickExpiry: 'Elige un vencimiento antes de aplicar una estrategia.',
+  },
+);
+
+type MessageKey = keyof typeof messages.en;
 
 interface LegSpec {
   type: 'call' | 'put';
@@ -27,8 +107,8 @@ interface LegAttempt {
 
 interface StrategyVariant {
   id: VariantId;
-  label: string;
-  helper: string;
+  label: MessageKey;
+  helper: MessageKey;
   shape: keyof typeof STRATEGY_SHAPES;
   sentiment: Sentiment;
   build: (chain: EnrichedChainResponse, expiry: string) => LegAttempt[];
@@ -267,35 +347,63 @@ function butterflySpecs(
   ];
 }
 
-function describeMissingLeg(spec: LegSpec): string {
-  const sideWord = spec.direction === 'buy' ? 'ask' : 'bid';
-  const verb = spec.direction === 'buy' ? 'buy' : 'sell';
-  return `${verb} ${spec.type} ${spec.strike.toLocaleString()} (no live ${sideWord})`;
+function describeMissingLeg(spec: LegSpec, locale: Locale): string {
+  return translate(
+    messages,
+    'missingLeg',
+    {
+      verb: translate(messages, spec.direction === 'buy' ? 'verbBuy' : 'verbSell', undefined, locale),
+      type: spec.type,
+      strike: spec.strike.toLocaleString(),
+      side: spec.direction === 'buy' ? 'ask' : 'bid',
+    },
+    locale,
+  );
 }
 
 function formatTemplateBuildError(
   template: StrategyTemplate,
   expiry: string,
   attempts: LegAttempt[],
+  locale: Locale,
 ): string {
-  const formattedExpiry = expiry ? formatExpiry(expiry) : 'this expiry';
+  const formattedExpiry = expiry
+    ? formatExpiry(expiry)
+    : translate(messages, 'thisExpiry', undefined, locale);
   const missing = attempts.filter((entry) => entry.built == null);
 
   if (missing.length === 0) {
-    return `${template.name} could not be built on ${formattedExpiry}.`;
+    return translate(
+      messages,
+      'couldNotBuild',
+      { name: template.name, expiry: formattedExpiry },
+      locale,
+    );
   }
 
-  const detail = missing.map((entry) => describeMissingLeg(entry.spec)).join('; ');
-  return `${template.name} on ${formattedExpiry}: ${detail}.`;
+  const detail = missing.map((entry) => describeMissingLeg(entry.spec, locale)).join('; ');
+  return translate(
+    messages,
+    'missingDetail',
+    { name: template.name, expiry: formattedExpiry, detail },
+    locale,
+  );
 }
 
-function emptyChainError(expiry: string): string {
-  return `No strikes are available for ${formatExpiry(expiry)} yet.`;
+function emptyChainError(expiry: string, locale: Locale): string {
+  return translate(messages, 'noStrikes', { expiry: formatExpiry(expiry) }, locale);
 }
 
-function strikeCoverageError(template: StrategyTemplate, expiry: string): string {
-  const formattedExpiry = expiry ? formatExpiry(expiry) : 'this expiry';
-  return `${template.name} needs wider strike coverage than ${formattedExpiry} currently has. Try a later expiry.`;
+function strikeCoverageError(template: StrategyTemplate, expiry: string, locale: Locale): string {
+  const formattedExpiry = expiry
+    ? formatExpiry(expiry)
+    : translate(messages, 'thisExpiry', undefined, locale);
+  return translate(
+    messages,
+    'strikeCoverage',
+    { name: template.name, expiry: formattedExpiry },
+    locale,
+  );
 }
 
 export const TEMPLATE_CARDS: StrategyTemplate[] = [
@@ -307,8 +415,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Long call',
+        label: 'buy',
+        helper: 'helperLongCall',
         shape: 'Long Call',
         sentiment: 'bullish',
         build: (chain, expiry) =>
@@ -316,8 +424,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Short call',
+        label: 'sell',
+        helper: 'helperShortCall',
         shape: 'Short Call',
         sentiment: 'bearish',
         build: (chain, expiry) =>
@@ -333,8 +441,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Long put',
+        label: 'buy',
+        helper: 'helperLongPut',
         shape: 'Long Put',
         sentiment: 'bearish',
         build: (chain, expiry) =>
@@ -342,8 +450,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Short put',
+        label: 'sell',
+        helper: 'helperShortPut',
         shape: 'Short Put',
         sentiment: 'bullish',
         build: (chain, expiry) =>
@@ -359,8 +467,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Call debit spread',
+        label: 'buy',
+        helper: 'helperCallDebitSpread',
         shape: 'Call Debit Spread',
         sentiment: 'bullish',
         build: (chain, expiry) =>
@@ -368,8 +476,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Call credit spread',
+        label: 'sell',
+        helper: 'helperCallCreditSpread',
         shape: 'Call Credit Spread',
         sentiment: 'bearish',
         build: (chain, expiry) =>
@@ -385,8 +493,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Put debit spread',
+        label: 'buy',
+        helper: 'helperPutDebitSpread',
         shape: 'Put Debit Spread',
         sentiment: 'bearish',
         build: (chain, expiry) =>
@@ -394,8 +502,8 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Put credit spread',
+        label: 'sell',
+        helper: 'helperPutCreditSpread',
         shape: 'Put Credit Spread',
         sentiment: 'bullish',
         build: (chain, expiry) =>
@@ -411,16 +519,16 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Long straddle',
+        label: 'buy',
+        helper: 'helperLongStraddle',
         shape: 'Long Straddle',
         sentiment: 'volatile',
         build: (chain, expiry) => materialize(chain, expiry, straddleSpecs(chain, 'buy')),
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Short straddle',
+        label: 'sell',
+        helper: 'helperShortStraddle',
         shape: 'Short Straddle',
         sentiment: 'neutral',
         build: (chain, expiry) => materialize(chain, expiry, straddleSpecs(chain, 'sell')),
@@ -435,16 +543,16 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Long strangle',
+        label: 'buy',
+        helper: 'helperLongStrangle',
         shape: 'Long Strangle',
         sentiment: 'volatile',
         build: (chain, expiry) => materialize(chain, expiry, strangleSpecs(chain, 'buy')),
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Short strangle',
+        label: 'sell',
+        helper: 'helperShortStrangle',
         shape: 'Short Strangle',
         sentiment: 'neutral',
         build: (chain, expiry) => materialize(chain, expiry, strangleSpecs(chain, 'sell')),
@@ -459,16 +567,16 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Credit iron condor',
+        label: 'sell',
+        helper: 'helperCreditIronCondor',
         shape: 'Iron Condor',
         sentiment: 'neutral',
         build: (chain, expiry) => materialize(chain, expiry, ironCondorSpecs(chain, 'sell')),
       },
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Reverse iron condor',
+        label: 'buy',
+        helper: 'helperReverseIronCondor',
         shape: 'Reverse Iron Condor',
         sentiment: 'volatile',
         build: (chain, expiry) => materialize(chain, expiry, ironCondorSpecs(chain, 'buy')),
@@ -483,16 +591,16 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
     variants: [
       {
         id: 'buy',
-        label: 'Buy',
-        helper: 'Long butterfly',
+        label: 'buy',
+        helper: 'helperLongButterfly',
         shape: 'Butterfly',
         sentiment: 'neutral',
         build: (chain, expiry) => materialize(chain, expiry, butterflySpecs(chain, 'buy')),
       },
       {
         id: 'sell',
-        label: 'Sell',
-        helper: 'Short butterfly',
+        label: 'sell',
+        helper: 'helperShortButterfly',
         shape: 'Short Butterfly',
         sentiment: 'volatile',
         build: (chain, expiry) => materialize(chain, expiry, butterflySpecs(chain, 'sell')),
@@ -501,11 +609,11 @@ export const TEMPLATE_CARDS: StrategyTemplate[] = [
   },
 ];
 
-const CATEGORIES: Array<{ id: Category; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'directional', label: 'Directional' },
-  { id: 'volatility', label: 'Volatility' },
-  { id: 'income', label: 'Income' },
+const CATEGORIES: Array<{ id: Category; label: MessageKey }> = [
+  { id: 'all', label: 'categoryAll' },
+  { id: 'directional', label: 'categoryDirectional' },
+  { id: 'volatility', label: 'categoryVolatility' },
+  { id: 'income', label: 'categoryIncome' },
 ];
 
 const DEFAULT_VARIANTS: Record<string, VariantId> = {
@@ -551,20 +659,24 @@ export function buildTemplateVariant(
   expiry: string,
   template: StrategyTemplate,
   variant: StrategyVariant,
+  locale: Locale = getLocale(),
 ): TemplateBuildResult {
   if (!chain) {
     return {
       ok: false,
-      error: { message: 'Builder is still loading the option chain. Try again in a moment.' },
+      error: { message: translate(messages, 'chainLoading', undefined, locale) },
     };
   }
 
   if (!expiry) {
-    return { ok: false, error: { message: 'Pick an expiry before applying a strategy.' } };
+    return {
+      ok: false,
+      error: { message: translate(messages, 'pickExpiry', undefined, locale) },
+    };
   }
 
   if (chain.strikes.length === 0) {
-    return { ok: false, error: { message: emptyChainError(expiry) } };
+    return { ok: false, error: { message: emptyChainError(expiry, locale) } };
   }
 
   const attempts = variant.build(chain, expiry);
@@ -572,7 +684,7 @@ export function buildTemplateVariant(
   // Empty attempts means a spec builder returned null because a required
   // strike offset is out of chain bounds — single source of truth for coverage.
   if (attempts.length === 0) {
-    return { ok: false, error: { message: strikeCoverageError(template, expiry) } };
+    return { ok: false, error: { message: strikeCoverageError(template, expiry, locale) } };
   }
 
   const built = attempts.flatMap((entry) => (entry.built ? [entry.built] : []));
@@ -580,7 +692,7 @@ export function buildTemplateVariant(
   if (built.length < attempts.length || built.length < template.legs) {
     return {
       ok: false,
-      error: { message: formatTemplateBuildError(template, expiry, attempts) },
+      error: { message: formatTemplateBuildError(template, expiry, attempts, locale) },
     };
   }
 
@@ -602,6 +714,8 @@ export default function StrategyTemplates({
   errorMessage,
   onErrorMessageChange,
 }: Props) {
+  const t = useT(messages);
+  const locale = useLocale();
   const addLeg = useStrategyStore((state) => state.addLeg);
   const clearLegs = useStrategyStore((state) => state.clearLegs);
   const [category, setCategory] = useState<Category>('all');
@@ -619,7 +733,7 @@ export default function StrategyTemplates({
   if (!chain) return null;
 
   function applyVariant(template: StrategyTemplate, variant: StrategyVariant) {
-    const result = buildTemplateVariant(chain, expiry, template, variant);
+    const result = buildTemplateVariant(chain, expiry, template, variant, locale);
     if (!result.ok) {
       onErrorMessageChange(result.error.message);
       return;
@@ -640,7 +754,7 @@ export default function StrategyTemplates({
             data-active={entry.id === category}
             onClick={() => setCategory(entry.id)}
           >
-            {entry.label}
+            {t(entry.label)}
           </button>
         ))}
       </div>
@@ -681,9 +795,9 @@ export default function StrategyTemplates({
 
               <div className={styles.templateCardInfo}>
                 <span className={styles.templateCardName}>{template.name}</span>
-                <span className={styles.templateCardHelper}>{selectedVariant.helper}</span>
+                <span className={styles.templateCardHelper}>{t(selectedVariant.helper)}</span>
                 <span className={styles.templateCardMeta}>
-                  {template.legs} leg{template.legs !== 1 ? 's' : ''}
+                  {t(template.legs !== 1 ? 'legs_other' : 'legs_one', { n: template.legs })}
                 </span>
               </div>
 
@@ -699,7 +813,7 @@ export default function StrategyTemplates({
                       applyVariant(template, variant);
                     }}
                   >
-                    {variant.label}
+                    {t(variant.label)}
                   </button>
                 ))}
               </div>

@@ -1,3 +1,30 @@
+import { defineMessages, intlLocale, type Locale, translate } from '@lib/i18n';
+
+const messages = defineMessages(
+  {
+    justNow: 'just now',
+    minutesAgo_one: '{n} minute ago',
+    minutesAgo_other: '{n} minutes ago',
+    hoursAgo_one: '{n} hour ago',
+    hoursAgo_other: '{n} hours ago',
+    daysAgo_one: '{n} day ago',
+    daysAgo_other: '{n} days ago',
+    today: 'Today',
+    yesterday: 'Yesterday',
+  },
+  {
+    justNow: 'justo ahora',
+    minutesAgo_one: 'hace {n} minuto',
+    minutesAgo_other: 'hace {n} minutos',
+    hoursAgo_one: 'hace {n} hora',
+    hoursAgo_other: 'hace {n} horas',
+    daysAgo_one: 'hace {n} día',
+    daysAgo_other: 'hace {n} días',
+    today: 'Hoy',
+    yesterday: 'Ayer',
+  },
+);
+
 const TCO_LINK = /https?:\/\/t\.co\/\S+/gi;
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -34,17 +61,17 @@ export function headlineLabel(item: {
   return categoryLabel(item.relevance?.tags[0] ?? item.ruleTag);
 }
 
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+function ago(n: number, unit: 'minutesAgo' | 'hoursAgo' | 'daysAgo', locale: Locale): string {
+  return translate(messages, n === 1 ? `${unit}_one` : `${unit}_other`, { n }, locale);
 }
 
-export function timeAgo(timestamp: number, now: number): string {
+export function timeAgo(timestamp: number, now: number, locale: Locale = 'en'): string {
   const delta = Math.max(0, now - timestamp);
-  if (delta < MINUTE_MS) return 'just now';
-  if (delta < HOUR_MS) return plural(Math.floor(delta / MINUTE_MS), 'minute');
-  if (delta < DAY_MS) return plural(Math.floor(delta / HOUR_MS), 'hour');
-  if (delta < 30 * DAY_MS) return plural(Math.floor(delta / DAY_MS), 'day');
-  return new Date(timestamp).toLocaleDateString('en-US', {
+  if (delta < MINUTE_MS) return translate(messages, 'justNow', undefined, locale);
+  if (delta < HOUR_MS) return ago(Math.floor(delta / MINUTE_MS), 'minutesAgo', locale);
+  if (delta < DAY_MS) return ago(Math.floor(delta / HOUR_MS), 'hoursAgo', locale);
+  if (delta < 30 * DAY_MS) return ago(Math.floor(delta / DAY_MS), 'daysAgo', locale);
+  return new Date(timestamp).toLocaleDateString(intlLocale(locale), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -65,12 +92,12 @@ function startOfLocalDay(ms: number): number {
   return d.getTime();
 }
 
-export function dayLabel(timestamp: number, now: number): string {
+export function dayLabel(timestamp: number, now: number, locale: Locale = 'en'): string {
   const diffDays = Math.round((startOfLocalDay(now) - startOfLocalDay(timestamp)) / DAY_MS);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 0) return translate(messages, 'today', undefined, locale);
+  if (diffDays === 1) return translate(messages, 'yesterday', undefined, locale);
   const sameYear = new Date(timestamp).getFullYear() === new Date(now).getFullYear();
-  return new Date(timestamp).toLocaleDateString('en-US', {
+  return new Date(timestamp).toLocaleDateString(intlLocale(locale), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

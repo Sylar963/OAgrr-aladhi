@@ -9,6 +9,7 @@ import {
 } from 'lightweight-charts';
 
 import type { EquityHistoryPoint, EquityHistoryRange, EquityHistoryVenue } from '@oggregator/protocol';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 
 import { useEquityHistory } from './hooks/queries';
@@ -39,7 +40,35 @@ interface Props {
   venue: EquityHistoryVenue;
 }
 
+const messages = defineMessages(
+  {
+    rangeAria: 'Equity range',
+    equity: ' · equity {v}',
+    loading: 'Loading {venue} equity history…',
+    unavailable: 'Equity history unavailable',
+    retry: 'Retry',
+    empty: 'No {venue} equity history in this range.',
+    cashReplay:
+      "Daily cash balance at 00:00 UTC, rebuilt from {venue}'s transaction log (settlements, funding, deposits, withdrawals). The last point adds the current unrealised P&L. Non-USD collateral uses today's index price.",
+    markToMarket:
+      'Daily mark-to-market account value reported by {venue}. Deposits and withdrawals show up as equity changes.',
+  },
+  {
+    rangeAria: 'Rango de equity',
+    equity: ' · equity {v}',
+    loading: 'Cargando historial de equity de {venue}…',
+    unavailable: 'Historial de equity no disponible',
+    retry: 'Reintentar',
+    empty: 'No hay historial de equity de {venue} en este rango.',
+    cashReplay:
+      'Saldo de efectivo diario a las 00:00 UTC, reconstruido desde el registro de transacciones de {venue} (liquidaciones, funding, depósitos, retiros). El último punto suma el P&L no realizado actual. El colateral que no es USD usa el precio índice de hoy.',
+    markToMarket:
+      'Valor diario de la cuenta a mercado reportado por {venue}. Los depósitos y retiros aparecen como cambios de equity.',
+  },
+);
+
 export default function EquityHistoryChart({ venue }: Props) {
+  const t = useT(messages);
   const [range, setRange] = useState<EquityHistoryRange>(loadRange);
   const { data, isError, error, isLoading, refetch } = useEquityHistory(venue, range);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,7 +135,7 @@ export default function EquityHistoryChart({ venue }: Props) {
   return (
     <div className={styles.wrap}>
       <div className={styles.controls}>
-        <div className={styles.group} role="radiogroup" aria-label="Equity range">
+        <div className={styles.group} role="radiogroup" aria-label={t('rangeAria')}>
           {RANGES.map((r) => (
             <button
               key={r}
@@ -123,7 +152,7 @@ export default function EquityHistoryChart({ venue }: Props) {
         </div>
         <span className={styles.snapshot}>
           {venueLabel}
-          {last != null && ` · equity ${fmtUsd(last.equityUsd)}`}
+          {last != null && t('equity', { v: fmtUsd(last.equityUsd) })}
           {change != null && ` · ${range} ${fmtSignedUsd(change)}`}
           {changePct != null && ` (${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%)`}
         </span>
@@ -131,24 +160,24 @@ export default function EquityHistoryChart({ venue }: Props) {
 
       <div className={styles.chartWrap}>
         <div className={styles.canvas} ref={containerRef} />
-        {isLoading && <div className={styles.overlay}>Loading {venueLabel} equity history…</div>}
+        {isLoading && <div className={styles.overlay}>{t('loading', { venue: venueLabel })}</div>}
         {isError && (
           <div className={styles.overlay}>
-            <div>{error instanceof Error ? error.message : 'Equity history unavailable'}</div>
+            <div>{error instanceof Error ? error.message : t('unavailable')}</div>
             <button type="button" className={styles.refresh} onClick={() => void refetch()}>
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
         {!isLoading && !isError && points.length === 0 && (
-          <div className={styles.overlay}>No {venueLabel} equity history in this range.</div>
+          <div className={styles.overlay}>{t('empty', { venue: venueLabel })}</div>
         )}
       </div>
 
       <div className={styles.hint}>
         {data?.basis === 'cash_replay'
-          ? `Daily cash balance at 00:00 UTC, rebuilt from ${venueLabel}'s transaction log (settlements, funding, deposits, withdrawals). The last point adds the current unrealised P&L. Non-USD collateral uses today's index price.`
-          : `Daily mark-to-market account value reported by ${venueLabel}. Deposits and withdrawals show up as equity changes.`}
+          ? t('cashReplay', { venue: venueLabel })
+          : t('markToMarket', { venue: venueLabel })}
       </div>
     </div>
   );

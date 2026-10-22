@@ -1,6 +1,21 @@
 import type { ExpiryBucketRow } from '@oggregator/protocol';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import styles from './ExpiryBuckets.module.css';
+
+const messages = defineMessages(
+  {
+    empty: 'Add positions to see risk by expiry.',
+    title: 'Risk by expiry',
+    contracts: 'contracts',
+  },
+  {
+    empty: 'Agrega posiciones para ver el riesgo por vencimiento.',
+    title: 'Riesgo por vencimiento',
+    contracts: 'contratos',
+  },
+);
 
 interface Props {
   rows: ExpiryBucketRow[];
@@ -33,13 +48,14 @@ function fmtGamma(value: number): string {
 }
 
 export default function ExpiryBuckets({ rows }: Props) {
+  const t = useT(messages);
   if (rows.length === 0) {
-    return <div className={styles.empty}>Add positions to see risk by expiry.</div>;
+    return <div className={styles.empty}>{t('empty')}</div>;
   }
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.title}>Risk by expiry</div>
+      <div className={styles.title}>{t('title')}</div>
       <div className={styles.list}>
         {rows.map((row) => (
           <div key={row.expiry} className={styles.card}>
@@ -48,7 +64,7 @@ export default function ExpiryBuckets({ rows }: Props) {
               <span className={styles.dte}>{row.dte}d</span>
             </div>
             <div className={styles.stats}>
-              <span className={styles.stat}>contracts {fmtContracts(row.contracts)}</span>
+              <span className={styles.stat}>{t('contracts')} {fmtContracts(row.contracts)}</span>
               <span className={styles.stat}>vega {fmtSigned(row.vega, 3)}</span>
               <span className={styles.stat}>gamma {fmtGamma(row.gamma)}</span>
               <span className={styles.stat}>theta {fmtSigned(row.theta, 2)}</span>

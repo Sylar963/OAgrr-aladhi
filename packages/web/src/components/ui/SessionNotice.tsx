@@ -1,8 +1,44 @@
 import { useEffect, useState } from 'react';
 
+import { defineMessages, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 
 import styles from './SessionNotice.module.css';
+
+const messages = defineMessages(
+  {
+    newVersion: 'New version available',
+    newVersionBody:
+      'The server has been updated with improvements and fixes. The page will refresh automatically to load the latest version.',
+    refreshingIn: 'Refreshing in',
+    updateNow: 'Update now',
+    aboutToExpire: 'Session about to expire',
+    aboutToExpireBody:
+      'Your session has been inactive for a while. To keep resources available for active users, you will be logged out automatically.',
+    autoLogoutIn: 'Auto-logout in',
+    stayActive: 'Stay active',
+    loggedOut: 'Logged out for inactivity',
+    loggedOutBody:
+      'Your session was ended after 30 minutes of inactivity. Idle sessions are released to keep live market data responsive for active users. Reload the page to start a new session.',
+    reconnect: 'Reconnect',
+  },
+  {
+    newVersion: 'Nueva versión disponible',
+    newVersionBody:
+      'El servidor se actualizó con mejoras y correcciones. La página se recargará automáticamente para cargar la última versión.',
+    refreshingIn: 'Recargando en',
+    updateNow: 'Actualizar ahora',
+    aboutToExpire: 'Tu sesión está por expirar',
+    aboutToExpireBody:
+      'Tu sesión ha estado inactiva por un tiempo. Para mantener los recursos disponibles para usuarios activos, se cerrará automáticamente.',
+    autoLogoutIn: 'Cierre automático en',
+    stayActive: 'Seguir activo',
+    loggedOut: 'Sesión cerrada por inactividad',
+    loggedOutBody:
+      'Tu sesión terminó tras 30 minutos de inactividad. Las sesiones inactivas se liberan para que los datos de mercado en vivo respondan rápido a los usuarios activos. Recarga la página para iniciar una nueva sesión.',
+    reconnect: 'Reconectar',
+  },
+);
 
 function reload() {
   window.location.reload();
@@ -16,6 +52,7 @@ function formatCountdown(ms: number): string {
 }
 
 export default function SessionNotice() {
+  const t = useT(messages);
   const notice = useAppStore((s) => s.sessionNotice);
   const extendSession = useAppStore((s) => s.extendSession);
   const [now, setNow] = useState(() => Date.now());
@@ -46,22 +83,19 @@ export default function SessionNotice() {
               ↻
             </span>
             <span className={styles.title} id={titleId}>
-              New version available
+              {t('newVersion')}
             </span>
           </div>
-          <p className={styles.body}>
-            The server has been updated with improvements and fixes. The page will
-            refresh automatically to load the latest version.
-          </p>
+          <p className={styles.body}>{t('newVersionBody')}</p>
           {reloadAtMs != null && (
             <div className={styles.countdown}>
-              <span>Refreshing in</span>
+              <span>{t('refreshingIn')}</span>
               <span className={styles.countdownValue}>{formatCountdown(reloadAtMs - now)}</span>
             </div>
           )}
           <div className={styles.actions}>
             <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={reload}>
-              Update now
+              {t('updateNow')}
             </button>
           </div>
         </div>
@@ -79,20 +113,17 @@ export default function SessionNotice() {
               ⏱
             </span>
             <span className={styles.title} id={titleId}>
-              Session about to expire
+              {t('aboutToExpire')}
             </span>
           </div>
-          <p className={styles.body}>
-            Your session has been inactive for a while. To keep resources available
-            for active users, you will be logged out automatically.
-          </p>
+          <p className={styles.body}>{t('aboutToExpireBody')}</p>
           <div className={styles.countdown}>
-            <span>Auto-logout in</span>
+            <span>{t('autoLogoutIn')}</span>
             <span className={styles.countdownValue}>{formatCountdown(remaining)}</span>
           </div>
           <div className={styles.actions}>
             <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={extendSession}>
-              Stay active
+              {t('stayActive')}
             </button>
           </div>
         </div>
@@ -108,17 +139,13 @@ export default function SessionNotice() {
             ⏻
           </span>
           <span className={styles.title} id={titleId}>
-            Logged out for inactivity
+            {t('loggedOut')}
           </span>
         </div>
-        <p className={styles.body}>
-          Your session was ended after 30 minutes of inactivity. Idle sessions are
-          released to keep live market data responsive for active users. Reload the
-          page to start a new session.
-        </p>
+        <p className={styles.body}>{t('loggedOutBody')}</p>
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={reload}>
-            Reconnect
+            {t('reconnect')}
           </button>
         </div>
       </div>

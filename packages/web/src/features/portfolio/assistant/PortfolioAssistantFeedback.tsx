@@ -6,15 +6,51 @@ import {
 } from '@oggregator/protocol';
 import { useState } from 'react';
 
+import { defineMessages, useLocale, useT } from '@lib/i18n';
+
 import { useSubmitPortfolioAssistantFeedback } from './hooks';
+import { assistantErrorFrom } from './i18n';
 import styles from './PortfolioAssistantPanel.module.css';
 
-const REASONS: Array<[PortfolioAssistantFeedbackReason, string]> = [
-  ['wrong_numbers', 'Wrong numbers'],
-  ['did_not_answer', "Didn't answer"],
-  ['too_long', 'Too long'],
-  ['refused', 'Refused'],
-  ['other', 'Other'],
+const messages = defineMessages(
+  {
+    reason_wrong_numbers: 'Wrong numbers',
+    reason_did_not_answer: "Didn't answer",
+    reason_too_long: 'Too long',
+    reason_refused: 'Refused',
+    reason_other: 'Other',
+    helpful: 'Helpful',
+    notHelpful: 'Not helpful',
+    thanks: 'Thanks for the feedback',
+    whatWentWrong: 'What went wrong? (optional)',
+    noteLabel: 'Feedback note',
+    notePlaceholder: 'Add a short note',
+    close: 'Close',
+    send: 'Send',
+  },
+  {
+    reason_wrong_numbers: 'Números incorrectos',
+    reason_did_not_answer: 'No respondió',
+    reason_too_long: 'Demasiado largo',
+    reason_refused: 'Se negó',
+    reason_other: 'Otro',
+    helpful: 'Útil',
+    notHelpful: 'No útil',
+    thanks: 'Gracias por tu opinión',
+    whatWentWrong: '¿Qué salió mal? (opcional)',
+    noteLabel: 'Nota de feedback',
+    notePlaceholder: 'Agrega una nota breve',
+    close: 'Cerrar',
+    send: 'Enviar',
+  },
+);
+
+const REASONS: PortfolioAssistantFeedbackReason[] = [
+  'wrong_numbers',
+  'did_not_answer',
+  'too_long',
+  'refused',
+  'other',
 ];
 
 interface PortfolioAssistantFeedbackProps {
@@ -28,6 +64,8 @@ export function PortfolioAssistantFeedback({
   messageId,
   feedback,
 }: PortfolioAssistantFeedbackProps) {
+  const t = useT(messages);
+  const locale = useLocale();
   const submit = useSubmitPortfolioAssistantFeedback(threadId, messageId);
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<PortfolioAssistantFeedbackReason[]>([]);
@@ -80,8 +118,8 @@ export function PortfolioAssistantFeedback({
         <button
           type="button"
           className={styles.feedbackVote}
-          aria-label="Helpful"
-          title="Helpful"
+          aria-label={t('helpful')}
+          title={t('helpful')}
           aria-pressed={vote === 'up'}
           disabled={submit.isPending}
           onClick={voteUp}
@@ -93,8 +131,8 @@ export function PortfolioAssistantFeedback({
         <button
           type="button"
           className={styles.feedbackVote}
-          aria-label="Not helpful"
-          title="Not helpful"
+          aria-label={t('notHelpful')}
+          title={t('notHelpful')}
           aria-pressed={vote === 'down'}
           aria-expanded={open}
           disabled={submit.isPending}
@@ -104,32 +142,32 @@ export function PortfolioAssistantFeedback({
             <path d="M11 9V2.5h2.5V9H11zm0 0l-2.6 4.8a1.3 1.3 0 0 1-2.3-1.1L6.8 10H3a1.3 1.3 0 0 1-1.3-1.5l.9-4.9A1.3 1.3 0 0 1 3.9 2.5H11" />
           </svg>
         </button>
-        {saved && !open && <span className={styles.feedbackStatus}>Thanks for the feedback</span>}
+        {saved && !open && <span className={styles.feedbackStatus}>{t('thanks')}</span>}
         {submit.isError && (
           <span className={styles.feedbackStatus} data-tone="error" role="alert">
-            {submit.error.message}
+            {assistantErrorFrom(submit.error, 'request_failed', locale)}
           </span>
         )}
       </div>
       {open && (
         <fieldset className={styles.feedbackDetails}>
-          <legend>What went wrong? (optional)</legend>
+          <legend>{t('whatWentWrong')}</legend>
           <div className={styles.feedbackChips}>
-            {REASONS.map(([reason, label]) => (
+            {REASONS.map((reason) => (
               <button
                 key={reason}
                 type="button"
                 aria-pressed={reasons.includes(reason)}
                 onClick={() => toggleReason(reason)}
               >
-                {label}
+                {t(`reason_${reason}`)}
               </button>
             ))}
           </div>
           <input
             type="text"
-            aria-label="Feedback note"
-            placeholder="Add a short note"
+            aria-label={t('noteLabel')}
+            placeholder={t('notePlaceholder')}
             maxLength={PORTFOLIO_ASSISTANT_FEEDBACK_NOTE_MAX_CHARS}
             value={note}
             onChange={(event) => setNote(event.target.value)}
@@ -139,10 +177,10 @@ export function PortfolioAssistantFeedback({
               {note.length}/{PORTFOLIO_ASSISTANT_FEEDBACK_NOTE_MAX_CHARS}
             </span>
             <button type="button" onClick={() => setOpen(false)}>
-              Close
+              {t('close')}
             </button>
             <button type="button" disabled={submit.isPending} onClick={sendDetails}>
-              Send
+              {t('send')}
             </button>
           </div>
         </fieldset>

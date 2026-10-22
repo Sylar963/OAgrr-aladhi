@@ -2,6 +2,7 @@ import { EmptyState, Spinner } from '@components/ui';
 import { formatGexM } from '@features/gex';
 import styles from '@features/gex/GexView.module.css';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import type { GexStrike } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
@@ -11,7 +12,43 @@ import TradfiGexBandsChart from './TradfiGexBandsChart';
 type Mode = 'all' | string;
 type Version = 'bars' | 'bands';
 
+const messages = defineMessages(
+  {
+    loading: 'Loading GEX data…',
+    title: 'Gamma Exposure (GEX)',
+    bars: 'Bars',
+    bands: 'Bands',
+    subtitle: 'Dealer gamma per strike · $M of hedging per 1% spot move',
+    spot: 'Spot: {value}',
+    allTitle: 'Sum GEX across every listed expiry',
+    all: 'ALL',
+    noGexAll: 'No GEX data across listed expiries',
+    noGexExpiry: 'No GEX data for this expiry',
+    noGexDetail: 'Open interest and flow populate once the chain has warmed.',
+    negative: '← Negative (accelerator)',
+    positive: 'Positive (magnet) →',
+    barTitle: '{strike}: {gex} per 1%',
+  },
+  {
+    loading: 'Cargando datos de GEX…',
+    title: 'Exposición gamma (GEX)',
+    bars: 'Barras',
+    bands: 'Bandas',
+    subtitle: 'Gamma del dealer por strike · $M de cobertura por cada 1% de movimiento del spot',
+    spot: 'Spot: {value}',
+    allTitle: 'Suma el GEX de todos los vencimientos listados',
+    all: 'TODOS',
+    noGexAll: 'Sin datos de GEX en los vencimientos listados',
+    noGexExpiry: 'Sin datos de GEX para este vencimiento',
+    noGexDetail: 'El open interest y el flujo se completan cuando la cadena termina de calentarse.',
+    negative: '← Negativo (acelerador)',
+    positive: 'Positivo (imán) →',
+    barTitle: '{strike}: {gex} por 1%',
+  },
+);
+
 export default function TradfiGexView() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.tradfiUnderlying);
 
   const { data: expiriesData } = useTradfiExpiries(underlying);
@@ -70,7 +107,7 @@ export default function TradfiGexView() {
   if (isLoading && gex.length === 0) {
     return (
       <div className={styles.view}>
-        <Spinner size="lg" label="Loading GEX data…" />
+        <Spinner size="lg" label={t('loading')} />
       </div>
     );
   }
@@ -80,7 +117,7 @@ export default function TradfiGexView() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.titleRow}>
-            <span className={styles.title}>Gamma Exposure (GEX)</span>
+            <span className={styles.title}>{t('title')}</span>
             <div className={styles.gexModeToggle}>
               <button
                 type="button"
@@ -88,7 +125,7 @@ export default function TradfiGexView() {
                 data-active={version === 'bars' || undefined}
                 onClick={() => setVersion('bars')}
               >
-                Bars
+                {t('bars')}
               </button>
               <button
                 type="button"
@@ -96,15 +133,15 @@ export default function TradfiGexView() {
                 data-active={version === 'bands' || undefined}
                 onClick={() => setVersion('bands')}
               >
-                Bands
+                {t('bands')}
               </button>
             </div>
           </div>
           <span className={styles.subtitle}>
-            Dealer gamma per strike · $M of hedging per 1% spot move
+            {t('subtitle')}
           </span>
         </div>
-        {spotPrice != null && <div className={styles.spotBadge}>Spot: {fmtUsd(spotPrice)}</div>}
+        {spotPrice != null && <div className={styles.spotBadge}>{t('spot', { value: fmtUsd(spotPrice) })}</div>}
       </div>
 
       <div className={styles.expiryPicker}>
@@ -113,9 +150,9 @@ export default function TradfiGexView() {
           className={styles.expiryBtn}
           data-active={isAll}
           onClick={() => setMode('all')}
-          title="Sum GEX across every listed expiry"
+          title={t('allTitle')}
         >
-          ALL
+          {t('all')}
           <span className={styles.dteBadge}>Σ</span>
         </button>
         {expiries.map((e) => {
@@ -139,8 +176,8 @@ export default function TradfiGexView() {
       {nonzero.length === 0 ? (
         <EmptyState
           icon="◈"
-          title={isAll ? 'No GEX data across listed expiries' : 'No GEX data for this expiry'}
-          detail="Open interest and flow populate once the chain has warmed."
+          title={isAll ? t('noGexAll') : t('noGexExpiry')}
+          detail={t('noGexDetail')}
         />
       ) : version === 'bands' ? (
         <TradfiGexBandsChart
@@ -153,11 +190,11 @@ export default function TradfiGexView() {
         <div className={styles.chart}>
           <div className={styles.axis}>
             <div className={styles.axisLeft}>
-              <span className={styles.axisLabel}>← Negative (accelerator)</span>
+              <span className={styles.axisLabel}>{t('negative')}</span>
             </div>
             <div className={styles.axisCenter}>0</div>
             <div className={styles.axisRight}>
-              <span className={styles.axisLabel}>Positive (magnet) →</span>
+              <span className={styles.axisLabel}>{t('positive')}</span>
             </div>
           </div>
           <div className={styles.bars} ref={barsRef}>
@@ -183,7 +220,7 @@ export default function TradfiGexView() {
                           className={styles.bar}
                           data-type="negative"
                           style={{ width: `${pct}%` }}
-                          title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%`}
+                          title={t('barTitle', { strike: g.strike, gex: formatGexM(g.gexUsdMillions) })}
                         />
                       )}
                     </div>
@@ -194,7 +231,7 @@ export default function TradfiGexView() {
                           className={styles.bar}
                           data-type="positive"
                           style={{ width: `${pct}%` }}
-                          title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%`}
+                          title={t('barTitle', { strike: g.strike, gex: formatGexM(g.gexUsdMillions) })}
                         />
                       )}
                     </div>

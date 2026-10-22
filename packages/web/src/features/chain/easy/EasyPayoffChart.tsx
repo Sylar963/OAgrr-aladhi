@@ -20,9 +20,11 @@ import {
 } from '@features/architect';
 import { Spinner } from '@components/ui';
 import { fmtUsd } from '@lib/format';
+import { intlLocale, useLocale, useT, type Locale, type Translate } from '@lib/i18n';
 import { DeadlinePrimitive } from './deadline-primitive';
 import { EASY_OPTION_MIME, decodeDraft, type EasyLegDraft } from './easy-explain';
 import { TIMEFRAMES, easyCandleSpec, futureTimes, type EasyTimeframe } from './future-axis';
+import { easyMessages } from './i18n';
 import styles from './EasyChain.module.css';
 
 interface EasyPayoffChartProps {
@@ -64,9 +66,9 @@ const HIDDEN_CANDLES = {
   wickDownColor: 'transparent',
 };
 
-function fmtDeadline(ms: number): string {
+function fmtDeadline(ms: number, locale: Locale): string {
   return new Date(ms)
-    .toLocaleString('en-US', {
+    .toLocaleString(intlLocale(locale), {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
@@ -76,9 +78,10 @@ function fmtDeadline(ms: number): string {
     .toUpperCase();
 }
 
-function legLineTitle(leg: Leg): string {
+function legLineTitle(leg: Leg, t: Translate<typeof easyMessages.en>): string {
   const qty = leg.quantity > 1 ? `${leg.quantity}× ` : '';
-  return `${qty}${leg.direction.toUpperCase()} ${leg.type.toUpperCase()} ${fmtUsd(leg.strike)}`;
+  const dir = leg.direction === 'buy' ? t('lineBuy') : t('lineSell');
+  return `${qty}${dir} ${leg.type.toUpperCase()} ${fmtUsd(leg.strike)}`;
 }
 
 export default function EasyPayoffChart({
@@ -91,6 +94,8 @@ export default function EasyPayoffChart({
   spot,
   onDropDraft,
 }: EasyPayoffChartProps) {
+  const t = useT(easyMessages);
+  const locale = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -280,9 +285,11 @@ export default function EasyPayoffChart({
       })),
       nowSec: lastCandleSec,
       deadlineSec,
-      label: fmtDeadline(expiryMs),
+      label: t('deadline', { date: fmtDeadline(expiryMs, locale) }),
+      profitLabel: t('profitZone'),
+      lossLabel: t('lossZone'),
     });
-  }, [zones, legs, lastCandleSec, deadlineSec, expiryMs]);
+  }, [zones, legs, lastCandleSec, deadlineSec, expiryMs, t, locale]);
 
   useEffect(() => {
     const candles = candleRef.current;
@@ -298,7 +305,7 @@ export default function EasyPayoffChart({
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: legLineTitle(leg),
+          title: legLineTitle(leg, t),
         }),
       );
     }
@@ -317,7 +324,7 @@ export default function EasyPayoffChart({
 
     extraPricesRef.current = [...legs.map((l) => l.strike), ...breakevens];
     chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-  }, [legs, breakevens]);
+  }, [legs, breakevens, t]);
 
   function acceptsDrag(e: DragEvent): boolean {
     return e.dataTransfer.types.includes(EASY_OPTION_MIME);
@@ -350,13 +357,13 @@ export default function EasyPayoffChart({
         <div className={styles.chartCanvas} ref={containerRef} />
 
         <div className={styles.chartToolbar}>
-          <div className={styles.toolGroup} role="group" aria-label="Chart type">
+          <div className={styles.toolGroup} role="group" aria-label={t('chartType')}>
             <button
               type="button"
               data-active={kind === 'candles'}
               onClick={() => setKind('candles')}
-              title="Candles"
-              aria-label="Candles"
+              title={t('candles')}
+              aria-label={t('candles')}
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
                 <path d="M4 2v3M4 11v3M12 1v4M12 10v5" stroke="currentColor" strokeWidth="1.3" />
@@ -368,15 +375,15 @@ export default function EasyPayoffChart({
               type="button"
               data-active={kind === 'line'}
               onClick={() => setKind('line')}
-              title="Line"
-              aria-label="Line"
+              title={t('line')}
+              aria-label={t('line')}
             >
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
                 <path d="M1 12l4-5 3 3 3-6 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
               </svg>
             </button>
           </div>
-          <div className={styles.toolGroup} role="group" aria-label="Timeframe">
+          <div className={styles.toolGroup} role="group" aria-label={t('timeframe')}>
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.id}
@@ -384,7 +391,11 @@ export default function EasyPayoffChart({
                 data-active={timeframe === tf.id}
                 onClick={() => setTimeframe(tf.id)}
               >
-                {tf.id === 'auto' && timeframe === 'auto' ? `Auto · ${spec.label}` : tf.label}
+                {tf.id === 'auto'
+                  ? timeframe === 'auto'
+                    ? t('autoWith', { label: spec.label })
+                    : t('auto')
+                  : tf.label}
               </button>
             ))}
           </div>
@@ -393,8 +404,7 @@ export default function EasyPayoffChart({
 
         {noHistory && (
           <div className={styles.chartNotice}>
-            Price history isn’t available for {underlying} right now. Your trade summary below
-            still works.
+            {t('noHistory', { underlying })}
           </div>
         )}
         {available && isLoading && (
@@ -405,11 +415,10 @@ export default function EasyPayoffChart({
 
         {legs.length === 0 && !noHistory && !isLoading && (
           <div className={styles.dropHint}>
-            <div className={styles.dropHintTitle}>Drag an option here</div>
+            <div className={styles.dropHintTitle}>{t('dragHere')}</div>
             <div className={styles.dropHintText}>
-              Pick from <b data-side="up">▲ UP</b> if you think {underlying} will rise, or{' '}
-              <b data-side="down">▼ DOWN</b> if you think it will fall. Drop it on the chart to see
-              where you would win or lose by the deadline.
+              {t('pickFrom')} <b data-side="up">{t('legUp')}</b> {t('ifRise', { underlying })}{' '}
+              <b data-side="down">{t('legDown')}</b> {t('ifFall')}
             </div>
           </div>
         )}
@@ -420,7 +429,7 @@ export default function EasyPayoffChart({
             data-profit={hover.pnl > 0}
             style={{ top: Math.max(44, hover.top - 44) }}
           >
-            If {underlying} is at <b>{fmtUsd(hover.price)}</b> at the deadline
+            {t('hoverIf', { underlying })} <b>{fmtUsd(hover.price)}</b> {t('hoverDeadline')}
             <span className={styles.hoverPnl}>
               {hover.pnl > 0 ? '+' : ''}
               {Math.abs(hover.pnl) < 0.5 ? '$0' : fmtUsd(hover.pnl)}
@@ -428,7 +437,7 @@ export default function EasyPayoffChart({
           </div>
         )}
 
-        {dragActive && <div className={styles.dropOverlay}>Drop to add to your trade</div>}
+        {dragActive && <div className={styles.dropOverlay}>{t('dropToAdd')}</div>}
       </div>
     </div>
   );

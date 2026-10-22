@@ -1,8 +1,14 @@
+import { defineMessages, type Locale, translate } from '@lib/i18n';
 import type { IvHistoryPoint } from '@shared/enriched';
 import type { IvHistoryWindow } from './queries';
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
+
+const messages = defineMessages(
+  { label: 'history: {coverage} / {window}', none: 'none' },
+  { label: 'historial: {coverage} / {window}', none: 'ninguno' },
+);
 
 type HistoryKey = 'atmIv' | 'rr25d' | 'bfly25d';
 
@@ -16,6 +22,7 @@ export function getHistoryCoverage(
   series: IvHistoryPoint[],
   window: IvHistoryWindow,
   keys: HistoryKey[],
+  locale: Locale = 'en',
 ): HistoryCoverage {
   const timestamps = series
     .filter((point) => keys.some((key) => point[key] != null && Number.isFinite(point[key])))
@@ -26,14 +33,19 @@ export function getHistoryCoverage(
   const targetDays = window === '90d' ? 90 : 30;
   const targetMs = targetDays * MS_PER_DAY;
   if (timestamps.length === 0) {
-    return { label: `history: none / ${window}`, short: true, coverageMs: 0 };
+    const none = translate(messages, 'none', undefined, locale);
+    return {
+      label: translate(messages, 'label', { coverage: none, window }, locale),
+      short: true,
+      coverageMs: 0,
+    };
   }
 
   const first = timestamps[0]!;
   const last = timestamps[timestamps.length - 1]!;
   const coverageMs = Math.max(0, last - first);
   return {
-    label: `history: ${formatCoverage(coverageMs)} / ${window}`,
+    label: translate(messages, 'label', { coverage: formatCoverage(coverageMs), window }, locale),
     short: coverageMs < targetMs * 0.75,
     coverageMs,
   };

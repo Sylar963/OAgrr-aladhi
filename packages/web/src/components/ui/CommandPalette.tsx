@@ -1,10 +1,28 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { getTokenLogo, getUnderlyingDisplayMeta } from '@lib/token-meta';
 import { VENUE_LIST } from '@lib/venue-meta';
 import { useUnderlyings } from '@features/chain/queries';
 
 import styles from './CommandPalette.module.css';
+
+const messages = defineMessages(
+  {
+    title: 'Select Asset',
+    search: 'Search by token name...',
+    navigate: 'Navigate',
+    select: 'Select',
+    close: 'Close',
+  },
+  {
+    title: 'Seleccionar activo',
+    search: 'Buscar por nombre de token...',
+    navigate: 'Navegar',
+    select: 'Seleccionar',
+    close: 'Cerrar',
+  },
+);
 
 interface CommandPaletteProps {
   underlyings: string[];
@@ -19,6 +37,8 @@ export default function CommandPalette({
   onSelect,
   onClose,
 }: CommandPaletteProps) {
+  const t = useT(messages);
+  const locale = useLocale();
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [venueFilter, setVenueFilter] = useState<string | null>(null);
@@ -46,7 +66,7 @@ export default function CommandPalette({
   }, [venueFilter, byVenue]);
 
   const filtered = underlyings.filter((u) => {
-    const display = getUnderlyingDisplayMeta(u, underlyings);
+    const display = getUnderlyingDisplayMeta(u, underlyings, locale);
     if (!display.searchText.toLowerCase().includes(search.toLowerCase())) return false;
     if (venueUnderlyings && !venueUnderlyings.has(u)) return false;
     return true;
@@ -93,7 +113,7 @@ export default function CommandPalette({
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.palette} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <span className={styles.headerTitle}>Select Asset</span>
+          <span className={styles.headerTitle}>{t('title')}</span>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -107,7 +127,7 @@ export default function CommandPalette({
           <input
             ref={inputRef}
             className={styles.searchInput}
-            placeholder="Search by token name..."
+            placeholder={t('search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -131,7 +151,7 @@ export default function CommandPalette({
           {filtered.map((u, i) => {
             const logo = getTokenLogo(u);
             const supportedVenues = venuesByUnderlying.get(u);
-            const display = getUnderlyingDisplayMeta(u, underlyings);
+            const display = getUnderlyingDisplayMeta(u, underlyings, locale);
             return (
               <button
                 key={u}
@@ -171,13 +191,13 @@ export default function CommandPalette({
 
         <div className={styles.footer}>
           <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>↑↓</kbd> Navigate
+            <kbd className={styles.kbd}>↑↓</kbd> {t('navigate')}
           </span>
           <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>Enter</kbd> Select
+            <kbd className={styles.kbd}>Enter</kbd> {t('select')}
           </span>
           <span className={styles.shortcut}>
-            <kbd className={styles.kbd}>Esc</kbd> Close
+            <kbd className={styles.kbd}>Esc</kbd> {t('close')}
           </span>
         </div>
       </div>

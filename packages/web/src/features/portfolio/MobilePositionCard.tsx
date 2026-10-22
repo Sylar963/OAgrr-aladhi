@@ -1,6 +1,26 @@
 import type { BreakEvenIvRow, PositionLeg } from '@oggregator/protocol';
 
+import { defineMessages, useT, type Translate } from '@lib/i18n';
+
+import { legMessages } from './i18n';
 import styles from './MobilePositionCard.module.css';
+
+type LegT = Translate<typeof legMessages.en>;
+
+const messages = defineMessages(
+  {
+    entry: 'Entry',
+    entryIvModel: 'Entry IV back-solved from entry price + forward',
+    mark: 'Mark',
+    beIv: 'BE IV',
+  },
+  {
+    entry: 'Entrada',
+    entryIvModel: 'IV de entrada despejada del precio de entrada + forward',
+    mark: 'Mark',
+    beIv: 'IV BE',
+  },
+);
 
 interface Props {
   leg: PositionLeg;
@@ -32,27 +52,26 @@ function fmtPct(value: number | null | undefined): string {
   return `${sign}${(value * 100).toFixed(2)}%`;
 }
 
-function beNoteLabel(note: BreakEvenIvRow['beNote']): string | null {
+function beNoteLabel(note: BreakEvenIvRow['beNote'], t: LegT): string | null {
   if (note === 'capped') return '>300%';
-  if (note === 'below_intrinsic') return '< intrinsic';
-  if (note === 'above_upper') return '> upper';
+  if (note === 'below_intrinsic') return t('belowIntrinsic');
+  if (note === 'above_upper') return t('aboveUpper');
   return null;
 }
 
-function beNoteTitle(note: BreakEvenIvRow['beNote']): string | undefined {
-  if (note === 'capped')
-    return 'position needs unrealistic vol to recover entry — time decay dominated';
-  if (note === 'below_intrinsic')
-    return 'entry below current no-arb floor (intrinsic); recovery requires spot move, not vol';
-  if (note === 'above_upper')
-    return 'entry above option upper bound; cannot be priced at any positive vol';
+function beNoteTitle(note: BreakEvenIvRow['beNote'], t: LegT): string | undefined {
+  if (note === 'capped') return t('cappedTitle');
+  if (note === 'below_intrinsic') return t('belowIntrinsicTitle');
+  if (note === 'above_upper') return t('aboveUpperTitle');
   return undefined;
 }
 
 export default function MobilePositionCard({ leg, be, readOnly, onRemove, removing }: Props) {
+  const t = useT(messages);
+  const tl = useT(legMessages);
   const isLong = leg.size > 0;
-  const noteLabel = beNoteLabel(be?.beNote);
-  const noteTitle = beNoteTitle(be?.beNote);
+  const noteLabel = beNoteLabel(be?.beNote, tl);
+  const noteTitle = beNoteTitle(be?.beNote, tl);
   const cushion = noteLabel != null ? null : be?.ivCushionPct ?? null;
   const cushionTone =
     cushion == null ? 'neutral' : cushion >= 0 ? 'positive' : 'negative';
@@ -79,7 +98,7 @@ export default function MobilePositionCard({ leg, be, readOnly, onRemove, removi
               className={styles.remove}
               onClick={onRemove}
               disabled={removing}
-              aria-label={`remove ${leg.legId}`}
+              aria-label={tl('remove', { id: leg.legId })}
             >
               ×
             </button>
@@ -89,13 +108,13 @@ export default function MobilePositionCard({ leg, be, readOnly, onRemove, removi
 
       <div className={styles.grid}>
         <div className={styles.cell}>
-          <span className={styles.label}>Entry {isLong ? 'Dr' : 'Cr'}</span>
+          <span className={styles.label}>{t('entry')} {isLong ? tl('debit') : tl('credit')}</span>
           <span className={styles.value}>{fmtUsd(leg.entryPriceUsd)}</span>
           <span
             className={`${styles.sub} ${leg.entryIvIsModel === true ? styles.ivModel : ''}`}
             title={
               leg.entryIvIsModel === true
-                ? 'Entry IV back-solved from entry price + forward'
+                ? t('entryIvModel')
                 : undefined
             }
           >
@@ -104,17 +123,17 @@ export default function MobilePositionCard({ leg, be, readOnly, onRemove, removi
           </span>
         </div>
         <div className={styles.cell}>
-          <span className={styles.label}>Mark</span>
+          <span className={styles.label}>{t('mark')}</span>
           <span className={styles.value}>{fmtUsd(be?.currentMarkUsd)}</span>
           <span
             className={`${styles.sub} ${be?.currentIvIsModel === true ? styles.ivModel : ''}`}
-            title={be?.currentIvIsModel === true ? 'fair value from smile fit' : undefined}
+            title={be?.currentIvIsModel === true ? tl('fairValue') : undefined}
           >
             {fmtIv(be?.currentIv)}
           </span>
         </div>
         <div className={styles.cell}>
-          <span className={styles.label}>BE IV</span>
+          <span className={styles.label}>{t('beIv')}</span>
           <span
             className={`${styles.value} ${noteLabel != null ? styles.beNote : ''}`}
             title={noteTitle}

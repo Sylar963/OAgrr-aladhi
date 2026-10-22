@@ -57,6 +57,14 @@ describe('PortfolioAssistantPromptBuilder', () => {
     expect(instructions).toContain('never present them as book-wide');
   });
 
+  it('answers in the language of the question, English or Spanish', () => {
+    const instructions =
+      new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
+    expect(instructions).toContain("Reply in the language of the user's latest message");
+    expect(instructions).toContain('neutral Latin American Spanish');
+    expect(instructions).toContain('[Interface language: ...]');
+  });
+
   it('reads trade-history sums from the deterministic totals', () => {
     const instructions =
       new PortfolioAssistantPromptBuilder().buildPortfolioAssistantSystemInstructions();
@@ -171,6 +179,18 @@ describe('PortfolioAssistantPromptBuilder', () => {
         question,
       );
       expect(overflows).toEqual([{ role: 'user', content: question }]);
+    });
+
+    it('notes the interface language on the latest question only', () => {
+      const messages = builder.buildPortfolioAssistantConversationMessages(
+        [message({ role: 'user', content: '¿Cómo va mi libro?' })],
+        'BTC 80k?',
+        'es',
+      );
+      expect(messages.map((entry) => entry.content)).toEqual([
+        '¿Cómo va mi libro?',
+        '[Interface language: Spanish]\nBTC 80k?',
+      ]);
     });
 
     it('caps replay at the 20 most recent messages', () => {

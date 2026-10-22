@@ -6,7 +6,28 @@ import type {
   StrategyGroupLeg,
 } from '@oggregator/protocol';
 
+import { defineMessages, translate, type Locale } from '@lib/i18n';
+
 import { fmtQty, legFillStatus } from './close-now';
+
+const messages = defineMessages(
+  {
+    booksOff: 'order books off',
+    heldOn: 'held on {venue}',
+    anotherVenue: 'another venue',
+    onlyOnBook: '{leg} only {filled}/{size} on book',
+    noAskOn: 'no ask on {leg}',
+    noBidOn: 'no bid on {leg}',
+  },
+  {
+    booksOff: 'libros de órdenes desactivados',
+    heldOn: 'en {venue}',
+    anotherVenue: 'otro exchange',
+    onlyOnBook: '{leg} solo {filled}/{size} en el libro',
+    noAskOn: 'sin ask en {leg}',
+    noBidOn: 'sin bid en {leg}',
+  },
+);
 
 const MIN_PCT_BASE_USD = 1;
 
@@ -58,8 +79,11 @@ export function markPrice(quote: CloseNowLeg): number | null {
 export function estimateClose(
   group: StrategyGroup,
   closeNow: PortfolioCloseNow | null,
+  locale: Locale = 'en',
 ): CloseEstimate {
-  if (closeNow == null) return { status: 'unavailable', reason: 'order books off' };
+  const t = (key: keyof typeof messages.en, vars?: Record<string, string | number>) =>
+    translate(messages, key, vars, locale);
+  if (closeNow == null) return { status: 'unavailable', reason: t('booksOff') };
   const byId = new Map(closeNow.legs.map((leg) => [leg.legId, leg]));
 
   const legs: CloseLegQuote[] = [];
@@ -67,7 +91,7 @@ export function estimateClose(
     const quote = byId.get(leg.legId);
     if (quote == null) return { status: 'loading' };
     if (quote.status === 'unsupported_venue') {
-      return { status: 'unavailable', reason: `held on ${quote.venue ?? 'another venue'}` };
+      return { status: 'unavailable', reason: t('heldOn', { venue: quote.venue ?? t('anotherVenue') }) };
     }
     legs.push({ legId: leg.legId, label: legLabel(leg), side: quote.side, size: quote.size, quote });
   }
@@ -76,7 +100,7 @@ export function estimateClose(
   if (missing.length > 0) {
     return missing.every((l) => l.quote.unavailableReason === 'loading')
       ? { status: 'loading' }
-      : { status: 'unavailable', reason: legFillStatus(missing[0]!.quote) };
+      : { status: 'unavailable', reason: legFillStatus(missing[0]!.quote, locale) };
   }
 
   const problems: string[] = [];
@@ -87,8 +111,8 @@ export function estimateClose(
     if (quote.status !== 'ok') {
       problems.push(
         quote.filledSize > 0
-          ? `${leg.label} only ${fmtQty(quote.filledSize)}/${fmtQty(quote.size)} on book`
-          : `${quote.side === 'buy' ? 'no ask' : 'no bid'} on ${leg.label}`,
+          ? t('onlyOnBook', { leg: leg.label, filled: fmtQty(quote.filledSize), size: fmtQty(quote.size) })
+          : t(quote.side === 'buy' ? 'noAskOn' : 'noBidOn', { leg: leg.label }),
       );
     }
     cashUsd += quote.exitCashUsd ?? 0;

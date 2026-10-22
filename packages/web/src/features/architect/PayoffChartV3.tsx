@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { dteDays, fmtIv, fmtPct, fmtPrice, fmtStrike, fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderUnits,
@@ -25,6 +26,29 @@ import {
 } from './ladder-geometry';
 import type { SpotCandle } from './queries';
 import s from './PayoffChartV3.module.css';
+
+const messages = defineMessages(
+  {
+    price: 'price',
+    now: 'now',
+    premium: 'prem {value}',
+    spread: '{label} spread',
+    debit: 'debit {value}',
+    credit: 'credit {value}',
+    max: 'max {profit} / {loss}',
+    empty: 'Click the chart at a strike to place a position',
+  },
+  {
+    price: 'precio',
+    now: 'ahora',
+    premium: 'prima {value}',
+    spread: '{label} spread',
+    debit: 'débito {value}',
+    credit: 'crédito {value}',
+    max: 'máx {profit} / {loss}',
+    empty: 'Haz clic en el gráfico sobre un strike para abrir una posición',
+  },
+);
 
 interface PayoffChartV3Props {
   points: PayoffPoint[];
@@ -109,6 +133,7 @@ export default function PayoffChartV3({
   onAddLegAtStrike,
   onRemoveLeg,
 }: PayoffChartV3Props) {
+  const t = useT(messages);
   const containerRef = useRef<HTMLDivElement>(null);
   // Default to a non-zero size so the chart renders before (and without) a live
   // ResizeObserver — jsdom has no ResizeObserver, and the first paint has no box.
@@ -552,12 +577,13 @@ export default function PayoffChartV3({
         <div className={s.tenorHeader} style={{ height: HEADER_H }}>
           {histW > 0 && (
             <span className={s.historyLabel} style={{ left: plotLeft + histW / 2 }}>
-              price{candleIntervalLabel ? ` · ${candleIntervalLabel}` : ''}
+              {t('price')}
+              {candleIntervalLabel ? ` · ${candleIntervalLabel}` : ''}
             </span>
           )}
           {!nowLabelCrowded && (
             <span className={s.tenorLabel} data-now="true" style={{ left: nowX }}>
-              now
+              {t('now')}
             </span>
           )}
           {tenorScale?.tenors.filter((t) => headerTenors.has(t)).map((t) => (
@@ -802,7 +828,7 @@ export default function PayoffChartV3({
           }}
         >
           <div className={s.cardTitle}>{legToBlock(hoveredLeg).label}</div>
-          <div>prem {fmtUsd(hoveredLeg.entryPrice)}</div>
+          <div>{t('premium', { value: fmtUsd(hoveredLeg.entryPrice) })}</div>
           <div>IV {fmtIv(hoveredLeg.iv)}</div>
           <div>Δ {hoveredLeg.delta != null ? hoveredLeg.delta.toFixed(2) : '–'} · Θ {hoveredLeg.theta != null ? hoveredLeg.theta.toFixed(2) : '–'}</div>
           <div>P/L @spot {fmtUsd(netPnlReadout([hoveredLeg], spotPrice, hoveredLeg.entryPrice).pnl)}</div>
@@ -821,12 +847,17 @@ export default function PayoffChartV3({
               className={s.card}
               style={{ left: cardLeft, top: midY - 48 }}
             >
-              <div className={s.cardTitle}>{hoveredSpread.label} spread</div>
+              <div className={s.cardTitle}>{t('spread', { label: hoveredSpread.label })}</div>
               <div>long +{lLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {fmtStrike(lLeg.strike)}</div>
               <div>short −{sLeg.quantity} {hoveredSpread.type === 'call' ? 'C' : 'P'} {fmtStrike(sLeg.strike)}</div>
-              <div>{m.netDebit < 0 ? 'debit' : 'credit'} {fmtUsd(Math.abs(m.netDebit))}</div>
               <div>
-                max {m.maxProfit != null ? fmtUsd(m.maxProfit) : '∞'} / {m.maxLoss != null ? fmtUsd(m.maxLoss) : '∞'}
+                {t(m.netDebit < 0 ? 'debit' : 'credit', { value: fmtUsd(Math.abs(m.netDebit)) })}
+              </div>
+              <div>
+                {t('max', {
+                  profit: m.maxProfit != null ? fmtUsd(m.maxProfit) : '∞',
+                  loss: m.maxLoss != null ? fmtUsd(m.maxLoss) : '∞',
+                })}
               </div>
             </div>
           );
@@ -858,7 +889,7 @@ export default function PayoffChartV3({
       )}
       </div>
 
-      {legs.length === 0 && <div className={s.empty}>Click the chart at a strike to place a position</div>}
+      {legs.length === 0 && <div className={s.empty}>{t('empty')}</div>}
     </div>
   );
 }

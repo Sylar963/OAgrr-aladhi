@@ -7,7 +7,8 @@ import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
-import { TABS } from '@lib/tabs';
+import { defineMessages, useT } from '@lib/i18n';
+import { useTabs } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import { lazy, Suspense, useEffect } from 'react';
 
@@ -36,7 +37,10 @@ const SocialView = lazy(() => import('@features/social').then((m) => ({ default:
 const PortfolioView = lazy(() =>
   import('@features/portfolio').then((m) => ({ default: m.PortfolioView })),
 );
+const messages = defineMessages({ loading: 'Loading {label}…' }, { loading: 'Cargando {label}…' });
+
 export default function App() {
+  const t = useT(messages);
   useServerVersion();
   useSessionTimeout();
   useTabUrlSync();
@@ -68,16 +72,17 @@ export default function App() {
   }, [setActiveTab]);
 
   const assetMode = useAppStore((s) => s.assetMode);
-  const activeLabel = TABS.find((t) => t.id === activeTab)?.label ?? activeTab;
+  const tabs = useTabs();
+  const activeLabel = tabs.find((t) => t.id === activeTab)?.label ?? activeTab;
 
   if (assetMode === 'tradfi') return <TradfiApp />;
 
   return (
-    <AppShell underlyings={underlyings} tabs={TABS}>
+    <AppShell underlyings={underlyings} tabs={tabs}>
       <div className={styles.panel}>
         <ErrorBoundary key={activeTab} label={activeLabel}>
           {activeTab === 'chain' && <ChainView />}
-          <Suspense fallback={<Spinner size="lg" label={`Loading ${activeLabel}…`} />}>
+          <Suspense fallback={<Spinner size="lg" label={t('loading', { label: activeLabel })} />}>
             {activeTab === 'alpha' && <AlphaView />}
             {activeTab === 'architect' && <ArchitectView />}
             {activeTab === 'trading' && (

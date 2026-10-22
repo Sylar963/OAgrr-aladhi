@@ -1,7 +1,9 @@
+import { type Locale, useLocale, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import type { IvHistoryResponse, IvTenor } from '@shared/enriched';
 import { useState } from 'react';
 import { getHistoryCoverage } from './history-coverage';
+import { skewMessages } from './i18n';
 import { type IvHistoryWindow, useIvHistory } from './queries';
 import styles from './SkewHistory.module.css';
 import SkewRegime from './SkewRegime';
@@ -12,93 +14,102 @@ import {
   buildSkewLineData,
   describeSkew,
   latestSkewDisplayValue,
-  ordinal,
   pickReferencePoint,
   reconstructSmile,
+  shortPercentile,
 } from './skew-history-utils';
 
 const TENORS: IvTenor[] = ['7d', '30d', '60d', '90d'];
-const LOOKBACKS: { key: IvHistoryWindow; label: string }[] = [
-  { key: '30d', label: '1M' },
-  { key: '90d', label: '3M' },
+const LOOKBACKS: { key: IvHistoryWindow; label: 'lb30' | 'lb90' }[] = [
+  { key: '30d', label: 'lb30' },
+  { key: '90d', label: 'lb90' },
 ];
 const MODELS = [
-  { key: 'v1', label: 'v1', title: 'Skew levels, percentiles, smile' },
-  { key: 'v2', label: 'v2', title: 'Segmented rolling regime (calls vs puts)' },
+  { key: 'v1', label: 'v1', title: 'modelV1Title' },
+  { key: 'v2', label: 'v2', title: 'modelV2Title' },
 ] as const;
 type SkewModel = (typeof MODELS)[number]['key'];
 const RR_COLOR = '#50d2c1';
 const FLY_COLOR = '#f59e0b';
-const VS_OPTIONS: { key: string; label: string; days: number }[] = [
-  { key: '1d', label: '1d ago', days: 1 },
-  { key: '7d', label: '7d ago', days: 7 },
-  { key: '30d', label: '30d ago', days: 30 },
+const VS_OPTIONS: { key: string; label: 'vs1d' | 'vs7d' | 'vs30d'; days: number }[] = [
+  { key: '1d', label: 'vs1d', days: 1 },
+  { key: '7d', label: 'vs7d', days: 7 },
+  { key: '30d', label: 'vs30d', days: 30 },
 ];
 
-const RR_TIP_BODY = (
-  <>
-    <div>call25 IV − put25 IV.</div>
-    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-      <li>Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).</li>
-      <li>Positive: calls richer → upside FOMO. Near zero = balanced.</li>
-      <li>Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.</li>
-    </ul>
-  </>
-);
-const FLY_TIP_BODY = (
-  <>
-    <div>(call25 IV + put25 IV) / 2 − ATM IV.</div>
-    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-      <li>High: wings expensive (fat-tail / event premium).</li>
-      <li>Low/negative: wings cheap vs body.</li>
-      <li>Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.</li>
-    </ul>
-  </>
-);
-
-function atmPctText(value: number | null): string {
-  return value == null || !Number.isFinite(value) ? '' : `${value.toFixed(1)}% of ATM`;
+function RrTipBody() {
+  const t = useT(skewMessages);
+  return (
+    <>
+      <div>call25 IV − put25 IV.</div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+        <li>{t('rrTip1')}</li>
+        <li>{t('rrTip2')}</li>
+        <li>{t('chartTip')}</li>
+      </ul>
+    </>
+  );
 }
 
-function fmtCell(value: number | null | undefined, pct: number | null | undefined): string {
+function FlyTipBody() {
+  const t = useT(skewMessages);
+  return (
+    <>
+      <div>(call25 IV + put25 IV) / 2 − ATM IV.</div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+        <li>{t('flyTip1')}</li>
+        <li>{t('flyTip2')}</li>
+        <li>{t('chartTip')}</li>
+      </ul>
+    </>
+  );
+}
+
+function fmtCell(
+  value: number | null | undefined,
+  pct: number | null | undefined,
+  locale: Locale,
+): string {
   if (value == null || !Number.isFinite(value)) return '–';
   const v = value * 100;
   const sign = v > 0 ? '+' : '';
-  return `${sign}${v.toFixed(1)}${pct != null ? ` · ${ordinal(pct)}` : ''}`;
+  return `${sign}${v.toFixed(1)}${pct != null ? ` · ${shortPercentile(pct, locale)}` : ''}`;
 }
 
 function TermStrip({ data, active }: { data: IvHistoryResponse | undefined; active: IvTenor }) {
+  const t = useT(skewMessages);
+  const locale = useLocale();
   const rows = [
     { label: 'RR', value: 'rr25d', pct: 'rrPercentile' },
     { label: 'Fly', value: 'bfly25d', pct: 'flyPercentile' },
   ] as const;
   return (
-    <div className={styles.term} role="table" aria-label="skew by tenor">
+    <div className={styles.term} role="table" aria-label={t('byTenorAria')}>
       <span className={styles.termHead} role="columnheader">
-        by tenor
+        {t('byTenor')}
       </span>
-      {TENORS.map((t) => (
+      {TENORS.map((tenor) => (
         <span
-          key={t}
+          key={tenor}
           className={styles.termHead}
-          data-active={t === active ? 'true' : undefined}
+          data-active={tenor === active ? 'true' : undefined}
           role="columnheader"
         >
-          {t}
+          {tenor}
         </span>
       ))}
       {rows.map((row) => (
         <div key={row.label} className={styles.termRow} role="row">
           <span className={styles.termLabel}>{row.label}</span>
-          {TENORS.map((t) => {
-            const r = data?.tenors[t];
+          {TENORS.map((tenor) => {
+            const r = data?.tenors[tenor];
             return (
               <span
-                key={t}
+                key={tenor}
                 className={styles.termCell}
-                data-active={t === active ? 'true' : undefined}
+                data-active={tenor === active ? 'true' : undefined}
               >
-                {fmtCell(r?.current?.[row.value], r?.[row.pct])}
+                {fmtCell(r?.current?.[row.value], r?.[row.pct], locale)}
               </span>
             );
           })}
@@ -114,6 +125,8 @@ interface Props {
 }
 
 export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
+  const t = useT(skewMessages);
+  const locale = useLocale();
   const [window, setWindow] = useState<IvHistoryWindow>('30d');
   const [tenor, setTenor] = useState<IvTenor>('30d');
   const [vsKey, setVsKey] = useState<string>('7d');
@@ -137,7 +150,10 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
   const rrPct = result?.rrPercentile ?? null;
   const flyPct = result?.flyPercentile ?? null;
 
-  const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d']);
+  const coverage = getHistoryCoverage(series, window, ['rr25d', 'bfly25d'], locale);
+  const vsLabel = t(vs.label);
+  const atmPctText = (value: number | null) =>
+    value == null || !Number.isFinite(value) ? '' : t('ofAtm', { v: value.toFixed(1) });
   const logo = getTokenLogo(underlying);
 
   return (
@@ -148,13 +164,13 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
           {underlying} SKEW
         </span>
         <div className={styles.toggles}>
-          <span className={styles.toggleLabel}>MODEL</span>
+          <span className={styles.toggleLabel}>{t('model')}</span>
           <div className={styles.toggleGroup}>
             {MODELS.map((m) => (
               <button
                 key={m.key}
                 type="button"
-                title={m.title}
+                title={t(m.title)}
                 className={styles.toggleBtn}
                 data-active={model === m.key ? 'true' : undefined}
                 onClick={() => setModel(m.key)}
@@ -163,24 +179,24 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
               </button>
             ))}
           </div>
-          <span className={styles.toggleLabel} title="Constant-maturity option tenor">
-            TENOR
+          <span className={styles.toggleLabel} title={t('tenorTitle')}>
+            {t('tenor')}
           </span>
           <div className={styles.toggleGroup}>
-            {TENORS.map((t) => (
+            {TENORS.map((option) => (
               <button
-                key={t}
+                key={option}
                 type="button"
                 className={styles.toggleBtn}
-                data-active={tenor === t ? 'true' : undefined}
-                onClick={() => setTenor(t)}
+                data-active={tenor === option ? 'true' : undefined}
+                onClick={() => setTenor(option)}
               >
-                {t}
+                {option}
               </button>
             ))}
           </div>
-          <span className={styles.toggleLabel} title="History used for percentiles and charts">
-            LOOKBACK
+          <span className={styles.toggleLabel} title={t('lookbackTitle')}>
+            {t('lookback')}
           </span>
           <div className={styles.toggleGroup}>
             {LOOKBACKS.map((w) => (
@@ -191,17 +207,14 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
                 data-active={window === w.key ? 'true' : undefined}
                 onClick={() => setWindow(w.key)}
               >
-                {w.label}
+                {t(w.label)}
               </button>
             ))}
           </div>
           {model === 'v1' && (
             <>
-              <span
-                className={styles.toggleLabel}
-                title="Reference point for the dashed smile and Δ"
-              >
-                VS
+              <span className={styles.toggleLabel} title={t('vsTitle')}>
+                {t('vs')}
               </span>
               <div className={styles.toggleGroup}>
                 {VS_OPTIONS.map((o) => (
@@ -212,7 +225,7 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
                     data-active={vsKey === o.key ? 'true' : undefined}
                     onClick={() => setVsKey(o.key)}
                   >
-                    {o.label}
+                    {t(o.label)}
                   </button>
                 ))}
               </div>
@@ -227,44 +240,44 @@ export default function SkewHistory({ underlying, market = 'crypto' }: Props) {
         <>
           <SkewTimeline
             label="25Δ RR"
-            title="25Δ Risk-Reversal"
-            tip={RR_TIP_BODY}
+            title={t('rrTitle')}
+            tip={<RrTipBody />}
             color={RR_COLOR}
             points={rrPoints}
             percentile={rrPct}
             atmText={atmPctText(latestSkewDisplayValue(series, 'rr25d', 'normalized'))}
             refValue={refPoint?.rr25d != null ? refPoint.rr25d * 100 : null}
             refTimeMs={refPoint?.ts ?? null}
-            refLabel={vs.label}
-            upLabel="calls bid"
-            downLabel="puts bid"
+            refLabel={vsLabel}
+            upLabel={t('callsBid')}
+            downLabel={t('putsBid')}
             loading={loading}
           />
           <SkewTimeline
             label="25Δ Fly"
-            title="25Δ Butterfly"
-            tip={FLY_TIP_BODY}
+            title={t('flyTitle')}
+            tip={<FlyTipBody />}
             color={FLY_COLOR}
             points={flyPoints}
             percentile={flyPct}
             atmText={atmPctText(latestSkewDisplayValue(series, 'bfly25d', 'normalized'))}
             refValue={refPoint?.bfly25d != null ? refPoint.bfly25d * 100 : null}
             refTimeMs={refPoint?.ts ?? null}
-            refLabel={vs.label}
-            upLabel="wings rich"
-            downLabel="wings cheap"
+            refLabel={vsLabel}
+            upLabel={t('wingsRich')}
+            downLabel={t('wingsCheap')}
             loading={loading}
           />
 
           <TermStrip data={data} active={tenor} />
 
-          <SkewSmileChart now={nowSmile} reference={refSmile} referenceLabel={vs.label} />
+          <SkewSmileChart now={nowSmile} reference={refSmile} referenceLabel={vsLabel} />
 
           <div className={styles.foot}>
             <span className={styles.coverage} data-short={coverage.short ? 'true' : undefined}>
               {coverage.label}
             </span>
-            <span className={styles.takeaway}>{describeSkew(rrNow, rrPct, flyNow, flyPct)}</span>
+            <span className={styles.takeaway}>{describeSkew(rrNow, rrPct, flyNow, flyPct, locale)}</span>
           </div>
         </>
       )}

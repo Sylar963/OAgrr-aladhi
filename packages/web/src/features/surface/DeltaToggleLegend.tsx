@@ -1,4 +1,5 @@
 import { deltaColor, deltaLabel } from '@lib/colors';
+import { defineMessages, useT } from '@lib/i18n';
 import styles from './DeltaToggleLegend.module.css';
 
 interface Props {
@@ -8,6 +9,8 @@ interface Props {
   onSetAll: (next: Set<number>) => void;
 }
 
+const messages = defineMessages({ all: 'All', none: 'None' }, { all: 'Todos', none: 'Ninguno' });
+
 export const PRESET_25D = new Set<number>([0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]);
 
 export function preset25Deltas(deltas: readonly number[]): Set<number> {
@@ -15,6 +18,7 @@ export function preset25Deltas(deltas: readonly number[]): Set<number> {
 }
 
 export default function DeltaToggleLegend({ deltas, enabled, onToggle, onSetAll }: Props) {
+  const t = useT(messages);
   const allOn = () => onSetAll(new Set(deltas));
   const allOff = () => onSetAll(new Set());
   const preset25 = () => onSetAll(preset25Deltas(deltas));
@@ -22,8 +26,8 @@ export default function DeltaToggleLegend({ deltas, enabled, onToggle, onSetAll 
   return (
     <div className={styles.rail}>
       <div className={styles.presets}>
-        <button type="button" className={styles.presetBtn} onClick={allOn}>All</button>
-        <button type="button" className={styles.presetBtn} onClick={allOff}>None</button>
+        <button type="button" className={styles.presetBtn} onClick={allOn}>{t('all')}</button>
+        <button type="button" className={styles.presetBtn} onClick={allOff}>{t('none')}</button>
         <button type="button" className={styles.presetBtn} onClick={preset25}>25Δ</button>
       </div>
 

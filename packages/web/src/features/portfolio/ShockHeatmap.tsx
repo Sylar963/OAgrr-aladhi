@@ -7,6 +7,8 @@ import type {
   ShockGridMeta,
 } from '@oggregator/protocol';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import styles from './ShockHeatmap.module.css';
 
 interface Props {
@@ -59,11 +61,128 @@ function isZeroIndex(axis: number[], index: number): boolean {
   return Math.abs(axis[index] ?? Number.NaN) < 1e-9;
 }
 
-const BASIS_LABEL: Record<EntryVolDrift['basis'], string> = {
-  entry: 'Since entry',
-  first_seen: 'Since first seen',
-  mixed: 'Since entry / first seen',
-};
+const messages = defineMessages(
+  {
+    basis_entry: 'Since entry',
+    basis_first_seen: 'Since first seen',
+    basis_mixed: 'Since entry / first seen',
+    empty: 'Add positions to see vol-shock P&L.',
+    driftLabel: 'ATM {atm} pts · skew {skew}',
+    title: 'Vol repricing matrix',
+    subtitleEntry:
+      "Shocks measured from each leg's entry IV · spot, forwards and time held at now",
+    subtitleMixed:
+      "Shocks measured from each leg's entry / first-seen IV · spot, forwards and time held at now",
+    subtitleNow:
+      'Scenarios recalculate from current market conditions · spot, forwards and time held constant',
+    anchorAria: 'Matrix anchor',
+    fromNow: 'From now',
+    fromEntry: 'From entry',
+    noEntryIv: 'No entry IV available for these legs yet',
+    nowBadge: 'NOW',
+    volDrift: 'Vol drift · {basis}',
+    liveBaseline: 'Live baseline',
+    noShock: 'No additional shock',
+    openPnl: 'Open P&L',
+    spot: 'Spot (Δ + Γ)',
+    time: 'Time (Θ)',
+    volSquare: 'Vol · square',
+    other: 'Other',
+    noFills_one: 'No fills · {n} leg',
+    noFills_other: 'No fills · {n} legs',
+    excluded_one:
+      '{n} leg excluded because live IV, forward or time-to-expiry is unavailable.',
+    excluded_other:
+      '{n} legs excluded because live IV, forward or time-to-expiry is unavailable.',
+    anchorNote:
+      "Venue positions don't report the IV they were opened at; their anchor is the first live IV this server recorded for the leg.",
+    caption: 'Portfolio P&L under parallel implied-volatility and skew-tilt shocks',
+    atmVolAxis: 'ATM vol ↓',
+    skewTiltAxis: 'Skew tilt →',
+    titleNowEntry: 'Now · vol drift {basis} {drift}{offGrid} · vol P&L {pnl}',
+    beyondGrid: ' (beyond grid range, pinned to edge)',
+    titleCurrent: 'Current surface · no additional shock',
+    titleCell: 'ATM IV {atm} vol pts · skew slope {skew} vol pts/log-K{fromEntry} · {pnl}',
+    fromEntrySuffix: ' from entry',
+    nowOffGrid: 'Now · off grid',
+    now: 'Now',
+    entry: 'Entry',
+    legendEntry:
+      'Now moves as live IV drifts from entry; it snaps to the nearest cell. Venue legs use IV back-solved from their opening fills at the underlying price of the fill minute.',
+    legendNow: 'Baseline stays centered; this is a scenario view, not market movement.',
+    rows: 'Rows',
+    rowsText: ' parallel ATM IV shift in vol points{fromEntry}',
+    columns: 'Columns',
+    columnsText: ' skew-slope change in vol points per ln(K/F)',
+    values: 'Values',
+    valuesEntry: 'vol P&L versus the entry surface',
+    valuesNow: 'model-consistent change from now',
+    split: 'Split',
+    splitText:
+      ' Black-76 revaluation from entry: spot, then time, then IV. Other is venue mark and fill prices versus the model.',
+    unavailable: 'Unavailable',
+  },
+  {
+    basis_entry: 'Desde la entrada',
+    basis_first_seen: 'Desde que se vio por primera vez',
+    basis_mixed: 'Desde la entrada / primera vez visto',
+    empty: 'Agrega posiciones para ver el P&L ante shocks de vol.',
+    driftLabel: 'ATM {atm} pts · skew {skew}',
+    title: 'Matriz de revaloración por vol',
+    subtitleEntry:
+      'Shocks medidos desde la IV de entrada de cada leg · spot, forwards y tiempo fijos en el presente',
+    subtitleMixed:
+      'Shocks medidos desde la IV de entrada / primera vista de cada leg · spot, forwards y tiempo fijos en el presente',
+    subtitleNow:
+      'Los escenarios se recalculan con las condiciones actuales del mercado · spot, forwards y tiempo constantes',
+    anchorAria: 'Ancla de la matriz',
+    fromNow: 'Desde ahora',
+    fromEntry: 'Desde la entrada',
+    noEntryIv: 'Aún no hay IV de entrada disponible para estos legs',
+    nowBadge: 'AHORA',
+    volDrift: 'Deriva de vol · {basis}',
+    liveBaseline: 'Referencia en vivo',
+    noShock: 'Sin shock adicional',
+    openPnl: 'P&L abierto',
+    spot: 'Spot (Δ + Γ)',
+    time: 'Tiempo (Θ)',
+    volSquare: 'Vol · cuadrado',
+    other: 'Otro',
+    noFills_one: 'Sin ejecuciones · {n} leg',
+    noFills_other: 'Sin ejecuciones · {n} legs',
+    excluded_one:
+      '{n} leg excluido porque la IV en vivo, el forward o el tiempo al vencimiento no está disponible.',
+    excluded_other:
+      '{n} legs excluidos porque la IV en vivo, el forward o el tiempo al vencimiento no está disponible.',
+    anchorNote:
+      'Las posiciones del exchange no reportan la IV con la que se abrieron; su ancla es la primera IV en vivo que este servidor registró para el leg.',
+    caption: 'P&L del portafolio ante shocks paralelos de volatilidad implícita y de inclinación del skew',
+    atmVolAxis: 'Vol ATM ↓',
+    skewTiltAxis: 'Inclinación skew →',
+    titleNowEntry: 'Ahora · deriva de vol {basis} {drift}{offGrid} · P&L de vol {pnl}',
+    beyondGrid: ' (fuera del rango de la matriz, fijado al borde)',
+    titleCurrent: 'Superficie actual · sin shock adicional',
+    titleCell: 'IV ATM {atm} pts de vol · pendiente del skew {skew} pts de vol/log-K{fromEntry} · {pnl}',
+    fromEntrySuffix: ' desde la entrada',
+    nowOffGrid: 'Ahora · fuera de la matriz',
+    now: 'Ahora',
+    entry: 'Entrada',
+    legendEntry:
+      'Ahora se mueve a medida que la IV en vivo se desvía de la entrada; se ajusta a la celda más cercana. Los legs del exchange usan la IV despejada de sus ejecuciones de apertura al precio del subyacente del minuto de la ejecución.',
+    legendNow: 'La referencia queda centrada; esta es una vista de escenarios, no movimiento de mercado.',
+    rows: 'Filas',
+    rowsText: ' cambio paralelo de IV ATM en puntos de vol{fromEntry}',
+    columns: 'Columnas',
+    columnsText: ' cambio de pendiente del skew en puntos de vol por ln(K/F)',
+    values: 'Valores',
+    valuesEntry: 'P&L de vol frente a la superficie de entrada',
+    valuesNow: 'cambio consistente con el modelo desde ahora',
+    split: 'Desglose',
+    splitText:
+      ' Revaloración Black-76 desde la entrada: spot, luego tiempo, luego IV. Otro es el mark del exchange y los precios de ejecución frente al modelo.',
+    unavailable: 'No disponible',
+  },
+);
 
 export default function ShockHeatmap({
   grid,
@@ -73,6 +192,7 @@ export default function ShockHeatmap({
   attribution = null,
   currentUnrealizedPnl,
 }: Props) {
+  const t = useT(messages);
   const [anchorRequested, setAnchorMode] = useState<AnchorMode>('entry');
 
   const entryAvailable = entryDrift != null && (entryGrid[0]?.length ?? 0) > 0;
@@ -80,7 +200,7 @@ export default function ShockHeatmap({
   const activeGrid = anchorMode === 'entry' ? entryGrid : grid;
 
   if (activeGrid.length === 0 || activeGrid[0] == null || activeGrid[0].length === 0) {
-    return <div className={styles.empty}>Add positions to see vol-shock P&amp;L.</div>;
+    return <div className={styles.empty}>{t('empty')}</div>;
   }
 
   const sinceEntryPnl = anchorMode === 'entry' ? (entryDrift?.volPnlUsd ?? 0) : 0;
@@ -109,42 +229,45 @@ export default function ShockHeatmap({
   const pricedLegs = meta?.pricedLegs ?? 0;
   const totalLegs = meta?.totalLegs ?? 0;
   const coverageComplete = totalLegs > 0 && pricedLegs === totalLegs;
-  const basisLabel = entryDrift != null ? BASIS_LABEL[entryDrift.basis] : BASIS_LABEL.entry;
+  const basisLabel = t(`basis_${entryDrift?.basis ?? 'entry'}`);
   const driftLabel =
     entryDrift == null
       ? ''
-      : `ATM ${fmtAxis(entryDrift.atmShiftVolPts, 1)} pts · skew ${fmtAxis(entryDrift.skewShiftPerLogK * 100)}`;
+      : t('driftLabel', {
+          atm: fmtAxis(entryDrift.atmShiftVolPts, 1),
+          skew: fmtAxis(entryDrift.skewShiftPerLogK * 100),
+        });
 
   return (
     <section className={styles.wrap} aria-labelledby="vol-matrix-title">
       <div className={styles.header}>
         <div>
-          <div className={styles.title} id="vol-matrix-title">Vol repricing matrix</div>
+          <div className={styles.title} id="vol-matrix-title">{t('title')}</div>
           <div className={styles.subtitle}>
             {anchorMode === 'entry'
-              ? `Shocks measured from each leg's ${entryDrift?.basis === 'entry' ? 'entry' : 'entry / first-seen'} IV · spot, forwards and time held at now`
-              : 'Scenarios recalculate from current market conditions · spot, forwards and time held constant'}
+              ? t(entryDrift?.basis === 'entry' ? 'subtitleEntry' : 'subtitleMixed')
+              : t('subtitleNow')}
           </div>
         </div>
         <div className={styles.toggles}>
-          <div className={styles.modeToggle} role="group" aria-label="Matrix anchor">
+          <div className={styles.modeToggle} role="group" aria-label={t('anchorAria')}>
             <button
               type="button"
               data-active={anchorMode === 'now' || undefined}
               aria-pressed={anchorMode === 'now'}
               onClick={() => setAnchorMode('now')}
             >
-              From now
+              {t('fromNow')}
             </button>
             <button
               type="button"
               data-active={anchorMode === 'entry' || undefined}
               aria-pressed={anchorMode === 'entry'}
               disabled={!entryAvailable}
-              title={entryAvailable ? undefined : 'No entry IV available for these legs yet'}
+              title={entryAvailable ? undefined : t('noEntryIv')}
               onClick={() => setAnchorMode('entry')}
             >
-              From entry
+              {t('fromEntry')}
             </button>
           </div>
         </div>
@@ -152,31 +275,34 @@ export default function ShockHeatmap({
 
       <div className={styles.referenceStrip}>
         <div className={styles.locationBlock}>
-          <span className={styles.nowBadge}><i />NOW</span>
+          <span className={styles.nowBadge}><i />{t('nowBadge')}</span>
           <div>
             {anchorMode === 'entry' ? (
               <>
-                <span className={styles.referenceLabel}>Vol drift · {basisLabel.toLowerCase()}</span>
+                <span className={styles.referenceLabel}>{t('volDrift', { basis: basisLabel.toLowerCase() })}</span>
                 <strong data-testid="entry-drift-label">{driftLabel}</strong>
               </>
             ) : (
               <>
-                <span className={styles.referenceLabel}>Live baseline</span>
-                <strong>No additional shock</strong>
+                <span className={styles.referenceLabel}>{t('liveBaseline')}</span>
+                <strong>{t('noShock')}</strong>
               </>
             )}
           </div>
         </div>
-        <Metric label="Open P&L" value={currentUnrealizedPnl} testId="open-pnl" />
+        <Metric label={t('openPnl')} value={currentUnrealizedPnl} testId="open-pnl" />
         {attribution != null && attribution.attributedLegs > 0 && (
           <>
-            <Metric label="Spot (Δ + Γ)" value={attribution.spotUsd} />
-            <Metric label="Time (Θ)" value={attribution.timeUsd} />
-            <Metric label="Vol · square" value={attribution.volUsd} highlight testId="vol-pnl" />
-            <Metric label="Other" value={attribution.otherUsd} />
+            <Metric label={t('spot')} value={attribution.spotUsd} />
+            <Metric label={t('time')} value={attribution.timeUsd} />
+            <Metric label={t('volSquare')} value={attribution.volUsd} highlight testId="vol-pnl" />
+            <Metric label={t('other')} value={attribution.otherUsd} />
             {attribution.attributedLegs < attribution.totalLegs && (
               <Metric
-                label={`No fills · ${attribution.totalLegs - attribution.attributedLegs} leg${attribution.totalLegs - attribution.attributedLegs === 1 ? '' : 's'}`}
+                label={t(
+                  attribution.totalLegs - attribution.attributedLegs === 1 ? 'noFills_one' : 'noFills_other',
+                  { n: attribution.totalLegs - attribution.attributedLegs },
+                )}
                 value={attribution.unattributedUsd}
               />
             )}
@@ -186,26 +312,26 @@ export default function ShockHeatmap({
 
       {!coverageComplete && totalLegs > 0 && (
         <div className={styles.coverageWarning} role="status">
-          {totalLegs - pricedLegs} leg{totalLegs - pricedLegs === 1 ? '' : 's'} excluded because live IV, forward or time-to-expiry is unavailable.
+          {t(totalLegs - pricedLegs === 1 ? 'excluded_one' : 'excluded_other', { n: totalLegs - pricedLegs })}
         </div>
       )}
 
       {anchorMode === 'entry' && entryDrift?.basis !== 'entry' && (
         <div className={styles.anchorNote}>
-          Venue positions don&apos;t report the IV they were opened at; their anchor is the first live IV this server recorded for the leg.
+          {t('anchorNote')}
         </div>
       )}
 
       <div className={styles.tableScroll}>
         <table className={styles.grid}>
           <caption className={styles.srOnly}>
-            Portfolio P&amp;L under parallel implied-volatility and skew-tilt shocks
+            {t('caption')}
           </caption>
           <thead>
             <tr>
               <th className={styles.axisCorner}>
-                <span>ATM vol ↓</span>
-                <span>Skew tilt →</span>
+                <span>{t('atmVolAxis')}</span>
+                <span>{t('skewTiltAxis')}</span>
               </th>
               {colAxis.map((skew, colIndex) => (
                 <th
@@ -238,9 +364,19 @@ export default function ShockHeatmap({
                     const displayValue = valueFor(cell);
                     const title = isCurrent
                       ? anchorMode === 'entry'
-                        ? `Now · vol drift ${basisLabel.toLowerCase()} ${driftLabel}${driftOffGrid ? ' (beyond grid range, pinned to edge)' : ''} · vol P&L ${fmtUsdShort(sinceEntryPnl)}`
-                        : 'Current surface · no additional shock'
-                      : `ATM IV ${fmtAxis(cell.atmShiftVolPts, 1)} vol pts · skew slope ${fmtAxis(cell.skewShiftPerLogK * 100)} vol pts/log-K${anchorMode === 'entry' ? ' from entry' : ''} · ${fmtUsdShort(displayValue)}`;
+                        ? t('titleNowEntry', {
+                            basis: basisLabel.toLowerCase(),
+                            drift: driftLabel,
+                            offGrid: driftOffGrid ? t('beyondGrid') : '',
+                            pnl: fmtUsdShort(sinceEntryPnl),
+                          })
+                        : t('titleCurrent')
+                      : t('titleCell', {
+                          atm: fmtAxis(cell.atmShiftVolPts, 1),
+                          skew: fmtAxis(cell.skewShiftPerLogK * 100),
+                          fromEntry: anchorMode === 'entry' ? t('fromEntrySuffix') : '',
+                          pnl: fmtUsdShort(displayValue),
+                        });
 
                     return (
                       <td
@@ -252,10 +388,10 @@ export default function ShockHeatmap({
                       >
                         {isCurrent && (
                           <span className={styles.baselineLabel}>
-                            {anchorMode === 'entry' ? (driftOffGrid ? 'Now · off grid' : 'Now') : 'No additional shock'}
+                            {anchorMode === 'entry' ? (driftOffGrid ? t('nowOffGrid') : t('now')) : t('noShock')}
                           </span>
                         )}
-                        {isEntry && !isCurrent && <span className={styles.entryLabel}>Entry</span>}
+                        {isEntry && !isCurrent && <span className={styles.entryLabel}>{t('entry')}</span>}
                         <span
                           className={styles.cellValue}
                           {...(isCurrent ? { 'data-testid': 'current-shock-cell-value' } : {})}
@@ -274,23 +410,26 @@ export default function ShockHeatmap({
 
       <div className={styles.legend}>
         {anchorMode === 'entry' ? (
-          <span>
-            Now moves as live IV drifts from entry; it snaps to the nearest cell. Venue legs use IV
-            back-solved from their opening fills at the underlying price of the fill minute.
-          </span>
+          <span>{t('legendEntry')}</span>
         ) : (
-          <span>Baseline stays centered; this is a scenario view, not market movement.</span>
+          <span>{t('legendNow')}</span>
         )}
-        <span><b>Rows</b> parallel ATM IV shift in vol points{anchorMode === 'entry' ? ' from entry' : ''}</span>
-        <span><b>Columns</b> skew-slope change in vol points per ln(K/F)</span>
         <span>
-          <b>Values</b>{' '}
-          {anchorMode === 'entry' ? 'vol P&L versus the entry surface' : 'model-consistent change from now'}
+          <b>{t('rows')}</b>
+          {t('rowsText', { fromEntry: anchorMode === 'entry' ? t('fromEntrySuffix') : '' })}
+        </span>
+        <span>
+          <b>{t('columns')}</b>
+          {t('columnsText')}
+        </span>
+        <span>
+          <b>{t('values')}</b>{' '}
+          {anchorMode === 'entry' ? t('valuesEntry') : t('valuesNow')}
         </span>
         {attribution != null && attribution.attributedLegs > 0 && (
           <span>
-            <b>Split</b> Black-76 revaluation from entry: spot, then time, then IV. Other is
-            venue mark and fill prices versus the model.
+            <b>{t('split')}</b>
+            {t('splitText')}
           </span>
         )}
       </div>
@@ -309,6 +448,7 @@ function Metric({
   highlight?: boolean;
   testId?: string;
 }) {
+  const t = useT(messages);
   return (
     <div className={styles.referenceMetric} data-highlight={highlight || undefined}>
       <span>{label}</span>
@@ -316,7 +456,7 @@ function Metric({
         data-sign={value == null ? undefined : value >= 0 ? 'positive' : 'negative'}
         {...(testId != null ? { 'data-testid': testId } : {})}
       >
-        {value == null ? 'Unavailable' : fmtUsdShort(value)}
+        {value == null ? t('unavailable') : fmtUsdShort(value)}
       </strong>
     </div>
   );

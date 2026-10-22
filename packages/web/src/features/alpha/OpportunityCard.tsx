@@ -2,19 +2,78 @@ import { VenueDot } from '@components/ui';
 import { fmtStrikeShort, fmtUsd } from '@lib/format';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
+import { defineMessages, useT } from '@lib/i18n';
 import type { ReactNode } from 'react';
+import { alphaMessages, humanizeRejection, VERTICAL_LABEL_KEYS } from './i18n';
 import type { MarkIndicative } from './spread-scanner';
-import { VERTICAL_LABELS, type VerticalEconomics, type VerticalKind } from './vertical-pricing';
+import type { VerticalEconomics, VerticalKind } from './vertical-pricing';
 import styles from './VenueOpportunities.module.css';
 
+const messages = defineMessages(
+  {
+    statusCheck: 'CHECK',
+    statusWait: 'WAIT',
+    statusTooLarge: 'TOO LARGE',
+    statusPriceOnly: 'PRICE ONLY',
+    statusNoPair: 'NO PAIR',
+    statusMarkOnly: 'MARK ONLY',
+    livePairs: 'live pairs',
+    scannerWaiting: 'Scanner waiting',
+    sizePerLeg: 'Size per leg',
+    executableCoverage: 'Executable coverage',
+    pairsCount: '{n} pairs',
+    markOnlyTitle: 'Mark only · no orders on {venue}',
+    atMark: 'At mark, before fees: {side} {premium} · max loss {maxLoss}. Reference only, not executable.',
+    credit: 'credit',
+    debit: 'debit',
+    marksNoQuote: '{venue} publishes marks and IV for these options but no bid or ask.',
+    noExecutable: 'No executable {kind}',
+    noSyncQuotes: 'No synchronized quotes',
+    whyFiltered: 'Why quotes were filtered',
+    noExclusions: 'No exclusions in this snapshot.',
+    lose: 'lose {value}',
+    ev: 'EV {value}',
+    make: 'make {value}',
+    loadSpread: 'Load spread →',
+  },
+  {
+    statusCheck: 'REVISAR',
+    statusWait: 'ESPERAR',
+    statusTooLarge: 'DEMASIADO GRANDE',
+    statusPriceOnly: 'SOLO PRECIO',
+    statusNoPair: 'SIN PAR',
+    statusMarkOnly: 'SOLO MARK',
+    livePairs: 'pares en vivo',
+    scannerWaiting: 'Escáner en espera',
+    sizePerLeg: 'Tamaño por pata',
+    executableCoverage: 'Cobertura ejecutable',
+    pairsCount: '{n} pares',
+    markOnlyTitle: 'Solo mark · sin órdenes en {venue}',
+    atMark: 'A mark, antes de comisiones: {side} {premium} · pérdida máx. {maxLoss}. Solo referencia, no ejecutable.',
+    credit: 'crédito',
+    debit: 'débito',
+    marksNoQuote: '{venue} publica mark e IV para estas opciones, pero no bid ni ask.',
+    noExecutable: 'Ningún {kind} ejecutable',
+    noSyncQuotes: 'Sin cotizaciones sincronizadas',
+    whyFiltered: 'Por qué se filtraron cotizaciones',
+    noExclusions: 'Sin exclusiones en esta instantánea.',
+    lose: 'pierdes {value}',
+    ev: 'EV {value}',
+    make: 'ganas {value}',
+    loadSpread: 'Cargar spread →',
+  },
+);
+
+type MessageKey = keyof typeof messages.en;
+
 const STATUS = {
-  review: { label: 'CHECK', tone: 'review' },
-  'no-edge': { label: 'WAIT', tone: 'avoid' },
-  'over-budget': { label: 'TOO LARGE', tone: 'danger' },
-  'no-model': { label: 'PRICE ONLY', tone: 'neutral' },
-} as const;
-const NO_PAIR = { label: 'NO PAIR', tone: 'empty' } as const;
-const MARK_ONLY = { label: 'MARK ONLY', tone: 'neutral' } as const;
+  review: { label: 'statusCheck', tone: 'review' },
+  'no-edge': { label: 'statusWait', tone: 'avoid' },
+  'over-budget': { label: 'statusTooLarge', tone: 'danger' },
+  'no-model': { label: 'statusPriceOnly', tone: 'neutral' },
+} as const satisfies Record<string, { label: MessageKey; tone: string }>;
+const NO_PAIR = { label: 'statusNoPair', tone: 'empty' } as const;
+const MARK_ONLY = { label: 'statusMarkOnly', tone: 'neutral' } as const;
 
 export function OpportunitySection({
   title,
@@ -23,7 +82,7 @@ export function OpportunitySection({
   emptyHint,
   note,
   isEmpty,
-  countLabel = 'live pairs',
+  countLabel,
   children,
 }: {
   title: string;
@@ -35,6 +94,7 @@ export function OpportunitySection({
   isEmpty: boolean;
   children: ReactNode;
 }) {
+  const t = useT(messages);
   return (
     <details className={styles.opportunities} open>
       <summary className={styles.opportunitySummary}>
@@ -43,13 +103,13 @@ export function OpportunitySection({
           <small>{subtitle}</small>
         </span>
         <span className={styles.summaryCount}>
-          {count} {countLabel}
+          {count} {countLabel ?? t('livePairs')}
         </span>
       </summary>
       {isEmpty ? (
         <div className={styles.scanEmpty}>
           <span className={styles.scanEmptyIcon}>◎</span>
-          <strong>Scanner waiting</strong>
+          <strong>{t('scannerWaiting')}</strong>
           <span>{emptyHint}</span>
         </div>
       ) : (
@@ -87,6 +147,8 @@ export function OpportunityCard({
   indicative?: MarkIndicative | null;
   children: ReactNode[];
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const best = kindCandidates.find((c) => c.status === 'review') ?? kindCandidates[0];
   const status = best ? STATUS[best.status] : markOnly ? MARK_ONLY : NO_PAIR;
   const venueLabel = VENUES[venue]?.label ?? venue;
@@ -103,19 +165,19 @@ export function OpportunityCard({
           {venueLabel}
         </span>
         <span className={styles.venueState} data-tone={status.tone}>
-          {status.label}
+          {t(status.label)}
         </span>
       </header>
 
       {sizeLabel && (
         <div className={styles.coverageRow}>
-          <span>Size per leg</span>
+          <span>{t('sizePerLeg')}</span>
           <strong>{sizeLabel}</strong>
         </div>
       )}
       <div className={styles.coverageRow}>
-        <span>Executable coverage</span>
-        <strong>{pricedCount} pairs</strong>
+        <span>{t('executableCoverage')}</span>
+        <strong>{t('pairsCount', { n: pricedCount })}</strong>
       </div>
       <div className={styles.coverageTrack}>
         <span style={{ width: `${Math.max(coverage, pricedCount > 0 ? 3 : 0)}%` }} />
@@ -125,11 +187,15 @@ export function OpportunityCard({
         <div className={styles.noPair}>
           <span aria-hidden="true">≈</span>
           <div>
-            <strong>Mark only · no orders on {venueLabel}</strong>
+            <strong>{t('markOnlyTitle', { venue: venueLabel })}</strong>
             <small>
               {indicative
-                ? `At mark, before fees: ${indicative.grossPremium >= 0 ? 'credit' : 'debit'} ${fmtUsd(Math.abs(indicative.grossPremium))} · max loss ${fmtUsd(indicative.maxLoss)}. Reference only, not executable.`
-                : `${venueLabel} publishes marks and IV for these options but no bid or ask.`}
+                ? t('atMark', {
+                    side: t(indicative.grossPremium >= 0 ? 'credit' : 'debit'),
+                    premium: fmtUsd(Math.abs(indicative.grossPremium)),
+                    maxLoss: fmtUsd(indicative.maxLoss),
+                  })
+                : t('marksNoQuote', { venue: venueLabel })}
             </small>
           </div>
         </div>
@@ -137,9 +203,9 @@ export function OpportunityCard({
         <div className={styles.noPair}>
           <span aria-hidden="true">∅</span>
           <div>
-            <strong>No executable {VERTICAL_LABELS[kind].toLowerCase()}</strong>
+            <strong>{t('noExecutable', { kind: ta(VERTICAL_LABEL_KEYS[kind]).toLowerCase() })}</strong>
             <small>
-              {topRejection ? humanizeRejection(topRejection[0]) : 'No synchronized quotes'}
+              {topRejection ? humanizeRejection(topRejection[0], ta) : t('noSyncQuotes')}
             </small>
           </div>
         </div>
@@ -148,14 +214,14 @@ export function OpportunityCard({
       )}
 
       <details className={styles.coverageDetails}>
-        <summary>Why quotes were filtered</summary>
+        <summary>{t('whyFiltered')}</summary>
         {Object.entries(rejected).map(([reason, count]) => (
           <div key={reason}>
-            <span>{humanizeRejection(reason)}</span>
+            <span>{humanizeRejection(reason, ta)}</span>
             <strong>{count}</strong>
           </div>
         ))}
-        {Object.keys(rejected).length === 0 && <p>No exclusions in this snapshot.</p>}
+        {Object.keys(rejected).length === 0 && <p>{t('noExclusions')}</p>}
       </details>
     </section>
   );
@@ -177,6 +243,7 @@ export function CandidateRow({
   detail?: ReactNode;
   onClick: () => void;
 }) {
+  const t = useT(messages);
   const status = STATUS[candidate.status];
   const total = candidate.maxProfit + candidate.maxLoss;
   const profitWidth = (candidate.maxProfit / total) * 100;
@@ -190,7 +257,7 @@ export function CandidateRow({
     >
       <span className={styles.candidateTopline}>
         <strong>{title}</strong>
-        <span data-tone={status.tone}>{status.label}</span>
+        <span data-tone={status.tone}>{t(status.label)}</span>
       </span>
       <span className={styles.strikeRoute}>
         <span>
@@ -210,34 +277,11 @@ export function CandidateRow({
         <i className={styles.candidateProfit} style={{ width: `${profitWidth}%` }} />
       </span>
       <span className={styles.candidateNumbers}>
-        <span>lose {fmtUsd(candidate.maxLoss)}</span>
-        <span>EV {fmtUsd(candidate.modelEdge)}</span>
-        <span>make {fmtUsd(candidate.maxProfit)}</span>
+        <span>{t('lose', { value: fmtUsd(candidate.maxLoss) })}</span>
+        <span>{t('ev', { value: fmtUsd(candidate.modelEdge) })}</span>
+        <span>{t('make', { value: fmtUsd(candidate.maxProfit) })}</span>
       </span>
-      <span className={styles.loadLabel}>Load spread →</span>
+      <span className={styles.loadLabel}>{t('loadSpread')}</span>
     </button>
   );
-}
-
-
-const REJECTION_LABELS: Record<string, string> = {
-  'Missing buy ask / sell bid': 'No tradable bid or ask',
-  'Unknown entry fees': 'Fee data missing',
-  'Stale or missing timestamp': 'Quote too old',
-  'Leg timestamps out of sync': 'Leg quotes not synchronized',
-  'Quantity below minimum or off step': 'Size below venue minimum',
-  'Order value below venue minimum': 'Order value below venue minimum',
-  'Insufficient displayed size': 'Not enough size at quote',
-  'No positive payoff after costs': 'Costs consume the payoff',
-  'Missing execution metadata / fees': 'Execution data missing',
-  'Inverse settlement needs separate risk model': 'Unsupported settlement type',
-  'Missing inverse conversion price': 'Coin-to-USD price missing',
-  'Settlement mismatch': 'Leg settlement mismatch',
-  'Leg expiry times differ': 'Legs expire at different times',
-  'Crossed leg quote': 'Invalid crossed quote',
-  'Enable a second venue to route across venues': 'Enable a second venue',
-};
-
-function humanizeRejection(reason: string): string {
-  return REJECTION_LABELS[reason] ?? reason;
 }

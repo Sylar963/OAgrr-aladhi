@@ -12,6 +12,7 @@ import {
 
 import { useUnderlyings } from '@features/chain';
 import { DropdownPicker } from '@components/ui';
+import { defineMessages, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import { venueColor, deltaColor, deltaLabel } from '@lib/colors';
 import { fmtIv } from '@lib/format';
@@ -22,6 +23,29 @@ import DeltaToggleLegend, { preset25Deltas } from './DeltaToggleLegend';
 import styles from './AtmTermStructure.module.css';
 
 const AVG_COLOR = '#50D2C1';
+
+const messages = defineMessages(
+  {
+    title: 'ATM Term Structure',
+    modeAria: 'Term structure mode',
+    perVenue: 'ATM · per venue',
+    multiDelta: 'Multi-delta',
+    average: 'Average',
+    tenorAria: 'Tenor mode',
+    listed: 'Listed',
+    cmm: 'CMM',
+  },
+  {
+    title: 'Estructura temporal ATM',
+    modeAria: 'Modo de estructura temporal',
+    perVenue: 'ATM · por exchange',
+    multiDelta: 'Multi-delta',
+    average: 'Promedio',
+    tenorAria: 'Modo de plazo',
+    listed: 'Listados',
+    cmm: 'CMM',
+  },
+);
 
 const IV_PRICE_FORMAT = {
   type: 'custom' as const,
@@ -267,6 +291,7 @@ function pickRows(
 }
 
 export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const t = useT(messages);
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
     useSurfaceUnderlying(market, defaultUnderlying);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -380,7 +405,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>ATM Term Structure</span>
+        <span className={styles.title}>{t('title')}</span>
         {setLocalUnderlying && (
           <DropdownPicker
             size="sm"
@@ -391,7 +416,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
           />
         )}
 
-        <div className={styles.modeSegmented} role="tablist" aria-label="Term structure mode">
+        <div className={styles.modeSegmented} role="tablist" aria-label={t('modeAria')}>
           <button
             type="button"
             role="tab"
@@ -399,7 +424,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
             className={mode === 'per-venue-atm' ? styles.segActive : styles.seg}
             onClick={() => setMode('per-venue-atm')}
           >
-            ATM · per venue
+            {t('perVenue')}
           </button>
           <button
             type="button"
@@ -408,7 +433,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
             className={mode === 'multi-delta' ? styles.segActive : styles.seg}
             onClick={() => setMode('multi-delta')}
           >
-            Multi-delta
+            {t('multiDelta')}
           </button>
         </div>
       </div>
@@ -424,7 +449,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
                 className={styles.checkbox}
               />
               <span className={styles.venueSwatch} style={{ background: AVG_COLOR }} />
-              Average
+              {t('average')}
             </label>
             {venuesWithData.map((v) => {
               const active = enabledVenues.has(v.id);
@@ -460,7 +485,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
                 return { value: id, label: meta?.shortLabel ?? id };
               })}
             />
-            <div className={styles.tenorSegmented} role="tablist" aria-label="Tenor mode">
+            <div className={styles.tenorSegmented} role="tablist" aria-label={t('tenorAria')}>
               <button
                 type="button"
                 role="tab"
@@ -468,7 +493,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
                 className={tenorMode === 'listed' ? styles.segActive : styles.seg}
                 onClick={() => setTenorMode('listed')}
               >
-                Listed
+                {t('listed')}
               </button>
               <button
                 type="button"
@@ -477,7 +502,7 @@ export default function AtmTermStructure({ defaultUnderlying = 'BTC', market = '
                 className={tenorMode === 'cmm' ? styles.segActive : styles.seg}
                 onClick={() => setTenorMode('cmm')}
               >
-                CMM
+                {t('cmm')}
               </button>
             </div>
           </div>

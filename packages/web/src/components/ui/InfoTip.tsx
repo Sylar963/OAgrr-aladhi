@@ -1,5 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { defineMessages, useT } from '@lib/i18n';
+
 import styles from './InfoTip.module.css';
+
+const messages = defineMessages({ moreInfo: 'More info: {label}' }, { moreInfo: 'Más info: {label}' });
 
 interface Props {
   label: string;
@@ -9,6 +13,7 @@ interface Props {
 }
 
 export default function InfoTip({ label, title, children, align = 'center' }: Props) {
+  const t = useT(messages);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
   const popoverId = useId();
@@ -36,7 +41,7 @@ export default function InfoTip({ label, title, children, align = 'center' }: Pr
       <button
         type="button"
         className={styles.trigger}
-        aria-label={`More info: ${label}`}
+        aria-label={t('moreInfo', { label })}
         aria-expanded={open}
         aria-controls={popoverId}
         onClick={(event) => {

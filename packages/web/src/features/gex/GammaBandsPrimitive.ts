@@ -37,16 +37,19 @@ const PROJECTION_FILL = 'rgba(80, 210, 193, 0.12)';
 
 type WallKey = 'callWall' | 'putWall' | 'gammaFlip';
 
-const LEVELS: ReadonlyArray<{ key: WallKey; color: string; label: string; width: number }> = [
-  { key: 'callWall', color: CALL_WALL_COLOR, label: 'CALL WALL', width: 2 },
-  { key: 'putWall', color: PUT_WALL_COLOR, label: 'PUT WALL', width: 2 },
-  { key: 'gammaFlip', color: FLIP_COLOR, label: 'FLIP', width: 1 },
+export type WallLabels = Readonly<Record<WallKey, string>>;
+
+const LEVELS: ReadonlyArray<{ key: WallKey; color: string; width: number }> = [
+  { key: 'callWall', color: CALL_WALL_COLOR, width: 2 },
+  { key: 'putWall', color: PUT_WALL_COLOR, width: 2 },
+  { key: 'gammaFlip', color: FLIP_COLOR, width: 1 },
 ];
 
 interface BandsContext {
   history: readonly AlignedWalls[];
   live: GammaWalls;
   anchorSec: number | null;
+  labels: WallLabels;
   priceToY: (price: number) => number | null;
   timeToX: (time: Time) => number | null;
 }
@@ -62,7 +65,7 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
   draw(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace((scope) => {
       const { context, bitmapSize, horizontalPixelRatio: hpr, verticalPixelRatio: vpr } = scope;
-      const { history, live, anchorSec, priceToY, timeToX } = this.ctx;
+      const { history, live, anchorSec, labels, priceToY, timeToX } = this.ctx;
 
       const toXY = (time: number, price: number | null): XY | null => {
         if (price == null) return null;
@@ -118,7 +121,7 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
         context.stroke();
         context.fillStyle = level.color;
         context.fillText(
-          `${Math.round(price).toLocaleString()} ${level.label}`,
+          `${Math.round(price).toLocaleString()} ${labels[level.key]}`,
           x1 - 6 * hpr,
           yb - 4 * vpr,
         );
@@ -244,6 +247,7 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
   private live: GammaWalls = { callWall: null, putWall: null, gammaFlip: null };
   // Last real candle time; timeToCoordinate only resolves series data times.
   private anchorSec: number | null = null;
+  private labels: WallLabels = { callWall: 'CALL WALL', putWall: 'PUT WALL', gammaFlip: 'FLIP' };
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private chart: SeriesAttachedParameter<Time>['chart'] | null = null;
   private requestUpdate: (() => void) | null = null;
@@ -267,6 +271,11 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
+  setLabels(labels: WallLabels): void {
+    this.labels = labels;
+    this.requestUpdate?.();
+  }
+
   paneViews(): readonly IPrimitivePaneView[] {
     if (!this.series || !this.chart) return [];
     const series = this.series;
@@ -276,6 +285,7 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
         history: this.history,
         live: this.live,
         anchorSec: this.anchorSec,
+        labels: this.labels,
         priceToY: (p) => series.priceToCoordinate(p),
         timeToX: (t) => chart.timeScale().timeToCoordinate(t),
       }),

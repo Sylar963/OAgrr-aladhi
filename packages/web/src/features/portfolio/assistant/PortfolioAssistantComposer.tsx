@@ -1,8 +1,29 @@
 import type { KeyboardEvent } from 'react';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import styles from './PortfolioAssistantPanel.module.css';
 
 const MAX_LENGTH = 4_000;
+
+const messages = defineMessages(
+  {
+    label: 'Ask about this portfolio',
+    placeholder: 'Ask about risk, PnL, Greeks, expiries...',
+    charsLeft: '{n} characters left',
+    hint: 'Enter to send | Shift+Enter for a new line',
+    stop: 'Stop',
+    send: 'Send',
+  },
+  {
+    label: 'Pregunta sobre este portafolio',
+    placeholder: 'Pregunta sobre riesgo, PnL, Greeks, vencimientos...',
+    charsLeft: 'quedan {n} caracteres',
+    hint: 'Enter para enviar | Shift+Enter para una nueva línea',
+    stop: 'Detener',
+    send: 'Enviar',
+  },
+);
 
 interface PortfolioAssistantComposerProps {
   value: string;
@@ -21,6 +42,7 @@ export function PortfolioAssistantComposer({
   isStreaming,
   disabled,
 }: PortfolioAssistantComposerProps) {
+  const t = useT(messages);
   const remaining = MAX_LENGTH - value.length;
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -31,14 +53,14 @@ export function PortfolioAssistantComposer({
   return (
     <div className={styles.composer}>
       <label className={styles.srOnly} htmlFor="portfolio-assistant-question">
-        Ask about this portfolio
+        {t('label')}
       </label>
       <textarea
         id="portfolio-assistant-question"
         value={value}
         maxLength={MAX_LENGTH}
         rows={3}
-        placeholder="Ask about risk, PnL, Greeks, expiries..."
+        placeholder={t('placeholder')}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
@@ -46,12 +68,12 @@ export function PortfolioAssistantComposer({
       <div className={styles.composerActions}>
         <span className={styles.composerHint}>
           {remaining <= 400
-            ? `${remaining} characters left`
-            : 'Enter to send | Shift+Enter for a new line'}
+            ? t('charsLeft', { n: remaining })
+            : t('hint')}
         </span>
         {isStreaming ? (
           <button type="button" className={styles.stopButton} onClick={onStop}>
-            Stop
+            {t('stop')}
           </button>
         ) : (
           <button
@@ -60,7 +82,7 @@ export function PortfolioAssistantComposer({
             disabled={disabled || !value.trim()}
             onClick={onSend}
           >
-            Send
+            {t('send')}
           </button>
         )}
       </div>

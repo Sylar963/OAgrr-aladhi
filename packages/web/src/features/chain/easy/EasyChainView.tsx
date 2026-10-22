@@ -9,11 +9,13 @@ import {
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { useAppStore } from '@stores/app-store';
 import { dteDays } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { bestBidAsk } from '../quote-selection';
 import EasyOptionList, { draftKey } from './EasyOptionList';
 import EasyPayoffChart from './EasyPayoffChart';
 import EasyPositionPanel from './EasyPositionPanel';
 import { chanceOfProfit, profitZones, type EasyLegDraft } from './easy-explain';
+import { easyMessages } from './i18n';
 import styles from './EasyChain.module.css';
 
 interface EasyChainViewProps {
@@ -25,6 +27,7 @@ interface EasyChainViewProps {
 const NOTICE_MS = 4000;
 
 export default function EasyChainView({ chain, underlying, activeVenues }: EasyChainViewProps) {
+  const t = useT(easyMessages);
   const storeUnderlying = useStrategyStore((s) => s.underlying);
   const storeLegs = useStrategyStore((s) => s.legs);
   const addLeg = useStrategyStore((s) => s.addLeg);
@@ -39,8 +42,8 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
 
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(null), NOTICE_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(timer);
   }, [notice]);
 
   const legs = useMemo(
@@ -94,12 +97,12 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
       }
       const leg = quote(draft);
       if (!leg) {
-        setNotice(`No live ${draft.direction === 'buy' ? 'ask' : 'bid'} for that option right now.`);
+        setNotice(t('noLiveQuoteAdd', { side: draft.direction === 'buy' ? 'ask' : 'bid' }));
         return;
       }
       addLeg(leg, underlying);
     },
-    [legs, chain.expiry, quote, updateLeg, addLeg, underlying],
+    [legs, chain.expiry, quote, updateLeg, addLeg, underlying, t],
   );
 
   const handleFlip = useCallback(
@@ -108,7 +111,12 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
       const fresh =
         leg.expiry === chain.expiry ? quote({ type: leg.type, direction, strike: leg.strike }) : null;
       if (leg.expiry === chain.expiry && !fresh) {
-        setNotice(`No live ${direction === 'buy' ? 'ask' : 'bid'} to ${direction} that option.`);
+        setNotice(
+          t('noLiveQuoteFlip', {
+            side: direction === 'buy' ? 'ask' : 'bid',
+            direction: direction === 'buy' ? t('switchToBuyVerb') : t('switchToSellVerb'),
+          }),
+        );
         return;
       }
       updateLeg(leg.id, {
@@ -116,7 +124,7 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
         ...(fresh ? { entryPrice: fresh.entryPrice, venue: fresh.venue } : {}),
       });
     },
-    [chain.expiry, quote, updateLeg],
+    [chain.expiry, quote, updateLeg, t],
   );
 
   const metrics = useMemo(

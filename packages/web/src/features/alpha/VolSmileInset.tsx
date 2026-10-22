@@ -1,4 +1,5 @@
 import { fmtStrike } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { memo, useMemo, useState, type MouseEvent } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
@@ -15,6 +16,75 @@ interface Props {
   richness?: SviRichness;
   T?: number | null;
 }
+
+const messages = defineMessages(
+  {
+    volSmile: 'Vol smile',
+    waiting: 'Waiting for chain data…',
+    otmMarkIv: 'OTM mark IV',
+    executableMid: 'executable IV midpoint',
+    tipLabel: 'How to read the smile',
+    tipTitle: 'Reading the vol smile',
+    tipAveraging:
+      'For each strike, IV is averaged across venues using the OTM side (puts below the forward, calls above) — the side that actually trades and reflects the wing premium the market is paying.',
+    whatToLookFor: 'What to look for:',
+    peakTitle: 'Short leg sitting on a peak',
+    peakText:
+      '(rich IV vs. neighbours) = you're selling expensive vol — the structural edge for credit spreads.',
+    belowTitle: 'Short below the curve',
+    belowText: '= selling cheap vol; the signal can still gate SELL but the edge is thin.',
+    troughTitle: 'Long sitting on a trough',
+    troughText: '= paying for cheap wing protection — desirable.',
+    skewText:
+      '= (IV at 0.9·forward − IV at 1.1·forward) / ATM IV. Positive skew → downside puts richer than upside calls (downside fear). In BTC/ETH, mildly positive is normal; spikes often precede directional regimes. Use it to pick the side: rich put skew makes put-credit spreads structurally more attractive.',
+    dashedTitle: 'Dashed line',
+    dashedText:
+      'is the SVI fit to executable bid/ask IV midpoints. Dot color uses a leave-one-out residual, so each strike is scored against a fit that excluded it:',
+    rich: 'rich',
+    richAt: 'at z > +1σ (good for sellers),',
+    cheap: 'cheap',
+    cheapAt: 'at z < −1σ (good for buyers / cheap protection legs).',
+    skewTitle:
+      '(IV at 0.9·forward − IV at 1.1·forward) / ATM IV. Positive = downside puts richer than upside calls.',
+    markFallback: 'mark IV fallback — puts below forward, calls above',
+    bidAskMid: 'bid/ask IV midpoint with leave-one-out SVI scoring',
+    aria: 'Volatility smile',
+    richness: 'richness',
+  },
+  {
+    volSmile: 'Smile de vol',
+    waiting: 'Esperando datos de la cadena…',
+    otmMarkIv: 'IV mark OTM',
+    executableMid: 'punto medio de IV ejecutable',
+    tipLabel: 'Cómo leer el smile',
+    tipTitle: 'Leer el smile de vol',
+    tipAveraging:
+      'Para cada strike, la IV se promedia entre exchanges usando el lado OTM (puts bajo el forward, calls sobre él): el lado que realmente se negocia y refleja la prima de ala que paga el mercado.',
+    whatToLookFor: 'Qué buscar:',
+    peakTitle: 'Pata short sobre un pico',
+    peakText:
+      '(IV cara frente a sus vecinos) = estás vendiendo vol cara: el edge estructural de los credit spreads.',
+    belowTitle: 'Short bajo la curva',
+    belowText: '= vendes vol barata; la señal aún puede habilitar VENDER, pero el edge es escaso.',
+    troughTitle: 'Long sobre un valle',
+    troughText: '= pagas protección de ala barata: deseable.',
+    skewText:
+      '= (IV a 0.9·forward − IV a 1.1·forward) / ATM IV. Skew positivo → puts a la baja más caros que calls al alza (miedo a la baja). En BTC/ETH, levemente positivo es normal; los picos suelen anteceder regímenes direccionales. Úsalo para elegir el lado: un skew de puts caro hace que los put-credit spreads sean estructuralmente más atractivos.',
+    dashedTitle: 'La línea punteada',
+    dashedText:
+      'es el ajuste SVI a los puntos medios de IV bid/ask ejecutables. El color del punto usa un residuo leave-one-out, así que cada strike se evalúa contra un ajuste que lo excluyó:',
+    rich: 'cara',
+    richAt: 'con z > +1σ (bueno para vendedores),',
+    cheap: 'barata',
+    cheapAt: 'con z < −1σ (bueno para compradores / patas de protección baratas).',
+    skewTitle:
+      '(IV a 0.9·forward − IV a 1.1·forward) / ATM IV. Positivo = puts a la baja más caros que calls al alza.',
+    markFallback: 'IV mark de respaldo: puts bajo el forward, calls sobre él',
+    bidAskMid: 'punto medio de IV bid/ask con puntuación SVI leave-one-out',
+    aria: 'Smile de volatilidad',
+    richness: 'riqueza',
+  },
+);
 
 const Z_NEUTRAL = 1;
 
@@ -33,6 +103,7 @@ const PAD_T = 16;
 const PAD_B = 28;
 
 function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
+  const tr = useT(messages);
   const [hoverX, setHoverX] = useState<number | null>(null);
 
   const zByStrike = useMemo(() => {
@@ -100,8 +171,8 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
   if (!layout) {
     return (
       <div className={styles.wrap}>
-        <div className={styles.title}>Vol smile</div>
-        <div className={styles.empty}>Waiting for chain data…</div>
+        <div className={styles.title}>{tr('volSmile')}</div>
+        <div className={styles.empty}>{tr('waiting')}</div>
       </div>
     );
   }
@@ -126,46 +197,30 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
     <div className={styles.wrap}>
       <div className={styles.title}>
         <span>
-          Vol smile · {richness?.params == null ? 'OTM mark IV' : 'executable IV midpoint'}
-          <InfoTip label="How to read the smile" title="Reading the vol smile" align="start">
-            <p>
-              For each strike, IV is averaged across venues using the OTM side
-              (puts below the forward, calls above) — the side that actually trades and
-              reflects the wing premium the market is paying.
-            </p>
+          {tr('volSmile')} · {richness?.params == null ? tr('otmMarkIv') : tr('executableMid')}
+          <InfoTip label={tr('tipLabel')} title={tr('tipTitle')} align="start">
+            <p>{tr('tipAveraging')}</p>
             <p style={{ marginTop: 6 }}>
-              <strong>What to look for:</strong>
+              <strong>{tr('whatToLookFor')}</strong>
             </p>
             <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
               <li>
-                <strong>Short leg sitting on a peak</strong> (rich IV vs.
-                neighbours) = you&apos;re selling expensive vol — the structural
-                edge for credit spreads.
+                <strong>{tr('peakTitle')}</strong> {tr('peakText')}
               </li>
               <li>
-                <strong>Short below the curve</strong> = selling cheap vol; the
-                signal can still gate SELL but the edge is thin.
+                <strong>{tr('belowTitle')}</strong> {tr('belowText')}
               </li>
               <li>
-                <strong>Long sitting on a trough</strong> = paying for cheap
-                wing protection — desirable.
+                <strong>{tr('troughTitle')}</strong> {tr('troughText')}
               </li>
             </ul>
             <p style={{ marginTop: 6 }}>
-              <strong>Skew</strong> = (IV at 0.9·forward − IV at 1.1·forward) / ATM IV.
-              Positive skew → downside puts richer than upside calls (downside
-              fear). In BTC/ETH, mildly positive is normal; spikes often precede
-              directional regimes. Use it to pick the side: rich put skew makes
-              put-credit spreads structurally more attractive.
+              <strong>Skew</strong> {tr('skewText')}
             </p>
             <p style={{ marginTop: 6 }}>
-              <strong>Dashed line</strong> is the SVI fit to executable bid/ask IV
-              midpoints. Dot color uses a leave-one-out residual, so each strike
-              is scored against a fit that excluded it:{' '}
-              <span style={{ color: 'var(--accent-primary)' }}>rich</span> at
-              z &gt; +1σ (good for sellers),{' '}
-              <span style={{ color: 'var(--color-loss)' }}>cheap</span> at z &lt;
-              −1σ (good for buyers / cheap protection legs).
+              <strong>{tr('dashedTitle')}</strong> {tr('dashedText')}{' '}
+              <span style={{ color: 'var(--accent-primary)' }}>{tr('rich')}</span> {tr('richAt')}{' '}
+              <span style={{ color: 'var(--color-loss)' }}>{tr('cheap')}</span> {tr('cheapAt')}
             </p>
           </InfoTip>
         </span>
@@ -176,7 +231,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
             </span>
           )}
           {smile?.skew != null && (
-            <span className={styles.stat} title="(IV at 0.9·forward − IV at 1.1·forward) / ATM IV. Positive = downside puts richer than upside calls.">
+            <span className={styles.stat} title={tr('skewTitle')}>
               Skew{' '}
               <strong data-sign={smile.skew >= 0 ? 'pos' : 'neg'}>
                 {smile.skew >= 0 ? '+' : ''}
@@ -187,15 +242,15 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
         </span>
         <span className={styles.subtitle}>
           {richness?.params == null
-            ? 'mark IV fallback — puts below forward, calls above'
-            : 'bid/ask IV midpoint with leave-one-out SVI scoring'}
+            ? tr('markFallback')
+            : tr('bidAskMid')}
         </span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className={styles.svg}
         role="img"
-        aria-label="Volatility smile"
+        aria-label={tr('aria')}
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverX(null)}
       >
@@ -272,7 +327,7 @@ function VolSmileInset({ smile, shortStrike, longStrike, richness, T }: Props) {
             >
               {z != null && (
                 <title>
-                  {fmtStrike(p.strike)} · IV {(p.blendedIv! * 100).toFixed(1)}% · richness{' '}
+                  {fmtStrike(p.strike)} · IV {(p.blendedIv! * 100).toFixed(1)}% · {tr('richness')}{' '}
                   {z >= 0 ? '+' : ''}
                   {z.toFixed(2)}σ
                 </title>

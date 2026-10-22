@@ -1,6 +1,7 @@
 import { SignInButton, useUser } from '@clerk/react';
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { ThalexNetworkBadge } from '@features/portfolio';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import { VENUES } from '@lib/venue-meta';
 import type { DeriveWalletSession } from '@lib/wallet/derive-wallet-connect';
@@ -18,6 +19,108 @@ import styles from './AccountChip.module.css';
 import ThalexKeyManager from './ThalexKeyManager';
 
 type Mode = 'home' | 'paste';
+
+const messages = defineMessages(
+  {
+    usernamesOff: 'Usernames are turned off in Clerk; enable them in the Clerk dashboard',
+    saveUsernameFailed: 'Could not save username',
+    adapterUnavailable: '{venue} private adapter is not available',
+    missing: 'Missing: {fields}',
+    accountNotReady: 'Account must finish loading before venue keys can be saved',
+    connectFailed: 'connect failed',
+    disconnectFailed: 'Disconnect failed',
+    acct: 'acct {id}',
+    chooseUsername: 'Choose a username',
+    accountUsername: 'Account username',
+    signIn: 'Sign in',
+    signOut: 'Sign out',
+    accountLoading: 'Account loading',
+    changeUsername: 'Change username',
+    account: 'Account',
+    venueConnections: 'Venue connections',
+    noVenues: 'No venues connected yet. Connect one to enable per-venue private feeds.',
+    live: 'live',
+    manageThalexAria: 'manage thalex keys',
+    removeVenueAria: 'remove {venue}',
+    manageThalex: 'Manage Thalex keys',
+    connectVenue: '+ Connect venue',
+    unsupported_one:
+      "{venues} private feed not available yet — credentials are encrypted on the server but positions won't appear in the Portfolio tab. Derive and Thalex are live today.",
+    unsupported_other:
+      "{venues} private feeds not available yet — credentials are encrypted on the server but positions won't appear in the Portfolio tab. Derive and Thalex are live today.",
+    help: 'Help',
+    takeTour: 'Take the tour',
+    keyboardShortcuts: 'Keyboard shortcuts',
+    back: '← back',
+    venue: 'Venue',
+    connecting: 'Connecting…',
+    docs: 'docs ↗',
+    saveKeys: 'Save {venue} keys',
+    walletFailed: 'Wallet connection failed',
+    approveKey: 'Approve the read-only key in your wallet…',
+    signInDerive: 'Sign in to Derive from your wallet…',
+    deriveHint:
+      'Your wallet signs twice: a Derive sign-in, then a read-only key for oggregator. The key can read positions but cannot trade or withdraw, and your wallet key never leaves the wallet.',
+    connectWallet: 'Connect wallet',
+    subaccount: 'Subaccount',
+    authorize: 'Authorize read-only access',
+    paradexHint:
+      'Your wallet signs one Paradex sign-in, then Paradex issues a read-only key for oggregator. The key can read positions but cannot trade or withdraw.',
+    waitingWallet: 'Waiting for wallet…',
+    pasteParadex: 'Or paste a Paradex read-only key:',
+  },
+  {
+    usernamesOff: 'Los nombres de usuario están desactivados en Clerk; actívalos en el panel de Clerk',
+    saveUsernameFailed: 'No se pudo guardar el nombre de usuario',
+    adapterUnavailable: 'El adaptador privado de {venue} no está disponible',
+    missing: 'Falta: {fields}',
+    accountNotReady: 'La cuenta debe terminar de cargar antes de guardar claves de exchange',
+    connectFailed: 'falló la conexión',
+    disconnectFailed: 'Falló la desconexión',
+    acct: 'cuenta {id}',
+    chooseUsername: 'Elige un nombre de usuario',
+    accountUsername: 'Nombre de usuario de la cuenta',
+    signIn: 'Iniciar sesión',
+    signOut: 'Cerrar sesión',
+    accountLoading: 'Cargando cuenta',
+    changeUsername: 'Cambiar nombre de usuario',
+    account: 'Cuenta',
+    venueConnections: 'Conexiones de exchange',
+    noVenues:
+      'Aún no hay exchanges conectados. Conecta uno para activar feeds privados por exchange.',
+    live: 'activo',
+    manageThalexAria: 'gestionar claves de thalex',
+    removeVenueAria: 'quitar {venue}',
+    manageThalex: 'Gestionar claves de Thalex',
+    connectVenue: '+ Conectar exchange',
+    unsupported_one:
+      '{venues}: feed privado aún no disponible — las credenciales se cifran en el servidor, pero las posiciones no aparecerán en la pestaña Portafolio. Derive y Thalex ya están activos.',
+    unsupported_other:
+      '{venues}: feeds privados aún no disponibles — las credenciales se cifran en el servidor, pero las posiciones no aparecerán en la pestaña Portafolio. Derive y Thalex ya están activos.',
+    help: 'Ayuda',
+    takeTour: 'Hacer el recorrido',
+    keyboardShortcuts: 'Atajos de teclado',
+    back: '← volver',
+    venue: 'Exchange',
+    connecting: 'Conectando…',
+    docs: 'docs ↗',
+    saveKeys: 'Guardar claves de {venue}',
+    walletFailed: 'Falló la conexión de la wallet',
+    approveKey: 'Aprueba la clave de solo lectura en tu wallet…',
+    signInDerive: 'Inicia sesión en Derive desde tu wallet…',
+    deriveHint:
+      'Tu wallet firma dos veces: un inicio de sesión en Derive y luego una clave de solo lectura para oggregator. La clave puede leer posiciones pero no puede operar ni retirar, y la clave de tu wallet nunca sale de la wallet.',
+    connectWallet: 'Conectar wallet',
+    subaccount: 'Subcuenta',
+    authorize: 'Autorizar acceso de solo lectura',
+    paradexHint:
+      'Tu wallet firma un inicio de sesión en Paradex y luego Paradex emite una clave de solo lectura para oggregator. La clave puede leer posiciones pero no puede operar ni retirar.',
+    waitingWallet: 'Esperando la wallet…',
+    pasteParadex: 'O pega una clave de solo lectura de Paradex:',
+  },
+);
+
+type T = Translate<typeof messages.en>;
 
 // Names typed before the chip saved to the Clerk username lived only in this browser.
 const DISPLAY_NAME_KEY_PREFIX = 'accountDisplayName:';
@@ -40,17 +143,17 @@ function writeDisplayName(userId: string, name: string | null): void {
   }
 }
 
-function clerkErrorMessage(error: unknown): string {
+function clerkErrorMessage(error: unknown, t: T): string {
   const first = (
     error as { errors?: Array<{ code?: string; longMessage?: string; message?: string }> }
   )?.errors?.[0];
   if (first?.code === 'form_param_unknown') {
-    return 'Usernames are turned off in Clerk; enable them in the Clerk dashboard';
+    return t('usernamesOff');
   }
   return (
     first?.longMessage ??
     first?.message ??
-    (error instanceof Error ? error.message : 'Could not save username')
+    (error instanceof Error ? error.message : t('saveUsernameFailed'))
   );
 }
 
@@ -70,6 +173,7 @@ interface AccountChipProps {
 }
 
 export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
+  const t = useT(messages);
   const startTour = useAppStore((s) => s.startTour);
   const accountId = useAppStore((s) => s.accountId);
   const configuredVenueIds = useAppStore((state) => state.configuredVenueIds);
@@ -136,7 +240,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
       cancelEditingName();
       void qc.invalidateQueries({ queryKey: ['account', userId, 'social'] });
     } catch (caught) {
-      setNameError(clerkErrorMessage(caught));
+      setNameError(clerkErrorMessage(caught, t));
     } finally {
       setSavingName(false);
     }
@@ -178,7 +282,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
   }, [isAccountReady, isSignedOut, open, pasteTarget]);
 
   const acctShort = accountId != null ? accountId.slice(0, 8) : '';
-  const accountLabel = username ?? displayName ?? email ?? `acct ${acctShort}`;
+  const accountLabel = username ?? displayName ?? email ?? t('acct', { id: acctShort });
   const configuredVenues = useMemo(
     () => VENUE_IDS.filter((venue) => configuredVenueIds.includes(venue)),
     [configuredVenueIds],
@@ -199,7 +303,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
     const venue = pasteTarget;
     const spec = PRIVATE_ADAPTER_SPECS[venue];
     if (spec.status !== 'available') {
-      setError(venue + ' private adapter is not available');
+      setError(t('adapterUnavailable', { venue }));
       return;
     }
     const missing: string[] = [];
@@ -209,7 +313,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
       }
     }
     if (missing.length > 0) {
-      setError(`Missing: ${missing.join(', ')}`);
+      setError(t('missing', { fields: missing.join(', ') }));
       return;
     }
     const trimmedFields: Record<VenueCredentialFieldKey, string> = { ...venueFields };
@@ -217,7 +321,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
       trimmedFields[key] = trimmedFields[key]!.trim();
     }
     if (!isAccountReady) {
-      setError('Account must finish loading before venue keys can be saved');
+      setError(t('accountNotReady'));
       return;
     }
 
@@ -228,7 +332,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
         markVenueConfigured('paradex');
         refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'connect failed');
+        setError(err instanceof Error ? err.message : t('connectFailed'));
         return;
       } finally {
         setBusy(false);
@@ -255,7 +359,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
         markVenueUnconfigured(venue);
         refresh();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'Disconnect failed');
+        setError(caught instanceof Error ? caught.message : t('disconnectFailed'));
       }
     }
   };
@@ -280,8 +384,8 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
               onBlur={() => {
                 if (nameError == null) void commitName();
               }}
-              placeholder="Choose a username"
-              aria-label="Account username"
+              placeholder={t('chooseUsername')}
+              aria-label={t('accountUsername')}
               aria-invalid={nameError != null}
               maxLength={64}
               disabled={savingName}
@@ -299,7 +403,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
           >
             <span className={styles.dot} />
             <span className={styles.chipLabel}>
-              {isSignedOut ? 'Sign in' : accountId ? accountLabel : 'Account loading'}
+              {isSignedOut ? t('signIn') : accountId ? accountLabel : t('accountLoading')}
             </span>
             {configuredVenues.length > 0 && (
               <span className={styles.venueBadge}>+{configuredVenues.length}</span>
@@ -311,8 +415,8 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
             type="button"
             className={styles.chipEdit}
             onClick={startEditingName}
-            aria-label="Change username"
-            title="Change username"
+            aria-label={t('changeUsername')}
+            title={t('changeUsername')}
           >
             ×
           </button>
@@ -328,12 +432,12 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
           {mode === 'home' && (
             <div className={styles.body}>
               <div className={styles.section}>
-                <div className={styles.label}>Account</div>
+                <div className={styles.label}>{t('account')}</div>
                 {isSignedOut ? (
                   <div className={styles.actionRow}>
                     <SignInButton mode="modal">
                       <button type="button" className={styles.primaryBtn}>
-                        Sign in
+                        {t('signIn')}
                       </button>
                     </SignInButton>
                   </div>
@@ -345,7 +449,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                         className={styles.dangerBtn}
                         onClick={() => void accountSession.endSession()}
                       >
-                        Sign out
+                        {t('signOut')}
                       </button>
                     )}
                     <div>
@@ -358,10 +462,10 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
               {isAccountReady && <div className={styles.divider} />}
               {isAccountReady && (
                 <div className={styles.section}>
-                  <div className={styles.label}>Venue connections</div>
+                  <div className={styles.label}>{t('venueConnections')}</div>
                   {configuredVenues.length === 0 ? (
                     <div className={styles.hint}>
-                      No venues connected yet. Connect one to enable per-venue private feeds.
+                      {t('noVenues')}
                     </div>
                   ) : (
                     <div className={styles.venueChipsRow}>
@@ -373,14 +477,16 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                             className={styles.venueChipStatus}
                             data-status={PRIVATE_ADAPTER_SPECS[venue].status}
                           >
-                            {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? 'live' : 'TODO'}
+                            {PRIVATE_ADAPTER_SPECS[venue].status === 'available' ? t('live') : 'TODO'}
                           </span>
                           <button
                             type="button"
                             className={styles.venueChipRemove}
                             onClick={() => onRemoveVenue(venue)}
-                            aria-label={venue === 'thalex' ? 'manage thalex keys' : `remove ${venue}`}
-                            title={venue === 'thalex' ? 'Manage Thalex keys' : undefined}
+                            aria-label={
+                              venue === 'thalex' ? t('manageThalexAria') : t('removeVenueAria', { venue })
+                            }
+                            title={venue === 'thalex' ? t('manageThalex') : undefined}
                           >
                             {venue === 'thalex' ? '⚙' : '×'}
                           </button>
@@ -397,21 +503,20 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                       setMode('paste');
                     }}
                   >
-                    + Connect venue
+                    {t('connectVenue')}
                   </button>
                   {hasUnsupportedConfigured && (
                     <div className={styles.warning}>
-                      {unsupportedVenueLabels.join(', ')} private feed
-                      {unsupportedVenueLabels.length === 1 ? '' : 's'} not available yet —
-                      credentials are encrypted on the server but positions won&apos;t appear in the
-                      Portfolio tab. Derive and Thalex are live today.
+                      {t(unsupportedVenueLabels.length === 1 ? 'unsupported_one' : 'unsupported_other', {
+                        venues: unsupportedVenueLabels.join(', '),
+                      })}
                     </div>
                   )}
                 </div>
               )}
               <div className={styles.divider} />
               <div className={styles.section}>
-                <div className={styles.label}>Help</div>
+                <div className={styles.label}>{t('help')}</div>
                 <button
                   type="button"
                   className={styles.menuItem}
@@ -420,7 +525,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                     startTour();
                   }}
                 >
-                  Take the tour
+                  {t('takeTour')}
                 </button>
                 {onOpenShortcuts && (
                   <button
@@ -431,7 +536,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                       onOpenShortcuts();
                     }}
                   >
-                    Keyboard shortcuts <kbd className={styles.kbd}>?</kbd>
+                    {t('keyboardShortcuts')} <kbd className={styles.kbd}>?</kbd>
                   </button>
                 )}
               </div>
@@ -449,10 +554,10 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   setMode('home');
                 }}
               >
-                ← back
+                {t('back')}
               </button>
               <label className={styles.field}>
-                <span>Venue</span>
+                <span>{t('venue')}</span>
                 <select
                   value={pasteTarget}
                   onChange={(e) => setPasteTarget(e.target.value as VenueId)}
@@ -508,7 +613,7 @@ export default function AccountChip({ onOpenShortcuts }: AccountChipProps) {
                   onSubmit={onPasteVenue}
                 />
               )}
-              {busy && <div className={styles.hint}>Connecting…</div>}
+              {busy && <div className={styles.hint}>{t('connecting')}</div>}
               {error != null && <div className={styles.error}>{error}</div>}
             </div>
           )}
@@ -526,6 +631,7 @@ interface VenueCredentialFormProps {
 }
 
 function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredentialFormProps) {
+  const t = useT(messages);
   const spec = PRIVATE_ADAPTER_SPECS[venue];
   return (
     <>
@@ -540,7 +646,7 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
           target="_blank"
           rel="noopener noreferrer"
         >
-          docs ↗
+          {t('docs')}
         </a>
       </div>
       {spec.credentialFields.map((field) => (
@@ -570,7 +676,7 @@ function VenueCredentialForm({ venue, values, onChange, onSubmit }: VenueCredent
         </label>
       ))}
       <button type="button" className={styles.primaryBtn} onClick={onSubmit}>
-        Save {VENUES[venue]?.label ?? venue} keys
+        {t('saveKeys', { venue: VENUES[venue]?.label ?? venue })}
       </button>
     </>
   );
@@ -587,6 +693,7 @@ interface DeriveWalletConnectProps {
 }
 
 function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps) {
+  const t = useT(messages);
   const [step, setStep] = useState<WalletStep>({ kind: 'idle' });
   const sessionRef = useRef<DeriveWalletSession | null>(null);
 
@@ -595,12 +702,12 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
   const fail = (caught: unknown) => {
     sessionRef.current?.cancel();
     sessionRef.current = null;
-    onError(caught instanceof Error ? caught.message : 'Wallet connection failed');
+    onError(caught instanceof Error ? caught.message : t('walletFailed'));
     setStep({ kind: 'idle' });
   };
 
   const authorize = async (session: DeriveWalletSession, subaccountId: number) => {
-    setStep({ kind: 'working', message: 'Approve the read-only key in your wallet…' });
+    setStep({ kind: 'working', message: t('approveKey') });
     try {
       await session.authorize(subaccountId);
       sessionRef.current = null;
@@ -612,7 +719,7 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
 
   const start = async () => {
     onError(null);
-    setStep({ kind: 'working', message: 'Sign in to Derive from your wallet…' });
+    setStep({ kind: 'working', message: t('signInDerive') });
     try {
       const { startDeriveWalletConnect } = await import('@lib/wallet/derive-wallet-connect');
       const session = await startDeriveWalletConnect();
@@ -630,19 +737,18 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
   return (
     <>
       <div className={styles.hint}>
-        Your wallet signs twice: a Derive sign-in, then a read-only key for oggregator. The key can
-        read positions but cannot trade or withdraw, and your wallet key never leaves the wallet.
+        {t('deriveHint')}
       </div>
       {step.kind === 'idle' && (
         <button type="button" className={styles.primaryBtn} onClick={() => void start()}>
-          Connect wallet
+          {t('connectWallet')}
         </button>
       )}
       {step.kind === 'working' && <div className={styles.hint}>{step.message}</div>}
       {step.kind === 'choose' && (
         <>
           <label className={styles.field}>
-            <span>Subaccount</span>
+            <span>{t('subaccount')}</span>
             <select
               value={step.subaccountId}
               onChange={(e) => setStep({ ...step, subaccountId: Number(e.target.value) })}
@@ -659,7 +765,7 @@ function DeriveWalletConnect({ onConnected, onError }: DeriveWalletConnectProps)
             className={styles.primaryBtn}
             onClick={() => void authorize(step.session, step.subaccountId)}
           >
-            Authorize read-only access
+            {t('authorize')}
           </button>
         </>
       )}
@@ -674,6 +780,7 @@ interface ParadexWalletConnectProps {
 }
 
 function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletConnectProps) {
+  const t = useT(messages);
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
@@ -684,7 +791,7 @@ function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletC
       await connectParadexWallet();
       onConnected();
     } catch (caught) {
-      onError(caught instanceof Error ? caught.message : 'Wallet connection failed');
+      onError(caught instanceof Error ? caught.message : t('walletFailed'));
     } finally {
       setBusy(false);
     }
@@ -693,8 +800,7 @@ function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletC
   return (
     <>
       <div className={styles.hint}>
-        Your wallet signs one Paradex sign-in, then Paradex issues a read-only key for oggregator.
-        The key can read positions but cannot trade or withdraw.
+        {t('paradexHint')}
       </div>
       <button
         type="button"
@@ -702,9 +808,9 @@ function ParadexWalletConnect({ onConnected, onError, children }: ParadexWalletC
         disabled={busy}
         onClick={() => void start()}
       >
-        {busy ? 'Waiting for wallet…' : 'Connect wallet'}
+        {busy ? t('waitingWallet') : t('connectWallet')}
       </button>
-      <div className={styles.hint}>Or paste a Paradex read-only key:</div>
+      <div className={styles.hint}>{t('pasteParadex')}</div>
       {children}
     </>
   );

@@ -74,10 +74,14 @@ export const PortfolioAssistantMessagePageSchema = z.object({
 });
 export type PortfolioAssistantMessagePage = z.infer<typeof PortfolioAssistantMessagePageSchema>;
 
+export const PortfolioAssistantLocaleSchema = z.enum(['en', 'es']);
+export type PortfolioAssistantLocale = z.infer<typeof PortfolioAssistantLocaleSchema>;
+
 export const SendPortfolioAssistantMessageRequestSchema = z.object({
   clientMessageId: z.string().uuid(),
   message: z.string().trim().min(1).max(4_000),
   forwardDays: z.number().int().min(0).max(365),
+  locale: PortfolioAssistantLocaleSchema.optional(),
 });
 export type SendPortfolioAssistantMessageRequest = z.infer<
   typeof SendPortfolioAssistantMessageRequestSchema

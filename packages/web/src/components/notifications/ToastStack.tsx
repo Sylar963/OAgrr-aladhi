@@ -1,3 +1,4 @@
+import { defineMessages, useT } from '@lib/i18n';
 import { type Toast, useAppStore } from '@stores/app-store';
 import { useEffect } from 'react';
 
@@ -5,10 +6,13 @@ import styles from './ToastStack.module.css';
 
 const AUTO_DISMISS_MS = 4000;
 
+const messages = defineMessages({ dismiss: 'Dismiss' }, { dismiss: 'Descartar' });
+
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
+  const t = useT(messages);
   useEffect(() => {
-    const t = setTimeout(() => onDismiss(toast.id), AUTO_DISMISS_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => onDismiss(toast.id), AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
   return (
@@ -20,7 +24,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       <button
         type="button"
         className={styles.close}
-        aria-label="Dismiss"
+        aria-label={t('dismiss')}
         onClick={() => onDismiss(toast.id)}
       >
         ✕

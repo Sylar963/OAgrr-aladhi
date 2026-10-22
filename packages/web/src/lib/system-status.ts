@@ -4,6 +4,8 @@ import {
   type SystemAnnouncementSeverity,
 } from '@oggregator/protocol';
 
+import { defineMessages, type Locale, translate } from '@lib/i18n';
+
 const DISMISSED_KEY = 'systemAnnouncementDismissed';
 
 export const SEVERITY_ICON: Record<SystemAnnouncementSeverity, string> = {
@@ -66,13 +68,23 @@ export interface NoticeSelection {
   notice: ActiveNotice | null;
 }
 
-const FEED_DEGRADED_NOTICE: ActiveNotice = {
-  id: null,
-  severity: 'degraded',
-  title: 'Live feed disconnected',
-  message: 'Reconnecting to market data…',
-  dismissible: false,
-};
+const messages = defineMessages(
+  { feedDownTitle: 'Live feed disconnected', feedDownMessage: 'Reconnecting to market data…' },
+  {
+    feedDownTitle: 'Feed en vivo desconectado',
+    feedDownMessage: 'Reconectando a los datos de mercado…',
+  },
+);
+
+function feedDegradedNotice(locale: Locale): ActiveNotice {
+  return {
+    id: null,
+    severity: 'degraded',
+    title: translate(messages, 'feedDownTitle', undefined, locale),
+    message: translate(messages, 'feedDownMessage', undefined, locale),
+    dismissible: false,
+  };
+}
 
 /** Pure decision: which surface (if any) to render right now. */
 export function selectActiveNotice(
@@ -80,6 +92,7 @@ export function selectActiveNotice(
   feedDegraded: boolean,
   dismissedIds: readonly string[],
   now: number,
+  locale: Locale = 'en',
 ): NoticeSelection {
   const candidates: Array<{ surface: 'takeover' | 'banner'; notice: ActiveNotice }> = [];
 
@@ -108,7 +121,7 @@ export function selectActiveNotice(
   }
 
   if (feedDegraded) {
-    candidates.push({ surface: 'banner', notice: FEED_DEGRADED_NOTICE });
+    candidates.push({ surface: 'banner', notice: feedDegradedNotice(locale) });
   }
 
   if (candidates.length === 0) return { surface: null, notice: null };

@@ -15,6 +15,7 @@ import {
 import { chainKeys } from '@features/chain';
 import { fetchJson } from '@lib/http';
 import { formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import type { SpotCandleResolutionSec, SpotCandlesResponse } from '@shared/common';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
@@ -59,6 +60,60 @@ const LINE_SPECS: LineSpec[] = [
   { key: 'otm30', label: '30d 25% OTM strangle', color: '#7dd3fc', style: LineStyle.Dashed },
   { key: 'portfolio', label: 'Portfolio BE', color: '#fbbf24', style: LineStyle.Dotted },
 ];
+
+const messages = defineMessages(
+  {
+    atm0: '0DTE ATM straddle',
+    otm0: '0DTE 25Δ strangle',
+    atm15: '15d ATM straddle',
+    otm15: '15d 25% OTM strangle',
+    atm30: '30d ATM straddle',
+    otm30: '30d 25% OTM strangle',
+    portfolio: 'Portfolio BE',
+    bookIs: 'book is {u}',
+    noBe: 'no BE',
+    loading: 'loading…',
+    unavailable: 'unavailable',
+    taUnderlying: 'TA underlying',
+    candleRange: 'Candle range',
+    beSnapshot: 'BE snapshot {time}',
+    beSnapshotEmpty: 'BE snapshot —',
+    refSpot: ' · ref spot {v}',
+    refreshing: 'Refreshing…',
+    refreshSnapshot: 'Refresh snapshot',
+    loadingSpot: 'Loading {u} spot history…',
+    spotUnavailable: 'Spot history unavailable',
+    retry: 'Retry',
+    expiriesUnavailable: 'Expiries unavailable, so structure break-evens cannot be computed.',
+    hint: 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: Deribit perpetual.',
+  },
+  {
+    atm0: '0DTE straddle ATM',
+    otm0: '0DTE strangle 25Δ',
+    atm15: '15d straddle ATM',
+    otm15: '15d strangle 25% OTM',
+    atm30: '30d straddle ATM',
+    otm30: '30d strangle 25% OTM',
+    portfolio: 'BE del portafolio',
+    bookIs: 'el libro es {u}',
+    noBe: 'sin BE',
+    loading: 'cargando…',
+    unavailable: 'no disponible',
+    taUnderlying: 'Subyacente TA',
+    candleRange: 'Rango de velas',
+    beSnapshot: 'Snapshot BE {time}',
+    beSnapshotEmpty: 'Snapshot BE —',
+    refSpot: ' · spot ref. {v}',
+    refreshing: 'Actualizando…',
+    refreshSnapshot: 'Actualizar snapshot',
+    loadingSpot: 'Cargando historial spot de {u}…',
+    spotUnavailable: 'Historial spot no disponible',
+    retry: 'Reintentar',
+    expiriesUnavailable:
+      'Vencimientos no disponibles, así que no se pueden calcular los breakevens de las estructuras.',
+    hint: 'Los breakevens son un snapshot fijo del vencimiento más cercano (0DTE) y de los vencimientos listados más cercanos a 15d y 30d, valorados al mid mediano entre exchanges. ATM: strike ± costo del straddle. Strangles: strike del put − costo y strike del call + costo, usando los strikes más cercanos a 25% del spot (15d/30d) o al 25Δ más cercano por delta mediana entre exchanges (0DTE). Velas: perpetuo de Deribit.',
+  },
+);
 
 const LINES_STORAGE_KEY = 'portfolioBeTaLines';
 const TIMEFRAME_STORAGE_KEY = 'portfolioBeTaTimeframe';
@@ -197,6 +252,7 @@ export default function BreakevenTaChart({
   portfolioUnderlying,
   portfolioBreakEvensUsd,
 }: Props) {
+  const t = useT(messages);
   const [lines, setLines] = useState(loadLines);
   const [timeframe, setTimeframe] = useState(loadTimeframe);
 
@@ -331,7 +387,7 @@ export default function BreakevenTaChart({
         axisLabelVisible: true,
         title:
           spec.key === 'portfolio'
-            ? 'Portfolio BE'
+            ? t('portfolio')
             : `${spec.label.split(' ').slice(0, 2).join(' ')} ${side === 'upper' ? '▲' : '▼'}${refSpot != null ? ` ${fmtMovePct(price, refSpot)}` : ''}`,
       }),
     );
@@ -350,7 +406,7 @@ export default function BreakevenTaChart({
         };
       },
     });
-  }, [activeLevels, refSpot]);
+  }, [activeLevels, refSpot, t]);
 
   const toggle = (key: LineKey) => {
     setLines((prev) => {
@@ -379,12 +435,15 @@ export default function BreakevenTaChart({
     if (spec.key === 'portfolio') {
       if (portfolioLevels.length > 0) return { text: portfolioLevels.map(fmtLevel).join(' / '), available: true };
       return {
-        text: portfolioUnderlying != null && portfolioUnderlying !== underlying ? `book is ${portfolioUnderlying}` : 'no BE',
+        text:
+          portfolioUnderlying != null && portfolioUnderlying !== underlying
+            ? t('bookIs', { u: portfolioUnderlying })
+            : t('noBe'),
         available: false,
       };
     }
     const s = structures[spec.key];
-    if (s == null) return { text: chainsLoading ? 'loading…' : 'unavailable', available: false };
+    if (s == null) return { text: chainsLoading ? t('loading') : t('unavailable'), available: false };
     const strikes = s.putStrike === s.callStrike ? fmtLevel(s.putStrike) : `${fmtLevel(s.putStrike)}P/${fmtLevel(s.callStrike)}C`;
     return {
       text: `${formatExpiry(s.expiry)} · K ${strikes} · $${fmtLevel(s.premiumUsd)} · ${fmtLevel(s.lowerUsd)} / ${fmtLevel(s.upperUsd)}`,
@@ -395,7 +454,7 @@ export default function BreakevenTaChart({
   return (
     <div className={styles.wrap}>
       <div className={styles.controls}>
-        <div className={styles.group} role="radiogroup" aria-label="TA underlying">
+        <div className={styles.group} role="radiogroup" aria-label={t('taUnderlying')}>
           {TA_UNDERLYINGS.map((u) => (
             <button
               key={u}
@@ -408,25 +467,29 @@ export default function BreakevenTaChart({
             </button>
           ))}
         </div>
-        <div className={styles.group} role="radiogroup" aria-label="Candle range">
-          {(Object.keys(TIMEFRAMES) as Timeframe[]).map((t) => (
+        <div className={styles.group} role="radiogroup" aria-label={t('candleRange')}>
+          {(Object.keys(TIMEFRAMES) as Timeframe[]).map((tf) => (
             <button
-              key={t}
+              key={tf}
               type="button"
               className={styles.tab}
-              data-active={t === timeframe || undefined}
-              onClick={() => selectTimeframe(t)}
+              data-active={tf === timeframe || undefined}
+              onClick={() => selectTimeframe(tf)}
             >
-              {t}
+              {tf}
             </button>
           ))}
         </div>
         <span className={styles.snapshot}>
-          {snapshotAt > 0 ? `BE snapshot ${new Date(snapshotAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'BE snapshot —'}
-          {refSpot != null && ` · ref spot ${fmtLevel(refSpot)}`}
+          {snapshotAt > 0
+            ? t('beSnapshot', {
+                time: new Date(snapshotAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              })
+            : t('beSnapshotEmpty')}
+          {refSpot != null && t('refSpot', { v: fmtLevel(refSpot) })}
         </span>
         <button type="button" className={styles.refresh} onClick={refreshSnapshot} disabled={chainsFetching || chainEntries.length === 0}>
-          {chainsFetching ? 'Refreshing…' : 'Refresh snapshot'}
+          {chainsFetching ? t('refreshing') : t('refreshSnapshot')}
         </button>
       </div>
 
@@ -450,7 +513,7 @@ export default function BreakevenTaChart({
                   borderTopStyle: spec.style === LineStyle.Solid ? 'solid' : spec.style === LineStyle.Dashed ? 'dashed' : 'dotted',
                 }}
               />
-              <span className={styles.chipLabel}>{spec.label}</span>
+              <span className={styles.chipLabel}>{t(spec.key)}</span>
               <span className={styles.chipDetail}>{detail.text}</span>
             </button>
           );
@@ -459,12 +522,12 @@ export default function BreakevenTaChart({
 
       <div className={styles.chartWrap}>
         <div className={styles.canvas} ref={containerRef} />
-        {candlesLoading && <div className={styles.overlay}>Loading {underlying} spot history…</div>}
+        {candlesLoading && <div className={styles.overlay}>{t('loadingSpot', { u: underlying })}</div>}
         {candlesError && (
           <div className={styles.overlay}>
-            <div>Spot history unavailable</div>
+            <div>{t('spotUnavailable')}</div>
             <button type="button" className={styles.refresh} onClick={() => void refetchCandles()}>
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
@@ -472,8 +535,8 @@ export default function BreakevenTaChart({
 
       <div className={styles.hint}>
         {expiriesError
-          ? 'Expiries unavailable, so structure break-evens cannot be computed.'
-          : 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: Deribit perpetual.'}
+          ? t('expiriesUnavailable')
+          : t('hint')}
       </div>
     </div>
   );

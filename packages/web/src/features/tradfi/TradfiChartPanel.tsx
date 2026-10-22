@@ -4,6 +4,7 @@ import {
   InstrumentChart,
   type OptionRight,
 } from '@features/chain';
+import { defineMessages, useT } from '@lib/i18n';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 import styles from './TradfiChartPanel.module.css';
 import { useTradfiAttribution } from './use-tradfi-attribution';
@@ -11,6 +12,29 @@ import { useTradfiCandles } from './use-tradfi-candles';
 
 const INTERVALS: InstrumentCandleInterval[] = ['5m', '15m', '1h', '1d'];
 const RANGES: InstrumentCandleRange[] = ['1d', '7d', '30d', 'max'];
+
+const messages = defineMessages(
+  {
+    close: 'Close',
+    price: 'Price',
+    attribution: 'Attribution',
+    loading: 'loading…',
+    errorRetry: 'error — retry',
+    noCandles: 'No candle history for this strike.',
+    computing: 'computing attribution…',
+    insufficient: 'insufficient option / underlying overlap for this strike + range',
+  },
+  {
+    close: 'Cerrar',
+    price: 'Precio',
+    attribution: 'Atribución',
+    loading: 'cargando…',
+    errorRetry: 'error — reintentar',
+    noCandles: 'Sin historial de velas para este strike.',
+    computing: 'calculando atribución…',
+    insufficient: 'superposición insuficiente entre opción y subyacente para este strike + rango',
+  },
+);
 
 export interface TradfiChartPanelData {
   underlying: string;
@@ -29,6 +53,7 @@ interface Props {
 }
 
 export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
+  const t = useT(messages);
   const { underlying, expiry, strike, type, interval, range, chartMode } = data;
 
   const candles = useTradfiCandles({
@@ -58,7 +83,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
           <span className={styles.cur}> · USD</span>
         </span>
         {onClose && (
-          <button type="button" onClick={onClose} aria-label="Close">
+          <button type="button" onClick={onClose} aria-label={t('close')}>
             ✕
           </button>
         )}
@@ -72,7 +97,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
             data-active={chartMode === 'price' || undefined}
             onClick={() => onPatch({ chartMode: 'price' })}
           >
-            Price
+            {t('price')}
           </button>
           <button
             type="button"
@@ -80,7 +105,7 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
             data-active={chartMode === 'attribution' || undefined}
             onClick={() => onPatch({ chartMode: 'attribution' })}
           >
-            Attribution
+            {t('attribution')}
           </button>
         </div>
         <div className={styles.group}>
@@ -114,10 +139,10 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
       <div className={styles.body}>
         {chartMode === 'price' ? (
           <>
-            {candles.isLoading && !candles.data && <div className={styles.empty}>loading…</div>}
-            {candles.error && <div className={styles.empty}>error — retry</div>}
+            {candles.isLoading && !candles.data && <div className={styles.empty}>{t('loading')}</div>}
+            {candles.error && <div className={styles.empty}>{t('errorRetry')}</div>}
             {candles.data && candles.data.candles.length === 0 && (
-              <div className={styles.empty}>No candle history for this strike.</div>
+              <div className={styles.empty}>{t('noCandles')}</div>
             )}
             {candles.data && candles.data.candles.length > 0 && (
               <InstrumentChart
@@ -129,12 +154,10 @@ export default function TradfiChartPanel({ data, onPatch, onClose }: Props) {
           </>
         ) : (
           <>
-            {attribution.isLoading && <div className={styles.empty}>computing attribution…</div>}
-            {attribution.error && <div className={styles.empty}>error — retry</div>}
+            {attribution.isLoading && <div className={styles.empty}>{t('computing')}</div>}
+            {attribution.error && <div className={styles.empty}>{t('errorRetry')}</div>}
             {attribution.insufficientData && (
-              <div className={styles.empty}>
-                insufficient option / underlying overlap for this strike + range
-              </div>
+              <div className={styles.empty}>{t('insufficient')}</div>
             )}
             {attribution.result && (
               <>

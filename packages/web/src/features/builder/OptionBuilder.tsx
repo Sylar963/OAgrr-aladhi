@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { defineMessages, intlLocale, type Locale, useLocale, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { NormalizedOptionContract } from '@shared/common';
 
@@ -7,6 +8,49 @@ import { contractToExecution } from './build-execution';
 import { computeExecutionCost, rankExecutions } from './compute-execution';
 import type { OrderSide, OptionSide, ExecutionCost, VenueExecution } from './types';
 import styles from './OptionBuilder.module.css';
+
+const messages = defineMessages(
+  {
+    save: 'save {amount} ({pct}%)',
+    best: 'BEST',
+    entryPrice: 'Entry price',
+    premium: 'Premium',
+    spreadCost: 'Spread cost',
+    takerFee: 'Taker fee',
+    avail: '{size} avail',
+    slippageRisk: 'slippage risk',
+    execution: 'Execution',
+    call: 'Call',
+    put: 'Put',
+    buy: 'Buy',
+    sell: 'Sell',
+    qty: 'Qty',
+    noPricing: 'No venue has pricing for this contract',
+    summaryBefore: 'Best execution on ',
+    summaryMid: ' saves',
+    summaryAfter: 'vs worst venue',
+  },
+  {
+    save: 'ahorra {amount} ({pct}%)',
+    best: 'MEJOR',
+    entryPrice: 'Precio de entrada',
+    premium: 'Prima',
+    spreadCost: 'Costo del spread',
+    takerFee: 'Comisión taker',
+    avail: '{size} disp.',
+    slippageRisk: 'riesgo de slippage',
+    execution: 'Ejecución',
+    call: 'Call',
+    put: 'Put',
+    buy: 'Comprar',
+    sell: 'Vender',
+    qty: 'Cant.',
+    noPricing: 'Ningún exchange tiene precio para este contrato',
+    summaryBefore: 'La mejor ejecución en ',
+    summaryMid: ' ahorra',
+    summaryAfter: 'vs el peor exchange',
+  },
+);
 
 interface OptionBuilderProps {
   underlying: string;
@@ -25,9 +69,9 @@ function fmtUsdExec(v: number): string {
   return '$' + v.toFixed(4);
 }
 
-function formatExpiry(iso: string): string {
+function formatExpiry(iso: string, locale: Locale): string {
   const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString('en-US', {
+  return d.toLocaleDateString(intlLocale(locale), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -41,12 +85,13 @@ interface SavingsBadgeProps {
 }
 
 function SavingsBadge({ best, current }: SavingsBadgeProps) {
+  const t = useT(messages);
   if (current <= best) return null;
   const saved = current - best;
   const pctSaved = (saved / current) * 100;
   return (
     <span className={styles.savingsBadge}>
-      save {fmtUsdExec(saved)} ({pctSaved.toFixed(1)}%)
+      {t('save', { amount: fmtUsdExec(saved), pct: pctSaved.toFixed(1) })}
     </span>
   );
 }
@@ -59,6 +104,7 @@ interface ExecutionCardProps {
 }
 
 function ExecutionCard({ exec, rank, bestCost, orderSide }: ExecutionCardProps) {
+  const t = useT(messages);
   const meta = VENUES[exec.venue];
   const isBest = rank === 0;
   const isSell = orderSide === 'sell';
@@ -69,7 +115,7 @@ function ExecutionCard({ exec, rank, bestCost, orderSide }: ExecutionCardProps) 
         <div className={styles.execVenue}>
           {meta && <img src={meta.logo} alt={meta.label} className={styles.execLogo} />}
           <span className={styles.execName}>{meta?.label ?? exec.venue}</span>
-          {isBest && <span className={styles.bestTag}>BEST</span>}
+          {isBest && <span className={styles.bestTag}>{t('best')}</span>}
         </div>
         <span className={isSell ? styles.totalProfit : styles.totalCost}>
           {isSell ? '+' : ''}
@@ -84,19 +130,19 @@ function ExecutionCard({ exec, rank, bestCost, orderSide }: ExecutionCardProps) 
 
       <div className={styles.execBreakdown}>
         <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Entry price</span>
+          <span className={styles.breakdownLabel}>{t('entryPrice')}</span>
           <span className={styles.breakdownValue}>{fmtUsdExec(exec.entryPrice)}</span>
         </div>
         <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Premium</span>
+          <span className={styles.breakdownLabel}>{t('premium')}</span>
           <span className={styles.breakdownValue}>{fmtUsdExec(exec.premiumUsd)}</span>
         </div>
         <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Spread cost</span>
+          <span className={styles.breakdownLabel}>{t('spreadCost')}</span>
           <span className={styles.breakdownValue}>{fmtUsdExec(exec.spreadCostUsd)}</span>
         </div>
         <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Taker fee</span>
+          <span className={styles.breakdownLabel}>{t('takerFee')}</span>
           <span className={styles.breakdownValue}>{fmtUsdExec(exec.feeUsd)}</span>
         </div>
       </div>
@@ -104,10 +150,10 @@ function ExecutionCard({ exec, rank, bestCost, orderSide }: ExecutionCardProps) 
       <div className={styles.execFooter}>
         {exec.sizeAvailable != null && (
           <span className={exec.fillable ? styles.sizeOk : styles.sizeWarn}>
-            {exec.fillable ? '✓' : '⚠'} {exec.sizeAvailable.toFixed(1)} avail
+            {exec.fillable ? '✓' : '⚠'} {t('avail', { size: exec.sizeAvailable.toFixed(1) })}
           </span>
         )}
-        {exec.slippageWarning && <span className={styles.slippageWarn}>slippage risk</span>}
+        {exec.slippageWarning && <span className={styles.slippageWarn}>{t('slippageRisk')}</span>}
       </div>
     </div>
   );
@@ -123,6 +169,8 @@ export default function OptionBuilder({
   underlyingPrice,
   onClose,
 }: OptionBuilderProps) {
+  const t = useT(messages);
+  const locale = useLocale();
   const [optionSide, setOptionSide] = useState<OptionSide>(initialSide);
   const [orderSide, setOrderSide] = useState<OrderSide>('buy');
   const [quantity, setQuantity] = useState(1);
@@ -141,9 +189,9 @@ export default function OptionBuilder({
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <span className={styles.title}>Execution</span>
+          <span className={styles.title}>{t('execution')}</span>
           <span className={styles.contract}>
-            {underlying} · {strike.toLocaleString()} · {formatExpiry(expiry)}
+            {underlying} · {strike.toLocaleString()} · {formatExpiry(expiry, locale)}
           </span>
         </div>
         <button className={styles.closeBtn} onClick={onClose}>
@@ -159,7 +207,7 @@ export default function OptionBuilder({
             data-variant="call"
             onClick={() => setOptionSide('call')}
           >
-            Call
+            {t('call')}
           </button>
           <button
             className={styles.toggleBtn}
@@ -167,7 +215,7 @@ export default function OptionBuilder({
             data-variant="put"
             onClick={() => setOptionSide('put')}
           >
-            Put
+            {t('put')}
           </button>
         </div>
 
@@ -177,19 +225,19 @@ export default function OptionBuilder({
             data-active={orderSide === 'buy'}
             onClick={() => setOrderSide('buy')}
           >
-            Buy
+            {t('buy')}
           </button>
           <button
             className={styles.toggleBtn}
             data-active={orderSide === 'sell'}
             onClick={() => setOrderSide('sell')}
           >
-            Sell
+            {t('sell')}
           </button>
         </div>
 
         <div className={styles.qtyGroup}>
-          <label className={styles.qtyLabel}>Qty</label>
+          <label className={styles.qtyLabel}>{t('qty')}</label>
           <input
             type="number"
             className={styles.qtyInput}
@@ -203,7 +251,7 @@ export default function OptionBuilder({
 
       <div className={styles.execList}>
         {ranked.length === 0 && (
-          <div className={styles.noData}>No venue has pricing for this contract</div>
+          <div className={styles.noData}>{t('noPricing')}</div>
         )}
         {ranked.map((exec, i) => (
           <ExecutionCard
@@ -219,11 +267,13 @@ export default function OptionBuilder({
       {ranked.length >= 2 && (
         <div className={styles.summary}>
           <span className={styles.summaryText}>
-            Best execution on <strong>{VENUES[ranked[0]!.venue]?.label}</strong> saves{' '}
+            {t('summaryBefore')}
+            <strong>{VENUES[ranked[0]!.venue]?.label}</strong>
+            {t('summaryMid')}{' '}
             <strong className={styles.summaryGreen}>
               {fmtUsdExec(ranked[ranked.length - 1]!.totalCostUsd - ranked[0]!.totalCostUsd)}
             </strong>{' '}
-            vs worst venue
+            {t('summaryAfter')}
           </span>
         </div>
       )}

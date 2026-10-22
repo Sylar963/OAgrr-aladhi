@@ -1,9 +1,49 @@
 import { useQuery } from '@tanstack/react-query';
 import { PRIVATE_ADAPTER_SPECS, type VenueId } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { fetchMetrics, venueStatus } from './api';
 import styles from './AlphaPortfolioContext.module.css';
+
+const messages = defineMessages(
+  {
+    aria: 'Existing portfolio exposure',
+    heading: 'Already in your book · {venue}',
+    open: 'Open Portfolio →',
+    unavailable: 'Portfolio unavailable. Open Portfolio to check the connection.',
+    loading: 'Loading portfolio exposure…',
+    connect: 'Connect this venue in Portfolio to see existing exposure here.',
+    noEquity: 'Account equity and free margin are not supplied to this scanner.',
+    openLegs: '{n} open legs',
+    openPnl: 'Open P&L {v}',
+    thetaPerDay: 'Theta {v} / day',
+    stale: 'Stale portfolio snapshot',
+    updated: 'Updated {time}',
+    days: '{n} days',
+    legs: '{n} legs',
+    footer:
+      'New trades add to this exposure. Scanner risk is per trade; it does not approve portfolio margin. Different expiries settle at different prices.',
+  },
+  {
+    aria: 'Exposición existente del portafolio',
+    heading: 'Ya está en tu libro · {venue}',
+    open: 'Abrir Portafolio →',
+    unavailable: 'Portafolio no disponible. Abre Portafolio para revisar la conexión.',
+    loading: 'Cargando exposición del portafolio…',
+    connect: 'Conecta este exchange en Portafolio para ver aquí la exposición existente.',
+    noEquity: 'El equity de la cuenta y el margen libre no se pasan a este escáner.',
+    openLegs: '{n} legs abiertos',
+    openPnl: 'P&L abierto {v}',
+    thetaPerDay: 'Theta {v} / día',
+    stale: 'Snapshot del portafolio desactualizado',
+    updated: 'Actualizado {time}',
+    days: '{n} días',
+    legs: '{n} legs',
+    footer:
+      'Los nuevos trades se suman a esta exposición. El riesgo del escáner es por trade; no aprueba el margen del portafolio. Distintos vencimientos liquidan a distintos precios.',
+  },
+);
 
 const money = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
@@ -15,6 +55,7 @@ export default function AlphaPortfolioContext({
   venue: VenueId;
   underlying: string;
 }) {
+  const t = useT(messages);
   const navigate = useAppStore((s) => s.setActiveTab);
   const supported = PRIVATE_ADAPTER_SPECS[venue].status === 'available';
   const status = useQuery({
@@ -43,45 +84,44 @@ export default function AlphaPortfolioContext({
     navigate('portfolio');
   }
   return (
-    <section className={styles.wrap} aria-label="Existing portfolio exposure">
+    <section className={styles.wrap} aria-label={t('aria')}>
       <div className={styles.heading}>
-        <span>Already in your book · {VENUES[venue]?.label ?? venue}</span>
+        <span>{t('heading', { venue: VENUES[venue]?.label ?? venue })}</span>
         <button type="button" onClick={openPortfolio}>
-          Open Portfolio →
+          {t('open')}
         </button>
       </div>
       {!connected || portfolio.isError || metrics == null ? (
         <p>
           {portfolio.isError || status.isError
-            ? 'Portfolio unavailable. Open Portfolio to check the connection.'
+            ? t('unavailable')
             : connected
-              ? 'Loading portfolio exposure…'
-              : 'Connect this venue in Portfolio to see existing exposure here.'}{' '}
-          Account equity and free margin are not supplied to this scanner.
+              ? t('loading')
+              : t('connect')}{' '}
+          {t('noEquity')}
         </p>
       ) : (
         <>
           <div className={styles.stats}>
-            <span>{positions.length} open legs</span>
-            <span>Open P&L {money(metrics.totals.unrealizedPnlUsd)}</span>
-            <span>Theta {money(metrics.totals.netThetaUsd)} / day</span>
+            <span>{t('openLegs', { n: positions.length })}</span>
+            <span>{t('openPnl', { v: money(metrics.totals.unrealizedPnlUsd) })}</span>
+            <span>{t('thetaPerDay', { v: money(metrics.totals.netThetaUsd) })}</span>
             <span>
               {stale
-                ? 'Stale portfolio snapshot'
-                : 'Updated ' + new Date(metrics.generatedAt).toLocaleTimeString()}
+                ? t('stale')
+                : t('updated', { time: new Date(metrics.generatedAt).toLocaleTimeString() })}
             </span>
           </div>
           {metrics.byExpiry.map((bucket) => (
             <div className={styles.row} key={bucket.expiry}>
               <strong>{bucket.expiry}</strong>
-              <span>{bucket.dte.toFixed(1)} days</span>
-              <span>{positions.filter((p) => p.expiry === bucket.expiry).length} legs</span>
-              <span>Theta {money(bucket.theta)} / day</span>
+              <span>{t('days', { n: bucket.dte.toFixed(1) })}</span>
+              <span>{t('legs', { n: positions.filter((p) => p.expiry === bucket.expiry).length })}</span>
+              <span>{t('thetaPerDay', { v: money(bucket.theta) })}</span>
             </div>
           ))}
           <p>
-            New trades add to this exposure. Scanner risk is per trade; it does not approve
-            portfolio margin. Different expiries settle at different prices.
+            {t('footer')}
           </p>
         </>
       )}

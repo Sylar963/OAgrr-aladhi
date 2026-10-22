@@ -2,9 +2,45 @@ import { useMemo } from 'react';
 
 import { VENUES } from '@lib/venue-meta';
 import { fmtUsd } from '@lib/format';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import type { HistoryRange, HistorySummary } from './queries';
 import DateRangePicker from './DateRangePicker';
 import styles from './HistoryControls.module.css';
+
+const messages = defineMessages(
+  {
+    notice: 'Experimental history. Counts and venue coverage are not guaranteed yet.',
+    trades: 'Trades',
+    premium: 'Premium',
+    notional: 'Notional',
+    window: 'Window',
+    prev: 'Prev',
+    next: 'Next',
+    page: 'Page {page}',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    last7d: '7D',
+    last30d: '30D',
+    custom: 'Custom',
+    noData: 'No data',
+  },
+  {
+    notice: 'Historial experimental. Los conteos y la cobertura de exchanges aún no están garantizados.',
+    trades: 'Trades',
+    premium: 'Prima',
+    notional: 'Nocional',
+    window: 'Período',
+    prev: 'Ant.',
+    next: 'Sig.',
+    page: 'Página {page}',
+    today: 'Hoy',
+    yesterday: 'Ayer',
+    last7d: '7D',
+    last30d: '30D',
+    custom: 'Personalizado',
+    noData: 'Sin datos',
+  },
+);
 
 export type HistoryPreset = 'today' | 'yesterday' | 'last7d' | 'last30d' | 'custom';
 
@@ -41,6 +77,7 @@ export function HistoryControls({
   onPreviousPage,
   onNextPage,
 }: HistoryControlsProps) {
+  const t = useT(messages);
   const venueSummary = useMemo(() => {
     if (!summary) return [];
     return summary.venues.filter((venue) => activeVenues.includes(venue.venue));
@@ -51,7 +88,7 @@ export function HistoryControls({
       <div className={styles.notice} role="note">
         <span className={styles.noticeDot} />
         <span className={styles.noticeText}>
-          Experimental history. Counts and venue coverage are not guaranteed yet.
+          {t('notice')}
         </span>
       </div>
 
@@ -65,7 +102,7 @@ export function HistoryControls({
                 data-active={preset === value}
                 onClick={() => onPresetChange(value)}
               >
-                {getPresetLabel(value)}
+                {t(value)}
               </button>
             ))}
           </div>
@@ -78,18 +115,18 @@ export function HistoryControls({
 
       <div className={styles.summaryGrid}>
         <SummaryCard
-          label="Trades"
+          label={t('trades')}
           value={isSummaryLoading ? '…' : formatCount(summary?.count ?? 0)}
         />
         <SummaryCard
-          label="Premium"
+          label={t('premium')}
           value={isSummaryLoading ? '…' : formatMoney(summary?.premiumUsd ?? 0)}
         />
         <SummaryCard
-          label="Notional"
+          label={t('notional')}
           value={isSummaryLoading ? '…' : formatMoney(summary?.notionalUsd ?? 0)}
         />
-        <SummaryCard label="Window" value={formatWindowLabel(summary, range)} />
+        <SummaryCard label={t('window')} value={formatWindowLabel(summary, range, t)} />
       </div>
 
       <div className={styles.metaRow}>
@@ -114,15 +151,15 @@ export function HistoryControls({
             onClick={onPreviousPage}
             disabled={!hasPreviousPage || isPageLoading}
           >
-            Prev
+            {t('prev')}
           </button>
-          <span className={styles.pageLabel}>Page {page}</span>
+          <span className={styles.pageLabel}>{t('page', { page })}</span>
           <button
             className={styles.pageBtn}
             onClick={onNextPage}
             disabled={!hasNextPage || isPageLoading}
           >
-            Next
+            {t('next')}
           </button>
         </div>
       </div>
@@ -139,14 +176,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getPresetLabel(preset: HistoryPreset): string {
-  if (preset === 'today') return 'Today';
-  if (preset === 'yesterday') return 'Yesterday';
-  if (preset === 'last7d') return '7D';
-  if (preset === 'last30d') return '30D';
-  return 'Custom';
-}
-
 function formatCount(count: number): string {
   return count.toLocaleString('en-US');
 }
@@ -155,14 +184,18 @@ function formatMoney(value: number): string {
   return value > 0 ? fmtUsd(value) : '—';
 }
 
-function formatWindowLabel(summary: HistorySummary | undefined, range: HistoryRange): string {
+function formatWindowLabel(
+  summary: HistorySummary | undefined,
+  range: HistoryRange,
+  t: Translate<typeof messages.en>,
+): string {
   if (summary?.oldestTs && summary?.newestTs) {
     return `${formatIsoLabel(summary.oldestTs)} → ${formatIsoLabel(summary.newestTs)}`;
   }
   if (range.start && range.end) {
     return `${formatIsoLabel(range.start)} → ${formatIsoLabel(new Date(new Date(range.end).getTime() - 1).toISOString())}`;
   }
-  return 'No data';
+  return t('noData');
 }
 
 function formatIsoLabel(value: string): string {

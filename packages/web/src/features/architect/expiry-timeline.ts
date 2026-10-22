@@ -1,6 +1,22 @@
+import { defineMessages, getLocale, translate, type Locale } from '@lib/i18n';
+
 import type { SpotCandle } from './queries';
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const MONTHS: Record<Locale, readonly string[]> = {
+  en: ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'],
+  es: ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'],
+};
+
+const messages = defineMessages(
+  {
+    expiryMark: 'EXP {date} · {left}',
+    breakevenCrossing: 'BE {date} · {left} left',
+  },
+  {
+    expiryMark: 'VTO {date} · {left}',
+    breakevenCrossing: 'BE {date} · quedan {left}',
+  },
+);
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;
 
@@ -19,9 +35,9 @@ export function expiryTimeMs(expiry: string, market: 'crypto' | 'tradfi'): numbe
   return Date.parse(`${expiry}T${market === 'tradfi' ? '21' : '08'}:00:00Z`);
 }
 
-export function fmtDayMonth(ms: number): string {
+export function fmtDayMonth(ms: number, locale: Locale = getLocale()): string {
   const d = new Date(ms);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  return `${d.getUTCDate()} ${MONTHS[locale][d.getUTCMonth()]}`;
 }
 
 export function fmtTimeLeft(ms: number): string {
@@ -34,6 +50,7 @@ export function buildExpiryMarks(
   expiries: readonly string[],
   market: 'crypto' | 'tradfi',
   nowMs: number,
+  locale: Locale = getLocale(),
 ): ExpiryMark[] {
   const times = [...new Set(expiries.filter(Boolean))]
     .map((e) => expiryTimeMs(e, market))
@@ -41,7 +58,12 @@ export function buildExpiryMarks(
     .sort((a, b) => a - b);
   return times.map((expiryMs, i) => ({
     expiryMs,
-    label: `EXP ${fmtDayMonth(expiryMs)} · ${fmtTimeLeft(expiryMs - nowMs)}`,
+    label: translate(
+      messages,
+      'expiryMark',
+      { date: fmtDayMonth(expiryMs, locale), left: fmtTimeLeft(expiryMs - nowMs) },
+      locale,
+    ),
     nearest: i === 0,
   }));
 }
@@ -54,6 +76,7 @@ export function findBreakevenCrossing(
   candles: readonly SpotCandle[],
   breakevens: readonly number[],
   expiryMs: number,
+  locale: Locale = getLocale(),
 ): BreakevenCrossing | null {
   if (candles.length === 0 || breakevens.length === 0) return null;
   const start = candles[0]!.open;
@@ -64,7 +87,15 @@ export function findBreakevenCrossing(
     if (crossed) {
       return {
         timestamp: candle.timestamp,
-        label: `BE ${fmtDayMonth(candle.timestamp)} · ${fmtTimeLeft(expiryMs - candle.timestamp)} left`,
+        label: translate(
+          messages,
+          'breakevenCrossing',
+          {
+            date: fmtDayMonth(candle.timestamp, locale),
+            left: fmtTimeLeft(expiryMs - candle.timestamp),
+          },
+          locale,
+        ),
       };
     }
   }

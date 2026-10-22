@@ -10,6 +10,7 @@ import {
 } from '@features/builder/round-trip';
 import type { VenueExecution } from '@features/builder/types';
 import { fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@oggregator/protocol';
 import type { EnrichedChainResponse } from '@shared/enriched';
@@ -66,13 +67,84 @@ export function buildVenueExecution(
   };
 }
 
-const BADGE_LABEL: Record<StrategyBadge, string> = {
-  ok: 'OK',
-  elevated: 'ELEVATED',
-  high: 'HIGH',
-  excessive: 'EXCESSIVE',
-  unroutable: 'UNROUTABLE',
-};
+const messages = defineMessages(
+  {
+    badge_ok: 'OK',
+    badge_elevated: 'ELEVATED',
+    badge_high: 'HIGH',
+    badge_excessive: 'EXCESSIVE',
+    badge_unroutable: 'UNROUTABLE',
+    title: 'Venue Comparison',
+    legs_one: '{n} leg',
+    legs_other: '{n} legs',
+    netEntry: 'Net entry',
+    roundTrip: 'Round-trip',
+    na: 'N/A',
+    entryOnly: 'ENTRY ONLY',
+    worstLeg: 'Worst leg:',
+    perBaseUnit: '{value}/base unit',
+    unroutable:
+      'One or more legs have no quote on the pinned venue. Pick another venue or check market data.',
+    singleRouteRanking: 'Single-route ranking',
+    rt: 'RT {value}',
+    entryFees: 'entry {entry} · fees {fees}',
+    notAvailable: 'Not available',
+    selectedVenue: 'Selected single-route venue: {venue}',
+    pinAll: 'Pin every leg to {venue}',
+    perLegRouting: 'Per-leg routing',
+    resetToAuto: 'Reset to auto',
+    buy: 'BUY',
+    sell: 'SELL',
+    baseQty: '{n} base',
+    venue: 'Venue',
+    bid: 'Bid',
+    bidSize: 'BidSize',
+    ask: 'Ask',
+    askSize: 'AskSize',
+    rtHead: 'RT',
+    noQuotes: 'No venue quotes for this leg',
+    sending: 'Sending…',
+    sendPinned: 'Send to paper (pinned routing)',
+  },
+  {
+    badge_ok: 'OK',
+    badge_elevated: 'ELEVADO',
+    badge_high: 'ALTO',
+    badge_excessive: 'EXCESIVO',
+    badge_unroutable: 'SIN RUTA',
+    title: 'Comparación de exchanges',
+    legs_one: '{n} pata',
+    legs_other: '{n} patas',
+    netEntry: 'Entrada neta',
+    roundTrip: 'Ida y vuelta',
+    na: 'N/D',
+    entryOnly: 'SOLO ENTRADA',
+    worstLeg: 'Peor pata:',
+    perBaseUnit: '{value}/unidad base',
+    unroutable:
+      'Una o más patas no tienen cotización en el exchange fijado. Elige otro exchange o revisa los datos de mercado.',
+    singleRouteRanking: 'Ranking de ruta única',
+    rt: 'RT {value}',
+    entryFees: 'entrada {entry} · comisiones {fees}',
+    notAvailable: 'No disponible',
+    selectedVenue: 'Exchange de ruta única seleccionado: {venue}',
+    pinAll: 'Fijar todas las patas a {venue}',
+    perLegRouting: 'Ruteo por pata',
+    resetToAuto: 'Volver a auto',
+    buy: 'COMPRA',
+    sell: 'VENTA',
+    baseQty: '{n} base',
+    venue: 'Exchange',
+    bid: 'Bid',
+    bidSize: 'Tam. bid',
+    ask: 'Ask',
+    askSize: 'Tam. ask',
+    rtHead: 'RT',
+    noQuotes: 'Sin cotizaciones de exchanges para esta pata',
+    sending: 'Enviando…',
+    sendPinned: 'Enviar a paper (ruteo fijado)',
+  },
+);
 
 function fmtSize(v: number | null): string {
   if (v == null) return '?';
@@ -90,6 +162,7 @@ export default function VenueSlideover({
   onSendToPaper,
   isSending,
 }: VenueSlideoverProps) {
+  const t = useT(messages);
   const [expandedVenue, setExpandedVenue] = useState<string | null>(null);
   const [routing, setRouting] = useState<StrategyRouting>({ legs: {} });
 
@@ -217,9 +290,9 @@ export default function VenueSlideover({
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <span className={styles.headerTitle}>Venue Comparison</span>
+          <span className={styles.headerTitle}>{t('title')}</span>
           <span className={styles.headerMeta}>
-            {strategyName} · {legs.length} leg{legs.length !== 1 ? 's' : ''}
+            {strategyName} · {t(legs.length !== 1 ? 'legs_other' : 'legs_one', { n: legs.length })}
             {strategyExpiry ? ` · ${formatExpiry(strategyExpiry)}` : ''}
           </span>
         </div>
@@ -232,7 +305,7 @@ export default function VenueSlideover({
         <div className={styles.summary} data-class={strategy.strategyClassification}>
           <div className={styles.summaryTopRow}>
             <div className={styles.summaryCol}>
-              <span className={styles.summaryLabel}>Net entry</span>
+              <span className={styles.summaryLabel}>{t('netEntry')}</span>
               <span
                 className={styles.summaryVal}
                 data-positive={strategy.netEntryUsd > 0 || undefined}
@@ -243,20 +316,20 @@ export default function VenueSlideover({
               </span>
             </div>
             <div className={styles.summaryCol}>
-              <span className={styles.summaryLabel}>Round-trip</span>
+              <span className={styles.summaryLabel}>{t('roundTrip')}</span>
               <span className={styles.summaryVal} data-rt-class={strategy.strategyClassification}>
-                {strategy.roundTripComplete ? fmtUsd(strategy.totalRoundTripUsd) : 'N/A'}
+                {strategy.roundTripComplete ? fmtUsd(strategy.totalRoundTripUsd) : t('na')}
               </span>
             </div>
             <span className={styles.viabilityBadge} data-class={strategy.strategyClassification}>
               {strategy.roundTripComplete
-                ? BADGE_LABEL[strategy.strategyClassification]
-                : 'ENTRY ONLY'}
+                ? t(`badge_${strategy.strategyClassification}`)
+                : t('entryOnly')}
             </span>
           </div>
           {strategy.worstLeg?.classification && legs.length > 1 && (
             <div className={styles.worstLegRow}>
-              Worst leg:{' '}
+              {t('worstLeg')}{' '}
               <span className={styles.worstLegMeta}>
                 {(() => {
                   const wl = legs.find((l) => l.id === strategy.worstLeg!.legId);
@@ -264,23 +337,22 @@ export default function VenueSlideover({
                   return `${wl.direction === 'buy' ? 'B' : 'S'} ${wl.strike.toLocaleString()} ${wl.type === 'call' ? 'C' : 'P'} / ${VENUES[strategy.worstLeg.venue]?.label ?? strategy.worstLeg.venue}`;
                 })()}
               </span>{' '}
-              = {fmtUsd(strategy.worstLeg.roundTripPerBase ?? 0)}/base unit{' '}
+              = {t('perBaseUnit', { value: fmtUsd(strategy.worstLeg.roundTripPerBase ?? 0) })}{' '}
               <span data-class={strategy.worstLeg.classification} className={styles.worstLegBadge}>
-                {BADGE_LABEL[strategy.worstLeg.classification]}
+                {t(`badge_${strategy.worstLeg.classification}`)}
               </span>
             </div>
           )}
           {!strategy.routable && (
             <div className={styles.unroutableNote}>
-              One or more legs have no quote on the pinned venue. Pick another venue or check market
-              data.
+              {t('unroutable')}
             </div>
           )}
         </div>
       )}
 
       <div className={styles.list}>
-        <div className={styles.sectionHeader}>Single-route ranking</div>
+        <div className={styles.sectionHeader}>{t('singleRouteRanking')}</div>
         {sortedVenues.map((vc, i) => {
           const meta = VENUES[vc.venue];
           const isExpanded = expandedVenue === vc.venue;
@@ -311,15 +383,19 @@ export default function VenueSlideover({
                   {vc.available ? (
                     <>
                       <span className={styles.venueRt} data-class={vc.classification}>
-                        RT {vc.roundTripComplete ? fmtUsd(vc.totalRoundTripUsd) : 'N/A'}
+                        {t('rt', {
+                          value: vc.roundTripComplete ? fmtUsd(vc.totalRoundTripUsd) : t('na'),
+                        })}
                       </span>
                       <span className={styles.venueSub}>
-                        entry {fmtUsd(vc.netEntryUsd)} · fees{' '}
-                        {fmtUsd(vc.totalEntryFeesUsd + vc.totalExitFeesUsd)}
+                        {t('entryFees', {
+                          entry: fmtUsd(vc.netEntryUsd),
+                          fees: fmtUsd(vc.totalEntryFeesUsd + vc.totalExitFeesUsd),
+                        })}
                       </span>
                     </>
                   ) : (
-                    <span className={styles.venueUnavail}>Not available</span>
+                    <span className={styles.venueUnavail}>{t('notAvailable')}</span>
                   )}
                 </div>
 
@@ -335,24 +411,26 @@ export default function VenueSlideover({
       {expandedVenueSummary?.available && (
         <div className={styles.listAction}>
           <span className={styles.listActionLabel}>
-            Selected single-route venue:{' '}
-            {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+            {t('selectedVenue', {
+              venue: VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue,
+            })}
           </span>
           <button
             className={styles.useAllBtn}
             onClick={() => pinAllToVenue(expandedVenueSummary.venue)}
           >
-            Pin every leg to{' '}
-            {VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue}
+            {t('pinAll', {
+              venue: VENUES[expandedVenueSummary.venue]?.label ?? expandedVenueSummary.venue,
+            })}
           </button>
         </div>
       )}
 
       <div className={styles.legsSection}>
         <div className={styles.legsSectionHead}>
-          <span className={styles.sectionHeader}>Per-leg routing</span>
+          <span className={styles.sectionHeader}>{t('perLegRouting')}</span>
           <button className={styles.resetBtn} onClick={resetToAuto}>
-            Reset to auto
+            {t('resetToAuto')}
           </button>
         </div>
         {legs.map((leg) => {
@@ -366,9 +444,11 @@ export default function VenueSlideover({
             <div key={leg.id} className={styles.legBlock}>
               <div className={styles.legBlockHead}>
                 <span data-direction={leg.direction} className={styles.legBlockDir}>
-                  {leg.direction === 'buy' ? 'BUY' : 'SELL'}
+                  {leg.direction === 'buy' ? t('buy') : t('sell')}
                 </span>
-                <span className={styles.legBlockQty}>{leg.quantity * (leg.contractMultiplier ?? 1)} base</span>
+                <span className={styles.legBlockQty}>
+                  {t('baseQty', { n: leg.quantity * (leg.contractMultiplier ?? 1) })}
+                </span>
                 <span className={styles.legBlockStrike}>{leg.strike.toLocaleString()}</span>
                 <span data-type={leg.type} className={styles.legBlockType}>
                   {leg.type === 'call' ? 'C' : 'P'}
@@ -378,16 +458,16 @@ export default function VenueSlideover({
 
               <div className={styles.legTable}>
                 <div className={styles.legTableHead}>
-                  <span>Venue</span>
+                  <span>{t('venue')}</span>
                   <span data-side="bid" data-active={crossedSide === 'bid' || undefined}>
-                    Bid
+                    {t('bid')}
                   </span>
-                  <span>BidSize</span>
+                  <span>{t('bidSize')}</span>
                   <span data-side="ask" data-active={crossedSide === 'ask' || undefined}>
-                    Ask
+                    {t('ask')}
                   </span>
-                  <span>AskSize</span>
-                  <span>RT</span>
+                  <span>{t('askSize')}</span>
+                  <span>{t('rtHead')}</span>
                 </div>
                 {quotes.map((q) => {
                   const meta = VENUES[q.venue];
@@ -434,7 +514,7 @@ export default function VenueSlideover({
                   );
                 })}
                 {quotes.length === 0 && (
-                  <div className={styles.legTableEmpty}>No venue quotes for this leg</div>
+                  <div className={styles.legTableEmpty}>{t('noQuotes')}</div>
                 )}
               </div>
             </div>
@@ -449,7 +529,7 @@ export default function VenueSlideover({
             disabled={!strategy?.routable || isSending}
             onClick={handleSendToPaper}
           >
-            {isSending ? 'Sending…' : 'Send to paper (pinned routing)'}
+            {isSending ? t('sending') : t('sendPinned')}
           </button>
         </div>
       )}

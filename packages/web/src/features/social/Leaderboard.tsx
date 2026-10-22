@@ -1,16 +1,63 @@
 import { EmptyState, Spinner } from '@components/ui';
 import { fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import type { LeaderboardPeriod } from '@oggregator/protocol';
 import { useState } from 'react';
 
 import { useLeaderboard } from './hooks/queries';
+import { socialMessages } from './i18n';
 import styles from './Leaderboard.module.css';
 import VenueTag from './VenueTag';
 
-const PERIODS: ReadonlyArray<{ id: LeaderboardPeriod; label: string }> = [
-  { id: 'all', label: 'All time' },
-  { id: '30d', label: '30D' },
-  { id: '7d', label: '7D' },
+const messages = defineMessages(
+  {
+    title: 'Leaderboard',
+    periodAll: 'All time',
+    period30d: '30D',
+    period7d: '7D',
+    updated: 'Venue account equity · updated',
+    loading: 'Loading leaderboard…',
+    unavailable: 'Leaderboard unavailable',
+    emptyTitle: 'No ranked traders yet',
+    emptyDetail:
+      'Members appear once their chosen venue account is connected and reports equity history.',
+    trader: 'Trader',
+    venue: 'Venue',
+    return: 'Return',
+    pnl: 'PnL',
+    equity: 'Equity',
+    open: 'Open',
+    sharingSince: 'Sharing since {date}',
+    measuredFrom: 'Measured from {date}',
+    asOf: 'As of {date}',
+  },
+  {
+    title: 'Ranking',
+    periodAll: 'Histórico',
+    period30d: '30D',
+    period7d: '7D',
+    updated: 'Equity de la cuenta del exchange · actualizado',
+    loading: 'Cargando ranking…',
+    unavailable: 'Ranking no disponible',
+    emptyTitle: 'Aún no hay traders en el ranking',
+    emptyDetail:
+      'Los miembros aparecen cuando la cuenta del exchange elegida está conectada y reporta historial de equity.',
+    trader: 'Trader',
+    venue: 'Exchange',
+    return: 'Retorno',
+    pnl: 'PnL',
+    equity: 'Equity',
+    open: 'Abiertas',
+    sharingSince: 'Comparte desde {date}',
+    measuredFrom: 'Medido desde {date}',
+    asOf: 'Al {date}',
+  },
+);
+
+const PERIODS: ReadonlyArray<{ id: LeaderboardPeriod; label: keyof typeof messages.en }> = [
+  { id: 'all', label: 'periodAll' },
+  { id: '30d', label: 'period30d' },
+  { id: '7d', label: 'period7d' },
 ];
 
 function fmtReturn(fraction: number): string {
@@ -35,13 +82,15 @@ interface LeaderboardProps {
 }
 
 export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardProps) {
+  const t = useT(messages);
+  const ts = useT(socialMessages);
   const [period, setPeriod] = useState<LeaderboardPeriod>('all');
   const { data, isLoading, isError } = useLeaderboard(period);
 
   return (
     <section className={styles.board}>
       <header className={styles.header}>
-        <h2 className={styles.title}>Leaderboard</h2>
+        <h2 className={styles.title}>{t('title')}</h2>
         <div className={styles.periods} role="tablist">
           {PERIODS.map((p) => (
             <button
@@ -52,13 +101,13 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
               data-active={p.id === period}
               onClick={() => setPeriod(p.id)}
             >
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
         {data && (
           <span className={styles.updated}>
-            Venue account equity · updated{' '}
+            {t('updated')}{' '}
             {new Date(data.generatedAt).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -69,25 +118,25 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
 
       <div className={styles.tableWrap}>
         {isLoading ? (
-          <Spinner size="md" label="Loading leaderboard…" />
+          <Spinner size="md" label={t('loading')} />
         ) : isError ? (
-          <EmptyState title="Leaderboard unavailable" detail="Try again in a moment." />
+          <EmptyState title={t('unavailable')} detail={ts('tryAgain')} />
         ) : !data || data.entries.length === 0 ? (
           <EmptyState
-            title="No ranked traders yet"
-            detail="Members appear once their chosen venue account is connected and reports equity history."
+            title={t('emptyTitle')}
+            detail={t('emptyDetail')}
           />
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
                 <th className={styles.rank}>#</th>
-                <th>Trader</th>
-                <th>Venue</th>
-                <th className={styles.num}>Return</th>
-                <th className={styles.num}>PnL</th>
-                <th className={styles.num}>Equity</th>
-                <th className={styles.num}>Open</th>
+                <th>{t('trader')}</th>
+                <th>{t('venue')}</th>
+                <th className={styles.num}>{t('return')}</th>
+                <th className={styles.num}>{t('pnl')}</th>
+                <th className={styles.num}>{t('equity')}</th>
+                <th className={styles.num}>{t('open')}</th>
               </tr>
             </thead>
             <tbody>
@@ -107,7 +156,9 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   </td>
                   <td
                     className={styles.trader}
-                    title={`Sharing since ${new Date(entry.sharingSince).toLocaleDateString()}`}
+                    title={t('sharingSince', {
+                      date: new Date(entry.sharingSince).toLocaleDateString(),
+                    })}
                   >
                     <button
                       className={styles.traderBtn}
@@ -118,7 +169,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                     >
                       @{entry.handle}
                     </button>
-                    {entry.isMe && <span className={styles.youTag}>you</span>}
+                    {entry.isMe && <span className={styles.youTag}>{ts('you')}</span>}
                   </td>
                   <td>
                     <VenueTag venue={entry.venue} />
@@ -126,7 +177,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   <td
                     className={styles.num}
                     data-tone={tone(entry.returnPct)}
-                    title={`Measured from ${new Date(entry.since).toLocaleDateString()}`}
+                    title={t('measuredFrom', { date: new Date(entry.since).toLocaleDateString() })}
                   >
                     {fmtReturn(entry.returnPct)}
                   </td>
@@ -135,7 +186,7 @@ export default function Leaderboard({ selectedHandle, onSelect }: LeaderboardPro
                   </td>
                   <td
                     className={styles.num}
-                    title={`As of ${new Date(entry.equityAsOf).toLocaleDateString()}`}
+                    title={t('asOf', { date: new Date(entry.equityAsOf).toLocaleDateString() })}
                   >
                     {fmtUsd(entry.equityUsd)}
                   </td>

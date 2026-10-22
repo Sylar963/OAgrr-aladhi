@@ -4,10 +4,12 @@ import type { EnrichedChainResponse } from '@shared/enriched';
 import type { SpotCandleCurrency } from '@shared/common';
 
 import InfoTip from '@components/ui/InfoTip';
+import { useT } from '@lib/i18n';
 
 import styles from '../AnalyticsView.module.css';
 import OiByStrikeChart from './OiByStrikeChart';
 import OiHeatmap from './OiHeatmap';
+import { oiMessages } from './i18n';
 import { computeMaxPain } from './oi-heatmap-utils';
 
 type Version = 'v1' | 'v2';
@@ -23,6 +25,7 @@ function isHeatmapCurrency(c: string): c is SpotCandleCurrency {
 }
 
 export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
+  const t = useT(oiMessages);
   const [version, setVersion] = useState<Version>('v1');
   const maxPain = useMemo(() => computeMaxPain(chains), [chains]);
   const v2Available = isHeatmapCurrency(currency);
@@ -31,7 +34,7 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
   return (
     <div className={`${styles.card} ${styles.oiCardRelative}`}>
       <div className={styles.oiHeader}>
-        <div className={styles.cardTitle}>Open Interest by Strike</div>
+        <div className={styles.cardTitle}>{t('title')}</div>
         <div className={styles.oiControls}>
           <div className={styles.oiToggle}>
             <button
@@ -46,53 +49,54 @@ export default function OiByStrikeCard({ chains, spotPrice, currency }: Props) {
               data-active={effectiveVersion === 'v2' || undefined}
               onClick={() => v2Available && setVersion('v2')}
               disabled={!v2Available}
-              title={v2Available ? undefined : 'V2 supports BTC/ETH/HYPE only'}
+              title={v2Available ? undefined : t('v2Unsupported')}
             >
               V2
             </button>
           </div>
           {effectiveVersion === 'v2' && (
-            <InfoTip label="V2 OI Heatmap" title="V2 — EM-Anchored OI Heatmap" align="end">
+            <InfoTip label={t('v2Label')} title={t('v2Title')} align="end">
               <p>
-                <strong>OI profile:</strong> bars show OI at significant strikes
-                (contracts or notional; calls green, puts red). Legend toggles
-                expiries. Dashed yellow <strong>MP</strong> = max pain.
+                <strong>{t('profileHead')}</strong>
+                {t('profileA')}
+                <strong>{t('profileMp')}</strong>
+                {t('profileB')}
               </p>
               <p>
-                <strong>EM cone:</strong> one expiry, chosen in
-                <strong> Cone</strong> (defaults to nearest). Fans from spot to
-                <strong> ±1σ</strong> (dense) and <strong>±2σ</strong> (faint)
-                at expiry. EM = ATM straddle mid ×1.25. Falls back to ATM IV when
-                the spread exceeds 5% of mid or the straddle deviates over 50%
-                from IV — shown as a dashed outline and <code>·iv</code> tag.
+                <strong>{t('coneHead')}</strong>
+                {t('coneA')}
+                <strong>{t('coneSel')}</strong>
+                {t('coneB')}
+                <strong>{t('cone1')}</strong>
+                {t('coneC')}
+                <strong>{t('cone2')}</strong>
+                {t('coneD')}
+                <code>·iv</code>
+                {t('coneE')}
               </p>
               <p>
-                <strong>A3</strong> (default): top 5 OI strikes per expiry within ±2σ.
+                <strong>A3</strong>
+                {t('a3')}
                 <br />
-                <strong>A4 BETA</strong>: strikes within ±2σ whose |GEX| exceeds
-                mean + 1.5σ. Green = dealers long gamma (pinning), red = short
-                gamma (acceleration). Adds γ flip and call/put walls. Uses tracked
-                dealer inventory, else assumes dealers long calls / short puts.
-                Label <strong>%</strong> = gamma share signed by observed taker
-                flow; faded bars rely on the assumption. Block trades excluded.
+                <strong>A4 BETA</strong>
+                {t('a4')}
+                <strong>%</strong>
+                {t('a4b')}
               </p>
               <p>
-                <strong>Block bubbles:</strong> block-trade volume per strike per
-                candle; size scales with volume, colour shows call/put dominance.
+                <strong>{t('bubblesHead')}</strong>
+                {t('bubbles')}
               </p>
               <p>
-                <strong>Timeframes:</strong> 5m (1d/3d), 30m (7d), 1h (30d), 4h
-                (90d); about 3 windows of history to scroll back.
+                <strong>{t('timeframesHead')}</strong>
+                {t('timeframes')}
               </p>
-              <p>
-                Hover a strike for EM zone, venue/expiry breakdown, session
-                OI sparkline. BTC, ETH, and HYPE only.
-              </p>
+              <p>{t('hoverNote')}</p>
             </InfoTip>
           )}
           {maxPain != null && (
             <div className={styles.maxPainBadge}>
-              Max Pain: <strong>{maxPain.toLocaleString()}</strong>
+              {t('maxPainBadge')} <strong>{maxPain.toLocaleString()}</strong>
             </div>
           )}
         </div>

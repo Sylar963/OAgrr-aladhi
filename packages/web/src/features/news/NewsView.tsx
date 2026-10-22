@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Spinner } from '@components/ui';
+import { defineMessages, type Translate, useLocale, useT } from '@lib/i18n';
 
 import type { NewsPin } from '@oggregator/protocol';
 
@@ -22,6 +23,79 @@ import {
   usePinMutation,
 } from './queries';
 import styles from './NewsView.module.css';
+
+const messages = defineMessages(
+  {
+    unpinHeadline: 'Unpin headline',
+    unpinOneFirst: 'Unpin one first (max 3)',
+    pinHeadline: 'Pin headline',
+    relevance: 'Relevance {score}/100',
+    pinned: 'pinned',
+    relatedToPin: 'related to a pin',
+    alreadyKnown: 'already known',
+    markerPinned: 'PINNED',
+    markerKnown: 'KNOWN',
+    markerPinStory: 'PIN STORY',
+    linkCopied: 'Link copied',
+    shareHeadline: 'Share headline',
+    share: 'Share',
+    copied: 'Copied',
+    fresh: 'NEW',
+    pinnedHint:
+      'Pin up to 3 headlines that define the moment. Related news is lifted, and retellings fade as the story ages.',
+    pinnedHeadlines: 'Pinned headlines',
+    unpin: 'Unpin',
+    timeWindow: 'Time window',
+    latest: 'Latest',
+    headlinesCount: '{n} headlines',
+    liveArchive: 'Live headline archive',
+    top: 'TOP',
+    layout: 'Layout',
+    cardGrid: 'Card grid',
+    list: 'List',
+    loading: 'Loading headlines…',
+    loadError: 'Couldn’t load headlines. Retrying…',
+    empty: 'No headlines recorded in this window yet.',
+    loadMore: 'Load more',
+    end: 'End of archive for this window',
+  },
+  {
+    unpinHeadline: 'Desfijar titular',
+    unpinOneFirst: 'Desfija uno primero (máx. 3)',
+    pinHeadline: 'Fijar titular',
+    relevance: 'Relevancia {score}/100',
+    pinned: 'fijado',
+    relatedToPin: 'relacionado con un fijado',
+    alreadyKnown: 'ya conocido',
+    markerPinned: 'FIJADO',
+    markerKnown: 'CONOCIDO',
+    markerPinStory: 'HISTORIA FIJADA',
+    linkCopied: 'Enlace copiado',
+    shareHeadline: 'Compartir titular',
+    share: 'Compartir',
+    copied: 'Copiado',
+    fresh: 'NUEVO',
+    pinnedHint:
+      'Fija hasta 3 titulares que definan el momento. Las noticias relacionadas se destacan y las repeticiones se atenúan a medida que la historia envejece.',
+    pinnedHeadlines: 'Titulares fijados',
+    unpin: 'Desfijar',
+    timeWindow: 'Ventana de tiempo',
+    latest: 'Recientes',
+    headlinesCount: '{n} titulares',
+    liveArchive: 'Archivo de titulares en vivo',
+    top: 'ARRIBA',
+    layout: 'Diseño',
+    cardGrid: 'Cuadrícula de tarjetas',
+    list: 'Lista',
+    loading: 'Cargando titulares…',
+    loadError: 'No se pudieron cargar los titulares. Reintentando…',
+    empty: 'Aún no hay titulares registrados en esta ventana.',
+    loadMore: 'Cargar más',
+    end: 'Fin del archivo para esta ventana',
+  },
+);
+
+type T = Translate<typeof messages.en>;
 
 type Layout = 'grid' | 'list';
 
@@ -127,10 +201,11 @@ interface PinControl {
 }
 
 function PinButton({ item, pins }: { item: ArchivedNewsItem; pins: PinControl }) {
+  const t = useT(messages);
   const pinned = pins.pinnedIds.has(item.id);
   if (!pins.canEdit) return null;
   const blocked = !pinned && pins.full;
-  const label = pinned ? 'Unpin headline' : blocked ? 'Unpin one first (max 3)' : 'Pin headline';
+  const label = pinned ? t('unpinHeadline') : blocked ? t('unpinOneFirst') : t('pinHeadline');
   return (
     <button
       type="button"
@@ -147,26 +222,28 @@ function PinButton({ item, pins }: { item: ArchivedNewsItem; pins: PinControl })
   );
 }
 
-function relevanceTitle(item: ArchivedNewsItem): string | undefined {
+function relevanceTitle(item: ArchivedNewsItem, t: T): string | undefined {
   const r = item.relevance;
   if (!r) return undefined;
-  const parts = [`Relevance ${r.score}/100`];
-  if (r.tags.length > 0) parts.push(r.tags.map((t) => categoryLabel(t)).join(', '));
-  if (r.pinId) parts.push(r.pinId === item.id ? 'pinned' : 'related to a pin');
-  if (r.repeat) parts.push('already known');
+  const parts = [t('relevance', { score: r.score })];
+  if (r.tags.length > 0) parts.push(r.tags.map((tag) => categoryLabel(tag)).join(', '));
+  if (r.pinId) parts.push(r.pinId === item.id ? t('pinned') : t('relatedToPin'));
+  if (r.repeat) parts.push(t('alreadyKnown'));
   return parts.join(' · ');
 }
 
 function RelevanceMarker({ item }: { item: ArchivedNewsItem }) {
+  const t = useT(messages);
   const r = item.relevance;
   if (!r) return null;
-  if (r.pinId === item.id) return <span className={styles.marker}>PINNED</span>;
-  if (r.repeat) return <span className={styles.marker}>KNOWN</span>;
-  if (r.pinId) return <span className={styles.marker}>PIN STORY</span>;
+  if (r.pinId === item.id) return <span className={styles.marker}>{t('markerPinned')}</span>;
+  if (r.repeat) return <span className={styles.marker}>{t('markerKnown')}</span>;
+  if (r.pinId) return <span className={styles.marker}>{t('markerPinStory')}</span>;
   return null;
 }
 
 function ShareButton({ item }: { item: ArchivedNewsItem }) {
+  const tr = useT(messages);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -198,10 +275,10 @@ function ShareButton({ item }: { item: ArchivedNewsItem }) {
       type="button"
       className={styles.shareBtn}
       onClick={() => void share()}
-      aria-label={copied ? 'Link copied' : 'Share headline'}
-      title={copied ? 'Link copied' : 'Share'}
+      aria-label={copied ? tr('linkCopied') : tr('shareHeadline')}
+      title={copied ? tr('linkCopied') : tr('share')}
     >
-      {copied ? <span className={styles.copied}>Copied</span> : <ShareIcon />}
+      {copied ? <span className={styles.copied}>{tr('copied')}</span> : <ShareIcon />}
     </button>
   );
 }
@@ -219,6 +296,8 @@ function SourceBadge({ item }: { item: ArchivedNewsItem }) {
 }
 
 function NewsCard({ item, now, pins }: { item: ArchivedNewsItem; now: number; pins: PinControl }) {
+  const t = useT(messages);
+  const locale = useLocale();
   const { title, summary } = splitHeadline(item.text);
   const fresh = now - item.timestamp < FRESH_MS;
 
@@ -230,12 +309,12 @@ function NewsCard({ item, now, pins }: { item: ArchivedNewsItem; now: number; pi
       data-repeat={item.relevance?.repeat ?? false}
     >
       <div className={styles.cardTop}>
-        <span className={styles.tag} title={relevanceTitle(item)}>
+        <span className={styles.tag} title={relevanceTitle(item, t)}>
           {headlineLabel(item)}
         </span>
         <span className={styles.cardMarkers}>
           <RelevanceMarker item={item} />
-          {fresh && <span className={styles.freshPill}>NEW</span>}
+          {fresh && <span className={styles.freshPill}>{t('fresh')}</span>}
         </span>
       </div>
       <a className={styles.headline} href={item.url} target="_blank" rel="noopener noreferrer">
@@ -251,7 +330,7 @@ function NewsCard({ item, now, pins }: { item: ArchivedNewsItem; now: number; pi
             title={new Date(item.timestamp).toLocaleString()}
           >
             <ClockIcon />
-            {timeAgo(item.timestamp, now)}
+            {timeAgo(item.timestamp, now, locale)}
           </time>
         </div>
         <div className={styles.actionsCell}>
@@ -264,6 +343,8 @@ function NewsCard({ item, now, pins }: { item: ArchivedNewsItem; now: number; pi
 }
 
 function NewsRow({ item, now, pins }: { item: ArchivedNewsItem; now: number; pins: PinControl }) {
+  const t = useT(messages);
+  const locale = useLocale();
   const { title, summary } = splitHeadline(item.text);
   return (
     <li
@@ -275,11 +356,11 @@ function NewsRow({ item, now, pins }: { item: ArchivedNewsItem; now: number; pin
       <time
         className={styles.rowTime}
         dateTime={new Date(item.timestamp).toISOString()}
-        title={timeAgo(item.timestamp, now)}
+        title={timeAgo(item.timestamp, now, locale)}
       >
         {clockTime(item.timestamp)}
       </time>
-      <span className={styles.rowTag} title={relevanceTitle(item)}>
+      <span className={styles.rowTag} title={relevanceTitle(item, t)}>
         {headlineLabel(item)}
         <RelevanceMarker item={item} />
       </span>
@@ -307,6 +388,7 @@ function NewsList({
   now: number;
   pins: PinControl;
 }) {
+  const locale = useLocale();
   const groups = useMemo(() => {
     const out: { key: number; items: ArchivedNewsItem[] }[] = [];
     for (const item of items) {
@@ -322,7 +404,7 @@ function NewsList({
     <div className={styles.list}>
       {groups.map((group) => (
         <section key={group.key}>
-          <h3 className={styles.dayHeader}>{dayLabel(group.key, now)}</h3>
+          <h3 className={styles.dayHeader}>{dayLabel(group.key, now, locale)}</h3>
           <ul className={styles.rows} data-editable={pins.canEdit}>
             {group.items.map((item) => (
               <NewsRow key={item.id} item={item} now={now} pins={pins} />
@@ -335,17 +417,18 @@ function NewsList({
 }
 
 function PinnedBar({ pins, control, now }: { pins: NewsPin[]; control: PinControl; now: number }) {
+  const t = useT(messages);
+  const locale = useLocale();
   if (pins.length === 0) {
     return control.canEdit ? (
       <div className={styles.pinnedHint}>
         <PinIcon />
-        Pin up to 3 headlines that define the moment. Related news is lifted, and retellings fade as
-        the story ages.
+        {t('pinnedHint')}
       </div>
     ) : null;
   }
   return (
-    <ul className={styles.pinnedBar} aria-label="Pinned headlines">
+    <ul className={styles.pinnedBar} aria-label={t('pinnedHeadlines')}>
       {pins.map((pin) => (
         <li key={pin.id} className={styles.pinnedItem}>
           <PinIcon />
@@ -359,7 +442,7 @@ function PinnedBar({ pins, control, now }: { pins: NewsPin[]; control: PinContro
           </a>
           <span className={styles.pinnedMeta}>
             {pin.handle ? `@${pin.handle} · ` : ''}
-            {timeAgo(pin.timestamp, now)}
+            {timeAgo(pin.timestamp, now, locale)}
           </span>
           {control.canEdit && (
             <button
@@ -367,8 +450,8 @@ function PinnedBar({ pins, control, now }: { pins: NewsPin[]; control: PinContro
               className={styles.unpinBtn}
               disabled={control.busy}
               onClick={() => control.toggle(pin.id, true)}
-              aria-label="Unpin headline"
-              title="Unpin"
+              aria-label={t('unpinHeadline')}
+              title={t('unpin')}
             >
               ×
             </button>
@@ -380,6 +463,7 @@ function PinnedBar({ pins, control, now }: { pins: NewsPin[]; control: PinContro
 }
 
 export default function NewsView() {
+  const t = useT(messages);
   const [range, setRange] = useState<NewsWindow>('latest');
   const [layout, setLayout] = useState<Layout>(readLayout);
   const now = useNow(NOW_TICK_MS);
@@ -443,7 +527,7 @@ export default function NewsView() {
   return (
     <div className={styles.view}>
       <header className={styles.toolbar}>
-        <div className={styles.windows} role="tablist" aria-label="Time window">
+        <div className={styles.windows} role="tablist" aria-label={t('timeWindow')}>
           {NEWS_WINDOWS.map((w) => (
             <button
               key={w.id}
@@ -454,7 +538,7 @@ export default function NewsView() {
               data-active={range === w.id}
               onClick={() => selectWindow(w.id)}
             >
-              {w.label}
+              {w.id === 'latest' ? t('latest') : w.label}
             </button>
           ))}
         </div>
@@ -462,8 +546,8 @@ export default function NewsView() {
         <div className={styles.status}>
           <span className={styles.liveDot} aria-hidden="true" />
           {items.length > 0
-            ? `${items.length}${hasNextPage ? '+' : ''} headlines`
-            : 'Live headline archive'}
+            ? t('headlinesCount', { n: `${items.length}${hasNextPage ? '+' : ''}` })
+            : t('liveArchive')}
         </div>
 
         <div className={styles.actions}>
@@ -472,15 +556,15 @@ export default function NewsView() {
             className={styles.topBtn}
             onClick={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            TOP <span aria-hidden="true">⤒</span>
+            {t('top')} <span aria-hidden="true">⤒</span>
           </button>
-          <div className={styles.layoutToggle} role="group" aria-label="Layout">
+          <div className={styles.layoutToggle} role="group" aria-label={t('layout')}>
             <button
               type="button"
               className={styles.layoutBtn}
               data-active={layout === 'grid'}
               aria-pressed={layout === 'grid'}
-              aria-label="Card grid"
+              aria-label={t('cardGrid')}
               onClick={() => selectLayout('grid')}
             >
               <GridIcon />
@@ -490,7 +574,7 @@ export default function NewsView() {
               className={styles.layoutBtn}
               data-active={layout === 'list'}
               aria-pressed={layout === 'list'}
-              aria-label="List"
+              aria-label={t('list')}
               onClick={() => selectLayout('list')}
             >
               <ListIcon />
@@ -509,12 +593,12 @@ export default function NewsView() {
       <div ref={scrollRef} className={styles.scroll}>
         {isPending ? (
           <div className={styles.center}>
-            <Spinner size="lg" label="Loading headlines…" />
+            <Spinner size="lg" label={t('loading')} />
           </div>
         ) : error && items.length === 0 ? (
-          <div className={styles.center}>Couldn’t load headlines. Retrying…</div>
+          <div className={styles.center}>{t('loadError')}</div>
         ) : items.length === 0 ? (
-          <div className={styles.center}>No headlines recorded in this window yet.</div>
+          <div className={styles.center}>{t('empty')}</div>
         ) : layout === 'grid' ? (
           <div className={styles.grid}>
             {items.map((item) => (
@@ -529,11 +613,11 @@ export default function NewsView() {
           {isFetchingNextPage && <Spinner size="sm" />}
           {hasNextPage && !isFetchingNextPage && (
             <button type="button" className={styles.moreBtn} onClick={() => void fetchNextPage()}>
-              Load more
+              {t('loadMore')}
             </button>
           )}
           {!hasNextPage && items.length > 0 && (
-            <span className={styles.end}>End of archive for this window</span>
+            <span className={styles.end}>{t('end')}</span>
           )}
         </div>
       </div>

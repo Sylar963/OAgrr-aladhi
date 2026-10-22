@@ -1,3 +1,4 @@
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { VenueId } from '@shared/enriched';
 import { useState } from 'react';
@@ -5,6 +6,44 @@ import { z } from 'zod';
 import styles from './SpreadBuilderPanel.module.css';
 import type { AlphaMarket } from './useAlphaMarketData';
 import { formatQuantity, type VenueSizeRule } from './venue-sizing';
+
+const messages = defineMessages(
+  {
+    yourTradeSize: 'Your trade size',
+    tradeVenue: 'Trade venue',
+    markOnly: ' (mark only)',
+    equity: 'Account equity · USD',
+    quantity: 'Quantity · {unit} per leg',
+    riskPct: 'Max loss budget · % of equity',
+    reserve: 'Exit / settlement / slippage reserve · USD',
+    tradfiUnit: '{underlying} shares (100 = 1 contract)',
+    autoHint: 'Auto: each venue uses the size its book fills best. Type to fix one size for all.',
+    fixedHint: 'Fixed for every venue ·',
+    autoSize: 'Auto-size per venue',
+    minimum: '{venue} minimum {min} · step',
+    use: 'Use {value}',
+    equityNote:
+      'Equity is manual, not your live balance. 1% and $0.25 are editable planning examples, not recommended limits or verified costs. Check free margin on the venue.',
+  },
+  {
+    yourTradeSize: 'Tamaño de tu trade',
+    tradeVenue: 'Exchange de ejecución',
+    markOnly: ' (solo mark)',
+    equity: 'Capital de la cuenta · USD',
+    quantity: 'Cantidad · {unit} por pata',
+    riskPct: 'Presupuesto de pérdida máx. · % del capital',
+    reserve: 'Reserva de salida / liquidación / slippage · USD',
+    tradfiUnit: 'acciones de {underlying} (100 = 1 contrato)',
+    autoHint:
+      'Auto: cada exchange usa el tamaño que mejor llena su libro. Escribe para fijar un tamaño para todos.',
+    fixedHint: 'Fijo para todos los exchanges ·',
+    autoSize: 'Tamaño automático por exchange',
+    minimum: '{venue} mínimo {min} · paso',
+    use: 'Usar {value}',
+    equityNote:
+      'El capital es manual, no tu saldo en vivo. 1% y $0.25 son ejemplos de planificación editables, no límites recomendados ni costos verificados. Revisa el margen libre en el exchange.',
+  },
+);
 
 export interface AlphaSizing {
   equity: string;
@@ -15,7 +54,11 @@ export interface AlphaSizing {
 
 const SIZING: Record<
   AlphaMarket,
-  { storageKey: string; defaults: AlphaSizing; unit: (underlying: string) => string }
+  {
+    storageKey: string;
+    defaults: AlphaSizing;
+    unit: (underlying: string, t: Translate<typeof messages.en>) => string;
+  }
 > = {
   crypto: {
     storageKey: 'alpha-sizing-v1',
@@ -25,7 +68,7 @@ const SIZING: Record<
   tradfi: {
     storageKey: 'alpha-sizing-tradfi-v1',
     defaults: { equity: '', quantity: '100', riskPct: '1', reserve: '0.25' },
-    unit: (underlying) => `${underlying} shares (100 = 1 contract)`,
+    unit: (underlying, t) => t('tradfiUnit', { underlying }),
   },
 };
 const sizingSchema = z.object({
@@ -118,6 +161,7 @@ export default function AlphaTradeSizing({
   onAutoQuantity: () => void;
   markOnlyVenues?: ReadonlySet<VenueId>;
 }) {
+  const t = useT(messages);
   const { defaults, unit } = SIZING[market];
   const quantity = Number(sizing.quantity);
   const offRule =
@@ -127,9 +171,9 @@ export default function AlphaTradeSizing({
       Math.abs(quantity / sizeRule.step - Math.round(quantity / sizeRule.step)) > 1e-7);
   return (
     <div className={styles.block}>
-      <div className={styles.label}>Your trade size</div>
+      <div className={styles.label}>{t('yourTradeSize')}</div>
       <label className={styles.hint}>
-        Trade venue
+        {t('tradeVenue')}
         <select
           className={styles.select}
           value={venue}
@@ -138,17 +182,17 @@ export default function AlphaTradeSizing({
           {venues.map((v) => (
             <option key={v} value={v}>
               {VENUES[v]?.label ?? v}
-              {markOnlyVenues?.has(v) ? ' (mark only)' : ''}
+              {markOnlyVenues?.has(v) ? t('markOnly') : ''}
             </option>
           ))}
         </select>
       </label>
       {(
         [
-          ['equity', 'Account equity · USD', '1080'],
-          ['quantity', `Quantity · ${unit(underlying)} per leg`, defaults.quantity],
-          ['riskPct', 'Max loss budget · % of equity', '1'],
-          ['reserve', 'Exit / settlement / slippage reserve · USD', '0.25'],
+          ['equity', t('equity'), '1080'],
+          ['quantity', t('quantity', { unit: unit(underlying, t) }), defaults.quantity],
+          ['riskPct', t('riskPct'), '1'],
+          ['reserve', t('reserve'), '0.25'],
         ] as const
       ).map(([key, label, placeholder]) => (
         <label key={key} className={styles.hint}>
@@ -165,12 +209,12 @@ export default function AlphaTradeSizing({
           {key === 'quantity' && market === 'crypto' && (
             <span>
               {quantityIsAuto ? (
-                'Auto: each venue uses the size its book fills best. Type to fix one size for all.'
+                t('autoHint')
               ) : (
                 <>
-                  Fixed for every venue ·{' '}
+                  {t('fixedHint')}{' '}
                   <button type="button" className={styles.inlineAction} onClick={onAutoQuantity}>
-                    Auto-size per venue
+                    {t('autoSize')}
                   </button>
                 </>
               )}
@@ -178,7 +222,10 @@ export default function AlphaTradeSizing({
           )}
           {key === 'quantity' && sizeRule != null && (
             <span data-invalid={offRule || undefined}>
-              {VENUES[venue]?.label ?? venue} minimum {formatQuantity(sizeRule.min)} · step{' '}
+              {t('minimum', {
+                venue: VENUES[venue]?.label ?? venue,
+                min: formatQuantity(sizeRule.min),
+              })}{' '}
               {formatQuantity(sizeRule.step)}
               {offRule && (
                 <>
@@ -188,7 +235,7 @@ export default function AlphaTradeSizing({
                     className={styles.inlineAction}
                     onClick={() => update('quantity', formatQuantity(sizeRule.min))}
                   >
-                    Use {formatQuantity(sizeRule.min)}
+                    {t('use', { value: formatQuantity(sizeRule.min) })}
                   </button>
                 </>
               )}
@@ -197,8 +244,7 @@ export default function AlphaTradeSizing({
         </label>
       ))}
       <p className={styles.hint}>
-        Equity is manual, not your live balance. 1% and $0.25 are editable planning examples, not
-        recommended limits or verified costs. Check free margin on the venue.
+        {t('equityNote')}
       </p>
     </div>
   );

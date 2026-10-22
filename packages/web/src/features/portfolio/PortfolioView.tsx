@@ -12,6 +12,7 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { portfolioToBuilderLegs, useStrategyStore } from '@features/architect';
 import { FlipBanner } from '@features/thesis';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 
 import { PortfolioAssistantPanel } from './assistant';
@@ -69,6 +70,66 @@ function loadStoredUnderlying(): UnderlyingOption {
   return 'all';
 }
 
+const messages = defineMessages(
+  {
+    manual: 'Manual',
+    paper: 'Paper',
+    manualNote: 'Hand-entered legs',
+    paperNote: 'Live paper trading book',
+    venueLiveNote: 'Live {venue} book via private WS',
+    venuePendingNote: 'Adapter {status} — keys are stored but not wired yet',
+    builderEmpty: 'Add option positions to explore them in Builder V2.',
+    builderPickUnderlying: 'Select one underlying above to open its positions in Builder V2.',
+    paperSourceLabel: 'paper',
+    emptyReadOnly: 'No open {source} positions yet. They will appear here as the feed reports them.',
+    title: 'Portfolio',
+    subtitle: 'Volatility, convexity and carry translated for delta-one traders',
+    source: 'Source',
+    underlying: 'Underlying',
+    forwardDays: 'Forward days',
+    all: 'All',
+    state_closed: 'closed',
+    state_connecting: 'connecting',
+    state_open: 'open',
+    state_retrying: 'retrying',
+    paperNoteBefore: 'Showing live paper-trading positions. Add or close legs from the',
+    paperNoteAfter: ' tab.',
+    venueNoteBefore: 'Showing live',
+    venueNoteAfter:
+      'positions from your private WS feed. Trade on the venue directly to change the book.',
+  },
+  {
+    manual: 'Manual',
+    paper: 'Paper',
+    manualNote: 'Legs ingresados a mano',
+    paperNote: 'Libro de paper trading en vivo',
+    venueLiveNote: 'Libro de {venue} en vivo vía WS privado',
+    venuePendingNote: 'Adaptador {status} — las claves están guardadas pero aún no conectadas',
+    builderEmpty: 'Agrega posiciones de opciones para explorarlas en Builder V2.',
+    builderPickUnderlying: 'Selecciona un subyacente arriba para abrir sus posiciones en Builder V2.',
+    paperSourceLabel: 'paper',
+    emptyReadOnly:
+      'Aún no hay posiciones abiertas de {source}. Aparecerán aquí cuando el feed las reporte.',
+    title: 'Portafolio',
+    subtitle: 'Volatilidad, convexidad y carry traducidos para traders delta-one',
+    source: 'Fuente',
+    underlying: 'Subyacente',
+    forwardDays: 'Días hacia adelante',
+    all: 'Todos',
+    state_closed: 'cerrado',
+    state_connecting: 'conectando',
+    state_open: 'abierto',
+    state_retrying: 'reintentando',
+    paperNoteBefore: 'Mostrando posiciones de paper trading en vivo. Agrega o cierra legs desde la pestaña',
+    paperNoteAfter: '.',
+    venueNoteBefore: 'Mostrando posiciones en vivo de',
+    venueNoteAfter:
+      'desde tu feed WS privado. Opera directamente en el exchange para cambiar el libro.',
+  },
+);
+
+type T = Translate<typeof messages.en>;
+
 interface SourceOption {
   value: PortfolioSource;
   label: string;
@@ -76,12 +137,14 @@ interface SourceOption {
   note: string;
 }
 
-const BASE_SOURCES: SourceOption[] = [
-  { value: 'manual', label: 'Manual', ready: true, note: 'Hand-entered legs' },
-  { value: 'paper', label: 'Paper', ready: true, note: 'Live paper trading book' },
-];
+function baseSources(t: T): SourceOption[] {
+  return [
+    { value: 'manual', label: t('manual'), ready: true, note: t('manualNote') },
+    { value: 'paper', label: t('paper'), ready: true, note: t('paperNote') },
+  ];
+}
 
-function venueSourceOptions(): SourceOption[] {
+function venueSourceOptions(t: T): SourceOption[] {
   return VENUE_IDS.map((venue: VenueId) => {
     const spec = PRIVATE_ADAPTER_SPECS[venue];
     return {
@@ -90,13 +153,14 @@ function venueSourceOptions(): SourceOption[] {
       ready: spec.status === 'available',
       note:
         spec.status === 'available'
-          ? `Live ${VENUES[venue]?.label ?? venue} book via private WS`
-          : `Adapter ${spec.status} — keys are stored but not wired yet`,
+          ? t('venueLiveNote', { venue: VENUES[venue]?.label ?? venue })
+          : t('venuePendingNote', { status: spec.status }),
     };
   });
 }
 
 export default function PortfolioView() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.underlying);
   const forwardDays = FORWARD_DAYS;
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
@@ -112,16 +176,16 @@ export default function PortfolioView() {
   const { data: metricsData } = usePortfolioMetrics(forwardDays, source, metricsOpts);
   const { data: venueMargin } = useVenueMargin(source === 'thalex' ? 'thalex' : null);
 
-  const sourceOptions = useMemo(() => [...BASE_SOURCES, ...venueSourceOptions()], []);
+  const sourceOptions = useMemo(() => [...baseSources(t), ...venueSourceOptions(t)], [t]);
   const activeNote = sourceOptions.find((o) => o.value === source)?.note ?? '';
 
   const positions = positionsData?.positions ?? metricsData?.positions ?? [];
   const metrics = metricsData?.metrics ?? null;
   const builderLegs = portfolioToBuilderLegs(positions, metrics?.breakEven);
   const builderDisabledReason = positions.length === 0
-    ? 'Add option positions to explore them in Builder V2.'
+    ? t('builderEmpty')
     : builderLegs.length === 0
-      ? 'Select one underlying above to open its positions in Builder V2.'
+      ? t('builderPickUnderlying')
       : undefined;
   const openInBuilder = () => {
     const first = positions[0];
@@ -137,12 +201,12 @@ export default function PortfolioView() {
   const isReadOnly = source !== 'manual';
   const sourceLabel =
     source === 'manual'
-      ? 'Manual'
+      ? t('manual')
       : source === 'paper'
-        ? 'paper'
+        ? t('paperSourceLabel')
         : (VENUES[source as VenueId]?.label ?? source);
   const emptyMessage = isReadOnly
-    ? `No open ${sourceLabel} positions yet. They will appear here as the feed reports them.`
+    ? t('emptyReadOnly', { source: sourceLabel })
     : undefined;
 
   const onSelectSource = (nextSource: PortfolioSource) => {
@@ -163,13 +227,13 @@ export default function PortfolioView() {
     <div className={styles.wrap}>
       <div className={styles.header}>
         <div className={styles.titleBlock}>
-          <h2 className={styles.title}>Portfolio</h2>
+          <h2 className={styles.title}>{t('title')}</h2>
           <span className={styles.subtitle}>
-            Volatility, convexity and carry translated for delta-one traders
+            {t('subtitle')}
           </span>
         </div>
         <div className={styles.statusGroup}>
-          <div className={styles.toggleGroup} role="radiogroup" aria-label="Source">
+          <div className={styles.toggleGroup} role="radiogroup" aria-label={t('source')}>
             {sourceOptions.map((opt) => (
               <button
                 key={opt.value}
@@ -192,10 +256,10 @@ export default function PortfolioView() {
             data-state={connectionState}
             title={lastError != null ? `${lastError.code}: ${lastError.message}` : undefined}
           >
-            {connectionState} · seq {lastSeq}
+            {t(`state_${connectionState}`)} · seq {lastSeq}
             {lastError != null && ` · ${lastError.code}`}
           </span>
-          <div className={styles.toggleGroup} role="radiogroup" aria-label="Underlying">
+          <div className={styles.toggleGroup} role="radiogroup" aria-label={t('underlying')}>
             {UNDERLYING_OPTIONS.map((opt) => (
               <button
                 key={opt}
@@ -204,11 +268,11 @@ export default function PortfolioView() {
                 data-active={underlyingFilter === opt || undefined}
                 onClick={() => onSelectUnderlying(opt)}
               >
-                {opt === 'all' ? 'All' : opt}
+                {opt === 'all' ? t('all') : opt}
               </button>
             ))}
           </div>
-          <div className={styles.toggleGroup} aria-label="Forward days">
+          <div className={styles.toggleGroup} aria-label={t('forwardDays')}>
             <span className={styles.toggle} data-active data-static>
               T+{forwardDays}d
             </span>
@@ -276,13 +340,13 @@ export default function PortfolioView() {
             <PositionForm defaultUnderlying={underlying} />
           ) : source === 'paper' ? (
             <div className={styles.readOnlyNote}>
-              Showing live paper-trading positions. Add or close legs from the{' '}
-              <strong>Paper</strong> tab.
+              {t('paperNoteBefore')} <strong>{t('paper')}</strong>
+              {t('paperNoteAfter')}
             </div>
           ) : (
             <div className={styles.readOnlyNote}>
-              Showing live <strong>{VENUES[source as VenueId]?.label ?? source}</strong> positions
-              from your private WS feed. Trade on the venue directly to change the book.
+              {t('venueNoteBefore')} <strong>{VENUES[source as VenueId]?.label ?? source}</strong>{' '}
+              {t('venueNoteAfter')}
             </div>
           )}
           <ExpiryBuckets rows={metrics?.byExpiry ?? []} />

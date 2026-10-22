@@ -1,6 +1,8 @@
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { fmtNum, fmtPct, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { computeExpiryRows, NEAR_EXPIRY_DAYS } from './positioning-utils';
+import { positioningMessages } from './i18n';
 import styles from './Positioning.module.css';
 
 interface ExpiryCalendarProps {
@@ -16,34 +18,33 @@ function pcClass(v: number | null): string | undefined {
 }
 
 export default function ExpiryCalendar({ chains, spotPrice }: ExpiryCalendarProps) {
+  const t = useT(positioningMessages);
   const rows = computeExpiryRows(chains, spotPrice);
   const maxShare = Math.max(...rows.map((r) => r.oiShare ?? 0), 0.0001);
 
   return (
     <div className={styles.card}>
       <div className={styles.cardHead}>
-        <span className={styles.cardTitle}>Expiry Calendar</span>
-        <span className={styles.cardSubtitle}>
-          Where OI rolls off, where it may pin, and which expiries are active · USD notional
-        </span>
+        <span className={styles.cardTitle}>{t('calendarTitle')}</span>
+        <span className={styles.cardSubtitle}>{t('calendarSubtitle')}</span>
       </div>
 
       {rows.length === 0 ? (
-        <div className={styles.empty}>No open interest.</div>
+        <div className={styles.empty}>{t('noOpenInterest')}</div>
       ) : (
         <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Expiry</th>
-                <th>OI</th>
-                <th>Share</th>
-                <th>P/C $</th>
-                <th>Max Pain</th>
-                <th>vs Fwd</th>
-                <th>Exp. Move</th>
-                <th>24h Vol</th>
-                <th>Turnover</th>
+                <th>{t('expiry')}</th>
+                <th>{t('oi')}</th>
+                <th>{t('share')}</th>
+                <th>{t('pcUsd')}</th>
+                <th>{t('maxPain')}</th>
+                <th>{t('vsFwd')}</th>
+                <th>{t('expMove')}</th>
+                <th>{t('vol24h')}</th>
+                <th>{t('turnover')}</th>
               </tr>
             </thead>
             <tbody>
@@ -89,11 +90,7 @@ export default function ExpiryCalendar({ chains, spotPrice }: ExpiryCalendarProp
         </div>
       )}
 
-      <span className={styles.footnote}>
-        Max pain: settlement minimising holder payout, USD-weighted · Exp. move: ATM straddle
-        cross-checked with ATM IV · Turnover: 24h volume / OI (high = active, low = stale) · Marked
-        rows expire within {NEAR_EXPIRY_DAYS}d
-      </span>
+      <span className={styles.footnote}>{t('calendarFootnote', { n: NEAR_EXPIRY_DAYS })}</span>
     </div>
   );
 }

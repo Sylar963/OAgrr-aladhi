@@ -1,9 +1,22 @@
+import { defineMessages, useT } from "@lib/i18n";
 import type { ChatMessageDto } from "@oggregator/protocol";
 import { useEffect, useState } from "react";
 
 import styles from "./ChatDock.module.css";
 import ChatPanel from "./ChatPanel";
 import type { useSocialSocket } from "./hooks/useSocialSocket";
+import { socialMessages } from "./i18n";
+
+const messages = defineMessages(
+  {
+    openChat: "Open global chat",
+    openChatUnread: "Open global chat, {n} new",
+  },
+  {
+    openChat: "Abrir chat global",
+    openChatUnread: "Abrir chat global, {n} nuevos",
+  },
+);
 
 type SocialSocket = ReturnType<typeof useSocialSocket>;
 
@@ -24,6 +37,8 @@ interface ChatDockProps {
 }
 
 export default function ChatDock({ state, send, reconnect }: ChatDockProps) {
+  const t = useT(messages);
+  const ts = useT(socialMessages);
   const [open, setOpen] = useState(false);
   const [seenAt, setSeenAt] = useState(() => Date.now());
   const unread = open ? 0 : unreadCount(state.messages, seenAt);
@@ -61,17 +76,17 @@ export default function ChatDock({ state, send, reconnect }: ChatDockProps) {
           onClick={() => setOpen(true)}
           aria-expanded={false}
           aria-label={
-            unread > 0 ? `Open global chat, ${unread} new` : "Open global chat"
+            unread > 0 ? t("openChatUnread", { n: unread }) : t("openChat")
           }
         >
           <span className={styles.dot} data-state={state.connection} />
-          <span className={styles.tabTitle}>Global chat</span>
+          <span className={styles.tabTitle}>{ts("globalChat")}</span>
           <span className={styles.tabMeta}>
             {live
-              ? `${state.online} online`
+              ? ts("online", { n: state.online })
               : state.connection === "error"
-                ? "offline"
-                : "connecting…"}
+                ? ts("offline")
+                : ts("connecting")}
           </span>
           {unread > 0 && (
             <span className={styles.badge}>{unread > 99 ? "99+" : unread}</span>

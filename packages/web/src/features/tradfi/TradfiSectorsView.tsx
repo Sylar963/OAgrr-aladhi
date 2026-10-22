@@ -1,7 +1,8 @@
 import { Spinner } from '@components/ui';
+import { defineMessages, intlLocale, useLocale, useT } from '@lib/i18n';
 import type { TradfiSectorBasket, TradfiSectorQuote } from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, useMemo, useState } from 'react';
 
 import { useTradfiSectors } from './queries';
 import styles from './TradfiSectorsView.module.css';
@@ -15,12 +16,43 @@ const ET_TIME = new Intl.DateTimeFormat('en-US', {
   hour: 'numeric',
   minute: '2-digit',
 });
-const SESSION_DATE = new Intl.DateTimeFormat('en-US', {
+const SESSION_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   timeZone: 'UTC',
   weekday: 'short',
   month: 'short',
   day: 'numeric',
-});
+};
+
+const messages = defineMessages(
+  {
+    loading: 'Loading sectors…',
+    noData: 'No sector data yet.',
+    title: 'Sectors',
+    tape: 'TastyTrade tape',
+    baskets: '{n} baskets',
+    note: '15-min delayed. Moves vs {vs} regular-session close. Sorted by basket average; tag = rank, breadth, median.',
+    notePrevious:
+      '15-min delayed. Moves vs previous regular-session close. Sorted by basket average; tag = rank, breadth, median.',
+    greenMedian: '{green}/{priced} green · med',
+    openChain: 'Open {symbol} chain',
+    less: 'less ▴',
+    more: '+{n} more ▾',
+  },
+  {
+    loading: 'Cargando sectores…',
+    noData: 'Aún no hay datos de sectores.',
+    title: 'Sectores',
+    tape: 'Cinta de TastyTrade',
+    baskets: '{n} canastas',
+    note: 'Retraso de 15 min. Movimientos vs el cierre de sesión regular del {vs}. Ordenado por promedio de canasta; etiqueta = ranking, amplitud, mediana.',
+    notePrevious:
+      'Retraso de 15 min. Movimientos vs el cierre de sesión regular anterior. Ordenado por promedio de canasta; etiqueta = ranking, amplitud, mediana.',
+    greenMedian: '{green}/{priced} en verde · med',
+    openChain: 'Abrir cadena de {symbol}',
+    less: 'menos ▴',
+    more: '+{n} más ▾',
+  },
+);
 
 export function formatMove(change: number | null): string {
   if (change == null) return '—';
@@ -51,30 +83,34 @@ export function collapsedMembers(members: TradfiSectorQuote[]): TradfiSectorQuot
 }
 
 export default function TradfiSectorsView() {
+  const t = useT(messages);
+  const locale = useLocale();
+  const sessionDate = useMemo(
+    () => new Intl.DateTimeFormat(intlLocale(locale), SESSION_DATE_OPTIONS),
+    [locale],
+  );
   const { data, isLoading, error } = useTradfiSectors();
 
-  if (isLoading && !data) return <Spinner size="lg" label="Loading sectors…" />;
+  if (isLoading && !data) return <Spinner size="lg" label={t('loading')} />;
   if (!data) {
-    return <div className={styles.empty}>{error ? String(error.message) : 'No sector data yet.'}</div>;
+    return <div className={styles.empty}>{error ? String(error.message) : t('noData')}</div>;
   }
 
   const asOf = data.asOf != null ? `${ET_TIME.format(data.asOf)} ET` : '—';
-  const vs = data.prevCloseDate
-    ? SESSION_DATE.format(new Date(`${data.prevCloseDate}T12:00:00Z`))
-    : 'previous';
+  const note = data.prevCloseDate
+    ? t('note', { vs: sessionDate.format(new Date(`${data.prevCloseDate}T12:00:00Z`)) })
+    : t('notePrevious');
 
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Sectors</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>
-          TastyTrade tape <span className={styles.sep}>|</span> {data.baskets.length} baskets{' '}
+          {t('tape')} <span className={styles.sep}>|</span>{' '}
+          {t('baskets', { n: data.baskets.length })}{' '}
           <span className={styles.sep}>|</span> {asOf}
         </p>
-        <p className={styles.note}>
-          15-min delayed. Moves vs {vs} regular-session close. Sorted by basket average; tag = rank,
-          breadth, median.
-        </p>
+        <p className={styles.note}>{note}</p>
       </header>
 
       <div className={styles.tape}>
@@ -97,6 +133,7 @@ export default function TradfiSectorsView() {
 }
 
 function BasketTile({ basket }: { basket: TradfiSectorBasket }) {
+  const t = useT(messages);
   const [expanded, setExpanded] = useState(false);
   const setUnderlying = useAppStore((s) => s.setTradfiUnderlying);
   const setPage = useAppStore((s) => s.setTradfiPage);
@@ -125,7 +162,8 @@ function BasketTile({ basket }: { basket: TradfiSectorBasket }) {
         </span>
       </div>
       <div className={styles.tileMeta}>
-        {basket.rank != null ? `#${basket.rank}` : '#—'} {basket.green}/{basket.priced} green · med{' '}
+        {basket.rank != null ? `#${basket.rank}` : '#—'}{' '}
+        {t('greenMedian', { green: basket.green, priced: basket.priced })}{' '}
         {formatMove(basket.median)}
       </div>
       <ul className={styles.rows}>
@@ -136,7 +174,7 @@ function BasketTile({ basket }: { basket: TradfiSectorBasket }) {
                 type="button"
                 className={styles.symbolLink}
                 onClick={() => open(m.symbol)}
-                title={`Open ${m.symbol} chain`}
+                title={t('openChain', { symbol: m.symbol })}
               >
                 {m.symbol}
               </button>
@@ -152,7 +190,7 @@ function BasketTile({ basket }: { basket: TradfiSectorBasket }) {
       </ul>
       {(hidden > 0 || expanded) && basket.members.length > COLLAPSED_ROWS && (
         <button type="button" className={styles.more} onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'less ▴' : `+${hidden} more ▾`}
+          {expanded ? t('less') : t('more', { n: hidden })}
         </button>
       )}
     </section>

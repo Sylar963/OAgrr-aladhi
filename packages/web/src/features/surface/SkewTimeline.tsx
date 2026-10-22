@@ -1,9 +1,16 @@
 import { type MouseEvent, type ReactNode, useState } from 'react';
 
 import InfoTip from '@components/ui/InfoTip';
+import { useLocale, useT } from '@lib/i18n';
 
+import { skewMessages, surfaceMessages } from './i18n';
 import styles from './SkewTimeline.module.css';
-import { buildBands, ordinal, type SkewLinePoint, zoneForPercentile } from './skew-history-utils';
+import {
+  buildBands,
+  formatPercentile,
+  type SkewLinePoint,
+  zoneForPercentile,
+} from './skew-history-utils';
 import { useMeasuredWidth } from './use-measured-width';
 
 interface Props {
@@ -61,6 +68,9 @@ export default function SkewTimeline({
   downLabel,
   loading = false,
 }: Props) {
+  const t = useT(skewMessages);
+  const ts = useT(surfaceMessages);
+  const locale = useLocale();
   const [wrapRef, width] = useMeasuredWidth<HTMLDivElement>(W_FALLBACK);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -78,7 +88,7 @@ export default function SkewTimeline({
       <div className={styles.block} ref={wrapRef}>
         <div className={styles.header}>
           {header}
-          <span className={styles.muted}>{loading ? 'loading…' : 'insufficient history'}</span>
+          <span className={styles.muted}>{loading ? ts('loading') : ts('insufficientHistory')}</span>
         </div>
       </div>
     );
@@ -112,11 +122,11 @@ export default function SkewTimeline({
   const onMove = (e: MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * W;
-    const t = tMin + ((x - PAD_L) / (W - PAD_L - PAD_R)) * tSpan;
+    const time = tMin + ((x - PAD_L) / (W - PAD_L - PAD_R)) * tSpan;
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < points.length; i++) {
-      const dist = Math.abs(points[i]!.time - t);
+      const dist = Math.abs(points[i]!.time - time);
       if (dist < bestDist) {
         bestDist = dist;
         best = i;
@@ -135,9 +145,9 @@ export default function SkewTimeline({
         <span
           className={styles.chip}
           data-zone={zone ?? 'normal'}
-          title="Share of lookback samples at or below the current value"
+          title={t('pctTitle')}
         >
-          {percentile != null ? `${ordinal(percentile)} pct` : '– pct'}
+          {percentile != null ? formatPercentile(percentile, locale) : t('pctNone')}
         </span>
         {delta != null && (
           <span className={styles.sub}>
@@ -154,7 +164,7 @@ export default function SkewTimeline({
         width="100%"
         height={H}
         role="img"
-        aria-label={`${label} history`}
+        aria-label={t('historyAria', { label })}
         onMouseMove={onMove}
         onMouseLeave={() => setHoverIdx(null)}
       >

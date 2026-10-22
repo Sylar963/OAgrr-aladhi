@@ -2,6 +2,10 @@ import type { DeriveSessionKeyGrant } from '@oggregator/protocol';
 import { encodeAbiParameters, getAddress, type Address, type Hex } from 'viem';
 import { z } from 'zod';
 
+import { translate } from '@lib/i18n';
+
+import { walletMessages } from './i18n';
+
 export const DERIVE_WS_URL = 'wss://api.derive.xyz/v3/ws';
 
 // Derive v3 action-signing constants (docs.derive.xyz/authentication/action-signing).
@@ -145,7 +149,7 @@ export class DeriveRpcSocket {
     });
     ws.addEventListener('close', () => {
       for (const pending of this.inflight.values()) {
-        pending.reject(new Error('Derive connection closed'));
+        pending.reject(new Error(translate(walletMessages, 'deriveClosed')));
       }
       this.inflight.clear();
     });
@@ -155,7 +159,7 @@ export class DeriveRpcSocket {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
       ws.addEventListener('open', () => resolve(new DeriveRpcSocket(ws)), { once: true });
-      ws.addEventListener('error', () => reject(new Error('Could not reach Derive')), {
+      ws.addEventListener('error', () => reject(new Error(translate(walletMessages, 'deriveUnreachable'))), {
         once: true,
       });
     });

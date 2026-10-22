@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import { PortfolioAssistantFeedback } from './PortfolioAssistantFeedback';
 import styles from './PortfolioAssistantPanel.module.css';
 
@@ -13,7 +15,29 @@ type CopyState = 'idle' | 'copied' | 'failed';
 
 const COPY_FEEDBACK_MS = 1_500;
 
+const messages = defineMessages(
+  {
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    copyMarkdown: 'Copy as Markdown',
+    you: 'You',
+    thinking: 'Thinking…',
+    stopped: 'Stopped',
+    incomplete: 'Incomplete',
+  },
+  {
+    copied: 'Copiado',
+    copyFailed: 'No se pudo copiar',
+    copyMarkdown: 'Copiar como Markdown',
+    you: 'Tú',
+    thinking: 'Pensando…',
+    stopped: 'Detenido',
+    incomplete: 'Incompleto',
+  },
+);
+
 function CopyMarkdownButton({ markdown }: { markdown: string }) {
+  const t = useT(messages);
   const [state, setState] = useState<CopyState>('idle');
 
   useEffect(() => {
@@ -32,7 +56,7 @@ function CopyMarkdownButton({ markdown }: { markdown: string }) {
   };
 
   const label =
-    state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy as Markdown';
+    state === 'copied' ? t('copied') : state === 'failed' ? t('copyFailed') : t('copyMarkdown');
 
   return (
     <button
@@ -66,12 +90,13 @@ export function PortfolioAssistantMessageBubble({
   feedbackThreadId?: string | null;
   feedback?: PortfolioAssistantFeedbackValue;
 }) {
+  const t = useT(messages);
   const copyable =
     message.role === 'assistant' && message.status !== 'streaming' && message.content.length > 0;
   return (
     <article className={styles.message} data-role={message.role} data-status={message.status}>
       <div className={styles.messageHeader}>
-        <span className={styles.messageRole}>{message.role === 'assistant' ? 'Hermes' : 'You'}</span>
+        <span className={styles.messageRole}>{message.role === 'assistant' ? 'Hermes' : t('you')}</span>
         {copyable && <CopyMarkdownButton markdown={message.content} />}
       </div>
       <div className={styles.messageBody}>
@@ -85,11 +110,11 @@ export function PortfolioAssistantMessageBubble({
             ),
           }}
         >
-          {message.content || (message.status === 'streaming' ? 'Thinking…' : '')}
+          {message.content || (message.status === 'streaming' ? t('thinking') : '')}
         </Markdown>
       </div>
-      {message.status === 'cancelled' && <span className={styles.messageState}>Stopped</span>}
-      {message.status === 'failed' && <span className={styles.messageState}>Incomplete</span>}
+      {message.status === 'cancelled' && <span className={styles.messageState}>{t('stopped')}</span>}
+      {message.status === 'failed' && <span className={styles.messageState}>{t('incomplete')}</span>}
       {feedbackThreadId &&
         message.role === 'assistant' &&
         message.status === 'complete' &&

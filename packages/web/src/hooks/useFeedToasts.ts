@@ -1,7 +1,13 @@
+import { defineMessages, translate } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
 
 const DEGRADED_DELAY_MS = 8000;
+
+const messages = defineMessages(
+  { reconnecting: 'Reconnecting to feed…', restored: 'Feed restored' },
+  { reconnecting: 'Reconectando al feed…', restored: 'Feed restablecido' },
+);
 
 /**
  * Read-only consumer of the feedStatus store slice. Emits transient toasts
@@ -30,7 +36,7 @@ export function useFeedToasts() {
     if (inTrouble && !wasInTrouble) {
       // Trouble just started — push an immediate toast for reconnecting states.
       if (connectionState === 'reconnecting' || connectionState === 'connecting') {
-        pushToast({ tone: 'warning', icon: '↻', text: 'Reconnecting to feed…' });
+        pushToast({ tone: 'warning', icon: '↻', text: translate(messages, 'reconnecting') });
         surfacedRef.current = true;
       }
       // Schedule degraded flag after sustained outage.
@@ -50,7 +56,7 @@ export function useFeedToasts() {
       setFeedDegraded(false);
       // Only show "restored" if trouble was visible to the user.
       if (surfacedRef.current) {
-        pushToast({ tone: 'success', icon: '✓', text: 'Feed restored' });
+        pushToast({ tone: 'success', icon: '✓', text: translate(messages, 'restored') });
       }
       surfacedRef.current = false;
     }

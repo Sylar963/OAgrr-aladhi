@@ -261,6 +261,7 @@ export class PortfolioAssistantConversationService {
       const conversationMessages = this.promptBuilder.buildPortfolioAssistantConversationMessages(
         historyPage.messages,
         input.message,
+        input.locale,
       );
       telemetry = {
         requestId: crypto.randomUUID(),

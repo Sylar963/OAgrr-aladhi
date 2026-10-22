@@ -1,11 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
+import { defineMessages, useT } from '@lib/i18n';
 import styles from './MyIvInput.module.css';
 
 const DEBOUNCE_MS = 120;
 
+const messages = defineMessages(
+  {
+    myIv: 'My IV',
+    estimate: 'My IV estimate (%)',
+    clear: 'Clear My IV',
+    edgeActive: 'Edge column active',
+    enterIv: 'Enter your IV to see edge',
+  },
+  {
+    myIv: 'Mi IV',
+    estimate: 'Mi estimación de IV (%)',
+    clear: 'Borrar mi IV',
+    edgeActive: 'Columna de edge activa',
+    enterIv: 'Ingresa tu IV para ver el edge',
+  },
+);
+
 export default function MyIvInput() {
+  const t = useT(messages);
   const storeIv = useAppStore((s) => s.myIv);
   const setMyIv = useAppStore((s) => s.setMyIv);
 
@@ -39,7 +58,7 @@ export default function MyIvInput() {
 
   return (
     <div className={styles.wrap} data-active={hasValue}>
-      <span className={styles.label}>My IV</span>
+      <span className={styles.label}>{t('myIv')}</span>
       <div className={styles.inputWrap}>
         <input
           type="number"
@@ -50,17 +69,17 @@ export default function MyIvInput() {
           max={500}
           step={0.1}
           onChange={(e) => onChange(e.target.value)}
-          aria-label="My IV estimate (%)"
+          aria-label={t('estimate')}
         />
         <span className={styles.pct}>%</span>
       </div>
       {hasValue && (
-        <button className={styles.clear} onClick={onClear} aria-label="Clear My IV">
+        <button className={styles.clear} onClick={onClear} aria-label={t('clear')}>
           ✕
         </button>
       )}
       <span className={styles.hint}>
-        {hasValue ? 'Edge column active' : 'Enter your IV to see edge'}
+        {hasValue ? t('edgeActive') : t('enterIv')}
       </span>
     </div>
   );

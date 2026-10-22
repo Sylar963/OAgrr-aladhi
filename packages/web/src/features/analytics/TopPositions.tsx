@@ -1,7 +1,9 @@
 import type { EnrichedChainResponse } from '@shared/enriched';
 import { fmtNum, fmtPct, fmtUsdCompact, formatExpiry } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { computeTopPositions } from './positioning-utils';
+import { positioningMessages } from './i18n';
 import styles from './Positioning.module.css';
 
 interface TopPositionsProps {
@@ -10,30 +12,29 @@ interface TopPositionsProps {
 }
 
 export default function TopPositions({ chains, spotPrice }: TopPositionsProps) {
+  const t = useT(positioningMessages);
   const rows = computeTopPositions(chains, spotPrice);
 
   return (
     <div className={styles.card} data-half>
       <div className={styles.cardHead}>
-        <span className={styles.cardTitle}>Largest Positions</span>
-        <span className={styles.cardSubtitle}>
-          Top contracts by OI, summed across venues · share of total OI
-        </span>
+        <span className={styles.cardTitle}>{t('topTitle')}</span>
+        <span className={styles.cardSubtitle}>{t('topSubtitle')}</span>
       </div>
 
       {rows.length === 0 ? (
-        <div className={styles.empty}>No open interest.</div>
+        <div className={styles.empty}>{t('noOpenInterest')}</div>
       ) : (
         <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Contract</th>
-                <th>vs Spot</th>
-                <th>OI</th>
-                <th>Share</th>
-                <th>24h Vol</th>
-                <th>Main venue</th>
+                <th>{t('contract')}</th>
+                <th>{t('vsSpot')}</th>
+                <th>{t('oi')}</th>
+                <th>{t('share')}</th>
+                <th>{t('vol24h')}</th>
+                <th>{t('mainVenue')}</th>
               </tr>
             </thead>
             <tbody>

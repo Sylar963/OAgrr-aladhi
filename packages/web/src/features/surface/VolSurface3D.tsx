@@ -4,9 +4,11 @@ import type { IvSurfaceResponse } from '@shared/enriched';
 
 import { Spinner, DropdownPicker, InfoTip } from '@components/ui';
 import { useUnderlyings } from '@features/chain';
+import { defineMessages, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import { VENUE_IDS, VENUE_LIST } from '@lib/venue-meta';
 import { formatExpiry } from '@lib/format';
+import { surfaceMessages } from './i18n';
 import { Plot, PLOTLY_3D_CONFIG, SCENE_DEFAULTS } from './plotly';
 import { deltaTickLabel } from './smile-utils';
 import { useSurface } from './queries';
@@ -20,38 +22,79 @@ type TenorMode = 'listed' | 'cmm';
 // construction.
 const MIN_NON_NULL_PER_ROW = 3;
 
-const SURFACE_TIP_BODY = (
-  <>
-    <div>
-      Implied vol across strike (X = delta), time (Y = tenor), and magnitude
-      (Z = IV %, also encoded by color).
-    </div>
-    <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
-      <li>
-        <strong>X — delta</strong>: 5Δp (deep OTM put) → ATM (0.5) → 5Δc (deep OTM call).
-        Wings above ATM = skew / tail-risk premium.
-      </li>
-      <li>
-        <strong>Y — tenor</strong>: days to expiry, near → far.
-        Upward slope = contango; inversion = near-term stress.
-      </li>
-      <li>
-        <strong>Z &amp; color</strong>: IV in %. Blue = low, white = mid, orange = high.
-        Where listed strikes are sparse, the surface is filled by an SVI fit
-        (Gatheral 2004) per expiry, with linear interpolation as fallback.
-      </li>
-      <li>
-        <strong>Venue picker</strong>: single-venue vs cross-venue Average.
-        Average smooths venue quirks; single venue exposes microstructure.
-      </li>
-      <li>
-        <strong>Tenor mode</strong>: Listed = each row is a real expiry.
-        Constant Maturity = canonical 7/14/30/60/90/180/365d tenors,
-        interpolated in total variance between bracketing listed expiries.
-      </li>
-    </ul>
-  </>
+const messages = defineMessages(
+  {
+    title: '3D IV Surface',
+    noData: 'No surface data',
+    average: 'Average',
+    listed: 'Listed',
+    cmm: 'Constant Maturity',
+    hover: 'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
+    tipIntro:
+      'Implied vol across strike (X = delta), time (Y = tenor), and magnitude (Z = IV %, also encoded by color).',
+    tipXHead: 'X — delta',
+    tipX: ': 5Δp (deep OTM put) → ATM (0.5) → 5Δc (deep OTM call). Wings above ATM = skew / tail-risk premium.',
+    tipYHead: 'Y — tenor',
+    tipY: ': days to expiry, near → far. Upward slope = contango; inversion = near-term stress.',
+    tipZHead: 'Z & color',
+    tipZ: ': IV in %. Blue = low, white = mid, orange = high. Where listed strikes are sparse, the surface is filled by an SVI fit (Gatheral 2004) per expiry, with linear interpolation as fallback.',
+    tipVenueHead: 'Venue picker',
+    tipVenue: ': single-venue vs cross-venue Average. Average smooths venue quirks; single venue exposes microstructure.',
+    tipTenorHead: 'Tenor mode',
+    tipTenor: ': Listed = each row is a real expiry. Constant Maturity = canonical 7/14/30/60/90/180/365d tenors, interpolated in total variance between bracketing listed expiries.',
+  },
+  {
+    title: 'Superficie de IV 3D',
+    noData: 'Sin datos de superficie',
+    average: 'Promedio',
+    listed: 'Listados',
+    cmm: 'Vencimiento constante',
+    hover: 'Delta: %{x}<br>Vencimiento: %{text}<br>IV: %{z:.1f}%<extra></extra>',
+    tipIntro:
+      'Vol implícita según strike (X = delta), tiempo (Y = plazo) y magnitud (Z = IV %, también codificada por color).',
+    tipXHead: 'X — delta',
+    tipX: ': 5Δp (put muy OTM) → ATM (0.5) → 5Δc (call muy OTM). Alas por encima del ATM = skew / prima por riesgo de cola.',
+    tipYHead: 'Y — plazo',
+    tipY: ': días al vencimiento, de cerca → lejos. Pendiente positiva = contango; inversión = estrés de corto plazo.',
+    tipZHead: 'Z y color',
+    tipZ: ': IV en %. Azul = baja, blanco = media, naranja = alta. Donde los strikes listados son escasos, la superficie se completa con un ajuste SVI (Gatheral 2004) por vencimiento, con interpolación lineal como respaldo.',
+    tipVenueHead: 'Selector de exchange',
+    tipVenue: ': un solo exchange vs promedio entre exchanges. El promedio suaviza particularidades de cada exchange; uno solo expone la microestructura.',
+    tipTenorHead: 'Modo de plazo',
+    tipTenor: ': Listados = cada fila es un vencimiento real. Vencimiento constante = plazos canónicos de 7/14/30/60/90/180/365d, interpolados en varianza total entre los vencimientos listados adyacentes.',
+  },
 );
+
+function SurfaceTipBody() {
+  const t = useT(messages);
+  return (
+    <>
+      <div>{t('tipIntro')}</div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 14 }}>
+        <li>
+          <strong>{t('tipXHead')}</strong>
+          {t('tipX')}
+        </li>
+        <li>
+          <strong>{t('tipYHead')}</strong>
+          {t('tipY')}
+        </li>
+        <li>
+          <strong>{t('tipZHead')}</strong>
+          {t('tipZ')}
+        </li>
+        <li>
+          <strong>{t('tipVenueHead')}</strong>
+          {t('tipVenue')}
+        </li>
+        <li>
+          <strong>{t('tipTenorHead')}</strong>
+          {t('tipTenor')}
+        </li>
+      </ul>
+    </>
+  );
+}
 
 interface SurfaceGrid {
   x: number[];
@@ -137,6 +180,8 @@ interface Props {
 }
 
 export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const t = useT(messages);
+  const ts = useT(surfaceMessages);
   const tradfi = market === 'tradfi';
   const { underlying: localUnderlying, setUnderlying: setLocalUnderlying } =
     useSurfaceUnderlying(market, defaultUnderlying);
@@ -185,14 +230,13 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'cryp
           thickness: 12,
           len: 0.6,
         },
-        hovertemplate:
-          'Delta: %{x}<br>Expiry: %{text}<br>IV: %{z:.1f}%<extra></extra>',
+        hovertemplate: t('hover'),
         contours: {
           z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } },
         },
       },
     ];
-  }, [grid]);
+  }, [grid, t]);
 
   const layout = useMemo<Partial<Plotly.Layout> | null>(() => {
     if (!grid) return null;
@@ -247,33 +291,33 @@ export default function VolSurface3D({ defaultUnderlying = 'BTC', market = 'cryp
   if (isLoading || !data) {
     return (
       <div className={styles.wrap}>
-        <Spinner size="md" label="Loading 3D surface..." />
+        <Spinner size="md" label={ts('loading3d')} />
       </div>
     );
   }
 
   if (!grid || !plotData || !layout) {
-    return <div className={styles.empty}>No surface data</div>;
+    return <div className={styles.empty}>{t('noData')}</div>;
   }
 
   const logo = getTokenLogo(localUnderlying);
 
   const venueOptions = [
-    { value: 'average', label: 'Average' },
+    { value: 'average', label: t('average') },
     ...VENUE_LIST.map((v) => ({ value: v.id, label: v.label })),
   ];
 
   const tenorOptions: { value: TenorMode; label: string }[] = [
-    { value: 'listed', label: 'Listed' },
-    { value: 'cmm', label: 'Constant Maturity' },
+    { value: 'listed', label: t('listed') },
+    { value: 'cmm', label: t('cmm') },
   ];
 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>3D IV Surface</span>
-        <InfoTip label="3D IV Surface" title="3D IV Surface" align="start">
-          {SURFACE_TIP_BODY}
+        <span className={styles.title}>{t('title')}</span>
+        <InfoTip label={t('title')} title={t('title')} align="start">
+          <SurfaceTipBody />
         </InfoTip>
         {setLocalUnderlying && (
           <DropdownPicker

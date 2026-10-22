@@ -1,3 +1,5 @@
+import { getLocale, type Locale } from '@lib/i18n';
+
 // ── Number formatters ─────────────────────────────────────────────────────
 // Convention: null or zero prices render as "–" (industry standard — IB, TradingView).
 // A zero bid/ask means "no market", not "free". Greeks CAN be legitimately zero
@@ -115,22 +117,13 @@ export function timeToExpiry(expiry: string, expiryTs?: number | null): TimeToEx
   };
 }
 
-export function formatExpiry(iso: string): string {
+const EXPIRY_MONTHS: Record<Locale, readonly string[]> = {
+  en: ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'],
+  es: ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'],
+};
+
+export function formatExpiry(iso: string, locale: Locale = getLocale()): string {
   const d = new Date(iso + 'T00:00:00Z');
   const day = d.getUTCDate().toString().padStart(2, '0');
-  const months = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-  return `${day} ${months[d.getUTCMonth()]!}`;
+  return `${day} ${EXPIRY_MONTHS[locale][d.getUTCMonth()]!}`;
 }

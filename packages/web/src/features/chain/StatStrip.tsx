@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { ChainStats } from '@shared/enriched';
-import type { VolRichness, WsConnectionState } from '@oggregator/protocol';
+import type { VolRichness, VolRichnessState, WsConnectionState } from '@oggregator/protocol';
 
 import { fmtUsd, fmtUsdCompact, fmtIv, fmtPct, fmtNum } from '@lib/format';
 import {
@@ -11,11 +11,122 @@ import {
   fmtZ,
   richnessTenorFor,
 } from '@lib/vol-richness';
+import { defineMessages, useT } from '@lib/i18n';
 import HoverTooltip from '@components/ui/HoverTooltip';
 import type { StatsResponse } from './queries';
 import RegimeChip from './RegimeChip';
 import BasisTooltip from './BasisTooltip';
 import styles from './StatStrip.module.css';
+
+const messages = defineMessages(
+  {
+    richTitle: 'IV vs forecast (excess premium)',
+    richIntro:
+      'Is this expiry’s IV cheap or rich against what BTC is likely to realize over the same horizon? Positive: options cost more than the forecast plus the usual premium.',
+    richFormula: 'excess = ATM IV − forecast RV − usual (IV − later RV)',
+    richConstant:
+      '{tenor} constant maturity: excess {excess}, {z} vs its own {samples}-day history, cone {cone} of realized {tenor} vol.',
+    richIntraday: 'Intraday: {tenor} IV {z24} vs last 24h, {z7} vs 7d; excess Δ24h {change}.',
+    richForecast:
+      'Forecast: 7D realized decays to the {longRun}D level, half-life {halfLife}d. Usual premium: median IV − subsequent RV over {samples} independent {tenor} windows.',
+    richRange: '52-week 30D DVOL range: {low}–{high}.',
+    richFair:
+      '±{band} pts reads as fair. The band and half-life are our choices, untested on BTC. Unknown baseline shows “–”, never zero.',
+    ivChangeIntro: 'Change in Deribit DVOL from yesterday’s UTC close to the latest live print.',
+    ivChangePos: 'Positive (green): IV expanding — premium getting richer day-on-day.',
+    ivChangeNeg: 'Negative (red): IV compressing — premium decaying.',
+    ivChangeReset:
+      'Resets at 00:05 UTC when the day rolls over and a new previousClose anchors the diff.',
+    atmIntro:
+      'Cross-venue average of at-the-money implied volatility for the currently selected expiry. Averages the mark IV of the call and put closest to the forward, across the active venues.',
+    atmExpiryOnly: 'Reflects this expiry only — for a constant-maturity view see the IV Rank panel.',
+    atmIvp: 'Pair with IVP to gauge whether this expiry’s IV is rich vs the past year.',
+    skewIntro: '25-delta call IV minus 25-delta put IV for the selected expiry.',
+    skewNeg: 'Negative (usual in BTC/ETH): puts richer than calls — downside fear priced in.',
+    skewPos: 'Positive: calls richer than puts — upside FOMO / squeeze pricing.',
+    skewCompress: 'Compression toward zero often precedes regime shifts.',
+    pcoiIntro: 'Total put open interest divided by total call open interest for this expiry.',
+    pcoiHigh: '> 1: more puts open than calls — hedging / bearish lean.',
+    pcoiLow: '< 1: more calls open than puts — directional upside positioning.',
+    pcoiSingle: 'Single-expiry only; compare across expiries on the term-structure view.',
+    connLive: 'Live',
+    connConnecting: 'Connecting',
+    connReconnecting: 'Reconnecting',
+    connStale: 'Stale',
+    connError: 'Error',
+    connClosed: 'Offline',
+    spot: '{underlying} Spot',
+    forward: 'Forward {dte}d {price}',
+    toExpiry: '{dte}d to expiry',
+    callMinusPut: 'call − put',
+    totalOi: 'Total OI',
+    basis: 'Basis {value}',
+    ivVsFcst: 'IV vs Fcst',
+    stateCheap: 'CHEAP',
+    stateFair: 'FAIR',
+    stateRich: 'RICH',
+    stateUnavailable: 'UNAVAILABLE',
+    feed: 'Feed',
+  },
+  {
+    richTitle: 'IV vs pronóstico (prima en exceso)',
+    richIntro:
+      '¿La IV de este vencimiento está barata o cara frente a lo que BTC probablemente realice en el mismo horizonte? Positivo: las opciones cuestan más que el pronóstico más la prima habitual.',
+    richFormula: 'exceso = ATM IV − RV pronosticada − habitual (IV − RV posterior)',
+    richConstant:
+      '{tenor} de madurez constante: exceso {excess}, {z} vs su propio historial de {samples} días, cono {cone} de la vol realizada {tenor}.',
+    richIntraday: 'Intradía: IV {tenor} {z24} vs últimas 24h, {z7} vs 7d; Δ24h del exceso {change}.',
+    richForecast:
+      'Pronóstico: la vol realizada 7D converge al nivel {longRun}D, vida media {halfLife}d. Prima habitual: mediana de IV − RV posterior en {samples} ventanas {tenor} independientes.',
+    richRange: 'Rango DVOL 30D de 52 semanas: {low}–{high}.',
+    richFair:
+      '±{band} pts se considera justo. La banda y la vida media son elecciones nuestras, no probadas en BTC. Sin línea base se muestra “–”, nunca cero.',
+    ivChangeIntro: 'Cambio del DVOL de Deribit desde el cierre UTC de ayer hasta el último dato en vivo.',
+    ivChangePos: 'Positivo (verde): IV en expansión — la prima se encarece día a día.',
+    ivChangeNeg: 'Negativo (rojo): IV en compresión — la prima se desinfla.',
+    ivChangeReset:
+      'Se reinicia a las 00:05 UTC cuando cambia el día y un nuevo previousClose ancla la diferencia.',
+    atmIntro:
+      'Promedio entre exchanges de la volatilidad implícita at-the-money para el vencimiento seleccionado. Promedia la mark IV del call y el put más cercanos al forward, en los exchanges activos.',
+    atmExpiryOnly: 'Refleja solo este vencimiento — para una vista de madurez constante usa el panel IV Rank.',
+    atmIvp: 'Combínalo con IVP para evaluar si la IV de este vencimiento está cara vs el último año.',
+    skewIntro: 'IV del call 25-delta menos IV del put 25-delta para el vencimiento seleccionado.',
+    skewNeg: 'Negativo (habitual en BTC/ETH): puts más caros que calls — miedo a la baja descontado.',
+    skewPos: 'Positivo: calls más caros que puts — FOMO alcista / precio de squeeze.',
+    skewCompress: 'La compresión hacia cero suele anteceder cambios de régimen.',
+    pcoiIntro: 'Open interest total de puts dividido por el de calls para este vencimiento.',
+    pcoiHigh: '> 1: más puts abiertos que calls — cobertura / sesgo bajista.',
+    pcoiLow: '< 1: más calls abiertos que puts — posicionamiento direccional alcista.',
+    pcoiSingle: 'Solo un vencimiento; compara entre vencimientos en la vista de estructura temporal.',
+    connLive: 'En vivo',
+    connConnecting: 'Conectando',
+    connReconnecting: 'Reconectando',
+    connStale: 'Desactualizado',
+    connError: 'Error',
+    connClosed: 'Desconectado',
+    spot: 'Spot {underlying}',
+    forward: 'Forward {dte}d {price}',
+    toExpiry: '{dte}d al vencimiento',
+    callMinusPut: 'call − put',
+    totalOi: 'OI total',
+    basis: 'Basis {value}',
+    ivVsFcst: 'IV vs Pron.',
+    stateCheap: 'BARATA',
+    stateFair: 'JUSTA',
+    stateRich: 'CARA',
+    stateUnavailable: 'N/D',
+    feed: 'Feed',
+  },
+);
+
+type MessageKey = keyof typeof messages.en;
+
+const STATE_KEY: Record<VolRichnessState, MessageKey> = {
+  cheap: 'stateCheap',
+  fair: 'stateFair',
+  rich: 'stateRich',
+  unavailable: 'stateUnavailable',
+};
 
 interface StatStripProps {
   stats: ChainStats;
@@ -113,111 +224,83 @@ function RichnessTip({
   dte: number;
   range52w: { low: number; high: number } | null;
 }) {
+  const t = useT(messages);
   const expiry = expiryRichness(richness, atmIv, dte);
   const tenor = richnessTenorFor(richness, dte);
   const tenorLabel = `${tenor.tenorDays}D`;
   return (
     <div className={styles.statTip}>
-      <div className={styles.statTipTitle}>IV vs forecast (excess premium)</div>
-      <div>
-        Is this expiry’s IV cheap or rich against what BTC is likely to realize over the same
-        horizon? Positive: options cost more than the forecast plus the usual premium.
-      </div>
-      <div className={styles.statTipFormula}>
-        excess = ATM IV − forecast RV − usual (IV − later RV)
-      </div>
+      <div className={styles.statTipTitle}>{t('richTitle')}</div>
+      <div>{t('richIntro')}</div>
+      <div className={styles.statTipFormula}>{t('richFormula')}</div>
       <div className={styles.statTipFormula}>
         {fmtIv(atmIv)} − {fmtIv(expiry.forecastVol)} − {fmtVolPts(expiry.usualPremium)} ={' '}
         {fmtVolPts(expiry.excessPremium)}
       </div>
       <ul className={styles.statTipList}>
         <li>
-          {tenorLabel} constant maturity: excess {fmtVolPts(tenor.excessPremium)}, {fmtZ(
-            tenor.excessHistory.zScore,
-          )}{' '}
-          vs its own {tenor.excessHistory.sampleCount}-day history, cone{' '}
-          {fmtPercentile(tenor.conePercentile)} of realized {tenorLabel} vol.
+          {t('richConstant', {
+            tenor: tenorLabel,
+            excess: fmtVolPts(tenor.excessPremium),
+            z: fmtZ(tenor.excessHistory.zScore),
+            samples: tenor.excessHistory.sampleCount,
+            cone: fmtPercentile(tenor.conePercentile),
+          })}
         </li>
         <li>
-          Intraday: {tenorLabel} IV {fmtZ(tenor.intraday.zScore24h)} vs last 24h,{' '}
-          {fmtZ(tenor.intraday.zScore7d)} vs 7d; excess Δ24h {fmtVolPts(tenor.excessChange24h)}.
+          {t('richIntraday', {
+            tenor: tenorLabel,
+            z24: fmtZ(tenor.intraday.zScore24h),
+            z7: fmtZ(tenor.intraday.zScore7d),
+            change: fmtVolPts(tenor.excessChange24h),
+          })}
         </li>
         <li>
-          Forecast: 7D realized decays to the {richness.forecast.longRunDays}D level, half-life{' '}
-          {richness.forecast.halfLifeDays}d. Usual premium: median IV − subsequent RV over{' '}
-          {tenor.premiumBaseline.independentSampleCount} independent {tenorLabel} windows.
+          {t('richForecast', {
+            longRun: richness.forecast.longRunDays,
+            halfLife: richness.forecast.halfLifeDays,
+            samples: tenor.premiumBaseline.independentSampleCount,
+            tenor: tenorLabel,
+          })}
         </li>
         {range52w && (
-          <li>
-            52-week 30D DVOL range: {fmtIv(range52w.low)}–{fmtIv(range52w.high)}.
-          </li>
+          <li>{t('richRange', { low: fmtIv(range52w.low), high: fmtIv(range52w.high) })}</li>
         )}
-        <li>
-          ±{(richness.fairBand * 100).toFixed(0)} pts reads as fair. The band and half-life are our
-          choices, untested on BTC. Unknown baseline shows “–”, never zero.
-        </li>
+        <li>{t('richFair', { band: (richness.fairBand * 100).toFixed(0) })}</li>
       </ul>
     </div>
   );
 }
 
-const IV_CHANGE_TIP = (
-  <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>IV Δ1d</div>
-    <div>Change in Deribit DVOL from yesterday’s UTC close to the latest live print.</div>
-    <ul className={styles.statTipList}>
-      <li>Positive (green): IV expanding — premium getting richer day-on-day.</li>
-      <li>Negative (red): IV compressing — premium decaying.</li>
-      <li>Resets at 00:05 UTC when the day rolls over and a new previousClose anchors the diff.</li>
-    </ul>
-  </div>
-);
-
-const ATM_IV_TIP = (
-  <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>ATM IV</div>
-    <div>
-      Cross-venue average of at-the-money implied volatility for the currently selected expiry.
-      Averages the mark IV of the call and put closest to the forward, across the active venues.
+function TipBody({
+  title,
+  intro,
+  items,
+}: {
+  title: string;
+  intro: string;
+  items: readonly string[];
+}) {
+  return (
+    <div className={styles.statTip}>
+      <div className={styles.statTipTitle}>{title}</div>
+      <div>{intro}</div>
+      <ul className={styles.statTipList}>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
-    <ul className={styles.statTipList}>
-      <li>Reflects this expiry only — for a constant-maturity view see the IV Rank panel.</li>
-      <li>Pair with IVP to gauge whether this expiry’s IV is rich vs the past year.</li>
-    </ul>
-  </div>
-);
+  );
+}
 
-const SKEW_TIP = (
-  <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>25Δ Skew</div>
-    <div>25-delta call IV minus 25-delta put IV for the selected expiry.</div>
-    <ul className={styles.statTipList}>
-      <li>Negative (usual in BTC/ETH): puts richer than calls — downside fear priced in.</li>
-      <li>Positive: calls richer than puts — upside FOMO / squeeze pricing.</li>
-      <li>Compression toward zero often precedes regime shifts.</li>
-    </ul>
-  </div>
-);
-
-const PCOI_TIP = (
-  <div className={styles.statTip}>
-    <div className={styles.statTipTitle}>Put / Call OI</div>
-    <div>Total put open interest divided by total call open interest for this expiry.</div>
-    <ul className={styles.statTipList}>
-      <li>&gt; 1: more puts open than calls — hedging / bearish lean.</li>
-      <li>&lt; 1: more calls open than puts — directional upside positioning.</li>
-      <li>Single-expiry only; compare across expiries on the term-structure view.</li>
-    </ul>
-  </div>
-);
-
-const CONN_DISPLAY: Record<WsConnectionState, { dot: string; label: string }> = {
-  live: { dot: 'var(--color-profit)', label: 'Live' },
-  connecting: { dot: 'var(--text-dim)', label: 'Connecting' },
-  reconnecting: { dot: 'var(--color-warning, orange)', label: 'Reconnecting' },
-  stale: { dot: 'var(--color-warning, orange)', label: 'Stale' },
-  error: { dot: 'var(--color-loss)', label: 'Error' },
-  closed: { dot: 'var(--text-dim)', label: 'Offline' },
+const CONN_DISPLAY: Record<WsConnectionState, { dot: string; label: MessageKey }> = {
+  live: { dot: 'var(--color-profit)', label: 'connLive' },
+  connecting: { dot: 'var(--text-dim)', label: 'connConnecting' },
+  reconnecting: { dot: 'var(--color-warning, orange)', label: 'connReconnecting' },
+  stale: { dot: 'var(--color-warning, orange)', label: 'connStale' },
+  error: { dot: 'var(--color-loss)', label: 'connError' },
+  closed: { dot: 'var(--text-dim)', label: 'connClosed' },
 };
 
 export default function StatStrip({
@@ -229,6 +312,7 @@ export default function StatStrip({
   richness,
   showRegimeIv = true,
 }: StatStripProps) {
+  const t = useT(messages);
   const expiry = richness ? expiryRichness(richness, stats.atmIv, dte) : null;
   const expiryTenor = richness ? richnessTenorFor(richness, dte) : null;
   const basisSub = stats.basisPct != null ? fmtPct(stats.basisPct, 3) : undefined;
@@ -240,36 +324,59 @@ export default function StatStrip({
   return (
     <div className={styles.strip}>
       <StatCell
-        label={`${underlying} Spot`}
+        label={t('spot', { underlying })}
         value={fmtUsd(stats.indexPriceUsd)}
         sub={
           stats.forwardPriceUsd != null
-            ? `Forward ${dte}d ${fmtUsd(stats.forwardPriceUsd)}`
+            ? t('forward', { dte, price: fmtUsd(stats.forwardPriceUsd) })
             : undefined
         }
       />
       <div className={styles.divider} />
-      <StatCell label="ATM IV" value={fmtIv(stats.atmIv)} accent labelTooltip={ATM_IV_TIP} />
+      <StatCell
+        label="ATM IV"
+        value={fmtIv(stats.atmIv)}
+        accent
+        labelTooltip={
+          <TipBody
+            title="ATM IV"
+            intro={t('atmIntro')}
+            items={[t('atmExpiryOnly'), t('atmIvp')]}
+          />
+        }
+      />
       <div className={styles.divider} />
       <StatCell
         label="Put/Call OI"
         value={stats.putCallOiRatio != null ? fmtNum(stats.putCallOiRatio) : '–'}
-        sub={`${dte}d to expiry`}
-        labelTooltip={PCOI_TIP}
+        sub={t('toExpiry', { dte })}
+        labelTooltip={
+          <TipBody
+            title="Put / Call OI"
+            intro={t('pcoiIntro')}
+            items={[t('pcoiHigh'), t('pcoiLow'), t('pcoiSingle')]}
+          />
+        }
       />
       <div className={styles.divider} />
       <StatCell
         label="25Δ Skew"
         value={stats.skew25d != null ? fmtIv(stats.skew25d) : '–'}
-        sub="call − put"
+        sub={t('callMinusPut')}
         positive={skewPositive}
-        labelTooltip={SKEW_TIP}
+        labelTooltip={
+          <TipBody
+            title="25Δ Skew"
+            intro={t('skewIntro')}
+            items={[t('skewNeg'), t('skewPos'), t('skewCompress')]}
+          />
+        }
       />
       <div className={styles.divider} />
       <StatCell
-        label="Total OI"
+        label={t('totalOi')}
         value={fmtUsdCompact(stats.totalOiUsd)}
-        sub={basisSub ? `Basis ${basisSub}` : undefined}
+        sub={basisSub ? t('basis', { value: basisSub }) : undefined}
         subPositive={basisPositive}
         subTooltip={
           stats.basisPct != null && dte > 0 ? (
@@ -281,12 +388,12 @@ export default function StatStrip({
         <>
           <div className={styles.divider} />
           <StatCell
-            label="IV vs Fcst"
+            label={t('ivVsFcst')}
             value={fmtVolPts(expiry.excessPremium)}
             positive={
               expiry.state === 'cheap' ? true : expiry.state === 'rich' ? false : null
             }
-            sub={`${expiry.state.toUpperCase()} · ${expiryTenor.tenorDays}D ${fmtZ(
+            sub={`${t(STATE_KEY[expiry.state])} · ${expiryTenor.tenorDays}D ${fmtZ(
               expiryTenor.intraday.zScore24h,
             )} 24h`}
             labelTooltip={
@@ -323,7 +430,13 @@ export default function StatStrip({
                     ? false
                     : null
             }
-            labelTooltip={IV_CHANGE_TIP}
+            labelTooltip={
+              <TipBody
+                title="IV Δ1d"
+                intro={t('ivChangeIntro')}
+                items={[t('ivChangePos'), t('ivChangeNeg'), t('ivChangeReset')]}
+              />
+            }
           />
         </>
       )}
@@ -339,14 +452,14 @@ export default function StatStrip({
         <>
           <div className={styles.divider} />
           <div className={styles.cell}>
-            <span className={styles.label}>Feed</span>
+            <span className={styles.label}>{t('feed')}</span>
             <span className={styles.feedState}>
               <span
                 className={styles.feedDot}
                 data-state={connectionState}
                 style={{ background: CONN_DISPLAY[connectionState].dot }}
               />
-              {CONN_DISPLAY[connectionState].label}
+              {t(CONN_DISPLAY[connectionState].label)}
             </span>
           </div>
         </>

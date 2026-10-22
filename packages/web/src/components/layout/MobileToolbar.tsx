@@ -2,16 +2,39 @@ import { useState } from 'react';
 
 import { useAppStore } from '@stores/app-store';
 import { MobileDrawer } from '@components/ui';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import { fmtUsdCompact, formatExpiry, dteDays } from '@lib/format';
 import { useExpiries, useStats } from '@features/chain/queries';
 import VenueSidebar from '@features/chain/VenueSidebar';
 import MyIvInput from '@features/chain/MyIvInput';
 
+import LanguageToggle from './LanguageToggle';
 import { useOpenPalette } from './palette-context';
 import styles from './MobileToolbar.module.css';
 
+const messages = defineMessages(
+  {
+    settings: 'Settings',
+    language: 'LANGUAGE',
+    asset: 'ASSET',
+    expiry: 'EXPIRY',
+    venues: 'VENUES',
+    myIv: 'MY IV',
+  },
+  {
+    settings: 'Ajustes',
+    language: 'IDIOMA',
+    asset: 'ACTIVO',
+    expiry: 'VENCIMIENTO',
+    venues: 'EXCHANGES',
+    myIv: 'MI IV',
+  },
+);
+
 export default function MobileToolbar() {
+  const t = useT(messages);
+  const locale = useLocale();
   const underlying = useAppStore((s) => s.underlying);
   const expiry = useAppStore((s) => s.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
@@ -41,7 +64,7 @@ export default function MobileToolbar() {
 
         {expiry && (
           <button className={styles.expiry} onClick={() => setDrawerOpen(true)}>
-            {formatExpiry(expiry)}
+            {formatExpiry(expiry, locale)}
             {dte != null && (
               <span className={styles.dte} data-urgent={dte <= 1}>
                 {dte}d
@@ -58,11 +81,16 @@ export default function MobileToolbar() {
         </div>
       </div>
 
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Settings">
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={t('settings')}>
         <div className={styles.drawerContent}>
+          <div className={styles.section}>
+            <div className={styles.sectionLabel}>{t('language')}</div>
+            <LanguageToggle />
+          </div>
+
           {/* Asset selection */}
           <div className={styles.section}>
-            <div className={styles.sectionLabel}>ASSET</div>
+            <div className={styles.sectionLabel}>{t('asset')}</div>
             <button
               className={styles.assetRow}
               onClick={() => {
@@ -80,7 +108,7 @@ export default function MobileToolbar() {
           {/* Expiry selection */}
           {expiries.length > 0 && (
             <div className={styles.section}>
-              <div className={styles.sectionLabel}>EXPIRY</div>
+              <div className={styles.sectionLabel}>{t('expiry')}</div>
               <div className={styles.expiryGrid}>
                 {expiries.map((e) => {
                   const d = dteDays(e);
@@ -91,7 +119,7 @@ export default function MobileToolbar() {
                       data-active={e === expiry}
                       onClick={() => setExpiry(e)}
                     >
-                      {formatExpiry(e)}
+                      {formatExpiry(e, locale)}
                       <span className={styles.chipDte} data-urgent={d <= 1}>
                         {d}d
                       </span>
@@ -104,13 +132,13 @@ export default function MobileToolbar() {
 
           {/* Venues */}
           <div className={styles.section}>
-            <div className={styles.sectionLabel}>VENUES</div>
+            <div className={styles.sectionLabel}>{t('venues')}</div>
             <VenueSidebar activeVenues={activeVenues} onToggle={toggleVenue} />
           </div>
 
           {/* My IV */}
           <div className={styles.section}>
-            <div className={styles.sectionLabel}>MY IV</div>
+            <div className={styles.sectionLabel}>{t('myIv')}</div>
             <div className={styles.ivRow}>
               <MyIvInput />
             </div>

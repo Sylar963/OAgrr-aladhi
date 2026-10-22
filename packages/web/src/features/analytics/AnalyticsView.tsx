@@ -1,4 +1,5 @@
 import { useAppStore } from '@stores/app-store';
+import { defineMessages, useT } from '@lib/i18n';
 import { AssetPickerButton, Spinner, VenuePickerButton } from '@components/ui';
 import { DvolChart, DvolHeatmap } from '@features/dvol';
 import { useAllExpiriesChain } from './queries';
@@ -12,7 +13,21 @@ import styles from './AnalyticsView.module.css';
 import { OiByStrikeCard } from './oi-by-strike';
 import { TimeAtPrice } from './time-at-price';
 
+const messages = defineMessages(
+  {
+    loading: 'Loading analytics…',
+    title: 'Analytics',
+    subtitle: 'Aggregated across {expiries} expiries · {venues} venues',
+  },
+  {
+    loading: 'Cargando analíticas…',
+    title: 'Analíticas',
+    subtitle: 'Agregado en {expiries} vencimientos · {venues} exchanges',
+  },
+);
+
 export default function AnalyticsView() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data: chains, isLoading } = useAllExpiriesChain(underlying, activeVenues);
@@ -20,7 +35,7 @@ export default function AnalyticsView() {
   if (isLoading || !chains) {
     return (
       <div className={styles.view}>
-        <Spinner size="lg" label="Loading analytics…" />
+        <Spinner size="lg" label={t('loading')} />
       </div>
     );
   }
@@ -32,12 +47,12 @@ export default function AnalyticsView() {
     <div className={styles.view}>
       <div className={styles.header}>
         <div className={styles.titleRow}>
-          <span className={styles.title}>Analytics</span>
+          <span className={styles.title}>{t('title')}</span>
           <AssetPickerButton />
           <VenuePickerButton />
         </div>
         <span className={styles.subtitle}>
-          Aggregated across {chains.length} expiries · {activeVenues.length} venues
+          {t('subtitle', { expiries: chains.length, venues: activeVenues.length })}
         </span>
       </div>
 

@@ -2,6 +2,7 @@ import { AssetPickerButton, EmptyState, Spinner, VenuePickerButton } from '@comp
 import { useAllExpiriesGex, useChainQuery, useExpiries } from '@features/chain/queries';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { dteDays, fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { VENUE_IDS } from '@lib/venue-meta';
 import type { SpotCandleCurrency } from '@shared/common';
 import type { GexStrike } from '@shared/enriched';
@@ -10,6 +11,96 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import GexBandsChart from './GexBandsChart';
 import { computeGammaWalls, flowAttributedShare, formatGexM, gexAtSpot } from './gex-wall-utils';
 import styles from './GexView.module.css';
+
+const messages = defineMessages(
+  {
+    loading: 'Loading GEX data…',
+    title: 'Gamma Exposure (GEX)',
+    bars: 'Bars',
+    bands: 'Bands',
+    bandsOnly: 'Gamma bands support BTC/ETH/HYPE only',
+    subtitle: 'Dealer gamma per strike · $M of hedging per 1% spot move',
+    spot: 'Spot: {price}',
+    allTip:
+      'Sum GEX across every listed expiry — closer to total dealer hedging pressure than a single tenor',
+    all: 'ALL',
+    noDataAll: 'No GEX data across listed expiries',
+    noDataExpiry: 'No GEX data for this expiry',
+    noDataAllDetail: 'Venues report no open interest yet. Try again once the runtimes have warmed.',
+    noDataExpiryDetail: 'Try a further-dated expiry with more open interest.',
+    magnet: 'Magnet',
+    accelerator: 'Accelerator',
+    netAtSpotTip:
+      'Total dealer GEX at the current spot. Positive: dealers long gamma (dampening). Negative: short gamma (amplifying).',
+    netAtSpot: 'Net at spot',
+    flipTip:
+      "Spot level where total dealer GEX changes sign, found by re-pricing every contract's gamma across ±20% of spot",
+    flip: 'Flip',
+    callWall: 'Call wall',
+    putWall: 'Put wall',
+    flowShareTip:
+      'Share of gross gamma whose dealer sign comes from observed taker flow. The rest is open interest that predates the flow book, signed by the naive prior (dealers long calls, short puts).',
+    flowAttributed: 'Flow-attributed',
+    positiveExplain:
+      'Positive GEX: dealers buy dips and sell rallies to stay hedged → dampens volatility, pins price near high-OI strikes',
+    negativeExplain:
+      'Negative GEX: dealers sell into dips and buy into rallies → amplifies moves, expect bigger swings',
+    formula:
+      "GEX per strike = dealer position × Gamma × Spot² × 1% × contract size, summed across venues. New open interest is signed by the taker side of screen and block trades in each 15-min interval (taker buys ⇒ dealer short). The flip re-prices every contract's gamma across spot levels and marks where the total changes sign.",
+    caveat:
+      'Open interest that predates the flow book keeps the naive sign (dealers long calls, short puts) until it closes or expires — see Flow-attributed. Faded bars and amber shares are mostly that prior. Treat GEX as a directional indicator, not ground truth.',
+    axisNegative: '← Negative (accelerator)',
+    axisPositive: 'Positive (magnet) →',
+    barTitle: '{strike}: {value} per 1%{flow}',
+    barFlow: ' · {pct}% flow',
+    strikeFlowTip: "Share of this strike's gamma signed by observed flow",
+    pctFlow: '{pct}% flow',
+  },
+  {
+    loading: 'Cargando datos de GEX…',
+    title: 'Exposición gamma (GEX)',
+    bars: 'Barras',
+    bands: 'Bandas',
+    bandsOnly: 'Las bandas gamma solo admiten BTC/ETH/HYPE',
+    subtitle: 'Gamma del dealer por strike · $M de cobertura por cada 1% de movimiento del spot',
+    spot: 'Spot: {price}',
+    allTip:
+      'Suma el GEX de todos los vencimientos listados — más cercano a la presión total de cobertura del dealer que un solo plazo',
+    all: 'TODOS',
+    noDataAll: 'Sin datos de GEX en los vencimientos listados',
+    noDataExpiry: 'Sin datos de GEX para este vencimiento',
+    noDataAllDetail:
+      'Los exchanges aún no reportan open interest. Inténtalo de nuevo cuando los runtimes estén listos.',
+    noDataExpiryDetail: 'Prueba un vencimiento más lejano con más open interest.',
+    magnet: 'Imán',
+    accelerator: 'Acelerador',
+    netAtSpotTip:
+      'GEX total del dealer en el spot actual. Positivo: dealers long gamma (amortigua). Negativo: short gamma (amplifica).',
+    netAtSpot: 'Neto en spot',
+    flipTip:
+      'Nivel de spot donde el GEX total del dealer cambia de signo, calculado revalorizando el gamma de cada contrato en ±20% del spot',
+    flip: 'Flip',
+    callWall: 'Muro de calls',
+    putWall: 'Muro de puts',
+    flowShareTip:
+      'Porción del gamma bruto cuyo signo de dealer proviene del flujo taker observado. El resto es open interest previo al libro de flujo, con signo según el supuesto ingenuo (dealers long calls, short puts).',
+    flowAttributed: 'Atribuido a flujo',
+    positiveExplain:
+      'GEX positivo: los dealers compran caídas y venden subidas para mantenerse cubiertos → amortigua la volatilidad, ancla el precio cerca de strikes con alto OI',
+    negativeExplain:
+      'GEX negativo: los dealers venden en caídas y compran en subidas → amplifica los movimientos, espera oscilaciones más grandes',
+    formula:
+      'GEX por strike = posición del dealer × Gamma × Spot² × 1% × tamaño del contrato, sumado entre exchanges. El nuevo open interest se firma según el lado taker de las operaciones en pantalla y en bloque en cada intervalo de 15 min (compras taker ⇒ dealer short). El flip revaloriza el gamma de cada contrato en distintos niveles de spot y marca dónde cambia de signo el total.',
+    caveat:
+      'El open interest previo al libro de flujo conserva el signo ingenuo (dealers long calls, short puts) hasta que se cierra o vence — ver Atribuido a flujo. Las barras atenuadas y las porciones en ámbar son mayormente ese supuesto. Trata el GEX como un indicador direccional, no como verdad absoluta.',
+    axisNegative: '← Negativo (acelerador)',
+    axisPositive: 'Positivo (imán) →',
+    barTitle: '{strike}: {value} por 1%{flow}',
+    barFlow: ' · {pct}% flujo',
+    strikeFlowTip: 'Porción del gamma de este strike firmada por flujo observado',
+    pctFlow: '{pct}% flujo',
+  },
+);
 
 type Mode = 'all' | string;
 type Version = 'bars' | 'bands';
@@ -20,6 +111,8 @@ function isBandsCurrency(c: string): c is SpotCandleCurrency {
 }
 
 export default function GexView() {
+  const t = useT(messages);
+  const locale = useLocale();
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
 
@@ -103,7 +196,7 @@ export default function GexView() {
   if (isLoading && gex.length === 0) {
     return (
       <div className={styles.view}>
-        <Spinner size="lg" label="Loading GEX data…" />
+        <Spinner size="lg" label={t('loading')} />
       </div>
     );
   }
@@ -113,7 +206,7 @@ export default function GexView() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.titleRow}>
-            <span className={styles.title}>Gamma Exposure (GEX)</span>
+            <span className={styles.title}>{t('title')}</span>
             <AssetPickerButton />
             <VenuePickerButton />
             <div className={styles.gexModeToggle}>
@@ -123,7 +216,7 @@ export default function GexView() {
                 data-active={effectiveVersion === 'bars' || undefined}
                 onClick={() => setVersion('bars')}
               >
-                Bars
+                {t('bars')}
               </button>
               <button
                 type="button"
@@ -131,17 +224,17 @@ export default function GexView() {
                 data-active={effectiveVersion === 'bands' || undefined}
                 onClick={() => bandsAvailable && setVersion('bands')}
                 disabled={!bandsAvailable}
-                title={bandsAvailable ? undefined : 'Gamma bands support BTC/ETH/HYPE only'}
+                title={bandsAvailable ? undefined : t('bandsOnly')}
               >
-                Bands
+                {t('bands')}
               </button>
             </div>
           </div>
           <span className={styles.subtitle}>
-            Dealer gamma per strike · $M of hedging per 1% spot move
+            {t('subtitle')}
           </span>
         </div>
-        {spotPrice != null && <div className={styles.spotBadge}>Spot: {fmtUsd(spotPrice)}</div>}
+        {spotPrice != null && <div className={styles.spotBadge}>{t('spot', { price: fmtUsd(spotPrice) })}</div>}
       </div>
 
       <div className={styles.expiryPicker}>
@@ -150,9 +243,9 @@ export default function GexView() {
           className={styles.expiryBtn}
           data-active={isAll}
           onClick={() => setMode('all')}
-          title="Sum GEX across every listed expiry — closer to total dealer hedging pressure than a single tenor"
+          title={t('allTip')}
         >
-          ALL
+          {t('all')}
           <span className={styles.dteBadge}>Σ</span>
         </button>
         {expiries.map((e) => {
@@ -164,7 +257,7 @@ export default function GexView() {
               data-active={e === mode}
               onClick={() => setMode(e)}
             >
-              {formatExpiry(e)}
+              {formatExpiry(e, locale)}
               <span className={styles.dteBadge} data-urgent={dte <= 1}>
                 {dte}d
               </span>
@@ -176,11 +269,9 @@ export default function GexView() {
       {nonzero.length === 0 ? (
         <EmptyState
           icon="◈"
-          title={isAll ? 'No GEX data across listed expiries' : 'No GEX data for this expiry'}
+          title={isAll ? t('noDataAll') : t('noDataExpiry')}
           detail={
-            isAll
-              ? 'Venues report no open interest yet. Try again once the runtimes have warmed.'
-              : 'Try a further-dated expiry with more open interest.'
+            isAll ? t('noDataAllDetail') : t('noDataExpiryDetail')
           }
         />
       ) : (
@@ -188,8 +279,8 @@ export default function GexView() {
           {isMobile ? (
             <button className={styles.explainToggle} onClick={() => setShowExplain((v) => !v)}>
               <span className={styles.explainToggleLabel}>
-                <span className={styles.explainDot} data-type="positive" /> Magnet
-                <span className={styles.explainDot} data-type="negative" /> Accelerator
+                <span className={styles.explainDot} data-type="positive" /> {t('magnet')}
+                <span className={styles.explainDot} data-type="negative" /> {t('accelerator')}
               </span>
               <span className={styles.explainToggleChevron} data-expanded={showExplain}>
                 ⓘ
@@ -200,9 +291,9 @@ export default function GexView() {
             {netAtSpot != null && (
               <span
                 className={styles.level}
-                title="Total dealer GEX at the current spot. Positive: dealers long gamma (dampening). Negative: short gamma (amplifying)."
+                title={t('netAtSpotTip')}
               >
-                Net at spot
+                {t('netAtSpot')}
                 <span
                   className={styles.levelValue}
                   data-type={netAtSpot >= 0 ? 'positive' : 'negative'}
@@ -213,21 +304,21 @@ export default function GexView() {
             )}
             <span
               className={styles.level}
-              title="Spot level where total dealer GEX changes sign, found by re-pricing every contract's gamma across ±20% of spot"
+              title={t('flipTip')}
             >
-              Flip
+              {t('flip')}
               <span className={styles.levelValue}>
                 {walls.gammaFlip != null ? Math.round(walls.gammaFlip).toLocaleString() : '—'}
               </span>
             </span>
-            <WallLevel label="Call wall" strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
-            <WallLevel label="Put wall" strike={walls.putWall} flowShare={flowShareAt(walls.putWall)} />
+            <WallLevel label={t('callWall')} strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
+            <WallLevel label={t('putWall')} strike={walls.putWall} flowShare={flowShareAt(walls.putWall)} />
             {flowShare != null && (
               <span
                 className={styles.level}
-                title="Share of gross gamma whose dealer sign comes from observed taker flow. The rest is open interest that predates the flow book, signed by the naive prior (dealers long calls, short puts)."
+                title={t('flowShareTip')}
               >
-                Flow-attributed
+                {t('flowAttributed')}
                 <span className={styles.levelValue} data-low-confidence={flowShare < 0.5}>
                   {Math.round(flowShare * 100)}%
                 </span>
@@ -239,26 +330,17 @@ export default function GexView() {
             <div className={styles.explain}>
               <span className={styles.explainItem} data-type="positive">
                 <span className={styles.explainDot} data-type="positive" />
-                Positive GEX: dealers buy dips and sell rallies to stay hedged → dampens volatility,
-                pins price near high-OI strikes
+                {t('positiveExplain')}
               </span>
               <span className={styles.explainItem} data-type="negative">
                 <span className={styles.explainDot} data-type="negative" />
-                Negative GEX: dealers sell into dips and buy into rallies → amplifies moves, expect
-                bigger swings
+                {t('negativeExplain')}
               </span>
               <span className={styles.explainFormula}>
-                GEX per strike = dealer position × Gamma × Spot² × 1% × contract size, summed
-                across venues. New open interest is signed by the taker side of screen and block
-                trades in each 15-min interval (taker buys ⇒ dealer short). The flip re-prices
-                every contract&apos;s gamma across spot levels and marks where the total changes
-                sign.
+                {t('formula')}
               </span>
               <span className={styles.explainCaveat}>
-                Open interest that predates the flow book keeps the naive sign (dealers long calls,
-                short puts) until it closes or expires — see Flow-attributed. Faded bars and
-                amber shares are mostly that prior. Treat GEX as a directional indicator, not
-                ground truth.
+                {t('caveat')}
               </span>
             </div>
           )}
@@ -275,11 +357,11 @@ export default function GexView() {
             <div className={styles.chart}>
               <div className={styles.axis}>
                 <div className={styles.axisLeft}>
-                  <span className={styles.axisLabel}>← Negative (accelerator)</span>
+                  <span className={styles.axisLabel}>{t('axisNegative')}</span>
                 </div>
                 <div className={styles.axisCenter}>0</div>
                 <div className={styles.axisRight}>
-                  <span className={styles.axisLabel}>Positive (magnet) →</span>
+                  <span className={styles.axisLabel}>{t('axisPositive')}</span>
                 </div>
               </div>
 
@@ -289,7 +371,7 @@ export default function GexView() {
                   const positive = g.gexUsdMillions >= 0;
                   const isNearSpot = g.strike === spotStrike;
                   const flowPct =
-                    g.flowShare !== undefined ? ` · ${Math.round(g.flowShare * 100)}% flow` : '';
+                    g.flowShare !== undefined ? t('barFlow', { pct: Math.round(g.flowShare * 100) }) : '';
                   const barOpacity = g.flowShare !== undefined ? 0.35 + 0.65 * g.flowShare : 1;
 
                   return (
@@ -310,7 +392,11 @@ export default function GexView() {
                               className={styles.bar}
                               data-type="negative"
                               style={{ width: `${pct}%`, opacity: barOpacity }}
-                              title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%${flowPct}`}
+                              title={t('barTitle', {
+                                strike: g.strike,
+                                value: formatGexM(g.gexUsdMillions),
+                                flow: flowPct,
+                              })}
                             />
                           )}
                         </div>
@@ -321,7 +407,11 @@ export default function GexView() {
                               className={styles.bar}
                               data-type="positive"
                               style={{ width: `${pct}%`, opacity: barOpacity }}
-                              title={`${g.strike}: ${formatGexM(g.gexUsdMillions)} per 1%${flowPct}`}
+                              title={t('barTitle', {
+                                strike: g.strike,
+                                value: formatGexM(g.gexUsdMillions),
+                                flow: flowPct,
+                              })}
                             />
                           )}
                         </div>
@@ -348,6 +438,7 @@ function WallLevel({
   strike: number | null;
   flowShare: number | undefined;
 }) {
+  const t = useT(messages);
   return (
     <span className={styles.level}>
       {label}
@@ -356,9 +447,9 @@ function WallLevel({
         <span
           className={styles.levelValue}
           data-low-confidence={flowShare < 0.5}
-          title="Share of this strike's gamma signed by observed flow"
+          title={t('strikeFlowTip')}
         >
-          {Math.round(flowShare * 100)}% flow
+          {t('pctFlow', { pct: Math.round(flowShare * 100) })}
         </span>
       )}
     </span>

@@ -1,75 +1,198 @@
 import { EmptyState, Spinner } from "@components/ui";
 import {
-  fmtAge,
   fmtDuration,
   fmtExpiry,
   fmtPrice,
   shareThesis,
-  STATUS_LABEL,
   useTheses,
   useThesisRefresh,
-  wrongIfText,
 } from "@features/thesis";
+import { defineMessages, type Translate, useLocale, useT } from "@lib/i18n";
 import type {
   PublicThesisDto,
   ThesisState,
   ThesisView,
 } from "@oggregator/protocol";
-import { useMemo, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 
 import {
   useLeaderboard,
   useThesisFeed,
   useThesisFeedRefresh,
 } from "./hooks/queries";
+import { socialMessages } from "./i18n";
 import styles from "./ThesisFeed.module.css";
+
+const messages = defineMessages(
+  {
+    scopeAll: "All",
+    scopeActive: "Active",
+    scopeMine: "Mine",
+    statusINTACT: "Intact",
+    statusAT_RISK: "At risk",
+    statusINVALIDATED: "Invalidated",
+    statusEXPIRED: "Expired",
+    invalidated: "Invalidated",
+    invalidatedTitle: "A confirmation candle closed beyond the level",
+    expired: "Held to horizon",
+    expiredTitle: "The horizon passed without the level breaking",
+    ended_early: "Ended early",
+    ended_earlyTitle: "The author ended it before the horizon",
+    overridden: "Flipped",
+    overriddenTitle: "The author flipped to the other side before a wait finished",
+    reversed: "Flipped",
+    reversedTitle: "The author flipped to the other side after waiting",
+    ageDays_one: "{n} day ago",
+    ageDays_other: "{n} days ago",
+    ageShort: "{d} ago",
+    theses: "Theses",
+    show: "Show",
+    underlying: "Underlying",
+    showEveryone: "Show every trader's theses",
+    loading: "Loading theses…",
+    unavailable: "Theses unavailable",
+    emptyTitle: "No shared theses yet",
+    noMatchTitle: "Nothing matches",
+    emptyDetail:
+      "Write a thesis in Architect and share it, or share an active one above.",
+    focusDetail: "@{handle} has not shared a thesis in the last 30 days.",
+    noMatchDetail: "Try another filter.",
+    privatePrompt: "Your {underlying} {direction} thesis until {date} is private.",
+    bearish: "bearish",
+    bullish: "bullish",
+    bearishCall: "▼ Bearish",
+    bullishCall: "▲ Bullish",
+    sharing: "Sharing…",
+    share: "Share",
+    openBook: "Open their book",
+    until: "until {date}",
+    less: "Less",
+    more: "More",
+    wrongIfAbove: "Wrong if a {tf} candle closes above {level}",
+    wrongIfBelow: "Wrong if a {tf} candle closes below {level}",
+    room: "{pct}% room",
+    left: "{d} left",
+    endedAgo: "ended {age}",
+    ended: "ended",
+    elapsed: "{pct}% of the horizon elapsed",
+    withdrawing: "Withdrawing…",
+    withdraw: "Withdraw from feed",
+  },
+  {
+    scopeAll: "Todas",
+    scopeActive: "Activas",
+    scopeMine: "Mías",
+    statusINTACT: "Intacta",
+    statusAT_RISK: "En riesgo",
+    statusINVALIDATED: "Invalidada",
+    statusEXPIRED: "Vencida",
+    invalidated: "Invalidada",
+    invalidatedTitle: "Una vela de confirmación cerró más allá del nivel",
+    expired: "Sostenida al horizonte",
+    expiredTitle: "El horizonte pasó sin que se rompiera el nivel",
+    ended_early: "Terminada antes",
+    ended_earlyTitle: "El autor la terminó antes del horizonte",
+    overridden: "Invertida",
+    overriddenTitle: "El autor se pasó al otro lado antes de terminar la espera",
+    reversed: "Invertida",
+    reversedTitle: "El autor se pasó al otro lado después de esperar",
+    ageDays_one: "hace {n} día",
+    ageDays_other: "hace {n} días",
+    ageShort: "hace {d}",
+    theses: "Tesis",
+    show: "Mostrar",
+    underlying: "Subyacente",
+    showEveryone: "Ver las tesis de todos los traders",
+    loading: "Cargando tesis…",
+    unavailable: "Tesis no disponibles",
+    emptyTitle: "Aún no hay tesis compartidas",
+    noMatchTitle: "Sin resultados",
+    emptyDetail:
+      "Escribe una tesis en Architect y compártela, o comparte una activa arriba.",
+    focusDetail: "@{handle} no ha compartido tesis en los últimos 30 días.",
+    noMatchDetail: "Prueba otro filtro.",
+    privatePrompt: "Tu tesis {direction} de {underlying} hasta {date} es privada.",
+    bearish: "bajista",
+    bullish: "alcista",
+    bearishCall: "▼ Bajista",
+    bullishCall: "▲ Alcista",
+    sharing: "Compartiendo…",
+    share: "Compartir",
+    openBook: "Ver su libro",
+    until: "hasta {date}",
+    less: "Menos",
+    more: "Más",
+    wrongIfAbove: "Inválida si una vela {tf} cierra por encima de {level}",
+    wrongIfBelow: "Inválida si una vela {tf} cierra por debajo de {level}",
+    room: "{pct}% de margen",
+    left: "quedan {d}",
+    endedAgo: "terminó {age}",
+    ended: "terminada",
+    elapsed: "{pct}% del horizonte transcurrido",
+    withdrawing: "Retirando…",
+    withdraw: "Retirar del feed",
+  },
+);
+
+type T = Translate<typeof messages.en>;
 
 type Scope = "all" | "active" | "mine";
 
-const SCOPES: ReadonlyArray<{ id: Scope; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "mine", label: "Mine" },
+const SCOPES: ReadonlyArray<{ id: Scope; label: keyof typeof messages.en }> = [
+  { id: "all", label: "scopeAll" },
+  { id: "active", label: "scopeActive" },
+  { id: "mine", label: "scopeMine" },
 ];
 
 const REASON_CLAMP_CHARS = 220;
 
-const ENDED_LABEL: Record<
-  Exclude<ThesisState, "active">,
-  { label: string; title: string }
-> = {
-  invalidated: {
-    label: "Invalidated",
-    title: "A confirmation candle closed beyond the level",
-  },
-  expired: {
-    label: "Held to horizon",
-    title: "The horizon passed without the level breaking",
-  },
-  ended_early: {
-    label: "Ended early",
-    title: "The author ended it before the horizon",
-  },
-  overridden: {
-    label: "Flipped",
-    title: "The author flipped to the other side before a wait finished",
-  },
-  reversed: {
-    label: "Flipped",
-    title: "The author flipped to the other side after waiting",
-  },
-};
-
-function outcome(thesis: PublicThesisDto): {
+function outcome(
+  thesis: PublicThesisDto,
+  t: T,
+): {
   label: string;
   title?: string;
   tone: string;
 } {
   if (thesis.state === "active") {
     const status = thesis.status ?? "INTACT";
-    return { label: STATUS_LABEL[status], tone: status };
+    return { label: t(`status${status}`), tone: status };
   }
-  return { ...ENDED_LABEL[thesis.state], tone: thesis.state };
+  const state: Exclude<ThesisState, "active"> = thesis.state;
+  return {
+    label: t(state),
+    title: t(`${state}Title`),
+    tone: state,
+  };
+}
+
+function fmtAge(createdAt: number, nowMs: number, t: T): string {
+  const days = Math.floor((nowMs - createdAt) / 86_400_000);
+  if (days >= 1)
+    return t(days === 1 ? "ageDays_one" : "ageDays_other", { n: days });
+  return t("ageShort", { d: fmtDuration(nowMs - createdAt) });
+}
+
+function wrongIfText(thesis: PublicThesisDto, t: T): string {
+  return t(thesis.direction === "bearish" ? "wrongIfAbove" : "wrongIfBelow", {
+    tf: thesis.confirmSec === 86400 ? "1D" : "4H",
+    level: fmtPrice(thesis.level),
+  });
+}
+
+function fillTemplate(
+  template: string,
+  slots: Record<string, ReactNode>,
+): ReactNode[] {
+  return template
+    .split(/\{(\w+)\}/)
+    .map((part, i) =>
+      i % 2 === 1 ? (
+        <Fragment key={i}>{slots[part]}</Fragment>
+      ) : (
+        part
+      ),
+    );
 }
 
 function spotMove(
@@ -104,6 +227,8 @@ export default function ThesisFeed({
   selectedHandle,
   onSelectTrader,
 }: ThesisFeedProps) {
+  const t = useT(messages);
+  const ts = useT(socialMessages);
   const feed = useThesisFeed();
   const ranked = useLeaderboard("all");
   const [scope, setScope] = useState<Scope>("all");
@@ -136,10 +261,10 @@ export default function ThesisFeed({
   const nowMs = Date.now();
 
   return (
-    <section className={styles.feed} aria-label="Theses">
+    <section className={styles.feed} aria-label={t("theses")}>
       <header className={styles.header}>
-        <h2 className={styles.title}>Theses</h2>
-        <div className={styles.filters} role="tablist" aria-label="Show">
+        <h2 className={styles.title}>{t("theses")}</h2>
+        <div className={styles.filters} role="tablist" aria-label={t("show")}>
           {SCOPES.map((option) => (
             <button
               key={option.id}
@@ -149,12 +274,12 @@ export default function ThesisFeed({
               data-active={option.id === scope}
               onClick={() => setScope(option.id)}
             >
-              {option.label}
+              {t(option.label)}
             </button>
           ))}
         </div>
         {underlyings.length > 1 && (
-          <div className={styles.filters} aria-label="Underlying">
+          <div className={styles.filters} aria-label={t("underlying")}>
             {underlyings.map((name) => (
               <button
                 key={name}
@@ -172,7 +297,7 @@ export default function ThesisFeed({
           <button
             className={styles.focusChip}
             onClick={() => setUnfocusedFrom(focus)}
-            title="Show every trader's theses"
+            title={t("showEveryone")}
           >
             @{focus} <span aria-hidden>×</span>
           </button>
@@ -182,23 +307,20 @@ export default function ThesisFeed({
       <div className={styles.list}>
         <MyPrivateTheses />
         {feed.isLoading ? (
-          <Spinner size="md" label="Loading theses…" />
+          <Spinner size="md" label={t("loading")} />
         ) : feed.isError ? (
-          <EmptyState
-            title="Theses unavailable"
-            detail="Try again in a moment."
-          />
+          <EmptyState title={t("unavailable")} detail={ts("tryAgain")} />
         ) : visible.length === 0 ? (
           <EmptyState
             title={
-              theses.length === 0 ? "No shared theses yet" : "Nothing matches"
+              theses.length === 0 ? t("emptyTitle") : t("noMatchTitle")
             }
             detail={
               theses.length === 0
-                ? "Write a thesis in Architect and share it, or share an active one above."
+                ? t("emptyDetail")
                 : focus
-                  ? `@${focus} has not shared a thesis in the last 30 days.`
-                  : "Try another filter."
+                  ? t("focusDetail", { handle: focus })
+                  : t("noMatchDetail")
             }
           />
         ) : (
@@ -221,6 +343,7 @@ export default function ThesisFeed({
 }
 
 function useShareAction() {
+  const ts = useT(socialMessages);
   const refreshTheses = useThesisRefresh();
   const refreshFeed = useThesisFeedRefresh();
   const [busy, setBusy] = useState<string | null>(null);
@@ -233,7 +356,7 @@ function useShareAction() {
       await shareThesis(id, shared);
       await Promise.all([refreshTheses(), refreshFeed()]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(err instanceof Error ? err.message : ts("requestFailed"));
     } finally {
       setBusy(null);
     }
@@ -243,6 +366,8 @@ function useShareAction() {
 }
 
 function MyPrivateTheses() {
+  const t = useT(messages);
+  const locale = useLocale();
   const own = useTheses();
   const share = useShareAction();
   const unshared = (own.data?.active ?? []).filter(
@@ -255,21 +380,25 @@ function MyPrivateTheses() {
       {unshared.map(({ thesis }) => (
         <div key={thesis.id} className={styles.promptRow}>
           <span className={styles.promptText}>
-            Your <strong>{thesis.underlying}</strong>{" "}
-            <span
-              className={styles.direction}
-              data-direction={thesis.direction}
-            >
-              {thesis.direction}
-            </span>{" "}
-            thesis until {fmtExpiry(thesis.horizonExpiry)} is private.
+            {fillTemplate(t("privatePrompt"), {
+              underlying: <strong>{thesis.underlying}</strong>,
+              direction: (
+                <span
+                  className={styles.direction}
+                  data-direction={thesis.direction}
+                >
+                  {t(thesis.direction)}
+                </span>
+              ),
+              date: fmtExpiry(thesis.horizonExpiry, locale),
+            })}
           </span>
           <button
             className={styles.shareBtn}
             disabled={share.busy != null}
             onClick={() => void share.run(thesis.id, true)}
           >
-            {share.busy === thesis.id ? "Sharing…" : "Share"}
+            {share.busy === thesis.id ? t("sharing") : t("share")}
           </button>
         </div>
       ))}
@@ -285,9 +414,12 @@ interface ThesisCardProps {
 }
 
 function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
+  const t = useT(messages);
+  const locale = useLocale();
+  const ts = useT(socialMessages);
   const [expanded, setExpanded] = useState(false);
   const share = useShareAction();
-  const result = outcome(thesis);
+  const result = outcome(thesis, t);
   const move = spotMove(thesis);
   const active = thesis.state === "active";
   const long = thesis.reason.length > REASON_CLAMP_CHARS;
@@ -304,19 +436,19 @@ function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
           <button
             className={styles.handleBtn}
             onClick={() => onSelectTrader(thesis.handle)}
-            title="Open their book"
+            title={t("openBook")}
           >
             @{thesis.handle}
           </button>
         ) : (
           <span className={styles.handle}>@{thesis.handle}</span>
         )}
-        {thesis.isMe && <span className={styles.youTag}>you</span>}
+        {thesis.isMe && <span className={styles.youTag}>{ts("you")}</span>}
         <time
           className={styles.age}
           dateTime={new Date(thesis.createdAt).toISOString()}
         >
-          {fmtAge(thesis.createdAt, nowMs)}
+          {fmtAge(thesis.createdAt, nowMs, t)}
         </time>
         <span
           className={styles.outcome}
@@ -330,10 +462,10 @@ function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
       <div className={styles.call}>
         <span className={styles.underlying}>{thesis.underlying}</span>
         <span className={styles.direction} data-direction={thesis.direction}>
-          {thesis.direction === "bearish" ? "▼ Bearish" : "▲ Bullish"}
+          {thesis.direction === "bearish" ? t("bearishCall") : t("bullishCall")}
         </span>
         <span className={styles.until}>
-          until {fmtExpiry(thesis.horizonExpiry)}
+          {t("until", { date: fmtExpiry(thesis.horizonExpiry, locale) })}
         </span>
       </div>
 
@@ -345,14 +477,11 @@ function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
           className={styles.moreBtn}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? "Less" : "More"}
+          {expanded ? t("less") : t("more")}
         </button>
       )}
 
-      <p className={styles.rule}>
-        Wrong if{" "}
-        {wrongIfText(thesis.direction, thesis.level, thesis.confirmSec)}
-      </p>
+      <p className={styles.rule}>{wrongIfText(thesis, t)}</p>
 
       <div className={styles.metrics}>
         <span>
@@ -366,20 +495,22 @@ function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
           )}
         </span>
         {active && thesis.roomPct != null && (
-          <span>{(thesis.roomPct * 100).toFixed(1)}% room</span>
+          <span>{t("room", { pct: (thesis.roomPct * 100).toFixed(1) })}</span>
         )}
         <span>
           {active
-            ? `${fmtDuration(Math.max(0, horizonMs - nowMs))} left`
+            ? t("left", { d: fmtDuration(Math.max(0, horizonMs - nowMs)) })
             : thesis.endedAt != null
-              ? `ended ${fmtAge(thesis.endedAt, nowMs)}`
-              : "ended"}
+              ? t("endedAgo", { age: fmtAge(thesis.endedAt, nowMs, t) })
+              : t("ended")}
         </span>
       </div>
       <div
         className={styles.progress}
         role="presentation"
-        title={`${Math.round(horizonProgress(thesis, nowMs) * 100)}% of the horizon elapsed`}
+        title={t("elapsed", {
+          pct: Math.round(horizonProgress(thesis, nowMs) * 100),
+        })}
       >
         <span
           className={styles.progressFill}
@@ -400,7 +531,7 @@ function ThesisCard({ thesis, nowMs, onSelectTrader }: ThesisCardProps) {
             disabled={share.busy != null}
             onClick={() => void share.run(thesis.id, false)}
           >
-            {share.busy ? "Withdrawing…" : "Withdraw from feed"}
+            {share.busy ? t("withdrawing") : t("withdraw")}
           </button>
         </div>
       )}

@@ -1,9 +1,11 @@
+import { useLocale, useT } from '@lib/i18n';
 import { useState } from 'react';
 
 import { endThesis, shareThesis, tightenThesis } from './api';
 import type { UnderlyingThesis } from './hooks';
 import { useThesisRefresh } from './hooks';
-import { fmtDuration, fmtExpiry, fmtPrice, STATUS_LABEL, wrongIfText } from './format';
+import { classificationLabel, fmtDuration, fmtExpiry, fmtPrice, statusLabel, wrongIfText } from './format';
+import { thesisMessages } from './i18n';
 import styles from './Thesis.module.css';
 
 interface ThesisStripProps extends UnderlyingThesis {
@@ -12,6 +14,8 @@ interface ThesisStripProps extends UnderlyingThesis {
 }
 
 export default function ThesisStrip({ underlying, active, reversal, onSetThesis }: ThesisStripProps) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const refresh = useThesisRefresh();
   const [editing, setEditing] = useState<'tighten' | 'end' | null>(null);
   const [input, setInput] = useState('');
@@ -27,7 +31,7 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
       setEditing(null);
       setInput('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
+      setError(err instanceof Error ? err.message : t('requestFailed'));
     } finally {
       setBusy(false);
     }
@@ -36,17 +40,19 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
   if (active == null) {
     return (
       <div className={styles.strip}>
-        <span className={styles.stripLabel}>Thesis</span>
+        <span className={styles.stripLabel}>{t('thesis')}</span>
         {reversal?.cooldown ? (
           <span className={styles.stripText}>
-            Ended {reversal.thesis.direction} thesis · reversal cooldown{' '}
-            {fmtDuration(reversal.cooldown.endsAt - Date.now())} left
+            {t('endedCooldown', {
+              direction: classificationLabel(reversal.thesis.direction, locale),
+              d: fmtDuration(reversal.cooldown.endsAt - Date.now()),
+            })}
           </span>
         ) : (
-          <span className={styles.stripText}>No {underlying} thesis.</span>
+          <span className={styles.stripText}>{t('noThesis', { underlying })}</span>
         )}
         <button type="button" className={styles.stripBtn} onClick={onSetThesis}>
-          Set thesis
+          {t('setThesis')}
         </button>
       </div>
     );
@@ -57,46 +63,49 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
   return (
     <div className={styles.stripWrap}>
       <div className={styles.strip}>
-        <span className={styles.stripLabel}>Thesis</span>
+        <span className={styles.stripLabel}>{t('thesis')}</span>
         <span className={styles.direction} data-direction={thesis.direction}>
-          {thesis.direction === 'bearish' ? 'Bearish' : 'Bullish'}
+          {thesis.direction === 'bearish' ? t('bearish') : t('bullish')}
         </span>
         <span className={styles.stripText}>
-          until {fmtExpiry(thesis.horizonExpiry)} · wrong if {wrongIfText(thesis.direction, thesis.level, thesis.confirmSec)}
+          {t('untilWrongIf', {
+            date: fmtExpiry(thesis.horizonExpiry, locale),
+            rule: wrongIfText(thesis.direction, thesis.level, thesis.confirmSec, locale),
+          })}
         </span>
         <span className={styles.statusChip} data-status={status.status}>
-          {STATUS_LABEL[status.status]}
+          {statusLabel(status.status, locale)}
         </span>
         {status.roomPct != null && (
-          <span className={styles.stripText}>{(status.roomPct * 100).toFixed(1)}% room</span>
+          <span className={styles.stripText}>{t('room', { pct: (status.roomPct * 100).toFixed(1) })}</span>
         )}
-        <span className={styles.stripText}>{fmtDuration(status.msToHorizon)} left</span>
+        <span className={styles.stripText}>{t('left', { d: fmtDuration(status.msToHorizon) })}</span>
         {cooldown?.kind === 'wait' && !cooldown.completed && (
-          <span className={styles.stripText}>wait {fmtDuration(cooldown.endsAt - Date.now())}</span>
+          <span className={styles.stripText}>{t('wait', { d: fmtDuration(cooldown.endsAt - Date.now()) })}</span>
         )}
-        {nothingToDo && <span className={styles.nothing}>nothing to do</span>}
+        {nothingToDo && <span className={styles.nothing}>{t('nothingToDo')}</span>}
         <span className={styles.stripSpacer} />
         <button
           type="button"
           className={styles.stripBtn}
           data-shared={thesis.share != null || undefined}
           disabled={busy}
-          title={thesis.share != null ? 'Shared on Social. Click to withdraw it.' : 'Publish on Social under your username'}
+          title={thesis.share != null ? t('sharedTitle') : t('shareTitle')}
           onClick={() => void run(() => shareThesis(thesis.id, thesis.share == null))}
         >
-          {thesis.share != null ? 'Shared' : 'Share'}
+          {thesis.share != null ? t('shared') : t('share')}
         </button>
         <button type="button" className={styles.stripBtn} onClick={() => setEditing(editing === 'tighten' ? null : 'tighten')}>
-          Tighten
+          {t('tighten')}
         </button>
         <button type="button" className={styles.stripBtn} onClick={() => setEditing(editing === 'end' ? null : 'end')}>
-          End
+          {t('end')}
         </button>
       </div>
       {editing === 'tighten' && (
         <div className={styles.stripEdit}>
           <span className={styles.stripText}>
-            New level (only closer to spot {fmtPrice(status.spotUsd)}):
+            {t('newLevel', { spot: fmtPrice(status.spotUsd) })}
           </span>
           <input
             className={styles.inputSmall}
@@ -110,18 +119,18 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
             disabled={busy || !(Number(input) > 0)}
             onClick={() => void run(() => tightenThesis(thesis.id, Number(input)))}
           >
-            Save
+            {t('save')}
           </button>
         </div>
       )}
       {editing === 'end' && (
         <div className={styles.stripEdit}>
           <span className={styles.stripText}>
-            End without a new view. Taking the other side within 24h then needs the override.
+            {t('endHint')}
           </span>
           <input
             className={styles.input}
-            placeholder="Note (optional)"
+            placeholder={t('notePlaceholder')}
             value={input}
             onChange={(event) => setInput(event.target.value)}
           />
@@ -131,7 +140,7 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
             disabled={busy}
             onClick={() => void run(() => endThesis(thesis.id, input.trim() || undefined))}
           >
-            End thesis
+            {t('endThesis')}
           </button>
         </div>
       )}

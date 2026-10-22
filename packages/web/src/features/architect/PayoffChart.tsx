@@ -2,7 +2,19 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 
 import type { PayoffPoint, Leg } from './payoff';
 import { fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import styles from './Architect.module.css';
+
+const messages = defineMessages(
+  {
+    price: 'Price  {value}',
+    dragHint: 'drag ◆ handles to adjust strikes',
+  },
+  {
+    price: 'Precio  {value}',
+    dragHint: 'arrastra los ◆ para ajustar strikes',
+  },
+);
 
 interface PayoffChartProps {
   points: PayoffPoint[];
@@ -68,6 +80,7 @@ export default function PayoffChart({
   scenarioIvPoints,
   scenarioDtePoints,
 }: PayoffChartProps) {
+  const t = useT(messages);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
@@ -379,7 +392,7 @@ export default function PayoffChart({
         ctx.fillStyle = '#888';
         ctx.font = "10px 'IBM Plex Mono', monospace";
         ctx.textAlign = 'left';
-        ctx.fillText(`Price  ${fmtUsd(hoverInfo.price)}`, tx + 8, ty + 16);
+        ctx.fillText(t('price', { value: fmtUsd(hoverInfo.price) }), tx + 8, ty + 16);
 
         ctx.fillStyle = hoverInfo.pnl >= 0 ? '#00E997' : '#CB3855';
         ctx.font = "bold 12px 'IBM Plex Mono', monospace";
@@ -390,7 +403,7 @@ export default function PayoffChart({
         );
       }
     },
-    [getLayout],
+    [getLayout, t],
   );
 
   useEffect(() => {
@@ -538,7 +551,7 @@ export default function PayoffChart({
         onMouseLeave={handleMouseLeave}
       />
       {onLegStrikeDrag && legs.length > 0 && (
-        <div className={styles.dragHint}>drag ◆ handles to adjust strikes</div>
+        <div className={styles.dragHint}>{t('dragHint')}</div>
       )}
     </div>
   );

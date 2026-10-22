@@ -4,6 +4,7 @@ import { Spinner, EmptyState, VenuePickerButton, AssetPickerButton } from '@comp
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 import { fmtIv } from '@lib/format';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { playTradeCue, tierForNotional } from '@lib/audio';
 import { useFlow, useFlowHistoryPage, useFlowHistorySummary } from './queries';
 import type { HistoryRange, TradeEvent, TradeHistoryCursor } from './queries';
@@ -11,7 +12,65 @@ import BlockFlowView from './BlockFlowView';
 import FlowChartsView from './FlowChartsView';
 import { getCustomRangeFromBounds } from './DateRangePicker';
 import { HistoryControls, getPresetRange, type HistoryPreset } from './HistoryControls';
+import { flowMessages } from './i18n';
 import styles from './FlowView.module.css';
+
+const messages = defineMessages(
+  {
+    liveTape: 'Live Tape',
+    history: 'History',
+    allStoredHistory: 'All stored history',
+    loadingFlow: 'Loading trade flow…',
+    failedFlow: 'Failed to load flow',
+    failedFlowDetail: 'Trade flow service may still be starting.',
+    allTrades: 'All Trades',
+    institutions: '🏛 Institutions',
+    charts: 'Charts',
+    muteSounds: 'Mute trade sounds',
+    enableSounds: 'Enable trade sounds',
+    subtitleTape: '{trades} live trades · {venues} venues · auto-refreshing',
+    subtitleCharts: 'Per-instrument trade chart · {range}',
+    subtitleHistory: '{scope} · {range} · {venues} venues',
+    loadingAvailableHistory: 'Loading available history…',
+    subtitleBlock: '{prefix}Institutional RFQ & block trades · {venues} venues',
+    buys: 'Buys',
+    sells: 'Sells',
+    whaleLegend: '🐋 $100K+ notional',
+    noStoredTrades: 'No stored trades in range',
+    noStoredTradesDetail:
+      'Try a wider window, another venue selection, or let ingest collect more history.',
+    noTradesYet: 'No trades yet',
+    noTradesYetDetail:
+      '{underlying} options have low trading activity. Trades will appear here in real-time when they occur.',
+  },
+  {
+    liveTape: 'Tape en vivo',
+    history: 'Historial',
+    allStoredHistory: 'Todo el historial guardado',
+    loadingFlow: 'Cargando flujo de trades…',
+    failedFlow: 'No se pudo cargar el flujo',
+    failedFlowDetail: 'Es posible que el servicio de flujo aún se esté iniciando.',
+    allTrades: 'Todos los trades',
+    institutions: '🏛 Institucionales',
+    charts: 'Gráficos',
+    muteSounds: 'Silenciar sonidos de trades',
+    enableSounds: 'Activar sonidos de trades',
+    subtitleTape: '{trades} trades en vivo · {venues} exchanges · actualización automática',
+    subtitleCharts: 'Gráfico de trades por instrumento · {range}',
+    subtitleHistory: '{scope} · {range} · {venues} exchanges',
+    loadingAvailableHistory: 'Cargando historial disponible…',
+    subtitleBlock: '{prefix}Trades RFQ y block institucionales · {venues} exchanges',
+    buys: 'Compras',
+    sells: 'Ventas',
+    whaleLegend: '🐋 $100K+ nocional',
+    noStoredTrades: 'No hay trades guardados en el rango',
+    noStoredTradesDetail:
+      'Prueba un período más amplio, otra selección de exchanges o deja que la ingesta reúna más historial.',
+    noTradesYet: 'Aún no hay trades',
+    noTradesYetDetail:
+      'Las opciones de {underlying} tienen poca actividad. Los trades aparecerán aquí en tiempo real cuando ocurran.',
+  },
+);
 
 const WHALE_THRESHOLD = 100_000;
 const SHARK_THRESHOLD = 10_000;
@@ -91,15 +150,15 @@ function getTradeBadge(tier: 'shrimp' | 'shark' | 'whale'): string {
   return '🦐';
 }
 
-function getScopeLabel(scope: FlowScope): string {
-  return scope === 'tape' ? 'Live Tape' : 'History';
+function getScopeLabel(scope: FlowScope, t: Translate<typeof messages.en>): string {
+  return scope === 'tape' ? t('liveTape') : t('history');
 }
 
-function getHistorySubtitle(range: HistoryRange): string {
+function getHistorySubtitle(range: HistoryRange, t: Translate<typeof messages.en>): string {
   if (range.start && range.end) {
     return `${range.start.slice(0, 10)} → ${new Date(new Date(range.end).getTime() - 1).toISOString().slice(0, 10)}`;
   }
-  return 'All stored history';
+  return t('allStoredHistory');
 }
 
 interface TradeRowProps {
@@ -108,6 +167,7 @@ interface TradeRowProps {
 }
 
 const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
+  const tf = useT(flowMessages);
   const meta = VENUES[trade.venue];
   const { strike, type } = parseStrikeAndType(trade.instrument);
   const expiry = parseExpiry(trade.instrument);
@@ -132,7 +192,7 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
       </span>
 
       <span className={styles.side} data-side={trade.side}>
-        {trade.side.toUpperCase()}
+        {trade.side === 'buy' ? tf('buy') : tf('sell')}
       </span>
 
       <span className={styles.instrument}>
@@ -149,7 +209,9 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
         <span className={styles.moneyPrimary} data-size={tier}>
           {fmtUsdCompact(notionalUsd ?? premiumUsd)}
         </span>
-        <span className={styles.moneySecondary}>Premium {fmtUsdCompact(premiumUsd)}</span>
+        <span className={styles.moneySecondary}>
+          {tf('premiumValue', { value: fmtUsdCompact(premiumUsd) })}
+        </span>
       </span>
 
       <span className={styles.iv}>{trade.iv != null ? fmtIv(trade.iv) : '–'}</span>
@@ -164,7 +226,25 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
   );
 });
 
+function TableHeader() {
+  const tf = useT(flowMessages);
+  return (
+    <div className={styles.tableHeader}>
+      <span>{tf('colTime')}</span>
+      <span>{tf('colVenue')}</span>
+      <span>{tf('colSide')}</span>
+      <span>{tf('colInstrument')}</span>
+      <span>{tf('colSize')}</span>
+      <span>{tf('colNotional')}</span>
+      <span>IV</span>
+      <span>{tf('colTag')}</span>
+    </div>
+  );
+}
+
 export default function FlowView() {
+  const t = useT(messages);
+  const tf = useT(flowMessages);
   const [mode, setMode] = useState<FlowMode>('all');
   const [scope, setScope] = useState<FlowScope>('tape');
   const [historyPreset, setHistoryPreset] = useState<HistoryPreset>('today');
@@ -285,7 +365,7 @@ export default function FlowView() {
   if (isLoading) {
     return (
       <div className={styles.view}>
-        <Spinner size="lg" label="Loading trade flow…" />
+        <Spinner size="lg" label={t('loadingFlow')} />
       </div>
     );
   }
@@ -295,8 +375,8 @@ export default function FlowView() {
       <div className={styles.view}>
         <EmptyState
           icon="⚠"
-          title="Failed to load flow"
-          detail="Trade flow service may still be starting."
+          title={t('failedFlow')}
+          detail={t('failedFlowDetail')}
         />
       </div>
     );
@@ -358,14 +438,14 @@ export default function FlowView() {
                 data-active={mode === 'all'}
                 onClick={() => setMode('all')}
               >
-                All Trades
+                {t('allTrades')}
               </button>
               <button
                 className={styles.modeBtn}
                 data-active={mode === 'block'}
                 onClick={() => { setMode('block'); if (scope === 'charts') setScope('tape'); }}
               >
-                🏛 Institutions
+                {t('institutions')}
               </button>
             </div>
             <div className={styles.modePicker}>
@@ -374,14 +454,14 @@ export default function FlowView() {
                 data-active={scope === 'tape'}
                 onClick={() => setScope('tape')}
               >
-                Live Tape
+                {t('liveTape')}
               </button>
               <button
                 className={styles.modeBtn}
                 data-active={scope === 'history'}
                 onClick={() => setScope('history')}
               >
-                History
+                {t('history')}
               </button>
               {mode === 'all' && (
                 <button
@@ -389,7 +469,7 @@ export default function FlowView() {
                   data-active={scope === 'charts'}
                   onClick={() => setScope('charts')}
                 >
-                  Charts
+                  {t('charts')}
                 </button>
               )}
             </div>
@@ -400,8 +480,8 @@ export default function FlowView() {
                 className={styles.modeBtn}
                 data-active={soundEnabled}
                 onClick={() => setSoundEnabled(!soundEnabled)}
-                title={soundEnabled ? 'Mute trade sounds' : 'Enable trade sounds'}
-                aria-label={soundEnabled ? 'Mute trade sounds' : 'Enable trade sounds'}
+                title={soundEnabled ? t('muteSounds') : t('enableSounds')}
+                aria-label={soundEnabled ? t('muteSounds') : t('enableSounds')}
               >
                 {soundEnabled ? '🔊' : '🔇'}
               </button>
@@ -410,22 +490,31 @@ export default function FlowView() {
           <span className={styles.subtitle}>
             {mode === 'all'
               ? scope === 'tape'
-                ? `${liveTrades.length} live trades · ${activeVenues.length} venues · auto-refreshing`
+                ? t('subtitleTape', { trades: liveTrades.length, venues: activeVenues.length })
                 : scope === 'charts'
-                  ? `Per-instrument trade chart · ${getHistorySubtitle(historyRange)}`
-                  : `${getScopeLabel(scope)} · ${isCustomInitializing ? 'Loading available history…' : getHistorySubtitle(historyRange)} · ${activeVenues.length} venues`
-              : `${scope === 'history' ? `${getHistorySubtitle(historyRange)} · ` : ''}Institutional RFQ & block trades · ${activeVenues.length} venues`}
+                  ? t('subtitleCharts', { range: getHistorySubtitle(historyRange, t) })
+                  : t('subtitleHistory', {
+                      scope: getScopeLabel(scope, t),
+                      range: isCustomInitializing
+                        ? t('loadingAvailableHistory')
+                        : getHistorySubtitle(historyRange, t),
+                      venues: activeVenues.length,
+                    })
+              : t('subtitleBlock', {
+                  prefix: scope === 'history' ? `${getHistorySubtitle(historyRange, t)} · ` : '',
+                  venues: activeVenues.length,
+                })}
           </span>
         </div>
         {mode === 'all' && scope === 'tape' ? (
           <div className={styles.legend}>
             <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="buy" /> Buys
+              <span className={styles.legendDot} data-side="buy" /> {t('buys')}
             </span>
             <span className={styles.legendItem}>
-              <span className={styles.legendDot} data-side="sell" /> Sells
+              <span className={styles.legendDot} data-side="sell" /> {t('sells')}
             </span>
-            <span className={styles.legendItem}>🐋 $100K+ notional</span>
+            <span className={styles.legendItem}>{t('whaleLegend')}</span>
           </div>
         ) : null}
       </div>
@@ -460,27 +549,18 @@ export default function FlowView() {
           />
 
           {historyTrades.length > 0 ? (
-            <div className={styles.tableHeader}>
-              <span>TIME</span>
-              <span>VENUE</span>
-              <span>SIDE</span>
-              <span>INSTRUMENT</span>
-              <span>SIZE</span>
-              <span>NOTIONAL</span>
-              <span>IV</span>
-              <span>TAG</span>
-            </div>
+            <TableHeader />
           ) : null}
 
           <div className={styles.list}>
             {isHistoryLoading ? (
               <div className={styles.centeredState}>
-                <Spinner size="lg" label="Loading history…" />
+                <Spinner size="lg" label={tf('loadingHistory')} />
               </div>
             ) : isHistoryEmpty ? (
               <EmptyState
-                title="No stored trades in range"
-                detail="Try a wider window, another venue selection, or let ingest collect more history."
+                title={t('noStoredTrades')}
+                detail={t('noStoredTradesDetail')}
               />
             ) : (
               historyTrades.map((trade) => (
@@ -498,22 +578,13 @@ export default function FlowView() {
         />
       ) : (
         <>
-          <div className={styles.tableHeader}>
-            <span>TIME</span>
-            <span>VENUE</span>
-            <span>SIDE</span>
-            <span>INSTRUMENT</span>
-            <span>SIZE</span>
-            <span>NOTIONAL</span>
-            <span>IV</span>
-            <span>TAG</span>
-          </div>
+          <TableHeader />
 
           <div className={styles.list}>
             {liveTrades.length === 0 ? (
               <EmptyState
-                title="No trades yet"
-                detail={`${underlying} options have low trading activity. Trades will appear here in real-time when they occur.`}
+                title={t('noTradesYet')}
+                detail={t('noTradesYetDetail', { underlying })}
               />
             ) : (
               liveTrades.map((trade) => (

@@ -1,5 +1,6 @@
 import type { PositionLeg } from '@features/portfolio';
 import { fmtNum, fmtPct, fmtUsdPrice } from '@lib/format';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import type { LiquidityResponse } from '@oggregator/protocol';
 import { type FormEvent, useId, useMemo, useState } from 'react';
 import { useLiquidity } from './hooks/useLiquidity';
@@ -13,8 +14,74 @@ import styles from './LiquidityCard.module.css';
 
 const LADDER_ROWS = 8;
 
+const messages = defineMessages(
+  {
+    header: 'Liquidity estimate (Thalex book)',
+    instrument: 'Instrument',
+    side: 'Side',
+    takingAsks: 'Taking asks',
+    hittingBids: 'Hitting bids',
+    sizeCoin: 'Size (coin)',
+    estimate: 'Estimate',
+    loadingBook: 'Loading book…',
+    filled: 'Filled',
+    vwap: 'VWAP',
+    worstLevel: 'Worst level',
+    vsMark: 'vs mark',
+    vsTouch: 'vs touch',
+    spread: 'Spread',
+    within: 'Within',
+    bidSize: 'Bid size',
+    askSize: 'Ask size',
+    ofMark: '±{pct}% of mark',
+    ladder: 'Order book ladder',
+    bid: 'Bid',
+    ask: 'Ask',
+    resyncing: 'resyncing',
+    crossed: 'crossed book',
+    live: 'live · {ms}ms',
+    err404: 'Thalex has no book for that instrument.',
+    err429: 'Too many books open right now; try again shortly.',
+    err400: 'Use a Thalex instrument name, e.g. BTC-PERPETUAL or BTC-23OCT26-84000-C.',
+    errDefault: 'Book unavailable right now.',
+  },
+  {
+    header: 'Estimación de liquidez (libro de Thalex)',
+    instrument: 'Instrumento',
+    side: 'Lado',
+    takingAsks: 'Tomando asks',
+    hittingBids: 'Pegando a bids',
+    sizeCoin: 'Tamaño (moneda)',
+    estimate: 'Estimar',
+    loadingBook: 'Cargando libro…',
+    filled: 'Ejecutado',
+    vwap: 'VWAP',
+    worstLevel: 'Peor nivel',
+    vsMark: 'vs mark',
+    vsTouch: 'vs touch',
+    spread: 'Spread',
+    within: 'Dentro de',
+    bidSize: 'Tamaño bid',
+    askSize: 'Tamaño ask',
+    ofMark: '±{pct}% del mark',
+    ladder: 'Escalera del libro de órdenes',
+    bid: 'Bid',
+    ask: 'Ask',
+    resyncing: 'resincronizando',
+    crossed: 'libro cruzado',
+    live: 'en vivo · {ms}ms',
+    err404: 'Thalex no tiene libro para ese instrumento.',
+    err429: 'Hay demasiados libros abiertos; intenta de nuevo en breve.',
+    err400: 'Usa un nombre de instrumento de Thalex, p. ej. BTC-PERPETUAL o BTC-23OCT26-84000-C.',
+    errDefault: 'Libro no disponible ahora.',
+  },
+);
+
+type T = Translate<typeof messages.en>;
+
 /** Read-only estimate from Thalex's live book. It never places anything. */
 export default function LiquidityCard({ positions }: { positions: PositionLeg[] }) {
+  const t = useT(messages);
   const listId = useId();
   const [instrument, setInstrument] = useState('');
   const [side, setSide] = useState<LiquiditySide>('buy');
@@ -44,12 +111,12 @@ export default function LiquidityCard({ positions }: { positions: PositionLeg[] 
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <span>Liquidity estimate (Thalex book)</span>
-        {query.data && <span className={styles.state}>{stateLabel(query.data)}</span>}
+        <span>{t('header')}</span>
+        {query.data && <span className={styles.state}>{stateLabel(query.data, t)}</span>}
       </div>
       <form className={styles.form} onSubmit={submit}>
         <label className={styles.field}>
-          <span>Instrument</span>
+          <span>{t('instrument')}</span>
           <input
             list={listId}
             value={instrument}
@@ -64,14 +131,14 @@ export default function LiquidityCard({ positions }: { positions: PositionLeg[] 
           </datalist>
         </label>
         <label className={styles.field}>
-          <span>Side</span>
+          <span>{t('side')}</span>
           <select value={side} onChange={(e) => setSide(e.target.value as LiquiditySide)}>
-            <option value="buy">Taking asks</option>
-            <option value="sell">Hitting bids</option>
+            <option value="buy">{t('takingAsks')}</option>
+            <option value="sell">{t('hittingBids')}</option>
           </select>
         </label>
         <label className={styles.field}>
-          <span>Size (coin)</span>
+          <span>{t('sizeCoin')}</span>
           <input
             type="number"
             min="0"
@@ -81,54 +148,55 @@ export default function LiquidityCard({ positions }: { positions: PositionLeg[] 
           />
         </label>
         <button type="submit" className={styles.submit} disabled={!canSubmit}>
-          Estimate
+          {t('estimate')}
         </button>
       </form>
 
-      {query.isError && <div className={styles.empty}>{errorText(query.error)}</div>}
-      {query.isLoading && <div className={styles.empty}>Loading book…</div>}
+      {query.isError && <div className={styles.empty}>{errorText(query.error, t)}</div>}
+      {query.isLoading && <div className={styles.empty}>{t('loadingBook')}</div>}
       {query.data && <Estimate data={query.data} />}
     </div>
   );
 }
 
 function Estimate({ data }: { data: LiquidityResponse }) {
+  const t = useT(messages);
   const { fill } = data;
   return (
     <>
       <div className={styles.metricGrid}>
-        <Metric label="Filled" value={`${fmtNum(fill.filled, 4)} / ${fmtNum(fill.requested, 4)}`} warn={!fill.fullyFilled} />
-        <Metric label="VWAP" value={fmtUsdPrice(fill.vwap)} />
-        <Metric label="Worst level" value={fmtUsdPrice(fill.worstPrice)} />
-        <Metric label="vs mark" value={fmtPct(fill.slippageVsMarkPct, 3)} />
-        <Metric label="vs touch" value={fmtPct(fill.slippageVsTouchPct, 3)} />
-        <Metric label="Spread" value={fmtPct(data.spreadPct, 3)} />
+        <Metric label={t('filled')} value={`${fmtNum(fill.filled, 4)} / ${fmtNum(fill.requested, 4)}`} warn={!fill.fullyFilled} />
+        <Metric label={t('vwap')} value={fmtUsdPrice(fill.vwap)} />
+        <Metric label={t('worstLevel')} value={fmtUsdPrice(fill.worstPrice)} />
+        <Metric label={t('vsMark')} value={fmtPct(fill.slippageVsMarkPct, 3)} />
+        <Metric label={t('vsTouch')} value={fmtPct(fill.slippageVsTouchPct, 3)} />
+        <Metric label={t('spread')} value={fmtPct(data.spreadPct, 3)} />
       </div>
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Within</th>
-            <th className={styles.rightAlign}>Bid size</th>
-            <th className={styles.rightAlign}>Ask size</th>
+            <th>{t('within')}</th>
+            <th className={styles.rightAlign}>{t('bidSize')}</th>
+            <th className={styles.rightAlign}>{t('askSize')}</th>
           </tr>
         </thead>
         <tbody>
           {data.depth.map((band) => (
             <tr key={band.pct}>
-              <td>±{band.pct}% of mark</td>
+              <td>{t('ofMark', { pct: band.pct })}</td>
               <td className={styles.rightAlign}>{fmtNum(band.bidAmount, 4)}</td>
               <td className={styles.rightAlign}>{fmtNum(band.askAmount, 4)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <table className={styles.table} aria-label="Order book ladder">
+      <table className={styles.table} aria-label={t('ladder')}>
         <thead>
           <tr>
-            <th className={styles.rightAlign}>Bid size</th>
-            <th className={styles.rightAlign}>Bid</th>
-            <th className={styles.rightAlign}>Ask</th>
-            <th className={styles.rightAlign}>Ask size</th>
+            <th className={styles.rightAlign}>{t('bidSize')}</th>
+            <th className={styles.rightAlign}>{t('bid')}</th>
+            <th className={styles.rightAlign}>{t('ask')}</th>
+            <th className={styles.rightAlign}>{t('askSize')}</th>
           </tr>
         </thead>
         <tbody>
@@ -155,16 +223,16 @@ function Metric({ label, value, warn = false }: { label: string; value: string; 
   );
 }
 
-function stateLabel(data: LiquidityResponse): string {
-  if (data.state !== 'synced') return 'resyncing';
-  if (data.crossed) return 'crossed book';
-  return `live · ${Math.round(data.bookAgeMs)}ms`;
+function stateLabel(data: LiquidityResponse, t: T): string {
+  if (data.state !== 'synced') return t('resyncing');
+  if (data.crossed) return t('crossed');
+  return t('live', { ms: Math.round(data.bookAgeMs) });
 }
 
-function errorText(error: unknown): string {
+function errorText(error: unknown, t: T): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (/404/.test(message)) return 'Thalex has no book for that instrument.';
-  if (/429/.test(message)) return 'Too many books open right now; try again shortly.';
-  if (/400/.test(message)) return 'Use a Thalex instrument name, e.g. BTC-PERPETUAL or BTC-23OCT26-84000-C.';
-  return 'Book unavailable right now.';
+  if (/404/.test(message)) return t('err404');
+  if (/429/.test(message)) return t('err429');
+  if (/400/.test(message)) return t('err400');
+  return t('errDefault');
 }

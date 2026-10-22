@@ -12,6 +12,7 @@ import {
 } from 'lightweight-charts';
 
 import { fetchJson } from '@lib/http';
+import { defineMessages, useT } from '@lib/i18n';
 import type {
   SpotCandleCurrency,
   SpotCandleResolutionSec,
@@ -81,6 +82,30 @@ function useGexWallHistory(currency: SpotCandleCurrency, days: number, enabled: 
   });
 }
 
+const messages = defineMessages(
+  {
+    callWall: 'CALL WALL',
+    putWall: 'PUT WALL',
+    flip: 'FLIP',
+    noteHistory: 'Band history: recorded walls · dashed zone: live walls',
+    noteLive: 'Dashed zone: live walls · band history needs ALL expiries + all venues',
+    loading: 'Loading spot history…',
+    unavailable: 'Spot history unavailable',
+    retry: 'Retry',
+  },
+  {
+    callWall: 'MURO CALLS',
+    putWall: 'MURO PUTS',
+    flip: 'FLIP',
+    noteHistory: 'Historial de bandas: muros registrados · zona punteada: muros en vivo',
+    noteLive:
+      'Zona punteada: muros en vivo · el historial de bandas requiere TODOS los vencimientos + todos los exchanges',
+    loading: 'Cargando historial del spot…',
+    unavailable: 'Historial del spot no disponible',
+    retry: 'Reintentar',
+  },
+);
+
 interface Props {
   gex: GexStrike[];
   gexProfile?: GexProfilePoint[];
@@ -96,6 +121,7 @@ export default function GexBandsChart({
   currency,
   showHistory,
 }: Props) {
+  const t = useT(messages);
   const [timeframe, setTimeframe] = useState<Timeframe>(DEFAULT_TIMEFRAME);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -230,6 +256,14 @@ export default function GexBandsChart({
     bandsRef.current?.update(history, walls, anchor);
   }, [history, walls, candleTimes]);
 
+  useEffect(() => {
+    bandsRef.current?.setLabels({
+      callWall: t('callWall'),
+      putWall: t('putWall'),
+      gammaFlip: t('flip'),
+    });
+  }, [t]);
+
   // SPOT line.
   useEffect(() => {
     const series = seriesRef.current;
@@ -267,22 +301,20 @@ export default function GexBandsChart({
           ))}
         </div>
         <span className={styles.bandsNote}>
-          {showHistory
-            ? 'Band history: recorded walls · dashed zone: live walls'
-            : 'Dashed zone: live walls · band history needs ALL expiries + all venues'}
+          {showHistory ? t('noteHistory') : t('noteLive')}
         </span>
       </div>
 
       <div className={styles.bandsChartWrap}>
         <div className={styles.bandsChartCanvas} ref={containerRef} />
         {candlesLoading && !candleData && (
-          <div className={styles.bandsOverlay}>Loading spot history…</div>
+          <div className={styles.bandsOverlay}>{t('loading')}</div>
         )}
         {candlesError && (
           <div className={styles.bandsOverlay}>
-            <div>Spot history unavailable</div>
+            <div>{t('unavailable')}</div>
             <button type="button" onClick={() => void refetch()}>
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}

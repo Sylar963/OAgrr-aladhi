@@ -1,6 +1,8 @@
 import type { Leg, StrategyMetrics } from '@features/architect';
 import { fmtUsd } from '@lib/format';
+import { useLocale, useT } from '@lib/i18n';
 import { describeLeg, describeStrategy, legTitle } from './easy-explain';
+import { easyMessages } from './i18n';
 import styles from './EasyChain.module.css';
 
 interface EasyPositionPanelProps {
@@ -36,23 +38,23 @@ export default function EasyPositionPanel({
   onClear,
   onOpenBuilder,
 }: EasyPositionPanelProps) {
+  const t = useT(easyMessages);
+  const locale = useLocale();
   if (legs.length === 0) {
     return (
       <div className={styles.panel}>
         {notice && <div className={styles.notice}>{notice}</div>}
         <ol className={styles.steps}>
           <li>
-            <b>Pick a direction.</b> Use the <span data-side="up">▲ UP</span> list if you think{' '}
-            {underlying} will rise and the <span data-side="down">▼ DOWN</span> list if you think
-            it will fall.
+            <b>{t('step1Title')}</b> {t('step1Use')} <span data-side="up">{t('legUp')}</span>{' '}
+            {t('step1UpList', { underlying })} <span data-side="down">{t('legDown')}</span>{' '}
+            {t('step1DownList')}
           </li>
           <li>
-            <b>Pick a target price.</b> Targets further away are cheaper, but less likely to pay.{' '}
-            <em>Odds</em> is the market's estimate of the chance it pays out.
+            <b>{t('step2Title')}</b> {t('step2Body')} <em>{t('odds')}</em> {t('step2Odds')}
           </li>
           <li>
-            <b>Drag it onto the chart.</b> Green shows where you win at expiry and red where you
-            lose. Combine several options to shape the trade.
+            <b>{t('step3Title')}</b> {t('step3Body')}
           </li>
         </ol>
       </div>
@@ -69,23 +71,23 @@ export default function EasyPositionPanel({
       <div className={styles.summary}>
         <div className={styles.summaryHead}>
           <div className={styles.strategyName}>{strategyName}</div>
-          <div className={styles.strategyBlurb}>{describeStrategy(strategyName)}</div>
+          <div className={styles.strategyBlurb}>{describeStrategy(strategyName, locale)}</div>
         </div>
         <div className={styles.kpis}>
           <div className={styles.kpi}>
-            <span>{debit >= 0 ? 'You pay now' : 'You receive now'}</span>
+            <span>{debit >= 0 ? t('youPay') : t('youReceive')}</span>
             <b>{fmtUsd(Math.abs(debit)) === '–' ? '$0' : fmtUsd(Math.abs(debit))}</b>
           </div>
           <div className={styles.kpi} data-tone="profit">
-            <span>Most you can win</span>
-            <b>{fmtBound(metrics?.maxProfit ?? null, 'Unlimited')}</b>
+            <span>{t('maxWin')}</span>
+            <b>{fmtBound(metrics?.maxProfit ?? null, t('unlimited'))}</b>
           </div>
           <div className={styles.kpi} data-tone="loss" data-alert={maxLossUnbounded}>
-            <span>Most you can lose</span>
-            <b>{fmtBound(metrics?.maxLoss ?? null, 'Unlimited ⚠')}</b>
+            <span>{t('maxLose')}</span>
+            <b>{fmtBound(metrics?.maxLoss ?? null, t('unlimitedWarn'))}</b>
           </div>
           <div className={styles.kpi}>
-            <span>Breakeven</span>
+            <span>{t('breakeven')}</span>
             <b>
               {metrics && metrics.breakevens.length > 0
                 ? metrics.breakevens.map((b) => fmtUsd(b)).join(' / ')
@@ -93,9 +95,7 @@ export default function EasyPositionPanel({
             </b>
           </div>
           <div className={styles.kpi}>
-            <span title="Rough market-implied estimate; it assumes one flat volatility">
-              Chance of profit
-            </span>
+            <span title={t('chanceTip')}>{t('chance')}</span>
             <b>{chance != null ? `~${Math.round(chance * 100)}%` : '–'}</b>
           </div>
         </div>
@@ -103,14 +103,12 @@ export default function EasyPositionPanel({
 
       {mixedExpiries && (
         <div className={styles.notice}>
-          This trade mixes expiry dates, and the chart treats every option as if it expires at the
-          same time. Open it in Builder for an accurate view.
+          {t('mixedExpiries')}
         </div>
       )}
       {maxLossUnbounded && (
         <div className={styles.notice} data-tone="loss">
-          Selling options without a protective option can lose more than you collect. Consider
-          buying a further-out option on the same side to cap the risk.
+          {t('nakedWarning')}
         </div>
       )}
 
@@ -119,17 +117,17 @@ export default function EasyPositionPanel({
           <li key={leg.id} className={styles.leg} data-side={leg.type === 'call' ? 'up' : 'down'}>
             <div className={styles.legTop}>
               <span className={styles.legTitle} data-direction={leg.direction}>
-                {legTitle(leg)}
+                {legTitle(leg, locale)}
               </span>
               <span className={styles.legMeta}>
-                {fmtUsd(leg.entryPrice)} each · {leg.venue}
+                {t('each', { price: fmtUsd(leg.entryPrice), venue: leg.venue })}
               </span>
               <span className={styles.qty}>
                 <button
                   type="button"
                   onClick={() => onQuantity(leg, leg.quantity - 1)}
                   disabled={leg.quantity <= 1}
-                  aria-label="Decrease quantity"
+                  aria-label={t('decrease')}
                 >
                   −
                 </button>
@@ -137,7 +135,7 @@ export default function EasyPositionPanel({
                 <button
                   type="button"
                   onClick={() => onQuantity(leg, leg.quantity + 1)}
-                  aria-label="Increase quantity"
+                  aria-label={t('increase')}
                 >
                   +
                 </button>
@@ -146,30 +144,30 @@ export default function EasyPositionPanel({
                 type="button"
                 className={styles.flipBtn}
                 onClick={() => onFlip(leg)}
-                title={leg.direction === 'buy' ? 'Switch to sell' : 'Switch to buy'}
+                title={leg.direction === 'buy' ? t('switchToSell') : t('switchToBuy')}
               >
-                {leg.direction === 'buy' ? '→ sell' : '→ buy'}
+                {leg.direction === 'buy' ? t('flipToSell') : t('flipToBuy')}
               </button>
               <button
                 type="button"
                 className={styles.removeBtn}
                 onClick={() => onRemove(leg)}
-                aria-label="Remove option"
+                aria-label={t('removeOption')}
               >
                 ✕
               </button>
             </div>
-            <div className={styles.legText}>{describeLeg(leg, underlying)}</div>
+            <div className={styles.legText}>{describeLeg(leg, underlying, locale)}</div>
           </li>
         ))}
       </ul>
 
       <div className={styles.panelActions}>
         <button type="button" className={styles.ghostBtn} onClick={onClear}>
-          Clear
+          {t('clear')}
         </button>
         <button type="button" className={styles.primaryBtn} onClick={onOpenBuilder}>
-          Open in Builder to trade →
+          {t('openBuilder')}
         </button>
       </div>
     </div>

@@ -1,7 +1,27 @@
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import styles from './BasisTooltip.module.css';
 
 type Tone = 'bull' | 'bear' | 'mixed' | 'neutral';
 type Bucket = 'flat' | 'tilt-up' | 'euphoric' | 'tilt-down' | 'stress';
+
+const messages = defineMessages(
+  {
+    flat: 'Flat — no directional conviction priced in',
+    tiltUp: 'Meaningful contango — healthy long carry',
+    euphoric: 'Euphoric — crowded longs, mean-reversion risk',
+    tiltDown: 'Mild backwardation — passive deleveraging',
+    stress: 'Real stress — watch for liquidation cascade',
+    header: 'Annualized basis ({dte}d)',
+  },
+  {
+    flat: 'Plano — sin convicción direccional descontada',
+    tiltUp: 'Contango significativo — carry long saludable',
+    euphoric: 'Eufórico — longs saturados, riesgo de reversión a la media',
+    tiltDown: 'Backwardation leve — desapalancamiento pasivo',
+    stress: 'Estrés real — atento a una cascada de liquidaciones',
+    header: 'Basis anualizado ({dte}d)',
+  },
+);
 
 interface BasisTooltipProps {
   basisPct: number | null;
@@ -38,7 +58,7 @@ function fmtRaw(v: number): string {
   return `${v.toFixed(3)}%`;
 }
 
-function buildRows(dte: number): Row[] {
+function buildRows(dte: number, t: Translate<typeof messages.en>): Row[] {
   const k = dte / 365;
   const flatRaw = FLAT_ANN * k;
   const tiltRaw = TILT_ANN * k;
@@ -50,48 +70,49 @@ function buildRows(dte: number): Row[] {
       tone: 'neutral',
       range: `|basis| < ${fmtRaw(flatRaw)}`,
       ann: '|ann| < 3%',
-      read: 'Flat — no directional conviction priced in',
+      read: t('flat'),
     },
     {
       bucket: 'tilt-up',
       tone: 'bull',
       range: `+${fmtRaw(flatRaw)} … +${fmtRaw(euphoricRaw)}`,
       ann: '+3% … +27% ann',
-      read: 'Meaningful contango — healthy long carry',
+      read: t('tiltUp'),
     },
     {
       bucket: 'euphoric',
       tone: 'bear',
       range: `> +${fmtRaw(euphoricRaw)}`,
       ann: '≥ +27% ann',
-      read: 'Euphoric — crowded longs, mean-reversion risk',
+      read: t('euphoric'),
     },
     {
       bucket: 'tilt-down',
       tone: 'mixed',
       range: `−${fmtRaw(tiltRaw)} … −${fmtRaw(flatRaw)}`,
       ann: '−9% … −3% ann',
-      read: 'Mild backwardation — passive deleveraging',
+      read: t('tiltDown'),
     },
     {
       bucket: 'stress',
       tone: 'bear',
       range: `< −${fmtRaw(tiltRaw)}`,
       ann: '≤ −9% ann',
-      read: 'Real stress — watch for liquidation cascade',
+      read: t('stress'),
     },
   ];
 }
 
 export default function BasisTooltip({ basisPct, dte }: BasisTooltipProps) {
+  const t = useT(messages);
   const annPct = basisPct != null && dte > 0 ? basisPct * (365 / dte) : null;
   const current = annPct != null ? classify(annPct) : null;
-  const rows = dte > 0 ? buildRows(dte) : [];
+  const rows = dte > 0 ? buildRows(dte, t) : [];
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <span className={styles.headerLabel}>Annualized basis ({dte}d)</span>
+        <span className={styles.headerLabel}>{t('header', { dte })}</span>
         {annPct != null ? (
           <span className={styles.headerValue} data-tone={current ? toneOf(rows, current) : undefined}>
             {fmtAnn(annPct)}

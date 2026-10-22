@@ -1,4 +1,12 @@
-import type { ThesisDiffKey, ThesisDirection, ThesisStatus } from '@oggregator/protocol';
+import { intlLocale, type Locale, translate } from '@lib/i18n';
+import type {
+  ThesisClassification,
+  ThesisDiffKey,
+  ThesisDirection,
+  ThesisStatus,
+} from '@oggregator/protocol';
+
+import { thesisMessages } from './i18n';
 
 export const fmtPrice = (value: number | null | undefined) =>
   value == null ? '—' : Math.round(value).toLocaleString('en-US');
@@ -6,10 +14,15 @@ export const fmtPrice = (value: number | null | undefined) =>
 export const fmtUsdSigned = (value: number | null | undefined) =>
   value == null ? '—' : `${value >= 0 ? '+' : '−'}$${Math.abs(Math.round(value)).toLocaleString('en-US')}`;
 
-export function fmtExpiry(expiry: string): string {
+export function fmtExpiry(expiry: string, locale: Locale = 'en'): string {
   const date = new Date(`${expiry}T08:00:00Z`);
   return date
-    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    .toLocaleDateString(locale === 'en' ? 'en-GB' : intlLocale(locale), {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    })
+    .replace(/\./g, '')
     .toUpperCase();
 }
 
@@ -20,31 +33,37 @@ export function fmtDuration(ms: number): string {
   return `${(hours / 24).toFixed(1)}d`;
 }
 
-export function fmtAge(createdAt: number, nowMs = Date.now()): string {
+export function fmtAge(createdAt: number, locale: Locale = 'en', nowMs = Date.now()): string {
   const days = Math.floor((nowMs - createdAt) / 86_400_000);
-  if (days >= 1) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return `${fmtDuration(nowMs - createdAt)} ago`;
+  if (days >= 1) {
+    return translate(thesisMessages, days === 1 ? 'daysAgo_one' : 'daysAgo_other', { n: days }, locale);
+  }
+  return translate(thesisMessages, 'durationAgo', { d: fmtDuration(nowMs - createdAt) }, locale);
 }
 
 export const confirmLabel = (confirmSec: number) => (confirmSec === 86400 ? '1D' : '4H');
 
-export const wrongIfText = (direction: ThesisDirection, level: number, confirmSec: number) =>
-  `a ${confirmLabel(confirmSec)} candle closes ${direction === 'bearish' ? 'above' : 'below'} ${fmtPrice(level)}`;
+export const wrongIfText = (
+  direction: ThesisDirection,
+  level: number,
+  confirmSec: number,
+  locale: Locale = 'en',
+) =>
+  translate(
+    thesisMessages,
+    direction === 'bearish' ? 'wrongIfAbove' : 'wrongIfBelow',
+    { tf: confirmLabel(confirmSec), level: fmtPrice(level) },
+    locale,
+  );
 
-export const STATUS_LABEL: Record<ThesisStatus, string> = {
-  INTACT: 'Intact',
-  AT_RISK: 'At risk',
-  INVALIDATED: 'Invalidated',
-  EXPIRED: 'Expired',
-};
+export const statusLabel = (status: ThesisStatus, locale: Locale = 'en') =>
+  translate(thesisMessages, `status_${status}`, undefined, locale);
 
-export const DIFF_LABEL: Record<ThesisDiffKey, string> = {
-  spot: 'Spot',
-  dvol: 'DVOL',
-  atmIv: 'ATM IV (horizon)',
-  skew25d: '25Δ skew (horizon)',
-  netGex: 'Net GEX',
-};
+export const diffLabel = (key: ThesisDiffKey, locale: Locale = 'en') =>
+  translate(thesisMessages, `diff_${key}`, undefined, locale);
+
+export const classificationLabel = (value: ThesisClassification, locale: Locale = 'en') =>
+  translate(thesisMessages, `cls_${value}`, undefined, locale);
 
 export function fmtDiffValue(key: ThesisDiffKey, value: number | null): string {
   if (value == null) return '—';

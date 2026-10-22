@@ -1,10 +1,16 @@
 import type { BreakEvenIvRow, PositionLeg } from '@oggregator/protocol';
 
 import { black76Price, normCdf, normPdf } from '@lib/analytics/blackScholes';
+import { defineMessages, translate, type Locale } from '@lib/i18n';
 
 import type { StrikeRiskMode } from './strike-risk';
 
 export type SpotProfileMode = Exclude<StrikeRiskMode, 'volga'>;
+
+const messages = defineMessages(
+  { now: 'Now', lastDay: '+{n}d · 1d left' },
+  { now: 'Ahora', lastDay: '+{n}d · queda 1d' },
+);
 
 export interface ProfileLeg {
   strike: number;
@@ -128,14 +134,20 @@ export function greeks76(
 
 // Now, halfway, and the last day before settlement: the three moments where gamma and
 // theta visibly change shape. Horizons collapse when the expiry is too close for them.
-export function profileHorizons(expiry: string, nowMs: number): ProfileHorizon[] {
+export function profileHorizons(
+  expiry: string,
+  nowMs: number,
+  locale: Locale = 'en',
+): ProfileHorizon[] {
   const daysLeft = daysUntilExpiry(expiry, nowMs);
-  const horizons: ProfileHorizon[] = [{ days: 0, label: 'Now' }];
+  const horizons: ProfileHorizon[] = [
+    { days: 0, label: translate(messages, 'now', undefined, locale) },
+  ];
   const halfway = Math.round(daysLeft / 2);
   const lastDay = Math.floor(daysLeft - 1);
   if (daysLeft > 4 && halfway > 0) horizons.push({ days: halfway, label: `+${halfway}d` });
   if (daysLeft > 2 && lastDay > (horizons[horizons.length - 1]?.days ?? 0)) {
-    horizons.push({ days: lastDay, label: `+${lastDay}d · 1d left` });
+    horizons.push({ days: lastDay, label: translate(messages, 'lastDay', { n: lastDay }, locale) });
   }
   return horizons;
 }
@@ -167,6 +179,7 @@ export function buildSpotProfile(
   mode: SpotProfileMode,
   spotUsd: number,
   nowMs: number,
+  locale: Locale = 'en',
 ): SpotProfile {
   if (legs.length === 0 || !(spotUsd > 0)) return { prices: [], series: [] };
   const [minPrice, maxPrice] = spotProfileRange(legs, spotUsd, nowMs);
@@ -181,7 +194,7 @@ export function buildSpotProfile(
     .filter((price, index, sorted) => index === 0 || price - sorted[index - 1]! > 1e-6);
 
   const expiry = legs[0]!.expiry;
-  const series = profileHorizons(expiry, nowMs).map((horizon) => {
+  const series = profileHorizons(expiry, nowMs, locale).map((horizon) => {
     const horizonMs = nowMs + horizon.days * DAY_MS;
     const values = prices.map((priceUsd) =>
       legs.reduce((sum, leg) => {

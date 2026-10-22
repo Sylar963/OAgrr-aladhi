@@ -32,6 +32,8 @@ interface Geometry {
   nowX: number | null;
   deadlineX: number | null;
   label: string;
+  profitLabel: string;
+  lossLabel: string;
   markers: { y: number; side: 'up' | 'down'; sell: boolean }[];
 }
 
@@ -72,7 +74,7 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
   }
 
   draw(target: DrawTarget): void {
-    const { zones, deadlineX, nowX, label, markers } = this.geo;
+    const { zones, deadlineX, nowX, label, profitLabel, lossLabel, markers } = this.geo;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = "700 10px 'IBM Plex Mono', monospace";
 
@@ -83,7 +85,7 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
         ctx.textBaseline = z.innerEdge === 'bottom' ? 'bottom' : 'top';
         ctx.textAlign = 'left';
         ctx.fillStyle = `rgba(${z.profit ? PROFIT : LOSS}, 0.85)`;
-        ctx.fillText(z.profit ? 'PROFIT ZONE' : 'LOSS ZONE', 10, y);
+        ctx.fillText(z.profit ? profitLabel : lossLabel, 10, y);
       }
 
       if (deadlineX != null && deadlineX <= mediaSize.width + BAR_W) {
@@ -99,7 +101,7 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
         }
 
         ctx.font = "600 10px 'IBM Plex Mono', monospace";
-        const text = `Deadline  ${label}`;
+        const text = label;
         const w = ctx.measureText(text).width + 12;
         const boxH = 18;
         const boxY = mediaSize.height - boxH - 6;
@@ -136,7 +138,15 @@ class DeadlineRenderer implements IPrimitivePaneRenderer {
 }
 
 class DeadlinePaneView implements IPrimitivePaneView {
-  geo: Geometry = { zones: [], nowX: null, deadlineX: null, label: '', markers: [] };
+  geo: Geometry = {
+    zones: [],
+    nowX: null,
+    deadlineX: null,
+    label: '',
+    profitLabel: '',
+    lossLabel: '',
+    markers: [],
+  };
 
   zOrder(): PrimitivePaneViewZOrder {
     return 'top';
@@ -158,6 +168,8 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
   private nowSec: number | null = null;
   private deadlineSec: number | null = null;
   private label = '';
+  private profitLabel = '';
+  private lossLabel = '';
   private param: SeriesAttachedParameter<Time, SeriesType> | null = null;
   private readonly view = new DeadlinePaneView();
   private readonly views: readonly IPrimitivePaneView[] = [this.view];
@@ -177,12 +189,16 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
     nowSec: number | null;
     deadlineSec: number | null;
     label: string;
+    profitLabel: string;
+    lossLabel: string;
   }): void {
     this.zones = state.zones;
     this.markers = state.markers;
     this.nowSec = state.nowSec;
     this.deadlineSec = state.deadlineSec;
     this.label = state.label;
+    this.profitLabel = state.profitLabel;
+    this.lossLabel = state.lossLabel;
     this.refresh();
     this.param?.requestUpdate();
   }
@@ -217,6 +233,8 @@ export class DeadlinePrimitive implements ISeriesPrimitive<Time> {
       nowX: toX(this.nowSec),
       deadlineX: toX(this.deadlineSec),
       label: this.label,
+      profitLabel: this.profitLabel,
+      lossLabel: this.lossLabel,
       markers,
     };
   }

@@ -1,6 +1,7 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
 import { ChallengePanel, useFundedRun } from '@features/funded';
 import { fmtDelta, fmtNum, fmtUsd } from '@lib/format';
+import { defineMessages, type Translate, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -12,7 +13,47 @@ import PaperTraderPanel from './PaperTraderPanel';
 import ThalexLivePanel from './ThalexLivePanel';
 import styles from './TradingView.module.css';
 
+const messages = defineMessages(
+  {
+    equity: 'Equity',
+    cash: 'Cash',
+    totalPnl: 'Total PnL',
+    realizedNet: 'Realized (net)',
+    unrealizedPnl: 'Unrealized PnL',
+    fees: 'Fees',
+    sync: 'Sync',
+    notInitialized: 'Paper account not initialized',
+    capital: 'Capital',
+    resetConfirm: 'Reset paper account to {amount}? This clears current paper history.',
+    reset: 'Reset',
+    initialize: 'Initialize',
+    live: 'Live',
+    reconnecting: 'Reconnecting',
+    error: 'Error',
+    closed: 'Closed',
+  },
+  {
+    equity: 'Patrimonio',
+    cash: 'Efectivo',
+    totalPnl: 'PnL total',
+    realizedNet: 'Realizado (neto)',
+    unrealizedPnl: 'PnL no realizado',
+    fees: 'Comisiones',
+    sync: 'Sincr.',
+    notInitialized: 'Cuenta paper sin inicializar',
+    capital: 'Capital',
+    resetConfirm: '¿Reiniciar la cuenta paper a {amount}? Esto borra el historial paper actual.',
+    reset: 'Reiniciar',
+    initialize: 'Inicializar',
+    live: 'En vivo',
+    reconnecting: 'Reconectando',
+    error: 'Error',
+    closed: 'Cerrado',
+  },
+);
+
 export default function TradingView() {
+  const t = useT(messages);
   const activeContext = useAppStore((s) => s.activeContext);
   const accountSession = useAccountSession();
   const queryClient = useQueryClient();
@@ -52,31 +93,31 @@ export default function TradingView() {
   return (
     <div className={styles.view}>
       <div className={styles.header}>
-        <HeaderStat label="Equity" value={fmtUsd(overview?.pnl.equityUsd ?? null)} />
-        <HeaderStat label="Cash" value={fmtUsd(overview?.pnl.cashUsd ?? null)} />
+        <HeaderStat label={t('equity')} value={fmtUsd(overview?.pnl.equityUsd ?? null)} />
+        <HeaderStat label={t('cash')} value={fmtUsd(overview?.pnl.cashUsd ?? null)} />
         <HeaderStat
-          label="Total PnL"
+          label={t('totalPnl')}
           value={fmtUsd(overview?.pnl.totalUsd ?? null)}
           tone={tone(overview?.pnl.totalUsd)}
         />
         <HeaderStat
-          label="Realized (net)"
+          label={t('realizedNet')}
           value={fmtUsd(overview?.pnl.realizedUsd ?? null)}
           tone={tone(overview?.pnl.realizedUsd)}
         />
         <HeaderStat
-          label="Unrealized PnL"
+          label={t('unrealizedPnl')}
           value={fmtUsd(overview?.pnl.unrealizedUsd ?? null)}
           tone={tone(overview?.pnl.unrealizedUsd)}
         />
-        <HeaderStat label="Fees" value={fmtUsd(overview?.pnl.feesUsd ?? null)} />
+        <HeaderStat label={t('fees')} value={fmtUsd(overview?.pnl.feesUsd ?? null)} />
         <HeaderStat label="Delta" value={fmtDelta(overview?.risk.delta ?? null)} />
         <HeaderStat label="Gamma" value={fmtNum(overview?.risk.gamma ?? null, 4)} />
         <HeaderStat label="Theta" value={fmtUsd(overview?.risk.theta ?? null)} />
         <HeaderStat label="Vega" value={fmtUsd(overview?.risk.vega ?? null)} />
         <HeaderStat
-          label="Sync"
-          value={wsLabel(wsState)}
+          label={t('sync')}
+          value={wsLabel(wsState, t)}
           tone={wsState === 'live' ? 'positive' : 'neutral'}
         />
         <div className={styles.headerPicker}>
@@ -100,7 +141,7 @@ export default function TradingView() {
           <span className={styles.accountFooterLabel}>
             {isConfigured
               ? `${paperAccount?.label ?? 'Paper'} · ${fmtUsd(paperAccount?.initialCashUsd ?? null)}`
-              : 'Paper account not initialized'}
+              : t('notInitialized')}
           </span>
           <span className={styles.accountFooterSep}>·</span>
           <input
@@ -112,7 +153,7 @@ export default function TradingView() {
             inputMode="numeric"
             value={capitalInput}
             onChange={(event) => setCapitalInput(event.target.value)}
-            aria-label="Capital"
+            aria-label={t('capital')}
           />
           <button
             className={styles.accountFooterButton}
@@ -121,9 +162,7 @@ export default function TradingView() {
               if (selectedCapital == null) return;
               if (
                 isConfigured &&
-                !window.confirm(
-                  `Reset paper account to ${fmtUsd(selectedCapital)}? This clears current paper history.`,
-                )
+                !window.confirm(t('resetConfirm', { amount: fmtUsd(selectedCapital) }))
               ) {
                 return;
               }
@@ -137,7 +176,7 @@ export default function TradingView() {
               );
             }}
           >
-            {isConfigured ? 'Reset' : 'Initialize'}
+            {isConfigured ? t('reset') : t('initialize')}
           </button>
         </footer>
       )}
@@ -162,16 +201,19 @@ function HeaderStat({
   );
 }
 
-function wsLabel(state: 'connecting' | 'live' | 'closed' | 'error'): string {
+function wsLabel(
+  state: 'connecting' | 'live' | 'closed' | 'error',
+  t: Translate<typeof messages.en>,
+): string {
   switch (state) {
     case 'live':
-      return 'Live';
+      return t('live');
     case 'connecting':
-      return 'Reconnecting';
+      return t('reconnecting');
     case 'error':
-      return 'Error';
+      return t('error');
     case 'closed':
-      return 'Closed';
+      return t('closed');
   }
 }
 

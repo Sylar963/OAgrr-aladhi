@@ -1,14 +1,16 @@
+import { esMX } from '@clerk/localizations';
 import { ClerkProvider } from '@clerk/react';
 import { AccountSessionProvider } from '@components/auth/AccountSessionProvider';
 import ErrorBoundary from '@components/ui/ErrorBoundary';
 import PopoutChartPage from '@features/chain/PopoutChartPage';
 import { TradfiPopoutChartPage } from '@features/tradfi';
+import { useLocale } from '@lib/i18n';
 import { queryClient } from '@lib/query-client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
-import { StrictMode } from 'react';
+import { type ReactNode, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
@@ -23,14 +25,24 @@ const isTradfiPopout = isPopout && popoutSearch.get('provider') === 'tradfi';
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
 
-createRoot(root).render(
-  <StrictMode>
+function LocalizedClerkProvider({ children }: { children: ReactNode }) {
+  const locale = useLocale();
+  return (
     <ClerkProvider
+      localization={locale === 'es' ? esMX : undefined}
       publishableKey={clerkPublishableKey}
       afterSignOutUrl="/"
       signInForceRedirectUrl={window.location.origin}
       signUpForceRedirectUrl={window.location.origin}
     >
+      {children}
+    </ClerkProvider>
+  );
+}
+
+createRoot(root).render(
+  <StrictMode>
+    <LocalizedClerkProvider>
       <QueryClientProvider client={queryClient}>
         <AccountSessionProvider>
           <ErrorBoundary label={isPopout ? 'Chart popout' : 'Application'}>
@@ -41,7 +53,7 @@ createRoot(root).render(
           {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
         </AccountSessionProvider>
       </QueryClientProvider>
-    </ClerkProvider>
+    </LocalizedClerkProvider>
   </StrictMode>,
 );
 

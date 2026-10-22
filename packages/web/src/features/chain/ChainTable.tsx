@@ -2,6 +2,7 @@ import { EmptyState, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { venueColor } from '@lib/colors';
 import { fmtDelta, fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -28,25 +29,64 @@ import MobileStrikeCard from './MobileStrikeCard';
 import QuickTrade from './QuickTrade';
 import { bestBidAsk, crossVenueSpreadPct } from './quote-selection';
 
-const GAMMA_TIP =
-  'Γ GAMMA — change in Δ for a 1% move in spot.\n\n' +
-  '• Highest at-the-money and near expiry; near-zero deep OTM.\n' +
-  '• Long options are long gamma — Δ moves in your favor as spot moves.\n' +
-  '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.\n' +
-  '• Scale-invariant display: gamma × spot / 100. Comparable across BTC, ETH, $LIT, etc.';
-
-const VEGA_TIP =
-  'ν VEGA — option price change as % of spot per 1% IV move.\n\n' +
-  '• Long options are long vega (gain when IV rises); short options are short vega.\n' +
-  '• Largest on long-dated ATM options; tiny on short-dated deep OTM.\n' +
-  '• Your exposure to IV re-pricing, independent of spot moves.\n' +
-  '• Scale-invariant display: vega / spot × 100. Comparable across underlyings.';
-
-const DELTA_TIP =
-  'Δ DELTA — price sensitivity of the option to the underlying.\n\n' +
-  '• Option moves ~Δ dollars per $1 move in spot. 0.50 Δ → option moves $0.50.\n' +
-  '• Sign: calls positive, puts negative. Long call / short put = long delta; long put / short call = short delta.\n' +
-  '• Rough moneyness proxy: |Δ| ≈ probability of finishing in-the-money.';
+const messages = defineMessages(
+  {
+    gammaTip:
+      'Γ GAMMA — change in Δ for a 1% move in spot.\n\n' +
+      '• Highest at-the-money and near expiry; near-zero deep OTM.\n' +
+      '• Long options are long gamma — Δ moves in your favor as spot moves.\n' +
+      '• Short options are short gamma — the position fights you on every move. Main risk of selling premium.\n' +
+      '• Scale-invariant display: gamma × spot / 100. Comparable across BTC, ETH, $LIT, etc.',
+    vegaTip:
+      'ν VEGA — option price change as % of spot per 1% IV move.\n\n' +
+      '• Long options are long vega (gain when IV rises); short options are short vega.\n' +
+      '• Largest on long-dated ATM options; tiny on short-dated deep OTM.\n' +
+      '• Your exposure to IV re-pricing, independent of spot moves.\n' +
+      '• Scale-invariant display: vega / spot × 100. Comparable across underlyings.',
+    deltaTip:
+      'Δ DELTA — price sensitivity of the option to the underlying.\n\n' +
+      '• Option moves ~Δ dollars per $1 move in spot. 0.50 Δ → option moves $0.50.\n' +
+      '• Sign: calls positive, puts negative. Long call / short put = long delta; long put / short call = short delta.\n' +
+      '• Rough moneyness proxy: |Δ| ≈ probability of finishing in-the-money.',
+    sellCall: 'Sell call at best bid',
+    buyCall: 'Buy call at best ask',
+    sellPut: 'Sell put at best bid',
+    buyPut: 'Buy put at best ask',
+    noOptions: 'No options data for this expiry',
+    index: 'Index {price}',
+    venues: 'VENUES',
+    callPos: 'Your call position (connected venues)',
+    putPos: 'Your put position (connected venues)',
+  },
+  {
+    gammaTip:
+      'Γ GAMMA — cambio en Δ por un movimiento de 1% del spot.\n\n' +
+      '• Máximo at-the-money y cerca del vencimiento; casi cero muy OTM.\n' +
+      '• Las opciones long son long gamma — Δ se mueve a tu favor cuando se mueve el spot.\n' +
+      '• Las opciones short son short gamma — la posición juega en tu contra en cada movimiento. Principal riesgo de vender prima.\n' +
+      '• Vista independiente de escala: gamma × spot / 100. Comparable entre BTC, ETH, $LIT, etc.',
+    vegaTip:
+      'ν VEGA — cambio del precio de la opción como % del spot por cada 1% de movimiento de IV.\n\n' +
+      '• Las opciones long son long vega (ganan si sube la IV); las short son short vega.\n' +
+      '• Mayor en opciones ATM de largo plazo; mínima en opciones de corto plazo muy OTM.\n' +
+      '• Tu exposición a la revalorización de IV, independiente del spot.\n' +
+      '• Vista independiente de escala: vega / spot × 100. Comparable entre subyacentes.',
+    deltaTip:
+      'Δ DELTA — sensibilidad del precio de la opción al subyacente.\n\n' +
+      '• La opción se mueve ~Δ dólares por cada $1 del spot. 0.50 Δ → la opción se mueve $0.50.\n' +
+      '• Signo: calls positivos, puts negativos. Long call / short put = long delta; long put / short call = short delta.\n' +
+      '• Aproximación de moneyness: |Δ| ≈ probabilidad de terminar in-the-money.',
+    sellCall: 'Vender call al mejor bid',
+    buyCall: 'Comprar call al mejor ask',
+    sellPut: 'Vender put al mejor bid',
+    buyPut: 'Comprar put al mejor ask',
+    noOptions: 'Sin datos de opciones para este vencimiento',
+    index: 'Índice {price}',
+    venues: 'EXCHANGES',
+    callPos: 'Tu posición en call (exchanges conectados)',
+    putPos: 'Tu posición en put (exchanges conectados)',
+  },
+);
 
 interface NewChainTableProps {
   strikes: EnrichedStrike[];
@@ -219,6 +259,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
   putPos,
   chartOverride,
 }: StrikeRowItemPropsInternal) {
+  const t = useT(messages);
   const distLabel = fmtDistPct(strike.strike, indexPrice);
   const callQ =
     strike.call.bestVenue != null ? (strike.call.venues[strike.call.bestVenue] ?? null) : null;
@@ -278,7 +319,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
               side: strike.call,
             });
           }}
-          title="Sell call at best bid"
+          title={t('sellCall')}
         />
         <div className={`${styles.spreadCell} ${callItm ? styles.itmCall : ''}`}>
           <SpreadPill spreadPct={crossVenueSpreadPct(callBba)} />
@@ -297,7 +338,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
               side: strike.call,
             });
           }}
-          title="Buy call at best ask"
+          title={t('buyCall')}
         />
         <PosCell position={callPos} />
 
@@ -326,7 +367,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
               side: strike.put,
             });
           }}
-          title="Sell put at best bid"
+          title={t('sellPut')}
         />
         <div className={`${styles.spreadCell} ${putItm ? styles.itmPut : ''}`}>
           <SpreadPill spreadPct={crossVenueSpreadPct(putBba)} />
@@ -345,7 +386,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
               side: strike.put,
             });
           }}
-          title="Buy put at best ask"
+          title={t('buyPut')}
         />
         <div className={`${styles.ivCell} ${putItm ? styles.itmPut : ''}`}>
           <IvChip iv={strike.put.bestIv} size="sm" />
@@ -394,6 +435,7 @@ export default function NewChainTable({
   positions,
   chartOverride,
 }: NewChainTableProps) {
+  const t = useT(messages);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [quickTrade, setQuickTrade] = useState<QuickTradeInfo | null>(null);
   const atmRef = useRef<HTMLDivElement>(null);
@@ -464,7 +506,7 @@ export default function NewChainTable({
   }, [scrollScope, atmIndex, isMobile, rowVirtualizer]);
 
   if (strikes.length === 0) {
-    return <EmptyState icon="∅" title="No options data for this expiry" />;
+    return <EmptyState icon="∅" title={t('noOptions')} />;
   }
 
   if (isMobile) {
@@ -479,7 +521,7 @@ export default function NewChainTable({
                   <div className={styles.atmMarker}>
                     <div className={styles.atmLine} />
                     <div className={styles.atmPill}>
-                      <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
+                      <span className={styles.atmPillText}>{t('index', { price: fmtUsd(indexPrice) })}</span>
                     </div>
                     <div className={styles.atmLine} />
                   </div>
@@ -509,14 +551,14 @@ export default function NewChainTable({
       <div className={styles.tableScroll}>
         <div className={styles.table}>
           <div className={styles.header}>
-            <span className={styles.hdrLabel}>VENUES</span>
-            <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
+            <span className={styles.hdrLabel}>{t('venues')}</span>
+            <span className={styles.hdrLabel} data-align="center" title={t('gammaTip')}>
               γ
             </span>
-            <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
+            <span className={styles.hdrLabel} data-align="center" title={t('vegaTip')}>
               ν
             </span>
-            <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
+            <span className={styles.hdrLabel} data-align="center" title={t('deltaTip')}>
               Δ
             </span>
             <span className={styles.hdrLabel} data-align="center">
@@ -531,13 +573,13 @@ export default function NewChainTable({
             <span className={styles.hdrLabel} data-align="right">
               ASK
             </span>
-            <span className={styles.hdrLabel} data-align="center" title="Your call position (connected venues)">
+            <span className={styles.hdrLabel} data-align="center" title={t('callPos')}>
               POS
             </span>
             <span className={styles.hdrLabel} data-align="center">
               STRIKE
             </span>
-            <span className={styles.hdrLabel} data-align="center" title="Your put position (connected venues)">
+            <span className={styles.hdrLabel} data-align="center" title={t('putPos')}>
               POS
             </span>
             <span className={styles.hdrLabel}>BID</span>
@@ -548,17 +590,17 @@ export default function NewChainTable({
             <span className={styles.hdrLabel} data-align="center">
               IV
             </span>
-            <span className={styles.hdrLabel} data-align="center" title={DELTA_TIP}>
+            <span className={styles.hdrLabel} data-align="center" title={t('deltaTip')}>
               Δ
             </span>
-            <span className={styles.hdrLabel} data-align="center" title={VEGA_TIP}>
+            <span className={styles.hdrLabel} data-align="center" title={t('vegaTip')}>
               ν
             </span>
-            <span className={styles.hdrLabel} data-align="center" title={GAMMA_TIP}>
+            <span className={styles.hdrLabel} data-align="center" title={t('gammaTip')}>
               γ
             </span>
             <span className={styles.hdrLabel} data-align="right">
-              VENUES
+              {t('venues')}
             </span>
           </div>
 
@@ -590,7 +632,7 @@ export default function NewChainTable({
                       <div className={styles.atmMarker}>
                         <div className={styles.atmLine} />
                         <div className={styles.atmPill}>
-                          <span className={styles.atmPillText}>Index {fmtUsd(indexPrice)}</span>
+                          <span className={styles.atmPillText}>{t('index', { price: fmtUsd(indexPrice) })}</span>
                         </div>
                         <div className={styles.atmLine} />
                       </div>

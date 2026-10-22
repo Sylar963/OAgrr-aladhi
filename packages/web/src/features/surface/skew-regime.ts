@@ -1,4 +1,5 @@
 import type { CallPutFlowBucket } from '@oggregator/protocol';
+import { defineMessages, type Locale, translate } from '@lib/i18n';
 import type { IvHistoryPoint } from '@shared/enriched';
 
 import type { SkewLinePoint } from './skew-history-utils';
@@ -209,22 +210,50 @@ export function formatDuration(sec: number): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-const REGIME_LABEL: Record<RegimeState, string> = {
-  'risk-on': 'Risk-on',
-  neutral: 'Neutral',
-  'risk-off': 'Risk-off',
-};
+const messages = defineMessages(
+  {
+    'risk-on': 'Risk-on',
+    neutral: 'Neutral',
+    'risk-off': 'Risk-off',
+    rr: 'RR',
+    contracts: 'call−put contracts',
+    notional: 'call−put notional',
+    premium: 'call−put premium',
+    notEnough: 'Not enough history yet to build the rolling zones.',
+    subject: '{smooth} avg {subject} {value}',
+    zones: '{band} zones {lower} … {upper}',
+    riskOn: 'Risk-on for {since}: {subject} broke above the upper zone ({zones}).',
+    riskOff: 'Risk-off for {since}: {subject} broke below the lower zone ({zones}).',
+    neutralRun: 'Neutral for {since}: {subject} inside the {zones}{position}.',
+    upperHalf: ', upper half',
+    lowerHalf: ', lower half',
+    share: 'risk-on {on}% · risk-off {off}% of lookback',
+  },
+  {
+    'risk-on': 'Risk-on',
+    neutral: 'Neutral',
+    'risk-off': 'Risk-off',
+    rr: 'RR',
+    contracts: 'contratos call−put',
+    notional: 'nocional call−put',
+    premium: 'prima call−put',
+    notEnough: 'Aún no hay suficiente historial para construir las zonas móviles.',
+    subject: 'prom. {smooth} {subject} {value}',
+    zones: 'zonas {band} {lower} … {upper}',
+    riskOn:
+      'Risk-on desde hace {since}: {subject} rompió por encima de la zona superior ({zones}).',
+    riskOff:
+      'Risk-off desde hace {since}: {subject} rompió por debajo de la zona inferior ({zones}).',
+    neutralRun: 'Neutral desde hace {since}: {subject} dentro de las {zones}{position}.',
+    upperHalf: ', mitad superior',
+    lowerHalf: ', mitad inferior',
+    share: 'risk-on {on}% · risk-off {off}% del periodo',
+  },
+);
 
-export function regimeLabel(regime: RegimeState): string {
-  return REGIME_LABEL[regime];
+export function regimeLabel(regime: RegimeState, locale: Locale = 'en'): string {
+  return translate(messages, regime, undefined, locale);
 }
-
-const SOURCE_SUBJECT: Record<RegimeSource, string> = {
-  rr: 'RR',
-  contracts: 'call−put contracts',
-  notional: 'call−put notional',
-  premium: 'call−put premium',
-};
 
 /** Plain-language read of the latest point. Descriptive only; the regime is not a forecast. */
 export function describeRegime(
@@ -232,28 +261,33 @@ export function describeRegime(
   source: RegimeSource,
   underlying: string,
   bandLabel: string,
+  locale: Locale = 'en',
 ): string {
+  const tr = (key: keyof typeof messages.en & string, vars?: Record<string, string>) =>
+    translate(messages, key, vars, locale);
   const last = points.at(-1);
   const run = currentRun(points);
   if (last == null || run == null || last.upper == null || last.lower == null) {
-    return 'Not enough history yet to build the rolling zones.';
+    return tr('notEnough');
   }
   const fmt = (v: number) => formatRegimeValue(v, source, underlying);
   const smooth = formatDuration(REGIME_SMOOTH_SEC[source]);
-  const subject = `${smooth} avg ${SOURCE_SUBJECT[source]} ${fmt(last.value)}`;
-  const zones = `${bandLabel} zones ${fmt(last.lower)} … ${fmt(last.upper)}`;
+  const subject = tr('subject', { smooth, subject: tr(source), value: fmt(last.value) });
+  const zones = tr('zones', { band: bandLabel, lower: fmt(last.lower), upper: fmt(last.upper) });
   const since = formatDuration(last.time - run.since);
-  if (run.regime === 'risk-on') {
-    return `Risk-on for ${since}: ${subject} broke above the upper zone (${zones}).`;
-  }
-  if (run.regime === 'risk-off') {
-    return `Risk-off for ${since}: ${subject} broke below the lower zone (${zones}).`;
-  }
-  const position = last.mid == null ? '' : last.value >= last.mid ? ', upper half' : ', lower half';
-  return `Neutral for ${since}: ${subject} inside the ${zones}${position}.`;
+  if (run.regime === 'risk-on') return tr('riskOn', { since, subject, zones });
+  if (run.regime === 'risk-off') return tr('riskOff', { since, subject, zones });
+  const position =
+    last.mid == null ? '' : last.value >= last.mid ? tr('upperHalf') : tr('lowerHalf');
+  return tr('neutralRun', { since, subject, zones, position });
 }
 
-export function shareText(share: RegimeShare | null): string {
+export function shareText(share: RegimeShare | null, locale: Locale = 'en'): string {
   if (share == null) return '';
-  return `risk-on ${Math.round(share.riskOn)}% · risk-off ${Math.round(share.riskOff)}% of lookback`;
+  return translate(
+    messages,
+    'share',
+    { on: Math.round(share.riskOn), off: Math.round(share.riskOff) },
+    locale,
+  );
 }

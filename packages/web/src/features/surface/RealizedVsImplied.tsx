@@ -9,6 +9,7 @@ import {
 } from 'lightweight-charts';
 
 import { DropdownPicker } from '@components/ui';
+import { defineMessages, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import { useDvolHistory } from '@features/dvol';
 import { useTradfiSelection } from '@features/tradfi';
@@ -20,6 +21,19 @@ import styles from './RealizedVsImplied.module.css';
 const CURRENCIES = ['BTC', 'ETH'] as const;
 const IV_COLOR = '#50D2C1';
 const HV_COLOR = '#F7A600';
+
+const messages = defineMessages(
+  {
+    title: 'Realized vs Implied Volatility',
+    hvWindow: 'HV {n}d (Realized)',
+    hv: 'HV (Realized)',
+  },
+  {
+    title: 'Volatilidad realizada vs implícita',
+    hvWindow: 'HV {n}d (realizada)',
+    hv: 'HV (realizada)',
+  },
+);
 
 /** IV and HV lines in vol points; the DVOL response already has this shape. */
 interface RvIvSeries {
@@ -130,6 +144,7 @@ interface Props {
 }
 
 export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 'crypto' }: Props) {
+  const t = useT(messages);
   const tradfi = market === 'tradfi';
   const initial = CURRENCIES.includes(defaultUnderlying as (typeof CURRENCIES)[number])
     ? defaultUnderlying
@@ -148,7 +163,7 @@ export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
-        <span className={styles.title}>Realized vs Implied Volatility</span>
+        <span className={styles.title}>{t('title')}</span>
         {tradfi ? (
           <span className={styles.title}>{tradfiUnderlying}</span>
         ) : (
@@ -167,7 +182,7 @@ export default function RealizedVsImplied({ defaultUnderlying = 'BTC', market = 
           </span>
           <span className={styles.legendItem}>
             <span className={styles.legendSwatch} style={{ background: HV_COLOR }} />
-            {tradfi ? `HV ${history?.rvWindowDays ?? 21}d (Realized)` : 'HV (Realized)'}
+            {tradfi ? t('hvWindow', { n: history?.rvWindowDays ?? 21 }) : t('hv')}
           </span>
         </div>
       </div>

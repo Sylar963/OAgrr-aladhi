@@ -1,7 +1,13 @@
 import type { EquityPointDto } from '@oggregator/protocol';
+import { defineMessages, useT } from '@lib/i18n';
 import { useId } from 'react';
 
 import styles from './EquityChart.module.css';
+
+const messages = defineMessages(
+  { equitySinceStart: 'Equity since start' },
+  { equitySinceStart: 'Equity desde el inicio' },
+);
 
 const WIDTH = 600;
 const HEIGHT = 140;
@@ -12,6 +18,7 @@ interface EquityChartProps {
 }
 
 export default function EquityChart({ points, baselineUsd }: EquityChartProps) {
+  const t = useT(messages);
   const gradientId = useId();
   if (points.length < 2) return null;
 
@@ -36,7 +43,7 @@ export default function EquityChart({ points, baselineUsd }: EquityChartProps) {
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       preserveAspectRatio="none"
       role="img"
-      aria-label="Equity since start"
+      aria-label={t('equitySinceStart')}
       data-tone={up ? 'up' : 'down'}
     >
       <defs>

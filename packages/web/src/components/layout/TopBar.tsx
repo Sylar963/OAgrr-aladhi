@@ -1,14 +1,33 @@
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
+import { defineMessages, useT } from '@lib/i18n';
 import { TAB_GROUPS, type TabDef, type TabGroup } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AccountChip from './AccountChip';
 import AssetModeToggle from './AssetModeToggle';
+import LanguageToggle from './LanguageToggle';
 import { useSeenTabs } from './seen-tabs';
 import { useTabFold } from './tab-fit';
 import styles from './TopBar.module.css';
 import VenueHealth from './VenueHealth';
+
+const messages = defineMessages(
+  {
+    more: 'More',
+    liveCharts: 'Live charts (Aggr)',
+    switchUnderlying: 'Switch underlying (⌘K)',
+    live: 'Live',
+    new: 'New',
+  },
+  {
+    more: 'Más',
+    liveCharts: 'Gráficos en vivo (Aggr)',
+    switchUnderlying: 'Cambiar subyacente (⌘K)',
+    live: 'En vivo',
+    new: 'Nuevo',
+  },
+);
 
 interface TopBarProps {
   tabs: readonly TabDef[];
@@ -26,6 +45,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const underlying = useAppStore((s) => s.underlying);
   const seenTabs = useSeenTabs(activeTab);
+  const t = useT(messages);
 
   // Show the TradFi entry only when its backend is reachable: always in dev
   // (the /tradfi-api proxy), and in prod only once VITE_TRADFI_API_BASE is set.
@@ -41,7 +61,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
     [tabs],
   );
   const activeGroupIndex = groups.findIndex((g) => g.tabs.some((t) => t.id === activeTab));
-  const activeLabel = tabs.find((t) => t.id === activeTab)?.label ?? 'More';
+  const activeLabel = tabs.find((t) => t.id === activeTab)?.label ?? t('more');
 
   const barRef = useRef<HTMLElement>(null);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -114,7 +134,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
             ))}
           </div>
         ))}
-        <MoreTriggerGhost label="More" />
+        <MoreTriggerGhost label={t('more')} />
         <MoreTriggerGhost label={activeLabel} active />
       </div>
 
@@ -127,8 +147,8 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
             href={aggrUrl}
             target="_blank"
             rel="noopener noreferrer"
-            title="Live charts (Aggr)"
-            aria-label="Live charts (Aggr)"
+            title={t('liveCharts')}
+            aria-label={t('liveCharts')}
           >
             ↗
           </a>
@@ -137,12 +157,13 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
           className={styles.cmdk}
           onClick={onOpenPalette}
           data-tour="asset-picker"
-          title="Switch underlying (⌘K)"
+          title={t('switchUnderlying')}
         >
           <span className={styles.asset}>{underlying}</span>
           <span className={styles.caret}>▾</span>
           <kbd className={styles.kbd}>⌘K</kbd>
         </button>
+        <LanguageToggle />
         <AccountChip onOpenShortcuts={onOpenShortcuts} />
       </div>
     </header>
@@ -150,8 +171,9 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
 }
 
 function TabIndicator({ tab, seen }: { tab: TabDef; seen: boolean }) {
-  if (tab.badge === 'LIVE') return <span className={styles.liveDot} title="Live" />;
-  if (tab.badge === 'NEW' && !seen) return <span className={styles.newDot} title="New" />;
+  const t = useT(messages);
+  if (tab.badge === 'LIVE') return <span className={styles.liveDot} title={t('live')} />;
+  if (tab.badge === 'NEW' && !seen) return <span className={styles.newDot} title={t('new')} />;
   return null;
 }
 
@@ -177,6 +199,7 @@ interface MoreMenuProps {
 }
 
 function MoreMenu({ groups, showDivider, activeTab, seenTabs, onSelect }: MoreMenuProps) {
+  const t = useT(messages);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const tabs = groups.flatMap((g) => g.tabs);
@@ -210,7 +233,7 @@ function MoreMenu({ groups, showDivider, activeTab, seenTabs, onSelect }: MoreMe
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {activeInMenu?.label ?? 'More'}
+        {activeInMenu?.label ?? t('more')}
         <span className={styles.caret}>▾</span>
         {hasUnseen && <span className={styles.newDot} />}
       </button>

@@ -3,6 +3,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { VolConeBand } from "@oggregator/protocol";
 
 import { fmtIv } from "@lib/format";
+import { type Translate, useT } from "@lib/i18n";
+
+import { coneMessages } from "./i18n";
 import styles from "./VolConeChart.module.css";
 
 export interface ConeIvPoint {
@@ -55,12 +58,13 @@ export function estimateConePercentile(
 function percentileLabel(
   band: VolConeBand | undefined,
   point: ConeIvPoint,
+  t: Translate<typeof coneMessages.en>,
 ): string {
   if (point.exactPercentile != null)
     return `p${point.exactPercentile.toFixed(0)}`;
   if (!band) return "";
-  if (point.iv > band.max) return ">max";
-  if (point.iv < band.min) return "<min";
+  if (point.iv > band.max) return t("aboveMax");
+  if (point.iv < band.min) return t("belowMin");
   const est = estimateConePercentile(band, point.iv);
   return est == null ? "" : `≈p${est.toFixed(0)}`;
 }
@@ -100,6 +104,7 @@ function useSize<T extends HTMLElement>() {
 }
 
 export default function VolConeChart({ bands, ivPoints }: Props) {
+  const t = useT(coneMessages);
   const [ref, { width, height }] = useSize<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -311,7 +316,7 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
                   className={styles.ivDot}
                 />
                 <text x={x(p.days)} y={y(p.iv) - 8} className={styles.ivLabel}>
-                  {percentileLabel(bandByDays.get(p.days), p)}
+                  {percentileLabel(bandByDays.get(p.days), p, t)}
                 </text>
               </g>
             ))}
@@ -373,7 +378,7 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
             className={styles.toolBtn}
             onClick={() => setZoom(null)}
           >
-            reset
+            {t("reset")}
           </button>
         )}
         <div className={styles.segment}>
@@ -389,11 +394,11 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
               }}
               title={
                 m === "core"
-                  ? "Fit p10–p90, IV and RV"
-                  : "Fit the full min–max range"
+                  ? t("fitCore")
+                  : t("fitFull")
               }
             >
-              {m === "core" ? "p10–p90" : "full"}
+              {m === "core" ? "p10–p90" : t("full")}
             </button>
           ))}
         </div>
@@ -408,35 +413,38 @@ export default function VolConeChart({ bands, ivPoints }: Props) {
           }}
         >
           <div className={styles.tooltipTitle}>
-            {hovered.horizonDays}d realized · {hovered.sampleCount} windows
+            {t("tooltipTitle", {
+              d: hovered.horizonDays,
+              n: hovered.sampleCount,
+            })}
           </div>
           {hoveredIv && (
             <div className={styles.tooltipRow}>
               <span className={styles.swIv} />
               ATM IV <b>{fmtIv(hoveredIv.iv)}</b>
               <span className={styles.dim}>
-                {percentileLabel(hovered, hoveredIv)}
+                {percentileLabel(hovered, hoveredIv, t)}
               </span>
             </div>
           )}
           <div className={styles.tooltipRow}>
             <span className={styles.swRv} />
-            RV now <b>{fmtIv(hovered.current)}</b>
+            {t("rvNow")} <b>{fmtIv(hovered.current)}</b>
           </div>
           <div className={styles.tooltipGrid}>
-            <span>max</span>
+            <span>{t("max")}</span>
             <b>{fmtIv(hovered.max)}</b>
             <span>p90</span>
             <b>{fmtIv(hovered.p90)}</b>
             <span>p75</span>
             <b>{fmtIv(hovered.p75)}</b>
-            <span>median</span>
+            <span>{t("median")}</span>
             <b>{fmtIv(hovered.p50)}</b>
             <span>p25</span>
             <b>{fmtIv(hovered.p25)}</b>
             <span>p10</span>
             <b>{fmtIv(hovered.p10)}</b>
-            <span>min</span>
+            <span>{t("min")}</span>
             <b>{fmtIv(hovered.min)}</b>
           </div>
         </div>

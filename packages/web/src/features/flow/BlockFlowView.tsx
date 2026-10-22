@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Spinner, EmptyState } from '@components/ui';
 import { VENUES } from '@lib/venue-meta';
 import { fmtUsd } from '@lib/format';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useBlockFlow, useBlockFlowHistoryPage, useBlockFlowHistorySummary } from './block-queries';
 import type { BlockTradeEvent } from './block-queries';
@@ -10,7 +11,41 @@ import { getCustomRangeFromBounds } from './DateRangePicker';
 import type { HistoryRange, TradeHistoryCursor } from './queries';
 import { HistoryControls, type HistoryPreset } from './HistoryControls';
 import StrategyIcon, { getStrategyLabel } from './StrategyIcon';
+import { flowMessages } from './i18n';
 import styles from './BlockFlowView.module.css';
+
+const messages = defineMessages(
+  {
+    legSize: '{size} ct',
+    legRatio: ' · ratio {ratio}',
+    perContract: '{price} per contract',
+    loadingBlocks: 'Loading block trades…',
+    failedBlocks: 'Failed to load institutional trades',
+    failedBlocksDetail:
+      'Service may still be starting. Deribit and Bybit connect via WebSocket, OKX and Derive poll every 90s.',
+    noStoredBlocks: 'No stored institutional trades in range',
+    noBlocksYet: 'No institutional trades yet',
+    noStoredBlocksDetail:
+      'Try a wider date window, another venue selection, or let ingest collect more history.',
+    noBlocksYetDetail:
+      'RFQ and block trades will appear here as they execute across Deribit, OKX, Bybit, Binance, and Derive.',
+  },
+  {
+    legSize: '{size} ct',
+    legRatio: ' · ratio {ratio}',
+    perContract: '{price} por contrato',
+    loadingBlocks: 'Cargando block trades…',
+    failedBlocks: 'No se pudieron cargar los trades institucionales',
+    failedBlocksDetail:
+      'Es posible que el servicio aún se esté iniciando. Deribit y Bybit se conectan por WebSocket; OKX y Derive se consultan cada 90s.',
+    noStoredBlocks: 'No hay trades institucionales guardados en el rango',
+    noBlocksYet: 'Aún no hay trades institucionales',
+    noStoredBlocksDetail:
+      'Prueba un rango de fechas más amplio, otra selección de exchanges o deja que la ingesta reúna más historial.',
+    noBlocksYetDetail:
+      'Los trades RFQ y block aparecerán aquí a medida que se ejecuten en Deribit, OKX, Bybit, Binance y Derive.',
+  },
+);
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -89,6 +124,9 @@ interface BlockTradeRowProps {
 }
 
 function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
+  const t = useT(messages);
+  const tf = useT(flowMessages);
+  const locale = useLocale();
   const meta = VENUES[trade.venue];
   const isMultiLeg = trade.legs.length > 1;
   const firstLeg = trade.legs[0];
@@ -111,11 +149,11 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
           <div className={styles.tradeInfo}>
             <div className={styles.tradeTop}>
               <span className={styles.strategy}>
-                {getStrategyLabel(trade.strategy, legInfo?.type)}
+                {getStrategyLabel(trade.strategy, legInfo?.type, locale)}
               </span>
               {isMultiLeg ? <span className={styles.legCount}>{trade.legs.length}L</span> : null}
               <span className={styles.side} data-side={trade.direction}>
-                {trade.direction.toUpperCase()}
+                {trade.direction === 'buy' ? tf('buy') : tf('sell')}
               </span>
             </div>
             <div className={styles.tradeBottom}>
@@ -137,7 +175,9 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
             <span className={styles.notional} data-whale={isWhale || undefined}>
               {fmtUsdCompact(notionalUsd ?? premiumUsd)}
             </span>
-            <span className={styles.notionalMeta}>Premium {fmtUsdCompact(premiumUsd)}</span>
+            <span className={styles.notionalMeta}>
+              {tf('premiumValue', { value: fmtUsdCompact(premiumUsd) })}
+            </span>
             <div className={styles.tradeMeta}>
               <span className={styles.venue}>
                 {meta?.logo ? <img src={meta.logo} className={styles.venueLogo} alt="" /> : null}
@@ -164,10 +204,11 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
             return (
               <div key={index} className={styles.leg} data-side={leg.direction}>
                 <span className={styles.legDir} data-side={leg.direction}>
-                  {leg.direction === 'buy' ? 'BUY' : 'SELL'}
+                  {leg.direction === 'buy' ? tf('buy') : tf('sell')}
                 </span>
                 <span className={styles.legSize}>
-                  {leg.size} ct{leg.ratio > 1 ? ` · ratio ${leg.ratio}` : ''}
+                  {t('legSize', { size: leg.size })}
+                  {leg.ratio > 1 ? t('legRatio', { ratio: leg.ratio }) : ''}
                 </span>
                 <span className={styles.legExpiry}>{info.expiry}</span>
                 <span className={styles.legStrike}>{info.strike}</span>
@@ -176,7 +217,9 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
                 </span>
                 {leg.price > 0 ? (
                   <span className={styles.legPrices}>
-                    <span className={styles.legPerContract}>{fmtUsd(leg.price)} per contract</span>
+                    <span className={styles.legPerContract}>
+                      {t('perContract', { price: fmtUsd(leg.price) })}
+                    </span>
                     <span className={styles.legTotal}>
                       {fmtUsd(leg.price * leg.size * leg.ratio)}
                     </span>
@@ -198,6 +241,8 @@ export default function BlockFlowView({
   onPresetChange,
   onRangeChange,
 }: BlockFlowViewProps) {
+  const t = useT(messages);
+  const tf = useT(flowMessages);
   const underlying = useAppStore((s) => s.underlying);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const { data, isLoading, error } = useBlockFlow(underlying, scope === 'tape');
@@ -275,15 +320,15 @@ export default function BlockFlowView({
   }
 
   if (isLoading) {
-    return <Spinner size="lg" label="Loading block trades…" />;
+    return <Spinner size="lg" label={t('loadingBlocks')} />;
   }
 
   if (error) {
     return (
       <EmptyState
         icon="⚠"
-        title="Failed to load institutional trades"
-        detail="Service may still be starting. Deribit and Bybit connect via WebSocket, OKX and Derive poll every 90s."
+        title={t('failedBlocks')}
+        detail={t('failedBlocksDetail')}
       />
     );
   }
@@ -313,19 +358,15 @@ export default function BlockFlowView({
 
       {isHistoryLoading ? (
         <div className={styles.centeredState}>
-          <Spinner size="lg" label="Loading history…" />
+          <Spinner size="lg" label={tf('loadingHistory')} />
         </div>
       ) : trades.length === 0 || isHistoryEmpty ? (
         <EmptyState
           title={
-            scope === 'history'
-              ? 'No stored institutional trades in range'
-              : 'No institutional trades yet'
+            scope === 'history' ? t('noStoredBlocks') : t('noBlocksYet')
           }
           detail={
-            scope === 'history'
-              ? 'Try a wider date window, another venue selection, or let ingest collect more history.'
-              : 'RFQ and block trades will appear here as they execute across Deribit, OKX, Bybit, Binance, and Derive.'
+            scope === 'history' ? t('noStoredBlocksDetail') : t('noBlocksYetDetail')
           }
         />
       ) : (

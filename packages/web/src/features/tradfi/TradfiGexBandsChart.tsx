@@ -6,6 +6,7 @@ import {
   PUT_WALL_COLOR,
 } from '@features/gex';
 import gexStyles from '@features/gex/GexView.module.css';
+import { defineMessages, useT } from '@lib/i18n';
 import type { InstrumentCandleInterval, InstrumentCandleRange } from '@oggregator/protocol';
 import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import {
@@ -36,6 +37,19 @@ const RANGES: Array<{ range: InstrumentCandleRange; interval: InstrumentCandleIn
   { range: 'max', interval: '1d', label: 'max' },
 ];
 
+const messages = defineMessages(
+  {
+    loading: 'Loading underlying history…',
+    unavailable: 'Underlying history unavailable',
+    retry: 'Retry',
+  },
+  {
+    loading: 'Cargando historial del subyacente…',
+    unavailable: 'Historial del subyacente no disponible',
+    retry: 'Reintentar',
+  },
+);
+
 interface Props {
   underlying: string;
   gex: GexStrike[];
@@ -44,6 +58,7 @@ interface Props {
 }
 
 export default function TradfiGexBandsChart({ underlying, gex, gexProfile, spotPrice }: Props) {
+  const t = useT(messages);
   const [rangeIdx, setRangeIdx] = useState(2); // default 30d
   const sel = RANGES[rangeIdx]!;
 
@@ -204,12 +219,12 @@ export default function TradfiGexBandsChart({ underlying, gex, gexProfile, spotP
       </div>
       <div className={gexStyles.bandsChartWrap}>
         <div className={gexStyles.bandsChartCanvas} ref={containerRef} />
-        {isLoading && !data && <div className={gexStyles.bandsOverlay}>Loading underlying history…</div>}
+        {isLoading && !data && <div className={gexStyles.bandsOverlay}>{t('loading')}</div>}
         {error && (
           <div className={gexStyles.bandsOverlay}>
-            <div>Underlying history unavailable</div>
+            <div>{t('unavailable')}</div>
             <button type="button" onClick={() => void refetch()}>
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}

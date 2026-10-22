@@ -3,6 +3,7 @@ import { useStrategyStore } from '@features/architect/strategy-store';
 import { ExpiryBar } from '@features/chain';
 import { AlphaPortfolioContext } from '@features/portfolio';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { defineMessages, useT } from '@lib/i18n';
 import type { SpreadKind } from '@lib/analytics/verticalSpread';
 import type { EnrichedChainResponse, VenueId } from '@shared/enriched';
 import { VENUES } from '@lib/venue-meta';
@@ -57,20 +58,72 @@ function isScannerStrategy(strategy: AlphaStrategy): strategy is ScannerStrategy
   );
 }
 
-const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: string }> = [
-  { id: 'call-credit', label: 'Call Credit' },
-  { id: 'put-credit', label: 'Put Credit' },
-  { id: 'call-debit', label: 'Call Debit' },
-  { id: 'put-debit', label: 'Put Debit' },
-  { id: 'long-call', label: 'Long Call' },
-  { id: 'long-put', label: 'Long Put' },
-  { id: 'short-straddle', label: 'Sell Straddle' },
-  { id: 'long-straddle', label: 'Buy Straddle' },
+const messages = defineMessages(
+  {
+    callCredit: 'Call Credit',
+    putCredit: 'Put Credit',
+    callDebit: 'Call Debit',
+    putDebit: 'Put Debit',
+    longCall: 'Long Call',
+    longPut: 'Long Put',
+    sellStraddle: 'Sell Straddle',
+    buyStraddle: 'Buy Straddle',
+    emptyEquity: 'Enter your current account equity in the builder to see dollar risk at your size.',
+    emptyChain: 'Chain unavailable. Cached quotes are not used for a trade estimate.',
+    emptyMarkOnly:
+      '{venue} has no bids or asks on {underlying} options, only marks. Pick a venue with a live book, or get a block quote on the venue.',
+    emptyQuote:
+      'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.',
+    portfolioRisk: 'Existing portfolio risk · {venue}',
+    strategyAria: 'Alpha strategy',
+    activeVenues: '{n} ACTIVE VENUES',
+    loadingChain: 'Loading chain data…',
+    failedChain: 'Failed to load chain',
+    checkConnection: 'Check your connection and try again.',
+    noOptions: 'No options data',
+    noVenuesData: 'No venues returned data for {underlying} {expiry}.',
+  },
+  {
+    callCredit: 'Call Credit',
+    putCredit: 'Put Credit',
+    callDebit: 'Call Debit',
+    putDebit: 'Put Debit',
+    longCall: 'Long Call',
+    longPut: 'Long Put',
+    sellStraddle: 'Vender straddle',
+    buyStraddle: 'Comprar straddle',
+    emptyEquity: 'Ingresa el capital actual de tu cuenta en el builder para ver el riesgo en dólares a tu tamaño.',
+    emptyChain: 'Cadena no disponible. No se usan cotizaciones en caché para estimar un trade.',
+    emptyMarkOnly:
+      '{venue} no tiene bids ni asks en opciones de {underlying}, solo marks. Elige un exchange con libro en vivo o pide una cotización block en el exchange.',
+    emptyQuote:
+      'No hay cotización elegible para estos strikes, exchange y tamaño. Revisa el tamaño, el vencimiento y las exclusiones de cotizaciones, o carga una alternativa abajo.',
+    portfolioRisk: 'Riesgo actual del portafolio · {venue}',
+    strategyAria: 'Estrategia Alpha',
+    activeVenues: '{n} EXCHANGES ACTIVOS',
+    loadingChain: 'Cargando datos de la cadena…',
+    failedChain: 'No se pudo cargar la cadena',
+    checkConnection: 'Revisa tu conexión e inténtalo de nuevo.',
+    noOptions: 'Sin datos de opciones',
+    noVenuesData: 'Ningún exchange devolvió datos para {underlying} {expiry}.',
+  },
+);
+
+const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: keyof typeof messages.en }> = [
+  { id: 'call-credit', label: 'callCredit' },
+  { id: 'put-credit', label: 'putCredit' },
+  { id: 'call-debit', label: 'callDebit' },
+  { id: 'put-debit', label: 'putDebit' },
+  { id: 'long-call', label: 'longCall' },
+  { id: 'long-put', label: 'longPut' },
+  { id: 'short-straddle', label: 'sellStraddle' },
+  { id: 'long-straddle', label: 'buyStraddle' },
 ];
 // TradFi has no scanner runtime yet; only the chain-local spread tabs apply.
 const SPREAD_STRATEGIES = STRATEGIES.filter((item) => !isScannerStrategy(item.id));
 
 export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket }) {
+  const t = useT(messages);
   const tradfi = market === 'tradfi';
   const {
     underlying,
@@ -327,12 +380,12 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         emptyState={!sizing.equity.trim() ? 'equity' : error ? 'market' : 'quote'}
         emptyReason={
           !sizing.equity.trim()
-            ? 'Enter your current account equity in the builder to see dollar risk at your size.'
+            ? t('emptyEquity')
             : error
-              ? 'Chain unavailable. Cached quotes are not used for a trade estimate.'
+              ? t('emptyChain')
               : tradeVenueMarkOnly
-                ? `${VENUES[tradeVenue]?.label ?? tradeVenue} has no bids or asks on ${underlying} options, only marks. Pick a venue with a live book, or get a block quote on the venue.`
-                : 'No eligible quote for these strikes, venue, and size. Check sizing, expiry, quote exclusions, or load an alternative below.'
+                ? t('emptyMarkOnly', { venue: VENUES[tradeVenue]?.label ?? tradeVenue, underlying })
+                : t('emptyQuote')
         }
         regime={regime ?? null}
         {...(builderLegs && { onOpenBuilder: openInBuilder })}
@@ -377,7 +430,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       />
       {!tradfi && (
         <details>
-          <summary>Existing portfolio risk · {tradeVenue}</summary>
+          <summary>{t('portfolioRisk', { venue: tradeVenue })}</summary>
           <AlphaPortfolioContext venue={tradeVenue} underlying={underlying} />
         </details>
       )}
@@ -391,7 +444,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
           <span>ALPHA</span>
           <strong>{underlying}</strong>
         </button>
-        <div className={styles.strategyTabs} role="tablist" aria-label="Alpha strategy">
+        <div className={styles.strategyTabs} role="tablist" aria-label={t('strategyAria')}>
           {(tradfi ? SPREAD_STRATEGIES : STRATEGIES).map((item) => (
             <button
               type="button"
@@ -414,12 +467,12 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
                 }
               }}
             >
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
         </div>
         {!tradfi && (
-          <span className={styles.venueScope}>{scanVenues.length} ACTIVE VENUES</span>
+          <span className={styles.venueScope}>{t('activeVenues', { n: scanVenues.length })}</span>
         )}
       </div>
 
@@ -469,7 +522,7 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
 
       {isSpread && isLoading && !chain && (
         <div className={styles.state}>
-          <Spinner size="lg" label="Loading chain data…" />
+          <Spinner size="lg" label={t('loadingChain')} />
         </div>
       )}
 
@@ -477,8 +530,8 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
         <div className={styles.state}>
           <EmptyState
             icon="⚠"
-            title="Failed to load chain"
-            detail={error instanceof Error ? error.message : 'Check your connection and try again.'}
+            title={t('failedChain')}
+            detail={error instanceof Error ? error.message : t('checkConnection')}
           />
         </div>
       )}
@@ -486,8 +539,8 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       {isSpread && chain && chain.strikes.length === 0 && (
         <EmptyState
           icon="∅"
-          title="No options data"
-          detail={`No venues returned data for ${underlying} ${expiry}.`}
+          title={t('noOptions')}
+          detail={t('noVenuesData', { underlying, expiry })}
         />
       )}
 

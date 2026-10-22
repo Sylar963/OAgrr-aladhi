@@ -90,6 +90,40 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@20.19.41)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@20.19.41)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
 
+  apps/trade:
+    dependencies:
+      react:
+        specifier: 19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: 19.2.4
+        version: 19.2.4(react@19.2.4)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@types/react':
+        specifier: 19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react-swc':
+        specifier: 4.3.0
+        version: 4.3.0(@swc/helpers@0.5.23)(vite@6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vite:
+        specifier: 6.4.3
+        version: 6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@22.19.15)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+
   packages/core:
     dependencies:
       '@noble/curves':
@@ -389,6 +423,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@clerk/localizations':
+        specifier: 4.17.1
+        version: 4.17.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@clerk/react':
         specifier: 6.16.1
         version: 6.16.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -594,6 +631,10 @@ packages:
   '@choojs/findup@0.2.1':
     resolution: {integrity: sha512-YstAqNb0MCN8PjdLCDfRsBcGVRN41f3vgLvaI0IrIcBp4AqILRSS0DeWNGkicC+f/zRIPJLc+9RURVSepwvfBw==}
     hasBin: true
+
+  '@clerk/localizations@4.17.1':
+    resolution: {integrity: sha512-XXcjk3TlR6L5B0Z5NndgSOdBUuN0oBfqXje6nk0Gy5jwk8FgReT+tffb024qwDdwEmNBogSH9WVNi5OckQQJng==}
+    engines: {node: '>=20.9.0'}
 
   '@clerk/react@6.16.1':
     resolution: {integrity: sha512-fYNiouRyVaEAKz8PZwWx7Y/jLnX0OxSplELfc+8VezgU36Xjx79Qu8xnr0XLhF/zwAuj+Avguvz60JbeIiiJ0Q==}
@@ -5347,6 +5388,13 @@ snapshots:
   '@choojs/findup@0.2.1':
     dependencies:
       commander: 2.20.3
+
+  '@clerk/localizations@4.17.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@clerk/shared': 4.33.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    transitivePeerDependencies:
+      - react
+      - react-dom
 
   '@clerk/react@6.16.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:

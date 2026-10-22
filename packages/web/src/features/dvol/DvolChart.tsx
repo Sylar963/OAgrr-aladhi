@@ -11,12 +11,39 @@ import {
 import { useAppStore } from '@stores/app-store';
 import { Spinner, EmptyState } from '@components/ui';
 import { useStats } from '@features/chain/queries';
+import { defineMessages, useT } from '@lib/i18n';
 import { useDvolHistory } from './queries';
 import styles from './DvolChart.module.css';
 
 const CURRENCIES = ['BTC', 'ETH'] as const;
 
+const messages = defineMessages(
+  {
+    unavailable: 'DVOL unavailable',
+    unavailableDetail: 'DVOL index only exists for BTC and ETH on Deribit.',
+    title: 'DVOL — Deribit Volatility Index',
+    subtitle: '30-day ATM implied volatility',
+    candles: ' · {n} daily candles',
+    hv: 'HV (Realized)',
+    current: 'Current',
+    range: '52w Range',
+    resetZoom: 'Reset zoom',
+  },
+  {
+    unavailable: 'DVOL no disponible',
+    unavailableDetail: 'El índice DVOL solo existe para BTC y ETH en Deribit.',
+    title: 'DVOL — Índice de volatilidad de Deribit',
+    subtitle: 'Volatilidad implícita ATM a 30 días',
+    candles: ' · {n} velas diarias',
+    hv: 'HV (realizada)',
+    current: 'Actual',
+    range: 'Rango 52s',
+    resetZoom: 'Restablecer zoom',
+  },
+);
+
 export default function DvolChart() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.underlying);
   const currency = CURRENCIES.includes(underlying as (typeof CURRENCIES)[number])
     ? underlying
@@ -136,8 +163,8 @@ export default function DvolChart() {
       <div className={styles.view}>
         <EmptyState
           icon="⚠"
-          title="DVOL unavailable"
-          detail="DVOL index only exists for BTC and ETH on Deribit."
+          title={t('unavailable')}
+          detail={t('unavailableDetail')}
         />
       </div>
     );
@@ -148,7 +175,7 @@ export default function DvolChart() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.titleRow}>
-            <span className={styles.title}>DVOL — Deribit Volatility Index</span>
+            <span className={styles.title}>{t('title')}</span>
             <div className={styles.picker}>
               {CURRENCIES.map((c) => (
                 <button
@@ -163,20 +190,21 @@ export default function DvolChart() {
             </div>
           </div>
           <span className={styles.subtitle}>
-            30-day ATM implied volatility{data ? ` · ${data.count} daily candles` : ''}
+            {t('subtitle')}
+            {data ? t('candles', { n: data.count }) : ''}
           </span>
           <div className={styles.chartLegend}>
             <span className={styles.legendLine} data-type="iv" />
             <span className={styles.legendText}>IV (DVOL)</span>
             <span className={styles.legendLine} data-type="hv" />
-            <span className={styles.legendText}>HV (Realized)</span>
+            <span className={styles.legendText}>{t('hv')}</span>
           </div>
         </div>
 
         {dvol && (
           <div className={styles.stats}>
             <div className={styles.stat}>
-              <span className={styles.statLabel}>Current</span>
+              <span className={styles.statLabel}>{t('current')}</span>
               <span className={styles.statValue} data-accent>
                 {(dvol.current * 100).toFixed(1)}%
               </span>
@@ -198,7 +226,7 @@ export default function DvolChart() {
               </span>
             </div>
             <div className={styles.stat}>
-              <span className={styles.statLabel}>52w Range</span>
+              <span className={styles.statLabel}>{t('range')}</span>
               <span className={styles.statValue}>
                 {(dvol.low52w * 100).toFixed(0)}%–{(dvol.high52w * 100).toFixed(0)}%
               </span>
@@ -217,7 +245,7 @@ export default function DvolChart() {
         <button
           className={styles.resetBtn}
           onClick={() => chartApiRef.current?.timeScale().fitContent()}
-          title="Reset zoom"
+          title={t('resetZoom')}
         >
           ⟲
         </button>

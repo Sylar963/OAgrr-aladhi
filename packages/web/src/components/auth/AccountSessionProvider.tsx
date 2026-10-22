@@ -6,6 +6,7 @@ import {
 } from '@lib/venue-connections-api';
 import { synchronizeAccountSession, terminateAuthenticatedSession } from '@lib/account-session-api';
 import { setClerkTokenGetter } from '@lib/clerk-token';
+import { defineMessages, translate, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,6 +18,25 @@ import {
   useMemo,
   useState,
 } from 'react';
+
+const messages = defineMessages(
+  {
+    syncFailed: 'Account synchronization failed',
+    signInPrompt: 'Sign in to load an account.',
+    signIn: 'Sign in',
+    unavailable: 'Account unavailable: {error}',
+    tryAgain: 'Try again',
+    loading: 'Loading account…',
+  },
+  {
+    syncFailed: 'Falló la sincronización de la cuenta',
+    signInPrompt: 'Inicia sesión para cargar una cuenta.',
+    signIn: 'Iniciar sesión',
+    unavailable: 'Cuenta no disponible: {error}',
+    tryAgain: 'Reintentar',
+    loading: 'Cargando cuenta…',
+  },
+);
 
 export type AccountSessionStatus = 'loading' | 'signed_out' | 'syncing' | 'ready' | 'error';
 
@@ -113,7 +133,7 @@ export function AccountSessionProvider({ children }: { children: ReactNode }) {
       } catch (caught) {
         if (cancelled) return;
         clearAccountData();
-        setError(caught instanceof Error ? caught.message : 'Account synchronization failed');
+        setError(caught instanceof Error ? caught.message : translate(messages, 'syncFailed'));
         setStatus('error');
       }
     })();
@@ -171,15 +191,16 @@ export function useAccountSession(): AccountSession {
 
 export function AccountAccessBoundary({ children }: { children: ReactNode }) {
   const session = useAccountSession();
+  const t = useT(messages);
 
   if (session.status === 'ready') return children;
 
   if (session.status === 'signed_out') {
     return (
       <div role="status">
-        <p>Sign in to load an account.</p>
+        <p>{t('signInPrompt')}</p>
         <SignInButton mode="modal">
-          <button type="button">Sign in</button>
+          <button type="button">{t('signIn')}</button>
         </SignInButton>
       </div>
     );
@@ -188,13 +209,13 @@ export function AccountAccessBoundary({ children }: { children: ReactNode }) {
   if (session.status === 'error') {
     return (
       <div role="alert">
-        <p>Account unavailable: {session.error}</p>
+        <p>{t('unavailable', { error: session.error ?? '' })}</p>
         <button type="button" onClick={session.retryAccountLoad}>
-          Try again
+          {t('tryAgain')}
         </button>
       </div>
     );
   }
 
-  return <div role="status">Loading account…</div>;
+  return <div role="status">{t('loading')}</div>;
 }

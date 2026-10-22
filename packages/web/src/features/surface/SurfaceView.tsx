@@ -2,10 +2,12 @@ import { Suspense, lazy, useState } from 'react';
 
 import { Spinner } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
+import { useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
 import VolSmile from './VolSmile';
 import AtmTermStructure from './AtmTermStructure';
 import RealizedVsImplied from './RealizedVsImplied';
+import { surfaceMessages } from './i18n';
 import IvRankPanel from './IvRankPanel';
 import SkewHistory from './SkewHistory';
 import styles from './SurfaceView.module.css';
@@ -16,6 +18,7 @@ const MOBILE_UNDERLYINGS = ['BTC', 'ETH'] as const;
 type MobileUnderlying = (typeof MOBILE_UNDERLYINGS)[number];
 
 export default function SurfaceView() {
+  const t = useT(surfaceMessages);
   const isMobile = useIsMobile();
   const [mobileUnderlying, setMobileUnderlying] = useState<MobileUnderlying>('BTC');
 
@@ -47,14 +50,14 @@ export default function SurfaceView() {
         <div className={styles.surfaceRow}>
           {showBtc ? (
             <div className={styles.surfacePanel}>
-              <Suspense fallback={<Spinner size="md" label="Loading 3D surface..." />}>
+              <Suspense fallback={<Spinner size="md" label={t('loading3d')} />}>
                 <VolSurface3D defaultUnderlying="BTC" />
               </Suspense>
             </div>
           ) : null}
           {showEth ? (
             <div className={styles.surfacePanel}>
-              <Suspense fallback={<Spinner size="md" label="Loading 3D surface..." />}>
+              <Suspense fallback={<Spinner size="md" label={t('loading3d')} />}>
                 <VolSurface3D defaultUnderlying="ETH" />
               </Suspense>
             </div>

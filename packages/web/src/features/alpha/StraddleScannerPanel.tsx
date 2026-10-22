@@ -10,9 +10,11 @@ import {
 import { Spinner } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { fmtIv } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import { useAppStore } from '@stores/app-store';
 
+import { alphaMessages } from './i18n';
 import { straddleToBuilderLegs } from './radar-builder';
 import StraddleDecisionCard from './StraddleDecisionCard';
 import StraddleVenueCards, { straddleKey } from './StraddleVenueCards';
@@ -25,6 +27,41 @@ const DTE_PRESETS = [
   { label: '21–45D', minDte: 21, maxDte: 45 },
   { label: '1–45D', minDte: 1, maxDte: 45 },
 ] as const;
+const messages = defineMessages(
+  {
+    eyebrow: '{underlying} · {n} ACTIVE VENUES · SHORT ATM STRADDLES',
+    title: 'Sell rich volatility, not cheap premium',
+    description:
+      'Sellable IV at the bids after fees, compared with a realized-vol forecast for the same horizon, the vol cone, and the usual insurance premium. A straddle has to clear all three gates before it can be a sell candidate.',
+    stressTitle:
+      "Tail move used for the stress loss and sizing, in forecast standard deviations over the option's life.",
+    stressMove: 'Stress move',
+    stressBudget: 'Stress budget',
+    stressAria: 'Percent of equity allowed to be lost at the stress move',
+    invalidSizing: 'Enter positive equity and a stress budget between 0 and 100%.',
+    unboundedLoss:
+      'Short straddles have unbounded loss. Stress loss is a scenario, not a maximum. No order is sent.',
+    countSell: '{n} SELL',
+    countCheap: '{n} CHEAP',
+  },
+  {
+    eyebrow: '{underlying} · {n} EXCHANGES ACTIVOS · SHORT STRADDLES ATM',
+    title: 'Vende volatilidad cara, no prima barata',
+    description:
+      'IV vendible en los bids después de comisiones, comparada con un pronóstico de vol realizada al mismo horizonte, el cono de vol y la prima de seguro habitual. Un straddle debe pasar los tres filtros antes de ser candidato a venta.',
+    stressTitle:
+      'Movimiento de cola usado para la pérdida de estrés y el dimensionamiento, en desviaciones estándar del pronóstico durante la vida de la opción.',
+    stressMove: 'Movimiento de estrés',
+    stressBudget: 'Presupuesto de estrés',
+    stressAria: 'Porcentaje del capital que se permite perder en el movimiento de estrés',
+    invalidSizing: 'Ingresa un capital positivo y un presupuesto de estrés entre 0 y 100%.',
+    unboundedLoss:
+      'Los short straddles tienen pérdida ilimitada. La pérdida de estrés es un escenario, no un máximo. No se envía ninguna orden.',
+    countSell: '{n} VENDER',
+    countCheap: '{n} BARATOS',
+  },
+);
+
 const STRESS_PRESETS = [2, 3, 4] as const;
 const MAX_SPREAD_PCT = 10;
 
@@ -46,6 +83,8 @@ interface StraddleScannerPanelProps {
 }
 
 export default function StraddleScannerPanel({ underlying, venues }: StraddleScannerPanelProps) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const [dtePreset, setDtePreset] = useState(3);
   const [stressSigma, setStressSigma] = useState(3);
   const [equityInput, setEquityInput] = useState('10000');
@@ -97,21 +136,17 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
       <header className={styles.header}>
         <div>
           <div className={styles.eyebrow}>
-            {underlying} · {activeVenues.length} ACTIVE VENUES · SHORT ATM STRADDLES
+            {t('eyebrow', { underlying, n: activeVenues.length })}
           </div>
-          <h2 className={styles.title}>Sell rich volatility, not cheap premium</h2>
-          <p className={styles.description}>
-            Sellable IV at the bids after fees, compared with a realized-vol forecast for the
-            same horizon, the vol cone, and the usual insurance premium. A straddle has to clear
-            all three gates before it can be a sell candidate.
-          </p>
+          <h2 className={styles.title}>{t('title')}</h2>
+          <p className={styles.description}>{t('description')}</p>
         </div>
-        <span className={styles.scanOnly}>SCAN ONLY</span>
+        <span className={styles.scanOnly}>{ta('scanOnly')}</span>
       </header>
 
       <div className={styles.controls}>
         <fieldset className={styles.controlGroup}>
-          <legend>Expiry window</legend>
+          <legend>{ta('expiryWindow')}</legend>
           <div className={styles.presetRow}>
             {DTE_PRESETS.map((preset, index) => (
               <button
@@ -127,9 +162,7 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
           </div>
         </fieldset>
         <fieldset className={styles.controlGroup}>
-          <legend title="Tail move used for the stress loss and sizing, in forecast standard deviations over the option's life.">
-            Stress move
-          </legend>
+          <legend title={t('stressTitle')}>{t('stressMove')}</legend>
           <div className={styles.presetRow}>
             {STRESS_PRESETS.map((value) => (
               <button
@@ -145,25 +178,25 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
           </div>
         </fieldset>
         <label className={styles.inputControl} data-invalid={equity == null || undefined}>
-          <span>Equity</span>
+          <span>{ta('equity')}</span>
           <div className={styles.inputShell}>
             <span>$</span>
             <input
               inputMode="decimal"
               value={equityInput}
-              aria-label="Account equity for straddle sizing"
+              aria-label={ta('equityAria')}
               aria-invalid={equity == null}
               onChange={(event) => setEquityInput(event.target.value)}
             />
           </div>
         </label>
         <label className={styles.inputControl} data-invalid={riskPct == null || undefined}>
-          <span>Stress budget</span>
+          <span>{t('stressBudget')}</span>
           <div className={styles.inputShell}>
             <input
               inputMode="decimal"
               value={riskInput}
-              aria-label="Percent of equity allowed to be lost at the stress move"
+              aria-label={t('stressAria')}
               aria-invalid={riskPct == null}
               onChange={(event) => setRiskInput(event.target.value)}
             />
@@ -171,29 +204,31 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
           </div>
         </label>
         <div className={styles.fixedRules}>
-          <span>ATM strike per venue/expiry</span>
-          <span>≤{MAX_SPREAD_PCT}% straddle spread</span>
+          <span>{ta('atmStrikePerVenue')}</span>
+          <span>{ta('maxStraddleSpread', { pct: MAX_SPREAD_PCT })}</span>
         </div>
       </div>
 
       {!sizingValid && (
         <div className={styles.message} data-tone="error">
-          Enter positive equity and a stress budget between 0 and 100%.
+          {t('invalidSizing')}
         </div>
       )}
       {activeVenues.length === 0 && (
-        <div className={styles.message}>No supported active venues are available for this scan.</div>
+        <div className={styles.message}>{ta('noSupportedVenues')}</div>
       )}
       {query.isLoading && !data && sizingValid && (
         <div className={styles.message}>
-          <Spinner size="sm" label={`Scanning ${activeVenues.length} venues…`} />
+          <Spinner size="sm" label={ta('scanningVenues', { n: activeVenues.length })} />
         </div>
       )}
       {query.error && (
         <div className={styles.message} data-tone="error">
           {data
-            ? `Refresh failed; showing the scan from ${new Date(data.generatedAt).toLocaleTimeString()}.`
-            : `Scanner unavailable: ${query.error instanceof Error ? query.error.message : 'request failed'}`}
+            ? ta('refreshFailed', { time: new Date(data.generatedAt).toLocaleTimeString() })
+            : ta('scannerUnavailable', {
+                error: query.error instanceof Error ? query.error.message : ta('requestFailed'),
+              })}
         </div>
       )}
 
@@ -202,15 +237,18 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
           <RegimeStrip data={data} refreshing={query.isFetching} />
           {unavailableVenues.length > 0 && (
             <div className={styles.venueWarning}>
-              Partial or no scan data from{' '}
-              {unavailableVenues.map((status) => VENUES[status.venue]?.label ?? status.venue).join(', ')}.
+              {ta('partialScanData', {
+                venues: unavailableVenues
+                  .map((status) => VENUES[status.venue]?.label ?? status.venue)
+                  .join(', '),
+              })}
             </div>
           )}
           <div className={styles.decisionStack}>
             <StraddleDecisionCard
               candidate={selected}
               emptyState="quote"
-              emptyReason={`No executable ${underlying} ATM straddles in this window. Check spreads, fees, and quote freshness, or widen the expiry window.`}
+              emptyReason={ta('noStraddlesInWindow', { underlying })}
               stressSigma={data.config.stressSigma}
               budgetUsd={(data.config.equity * data.config.riskPct) / 100}
               evidence={evidence.data ?? null}
@@ -228,14 +266,12 @@ export default function StraddleScannerPanel({ underlying, venues }: StraddleSca
 
       <footer className={styles.footer}>
         <span>
-          The forecast decays 7D realized vol toward the {data?.forecast.longRunDays || 180}D level
-          with a {data?.forecast.halfLifeDays ?? 14}-day half-life. That half-life is an assumption
-          not fitted to BTC, and the forecast is not an event model.
+          {ta('forecastFooter', {
+            longRun: data?.forecast.longRunDays || 180,
+            halfLife: data?.forecast.halfLifeDays ?? 14,
+          })}
         </span>
-        <span>
-          Short straddles have unbounded loss. Stress loss is a scenario, not a maximum. No order is
-          sent.
-        </span>
+        <span>{t('unboundedLoss')}</span>
       </footer>
     </section>
   );
@@ -248,6 +284,8 @@ function RegimeStrip({
   data: AlphaStraddleScannerResponse;
   refreshing: boolean;
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   const counts: Record<AlphaStraddleVerdict, number> = {
     'sell-candidate': 0,
     watch: 0,
@@ -264,7 +302,7 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        LONG-RUN <strong>{fmtIv(data.forecast.longRunVol)}</strong>
+        {ta('longRun')} <strong>{fmtIv(data.forecast.longRunVol)}</strong>
       </span>
       <span>
         ATM IV 7D / 30D{' '}
@@ -273,7 +311,7 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        IV RANK 30D{' '}
+        {ta('ivRank30d')}{' '}
         <strong>
           {data.context.ivPercentile30d == null
             ? '—'
@@ -281,17 +319,17 @@ function RegimeStrip({
         </strong>
       </span>
       <span>
-        TERM <strong>{data.context.termStructure.toUpperCase()}</strong>
+        {ta('term')} <strong>{data.context.termStructure.toUpperCase()}</strong>
       </span>
       <span>
-        SPOT <strong>{data.context.spotState.replaceAll('-', ' ').toUpperCase()}</strong>
+        {ta('spotLabel')} <strong>{data.context.spotState.replaceAll('-', ' ').toUpperCase()}</strong>
       </span>
       <span className={styles.counts}>
-        <strong data-verdict="sell-candidate">{counts['sell-candidate']} SELL</strong>
-        <strong data-verdict="watch">{counts.watch} WATCH</strong>
-        <strong data-verdict="cheap">{counts.cheap} CHEAP</strong>
+        <strong data-verdict="sell-candidate">{t('countSell', { n: counts['sell-candidate'] })}</strong>
+        <strong data-verdict="watch">{ta('countWatch', { n: counts.watch })}</strong>
+        <strong data-verdict="cheap">{t('countCheap', { n: counts.cheap })}</strong>
       </span>
-      {refreshing && <span className={styles.refreshing}>REFRESHING</span>}
+      {refreshing && <span className={styles.refreshing}>{ta('refreshing')}</span>}
     </div>
   );
 }

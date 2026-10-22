@@ -85,14 +85,14 @@ describe('chanceOfProfit', () => {
 
 describe('describeLeg', () => {
   it('states the cost and payout trigger of a bought call', () => {
-    const text = describeLeg(leg({ strike: 82_000, entryPrice: 230 }), 'BTC');
+    const text = describeLeg(leg({ strike: 82_000, entryPrice: 230 }), 'BTC', 'en');
     expect(text).toContain('You pay $230');
     expect(text).toContain('above $82,000');
     expect(text).toContain('$82,230');
   });
 
   it('states the credit and loss trigger of a sold put', () => {
-    const text = describeLeg(leg({ type: 'put', direction: 'sell', strike: 80_000, entryPrice: 100 }), 'BTC');
+    const text = describeLeg(leg({ type: 'put', direction: 'sell', strike: 80_000, entryPrice: 100 }), 'BTC', 'en');
     expect(text).toContain('You collect $100');
     expect(text).toContain('below $79,900');
   });

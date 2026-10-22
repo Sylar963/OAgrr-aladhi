@@ -4,11 +4,13 @@ import type { TenorRichness } from "@oggregator/protocol";
 
 import HoverTooltip from "@components/ui/HoverTooltip";
 import { useVolRichness } from "@hooks/useVolRichness";
+import { type Locale, useLocale, useT } from "@lib/i18n";
 import { getTokenLogo } from "@lib/token-meta";
 import { fmtIv } from "@lib/format";
 import { fmtVolPts, fmtZ } from "@lib/vol-richness";
 import type { IvHistoryTenorResult, IvTenor } from "@shared/enriched";
 import { getHistoryCoverage, type HistoryCoverage } from "./history-coverage";
+import { ivRankMessages } from "./i18n";
 import { useIvHistory, type IvHistoryWindow } from "./queries";
 import VolConeChart, { type ConeIvPoint } from "./VolConeChart";
 import styles from "./IvRankPanel.module.css";
@@ -70,152 +72,151 @@ function sampleEvenly<T>(arr: T[], targetCount: number): T[] {
   return out;
 }
 
-const IVR_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>How to read IV Rank</div>
-    <div>
-      Where current ATM IV sits within the look-back window (toggle above the
-      chips).
-    </div>
-    <div className={styles.tipFormula}>
-      rank = (current − min) / (max − min) × 100
-    </div>
-    <ul className={styles.tipList}>
-      <li>
-        <b style={{ color: "var(--color-profit)" }}>0–30</b>: IV cheap vs the
-        window — vol buyers favored.
-      </li>
-      <li>
-        <b style={{ color: "var(--color-warning)" }}>30–70</b>: mid-range; no
-        strong edge.
-      </li>
-      <li>
-        <b style={{ color: "var(--color-loss)" }}>70–100</b>: IV rich vs the
-        window — vol sellers favored.
-      </li>
-    </ul>
-    <div className={styles.tipBlock}>
-      <b>Per-tenor source</b>
+function IvrTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("ivrTipTitle")}</div>
+      <div>{t("ivrTipBody")}</div>
+      <div className={styles.tipFormula}>
+        rank = (current − min) / (max − min) × 100
+      </div>
       <ul className={styles.tipList}>
         <li>
-          <b>30d</b> (BTC/ETH): Deribit DVOL — ~1 year of daily closes, kept
-          live by the DVOL push.
+          <b style={{ color: "var(--color-profit)" }}>0–30</b>
+          {t("ivrCheap")}
         </li>
         <li>
-          <b>7d / 60d / 90d</b>: cross-venue ATM averages interpolated to the
-          tenor, snapshotted every 5 min.
+          <b style={{ color: "var(--color-warning)" }}>30–70</b>
+          {t("ivrMid")}
         </li>
         <li>
-          After a fresh server start, 7d/60d/90d are thinly populated — check{" "}
-          <b>n</b> on each chip.
+          <b style={{ color: "var(--color-loss)" }}>70–100</b>
+          {t("ivrRich")}
+        </li>
+      </ul>
+      <div className={styles.tipBlock}>
+        <b>{t("perTenorSource")}</b>
+        <ul className={styles.tipList}>
+          <li>
+            <b>30d</b>
+            {t("src30")}
+          </li>
+          <li>
+            <b>7d / 60d / 90d</b>
+            {t("srcOther")}
+          </li>
+          <li>
+            {t("srcFreshA")}
+            <b>n</b>
+            {t("srcFreshB")}
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function RankTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("rankTipTitle")}</div>
+      <div>{t("rankTipBody")}</div>
+      <div className={styles.tipFormula}>
+        rank = (current − min) / (max − min) × 100
+      </div>
+      <ul className={styles.tipList}>
+        <li>{t("rankTip0")}</li>
+        <li>
+          <b style={{ color: "var(--color-loss)" }}>&gt;70</b>
+          {t("rankTipRich")}
+        </li>
+        <li>
+          <b style={{ color: "var(--color-warning)" }}>30–70</b>
+          {t("rankTipMid")}
+        </li>
+        <li>
+          <b style={{ color: "var(--color-profit)" }}>&lt;30</b>
+          {t("rankTipCheap")}
         </li>
       </ul>
     </div>
-  </div>
-);
+  );
+}
 
-const RANK_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>IV Rank</div>
-    <div>Position of current ATM IV in the window’s low→high band.</div>
-    <div className={styles.tipFormula}>
-      rank = (current − min) / (max − min) × 100
+function PctTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("pctTipTitle")}</div>
+      <div>{t("pctTipBody")}</div>
+      <ul className={styles.tipList}>
+        <li>{t("pctTip1")}</li>
+        <li>{t("pctTip2")}</li>
+        <li>{t("pctTip3")}</li>
+      </ul>
     </div>
-    <ul className={styles.tipList}>
-      <li>
-        0 = at window low (cheapest seen). 100 = at window high (richest seen).
-      </li>
-      <li>
-        <b style={{ color: "var(--color-loss)" }}>&gt;70</b>: premium rich
-        historically — prefer selling vol.
-      </li>
-      <li>
-        <b style={{ color: "var(--color-warning)" }}>30–70</b>: middle of the
-        range; no strong edge.
-      </li>
-      <li>
-        <b style={{ color: "var(--color-profit)" }}>&lt;30</b>: premium cheap
-        historically — prefer buying vol.
-      </li>
-    </ul>
-  </div>
-);
+  );
+}
 
-const PCT_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>IV Percentile</div>
-    <div>Share of historical samples ≤ current IV.</div>
-    <ul className={styles.tipList}>
-      <li>Robust to outliers — one extreme print does not move the needle.</li>
-      <li>
-        50% = half the history was lower. 90% = only 10% of the window has been
-        richer.
-      </li>
-      <li>
-        Pair with rank: a wide divergence flags outlier-distorted distributions.
-      </li>
-    </ul>
-  </div>
-);
-
-const RICHNESS_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>IV vs forecast</div>
-    <div>
-      Rank and pct compare IV with its own past. This row compares it with what
-      BTC is likely to realize over the same horizon.
+function RichnessTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("richTipTitle")}</div>
+      <div>{t("richTipBody")}</div>
+      <div className={styles.tipFormula}>{t("richTipFormula")}</div>
+      <ul className={styles.tipList}>
+        <li>
+          <b>fcst</b>
+          {t("richFcst")}
+        </li>
+        <li>
+          <b>hist</b>
+          {t("richHist")}
+        </li>
+        <li>
+          <b>24h</b>
+          {t("rich24h")}
+        </li>
+        <li>{t("richTenors")}</li>
+      </ul>
     </div>
-    <div className={styles.tipFormula}>
-      excess = IV − forecast RV − usual (IV − later RV)
+  );
+}
+
+function SamplesTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("samplesTitle")}</div>
+      <div>{t("samplesBody")}</div>
+      <ul className={styles.tipList}>
+        <li>{t("samples1")}</li>
+        <li>{t("samples2")}</li>
+        <li>{t("samples3")}</li>
+      </ul>
     </div>
-    <ul className={styles.tipList}>
-      <li>
-        <b>fcst</b>: excess premium in vol points. Negative: cheap; positive:
-        rich; ±2 pts fair (our band, untested on BTC).
-      </li>
-      <li>
-        <b>hist</b>: z-score of IV − forecast against its own daily history
-        (overlapping, so descriptive only).
-      </li>
-      <li>
-        <b>24h</b>: z-score of IV against the last 24h of 5-minute samples.
-        Shows whether vol was just bid or offered.
-      </li>
-      <li>
-        7D and 30D only: the usual-premium baselines exist for those tenors.
-      </li>
-    </ul>
-  </div>
-);
+  );
+}
 
-const SAMPLES_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>Samples</div>
-    <div>Valid ATM IV readings inside the selected window.</div>
-    <ul className={styles.tipList}>
-      <li>
-        30d BTC/ETH seeds from ~1 year of Deribit DVOL daily candles on startup.
-      </li>
-      <li>
-        Other tenors accumulate one new point every 5 min from the live surface.
-      </li>
-      <li>Rank / pct show “–” until n ≥ 2 with a non-zero range.</li>
-    </ul>
-  </div>
-);
-
-const STATE_LABEL: Record<TenorRichness["state"], string> = {
-  cheap: "cheap",
-  fair: "fair",
-  rich: "rich",
-  unavailable: "n/a",
+const STATE_LABEL: Record<
+  TenorRichness["state"],
+  "stateCheap" | "stateFair" | "stateRich" | "stateNa"
+> = {
+  cheap: "stateCheap",
+  fair: "stateFair",
+  rich: "stateRich",
+  unavailable: "stateNa",
 };
 
 function RichnessRow({ richness }: { richness: TenorRichness | null }) {
+  const t = useT(ivRankMessages);
   if (!richness) {
     return (
       <div className={styles.richness} data-empty="true">
-        no forecast baseline
+        {t("noBaseline")}
       </div>
     );
   }
@@ -225,16 +226,16 @@ function RichnessRow({ richness }: { richness: TenorRichness | null }) {
       as="div"
       className={styles.richness}
       placement="bottom-start"
-      content={RICHNESS_TIP}
+      content={<RichnessTip />}
     >
       <span className={styles.statePill} data-level={level}>
-        {STATE_LABEL[richness.state]}
+        {t(STATE_LABEL[richness.state])}
       </span>
       <span className={styles.rankValue} data-level={level}>
         {fmtVolPts(richness.excessPremium)}
       </span>
       <span className={styles.metaRight}>
-        <span>hist {fmtZ(richness.excessHistory.zScore)}</span>
+        <span>{t("hist", { z: fmtZ(richness.excessHistory.zScore) })}</span>
         <span>24h {fmtZ(richness.intraday.zScore24h)}</span>
       </span>
     </HoverTooltip>
@@ -282,7 +283,7 @@ export function Chip({
   result,
   richness,
   showRichness,
-  samplesTip = SAMPLES_TIP,
+  samplesTip = <SamplesTip />,
 }: {
   label: string;
   result: IvHistoryTenorResult | undefined;
@@ -290,6 +291,7 @@ export function Chip({
   showRichness: boolean;
   samplesTip?: ReactNode;
 }) {
+  const t = useT(ivRankMessages);
   const series = result?.series ?? [];
   const n = series.filter((p) => p.atmIv != null).length;
   const currentIv = result?.current.atmIv ?? null;
@@ -318,13 +320,13 @@ export function Chip({
           as="span"
           className={styles.badgeTrigger}
           placement="bottom-end"
-          content={RANK_TIP}
+          content={<RankTip />}
         >
           <span className={styles.rankBlock} data-level={level}>
             <span className={styles.rankNum}>
               {rank != null ? rank.toFixed(0) : "–"}
             </span>
-            <span className={styles.rankCaption}>rank</span>
+            <span className={styles.rankCaption}>{t("rank")}</span>
           </span>
         </HoverTooltip>
       </div>
@@ -378,9 +380,9 @@ export function Chip({
           as="span"
           className={styles.badgeTrigger}
           placement="bottom-start"
-          content={PCT_TIP}
+          content={<PctTip />}
         >
-          pct{" "}
+          {t("pct")}{" "}
           <span className={styles.rankValue} data-level={level}>
             {percentile != null ? `${percentile.toFixed(0)}%` : "–"}
           </span>
@@ -400,34 +402,27 @@ export function Chip({
   );
 }
 
-const CONE_TIP = (
-  <div className={styles.tip}>
-    <div className={styles.tipTitle}>Vol cone</div>
-    <div>
-      Grey bands: distribution of realized vol over every rolling window of each
-      horizon, from ~2 years of Deribit perpetual daily closes (Sinclair vol cone).
+function ConeTip() {
+  const t = useT(ivRankMessages);
+  return (
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>{t("coneTipTitle")}</div>
+      <div>{t("coneTipBody")}</div>
+      <ul className={styles.tipList}>
+        <li>{t("coneTipBands")}</li>
+        <li>
+          <b style={{ color: "var(--accent-primary)" }}>{t("coneTipTeal")}</b>
+          {t("coneTipTealBody")}
+        </li>
+        <li>
+          <b style={{ color: "#f7a600" }}>{t("coneTipOrange")}</b>
+          {t("coneTipOrangeBody")}
+        </li>
+        <li>{t("coneTipTop")}</li>
+      </ul>
     </div>
-    <ul className={styles.tipList}>
-      <li>
-        Darkest band 25–75th pct, then 10–90th, then min–max. Dashed line is the
-        median.
-      </li>
-      <li>
-        <b style={{ color: "var(--accent-primary)" }}>Teal</b>: current ATM IV
-        term structure. Label is its percentile inside the cone (≈ when
-        interpolated from the bands).
-      </li>
-      <li>
-        <b style={{ color: "#f7a600" }}>Orange</b>: realized vol over the
-        trailing window of each horizon.
-      </li>
-      <li>
-        IV near the top of the cone prices more movement than BTC has usually
-        delivered.
-      </li>
-    </ul>
-  </div>
-);
+  );
+}
 
 interface Props {
   underlying: string;
@@ -436,9 +431,10 @@ interface Props {
 function shortestCoverage(
   results: Array<IvHistoryTenorResult | undefined>,
   window: IvHistoryWindow,
+  locale: Locale,
 ): HistoryCoverage {
   const coverages = results.map((result) =>
-    getHistoryCoverage(result?.series ?? [], window, ["atmIv"]),
+    getHistoryCoverage(result?.series ?? [], window, ["atmIv"], locale),
   );
   return coverages.reduce((min, item) =>
     item.coverageMs < min.coverageMs ? item : min,
@@ -446,20 +442,25 @@ function shortestCoverage(
 }
 
 export default function IvRankPanel({ underlying }: Props) {
+  const t = useT(ivRankMessages);
+  const locale = useLocale();
   const [window, setWindow] = useState<IvHistoryWindow>("30d");
   const { data } = useIvHistory(underlying, window);
   const { data: richness } = useVolRichness(underlying);
   const logo = getTokenLogo(underlying);
-  const coneIvPoints: ConeIvPoint[] = TENORS.flatMap((t) => {
-    const iv = data?.tenors[t]?.current.atmIv;
+  const coneIvPoints: ConeIvPoint[] = TENORS.flatMap((tenor) => {
+    const iv = data?.tenors[tenor]?.current.atmIv;
     if (iv == null) return [];
     const exact =
-      t === "7d" || t === "30d" ? richness?.tenors[t].conePercentile : null;
-    return [{ days: TENOR_DAYS[t], iv, exactPercentile: exact }];
+      tenor === "7d" || tenor === "30d"
+        ? richness?.tenors[tenor].conePercentile
+        : null;
+    return [{ days: TENOR_DAYS[tenor], iv, exactPercentile: exact }];
   });
   const coverage = shortestCoverage(
-    TENORS.map((t) => data?.tenors[t]),
+    TENORS.map((tenor) => data?.tenors[tenor]),
     window,
+    locale,
   );
 
   return (
@@ -469,7 +470,7 @@ export default function IvRankPanel({ underlying }: Props) {
           as="span"
           className={styles.title}
           placement="bottom-start"
-          content={IVR_TIP}
+          content={<IvrTip />}
         >
           <span className={styles.titleTrigger}>
             {logo && <img src={logo} alt="" className={styles.tokenLogo} />}
@@ -503,13 +504,15 @@ export default function IvRankPanel({ underlying }: Props) {
       </div>
 
       <div className={styles.grid}>
-        {TENORS.map((t) => (
+        {TENORS.map((tenor) => (
           <Chip
-            key={t}
-            label={`${t.toUpperCase()} ATM`}
-            result={data?.tenors[t]}
+            key={tenor}
+            label={`${tenor.toUpperCase()} ATM`}
+            result={data?.tenors[tenor]}
             richness={
-              t === "7d" || t === "30d" ? (richness?.tenors[t] ?? null) : null
+              tenor === "7d" || tenor === "30d"
+                ? (richness?.tenors[tenor] ?? null)
+                : null
             }
             showRichness={richness != null}
           />
@@ -522,11 +525,9 @@ export default function IvRankPanel({ underlying }: Props) {
             as="span"
             className={styles.coneTitle}
             placement="bottom-start"
-            content={CONE_TIP}
+            content={<ConeTip />}
           >
-            <span className={styles.titleTrigger}>
-              VOL CONE · IV vs realized
-            </span>
+            <span className={styles.titleTrigger}>{t("coneTitle")}</span>
           </HoverTooltip>
           <div className={styles.legend}>
             <span>
@@ -535,15 +536,15 @@ export default function IvRankPanel({ underlying }: Props) {
             </span>
             <span>
               <i className={styles.lgRv} />
-              RV now
+              {t("legendRvNow")}
             </span>
             <span>
               <i className={styles.lgMedian} />
-              median
+              {t("legendMedian")}
             </span>
             <span>
               <i className={styles.lgBand} />
-              25–75 / 10–90 / range
+              {t("legendBands")}
             </span>
           </div>
         </div>

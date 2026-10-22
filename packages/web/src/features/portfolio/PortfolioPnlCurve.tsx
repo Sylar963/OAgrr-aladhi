@@ -6,6 +6,7 @@ import type {
   VenueMarginResponse,
 } from '@oggregator/protocol';
 import { formatExpiry } from '@lib/format';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 
 import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
 import EquityHistoryChart from './EquityHistoryChart';
@@ -29,6 +30,92 @@ const TOOLTIP_WIDTH = 150;
 const MARGIN_CALL_COLOR = '#fb923c';
 const MODE_STORAGE_KEY = 'portfolioPnlCurveMode';
 type CurveMode = 'payoff' | 'ta' | 'equity';
+
+const messages = defineMessages(
+  {
+    lossMixedExpiry: 'expiry-window low',
+    lossSamePrice: 'same-price scenario low',
+    lossExpiry: 'expiry curve low',
+    emptyNone: 'Add positions to see the payoff curve.',
+    emptyMixed: 'The payoff curve needs a single underlying book.',
+    emptyMarks: 'Live marks are missing for one or more legs, so the curve is unavailable.',
+    emptyFallback: 'No P/L curve available.',
+    title: 'Portfolio P&L curve',
+    subtitleTa: 'x-axis: time • y-axis: underlying price with structure break-evens',
+    subtitleEquity: 'x-axis: time • y-axis: venue account equity (USD)',
+    subtitlePayoff: 'x-axis: underlying price • y-axis: portfolio P&L',
+    curveView: 'Curve view',
+    payoff: 'Payoff',
+    taV2: 'TA V2',
+    equity: 'Equity',
+    now: 'Now',
+    expiry: 'Expiry',
+    openBuilder: 'Open in Builder V2 →',
+    builderHint:
+      'Explore price paths using your entry prices. Replaces current Builder legs; excludes realized P&L and fees.',
+    underlying: 'underlying {v}',
+    spot: 'spot {v}',
+    maxGain: 'max gain {v}',
+    upsideUnbounded: 'Upside unbounded after {date}',
+    imTitle: 'Thalex account-wide initial margin requirement',
+    freeMarginTitle: 'Thalex account margin minus initial margin',
+    freeMargin: 'free margin {v}',
+    imBreachTitle: 'Now-curve prices where account margin reaches IM, holding IM fixed',
+    imBreach: 'IM breach',
+    noneInRange: 'none in range',
+    stale: 'stale · waiting for live marks',
+    mixedExpiries:
+      'Multiple expiries: the expiry curve assumes the same settlement price at every date. Its low point is not a portfolio-wide maximum-loss or margin guarantee. Review each expiry separately.',
+    imBreachLine: 'IM breach ≈ {v}',
+    hint: 'Hover to read P&L at any price. Break-even markers are based on the expiry curve; shading shows expiry gain and loss.',
+    hintMargin:
+      " IM is Thalex's account-wide initial margin, covering every underlying. The IM breach line holds IM fixed as price moves, so treat it as approximate.",
+    freeMarginRow: 'Free margin',
+  },
+  {
+    lossMixedExpiry: 'mínimo de la ventana de vencimientos',
+    lossSamePrice: 'mínimo del escenario a mismo precio',
+    lossExpiry: 'mínimo de la curva al vencimiento',
+    emptyNone: 'Agrega posiciones para ver la curva de payoff.',
+    emptyMixed: 'La curva de payoff necesita un libro de un solo subyacente.',
+    emptyMarks: 'Faltan marks en vivo para uno o más legs, así que la curva no está disponible.',
+    emptyFallback: 'No hay curva de P/L disponible.',
+    title: 'Curva de P&L del portafolio',
+    subtitleTa: 'eje x: tiempo • eje y: precio del subyacente con breakevens de la estructura',
+    subtitleEquity: 'eje x: tiempo • eje y: equity de la cuenta del exchange (USD)',
+    subtitlePayoff: 'eje x: precio del subyacente • eje y: P&L del portafolio',
+    curveView: 'Vista de la curva',
+    payoff: 'Payoff',
+    taV2: 'TA V2',
+    equity: 'Equity',
+    now: 'Ahora',
+    expiry: 'Vencimiento',
+    openBuilder: 'Abrir en Builder V2 →',
+    builderHint:
+      'Explora trayectorias de precio con tus precios de entrada. Reemplaza los legs actuales del Builder; excluye P&L realizado y comisiones.',
+    underlying: 'subyacente {v}',
+    spot: 'spot {v}',
+    maxGain: 'ganancia máx. {v}',
+    upsideUnbounded: 'Alza ilimitada después de {date}',
+    imTitle: 'Requerimiento de margen inicial de toda la cuenta de Thalex',
+    freeMarginTitle: 'Margen de la cuenta de Thalex menos el margen inicial',
+    freeMargin: 'margen libre {v}',
+    imBreachTitle:
+      'Precios de la curva actual donde el margen de la cuenta llega al IM, manteniendo el IM fijo',
+    imBreach: 'Ruptura de IM',
+    noneInRange: 'ninguna en el rango',
+    stale: 'desactualizado · esperando marks en vivo',
+    mixedExpiries:
+      'Varios vencimientos: la curva al vencimiento asume el mismo precio de liquidación en cada fecha. Su punto mínimo no es una garantía de pérdida máxima ni de margen para todo el portafolio. Revisa cada vencimiento por separado.',
+    imBreachLine: 'Ruptura de IM ≈ {v}',
+    hint: 'Pasa el cursor para leer el P&L a cualquier precio. Los marcadores de breakeven se basan en la curva al vencimiento; el sombreado muestra ganancia y pérdida al vencimiento.',
+    hintMargin:
+      ' El IM es el margen inicial de toda la cuenta de Thalex, que cubre todos los subyacentes. La línea de ruptura de IM mantiene el IM fijo mientras se mueve el precio, así que tómala como aproximada.',
+    freeMarginRow: 'Margen libre',
+  },
+);
+
+type T = Translate<typeof messages.en>;
 
 function loadMode(): CurveMode {
   try {
@@ -120,14 +207,15 @@ function linePath(
   return commands.join(' ');
 }
 
-function emptyMessage(status: PortfolioPnlCurveData['status']): string {
-  if (status === 'empty') return 'Add positions to see the payoff curve.';
-  if (status === 'mixed_underlyings') return 'The payoff curve needs a single underlying book.';
-  if (status === 'missing_marks') return 'Live marks are missing for one or more legs, so the curve is unavailable.';
-  return 'No P/L curve available.';
+function emptyMessage(status: PortfolioPnlCurveData['status'], t: T): string {
+  if (status === 'empty') return t('emptyNone');
+  if (status === 'mixed_underlyings') return t('emptyMixed');
+  if (status === 'missing_marks') return t('emptyMarks');
+  return t('emptyFallback');
 }
 
 export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null }: Props) {
+  const t = useT(messages);
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const [storedMode, setMode] = useState<CurveMode>(loadMode);
@@ -157,10 +245,10 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
     firstUnboundedIndex > 0 ? (displayCurve.riskWindows[firstUnboundedIndex]?.from ?? null) : null;
   const lossLabel =
     displayCurve.expiryBasis === 'mixed_expiry'
-      ? 'expiry-window low'
+      ? t('lossMixedExpiry')
       : mixedExpiries
-        ? 'same-price scenario low'
-        : 'expiry curve low';
+        ? t('lossSamePrice')
+        : t('lossExpiry');
 
   const marginCall = useMemo(() => {
     const spotUsd = displayCurve.currentSpotUsd;
@@ -241,34 +329,34 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
   const header = (
     <div className={styles.header}>
       <div className={styles.titleBlock}>
-        <span className={styles.title}>Portfolio P&amp;L curve</span>
+        <span className={styles.title}>{t('title')}</span>
         <span className={styles.subtitle}>
           {mode === 'ta'
-            ? 'x-axis: time • y-axis: underlying price with structure break-evens'
+            ? t('subtitleTa')
             : mode === 'equity'
-              ? 'x-axis: time • y-axis: venue account equity (USD)'
-              : 'x-axis: underlying price • y-axis: portfolio P&L'}
+              ? t('subtitleEquity')
+              : t('subtitlePayoff')}
         </span>
       </div>
       <div className={styles.headerRight}>
-        <div className={styles.modeToggle} role="radiogroup" aria-label="Curve view">
+        <div className={styles.modeToggle} role="radiogroup" aria-label={t('curveView')}>
           <button type="button" role="radio" aria-checked={mode === 'payoff'} className={styles.modeButton} data-active={mode === 'payoff' || undefined} onClick={() => selectMode('payoff')}>
-            Payoff
+            {t('payoff')}
           </button>
           <button type="button" role="radio" aria-checked={mode === 'ta'} className={styles.modeButton} data-active={mode === 'ta' || undefined} onClick={() => selectMode('ta')}>
-            TA V2
+            {t('taV2')}
           </button>
           {equityVenue != null && (
             <button type="button" role="radio" aria-checked={mode === 'equity'} className={styles.modeButton} data-active={mode === 'equity' || undefined} onClick={() => selectMode('equity')}>
-              Equity
+              {t('equity')}
             </button>
           )}
         </div>
         {mode === 'payoff' && (
           <div className={styles.legend}>
-            <span className={styles.legendItem}><span className={styles.nowSwatch} />Now</span>
+            <span className={styles.legendItem}><span className={styles.nowSwatch} />{t('now')}</span>
             {forwardDays > 0 && <span className={styles.legendItem}><span className={styles.forwardSwatch} />T+{forwardDays}d</span>}
-            <span className={styles.legendItem}><span className={styles.expirySwatch} />Expiry</span>
+            <span className={styles.legendItem}><span className={styles.expirySwatch} />{t('expiry')}</span>
           </div>
         )}
       </div>
@@ -311,54 +399,54 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
             disabled={builderDisabledReason != null}
             aria-describedby="portfolio-builder-hint"
           >
-            Open in Builder V2 →
+            {t('openBuilder')}
           </button>
           <span id="portfolio-builder-hint" className={styles.subtitle}>
-            {builderDisabledReason ?? 'Explore price paths using your entry prices. Replaces current Builder legs; excludes realized P&L and fees.'}
+            {builderDisabledReason ?? t('builderHint')}
           </span>
         </div>
       )}
 
       <div className={styles.metaRow}>
-        <span className={styles.metricPill}>underlying {displayCurve.underlying ?? '—'}</span>
-        <span className={styles.metricPill}>spot {fmtPrice(displayCurve.currentSpotUsd)}</span>
+        <span className={styles.metricPill}>{t('underlying', { v: displayCurve.underlying ?? '—' })}</span>
+        <span className={styles.metricPill}>{t('spot', { v: fmtPrice(displayCurve.currentSpotUsd) })}</span>
         <span className={styles.metricPill}>
           BE {displayCurve.breakEvenPricesUsd.length === 0 ? '—' : displayCurve.breakEvenPricesUsd.map((value) => fmtPrice(value)).join(' / ')}
         </span>
-        {displayCurve.maxProfitUsd != null && <span className={styles.metricPill}>max gain {fmtUsd(displayCurve.maxProfitUsd)}</span>}
+        {displayCurve.maxProfitUsd != null && <span className={styles.metricPill}>{t('maxGain', { v: fmtUsd(displayCurve.maxProfitUsd) })}</span>}
         {upsideUnboundedAfter != null ? (
-          <span className={styles.metricPill}>Upside unbounded after {formatExpiry(upsideUnboundedAfter)}</span>
+          <span className={styles.metricPill}>{t('upsideUnbounded', { date: formatExpiry(upsideUnboundedAfter) })}</span>
         ) : (
           displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
         )}
         {margin != null && (
           <>
-            <span className={styles.metricPill} title="Thalex account-wide initial margin requirement">
+            <span className={styles.metricPill} title={t('imTitle')}>
               IM {fmtMoney(margin.initialMarginUsd)}
             </span>
             <span
               className={margin.remainingMarginUsd > 0 ? styles.metricPill : styles.stalePill}
-              title="Thalex account margin minus initial margin"
+              title={t('freeMarginTitle')}
             >
-              free margin {fmtMoney(margin.remainingMarginUsd)}
+              {t('freeMargin', { v: fmtMoney(margin.remainingMarginUsd) })}
             </span>
             {marginCall != null && margin.remainingMarginUsd > 0 && (
-              <span className={styles.metricPill} title="Now-curve prices where account margin reaches IM, holding IM fixed">
-                IM breach{' '}
+              <span className={styles.metricPill} title={t('imBreachTitle')}>
+                {t('imBreach')}{' '}
                 {marginCall.below == null && marginCall.above == null
-                  ? 'none in range'
+                  ? t('noneInRange')
                   : `≈ ${[marginCall.below, marginCall.above].filter((value) => value != null).map((value) => fmtPrice(value)).join(' / ')}`}
               </span>
             )}
           </>
         )}
-        {isStale && <span className={styles.stalePill}>stale · waiting for live marks</span>}
+        {isStale && <span className={styles.stalePill}>{t('stale')}</span>}
       </div>
 
       <div className={styles.chartWrap}>
-        {mixedExpiries && <p className={styles.subtitle}>Multiple expiries: the expiry curve assumes the same settlement price at every date. Its low point is not a portfolio-wide maximum-loss or margin guarantee. Review each expiry separately.</p>}
+        {mixedExpiries && <p className={styles.subtitle}>{t('mixedExpiries')}</p>}
         {chart == null ? (
-          <div className={styles.empty}>{emptyMessage(curve.status)}</div>
+          <div className={styles.empty}>{emptyMessage(curve.status, t)}</div>
         ) : (
           <svg
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -464,7 +552,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                   fontSize={9}
                   fill="#f8fafc"
                 >
-                  spot {fmtPrice(spot)}
+                  {t('spot', { v: fmtPrice(spot) })}
                 </text>
               </g>
             )}
@@ -486,7 +574,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
                   fontSize={9}
                   fill={MARGIN_CALL_COLOR}
                 >
-                  IM breach ≈ {fmtUsd(marginCall.level)}
+                  {t('imBreachLine', { v: fmtUsd(marginCall.level) })}
                 </text>
               </g>
             )}
@@ -542,8 +630,8 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
       </div>
 
       <div className={styles.hint}>
-        Hover to read P&amp;L at any price. Break-even markers are based on the expiry curve; shading shows expiry gain and loss.
-        {margin != null && ' IM is Thalex\'s account-wide initial margin, covering every underlying. The IM breach line holds IM fixed as price moves, so treat it as approximate.'}
+        {t('hint')}
+        {margin != null && t('hintMargin')}
       </div>
     </div>
   );
@@ -559,14 +647,15 @@ interface HoverReadoutProps {
 }
 
 function HoverReadout({ point, spot, forwardDays, marginCallLevel, toX, toY }: HoverReadoutProps) {
+  const t = useT(messages);
   const x = toX(point.underlyingPriceUsd);
   const rows: Array<{ label: string; value: number; color: string }> = [
-    { label: 'Now', value: point.nowPnlUsd, color: '#a78bfa' },
+    { label: t('now'), value: point.nowPnlUsd, color: '#a78bfa' },
   ];
   if (forwardDays > 0 && point.forwardPnlUsd != null) {
     rows.push({ label: `T+${forwardDays}d`, value: point.forwardPnlUsd, color: '#38bdf8' });
   }
-  rows.push({ label: 'Expiry', value: point.expiryPnlUsd, color: point.expiryPnlUsd < 0 ? '#f87171' : '#4ade80' });
+  rows.push({ label: t('expiry'), value: point.expiryPnlUsd, color: point.expiryPnlUsd < 0 ? '#f87171' : '#4ade80' });
   const readoutRows: Array<{ label: string; value: string; color: string }> = rows.map((row) => ({
     label: row.label,
     value: fmtUsd(row.value),
@@ -574,7 +663,7 @@ function HoverReadout({ point, spot, forwardDays, marginCallLevel, toX, toY }: H
   }));
   if (marginCallLevel != null) {
     readoutRows.push({
-      label: 'Free margin',
+      label: t('freeMarginRow'),
       value: fmtMoney(point.nowPnlUsd - marginCallLevel),
       color: MARGIN_CALL_COLOR,
     });

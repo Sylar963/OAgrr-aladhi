@@ -1,6 +1,7 @@
 import { ForwardDeltaPill, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { fmtDelta, fmtIv, fmtNum, fmtUsd } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, VenueId, VenueQuote } from '@shared/enriched';
 import { useMemo } from 'react';
@@ -13,6 +14,73 @@ import {
   NotSupportedVenueError,
   toVenueSymbol,
 } from './instrument-symbol.js';
+
+const messages = defineMessages(
+  {
+    inverseTip:
+      "Inverse contract — premium quoted in {coin}, not USD. The mid shown is the USD equivalent at the venue's current underlying mark.",
+    noQuotes: 'No quotes',
+    venue: 'VENUE',
+    cost: 'COST',
+    deltaTip:
+      'Δ DELTA — price sensitivity of this option to the underlying.\n\n' +
+      '• Magnitude: option moves ~Δ dollars for each $1 move in spot. 0.50 Δ → option moves $0.50 per $1 move.\n' +
+      '• Sign: calls positive, puts negative. Long calls / short puts = long delta; long puts / short calls = short delta.\n' +
+      '• Proxy for moneyness: |Δ| ≈ probability of finishing in-the-money. 0.25 Δ → ~25% ITM odds.',
+    thetaTip:
+      'Θ THETA — daily time decay, in USD.\n\n' +
+      '• What it costs: if spot and vol do not move, the option loses this many dollars per day.\n' +
+      '• Sign: long options pay theta (negative for you); short options collect theta (positive for you).\n' +
+      '• Accelerates near expiry: ATM theta is small far out, steep into the last week.',
+    consTip:
+      'Δ VS CONSENSUS — how far this venue’s implied forward is from the cross-venue median.\n\n' +
+      '• Near zero (green): clean forward. Any price difference here reflects real MM skew — potentially tradeable edge.\n' +
+      '• Moderate (amber): some forward drift. Interpret price differences with caution.\n' +
+      '• Large (red): forward drift dominates. Cheap/expensive prices on this venue are mostly just forward, not edge.\n' +
+      '• Muted: consensus lies inside this venue’s bid/ask no-arb band — the drift is explainable by spread, not a real dislocation.',
+    edgeTip:
+      'EDGE — the gap between your IV view (“MY IV” input above the chain) and this venue’s mark IV.\n\n' +
+      '• Positive (green): the venue is pricing vol lower than you think — a buyer’s edge (you’d buy premium here).\n' +
+      '• Negative (red): the venue is pricing vol higher than you think — a seller’s edge (you’d sell premium here).\n' +
+      '• Blank: enter a value in MY IV to see your edge against each venue.',
+    consensus: 'CONSENSUS F @ ATM {strike}: {forward}',
+    noVenue: 'No venue available for this strike',
+    openChart: 'Open chart for {type}',
+    chart: 'Chart',
+  },
+  {
+    inverseTip:
+      'Contrato inverso — la prima cotiza en {coin}, no en USD. El mid mostrado es el equivalente en USD al mark actual del subyacente en el exchange.',
+    noQuotes: 'Sin cotizaciones',
+    venue: 'EXCHANGE',
+    cost: 'COSTO',
+    deltaTip:
+      'Δ DELTA — sensibilidad del precio de esta opción al subyacente.\n\n' +
+      '• Magnitud: la opción se mueve ~Δ dólares por cada $1 del spot. 0.50 Δ → la opción se mueve $0.50 por cada $1.\n' +
+      '• Signo: calls positivos, puts negativos. Long calls / short puts = long delta; long puts / short calls = short delta.\n' +
+      '• Aproximación de moneyness: |Δ| ≈ probabilidad de terminar in-the-money. 0.25 Δ → ~25% de probabilidad ITM.',
+    thetaTip:
+      'Θ THETA — decaimiento temporal diario, en USD.\n\n' +
+      '• Lo que cuesta: si el spot y la vol no se mueven, la opción pierde estos dólares por día.\n' +
+      '• Signo: las opciones long pagan theta (negativo para ti); las short cobran theta (positivo para ti).\n' +
+      '• Se acelera cerca del vencimiento: el theta ATM es pequeño lejos del vencimiento y fuerte en la última semana.',
+    consTip:
+      'Δ VS CONSENSO — qué tan lejos está el forward implícito de este exchange respecto de la mediana entre exchanges.\n\n' +
+      '• Cerca de cero (verde): forward limpio. Cualquier diferencia de precio refleja skew real del MM — edge potencialmente operable.\n' +
+      '• Moderado (ámbar): algo de deriva del forward. Interpreta las diferencias de precio con cautela.\n' +
+      '• Grande (rojo): domina la deriva del forward. Los precios baratos/caros en este exchange son mayormente forward, no edge.\n' +
+      '• Atenuado: el consenso cae dentro de la banda no-arb bid/ask de este exchange — la deriva se explica por el spread, no es una dislocación real.',
+    edgeTip:
+      'EDGE — la diferencia entre tu visión de IV (campo “MI IV” sobre la cadena) y la mark IV de este exchange.\n\n' +
+      '• Positivo (verde): el exchange valora la vol por debajo de lo que crees — edge comprador (comprarías prima aquí).\n' +
+      '• Negativo (rojo): el exchange valora la vol por encima de lo que crees — edge vendedor (venderías prima aquí).\n' +
+      '• Vacío: ingresa un valor en MI IV para ver tu edge frente a cada exchange.',
+    consensus: 'F CONSENSO @ ATM {strike}: {forward}',
+    noVenue: 'No hay exchange disponible para este strike',
+    openChart: 'Abrir gráfico del {type}',
+    chart: 'Gráfico',
+  },
+);
 
 interface ForwardCell {
   fImplied: number | null;
@@ -72,6 +140,7 @@ function VenueRow({
   atmStrike,
   underlying,
 }: VenueRowProps) {
+  const t = useT(messages);
   const meta = VENUES[venueId];
   const mid = quote.mid;
   const breakeven = mid != null ? (type === 'call' ? strike + mid : strike - mid) : null;
@@ -87,7 +156,7 @@ function VenueRow({
         {inverseLabel && (
           <span
             className={styles.inverseTag}
-            title={`Inverse contract — premium quoted in ${inverseLabel}, not USD. The mid shown is the USD equivalent at the venue's current underlying mark.`}
+            title={t('inverseTip', { coin: inverseLabel })}
           >
             {inverseLabel}
           </span>
@@ -175,17 +244,18 @@ function SideTable({
   atmStrike,
   underlying,
 }: SideTableProps) {
+  const t = useT(messages);
   const entries = Object.entries(side.venues) as [VenueId, VenueQuote][];
 
   if (entries.length === 0) {
-    return <div className={styles.noQuotes}>No quotes</div>;
+    return <div className={styles.noQuotes}>{t('noQuotes')}</div>;
   }
 
   const mirror = type === 'put';
 
   const headers = [
     <th key="venue" className={styles.thVenue} data-mirror={mirror || undefined}>
-      VENUE
+      {t('venue')}
     </th>,
     <th key="fimplied" className={styles.th}>
       F_IMPLIED
@@ -214,24 +284,14 @@ function SideTable({
     <th
       key="delta"
       className={styles.th}
-      title={
-        'Δ DELTA — price sensitivity of this option to the underlying.\n\n' +
-        '• Magnitude: option moves ~Δ dollars for each $1 move in spot. 0.50 Δ → option moves $0.50 per $1 move.\n' +
-        '• Sign: calls positive, puts negative. Long calls / short puts = long delta; long puts / short calls = short delta.\n' +
-        '• Proxy for moneyness: |Δ| ≈ probability of finishing in-the-money. 0.25 Δ → ~25% ITM odds.'
-      }
+      title={t('deltaTip')}
     >
       Δ
     </th>,
     <th
       key="theta"
       className={styles.th}
-      title={
-        'Θ THETA — daily time decay, in USD.\n\n' +
-        '• What it costs: if spot and vol do not move, the option loses this many dollars per day.\n' +
-        '• Sign: long options pay theta (negative for you); short options collect theta (positive for you).\n' +
-        '• Accelerates near expiry: ATM theta is small far out, steep into the last week.'
-      }
+      title={t('thetaTip')}
     >
       THETA
     </th>,
@@ -242,30 +302,19 @@ function SideTable({
       BREAK
     </th>,
     <th key="cost" className={styles.th}>
-      COST
+      {t('cost')}
     </th>,
     <th
       key="cons"
       className={styles.th}
-      title={
-        'Δ VS CONSENSUS — how far this venue’s implied forward is from the cross-venue median.\n\n' +
-        '• Near zero (green): clean forward. Any price difference here reflects real MM skew — potentially tradeable edge.\n' +
-        '• Moderate (amber): some forward drift. Interpret price differences with caution.\n' +
-        '• Large (red): forward drift dominates. Cheap/expensive prices on this venue are mostly just forward, not edge.\n' +
-        '• Muted: consensus lies inside this venue’s bid/ask no-arb band — the drift is explainable by spread, not a real dislocation.'
-      }
+      title={t('consTip')}
     >
       Δ CONS
     </th>,
     <th
       key="edge"
       className={styles.th}
-      title={
-        'EDGE — the gap between your IV view (“MY IV” input above the chain) and this venue’s mark IV.\n\n' +
-        '• Positive (green): the venue is pricing vol lower than you think — a buyer’s edge (you’d buy premium here).\n' +
-        '• Negative (red): the venue is pricing vol higher than you think — a seller’s edge (you’d sell premium here).\n' +
-        '• Blank: enter a value in MY IV to see your edge against each venue.'
-      }
+      title={t('edgeTip')}
     >
       EDGE
     </th>,
@@ -307,6 +356,7 @@ export default function ExpandedRow({
   expiry,
   chartOverride,
 }: ExpandedRowProps) {
+  const t = useT(messages);
   const forwardsByVenue = useMemo<Map<VenueId, ForwardCell>>(() => {
     const map = new Map<VenueId, ForwardCell>();
     const ids = new Set<VenueId>([
@@ -342,7 +392,10 @@ export default function ExpandedRow({
     <div className={styles.expanded}>
       {atmConsensusForward != null && atmStrike != null && (
         <div className={styles.consensusLine}>
-          CONSENSUS F @ ATM {atmStrike.toLocaleString()}: {fmtUsd(atmConsensusForward)}
+          {t('consensus', {
+            strike: atmStrike.toLocaleString(),
+            forward: fmtUsd(atmConsensusForward),
+          })}
         </div>
       )}
 
@@ -440,6 +493,7 @@ function ChartButton({
   activeVenues,
   chartOverride,
 }: ChartButtonProps) {
+  const t = useT(messages);
   const openPanel = useChartPanelsStore((s) => s.openPanel);
   const isMobile = useIsMobile();
   const venue = pickPrimaryVenue(side, activeVenues);
@@ -451,9 +505,7 @@ function ChartButton({
       type="button"
       className={styles.chartBtn}
       disabled={disabled}
-      title={
-        disabled ? 'No venue available for this strike' : `Open chart for ${type.toUpperCase()}`
-      }
+      title={disabled ? t('noVenue') : t('openChart', { type: type.toUpperCase() })}
       onClick={() => {
         if (chartOverride) {
           chartOverride({ underlying, expiry, strike, type });
@@ -473,7 +525,7 @@ function ChartButton({
         }
       }}
     >
-      Chart
+      {t('chart')}
     </button>
   );
 }

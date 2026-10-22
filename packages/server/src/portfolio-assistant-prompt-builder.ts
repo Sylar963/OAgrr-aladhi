@@ -1,4 +1,4 @@
-import type { PortfolioAssistantMessage } from '@oggregator/protocol';
+import type { PortfolioAssistantLocale, PortfolioAssistantMessage } from '@oggregator/protocol';
 
 import type { PortfolioAssistantContext } from './portfolio-assistant-context-builder.js';
 import type { PortfolioAssistantModelMessage } from './portfolio-assistant-model-gateway.js';
@@ -57,6 +57,11 @@ export class PortfolioAssistantPromptBuilder {
       'HISTORY',
       'Earlier answers are marked with the portfolio snapshot they used. When they disagree with the current context, the current context wins: use current numbers silently, mention a change only when it changes the conclusion, and never apologise for or re-litigate earlier figures.',
       '',
+      'LANGUAGE',
+      "- Reply in the language of the user's latest message; English and Spanish are both supported. When that message does not show a language (a ticker, a number, a strike), use the [Interface language: ...] note on it, else English.",
+      '- Write Spanish answers in neutral Latin American Spanish with "tú". Keep options terms in English as traders use them: call, put, strike, delta, gamma, vega, theta, IV, skew, straddle, strangle, spread, breakeven, P&L. Translate section headings (### Advertencias for ### Caveats, ### Fuentes for ### Sources).',
+      '- Tool calls, tool arguments, field names and book citations stay in their original language whatever the reply language.',
+      '',
       'FORMAT',
       'Format every answer as Markdown for a narrow chat panel (about 360px wide) that people scan, not read:',
       '- Start with a one- or two-sentence bottom line that directly answers the question, with the key number in **bold**.',
@@ -76,9 +81,11 @@ export class PortfolioAssistantPromptBuilder {
   buildPortfolioAssistantConversationMessages(
     history: PortfolioAssistantMessage[],
     question: string,
+    locale?: PortfolioAssistantLocale,
   ): PortfolioAssistantModelMessage[] {
     const bounded: PortfolioAssistantModelMessage[] = [];
-    let characters = question.length;
+    const latest = withInterfaceLanguage(question, locale);
+    let characters = latest.length;
     for (const message of selectReplayableMessages(history).reverse().slice(0, 20)) {
       const content =
         message.role === 'assistant'
@@ -88,7 +95,7 @@ export class PortfolioAssistantPromptBuilder {
       bounded.unshift({ role: message.role, content });
       characters += content.length;
     }
-    bounded.push({ role: 'user', content: question });
+    bounded.push({ role: 'user', content: latest });
     return bounded;
   }
 }
@@ -101,6 +108,13 @@ function selectReplayableMessages(history: PortfolioAssistantMessage[]): Portfol
     const next = history[index + 1];
     return !(message.role === 'user' && next?.role === 'assistant' && next.status !== 'complete');
   });
+}
+
+// The note rides on the latest turn only, so the cached system prompt stays identical across
+// languages and replayed history is never rewritten.
+function withInterfaceLanguage(question: string, locale: PortfolioAssistantLocale | undefined): string {
+  if (locale === undefined) return question;
+  return `[Interface language: ${locale === 'es' ? 'Spanish' : 'English'}]\n${question}`;
 }
 
 function snapshotAnnotation(portfolioGeneratedAt: number | null): string {

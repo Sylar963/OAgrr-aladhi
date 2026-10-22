@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
 import { fmtUsdCompact, fmtCompact, formatExpiry } from '@lib/format';
+import { useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import styles from '../AnalyticsView.module.css';
 import {
@@ -10,6 +11,7 @@ import {
   type OiMode,
   type StrikeOi,
 } from './oi-heatmap-utils';
+import { oiMessages } from './i18n';
 
 const EXPIRY_COLORS = [
   '#00E997', '#CB3855', '#50D2C1', '#F0B90B', '#0052FF',
@@ -30,6 +32,7 @@ function OiStrikeTooltip({
   expiryColorMap: Map<string, string>;
   fmt: (v: number | null | undefined) => string;
 }) {
+  const t = useT(oiMessages);
   const hovered = data.find((d) => d.strike === hoveredStrike);
   if (!hovered) return null;
 
@@ -42,11 +45,11 @@ function OiStrikeTooltip({
       <div className={styles.oiTooltipColumns}>
         {hovered.venues.length > 0 && (
           <div className={styles.oiTooltipCol}>
-            <div className={styles.oiTooltipSection}>By Venue</div>
+            <div className={styles.oiTooltipSection}>{t('byVenue')}</div>
             <div className={styles.oiTooltipHeader}>
               <span />
-              <span>Calls</span>
-              <span>Puts</span>
+              <span>{t('calls')}</span>
+              <span>{t('puts')}</span>
             </div>
             {hovered.venues.map((v) => {
               const meta = VENUES[v.venue];
@@ -66,11 +69,11 @@ function OiStrikeTooltip({
 
         {hovered.expiries.length > 1 && (
           <div className={styles.oiTooltipCol}>
-            <div className={styles.oiTooltipSection}>By Expiry</div>
+            <div className={styles.oiTooltipSection}>{t('byExpiry')}</div>
             <div className={styles.oiTooltipHeader}>
               <span />
-              <span>Calls</span>
-              <span>Puts</span>
+              <span>{t('calls')}</span>
+              <span>{t('puts')}</span>
             </div>
             {hovered.expiries.map((ep) => (
               <div key={ep.expiry} className={styles.oiTooltipRow}>
@@ -115,6 +118,7 @@ function OiByStrikeChart({
   chains: EnrichedChainResponse[];
   spotPrice: number | null;
 }) {
+  const t = useT(oiMessages);
   const [mode, setMode] = useState<OiMode>('contracts');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(new Set());
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
@@ -192,14 +196,14 @@ function OiByStrikeChart({
               data-active={mode === 'contracts' || undefined}
               onClick={() => setMode('contracts')}
             >
-              Contracts
+              {t('contracts')}
             </button>
             <button
               className={styles.oiToggleBtn}
               data-active={mode === 'notional' || undefined}
               onClick={() => setMode('notional')}
             >
-              Notional
+              {t('notional')}
             </button>
           </div>
         </div>
@@ -242,8 +246,8 @@ function OiByStrikeChart({
             >
               <div className={styles.oiStrike} data-spot={isSpot || undefined} data-maxpain={isMaxPain || undefined}>
                 {d.strike.toLocaleString()}
-                {isSpot && <span className={styles.spotTag}>SPOT</span>}
-                {isMaxPain && !isSpot && <span className={styles.maxPainTag}>MP</span>}
+                {isSpot && <span className={styles.spotTag}>{t('spotTag')}</span>}
+                {isMaxPain && !isSpot && <span className={styles.maxPainTag}>{t('mpTag')}</span>}
               </div>
               <div className={styles.oiBars}>
                 <div className={styles.oiBarLeft}>
@@ -273,11 +277,11 @@ function OiByStrikeChart({
       )}
 
       <div className={styles.oiLegend}>
-        <span className={styles.pcrLegendDot} data-type="call" /> Call OI
-        <span className={styles.pcrLegendDot} data-type="put" /> Put OI
+        <span className={styles.pcrLegendDot} data-type="call" /> {t('callOi')}
+        <span className={styles.pcrLegendDot} data-type="put" /> {t('putOi')}
         {maxPain != null && (
           <>
-            <span className={styles.maxPainDot} /> Max Pain
+            <span className={styles.maxPainDot} /> {t('maxPain')}
           </>
         )}
       </div>

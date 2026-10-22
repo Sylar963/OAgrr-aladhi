@@ -12,6 +12,7 @@ import {
 import type { BreakEvenLine, BreakEvenResponse } from '@oggregator/protocol';
 import { useExpiries } from '@features/chain/queries';
 import { formatExpiry } from '@lib/format';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import {
   defaultExpiry,
   formatProb,
@@ -32,6 +33,62 @@ const SPOT_KEY = 'spot';
 const SUPPORTED_UNDERLYINGS = new Set(['BTC', 'ETH']);
 const DAY_MS = 86_400_000;
 
+const messages = defineMessages(
+  {
+    title: 'Break-Even Forecast',
+    unsupported: 'Built from Deribit marks, so it is available for BTC and ETH only.',
+    subtitle:
+      'Deribit marks · OTM, |Δ| < 0.55 · solid = recorded, dashed = projection with forward and IV held',
+    expiry: 'Expiry',
+    loading: 'Loading break-evens…',
+    noMarks: 'No Deribit marks for this expiry right now.',
+    strike: 'Strike',
+    be: 'BE',
+    nd2Title: 'Risk-neutral probability of finishing beyond the strike, from the mark IV',
+    hist: 'Hist',
+    histTitle: 'Historical frequency of finishing beyond the strike over the same horizon',
+    gap: 'Gap',
+    gapTitle: 'Hist minus N(d2), percentage points. Descriptive, not an edge.',
+    spot: 'Spot',
+    fwd: 'fwd',
+    historyEmpty:
+      'Break-even history is recorded hourly from Deribit marks and starts filling in from now. Until then the chart shows spot and the projection.',
+    historySince: 'Break-evens rebuilt hourly from recorded Deribit mark IVs since {since} UTC.',
+    historicalNote:
+      'Hist = share of {windows} overlapping {horizon}-day {underlying} moves over the last {lookback} days (trend removed) that finished beyond the strike, about {independent} independent samples. A historical frequency, not a forecast.',
+    nd2Note:
+      'N(d2) comes from implied vol, which mostly extrapolates recent realized vol plus a risk premium. After quiet stretches it prices a narrow distribution, so far strikes can look remote right before a large move.',
+  },
+  {
+    title: 'Pronóstico de breakeven',
+    unsupported: 'Se construye con marks de Deribit, así que solo está disponible para BTC y ETH.',
+    subtitle:
+      'Marks de Deribit · OTM, |Δ| < 0.55 · sólida = registrada, punteada = proyección con forward e IV fijos',
+    expiry: 'Vencimiento',
+    loading: 'Cargando breakevens…',
+    noMarks: 'No hay marks de Deribit para este vencimiento ahora.',
+    strike: 'Strike',
+    be: 'BE',
+    nd2Title: 'Probabilidad neutral al riesgo de terminar más allá del strike, a partir de la IV mark',
+    hist: 'Hist',
+    histTitle: 'Frecuencia histórica de terminar más allá del strike en el mismo horizonte',
+    gap: 'Brecha',
+    gapTitle: 'Hist menos N(d2), en puntos porcentuales. Descriptivo, no es una ventaja.',
+    spot: 'Spot',
+    fwd: 'fwd',
+    historyEmpty:
+      'El historial de breakeven se registra cada hora con marks de Deribit y empieza a llenarse desde ahora. Mientras tanto, el gráfico muestra el spot y la proyección.',
+    historySince:
+      'Breakevens reconstruidos cada hora con IVs mark registradas de Deribit desde {since} UTC.',
+    historicalNote:
+      'Hist = proporción de {windows} movimientos superpuestos de {horizon} días de {underlying} en los últimos {lookback} días (sin tendencia) que terminaron más allá del strike, unas {independent} muestras independientes. Es una frecuencia histórica, no un pronóstico.',
+    nd2Note:
+      'N(d2) proviene de la vol implícita, que en gran parte extrapola la vol realizada reciente más una prima de riesgo. Tras periodos tranquilos valora una distribución estrecha, así que los strikes lejanos pueden parecer remotos justo antes de un gran movimiento.',
+  },
+);
+
+type T = Translate<typeof messages.en>;
+
 const fmtLevel = (value: number) => Math.round(value).toLocaleString('en-US');
 
 interface SeriesPair {
@@ -50,19 +107,25 @@ function lineLabel(line: BreakEvenLine): string {
   return `${line.right === 'call' ? 'C' : 'P'} ${fmtLevel(line.strike)}`;
 }
 
-function historyNote(data: BreakEvenResponse): string {
+function historyNote(data: BreakEvenResponse, t: T): string {
   if (data.recordedSince == null || data.asOf - data.recordedSince < 2 * 3_600_000) {
-    return 'Break-even history is recorded hourly from Deribit marks and starts filling in from now. Until then the chart shows spot and the projection.';
+    return t('historyEmpty');
   }
   const since = new Date(data.recordedSince).toISOString().slice(0, 16).replace('T', ' ');
-  return `Break-evens rebuilt hourly from recorded Deribit mark IVs since ${since} UTC.`;
+  return t('historySince', { since });
 }
 
-function historicalNote(data: BreakEvenResponse): string | null {
+function historicalNote(data: BreakEvenResponse, t: T): string | null {
   const { horizonDays, windows, lookbackDays } = data.historical;
   if (windows === 0) return null;
   const independent = Math.max(1, Math.floor(windows / horizonDays));
-  return `Hist = share of ${windows} overlapping ${horizonDays}-day ${data.underlying} moves over the last ${lookbackDays} days (trend removed) that finished beyond the strike, about ${independent} independent samples. A historical frequency, not a forecast.`;
+  return t('historicalNote', {
+    windows,
+    horizon: horizonDays,
+    underlying: data.underlying,
+    lookback: lookbackDays,
+    independent,
+  });
 }
 
 interface BreakEvenForecastProps {
@@ -70,6 +133,7 @@ interface BreakEvenForecastProps {
 }
 
 export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps) {
+  const t = useT(messages);
   const supported = SUPPORTED_UNDERLYINGS.has(underlying);
   const { data: expiriesData } = useExpiries(underlying);
   const [picked, setPicked] = useState<string | null>(null);
@@ -193,10 +257,8 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
   if (!supported) {
     return (
       <div className={analyticsStyles.card}>
-        <div className={analyticsStyles.cardTitle}>Break-Even Forecast</div>
-        <div className={styles.empty}>
-          Built from Deribit marks, so it is available for BTC and ETH only.
-        </div>
+        <div className={analyticsStyles.cardTitle}>{t('title')}</div>
+        <div className={styles.empty}>{t('unsupported')}</div>
       </div>
     );
   }
@@ -204,7 +266,7 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
   const calls = data?.lines.filter((line) => line.right === 'call') ?? [];
   const puts = data?.lines.filter((line) => line.right === 'put') ?? [];
   const dte = data ? Math.max(0, (data.expiryTs - data.asOf) / DAY_MS) : null;
-  const histNote = data ? historicalNote(data) : null;
+  const histNote = data ? historicalNote(data, t) : null;
 
   const renderRow = (line: BreakEvenLine) => {
     const key = lineKey(line);
@@ -235,14 +297,11 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
     <div className={analyticsStyles.card}>
       <div className={styles.header}>
         <div>
-          <div className={analyticsStyles.cardTitle}>Break-Even Forecast</div>
-          <div className={styles.subtitle}>
-            Deribit marks · OTM, |Δ| &lt; 0.55 · solid = recorded, dashed = projection with forward
-            and IV held
-          </div>
+          <div className={analyticsStyles.cardTitle}>{t('title')}</div>
+          <div className={styles.subtitle}>{t('subtitle')}</div>
         </div>
         <label className={styles.expiryPicker}>
-          <span>Expiry</span>
+          <span>{t('expiry')}</span>
           <select
             value={expiry ?? ''}
             onChange={(event) => setPicked(event.target.value)}
@@ -260,9 +319,9 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
       <div className={styles.body}>
         <div className={styles.chartArea}>
           <div className={styles.chart} ref={containerRef} />
-          {isLoading && <div className={styles.overlay}>Loading break-evens…</div>}
+          {isLoading && <div className={styles.overlay}>{t('loading')}</div>}
           {isError && !data && (
-            <div className={styles.overlay}>No Deribit marks for this expiry right now.</div>
+            <div className={styles.overlay}>{t('noMarks')}</div>
           )}
         </div>
 
@@ -271,17 +330,11 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Strike</th>
-                  <th>BE</th>
-                  <th title="Risk-neutral probability of finishing beyond the strike, from the mark IV">
-                    N(d2)
-                  </th>
-                  <th title="Historical frequency of finishing beyond the strike over the same horizon">
-                    Hist
-                  </th>
-                  <th title="Hist minus N(d2), percentage points. Descriptive, not an edge.">
-                    Gap
-                  </th>
+                  <th>{t('strike')}</th>
+                  <th>{t('be')}</th>
+                  <th title={t('nd2Title')}>N(d2)</th>
+                  <th title={t('histTitle')}>{t('hist')}</th>
+                  <th title={t('gapTitle')}>{t('gap')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -289,11 +342,11 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
                 <tr className={styles.spotRow}>
                   <td>
                     <span className={styles.swatch} style={{ background: SPOT_COLOR }} />
-                    Spot
+                    {t('spot')}
                   </td>
                   <td>{fmtLevel(data.spot)}</td>
                   <td colSpan={3}>
-                    fwd {fmtLevel(data.forward)}
+                    {t('fwd')} {fmtLevel(data.forward)}
                     {dte != null && ` · ${dte < 1 ? `${Math.round(dte * 24)}h` : `${dte.toFixed(1)}d`}`}
                   </td>
                 </tr>
@@ -306,13 +359,9 @@ export default function BreakEvenForecast({ underlying }: BreakEvenForecastProps
 
       {data && (
         <div className={styles.notes}>
-          <p>{historyNote(data)}</p>
+          <p>{historyNote(data, t)}</p>
           {histNote && <p>{histNote}</p>}
-          <p>
-            N(d2) comes from implied vol, which mostly extrapolates recent realized vol plus a risk
-            premium. After quiet stretches it prices a narrow distribution, so far strikes can look
-            remote right before a large move.
-          </p>
+          <p>{t('nd2Note')}</p>
         </div>
       )}
     </div>

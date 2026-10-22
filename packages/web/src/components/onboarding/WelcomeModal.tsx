@@ -1,11 +1,30 @@
 import { useIsMobile } from '@hooks/useIsMobile';
+import { defineMessages, useT } from '@lib/i18n';
 import { hasSeenOnboarding, markOnboardingSeen } from '@lib/onboarding';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
 
 import styles from './WelcomeModal.module.css';
 
+const messages = defineMessages(
+  {
+    title: 'Welcome to oggregator',
+    body: 'Cross-venue crypto options on one screen. Compare quotes, vol, and Greeks across Deribit, OKX, Bybit and more.',
+    gotIt: 'Got it',
+    skip: 'Skip',
+    takeTour: 'Take the tour',
+  },
+  {
+    title: 'Bienvenido a oggregator',
+    body: 'Opciones cripto de varios exchanges en una sola pantalla. Compara cotizaciones, vol y Greeks entre Deribit, OKX, Bybit y más.',
+    gotIt: 'Entendido',
+    skip: 'Omitir',
+    takeTour: 'Hacer el recorrido',
+  },
+);
+
 export default function WelcomeModal() {
+  const t = useT(messages);
   const [visible, setVisible] = useState(() => !hasSeenOnboarding());
   const isMobile = useIsMobile();
   const startTour = useAppStore((s) => s.startTour);
@@ -48,13 +67,10 @@ export default function WelcomeModal() {
             ◎
           </span>
           <span className={styles.title} id={titleId}>
-            Welcome to oggregator
+            {t('title')}
           </span>
         </div>
-        <p className={styles.body}>
-          Cross-venue crypto options on one screen. Compare quotes, vol, and Greeks across Deribit,
-          OKX, Bybit and more.
-        </p>
+        <p className={styles.body}>{t('body')}</p>
         <div className={styles.actions}>
           {isMobile ? (
             <button
@@ -63,12 +79,12 @@ export default function WelcomeModal() {
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={dismiss}
             >
-              Got it
+              {t('gotIt')}
             </button>
           ) : (
             <>
               <button type="button" className={styles.btn} onClick={dismiss}>
-                Skip
+                {t('skip')}
               </button>
               <button
                 type="button"
@@ -76,7 +92,7 @@ export default function WelcomeModal() {
                 className={`${styles.btn} ${styles.btnPrimary}`}
                 onClick={onTakeTour}
               >
-                Take the tour
+                {t('takeTour')}
               </button>
             </>
           )}

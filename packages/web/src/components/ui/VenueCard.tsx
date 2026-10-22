@@ -1,6 +1,12 @@
 import { VENUES } from '@lib/venue-meta';
 import { fmtUsd, fmtIv } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import styles from './VenueCard.module.css';
+
+const messages = defineMessages(
+  { best: 'BEST', na: 'N/A', buy: 'BUY', sell: 'SELL', size: 'Size', spreadCost: 'Spread Cost' },
+  { best: 'MEJOR', na: 'N/D', buy: 'COMPRA', sell: 'VENTA', size: 'Tamaño', spreadCost: 'Costo spread' },
+);
 
 export interface VenueCardDetail {
   label: string;
@@ -37,6 +43,7 @@ export default function VenueCard({
   savings,
   tags,
 }: VenueCardProps) {
+  const t = useT(messages);
   const meta = VENUES[venueId];
   const allTags = tags ?? (isBest ? ['BEST'] : []);
 
@@ -53,14 +60,14 @@ export default function VenueCard({
           <span className={styles.name}>{meta?.label ?? venueId}</span>
           {allTags.map((tag) => (
             <span key={tag} className={styles.bestTag} data-tag={tag}>
-              {tag}
+              {tag === 'BEST' ? t('best') : tag}
             </span>
           ))}
         </div>
         <span className={styles.total} data-positive={total != null && total > 0}>
           {available && total != null && Number.isFinite(total)
             ? `${total > 0 ? '+' : ''}${fmtUsd(total)}`
-            : 'N/A'}
+            : t('na')}
         </span>
       </div>
 
@@ -71,7 +78,7 @@ export default function VenueCard({
             <div key={i} className={styles.legRow}>
               <div className={styles.legLeft}>
                 <span className={styles.dir} data-direction={d.direction}>
-                  {d.direction === 'buy' ? 'BUY' : 'SELL'}
+                  {d.direction === 'buy' ? t('buy') : t('sell')}
                 </span>
                 <span className={styles.strike}>{d.strike.toLocaleString()}</span>
                 <span className={styles.type} data-type={d.type}>
@@ -101,13 +108,13 @@ export default function VenueCard({
               )}
               {details[0].size != null && (
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Size</span>
+                  <span className={styles.statLabel}>{t('size')}</span>
                   <span className={styles.statVal}>{details[0].size.toFixed(1)}</span>
                 </div>
               )}
               {details[0].spreadCost != null && (
                 <div className={styles.stat}>
-                  <span className={styles.statLabel}>Spread Cost</span>
+                  <span className={styles.statLabel}>{t('spreadCost')}</span>
                   <span className={styles.statVal}>{fmtUsd(details[0].spreadCost)}</span>
                 </div>
               )}

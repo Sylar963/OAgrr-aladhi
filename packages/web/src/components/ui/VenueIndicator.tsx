@@ -1,8 +1,15 @@
 import { useAppStore } from '@stores/app-store';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import styles from './VenueIndicator.module.css';
 
+const messages = defineMessages(
+  { all: 'All venues', count: '{n} venues' },
+  { all: 'Todos los exchanges', count: '{n} exchanges' },
+);
+
 export default function VenueIndicator() {
+  const t = useT(messages);
   const activeVenues = useAppStore((s) => s.activeVenues);
   const allActive = activeVenues.length >= 5;
 
@@ -25,7 +32,7 @@ export default function VenueIndicator() {
         );
       })}
       <span className={styles.label}>
-        {allActive ? 'All venues' : `${activeVenues.length} venues`}
+        {allActive ? t('all') : t('count', { n: activeVenues.length })}
       </span>
     </span>
   );

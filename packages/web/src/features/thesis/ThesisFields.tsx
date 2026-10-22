@@ -1,3 +1,4 @@
+import { type Locale, translate, useLocale, useT, type Vars } from '@lib/i18n';
 import {
   THESIS_MIN_REASON_CHARS,
   type ThesisConfirmSec,
@@ -5,6 +6,7 @@ import {
 } from '@oggregator/protocol';
 
 import { fmtExpiry, fmtPrice } from './format';
+import { thesisMessages } from './i18n';
 import styles from './Thesis.module.css';
 
 export interface ThesisFieldValues {
@@ -15,18 +17,24 @@ export interface ThesisFieldValues {
   reason: string;
 }
 
-export function validateThesisFields(values: ThesisFieldValues, spotUsd: number | null): string | null {
+export function validateThesisFields(
+  values: ThesisFieldValues,
+  spotUsd: number | null,
+  locale: Locale,
+): string | null {
   const level = Number(values.level);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.horizonExpiry)) return 'Pick a horizon expiry.';
-  if (!(level > 0)) return 'Enter the invalidation level.';
+  const tr = (key: keyof typeof thesisMessages.en, vars?: Vars) =>
+    translate(thesisMessages, key, vars, locale);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.horizonExpiry)) return tr('pickHorizon');
+  if (!(level > 0)) return tr('enterLevel');
   if (spotUsd != null && values.direction === 'bearish' && level <= spotUsd) {
-    return `A bearish thesis is wrong above spot: set the level above ${fmtPrice(spotUsd)}.`;
+    return tr('bearishLevel', { spot: fmtPrice(spotUsd) });
   }
   if (spotUsd != null && values.direction === 'bullish' && level >= spotUsd) {
-    return `A bullish thesis is wrong below spot: set the level below ${fmtPrice(spotUsd)}.`;
+    return tr('bullishLevel', { spot: fmtPrice(spotUsd) });
   }
   if (values.reason.trim().length < THESIS_MIN_REASON_CHARS) {
-    return `Write the reason (at least ${THESIS_MIN_REASON_CHARS} characters).`;
+    return tr('writeReason', { n: THESIS_MIN_REASON_CHARS });
   }
   return null;
 }
@@ -40,6 +48,8 @@ interface ThesisFieldsProps {
 }
 
 export function ThesisFields({ values, onChange, expiryOptions, lockDirection = false }: ThesisFieldsProps) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const set = <K extends keyof ThesisFieldValues>(key: K, value: ThesisFieldValues[K]) =>
     onChange({ ...values, [key]: value });
   const expiries = expiryOptions.includes(values.horizonExpiry) || values.horizonExpiry === ''
@@ -49,8 +59,8 @@ export function ThesisFields({ values, onChange, expiryOptions, lockDirection = 
   return (
     <div className={styles.fields}>
       <div className={styles.fieldRow}>
-        <span className={styles.fieldLabel}>View</span>
-        <div className={styles.segment} role="radiogroup" aria-label="Direction">
+        <span className={styles.fieldLabel}>{t('view')}</span>
+        <div className={styles.segment} role="radiogroup" aria-label={t('direction')}>
           {(['bearish', 'bullish'] as const).map((direction) => (
             <button
               key={direction}
@@ -61,23 +71,23 @@ export function ThesisFields({ values, onChange, expiryOptions, lockDirection = 
               disabled={lockDirection && values.direction !== direction}
               onClick={() => set('direction', direction)}
             >
-              {direction === 'bearish' ? 'Bearish' : 'Bullish'}
+              {direction === 'bearish' ? t('bearish') : t('bullish')}
             </button>
           ))}
         </div>
       </div>
       <label className={styles.fieldRow}>
-        <span className={styles.fieldLabel}>Until</span>
+        <span className={styles.fieldLabel}>{t('until')}</span>
         {expiries.length > 0 ? (
           <select
             className={styles.input}
             value={values.horizonExpiry}
             onChange={(event) => set('horizonExpiry', event.target.value)}
           >
-            {values.horizonExpiry === '' && <option value="">Pick expiry</option>}
+            {values.horizonExpiry === '' && <option value="">{t('pickExpiry')}</option>}
             {expiries.map((expiry) => (
               <option key={expiry} value={expiry}>
-                {fmtExpiry(expiry)} ({expiry})
+                {fmtExpiry(expiry, locale)} ({expiry})
               </option>
             ))}
           </select>
@@ -91,9 +101,7 @@ export function ThesisFields({ values, onChange, expiryOptions, lockDirection = 
         )}
       </label>
       <label className={styles.fieldRow}>
-        <span className={styles.fieldLabel}>
-          I'm wrong if a
-        </span>
+        <span className={styles.fieldLabel}>{t('wrongIfA')}</span>
         <span className={styles.inline}>
           <select
             className={styles.inputSmall}
@@ -104,24 +112,24 @@ export function ThesisFields({ values, onChange, expiryOptions, lockDirection = 
             <option value={14400}>4H</option>
           </select>
           <span className={styles.fieldText}>
-            candle closes {values.direction === 'bearish' ? 'above' : 'below'}
+            {values.direction === 'bearish' ? t('candleClosesAbove') : t('candleClosesBelow')}
           </span>
           <input
             className={styles.inputSmall}
             inputMode="decimal"
             value={values.level}
-            placeholder="level"
+            placeholder={t('levelPlaceholder')}
             onChange={(event) => set('level', event.target.value.replace(/[^\d.]/g, ''))}
           />
         </span>
       </label>
       <label className={styles.fieldColumn}>
-        <span className={styles.fieldLabel}>Because</span>
+        <span className={styles.fieldLabel}>{t('because')}</span>
         <textarea
           className={styles.textarea}
           rows={2}
           value={values.reason}
-          placeholder="What you expect and why, in your own words. You will read this back before you flip."
+          placeholder={t('reasonPlaceholder')}
           onChange={(event) => set('reason', event.target.value)}
         />
       </label>

@@ -22,6 +22,7 @@ import tonLogo from '@/assets/tokens/ton.svg';
 import trumpLogo from '@/assets/tokens/trump.png';
 import xtiLogo from '@/assets/tokens/xti.svg';
 import enaLogo from '@/assets/tokens/ena.svg';
+import type { Locale } from '@lib/i18n';
 
 export interface TokenMeta {
   symbol: string;
@@ -77,13 +78,14 @@ export function getTokenLogo(symbol: string): string | undefined {
 export function getUnderlyingDisplayMeta(
   underlying: string,
   allUnderlyings: readonly string[] = [],
+  locale: Locale = 'en',
 ): UnderlyingDisplayMeta {
   const upper = underlying.toUpperCase();
   const [base, settle] = upper.split('_');
   if (!base || !settle) {
     return {
       label: upper,
-      sublabel: 'Options',
+      sublabel: locale === 'es' ? 'Opciones' : 'Options',
       searchText: upper,
     };
   }
@@ -91,7 +93,7 @@ export function getUnderlyingDisplayMeta(
   const hasBaseSibling = allUnderlyings.some((entry) => entry.toUpperCase() === base);
   return {
     label: hasBaseSibling ? `${base}/${settle}` : base,
-    sublabel: `${settle}-settled options`,
+    sublabel: locale === 'es' ? `Opciones liquidadas en ${settle}` : `${settle}-settled options`,
     searchText: `${upper} ${base} ${base}/${settle} ${settle}`,
   };
 }

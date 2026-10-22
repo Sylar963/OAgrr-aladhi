@@ -5,19 +5,36 @@ import type {
   AlphaStraddleVerdict,
 } from '@oggregator/protocol';
 import { fmtStrikeShort, fmtUsd, formatExpiry } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 
+import { alphaMessages, type AlphaKey } from './i18n';
 import { OpportunitySection } from './OpportunityCard';
-import { STRADDLE_STATUS } from './StraddleDecisionCard';
+import { STRADDLE_STATUS, straddleMessages } from './StraddleDecisionCard';
 import styles from './StraddleScannerPanel.module.css';
 import cards from './VenueOpportunities.module.css';
 
 const ROWS_PER_VENUE = 3;
-const CARD_STATUS: Record<AlphaStraddleVerdict, { label: string; tone: string }> = {
-  'sell-candidate': { label: 'CHECK', tone: 'review' },
-  watch: { label: 'WATCH', tone: 'neutral' },
-  cheap: { label: 'CHEAP', tone: 'danger' },
-  'no-forecast': { label: 'NO MODEL', tone: 'neutral' },
+const messages = defineMessages(
+  {
+    subtitle: 'Both legs sell at the bids on one venue · figures per 1 underlying',
+    note: 'Green means “inspect,” not “sell.” Ranking uses bids after fees, the matched-horizon forecast, the vol cone, and model edge per unit of stress loss.',
+    stress: 'stress −{value}',
+    credit: 'credit {value}',
+  },
+  {
+    subtitle: 'Ambas patas venden en los bids de un exchange · cifras por 1 unidad del subyacente',
+    note: 'Verde significa “revisar”, no “vender”. El ranking usa bids después de comisiones, el pronóstico al mismo horizonte, el cono de vol y el edge del modelo por unidad de pérdida de estrés.',
+    stress: 'estrés −{value}',
+    credit: 'crédito {value}',
+  },
+);
+
+const CARD_STATUS: Record<AlphaStraddleVerdict, { label: AlphaKey; tone: string }> = {
+  'sell-candidate': { label: 'cardCheck', tone: 'review' },
+  watch: { label: 'cardWatch', tone: 'neutral' },
+  cheap: { label: 'cardCheap', tone: 'danger' },
+  'no-forecast': { label: 'cardNoModel', tone: 'neutral' },
 };
 
 export function straddleKey(candidate: AlphaStraddleCandidate): string {
@@ -33,14 +50,16 @@ export default function StraddleVenueCards({
   selectedKey: string | null;
   onSelect: (candidate: AlphaStraddleCandidate) => void;
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
   return (
     <OpportunitySection
-      title="Straddles by venue"
-      subtitle="Both legs sell at the bids on one venue · figures per 1 underlying"
+      title={ta('straddlesByVenue')}
+      subtitle={t('subtitle')}
       count={data.candidates.length}
-      countLabel="live straddles"
-      emptyHint="No venues returned expiries for this window."
-      note="Green means “inspect,” not “sell.” Ranking uses bids after fees, the matched-horizon forecast, the vol cone, and model edge per unit of stress loss."
+      countLabel={ta('liveStraddles')}
+      emptyHint={ta('noExpiriesWindow')}
+      note={t('note')}
       isEmpty={data.venueStatus.length === 0}
     >
       {data.venueStatus.map((status) => {
@@ -52,8 +71,8 @@ export default function StraddleVenueCards({
         ].slice(0, ROWS_PER_VENUE);
         const best = candidates[0];
         const state = best
-          ? CARD_STATUS[best.verdict]
-          : { label: 'NO STRADDLE', tone: 'empty' };
+          ? { label: ta(CARD_STATUS[best.verdict].label), tone: CARD_STATUS[best.verdict].tone }
+          : { label: ta('noStraddle'), tone: 'empty' };
         return (
           <section className={cards.venueCard} data-tone={state.tone} key={status.venue}>
             <header className={cards.venueCardHeader}>
@@ -66,10 +85,8 @@ export default function StraddleVenueCards({
               </span>
             </header>
             <div className={cards.coverageRow}>
-              <span>Expiries in window</span>
-              <strong>
-                {candidates.length}/{status.eligibleExpiries} priced
-              </strong>
+              <span>{ta('expiriesInWindow')}</span>
+              <strong>{ta('pricedOf', { n: candidates.length, total: status.eligibleExpiries })}</strong>
             </div>
             <div className={cards.coverageTrack}>
               <span
@@ -82,10 +99,8 @@ export default function StraddleVenueCards({
               <div className={cards.noPair}>
                 <span aria-hidden="true">∅</span>
                 <div>
-                  <strong>No executable ATM straddle</strong>
-                  <small>
-                    {status.error ?? 'No quotes passed the freshness, fee, and spread checks'}
-                  </small>
+                  <strong>{ta('noAtmStraddle')}</strong>
+                  <small>{status.error ?? ta('noQuotesPassed')}</small>
                 </div>
               </div>
             ) : (
@@ -116,6 +131,9 @@ function StraddleRow({
   selected: boolean;
   onClick: () => void;
 }) {
+  const t = useT(messages);
+  const ta = useT(alphaMessages);
+  const ts = useT(straddleMessages);
   const status = CARD_STATUS[candidate.verdict];
   const total = candidate.stressLossUsd + candidate.netCredit;
   const creditWidth = total > 0 ? (candidate.netCredit / total) * 100 : 50;
@@ -125,14 +143,14 @@ function StraddleRow({
       className={cards.candidateRow}
       data-selected={selected}
       data-tone={status.tone}
-      title={STRADDLE_STATUS[candidate.verdict].message}
+      title={ts(STRADDLE_STATUS[candidate.verdict].message)}
       onClick={onClick}
     >
       <span className={cards.candidateTopline}>
         <strong>
           {formatExpiry(candidate.expiry)} · {candidate.dte.toFixed(0)}D
         </strong>
-        <span data-tone={status.tone}>{status.label}</span>
+        <span data-tone={status.tone}>{ta(status.label)}</span>
       </span>
       <span className={`${cards.strikeRoute} ${styles.straddleRoute}`}>
         <span>
@@ -144,8 +162,8 @@ function StraddleRow({
         </span>
       </span>
       <span className={styles.rowVol}>
-        IV {(candidate.sellIv * 100).toFixed(1)} vs{' '}
-        {candidate.hurdleVol == null ? '—' : (candidate.hurdleVol * 100).toFixed(1)} · cone{' '}
+        IV {(candidate.sellIv * 100).toFixed(1)} {ta('vs')}{' '}
+        {candidate.hurdleVol == null ? '—' : (candidate.hurdleVol * 100).toFixed(1)} · {ta('cone')}{' '}
         {candidate.conePercentile == null ? '—' : `p${candidate.conePercentile.toFixed(0)}`}
       </span>
       <span className={cards.candidateBalance}>
@@ -153,11 +171,11 @@ function StraddleRow({
         <i className={cards.candidateProfit} style={{ width: `${creditWidth}%` }} />
       </span>
       <span className={cards.candidateNumbers}>
-        <span>stress −{fmtUsd(candidate.stressLossUsd)}</span>
-        <span>edge {fmtUsd(candidate.modelEdgeUsd)}</span>
-        <span>credit {fmtUsd(candidate.netCredit)}</span>
+        <span>{t('stress', { value: fmtUsd(candidate.stressLossUsd) })}</span>
+        <span>{ta('edge', { value: fmtUsd(candidate.modelEdgeUsd) })}</span>
+        <span>{t('credit', { value: fmtUsd(candidate.netCredit) })}</span>
       </span>
-      <span className={cards.loadLabel}>Load straddle →</span>
+      <span className={cards.loadLabel}>{ta('loadStraddle')}</span>
     </button>
   );
 }

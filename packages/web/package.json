@@ -13,6 +13,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@clerk/localizations": "4.17.1",
     "@clerk/react": "6.16.1",
     "@oggregator/protocol": "workspace:",
     "@reown/appkit": "1.8.24",

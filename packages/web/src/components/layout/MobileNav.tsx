@@ -1,14 +1,19 @@
 import { useEffect, useRef } from 'react';
 
 import { useAppStore } from '@stores/app-store';
-import { TABS } from '@lib/tabs';
+import { defineMessages, useT } from '@lib/i18n';
+import { useTabs } from '@lib/tabs';
 
 import styles from './MobileNav.module.css';
 
+const messages = defineMessages({ charts: 'Charts' }, { charts: 'Gráficos' });
+
 export default function MobileNav() {
+  const t = useT(messages);
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setAssetMode = useAppStore((s) => s.setAssetMode);
+  const tabs = useTabs();
   const activeRef = useRef<HTMLButtonElement | null>(null);
   const aggrUrl = import.meta.env.VITE_AGGR_URL;
   const tradfiEnabled = import.meta.env.DEV || Boolean(import.meta.env.VITE_TRADFI_API_BASE);
@@ -19,7 +24,7 @@ export default function MobileNav() {
 
   return (
     <nav className={styles.nav}>
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
           <button
@@ -38,7 +43,7 @@ export default function MobileNav() {
       {aggrUrl && (
         <a className={styles.tab} href={aggrUrl} target="_blank" rel="noopener noreferrer">
           <span className={styles.icon}>↗</span>
-          <span className={styles.label}>Charts</span>
+          <span className={styles.label}>{t('charts')}</span>
         </a>
       )}
       {tradfiEnabled && (

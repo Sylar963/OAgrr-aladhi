@@ -7,6 +7,7 @@ import { Spinner, EmptyState } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { useVolRichness } from '@hooks/useVolRichness';
 import { fmtIv, fmtUsdCompact } from '@lib/format';
+import { defineMessages, useT } from '@lib/i18n';
 
 import ExpiryBar from './ExpiryBar';
 import { useExpiryPositions } from './use-expiry-positions';
@@ -21,6 +22,35 @@ import styles from './ChainView.module.css';
 
 const EASY_MODE_KEY = 'chain.easyMode';
 
+const messages = defineMessages(
+  {
+    loading: 'Loading chain data…',
+    failed: 'Failed to load chain',
+    checkConnection: 'Check your connection and try again.',
+    noData: 'No options data',
+    noVenuesShort: 'No venues returned data for {underlying} {expiry}.',
+    noVenuesLong:
+      'No venues returned data for {underlying} {expiry}. The expiry may only be listed on venues that are currently unavailable.',
+    easyModeTitle: 'Easy mode: build a trade by dragging options onto the price chart',
+    easyMode: 'Easy mode',
+    toggleCalc: 'Toggle option calculator',
+    calc: 'Option Calculator',
+  },
+  {
+    loading: 'Cargando datos de la cadena…',
+    failed: 'No se pudo cargar la cadena',
+    checkConnection: 'Revisa tu conexión e inténtalo de nuevo.',
+    noData: 'Sin datos de opciones',
+    noVenuesShort: 'Ningún exchange devolvió datos para {underlying} {expiry}.',
+    noVenuesLong:
+      'Ningún exchange devolvió datos para {underlying} {expiry}. Es posible que el vencimiento solo esté listado en exchanges que no están disponibles ahora.',
+    easyModeTitle: 'Modo fácil: arma un trade arrastrando opciones al gráfico de precio',
+    easyMode: 'Modo fácil',
+    toggleCalc: 'Mostrar/ocultar calculadora de opciones',
+    calc: 'Calculadora de opciones',
+  },
+);
+
 function readEasyMode(): boolean {
   try {
     return localStorage.getItem(EASY_MODE_KEY) === '1';
@@ -30,6 +60,7 @@ function readEasyMode(): boolean {
 }
 
 export default function ChainView() {
+  const t = useT(messages);
   const underlying = useAppStore((s) => s.underlying);
   const expiry = useAppStore((s) => s.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
@@ -137,21 +168,21 @@ export default function ChainView() {
           )}
 
           <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
-            {showLoading && <Spinner size="lg" label="Loading chain data…" />}
+            {showLoading && <Spinner size="lg" label={t('loading')} />}
             {error && !displayChain && (
               <EmptyState
                 icon="⚠"
-                title="Failed to load chain"
+                title={t('failed')}
                 detail={
-                  error instanceof Error ? error.message : 'Check your connection and try again.'
+                  error instanceof Error ? error.message : t('checkConnection')
                 }
               />
             )}
             {displayChain && displayChain.strikes.length === 0 && (
               <EmptyState
                 icon="∅"
-                title="No options data"
-                detail={`No venues returned data for ${underlying} ${expiry}.`}
+                title={t('noData')}
+                detail={t('noVenuesShort', { underlying, expiry })}
               />
             )}
             {displayChain && displayChain.strikes.length > 0 && (
@@ -213,29 +244,29 @@ export default function ChainView() {
             data-active={easyMode}
             aria-pressed={easyMode}
             onClick={() => setEasyMode((v) => !v)}
-            title="Easy mode: build a trade by dragging options onto the price chart"
+            title={t('easyModeTitle')}
           >
             <span className={styles.easyDot} />
-            Easy mode
+            {t('easyMode')}
           </button>
         </div>
 
         <div className={styles.tableArea} data-stale={isPlaceholderData} aria-busy={isPlaceholderData}>
-          {showLoading && <Spinner size="lg" label="Loading chain data…" />}
+          {showLoading && <Spinner size="lg" label={t('loading')} />}
           {error && !displayChain && (
             <EmptyState
               icon="⚠"
-              title="Failed to load chain"
+              title={t('failed')}
               detail={
-                error instanceof Error ? error.message : 'Check your connection and try again.'
+                error instanceof Error ? error.message : t('checkConnection')
               }
             />
           )}
           {displayChain && displayChain.strikes.length === 0 && (
             <EmptyState
               icon="∅"
-              title="No options data"
-              detail={`No venues returned data for ${underlying} ${expiry}. The expiry may only be listed on venues that are currently unavailable.`}
+              title={t('noData')}
+              detail={t('noVenuesLong', { underlying, expiry })}
             />
           )}
           {displayChain && displayChain.strikes.length > 0 && easyMode && (
@@ -261,8 +292,8 @@ export default function ChainView() {
         className={styles.calcFab}
         data-active={calcOpen}
         onClick={() => setCalcOpen((v) => !v)}
-        aria-label="Toggle option calculator"
-        title="Option Calculator"
+        aria-label={t('toggleCalc')}
+        title={t('calc')}
       >
         ⌥
       </button>

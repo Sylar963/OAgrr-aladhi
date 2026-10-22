@@ -12,7 +12,34 @@ import {
   type OptionRight,
 } from '@lib/analytics/blackScholes';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import styles from './OptionCalculator.module.css';
+
+const messages = defineMessages(
+  {
+    title: 'Option Calculator',
+    close: 'Close calculator',
+    expiryDate: 'Expiry Date',
+    enter: 'Enter',
+    dte: 'Days To Expiration',
+    underlyingPrice: 'Underlying Price',
+    volatility: 'Volatility (%)',
+    theoPrice: 'Theoretical Price',
+    reset: 'Reset',
+  },
+  {
+    title: 'Calculadora de opciones',
+    close: 'Cerrar calculadora',
+    expiryDate: 'Fecha de vencimiento',
+    enter: 'Ingresa',
+    dte: 'Días al vencimiento',
+    underlyingPrice: 'Precio del subyacente',
+    volatility: 'Volatilidad (%)',
+    theoPrice: 'Precio teórico',
+    reset: 'Restablecer',
+  },
+);
 
 interface OptionCalculatorProps {
   defaultUnderlying: string;
@@ -37,6 +64,7 @@ export default function OptionCalculator({
   defaultSpot,
   onClose,
 }: OptionCalculatorProps) {
+  const t = useT(messages);
   const [right, setRight] = useState<OptionRight>('call');
   const [expiryDate, setExpiryDate] = useState(defaultExpiry || '');
   const [strike, setStrike] = useState('');
@@ -152,9 +180,9 @@ export default function OptionCalculator({
   return (
     <div className={styles.panel} style={{ left: pos.x, top: pos.y }}>
       <div className={styles.header} onMouseDown={onHeaderMouseDown}>
-        <span className={styles.title}>Option Calculator</span>
+        <span className={styles.title}>{t('title')}</span>
         <span className={styles.subtitle}>{defaultUnderlying}</span>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Close calculator">
+        <button className={styles.closeBtn} onClick={onClose} aria-label={t('close')}>
           ✕
         </button>
       </div>
@@ -180,7 +208,7 @@ export default function OptionCalculator({
         </div>
 
         <div className={styles.row}>
-          <Field label="Expiry Date">
+          <Field label={t('expiryDate')}>
             <input
               type="date"
               className={styles.input}
@@ -192,7 +220,7 @@ export default function OptionCalculator({
             <input
               type="number"
               className={styles.input}
-              placeholder="Enter"
+              placeholder={t('enter')}
               value={strike}
               min={0}
               step="any"
@@ -202,7 +230,7 @@ export default function OptionCalculator({
         </div>
 
         <div className={styles.row}>
-          <Field label="Days To Expiration">
+          <Field label={t('dte')}>
             <input
               type="number"
               className={styles.input}
@@ -213,11 +241,11 @@ export default function OptionCalculator({
               onChange={(e) => setDte(e.target.value)}
             />
           </Field>
-          <Field label="Underlying Price">
+          <Field label={t('underlyingPrice')}>
             <input
               type="number"
               className={styles.input}
-              placeholder="Enter"
+              placeholder={t('enter')}
               value={spot}
               min={0}
               step="any"
@@ -227,11 +255,11 @@ export default function OptionCalculator({
         </div>
 
         <div className={styles.row}>
-          <Field label="Volatility (%)">
+          <Field label={t('volatility')}>
             <input
               type="number"
               className={styles.input}
-              placeholder="Enter"
+              placeholder={t('enter')}
               value={displayVolPct}
               min={0}
               step="any"
@@ -244,11 +272,11 @@ export default function OptionCalculator({
           <span className={styles.swap} aria-hidden>
             ⇄
           </span>
-          <Field label="Theoretical Price">
+          <Field label={t('theoPrice')}>
             <input
               type="number"
               className={styles.input}
-              placeholder="Enter"
+              placeholder={t('enter')}
               value={displayPrice}
               min={0}
               step="any"
@@ -270,7 +298,7 @@ export default function OptionCalculator({
 
         <div className={styles.actions}>
           <button type="button" className={styles.resetBtn} onClick={onReset}>
-            Reset
+            {t('reset')}
           </button>
         </div>
       </div>

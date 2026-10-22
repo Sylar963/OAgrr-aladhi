@@ -2,8 +2,30 @@ import type { EnrichedSide } from '@shared/enriched';
 import { VenueCard, type VenueCardDetail } from '@components/ui';
 import { useStrategyStore } from '@features/architect/strategy-store';
 import { useAppStore } from '@stores/app-store';
+import { defineMessages, useT } from '@lib/i18n';
 import { isActionableQuote } from './quote-selection';
 import styles from './QuickTrade.module.css';
+
+const messages = defineMessages(
+  {
+    buy: 'BUY',
+    sell: 'SELL',
+    bestPrice: 'BEST PRICE',
+    bestIv: 'BEST IV',
+    addLeg: '+ Add Leg',
+    builder: '+ Builder',
+    noQuotes: 'No quotes available for this option',
+  },
+  {
+    buy: 'COMPRAR',
+    sell: 'VENDER',
+    bestPrice: 'MEJOR PRECIO',
+    bestIv: 'MEJOR IV',
+    addLeg: '+ Agregar pata',
+    builder: '+ Constructor',
+    noQuotes: 'No hay cotizaciones disponibles para esta opción',
+  },
+);
 
 interface QuickTradeProps {
   strike: number;
@@ -30,6 +52,7 @@ export default function QuickTrade({
   builderMode,
   onClose,
 }: QuickTradeProps) {
+  const t = useT(messages);
   const addLeg = useStrategyStore((s) => s.addLeg);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setTradfiPage = useAppStore((s) => s.setTradfiPage);
@@ -119,7 +142,7 @@ export default function QuickTrade({
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <span className={styles.direction} data-direction={direction}>
-            {direction === 'buy' ? 'BUY' : 'SELL'}
+            {direction === 'buy' ? t('buy') : t('sell')}
           </span>
           <span className={styles.strike}>{strike.toLocaleString()}</span>
           <span className={styles.type} data-type={type}>
@@ -146,8 +169,8 @@ export default function QuickTrade({
           };
 
           const tags: string[] = [];
-          if (v.venueId === bestPriceVenue) tags.push('BEST PRICE');
-          if (v.venueId === bestIvVenue) tags.push('BEST IV');
+          if (v.venueId === bestPriceVenue) tags.push(t('bestPrice'));
+          if (v.venueId === bestIvVenue) tags.push(t('bestIv'));
 
           return (
             <VenueCard
@@ -159,14 +182,14 @@ export default function QuickTrade({
               details={[detail]}
               tags={tags}
               action={{
-                label: isOnBuilder ? '+ Add Leg' : '+ Builder',
+                label: isOnBuilder ? t('addLeg') : t('builder'),
                 onClick: () => handleAdd(v),
               }}
             />
           );
         })}
         {venues.length === 0 && (
-          <div className={styles.empty}>No quotes available for this option</div>
+          <div className={styles.empty}>{t('noQuotes')}</div>
         )}
       </div>
     </div>

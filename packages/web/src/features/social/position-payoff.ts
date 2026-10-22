@@ -1,4 +1,10 @@
+import { defineMessages, type Locale, translate } from '@lib/i18n';
 import type { PublicPositionDto } from '@oggregator/protocol';
+
+const messages = defineMessages(
+  { netPosition: 'Net Position', custom: '{n}-leg Custom' },
+  { netPosition: 'Posición neta', custom: 'Personalizada {n} patas' },
+);
 
 export interface PositionGroup {
   key: string;
@@ -107,7 +113,7 @@ export function payoffPoints(legs: PublicPositionDto[], from: number, to: number
   return prices.map((price) => ({ price, pnl: payoffAt(legs, price) }));
 }
 
-export function strategyName(legs: PublicPositionDto[]): string {
+export function strategyName(legs: PublicPositionDto[], locale: Locale = 'en'): string {
   if (legs.length === 1) {
     const leg = legs[0]!;
     return `${leg.netQuantity > 0 ? 'Long' : 'Short'} ${leg.optionRight === 'call' ? 'Call' : 'Put'}`;
@@ -127,7 +133,7 @@ export function strategyName(legs: PublicPositionDto[]): string {
       const side = a.netQuantity > 0 ? 'Long' : 'Short';
       return a.strike === b.strike ? `${side} Straddle` : `${side} Strangle`;
     }
-    if (a.optionRight === b.optionRight && a.strike === b.strike) return 'Net Position';
+    if (a.optionRight === b.optionRight && a.strike === b.strike) return translate(messages, 'netPosition', undefined, locale);
   }
   if (legs.length === 4) {
     const puts = legs.filter((leg) => leg.optionRight === 'put');
@@ -145,5 +151,5 @@ export function strategyName(legs: PublicPositionDto[]): string {
       if (longBody) return 'Reverse Iron Condor';
     }
   }
-  return `${legs.length}-leg Custom`;
+  return translate(messages, 'custom', { n: legs.length }, locale);
 }

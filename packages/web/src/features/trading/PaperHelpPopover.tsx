@@ -1,9 +1,46 @@
+import { defineMessages, useT } from '@lib/i18n';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useRef, useState } from 'react';
 
 import styles from './PaperHelpPopover.module.css';
 
+const messages = defineMessages(
+  {
+    help: 'Paper trading help',
+    title: 'Paper trading',
+    signIn:
+      'Sign in via the account chip in the top bar to get an API key — your paper book is tied to that account.',
+    step1Before: 'Build a strategy in the ',
+    step1Strong: 'Builder',
+    step1After: ' tab.',
+    step2Before: 'Click ',
+    step2Strong: 'Send to paper',
+    step2After: ' to open a position.',
+    step3: 'Manage trades here — reduce, roll, or close.',
+    step4Before: 'The ',
+    step4Strong: 'Portfolio',
+    step4After: ' tab shows vega/vanna/volga curves and shock P&L on this paper book.',
+  },
+  {
+    help: 'Ayuda de paper trading',
+    title: 'Paper trading',
+    signIn:
+      'Inicia sesión con el chip de cuenta en la barra superior para obtener una API key — tu libro paper está vinculado a esa cuenta.',
+    step1Before: 'Arma una estrategia en la pestaña ',
+    step1Strong: 'Constructor',
+    step1After: '.',
+    step2Before: 'Haz clic en ',
+    step2Strong: 'Enviar a paper',
+    step2After: ' para abrir una posición.',
+    step3: 'Gestiona tus trades aquí — reducir, rolar o cerrar.',
+    step4Before: 'La pestaña ',
+    step4Strong: 'Portafolio',
+    step4After: ' muestra curvas de vega/vanna/volga y P&L de shock de este libro paper.',
+  },
+);
+
 export default function PaperHelpPopover() {
+  const t = useT(messages);
   const accountId = useAppStore((s) => s.accountId);
 
   const [open, setOpen] = useState(false);
@@ -36,7 +73,7 @@ export default function PaperHelpPopover() {
         aria-controls="paper-help-popover"
         onClick={() => setOpen((v) => !v)}
       >
-        <span>Paper trading help</span>
+        <span>{t('help')}</span>
         <span className={styles.triggerQ} aria-hidden="true">
           ?
         </span>
@@ -46,27 +83,29 @@ export default function PaperHelpPopover() {
         <div
           id="paper-help-popover"
           role="dialog"
-          aria-label="Paper trading help"
+          aria-label={t('help')}
           className={styles.popover}
         >
-          <div className={styles.title}>Paper trading</div>
+          <div className={styles.title}>{t('title')}</div>
           {accountId == null && (
-            <p className={styles.paragraph}>
-              Sign in via the account chip in the top bar to get an API key — your paper book is
-              tied to that account.
-            </p>
+            <p className={styles.paragraph}>{t('signIn')}</p>
           )}
           <ol className={styles.steps}>
             <li>
-              Build a strategy in the <strong>Builder</strong> tab.
+              {t('step1Before')}
+              <strong>{t('step1Strong')}</strong>
+              {t('step1After')}
             </li>
             <li>
-              Click <strong>Send to paper</strong> to open a position.
+              {t('step2Before')}
+              <strong>{t('step2Strong')}</strong>
+              {t('step2After')}
             </li>
-            <li>Manage trades here — reduce, roll, or close.</li>
+            <li>{t('step3')}</li>
             <li>
-              The <strong>Portfolio</strong> tab shows vega/vanna/volga curves and shock P&amp;L on
-              this paper book.
+              {t('step4Before')}
+              <strong>{t('step4Strong')}</strong>
+              {t('step4After')}
             </li>
           </ol>
         </div>

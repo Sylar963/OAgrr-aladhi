@@ -16,6 +16,7 @@ import {
   TIME_AT_PRICE_UNDERLYINGS,
   type TimeAtPriceResponse,
 } from '@oggregator/protocol';
+import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { useTimeAtPrice } from '../queries';
 import analyticsStyles from '../AnalyticsView.module.css';
 import cardStyles from '../BreakEvenForecast.module.css';
@@ -25,7 +26,66 @@ import styles from './TimeAtPrice.module.css';
 const PATH_COLOR = '#E8ECEB';
 const DAY_MS = 86_400_000;
 const SUPPORTED = new Set<string>(TIME_AT_PRICE_UNDERLYINGS);
-const LOOKBACK_LABELS: Record<number, string> = { 90: '90D', 180: '180D', 365: '1Y', 730: '2Y' };
+const LOOKBACK_LABELS: Record<number, 'lb90' | 'lb180' | 'lb365' | 'lb730'> = {
+  90: 'lb90',
+  180: 'lb180',
+  365: 'lb365',
+  730: 'lb730',
+};
+
+const messages = defineMessages(
+  {
+    title: 'Time at Price',
+    unsupported: 'Built from perpetual candles, so it is available for BTC, ETH and HYPE only.',
+    subtitle:
+      '{underlying}-PERPETUAL hourly bars · shade = hours traded through each level · line = daily close',
+    lookback: 'Lookback',
+    lb90: '90D',
+    lb180: '180D',
+    lb365: '1Y',
+    lb730: '2Y',
+    lbDays: '{n}D',
+    loading: 'Loading price history…',
+    unavailable: 'Price history is unavailable right now.',
+    price: 'Price',
+    volTitle:
+      'Mean trailing {n}-day Parkinson vol (annualized) of the hours spent in the bin',
+    vol: 'Vol {n}d',
+    time: 'Time',
+    timeTitle: 'Share of hours whose mid sat in the bin',
+    shade:
+      'Shade = share of the {bars} hourly bars from {from} to {to} whose high–low range crossed each {bin} level.',
+    shortHistory: 'The venue serves less history than the selected lookback.',
+    volNote:
+      "Vol = mean trailing {n}-day Parkinson (high–low) volatility, annualized, of the hours whose mid sat in each {bin} bin. Bins with little time are noisy. Spot's bin is outlined.",
+  },
+  {
+    title: 'Tiempo en precio',
+    unsupported:
+      'Se construye con velas de perpetuos, así que solo está disponible para BTC, ETH y HYPE.',
+    subtitle:
+      'Barras horarias de {underlying}-PERPETUAL · sombra = horas negociadas en cada nivel · línea = cierre diario',
+    lookback: 'Periodo',
+    lb90: '90D',
+    lb180: '180D',
+    lb365: '1A',
+    lb730: '2A',
+    lbDays: '{n}D',
+    loading: 'Cargando historial de precios…',
+    unavailable: 'El historial de precios no está disponible ahora.',
+    price: 'Precio',
+    volTitle:
+      'Vol Parkinson móvil media de {n} días (anualizada) de las horas pasadas en el rango',
+    vol: 'Vol {n}d',
+    time: 'Tiempo',
+    timeTitle: 'Proporción de horas cuyo precio medio estuvo en el rango',
+    shade:
+      'Sombra = proporción de las {bars} barras horarias del {from} al {to} cuyo rango máx–mín cruzó cada nivel de {bin}.',
+    shortHistory: 'El exchange ofrece menos historial que el periodo seleccionado.',
+    volNote:
+      'Vol = volatilidad Parkinson (máx–mín) móvil media de {n} días, anualizada, de las horas cuyo precio medio estuvo en cada rango de {bin}. Los rangos con poco tiempo son ruidosos. El rango del spot está resaltado.',
+  },
+);
 
 function fmtPrice(value: number): string {
   if (value >= 1000) return Math.round(value).toLocaleString('en-US');
@@ -41,10 +101,15 @@ function fmtDate(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-function historyNote(data: TimeAtPriceResponse): string {
-  const shade = `Shade = share of the ${data.bars.toLocaleString('en-US')} hourly bars from ${fmtDate(data.from)} to ${fmtDate(data.to)} whose high–low range crossed each ${fmtPrice(data.binSize)} level.`;
+function historyNote(data: TimeAtPriceResponse, t: Translate<typeof messages.en>): string {
+  const shade = t('shade', {
+    bars: data.bars.toLocaleString('en-US'),
+    from: fmtDate(data.from),
+    to: fmtDate(data.to),
+    bin: fmtPrice(data.binSize),
+  });
   const short = data.to - data.from < data.lookbackDays * DAY_MS * 0.95;
-  return short ? `${shade} The venue serves less history than the selected lookback.` : shade;
+  return short ? `${shade} ${t('shortHistory')}` : shade;
 }
 
 interface TimeAtPriceProps {
@@ -52,6 +117,7 @@ interface TimeAtPriceProps {
 }
 
 export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
+  const t = useT(messages);
   const supported = SUPPORTED.has(underlying);
   const [lookbackDays, setLookbackDays] = useState<number>(730);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -143,10 +209,8 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
   if (!supported) {
     return (
       <div className={analyticsStyles.card}>
-        <div className={analyticsStyles.cardTitle}>Time at Price</div>
-        <div className={cardStyles.empty}>
-          Built from perpetual candles, so it is available for BTC, ETH and HYPE only.
-        </div>
+        <div className={analyticsStyles.cardTitle}>{t('title')}</div>
+        <div className={cardStyles.empty}>{t('unsupported')}</div>
       </div>
     );
   }
@@ -155,21 +219,18 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
     <div className={analyticsStyles.card}>
       <div className={cardStyles.header}>
         <div>
-          <div className={analyticsStyles.cardTitle}>Time at Price</div>
-          <div className={cardStyles.subtitle}>
-            {underlying}-PERPETUAL hourly bars · shade = hours traded through each level · line =
-            daily close
-          </div>
+          <div className={analyticsStyles.cardTitle}>{t('title')}</div>
+          <div className={cardStyles.subtitle}>{t('subtitle', { underlying })}</div>
         </div>
         <label className={cardStyles.expiryPicker}>
-          <span>Lookback</span>
+          <span>{t('lookback')}</span>
           <select
             value={lookbackDays}
             onChange={(event) => setLookbackDays(Number(event.target.value))}
           >
             {TIME_AT_PRICE_LOOKBACK_DAYS.map((days) => (
               <option key={days} value={days}>
-                {LOOKBACK_LABELS[days] ?? `${days}D`}
+                {t(LOOKBACK_LABELS[days] ?? 'lbDays', { n: days })}
               </option>
             ))}
           </select>
@@ -179,9 +240,9 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
       <div className={cardStyles.body}>
         <div className={cardStyles.chartArea}>
           <div className={cardStyles.chart} ref={containerRef} />
-          {isLoading && <div className={cardStyles.overlay}>Loading price history…</div>}
+          {isLoading && <div className={cardStyles.overlay}>{t('loading')}</div>}
           {isError && !data && (
-            <div className={cardStyles.overlay}>Price history is unavailable right now.</div>
+            <div className={cardStyles.overlay}>{t('unavailable')}</div>
           )}
         </div>
 
@@ -190,13 +251,11 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
             <table className={cardStyles.table}>
               <thead>
                 <tr>
-                  <th>Price</th>
-                  <th
-                    title={`Mean trailing ${data.volWindowHours / 24}-day Parkinson vol (annualized) of the hours spent in the bin`}
-                  >
-                    Vol {data.volWindowHours / 24}d
+                  <th>{t('price')}</th>
+                  <th title={t('volTitle', { n: data.volWindowHours / 24 })}>
+                    {t('vol', { n: data.volWindowHours / 24 })}
                   </th>
-                  <th title="Share of hours whose mid sat in the bin">Time</th>
+                  <th title={t('timeTitle')}>{t('time')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -235,11 +294,9 @@ export default function TimeAtPrice({ underlying }: TimeAtPriceProps) {
 
       {data && (
         <div className={cardStyles.notes}>
-          <p>{historyNote(data)}</p>
+          <p>{historyNote(data, t)}</p>
           <p>
-            Vol = mean trailing {data.volWindowHours / 24}-day Parkinson (high–low) volatility,
-            annualized, of the hours whose mid sat in each {fmtPrice(data.volBinSize)} bin. Bins
-            with little time are noisy. Spot&apos;s bin is outlined.
+            {t('volNote', { n: data.volWindowHours / 24, bin: fmtPrice(data.volBinSize) })}
           </p>
         </div>
       )}

@@ -1,0 +1,378 @@
+import { defineMessages } from '@lib/i18n';
+
+export const surfaceMessages = defineMessages(
+  {
+    loading3d: 'Loading 3D surface...',
+    loading: 'loading…',
+    insufficientHistory: 'insufficient history',
+    insufficientData: 'insufficient data',
+    retry: 'Retry',
+
+    tradfiSkewNote:
+      'Skew history is recorded every 5 minutes during regular hours for {underlyings}.',
+  },
+  {
+    loading3d: 'Cargando superficie 3D...',
+    loading: 'cargando…',
+    insufficientHistory: 'historial insuficiente',
+    insufficientData: 'datos insuficientes',
+    retry: 'Reintentar',
+
+    tradfiSkewNote:
+      'El historial de skew se registra cada 5 minutos en horario regular para {underlyings}.',
+  },
+);
+
+export const skewMessages = defineMessages(
+  {
+    modelV1Title: 'Skew levels, percentiles, smile',
+    modelV2Title: 'Segmented rolling regime (calls vs puts)',
+    lb30: '1M',
+    lb90: '3M',
+    vs1d: '1d ago',
+    vs7d: '7d ago',
+    vs30d: '30d ago',
+    model: 'MODEL',
+    tenor: 'TENOR',
+    tenorTitle: 'Constant-maturity option tenor',
+    lookback: 'LOOKBACK',
+    lookbackTitle: 'History used for percentiles and charts',
+    vs: 'VS',
+    vsTitle: 'Reference point for the dashed smile and Δ',
+    byTenor: 'by tenor',
+    byTenorAria: 'skew by tenor',
+    ofAtm: '{v}% of ATM',
+    rrTitle: '25Δ Risk-Reversal',
+    flyTitle: '25Δ Butterfly',
+    callsBid: 'calls bid',
+    putsBid: 'puts bid',
+    wingsRich: 'wings rich',
+    wingsCheap: 'wings cheap',
+    rrTip1: 'Negative: puts richer than calls → downside fear (usual in BTC/ETH and equity indices).',
+    rrTip2: 'Positive: calls richer → upside FOMO. Near zero = balanced.',
+    chartTip: 'Chart: shaded band = 10th–90th pct of the lookback, dashed = median, vertical = VS point.',
+    flyTip1: 'High: wings expensive (fat-tail / event premium).',
+    flyTip2: 'Low/negative: wings cheap vs body.',
+
+    pctNone: '– pct',
+    pctTitle: 'Share of lookback samples at or below the current value',
+    historyAria: '{label} history',
+
+    smileAria: 'volatility smile',
+    smileCaption:
+      'solid = now · dashed = {ref} · labels = IV and change in vol pts · tilt = RR · lift = Fly',
+    smileNoHistory: 'solid = now · no history for {ref}',
+
+    regime: 'REGIME',
+    regimeLabel: 'Regime',
+    regimeTitle: 'Segmented rolling skew regime',
+    srcContracts: 'Contracts',
+    srcContractsTitle: 'Call minus put contracts traded (underlying units)',
+    srcNotional: 'Notional',
+    srcNotionalTitle: 'Call minus put notional traded (contracts × spot, USD)',
+    srcPremium: 'Premium',
+    srcPremiumTitle: 'Call minus put premium paid (USD)',
+    srcRr: 'RR',
+    srcRrTitle: '25Δ risk-reversal of the selected tenor (vol points)',
+    tip0: 'Calls minus puts, compared with its own recent range.',
+    tip1: 'Line: trailing average of the selected source (6h for flow, 1h for RR).',
+    tip2: 'Dotted zones: mean ± {k}σ of the line over the previous zone window. Only earlier data is used, so past colours never change.',
+    tip3: 'Blue: broke above the upper zone (calls in demand vs. recent norm). Red: broke below the lower zone (puts in demand). A regime ends halfway back to the mean.',
+    tip4: 'Flow: screen trades across venues and expiries, block duplicates excluded.',
+    tip5: 'Descriptive regime read, not a forecast.',
+    storeUnavailable: 'trade history store unavailable',
+    loadingFlow: 'loading flow history…',
+    flowFailed: 'flow history failed to load',
+    forDuration: 'for {d}',
+    source: 'SOURCE',
+    zones: 'ZONES',
+    zonesTitle: 'Window the rolling zones are built from',
+    zoneAria: '{label} zone window',
+    zonesLegend: 'zones ±{k}σ / {label}',
+    scopeFlow: 'screen flow · all expiries · 1h buckets',
+    scopeRr: '{tenor} constant-maturity RR',
+    readoutZones: ' · zones {lower} … {upper}',
+    warmingUp: 'warming up',
+    regimeAria: 'segmented rolling regime',
+    callsUp: 'calls ↑',
+    putsDown: 'puts ↓',
+  },
+  {
+    modelV1Title: 'Niveles de skew, percentiles, smile',
+    modelV2Title: 'Régimen móvil segmentado (calls vs puts)',
+    lb30: '1M',
+    lb90: '3M',
+    vs1d: 'hace 1d',
+    vs7d: 'hace 7d',
+    vs30d: 'hace 30d',
+    model: 'MODELO',
+    tenor: 'PLAZO',
+    tenorTitle: 'Plazo de opción a vencimiento constante',
+    lookback: 'PERIODO',
+    lookbackTitle: 'Historial usado para percentiles y gráficos',
+    vs: 'VS',
+    vsTitle: 'Punto de referencia para el smile punteado y Δ',
+    byTenor: 'por plazo',
+    byTenorAria: 'skew por plazo',
+    ofAtm: '{v}% del ATM',
+    rrTitle: 'Risk reversal 25Δ',
+    flyTitle: 'Butterfly 25Δ',
+    callsBid: 'calls demandados',
+    putsBid: 'puts demandados',
+    wingsRich: 'alas caras',
+    wingsCheap: 'alas baratas',
+    rrTip1:
+      'Negativo: puts más caros que calls → miedo a la baja (habitual en BTC/ETH e índices bursátiles).',
+    rrTip2: 'Positivo: calls más caros → FOMO alcista. Cerca de cero = equilibrado.',
+    chartTip:
+      'Gráfico: banda sombreada = percentil 10–90 del periodo, punteada = mediana, vertical = punto VS.',
+    flyTip1: 'Alto: alas caras (colas gruesas / prima por eventos).',
+    flyTip2: 'Bajo/negativo: alas baratas frente al cuerpo.',
+
+    pctNone: 'p–',
+    pctTitle: 'Proporción de muestras del periodo iguales o menores al valor actual',
+    historyAria: 'historial de {label}',
+
+    smileAria: 'sonrisa de volatilidad',
+    smileCaption:
+      'sólida = ahora · punteada = {ref} · etiquetas = IV y cambio en pts de vol · inclinación = RR · elevación = Fly',
+    smileNoHistory: 'sólida = ahora · sin historial para {ref}',
+
+    regime: 'RÉGIMEN',
+    regimeLabel: 'Régimen',
+    regimeTitle: 'Régimen de skew móvil segmentado',
+    srcContracts: 'Contratos',
+    srcContractsTitle: 'Contratos call menos put negociados (unidades del subyacente)',
+    srcNotional: 'Nocional',
+    srcNotionalTitle: 'Nocional call menos put negociado (contratos × spot, USD)',
+    srcPremium: 'Prima',
+    srcPremiumTitle: 'Prima call menos put pagada (USD)',
+    srcRr: 'RR',
+    srcRrTitle: 'Risk reversal 25Δ del plazo seleccionado (puntos de vol)',
+    tip0: 'Calls menos puts, comparado con su propio rango reciente.',
+    tip1: 'Línea: media móvil de la fuente seleccionada (6h para flujo, 1h para RR).',
+    tip2: 'Zonas punteadas: media ± {k}σ de la línea en la ventana de zona previa. Solo se usan datos anteriores, así que los colores pasados nunca cambian.',
+    tip3: 'Azul: rompió por encima de la zona superior (demanda de calls vs. la norma reciente). Rojo: rompió por debajo de la zona inferior (demanda de puts). Un régimen termina a mitad de camino de vuelta a la media.',
+    tip4: 'Flujo: operaciones en pantalla de todos los exchanges y vencimientos, sin duplicados de bloques.',
+    tip5: 'Lectura descriptiva del régimen, no un pronóstico.',
+    storeUnavailable: 'almacén de historial de operaciones no disponible',
+    loadingFlow: 'cargando historial de flujo…',
+    flowFailed: 'no se pudo cargar el historial de flujo',
+    forDuration: 'desde hace {d}',
+    source: 'FUENTE',
+    zones: 'ZONAS',
+    zonesTitle: 'Ventana con la que se construyen las zonas móviles',
+    zoneAria: 'ventana de zona de {label}',
+    zonesLegend: 'zonas ±{k}σ / {label}',
+    scopeFlow: 'flujo en pantalla · todos los vencimientos · tramos de 1h',
+    scopeRr: 'RR a vencimiento constante {tenor}',
+    readoutZones: ' · zonas {lower} … {upper}',
+    warmingUp: 'calentando',
+    regimeAria: 'régimen móvil segmentado',
+    callsUp: 'calls ↑',
+    putsDown: 'puts ↓',
+  },
+);
+
+export const ivRankMessages = defineMessages(
+  {
+    ivrTipTitle: 'How to read IV Rank',
+    ivrTipBody: 'Where current ATM IV sits within the look-back window (toggle above the chips).',
+    ivrCheap: ': IV cheap vs the window — vol buyers favored.',
+    ivrMid: ': mid-range; no strong edge.',
+    ivrRich: ': IV rich vs the window — vol sellers favored.',
+    perTenorSource: 'Per-tenor source',
+    src30: ' (BTC/ETH): Deribit DVOL — ~1 year of daily closes, kept live by the DVOL push.',
+    srcOther: ': cross-venue ATM averages interpolated to the tenor, snapshotted every 5 min.',
+    srcFreshA: 'After a fresh server start, 7d/60d/90d are thinly populated — check ',
+    srcFreshB: ' on each chip.',
+
+    rankTipTitle: 'IV Rank',
+    rankTipBody: 'Position of current ATM IV in the window’s low→high band.',
+    rankTip0: '0 = at window low (cheapest seen). 100 = at window high (richest seen).',
+    rankTipRich: ': premium rich historically — prefer selling vol.',
+    rankTipMid: ': middle of the range; no strong edge.',
+    rankTipCheap: ': premium cheap historically — prefer buying vol.',
+
+    pctTipTitle: 'IV Percentile',
+    pctTipBody: 'Share of historical samples ≤ current IV.',
+    pctTip1: 'Robust to outliers — one extreme print does not move the needle.',
+    pctTip2: '50% = half the history was lower. 90% = only 10% of the window has been richer.',
+    pctTip3: 'Pair with rank: a wide divergence flags outlier-distorted distributions.',
+
+    richTipTitle: 'IV vs forecast',
+    richTipBody:
+      'Rank and pct compare IV with its own past. This row compares it with what BTC is likely to realize over the same horizon.',
+    richTipFormula: 'excess = IV − forecast RV − usual (IV − later RV)',
+    richFcst: ': excess premium in vol points. Negative: cheap; positive: rich; ±2 pts fair (our band, untested on BTC).',
+    richHist: ': z-score of IV − forecast against its own daily history (overlapping, so descriptive only).',
+    rich24h: ': z-score of IV against the last 24h of 5-minute samples. Shows whether vol was just bid or offered.',
+    richTenors: '7D and 30D only: the usual-premium baselines exist for those tenors.',
+
+    samplesTitle: 'Samples',
+    samplesBody: 'Valid ATM IV readings inside the selected window.',
+    samples1: '30d BTC/ETH seeds from ~1 year of Deribit DVOL daily candles on startup.',
+    samples2: 'Other tenors accumulate one new point every 5 min from the live surface.',
+    samples3: 'Rank / pct show “–” until n ≥ 2 with a non-zero range.',
+
+    stateCheap: 'cheap',
+    stateFair: 'fair',
+    stateRich: 'rich',
+    stateNa: 'n/a',
+    noBaseline: 'no forecast baseline',
+    hist: 'hist {z}',
+    rank: 'rank',
+    pct: 'pct',
+
+    coneTipTitle: 'Vol cone',
+    coneTipBody:
+      'Grey bands: distribution of realized vol over every rolling window of each horizon, from ~2 years of Deribit perpetual daily closes (Sinclair vol cone).',
+    coneTipBands: 'Darkest band 25–75th pct, then 10–90th, then min–max. Dashed line is the median.',
+    coneTipTeal: 'Teal',
+    coneTipTealBody:
+      ': current ATM IV term structure. Label is its percentile inside the cone (≈ when interpolated from the bands).',
+    coneTipOrange: 'Orange',
+    coneTipOrangeBody: ': realized vol over the trailing window of each horizon.',
+    coneTipTop: 'IV near the top of the cone prices more movement than BTC has usually delivered.',
+
+    coneTitle: 'VOL CONE · IV vs realized',
+    legendRvNow: 'RV now',
+    legendMedian: 'median',
+    legendBands: '25–75 / 10–90 / range',
+
+    tfTipBody: "Where today's value sits within the look-back window (toggle above the chips).",
+    tfTipIv:
+      ": TastyTrade's daily 30-day implied vol for the ticker. Index products use their published vol index instead (VIX for SPX/SPY/XSP, RVX for RUT/IWM).",
+    tfTipRv:
+      ': close-to-close realized vol over the last 21 trading days, annualized over 252 trading days.',
+    tfTipLookbacks: '6M = 126 trading days, 1Y = 252.',
+    tfSamplesBody: 'Trading days with a value inside the selected window, from daily candles.',
+    tfConeBody:
+      'Grey bands: distribution of realized vol over every rolling window of each horizon, from ~3 years of daily closes. Horizons of 7/14/30/60/90 calendar days use 5/10/21/42/63 trading-day windows.',
+    tfConeTealBody:
+      ': current ATM IV term structure from the live surface, labelled with its percentile inside each band.',
+    lb6m: '6M',
+    lb1y: '1Y',
+    dailySince: 'Daily since {date} · IV source {source}',
+    loadingDaily: 'Loading daily history…',
+  },
+  {
+    ivrTipTitle: 'Cómo leer el IV Rank',
+    ivrTipBody:
+      'Dónde se ubica la IV ATM actual dentro de la ventana histórica (selector sobre las tarjetas).',
+    ivrCheap: ': IV barata vs la ventana — favorece a compradores de vol.',
+    ivrMid: ': rango medio; sin ventaja clara.',
+    ivrRich: ': IV cara vs la ventana — favorece a vendedores de vol.',
+    perTenorSource: 'Fuente por plazo',
+    src30: ' (BTC/ETH): DVOL de Deribit — ~1 año de cierres diarios, actualizado en vivo por el push de DVOL.',
+    srcOther:
+      ': promedios ATM entre exchanges interpolados al plazo, con snapshot cada 5 min.',
+    srcFreshA: 'Tras un reinicio del servidor, 7d/60d/90d tienen pocos datos — revisa ',
+    srcFreshB: ' en cada tarjeta.',
+
+    rankTipTitle: 'IV Rank',
+    rankTipBody: 'Posición de la IV ATM actual en la banda mín→máx de la ventana.',
+    rankTip0: '0 = en el mínimo de la ventana (lo más barato visto). 100 = en el máximo (lo más caro visto).',
+    rankTipRich: ': prima históricamente cara — conviene vender vol.',
+    rankTipMid: ': mitad del rango; sin ventaja clara.',
+    rankTipCheap: ': prima históricamente barata — conviene comprar vol.',
+
+    pctTipTitle: 'Percentil de IV',
+    pctTipBody: 'Proporción de muestras históricas ≤ la IV actual.',
+    pctTip1: 'Robusto ante valores atípicos — un dato extremo no mueve la aguja.',
+    pctTip2:
+      '50% = la mitad del historial fue menor. 90% = solo el 10% de la ventana ha sido más caro.',
+    pctTip3: 'Compáralo con el rank: una gran divergencia indica distribuciones distorsionadas por atípicos.',
+
+    richTipTitle: 'IV vs pronóstico',
+    richTipBody:
+      'Rank y pct comparan la IV con su propio pasado. Esta fila la compara con lo que BTC probablemente realice en el mismo horizonte.',
+    richTipFormula: 'exceso = IV − RV pronosticada − habitual (IV − RV posterior)',
+    richFcst:
+      ': prima en exceso en puntos de vol. Negativa: barata; positiva: cara; ±2 pts justa (nuestra banda, sin probar en BTC).',
+    richHist:
+      ': z-score de IV − pronóstico frente a su propio historial diario (superpuesto, así que solo descriptivo).',
+    rich24h:
+      ': z-score de la IV frente a las últimas 24h de muestras de 5 minutos. Muestra si la vol acaba de ser demandada u ofrecida.',
+    richTenors: 'Solo 7D y 30D: las referencias de prima habitual existen para esos plazos.',
+
+    samplesTitle: 'Muestras',
+    samplesBody: 'Lecturas válidas de IV ATM dentro de la ventana seleccionada.',
+    samples1: '30d BTC/ETH se inicializa con ~1 año de velas diarias de DVOL de Deribit al arrancar.',
+    samples2: 'Los demás plazos suman un punto nuevo cada 5 min desde la superficie en vivo.',
+    samples3: 'Rank / pct muestran “–” hasta que n ≥ 2 con un rango distinto de cero.',
+
+    stateCheap: 'barata',
+    stateFair: 'justa',
+    stateRich: 'cara',
+    stateNa: 'n/d',
+    noBaseline: 'sin referencia de pronóstico',
+    hist: 'hist {z}',
+    rank: 'rank',
+    pct: 'pct',
+
+    coneTipTitle: 'Cono de vol',
+    coneTipBody:
+      'Bandas grises: distribución de la vol realizada en cada ventana móvil de cada horizonte, a partir de ~2 años de cierres diarios del perpetuo de Deribit (cono de vol de Sinclair).',
+    coneTipBands:
+      'Banda más oscura percentil 25–75, luego 10–90, luego mín–máx. La línea punteada es la mediana.',
+    coneTipTeal: 'Turquesa',
+    coneTipTealBody:
+      ': estructura temporal actual de la IV ATM. La etiqueta es su percentil dentro del cono (≈ cuando se interpola de las bandas).',
+    coneTipOrange: 'Naranja',
+    coneTipOrangeBody: ': vol realizada en la ventana móvil de cada horizonte.',
+    coneTipTop:
+      'Una IV cerca del techo del cono descuenta más movimiento del que BTC suele entregar.',
+
+    coneTitle: 'CONO DE VOL · IV vs realizada',
+    legendRvNow: 'RV actual',
+    legendMedian: 'mediana',
+    legendBands: '25–75 / 10–90 / rango',
+
+    tfTipBody:
+      'Dónde se ubica el valor de hoy dentro de la ventana histórica (selector sobre las tarjetas).',
+    tfTipIv:
+      ': vol implícita diaria a 30 días de TastyTrade para el ticker. Los productos de índice usan su índice de vol publicado (VIX para SPX/SPY/XSP, RVX para RUT/IWM).',
+    tfTipRv:
+      ': vol realizada cierre a cierre de los últimos 21 días hábiles, anualizada sobre 252 días hábiles.',
+    tfTipLookbacks: '6M = 126 días hábiles, 1A = 252.',
+    tfSamplesBody: 'Días hábiles con valor dentro de la ventana seleccionada, a partir de velas diarias.',
+    tfConeBody:
+      'Bandas grises: distribución de la vol realizada en cada ventana móvil de cada horizonte, a partir de ~3 años de cierres diarios. Los horizontes de 7/14/30/60/90 días calendario usan ventanas de 5/10/21/42/63 días hábiles.',
+    tfConeTealBody:
+      ': estructura temporal actual de la IV ATM desde la superficie en vivo, etiquetada con su percentil dentro de cada banda.',
+    lb6m: '6M',
+    lb1y: '1A',
+    dailySince: 'Diario desde {date} · fuente IV {source}',
+    loadingDaily: 'Cargando historial diario…',
+  },
+);
+
+export const coneMessages = defineMessages(
+  {
+    aboveMax: '>max',
+    belowMin: '<min',
+    reset: 'reset',
+    fitCore: 'Fit p10–p90, IV and RV',
+    fitFull: 'Fit the full min–max range',
+    full: 'full',
+    tooltipTitle: '{d}d realized · {n} windows',
+    rvNow: 'RV now',
+    max: 'max',
+    median: 'median',
+    min: 'min',
+  },
+  {
+    aboveMax: '>máx',
+    belowMin: '<mín',
+    reset: 'restablecer',
+    fitCore: 'Ajustar a p10–p90, IV y RV',
+    fitFull: 'Ajustar al rango completo mín–máx',
+    full: 'completo',
+    tooltipTitle: '{d}d realizada · {n} ventanas',
+    rvNow: 'RV actual',
+    max: 'máx',
+    median: 'mediana',
+    min: 'mín',
+  },
+);

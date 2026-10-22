@@ -1,7 +1,9 @@
+import { useLocale, useT } from '@lib/i18n';
 import { useState } from 'react';
 
 import { createThesis } from './api';
 import { useThesisRefresh } from './hooks';
+import { thesisMessages } from './i18n';
 import { type ThesisFieldValues, ThesisFields, validateThesisFields } from './ThesisFields';
 import styles from './Thesis.module.css';
 
@@ -20,6 +22,8 @@ export default function ThesisCreateForm({
   spotUsd,
   onClose,
 }: ThesisCreateFormProps) {
+  const t = useT(thesisMessages);
+  const locale = useLocale();
   const refresh = useThesisRefresh();
   const [values, setValues] = useState(initial);
   const [share, setShare] = useState(false);
@@ -27,7 +31,7 @@ export default function ThesisCreateForm({
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    const invalid = validateThesisFields(values, spotUsd);
+    const invalid = validateThesisFields(values, spotUsd, locale);
     if (invalid) {
       setError(invalid);
       return;
@@ -47,7 +51,7 @@ export default function ThesisCreateForm({
       await refresh();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the thesis');
+      setError(err instanceof Error ? err.message : t('couldNotSave'));
     } finally {
       setBusy(false);
     }
@@ -55,19 +59,19 @@ export default function ThesisCreateForm({
 
   return (
     <div className={styles.card}>
-      <div className={styles.cardTitle}>Set your {underlying} thesis</div>
+      <div className={styles.cardTitle}>{t('setYourThesis', { underlying })}</div>
       <ThesisFields values={values} onChange={setValues} expiryOptions={expiryOptions} />
       <label className={styles.shareToggle}>
         <input type="checkbox" checked={share} onChange={(event) => setShare(event.target.checked)} />
-        <span>Share on Social under your username</span>
+        <span>{t('shareOnSocial')}</span>
       </label>
       {error && <div className={styles.error}>{error}</div>}
       <div className={styles.actions}>
         <button type="button" className={styles.primaryBtn} onClick={() => void submit()} disabled={busy}>
-          {busy ? 'Saving…' : 'Save thesis'}
+          {busy ? t('saving') : t('saveThesis')}
         </button>
         <button type="button" className={styles.ghostBtn} onClick={onClose} disabled={busy}>
-          Cancel
+          {t('cancel')}
         </button>
       </div>
     </div>

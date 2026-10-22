@@ -1,4 +1,5 @@
 import { useFeedToasts } from '@hooks/useFeedToasts';
+import { useLocale } from '@lib/i18n';
 import { addDismissedId, loadDismissedIds, selectActiveNotice } from '@lib/system-status';
 import { useAppStore } from '@stores/app-store';
 import { useEffect, useState } from 'react';
@@ -15,8 +16,9 @@ export default function SystemNotifications() {
   const feedDegraded = useAppStore((s) => s.feedDegraded);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => loadDismissedIds());
   const [now, setNow] = useState(() => Date.now());
+  const locale = useLocale();
 
-  const selection = selectActiveNotice(announcement, feedDegraded, dismissedIds, now);
+  const selection = selectActiveNotice(announcement, feedDegraded, dismissedIds, now, locale);
 
   // Tick once per second only while a countdown or expiry is pending.
   const needsTick =

@@ -3,10 +3,16 @@ import type { CSSProperties } from 'react';
 
 import { useNewsFeed } from '@hooks/useNewsFeed';
 import { useSpots } from '@hooks/useSpots';
-import { AD_EVERY, SPONSORS } from '@lib/sponsors';
+import { defineMessages, useLocale, useT } from '@lib/i18n';
+import { AD_EVERY, sponsorsFor } from '@lib/sponsors';
 
 import { mergeTickerItems, type TickerItem } from './news-ticker/items';
 import styles from './NewsTicker.module.css';
+
+const messages = defineMessages(
+  { crypto: 'CRYPTO', news: 'NEWS' },
+  { crypto: 'CRIPTO', news: 'NOTICIAS' },
+);
 
 const PX_PER_SEC = 34;
 const AD_ROTATE_MS = 20_000;
@@ -68,10 +74,11 @@ function AdChip({ item }: { item: AdItem }) {
 }
 
 function TickerChip({ item }: { item: TickerItem }) {
+  const t = useT(messages);
   if (item.kind === 'spot') {
     return (
       <div className={styles.chip}>
-        <span className={styles.category}>CRYPTO</span>
+        <span className={styles.category}>{t('crypto')}</span>
         <span className={styles.primary}>{symbolToBase(item.symbol)}</span>
         <span className={styles.secondary}>{fmtPrice(item.lastPrice)}</span>
         <span className={`${styles.change} ${changeClass(item.change24hPct)}`}>
@@ -82,7 +89,7 @@ function TickerChip({ item }: { item: TickerItem }) {
   }
 
   if (item.kind === 'news') {
-    const category = (item.label ?? 'NEWS').toUpperCase().replace(/[_-]/g, ' ');
+    const category = (item.label ?? t('news')).toUpperCase().replace(/[_-]/g, ' ');
     return (
       <a
         className={`${styles.chip} ${styles.chipLink}`}
@@ -104,6 +111,7 @@ function TickerChip({ item }: { item: TickerItem }) {
 export function NewsTicker() {
   const { data: news = [] } = useNewsFeed();
   const { data: spots = [] } = useSpots();
+  const locale = useLocale();
 
   const [adTick, setAdTick] = useState(0);
   useEffect(() => {
@@ -112,8 +120,15 @@ export function NewsTicker() {
   }, []);
 
   const items = useMemo(
-    () => mergeTickerItems({ news, spots, sponsors: SPONSORS, adEvery: AD_EVERY, startIndex: adTick }),
-    [news, spots, adTick],
+    () =>
+      mergeTickerItems({
+        news,
+        spots,
+        sponsors: sponsorsFor(locale),
+        adEvery: AD_EVERY,
+        startIndex: adTick,
+      }),
+    [news, spots, adTick, locale],
   );
 
   const itemsKey = useMemo(

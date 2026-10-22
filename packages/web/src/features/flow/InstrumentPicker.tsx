@@ -1,7 +1,26 @@
 import { useMemo, useState } from 'react';
 
+import { defineMessages, useT } from '@lib/i18n';
+
 import type { InstrumentRow } from './chart-queries';
 import styles from './InstrumentPicker.module.css';
+
+const messages = defineMessages(
+  {
+    loading: 'Loading…',
+    pick: 'Pick instrument',
+    filter: 'Filter…',
+    noMatches: 'No matches',
+    tradesCount: '{n} trades',
+  },
+  {
+    loading: 'Cargando…',
+    pick: 'Elige instrumento',
+    filter: 'Filtrar…',
+    noMatches: 'Sin coincidencias',
+    tradesCount: '{n} trades',
+  },
+);
 
 interface InstrumentPickerProps {
   instruments: InstrumentRow[];
@@ -11,6 +30,7 @@ interface InstrumentPickerProps {
 }
 
 export function InstrumentPicker({ instruments, selected, onSelect, loading }: InstrumentPickerProps) {
+  const t = useT(messages);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -32,7 +52,7 @@ export function InstrumentPicker({ instruments, selected, onSelect, loading }: I
         disabled={loading || instruments.length === 0}
       >
         <span className={styles.triggerLabel}>
-          {selectedRow ? selectedRow.instrument : loading ? 'Loading…' : 'Pick instrument'}
+          {selectedRow ? selectedRow.instrument : loading ? t('loading') : t('pick')}
         </span>
         <span className={styles.caret} aria-hidden="true">▾</span>
       </button>
@@ -41,14 +61,14 @@ export function InstrumentPicker({ instruments, selected, onSelect, loading }: I
         <div className={styles.dropdown} role="listbox">
           <input
             className={styles.search}
-            placeholder="Filter…"
+            placeholder={t('filter')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
           />
           <ul className={styles.list}>
             {filtered.length === 0 ? (
-              <li className={styles.empty}>No matches</li>
+              <li className={styles.empty}>{t('noMatches')}</li>
             ) : (
               filtered.slice(0, 100).map((row) => (
                 <li key={row.instrument}>
@@ -67,7 +87,7 @@ export function InstrumentPicker({ instruments, selected, onSelect, loading }: I
                       <span className={styles.rowType} data-type={row.optionType ?? 'unknown'}>
                         {row.optionType === 'call' ? 'C' : row.optionType === 'put' ? 'P' : '–'}
                       </span>
-                      <span className={styles.rowCount}>{row.count} trades</span>
+                      <span className={styles.rowCount}>{t('tradesCount', { n: row.count })}</span>
                     </span>
                   </button>
                 </li>

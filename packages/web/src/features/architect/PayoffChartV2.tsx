@@ -254,9 +254,8 @@ export default function PayoffChartV2({
   const snapshotLinesRef = useRef<ExpiryLinesPrimitive | null>(null);
   const anchorMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const lastWindowKeyRef = useRef<string>('');
-  // Keyed `${set}:${kind}` (future candles) and `${set}:${kind}:past` (realized-window line).
+  // Keyed `${set}:${kind}`.
   const ghostSeriesRef = useRef(new Map<string, ISeriesApi<'Candlestick'>>());
-  const ghostPastRef = useRef(new Map<string, ISeriesApi<'Line'>>());
   const ghostMarkersRef = useRef(new Map<string, ISeriesMarkersPluginApi<Time>>());
   const ghostTagsRef = useRef<{ series: ISeriesApi<'Candlestick'>; line: IPriceLine }[]>([]);
   const frontierSeriesRef = useRef(new Map<ProfitFrontier['kind'], ISeriesApi<'Line'>>());
@@ -345,7 +344,6 @@ export default function PayoffChartV2({
       anchorMarkersRef.current = null;
       lastWindowKeyRef.current = '';
       ghostSeriesRef.current.clear();
-      ghostPastRef.current.clear();
       ghostMarkersRef.current.clear();
       ghostTagsRef.current = [];
       frontierSeriesRef.current.clear();
@@ -470,8 +468,8 @@ export default function PayoffChartV2({
   // Series are kept per key and updated in place: removing and re-adding them
   // on every spot tick shrinks/grows the time scale's base index, which makes
   // lightweight-charts shift the visible range and undo the user's pan/zoom.
-  // A snapshot's stretch inside the real-candle window is hindsight, so it is
-  // drawn as a thin line over the real candles; only the forward part is ghosted.
+  // A snapshot's stretch inside the real-candle window is hindsight and only adds
+  // noise over the real candles, so just its forward part is drawn.
   useEffect(() => {
     const chart = chartApiRef.current;
     if (!chart) return;
@@ -496,7 +494,6 @@ export default function PayoffChartV2({
         for (const path of set.paths) {
           if (path.candles.length === 0) continue;
           const key = `${set.id}:${path.kind}`;
-          const pastKey = `${key}:past`;
           const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
           const bodyAlpha = (path.kind === 'theta' ? 0.18 : 0.3) * (muted ? 0.55 : 1);
           const edgeAlpha = muted ? 0.32 : 0.55;
@@ -520,7 +517,6 @@ export default function PayoffChartV2({
             ghostSeriesRef.current.set(key, series);
             ghostMarkersRef.current.set(key, createSeriesMarkers(series, []));
           }
-          const past = path.candles.filter((c) => c.timestamp <= lastRealMs);
           const future = path.candles.filter((c) => c.timestamp > lastRealMs);
           series.setData(
             future.map((c) => ({
@@ -533,41 +529,15 @@ export default function PayoffChartV2({
           );
           active.add(key);
 
-          if (past.length > 0) {
-            let line = ghostPastRef.current.get(pastKey);
-            const lineStyle = { color: rgba(rgb, muted ? 0.6 : 0.8), lineWidth: 1 as const };
-            if (line) {
-              line.applyOptions(lineStyle);
-            } else {
-              line = chart.addSeries(LineSeries, {
-                ...lineStyle,
-                crosshairMarkerVisible: false,
-                priceLineVisible: false,
-                lastValueVisible: false,
-              });
-              ghostPastRef.current.set(pastKey, line);
-              ghostMarkersRef.current.set(pastKey, createSeriesMarkers(line, []));
-            }
-            // Carry the line one bar into the ghost region so the two halves join.
-            line.setData(
-              [...past, ...future.slice(0, 1)].map((c) => ({
-                time: toSec(c.timestamp),
-                value: c.close,
-              })) as never,
-            );
-            active.add(pastKey);
-          }
-
           const crossing = findBreakevenCrossing(
             path.candles,
             set.breakevens,
             Number.isFinite(set.expiryMs) ? set.expiryMs : path.candles.at(-1)!.timestamp,
             locale,
           );
-          if (crossing) {
+          if (crossing && crossing.timestamp > lastRealMs) {
             const day = Math.floor(crossing.timestamp / MS_PER_DAY);
-            const markerKey = crossing.timestamp <= lastRealMs ? pastKey : key;
-            const list = markers.get(markerKey) ?? [];
+            const list = markers.get(key) ?? [];
             list.push({
               time: toSec(crossing.timestamp) as Time,
               position: path.targetPrice >= path.candles[0]!.open ? 'aboveBar' : 'belowBar',
@@ -576,7 +546,7 @@ export default function PayoffChartV2({
               text: labelledDays.has(day) ? '' : crossing.label,
               size: 0.6,
             });
-            markers.set(markerKey, list);
+            markers.set(key, list);
             labelledDays.add(day);
           }
 
@@ -600,9 +570,6 @@ export default function PayoffChartV2({
     for (const [key, plugin] of ghostMarkersRef.current) plugin.setMarkers(markers.get(key) ?? []);
     for (const [key, series] of ghostSeriesRef.current) {
       if (!active.has(key)) series.setData([]);
-    }
-    for (const [key, line] of ghostPastRef.current) {
-      if (!active.has(key)) line.setData([]);
     }
 
     // Bring the projection into view only when the projection identity changes

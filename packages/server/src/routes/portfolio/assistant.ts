@@ -12,6 +12,10 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import {
+  type PortfolioAssistantLiveRun,
+  portfolioAssistantLiveRuns,
+} from '../../portfolio-assistant-live-runs.js';
 import { PortfolioAssistantServiceError } from '../../portfolio-assistant-model-gateway.js';
 import { authenticateUser } from '../../user-service.js';
 
@@ -65,6 +69,69 @@ function sendAssistantError(reply: FastifyReply, error: unknown): FastifyReply {
 
 function frame(event: PortfolioAssistantStreamEvent): string {
   return `event: portfolio_assistant\ndata: ${JSON.stringify(PortfolioAssistantStreamEventSchema.parse(event))}\n\n`;
+}
+
+/** A client disconnect only detaches this subscriber; the run itself keeps going. */
+async function streamLiveRun(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  run: PortfolioAssistantLiveRun,
+): Promise<FastifyReply | undefined> {
+  const detached = new AbortController();
+  const onClosed = () => detached.abort();
+  reply.raw.once('close', onClosed);
+  const iterator = run.subscribe(detached.signal)[Symbol.asyncIterator]();
+
+  let first: IteratorResult<PortfolioAssistantStreamEvent>;
+  try {
+    first = await iterator.next();
+  } catch (error) {
+    reply.raw.off('close', onClosed);
+    return sendAssistantError(reply, error);
+  }
+
+  reply.headers({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const responseHeaders = reply.getHeaders();
+  for (const [name, value] of Object.entries(responseHeaders)) {
+    if (value !== undefined) reply.raw.setHeader(name, value);
+  }
+  reply.hijack();
+  reply.raw.writeHead(200);
+  const heartbeat = setInterval(() => {
+    if (!reply.raw.destroyed) reply.raw.write(': keep-alive\n\n');
+  }, 15_000);
+  heartbeat.unref?.();
+
+  try {
+    if (!first.done) reply.raw.write(frame(first.value));
+    while (!detached.signal.aborted) {
+      const next = await iterator.next();
+      if (next.done) break;
+      if (!reply.raw.destroyed) reply.raw.write(frame(next.value));
+    }
+  } catch (error) {
+    request.log.error({ err: error }, 'portfolio assistant stream failed');
+    if (!reply.raw.destroyed) {
+      reply.raw.write(
+        frame({
+          type: 'error',
+          code: 'internal_error',
+          message: 'Portfolio Assistant stream failed.',
+          retryable: true,
+        }),
+      );
+    }
+  } finally {
+    clearInterval(heartbeat);
+    reply.raw.off('close', onClosed);
+    if (!reply.raw.destroyed) reply.raw.end();
+  }
+  return undefined;
 }
 
 export async function portfolioAssistantRoutes(app: FastifyInstance) {
@@ -176,75 +243,54 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
           retryable: false,
         });
 
-      const controller = new AbortController();
-      const onAborted = () => controller.abort();
-      const onClosed = () => {
-        if (!reply.raw.writableEnded) controller.abort();
-      };
-      request.raw.once('aborted', onAborted);
-      reply.raw.once('close', onClosed);
-      const iterator = portfolioAssistantConversationService
-        .streamPortfolioAssistantReply(
-          request.user!,
-          params.data.threadId,
-          body.data,
-          controller.signal,
-        )
-        [Symbol.asyncIterator]();
-
-      let first: IteratorResult<PortfolioAssistantStreamEvent>;
+      const user = request.user!;
+      let run: PortfolioAssistantLiveRun;
       try {
-        first = await iterator.next();
+        run = portfolioAssistantLiveRuns.start(user.id, params.data.threadId, (signal) =>
+          portfolioAssistantConversationService.streamPortfolioAssistantReply(
+            user,
+            params.data.threadId,
+            body.data,
+            signal,
+          ),
+        );
       } catch (error) {
-        request.raw.off('aborted', onAborted);
-        reply.raw.off('close', onClosed);
         return sendAssistantError(reply, error);
       }
-
-      reply.headers({
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      });
-      const responseHeaders = reply.getHeaders();
-      for (const [name, value] of Object.entries(responseHeaders)) {
-        if (value !== undefined) reply.raw.setHeader(name, value);
-      }
-      reply.hijack();
-      reply.raw.writeHead(200);
-      const heartbeat = setInterval(() => {
-        if (!reply.raw.destroyed) reply.raw.write(': keep-alive\n\n');
-      }, 15_000);
-      heartbeat.unref?.();
-
-      try {
-        if (!first.done) reply.raw.write(frame(first.value));
-        while (true) {
-          const next = await iterator.next();
-          if (next.done) break;
-          reply.raw.write(frame(next.value));
-        }
-      } catch (error) {
-        request.log.error({ err: error }, 'portfolio assistant stream failed');
-        if (!reply.raw.destroyed) {
-          reply.raw.write(
-            frame({
-              type: 'error',
-              code: 'internal_error',
-              message: 'Portfolio Assistant stream failed.',
-              retryable: true,
-            }),
-          );
-        }
-      } finally {
-        clearInterval(heartbeat);
-        request.raw.off('aborted', onAborted);
-        reply.raw.off('close', onClosed);
-        if (!reply.raw.destroyed) reply.raw.end();
-      }
+      return streamLiveRun(request, reply, run);
     },
   );
+
+  app.get('/portfolio/assistant/threads/:threadId/stream', strictAuth, async (request, reply) => {
+    const params = ThreadParamsSchema.safeParse(request.params);
+    if (!params.success)
+      return reply
+        .status(400)
+        .send({ error: 'invalid_query', message: 'Thread ID is invalid.', retryable: false });
+    const run = portfolioAssistantLiveRuns.find(request.user!.id, params.data.threadId);
+    if (!run)
+      return reply.status(404).send({
+        error: 'run_not_found',
+        message: 'No Hermes response is in progress for this conversation.',
+        retryable: false,
+      });
+    return streamLiveRun(request, reply, run);
+  });
+
+  app.post('/portfolio/assistant/threads/:threadId/cancel', strictAuth, async (request, reply) => {
+    const params = ThreadParamsSchema.safeParse(request.params);
+    if (!params.success)
+      return reply
+        .status(400)
+        .send({ error: 'invalid_query', message: 'Thread ID is invalid.', retryable: false });
+    if (!portfolioAssistantLiveRuns.cancel(request.user!.id, params.data.threadId))
+      return reply.status(404).send({
+        error: 'run_not_found',
+        message: 'No Hermes response is in progress for this conversation.',
+        retryable: false,
+      });
+    return reply.status(204).send();
+  });
 
   app.delete('/portfolio/assistant/threads/:threadId', strictAuth, async (request, reply) => {
     const params = ThreadParamsSchema.safeParse(request.params);
@@ -252,6 +298,7 @@ export async function portfolioAssistantRoutes(app: FastifyInstance) {
       return reply
         .status(400)
         .send({ error: 'invalid_query', message: 'Thread ID is invalid.', retryable: false });
+    portfolioAssistantLiveRuns.cancel(request.user!.id, params.data.threadId);
     try {
       const deleted = await portfolioAssistantConversationService.deletePortfolioAssistantThread(
         request.user!.id,

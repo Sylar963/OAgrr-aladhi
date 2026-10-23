@@ -216,6 +216,13 @@ export async function streamPortfolioAssistantMessage(
       signal,
     },
   );
+  await consumePortfolioAssistantStream(response, onEvent);
+}
+
+async function consumePortfolioAssistantStream(
+  response: Response,
+  onEvent: (event: PortfolioAssistantStreamEvent) => void,
+): Promise<void> {
   if (!response.ok) {
     const body = (await response
       .json()
@@ -235,4 +242,37 @@ export async function streamPortfolioAssistantMessage(
       502,
     );
   for await (const event of parsePortfolioAssistantEventStream(response.body)) onEvent(event);
+}
+
+/** Reattaches to a reply still running on the server, replaying it from the start. */
+export async function attachPortfolioAssistantStream(
+  threadId: string,
+  signal: AbortSignal,
+  onEvent: (event: PortfolioAssistantStreamEvent) => void,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE}/portfolio/assistant/threads/${encodeURIComponent(threadId)}/stream`,
+    { headers: await headers(), signal },
+  );
+  await consumePortfolioAssistantStream(response, onEvent);
+}
+
+export async function cancelPortfolioAssistantRun(threadId: string): Promise<boolean> {
+  const response = await fetch(
+    `${API_BASE}/portfolio/assistant/threads/${encodeURIComponent(threadId)}/cancel`,
+    { method: 'POST', headers: await headers() },
+  );
+  if (response.status === 404) return false;
+  if (!response.ok) {
+    const body = (await response
+      .json()
+      .catch(() => null)) as Partial<PortfolioAssistantErrorResponse> | null;
+    throw new PortfolioAssistantApiError(
+      body?.error ?? 'cancel_failed',
+      body?.message ?? 'Could not stop Hermes.',
+      body?.retryable ?? true,
+      response.status,
+    );
+  }
+  return true;
 }

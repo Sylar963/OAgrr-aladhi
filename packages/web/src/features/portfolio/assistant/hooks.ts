@@ -13,6 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   PortfolioAssistantApiError,
+  attachPortfolioAssistantStream,
+  cancelPortfolioAssistantRun,
   createPortfolioAssistantThread,
   deletePortfolioAssistantThread,
   fetchPortfolioAssistantAccess,
@@ -125,18 +127,31 @@ export function usePortfolioAssistantConversation(
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const attachedMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMessages(query.data?.messages ?? []);
   }, [query.data?.messages, threadId]);
 
-  useEffect(() => () => controllerRef.current?.abort(), []);
+  // Leaving the page only detaches this view; the server keeps the reply running.
+  useEffect(
+    () => () => {
+      attachedMessageRef.current = null;
+      controllerRef.current?.abort();
+    },
+    [],
+  );
 
   const onEvent = useCallback((event: PortfolioAssistantStreamEvent) => {
     if (event.type === 'message_started') {
+      // A reattach replays the reply from its first delta, so drop the checkpointed text.
       setMessages((current) =>
         current.some((item) => item.messageId === event.assistantMessageId)
-          ? current
+          ? current.map((item) =>
+              item.messageId === event.assistantMessageId
+                ? { ...item, content: '', status: 'streaming' }
+                : item,
+            )
           : [
               ...current,
               {
@@ -174,6 +189,52 @@ export function usePortfolioAssistantConversation(
     }
   }, []);
 
+  const runStream = useCallback(
+    async (open: (signal: AbortSignal) => Promise<void>) => {
+      setError(null);
+      setErrorCode(null);
+      setIsStreaming(true);
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      try {
+        await open(controller.signal);
+      } catch (caught) {
+        const aborted = caught instanceof DOMException && caught.name === 'AbortError';
+        const finished = caught instanceof PortfolioAssistantApiError && caught.code === 'run_not_found';
+        if (!aborted && !finished) {
+          setError(caught instanceof Error ? caught.message : 'Could not ask Hermes.');
+          setErrorCode(
+            caught instanceof PortfolioAssistantApiError
+              ? caught.code
+              : caught instanceof Error
+                ? null
+                : 'ask_failed',
+          );
+        }
+      } finally {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          setIsStreaming(false);
+        }
+        await queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
+    [key, queryClient],
+  );
+
+  const lastMessage = query.data?.messages.at(-1);
+  const resumableMessageId =
+    lastMessage?.role === 'assistant' && lastMessage.status === 'streaming'
+      ? lastMessage.messageId
+      : null;
+
+  useEffect(() => {
+    if (!threadId || !resumableMessageId || isStreaming) return;
+    if (attachedMessageRef.current === resumableMessageId) return;
+    attachedMessageRef.current = resumableMessageId;
+    void runStream((signal) => attachPortfolioAssistantStream(threadId, signal, onEvent));
+  }, [isStreaming, onEvent, resumableMessageId, runStream, threadId]);
+
   const sendMessage = useCallback(
     async (message: string, forwardDays: number) => {
       if (!threadId || isStreaming) return;
@@ -191,39 +252,27 @@ export function usePortfolioAssistantConversation(
           createdAt: Date.now(),
         },
       ]);
-      setError(null);
-      setErrorCode(null);
-      setIsStreaming(true);
-      const controller = new AbortController();
-      controllerRef.current = controller;
-      try {
-        await streamPortfolioAssistantMessage(
+      await runStream((signal) =>
+        streamPortfolioAssistantMessage(
           threadId,
           { clientMessageId, message: content, forwardDays, locale: getLocale() },
-          controller.signal,
+          signal,
           onEvent,
-        );
-      } catch (caught) {
-        if (!(caught instanceof DOMException && caught.name === 'AbortError')) {
-          setError(caught instanceof Error ? caught.message : 'Could not ask Hermes.');
-          setErrorCode(
-            caught instanceof PortfolioAssistantApiError
-              ? caught.code
-              : caught instanceof Error
-                ? null
-                : 'ask_failed',
-          );
-        }
-      } finally {
-        controllerRef.current = null;
-        setIsStreaming(false);
-        await queryClient.invalidateQueries({ queryKey: key });
-      }
+        ),
+      );
     },
-    [isStreaming, key, onEvent, queryClient, threadId],
+    [isStreaming, onEvent, runStream, threadId],
   );
 
-  const stop = useCallback(() => controllerRef.current?.abort(), []);
+  // The cancelled event arrives on the open stream; abort locally only if the server had no run.
+  const stop = useCallback(() => {
+    if (!threadId) return;
+    void cancelPortfolioAssistantRun(threadId)
+      .then((cancelled) => {
+        if (!cancelled) controllerRef.current?.abort();
+      })
+      .catch(() => controllerRef.current?.abort());
+  }, [threadId]);
 
   return { messages, isLoading: query.isLoading, isStreaming, error, errorCode, sendMessage, stop };
 }

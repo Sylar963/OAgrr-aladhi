@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { derivePositionStore } from '../../derive-position-store.js';
 import { paradexPositionStore } from '../../paradex-position-store.js';
+import { portfolioAssistantLiveRuns } from '../../portfolio-assistant-live-runs.js';
 import { thalexPositionStore } from '../../thalex-position-store.js';
 import { revokePrivateWebSockets } from '../../websocket-security.js';
 import { getUserByToken, syncUser } from '../../user-service.js';
@@ -54,6 +55,7 @@ export async function paperAuthRoute(app: FastifyInstance) {
         message: 'Invalid or missing Authorization bearer token',
       });
     }
+    portfolioAssistantLiveRuns.cancel(user.id);
     invalidateWebSocketTicketsForUser(user.id);
     revokePrivateWebSockets(user.id);
     await Promise.allSettled([

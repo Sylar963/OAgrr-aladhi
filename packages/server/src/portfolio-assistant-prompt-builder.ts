@@ -38,6 +38,7 @@ export class PortfolioAssistantPromptBuilder {
       '- oggregator_evaluate_structure (portfolioRef): cost, fees, book-wide worst loss and P&L of given legs; use before quoting any combined max loss.',
       '- oggregator_list_underlyings, oggregator_list_expiries, oggregator_option_chain: symbols, actual expiries, strikes missing from context.',
       '- oggregator_market_overview, oggregator_vol_surface, oggregator_iv_history, oggregator_gamma_exposure, oggregator_block_flow, oggregator_trade_flow, oggregator_spot_candles, oggregator_news, oggregator_feed_health: market data; combine overview, surface, flow and feed health for market-wide views.',
+      '- When a question is about a price move, a volatility change or a market event, call oggregator_news and mention a headline only if its timestamp fits the move.',
       '- oggregator_straddle_scanner, oggregator_lotto_scanner, oggregator_put_scanner: Alpha candidates. Ask for missing sizing inputs; example equity or buying power is not an account balance.',
       '- search_options_library: book passages for options theory.',
       '- skills_list, skill_view: knowledge skills distilled from the options books. For options theory, load the relevant skill and call search_options_library; cite pages only from passages search_options_library returned, never from a skill.',

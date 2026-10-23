@@ -98,21 +98,45 @@
   color: var(--color-info);
 }
 
+.reading {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  color: #ededed;
+}
+
 .chart {
-  flex: 1 1 260px;
+  flex: 1 1 320px;
   min-width: 0;
-  max-width: 560px;
+  max-width: 720px;
   margin: 0;
+}
+
+.plotRow {
+  display: flex;
+  gap: 4px;
+}
+
+.plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 96px;
+  cursor: crosshair;
+  touch-action: pan-y;
 }
 
 .svg {
   display: block;
   width: 100%;
-  height: 56px;
+  height: 100%;
 }
 
-.band {
-  fill: color-mix(in srgb, var(--color-warning) 8%, transparent);
+.zoneHi {
+  fill: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+
+.zoneLo {
+  fill: color-mix(in srgb, var(--color-info) 8%, transparent);
 }
 
 .rule {
@@ -120,6 +144,10 @@
   stroke-width: 1;
   stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke;
+}
+
+.gap {
+  fill: color-mix(in srgb, var(--accent-primary) 14%, transparent);
 }
 
 .rho,
@@ -138,23 +166,153 @@
   stroke-dasharray: 2 2;
 }
 
-.axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2px;
+.zoneLabel {
+  position: absolute;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.zoneLabel[data-zone="hi"] {
+  color: var(--color-warning);
+}
+
+.zoneLabel[data-zone="mid"] {
+  color: var(--text-dim);
+  transform: translateY(-50%);
+}
+
+.zoneLabel[data-zone="lo"] {
+  color: var(--color-info);
+}
+
+.sinceMark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--color-warning);
+  pointer-events: none;
+}
+
+.cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--text-secondary);
+  pointer-events: none;
+}
+
+.dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.tooltip[data-side="right"] {
+  transform: translateX(8px);
+}
+
+.tooltip[data-side="left"] {
+  transform: translateX(calc(-100% - 8px));
+}
+
+.tooltip b {
+  color: #f2f2f2;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipTime {
+  color: var(--text-tertiary);
+}
+
+.yAxis {
+  position: relative;
+  width: 22px;
+  font-size: 9px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.yAxis span {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.xAxis {
+  position: relative;
+  height: 14px;
+  margin-right: 26px;
   font-size: 9px;
   color: var(--text-dim);
 }
 
+.xAxis span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.xAxis .nowTick {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
 .legend {
   display: flex;
-  gap: 10px;
-}
-
-.legend [data-series="rho"] {
-  color: var(--accent-primary);
-}
-
-.legend [data-series="ex-btc"] {
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 2px;
+  font-size: 10px;
   color: var(--text-tertiary);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend span::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+}
+
+.legend [data-series="rho"]::before {
+  border-top: 2px solid var(--accent-primary);
+}
+
+.legend [data-series="ex-btc"]::before {
+  border-top: 2px dotted var(--text-tertiary);
+}
+
+.legend [data-series="gap"]::before {
+  height: 8px;
+  background: color-mix(in srgb, var(--accent-primary) 25%, transparent);
 }

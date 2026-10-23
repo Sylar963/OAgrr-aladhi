@@ -18,6 +18,7 @@ import {
   createWorkerHmmFitter,
   SpotCandleService,
   type SpotCandleCurrency,
+  PerpCandleRuntime,
   PerpTickerRuntime,
   SpotRuntime,
   TradeRuntime,
@@ -106,6 +107,7 @@ export const volHeatmapRuntime =
 export const orderBookRuntime = process.env['ORDER_BOOK'] === '0' ? null : new OrderBookRuntime();
 export const spotService = new SpotRuntime();
 export const perpTickerService = new PerpTickerRuntime();
+export const perpCandleService = new PerpCandleRuntime();
 export const spotCandleService = new SpotCandleService();
 // Rolling mark + trade buffer for venues with no REST mark-history endpoint
 // (Derive). Fed by every adapter's quote recorder and by TradeRuntime, queried

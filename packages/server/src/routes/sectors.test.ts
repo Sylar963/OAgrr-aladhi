@@ -1,8 +1,11 @@
-import { CryptoSectorsResponseSchema } from '@oggregator/protocol';
+import {
+  CryptoSectorCorrelationResponseSchema,
+  CryptoSectorsResponseSchema,
+} from '@oggregator/protocol';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
-const { getSnapshot } = vi.hoisted(() => ({ getSnapshot: vi.fn() }));
+const { getSnapshot, getCandles } = vi.hoisted(() => ({ getSnapshot: vi.fn(), getCandles: vi.fn() }));
 
 vi.mock('@oggregator/core', () => ({
   getAllAdapters: vi.fn(() => [
@@ -10,7 +13,10 @@ vi.mock('@oggregator/core', () => ({
     { venue: 'paradex', listUnderlyings: vi.fn(async () => ['BTC', 'XAU']) },
   ]),
 }));
-vi.mock('../services.js', () => ({ perpTickerService: { getSnapshot } }));
+vi.mock('../services.js', () => ({
+  perpTickerService: { getSnapshot },
+  perpCandleService: { getCandles },
+}));
 
 import { sectorsRoute } from './sectors.js';
 
@@ -49,6 +55,36 @@ describe('GET /sectors', () => {
       'deribit',
       'paradex',
     ]);
+    await app.close();
+  });
+});
+
+describe('GET /sectors/correlation', () => {
+  const BAR = 300_000;
+  const last = 1_792_718_400_000;
+  const flat = new Map([
+    ['BTCUSDT', [{ start: last - BAR, close: 1, volume: 1 }, { start: last, close: 1, volume: 1 }]],
+  ]);
+
+  it('returns 503 until any Bybit candles have loaded', async () => {
+    getCandles.mockResolvedValueOnce({ barMs: BAR, lastClosedStart: last, series: new Map() });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/sectors/correlation' });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('computes once per closed bar', async () => {
+    getCandles.mockResolvedValue({ barMs: BAR, lastClosedStart: last, series: flat });
+    const app = await buildApp();
+    const first = await app.inject({ method: 'GET', url: '/sectors/correlation' });
+    expect(first.statusCode).toBe(200);
+    const body = CryptoSectorCorrelationResponseSchema.parse(first.json());
+    expect(body.sectorIds).toContain('majors');
+    expect(body.asOf).toBe(last + BAR);
+    const second = await app.inject({ method: 'GET', url: '/sectors/correlation' });
+    expect(second.body).toBe(first.body);
+    expect(getCandles.mock.calls[0]![0]).toContain('BTCUSDT');
     await app.close();
   });
 });

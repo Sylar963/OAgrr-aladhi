@@ -34,3 +34,59 @@ export const CryptoSectorsResponseSchema = z.object({
   baskets: z.array(CryptoSectorBasketSchema),
 });
 export type CryptoSectorsResponse = z.infer<typeof CryptoSectorsResponseSchema>;
+
+/** Cross-sector co-movement over one rolling window of 5m Bybit perp bars. */
+export const CryptoSectorCorrelationPointSchema = z.object({
+  /** End of the window (close time of its last bar). */
+  t: z.number().int().nonnegative(),
+  /** Mean pairwise correlation of equal-weight sector returns. */
+  avgCorr: z.number().nullable(),
+  /** Same, after regressing each sector on BTC: co-movement BTC does not explain. */
+  residualCorr: z.number().nullable(),
+  /** Share of variance on the first principal component (1/k … 1). */
+  pc1Share: z.number().nullable(),
+  /** Cross-sectional stdev of sector returns over the window, as a fraction. */
+  dispersion: z.number().nullable(),
+});
+export type CryptoSectorCorrelationPoint = z.infer<typeof CryptoSectorCorrelationPointSchema>;
+
+export const CryptoSectorCorrelationSectorSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  corrBtc: z.number().nullable(),
+  betaBtc: z.number().nullable(),
+  /** Mean pairwise correlation between the basket's own members. */
+  intraCorr: z.number().nullable(),
+});
+export type CryptoSectorCorrelationSector = z.infer<typeof CryptoSectorCorrelationSectorSchema>;
+
+export const CryptoSectorRegimeSchema = z.enum(['correlated', 'mixed', 'dispersed']);
+export type CryptoSectorRegime = z.infer<typeof CryptoSectorRegimeSchema>;
+
+/** GET /api/sectors/correlation. */
+export const CryptoSectorCorrelationResponseSchema = z.object({
+  asOf: z.number().int().nonnegative().nullable(),
+  barSec: z.number().int().positive(),
+  windowBars: z.number().int().positive(),
+  thresholds: z.object({ correlated: z.number(), dispersed: z.number() }),
+  regime: CryptoSectorRegimeSchema.nullable(),
+  /** When the current regime began, within the loaded history; null if it spans all of it. */
+  regimeSince: z.number().int().nonnegative().nullable(),
+  current: CryptoSectorCorrelationPointSchema.nullable(),
+  /** avgCorr now minus one hour earlier. */
+  change1h: z.number().nullable(),
+  /** avgCorr distribution over the loaded history (~3.5 days of windows). */
+  baseline: z.object({
+    mean: z.number().nullable(),
+    std: z.number().nullable(),
+    windows: z.number().int().nonnegative(),
+  }),
+  zScore: z.number().nullable(),
+  sectorIds: z.array(z.string()),
+  /** Current-window correlation matrix in `sectorIds` order; null where a sector lacked data. */
+  matrix: z.array(z.array(z.number().nullable())),
+  sectors: z.array(CryptoSectorCorrelationSectorSchema),
+  /** Last 24h, one point per bar. */
+  timeline: z.array(CryptoSectorCorrelationPointSchema),
+});
+export type CryptoSectorCorrelationResponse = z.infer<typeof CryptoSectorCorrelationResponseSchema>;

@@ -4,6 +4,7 @@ import type { CryptoSectorBasket, CryptoSectorQuote } from '@oggregator/protocol
 import { useAppStore } from '@stores/app-store';
 import { type CSSProperties, useState } from 'react';
 
+import CorrelationStrip from './CorrelationStrip';
 import { useCryptoSectors } from './queries';
 import styles from './SectorsView.module.css';
 
@@ -112,6 +113,8 @@ export default function SectorsView() {
           </span>
         ))}
       </div>
+
+      <CorrelationStrip />
 
       <div className={styles.grid}>
         {data.baskets.map((b) => (

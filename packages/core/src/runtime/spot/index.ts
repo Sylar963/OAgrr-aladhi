@@ -13,3 +13,9 @@ export {
   type PerpTickerRuntimeOptions,
   type PerpTickerSnapshot,
 } from './perp-tickers.js';
+export {
+  type PerpCandle,
+  PerpCandleRuntime,
+  type PerpCandleRuntimeOptions,
+  type PerpCandleSnapshot,
+} from './perp-candles.js';

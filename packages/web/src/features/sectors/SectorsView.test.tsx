@@ -43,6 +43,7 @@ const board: CryptoSectorsResponse = {
 
 vi.mock('./queries', () => ({
   useCryptoSectors: () => ({ data: board, isLoading: false, error: null }),
+  useSectorCorrelation: () => ({ data: undefined, isLoading: true }),
 }));
 
 import SectorsView, { collapsedMembers, formatMove, formatPrice } from './SectorsView';

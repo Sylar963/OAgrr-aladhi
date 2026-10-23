@@ -20,6 +20,7 @@ export const BYBIT_RFQ_WS_URL = 'wss://stream.bybit.com/v5/public/rfq';
 export const BYBIT_REST_BASE_URL = 'https://api.bybit.com';
 export const BYBIT_INSTRUMENTS_INFO = '/v5/market/instruments-info';
 export const BYBIT_TICKERS = '/v5/market/tickers';
+export const BYBIT_KLINE = '/v5/market/kline';
 export const BYBIT_SYSTEM_STATUS = '/v5/system/status';
 export const BYBIT_RECENT_TRADE = '/v5/market/recent-trade';
 

@@ -6,6 +6,8 @@ export interface SectorMemberDef {
   bybit?: string;
   /** Units per contract quote, e.g. 1000 for 1000PEPEUSDT; the price is divided back to one coin. */
   scale?: number;
+  /** Bybit stock/ETF perps trade thinly outside NYSE hours; correlation only counts in-session bars. */
+  session?: 'always' | 'us-equity';
 }
 
 export interface SectorBasketDef {
@@ -21,8 +23,19 @@ const thousand = (symbol: string, bybit = `1000${symbol}USDT`): SectorMemberDef 
 });
 
 // US100/US500 options settle on the index; Bybit has no index perp, so QQQ/SPY stand in.
-const US100: SectorMemberDef = { symbol: 'US100', label: 'US100 (QQQ)', bybit: 'QQQUSDT' };
-const US500: SectorMemberDef = { symbol: 'US500', label: 'US500 (SPY)', bybit: 'SPYUSDT' };
+const US100: SectorMemberDef = {
+  symbol: 'US100',
+  label: 'US100 (QQQ)',
+  bybit: 'QQQUSDT',
+  session: 'us-equity',
+};
+const US500: SectorMemberDef = {
+  symbol: 'US500',
+  label: 'US500 (SPY)',
+  bybit: 'SPYUSDT',
+  session: 'us-equity',
+};
+const stock = (symbol: string): SectorMemberDef => ({ symbol, session: 'us-equity' });
 
 export const SECTOR_TAPE: readonly (string | SectorMemberDef)[] = [
   'BTC',
@@ -89,10 +102,10 @@ export const SECTOR_BASKETS: readonly SectorBasketDef[] = [
       'PAXG',
       US500,
       US100,
-      'META',
-      'MSTR',
-      'MU',
-      'SPCX',
+      stock('META'),
+      stock('MSTR'),
+      stock('MU'),
+      stock('SPCX'),
     ],
   },
 ];
@@ -104,5 +117,6 @@ export function memberDef(member: string | SectorMemberDef): Required<SectorMemb
     label: def.label ?? def.symbol,
     bybit: def.bybit ?? `${def.symbol}USDT`,
     scale: def.scale ?? 1,
+    session: def.session ?? 'always',
   };
 }

@@ -1,7 +1,9 @@
 import type {
   PositionLeg,
   ThesisClassification,
+  ThesisDirection,
   ThesisStructureClass,
+  ThesisStructureShape,
 } from '@oggregator/protocol';
 
 import { buildPortfolioHorizonScenarios } from '../portfolio/pnl-curve.js';
@@ -25,18 +27,42 @@ export interface ClassifyBookInput {
   atmIv: number | null;
 }
 
-export function classifyBias(
-  upPnlUsd: number,
-  downPnlUsd: number,
-): { classification: Exclude<ThesisClassification, 'unknown'>; bias: number } {
+export interface BiasResult {
+  classification: Exclude<ThesisClassification, 'unknown'>;
+  bias: number;
+  shape: ThesisStructureShape | null;
+  lean: ThesisDirection | null;
+}
+
+function pnlSign(pnlUsd: number): -1 | 0 | 1 {
+  if (Math.abs(pnlUsd) < THESIS_MIN_PNL_USD) return 0;
+  return pnlUsd > 0 ? 1 : -1;
+}
+
+/**
+ * Directional when one side of the ±1σ move pays and the other costs. When both sides pay or
+ * both cost, the bet is on move size. Long vol paid mostly on one side is still a bet on that
+ * side, so a strong lean classifies as that direction. Short vol never does: it loses either
+ * way, so a short straddle that loses less on the way up is a bet that price stays put, not a
+ * bullish trade. `flatPnlUsd` (no move, same horizon) tells long vol from short vol, since a
+ * short straddle can still be up at ±1σ on decay alone.
+ */
+export function classifyBias(upPnlUsd: number, downPnlUsd: number, flatPnlUsd: number): BiasResult {
   const scale = Math.abs(upPnlUsd) + Math.abs(downPnlUsd);
-  if (Math.max(Math.abs(upPnlUsd), Math.abs(downPnlUsd)) < THESIS_MIN_PNL_USD || scale <= 0) {
-    return { classification: 'neutral', bias: 0 };
+  const up = pnlSign(upPnlUsd);
+  const down = pnlSign(downPnlUsd);
+  if ((up === 0 && down === 0) || scale <= 0) {
+    return { classification: 'neutral', bias: 0, shape: null, lean: null };
   }
   const bias = (upPnlUsd - downPnlUsd) / scale;
-  if (bias >= THESIS_BIAS_THRESHOLD) return { classification: 'bullish', bias };
-  if (bias <= -THESIS_BIAS_THRESHOLD) return { classification: 'bearish', bias };
-  return { classification: 'neutral', bias };
+  if (up !== down) {
+    return { classification: up > down ? 'bullish' : 'bearish', bias, shape: 'directional', lean: null };
+  }
+  const lean = bias >= THESIS_BIAS_THRESHOLD ? 'bullish' : bias <= -THESIS_BIAS_THRESHOLD ? 'bearish' : null;
+  if ((upPnlUsd + downPnlUsd) / 2 < flatPnlUsd) {
+    return { classification: 'neutral', bias, shape: 'short_vol', lean };
+  }
+  return { classification: lean ?? 'neutral', bias, shape: 'long_vol', lean };
 }
 
 function median(values: number[]): number | null {
@@ -53,13 +79,15 @@ function unknown(note: string): ThesisStructureClass {
     upPnlUsd: null,
     downPnlUsd: null,
     movePct: null,
+    shape: null,
+    lean: null,
     note,
   };
 }
 
 /**
- * Direction of a book over the thesis horizon: P&L at a ±1σ move to the horizon, IV held
- * constant. Entry prices are taken as given, so callers that want the exposure from now on
+ * Direction of a book over the thesis horizon: P&L at a ±1σ move (and no move) to the
+ * horizon, IV held constant. Entry prices are taken as given, so callers that want the exposure from now on
  * pass legs re-based to their current mark (see `rebaseToMark`).
  */
 export function classifyBook(input: ClassifyBookInput): ThesisStructureClass {
@@ -85,18 +113,17 @@ export function classifyBook(input: ClassifyBookInput): ThesisStructureClass {
     priced,
     nowMs,
     [msToHorizon / DAY_MS],
-    [-movePct, movePct],
+    [-movePct, 0, movePct],
   );
   if (scenarios.status !== 'ok') return unknown(scenarios.status.replaceAll('_', ' '));
 
   const down = scenarios.cells.find((cell) => cell.spotMovePct < 0);
+  const flat = scenarios.cells.find((cell) => cell.spotMovePct === 0);
   const up = scenarios.cells.find((cell) => cell.spotMovePct > 0);
-  if (down == null || up == null) return unknown('scenario grid incomplete');
+  if (down == null || flat == null || up == null) return unknown('scenario grid incomplete');
 
-  const { classification, bias } = classifyBias(up.pnlUsd, down.pnlUsd);
   return {
-    classification,
-    bias,
+    ...classifyBias(up.pnlUsd, down.pnlUsd, flat.pnlUsd),
     upPnlUsd: up.pnlUsd,
     downPnlUsd: down.pnlUsd,
     movePct,

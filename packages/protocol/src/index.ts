@@ -636,6 +636,8 @@ export {
   ThesisStatusSchema,
   type ThesisStructureClass,
   ThesisStructureClassSchema,
+  type ThesisStructureShape,
+  ThesisStructureShapeSchema,
   ThesisTightenRequestSchema,
   type ThesisView,
   ThesisViewSchema,

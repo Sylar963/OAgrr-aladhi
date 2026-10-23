@@ -306,9 +306,11 @@ export class ThesisService {
       combinedSources.push(source);
     }
 
+    let heldClass: ThesisStructureClass | null = null;
     let combined: ThesisStructureClass | null = null;
     let heldBookNote: string | null = null;
     if (held.length > 0) {
+      heldClass = classifyBook({ legs: held, spotUsd, horizonMs, nowMs, atmIv });
       combined = classifyBook({ legs: [...held, ...proposedLegs], spotUsd, horizonMs, nowMs, atmIv });
       heldBookNote =
         combined.classification === 'unknown'
@@ -342,6 +344,7 @@ export class ThesisService {
           reason: decision.reason,
           target,
           proposed,
+          held: heldClass,
           combined,
           spotUsd,
           materialCount: view?.diff?.materialCount ?? null,
@@ -353,6 +356,7 @@ export class ThesisService {
       decision: decision.decision,
       reason: decision.reason,
       proposed,
+      held: heldClass,
       combined,
       heldBookNote,
       view,

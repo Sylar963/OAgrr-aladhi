@@ -73,19 +73,22 @@ const gate: ThesisGateCheckResponse & { view: ThesisView } = {
     upPnlUsd: 221,
     downPnlUsd: -164,
     movePct: 4.1,
+    shape: 'directional',
+    lean: null,
     note: null,
   },
+  held: null,
   combined: null,
   heldBookNote: 'No connected BTC positions found; judged on the structure alone.',
   view,
 };
 
-function renderPanel(next: ThesisView = view) {
+function renderPanel(next: ThesisView = view, response: ThesisGateCheckResponse = gate) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <ThesisGatePanel
-        gate={{ ...gate, view: next }}
+        gate={{ ...response, view: next }}
         underlying="BTC"
         expiryOptions={['2026-10-23', '2026-10-30']}
         flipLevel="81500"
@@ -107,6 +110,31 @@ describe('ThesisGatePanel', () => {
     expect(screen.getByText(/a 1D candle closes above 85,105/)).toBeTruthy();
     expect(screen.getByText(/up \+\$221 \/ down −\$164/)).toBeTruthy();
     expect(screen.getByText(/0 of 2 changed materially/)).toBeTruthy();
+  });
+
+  it('names a short straddle short vol and blames the book when the book is what turned', () => {
+    const shortStraddle = {
+      classification: 'neutral' as const,
+      bias: 0.69,
+      upPnlUsd: -119,
+      downPnlUsd: -640,
+      movePct: 6.9,
+      shape: 'short_vol' as const,
+      lean: 'bullish' as const,
+      note: null,
+    };
+    const bullishBook = { ...gate.proposed, upPnlUsd: 900, downPnlUsd: -400 };
+    renderPanel(view, {
+      ...gate,
+      proposed: shortStraddle,
+      held: bullishBook,
+      combined: { ...bullishBook, upPnlUsd: 780, downPnlUsd: -1_040 },
+      heldBookNote: 'Combined with your thalex BTC book.',
+    });
+    expect(screen.getByText(/With this structure your BTC book turns bullish, against your bearish thesis/)).toBeTruthy();
+    expect(screen.getByText('short vol, bullish lean')).toBeTruthy();
+    expect(screen.getByText(/Book bullish → bullish/)).toBeTruthy();
+    expect(screen.queryByText(/This bullish structure/)).toBeNull();
   });
 
   it('collapses to "nothing to do" when the thesis is kept', async () => {

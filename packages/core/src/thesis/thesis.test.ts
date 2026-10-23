@@ -175,18 +175,45 @@ describe('thesis status', () => {
 
 describe('classifyBias', () => {
   it('classifies the case legends', () => {
-    expect(classifyBias(-18.05, 43.01).classification).toBe('bearish');
-    expect(classifyBias(221, -164).classification).toBe('bullish');
+    expect(classifyBias(-18.05, 43.01, 0)).toMatchObject({ classification: 'bearish', shape: 'directional' });
+    expect(classifyBias(221, -164, 0)).toMatchObject({ classification: 'bullish', shape: 'directional' });
   });
 
-  it('calls a long straddle with similar wings neutral', () => {
-    const result = classifyBias(100, 80);
-    expect(result.classification).toBe('neutral');
+  it('calls a long straddle with similar wings neutral long vol', () => {
+    const result = classifyBias(100, 80, -150);
+    expect(result).toMatchObject({ classification: 'neutral', shape: 'long_vol', lean: null });
     expect(result.bias).toBeCloseTo(20 / 180, 8);
   });
 
+  it('never calls a structure that loses on both sides directional', () => {
+    // The 2026-10-23 gated 82k short straddle with spot at 81,639.
+    expect(classifyBias(-119.04, -640.32, 900)).toMatchObject({
+      classification: 'neutral',
+      shape: 'short_vol',
+      lean: 'bullish',
+    });
+    expect(classifyBias(-731.41, -1453.01, 900)).toMatchObject({ classification: 'neutral', shape: 'short_vol' });
+  });
+
+  it('calls long vol paid mostly on one side that direction', () => {
+    // 3 held 83k puts plus 8 new 83k calls: the puts still pay on the way down.
+    expect(classifyBias(52_860, 3_698, -6_000)).toMatchObject({
+      classification: 'bullish',
+      shape: 'long_vol',
+      lean: 'bullish',
+    });
+  });
+
+  it('keeps a short put bullish', () => {
+    expect(classifyBias(465.29, -5035.22, 300)).toMatchObject({ classification: 'bullish', shape: 'directional' });
+  });
+
   it('calls dust-sized books neutral', () => {
-    expect(classifyBias(0.4, -0.3).classification).toBe('neutral');
+    expect(classifyBias(0.4, -0.3, 0)).toMatchObject({ classification: 'neutral', shape: null });
+  });
+
+  it('treats a dust side as flat, so the other side sets the direction', () => {
+    expect(classifyBias(0.4, -500, 0).classification).toBe('bullish');
   });
 });
 
@@ -204,6 +231,30 @@ describe('classifyBook', () => {
     const result = classifyBook({ legs: longPut, spotUsd: spot, horizonMs, nowMs, atmIv: 0.42 });
     expect(result.classification).toBe('bearish');
     expect(result.movePct).toBeCloseTo(0.42 * Math.sqrt((horizonMs - nowMs) / (365 * DAY_MS)) * 100, 6);
+  });
+
+  it('classifies straddles by move size, not by their lean', () => {
+    const shortStraddle = (strike: number, credit: number) => [
+      withMark(leg(strike, 'call', -1, credit / 2), spot),
+      withMark(leg(strike, 'put', -1, credit / 2), spot),
+    ];
+    const atm = classifyBook({ legs: shortStraddle(83_000, 3_000), spotUsd: spot, horizonMs, nowMs, atmIv: 0.42 });
+    expect(atm).toMatchObject({ classification: 'neutral', shape: 'short_vol', lean: null });
+
+    const above = classifyBook({ legs: shortStraddle(84_000, 3_000), spotUsd: spot, horizonMs, nowMs, atmIv: 0.42 });
+    expect(above).toMatchObject({ classification: 'neutral', shape: 'short_vol', lean: 'bullish' });
+    expect(above.upPnlUsd!).toBeLessThan(0);
+    expect(above.downPnlUsd!).toBeLessThan(above.upPnlUsd!);
+
+    const rich = classifyBook({ legs: shortStraddle(83_000, 6_000), spotUsd: spot, horizonMs, nowMs, atmIv: 0.42 });
+    expect(rich.upPnlUsd!).toBeGreaterThan(0);
+    expect(rich).toMatchObject({ classification: 'neutral', shape: 'short_vol' });
+
+    const long = shortStraddle(83_000, 3_000).map(({ leg: l, mark }) => ({ leg: { ...l, size: 1 }, mark }));
+    expect(classifyBook({ legs: long, spotUsd: spot, horizonMs, nowMs, atmIv: 0.42 })).toMatchObject({
+      classification: 'neutral',
+      shape: 'long_vol',
+    });
   });
 
   it('uses the minimum band when the horizon has passed', () => {

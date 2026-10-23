@@ -211,6 +211,13 @@
   color: var(--text-tertiary);
 }
 
+.volPass {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+}
+
 .diffTable {
   width: 100%;
   max-width: 560px;

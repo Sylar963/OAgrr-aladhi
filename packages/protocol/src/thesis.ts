@@ -15,6 +15,13 @@ export type ThesisDirection = z.infer<typeof ThesisDirectionSchema>;
 export const ThesisClassificationSchema = z.enum(['bullish', 'bearish', 'neutral', 'unknown']);
 export type ThesisClassification = z.infer<typeof ThesisClassificationSchema>;
 
+/**
+ * What a structure bets on over the thesis horizon. `long_vol` / `short_vol` win or lose on
+ * both sides of a ±1σ move, so they are bets on move size and never classify as a direction.
+ */
+export const ThesisStructureShapeSchema = z.enum(['directional', 'long_vol', 'short_vol']);
+export type ThesisStructureShape = z.infer<typeof ThesisStructureShapeSchema>;
+
 export const ThesisConfirmSecSchema = z.union([z.literal(14400), z.literal(86400)]);
 export type ThesisConfirmSec = z.infer<typeof ThesisConfirmSecSchema>;
 
@@ -226,6 +233,10 @@ export const ThesisStructureClassSchema = z.object({
   upPnlUsd: NullableNumber,
   downPnlUsd: NullableNumber,
   movePct: NullableNumber,
+  /** Null when unknown or too small to matter. */
+  shape: ThesisStructureShapeSchema.nullable(),
+  /** For volatility shapes, the direction whose side of the move pays more or costs less. */
+  lean: ThesisDirectionSchema.nullable(),
   note: z.string().nullable(),
 });
 export type ThesisStructureClass = z.infer<typeof ThesisStructureClassSchema>;
@@ -246,6 +257,8 @@ export const ThesisGateCheckResponseSchema = z.object({
   decision: z.enum(['pass', 'gate', 'unknown']),
   reason: ThesisGateReasonSchema,
   proposed: ThesisStructureClassSchema,
+  /** The held book alone, before the proposed structure; null when none was combined. */
+  held: ThesisStructureClassSchema.nullable(),
   combined: ThesisStructureClassSchema.nullable(),
   /** Set when the held book could not be combined or was empty. */
   heldBookNote: z.string().nullable(),

@@ -177,6 +177,26 @@ describe('ThesisService', () => {
     expect(unknown.decision).toBe('unknown');
   });
 
+  it('passes a short straddle that loses on both sides as short vol, not bullish', async () => {
+    const { service, market } = harness();
+    await service.create(ACCOUNT, bearishThesis);
+    const strike = Math.round(market.spot / 1_000) * 1_000 + 1_000;
+    const straddle: ThesisGateLeg[] = (['call', 'put'] as const).map((optionRight) => ({
+      expiry: '2026-10-23',
+      strike,
+      optionRight,
+      side: 'sell',
+      size: 1,
+      premiumUsd: 1_400,
+      iv: 0.42,
+    }));
+    const result = await service.gateCheck(ACCOUNT, gateRequest(straddle));
+    expect(result.proposed).toMatchObject({ classification: 'neutral', shape: 'short_vol' });
+    expect(result.proposed.upPnlUsd!).toBeLessThan(0);
+    expect(result.proposed.downPnlUsd!).toBeLessThan(0);
+    expect(result).toMatchObject({ decision: 'pass', reason: 'neutral' });
+  });
+
   it('combines the live held book: a small hedge on a bearish book passes, a flat-out flip gates', async () => {
     const { service, books } = harness();
     await service.create(ACCOUNT, bearishThesis);
@@ -185,6 +205,7 @@ describe('ThesisService', () => {
       { expiry: '2026-10-23', strike: 85_000, optionRight: 'call', side: 'buy', size: 0.5, premiumUsd: 700, iv: 0.42 },
     ];
     const hedged = await service.gateCheck(ACCOUNT, gateRequest(small));
+    expect(hedged.held?.classification).toBe('bearish');
     expect(hedged.combined?.classification).toBe('bearish');
     expect(hedged.decision).toBe('pass');
     expect(hedged.heldBookNote).toContain('thalex');
@@ -192,7 +213,9 @@ describe('ThesisService', () => {
     const big: ThesisGateLeg[] = [
       { expiry: '2026-10-23', strike: 83_000, optionRight: 'call', side: 'buy', size: 8, premiumUsd: 1_500, iv: 0.42 },
     ];
-    expect((await service.gateCheck(ACCOUNT, gateRequest(big))).decision).toBe('gate');
+    const flipped = await service.gateCheck(ACCOUNT, gateRequest(big));
+    expect(flipped.combined).toMatchObject({ classification: 'bullish', shape: 'long_vol', lean: 'bullish' });
+    expect(flipped.decision).toBe('gate');
 
     books.set('thalex', { live: false, legs: [heldLeg(83_000, 'put', 3, 1_400)] });
     const notLive = await service.gateCheck(ACCOUNT, gateRequest(small));

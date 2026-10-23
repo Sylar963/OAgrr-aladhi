@@ -4,6 +4,7 @@ import type {
   ThesisDiffKey,
   ThesisDirection,
   ThesisStatus,
+  ThesisStructureClass,
 } from '@oggregator/protocol';
 
 import { thesisMessages } from './i18n';
@@ -64,6 +65,18 @@ export const diffLabel = (key: ThesisDiffKey, locale: Locale = 'en') =>
 
 export const classificationLabel = (value: ThesisClassification, locale: Locale = 'en') =>
   translate(thesisMessages, `cls_${value}`, undefined, locale);
+
+export function structureLabel(value: ThesisStructureClass, locale: Locale = 'en'): string {
+  if (value.shape !== 'long_vol' && value.shape !== 'short_vol') {
+    return classificationLabel(value.classification, locale);
+  }
+  const shape = translate(thesisMessages, `shape_${value.shape}`, undefined, locale);
+  if (value.lean == null) return shape;
+  return translate(thesisMessages, 'shapeLean', { shape, lean: classificationLabel(value.lean, locale) }, locale);
+}
+
+export const isVolShape = (value: ThesisStructureClass | null | undefined) =>
+  value?.shape === 'long_vol' || value?.shape === 'short_vol';
 
 export function fmtDiffValue(key: ThesisDiffKey, value: number | null): string {
   if (value == null) return '—';

@@ -12,12 +12,12 @@ import {
   fmtDuration,
   fmtExpiry,
   fmtPrice,
-  fmtUsdSigned,
   statusLabel,
   wrongIfText,
 } from './format';
 import { useThesisRefresh } from './hooks';
 import { thesisMessages } from './i18n';
+import StructureSummary from './StructureSummary';
 import styles from './Thesis.module.css';
 
 interface ThesisGatePanelProps {
@@ -66,7 +66,11 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
   const { view } = gate;
   const { thesis, status } = view;
   const reversal = gate.reason === 'reversal_cooldown';
-  const target = gate.combined?.classification ?? gate.proposed.classification;
+  const bookTurned =
+    gate.combined != null &&
+    gate.combined.classification !== 'unknown' &&
+    gate.combined.classification !== gate.proposed.classification;
+  const target = bookTurned && gate.combined != null ? gate.combined.classification : gate.proposed.classification;
   const waitRunning = view.cooldown?.kind === 'wait' && !view.cooldown.completed;
 
   async function run(action: () => Promise<unknown>, next: typeof mode) {
@@ -117,7 +121,11 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
               underlying,
               age: fmtAge(thesis.endedAt ?? thesis.createdAt, locale),
             })
-          : t('againstHeader', { target: classificationLabel(target, locale), direction, underlying })}
+          : t(bookTurned ? 'againstHeaderBook' : 'againstHeader', {
+              target: classificationLabel(target, locale),
+              direction,
+              underlying,
+            })}
       </div>
 
       <blockquote className={styles.quote}>
@@ -141,16 +149,7 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
 
       {!reversal && <DiffTable view={view} />}
 
-      <div className={styles.structureLine}>
-        {t('structureUpDown', {
-          up: fmtUsdSigned(gate.proposed.upPnlUsd),
-          down: fmtUsdSigned(gate.proposed.downPnlUsd),
-        })}
-        {gate.proposed.movePct != null && ` ${t('structureMove', { pct: gate.proposed.movePct.toFixed(1) })}`}{' '}
-        {t('structureBy', { date: expiryLabel })}{' '}
-        <strong>{classificationLabel(gate.proposed.classification, locale)}</strong>.
-        {gate.heldBookNote && <span className={styles.note}> {gate.heldBookNote}</span>}
-      </div>
+      <StructureSummary gate={gate} horizonExpiry={thesis.horizonExpiry} />
 
       {!reversal && view.diff != null && (
         <div className={styles.verdict}>

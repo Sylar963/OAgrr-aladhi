@@ -1,13 +1,15 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
-import { useT } from '@lib/i18n';
+import { useLocale, useT } from '@lib/i18n';
 import type { ThesisDirection, ThesisGateLeg, ThesisView } from '@oggregator/protocol';
 import { useState } from 'react';
 
 import FlipBanner from './FlipBanner';
+import { classificationLabel, isVolShape } from './format';
 import { gateStructureKey, useThesisFor, useThesisGate } from './hooks';
 import { thesisMessages } from './i18n';
 import ThesisCreateForm from './ThesisCreateForm';
 import ThesisGatePanel from './ThesisGatePanel';
+import StructureSummary from './StructureSummary';
 import ThesisStrip from './ThesisStrip';
 import styles from './Thesis.module.css';
 
@@ -61,6 +63,7 @@ export default function ThesisSection({
 }: ThesisSectionProps) {
   const session = useAccountSession();
   const t = useT(thesisMessages);
+  const locale = useLocale();
   const [creating, setCreating] = useState(false);
   if (session.status !== 'ready') return null;
 
@@ -72,6 +75,12 @@ export default function ThesisSection({
   const gateView: ThesisView | null = gated ? gate?.view ?? null : null;
   const flipDirection: ThesisDirection = gateView?.thesis.direction === 'bearish' ? 'bullish' : 'bearish';
   const flipLevel = invalidationFromBreakevens(flipDirection, breakevens, spotUsd);
+  const activeThesis = thesis.active?.thesis ?? null;
+  const volPass =
+    gate?.decision === 'pass' &&
+    gate.reason === 'neutral' &&
+    activeThesis != null &&
+    isVolShape(gate.combined?.classification === 'unknown' ? gate.proposed : gate.combined ?? gate.proposed);
 
   return (
     <div className={styles.section}>
@@ -105,6 +114,17 @@ export default function ThesisSection({
           expiryOptions={expiryOptions}
           flipLevel={flipLevel == null ? '' : String(Math.round(flipLevel))}
         />
+      )}
+      {volPass && gate != null && activeThesis != null && (
+        <div className={styles.volPass} role="note">
+          <span>
+            {t('volPass', {
+              direction: classificationLabel(activeThesis.direction, locale),
+              underlying,
+            })}
+          </span>
+          <StructureSummary gate={gate} horizonExpiry={activeThesis.horizonExpiry} />
+        </div>
       )}
       {gate?.decision === 'unknown' && (thesis.active != null || thesis.reversal != null) && (
         <div className={styles.note}>

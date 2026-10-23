@@ -1,0 +1,124 @@
+.root {
+  font-size: var(--text-xs);
+  color: #d9d9d9;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.controlLabel {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 2px 10px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: none;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border-default);
+}
+
+.segmented button[aria-pressed="true"] {
+  color: var(--bg-base);
+  background: var(--accent-primary);
+}
+
+.note {
+  margin: 6px 0 10px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.empty {
+  padding: 24px 0;
+  color: var(--text-tertiary);
+}
+
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.colHead {
+  height: 128px;
+  padding: 0 0 4px;
+  vertical-align: bottom;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.colHead span {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+
+.btcHead {
+  color: var(--text-tertiary);
+}
+
+.rowHead {
+  padding: 0 8px 0 0;
+  font-weight: 700;
+  color: #ededed;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.flag {
+  margin-left: 4px;
+  color: var(--color-warning);
+}
+
+.cell {
+  min-width: 44px;
+  height: 26px;
+  padding: 0 4px;
+  text-align: center;
+  color: #f2f2f2;
+  background: var(--bg-surface);
+  border-radius: 2px;
+}
+
+.cell[data-diag] {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-elevated),
+    var(--bg-elevated) 3px,
+    var(--bg-surface) 3px,
+    var(--bg-surface) 6px
+  );
+}
+
+.btcCell {
+  outline: 1px solid var(--border-default);
+}

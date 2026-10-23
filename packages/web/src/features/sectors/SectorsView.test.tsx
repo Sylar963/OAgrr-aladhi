@@ -1,4 +1,8 @@
-import type { CryptoSectorQuote, CryptoSectorsResponse } from '@oggregator/protocol';
+import type {
+  CryptoSectorCorrelationResponse,
+  CryptoSectorQuote,
+  CryptoSectorsResponse,
+} from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -41,9 +45,37 @@ const board: CryptoSectorsResponse = {
   ],
 };
 
+const correlation: CryptoSectorCorrelationResponse = {
+  asOf: 1,
+  barSec: 300,
+  windowBars: 24,
+  thresholds: { correlated: 0.8, dispersed: 0.5 },
+  regime: 'mixed',
+  regimeSince: null,
+  current: null,
+  change1h: null,
+  baseline: { mean: null, std: null, windows: 0 },
+  zScore: null,
+  sectorIds: ['rwa'],
+  views: [{ windowBars: 24, matrix: [[1]], residualMatrix: [[1]], corrBtc: [0.06] }],
+  sectors: [
+    {
+      id: 'rwa',
+      name: 'RWA',
+      corrBtc: 0.064,
+      betaBtc: 0.061,
+      intraCorr: 0.276,
+      meanCorr: -0.21,
+      gapZ: -2.6,
+      decoupled: true,
+    },
+  ],
+  timeline: [],
+};
+
 vi.mock('./queries', () => ({
   useCryptoSectors: () => ({ data: board, isLoading: false, error: null }),
-  useSectorCorrelation: () => ({ data: undefined, isLoading: true }),
+  useSectorCorrelation: () => ({ data: correlation, isLoading: false }),
 }));
 
 import SectorsView, { collapsedMembers, formatMove, formatPrice } from './SectorsView';
@@ -87,5 +119,16 @@ describe('SectorsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'XAU' }));
     expect(useAppStore.getState().underlying).toBe('XAU');
     expect(useAppStore.getState().activeTab).toBe('chain');
+  });
+
+  it('tags tiles with their BTC correlation, flags decoupling, and switches to the matrix', () => {
+    render(<SectorsView />);
+    expect(screen.getByText('ρBTC 0.06 · β 0.06 · intra 0.28')).not.toBeNull();
+    const tag = screen.getByText('Decoupling');
+    expect(tag.getAttribute('title')).toContain('-0.21, 2.6σ below');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Correlation' }));
+    expect(screen.queryByText('ρBTC 0.06 · β 0.06 · intra 0.28')).toBeNull();
+    expect(screen.getByRole('button', { name: 'ex-BTC' })).not.toBeNull();
   });
 });

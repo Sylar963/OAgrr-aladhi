@@ -57,8 +57,24 @@ export const CryptoSectorCorrelationSectorSchema = z.object({
   betaBtc: z.number().nullable(),
   /** Mean pairwise correlation between the basket's own members. */
   intraCorr: z.number().nullable(),
+  /** Mean correlation to the other sectors. */
+  meanCorr: z.number().nullable(),
+  /** (`meanCorr` − market mean correlation) against this sector's own loaded history. */
+  gapZ: z.number().nullable(),
+  /** Unusually detached from the pack while the market overall is not dispersed. */
+  decoupled: z.boolean(),
 });
 export type CryptoSectorCorrelationSector = z.infer<typeof CryptoSectorCorrelationSectorSchema>;
+
+/** One heatmap window; matrices and `corrBtc` are in `sectorIds` order, null where a sector lacked data. */
+export const CryptoSectorCorrelationViewSchema = z.object({
+  windowBars: z.number().int().positive(),
+  matrix: z.array(z.array(z.number().nullable())),
+  /** Partial correlations after removing each sector's BTC beta. */
+  residualMatrix: z.array(z.array(z.number().nullable())),
+  corrBtc: z.array(z.number().nullable()),
+});
+export type CryptoSectorCorrelationView = z.infer<typeof CryptoSectorCorrelationViewSchema>;
 
 export const CryptoSectorRegimeSchema = z.enum(['correlated', 'mixed', 'dispersed']);
 export type CryptoSectorRegime = z.infer<typeof CryptoSectorRegimeSchema>;
@@ -83,8 +99,9 @@ export const CryptoSectorCorrelationResponseSchema = z.object({
   }),
   zScore: z.number().nullable(),
   sectorIds: z.array(z.string()),
-  /** Current-window correlation matrix in `sectorIds` order; null where a sector lacked data. */
-  matrix: z.array(z.array(z.number().nullable())),
+  /** Heatmap windows, shortest first; the first matches `windowBars`. */
+  views: z.array(CryptoSectorCorrelationViewSchema),
+  /** Per-sector stats over the `windowBars` window. */
   sectors: z.array(CryptoSectorCorrelationSectorSchema),
   /** Last 24h, one point per bar. */
   timeline: z.array(CryptoSectorCorrelationPointSchema),

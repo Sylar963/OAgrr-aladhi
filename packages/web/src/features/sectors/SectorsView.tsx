@@ -1,11 +1,16 @@
-import { Spinner } from '@components/ui';
+import { Spinner, Tabs } from '@components/ui';
 import { defineMessages, useT } from '@lib/i18n';
-import type { CryptoSectorBasket, CryptoSectorQuote } from '@oggregator/protocol';
+import type {
+  CryptoSectorBasket,
+  CryptoSectorCorrelationSector,
+  CryptoSectorQuote,
+} from '@oggregator/protocol';
 import { useAppStore } from '@stores/app-store';
 import { type CSSProperties, useState } from 'react';
 
+import CorrelationMatrix from './CorrelationMatrix';
 import CorrelationStrip from './CorrelationStrip';
-import { useCryptoSectors } from './queries';
+import { useCryptoSectors, useSectorCorrelation } from './queries';
 import styles from './SectorsView.module.css';
 
 const messages = defineMessages(
@@ -22,6 +27,15 @@ const messages = defineMessages(
     noOptions: 'No options venue',
     less: 'less ▴',
     more: '+{n} more ▾',
+    board: 'Board',
+    correlation: 'Correlation',
+    matrixLoading: 'Loading 5m candles…',
+    corrLine: 'ρBTC {corr} · β {beta} · intra {intra}',
+    corrTip:
+      'Last 2h of 5m returns. ρBTC / β: correlation and beta of the basket to BTC. intra: average correlation between the basket’s own members.',
+    decoupling: 'Decoupling',
+    decouplingTip:
+      'Correlation to the other sectors is {corr}, {z}σ below its usual gap to the market. This basket is moving on its own.',
   },
   {
     loading: 'Cargando sectores…',
@@ -36,6 +50,15 @@ const messages = defineMessages(
     noOptions: 'Sin exchange de opciones',
     less: 'menos ▴',
     more: '+{n} más ▾',
+    board: 'Tablero',
+    correlation: 'Correlación',
+    matrixLoading: 'Cargando velas de 5m…',
+    corrLine: 'ρBTC {corr} · β {beta} · intra {intra}',
+    corrTip:
+      'Últimas 2h de retornos de 5m. ρBTC / β: correlación y beta de la canasta frente a BTC. intra: correlación promedio entre los miembros de la canasta.',
+    decoupling: 'Desacople',
+    decouplingTip:
+      'La correlación con el resto de sectores es {corr}, {z}σ por debajo de su brecha habitual con el mercado. Esta canasta se mueve por su cuenta.',
   },
 );
 
@@ -78,9 +101,15 @@ export function collapsedMembers(members: CryptoSectorQuote[]): CryptoSectorQuot
   return [...priced.slice(0, half), ...priced.slice(-half)];
 }
 
+type View = 'board' | 'correlation';
+
+const fmtCorr = (v: number | null) => (v == null ? '—' : v.toFixed(2));
+
 export default function SectorsView() {
   const t = useT(messages);
   const { data, isLoading, error } = useCryptoSectors();
+  const correlation = useSectorCorrelation().data;
+  const [view, setView] = useState<View>('board');
 
   if (isLoading && !data) return <Spinner size="lg" label={t('loading')} />;
   if (!data) {
@@ -116,16 +145,44 @@ export default function SectorsView() {
 
       <CorrelationStrip />
 
-      <div className={styles.grid}>
-        {data.baskets.map((b) => (
-          <BasketTile key={b.id} basket={b} venueCount={data.venueCount} />
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { id: 'board', label: t('board') },
+          { id: 'correlation', label: t('correlation') },
+        ]}
+        active={view}
+        onChange={(id) => setView(id as View)}
+      />
+
+      {view === 'board' ? (
+        <div className={styles.grid}>
+          {data.baskets.map((b) => (
+            <BasketTile
+              key={b.id}
+              basket={b}
+              venueCount={data.venueCount}
+              stats={correlation?.sectors.find((s) => s.id === b.id)}
+            />
+          ))}
+        </div>
+      ) : correlation ? (
+        <CorrelationMatrix data={correlation} />
+      ) : (
+        <Spinner size="lg" label={t('matrixLoading')} />
+      )}
     </div>
   );
 }
 
-function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueCount: number }) {
+function BasketTile({
+  basket,
+  venueCount,
+  stats,
+}: {
+  basket: CryptoSectorBasket;
+  venueCount: number;
+  stats?: CryptoSectorCorrelationSector | undefined;
+}) {
   const t = useT(messages);
   const [expanded, setExpanded] = useState(false);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
@@ -145,6 +202,7 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
     <section
       className={styles.tile}
       data-bias={tileTone}
+      data-decoupled={stats?.decoupled || undefined}
       style={{ '--tint': `${Math.round(8 + tint * 30)}%` } as CSSProperties}
       aria-label={`${basket.name} ${formatMove(basket.mean)}`}
     >
@@ -154,6 +212,17 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
           {formatMove(basket.mean)}
         </span>
       </div>
+      {stats?.decoupled && (
+        <span
+          className={styles.decoupling}
+          title={t('decouplingTip', {
+            corr: fmtCorr(stats.meanCorr),
+            z: stats.gapZ == null ? '—' : Math.abs(stats.gapZ).toFixed(1),
+          })}
+        >
+          {t('decoupling')}
+        </span>
+      )}
       <div className={styles.tileMeta}>
         {t('meta', {
           rank: basket.rank != null ? `#${basket.rank}` : '#—',
@@ -162,6 +231,15 @@ function BasketTile({ basket, venueCount }: { basket: CryptoSectorBasket; venueC
           median: formatMove(basket.median),
         })}
       </div>
+      {stats && (
+        <div className={styles.tileCorr} title={t('corrTip')}>
+          {t('corrLine', {
+            corr: fmtCorr(stats.corrBtc),
+            beta: fmtCorr(stats.betaBtc),
+            intra: fmtCorr(stats.intraCorr),
+          })}
+        </div>
+      )}
       <ul className={styles.rows}>
         {rows.map((m) => (
           <li key={m.symbol} className={styles.row}>

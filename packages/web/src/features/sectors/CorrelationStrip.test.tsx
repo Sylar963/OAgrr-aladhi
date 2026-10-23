@@ -23,7 +23,7 @@ const data: CryptoSectorCorrelationResponse = {
   baseline: { mean: 0.7, std: 0.1, windows: 975 },
   zScore: 1.7,
   sectorIds: ['majors'],
-  matrix: [[1]],
+  views: [],
   sectors: [],
   timeline: [point(0, 0.6), point(1, null), point(2, 0.87)],
 };

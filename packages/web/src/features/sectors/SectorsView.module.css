@@ -111,13 +111,38 @@
 }
 
 .tileMeta {
-  margin: 2px 0 8px;
+  margin: 2px 0 0;
   font-size: 10px;
   color: var(--text-tertiary);
 }
 
+.tileCorr {
+  margin-top: 1px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile[data-decoupled] {
+  outline: 1px dashed var(--color-warning);
+  outline-offset: 2px;
+}
+
+.decoupling {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
+  border-radius: 2px;
+}
+
 .rows {
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
 }

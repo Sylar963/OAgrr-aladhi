@@ -3,14 +3,17 @@ import type {
   CryptoSectorCorrelationPoint,
   CryptoSectorCorrelationResponse,
   CryptoSectorCorrelationSector,
+  CryptoSectorCorrelationView,
   CryptoSectorRegime,
 } from '@oggregator/protocol';
 import { memberDef, type SectorBasketDef } from './baskets.js';
 
 export const CORRELATION_WINDOW_BARS = 24;
+/** Heatmap windows: 2h, 6h, 24h. */
+export const VIEW_WINDOW_BARS = [24, 72, 288] as const;
 const TIMELINE_BARS = 288;
 const BARS_PER_HOUR = 12;
-const MIN_ROWS = 18;
+const MIN_ROW_SHARE = 0.75;
 const MIN_SECTOR_COVERAGE = 0.75;
 const MIN_SECTORS = 3;
 // Calibrated on two weeks of Bybit 5m bars (Oct 2026): median 0.70, p10 0.50, p90 0.85.
@@ -19,6 +22,11 @@ const DISPERSED_AT = 0.5;
 // A regime is only left after crossing back past its threshold by this much, so `regimeSince`
 // marks a real shift instead of the last tick around the line.
 const HYSTERESIS = 0.05;
+// A sector is decoupling when its gap to the market's mean correlation sits this many stdevs below
+// its own norm and is material in absolute terms, while the market as a whole is not dispersed.
+// Scoring the gap rather than the level keeps a market-wide loosening from flagging every sector.
+const DECOUPLED_Z = -2;
+const DECOUPLED_GAP = -0.15;
 const POWER_ITERATIONS = 40;
 const BTC = 'BTCUSDT';
 
@@ -33,8 +41,11 @@ export type CorrelationWindowCache = Map<number, WindowResult & { detailed: bool
 
 interface WindowResult {
   point: CryptoSectorCorrelationPoint;
+  /** Sector indices backing `matrix` rows/columns. */
   included: number[];
   matrix: number[][];
+  /** Partial correlations given BTC; empty for summary windows or without BTC. */
+  residualMatrix: number[][];
   corrBtc: (number | null)[];
   betaBtc: (number | null)[];
 }
@@ -79,7 +90,10 @@ export function buildSectorCorrelation({
     const detailed = end >= detailFrom;
     let window = cache.get(t);
     if (!window || (detailed && !window.detailed)) {
-      window = { ...windowStats(sectorReturns, btc, end, t, detailed), detailed };
+      window = {
+        ...windowStats(sectorReturns, btc, end, t, CORRELATION_WINDOW_BARS, detailed),
+        detailed,
+      };
       cache.set(t, window);
     }
     history.push(window);
@@ -105,25 +119,43 @@ export function buildSectorCorrelation({
 
   const hourAgo = history[history.length - 1 - BARS_PER_HOUR]?.point.avgCorr ?? null;
   const ids = baskets.map((b) => b.id);
-  const matrix = ids.map(() => ids.map((): number | null => null));
-  if (latest) {
-    latest.included.forEach((si, a) =>
-      latest.included.forEach((sj, b) => {
-        matrix[si]![sj] = latest.matrix[a]![b]!;
-      }),
-    );
-  }
-
   const end = n - 1;
+  const marketCoupled = current?.avgCorr != null && current.avgCorr > DISPERSED_AT;
+
   const sectors = baskets.map((def, s): CryptoSectorCorrelationSector => {
     const at = latest?.included.indexOf(s) ?? -1;
+    const meanCorr = latest ? meanCorrToOthers(latest, s) : null;
+    const gap = (h: WindowResult) => {
+      const v = meanCorrToOthers(h, s);
+      return v == null || h.point.avgCorr == null ? null : v - h.point.avgCorr;
+    };
+    const past = history.flatMap((h) => {
+      const v = gap(h);
+      return v == null ? [] : [v];
+    });
+    const nowGap = latest ? gap(latest) : null;
+    const z = nowGap != null ? zScoreOf(nowGap, past) : null;
     return {
       id: def.id,
       name: def.name,
       corrBtc: at >= 0 ? (latest!.corrBtc[at] ?? null) : null,
       betaBtc: at >= 0 ? (latest!.betaBtc[at] ?? null) : null,
       intraCorr: end >= CORRELATION_WINDOW_BARS ? intraCorrelation(members[s]!, end) : null,
+      meanCorr,
+      gapZ: z,
+      decoupled:
+        marketCoupled && z != null && z <= DECOUPLED_Z && nowGap != null && nowGap <= DECOUPLED_GAP,
     };
+  });
+
+  const views = VIEW_WINDOW_BARS.map((bars): CryptoSectorCorrelationView => {
+    const window =
+      bars === CORRELATION_WINDOW_BARS
+        ? latest
+        : end >= bars
+          ? windowStats(sectorReturns, btc, end, lastClosedStart + barMs, bars, true)
+          : null;
+    return toView(bars, ids.length, window);
   });
 
   return {
@@ -141,10 +173,46 @@ export function buildSectorCorrelation({
         ? (current.avgCorr - baseMean) / std
         : null,
     sectorIds: ids,
-    matrix,
+    views,
     sectors,
     timeline: history.slice(-TIMELINE_BARS).map((h) => h.point),
   };
+}
+
+/** Expands a window's included-sector matrices to the full sector order, null where excluded. */
+function toView(
+  windowBars: number,
+  size: number,
+  window: WindowResult | null,
+): CryptoSectorCorrelationView {
+  const blank = () => Array.from({ length: size }, () => new Array<number | null>(size).fill(null));
+  const matrix = blank();
+  const residualMatrix = blank();
+  const corrBtc = new Array<number | null>(size).fill(null);
+  window?.included.forEach((si, a) => {
+    corrBtc[si] = window.corrBtc[a] ?? null;
+    window.included.forEach((sj, b) => {
+      matrix[si]![sj] = window.matrix[a]![b]!;
+      residualMatrix[si]![sj] = window.residualMatrix[a]?.[b] ?? null;
+    });
+  });
+  return { windowBars, matrix, residualMatrix, corrBtc };
+}
+
+function meanCorrToOthers(window: WindowResult, sector: number): number | null {
+  const at = window.included.indexOf(sector);
+  const k = window.included.length;
+  if (at < 0 || k < 2) return null;
+  let sum = 0;
+  for (let b = 0; b < k; b++) if (b !== at) sum += window.matrix[at]![b]!;
+  return sum / (k - 1);
+}
+
+function zScoreOf(value: number, sample: readonly number[]): number | null {
+  if (sample.length < 2) return null;
+  const mu = mean(sample);
+  const sd = Math.sqrt(sample.reduce((a, v) => a + (v - mu) ** 2, 0) / (sample.length - 1));
+  return sd > 0 ? (value - mu) / sd : null;
 }
 
 function classify(prev: CryptoSectorRegime | null, value: number | null): CryptoSectorRegime | null {
@@ -224,14 +292,16 @@ function windowStats(
   btc: Float64Array | null,
   end: number,
   t: number,
-  /** Older windows only feed the avgCorr baseline and regime; skip the eigen/residual work. */
+  bars: number,
+  /** Older windows only feed the baselines and regime; skip the BTC/eigen work. */
   detailed: boolean,
 ): WindowResult {
-  const from = end - CORRELATION_WINDOW_BARS + 1;
+  const from = end - bars + 1;
   const empty: WindowResult = {
     point: { t, avgCorr: null, residualCorr: null, pc1Share: null, dispersion: null },
     included: [],
     matrix: [],
+    residualMatrix: [],
     corrBtc: [],
     betaBtc: [],
   };
@@ -240,14 +310,14 @@ function windowStats(
   for (let s = 0; s < sectors.length; s++) {
     let have = 0;
     for (let i = from; i <= end; i++) if (Number.isFinite(sectors[s]![i]!)) have++;
-    if (have >= CORRELATION_WINDOW_BARS * MIN_SECTOR_COVERAGE) covered.push(s);
+    if (have >= bars * MIN_SECTOR_COVERAGE) covered.push(s);
   }
   const rows: number[] = [];
   for (let i = from; i <= end; i++) {
     if (btc && !Number.isFinite(btc[i]!)) continue;
     if (covered.every((s) => Number.isFinite(sectors[s]![i]!))) rows.push(i);
   }
-  if (rows.length < MIN_ROWS) return empty;
+  if (rows.length < bars * MIN_ROW_SHARE) return empty;
 
   const included: number[] = [];
   const z: Float64Array[] = [];
@@ -274,7 +344,7 @@ function windowStats(
   }
 
   const avgCorr = meanOffDiagonal(matrix);
-  if (!detailed) return { ...empty, point: { ...empty.point, avgCorr } };
+  if (!detailed) return { ...empty, point: { ...empty.point, avgCorr }, included, matrix };
 
   const zb = btc ? standardize(btc, rows) : null;
   const corrBtc = z.map((col) => (zb ? dot(col, zb.z) : null));
@@ -282,16 +352,21 @@ function windowStats(
 
   // Correlation of residuals after regressing each sector on BTC is the partial correlation.
   let residualCorr: number | null = null;
+  const residualMatrix: number[][] = [];
   if (zb) {
     let sum = 0;
     let pairs = 0;
+    for (let a = 0; a < k; a++) residualMatrix.push(new Array<number>(k).fill(1));
     for (let a = 0; a < k; a++) {
       for (let b = a + 1; b < k; b++) {
         const ra = corrBtc[a]!;
         const rb = corrBtc[b]!;
         const denom = Math.sqrt((1 - ra * ra) * (1 - rb * rb));
+        const r = denom > 1e-9 ? (matrix[a]![b]! - ra * rb) / denom : 0;
+        residualMatrix[a]![b] = r;
+        residualMatrix[b]![a] = r;
         if (denom > 1e-9) {
-          sum += (matrix[a]![b]! - ra * rb) / denom;
+          sum += r;
           pairs++;
         }
       }
@@ -310,6 +385,7 @@ function windowStats(
     },
     included,
     matrix,
+    residualMatrix,
     corrBtc,
     betaBtc,
   };
@@ -355,7 +431,7 @@ function intraCorrelation(members: readonly Float64Array[], end: number): number
           ys.push(y);
         }
       }
-      if (xs.length < MIN_ROWS) continue;
+      if (xs.length < CORRELATION_WINDOW_BARS * MIN_ROW_SHARE) continue;
       const r = pearson(xs, ys);
       if (r != null) values.push(r);
     }

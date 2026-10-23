@@ -472,6 +472,8 @@ export {
   CryptoSectorCorrelationResponseSchema,
   type CryptoSectorCorrelationSector,
   CryptoSectorCorrelationSectorSchema,
+  type CryptoSectorCorrelationView,
+  CryptoSectorCorrelationViewSchema,
   type CryptoSectorRegime,
   CryptoSectorRegimeSchema,
   type CryptoSectorQuote,

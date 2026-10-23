@@ -3,6 +3,8 @@ import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 import type {
   EquityHistoryVenue,
   PortfolioPnlCurve as PortfolioPnlCurveData,
+  PositionLeg,
+  StrategyGroup,
   VenueMarginResponse,
 } from '@oggregator/protocol';
 import { formatExpiry } from '@lib/format';
@@ -21,6 +23,8 @@ interface Props {
   builderDisabledReason?: string | undefined;
   equityVenue?: EquityHistoryVenue | null;
   margin?: VenueMarginResponse | null;
+  strategies?: readonly StrategyGroup[];
+  positions?: readonly PositionLeg[];
 }
 
 const WIDTH = 720;
@@ -225,7 +229,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status'], t: T): string {
   return t('emptyFallback');
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions }: Props) {
   const t = useT(messages);
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
@@ -402,6 +406,8 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
           onUnderlyingChange={setTaUnderlying}
           portfolioUnderlying={displayCurve.underlying}
           portfolioBreakEvensUsd={displayCurve.breakEvenPricesUsd}
+          strategies={strategies}
+          positions={positions}
         />
       </div>
     );

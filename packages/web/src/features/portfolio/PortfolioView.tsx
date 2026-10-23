@@ -296,6 +296,8 @@ export default function PortfolioView() {
             mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
             equityVenue={isEquityHistoryVenue(source) ? source : null}
             margin={source === 'thalex' ? (venueMargin ?? null) : null}
+            strategies={metrics?.strategies}
+            positions={positions}
           />
           <StrategyGroupsPanel
             groups={metrics?.strategies ?? []}

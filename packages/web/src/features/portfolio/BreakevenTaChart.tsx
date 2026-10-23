@@ -5,12 +5,19 @@ import {
   ColorType,
   LineStyle,
   createChart,
+  createSeriesMarkers,
   type AutoscaleInfo,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type MouseEventParams,
+  type SeriesMarker,
+  type SeriesMarkerShape,
   type Time,
 } from 'lightweight-charts';
+
+import type { PositionLeg, StrategyGroup } from '@oggregator/protocol';
 
 import { chainKeys } from '@features/chain';
 import { fetchJson } from '@lib/http';
@@ -30,6 +37,8 @@ import {
   type StructureBreakevens,
 } from './breakeven-levels';
 import styles from './BreakevenTaChart.module.css';
+import { candleIndexAt, strategyEntries, type StrategyEntry } from './entry-markers';
+import { legSummary, strategyLabel, strategyLabelMessages, type StrategyBias } from './strategy-label';
 
 export const TA_UNDERLYINGS = ['BTC', 'ETH'] as const;
 export type TaUnderlying = (typeof TA_UNDERLYINGS)[number];
@@ -61,6 +70,15 @@ const LINE_SPECS: LineSpec[] = [
   { key: 'portfolio', label: 'Portfolio BE', color: '#fbbf24', style: LineStyle.Dotted },
 ];
 
+const BIAS_MARKER: Record<StrategyBias, { color: string; shape: SeriesMarkerShape }> = {
+  bull: { color: '#60a5fa', shape: 'arrowUp' },
+  bear: { color: '#fb923c', shape: 'arrowDown' },
+  long_vol: { color: '#e879f9', shape: 'circle' },
+  short_vol: { color: '#e5e7eb', shape: 'circle' },
+};
+
+const ENTRY_HOVER_PX = 14;
+
 const messages = defineMessages(
   {
     atm0: '0DTE ATM straddle',
@@ -85,6 +103,15 @@ const messages = defineMessages(
     spotUnavailable: 'Spot history unavailable',
     retry: 'Retry',
     expiriesUnavailable: 'Expiries unavailable, so structure break-evens cannot be computed.',
+    entries: 'Entries',
+    entriesShown: '{shown} of {n} open structures',
+    entriesNone: 'no open structures',
+    opened: 'Opened {v}',
+    spotAtEntry: 'Spot at fill {v}',
+    spotApprox: 'Spot ≈ {v} (candle close, no fill anchor)',
+    netDebit: 'Net debit {v}',
+    netCredit: 'Net credit {v}',
+    leggedIn: 'Legged in over {v}; marked at the last leg',
     hint: 'Break-evens are a frozen snapshot from the front (0DTE) expiry and the listed expiries nearest 15d and 30d, priced at the median venue mid. ATM: strike ± straddle cost. Strangles: put strike − cost and call strike + cost, using strikes nearest 25% from spot (15d/30d) or nearest 25Δ by median venue delta (0DTE). Candles: Deribit perpetual.',
   },
   {
@@ -111,12 +138,24 @@ const messages = defineMessages(
     retry: 'Reintentar',
     expiriesUnavailable:
       'Vencimientos no disponibles, así que no se pueden calcular los breakevens de las estructuras.',
+    entries: 'Entradas',
+    entriesShown: '{shown} de {n} estructuras abiertas',
+    entriesNone: 'sin estructuras abiertas',
+    opened: 'Abierta {v}',
+    spotAtEntry: 'Spot en el fill {v}',
+    spotApprox: 'Spot ≈ {v} (cierre de vela, sin ancla de fill)',
+    netDebit: 'Débito neto {v}',
+    netCredit: 'Crédito neto {v}',
+    leggedIn: 'Armada en {v}; marcada en el último leg',
     hint: 'Los breakevens son un snapshot fijo del vencimiento más cercano (0DTE) y de los vencimientos listados más cercanos a 15d y 30d, valorados al mid mediano entre exchanges. ATM: strike ± costo del straddle. Strangles: strike del put − costo y strike del call + costo, usando los strikes más cercanos a 25% del spot (15d/30d) o al 25Δ más cercano por delta mediana entre exchanges (0DTE). Velas: perpetuo de Deribit.',
   },
 );
 
 const LINES_STORAGE_KEY = 'portfolioBeTaLines';
 const TIMEFRAME_STORAGE_KEY = 'portfolioBeTaTimeframe';
+const ENTRIES_STORAGE_KEY = 'portfolioBeTaEntries';
+const NO_STRATEGIES: readonly StrategyGroup[] = [];
+const NO_POSITIONS: readonly PositionLeg[] = [];
 const DEFAULT_LINES: Record<LineKey, boolean> = {
   atm0: true,
   otm0: true,
@@ -148,6 +187,26 @@ function loadTimeframe(): Timeframe {
     if (raw != null && raw in TIMEFRAMES) return raw as Timeframe;
   } catch {}
   return '30d';
+}
+
+function loadShowEntries(): boolean {
+  try {
+    return localStorage.getItem(ENTRIES_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+function fmtDuration(ms: number): string {
+  const hours = ms / 3_600_000;
+  return hours >= 48 ? `${Math.round(hours / 24)}d` : `${Math.max(1, Math.round(hours))}h`;
+}
+
+interface PlacedEntry {
+  entry: StrategyEntry;
+  time: number;
+  price: number;
+  approx: boolean;
 }
 
 function fmtLevel(value: number): string {
@@ -244,6 +303,8 @@ interface Props {
   onUnderlyingChange: (underlying: TaUnderlying) => void;
   portfolioUnderlying: string | null;
   portfolioBreakEvensUsd: number[];
+  strategies?: readonly StrategyGroup[];
+  positions?: readonly PositionLeg[];
 }
 
 export default function BreakevenTaChart({
@@ -251,15 +312,21 @@ export default function BreakevenTaChart({
   onUnderlyingChange,
   portfolioUnderlying,
   portfolioBreakEvensUsd,
+  strategies = NO_STRATEGIES,
+  positions = NO_POSITIONS,
 }: Props) {
   const t = useT(messages);
+  const tl = useT(strategyLabelMessages);
   const [lines, setLines] = useState(loadLines);
   const [timeframe, setTimeframe] = useState(loadTimeframe);
+  const [showEntries, setShowEntries] = useState(loadShowEntries);
+  const [hovered, setHovered] = useState<{ placed: PlacedEntry; x: number; y: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const didFitRef = useRef(false);
 
   const snapshot = usePreloadedSnapshot();
@@ -299,6 +366,27 @@ export default function BreakevenTaChart({
   const candlesError = candleResult.isError && candleData == null;
   const candlesPlaceholder = candleResult.isPlaceholderData;
   const refetchCandles = candleResult.refetch;
+
+  const entries = useMemo(
+    () => strategyEntries(strategies, positions, underlying),
+    [strategies, positions, underlying],
+  );
+  const placedEntries = useMemo(() => {
+    const candles = candleData?.candles ?? [];
+    const timestamps = candles.map((c) => c.timestamp);
+    const placed: PlacedEntry[] = [];
+    for (const entry of entries) {
+      const candle = candles[candleIndexAt(timestamps, entry.openedAtMs)];
+      if (candle == null) continue;
+      placed.push({
+        entry,
+        time: Math.floor(candle.timestamp / 1000),
+        price: entry.spotUsd ?? candle.close,
+        approx: entry.spotUsd == null,
+      });
+    }
+    return placed;
+  }, [entries, candleData]);
 
   const activeLevels = useMemo(() => {
     const levels: Array<{ spec: LineSpec; price: number; side: 'lower' | 'upper' | null }> = [];
@@ -340,13 +428,55 @@ export default function BreakevenTaChart({
     }) as ISeriesApi<'Candlestick', Time>;
     chartRef.current = chart;
     seriesRef.current = series;
+    markersRef.current = createSeriesMarkers(series, []);
     return () => {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      markersRef.current = null;
       priceLinesRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    const visible = showEntries ? placedEntries : [];
+    const markers: SeriesMarker<Time>[] = visible.map(({ entry, time, price }) => ({
+      id: entry.group.groupId,
+      time: time as Time,
+      position: 'atPriceMiddle',
+      price,
+      shape: BIAS_MARKER[entry.bias].shape,
+      color: BIAS_MARKER[entry.bias].color,
+      size: 1.6,
+      text: `${strategyLabel(entry.group, tl)} ${formatExpiry(entry.group.expiry)}`,
+    }));
+    markersRef.current?.setMarkers(markers);
+
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (chart == null || series == null || visible.length === 0) {
+      setHovered(null);
+      return;
+    }
+    const onMove = (param: MouseEventParams<Time>) => {
+      const point = param.point;
+      if (point == null || param.time == null) {
+        setHovered(null);
+        return;
+      }
+      let best: { placed: PlacedEntry; y: number; dist: number } | null = null;
+      for (const placed of visible) {
+        if (placed.time !== param.time) continue;
+        const y = series.priceToCoordinate(placed.price);
+        if (y == null) continue;
+        const dist = Math.abs(y - point.y);
+        if (dist <= ENTRY_HOVER_PX && (best == null || dist < best.dist)) best = { placed, y, dist };
+      }
+      setHovered(best == null ? null : { placed: best.placed, x: point.x, y: best.y });
+    };
+    chart.subscribeCrosshairMove(onMove);
+    return () => chart.unsubscribeCrosshairMove(onMove);
+  }, [placedEntries, showEntries, tl]);
 
   useEffect(() => {
     didFitRef.current = false;
@@ -415,6 +545,15 @@ export default function BreakevenTaChart({
         localStorage.setItem(LINES_STORAGE_KEY, JSON.stringify(next));
       } catch {}
       return next;
+    });
+  };
+
+  const toggleEntries = () => {
+    setShowEntries((prev) => {
+      try {
+        localStorage.setItem(ENTRIES_STORAGE_KEY, prev ? '0' : '1');
+      } catch {}
+      return !prev;
     });
   };
 
@@ -518,10 +657,29 @@ export default function BreakevenTaChart({
             </button>
           );
         })}
+        <button
+          type="button"
+          className={styles.chip}
+          data-active={showEntries || undefined}
+          data-unavailable={placedEntries.length === 0 || undefined}
+          aria-pressed={showEntries}
+          onClick={toggleEntries}
+        >
+          <span className={styles.entryDot} />
+          <span className={styles.chipLabel}>{t('entries')}</span>
+          <span className={styles.chipDetail}>
+            {entries.length === 0
+              ? t('entriesNone')
+              : t('entriesShown', { shown: placedEntries.length, n: entries.length })}
+          </span>
+        </button>
       </div>
 
       <div className={styles.chartWrap}>
         <div className={styles.canvas} ref={containerRef} />
+        {hovered != null && (
+          <EntryTooltip placed={hovered.placed} x={hovered.x} y={hovered.y} label={strategyLabel(hovered.placed.entry.group, tl)} />
+        )}
         {candlesLoading && <div className={styles.overlay}>{t('loadingSpot', { u: underlying })}</div>}
         {candlesError && (
           <div className={styles.overlay}>
@@ -538,6 +696,33 @@ export default function BreakevenTaChart({
           ? t('expiriesUnavailable')
           : t('hint')}
       </div>
+    </div>
+  );
+}
+
+function EntryTooltip({ placed, x, y, label }: { placed: PlacedEntry; x: number; y: number; label: string }) {
+  const t = useT(messages);
+  const { entry, price, approx } = placed;
+  const { group } = entry;
+  const net = group.netEntryPremiumUsd;
+  const opened = new Date(entry.openedAtMs).toLocaleString([], {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return (
+    <div className={styles.entryTooltip} style={{ left: x + 14, top: y }} role="tooltip">
+      <div className={styles.entryTitle} style={{ color: BIAS_MARKER[entry.bias].color }}>
+        {label} · {group.underlying} {formatExpiry(group.expiry)}
+      </div>
+      <div>{legSummary(group)}</div>
+      <div>{t('opened', { v: opened })}</div>
+      <div>{t(approx ? 'spotApprox' : 'spotAtEntry', { v: fmtLevel(price) })}</div>
+      {group.debitOrCredit !== 'flat' && (
+        <div>{t(net > 0 ? 'netDebit' : 'netCredit', { v: `$${Math.abs(net).toLocaleString(undefined, { maximumFractionDigits: Math.abs(net) >= 100 ? 0 : 2 })}` })}</div>
+      )}
+      {entry.leggedOverMs >= 3_600_000 && <div>{t('leggedIn', { v: fmtDuration(entry.leggedOverMs) })}</div>}
     </div>
   );
 }

@@ -9,11 +9,20 @@ const series = {
   applyOptions: vi.fn(),
 };
 
+const markers = { setMarkers: vi.fn() };
+
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: {},
   ColorType: { Solid: 'solid' },
   LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
-  createChart: () => ({ addSeries: () => series, remove: () => {}, timeScale: () => ({ fitContent: () => {} }) }),
+  createChart: () => ({
+    addSeries: () => series,
+    remove: () => {},
+    timeScale: () => ({ fitContent: () => {} }),
+    subscribeCrosshairMove: () => {},
+    unsubscribeCrosshairMove: () => {},
+  }),
+  createSeriesMarkers: () => markers,
 }));
 
 const SPOT = { BTC: 80_000, ETH: 2_000 } as const;

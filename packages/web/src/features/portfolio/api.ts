@@ -86,6 +86,7 @@ const PositionLegSchema: z.ZodType<PositionLeg> = z.object({
   entryPriceUsd: z.number(),
   entryIv: z.number().nullable(),
   entryIvIsModel: z.boolean().optional(),
+  entryUnderlyingUsd: z.number().positive().nullable().optional(),
   realizedPnlUsd: z.number().default(0),
   entryTs: z.number(),
   venueHint: WebVenueIdSchema.nullable(),

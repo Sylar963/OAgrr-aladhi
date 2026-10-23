@@ -11,6 +11,7 @@ import {
 } from './close-liquidity';
 import { closeNowMessages, giveBackLevel } from './close-now';
 import { fmtUsdSigned } from './format';
+import { legSummary, strategyLabel, strategyLabelMessages } from './strategy-label';
 import styles from './StrategyGroups.module.css';
 
 interface Props {
@@ -20,21 +21,6 @@ interface Props {
 
 const messages = defineMessages(
   {
-    bullCallSpread: 'Bull call spread',
-    bearCallSpread: 'Bear call spread',
-    bearPutSpread: 'Bear put spread',
-    bullPutSpread: 'Bull put spread',
-    longStraddle: 'Long straddle',
-    shortStraddle: 'Short straddle',
-    longStrangle: 'Long strangle',
-    shortStrangle: 'Short strangle',
-    shortIronCondor: 'Short iron condor',
-    longIronCondor: 'Long iron condor',
-    shortIronButterfly: 'Short iron butterfly',
-    longIronButterfly: 'Long iron butterfly',
-    longNaked: 'Long {right}',
-    shortNaked: 'Short {right}',
-    option: 'option',
     sell: 'Sell',
     buy: 'Buy',
     noPrice: 'no price',
@@ -77,21 +63,6 @@ const messages = defineMessages(
     openBook: 'Open book',
   },
   {
-    bullCallSpread: 'Call spread alcista',
-    bearCallSpread: 'Call spread bajista',
-    bearPutSpread: 'Put spread bajista',
-    bullPutSpread: 'Put spread alcista',
-    longStraddle: 'Long straddle',
-    shortStraddle: 'Short straddle',
-    longStrangle: 'Long strangle',
-    shortStrangle: 'Short strangle',
-    shortIronCondor: 'Short iron condor',
-    longIronCondor: 'Long iron condor',
-    shortIronButterfly: 'Short iron butterfly',
-    longIronButterfly: 'Long iron butterfly',
-    longNaked: 'Long {right}',
-    shortNaked: 'Short {right}',
-    option: 'opción',
     sell: 'Vender',
     buy: 'Comprar',
     noPrice: 'sin precio',
@@ -136,50 +107,6 @@ const messages = defineMessages(
 );
 
 type T = Translate<typeof messages.en>;
-
-function strategyLabel(group: StrategyGroup, t: T): string {
-  const long = group.legs.find((l) => l.size > 0);
-  const short = group.legs.find((l) => l.size < 0);
-  const first = group.legs[0];
-  switch (group.kind) {
-    case 'call_spread':
-      return long != null && short != null && long.strike < short.strike
-        ? t('bullCallSpread')
-        : t('bearCallSpread');
-    case 'put_spread':
-      return long != null && short != null && long.strike > short.strike
-        ? t('bearPutSpread')
-        : t('bullPutSpread');
-    case 'straddle':
-      return (first?.size ?? 0) > 0 ? t('longStraddle') : t('shortStraddle');
-    case 'strangle':
-      return (first?.size ?? 0) > 0 ? t('longStrangle') : t('shortStrangle');
-    case 'iron_condor':
-    case 'iron_butterfly': {
-      const condor = group.kind === 'iron_condor';
-      const outer = [...group.legs].sort((a, b) => a.strike - b.strike)[0];
-      if ((outer?.size ?? 0) > 0) return condor ? t('shortIronCondor') : t('shortIronButterfly');
-      return condor ? t('longIronCondor') : t('longIronButterfly');
-    }
-    case 'naked':
-      return t((first?.size ?? 0) > 0 ? 'longNaked' : 'shortNaked', {
-        right: first?.optionRight ?? t('option'),
-      });
-  }
-}
-
-function fmtQty(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
-}
-
-function legSummary(group: StrategyGroup): string {
-  const strikes = [...group.legs]
-    .sort((a, b) => a.strike - b.strike)
-    .map((l) => `${l.strike.toLocaleString(undefined, { maximumFractionDigits: 2 })}${l.optionRight === 'call' ? 'C' : 'P'}`)
-    .join(' / ');
-  const qty = Math.abs(group.legs[0]?.size ?? 0);
-  return `${strikes} × ${fmtQty(qty)}`;
-}
 
 function fmtAmount(abs: number): string {
   if (abs >= 100) return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -352,6 +279,7 @@ function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
 export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
   const t = useT(messages);
   const tc = useT(closeNowMessages);
+  const tl = useT(strategyLabelMessages);
   const locale = useLocale();
   if (groups.length === 0) return null;
 
@@ -394,7 +322,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             return (
               <div key={group.groupId} className={styles.row} role="row">
                 <span role="rowheader" className={styles.kind} data-kind={group.kind}>
-                  {strategyLabel(group, t)}
+                  {strategyLabel(group, tl)}
                   <small>
                     {group.underlying} · {group.expiry}
                   </small>

@@ -6,7 +6,6 @@ import {
   buildFractalPathOnTimes,
   projectionTimesOnGrid,
   pathTexture,
-  readRealized,
   realizedVol,
   FRACTAL_SHAPE_POINTS,
 } from './ghost-paths';
@@ -255,48 +254,5 @@ describe('projectionTimesOnGrid', () => {
       51 * HOUR_MS,
       52 * HOUR_MS,
     ]);
-  });
-});
-
-describe('readRealized', () => {
-  const HOUR_MS = 3_600_000;
-  const real = (closes: number[]) =>
-    closes.map((c, i) => ({ timestamp: i * HOUR_MS, open: c, high: c, low: c, close: c }));
-  const path = (kind: GhostPath['kind'], target: number, times: number[]): GhostPath => ({
-    kind,
-    isProfit: true,
-    targetPrice: target,
-    pnlAtExpiry: 0,
-    shape: [],
-    textureVol: 0.6,
-    candles: buildFractalPathOnTimes(100, target, 0, 10 * HOUR_MS, times, []),
-  });
-
-  it('scores realized price in √t band units and names the nearest path', () => {
-    const candles = real([100, 101, 102, 103, 104, 105]);
-    const times = projectionTimesOnGrid(0, 10 * HOUR_MS, 3600, candles.map((c) => c.timestamp));
-    const paths = [path('up', 110, times), path('down', 90, times), path('theta', 100, times)];
-    const r = readRealized(paths, candles, 100, 0, 10 * HOUR_MS)!;
-    expect(r.nearest).toBe('up');
-    expect(r.atExpiry).toBe(false);
-    expect(r.asOfMs).toBe(5 * HOUR_MS);
-    expect(r.sigma).toBeCloseTo(5 / (10 * Math.sqrt(0.5)), 6);
-  });
-
-  it('freezes the reading at expiry once the horizon has passed', () => {
-    const candles = real(Array.from({ length: 15 }, () => 95));
-    const times = projectionTimesOnGrid(0, 10 * HOUR_MS, 3600, candles.map((c) => c.timestamp));
-    const paths = [path('up', 110, times), path('down', 90, times), path('theta', 100, times)];
-    const r = readRealized(paths, candles, 100, 0, 10 * HOUR_MS)!;
-    expect(r.atExpiry).toBe(true);
-    expect(r.asOfMs).toBe(10 * HOUR_MS);
-    expect(r.sigma).toBeCloseTo(-0.5, 6);
-  });
-
-  it('returns null before any real candle has printed after the anchor', () => {
-    const candles = real([100]);
-    const times = projectionTimesOnGrid(0, 10 * HOUR_MS, 3600, [0]);
-    const paths = [path('up', 110, times), path('down', 90, times)];
-    expect(readRealized(paths, candles, 100, 0, 10 * HOUR_MS)).toBeNull();
   });
 });

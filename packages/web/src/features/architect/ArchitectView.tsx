@@ -41,7 +41,6 @@ import {
   projectionTimesOnGrid,
   realizedVol,
   pathTexture,
-  readRealized,
   DEFAULT_IV,
   type GhostPath,
 } from './ghost-paths';
@@ -55,11 +54,7 @@ import { repriceLeg } from './reprice';
 import { withPortfolioEntryPrice } from './portfolio-import';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
-import PayoffChartV2, {
-  pickCandleSpec,
-  type ProjectionSet,
-  type SnapshotOverlay,
-} from './PayoffChartV2';
+import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
 import PayoffChartV3 from './PayoffChartV3';
 import { buildExpiryMarks, expiryTimeMs } from './expiry-timeline';
 import { computeLongCallProfitFrontiers } from './profit-frontiers';
@@ -928,8 +923,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     [snapshots, selectedSnapshotId],
   );
 
-  // A selected snapshot is rebuilt at its original anchor on the chart's current
-  // bar grid and overlaid on the live projection (muted), never replacing it.
+  // A selected snapshot replaces the live projection, rebuilt at its original
+  // anchor on the chart's current bar grid.
   const realCandles = visibleSpotCandles?.candles;
   const snapshotGhostPaths: GhostPath[] = useMemo(() => {
     if (!selectedSnapshot) return [];
@@ -962,44 +957,18 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     }));
   }, [selectedSnapshot, candleResolutionSec, realCandles]);
 
+  const activeGhostPaths = selectedSnapshot ? snapshotGhostPaths : liveGhostPaths;
   const liveBreakevens = metrics?.breakevens;
-  const projectionSets: ProjectionSet[] = useMemo(() => {
-    const sets: ProjectionSet[] = [
-      {
-        id: 'live',
-        paths: liveGhostPaths,
-        breakevens: liveBreakevens ?? [],
-        expiryMs: nearestExpiryMs,
-      },
-    ];
-    if (selectedSnapshot) {
-      sets.push({
-        id: 'snapshot',
-        paths: snapshotGhostPaths,
-        breakevens: selectedSnapshot.breakevens ?? [],
-        expiryMs: selectedSnapshot.expiryMs,
-      });
-    }
-    return sets;
-  }, [liveGhostPaths, liveBreakevens, nearestExpiryMs, selectedSnapshot, snapshotGhostPaths]);
+  const ghostBreakevens = useMemo(
+    () => (selectedSnapshot ? selectedSnapshot.breakevens : liveBreakevens) ?? [],
+    [selectedSnapshot, liveBreakevens],
+  );
+  const ghostExpiryMs = selectedSnapshot?.expiryMs ?? nearestExpiryMs;
 
-  const snapshotOverlay: SnapshotOverlay | null = useMemo(() => {
-    if (!selectedSnapshot) return null;
-    return {
-      anchorMs: selectedSnapshot.createdAt,
-      spot: selectedSnapshot.spotAtSnapshot,
-      agoLabel: formatAgo(selectedSnapshot.createdAt, t),
-      breakevens: selectedSnapshot.breakevens ?? [],
-      expiryMs: selectedSnapshot.expiryMs,
-      realized: readRealized(
-        snapshotGhostPaths,
-        realCandles ?? [],
-        selectedSnapshot.spotAtSnapshot,
-        selectedSnapshot.createdAt,
-        selectedSnapshot.expiryMs,
-      ),
-    };
-  }, [selectedSnapshot, snapshotGhostPaths, realCandles, t]);
+  const snapshotMeta = useMemo(
+    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt, t) } : null),
+    [selectedSnapshot, t],
+  );
 
   const handleSnapshot = useCallback(() => {
     if (liveGhostPaths.length === 0 || !Number.isFinite(nearestExpiryMs)) return;
@@ -1465,9 +1434,11 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}
-                        projections={projectionSets}
-                        snapshot={snapshotOverlay}
+                        ghostPaths={activeGhostPaths}
+                        ghostBreakevens={ghostBreakevens}
+                        ghostExpiryMs={ghostExpiryMs}
                         showProjections={showProjections}
+                        snapshotMeta={snapshotMeta}
                         projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
                         profitFrontiers={profitFrontiers}
                         expiryMarks={expiryMarks}

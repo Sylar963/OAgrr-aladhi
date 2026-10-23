@@ -10,7 +10,6 @@ import {
   type ISeriesApi,
   type IPriceLine,
   type ISeriesMarkersPluginApi,
-  type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
 
@@ -21,28 +20,16 @@ import { dteDays, fmtUsd } from '@lib/format';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
 import type { SpotCandle } from './queries';
 import { ZonesPrimitive, type PriceZone } from './zones-primitive';
-import type { GhostPath, RealizedReading } from './ghost-paths';
+import type { GhostPath, GhostPathKind } from './ghost-paths';
 import type { ProfitFrontier } from './profit-frontiers';
-import { ExpiryLinesPrimitive, type VerticalLinePalette } from './expiry-lines-primitive';
-import { findBreakevenCrossing, fmtDayMonth, type ExpiryMark } from './expiry-timeline';
+import { ExpiryLinesPrimitive } from './expiry-lines-primitive';
+import { findBreakevenCrossing, type ExpiryMark } from './expiry-timeline';
 import styles from './Architect.module.css';
 
 const GHOST_RGB: Record<'profit' | 'loss', string> = {
   profit: '0,233,151',
   loss: '203,56,85',
 };
-const SNAP_RGB = '179,157,255';
-const SNAP_PALETTE: VerticalLinePalette = {
-  strong: `rgb(${SNAP_RGB})`,
-  muted: `rgba(${SNAP_RGB},0.5)`,
-  strongBg: 'rgba(36, 28, 64, 0.92)',
-  mutedBg: 'rgba(26, 22, 40, 0.85)',
-  labelTop: 26,
-};
-/** Snapshot break-evens within this fraction of a live one are already drawn. */
-const BE_MATCH_TOL = 0.0025;
-const SAME_EXPIRY_MS = 3_600_000;
-const MS_PER_DAY = 86_400_000;
 const messages = defineMessages(
   {
     ghost_up: '↑ up',
@@ -53,12 +40,6 @@ const messages = defineMessages(
     v1Accurate: 'The V1 expiry view stays accurate.',
     switchToV1: 'Switch back to V1',
     snapshotAgo: 'snapshot · {ago}',
-    live: 'live',
-    snapshotAnchor: '⎙ {ago} · {spot}',
-    snapshotExpiry: '⎙ EXP {date}',
-    snapBe: 'BE ⎙',
-    realized: 'realized {sigma}σ · near {path}',
-    realizedAtExpiry: 'at expiry {sigma}σ · near {path}',
     profitFrontier: 'PROFIT FRONTIER',
     ivShift: 'IV {iv}% ({shift} pts)',
     frontierNote: 'Above = modeled profit before exit costs',
@@ -72,12 +53,6 @@ const messages = defineMessages(
     v1Accurate: 'La vista de vencimiento V1 sigue siendo precisa.',
     switchToV1: 'Volver a V1',
     snapshotAgo: 'captura · {ago}',
-    live: 'en vivo',
-    snapshotAnchor: '⎙ {ago} · {spot}',
-    snapshotExpiry: '⎙ VTO {date}',
-    snapBe: 'BE ⎙',
-    realized: 'realizado {sigma}σ · cerca de {path}',
-    realizedAtExpiry: 'al vencimiento {sigma}σ · cerca de {path}',
     profitFrontier: 'FRONTERA DE GANANCIA',
     ivShift: 'IV {iv}% ({shift} pts)',
     frontierNote: 'Arriba = ganancia modelada antes de costos de salida',
@@ -94,30 +69,16 @@ interface PayoffChartV2Props {
   loading: boolean;
   available: boolean;
   onSwitchToV1: () => void;
-  projections: ProjectionSet[];
-  snapshot: SnapshotOverlay | null;
+  ghostPaths: GhostPath[];
+  /** Break-evens / expiry the projection was built against (a snapshot's own, not live). */
+  ghostBreakevens: number[];
+  ghostExpiryMs: number;
   showProjections: boolean;
+  snapshotMeta: { agoLabel: string } | null;
   projectionKey: string;
   profitFrontiers: ProfitFrontier[];
   expiryMarks: ExpiryMark[];
   invalidationLevel?: number | null;
-}
-
-/** One set of up/down/θ paths with the break-evens and expiry it was built against. */
-export interface ProjectionSet {
-  id: 'live' | 'snapshot';
-  paths: GhostPath[];
-  breakevens: number[];
-  expiryMs: number;
-}
-
-export interface SnapshotOverlay {
-  anchorMs: number;
-  spot: number;
-  agoLabel: string;
-  breakevens: number[];
-  expiryMs: number;
-  realized: RealizedReading | null;
 }
 
 export interface CandleSpec {
@@ -235,9 +196,11 @@ export default function PayoffChartV2({
   loading,
   available,
   onSwitchToV1,
-  projections,
-  snapshot,
+  ghostPaths,
+  ghostBreakevens,
+  ghostExpiryMs,
   showProjections,
+  snapshotMeta,
   projectionKey,
   profitFrontiers,
   expiryMarks,
@@ -251,12 +214,9 @@ export default function PayoffChartV2({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const primitiveRef = useRef<ZonesPrimitive | null>(null);
   const expiryLinesRef = useRef<ExpiryLinesPrimitive | null>(null);
-  const snapshotLinesRef = useRef<ExpiryLinesPrimitive | null>(null);
-  const anchorMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const ghostMarkersRef = useRef(new Map<GhostPathKind, ISeriesMarkersPluginApi<Time>>());
   const lastWindowKeyRef = useRef<string>('');
-  // Keyed `${set}:${kind}`.
-  const ghostSeriesRef = useRef(new Map<string, ISeriesApi<'Candlestick'>>());
-  const ghostMarkersRef = useRef(new Map<string, ISeriesMarkersPluginApi<Time>>());
+  const ghostSeriesRef = useRef(new Map<GhostPathKind, ISeriesApi<'Candlestick'>>());
   const ghostTagsRef = useRef<{ series: ISeriesApi<'Candlestick'>; line: IPriceLine }[]>([]);
   const frontierSeriesRef = useRef(new Map<ProfitFrontier['kind'], ISeriesApi<'Line'>>());
   const lastGhostFitKeyRef = useRef<string>('');
@@ -323,15 +283,11 @@ export default function PayoffChartV2({
     series.attachPrimitive(primitive);
     const expiryLines = new ExpiryLinesPrimitive();
     series.attachPrimitive(expiryLines);
-    const snapshotLines = new ExpiryLinesPrimitive(SNAP_PALETTE);
-    series.attachPrimitive(snapshotLines);
 
     chartApiRef.current = chart;
     seriesRef.current = series;
     primitiveRef.current = primitive;
     expiryLinesRef.current = expiryLines;
-    snapshotLinesRef.current = snapshotLines;
-    anchorMarkersRef.current = createSeriesMarkers(series, []);
 
     return () => {
       chart.remove();
@@ -340,8 +296,6 @@ export default function PayoffChartV2({
       priceLinesRef.current = [];
       primitiveRef.current = null;
       expiryLinesRef.current = null;
-      snapshotLinesRef.current = null;
-      anchorMarkersRef.current = null;
       lastWindowKeyRef.current = '';
       ghostSeriesRef.current.clear();
       ghostMarkersRef.current.clear();
@@ -428,21 +382,6 @@ export default function PayoffChartV2({
       priceLinesRef.current.push(spotLine);
     }
 
-    if (snapshot && showProjections) {
-      for (const be of snapshot.breakevens) {
-        if (breakevens.some((live) => Math.abs(live - be) <= live * BE_MATCH_TOL)) continue;
-        const line = series.createPriceLine({
-          price: be,
-          color: rgba(SNAP_RGB, 0.7),
-          lineWidth: 1,
-          lineStyle: LineStyle.LargeDashed,
-          axisLabelVisible: true,
-          title: t('snapBe'),
-        });
-        priceLinesRef.current.push(line);
-      }
-    }
-
     if (invalidationLevel != null && invalidationLevel > 0) {
       const thesisLine = series.createPriceLine({
         price: invalidationLevel,
@@ -454,7 +393,7 @@ export default function PayoffChartV2({
       });
       priceLinesRef.current.push(thesisLine);
     }
-  }, [breakevens, spotPrice, invalidationLevel, snapshot, showProjections, t]);
+  }, [breakevens, spotPrice, invalidationLevel, t]);
 
   // Push zones to the chart-canvas primitive. The primitive itself recomputes
   // pixel coordinates on every chart redraw via updateAllViews, so there is
@@ -465,11 +404,9 @@ export default function PayoffChartV2({
 
   // Render the projection paths as translucent candlestick series. Each series'
   // future data points extend the shared time scale into the projection region.
-  // Series are kept per key and updated in place: removing and re-adding them
+  // Series are kept per kind and updated in place: removing and re-adding them
   // on every spot tick shrinks/grows the time scale's base index, which makes
   // lightweight-charts shift the visible range and undo the user's pan/zoom.
-  // A snapshot's stretch inside the real-candle window is hindsight and only adds
-  // noise over the real candles, so just its forward part is drawn.
   useEffect(() => {
     const chart = chartApiRef.current;
     if (!chart) return;
@@ -477,99 +414,91 @@ export default function PayoffChartV2({
     const timeScale = chart.timeScale();
     const shouldFit = projectionKey !== lastGhostFitKeyRef.current;
     const preservedRange = shouldFit ? null : timeScale.getVisibleLogicalRange();
-    const lastRealMs = candles.at(-1)?.timestamp ?? -Infinity;
-    const toSec = (ms: number) => Math.floor(ms / 1000);
 
     for (const tag of ghostTagsRef.current) tag.series.removePriceLine(tag.line);
     ghostTagsRef.current = [];
 
-    const active = new Set<string>();
-    const markers = new Map<string, SeriesMarker<Time>[]>();
+    const activeKinds = new Set<GhostPathKind>();
     // Paths leaving spot together cross the same break-even on the same day;
     // label only the first so the texts don't stack on top of each other.
     const labelledDays = new Set<number>();
     if (showProjections) {
-      for (const set of projections) {
-        const muted = set.id === 'snapshot';
-        for (const path of set.paths) {
-          if (path.candles.length === 0) continue;
-          const key = `${set.id}:${path.kind}`;
-          const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
-          const bodyAlpha = (path.kind === 'theta' ? 0.18 : 0.3) * (muted ? 0.55 : 1);
-          const edgeAlpha = muted ? 0.32 : 0.55;
-          const style = {
-            upColor: rgba(rgb, bodyAlpha),
-            downColor: rgba(rgb, bodyAlpha),
-            borderUpColor: rgba(rgb, edgeAlpha),
-            borderDownColor: rgba(rgb, edgeAlpha),
-            wickUpColor: rgba(rgb, edgeAlpha),
-            wickDownColor: rgba(rgb, edgeAlpha),
-          };
-          let series = ghostSeriesRef.current.get(key);
-          if (series) {
-            series.applyOptions(style);
-          } else {
-            series = chart.addSeries(CandlestickSeries, {
-              ...style,
-              priceLineVisible: false,
-              lastValueVisible: false,
-            });
-            ghostSeriesRef.current.set(key, series);
-            ghostMarkersRef.current.set(key, createSeriesMarkers(series, []));
-          }
-          const future = path.candles.filter((c) => c.timestamp > lastRealMs);
-          series.setData(
-            future.map((c) => ({
-              time: toSec(c.timestamp), // seconds — match the main series
-              open: c.open,
-              high: c.high,
-              low: c.low,
-              close: c.close,
-            })) as never,
-          );
-          active.add(key);
-
-          const crossing = findBreakevenCrossing(
-            path.candles,
-            set.breakevens,
-            Number.isFinite(set.expiryMs) ? set.expiryMs : path.candles.at(-1)!.timestamp,
-            locale,
-          );
-          if (crossing && crossing.timestamp > lastRealMs) {
-            const day = Math.floor(crossing.timestamp / MS_PER_DAY);
-            const list = markers.get(key) ?? [];
-            list.push({
-              time: toSec(crossing.timestamp) as Time,
-              position: path.targetPrice >= path.candles[0]!.open ? 'aboveBar' : 'belowBar',
-              shape: 'circle',
-              color: rgba(rgb, muted ? 0.7 : 0.9),
-              text: labelledDays.has(day) ? '' : crossing.label,
-              size: 0.6,
-            });
-            markers.set(key, list);
-            labelledDays.add(day);
-          }
-
-          if (future.length > 0) {
-            ghostTagsRef.current.push({
-              series,
-              line: series.createPriceLine({
-                price: path.targetPrice,
-                color: rgba(rgb, muted ? 0.55 : 0.9),
-                lineVisible: false,
-                axisLabelVisible: true,
-                axisLabelColor: rgba(rgb, muted ? 0.4 : 0.85),
-                axisLabelTextColor: '#0A0A0A',
-                title: `${muted ? '⎙ ' : ''}${t(`ghost_${path.kind}`)} ${fmtUsd(path.pnlAtExpiry)}`,
-              }),
-            });
-          }
+      for (const path of ghostPaths) {
+        if (path.candles.length === 0) continue;
+        const rgb = path.isProfit ? GHOST_RGB.profit : GHOST_RGB.loss;
+        const bodyAlpha = path.kind === 'theta' ? 0.18 : 0.3;
+        const style = {
+          upColor: rgba(rgb, bodyAlpha),
+          downColor: rgba(rgb, bodyAlpha),
+          borderUpColor: rgba(rgb, 0.55),
+          borderDownColor: rgba(rgb, 0.55),
+          wickUpColor: rgba(rgb, 0.55),
+          wickDownColor: rgba(rgb, 0.55),
+        };
+        let series = ghostSeriesRef.current.get(path.kind);
+        if (series) {
+          series.applyOptions(style);
+        } else {
+          series = chart.addSeries(CandlestickSeries, {
+            ...style,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          ghostSeriesRef.current.set(path.kind, series);
+          ghostMarkersRef.current.set(path.kind, createSeriesMarkers(series, []));
         }
+        series.setData(
+          path.candles.map((c) => ({
+            time: Math.floor(c.timestamp / 1000) as number, // seconds — match the main series
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          })) as never,
+        );
+        const crossing = findBreakevenCrossing(
+          path.candles,
+          ghostBreakevens,
+          Number.isFinite(ghostExpiryMs) ? ghostExpiryMs : path.candles.at(-1)!.timestamp,
+          locale,
+        );
+        const crossingDay = crossing ? Math.floor(crossing.timestamp / 86_400_000) : null;
+        const showLabel = crossingDay != null && !labelledDays.has(crossingDay);
+        if (crossingDay != null) labelledDays.add(crossingDay);
+        const towardUp = path.targetPrice >= path.candles[0]!.open;
+        ghostMarkersRef.current.get(path.kind)?.setMarkers(
+          crossing
+            ? [
+                {
+                  time: Math.floor(crossing.timestamp / 1000) as Time,
+                  position: towardUp ? 'aboveBar' : 'belowBar',
+                  shape: 'circle',
+                  color: rgba(rgb, 0.9),
+                  text: showLabel ? crossing.label : '',
+                  size: 0.6,
+                },
+              ]
+            : [],
+        );
+        ghostTagsRef.current.push({
+          series,
+          line: series.createPriceLine({
+            price: path.targetPrice,
+            color: rgba(rgb, 0.9),
+            lineVisible: false,
+            axisLabelVisible: true,
+            axisLabelColor: rgba(rgb, 0.85),
+            axisLabelTextColor: '#0A0A0A',
+            title: `${t(`ghost_${path.kind}`)} ${fmtUsd(path.pnlAtExpiry)}`,
+          }),
+        });
+        activeKinds.add(path.kind);
       }
     }
-    for (const [key, plugin] of ghostMarkersRef.current) plugin.setMarkers(markers.get(key) ?? []);
-    for (const [key, series] of ghostSeriesRef.current) {
-      if (!active.has(key)) series.setData([]);
+    for (const [kind, series] of ghostSeriesRef.current) {
+      if (activeKinds.has(kind)) continue;
+      series.setData([]);
+      ghostMarkersRef.current.get(kind)?.setMarkers([]);
     }
 
     // Bring the projection into view only when the projection identity changes
@@ -581,7 +510,7 @@ export default function PayoffChartV2({
     } else if (preservedRange) {
       timeScale.setVisibleLogicalRange(preservedRange);
     }
-  }, [projections, showProjections, projectionKey, candles, locale, t]);
+  }, [ghostPaths, showProjections, projectionKey, ghostBreakevens, ghostExpiryMs, locale, t]);
 
   // Expiry lines are positioned off the last time point on the shared scale,
   // which the projection and frontier series extend past the last real candle.
@@ -589,69 +518,17 @@ export default function PayoffChartV2({
     let lastMs = candles.at(-1)?.timestamp ?? null;
     if (showProjections) {
       const extents = [
-        ...projections.flatMap((set) => set.paths.map((p) => p.candles.at(-1)?.timestamp)),
+        ...ghostPaths.map((p) => p.candles.at(-1)?.timestamp),
         ...profitFrontiers.map((f) => f.points.at(-1)?.timestamp),
       ];
       for (const t of extents) if (t != null && (lastMs == null || t > lastMs)) lastMs = t;
     }
-    const lastSec = lastMs == null ? null : Math.floor(lastMs / 1000);
-    expiryLinesRef.current?.setMarks(expiryMarks, lastSec, resolutionSec);
-
-    const snapshotMarks: ExpiryMark[] = [];
-    if (snapshot && showProjections) {
-      snapshotMarks.push({
-        expiryMs: snapshot.anchorMs,
-        label: t('snapshotAnchor', { ago: snapshot.agoLabel, spot: fmtUsd(snapshot.spot) }),
-        nearest: true,
-      });
-      const liveExpiryMs = expiryMarks[0]?.expiryMs;
-      if (liveExpiryMs == null || Math.abs(snapshot.expiryMs - liveExpiryMs) > SAME_EXPIRY_MS) {
-        snapshotMarks.push({
-          expiryMs: snapshot.expiryMs,
-          label: t('snapshotExpiry', { date: fmtDayMonth(snapshot.expiryMs, locale) }),
-          nearest: false,
-        });
-      }
-    }
-    snapshotLinesRef.current?.setMarks(snapshotMarks, lastSec, resolutionSec);
-  }, [
-    expiryMarks,
-    candles,
-    projections,
-    profitFrontiers,
-    showProjections,
-    resolutionSec,
-    snapshot,
-    locale,
-    t,
-  ]);
-
-  // Dot at the snapshot's capture point: the spot every path left from.
-  useEffect(() => {
-    const plugin = anchorMarkersRef.current;
-    if (!plugin) return;
-    let anchorBar: SpotCandle | undefined;
-    if (snapshot && showProjections) {
-      for (const c of candles) {
-        if (c.timestamp > snapshot.anchorMs) break;
-        anchorBar = c;
-      }
-    }
-    plugin.setMarkers(
-      anchorBar && snapshot
-        ? [
-            {
-              time: Math.floor(anchorBar.timestamp / 1000) as Time,
-              position: 'atPriceMiddle',
-              price: snapshot.spot,
-              shape: 'circle',
-              color: `rgb(${SNAP_RGB})`,
-              size: 0.8,
-            },
-          ]
-        : [],
+    expiryLinesRef.current?.setMarks(
+      expiryMarks,
+      lastMs == null ? null : Math.floor(lastMs / 1000),
+      resolutionSec,
     );
-  }, [snapshot, showProjections, candles]);
+  }, [expiryMarks, candles, ghostPaths, profitFrontiers, showProjections, resolutionSec]);
 
   useEffect(() => {
     const chart = chartApiRef.current;
@@ -712,43 +589,22 @@ export default function PayoffChartV2({
             <Spinner size="lg" />
           </div>
         )}
-        {showProjections && projections.some((set) => set.paths.length > 0) && (
+        {showProjections && ghostPaths.length > 0 && (
           <div className={styles.ghostLegend}>
-            {projections.map(
-              (set) =>
-                set.paths.length > 0 && (
-                  <div
-                    key={set.id}
-                    className={styles.ghostLegendGroup}
-                    data-muted={set.id === 'snapshot'}
-                  >
-                    {snapshot && (
-                      <div className={styles.ghostLegendSnap} data-set={set.id}>
-                        {set.id === 'snapshot'
-                          ? t('snapshotAgo', { ago: snapshot.agoLabel })
-                          : t('live')}
-                      </div>
-                    )}
-                    {set.paths.map((p) => (
-                      <div key={p.kind} className={styles.ghostLegendRow}>
-                        <span className={styles.ghostLegendDot} data-profit={p.isProfit} />
-                        <span className={styles.ghostLegendLabel}>{t(`ghost_${p.kind}`)}</span>
-                        <span className={styles.ghostLegendPnl} data-profit={p.isProfit}>
-                          {fmtUsd(p.pnlAtExpiry)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ),
-            )}
-            {snapshot?.realized && (
-              <div className={styles.ghostLegendRealized}>
-                {t(snapshot.realized.atExpiry ? 'realizedAtExpiry' : 'realized', {
-                  sigma: `${snapshot.realized.sigma >= 0 ? '+' : ''}${snapshot.realized.sigma.toFixed(1)}`,
-                  path: t(`ghost_${snapshot.realized.nearest}`),
-                })}
+            {snapshotMeta && (
+              <div className={styles.ghostLegendSnap}>
+                {t('snapshotAgo', { ago: snapshotMeta.agoLabel })}
               </div>
             )}
+            {ghostPaths.map((p) => (
+              <div key={p.kind} className={styles.ghostLegendRow}>
+                <span className={styles.ghostLegendDot} data-profit={p.isProfit} />
+                <span className={styles.ghostLegendLabel}>{t(`ghost_${p.kind}`)}</span>
+                <span className={styles.ghostLegendPnl} data-profit={p.isProfit}>
+                  {fmtUsd(p.pnlAtExpiry)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
         {showProjections && profitFrontiers.length > 0 && (

@@ -329,6 +329,7 @@ export {
   type BlockTradeEvent,
   type BlockTradeLeg,
   type BlockTradeRuntimeHealth,
+  type BlockTradeSource,
 } from './runtime/block-trades/index.js';
 export {
   mergeHeatmapColumns,

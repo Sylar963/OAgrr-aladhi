@@ -16,7 +16,14 @@ import { computeBlockTradeAmounts } from '../../trade-persistence.js';
 import type { VenueId } from '../../types/common.js';
 import { feedLogger } from '../../utils/logger.js';
 import { backoffDelay } from '../../utils/reconnect.js';
+import {
+  DERIBIT_OTC_TAPE_CHANNEL,
+  DeribitOtcBlockAssembler,
+  fetchDeribitOtcSeed,
+  parseDeribitOtcLegs,
+} from './deribit-otc.js';
 import { createBlockVenueState, mergeBlockVenueState } from './health.js';
+import { areOptionLegs, deriveStrategy, extractUnderlying, isOptionInstrument } from './instruments.js';
 import { BLOCK_TRADE_RUNTIME_BUFFER_SIZE, insertBlockTrades } from './retention.js';
 import type {
   BlockTradeEvent,
@@ -47,6 +54,7 @@ const MAX_DERIVE_PAGES_PER_POLL = 25;
 /**
  * Aggregates block/RFQ trades across all venues.
  * Deribit + Bybit via WebSocket (real-time), OKX + Binance + Derive via REST polling.
+ * Deribit also streams OTC blocks (Paradigm, bilateral) off its public option tape.
  */
 export class BlockTradeRuntime {
   private buffer: BlockTradeEvent[] = [];
@@ -229,36 +237,6 @@ export class BlockTradeRuntime {
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function extractUnderlying(instrument: string): string {
-  return instrument.split('-')[0]!.replace(/_.*$/, '').toUpperCase();
-}
-
-function isOptionInstrument(instrument: string): boolean {
-  const parts = instrument.split('-');
-  // Bybit appended a currency suffix in 2026: BTC-28MAR26-60000-C-USDT.
-  // Find C/P from the end so both old and new formats work.
-  let typeIdx = -1;
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i] === 'C' || parts[i] === 'P') {
-      typeIdx = i;
-      break;
-    }
-  }
-  if (typeIdx < 0) return false;
-  const strike = parts[typeIdx - 1];
-  const expiry = parts[typeIdx - 2];
-  const hasStrike = strike != null && /^[0-9]+(?:\.[0-9]+)?$/.test(strike);
-  const hasExpiry =
-    expiry != null && (/^\d{1,2}[A-Z]{3}\d{2}$/.test(expiry) || /^\d{6,8}$/.test(expiry));
-  return hasStrike && hasExpiry;
-}
-
-function areOptionLegs(instruments: string[]): boolean {
-  return (
-    instruments.length > 0 && instruments.every((instrument) => isOptionInstrument(instrument))
-  );
-}
-
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
@@ -306,6 +284,7 @@ function mapDeribitBlockTrade(
 
   const blockTrade: BlockTradeEvent = {
     venue: 'deribit',
+    source: 'rfq',
     tradeId: String(trade.id),
     timestamp: trade.timestamp,
     underlying,
@@ -390,8 +369,13 @@ interface TopicBlockStreamConfig {
   subscribeMessage: Record<string, unknown>;
   pingMessage: Record<string, unknown>;
   pingIntervalMs: number;
-  parseFrame: (msg: Record<string, unknown>) => BlockTradeEvent[];
+  /** `emit` delivers trades assembled after the frame, e.g. once a block's legs are complete. */
+  parseFrame: (
+    msg: Record<string, unknown>,
+    emit: (trades: BlockTradeEvent[]) => void,
+  ) => BlockTradeEvent[];
   seed?: () => Promise<BlockTradeEvent[]>;
+  onDispose?: () => void;
 }
 
 function topicBlockStream(config: TopicBlockStreamConfig): BlockVenueStream {
@@ -415,7 +399,7 @@ function topicBlockStream(config: TopicBlockStreamConfig): BlockVenueStream {
         onMessage: (raw) => {
           try {
             const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
-            const trades = config.parseFrame(msg);
+            const trades = config.parseFrame(msg, handlers.onTrades);
             if (trades.length > 0) handlers.onTrades(trades);
           } catch (err) {
             log.debug({ venue: config.venue, err: String(err) }, 'malformed WS frame');
@@ -441,17 +425,24 @@ function topicBlockStream(config: TopicBlockStreamConfig): BlockVenueStream {
       const current = client;
       client = null;
       void current?.disconnect();
+      config.onDispose?.();
     },
   };
 }
 
-function parseDeribitBlockFrame(msg: Record<string, unknown>): BlockTradeEvent[] {
+function parseDeribitBlockFrame(
+  msg: Record<string, unknown>,
+  otcAssembler: DeribitOtcBlockAssembler,
+): BlockTradeEvent[] {
   if (msg['method'] !== 'subscription') return [];
   const params = msg['params'] as Record<string, unknown> | undefined;
   const data = params?.['data'];
   if (!data || typeof data !== 'object') return [];
   // Deribit pushes single block_rfq objects, not arrays
-  const items = Array.isArray(data) ? data : [data];
+  const items: unknown[] = Array.isArray(data) ? data : [data];
+  if (params?.['channel'] === DERIBIT_OTC_TAPE_CHANNEL) {
+    return otcAssembler.push(parseDeribitOtcLegs(items));
+  }
   const trades: BlockTradeEvent[] = [];
   for (const item of items) {
     const parsed = DeribitBlockRfqSchema.safeParse(item);
@@ -463,6 +454,8 @@ function parseDeribitBlockFrame(msg: Record<string, unknown>): BlockTradeEvent[]
 }
 
 function deribitBlockStream(): BlockVenueStream {
+  let otcAssembler: DeribitOtcBlockAssembler | null = null;
+
   return topicBlockStream({
     venue: 'deribit',
     url: DERIBIT_WS_URL,
@@ -470,39 +463,26 @@ function deribitBlockStream(): BlockVenueStream {
       jsonrpc: '2.0',
       id: 1,
       method: 'public/subscribe',
-      params: { channels: ['block_rfq.trades.any'] },
+      params: { channels: ['block_rfq.trades.any', DERIBIT_OTC_TAPE_CHANNEL] },
     },
     pingMessage: { jsonrpc: '2.0', id: 0, method: 'public/test', params: {} },
     pingIntervalMs: DERIBIT_BLOCK_KEEPALIVE_MS,
-    parseFrame: parseDeribitBlockFrame,
-    seed: seedDeribitBlockTrades,
+    parseFrame: (msg, emit) => {
+      otcAssembler ??= new DeribitOtcBlockAssembler(emit);
+      return parseDeribitBlockFrame(msg, otcAssembler);
+    },
+    seed: async () => {
+      const [rfqTrades, otcTrades] = await Promise.all([
+        seedDeribitBlockTrades(),
+        fetchDeribitOtcSeed(fetchJson),
+      ]);
+      return [...rfqTrades, ...otcTrades];
+    },
+    onDispose: () => {
+      otcAssembler?.dispose();
+      otcAssembler = null;
+    },
   });
-}
-
-// Deribit combo_id encodes strategy: BTC-STRD-27MAR26-70000, BTC-CS-..., etc.
-function deriveStrategy(comboId: string | null | undefined, legCount: number): string | null {
-  if (!comboId) return legCount > 1 ? 'CUSTOM' : null;
-  const parts = comboId.split('-');
-  const code = parts[1]?.toUpperCase();
-  const STRATEGY_MAP: Record<string, string> = {
-    STRD: 'STRADDLE',
-    STRG: 'STRANGLE',
-    CS: 'CALL_SPREAD',
-    PS: 'PUT_SPREAD',
-    CF: 'CALL_BUTTERFLY',
-    PF: 'PUT_BUTTERFLY',
-    IC: 'IRON_CONDOR',
-    IB: 'IRON_BUTTERFLY',
-    CR: 'CALL_RATIO',
-    PR: 'PUT_RATIO',
-    CCS: 'CALL_CALENDAR_SPREAD',
-    PCS: 'PUT_CALENDAR_SPREAD',
-    CD: 'CALL_DIAGONAL',
-    PD: 'PUT_DIAGONAL',
-    FSR: 'FUTURE_SPREAD',
-    COMBO: 'COMBO',
-  };
-  return STRATEGY_MAP[code ?? ''] ?? (legCount > 1 ? 'CUSTOM' : null);
 }
 
 // ── Bybit (WS real-time) ─────────────────────────────────────
@@ -538,6 +518,7 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
 
   return {
     venue: 'bybit',
+    source: 'rfq',
     tradeId: trade.rfqId,
     timestamp: Number(trade.updatedAt ?? trade.createdAt),
     underlying,
@@ -635,6 +616,7 @@ function okxBlockPoller(): BlockVenuePoller {
 
           trades.push({
             venue: 'okx',
+            source: 'rfq',
             tradeId: d.blockTdId,
             timestamp: Number(d.cTime),
             underlying,
@@ -699,6 +681,7 @@ function binanceBlockPoller(): BlockVenuePoller {
 
           trades.push({
             venue: 'binance',
+            source: 'rfq',
             tradeId: String(d.id),
             timestamp: d.time,
             underlying,
@@ -763,6 +746,7 @@ function mapDeriveBlockTrade(trade: z.infer<typeof DeriveTradeSchema>): BlockTra
 
   return {
     venue: 'derive',
+    source: 'rfq',
     tradeId: trade.trade_id,
     timestamp: trade.timestamp,
     underlying: extractUnderlying(trade.instrument_name),

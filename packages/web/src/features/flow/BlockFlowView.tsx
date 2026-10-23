@@ -19,6 +19,8 @@ const messages = defineMessages(
     legSize: '{size} ct',
     legRatio: ' · ratio {ratio}',
     perContract: '{price} per contract',
+    otc: 'OTC',
+    otcTitle: 'Negotiated off-exchange (Paradigm or bilateral) and printed on the venue tape',
     loadingBlocks: 'Loading block trades…',
     failedBlocks: 'Failed to load institutional trades',
     failedBlocksDetail:
@@ -28,12 +30,14 @@ const messages = defineMessages(
     noStoredBlocksDetail:
       'Try a wider date window, another venue selection, or let ingest collect more history.',
     noBlocksYetDetail:
-      'RFQ and block trades will appear here as they execute across Deribit, OKX, Bybit, Binance, and Derive.',
+      'RFQ, OTC and block trades will appear here as they execute across Deribit, OKX, Bybit, Binance, and Derive.',
   },
   {
     legSize: '{size} ct',
     legRatio: ' · ratio {ratio}',
     perContract: '{price} por contrato',
+    otc: 'OTC',
+    otcTitle: 'Negociado fuera del exchange (Paradigm o bilateral) e impreso en la cinta del venue',
     loadingBlocks: 'Cargando block trades…',
     failedBlocks: 'No se pudieron cargar los trades institucionales',
     failedBlocksDetail:
@@ -43,7 +47,7 @@ const messages = defineMessages(
     noStoredBlocksDetail:
       'Prueba un rango de fechas más amplio, otra selección de exchanges o deja que la ingesta reúna más historial.',
     noBlocksYetDetail:
-      'Los trades RFQ y block aparecerán aquí a medida que se ejecuten en Deribit, OKX, Bybit, Binance y Derive.',
+      'Los trades RFQ, OTC y block aparecerán aquí a medida que se ejecuten en Deribit, OKX, Bybit, Binance y Derive.',
   },
 );
 
@@ -183,6 +187,11 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
                 {meta?.logo ? <img src={meta.logo} className={styles.venueLogo} alt="" /> : null}
                 {meta?.shortLabel ?? trade.venue}
               </span>
+              {trade.source === 'otc' ? (
+                <span className={styles.otcBadge} title={t('otcTitle')}>
+                  {t('otc')}
+                </span>
+              ) : null}
               <span className={styles.time}>
                 {formatDate(trade.timestamp)} {formatTime(trade.timestamp)}
               </span>

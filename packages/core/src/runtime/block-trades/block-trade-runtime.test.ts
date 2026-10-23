@@ -5,6 +5,7 @@ import type { BlockTradeEvent } from './types.js';
 function makeBlockTrade(partial: Partial<BlockTradeEvent> = {}): BlockTradeEvent {
   return {
     venue: partial.venue ?? 'deribit',
+    source: partial.source ?? 'rfq',
     tradeId: partial.tradeId ?? `trade-${Math.random()}`,
     timestamp: partial.timestamp ?? Date.now(),
     underlying: partial.underlying ?? 'BTC',

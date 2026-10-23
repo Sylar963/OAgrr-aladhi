@@ -680,6 +680,7 @@ function mapInstitutionalTrade(
     legs,
     raw: {
       tradeId: trade.tradeId,
+      source: trade.source,
       totalSize: trade.totalSize,
       indexPrice: trade.indexPrice,
     },

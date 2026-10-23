@@ -28,6 +28,7 @@ const STRATEGY_PATHS: Record<string, string> = {
   CALL_RATIO: 'M2,14 L8,14 L11,2 L14,14 L18,14',
   PUT_RATIO: 'M2,14 L8,14 L11,2 L14,14 L18,14',
   COMBO: 'M2,10 L8,2 L12,14 L18,6',
+  RISK_REVERSAL: 'M2,14 L7,8 L13,8 L18,2',
 };
 
 const messages = defineMessages(
@@ -44,6 +45,7 @@ const messages = defineMessages(
     calendar: 'Calendar',
     diagonal: 'Diagonal',
     ratio: 'Ratio',
+    riskReversal: 'Risk Reversal',
     combo: 'Combo',
     custom: 'Custom',
     single: 'Single',
@@ -61,6 +63,7 @@ const messages = defineMessages(
     calendar: 'Calendario',
     diagonal: 'Diagonal',
     ratio: 'Ratio',
+    riskReversal: 'Risk Reversal',
     combo: 'Combo',
     custom: 'Personalizada',
     single: 'Simple',
@@ -88,6 +91,7 @@ const STRATEGY_LABELS: Record<string, StrategyLabelKey> = {
   PUT_DIAGONAL: 'diagonal',
   CALL_RATIO: 'ratio',
   PUT_RATIO: 'ratio',
+  RISK_REVERSAL: 'riskReversal',
   COMBO: 'combo',
   CUSTOM: 'custom',
 };

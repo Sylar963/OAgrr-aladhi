@@ -3,4 +3,5 @@ export type {
   BlockTradeEvent,
   BlockTradeLeg,
   BlockTradeRuntimeHealth,
+  BlockTradeSource,
 } from './types.js';

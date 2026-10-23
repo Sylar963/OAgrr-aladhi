@@ -152,6 +152,8 @@ function mapStoredBlockTrade(row: PersistedTradeRecord): EnrichedBlockTradeEvent
 
   return {
     venue,
+    // Rows stored before OTC ingestion carry no source; they all came from venue RFQ feeds.
+    source: getOptionalString(row.raw, 'source') === 'otc' ? 'otc' : 'rfq',
     tradeUid: row.tradeUid,
     tradeId:
       getOptionalString(row.raw, 'tradeId') ??

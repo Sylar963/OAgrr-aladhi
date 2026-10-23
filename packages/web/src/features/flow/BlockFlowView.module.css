@@ -220,6 +220,15 @@
   color: var(--text-dim);
 }
 
+.otcBadge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+  color: var(--accent-primary);
+}
+
 .venueLogo {
   width: 12px;
   height: 12px;

@@ -2,6 +2,7 @@
 export const DERIBIT_WS_URL = 'wss://www.deribit.com/ws/api/v2';
 export const DERIBIT_REST_BASE_URL = 'https://www.deribit.com';
 export const DERIBIT_GET_BLOCK_RFQ_TRADES = '/api/v2/public/get_block_rfq_trades';
+export const DERIBIT_GET_LAST_TRADES_BY_CURRENCY = '/api/v2/public/get_last_trades_by_currency';
 
 // ── OKX ───────────────────────────────────────────────────────────
 export const OKX_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public';

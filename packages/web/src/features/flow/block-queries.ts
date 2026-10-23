@@ -14,6 +14,8 @@ export interface BlockTradeLeg {
 
 export interface BlockTradeEvent {
   venue: string;
+  /** `otc`: negotiated off-venue (Paradigm or bilateral), seen only on the venue's public tape. */
+  source?: 'rfq' | 'otc';
   tradeUid: string;
   tradeId: string;
   timestamp: number;

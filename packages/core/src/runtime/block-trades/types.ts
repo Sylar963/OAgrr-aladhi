@@ -8,8 +8,15 @@ export interface BlockTradeLeg {
   ratio: number;
 }
 
+/**
+ * `rfq`: matched on the venue's own RFQ/block product.
+ * `otc`: negotiated off-venue (Paradigm or bilateral) and only printed on the venue's public tape.
+ */
+export type BlockTradeSource = 'rfq' | 'otc';
+
 export interface BlockTradeEvent {
   venue: VenueId;
+  source: BlockTradeSource;
   tradeId: string;
   timestamp: number;
   underlying: string;

@@ -222,6 +222,30 @@ describe('computeTotals', () => {
     expect(totals.netDeltaCoin).toBeCloseTo(0.5, 6);
   });
 
+  it('adds perp delta and P&L so a matching perp hedges the options to zero', () => {
+    const withMarks = attachMarks([makeLeg({ strike: 70_000, size: 2 })], constantMarks);
+    const optionsDelta = computeTotals(withMarks).netDeltaCoin;
+    const totals = computeTotals(withMarks, [
+      {
+        instrumentName: 'BTC-PERPETUAL',
+        underlying: 'BTC',
+        kind: 'perpetual',
+        expiry: null,
+        sizeCoin: -optionsDelta,
+        entryPriceUsd: 80_000,
+        markPriceUsd: 81_000,
+        source: 'thalex',
+      },
+    ]);
+    expect(totals.optionsDeltaCoin).toBeCloseTo(optionsDelta, 9);
+    expect(totals.linearDeltaCoin).toBeCloseTo(-optionsDelta, 9);
+    expect(totals.netDeltaCoin).toBeCloseTo(0, 9);
+    expect(totals.unrealizedPnlUsd - computeTotals(withMarks).unrealizedPnlUsd).toBeCloseTo(
+      -optionsDelta * 1_000,
+      6,
+    );
+  });
+
   it('unrealizedPnlUsd is zero when mark equals entry price', () => {
     const leg = makeLeg({
       strike: 70_000,

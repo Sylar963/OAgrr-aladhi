@@ -8,6 +8,7 @@ import {
   thalexCashTransactions,
   thalexPortfolioEntryToLeg,
   thalexPortfolioToLegs,
+  thalexPortfolioToLinear,
   thalexRealizedPnl,
 } from './codec.js';
 import type { ExchangePortfolioTrade } from '@oggregator/protocol';
@@ -97,6 +98,49 @@ describe('thalexPortfolioEntryToLeg', () => {
     ]);
     expect(legs).toHaveLength(2);
     expect(legs.every((l) => l.source === 'thalex')).toBe(true);
+  });
+});
+
+describe('thalexPortfolioToLinear', () => {
+  it('keeps perpetuals and dated futures that the option parser drops', () => {
+    const entries: ThalexPortfolioEntry[] = [
+      SAMPLE,
+      { instrument_name: 'BTC-PERPETUAL', position: 0.02, average_price: 81_200, mark_price: 81_450 },
+      { instrument_name: 'ETH-25DEC26', position: -1.5, average_price: 3_100, mark_price: null },
+      { instrument_name: 'BTC-PERPETUAL-X', position: 1, average_price: 80_000 },
+    ];
+    expect(thalexPortfolioToLegs(entries)).toHaveLength(1);
+    expect(thalexPortfolioToLinear(entries)).toEqual([
+      {
+        instrumentName: 'BTC-PERPETUAL',
+        underlying: 'BTC',
+        kind: 'perpetual',
+        expiry: null,
+        sizeCoin: 0.02,
+        entryPriceUsd: 81_200,
+        markPriceUsd: 81_450,
+        source: 'thalex',
+      },
+      {
+        instrumentName: 'ETH-25DEC26',
+        underlying: 'ETH',
+        kind: 'future',
+        expiry: '2026-12-25',
+        sizeCoin: -1.5,
+        entryPriceUsd: 3_100,
+        markPriceUsd: null,
+        source: 'thalex',
+      },
+    ]);
+  });
+
+  it('skips flat positions and missing entry prices', () => {
+    expect(
+      thalexPortfolioToLinear([
+        { instrument_name: 'BTC-PERPETUAL', position: 0, average_price: 81_000 },
+        { instrument_name: 'ETH-PERPETUAL', position: 1, average_price: null },
+      ]),
+    ).toEqual([]);
   });
 });
 

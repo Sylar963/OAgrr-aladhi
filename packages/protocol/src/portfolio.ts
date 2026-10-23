@@ -64,6 +64,20 @@ export const PositionLegSchema = z.object({
 });
 export type PositionLeg = z.infer<typeof PositionLegSchema>;
 
+// Perpetuals and dated futures held next to the options. They carry delta 1 per coin and
+// no other greeks, so they are kept out of PositionLeg, whose consumers all assume an option.
+export const LinearPositionSchema = z.object({
+  instrumentName: z.string().min(1),
+  underlying: z.string().min(1),
+  kind: z.enum(['perpetual', 'future']),
+  expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  sizeCoin: z.number().refine((v) => v !== 0, 'size must be non-zero'),
+  entryPriceUsd: z.number().positive(),
+  markPriceUsd: z.number().nonnegative().nullable(),
+  source: PositionSourceSchema,
+});
+export type LinearPosition = z.infer<typeof LinearPositionSchema>;
+
 export const ExchangePortfolioVenueSchema = z.enum(['derive', 'thalex']);
 export type ExchangePortfolioVenue = z.infer<typeof ExchangePortfolioVenueSchema>;
 
@@ -242,8 +256,11 @@ export const VolShockResultSchema = z.object({
 });
 export type VolShockResult = z.infer<typeof VolShockResultSchema>;
 
+// netDeltaCoin is options plus linear positions; the book is delta hedged when it is zero.
 export const PortfolioTotalsSchema = z.object({
   netDeltaCoin: z.number(),
+  optionsDeltaCoin: z.number().default(0),
+  linearDeltaCoin: z.number().default(0),
   netGammaUsd: z.number(),
   netVegaUsd: z.number(),
   netThetaUsd: z.number(),
@@ -525,6 +542,7 @@ export const PortfolioMetricsSchema = z.object({
   pnlAttribution: PnlAttributionSchema.nullable().optional(),
   strategies: z.array(StrategyGroupSchema),
   accounting: PortfolioAccountingSchema,
+  linearPositions: z.array(LinearPositionSchema).default([]),
   // Null when the deployment has no order-book runtime (ORDER_BOOK=0).
   closeNow: PortfolioCloseNowSchema.nullable().optional(),
 });

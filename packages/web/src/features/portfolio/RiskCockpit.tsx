@@ -8,6 +8,7 @@ import {
   fmtAge,
   giveBackLevel,
 } from './close-now';
+import { DELTA_DIGITS, deltaHedgeState } from './delta-hedge';
 import { fmtNum, fmtUsdSigned } from './format';
 import {
   calculateIvEdge,
@@ -91,7 +92,9 @@ const messages = defineMessages(
     direction: 'Direction',
     longDelta: 'Long delta',
     shortDelta: 'Short delta',
-    deltaNote: 'Synthetic perp exposure right now.',
+    deltaHedged: 'Delta hedged',
+    deltaSplit: 'options {options} · perps {linear}',
+    deltaNote: 'Options delta plus perps and futures, in coin. Hedged when the sum is 0.000.',
     volatility: 'Volatility',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -184,7 +187,9 @@ const messages = defineMessages(
     direction: 'Dirección',
     longDelta: 'Long delta',
     shortDelta: 'Short delta',
-    deltaNote: 'Exposición sintética a perpetuo en este momento.',
+    deltaHedged: 'Delta cubierto',
+    deltaSplit: 'opciones {options} · perpetuos {linear}',
+    deltaNote: 'Delta de las opciones más perpetuos y futuros, en moneda. Cubierto cuando la suma es 0.000.',
     volatility: 'Volatilidad',
     longVol: 'Long vol',
     shortVol: 'Short vol',
@@ -357,6 +362,7 @@ function CloseNowMetric({ closeNow }: { closeNow: PortfolioCloseNow | null | und
 export default function RiskCockpit({ metrics, positions }: Props) {
   const t = useT(messages);
   const totals = metrics?.totals ?? null;
+  const hedge = totals == null ? null : deltaHedgeState(totals.netDeltaCoin);
   const accounting = metrics?.accounting ?? null;
   const mode = classifyBook(totals, positions.length);
   const modeMeta = modeMetaFor(mode, t);
@@ -468,10 +474,24 @@ export default function RiskCockpit({ metrics, positions }: Props) {
             <span className={styles.exposureName}>{t('direction')}</span>
             <span className={styles.greek}>Delta</span>
           </div>
-          <strong className={styles.exposureValue}>{fmtNum(totals?.netDeltaCoin)}</strong>
-          <span className={styles.exposureState}>
-            {exposureSide(totals?.netDeltaCoin, t('longDelta'), t('shortDelta'), t('flat'))}
+          <strong className={styles.exposureValue}>{fmtNum(totals?.netDeltaCoin, DELTA_DIGITS)}</strong>
+          <span className={styles.exposureState} data-hedge={hedge ?? undefined}>
+            {hedge == null
+              ? t('flat')
+              : hedge === 'hedged'
+                ? t('deltaHedged')
+                : hedge === 'long'
+                  ? t('longDelta')
+                  : t('shortDelta')}
           </span>
+          {totals != null && totals.linearDeltaCoin !== 0 && (
+            <span className={styles.exposureState}>
+              {t('deltaSplit', {
+                options: fmtNum(totals.optionsDeltaCoin, DELTA_DIGITS),
+                linear: fmtNum(totals.linearDeltaCoin, DELTA_DIGITS),
+              })}
+            </span>
+          )}
           <p>{t('deltaNote')}</p>
         </article>
 

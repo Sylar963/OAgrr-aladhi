@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PositionLeg } from '@oggregator/protocol';
+import type { LinearPosition, PositionLeg } from '@oggregator/protocol';
 
 import { buildPortfolioPnlCurve } from './pnl-curve.js';
 import type { MarkContext } from './types.js';
@@ -147,5 +147,34 @@ describe('buildPortfolioPnlCurve', () => {
     expect(curve.expiryBasis).toBe('mixed_expiry');
     expect(curve.maxLossUsd).toBeCloseTo(-1_000, 4);
     expect(curve.maxLossUsd).toBe(Math.min(...curve.riskWindows.map((window) => window.worstLossUsd ?? 0)));
+  });
+
+  it('adds a perp as a straight line, so a long perp caps a short call', () => {
+    const perp: LinearPosition = {
+      instrumentName: 'BTC-PERPETUAL',
+      underlying: 'BTC',
+      kind: 'perpetual',
+      expiry: null,
+      sizeCoin: 1,
+      entryPriceUsd: 70_000,
+      markPriceUsd: 70_000,
+      source: 'thalex',
+    };
+    const legs = [{ leg: makeLeg({ strike: 75_000, size: -1, entryPriceUsd: 2_000 }), mark: makeMark() }];
+    const naked = buildPortfolioPnlCurve(legs, NOW, 0);
+    const hedged = buildPortfolioPnlCurve(legs, NOW, 0, [perp]);
+
+    expect(naked.upsideBounded).toBe(false);
+    expect(hedged.upsideBounded).toBe(true);
+    expect(hedged.maxProfitUsd).toBeCloseTo(7_000, 4);
+    expect(hedged.riskWindows[0]?.upsideUnbounded).toBe(false);
+    expect(hedged.riskWindows[0]?.netCallSize).toBeCloseTo(0, 9);
+    for (const [index, point] of hedged.points.entries()) {
+      const nakedPoint = naked.points[index];
+      expect(nakedPoint?.underlyingPriceUsd).toBe(point.underlyingPriceUsd);
+      const line = point.underlyingPriceUsd - 70_000;
+      expect(point.expiryPnlUsd).toBeCloseTo((nakedPoint?.expiryPnlUsd ?? 0) + line, 6);
+      expect(point.nowPnlUsd).toBeCloseTo((nakedPoint?.nowPnlUsd ?? 0) + line, 6);
+    }
   });
 });

@@ -267,8 +267,21 @@ export async function restoreVenueConnections(token?: string): Promise<VenueConn
   return result.venues;
 }
 
+const LinearPositionSchema = z.object({
+  instrumentName: z.string(),
+  underlying: z.string(),
+  kind: z.enum(['perpetual', 'future']),
+  expiry: z.string().nullable(),
+  sizeCoin: z.number(),
+  entryPriceUsd: z.number(),
+  markPriceUsd: z.number().nullable(),
+  source: WebPortfolioSourceSchema,
+});
+
 const PortfolioTotalsSchema = z.object({
   netDeltaCoin: z.number(),
+  optionsDeltaCoin: z.number().default(0),
+  linearDeltaCoin: z.number().default(0),
   netGammaUsd: z.number(),
   netVegaUsd: z.number(),
   netThetaUsd: z.number(),
@@ -443,6 +456,7 @@ const PortfolioMetricsSchema: z.ZodType<PortfolioMetrics> = z.object({
     lastSyncedAtMs: z.number().int().nonnegative().nullable(),
     persistence: z.enum(['venue_history', 'position_snapshot', 'unavailable']),
   }),
+  linearPositions: z.array(LinearPositionSchema).default([]),
 }) as z.ZodType<PortfolioMetrics>;
 
 const VolShockLegResultSchema = z.object({

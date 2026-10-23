@@ -1,4 +1,4 @@
-import type { ExpiryRiskWindow, PositionLeg } from '@oggregator/protocol';
+import type { ExpiryRiskWindow, LinearPosition, PositionLeg } from '@oggregator/protocol';
 
 import {
   expiryInstantMs,
@@ -38,12 +38,20 @@ function spotGrid(legsWithMarks: LegWithMark[]): number[] {
   return [...new Set(grid)].sort((left, right) => left - right);
 }
 
+// Perps and futures are valued at spot, so their P&L is the same straight line at every horizon.
+export function linearPnlAt(linear: readonly LinearPosition[], spotUsd: number): number {
+  let pnlUsd = 0;
+  for (const position of linear) pnlUsd += (spotUsd - position.entryPriceUsd) * position.sizeCoin;
+  return pnlUsd;
+}
+
 export function pnlAtHorizon(
   legsWithMarks: LegWithMark[],
   spotUsd: number,
   horizonMs: number,
+  linear: readonly LinearPosition[] = [],
 ): number | null {
-  let pnlUsd = 0;
+  let pnlUsd = linearPnlAt(linear, spotUsd);
   for (const { leg, mark } of legsWithMarks) {
     // Black-76 at a zero forward collapses to intrinsic, which markAtHorizon rejects.
     const value =
@@ -125,11 +133,14 @@ function findBreakevens(
  * same spot that is evaluated at its end. Unboundedness does not rely on that
  * assumption, and once a window is unbounded every later window is too.
  * `pnlOffsetUsd` is added to every P&L value, e.g. minus proposed-leg fees.
+ * `linear` perps and futures add slope like calls struck at zero; a future stays live
+ * until its own expiry and then keeps its settled P&L on the same path.
  */
 export function analyzeExpiryStructure(
   legsWithMarks: LegWithMark[],
   nowMs: number,
   pnlOffsetUsd = 0,
+  linear: readonly LinearPosition[] = [],
 ): ExpiryRiskWindow[] | null {
   const expiries = [...new Set(legsWithMarks.map(({ leg }) => leg.expiry))]
     .filter((expiry) => expiryInstantMs(expiry) > nowMs)
@@ -139,24 +150,26 @@ export function analyzeExpiryStructure(
   const grid = spotGrid(legsWithMarks);
   // Every evaluated leg, including already-expired ones settled at intrinsic, sets the
   // single-path slope as spot rises; a negative slope makes any grid minimum an edge artifact.
-  const pathCallSize = legsWithMarks.reduce(
-    (sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum),
-    0,
-  );
+  const pathCallSize =
+    legsWithMarks.reduce((sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum), 0) +
+    linear.reduce((sum, position) => sum + position.sizeCoin, 0);
   const windows: ExpiryRiskWindow[] = [];
   let from = new Date(nowMs).toISOString();
 
   for (const until of expiries) {
     const horizonMs = expiryInstantMs(until);
     const pnlAt = (spotUsd: number) => {
-      const pnlUsd = pnlAtHorizon(legsWithMarks, spotUsd, horizonMs);
+      const pnlUsd = pnlAtHorizon(legsWithMarks, spotUsd, horizonMs, linear);
       return pnlUsd == null ? null : pnlUsd + pnlOffsetUsd;
     };
     const live = legsWithMarks.filter(({ leg }) => leg.expiry >= until);
-    const netCallSize = live.reduce(
-      (sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum),
-      0,
-    );
+    const netCallSize =
+      live.reduce((sum, { leg }) => (leg.optionRight === 'call' ? sum + leg.size : sum), 0) +
+      linear.reduce(
+        (sum, position) =>
+          position.expiry == null || position.expiry >= until ? sum + position.sizeCoin : sum,
+        0,
+      );
     // An earlier unbounded window settled at a spot this window cannot cap, so the
     // cumulative P&L at `until` stays unbounded even when the live calls are net long.
     const upsideUnbounded =

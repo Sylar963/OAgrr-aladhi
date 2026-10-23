@@ -27,6 +27,8 @@ const metrics: PortfolioMetrics = {
   forwardDays: 0,
   totals: {
     netDeltaCoin: -1,
+    optionsDeltaCoin: -1,
+    linearDeltaCoin: 0,
     netGammaUsd: -2,
     netVegaUsd: -3,
     netThetaUsd: 4,
@@ -108,6 +110,7 @@ const metrics: PortfolioMetrics = {
     lastSyncedAtMs: null,
     persistence: 'unavailable',
   },
+  linearPositions: [],
 };
 
 describe('portfolio assistant risk facts', () => {

@@ -26,6 +26,8 @@ function group(): StrategyGroup {
     grossCreditUsd: 202.95,
     totals: {
       netDeltaCoin: 0,
+      optionsDeltaCoin: 0,
+      linearDeltaCoin: 0,
       netGammaUsd: 0,
       netVegaUsd: 0,
       netThetaUsd: 0,

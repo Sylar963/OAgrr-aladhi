@@ -1,4 +1,9 @@
-import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type {
+  EquityHistoryPoint,
+  ExchangePortfolioTrade,
+  LinearPosition,
+  PositionLeg,
+} from '@oggregator/protocol';
 
 import { naturalKeyOf } from '../../portfolio/position-fold.js';
 import { THALEX_OPTION_SYMBOL_RE } from '../thalex/types.js';
@@ -115,6 +120,46 @@ export function thalexPortfolioToLegs(
     if (leg != null) legs.push(leg);
   }
   return legs;
+}
+
+const THALEX_PERPETUAL_RE = /^([A-Z]{2,4})-PERPETUAL$/;
+const THALEX_FUTURE_RE = /^([A-Z]{2,4})-(\d{1,2})([A-Z]{3})(\d{2})$/;
+
+export function parseThalexLinearInstrument(
+  name: string,
+): { underlying: string; kind: LinearPosition['kind']; expiry: string | null } | null {
+  const perp = THALEX_PERPETUAL_RE.exec(name);
+  if (perp?.[1] != null) return { underlying: perp[1], kind: 'perpetual', expiry: null };
+  const future = THALEX_FUTURE_RE.exec(name);
+  if (future == null) return null;
+  const [, underlying, ddRaw, monRaw, yyRaw] = future;
+  const mon = monRaw != null ? MONTH_TO_NUM[monRaw] : undefined;
+  if (underlying == null || ddRaw == null || mon == null || yyRaw == null) return null;
+  return { underlying, kind: 'future', expiry: `20${yyRaw}-${mon}-${ddRaw.padStart(2, '0')}` };
+}
+
+export function thalexPortfolioToLinear(entries: ThalexPortfolioEntry[]): LinearPosition[] {
+  const positions: LinearPosition[] = [];
+  for (const entry of entries) {
+    const parsed = parseThalexLinearInstrument(entry.instrument_name);
+    if (parsed == null) continue;
+    const size = entry.position;
+    const avg = entry.average_price;
+    if (!Number.isFinite(size) || size === 0) continue;
+    if (avg == null || !Number.isFinite(avg) || avg <= 0) continue;
+    const mark = entry.mark_price;
+    positions.push({
+      instrumentName: entry.instrument_name,
+      underlying: parsed.underlying,
+      kind: parsed.kind,
+      expiry: parsed.expiry,
+      sizeCoin: size,
+      entryPriceUsd: avg,
+      markPriceUsd: mark != null && Number.isFinite(mark) && mark >= 0 ? mark : null,
+      source: 'thalex',
+    });
+  }
+  return positions;
 }
 
 export function thalexTradeToPortfolioTrade(

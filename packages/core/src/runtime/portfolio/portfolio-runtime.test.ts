@@ -227,6 +227,38 @@ describe('PortfolioRuntime', () => {
     runtime.dispose();
   });
 
+  it('nets perp delta into the totals and filters perps by underlying', () => {
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, -1));
+    const perp = (underlying: string, sizeCoin: number) => ({
+      instrumentName: `${underlying}-PERPETUAL`,
+      underlying,
+      kind: 'perpetual' as const,
+      expiry: null,
+      sizeCoin,
+      entryPriceUsd: F,
+      markPriceUsd: F,
+      source: 'thalex' as const,
+    });
+    const linearStore = Object.assign(store, {
+      listLinear: () => [perp('BTC', 0.5), perp('ETH', 3)],
+    });
+    const runtime = new PortfolioRuntime({
+      accountId: ACCOUNT,
+      store: linearStore,
+      markProvider,
+      now: () => NOW,
+      underlyingFilter: 'BTC',
+    });
+    const { metrics } = runtime.computeMetricsAt(0);
+
+    expect(metrics.linearPositions.map((p) => p.instrumentName)).toEqual(['BTC-PERPETUAL']);
+    expect(metrics.totals.optionsDeltaCoin).toBeCloseTo(-0.5, 9);
+    expect(metrics.totals.linearDeltaCoin).toBeCloseTo(0.5, 9);
+    expect(metrics.totals.netDeltaCoin).toBeCloseTo(0, 9);
+    runtime.dispose();
+  });
+
   it('dispose stops emission', () => {
     const store = new InMemoryPositionStore();
     const runtime = new PortfolioRuntime({

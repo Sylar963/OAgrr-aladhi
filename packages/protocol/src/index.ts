@@ -249,6 +249,8 @@ export {
   PortfolioWsClientMessageSchema,
   type PortfolioWsServerMessage,
   PortfolioWsServerMessageSchema,
+  type LinearPosition,
+  LinearPositionSchema,
   type PositionLeg,
   type PositionLegInput,
   PositionLegInputSchema,

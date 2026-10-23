@@ -2,6 +2,7 @@ import type {
   BreakEvenIvRow,
   EntryVolDrift,
   ExpiryBucketRow,
+  LinearPosition,
   PortfolioAccounting,
   PnlAttribution,
   PortfolioCloseNow,
@@ -106,6 +107,8 @@ export interface PortfolioRuntimeOptions {
 function emptyTotals(): PortfolioTotals {
   return {
     netDeltaCoin: 0,
+    optionsDeltaCoin: 0,
+    linearDeltaCoin: 0,
     netGammaUsd: 0,
     netVegaUsd: 0,
     netThetaUsd: 0,
@@ -353,11 +356,19 @@ export class PortfolioRuntime {
     return { positions, withMarks };
   }
 
+  private collectLinear(): LinearPosition[] {
+    const linear = this.store.listLinear?.(this.accountId) ?? [];
+    return this.underlyingFilter == null
+      ? linear
+      : linear.filter((position) => position.underlying === this.underlyingFilter);
+  }
+
   private buildMetrics(forwardDays: number): {
     positions: PositionLeg[];
     metrics: PortfolioMetrics;
   } {
     const { positions, withMarks } = this.collectLegsWithMarks();
+    const linearPositions = this.collectLinear();
     const nowMs = this.now() + forwardDays * 86_400_000;
 
     let totals: PortfolioTotals;
@@ -373,7 +384,7 @@ export class PortfolioRuntime {
     let strategies: StrategyGroup[];
 
     if (positions.length === 0) {
-      totals = emptyTotals();
+      totals = computeTotals([], linearPositions);
       pnlCurve = emptyPnlCurve();
       byStrike = [];
       byExpiry = [];
@@ -390,8 +401,8 @@ export class PortfolioRuntime {
       pnlAttribution = null;
       strategies = [];
     } else {
-      totals = computeTotals(withMarks);
-      pnlCurve = buildPortfolioPnlCurve(withMarks, this.now(), forwardDays);
+      totals = computeTotals(withMarks, linearPositions);
+      pnlCurve = buildPortfolioPnlCurve(withMarks, this.now(), forwardDays, linearPositions);
       byStrike = aggregateGreeksByStrike(withMarks);
       byExpiry = aggregateGreeksByExpiry(withMarks, nowMs);
       breakEven = breakEvenIvCurve(withMarks);
@@ -425,6 +436,7 @@ export class PortfolioRuntime {
       pnlAttribution,
       strategies,
       accounting,
+      linearPositions,
       closeNow: this.computeCloseNow(withMarks, strategies),
     };
     return { positions, metrics };
@@ -459,6 +471,7 @@ export class PortfolioRuntime {
         accounting:
           this.store.getAccounting?.(this.accountId, this.underlyingFilter) ??
           positionAccounting(positions),
+        linearPositions: [],
       };
       return {
         positions,

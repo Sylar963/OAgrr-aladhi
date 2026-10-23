@@ -7,6 +7,7 @@ export {
   type PortfolioRiskMetric,
 } from './assistant-facts.js';
 export type {
+  LinearPosition,
   PositionLeg,
   MarkContext,
   MarkProvider,

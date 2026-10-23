@@ -42,6 +42,8 @@ function group(kind: StrategyGroup['kind'], legs: StrategyGroupLeg[], underlying
     grossCreditUsd: 0,
     totals: {
       netDeltaCoin: 0,
+      optionsDeltaCoin: 0,
+      linearDeltaCoin: 0,
       netGammaUsd: 0,
       netVegaUsd: 0,
       netThetaUsd: 0,

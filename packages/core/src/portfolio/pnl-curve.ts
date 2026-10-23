@@ -1,12 +1,13 @@
 import type {
   ExpiryBasis,
+  LinearPosition,
   PortfolioPnlCurve,
   PortfolioPnlCurveStatus,
   PortfolioPnlPoint,
   PositionLeg,
 } from '@oggregator/protocol';
 
-import { analyzeExpiryStructure } from './expiry-structure.js';
+import { analyzeExpiryStructure, linearPnlAt } from './expiry-structure.js';
 import { intrinsicValue, markAtHorizon, yearsUntil } from './horizon-valuation.js';
 import type { MarkContext } from './types.js';
 
@@ -116,6 +117,7 @@ export function buildPortfolioPnlCurve(
   legsWithMarks: LegWithMark[],
   nowMs: number,
   forwardDays: number,
+  linear: readonly LinearPosition[] = [],
 ): PortfolioPnlCurve {
   const expiryBasis: ExpiryBasis =
     new Set(legsWithMarks.map(({ leg }) => leg.expiry)).size > 1 ? 'mixed_expiry' : 'common_expiry';
@@ -140,9 +142,10 @@ export function buildPortfolioPnlCurve(
   const points: PortfolioPnlPoint[] = [];
 
   for (const underlyingPriceUsd of samplePrices) {
-    let nowPnlUsd = 0;
-    let forwardPnlUsd = 0;
-    let expiryPnlUsd = 0;
+    const linearPnlUsd = linearPnlAt(linear, underlyingPriceUsd);
+    let nowPnlUsd = linearPnlUsd;
+    let forwardPnlUsd = linearPnlUsd;
+    let expiryPnlUsd = linearPnlUsd;
 
     for (const { leg, mark } of legsWithMarks) {
       const nowValue = markAtHorizon(leg, mark, underlyingPriceUsd, yearsUntil(leg.expiry, nowMs));
@@ -172,7 +175,7 @@ export function buildPortfolioPnlCurve(
     });
   }
 
-  const riskWindows = analyzeExpiryStructure(legsWithMarks, nowMs);
+  const riskWindows = analyzeExpiryStructure(legsWithMarks, nowMs, 0, linear);
   if (riskWindows == null) {
     return unavailableCurve('missing_marks', underlying, currentSpotUsd, expiryBasis);
   }

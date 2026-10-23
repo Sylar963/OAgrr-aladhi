@@ -298,6 +298,8 @@ export default function PortfolioView() {
             margin={source === 'thalex' ? (venueMargin ?? null) : null}
             strategies={metrics?.strategies}
             positions={positions}
+            totals={metrics?.totals ?? null}
+            linearPositions={metrics?.linearPositions ?? []}
           />
           <StrategyGroupsPanel
             groups={metrics?.strategies ?? []}

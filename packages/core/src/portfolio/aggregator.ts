@@ -1,6 +1,7 @@
 import type {
   BreakEvenIvRow,
   ExpiryBucketRow,
+  LinearPosition,
   PortfolioTotals,
   VegaByStrikeRow,
 } from '@oggregator/protocol';
@@ -160,9 +161,14 @@ export function breakEvenIvCurve(legsWithMarks: LegWithMark[]): BreakEvenIvRow[]
   });
 }
 
-export function computeTotals(legsWithMarks: LegWithMark[]): PortfolioTotals {
+export function computeTotals(
+  legsWithMarks: LegWithMark[],
+  linear: readonly LinearPosition[] = [],
+): PortfolioTotals {
   const totals: PortfolioTotals = {
     netDeltaCoin: 0,
+    optionsDeltaCoin: 0,
+    linearDeltaCoin: 0,
     netGammaUsd: 0,
     netVegaUsd: 0,
     netThetaUsd: 0,
@@ -172,7 +178,7 @@ export function computeTotals(legsWithMarks: LegWithMark[]): PortfolioTotals {
   };
 
   for (const { leg, mark } of legsWithMarks) {
-    totals.netDeltaCoin += (mark.delta ?? 0) * leg.size;
+    totals.optionsDeltaCoin += (mark.delta ?? 0) * leg.size;
     totals.netGammaUsd += (mark.gamma ?? 0) * leg.size;
     totals.netVegaUsd += (mark.vega ?? 0) * leg.size;
     totals.netThetaUsd += (mark.theta ?? 0) * leg.size;
@@ -184,6 +190,13 @@ export function computeTotals(legsWithMarks: LegWithMark[]): PortfolioTotals {
       totals.unrealizedPnlUsd += (mark.markPriceUsd - leg.entryPriceUsd) * leg.size;
     }
   }
+  for (const position of linear) {
+    totals.linearDeltaCoin += position.sizeCoin;
+    if (position.markPriceUsd != null) {
+      totals.unrealizedPnlUsd += (position.markPriceUsd - position.entryPriceUsd) * position.sizeCoin;
+    }
+  }
+  totals.netDeltaCoin = totals.optionsDeltaCoin + totals.linearDeltaCoin;
 
   return totals;
 }

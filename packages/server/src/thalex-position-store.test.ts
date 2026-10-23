@@ -4,15 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
   type Listener<T> = (value: T) => void;
   class FakeThalexClient {
-    positions: Listener<unknown[]> | null = null;
+    positions: ((legs: unknown[], linear?: unknown[]) => void) | null = null;
     trades: Listener<unknown[]> | null = null;
     settlements: (() => void) | null = null;
     realizedPnl: number | null = null;
     constructor(readonly creds: { env?: string }) {
       clients.push(this);
     }
-    subscribe(listener: Listener<unknown[]>) {
-      this.positions = listener;
+    subscribe(listener: (legs: unknown[], linear: unknown[]) => void) {
+      this.positions = (legs, linear = []) => listener(legs, linear);
       return () => {};
     }
     subscribeTrades(listener: Listener<unknown[]>) {
@@ -91,6 +91,30 @@ describe('ThalexPositionStore environments', () => {
     expect(ledgerMock.loadPositions).not.toHaveBeenCalled();
     expect(ledgerMock.replacePositions).not.toHaveBeenCalled();
     expect(ledgerMock.upsertTrades).not.toHaveBeenCalled();
+  });
+
+  it('keeps perps beside the option legs and broadcasts when they change', async () => {
+    await store.connect({ accountId: 'a1', kid: 'k', privateKeyPem: 'p', env: 'test' });
+    const events: string[][] = [];
+    store.subscribe((event) => events.push(event.changedLegIds));
+    const perp = {
+      instrumentName: 'BTC-PERPETUAL',
+      underlying: 'BTC',
+      kind: 'perpetual',
+      expiry: null,
+      sizeCoin: 0.02,
+      entryPriceUsd: 81_200,
+      markPriceUsd: 81_450,
+      source: 'thalex',
+    };
+    clients[0]!.positions!([leg('L1', 1)], [perp]);
+    expect(store.listLinear('a1')).toEqual([perp]);
+    const afterFirst = events.length;
+    clients[0]!.positions!([leg('L1', 1)], [perp]);
+    expect(events).toHaveLength(afterFirst);
+    clients[0]!.positions!([leg('L1', 1)], []);
+    expect(store.listLinear('a1')).toEqual([]);
+    expect(events).toHaveLength(afterFirst + 1);
   });
 
   it('hydrates and persists a mainnet session as before', async () => {

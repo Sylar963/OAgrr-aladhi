@@ -1,5 +1,10 @@
 import type WebSocket from 'ws';
-import type { EquityHistoryPoint, ExchangePortfolioTrade, PositionLeg } from '@oggregator/protocol';
+import type {
+  EquityHistoryPoint,
+  ExchangePortfolioTrade,
+  LinearPosition,
+  PositionLeg,
+} from '@oggregator/protocol';
 
 import { feedLogger } from '../../utils/logger.js';
 import { TopicWsClient } from '../shared/topic-ws-client.js';
@@ -10,6 +15,7 @@ import {
   thalexCashReplayEquity,
   thalexCashTransactions,
   thalexPortfolioToLegs,
+  thalexPortfolioToLinear,
   thalexRealizedPnl,
   thalexSettlementBoundary,
   thalexTradesToPortfolioTrades,
@@ -75,7 +81,7 @@ export interface ThalexAccountLedger {
   equityHistory: EquityHistoryPoint[];
 }
 
-export type ThalexPositionsListener = (legs: PositionLeg[]) => void;
+export type ThalexPositionsListener = (legs: PositionLeg[], linear: LinearPosition[]) => void;
 
 export type ThalexTradesListener = (trades: ExchangePortfolioTrade[]) => void;
 interface PendingRequest {
@@ -99,6 +105,7 @@ export class ThalexPrivateClient {
   private readonly tradeListeners = new Set<ThalexTradesListener>();
   private latestTrades: ExchangePortfolioTrade[] = [];
   private latestLegs: PositionLeg[] = [];
+  private latestLinear: LinearPosition[] = [];
   private latestEntries: ThalexPortfolioEntry[] = [];
   private latestMargin: ThalexAccountMargin | null = null;
   private latestEquity: ThalexAccountEquity | null = null;
@@ -145,9 +152,9 @@ export class ThalexPrivateClient {
 
   subscribe(listener: ThalexPositionsListener): () => void {
     this.listeners.add(listener);
-    if (this.latestLegs.length > 0) {
+    if (this.latestLegs.length > 0 || this.latestLinear.length > 0) {
       try {
-        listener(this.latestLegs);
+        listener(this.latestLegs, this.latestLinear);
       } catch {}
     }
     return () => {
@@ -169,6 +176,10 @@ export class ThalexPrivateClient {
 
   getLatestLegs(): PositionLeg[] {
     return [...this.latestLegs];
+  }
+
+  getLatestLinear(): LinearPosition[] {
+    return [...this.latestLinear];
   }
 
   /** Fires when newly settled daily marks change realised P&L. */
@@ -274,7 +285,11 @@ export class ThalexPrivateClient {
     }
     this.applyPortfolio(parsed.data, true);
     this.log.info(
-      { positions: parsed.data.length, optionLegs: this.latestLegs.length },
+      {
+        positions: parsed.data.length,
+        optionLegs: this.latestLegs.length,
+        linearPositions: this.latestLinear.length,
+      },
       'thalex private portfolio bootstrap ok',
     );
   }
@@ -480,10 +495,12 @@ export class ThalexPrivateClient {
     const merged = isSnapshot ? entries : this.mergeEntries(this.latestEntries, entries);
     this.latestEntries = merged;
     const legs = thalexPortfolioToLegs(merged);
+    const linear = thalexPortfolioToLinear(merged);
     this.latestLegs = legs;
+    this.latestLinear = linear;
     for (const listener of this.listeners) {
       try {
-        listener(legs);
+        listener(legs, linear);
       } catch {}
     }
   }

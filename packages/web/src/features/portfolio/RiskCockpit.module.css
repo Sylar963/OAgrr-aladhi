@@ -432,6 +432,10 @@
   font-size: 10px;
 }
 
+.exposureState[data-hedge='hedged'] {
+  color: var(--color-profit);
+}
+
 .exposureCard p {
   margin: 9px 0 0;
   color: #626b69;

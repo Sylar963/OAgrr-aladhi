@@ -11,6 +11,8 @@ export {
   thalexCashTransactions,
   thalexPortfolioEntryToLeg,
   thalexPortfolioToLegs,
+  thalexPortfolioToLinear,
+  parseThalexLinearInstrument,
   type ThalexAccountEquity,
   type ThalexAccountMargin,
   type ThalexCashHolding,

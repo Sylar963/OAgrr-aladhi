@@ -2,7 +2,9 @@ import { useEffect, useId, useMemo, useState, type PointerEvent } from 'react';
 
 import type {
   EquityHistoryVenue,
+  LinearPosition,
   PortfolioPnlCurve as PortfolioPnlCurveData,
+  PortfolioTotals,
   PositionLeg,
   StrategyGroup,
   VenueMarginResponse,
@@ -10,6 +12,7 @@ import type {
 import { formatExpiry } from '@lib/format';
 import { defineMessages, useT, type Translate } from '@lib/i18n';
 
+import { DELTA_DIGITS, deltaHedgeState } from './delta-hedge';
 import BreakevenTaChart, { TA_UNDERLYINGS, type TaUnderlying } from './BreakevenTaChart';
 import EquityHistoryChart from './EquityHistoryChart';
 import { liquidationBufferUsd, marginCallPnl, marginCallPrices } from './margin-call';
@@ -25,6 +28,8 @@ interface Props {
   margin?: VenueMarginResponse | null;
   strategies?: readonly StrategyGroup[];
   positions?: readonly PositionLeg[];
+  totals?: PortfolioTotals | null;
+  linearPositions?: readonly LinearPosition[];
 }
 
 const WIDTH = 720;
@@ -61,6 +66,12 @@ const messages = defineMessages(
     underlying: 'underlying {v}',
     spot: 'spot {v}',
     maxGain: 'max gain {v}',
+    deltaHedged: 'Δ hedged',
+    deltaNet: 'Δ net {v} · not hedged',
+    deltaTitle: 'Options delta {options} + perps/futures {linear} = net {net}. Hedged when the net rounds to 0.000.',
+    linearPill: '{name} {size} @ {entry}',
+    linearHint: ' Perps and futures are included as straight lines from their entry price.',
+    builderLinear: ' Perp and future positions are not carried over.',
     upsideUnbounded: 'Upside unbounded after {date}',
     imTitle: 'Thalex account-wide initial margin requirement',
     freeMarginTitle: 'Thalex account margin minus initial margin',
@@ -106,6 +117,12 @@ const messages = defineMessages(
     underlying: 'subyacente {v}',
     spot: 'spot {v}',
     maxGain: 'ganancia máx. {v}',
+    deltaHedged: 'Δ cubierto',
+    deltaNet: 'Δ neto {v} · sin cubrir',
+    deltaTitle: 'Delta de opciones {options} + perpetuos/futuros {linear} = neto {net}. Cubierto cuando el neto redondea a 0.000.',
+    linearPill: '{name} {size} @ {entry}',
+    linearHint: ' Los perpetuos y futuros se incluyen como líneas rectas desde su precio de entrada.',
+    builderLinear: ' Las posiciones en perpetuos y futuros no se trasladan.',
     upsideUnbounded: 'Alza ilimitada después de {date}',
     imTitle: 'Requerimiento de margen inicial de toda la cuenta de Thalex',
     freeMarginTitle: 'Margen de la cuenta de Thalex menos el margen inicial',
@@ -150,6 +167,10 @@ function fmtPrice(value: number | null | undefined): string {
     minimumFractionDigits: value >= 100 ? 0 : 2,
     maximumFractionDigits: value >= 100 ? 0 : 2,
   });
+}
+
+function fmtDelta(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(DELTA_DIGITS)}`;
 }
 
 function fmtUsd(value: number | null | undefined): string {
@@ -229,7 +250,7 @@ function emptyMessage(status: PortfolioPnlCurveData['status'], t: T): string {
   return t('emptyFallback');
 }
 
-export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions }: Props) {
+export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = false, onOpenBuilder, builderDisabledReason, equityVenue = null, margin = null, strategies, positions, totals = null, linearPositions = [] }: Props) {
   const t = useT(messages);
   const [stickyCurve, setStickyCurve] = useState<PortfolioPnlCurveData | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
@@ -429,7 +450,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
             {t('openBuilder')}
           </button>
           <span id="portfolio-builder-hint" className={styles.subtitle}>
-            {builderDisabledReason ?? t('builderHint')}
+            {builderDisabledReason ?? `${t('builderHint')}${linearPositions.length > 0 ? t('builderLinear') : ''}`}
           </span>
         </div>
       )}
@@ -446,6 +467,30 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
         ) : (
           displayCurve.maxLossUsd != null && <span className={styles.metricPill}>{lossLabel} {fmtUsd(displayCurve.maxLossUsd)}</span>
         )}
+        {totals != null && (
+          <span
+            className={styles.metricPill}
+            data-hedge={deltaHedgeState(totals.netDeltaCoin)}
+            title={t('deltaTitle', {
+              options: fmtDelta(totals.optionsDeltaCoin),
+              linear: fmtDelta(totals.linearDeltaCoin),
+              net: fmtDelta(totals.netDeltaCoin),
+            })}
+          >
+            {deltaHedgeState(totals.netDeltaCoin) === 'hedged'
+              ? t('deltaHedged')
+              : t('deltaNet', { v: fmtDelta(totals.netDeltaCoin) })}
+          </span>
+        )}
+        {linearPositions.map((position) => (
+          <span key={position.instrumentName} className={styles.metricPill}>
+            {t('linearPill', {
+              name: position.instrumentName,
+              size: fmtDelta(position.sizeCoin),
+              entry: fmtPrice(position.entryPriceUsd),
+            })}
+          </span>
+        ))}
         {margin != null && (
           <>
             <span className={styles.metricPill} title={t('imTitle')}>
@@ -689,6 +734,7 @@ export default function PortfolioPnlCurve({ curve, forwardDays, mixedExpiries = 
 
       <div className={styles.hint}>
         {t('hint')}
+        {linearPositions.length > 0 && t('linearHint')}
         {margin != null && t('hintMargin')}
       </div>
     </div>

@@ -153,7 +153,7 @@ describe('ThalexPrivateClient', () => {
         entryPriceUsd: 1850.5,
         source: 'thalex',
       }),
-    ]);
+    ], []);
     expect(client.getLatestLegs()).toEqual([
       expect.objectContaining({
         legId: 'thalex|BTC|2026-04-21|75000|call',

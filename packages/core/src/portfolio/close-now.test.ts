@@ -214,6 +214,8 @@ function group(groupId: string, legIds: string[]): StrategyGroup {
     grossCreditUsd: 0,
     totals: {
       netDeltaCoin: 0,
+      optionsDeltaCoin: 0,
+      linearDeltaCoin: 0,
       netGammaUsd: 0,
       netVegaUsd: 0,
       netThetaUsd: 0,

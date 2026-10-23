@@ -6,6 +6,7 @@ import {
   type ThalexPrivateCreds,
   logger,
   type EntryAnchor,
+  type LinearPosition,
   type PositionLeg,
   type PositionStore,
   type PositionStoreListener,
@@ -28,6 +29,7 @@ const HYDRATE_RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 120_000, 300_000];
 
 export class ThalexPositionStore implements PositionStore {
   private readonly cache = new Map<string, Map<string, PositionLeg>>();
+  private readonly linearCache = new Map<string, LinearPosition[]>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, ThalexPrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
@@ -67,6 +69,10 @@ export class ThalexPositionStore implements PositionStore {
   list(accountId: string): PositionLeg[] {
     const legs = this.cache.get(accountId);
     return legs == null ? [] : [...legs.values()];
+  }
+
+  listLinear(accountId: string): LinearPosition[] {
+    return this.linearCache.get(accountId) ?? [];
   }
 
   get(accountId: string, legId: string): PositionLeg | null {
@@ -213,6 +219,7 @@ export class ThalexPositionStore implements PositionStore {
     const environment = creds.env ?? 'prod';
     if ((this.environments.get(accountId) ?? 'prod') !== environment) {
       this.cache.delete(accountId);
+      this.linearCache.delete(accountId);
       this.broadcast(accountId, []);
     }
     this.environments.set(accountId, environment);
@@ -222,8 +229,9 @@ export class ThalexPositionStore implements PositionStore {
 
     const client = new ThalexPrivateClient(creds);
     const isCurrent = () => this.clients.get(accountId) === client;
-    const unsubscribe = client.subscribe((incoming) => {
+    const unsubscribe = client.subscribe((incoming, linear) => {
       if (!isCurrent()) return;
+      this.applyLinear(accountId, linear);
       const legs = carryEntryIvs(this.cache.get(accountId), incoming);
       this.applyLegs(accountId, legs);
       void persistence.persistPositions(accountId, legs).catch((error) => {
@@ -303,8 +311,10 @@ export class ThalexPositionStore implements PositionStore {
     this.clients.delete(accountId);
     if (this.mainnetKeys.delete(accountId)) this.notifyKeys();
     // Testnet legs are never persisted, so nothing should keep showing them once the session ends.
-    if (this.environments.get(accountId) === 'test' && this.cache.delete(accountId)) {
-      this.broadcast(accountId, []);
+    if (this.environments.get(accountId) === 'test') {
+      const hadLegs = this.cache.delete(accountId);
+      const hadLinear = this.linearCache.delete(accountId);
+      if (hadLegs || hadLinear) this.broadcast(accountId, []);
     }
     if (client != null) await client.dispose();
   }
@@ -401,6 +411,18 @@ export class ThalexPositionStore implements PositionStore {
     if (changedLegIds.length > 0 || prev.size !== next.size) {
       this.broadcast(accountId, changedLegIds);
     }
+  }
+
+  private applyLinear(accountId: string, linear: LinearPosition[]): void {
+    const prev = this.linearCache.get(accountId) ?? [];
+    const key = (positions: LinearPosition[]) =>
+      positions
+        .map((p) => `${p.instrumentName}:${p.sizeCoin}:${p.entryPriceUsd}:${p.markPriceUsd ?? ''}`)
+        .sort()
+        .join(',');
+    if (linear.length === 0) this.linearCache.delete(accountId);
+    else this.linearCache.set(accountId, linear);
+    if (key(prev) !== key(linear)) this.broadcast(accountId, []);
   }
 
   private broadcast(accountId: string, changedLegIds: string[]): void {

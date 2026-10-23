@@ -422,6 +422,7 @@ export { expiryInstantMs } from './portfolio/index.js';
 
 // portfolio module
 export type {
+  LinearPosition,
   PositionLeg,
   MarkContext,
   MarkProvider,

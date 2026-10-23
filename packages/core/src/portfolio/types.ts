@@ -1,6 +1,6 @@
-import type { PortfolioAccounting, PositionLeg } from '@oggregator/protocol';
+import type { LinearPosition, PortfolioAccounting, PositionLeg } from '@oggregator/protocol';
 
-export type { PositionLeg } from '@oggregator/protocol';
+export type { LinearPosition, PositionLeg } from '@oggregator/protocol';
 
 export interface MarkContext {
   underlyingPriceUsd: number | null;
@@ -37,6 +37,7 @@ export interface PositionStore {
   // Venue legs arrive without an entry IV; the runtime reports the first live IV it
   // captured (legId → IV) so stores can keep it across pushes and restarts.
   recordEntryIvs?(accountId: string, entryIvs: ReadonlyMap<string, number>): void;
+  listLinear?(accountId: string): LinearPosition[];
 }
 
 export interface PortfolioPersistence {

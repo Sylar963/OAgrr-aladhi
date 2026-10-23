@@ -14,6 +14,7 @@ function snap(over: Partial<GhostSnapshot> = {}): GhostSnapshot {
     expiryMs: over.expiryMs ?? 9_999,
     resolutionSec: over.resolutionSec ?? 86_400,
     paths: over.paths ?? [{ kind: 'up', isProfit: true, targetPrice: 130, pnlAtExpiry: 25 }],
+    ...(over.breakevens ? { breakevens: over.breakevens } : {}),
   };
 }
 
@@ -69,5 +70,11 @@ describe('snapshots-store', () => {
     );
     expect(listSnapshots()[0]!.paths[0]!.shape).toEqual([0, 0.1, 0]);
     expect(snap().paths[0]!.shape).toBeUndefined();
+  });
+
+  it('persists capture-time break-evens and still loads snapshots without them', () => {
+    addSnapshot(snap({ id: 'be', breakevens: [81_185, 92_400] }));
+    expect(listSnapshots()[0]!.breakevens).toEqual([81_185, 92_400]);
+    expect(snap().breakevens).toBeUndefined();
   });
 });

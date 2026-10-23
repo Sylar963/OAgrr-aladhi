@@ -149,7 +149,7 @@ Snapshot button ─► addSnapshot(localStorage)  ◄─►  snapshots dropdown
 - **Near-expiry** (`T_years → 0`) → `MIN_BAND_PCT` floor keeps three visible paths.
 - **Missing IV on all legs** → `DEFAULT_IV` fallback; paths still render.
 - **Snapshot older than the visible lookback window** → its anchor predates the first real candle; render the paths from the window start and tag the legend "snapshot predates visible history." (With the new 3× lookback — up to ~540 days — most snapshots fall inside the window.)
-- **Snapshot resolution ≠ current window resolution** → snapshot rebuilds candles at its own stored `resolutionSec`; absolute timestamps still place them correctly (minor cosmetic cadence mismatch is acceptable).
+- **Snapshot resolution ≠ current window resolution** → *superseded (2026-10-23, see §10).* Rebuilding at the stored `resolutionSec` was not cosmetic: lightweight-charts spaces bars by index, so off-grid snapshot times rendered sparse (4H on 1H) or stretched the real candles apart (1H on 4H). Replay now uses the chart's current grid.
 - **localStorage unavailable / quota** → store degrades to in-memory for the session; capture still works until reload, surfaced as a non-blocking toast/log.
 
 ## 7. Testing strategy
@@ -177,3 +177,18 @@ Snapshot button ─► addSnapshot(localStorage)  ◄─►  snapshots dropdown
 ## 9. Constants (tunable, centralized in `ghost-paths.ts`)
 
 `SIGMA_MULTIPLE = 1` · `MIN_BAND_PCT = 0.015` · `DEFAULT_IV = 0.6` · `WICK_PCT = 0.0005` · `WICK_BODY_FRAC = 0.15` · `MAX_PROJECTION_BARS = 1000` · `MAX_SNAPSHOTS = 50`.
+Texture (§10): `TEXTURE_BODY_K = 1.2` · `TEXTURE_PHI = 0.5` · `TEXTURE_WICK_K = 0.6` · `TEXTURE_TAPER_FRAC = 0.04`.
+
+## 10. Revision 2026-10-23 — grid-aligned replay, candle texture, snapshot overlay
+
+Supersedes the parts of §3.3, §4.2–4.4 and §6 that it contradicts.
+
+- **Time grid.** All path times come from `projectionTimesOnGrid(anchor, expiry, resolutionSec, realCandleTimes)`: real candle times inside the history window, resolution steps outside it. A path never adds a time point between real candles. This is required, not cosmetic, because the chart spaces bars by index. Live paths pass `[anchor]` (the last real candle) as the grid.
+- **Geometry.** `buildFractalPathOnTimes` evaluates `glide(frac) + fractalResidual(frac) + texture` at each bar time, with `frac = (t − anchor)/(Tₑ − anchor)` clamped to [0,1]. `buildPathCandles`/`buildFractalPathCandles` were removed.
+- **Candle texture.** AR(1) bar noise (`φ = TEXTURE_PHI`, stationary σ = `TEXTURE_BODY_K × barσ`). `barσ` comes from history realized vol (`realizedVol`, falling back to leg IV), so bodies alternate colour and wicks vary like real bars. The noise is deterministic: a hash of (kind, anchor) seeds it and each bar time keys it, so replay needs no stored noise. It tapers to 0 over the last `TEXTURE_TAPER_FRAC` of the horizon, so targets are still hit exactly. Still illustrations, not forecasts.
+- **Snapshot store.** Adds optional `breakevens` (capture-time) and `textureVol`. Older snapshots fall back to no crossing markers and the current realized vol.
+- **Overlay, not replace.** A selected snapshot is drawn alongside the live paths with muted styling. The live paths are never hidden. The snapshot's stretch inside the real-candle window is drawn as a thin line (it is hindsight); only its forward part is ghost candles.
+- **Snapshot context.** Violet capture hairline + dot at `(createdAt, spotAtSnapshot)`, the snapshot's own break-evens (dashed, only where they differ from live) and its own expiry line (when it differs from the live nearest expiry).
+- **Endpoint tags.** Each path with a forward part gets a price-axis tag at its target: `↑ up $328`, prefixed `⎙` for the snapshot. This reverses §4.3's "no new horizontal price lines"; the tags draw no line, only an axis label.
+- **Realized readout.** `readRealized` places the last real close (or the close at expiry once it has passed) in √t-scaled band units, `(P − S₀)/(bandHalf·√frac)`, and names the nearest path. The legend shows it, e.g. "realized −0.4σ · near ↓ down".
+- **Crossing labels.** Each path set checks crossings against its own break-evens and expiry. Same-day crossings across paths keep the dot but only the first gets a label.

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { VENUE_IDS } from '@oggregator/protocol';
+import { AlphaIronFlyScannerResponseSchema, VENUE_IDS } from '@oggregator/protocol';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -75,6 +75,29 @@ function unwrap<T>(result: MarketReadResult<T>): T {
       : new ToolInputError(result.error, result.code ?? 'upstream_error', result.hint);
   }
   return result.data;
+}
+
+const PlatformResultSchema = z.looseObject({ data: z.unknown() });
+
+// The per-window ratios feed the Alpha chart; the assistant only needs their counts.
+function compactIronFlyScan(result: unknown): unknown {
+  const envelope = PlatformResultSchema.safeParse(result);
+  if (!envelope.success) return result;
+  const parsed = AlphaIronFlyScannerResponseSchema.safeParse(envelope.data.data);
+  if (!parsed.success) return result;
+  const { windows, ...scan } = parsed.data;
+  return {
+    ...envelope.data,
+    data: {
+      ...scan,
+      windows: windows.map(({ expiryTs, horizonHours, ratios, holdoutFrom }) => ({
+        expiryTs,
+        horizonHours,
+        count: ratios.length,
+        holdoutFrom,
+      })),
+    },
+  };
 }
 
 export const ASSISTANT_MCP_TOOL_CALL_MESSAGE = 'assistant mcp tool call';
@@ -320,6 +343,26 @@ export function buildAssistantMcpTools(
           'Maximum DTE and OTM must be at least their minimums',
         ),
       run: async (args) => unwrap(await reader.platformData('alpha/put-scanner', args)),
+    }),
+    tool({
+      name: 'oggregator_iron_fly_scanner',
+      description:
+        'Run the Alpha short iron fly scanner. Each candidate sells the ATM straddle at the bids and buys symmetric wings at the asks (about 1/2/3/5% of the forward), after taker fees on all four legs. It scores today\'s net credit with the full expiry payoff against past windows that start at the same hour of the week and settle at the same hour as the expiry (hourly perp closes, last 26 weeks held out of ranking): profit rate, mean P&L with a 95% CI, worst loss, and sample size. That is credit versus the historical settlement distribution, not a backtest of past option prices. Sizing fits max loss to equity × riskPct. Check the chosen fly against the book with oggregator_evaluate_structure. No orders.',
+      input: z
+        .object({
+          underlying,
+          venues: z.array(z.enum(VENUE_IDS)).min(1).max(VENUE_IDS.length),
+          equity: z.number().positive().max(100_000_000),
+          riskPct: z.number().positive().max(100),
+          minDte: z.number().min(0).max(365).default(0),
+          maxDte: z.number().min(0).max(365).default(7),
+          maxSpreadPct: z.number().positive().max(500).default(40),
+          lookbackWeeks: z.number().int().min(78).max(312).default(156),
+          limit: z.number().int().min(1).max(20).default(8),
+        })
+        .refine((args) => args.maxDte >= args.minDte, 'maxDte must be at least minDte'),
+      run: async (args) =>
+        compactIronFlyScan(unwrap(await reader.platformData('alpha/iron-fly-scanner', args))),
     }),
     tool({
       name: 'oggregator_evaluate_structure',

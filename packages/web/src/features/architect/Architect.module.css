@@ -1402,6 +1402,25 @@
   color: #f0b90b;
   margin-bottom: 2px;
 }
+.ghostLegendSnap[data-set='snapshot'] {
+  color: #b39dff;
+}
+.ghostLegendGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ghostLegendGroup + .ghostLegendGroup {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #1f2937;
+}
+.ghostLegendRealized {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #1f2937;
+  color: #b39dff;
+}
 .ghostLegendRow {
   display: flex;
   align-items: center;
@@ -1427,6 +1446,9 @@
 }
 .ghostLegendPnl[data-profit='false'] {
   color: #cb3855;
+}
+.ghostLegendGroup[data-muted='true'] .ghostLegendRow {
+  opacity: 0.6;
 }
 
 .frontierLegend {

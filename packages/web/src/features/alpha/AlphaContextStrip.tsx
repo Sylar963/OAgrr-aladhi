@@ -15,7 +15,8 @@ interface AlphaContextStripProps {
     | 'long-call'
     | 'long-put'
     | 'short-straddle'
-    | 'long-straddle';
+    | 'long-straddle'
+    | 'iron-fly';
   loading: boolean;
 }
 

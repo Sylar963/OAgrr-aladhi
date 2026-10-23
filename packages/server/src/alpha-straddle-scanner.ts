@@ -141,7 +141,7 @@ export interface StraddlePair {
   forward: number;
 }
 
-function readLeg(
+export function readLeg(
   quote: VenueQuote | undefined,
   side: StraddleSide,
 ): StraddleLeg | 'missing' | 'missing_market' | 'missing_fees' {

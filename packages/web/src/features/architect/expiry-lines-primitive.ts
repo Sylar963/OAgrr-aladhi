@@ -20,11 +20,28 @@ interface PixelMark {
   nearest: boolean;
 }
 
-const NEAREST_COLOR = '#F0B90B';
-const LATER_COLOR = 'rgba(240, 185, 11, 0.45)';
+export interface VerticalLinePalette {
+  strong: string;
+  muted: string;
+  strongBg: string;
+  mutedBg: string;
+  /** Label row offset in CSS px, so two primitives' labels don't collide. */
+  labelTop: number;
+}
+
+const EXPIRY_PALETTE: VerticalLinePalette = {
+  strong: '#F0B90B',
+  muted: 'rgba(240, 185, 11, 0.45)',
+  strongBg: 'rgba(58, 44, 6, 0.92)',
+  mutedBg: 'rgba(30, 26, 14, 0.85)',
+  labelTop: 6,
+};
 
 class ExpiryLinesRenderer implements IPrimitivePaneRenderer {
-  constructor(private readonly marks: readonly PixelMark[]) {}
+  constructor(
+    private readonly marks: readonly PixelMark[],
+    private readonly palette: VerticalLinePalette,
+  ) {}
 
   draw(target: DrawTarget): void {
     if (this.marks.length === 0) return;
@@ -36,7 +53,7 @@ class ExpiryLinesRenderer implements IPrimitivePaneRenderer {
         for (const m of this.marks) {
           const x = Math.round(m.x * hpr);
           if (x < 0 || x > bitmapSize.width) continue;
-          const color = m.nearest ? NEAREST_COLOR : LATER_COLOR;
+          const color = m.nearest ? this.palette.strong : this.palette.muted;
           ctx.strokeStyle = color;
           ctx.lineWidth = Math.max(1, Math.round(hpr));
           ctx.setLineDash([Math.round(6 * hpr), Math.round(4 * hpr)]);
@@ -52,9 +69,9 @@ class ExpiryLinesRenderer implements IPrimitivePaneRenderer {
           const boxH = Math.round(10 * vpr) + padY * 2;
           // Flip the label to the left of the line when it would overflow the pane.
           const boxX = x + boxW + 2 * hpr > bitmapSize.width ? x - boxW - 2 * hpr : x + 2 * hpr;
-          const boxY = Math.round(6 * vpr);
+          const boxY = Math.round(this.palette.labelTop * vpr);
           ctx.setLineDash([]);
-          ctx.fillStyle = m.nearest ? 'rgba(58, 44, 6, 0.92)' : 'rgba(30, 26, 14, 0.85)';
+          ctx.fillStyle = m.nearest ? this.palette.strongBg : this.palette.mutedBg;
           ctx.fillRect(boxX, boxY, boxW, boxH);
           ctx.fillStyle = color;
           ctx.fillText(m.label, boxX + padX, boxY + padY);
@@ -68,6 +85,8 @@ class ExpiryLinesRenderer implements IPrimitivePaneRenderer {
 class ExpiryLinesPaneView implements IPrimitivePaneView {
   private pixels: PixelMark[] = [];
 
+  constructor(private readonly palette: VerticalLinePalette) {}
+
   zOrder(): PrimitivePaneViewZOrder {
     return 'top';
   }
@@ -77,7 +96,7 @@ class ExpiryLinesPaneView implements IPrimitivePaneView {
   }
 
   renderer(): IPrimitivePaneRenderer {
-    return new ExpiryLinesRenderer(this.pixels);
+    return new ExpiryLinesRenderer(this.pixels, this.palette);
   }
 }
 
@@ -86,8 +105,13 @@ export class ExpiryLinesPrimitive implements ISeriesPrimitive<Time> {
   private lastTimeSec: number | null = null;
   private resolutionSec = 3600;
   private attachedParam: SeriesAttachedParameter<Time, SeriesType> | null = null;
-  private readonly paneView = new ExpiryLinesPaneView();
-  private readonly cachedPaneViews: readonly IPrimitivePaneView[] = [this.paneView];
+  private readonly paneView: ExpiryLinesPaneView;
+  private readonly cachedPaneViews: readonly IPrimitivePaneView[];
+
+  constructor(palette: VerticalLinePalette = EXPIRY_PALETTE) {
+    this.paneView = new ExpiryLinesPaneView(palette);
+    this.cachedPaneViews = [this.paneView];
+  }
 
   attached(param: SeriesAttachedParameter<Time, SeriesType>): void {
     this.attachedParam = param;

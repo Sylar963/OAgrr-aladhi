@@ -59,6 +59,7 @@ export const EVAL_TOOL_SOURCES: Record<string, EvalDatasetSource> = {
   oggregator_straddle_scanner: 'unavailable',
   oggregator_lotto_scanner: 'unavailable',
   oggregator_put_scanner: 'unavailable',
+  oggregator_iron_fly_scanner: 'unavailable',
   search_options_library: 'local',
 };
 

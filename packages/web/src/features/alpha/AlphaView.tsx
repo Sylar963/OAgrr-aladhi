@@ -13,6 +13,7 @@ import AlphaContextStrip from './AlphaContextStrip';
 import AlphaTradeSizing, { useAlphaSizing } from './AlphaTradeSizing';
 import AlphaVenueOpportunities from './AlphaVenueOpportunities';
 import styles from './AlphaView.module.css';
+import IronFlyPanel from './IronFlyPanel';
 import LongStraddlePanel from './LongStraddlePanel';
 import LottoScannerPanel from './LottoScannerPanel';
 import ProtectivePutPanel from './ProtectivePutPanel';
@@ -46,7 +47,13 @@ import {
 import type { VerticalEconomics } from './vertical-pricing';
 import VolSmileInset from './VolSmileInset';
 
-type AlphaStrategy = SpreadKind | 'long-call' | 'long-put' | 'short-straddle' | 'long-straddle';
+type AlphaStrategy =
+  | SpreadKind
+  | 'long-call'
+  | 'long-put'
+  | 'short-straddle'
+  | 'long-straddle'
+  | 'iron-fly';
 type ScannerStrategy = Exclude<AlphaStrategy, SpreadKind>;
 
 function isScannerStrategy(strategy: AlphaStrategy): strategy is ScannerStrategy {
@@ -54,7 +61,8 @@ function isScannerStrategy(strategy: AlphaStrategy): strategy is ScannerStrategy
     strategy === 'long-call' ||
     strategy === 'long-put' ||
     strategy === 'short-straddle' ||
-    strategy === 'long-straddle'
+    strategy === 'long-straddle' ||
+    strategy === 'iron-fly'
   );
 }
 
@@ -68,6 +76,7 @@ const messages = defineMessages(
     longPut: 'Long Put',
     sellStraddle: 'Sell Straddle',
     buyStraddle: 'Buy Straddle',
+    ironFly: 'Iron Fly',
     emptyEquity: 'Enter your current account equity in the builder to see dollar risk at your size.',
     emptyChain: 'Chain unavailable. Cached quotes are not used for a trade estimate.',
     emptyMarkOnly:
@@ -92,6 +101,7 @@ const messages = defineMessages(
     longPut: 'Long Put',
     sellStraddle: 'Vender straddle',
     buyStraddle: 'Comprar straddle',
+    ironFly: 'Iron fly',
     emptyEquity: 'Ingresa el capital actual de tu cuenta en el builder para ver el riesgo en dólares a tu tamaño.',
     emptyChain: 'Cadena no disponible. No se usan cotizaciones en caché para estimar un trade.',
     emptyMarkOnly:
@@ -118,6 +128,7 @@ const STRATEGIES: ReadonlyArray<{ id: AlphaStrategy; label: keyof typeof message
   { id: 'long-put', label: 'longPut' },
   { id: 'short-straddle', label: 'sellStraddle' },
   { id: 'long-straddle', label: 'buyStraddle' },
+  { id: 'iron-fly', label: 'ironFly' },
 ];
 // TradFi has no scanner runtime yet; only the chain-local spread tabs apply.
 const SPREAD_STRATEGIES = STRATEGIES.filter((item) => !isScannerStrategy(item.id));
@@ -517,6 +528,12 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
       {strategy === 'long-straddle' && (
         <div className={styles.scannerWorkspace}>
           <LongStraddlePanel underlying={underlying} venues={scanVenues} />
+        </div>
+      )}
+
+      {strategy === 'iron-fly' && (
+        <div className={styles.scannerWorkspace}>
+          <IronFlyPanel underlying={underlying} venues={scanVenues} />
         </div>
       )}
 

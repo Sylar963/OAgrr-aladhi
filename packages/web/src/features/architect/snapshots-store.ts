@@ -20,6 +20,10 @@ const GhostSnapshotSchema = z.object({
   spotAtSnapshot: z.number(),
   expiryMs: z.number(),
   resolutionSec: z.number(),
+  // Break-evens of the structure at capture; optional for older snapshots.
+  breakevens: z.array(z.number()).optional(),
+  // Realized vol that sized the candle texture; optional for older snapshots.
+  textureVol: z.number().optional(),
   paths: z.array(GhostPathSnapshotSchema),
 });
 

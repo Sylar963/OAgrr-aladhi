@@ -249,6 +249,48 @@ evidence** that IV below this forecast predicts profitable long straddles (see b
 row is a price check that needs a move thesis. On 2026-10-02 (Friday night) the live scan had no
 buy candidates: 1–6 DTE were watch (IV far below realized) and 13+ DTE were expensive (cone > p50).
 
+## Short iron fly: model and gates (Iron Fly tab)
+
+Engineering derivation, per 1 underlying unit, same venue and expiry, linear European options.
+Sell the call and put at the ATM strike K (listed strike nearest the venue forward) at the bids,
+buy the K+W call and K−W put at the asks. Net credit C = body bids − wing asks − taker fees on
+all four legs. Terminal P&L = C − min(|S_T − K|, W). Breakevens K ± C; max loss W − C.
+Wings W are the listed symmetric widths nearest 1/2/3/5% of the forward.
+
+`packages/server/src/alpha-iron-fly-scanner.ts` (route `/api/alpha/iron-fly-scanner`) scores
+**today's** credit against past settlement locations, not against past option prices:
+
+- **Windows:** for each past week, the window starts at the same UTC hour of the week as now and
+  ends at the same hour of the week as the expiry (so a Friday 16:00 scan of a Sunday 08:00
+  expiry uses past Fri 16:00 → Sun 08:00 moves). Prices are hourly BTC-PERPETUAL closes; the
+  settlement is proxied by the close at the expiry hour, not the venue's index average. Each
+  window's ratio is applied to today's forward. Weekend variance is therefore in the sample
+  rather than modelled. Windows longer than a week overlap; the CI uses n × 7d/horizon (K4).
+- **Fit vs holdout:** the last 26 weeks are held out. Ranking and the verdict use the older fit
+  windows; the holdout is shown beside them. Strikes are not chosen from history (ATM only), so
+  the holdout guards the width ranking and the regime, not strike selection.
+- **Stats:** profit rate, mean P&L from the full payoff (not the profit rate), 95% CI, worst and
+  best observed, n. Also the lognormal probability inside the breakevens at the body's mark IV.
+- **Verdict:** thin history (< 52 fit windows) → historically negative (fit mean ≤ 0) → watch
+  (holdout mean ≤ 0, CI includes zero, overlapping windows, or size below minimum) → historically
+  positive. Thresholds are our choices.
+- **Sizing:** quantity whose max loss fits equity × budget %, capped by the smallest top-of-book.
+- **Not modelled:** settlement fees, early exits, margin paths, book-wide risk. The assistant tool
+  `oggregator_iron_fly_scanner` returns the same rows; pair it with
+  `oggregator_evaluate_structure` for book-wide worst loss.
+
+Applying today's credit to past weekends is a comparison of price with the historical
+distribution, not a trading backtest. A backtest needs archived Friday bids, asks and fees
+per strike. Our short-straddle snapshots record only the ATM pair.
+
+First live reading (2026-10-23 16:30 UTC, Deribit 25OCT26, forward ~81.5k, centre 82k, ~$98
+of estimated taker fees for four legs): credits of $416–644 for 1k–4k wings. Over 40h Fri 16:00 →
+Sun 08:00 windows since 2020, the fit mean was negative for every width and lookback (−$240 to
+−$710 per fly, CIs excluding zero). Win rates were 25–44%, and the latest 26 weeks were less
+negative (−$54 to −$179). This is consistent with the weekend short-straddle reconstruction
+above: weekend premium at the bids, after a taker's costs, did not cover realized weekend moves.
+Status: **observation**, one scan.
+
 ## Weekend variance weight (shared forecast)
 
 `packages/core/src/services/vol-richness.ts` weights the Saturday–Sunday UTC share of an option's
@@ -493,6 +535,9 @@ Alpha currently shows:
   a stress-sized quantity, and walk-forward evidence. Scan only; no orders.
 - Buy Straddle tab: the mirror at the asks, gated on a weekend-adjusted forecast and the vol
   cone, sized so the debit fits a max-loss budget. Scan only; no orders.
+- Iron Fly tab: ATM short iron flies at four widths, today's credit scored on past
+  same-hour-of-week settlement windows (fit + 26-week holdout), sized to a max-loss budget. Scan
+  only; no orders.
 
 Missing/unfinished research: calibrated physical return distributions, forecast errors,
 event-aware BTC volatility, out-of-sample execution-cost studies, portfolio incremental

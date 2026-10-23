@@ -1,4 +1,5 @@
 import type {
+  AlphaIronFlyCandidate,
   AlphaLongStraddleCandidate,
   AlphaLottoCandidate,
   AlphaStraddleCandidate,
@@ -111,6 +112,37 @@ export function longStraddleToBuilderLegs(candidate: LongStraddleBuilderCandidat
   return [
     leg('call', candidate.callInstrument, candidate.callAsk),
     leg('put', candidate.putInstrument, candidate.putAsk),
+  ];
+}
+
+export function ironFlyToBuilderLegs(candidate: AlphaIronFlyCandidate): Leg[] {
+  const quantity = candidate.suggestedQuantity > 0 ? candidate.suggestedQuantity : candidate.minQuantity;
+  const leg = (
+    type: 'call' | 'put',
+    direction: 'buy' | 'sell',
+    strike: number,
+    instrument: string,
+    price: number,
+  ): Leg => ({
+    id: `iron-fly:${candidate.venue}:${instrument}`,
+    type,
+    direction,
+    strike,
+    expiry: candidate.expiry,
+    quantity,
+    entryPrice: price,
+    venue: candidate.venue,
+    delta: null,
+    gamma: null,
+    theta: null,
+    vega: null,
+    iv: candidate.markIv,
+  });
+  return [
+    leg('put', 'buy', candidate.center - candidate.width, candidate.wingPutInstrument, candidate.wingPutAsk),
+    leg('put', 'sell', candidate.center, candidate.putInstrument, candidate.putBid),
+    leg('call', 'sell', candidate.center, candidate.callInstrument, candidate.callBid),
+    leg('call', 'buy', candidate.center + candidate.width, candidate.wingCallInstrument, candidate.wingCallAsk),
   ];
 }
 

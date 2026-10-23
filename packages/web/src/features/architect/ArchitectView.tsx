@@ -37,8 +37,12 @@ import {
 import { deriveTenorColumns } from './ladder-geometry';
 import {
   computeGhostPaths,
-  buildPathCandles,
-  buildFractalPathCandles,
+  buildFractalPathOnTimes,
+  projectionTimesOnGrid,
+  realizedVol,
+  pathTexture,
+  readRealized,
+  DEFAULT_IV,
   type GhostPath,
 } from './ghost-paths';
 import {
@@ -51,7 +55,11 @@ import { repriceLeg } from './reprice';
 import { withPortfolioEntryPrice } from './portfolio-import';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
-import PayoffChartV2, { pickCandleSpec } from './PayoffChartV2';
+import PayoffChartV2, {
+  pickCandleSpec,
+  type ProjectionSet,
+  type SnapshotOverlay,
+} from './PayoffChartV2';
 import PayoffChartV3 from './PayoffChartV3';
 import { buildExpiryMarks, expiryTimeMs } from './expiry-timeline';
 import { computeLongCallProfitFrontiers } from './profit-frontiers';
@@ -920,39 +928,78 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     [snapshots, selectedSnapshotId],
   );
 
-  // Active set: a selected snapshot (rebuilt at its original anchor) or live.
-  const activeGhostPaths: GhostPath[] = useMemo(() => {
-    if (!selectedSnapshot) return liveGhostPaths;
+  // A selected snapshot is rebuilt at its original anchor on the chart's current
+  // bar grid and overlaid on the live projection (muted), never replacing it.
+  const realCandles = visibleSpotCandles?.candles;
+  const snapshotGhostPaths: GhostPath[] = useMemo(() => {
+    if (!selectedSnapshot) return [];
+    const times = projectionTimesOnGrid(
+      selectedSnapshot.createdAt,
+      selectedSnapshot.expiryMs,
+      candleResolutionSec,
+      (realCandles ?? []).map((c) => c.timestamp),
+    );
+    const textureVol =
+      selectedSnapshot.textureVol ??
+      realizedVol(realCandles ?? [], candleResolutionSec) ??
+      DEFAULT_IV;
     return selectedSnapshot.paths.map((p) => ({
       kind: p.kind,
       isProfit: p.isProfit,
       targetPrice: p.targetPrice,
       pnlAtExpiry: p.pnlAtExpiry,
       shape: p.shape ?? [],
-      candles:
-        p.shape && p.shape.length > 0
-          ? buildFractalPathCandles(
-              selectedSnapshot.spotAtSnapshot,
-              p.targetPrice,
-              selectedSnapshot.createdAt,
-              selectedSnapshot.expiryMs,
-              selectedSnapshot.resolutionSec,
-              p.shape,
-            )
-          : buildPathCandles(
-              selectedSnapshot.spotAtSnapshot,
-              p.targetPrice,
-              selectedSnapshot.createdAt,
-              selectedSnapshot.expiryMs,
-              selectedSnapshot.resolutionSec,
-            ),
+      textureVol,
+      candles: buildFractalPathOnTimes(
+        selectedSnapshot.spotAtSnapshot,
+        p.targetPrice,
+        selectedSnapshot.createdAt,
+        selectedSnapshot.expiryMs,
+        times,
+        p.shape ?? [],
+        pathTexture(p.kind, textureVol, selectedSnapshot.createdAt),
+      ),
     }));
-  }, [selectedSnapshot, liveGhostPaths]);
+  }, [selectedSnapshot, candleResolutionSec, realCandles]);
 
-  const snapshotMeta = useMemo(
-    () => (selectedSnapshot ? { agoLabel: formatAgo(selectedSnapshot.createdAt, t) } : null),
-    [selectedSnapshot, t],
-  );
+  const liveBreakevens = metrics?.breakevens;
+  const projectionSets: ProjectionSet[] = useMemo(() => {
+    const sets: ProjectionSet[] = [
+      {
+        id: 'live',
+        paths: liveGhostPaths,
+        breakevens: liveBreakevens ?? [],
+        expiryMs: nearestExpiryMs,
+      },
+    ];
+    if (selectedSnapshot) {
+      sets.push({
+        id: 'snapshot',
+        paths: snapshotGhostPaths,
+        breakevens: selectedSnapshot.breakevens ?? [],
+        expiryMs: selectedSnapshot.expiryMs,
+      });
+    }
+    return sets;
+  }, [liveGhostPaths, liveBreakevens, nearestExpiryMs, selectedSnapshot, snapshotGhostPaths]);
+
+  const snapshotOverlay: SnapshotOverlay | null = useMemo(() => {
+    if (!selectedSnapshot) return null;
+    return {
+      anchorMs: selectedSnapshot.createdAt,
+      spot: selectedSnapshot.spotAtSnapshot,
+      agoLabel: formatAgo(selectedSnapshot.createdAt, t),
+      breakevens: selectedSnapshot.breakevens ?? [],
+      expiryMs: selectedSnapshot.expiryMs,
+      realized: readRealized(
+        snapshotGhostPaths,
+        realCandles ?? [],
+        selectedSnapshot.spotAtSnapshot,
+        selectedSnapshot.createdAt,
+        selectedSnapshot.expiryMs,
+      ),
+    };
+  }, [selectedSnapshot, snapshotGhostPaths, realCandles, t]);
 
   const handleSnapshot = useCallback(() => {
     if (liveGhostPaths.length === 0 || !Number.isFinite(nearestExpiryMs)) return;
@@ -964,6 +1011,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
       spotAtSnapshot: spotPrice,
       expiryMs: nearestExpiryMs,
       resolutionSec: candleResolutionSec,
+      breakevens: metrics?.breakevens ?? [],
+      textureVol: liveGhostPaths[0]!.textureVol,
       paths: liveGhostPaths.map((p) => ({
         kind: p.kind,
         isProfit: p.isProfit,
@@ -981,6 +1030,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     pricedLegs,
     spotPrice,
     candleResolutionSec,
+    metrics?.breakevens,
   ]);
 
   function handleCopyUrl() {
@@ -1415,9 +1465,9 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
                         onSwitchToV1={() => setVariant('v1')}
-                        ghostPaths={activeGhostPaths}
+                        projections={projectionSets}
+                        snapshot={snapshotOverlay}
                         showProjections={showProjections}
-                        snapshotMeta={snapshotMeta}
                         projectionKey={`${market}:${underlying}:${selectedSnapshotId ?? 'live'}:${nearestExpiryMs}:${candleResolutionSec}`}
                         profitFrontiers={profitFrontiers}
                         expiryMarks={expiryMarks}

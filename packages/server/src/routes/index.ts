@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { isReady } from '../app.js';
+import { alphaIronFlyScannerRoute } from './alpha-iron-fly-scanner.js';
 import { alphaMarketContextRoute } from './alpha-market-context.js';
 import { alphaLottoScannerRoute } from './alpha-lotto-scanner.js';
 import { alphaPutScannerRoute } from './alpha-put-scanner.js';
@@ -79,6 +80,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(alphaPutScannerRoute, { prefix: '/api' });
   app.register(alphaShortStraddleEvaluationRoute, { prefix: '/api' });
   app.register(alphaStraddleScannerRoute, { prefix: '/api' });
+  app.register(alphaIronFlyScannerRoute, { prefix: '/api' });
   app.register(underlyingsRoute, { prefix: '/api' });
   app.register(sectorsRoute, { prefix: '/api' });
   app.register(expiriesRoute, { prefix: '/api' });

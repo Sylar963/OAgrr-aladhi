@@ -1,5 +1,6 @@
 import {
   AlphaLottoScannerResponseSchema,
+  AlphaIronFlyScannerResponseSchema,
   AlphaPutScannerResponseSchema,
   AlphaStraddleScannerResponseSchema,
   type BreakEvenResponse,
@@ -155,7 +156,8 @@ export class AssistantMarketDataReader {
       | 'health'
       | 'alpha/straddle-scanner'
       | 'alpha/lotto-scanner'
-      | 'alpha/put-scanner',
+      | 'alpha/put-scanner'
+      | 'alpha/iron-fly-scanner',
     parameters: Record<string, string | number | boolean | string[] | undefined>,
   ): Promise<MarketReadResult<unknown>> {
     const query = new URLSearchParams();
@@ -261,6 +263,9 @@ export class AssistantMarketDataReader {
         break;
       case 'alpha/put-scanner':
         result = await this.get(path, AlphaPutScannerResponseSchema, 25_000);
+        break;
+      case 'alpha/iron-fly-scanner':
+        result = await this.get(path, AlphaIronFlyScannerResponseSchema, 25_000);
         break;
     }
     if (!result.ok) return result;

@@ -33,6 +33,7 @@ interface LegInputProps {
   expiries: string[];
   underlying: string;
   activeVenues: string[];
+  allowPerp?: boolean;
   onExpiryChange: (expiry: string) => void;
 }
 
@@ -42,6 +43,7 @@ export default function LegInput({
   expiries,
   underlying,
   activeVenues,
+  allowPerp = true,
   onExpiryChange,
 }: LegInputProps) {
   const t = useT(messages);
@@ -209,17 +211,19 @@ export default function LegInput({
           >
             PUT
           </button>
-          <button
-            className={styles.toggleBtn}
-            data-active={isPerp}
-            data-type="perp"
-            onClick={() => {
-              setType('perp');
-              setShowSuggestions(false);
-            }}
-          >
-            PERP
-          </button>
+          {allowPerp && (
+            <button
+              className={styles.toggleBtn}
+              data-active={isPerp}
+              data-type="perp"
+              onClick={() => {
+                setType('perp');
+                setShowSuggestions(false);
+              }}
+            >
+              PERP
+            </button>
+          )}
         </div>
 
         {!isPerp && (

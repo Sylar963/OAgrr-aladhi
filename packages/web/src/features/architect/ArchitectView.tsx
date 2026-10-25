@@ -849,11 +849,13 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   // Rounded to the delta display precision so the hedge lands on 0.000.
   const deltaHedge = useMemo(() => {
     const netDelta = metrics?.netDelta;
-    if (legs.length === 0 || netDelta == null || !(perpReferencePrice > 0)) return null;
+    if (market !== 'crypto' || legs.length === 0 || netDelta == null || !(perpReferencePrice > 0)) {
+      return null;
+    }
     const quantity = Math.round(Math.abs(netDelta) * 1000) / 1000;
     if (quantity === 0) return null;
     return { direction: netDelta > 0 ? ('sell' as const) : ('buy' as const), quantity };
-  }, [legs.length, metrics?.netDelta, perpReferencePrice]);
+  }, [legs.length, market, metrics?.netDelta, perpReferencePrice]);
 
   const handleDeltaHedge = useCallback(() => {
     if (!deltaHedge) return;
@@ -1269,6 +1271,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               expiries={allExpiries}
               underlying={underlying}
               activeVenues={activeVenues}
+              allowPerp={market === 'crypto'}
               onExpiryChange={setBuilderExpiry}
             />
 

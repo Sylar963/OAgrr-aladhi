@@ -144,16 +144,13 @@ export function fitRowFromStrikesSvi(
   const ivOf = (side: EnrichedSide): number | null =>
     venueId ? side.venues[venueId]?.markIv ?? null : averageSideIv(side);
 
+  // OTM side only, per Gatheral. Deep-ITM IVs are unreliable (TastyTrade publishes 20% puts
+  // beside 46% calls at the same strike), and averaging them in bent the wings.
   const points: { k: number; iv: number }[] = [];
   for (const s of strikes) {
     if (s.strike <= 0) continue;
-    const callIv = ivOf(s.call);
-    const putIv = ivOf(s.put);
-    const ivs: number[] = [];
-    if (isValidIv(callIv)) ivs.push(callIv);
-    if (isValidIv(putIv)) ivs.push(putIv);
-    if (ivs.length === 0) continue;
-    const iv = ivs.reduce((a, b) => a + b, 0) / ivs.length;
+    const iv = ivOf(s.strike >= refPrice ? s.call : s.put);
+    if (!isValidIv(iv)) continue;
     points.push({ k: Math.log(s.strike / refPrice), iv });
   }
 
@@ -161,8 +158,19 @@ export function fitRowFromStrikesSvi(
   const params = fitSvi(points, T);
   if (!params) return null;
 
+  // Hold IV flat past the outermost listed strikes. SVI's wings are linear in total variance
+  // and unchecked for arbitrage out there: a long-dated equity expiry listing calls only to
+  // 45Δ extrapolated to 104% IV at 5Δ.
+  let kMin = Infinity;
+  let kMax = -Infinity;
+  for (const p of points) {
+    kMin = Math.min(kMin, p.k);
+    kMax = Math.max(kMax, p.k);
+  }
+  const ivAt = (k: number) => sviIv(params, Math.min(kMax, Math.max(kMin, k)), T);
+
   const sqrtT = Math.sqrt(T);
-  const atmSigma = sviIv(params, 0, T);
+  const atmSigma = ivAt(0);
   if (!Number.isFinite(atmSigma) || atmSigma <= 0) return null;
 
   const out: (number | null)[] = [];
@@ -177,7 +185,7 @@ export function fitRowFromStrikesSvi(
     let converged = false;
     for (let i = 0; i < FP_MAX_ITER; i++) {
       const k = -sigma * sqrtT * d1 + 0.5 * sigma * sigma * T;
-      const sigmaNext = sviIv(params, k, T);
+      const sigmaNext = ivAt(k);
       if (!Number.isFinite(sigmaNext) || sigmaNext <= 0) break;
       if (Math.abs(sigmaNext - sigma) < FP_TOL) {
         sigma = sigmaNext;

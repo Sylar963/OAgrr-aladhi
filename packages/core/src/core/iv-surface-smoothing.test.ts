@@ -15,6 +15,7 @@ import {
   smoothFineSurfaceRow,
   DENSE_CMM_TENORS,
 } from './iv-surface-smoothing.js';
+import { fitSvi, sviIv } from '../services/svi-fit.js';
 
 function createQuote(partial: Partial<VenueQuote> = {}): VenueQuote {
   return {
@@ -119,6 +120,16 @@ describe('fitRowFromStrikesSvi', () => {
     const T = 30 / 365;
     const strikes = syntheticSmile(refPrice, T, [90_000, 100_000, 110_000], 0.6, -0.1, 0.5);
     expect(fitRowFromStrikesSvi(strikes, refPrice, T)).toBeNull();
+  });
+
+  it('holds IV flat beyond the outermost listed strike', () => {
+    const refPrice = 100;
+    const T = 2;
+    const strikes = syntheticSmile(refPrice, T, [40, 50, 60, 70, 80, 90, 100, 110, 120], 0.45, -0.1, 0.1);
+    const ivs = fitRowFromStrikesSvi(strikes, refPrice, T, ULTRA_FINE_DELTA_GRID);
+    expect(ivs).not.toBeNull();
+    const edgeCallIv = strikes.at(-1)!.call.bestIv!;
+    expect(ivs!.at(-1)!).toBeCloseTo(edgeCallIv, 2);
   });
 
   it('rejects bad reference price or tenor', () => {
@@ -287,5 +298,55 @@ describe('liftRowToGrid', () => {
     const raw: (number | null)[] = FINE_DELTA_GRID.map((_, i) => i / 10);
     const lifted = liftRowToGrid(raw, FINE_DELTA_GRID, FINE_DELTA_GRID);
     expect(lifted).toEqual(raw);
+  });
+});
+
+// TastyTrade ADBE 2027-03-19, spot 262.8, 2026-10-25: [strike, callIv, putIv]. Deep-ITM IVs
+// disagree with the OTM side by up to 0.2, and SVI once fitted this slice at 122–154% IV.
+const ADBE_MAR27: [number, number, number][] = [
+  [100, 0.857, 0.646], [105, 0.831, 0.623], [110, 0.818, 0.599], [115, 0.806, 0.577],
+  [120, 0.791, 0.554], [125, 0.775, 0.533], [130, 0.758, 0.52], [135, 0.74, 0.526],
+  [140, 0.722, 0.527], [145, 0.702, 0.524], [150, 0.683, 0.516], [155, 0.663, 0.507],
+  [160, 0.646, 0.498], [165, 0.633, 0.498], [170, 0.623, 0.495], [175, 0.612, 0.489],
+  [180, 0.6, 0.481], [185, 0.589, 0.471], [190, 0.577, 0.461], [195, 0.564, 0.455],
+  [200, 0.552, 0.449], [210, 0.546, 0.448], [220, 0.538, 0.443], [230, 0.523, 0.435],
+  [240, 0.506, 0.431], [250, 0.498, 0.435], [260, 0.489, 0.434], [270, 0.485, 0.425],
+  [280, 0.487, 0.409], [290, 0.486, 0.395], [300, 0.478, 0.385], [310, 0.466, 0.377],
+  [320, 0.46, 0.376], [330, 0.46, 0.374], [340, 0.459, 0.369], [350, 0.456, 0.362],
+  [360, 0.458, 0.349], [370, 0.46, 0.326], [380, 0.458, 0.315], [390, 0.456, 0.319],
+  [400, 0.458, 0.327], [410, 0.461, 0.333], [420, 0.468, 0.345], [430, 0.475, 0.358],
+];
+const ADBE_SPOT = 262.8;
+const ADBE_T = 0.398;
+
+describe('SVI on a TastyTrade equity slice', () => {
+  it('never accepts a fit that misses its inputs', () => {
+    const averaged = ADBE_MAR27.map(([K, c, p]) => ({ k: Math.log(K / ADBE_SPOT), iv: (c + p) / 2 }));
+    const otm = ADBE_MAR27.map(([K, c, p]) => ({ k: Math.log(K / ADBE_SPOT), iv: K >= ADBE_SPOT ? c : p }));
+    for (const points of [averaged, otm]) {
+      const fit = fitSvi(points, ADBE_T);
+      if (fit == null) continue;
+      for (const { k, iv } of points) expect(Math.abs(sviIv(fit, k, ADBE_T) - iv)).toBeLessThan(0.15);
+    }
+  });
+
+  it('keeps the smoothed row within the observed IV range', () => {
+    const strikes: EnrichedStrike[] = ADBE_MAR27.map(([K, c, p]) => ({
+      strike: K,
+      call: { bestIv: c, bestVenue: 'deribit', venues: { deribit: createQuote({ markIv: c }) } },
+      put: { bestIv: p, bestVenue: 'deribit', venues: { deribit: createQuote({ markIv: p }) } },
+    }));
+    const raw: IvSurfaceFineRow = {
+      expiry: '2027-03-19',
+      dte: 146,
+      ivs: [0.5, 0.47, 0.45, 0.44, 0.43, 0.43, 0.44, null, 0.43, 0.46, 0.49, 0.48, 0.47, 0.46, 0.46, 0.46, 0.46, 0.46, 0.47],
+    };
+    const out = smoothFineSurfaceRow(raw, strikes, ADBE_SPOT, ADBE_T, ULTRA_FINE_DELTA_GRID);
+    expect(out.ivs).toHaveLength(ULTRA_FINE_DELTA_GRID.length);
+    for (const iv of out.ivs) {
+      expect(iv).not.toBeNull();
+      expect(iv!).toBeGreaterThan(0.3);
+      expect(iv!).toBeLessThan(0.7);
+    }
   });
 });

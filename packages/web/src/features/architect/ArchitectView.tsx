@@ -385,6 +385,12 @@ function parsePositive(raw: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+// Capped at 4 decimals: fmtUsd prints 6 below $0.01, which overflows the leg grid.
+function fmtHedgePnl(pnl: number): string {
+  const abs = Math.abs(pnl);
+  return `${pnl < 0 ? '−' : '+'}${abs >= 1 ? fmtUsd(abs) : `$${abs.toFixed(4)}`}`;
+}
+
 function HedgeRow({ hedge, spotPrice, onRemove, onUpdate }: HedgeRowProps) {
   const t = useT(messages);
   const [editing, setEditing] = useState(false);
@@ -453,19 +459,20 @@ function HedgeRow({ hedge, spotPrice, onRemove, onUpdate }: HedgeRowProps) {
         {hedge.direction === 'buy' ? t('buy') : t('sell')}
       </span>
       <span className={styles.legQty}>{hedge.quantity}×</span>
-      <span className={styles.legStrike} title={t('entry')}>
-        {fmtUsd(hedge.entryPrice)}
+      <span className={styles.legStrike} title={`${t('entry')} ${fmtUsd(hedge.entryPrice)}`}>
+        {hedge.entryPrice.toLocaleString(undefined, {
+          maximumFractionDigits: hedge.entryPrice >= 1000 ? 0 : 3,
+        })}
       </span>
-      <span className={styles.legType} data-type="perp">
+      <span className={styles.legType} data-type="perp" title={hedge.instrumentName}>
         {typeLabel}
       </span>
-      <span className={styles.legExpiry}>{hedge.instrumentName ?? '—'}</span>
       <span
         className={styles.legPrice}
         data-positive={pnl != null && pnl > 0 ? 'true' : undefined}
         data-negative={pnl != null && pnl < 0 ? 'true' : undefined}
       >
-        {pnl != null ? `${pnl >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnl))}` : '–'}
+        {pnl != null ? fmtHedgePnl(pnl) : '–'}
       </span>
       <button
         className={styles.legEditBtn}

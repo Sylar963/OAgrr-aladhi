@@ -56,6 +56,10 @@ const NM_MAX_ITER = 250;
 const NM_TOL = 1e-12;
 const BUTTERFLY_SAMPLES = 64;
 const BUTTERFLY_TOL = 1e-9;
+// Healthy fits on live smiles land under ~10% relative IV RMSE. When the simplex drifts to a
+// degenerate (m, σ) the inner solve goes collinear, ρ gets clamped after the fact and the fit
+// misses the data by 100%+ while still passing the arbitrage checks.
+const MAX_REL_IV_RMSE = 0.2;
 
 // Density-positivity check (Roger Lee, 2004):
 //   g(k) = (1 − k·w'/(2w))² − (w'²/4)·(1/w + 1/4) + w''/2
@@ -113,7 +117,20 @@ export function fitSvi(points: readonly FitPoint[], T: number): SviParams | null
   if (a + b * sigma * Math.sqrt(1 - rho * rho) < -1e-6) return null;
   const fit: SviParams = { a, b, rho, m, sigma };
   if (!isButterflyArbFree(fit, lo, hi)) return null;
+  if (relativeIvRmse(fit, points, T) > MAX_REL_IV_RMSE) return null;
   return fit;
+}
+
+function relativeIvRmse(params: SviParams, points: readonly FitPoint[], T: number): number {
+  let sse = 0;
+  let ivSum = 0;
+  for (const p of points) {
+    const iv = sviIv(params, p.k, T);
+    if (!Number.isFinite(iv)) return Number.POSITIVE_INFINITY;
+    sse += (iv - p.iv) ** 2;
+    ivSum += p.iv;
+  }
+  return Math.sqrt(sse / points.length) / (ivSum / points.length);
 }
 
 function solveInner(

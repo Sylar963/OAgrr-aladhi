@@ -516,6 +516,9 @@
   background: color-mix(in srgb, var(--color-loss) 10%, transparent);
 }
 .legType[data-type="perp"] {
+  /* Spans the type + expiry tracks so the wider tag never widens the C/P column. */
+  grid-column: span 2;
+  justify-self: start;
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }

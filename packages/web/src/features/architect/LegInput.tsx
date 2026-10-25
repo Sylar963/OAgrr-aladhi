@@ -14,6 +14,7 @@ const messages = defineMessages(
     sell: 'SELL',
     baseQty: 'Base qty',
     strike: 'Strike',
+    entry: 'Entry',
     add: '+ Add',
   },
   {
@@ -21,6 +22,7 @@ const messages = defineMessages(
     sell: 'VENTA',
     baseQty: 'Cant. base',
     strike: 'Strike',
+    entry: 'Entrada',
     add: '+ Agregar',
   },
 );
@@ -44,7 +46,8 @@ export default function LegInput({
 }: LegInputProps) {
   const t = useT(messages);
   const addLeg = useStrategyStore((s) => s.addLeg);
-  const [type, setType] = useState<'call' | 'put'>('call');
+  const addHedge = useStrategyStore((s) => s.addHedge);
+  const [type, setType] = useState<'call' | 'put' | 'perp'>('call');
   const [direction, setDirection] = useState<'buy' | 'sell'>('buy');
   const [strikeInput, setStrikeInput] = useState('');
   const [qty, setQty] = useState('1');
@@ -53,6 +56,8 @@ export default function LegInput({
 
   const strikes = chain?.strikes.map((s) => s.strike) ?? [];
   const atmStrike = chain?.stats.atmStrike ?? 0;
+  const perpReference = chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? 0;
+  const isPerp = type === 'perp';
 
   const filtered = strikeInput
     ? strikes.filter((s) => s.toString().includes(strikeInput))
@@ -74,10 +79,18 @@ export default function LegInput({
   }
 
   function handleAdd() {
-    if (!chain || !expiry) return;
-
     const parsedQty = parseFloat(qty);
     const quantity = Number.isFinite(parsedQty) ? Math.max(0.001, parsedQty) : 1;
+
+    if (type === 'perp') {
+      const entryPrice = Number(strikeInput) || perpReference;
+      if (!(entryPrice > 0)) return;
+      addHedge({ kind: 'perpetual', direction, quantity, entryPrice }, underlying);
+      setStrikeInput('');
+      return;
+    }
+
+    if (!chain || !expiry) return;
 
     const leg = repriceLeg(chain, activeVenues, {
       type,
@@ -138,7 +151,16 @@ export default function LegInput({
             type="text"
             inputMode="decimal"
             className={styles.legInputField}
-            placeholder={atmStrike ? atmStrike.toLocaleString() : t('strike')}
+            placeholder={
+              isPerp
+                ? perpReference
+                  ? Math.round(perpReference).toLocaleString()
+                  : t('entry')
+                : atmStrike
+                  ? atmStrike.toLocaleString()
+                  : t('strike')
+            }
+            title={isPerp ? t('entry') : t('strike')}
             value={strikeInput}
             onChange={(e) => {
               const cleaned = e.target.value.replace(/[^\d.]/g, '');
@@ -148,12 +170,12 @@ export default function LegInput({
                   ? cleaned
                   : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
               setStrikeInput(normalized);
-              setShowSuggestions(true);
+              setShowSuggestions(!isPerp);
             }}
-            onFocus={() => setShowSuggestions(true)}
+            onFocus={() => setShowSuggestions(!isPerp)}
             style={{ width: 90 }}
           />
-          {showSuggestions && filtered.length > 0 && (
+          {showSuggestions && !isPerp && filtered.length > 0 && (
             <div className={styles.strikeSuggestions}>
               {filtered.slice(0, 20).map((s) => (
                 <button
@@ -187,18 +209,31 @@ export default function LegInput({
           >
             PUT
           </button>
+          <button
+            className={styles.toggleBtn}
+            data-active={isPerp}
+            data-type="perp"
+            onClick={() => {
+              setType('perp');
+              setShowSuggestions(false);
+            }}
+          >
+            PERP
+          </button>
         </div>
 
-        <DropdownPicker
-          size="sm"
-          value={expiry}
-          onChange={onExpiryChange}
-          options={expiries.map((e) => ({
-            value: e,
-            label: formatExpiry(e),
-            meta: `${dteDays(e)}d`,
-          }))}
-        />
+        {!isPerp && (
+          <DropdownPicker
+            size="sm"
+            value={expiry}
+            onChange={onExpiryChange}
+            options={expiries.map((e) => ({
+              value: e,
+              label: formatExpiry(e),
+              meta: `${dteDays(e)}d`,
+            }))}
+          />
+        )}
 
         <button className={styles.addLegBtn} onClick={handleAdd}>
           {t('add')}

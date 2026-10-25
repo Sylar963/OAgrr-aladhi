@@ -22,7 +22,7 @@ import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 import type { GexWallHistoryResponse } from '@oggregator/protocol';
 
 import { CALL_WALL_COLOR, GammaBandsPrimitive, PUT_WALL_COLOR } from './GammaBandsPrimitive';
-import { alignWallHistory, smoothWallHistory } from './gex-wall-history';
+import { alignWallHistory, gexKeltner } from './gex-wall-history';
 import { computeGammaWalls } from './gex-wall-utils';
 import styles from './GexView.module.css';
 
@@ -47,9 +47,8 @@ const SPOT_COLOR = '#50D2C1';
 // Share of the visible window reserved right of the last candle for the live walls.
 const PROJECTION_FRACTION = 0.15;
 const MIN_PROJECTION_BARS = 8;
-// SMA window for the recorded walls, fixed in time so every timeframe smooths
-// over the same span regardless of candle size.
-const WALL_SMA_WINDOW_SEC = 6 * 3600;
+// Counted in candles, like a chart-platform Keltner length.
+const KELTNER_LENGTH = 130;
 
 function useGexSpotCandles(
   currency: SpotCandleCurrency,
@@ -87,7 +86,7 @@ const messages = defineMessages(
     callWall: 'CALL WALL',
     putWall: 'PUT WALL',
     flip: 'FLIP',
-    noteHistory: 'Band history: recorded walls · dashed zone: live walls',
+    noteHistory: 'GEX Keltner 130: EMA ± smoothed wall distance · dashed zone: live walls',
     noteLive: 'Dashed zone: live walls · band history needs ALL expiries + all venues',
     loading: 'Loading spot history…',
     unavailable: 'Spot history unavailable',
@@ -97,7 +96,8 @@ const messages = defineMessages(
     callWall: 'MURO CALLS',
     putWall: 'MURO PUTS',
     flip: 'FLIP',
-    noteHistory: 'Historial de bandas: muros registrados · zona punteada: muros en vivo',
+    noteHistory:
+      'Keltner GEX 130: EMA ± distancia suavizada a los muros · zona punteada: muros en vivo',
     noteLive:
       'Zona punteada: muros en vivo · el historial de bandas requiere TODOS los vencimientos + todos los exchanges',
     loading: 'Cargando historial del spot…',
@@ -151,20 +151,25 @@ export default function GexBandsChart({
     showHistory,
   );
 
-  const candleTimes = useMemo(
-    () => (candleData?.candles ?? []).map((c) => Math.floor(c.timestamp / 1000)),
+  const candleCloses = useMemo(
+    () =>
+      (candleData?.candles ?? []).map((c) => ({
+        time: Math.floor(c.timestamp / 1000),
+        close: c.close,
+      })),
     [candleData],
   );
+  const candleTimes = useMemo(() => candleCloses.map((c) => c.time), [candleCloses]);
   const history = useMemo(
     () =>
       showHistory && historyData && !candlesStale
-        ? smoothWallHistory(
+        ? gexKeltner(
+            candleCloses,
             alignWallHistory(candleTimes, historyData.points, tfSpec.resolution),
-            Math.max(1, Math.round(WALL_SMA_WINDOW_SEC / tfSpec.resolution)),
-            tfSpec.resolution,
+            KELTNER_LENGTH,
           )
         : [],
-    [showHistory, historyData, candlesStale, candleTimes, tfSpec.resolution],
+    [showHistory, historyData, candlesStale, candleCloses, candleTimes, tfSpec.resolution],
   );
 
   // Chart lifecycle (mount/unmount only).

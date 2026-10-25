@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { computeMetrics, detectStrategy, type Leg } from './payoff';
+import {
+  computeMetrics,
+  computePayoff,
+  computeScenarioPayoff,
+  detectStrategy,
+  pnlAtPrice,
+  type HedgeLeg,
+  type Leg,
+} from './payoff';
 
 function leg(overrides: Partial<Leg> & Pick<Leg, 'type' | 'direction' | 'strike' | 'entryPrice'>): Leg {
   return {
@@ -286,5 +294,53 @@ describe('detectStrategy', () => {
       leg({ type: 'call', direction: 'sell', strike: 2_500, entryPrice: 40 }),
     ];
     expect(detectStrategy(legs)).toBe('Custom (4 legs)');
+  });
+});
+
+describe('perp hedges', () => {
+  const shortPerp: HedgeLeg = {
+    id: 'perp',
+    kind: 'perpetual',
+    direction: 'sell',
+    quantity: 0.5,
+    entryPrice: 80_000,
+  };
+
+  it('adds linear P&L from the entry price', () => {
+    expect(pnlAtPrice([], 82_000, [shortPerp])).toBe(-1_000);
+    expect(pnlAtPrice([], 78_000, [shortPerp])).toBe(1_000);
+  });
+
+  it('turns a long call into a synthetic put when hedged with a full short perp', () => {
+    const call = leg({ type: 'call', direction: 'buy', strike: 80_000, entryPrice: 2_000 });
+    const perp: HedgeLeg = { ...shortPerp, quantity: 1 };
+    const m = computeMetrics([call], 80_000, [perp]);
+    expect(m.maxLoss!).toBeCloseTo(-2_000, 0);
+    expect(m.maxProfit).toBeNull();
+    expect(m.netDebit).toBeCloseTo(-2_000, 0);
+    expect(m.breakevens).toHaveLength(1);
+    expect(m.breakevens[0]!).toBeCloseTo(78_000, -1);
+  });
+
+  it('nets hedge delta into the option delta', () => {
+    const call = leg({ type: 'call', direction: 'buy', strike: 80_000, entryPrice: 2_000, delta: 0.5 });
+    expect(computeMetrics([call], 80_000, [shortPerp]).netDelta).toBeCloseTo(0, 9);
+  });
+
+  it('leaves delta unknown when option legs report none', () => {
+    const call = leg({ type: 'call', direction: 'buy', strike: 80_000, entryPrice: 2_000 });
+    expect(computeMetrics([call], 80_000, [shortPerp]).netDelta).toBeNull();
+  });
+
+  it('prices a hedge-only book', () => {
+    const points = computePayoff([], 80_000, 200, [shortPerp]);
+    expect(points.length).toBeGreaterThan(0);
+    expect(computeMetrics([], 80_000, [shortPerp]).netDelta).toBe(-0.5);
+  });
+
+  it('keeps the hedge flat across IV and time scenarios', () => {
+    const base = computePayoff([], 80_000, 50, [shortPerp]);
+    const shifted = computeScenarioPayoff([], 80_000, 0.2, -10, 30, 50, [shortPerp]);
+    expect(shifted.map((p) => p.pnl)).toEqual(base.map((p) => p.pnl));
   });
 });

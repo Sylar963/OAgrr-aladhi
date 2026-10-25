@@ -14,7 +14,7 @@ import {
 } from 'lightweight-charts';
 
 import { Spinner } from '@components/ui';
-import type { Leg } from './payoff';
+import type { HedgeLeg, Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import { dteDays, fmtUsd } from '@lib/format';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
@@ -65,6 +65,7 @@ interface PayoffChartV2Props {
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
+  hedges?: readonly HedgeLeg[];
   resolutionSec: number;
   loading: boolean;
   available: boolean;
@@ -157,11 +158,18 @@ export function pickCandleSpec(legs: Leg[]): CandleSpec {
   };
 }
 
-function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): PriceZone[] {
-  if (legs.length === 0) return [];
+const NO_HEDGES: readonly HedgeLeg[] = [];
+
+function buildZones(
+  legs: Leg[],
+  breakevens: number[],
+  spotPrice: number,
+  hedges: readonly HedgeLeg[],
+): PriceZone[] {
+  if (legs.length === 0 && hedges.length === 0) return [];
 
   if (breakevens.length === 0) {
-    const sign = pnlAtPrice(legs, spotPrice) >= 0;
+    const sign = pnlAtPrice(legs, spotPrice, hedges) >= 0;
     return [{ low: -Infinity, high: Infinity, profit: sign }];
   }
 
@@ -182,7 +190,7 @@ function buildZones(legs: Leg[], breakevens: number[], spotPrice: number): Price
     } else {
       probe = spotPrice;
     }
-    zones.push({ low, high, profit: pnlAtPrice(legs, probe) >= 0 });
+    zones.push({ low, high, profit: pnlAtPrice(legs, probe, hedges) >= 0 });
   }
   return zones;
 }
@@ -192,6 +200,7 @@ export default function PayoffChartV2({
   breakevens,
   spotPrice,
   legs,
+  hedges = NO_HEDGES,
   resolutionSec,
   loading,
   available,
@@ -222,8 +231,8 @@ export default function PayoffChartV2({
   const lastGhostFitKeyRef = useRef<string>('');
 
   const zones = useMemo(
-    () => buildZones(legs, breakevens, spotPrice),
-    [legs, breakevens, spotPrice],
+    () => buildZones(legs, breakevens, spotPrice, hedges),
+    [legs, breakevens, spotPrice, hedges],
   );
 
   // Init chart once.

@@ -311,6 +311,10 @@
   background: color-mix(in srgb, var(--color-loss) 20%, transparent);
   color: var(--color-loss);
 }
+.toggleBtn[data-active="true"][data-type="perp"] {
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
+}
 
 .legInputField {
   font-family: var(--font-mono);
@@ -510,6 +514,16 @@
 .legType[data-type="put"] {
   color: var(--color-loss);
   background: color-mix(in srgb, var(--color-loss) 10%, transparent);
+}
+.legType[data-type="perp"] {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+.legPrice[data-positive="true"] {
+  color: var(--color-profit);
+}
+.legPrice[data-negative="true"] {
+  color: var(--color-loss);
 }
 .legExpiry {
   color: var(--text-dim);
@@ -895,6 +909,24 @@
   margin-top: 4px;
   font-size: 11px;
   color: var(--text-dim);
+}
+
+.hedgeDeltaBtn {
+  margin-top: var(--space-2);
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 5px 8px;
+  color: var(--accent-primary);
+  background: transparent;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hedgeDeltaBtn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 
 /* ── Scenario sliders ────────────────────────────────── */

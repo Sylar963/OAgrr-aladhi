@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Leg } from './payoff';
+import type { HedgeLeg, Leg } from './payoff';
 import { decodeStrategy, encodeStrategy } from './share';
 
 function leg(o: Partial<Leg> & Pick<Leg, 'type' | 'direction' | 'strike' | 'entryPrice'>): Leg {
@@ -124,5 +124,32 @@ describe('decodeStrategy', () => {
     expect(decodeStrategy(new URLSearchParams())).toBeNull();
     expect(decodeStrategy(new URLSearchParams({ u: 'BTC', legs: 'garbage' }))).toBeNull();
     expect(decodeStrategy(new URLSearchParams({ strategy: 'not-base64-json' }))).toBeNull();
+  });
+});
+
+describe('hedge sharing', () => {
+  const hedge: HedgeLeg = {
+    id: 'h1',
+    kind: 'perpetual',
+    direction: 'sell',
+    quantity: 0.42,
+    entryPrice: 80_750.5,
+  };
+
+  it('round-trips perp hedges next to option legs', () => {
+    const legs = [leg({ type: 'call', direction: 'buy', strike: 77000, entryPrice: 2360 })];
+    const params = encodeStrategy(legs, 'BTC', [hedge])!;
+    expect(params.get('h')).toBe('sp@80750.5x0.42');
+    const decoded = decodeStrategy(params)!;
+    expect(decoded.legs).toHaveLength(1);
+    expect(decoded.hedges).toEqual([
+      { direction: 'sell', kind: 'perpetual', entryPrice: 80_750.5, quantity: 0.42 },
+    ]);
+  });
+
+  it('shares a hedge-only strategy', () => {
+    const params = encodeStrategy([], 'BTC', [{ ...hedge, kind: 'future', direction: 'buy' }])!;
+    expect(params.has('legs')).toBe(false);
+    expect(decodeStrategy(params)!.hedges[0]).toMatchObject({ kind: 'future', direction: 'buy' });
   });
 });

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { PositionLeg } from '@oggregator/protocol';
-import { portfolioToBuilderLegs, withPortfolioEntryPrice } from './portfolio-import';
+import type { LinearPosition, PositionLeg } from '@oggregator/protocol';
+import {
+  portfolioToBuilderHedges,
+  portfolioToBuilderLegs,
+  withPortfolioEntryPrice,
+} from './portfolio-import';
 import { pnlAtPrice } from './payoff';
 
 const position: PositionLeg = {
@@ -33,5 +37,31 @@ describe('portfolio import', () => {
     expect(live.entryPrice).toBe(4_000);
     const { portfolioEntryPrice: _entry, ...ordinary } = live;
     expect(withPortfolioEntryPrice(ordinary).entryPrice).toBe(4_000);
+  });
+});
+
+describe('linear position import', () => {
+  const perp: LinearPosition = {
+    instrumentName: 'BTC-PERPETUAL',
+    underlying: 'BTC',
+    kind: 'perpetual',
+    expiry: null,
+    sizeCoin: -0.3,
+    entryPriceUsd: 81_000,
+    markPriceUsd: 80_500,
+    source: 'thalex',
+  };
+
+  it('carries perps over as signed hedges for the same underlying only', () => {
+    const hedges = portfolioToBuilderHedges([perp, { ...perp, underlying: 'ETH' }], 'BTC');
+    expect(hedges).toHaveLength(1);
+    expect(hedges[0]).toMatchObject({
+      kind: 'perpetual',
+      direction: 'sell',
+      quantity: 0.3,
+      entryPrice: 81_000,
+      instrumentName: 'BTC-PERPETUAL',
+    });
+    expect(pnlAtPrice([], 80_000, hedges)).toBeCloseTo(300, 9);
   });
 });

@@ -1,6 +1,6 @@
-// Keltner-style gamma bands. Two parts:
-//   • history — recorded call/put walls and flip, SMA-smoothed per candle,
-//     drawn as moving lines with the channel filled between them;
+// Gamma bands. Two parts:
+//   • history — GEX Keltner channel (EMA basis ± EMA wall distance) plus the
+//     EMA'd flip, drawn as moving lines with the channel filled between them;
 //   • projection — the live walls drawn only to the right of the last candle,
 //     so the current snapshot never pretends to describe past price action.
 
@@ -15,7 +15,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 
-import type { AlignedWalls } from './gex-wall-history';
+import type { GexKeltnerPoint } from './gex-wall-history';
 import type { GammaWalls } from './gex-wall-utils';
 
 interface BitmapCoordinatesRenderingScope {
@@ -32,6 +32,7 @@ interface CanvasRenderingTarget2D {
 export const CALL_WALL_COLOR = '#00E997';
 export const PUT_WALL_COLOR = '#CB3855';
 export const FLIP_COLOR = '#F0B90B';
+const BASIS_COLOR = 'rgba(154, 160, 166, 0.6)';
 const CHANNEL_FILL = 'rgba(80, 210, 193, 0.07)';
 const PROJECTION_FILL = 'rgba(80, 210, 193, 0.12)';
 
@@ -45,8 +46,17 @@ const LEVELS: ReadonlyArray<{ key: WallKey; color: string; width: number }> = [
   { key: 'gammaFlip', color: FLIP_COLOR, width: 1 },
 ];
 
+type HistoryKey = 'upper' | 'lower' | 'basis' | 'gammaFlip';
+
+const HISTORY_LINES: ReadonlyArray<{ key: HistoryKey; color: string; width: number }> = [
+  { key: 'upper', color: CALL_WALL_COLOR, width: 2 },
+  { key: 'lower', color: PUT_WALL_COLOR, width: 2 },
+  { key: 'basis', color: BASIS_COLOR, width: 1 },
+  { key: 'gammaFlip', color: FLIP_COLOR, width: 1 },
+];
+
 interface BandsContext {
-  history: readonly AlignedWalls[];
+  history: readonly GexKeltnerPoint[];
   live: GammaWalls;
   anchorSec: number | null;
   labels: WallLabels;
@@ -76,12 +86,12 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
 
       const gapAfter = gapFlags(history);
       fillChannel(context, history, gapAfter, toXY);
-      for (const level of LEVELS) {
-        const runs = splitRuns(history.map((h) => toXY(h.time, h[level.key])), gapAfter);
+      for (const line of HISTORY_LINES) {
+        const runs = splitRuns(history.map((h) => toXY(h.time, h[line.key])), gapAfter);
         context.save();
-        context.strokeStyle = level.color;
-        context.lineWidth = level.width * hpr;
-        if (level.key === 'gammaFlip') context.setLineDash([4 * hpr, 3 * hpr]);
+        context.strokeStyle = line.color;
+        context.lineWidth = line.width * hpr;
+        if (line.key === 'gammaFlip') context.setLineDash([4 * hpr, 3 * hpr]);
         for (const run of runs) strokeLine(context, run);
         context.restore();
       }
@@ -143,7 +153,7 @@ class GammaBandsRenderer implements IPrimitivePaneRenderer {
 
 // History skips candles inside recording gaps; flag where the spacing exceeds
 // the usual candle step so lines break there instead of bridging the gap.
-function gapFlags(history: readonly AlignedWalls[]): boolean[] {
+function gapFlags(history: readonly GexKeltnerPoint[]): boolean[] {
   let step = Infinity;
   for (let i = 1; i < history.length; i++) {
     const d = history[i]!.time - history[i - 1]!.time;
@@ -175,7 +185,7 @@ function strokeLine(ctx: CanvasRenderingContext2D, run: readonly XY[]): void {
 
 function fillChannel(
   ctx: CanvasRenderingContext2D,
-  history: readonly AlignedWalls[],
+  history: readonly GexKeltnerPoint[],
   gapAfter: readonly boolean[],
   toXY: (time: number, price: number | null) => XY | null,
 ): void {
@@ -193,8 +203,8 @@ function fillChannel(
     run = [];
   };
   history.forEach((h, i) => {
-    const upper = toXY(h.time, h.callWall);
-    const lower = toXY(h.time, h.putWall);
+    const upper = toXY(h.time, h.upper);
+    const lower = toXY(h.time, h.lower);
     if (upper && lower) run.push({ upper, lower });
     else flush();
     if (gapAfter[i]) flush();
@@ -243,7 +253,7 @@ class WallAxisView implements ISeriesPrimitiveAxisView {
 }
 
 export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
-  private history: AlignedWalls[] = [];
+  private history: GexKeltnerPoint[] = [];
   private live: GammaWalls = { callWall: null, putWall: null, gammaFlip: null };
   // Last real candle time; timeToCoordinate only resolves series data times.
   private anchorSec: number | null = null;
@@ -264,7 +274,7 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate = null;
   }
 
-  update(history: readonly AlignedWalls[], live: GammaWalls, anchorSec: number | null): void {
+  update(history: readonly GexKeltnerPoint[], live: GammaWalls, anchorSec: number | null): void {
     this.history = [...history];
     this.live = live;
     this.anchorSec = anchorSec;

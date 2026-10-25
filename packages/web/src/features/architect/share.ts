@@ -1,6 +1,13 @@
-import type { Leg } from './payoff';
+import type { HedgeLeg, Leg } from './payoff';
 
 type DecodedLeg = Omit<Leg, 'id'>;
+type DecodedHedge = Omit<HedgeLeg, 'id'>;
+
+export interface DecodedStrategy {
+  underlying: string;
+  legs: DecodedLeg[];
+  hedges: DecodedHedge[];
+}
 
 const NULL_GREEKS = {
   delta: null,
@@ -11,6 +18,7 @@ const NULL_GREEKS = {
 } as const;
 
 const LEG_RE = /^(b|s)(c|p)(\d+(?:\.\d+)?)@(\d+(?:\.\d+)?)(?:x(\d+(?:\.\d+)?))?$/;
+const HEDGE_RE = /^(b|s)(p|f)@(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/;
 
 function modeOf(values: string[]): string | null {
   const first = values[0];
@@ -69,7 +77,28 @@ function decodeLeg(token: string, defV: string, defE: string): DecodedLeg | null
   };
 }
 
-function decodeLegacy(encoded: string): { underlying: string; legs: DecodedLeg[] } | null {
+function encodeHedge(hedge: HedgeLeg): string {
+  const dir = hedge.direction === 'buy' ? 'b' : 's';
+  const kind = hedge.kind === 'future' ? 'f' : 'p';
+  return `${dir}${kind}@${Math.round(hedge.entryPrice * 100) / 100}x${hedge.quantity}`;
+}
+
+function decodeHedge(token: string): DecodedHedge | null {
+  const m = HEDGE_RE.exec(token.trim());
+  if (!m) return null;
+  const [, dir, kind, price, qty] = m;
+  const entryPrice = Number(price);
+  const quantity = Number(qty);
+  if (!(entryPrice > 0) || !(quantity > 0)) return null;
+  return {
+    direction: dir === 'b' ? 'buy' : 'sell',
+    kind: kind === 'f' ? 'future' : 'perpetual',
+    entryPrice,
+    quantity,
+  };
+}
+
+function decodeLegacy(encoded: string): DecodedStrategy | null {
   try {
     const data = JSON.parse(atob(encoded));
     if (!data?.u || !Array.isArray(data.l)) return null;
@@ -83,22 +112,27 @@ function decodeLegacy(encoded: string): { underlying: string; legs: DecodedLeg[]
       venue: String(l.v || ''),
       ...NULL_GREEKS,
     }));
-    return { underlying: data.u, legs };
+    return { underlying: data.u, legs, hedges: [] };
   } catch {
     return null;
   }
 }
 
-/** Encode legs into URL search params (u, v, e, legs). Returns null if no legs. */
-export function encodeStrategy(legs: Leg[], underlying: string): URLSearchParams | null {
-  if (legs.length === 0) return null;
+/** Encode legs into URL search params (u, v, e, legs, h). Returns null if empty. */
+export function encodeStrategy(
+  legs: Leg[],
+  underlying: string,
+  hedges: readonly HedgeLeg[] = [],
+): URLSearchParams | null {
+  if (legs.length === 0 && hedges.length === 0) return null;
   const defV = modeOf(legs.map((l) => l.venue).filter((v): v is string => Boolean(v)));
   const defE = modeOf(legs.map((l) => l.expiry).filter((e): e is string => Boolean(e)));
   const params = new URLSearchParams();
   params.set('u', underlying);
   if (defV) params.set('v', defV);
   if (defE) params.set('e', defE);
-  params.set('legs', legs.map((l) => encodeLeg(l, defV, defE)).join(','));
+  if (legs.length > 0) params.set('legs', legs.map((l) => encodeLeg(l, defV, defE)).join(','));
+  if (hedges.length > 0) params.set('h', hedges.map(encodeHedge).join(','));
   return params;
 }
 
@@ -106,36 +140,45 @@ export function encodeStrategy(legs: Leg[], underlying: string): URLSearchParams
  * Decode a strategy from URL search params. Tries the new compact format first
  * (u/v/e/legs), then falls back to the legacy base64 `strategy=` param.
  */
-export function decodeStrategy(
-  params: URLSearchParams,
-): { underlying: string; legs: DecodedLeg[] } | null {
+export function decodeStrategy(params: URLSearchParams): DecodedStrategy | null {
   const legacy = params.get('strategy');
   if (legacy) return decodeLegacy(legacy);
 
   const underlying = params.get('u');
   const rawLegs = params.get('legs');
-  if (!underlying || !rawLegs) return null;
+  const rawHedges = params.get('h');
+  if (!underlying || (!rawLegs && !rawHedges)) return null;
   const defV = params.get('v') ?? '';
   const defE = params.get('e') ?? '';
   const legs: DecodedLeg[] = [];
-  for (const token of rawLegs.split(',')) {
+  for (const token of rawLegs?.split(',') ?? []) {
     const leg = decodeLeg(token, defV, defE);
     if (leg) legs.push(leg);
   }
-  if (legs.length === 0) return null;
-  return { underlying, legs };
+  const hedges: DecodedHedge[] = [];
+  for (const token of rawHedges?.split(',') ?? []) {
+    const hedge = decodeHedge(token);
+    if (hedge) hedges.push(hedge);
+  }
+  if (legs.length === 0 && hedges.length === 0) return null;
+  return { underlying, legs, hedges };
 }
 
 /** Param keys this module reads from the URL — for cleanup after applying. */
-export const STRATEGY_PARAM_KEYS = ['strategy', 'u', 'v', 'e', 'legs'] as const;
+export const STRATEGY_PARAM_KEYS = ['strategy', 'u', 'v', 'e', 'legs', 'h'] as const;
 
 /**
  * Build a shareable URL with the encoded strategy. The query is assembled by
  * hand so `:`, `@`, `!`, and `,` stay unencoded — browsers accept and display
  * them fine, and the URL stays human-readable.
  */
-export function buildShareUrl(legs: Leg[], underlying: string, hash = ''): string {
-  const params = encodeStrategy(legs, underlying);
+export function buildShareUrl(
+  legs: Leg[],
+  hedges: readonly HedgeLeg[],
+  underlying: string,
+  hash = '',
+): string {
+  const params = encodeStrategy(legs, underlying, hedges);
   if (!params) return window.location.href;
   const parts: string[] = [];
   for (const [k, v] of params) parts.push(`${k}=${v}`);

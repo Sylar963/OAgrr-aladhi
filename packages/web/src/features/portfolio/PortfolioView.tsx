@@ -10,7 +10,11 @@ import {
 } from '@oggregator/protocol';
 
 import { useAppStore } from '@stores/app-store';
-import { portfolioToBuilderLegs, useStrategyStore } from '@features/architect';
+import {
+  portfolioToBuilderHedges,
+  portfolioToBuilderLegs,
+  useStrategyStore,
+} from '@features/architect';
 import { FlipBanner } from '@features/thesis';
 import { defineMessages, useT, type Translate } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
@@ -190,7 +194,8 @@ export default function PortfolioView() {
   const openInBuilder = () => {
     const first = positions[0];
     if (!first || builderLegs.length === 0) return;
-    useStrategyStore.getState().replaceLegs(builderLegs, first.underlying);
+    const hedges = portfolioToBuilderHedges(metrics?.linearPositions ?? [], first.underlying);
+    useStrategyStore.getState().replaceLegs(builderLegs, first.underlying, hedges);
     const app = useAppStore.getState();
     app.setAssetMode('crypto');
     app.setUnderlying(first.underlying);

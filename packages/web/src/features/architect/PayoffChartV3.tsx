@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { dteDays, fmtIv, fmtPct, fmtPrice, fmtStrike, fmtUsd, formatExpiry } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
-import { computeMetrics, type Leg, type PayoffPoint } from './payoff';
+import { computeMetrics, type HedgeLeg, type Leg, type PayoffPoint } from './payoff';
 import {
   buildLadderUnits,
   buildLadderZones,
@@ -55,6 +55,8 @@ interface PayoffChartV3Props {
   breakevens: number[];
   spotPrice: number;
   legs: Leg[];
+  /** Perp / future hedges: no brick, but they move every P&L readout. */
+  hedges?: readonly HedgeLeg[];
   netDebit: number;
   strikes?: number[];
   /** Expiry columns for the horizontal time axis; none → boxes span the whole future pane. */
@@ -113,6 +115,8 @@ function clampY(price: number, yOf: (p: number) => number, plotTop: number, plot
   return Math.max(plotTop, Math.min(plotBottom, yOf(price)));
 }
 
+const NO_HEDGES: readonly HedgeLeg[] = [];
+
 function nearestStrike(price: number, strikes: number[]): number | null {
   if (strikes.length === 0) return null;
   return strikes.reduce((best, k) => (Math.abs(k - price) < Math.abs(best - price) ? k : best));
@@ -122,6 +126,7 @@ export default function PayoffChartV3({
   breakevens,
   spotPrice,
   legs,
+  hedges = NO_HEDGES,
   netDebit,
   strikes = [],
   tenors,
@@ -197,8 +202,8 @@ export default function PayoffChartV3({
     [legs, drag],
   );
   const viewBreakevens = useMemo(
-    () => (drag ? computeMetrics(viewLegs, spotPrice).breakevens : breakevens),
-    [drag, viewLegs, spotPrice, breakevens],
+    () => (drag ? computeMetrics(viewLegs, spotPrice, hedges).breakevens : breakevens),
+    [drag, viewLegs, spotPrice, breakevens, hedges],
   );
   const blocks = useMemo(() => viewLegs.map(legToBlock), [viewLegs]);
 
@@ -305,8 +310,8 @@ export default function PayoffChartV3({
   const cardLeft = Math.min(nowX + 2 + Math.max(1, laneCount) * LANE_STEP, w - 150);
   const colors = useMemo(() => brickColors(viewLegs, spotPrice, nowMs), [viewLegs, spotPrice, nowMs]);
   const zones = useMemo(
-    () => buildLadderZones(viewLegs, viewBreakevens, spotPrice),
-    [viewLegs, viewBreakevens, spotPrice],
+    () => buildLadderZones(viewLegs, viewBreakevens, spotPrice, hedges),
+    [viewLegs, viewBreakevens, spotPrice, hedges],
   );
 
   const spotY = clampY(spotPrice, scale.y, plotTop, plotBottom);
@@ -330,7 +335,7 @@ export default function PayoffChartV3({
     if (!tenorScale || viewLegs.length === 0) return null;
     const timeEdges = gridTimeEdges(tenorScale.nowMs, tenorScale.endMs, Math.floor(futureW / CELL_PX));
     const priceEdges = gridRowEdges(rungs, domain.priceMin, domain.priceMax, plotH / span, CELL_PX);
-    const grid = buildPnlGrid(viewLegs, timeEdges, priceEdges);
+    const grid = buildPnlGrid(viewLegs, timeEdges, priceEdges, hedges);
     if (grid.maxAbs === 0) return null;
     const cellBox = (c: PnlGridCell) => {
       const x0 = tenorScale.xOf(c.t0Ms);
@@ -370,7 +375,7 @@ export default function PayoffChartV3({
         ))}
       </g>
     );
-  }, [tenorScale, viewLegs, rungs, domain, futureW, plotH, span, scale, spotPrice]);
+  }, [tenorScale, viewLegs, hedges, rungs, domain, futureW, plotH, span, scale, spotPrice]);
 
   const historyLayer = useMemo(() => {
     if (shownCandles.length === 0) return null;
@@ -527,7 +532,9 @@ export default function PayoffChartV3({
       ? Math.max(tenorScale.nowMs, Math.min(tenorScale.endMs, tenorScale.timeAt(hoverX)))
       : null;
   const hoverReadout =
-    hoverPrice != null ? netPnlReadout(legs, hoverPrice, netDebit, hoverMs ?? undefined) : null;
+    hoverPrice != null
+      ? netPnlReadout(legs, hoverPrice, netDebit, hoverMs ?? undefined, hedges)
+      : null;
   const hoveredLeg = hoverLegId != null ? legs.find((l) => l.id === hoverLegId) ?? null : null;
   const hoveredSpread = ((): LadderSpread | null => {
     if (hoverSpreadKey == null) return null;
@@ -729,6 +736,19 @@ export default function PayoffChartV3({
               <line className={s.beLine} x1={nowX} y1={y} x2={plotRight} y2={y} stroke="var(--lego-be)" strokeWidth="1.3" strokeDasharray="5 3" />
               <text x={plotLeft - 4} y={y + 3} fill="var(--lego-be)" fontSize="9" textAnchor="end">
                 {fmtPrice(be)}
+              </text>
+            </g>
+          );
+        })}
+
+        {hedges.map((h) => {
+          const y = scale.y(h.entryPrice);
+          if (y < plotTop || y > plotBottom) return null;
+          return (
+            <g key={h.id} data-hedge={h.id}>
+              <line x1={nowX} y1={y} x2={plotRight} y2={y} stroke="var(--text-dim)" strokeWidth="1" strokeDasharray="2 3" />
+              <text x={plotRight + 4} y={y + 3} fill="var(--text-dim)" fontSize="9">
+                {h.kind === 'future' ? 'FUT' : 'PERP'} {h.direction === 'buy' ? '+' : '−'}{h.quantity}
               </text>
             </g>
           );

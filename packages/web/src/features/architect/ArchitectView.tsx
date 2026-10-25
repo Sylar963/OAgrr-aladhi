@@ -32,6 +32,8 @@ import {
   computeMetrics,
   computeScenarioPayoff,
   detectStrategy,
+  hedgePnlAtPrice,
+  type HedgeLeg,
   type Leg,
 } from './payoff';
 import { deriveTenorColumns } from './ladder-geometry';
@@ -139,6 +141,15 @@ const messages = defineMessages(
     shareEmpty: 'Build a strategy to share',
     copied: 'Copied',
     copy: 'Copy',
+    size: 'Size',
+    entry: 'Entry',
+    removeHedge: 'Remove hedge',
+    editHedge: 'Edit hedge',
+    hedgeSuffix: '{name} + perp hedge',
+    perpOnly: 'Perp',
+    hedgeDelta: 'Hedge Δ with perp',
+    hedgeDeltaTitle: '{side} {size} perp at {price} to flatten net delta',
+    hedgesNotRouted: 'Perp hedges count in the payoff and greeks but are not sent to paper or venue routing.',
   },
   {
     justNow: 'ahora',
@@ -200,6 +211,15 @@ const messages = defineMessages(
     shareEmpty: 'Arma una estrategia para compartir',
     copied: 'Copiado',
     copy: 'Copiar',
+    size: 'Tamaño',
+    entry: 'Entrada',
+    removeHedge: 'Quitar cobertura',
+    editHedge: 'Editar cobertura',
+    hedgeSuffix: '{name} + cobertura perp',
+    perpOnly: 'Perp',
+    hedgeDelta: 'Cubrir Δ con perp',
+    hedgeDeltaTitle: '{side} {size} perp a {price} para neutralizar el delta neto',
+    hedgesNotRouted: 'Las coberturas perp cuentan en el payoff y las greeks, pero no se envían a paper ni al ruteo de exchanges.',
   },
 );
 
@@ -353,6 +373,118 @@ function LegRow({ leg, allStrikes, onRemove, onUpdate }: LegRowProps) {
   );
 }
 
+interface HedgeRowProps {
+  hedge: HedgeLeg;
+  spotPrice: number;
+  onRemove: () => void;
+  onUpdate: (id: string, patch: Partial<HedgeLeg>) => void;
+}
+
+function parsePositive(raw: string): number | null {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function HedgeRow({ hedge, spotPrice, onRemove, onUpdate }: HedgeRowProps) {
+  const t = useT(messages);
+  const [editing, setEditing] = useState(false);
+  const [sizeInput, setSizeInput] = useState(String(hedge.quantity));
+  const [entryInput, setEntryInput] = useState(String(hedge.entryPrice));
+  const pnl = spotPrice > 0 ? hedgePnlAtPrice([hedge], spotPrice) : null;
+  const typeLabel = hedge.kind === 'future' ? 'FUT' : 'PERP';
+
+  if (editing) {
+    return (
+      <div className={styles.legRowEditing}>
+        <div className={styles.legEditRow}>
+          <span className={styles.legEditLabel}>{t('size')}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            className={styles.legInputField}
+            value={sizeInput}
+            onChange={(e) => {
+              setSizeInput(e.target.value);
+              const quantity = parsePositive(e.target.value);
+              if (quantity != null) onUpdate(hedge.id, { quantity });
+            }}
+            style={{ width: 76 }}
+          />
+        </div>
+        <div className={styles.legEditRow}>
+          <span className={styles.legEditLabel}>{t('entry')}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            className={styles.legInputField}
+            value={entryInput}
+            onChange={(e) => {
+              setEntryInput(e.target.value);
+              const entryPrice = parsePositive(e.target.value);
+              if (entryPrice != null) onUpdate(hedge.id, { entryPrice });
+            }}
+            style={{ width: 90 }}
+          />
+        </div>
+        <div className={styles.legEditRow}>
+          <span className={styles.legEditLabel}>{t('side')}</span>
+          <button
+            className={styles.legStepBtn}
+            onClick={() =>
+              onUpdate(hedge.id, { direction: hedge.direction === 'buy' ? 'sell' : 'buy' })
+            }
+            style={{ width: 'auto', padding: '0 6px' }}
+          >
+            {hedge.direction === 'buy' ? t('buy') : t('sell')}
+          </button>
+          <div className={styles.legEditActions}>
+            <button className={styles.legEditSave} onClick={() => setEditing(false)}>
+              {t('done')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.legRow} data-direction={hedge.direction} data-hedge="true">
+      <span className={styles.legDirection} data-direction={hedge.direction}>
+        {hedge.direction === 'buy' ? t('buy') : t('sell')}
+      </span>
+      <span className={styles.legQty}>{hedge.quantity}×</span>
+      <span className={styles.legStrike} title={t('entry')}>
+        {fmtUsd(hedge.entryPrice)}
+      </span>
+      <span className={styles.legType} data-type="perp">
+        {typeLabel}
+      </span>
+      <span className={styles.legExpiry}>{hedge.instrumentName ?? '—'}</span>
+      <span
+        className={styles.legPrice}
+        data-positive={pnl != null && pnl > 0 ? 'true' : undefined}
+        data-negative={pnl != null && pnl < 0 ? 'true' : undefined}
+      >
+        {pnl != null ? `${pnl >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnl))}` : '–'}
+      </span>
+      <button
+        className={styles.legEditBtn}
+        onClick={() => {
+          setSizeInput(String(hedge.quantity));
+          setEntryInput(String(hedge.entryPrice));
+          setEditing(true);
+        }}
+        title={t('editHedge')}
+      >
+        ✎
+      </button>
+      <button className={styles.legRemove} onClick={onRemove} title={t('removeHedge')}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ── Main view ────────────────────────────────────────────────────────────────
 
 interface ArchitectViewProps {
@@ -421,13 +553,18 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const removeLeg = useStrategyStore((s) => s.removeLeg);
   const updateLeg = useStrategyStore((s) => s.updateLeg);
   const addLeg = useStrategyStore((s) => s.addLeg);
+  const hedges = useStrategyStore((s) => s.hedges);
+  const addHedge = useStrategyStore((s) => s.addHedge);
+  const removeHedge = useStrategyStore((s) => s.removeHedge);
+  const updateHedge = useStrategyStore((s) => s.updateHedge);
   const strategyUnderlying = useStrategyStore((s) => s.underlying);
+  const hasPosition = legs.length > 0 || hedges.length > 0;
 
   useEffect(() => {
-    if (strategyUnderlying && strategyUnderlying !== underlying && legs.length > 0) {
+    if (strategyUnderlying && strategyUnderlying !== underlying && hasPosition) {
       clearLegs();
     }
-  }, [clearLegs, legs.length, strategyUnderlying, underlying]);
+  }, [clearLegs, hasPosition, strategyUnderlying, underlying]);
 
   const [showVenues, setShowVenues] = useState(false);
   const [ivShift, setIvShift] = useState(0);
@@ -572,7 +709,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
     clearLegs();
     for (const leg of decoded.legs) addLeg(leg, decoded.underlying);
-    setBuilderExpiry(decoded.legs[0]?.expiry ?? '');
+    for (const hedge of decoded.hedges) addHedge(hedge, decoded.underlying);
+    if (decoded.legs[0]) setBuilderExpiry(decoded.legs[0].expiry);
 
     for (const k of STRATEGY_PARAM_KEYS) params.delete(k);
     const clean = params.toString();
@@ -580,6 +718,8 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const spotPrice = chain?.stats.forwardPriceUsd ?? chain?.stats.indexPriceUsd ?? 0;
+  // Perps track the index, not the option forward.
+  const perpReferencePrice = chain?.stats.indexPriceUsd ?? spotPrice;
   const availableStrikes = useMemo(() => chain?.strikes.map((s) => s.strike) ?? [], [chain]);
 
   const repriceStrategyLeg = useCallback(
@@ -693,14 +833,32 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   );
 
   const payoffPoints = useMemo(
-    () => computePayoff(analyticsLegs, spotPrice),
-    [analyticsLegs, spotPrice],
+    () => computePayoff(analyticsLegs, spotPrice, undefined, hedges),
+    [analyticsLegs, spotPrice, hedges],
   );
   const metrics = useMemo(
-    () => (analyticsLegs.length > 0 ? computeMetrics(analyticsLegs, spotPrice) : null),
-    [analyticsLegs, spotPrice],
+    () => (hasPosition ? computeMetrics(analyticsLegs, spotPrice, hedges) : null),
+    [analyticsLegs, spotPrice, hedges, hasPosition],
   );
-  const strategyName = useMemo(() => detectStrategy(pricedLegs), [pricedLegs]);
+  const strategyName = useMemo(() => {
+    if (pricedLegs.length === 0) return t('perpOnly');
+    const name = detectStrategy(pricedLegs);
+    return hedges.length > 0 ? t('hedgeSuffix', { name }) : name;
+  }, [pricedLegs, hedges.length, t]);
+
+  // Rounded to the delta display precision so the hedge lands on 0.000.
+  const deltaHedge = useMemo(() => {
+    const netDelta = metrics?.netDelta;
+    if (legs.length === 0 || netDelta == null || !(perpReferencePrice > 0)) return null;
+    const quantity = Math.round(Math.abs(netDelta) * 1000) / 1000;
+    if (quantity === 0) return null;
+    return { direction: netDelta > 0 ? ('sell' as const) : ('buy' as const), quantity };
+  }, [legs.length, metrics?.netDelta, perpReferencePrice]);
+
+  const handleDeltaHedge = useCallback(() => {
+    if (!deltaHedge) return;
+    addHedge({ kind: 'perpetual', ...deltaHedge, entryPrice: perpReferencePrice }, underlying);
+  }, [addHedge, deltaHedge, perpReferencePrice, underlying]);
 
   const thesisEnabled = market !== 'tradfi' && isSpotCandleUnderlying(underlying);
   const thesisLegs = useMemo((): ThesisGateLeg[] | null => {
@@ -733,13 +891,29 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
 
   const scenarioIvPoints = useMemo(() => {
     if (analyticsLegs.length === 0 || ivShift === 0) return undefined;
-    return computeScenarioPayoff(analyticsLegs, spotPrice, ivShift / 100, 0, baseDte);
-  }, [analyticsLegs, baseDte, ivShift, spotPrice]);
+    return computeScenarioPayoff(
+      analyticsLegs,
+      spotPrice,
+      ivShift / 100,
+      0,
+      baseDte,
+      undefined,
+      hedges,
+    );
+  }, [analyticsLegs, baseDte, ivShift, spotPrice, hedges]);
 
   const scenarioDtePoints = useMemo(() => {
     if (analyticsLegs.length === 0 || dteShift === 0) return undefined;
-    return computeScenarioPayoff(analyticsLegs, spotPrice, 0, dteShift, baseDte);
-  }, [analyticsLegs, baseDte, dteShift, spotPrice]);
+    return computeScenarioPayoff(
+      analyticsLegs,
+      spotPrice,
+      0,
+      dteShift,
+      baseDte,
+      undefined,
+      hedges,
+    );
+  }, [analyticsLegs, baseDte, dteShift, spotPrice, hedges]);
 
   const hasScenarios = ivShift !== 0 || dteShift !== 0;
 
@@ -895,9 +1069,11 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
         lastBarMs,
         candleResolutionSec,
         visibleSpotCandles?.candles ?? [],
+        hedges,
       ),
     [
       analyticsLegs,
+      hedges,
       spotPrice,
       nearestExpiryMs,
       lastBarMs,
@@ -1005,6 +1181,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   function handleCopyUrl() {
     const url = buildShareUrl(
       pricedLegs,
+      hedges,
       underlying,
       market === 'tradfi' ? `#tradfi/builder/${underlying}` : `#builder/${underlying}`,
     );
@@ -1095,7 +1272,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               onExpiryChange={setBuilderExpiry}
             />
 
-            {legs.length > 0 && (
+            {hasPosition && (
               <div className={styles.legsSection}>
                 <div className={styles.legsSectionHeader}>
                   <span className={styles.strategyName}>{strategyName}</span>
@@ -1118,7 +1295,19 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                       onUpdate={handleLegUpdate}
                     />
                   ))}
+                  {hedges.map((hedge) => (
+                    <HedgeRow
+                      key={hedge.id}
+                      hedge={hedge}
+                      spotPrice={perpReferencePrice}
+                      onRemove={() => removeHedge(hedge.id)}
+                      onUpdate={updateHedge}
+                    />
+                  ))}
                 </div>
+                {hedges.length > 0 && legs.length > 0 && (
+                  <div className={styles.greeksPartial}>{t('hedgesNotRouted')}</div>
+                )}
               </div>
             )}
 
@@ -1175,7 +1364,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               </div>
             )}
 
-            {legs.length === 0 && (
+            {!hasPosition && (
               <div className={styles.emptyLegs}>
                 {t('emptyLegs')}
               </div>
@@ -1196,7 +1385,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
             >
               {/* V3 stays mounted when empty: its ladder is the empty state
                   (click a rung to place the first leg). V1/V2 keep the ghost. */}
-              {legs.length === 0 && variant !== 'v3' ? (
+              {!hasPosition && variant !== 'v3' ? (
                 <div className={styles.chartEmpty}>
                   <svg
                     className={styles.ghostChart}
@@ -1430,6 +1619,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                         breakevens={metrics?.breakevens ?? []}
                         spotPrice={spotPrice}
                         legs={analyticsLegs}
+                        hedges={hedges}
                         resolutionSec={candleResolutionSec}
                         loading={spotCandlesLoading && candleAvailable}
                         available={candleAvailable}
@@ -1451,6 +1641,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                       breakevens={metrics?.breakevens ?? []}
                       spotPrice={spotPrice}
                       legs={pricedLegs}
+                      hedges={hedges}
                       netDebit={metrics?.netDebit ?? 0}
                       strikes={availableStrikes}
                       tenors={tenorColumns}
@@ -1558,6 +1749,20 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   })}
                 </span>
               )}
+              {deltaHedge && (
+                <button
+                  className={styles.hedgeDeltaBtn}
+                  onClick={handleDeltaHedge}
+                  title={t('hedgeDeltaTitle', {
+                    side: deltaHedge.direction === 'buy' ? t('buy') : t('sell'),
+                    size: deltaHedge.quantity,
+                    price: fmtUsd(perpReferencePrice),
+                  })}
+                >
+                  {t('hedgeDelta')} · {deltaHedge.direction === 'buy' ? '+' : '−'}
+                  {deltaHedge.quantity}
+                </button>
+              )}
             </div>
 
             <div className={styles.rightSection}>
@@ -1631,9 +1836,10 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               <span className={styles.rightSectionTitle}>{t('share')}</span>
               <div className={styles.shareBar}>
                 <span className={styles.shareUrl}>
-                  {pricedLegs.length > 0
+                  {hasPosition
                     ? buildShareUrl(
                         pricedLegs,
+                        hedges,
                         underlying,
                         market === 'tradfi'
                           ? `#tradfi/builder/${underlying}`
@@ -1641,7 +1847,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                       )
                     : t('shareEmpty')}
                 </span>
-                {pricedLegs.length > 0 &&
+                {hasPosition &&
                   (copied ? (
                     <span className={styles.shareCopied}>{t('copied')}</span>
                   ) : (

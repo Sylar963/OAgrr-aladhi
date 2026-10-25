@@ -36,40 +36,71 @@ export function alignWallHistory(
   return out;
 }
 
-const LEVEL_KEYS = ['callWall', 'putWall', 'gammaFlip'] as const;
+export interface CandleClose {
+  time: number;
+  close: number;
+}
+
+/** One candle of the GEX Keltner channel; null levels break the drawn line. */
+export interface GexKeltnerPoint {
+  time: number;
+  basis: number | null;
+  upper: number | null;
+  lower: number | null;
+  gammaFlip: number | null;
+}
+
+interface Ema {
+  value: number | null;
+  idle: number;
+}
+
+function stepEma(ema: Ema, sample: number | null, alpha: number, maxIdle: number): void {
+  if (sample == null) {
+    ema.idle++;
+    if (ema.idle >= maxIdle) ema.value = null;
+    return;
+  }
+  ema.value = ema.value == null ? sample : ema.value + alpha * (sample - ema.value);
+  ema.idle = 0;
+}
 
 /**
- * Simple moving average of each level over the trailing `period` candles. The
- * window restarts after any skipped candle so a recording gap never averages
- * levels from either side of it; nulls are excluded from the mean, and a level
- * stays null where its raw value is null so the renderer still breaks there.
+ * Keltner channel with the ATR swapped for dealer wall distance:
+ * basis = EMA(close), upper = basis + EMA(callWall − close),
+ * lower = basis − EMA(close − putWall), all over `length` candles.
+ *
+ * Wall EMAs seed on their first snapshot and hold through candles without
+ * one; a side unobserved for `length` candles resets, so a long recording gap
+ * is never bridged with stale distances. The flip gets the same EMA but is
+ * only emitted where the candle's snapshot carries a flip.
  */
-export function smoothWallHistory(
-  aligned: readonly AlignedWalls[],
-  period: number,
-  resolutionSec: number,
-): AlignedWalls[] {
-  const out: AlignedWalls[] = [];
-  let runStart = 0;
-  for (let i = 0; i < aligned.length; i++) {
-    const cur = aligned[i]!;
-    if (i > 0 && cur.time - aligned[i - 1]!.time > resolutionSec) runStart = i;
-    const from = Math.max(runStart, i - period + 1);
-    const next: AlignedWalls = { time: cur.time, callWall: null, putWall: null, gammaFlip: null };
-    for (const key of LEVEL_KEYS) {
-      if (cur[key] == null) continue;
-      let sum = 0;
-      let n = 0;
-      for (let j = from; j <= i; j++) {
-        const v = aligned[j]![key];
-        if (v != null) {
-          sum += v;
-          n++;
-        }
-      }
-      next[key] = sum / n;
-    }
-    out.push(next);
+export function gexKeltner(
+  candles: readonly CandleClose[],
+  walls: readonly AlignedWalls[],
+  length: number,
+): GexKeltnerPoint[] {
+  const alpha = 2 / (length + 1);
+  const byTime = new Map(walls.map((w) => [w.time, w]));
+  const above: Ema = { value: null, idle: 0 };
+  const below: Ema = { value: null, idle: 0 };
+  const flip: Ema = { value: null, idle: 0 };
+  const out: GexKeltnerPoint[] = [];
+  let basis: number | null = null;
+  for (const { time, close } of candles) {
+    basis = basis == null ? close : basis + alpha * (close - basis);
+    const w = byTime.get(time);
+    stepEma(above, w?.callWall == null ? null : w.callWall - close, alpha, length);
+    stepEma(below, w?.putWall == null ? null : close - w.putWall, alpha, length);
+    stepEma(flip, w?.gammaFlip ?? null, alpha, length);
+    if (above.value == null && below.value == null) continue;
+    out.push({
+      time,
+      basis,
+      upper: above.value == null ? null : basis + above.value,
+      lower: below.value == null ? null : basis - below.value,
+      gammaFlip: w?.gammaFlip == null ? null : flip.value,
+    });
   }
   return out;
 }

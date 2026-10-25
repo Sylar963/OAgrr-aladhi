@@ -1,4 +1,4 @@
-import type { Leg } from './payoff';
+import type { HedgeLeg, Leg } from './payoff';
 import { pnlAtPrice } from './payoff';
 import type { SpotCandle } from './queries';
 
@@ -282,6 +282,7 @@ export function computeGhostPaths(
   anchorBarTimeMs: number,
   resolutionSec: number,
   history: SpotCandle[],
+  hedges: readonly HedgeLeg[] = [],
 ): GhostPath[] {
   if (legs.length === 0 || spotPrice <= 0) return [];
   if (!Number.isFinite(horizonExpiryMs) || horizonExpiryMs <= anchorBarTimeMs) return [];
@@ -307,7 +308,7 @@ export function computeGhostPaths(
   ];
 
   return targets.map(({ kind, target }) => {
-    const pnl = pnlAtPrice(legs, target);
+    const pnl = pnlAtPrice(legs, target, hedges);
     const isProfit = pnl >= 0;
     const archetype: FractalArchetype =
       kind === 'up' ? 'up' : kind === 'down' ? 'down' : isProfit ? 'range' : 'breakout';

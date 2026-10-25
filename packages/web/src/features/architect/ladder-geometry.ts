@@ -1,7 +1,7 @@
 import { black76Price } from '@lib/analytics/blackScholes';
 import { fmtStrike } from '@lib/format';
 
-import { pnlAtPrice, type Leg, type PayoffPoint } from './payoff';
+import { hedgePnlAtPrice, pnlAtPrice, type HedgeLeg, type Leg, type PayoffPoint } from './payoff';
 
 export interface PriceScale {
   priceMin: number;
@@ -160,10 +160,13 @@ export function buildLadderZones(
   legs: Leg[],
   breakevens: number[],
   spotPrice: number,
+  hedges: readonly HedgeLeg[] = [],
 ): LadderZone[] {
-  if (legs.length === 0) return [];
+  if (legs.length === 0 && hedges.length === 0) return [];
   if (breakevens.length === 0) {
-    return [{ lowPrice: -Infinity, highPrice: Infinity, profit: pnlAtPrice(legs, spotPrice) >= 0 }];
+    return [
+      { lowPrice: -Infinity, highPrice: Infinity, profit: pnlAtPrice(legs, spotPrice, hedges) >= 0 },
+    ];
   }
   const sorted = [...breakevens].sort((a, b) => a - b);
   const boundaries = [-Infinity, ...sorted, Infinity];
@@ -176,7 +179,7 @@ export function buildLadderZones(
     else if (Number.isFinite(high)) probe = high * 0.5;
     else if (Number.isFinite(low)) probe = low * 1.5;
     else probe = spotPrice;
-    zones.push({ lowPrice: low, highPrice: high, profit: pnlAtPrice(legs, probe) >= 0 });
+    zones.push({ lowPrice: low, highPrice: high, profit: pnlAtPrice(legs, probe, hedges) >= 0 });
   }
   return zones;
 }
@@ -353,8 +356,10 @@ export function netPnlReadout(
   price: number,
   netDebit: number,
   atMs?: number,
+  hedges: readonly HedgeLeg[] = [],
 ): { pnl: number; pct: number | null } {
-  const pnl = atMs != null ? pnlAtTime(legs, price, atMs) : pnlAtPrice(legs, price);
+  const pnl =
+    atMs != null ? pnlAtTime(legs, price, atMs, hedges) : pnlAtPrice(legs, price, hedges);
   const cost = Math.abs(netDebit);
   return { pnl, pct: cost > 0 ? (pnl / cost) * 100 : null };
 }
@@ -438,8 +443,13 @@ export function legValueAt(leg: Leg, price: number, atMs: number): number {
 }
 
 /** Net structure P&L if the underlying sits at `price` at time `atMs`. */
-export function pnlAtTime(legs: Leg[], price: number, atMs: number): number {
-  let total = 0;
+export function pnlAtTime(
+  legs: Leg[],
+  price: number,
+  atMs: number,
+  hedges: readonly HedgeLeg[] = [],
+): number {
+  let total = hedgePnlAtPrice(hedges, price);
   for (const leg of legs) {
     const sign = leg.direction === 'buy' ? 1 : -1;
     total +=
@@ -497,17 +507,18 @@ export function buildPnlGrid(
   legs: Leg[],
   timeEdges: number[],
   priceEdges: number[],
+  hedges: readonly HedgeLeg[] = [],
 ): { cells: PnlGridCell[]; maxAbs: number } {
   const cells: PnlGridCell[] = [];
   let maxAbs = 0;
-  if (legs.length === 0) return { cells, maxAbs };
+  if (legs.length === 0 && hedges.length === 0) return { cells, maxAbs };
   for (let c = 1; c < timeEdges.length; c++) {
     const t0Ms = timeEdges[c - 1]!;
     const t1Ms = timeEdges[c]!;
     for (let r = 1; r < priceEdges.length; r++) {
       const lowPrice = priceEdges[r - 1]!;
       const highPrice = priceEdges[r]!;
-      const pnl = pnlAtTime(legs, (lowPrice + highPrice) / 2, t1Ms);
+      const pnl = pnlAtTime(legs, (lowPrice + highPrice) / 2, t1Ms, hedges);
       maxAbs = Math.max(maxAbs, Math.abs(pnl));
       cells.push({ t0Ms, t1Ms, lowPrice, highPrice, pnl });
     }

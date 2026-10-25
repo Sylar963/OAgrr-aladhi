@@ -22,6 +22,22 @@ export interface Leg {
   iv: number | null;
 }
 
+/**
+ * Linear hedge (perpetual or dated future) held next to the option legs. Kept out
+ * of Leg because every Leg consumer assumes an option: it has no strike, premium
+ * or expiry payoff kink, just delta 1 per coin from its entry price.
+ */
+export interface HedgeLeg {
+  id: string;
+  kind: 'perpetual' | 'future';
+  direction: 'buy' | 'sell';
+  /** Size in coin */
+  quantity: number;
+  /** Entry price in USD */
+  entryPrice: number;
+  instrumentName?: string;
+}
+
 export interface PayoffPoint {
   underlyingPrice: number;
   pnl: number;
@@ -40,9 +56,28 @@ export interface StrategyMetrics {
   greeksMissingLegs: number;
 }
 
-/** Total strategy P&L at expiry for a single underlying price. Used by V2 chart for zone classification. */
-export function pnlAtPrice(legs: Leg[], underlyingPrice: number): number {
+/** P&L of the linear hedges at a given underlying price. Time and IV do not move it. */
+export function hedgePnlAtPrice(hedges: readonly HedgeLeg[], underlyingPrice: number): number {
   let total = 0;
+  for (const hedge of hedges) {
+    const sign = hedge.direction === 'buy' ? 1 : -1;
+    total += sign * (underlyingPrice - hedge.entryPrice) * hedge.quantity;
+  }
+  return total;
+}
+
+/** Net delta of the linear hedges in coin. */
+export function hedgeDelta(hedges: readonly HedgeLeg[]): number {
+  return hedges.reduce((sum, h) => sum + (h.direction === 'buy' ? 1 : -1) * h.quantity, 0);
+}
+
+/** Total strategy P&L at expiry for a single underlying price. Used by V2 chart for zone classification. */
+export function pnlAtPrice(
+  legs: Leg[],
+  underlyingPrice: number,
+  hedges: readonly HedgeLeg[] = [],
+): number {
+  let total = hedgePnlAtPrice(hedges, underlyingPrice);
   for (const leg of legs) total += legPnlAtExpiry(leg, underlyingPrice);
   return total;
 }
@@ -98,13 +133,22 @@ function computeRangeHalf(
   );
 }
 
-/** Compute total strategy P&L across a range of underlying prices. */
-export function computePayoff(legs: Leg[], spotPrice: number, numPoints = 200): PayoffPoint[] {
-  if (legs.length === 0) return [];
+function priceAnchors(legs: Leg[], hedges: readonly HedgeLeg[]): number[] {
+  return [...legs.map((l) => l.strike), ...hedges.map((h) => h.entryPrice)];
+}
 
-  const strikes = legs.map((l) => l.strike);
-  const minStrike = Math.min(...strikes);
-  const maxStrike = Math.max(...strikes);
+/** Compute total strategy P&L across a range of underlying prices. */
+export function computePayoff(
+  legs: Leg[],
+  spotPrice: number,
+  numPoints = 200,
+  hedges: readonly HedgeLeg[] = [],
+): PayoffPoint[] {
+  if (legs.length === 0 && hedges.length === 0) return [];
+
+  const anchors = priceAnchors(legs, hedges);
+  const minStrike = Math.min(...anchors);
+  const maxStrike = Math.max(...anchors);
 
   const rangeCenter = spotPrice;
   const rangeHalf = computeRangeHalf(legs, spotPrice, minStrike, maxStrike);
@@ -115,11 +159,7 @@ export function computePayoff(legs: Leg[], spotPrice: number, numPoints = 200): 
   const points: PayoffPoint[] = [];
   for (let i = 0; i <= numPoints; i++) {
     const price = low + i * step;
-    let totalPnl = 0;
-    for (const leg of legs) {
-      totalPnl += legPnlAtExpiry(leg, price);
-    }
-    points.push({ underlyingPrice: price, pnl: totalPnl });
+    points.push({ underlyingPrice: price, pnl: pnlAtPrice(legs, price, hedges) });
   }
 
   return points;
@@ -145,8 +185,12 @@ function findBreakevens(points: PayoffPoint[]): number[] {
 }
 
 /** Compute strategy-level metrics from legs. */
-export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics {
-  const payoff = computePayoff(legs, spotPrice, 500);
+export function computeMetrics(
+  legs: Leg[],
+  spotPrice: number,
+  hedges: readonly HedgeLeg[] = [],
+): StrategyMetrics {
+  const payoff = computePayoff(legs, spotPrice, 500, hedges);
 
   const pnls = payoff.map((p) => p.pnl);
   const maxPnl = Math.max(...pnls);
@@ -194,7 +238,11 @@ export function computeMetrics(legs: Leg[], spotPrice: number): StrategyMetrics 
     return { value: reported > 0 ? total : null, missing };
   };
 
-  const delta = sumGreek((l) => l.delta);
+  const optionDelta = sumGreek((l) => l.delta);
+  const delta =
+    hedges.length === 0 || (legs.length > 0 && optionDelta.value == null)
+      ? optionDelta
+      : { ...optionDelta, value: (optionDelta.value ?? 0) + hedgeDelta(hedges) };
   const gamma = sumGreek((l) => l.gamma);
   const theta = sumGreek((l) => l.theta);
   const vega = sumGreek((l) => l.vega);
@@ -251,11 +299,12 @@ export function computeScenarioPayoff(
   dteShift: number,
   baseDte: number,
   numPoints = 200,
+  hedges: readonly HedgeLeg[] = [],
 ): PayoffPoint[] {
-  if (legs.length === 0) return [];
-  const strikes = legs.map((l) => l.strike);
-  const minStrike = Math.min(...strikes);
-  const maxStrike = Math.max(...strikes);
+  if (legs.length === 0 && hedges.length === 0) return [];
+  const anchors = priceAnchors(legs, hedges);
+  const minStrike = Math.min(...anchors);
+  const maxStrike = Math.max(...anchors);
   const rangeCenter = spotPrice;
   const rangeHalf = computeRangeHalf(legs, spotPrice, minStrike, maxStrike);
   const low = Math.max(0, rangeCenter - rangeHalf);
@@ -267,7 +316,7 @@ export function computeScenarioPayoff(
   const points: PayoffPoint[] = [];
   for (let i = 0; i <= numPoints; i++) {
     const price = low + i * step;
-    let totalPnl = 0;
+    let totalPnl = hedgePnlAtPrice(hedges, price);
     for (const leg of legs) {
       const sign = leg.direction === 'buy' ? 1 : -1;
       const iv = (leg.iv ?? 0.5) + ivShift;

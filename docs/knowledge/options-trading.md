@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-10-02. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-10-26. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -28,6 +28,108 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | [Natenberg, Option Volatility & Pricing](../Sheldon_Natenberg_Option_Volatility_&_Pricing_Advanced_Trading_Strategies.pdf) | None | File is **0 bytes**. Needs re-upload. Do not attribute learning to it. |
 | Web sources on IV richness (2026-10-02) | [FlashAlpha VRP article](https://flashalpha.com/articles/volatility-risk-premium-api-find-overpriced-iv); vol-cone explainers ([LuxAlgo](https://www.luxalgo.com/library/concept/volatility-cones/), [Amberdata](https://blog.amberdata.io/estimating-future-volatility-ranges-with-volatility-cones), [Montréal Exchange](https://www.m-x.ca/f_publications_en/cone_vol_en.pdf)); DVOL VRP definitions ([Amberdata docs](https://docs.amberdata.io/docs/iv-dvol)); BTC HAR-RV forecasting ([Bouri et al. 2020](https://repository.up.ac.za/bitstream/handle/2263/76318/Bouri_Forecasting_2020.pdf?sequence=1)) | Vendor articles and abstracts, read for framing only. They agree with Sinclair K12–K14; none is evidence of a BTC edge. The HAR-RV paper was not read past its abstract. |
 | [PDF_AuctionPricing](../PDF_AuctionPricing.pdf) | File checked, six pages; first four have no extractable text | Not studied. Needs rendering/OCR before substantive attribution. Title/author not verified. |
+| Intraday channels and gamma (2026-10-26) | [Schwab KeltnerChannels](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/G-L/KeltnerChannels): description and inputs; [TradingView VWAP](https://www.tradingview.com/support/solutions/43000502018-volume-weighted-average-price-vwap/): calculation and anchoring; [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma): long/short gamma; [SpotGamma Delta Pressure](https://support.spotgamma.com/hc/en-us/articles/33608084842643-What-is-the-Delta-Pressure-Heatmap): positive/negative dealer-gamma interpretation | Official documentation read alongside the current repository chart shown in Roberto's screenshot. Mechanics are distinct from predictive evidence; subsequent 130/4 and 60/3 price-only studies are recorded below. |
+| Channel-study data and costs (2026-10-26) | [Deribit chart API](https://docs.deribit.com/api-reference/market-data/public-get_tradingview_chart_data); [Deribit fees](https://support.deribit.com/hc/en-us/articles/25944746248989-Fees), standard perpetual/futures tier | Public five-minute BTC candles and current 3.5 bps/side standard taker fee. Current fees are a scenario, not reconstructed historical charges; 1 bp/side spread/slippage is assumed. Funding is excluded. |
+
+## Intraday channel research (2026-10-26)
+
+Status: **engineering diagnosis with exploratory price-only results below; gamma filters
+remain untested**. Roberto wants intraday boundary
+interactions that can be evaluated as entries. A remote positioning level can still provide
+context, but its distance is not an estimate of the next intraday price excursion.
+
+Implementation findings (`packages/web/src/features/gex/gex-wall-history.ts`,
+`gex-wall-utils.ts`, `GexBandsChart.tsx`, and server `gex-wall-history-service.ts`):
+
+- Current upper = EMA(close) + EMA(callWall - close), lower = EMA(close) -
+  EMA(close - putWall), with identical EMA coefficients. With identical observation times
+  and compatible seeds, linearity makes these exactly EMA(callWall) and EMA(putWall).
+  Earlier price warmup introduces an initial offset that decays during continuous wall
+  coverage; missing samples also break the exact identity. Neither creates an ATR width.
+- Length is 130 chart candles. The default 30D view uses hourly candles; 1D/3D views use
+  five-minute candles. Changing the visible window therefore changes the smoothing horizon.
+  Historical walls are all-expiry/all-venue snapshots sampled every 15 minutes.
+- Selection takes the largest positive signed GEX above spot and most negative below spot.
+  A crossed strike can cease to qualify. Persist the original level through a setup if its
+  break/retest is being evaluated. Signed net GEX alone does not identify call vs put OI.
+- The lower selector's negative gamma is not evidence of buying support. OIC distinguishes
+  long vs short option positions as the source of gamma sign. Under delta hedging, negative
+  dealer gamma can amplify a decline (SpotGamma's documented interpretation). Our dealer
+  inventory is inferred from flow plus an assumed legacy-OI sign; flow attribution is not
+  proof of dealer identity or a probability that a level holds.
+
+Proposed first experiment: keep actual gamma levels as reference levels and add a conventional
+volatility channel for entries. Roberto specified length 130 and multiplier 4 on 2026-10-26,
+replacing the initial 20/2 proposal. On completed five-minute candles, let M = EMA130(close),
+A = Wilder ATR130, U = M + 4A, and L = M - 4A. Both lengths are taken as 130; no 20-period
+variant is tested. These are user-selected hypotheses, not optimized parameters. Schwab
+documents ATR-based channel construction and different trend
+versus range interpretations. Alternatives are a session VWAP with volume-weighted price
+dispersion bands (declare the crypto venue and session anchor), or nearby meaningful gamma
+clusters by expiry. A missing nearby cluster means no local gamma level; do not move a remote
+wall inward and continue calling it an observed wall.
+
+Candidate rebound rule: use the band fixed at the previous close, require the next candle
+to trade below L and close back inside [L, U], then evaluate an entry at the next executable
+quote. Freeze the setup's band, swing low, and target at confirmation. Test a stop below that
+low with a prespecified volatility buffer, a target at M, and a fixed intraday timeout.
+Rearm only after a prespecified reset; repeated touches in one excursion are not independent
+setups. Positive estimated dealer gamma and a non-trending price state are candidate filters,
+not guarantees. Negative/uncertain gamma or a continuing downside break should not produce
+an automatic rebound buy. Breakout and retest entries require a separate directional rule.
+
+Validation requirements before presenting actionable signals:
+
+1. Compare identical channel rules with and without gamma filters on chronological holdouts.
+   Evaluate fees, bid/ask spread, slippage, funding when applicable, drawdown, and net expectancy;
+   count independent setups rather than maximizing touches. Keep a small prespecified
+   parameter set and report all tested variants, including failures.
+2. Use only information actually available at the event time. Current chart alignment takes
+   snapshots before a candle's close, which is unsuitable for attributing an earlier wick
+   touch to that snapshot. The recorder labels samples by slot start although acquisition
+   happens later. Capture actual observation/availability times for signal research.
+3. Archive per-expiry profiles, signed exposure, attribution, and freshness if testing those
+   filters. Existing three-level wall snapshots cannot reconstruct those historical states.
+   Do not backfill past signals using today's chain or claim an options P&L from underlying
+   moves alone; an options implementation also needs contemporaneous executable premiums.
+
+The initial documentation review did not measure performance. The follow-up study below
+does not establish that gamma adds predictive value beyond a conventional volatility channel.
+
+### Gamma interpretation correction and channel measurements
+
+Roberto correctly identified that negative dealer gamma can reinforce a move. It can
+reinforce either a rally or a decline; it is not intrinsically bearish. A negative strike
+below spot is one contribution, not the total regime. The existing net-at-spot calculation
+already uses the repriced profile's zero-move point for the selected venues and expiries.
+The UI now calls the selected levels positive gamma above and negative gamma below, labels
+net exposure as estimated, shows a missing regime as unknown, and avoids calling zero
+gamma long gamma. The legacy API field names remain for snapshot compatibility. The lower
+zone's tooltip describes possible downside amplification rather than buying support.
+
+Reproducible study: [method and results](../../scripts/research/intraday-channel/README.md).
+Both EMA and Wilder ATR use 130 bars with multiplier 4; Roberto subsequently requested
+60 bars with multiplier 3. No 20-bar run. Same 51,840 five-minute BTC-PERPETUAL candles,
+2026-04-29 through 2026-10-26 00:00 UTC exclusive, with five additional warmup days and no gaps.
+Long reclaim of the previous candle's lower band, next-open entry, frozen middle target,
+stop 0.5 ATR below the signal low, 60-minute timeout, one position, and rearm after a
+subsequent flat-state close reaches the middle. These exit assumptions were not optimized.
+
+| Final 60 days | 130 / 4 | 60 / 3 |
+| --- | ---: | ---: |
+| Days with lower / upper touches | 49 / 53 | 58 / 58 |
+| Long-reclaim trades | 80 | 134 |
+| Mean gross return, bps/trade | -1.08 | -2.21 |
+| Mean after assumed 9 bps round-trip costs | -10.08 | -11.21 |
+| Win rate after assumed costs | 38.75% | 31.34% |
+
+All 180 days: 246 trades at -10.79 bps cost-adjusted for 130/4; 434 trades at -11.40 bps
+for 60/3. These price-return results exclude funding and are not actual fills or options
+P&L. Both configurations produce intraday touches; the specific unfiltered rebound rule
+was negative even before costs. Gamma and trend filters were not tested. The 60/3 choice
+followed review of 130/4 results, so the last 60 days are now comparison data, not an
+untouched holdout. Neither continuation profitability nor an inverse-strategy edge follows
+from the rebound losses. Validate further choices on fresh data.
 
 ## Principles we carry into the product
 

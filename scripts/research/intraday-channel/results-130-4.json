@@ -1,0 +1,186 @@
+{
+  "instrument": "BTC-PERPETUAL",
+  "source": "https://docs.deribit.com/api-reference/market-data/public-get_tradingview_chart_data",
+  "parameters": {
+    "length": 130,
+    "multiplier": 4,
+    "stopAtr": 0.5,
+    "holdBars": 12,
+    "candleMinutes": 5,
+    "gammaFilter": false,
+    "trendFilter": false
+  },
+  "data": {
+    "startInclusive": "2026-04-29T00:00:00.000Z",
+    "endExclusive": "2026-10-26T00:00:00.000Z",
+    "warmupBars": 1440,
+    "testedBars": 51840,
+    "missingBars": 0,
+    "sha256": "dba0b53ca53a5a771aa016d27cbdca4ac3124aebc0bb335221e6deeaf668d460"
+  },
+  "costModel": {
+    "roundTripBps": 9,
+    "currentStandardTakerFeeBpsPerSide": 3.5,
+    "assumedSpreadSlippageBpsPerSide": 1,
+    "feeSource": "https://support.deribit.com/hc/en-us/articles/25944746248989-Fees",
+    "scope": "Fixed basis-point friction sensitivity on underlying price returns; current fees applied as a scenario, not reconstructed historical charges. Excludes funding, collateral, liquidation, option premiums, and execution-size impact."
+  },
+  "periods": {
+    "first120Days": {
+      "startInclusive": "2026-04-29T00:00:00.000Z",
+      "endExclusive": "2026-08-27T00:00:00.000Z",
+      "touches": {
+        "days": 120,
+        "daysWithLowerTouch": 102,
+        "daysWithUpperTouch": 105,
+        "daysWithEitherTouch": 120,
+        "lowerTouchBars": 1816,
+        "upperTouchBars": 1880,
+        "lowerReclaimBars": 910
+      },
+      "trades": 166,
+      "grossMeanBps": -2.1316644475993525,
+      "costScenarios": [
+        {
+          "roundTripBps": 0,
+          "meanBps": -2.1316644475993525
+        },
+        {
+          "roundTripBps": 7,
+          "meanBps": -9.131664447599352
+        },
+        {
+          "roundTripBps": 9,
+          "meanBps": -11.131664447599352
+        },
+        {
+          "roundTripBps": 14,
+          "meanBps": -16.131664447599352
+        }
+      ],
+      "winRateAfter9Bps": 0.3072289156626506,
+      "profitFactorAfter9Bps": 0.35826253286804477,
+      "meanAfter9BpsWeekBootstrap95": [
+        -15.973814236743358,
+        -6.686817130628983
+      ],
+      "calendarBlocks": 18,
+      "closedTradeDrawdownBpsAfter9Bps": 1968.008332891191,
+      "worstTradeBpsAfter9Bps": -71.74350383446702,
+      "medianHoldingMinutesUpperBound": 25,
+      "exits": {
+        "target": 36,
+        "stop": 90,
+        "stop_gap": 2,
+        "timeout": 38
+      },
+      "ambiguousStopFirstTrades": 0,
+      "skippedEntryGaps": 2,
+      "skippedEndOfWindow": 0
+    },
+    "last60Days": {
+      "startInclusive": "2026-08-27T00:00:00.000Z",
+      "endExclusive": "2026-10-26T00:00:00.000Z",
+      "touches": {
+        "days": 60,
+        "daysWithLowerTouch": 49,
+        "daysWithUpperTouch": 53,
+        "daysWithEitherTouch": 60,
+        "lowerTouchBars": 887,
+        "upperTouchBars": 928,
+        "lowerReclaimBars": 456
+      },
+      "trades": 80,
+      "grossMeanBps": -1.0783560020843905,
+      "costScenarios": [
+        {
+          "roundTripBps": 0,
+          "meanBps": -1.0783560020843905
+        },
+        {
+          "roundTripBps": 7,
+          "meanBps": -8.07835600208439
+        },
+        {
+          "roundTripBps": 9,
+          "meanBps": -10.07835600208439
+        },
+        {
+          "roundTripBps": 14,
+          "meanBps": -15.07835600208439
+        }
+      ],
+      "winRateAfter9Bps": 0.3875,
+      "profitFactorAfter9Bps": 0.418773682117464,
+      "meanAfter9BpsWeekBootstrap95": [
+        -14.785117508452425,
+        -6.0095281123093605
+      ],
+      "calendarBlocks": 9,
+      "closedTradeDrawdownBpsAfter9Bps": 808.0863272842695,
+      "worstTradeBpsAfter9Bps": -89.39900149687473,
+      "medianHoldingMinutesUpperBound": 35,
+      "exits": {
+        "target": 12,
+        "stop": 43,
+        "stop_gap": 0,
+        "timeout": 25
+      },
+      "ambiguousStopFirstTrades": 1,
+      "skippedEntryGaps": 3,
+      "skippedEndOfWindow": 1
+    },
+    "all180Days": {
+      "startInclusive": "2026-04-29T00:00:00.000Z",
+      "endExclusive": "2026-10-26T00:00:00.000Z",
+      "touches": {
+        "days": 180,
+        "daysWithLowerTouch": 151,
+        "daysWithUpperTouch": 158,
+        "daysWithEitherTouch": 180,
+        "lowerTouchBars": 2703,
+        "upperTouchBars": 2808,
+        "lowerReclaimBars": 1366
+      },
+      "trades": 246,
+      "grossMeanBps": -1.7891251157245678,
+      "costScenarios": [
+        {
+          "roundTripBps": 0,
+          "meanBps": -1.7891251157245678
+        },
+        {
+          "roundTripBps": 7,
+          "meanBps": -8.789125115724568
+        },
+        {
+          "roundTripBps": 9,
+          "meanBps": -10.789125115724568
+        },
+        {
+          "roundTripBps": 14,
+          "meanBps": -15.789125115724568
+        }
+      ],
+      "winRateAfter9Bps": 0.3333333333333333,
+      "profitFactorAfter9Bps": 0.37793611594760146,
+      "meanAfter9BpsWeekBootstrap95": [
+        -14.48368464301962,
+        -7.4627051039184025
+      ],
+      "calendarBlocks": 26,
+      "closedTradeDrawdownBpsAfter9Bps": 2655.942625585764,
+      "worstTradeBpsAfter9Bps": -89.39900149687473,
+      "medianHoldingMinutesUpperBound": 30,
+      "exits": {
+        "target": 48,
+        "stop": 133,
+        "stop_gap": 2,
+        "timeout": 63
+      },
+      "ambiguousStopFirstTrades": 1,
+      "skippedEntryGaps": 5,
+      "skippedEndOfWindow": 1
+    }
+  }
+}

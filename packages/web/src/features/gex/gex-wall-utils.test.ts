@@ -86,6 +86,13 @@ describe('computeGammaFlip', () => {
 });
 
 describe('profile helpers', () => {
+  it('keeps a negative strike separate from the total gamma regime at spot', () => {
+    const p = profile([[-0.01, -2], [0, 6], [0.01, 9]]);
+    expect(computeGammaWalls(SAMPLE, 61_800, p).putWall).toBe(57_500);
+    expect(gexAtSpot(p)).toBe(6);
+    expect(gexAtSpot(profile([[0, 0]]))).toBe(0);
+  });
+
   it('sums profiles pointwise and reads the 0% point', () => {
     const sum = sumGexProfiles([profile([[-0.005, 1], [0, 2]]), undefined, profile([[0, 3]])]);
     expect(sum).toEqual(profile([[-0.005, 1], [0, 5]]));

@@ -5,9 +5,8 @@ import type { GexProfilePoint, GexStrike } from '@shared/enriched';
 export const GEX_WALL_FLOOR_M = 0.01;
 
 export interface GammaWalls {
-  /** Largest positive-GEX strike above spot (long-gamma magnet → resistance). */
+  // Historical field names are retained for stored snapshots; these are signed net-GEX zones.
   callWall: number | null;
-  /** Most negative-GEX strike below spot (short-gamma → support). */
   putWall: number | null;
   /** Spot level nearest the current spot where total dealer GEX changes sign. */
   gammaFlip: number | null;

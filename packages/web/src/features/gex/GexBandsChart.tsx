@@ -83,8 +83,8 @@ function useGexWallHistory(currency: SpotCandleCurrency, days: number, enabled: 
 
 const messages = defineMessages(
   {
-    callWall: 'CALL WALL',
-    putWall: 'PUT WALL',
+    callWall: 'POSITIVE Γ ABOVE',
+    putWall: 'NEGATIVE Γ BELOW',
     flip: 'FLIP',
     noteHistory: 'GEX Keltner 130: EMA ± smoothed wall distance · dashed zone: live walls',
     noteLive: 'Dashed zone: live walls · band history needs ALL expiries + all venues',
@@ -93,8 +93,8 @@ const messages = defineMessages(
     retry: 'Retry',
   },
   {
-    callWall: 'MURO CALLS',
-    putWall: 'MURO PUTS',
+    callWall: 'Γ POSITIVO ARRIBA',
+    putWall: 'Γ NEGATIVO ABAJO',
     flip: 'FLIP',
     noteHistory:
       'Keltner GEX 130: EMA ± distancia suavizada a los muros · zona punteada: muros en vivo',

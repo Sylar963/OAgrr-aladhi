@@ -257,7 +257,7 @@ export class GammaBandsPrimitive implements ISeriesPrimitive<Time> {
   private live: GammaWalls = { callWall: null, putWall: null, gammaFlip: null };
   // Last real candle time; timeToCoordinate only resolves series data times.
   private anchorSec: number | null = null;
-  private labels: WallLabels = { callWall: 'CALL WALL', putWall: 'PUT WALL', gammaFlip: 'FLIP' };
+  private labels: WallLabels = { callWall: 'POSITIVE Γ ABOVE', putWall: 'NEGATIVE Γ BELOW', gammaFlip: 'FLIP' };
   private series: ISeriesApi<SeriesType, Time> | null = null;
   private chart: SeriesAttachedParameter<Time>['chart'] | null = null;
   private requestUpdate: (() => void) | null = null;

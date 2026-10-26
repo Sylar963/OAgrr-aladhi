@@ -19,7 +19,7 @@ const messages = defineMessages(
     bars: 'Bars',
     bands: 'Bands',
     bandsOnly: 'Gamma bands support BTC/ETH/HYPE only',
-    subtitle: 'Dealer gamma per strike · $M of hedging per 1% spot move',
+    subtitle: 'Estimated dealer gamma per strike · $M per 1% spot move',
     spot: 'Spot: {price}',
     allTip:
       'Sum GEX across every listed expiry — closer to total dealer hedging pressure than a single tenor',
@@ -28,29 +28,35 @@ const messages = defineMessages(
     noDataExpiry: 'No GEX data for this expiry',
     noDataAllDetail: 'Venues report no open interest yet. Try again once the runtimes have warmed.',
     noDataExpiryDetail: 'Try a further-dated expiry with more open interest.',
-    magnet: 'Magnet',
-    accelerator: 'Accelerator',
+    magnet: 'Dampening potential',
+    accelerator: 'Amplification risk',
     netAtSpotTip:
-      'Total dealer GEX at the current spot. Positive: dealers long gamma (dampening). Negative: short gamma (amplifying).',
-    netAtSpot: 'Net at spot',
+      'Estimated total dealer GEX at current spot for the selected expiries and venues. Positive gamma may dampen moves; negative gamma may amplify either direction. One negative strike does not determine this total. Flow attribution does not verify dealer identity.',
+    netAtSpot: 'Est. net at spot',
+    netUnknown: 'Unknown',
+    netNeutral: 'zero γ',
     flipTip:
       "Spot level where total dealer GEX changes sign, found by re-pricing every contract's gamma across ±20% of spot",
     flip: 'Flip',
-    callWall: 'Call wall',
-    putWall: 'Put wall',
+    callWall: 'Positive Γ above',
+    putWall: 'Negative Γ below',
+    callWallTip:
+      'Largest positive net-GEX strike above spot. Hedging may oppose a move; this is not verified resistance or a measure of call ownership.',
+    putWallTip:
+      'Most negative net-GEX strike below spot. Short-gamma hedging may reinforce a decline through this area. This is not buying support or a measure of put ownership.',
     flowShareTip:
-      'Share of gross gamma whose dealer sign comes from observed taker flow. The rest is open interest that predates the flow book, signed by the naive prior (dealers long calls, short puts).',
+      'Share of gamma attributed using observed taker flow. Dealer identity and inventory are inferred, not verified. Remaining open interest uses the legacy assumption of dealers long calls and short puts. This percentage is not a probability that a level holds.',
     flowAttributed: 'Flow-attributed',
     positiveExplain:
-      'Positive GEX: dealers buy dips and sell rallies to stay hedged → dampens volatility, pins price near high-OI strikes',
+      'Estimated positive dealer gamma: hedging may buy dips and sell rallies, opposing price moves. A touch alone does not confirm a reversal.',
     negativeExplain:
-      'Negative GEX: dealers sell into dips and buy into rallies → amplifies moves, expect bigger swings',
+      'Estimated negative dealer gamma: hedging may sell declines and buy rallies, reinforcing either direction. A lower-zone breach is not an automatic buy.',
     formula:
       "GEX per strike = dealer position × Gamma × Spot² × 1% × contract size, summed across venues. New open interest is signed by the taker side of screen and block trades in each 15-min interval (taker buys ⇒ dealer short). The flip re-prices every contract's gamma across spot levels and marks where the total changes sign.",
     caveat:
-      'Open interest that predates the flow book keeps the naive sign (dealers long calls, short puts) until it closes or expires — see Flow-attributed. Faded bars and amber shares are mostly that prior. Treat GEX as a directional indicator, not ground truth.',
-    axisNegative: '← Negative (accelerator)',
-    axisPositive: 'Positive (magnet) →',
+      'Legacy open interest assumes dealers long calls and short puts. Flow-based signs also infer dealer inventory. Use net gamma at spot for the selected scope; individual strikes are contributions. Gamma sign describes potential hedging feedback, not a bullish or bearish forecast.',
+    axisNegative: '← Negative (may amplify)',
+    axisPositive: 'Positive (may dampen) →',
     barTitle: '{strike}: {value} per 1%{flow}',
     barFlow: ' · {pct}% flow',
     strikeFlowTip: "Share of this strike's gamma signed by observed flow",
@@ -62,7 +68,7 @@ const messages = defineMessages(
     bars: 'Barras',
     bands: 'Bandas',
     bandsOnly: 'Las bandas gamma solo admiten BTC/ETH/HYPE',
-    subtitle: 'Gamma del dealer por strike · $M de cobertura por cada 1% de movimiento del spot',
+    subtitle: 'Gamma estimado del dealer por strike · $M por cada 1% de movimiento del spot',
     spot: 'Spot: {price}',
     allTip:
       'Suma el GEX de todos los vencimientos listados — más cercano a la presión total de cobertura del dealer que un solo plazo',
@@ -72,29 +78,35 @@ const messages = defineMessages(
     noDataAllDetail:
       'Los exchanges aún no reportan open interest. Inténtalo de nuevo cuando los runtimes estén listos.',
     noDataExpiryDetail: 'Prueba un vencimiento más lejano con más open interest.',
-    magnet: 'Imán',
-    accelerator: 'Acelerador',
+    magnet: 'Posible amortiguación',
+    accelerator: 'Riesgo de amplificación',
     netAtSpotTip:
-      'GEX total del dealer en el spot actual. Positivo: dealers long gamma (amortigua). Negativo: short gamma (amplifica).',
-    netAtSpot: 'Neto en spot',
+      'GEX total estimado del dealer en el spot actual para los vencimientos y exchanges seleccionados. Gamma positivo puede amortiguar movimientos; negativo puede amplificar ambas direcciones. Un strike negativo no determina este total. El flujo no verifica la identidad del dealer.',
+    netAtSpot: 'Neto estimado en spot',
+    netUnknown: 'Desconocido',
+    netNeutral: 'γ cero',
     flipTip:
       'Nivel de spot donde el GEX total del dealer cambia de signo, calculado revalorizando el gamma de cada contrato en ±20% del spot',
     flip: 'Flip',
-    callWall: 'Muro de calls',
-    putWall: 'Muro de puts',
+    callWall: 'Γ positivo arriba',
+    putWall: 'Γ negativo abajo',
+    callWallTip:
+      'Strike con mayor GEX neto positivo por encima del spot. La cobertura puede oponerse al movimiento; no es resistencia verificada ni una medida de tenencia de calls.',
+    putWallTip:
+      'Strike con GEX neto más negativo por debajo del spot. La cobertura short gamma puede reforzar una caída por esta zona. No es soporte comprador ni una medida de tenencia de puts.',
     flowShareTip:
-      'Porción del gamma bruto cuyo signo de dealer proviene del flujo taker observado. El resto es open interest previo al libro de flujo, con signo según el supuesto ingenuo (dealers long calls, short puts).',
+      'Porción del gamma atribuida mediante flujo taker observado. La identidad y el inventario del dealer se infieren, no se verifican. El resto del open interest supone dealers long calls y short puts. Este porcentaje no es la probabilidad de que un nivel aguante.',
     flowAttributed: 'Atribuido a flujo',
     positiveExplain:
-      'GEX positivo: los dealers compran caídas y venden subidas para mantenerse cubiertos → amortigua la volatilidad, ancla el precio cerca de strikes con alto OI',
+      'Gamma positivo estimado del dealer: la cobertura puede comprar caídas y vender subidas, oponiéndose al movimiento. Un toque por sí solo no confirma una reversión.',
     negativeExplain:
-      'GEX negativo: los dealers venden en caídas y compran en subidas → amplifica los movimientos, espera oscilaciones más grandes',
+      'Gamma negativo estimado del dealer: la cobertura puede vender caídas y comprar subidas, reforzando ambas direcciones. Romper la zona inferior no es una compra automática.',
     formula:
       'GEX por strike = posición del dealer × Gamma × Spot² × 1% × tamaño del contrato, sumado entre exchanges. El nuevo open interest se firma según el lado taker de las operaciones en pantalla y en bloque en cada intervalo de 15 min (compras taker ⇒ dealer short). El flip revaloriza el gamma de cada contrato en distintos niveles de spot y marca dónde cambia de signo el total.',
     caveat:
-      'El open interest previo al libro de flujo conserva el signo ingenuo (dealers long calls, short puts) hasta que se cierra o vence — ver Atribuido a flujo. Las barras atenuadas y las porciones en ámbar son mayormente ese supuesto. Trata el GEX como un indicador direccional, no como verdad absoluta.',
-    axisNegative: '← Negativo (acelerador)',
-    axisPositive: 'Positivo (imán) →',
+      'El open interest previo supone dealers long calls y short puts. Los signos basados en flujo también infieren el inventario del dealer. Usa el gamma neto en spot del alcance seleccionado; cada strike es una contribución. El signo indica posible efecto de cobertura, no un pronóstico alcista o bajista.',
+    axisNegative: '← Negativo (puede amplificar)',
+    axisPositive: 'Positivo (puede amortiguar) →',
     barTitle: '{strike}: {value} por 1%{flow}',
     barFlow: ' · {pct}% flujo',
     strikeFlowTip: 'Porción del gamma de este strike firmada por flujo observado',
@@ -288,20 +300,24 @@ export default function GexView() {
             </button>
           ) : null}
           <div className={styles.levels}>
-            {netAtSpot != null && (
+            <span
+              className={styles.level}
+              title={t('netAtSpotTip')}
+            >
+              {t('netAtSpot')}
               <span
-                className={styles.level}
-                title={t('netAtSpotTip')}
+                className={styles.levelValue}
+                data-type={
+                  netAtSpot == null || netAtSpot === 0
+                    ? undefined
+                    : netAtSpot > 0 ? 'positive' : 'negative'
+                }
               >
-                {t('netAtSpot')}
-                <span
-                  className={styles.levelValue}
-                  data-type={netAtSpot >= 0 ? 'positive' : 'negative'}
-                >
-                  {formatGexM(netAtSpot)} · {netAtSpot >= 0 ? 'long γ' : 'short γ'}
-                </span>
+                {netAtSpot == null
+                  ? t('netUnknown')
+                  : `${formatGexM(netAtSpot)} · ${netAtSpot === 0 ? t('netNeutral') : netAtSpot > 0 ? 'long γ' : 'short γ'}`}
               </span>
-            )}
+            </span>
             <span
               className={styles.level}
               title={t('flipTip')}
@@ -311,8 +327,8 @@ export default function GexView() {
                 {walls.gammaFlip != null ? Math.round(walls.gammaFlip).toLocaleString() : '—'}
               </span>
             </span>
-            <WallLevel label={t('callWall')} strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
-            <WallLevel label={t('putWall')} strike={walls.putWall} flowShare={flowShareAt(walls.putWall)} />
+            <WallLevel label={t('callWall')} title={t('callWallTip')} strike={walls.callWall} flowShare={flowShareAt(walls.callWall)} />
+            <WallLevel label={t('putWall')} title={t('putWallTip')} strike={walls.putWall} flowShare={flowShareAt(walls.putWall)} />
             {flowShare != null && (
               <span
                 className={styles.level}
@@ -431,16 +447,18 @@ export default function GexView() {
 
 function WallLevel({
   label,
+  title,
   strike,
   flowShare,
 }: {
   label: string;
+  title: string;
   strike: number | null;
   flowShare: number | undefined;
 }) {
   const t = useT(messages);
   return (
-    <span className={styles.level}>
+    <span className={styles.level} title={title}>
       {label}
       <span className={styles.levelValue}>{strike != null ? strike.toLocaleString() : '—'}</span>
       {strike != null && flowShare !== undefined && (

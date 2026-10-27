@@ -270,9 +270,15 @@ function PositionVerdict({ position }: { position?: FlowPositionAssessment | und
           {t(action)} <small>· {t('inferred')}</small>
         </>
       ) : status === 'opening_component' ? (
-        <>{t(status, { value: formatNumber(position.minOpening ?? 0) })} <small>· {t('inferred')}</small></>
+        <>
+          {t(status, { value: formatNumber(position.minOpening ?? 0) })}{' '}
+          <small>· {t('inferred')}</small>
+        </>
       ) : status === 'closing_component' ? (
-        <>{t(status, { value: formatNumber(position.minClosing ?? 0) })} <small>· {t('inferred')}</small></>
+        <>
+          {t(status, { value: formatNumber(position.minClosing ?? 0) })}{' '}
+          <small>· {t('inferred')}</small>
+        </>
       ) : status === 'incomplete' ? (
         t('incompleteTape')
       ) : (

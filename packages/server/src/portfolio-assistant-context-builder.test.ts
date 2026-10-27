@@ -8,6 +8,7 @@ import type { PortfolioPnlCurve, ShockGridCell } from '@oggregator/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
+import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { SyntheticMarket } from './assistant-eval/synthetic-market.js';
 import { readPortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type { PortfolioAssistantContext } from './portfolio-assistant-context-builder.js';
@@ -34,7 +35,13 @@ const NOW = Date.parse('2026-10-07T12:00:00.000Z');
 const SPOT = 83_886.66;
 const ACCOUNT = 'acct-1';
 
-function leg(legId: string, expiry: string, strike: number, size: number, entryPriceUsd: number): PositionLeg {
+function leg(
+  legId: string,
+  expiry: string,
+  strike: number,
+  size: number,
+  entryPriceUsd: number,
+): PositionLeg {
   return {
     legId,
     underlying: 'BTC',
@@ -129,7 +136,8 @@ describe('trimPayoffFacts', () => {
     const curve = linearCurve(0);
     const trimmed = trimPayoffFacts(curve, 0);
     const prices = trimmed.points.map((point) => point.underlyingPriceUsd);
-    const priceAt = (index: number) => Math.round((curve.points[index]?.underlyingPriceUsd ?? 0) * 100) / 100;
+    const priceAt = (index: number) =>
+      Math.round((curve.points[index]?.underlyingPriceUsd ?? 0) * 100) / 100;
 
     expect(prices).toEqual([...prices].sort((a, b) => a - b));
     expect(new Set(prices).size).toBe(prices.length);
@@ -138,7 +146,9 @@ describe('trimPayoffFacts', () => {
     expect(prices).toContain(priceAt(20));
     expect(prices).toContain(priceAt(31));
     expect(trimmed.points.length).toBe(24);
-    expect(trimmed.points.find((point) => point.underlyingPriceUsd === priceAt(31))?.expiryPnlUsd).toBe(10_000);
+    expect(
+      trimmed.points.find((point) => point.underlyingPriceUsd === priceAt(31))?.expiryPnlUsd,
+    ).toBe(10_000);
     expect(trimmed.points.every((point) => !('forwardPnlUsd' in point))).toBe(true);
     expect(trimmed.currentSpotUsd).toBe(84_000);
     expect(trimmed.maxLossUsd).toBe(-2_011.1);
@@ -190,7 +200,13 @@ describe('buildRiskBudgetFacts', () => {
         status: 'ok',
         riskWindows: [
           window,
-          { ...window, from: '2026-10-16', until: '2026-10-30', upsideUnbounded: true, worstLossUsd: null },
+          {
+            ...window,
+            from: '2026-10-16',
+            until: '2026-10-30',
+            upsideUnbounded: true,
+            worstLossUsd: null,
+          },
         ],
       },
       [
@@ -229,7 +245,12 @@ describe('shock facts', () => {
       totalPnlUsd: atmShiftVolPts * 10.123 + skewShiftPerLogK,
     })),
   );
-  const meta = { totalLegs: 1, pricedLegs: 1, excludedLegIds: [], anchor: 'per_leg_forward' as const };
+  const meta = {
+    totalLegs: 1,
+    pricedLegs: 1,
+    excludedLegIds: [],
+    anchor: 'per_leg_forward' as const,
+  };
 
   it('reshapes the grid into axis arrays and a rounded matrix', () => {
     const facts = toShockFacts(grid, meta);
@@ -256,7 +277,13 @@ describe('assemblePortfolioAssistantContext', () => {
     expect(context.riskBudgetFacts.worstLossUsd).toBeNull();
     expect(context.riskBudgetFacts.unboundedAfter).toBe('2026-10-16');
     expect(context.riskBudgetFacts.uncoveredShorts).toEqual([
-      { legId: 'short-oct30-85000-c', expiry: '2026-10-30', strike: 85_000, right: 'call', size: 1 },
+      {
+        legId: 'short-oct30-85000-c',
+        expiry: '2026-10-30',
+        strike: 85_000,
+        right: 'call',
+        size: 1,
+      },
     ]);
     expect(context.riskBudgetFacts.riskWindows.map((window) => window.until)).toEqual([
       '2026-10-16',
@@ -274,7 +301,9 @@ describe('assemblePortfolioAssistantContext', () => {
     const compacted = assembleDiagonal(1_000);
     expect(compacted.limitations).toContain(CONTEXT_COMPACTED_LIMITATION);
     expect(compacted.limitations.some((item) => item.startsWith('shockFacts keeps'))).toBe(true);
-    expect(compacted.shockFacts?.columnsSkewShiftPerLogK.every((value) => Math.abs(value) <= 0.25)).toBe(true);
+    expect(
+      compacted.shockFacts?.columnsSkewShiftPerLogK.every((value) => Math.abs(value) <= 0.25),
+    ).toBe(true);
     expect(compacted.riskBudgetFacts).toEqual(full.riskBudgetFacts);
     expect(compacted.toolHints).toEqual(full.toolHints);
   });
@@ -283,8 +312,15 @@ describe('assemblePortfolioAssistantContext', () => {
     const context = assembleDiagonal(160_000);
     const facts = context.bookVsMarketFacts;
     expect(facts?.underlying).toBe('BTC');
-    expect(facts?.expiryOutlook.map((outlook) => outlook.until)).toEqual(['2026-10-16', '2026-10-30']);
-    expect(facts?.expiryOutlook.map((outlook) => outlook.breakevens.map((breakeven) => breakeven.spotUsd))).toEqual(
+    expect(facts?.expiryOutlook.map((outlook) => outlook.until)).toEqual([
+      '2026-10-16',
+      '2026-10-30',
+    ]);
+    expect(
+      facts?.expiryOutlook.map((outlook) =>
+        outlook.breakevens.map((breakeven) => breakeven.spotUsd),
+      ),
+    ).toEqual(
       context.riskBudgetFacts.riskWindows.map((window) => window.breakevenSpotsUsd.map(Math.round)),
     );
     // No term structure in this market, so the outlook cannot price a move.
@@ -338,6 +374,37 @@ describe('PortfolioAssistantContextBuilder', () => {
       'short-oct30-85000-c',
     ]);
   });
+
+  it('skips market, ledger and horizon work for a narrow exposure question', async () => {
+    const runtime = diagonalRuntime();
+    vi.mocked(services.getOrCreatePortfolioRuntime).mockReturnValue(runtime);
+    const scenarios = vi.spyOn(runtime, 'computeHorizonScenarios');
+    const marketOverview = vi.fn();
+    const fetchAccountLedger = vi.fn();
+    const builder = new PortfolioAssistantContextBuilder(
+      readPortfolioAssistantConfiguration({}),
+      { marketOverview } as unknown as AssistantMarketDataReader,
+      null,
+      () => NOW,
+      new PortfolioRefStore({ now: () => NOW }),
+      () => true,
+      { fetchAccountLedger },
+    );
+    const context = await builder.buildPortfolioAssistantContext({
+      accountId: ACCOUNT,
+      source: 'thalex',
+      underlying: 'BTC',
+      forwardDays: 7,
+      question: 'Which expiry has the most negative theta?',
+    });
+    expect(marketOverview).not.toHaveBeenCalled();
+    expect(fetchAccountLedger).not.toHaveBeenCalled();
+    expect(scenarios).not.toHaveBeenCalled();
+    expect(context.expiryFacts).toHaveLength(2);
+    expect(context.riskBudgetFacts.unboundedAfter).toBe('2026-10-16');
+    expect(context.contextSelection?.intent).toBe('exposure');
+    expect(context.limitations).not.toContain('Multi-horizon scenarios could not be computed.');
+  });
 });
 
 function thalexLedger(transactionCount = 1): ThalexAccountLedger {
@@ -376,7 +443,11 @@ describe('buildAccountEquityFacts', () => {
     expect(facts.sessionRealisedPnlUsd).toBe(40.95);
     expect(facts.cash[0]?.balance).toBe(165.12345679);
     expect(facts.dailyEquity.map((point) => point.equityUsd)).toEqual([184, 165.12]);
-    expect(facts.transactions[0]).toMatchObject({ type: 'session settlement', amount: -1.5, balanceAfter: 165.12 });
+    expect(facts.transactions[0]).toMatchObject({
+      type: 'session settlement',
+      amount: -1.5,
+      balanceAfter: 165.12,
+    });
     expect(facts.transactions[0]?.description).toHaveLength(160);
     expect(facts.basis).toContain('sessionRealisedPnlUsd');
   });
@@ -394,7 +465,9 @@ describe('PortfolioAssistantContextBuilder account equity', () => {
     vi.mocked(services.getOrCreatePortfolioRuntime).mockReturnValue(diagonalRuntime());
   });
 
-  function builderWith(fetchAccountLedger: (accountId: string, fromMs: number) => Promise<unknown>) {
+  function builderWith(
+    fetchAccountLedger: (accountId: string, fromMs: number) => Promise<unknown>,
+  ) {
     return new PortfolioAssistantContextBuilder(
       readPortfolioAssistantConfiguration({}),
       null,
@@ -407,7 +480,10 @@ describe('PortfolioAssistantContextBuilder account equity', () => {
   }
 
   it('attaches Thalex account equity for a thalex book', async () => {
-    const fetchAccountLedger = vi.fn(async () => ({ ledger: thalexLedger(), network: 'mainnet' as const }));
+    const fetchAccountLedger = vi.fn(async () => ({
+      ledger: thalexLedger(),
+      network: 'mainnet' as const,
+    }));
     const context = await builderWith(fetchAccountLedger).buildPortfolioAssistantContext({
       accountId: ACCOUNT,
       source: 'thalex',
@@ -427,13 +503,17 @@ describe('PortfolioAssistantContextBuilder account equity', () => {
     });
     expect(manual.accountEquityFacts).toBeNull();
 
-    const failed = await builderWith(vi.fn(async () => Promise.reject(new Error('down')))).buildPortfolioAssistantContext({
+    const failed = await builderWith(
+      vi.fn(async () => Promise.reject(new Error('down'))),
+    ).buildPortfolioAssistantContext({
       accountId: ACCOUNT,
       source: 'thalex',
       underlying: 'BTC',
       forwardDays: 0,
     });
     expect(failed.accountEquityFacts).toBeNull();
-    expect(failed.limitations).toContain('Thalex account equity and cash transactions could not be loaded.');
+    expect(failed.limitations).toContain(
+      'Thalex account equity and cash transactions could not be loaded.',
+    );
   });
 });

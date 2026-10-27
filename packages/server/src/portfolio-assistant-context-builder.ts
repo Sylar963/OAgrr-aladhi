@@ -33,7 +33,10 @@ import type {
   StrategyGroup,
   VegaByStrikeRow,
 } from '@oggregator/protocol';
-import { selectAssistantContextPolicy, type AssistantContextPolicy } from './portfolio-assistant-context-policy.js';
+import {
+  selectAssistantContextPolicy,
+  type AssistantContextPolicy,
+} from './portfolio-assistant-context-policy.js';
 import type { CompactChain, CompactSurface } from './assistant-market/market-data-compaction.js';
 import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
@@ -133,7 +136,8 @@ export type PortfolioAssistantPayoffPoint = Omit<PortfolioPnlPoint, 'forwardPnlU
   forwardPnlUsd?: number | null;
 };
 
-export interface PortfolioAssistantPayoffFacts extends Omit<PortfolioPnlCurve, 'points' | 'riskWindows'> {
+export interface PortfolioAssistantPayoffFacts
+  extends Omit<PortfolioPnlCurve, 'points' | 'riskWindows'> {
   points: PortfolioAssistantPayoffPoint[];
 }
 
@@ -184,7 +188,12 @@ export interface PortfolioAssistantAccountEquityFacts {
   marginUsd: number | null;
   requiredMarginUsd: number | null;
   remainingMarginUsd: number | null;
-  cash: Array<{ asset: string; balance: number; indexPriceUsd: number | null; valueUsd: number | null }>;
+  cash: Array<{
+    asset: string;
+    balance: number;
+    indexPriceUsd: number | null;
+    valueUsd: number | null;
+  }>;
   /** Cash right after each 08:00 UTC settlement, oldest first, ending with the live equity. */
   dailyEquity: Array<{ at: string; equityUsd: number }>;
   /** Cash ledger entries in the window, newest first. */
@@ -277,7 +286,7 @@ const COMPACT_ACCOUNT_TRANSACTION_LIMIT = 20;
 const DESCRIPTION_MAX_CHARS = 160;
 const DAY_MS = 86_400_000;
 const ACCOUNT_EQUITY_BASIS =
-  'equityUsd = cashUsd + unrealisedPnlUsd + sessionRealisedPnlUsd, the same formula as the portfolio equity chart. Both P&L terms are unsettled: they reach cash at the 08:00 UTC session settlement transaction, so a close mid-session moves its gain from unrealisedPnlUsd to sessionRealisedPnlUsd and equityUsd stays put. cashUsd values non-stable assets at today\'s index. marginUsd is Thalex\'s own margin figure (collateral after collateral factors plus unsettled P&L).';
+  "equityUsd = cashUsd + unrealisedPnlUsd + sessionRealisedPnlUsd, the same formula as the portfolio equity chart. Both P&L terms are unsettled: they reach cash at the 08:00 UTC session settlement transaction, so a close mid-session moves its gain from unrealisedPnlUsd to sessionRealisedPnlUsd and equityUsd stays put. cashUsd values non-stable assets at today's index. marginUsd is Thalex's own margin figure (collateral after collateral factors plus unsettled P&L).";
 const SHOCK_TRIM_BUDGET_SHARE = 0.6;
 const SHOCK_MAX_ATM_SHIFT_VOL_PTS = 10;
 const SHOCK_MAX_SKEW_SHIFT_PER_LOG_K = 0.25;
@@ -314,19 +323,26 @@ function feeSummary(trades: PortfolioAssistantTradeFact[]) {
 function premiumSummary(trades: PortfolioAssistantTradeFact[]) {
   const reported = trades.flatMap((trade) => trade.realizedPnlUsd ?? []);
   return {
-    premiumBoughtUsd: sumCents(trades.filter((trade) => trade.side === 'buy').map((trade) => trade.premiumUsd)),
-    premiumSoldUsd: sumCents(trades.filter((trade) => trade.side === 'sell').map((trade) => trade.premiumUsd)),
+    premiumBoughtUsd: sumCents(
+      trades.filter((trade) => trade.side === 'buy').map((trade) => trade.premiumUsd),
+    ),
+    premiumSoldUsd: sumCents(
+      trades.filter((trade) => trade.side === 'sell').map((trade) => trade.premiumUsd),
+    ),
     realizedPnlUsd: reported.length === 0 ? null : sumCents(reported),
     fillsWithRealizedPnl: reported.length,
     fillsWithoutRealizedPnl: trades.length - reported.length,
   };
 }
 
-export function summarizeTradeFacts(trades: PortfolioAssistantTradeFact[]): PortfolioAssistantTradeTotals {
+export function summarizeTradeFacts(
+  trades: PortfolioAssistantTradeFact[],
+): PortfolioAssistantTradeTotals {
   const premiums = premiumSummary(trades);
   const times = trades.map((trade) => trade.tradedAt).sort();
   const groups = new Map<string, PortfolioAssistantTradeFact[]>();
-  for (const trade of trades) groups.set(trade.instrument, [...(groups.get(trade.instrument) ?? []), trade]);
+  for (const trade of trades)
+    groups.set(trade.instrument, [...(groups.get(trade.instrument) ?? []), trade]);
   const byInstrument = [...groups.entries()]
     .map(([instrument, fills]) => {
       const summary = premiumSummary(fills);
@@ -334,8 +350,12 @@ export function summarizeTradeFacts(trades: PortfolioAssistantTradeFact[]): Port
         instrument,
         fills: fills.length,
         netAmount:
-          Math.round(fills.reduce((sum, fill) => sum + (fill.side === 'buy' ? fill.amount : -fill.amount), 0) * 1e8) /
-          1e8,
+          Math.round(
+            fills.reduce(
+              (sum, fill) => sum + (fill.side === 'buy' ? fill.amount : -fill.amount),
+              0,
+            ) * 1e8,
+          ) / 1e8,
         feesUsd: feeSummary(fills).feesUsd,
         premiumBoughtUsd: summary.premiumBoughtUsd,
         premiumSoldUsd: summary.premiumSoldUsd,
@@ -346,7 +366,9 @@ export function summarizeTradeFacts(trades: PortfolioAssistantTradeFact[]): Port
     .sort(
       (left, right) =>
         right.fills - left.fills ||
-        right.premiumBoughtUsd + right.premiumSoldUsd - (left.premiumBoughtUsd + left.premiumSoldUsd) ||
+        right.premiumBoughtUsd +
+          right.premiumSoldUsd -
+          (left.premiumBoughtUsd + left.premiumSoldUsd) ||
         left.instrument.localeCompare(right.instrument),
     );
   return {
@@ -380,16 +402,16 @@ export function buildTradeHistoryFacts(
     .filter((trade) => underlying == null || trade.underlying === underlying)
     .sort((a, b) => b.timestampMs - a.timestampMs);
   const listed: PortfolioAssistantTradeFact[] = matching.slice(0, limit).map((trade) => ({
-      tradedAt: new Date(trade.timestampMs).toISOString(),
-      instrument: trade.instrumentName,
-      side: trade.direction,
-      amount: trade.amount,
-      priceUsd: roundCents(trade.priceUsd),
-      premiumUsd: roundCents(trade.priceUsd * trade.amount),
-      feeUsd: trade.feeUsd == null ? null : roundCents(trade.feeUsd),
-      realizedPnlUsd: trade.realizedPnlUsd == null ? null : roundCents(trade.realizedPnlUsd),
-      liquidityRole: trade.liquidityRole,
-      orderId: trade.orderId,
+    tradedAt: new Date(trade.timestampMs).toISOString(),
+    instrument: trade.instrumentName,
+    side: trade.direction,
+    amount: trade.amount,
+    priceUsd: roundCents(trade.priceUsd),
+    premiumUsd: roundCents(trade.priceUsd * trade.amount),
+    feeUsd: trade.feeUsd == null ? null : roundCents(trade.feeUsd),
+    realizedPnlUsd: trade.realizedPnlUsd == null ? null : roundCents(trade.realizedPnlUsd),
+    liquidityRole: trade.liquidityRole,
+    orderId: trade.orderId,
   }));
   return {
     venue,
@@ -519,7 +541,10 @@ function roundRiskWindow(window: ExpiryRiskWindow): ExpiryRiskWindow {
   };
 }
 
-function extremumIndex(points: PortfolioPnlPoint[], pick: (a: number, b: number) => boolean): number {
+function extremumIndex(
+  points: PortfolioPnlPoint[],
+  pick: (a: number, b: number) => boolean,
+): number {
   let found = 0;
   points.forEach((point, index) => {
     const current = points[found];
@@ -625,7 +650,9 @@ export function toShockFacts(
 }
 
 export function trimShockFacts(facts: PortfolioAssistantShockFacts): PortfolioAssistantShockFacts {
-  const keepRow = facts.rowsAtmShiftVolPts.map((value) => Math.abs(value) <= SHOCK_MAX_ATM_SHIFT_VOL_PTS);
+  const keepRow = facts.rowsAtmShiftVolPts.map(
+    (value) => Math.abs(value) <= SHOCK_MAX_ATM_SHIFT_VOL_PTS,
+  );
   const keepColumn = facts.columnsSkewShiftPerLogK.map(
     (value) => Math.abs(value) <= SHOCK_MAX_SKEW_SHIFT_PER_LOG_K,
   );
@@ -658,14 +685,19 @@ export function compactPortfolioAssistantContext(
             truncated:
               context.tradeHistoryFacts.truncated ||
               context.tradeHistoryFacts.trades.length > COMPACT_TRADE_CONTEXT_LIMIT,
-            totals: summarizeTradeFacts(context.tradeHistoryFacts.trades.slice(0, COMPACT_TRADE_CONTEXT_LIMIT)),
+            totals: summarizeTradeFacts(
+              context.tradeHistoryFacts.trades.slice(0, COMPACT_TRADE_CONTEXT_LIMIT),
+            ),
           },
     accountEquityFacts:
       context.accountEquityFacts == null
         ? null
         : {
             ...context.accountEquityFacts,
-            transactions: context.accountEquityFacts.transactions.slice(0, COMPACT_ACCOUNT_TRANSACTION_LIMIT),
+            transactions: context.accountEquityFacts.transactions.slice(
+              0,
+              COMPACT_ACCOUNT_TRANSACTION_LIMIT,
+            ),
             transactionsTruncated:
               context.accountEquityFacts.transactionsTruncated ||
               context.accountEquityFacts.transactions.length > COMPACT_ACCOUNT_TRANSACTION_LIMIT,
@@ -674,7 +706,9 @@ export function compactPortfolioAssistantContext(
       ...context.marketFacts,
       underlyings: context.marketFacts.underlyings.map((facts) => {
         const heldStrikes = new Set(
-          heldPositions.filter((leg) => leg.underlying === facts.underlying).map((leg) => leg.strike),
+          heldPositions
+            .filter((leg) => leg.underlying === facts.underlying)
+            .map((leg) => leg.strike),
         );
         return {
           ...facts,
@@ -717,7 +751,13 @@ export interface AssemblePortfolioAssistantContextInput {
 
 function bookVsMarket(
   input: AssemblePortfolioAssistantContextInput,
-  positions: Array<{ underlying: string; expiry: string; strike: number; optionRight: 'call' | 'put'; size: number }>,
+  positions: Array<{
+    underlying: string;
+    expiry: string;
+    strike: number;
+    optionRight: 'call' | 'put';
+    size: number;
+  }>,
   pnlCurve: Pick<PortfolioPnlCurve, 'underlying' | 'currentSpotUsd' | 'status' | 'riskWindows'>,
 ): PortfolioAssistantBookVsMarketFacts | null {
   const underlying = pnlCurve.underlying;
@@ -771,21 +811,33 @@ export function assemblePortfolioAssistantContext(
   const { totals, pnlCurve } = metrics;
   const expiries = [...new Set(positions.map((leg) => leg.expiry))].sort();
   const uncoveredShorts =
-    input.legsWithMarks == null ? null : findUncoveredShorts(input.legsWithMarks, metrics.generatedAt);
+    input.legsWithMarks == null
+      ? null
+      : findUncoveredShorts(input.legsWithMarks, metrics.generatedAt);
 
   const context: PortfolioAssistantContext = {
-    ...(input.policy ? { contextSelection: {
-      intent: input.policy.intent,
-      omittedSections: [
-        ...(!input.policy.market ? ['marketFacts', 'bookVsMarketFacts'] : []),
-        ...(!input.policy.history ? ['tradeHistoryFacts', 'accountEquityFacts'] : []),
-        ...(!input.policy.scenarios ? ['horizonScenarios', 'shockFacts', 'payoffFacts.points'] : []),
-      ],
-    } } : {}),
-    markTimestamps: Object.fromEntries(positions.flatMap((leg) => {
-      const mark = riskFacts.positions.find((fact) => fact.legId === leg.legId)?.currentMarkUsd;
-      return leg.venueMarkTs != null && leg.venueMarkPriceUsd === mark ? [[leg.legId, leg.venueMarkTs]] : [];
-    })),
+    ...(input.policy
+      ? {
+          contextSelection: {
+            intent: input.policy.intent,
+            omittedSections: [
+              ...(!input.policy.market ? ['marketFacts', 'bookVsMarketFacts'] : []),
+              ...(!input.policy.history ? ['tradeHistoryFacts', 'accountEquityFacts'] : []),
+              ...(!input.policy.scenarios
+                ? ['horizonScenarios', 'shockFacts', 'payoffFacts.points']
+                : []),
+            ],
+          },
+        }
+      : {}),
+    markTimestamps: Object.fromEntries(
+      positions.flatMap((leg) => {
+        const mark = riskFacts.positions.find((fact) => fact.legId === leg.legId)?.currentMarkUsd;
+        return leg.venueMarkTs != null && leg.venueMarkPriceUsd === mark
+          ? [[leg.legId, leg.venueMarkTs]]
+          : [];
+      }),
+    ),
     headline: {
       asOf: new Date(metrics.generatedAt).toISOString(),
       underlying: pnlCurve.underlying ?? input.underlying,
@@ -815,23 +867,30 @@ export function assemblePortfolioAssistantContext(
             ? 'Some calculations have explicit exclusions or unavailable inputs.'
             : null,
     },
-    positions: [...riskFacts.positions].sort((a, b) => a.legId.localeCompare(b.legId)).slice(0, 100),
+    positions: [...riskFacts.positions]
+      .sort((a, b) => a.legId.localeCompare(b.legId))
+      .slice(0, 100),
     totals,
     expiryFacts: metrics.byExpiry.slice(0, 40),
     strikeFacts: metrics.byStrike.slice(0, 120),
     strategyFacts: metrics.strategies.slice(0, 50),
     breakEvenFacts: metrics.breakEven.slice(0, 100),
-    payoffFacts: input.policy?.scenarios === false
-      ? { ...trimPayoffFacts(pnlCurve, input.forwardDays), points: [] }
-      : trimPayoffFacts(pnlCurve, input.forwardDays),
+    payoffFacts:
+      input.policy?.scenarios === false
+        ? { ...trimPayoffFacts(pnlCurve, input.forwardDays), points: [] }
+        : trimPayoffFacts(pnlCurve, input.forwardDays),
     horizonScenarios,
     marketFacts: input.marketFacts,
-    shockFacts: input.policy?.scenarios === false ? null : toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
+    shockFacts:
+      input.policy?.scenarios === false
+        ? null
+        : toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
     accountEquityFacts: input.accountEquityFacts ?? null,
     userMemoryFacts: input.userMemoryFacts ?? null,
-    bookVsMarketFacts: input.policy?.market === false ? null : bookVsMarket(input, positions, pnlCurve),
+    bookVsMarketFacts:
+      input.policy?.market === false ? null : bookVsMarket(input, positions, pnlCurve),
     topContributors: {
       delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
       gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
@@ -872,7 +931,10 @@ export class PortfolioAssistantContextBuilder {
     private readonly ledgerMatchesSession: (accountId: string, venue: string) => boolean = () =>
       true,
     private readonly accountLedger: PortfolioAssistantAccountLedgerReader | null = null,
-    private readonly sessionNetwork: (accountId: string, source: PortfolioSource) => 'mainnet' | 'testnet' | null = () => null,
+    private readonly sessionNetwork: (
+      accountId: string,
+      source: PortfolioSource,
+    ) => 'mainnet' | 'testnet' | null = () => null,
   ) {}
 
   private async buildAccountEquity(
@@ -886,7 +948,9 @@ export class PortfolioAssistantContextBuilder {
         this.now() - ACCOUNT_LEDGER_WINDOW_DAYS * DAY_MS,
       );
       if (result == null) {
-        limitations.push('Thalex account equity is unavailable because no Thalex session is connected.');
+        limitations.push(
+          'Thalex account equity is unavailable because no Thalex session is connected.',
+        );
         return null;
       }
       const facts = buildAccountEquityFacts(result.ledger, result.network);
@@ -954,7 +1018,9 @@ export class PortfolioAssistantContextBuilder {
           if (chain.ok) {
             heldExpiryChains.push(
               outOfTheMoneyChain(
-                reference == null ? narrowChain(chain.data, CHAIN_STRIKE_BAND, heldStrikes) : chain.data,
+                reference == null
+                  ? narrowChain(chain.data, CHAIN_STRIKE_BAND, heldStrikes)
+                  : chain.data,
                 heldStrikes,
               ),
             );
@@ -979,7 +1045,9 @@ export class PortfolioAssistantContextBuilder {
   ): Promise<PortfolioAssistantLevelInputs | null> {
     const reader = this.marketData;
     if (!reader || underlying == null) return null;
-    const expiries = [...new Set(positions.filter((leg) => leg.underlying === underlying).map((leg) => leg.expiry))]
+    const expiries = [
+      ...new Set(positions.filter((leg) => leg.underlying === underlying).map((leg) => leg.expiry)),
+    ]
       .sort()
       .slice(0, MARKET_EXPIRY_LIMIT);
     const [gamma, timeAtPrice, breakEvens] = await Promise.all([
@@ -996,16 +1064,29 @@ export class PortfolioAssistantContextBuilder {
   ): Promise<PortfolioAssistantTradeHistoryFacts | null> {
     if (!isLedgerVenue(input.source)) return null;
     if (!this.tradeLedger?.enabled) {
-      limitations.push('Venue trade history is unavailable because the trade ledger is not configured.');
+      limitations.push(
+        'Venue trade history is unavailable because the trade ledger is not configured.',
+      );
       return null;
     }
     if (!this.ledgerMatchesSession(input.accountId, input.source)) {
-      limitations.push('Venue trade history is not shown for a testnet session; the ledger holds mainnet fills only.');
+      limitations.push(
+        'Venue trade history is not shown for a testnet session; the ledger holds mainnet fills only.',
+      );
       return null;
     }
     try {
-      const trades = await this.tradeLedger.loadTrades(input.accountId, input.source, TRADE_LOAD_LIMIT);
-      const facts = buildTradeHistoryFacts(input.source, trades, input.underlying, TRADE_CONTEXT_LIMIT);
+      const trades = await this.tradeLedger.loadTrades(
+        input.accountId,
+        input.source,
+        TRADE_LOAD_LIMIT,
+      );
+      const facts = buildTradeHistoryFacts(
+        input.source,
+        trades,
+        input.underlying,
+        TRADE_CONTEXT_LIMIT,
+      );
       if (facts.truncated) {
         limitations.push(
           `tradeHistoryFacts lists the ${TRADE_CONTEXT_LIMIT} most recent trades; use accountingFacts for lifetime totals.`,
@@ -1035,18 +1116,27 @@ export class PortfolioAssistantContextBuilder {
         true,
       );
     }
-    const horizonScenarios = policy.scenarios ? runtime.computeHorizonScenarios(
-      [...SCENARIO_HORIZONS_DAYS, input.forwardDays],
-      SCENARIO_SPOT_MOVES_PCT,
-    ) : null;
+    const horizonScenarios = policy.scenarios
+      ? runtime.computeHorizonScenarios(
+          [...SCENARIO_HORIZONS_DAYS, input.forwardDays],
+          SCENARIO_SPOT_MOVES_PCT,
+        )
+      : null;
     const limitations: string[] = [];
     if (policy.history) input.onProgress?.('loading_history');
     if (policy.market) input.onProgress?.('checking_quotes');
     const [tradeHistoryFacts, levelInputs, accountEquityFacts, marketFacts] = await Promise.all([
       policy.history ? this.buildTradeHistory(input, limitations) : null,
-      policy.market ? this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions) : null,
+      policy.market
+        ? this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions)
+        : null,
       policy.history ? this.buildAccountEquity(input, limitations) : null,
-      policy.market ? this.buildMarketFacts(snapshot.positions, input.underlying, snapshot.metrics.pnlCurve.currentSpotUsd)
+      policy.market
+        ? this.buildMarketFacts(
+            snapshot.positions,
+            input.underlying,
+            snapshot.metrics.pnlCurve.currentSpotUsd,
+          )
         : { underlyings: [], unavailable: [] },
     ]);
     const context = assemblePortfolioAssistantContext({
@@ -1072,7 +1162,8 @@ export class PortfolioAssistantContextBuilder {
       limitations,
       maxContextCharacters: this.configuration.maxContextCharacters,
     });
-    context.network = accountEquityFacts?.network ?? this.sessionNetwork(input.accountId, input.source);
+    context.network =
+      accountEquityFacts?.network ?? this.sessionNetwork(input.accountId, input.source);
     return context;
   }
 }

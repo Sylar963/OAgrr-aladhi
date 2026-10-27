@@ -1,5 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
-import { PortfolioAssistantEvidenceSchema, type PortfolioAssistantEvidence } from '@oggregator/protocol';
+import {
+  PortfolioAssistantEvidenceSchema,
+  type PortfolioAssistantEvidence,
+} from '@oggregator/protocol';
 import { createPgPool } from './pg-pool.js';
 
 export type UserEntitlementStatus = 'enabled' | 'revoked';
@@ -491,7 +494,9 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
         input.portfolioGeneratedAt,
         input.contextDigest,
         input.createdAt,
-        input.evidence == null ? null : JSON.stringify(PortfolioAssistantEvidenceSchema.parse(input.evidence)),
+        input.evidence == null
+          ? null
+          : JSON.stringify(PortfolioAssistantEvidenceSchema.parse(input.evidence)),
       ],
     );
     return mapMessage(result.rows[0]!);

@@ -1,6 +1,9 @@
 import { logger } from '@oggregator/core';
 import { readFileSync } from 'node:fs';
-import { AssistantEvalFixtureSchema, fixtureContext } from './assistant-eval/assistant-eval-fixture.js';
+import {
+  AssistantEvalFixtureSchema,
+  fixtureContext,
+} from './assistant-eval/assistant-eval-fixture.js';
 import type { PortfolioAssistantStore } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,7 +33,14 @@ import type { AuthenticatedUser } from './user-service.js';
 const REF = 'pref_QUFBQUFBQUFBQUFBQUFBQQ';
 
 function testContext() {
-  const fixture = AssistantEvalFixtureSchema.parse(JSON.parse(readFileSync(new URL('./assistant-eval/fixtures/reference-max-loss.json', import.meta.url), 'utf8')));
+  const fixture = AssistantEvalFixtureSchema.parse(
+    JSON.parse(
+      readFileSync(
+        new URL('./assistant-eval/fixtures/reference-max-loss.json', import.meta.url),
+        'utf8',
+      ),
+    ),
+  );
   return { ...fixtureContext(fixture), generatedAt: 1, positions: [], portfolioRef: REF };
 }
 const USER: AuthenticatedUser = {
@@ -87,7 +97,9 @@ function buildService(
   const callTool = (name: string, args: Record<string, unknown>) =>
     mcp.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   const gateway = {
-    async *streamPortfolioAnswer(request: StreamPortfolioAnswerRequest): AsyncIterable<PortfolioAssistantModelEvent> {
+    async *streamPortfolioAnswer(
+      request: StreamPortfolioAnswerRequest,
+    ): AsyncIterable<PortfolioAssistantModelEvent> {
       options.contextMessages?.push(request.contextMessage);
       await callTool('test_structure', { portfolioRef: REF });
       await callTool('test_structure', { portfolioRef: REF, legs: 'bad' });
@@ -191,11 +203,15 @@ describe('PortfolioAssistantConversationService tool telemetry', () => {
 
   it('keeps the run summary per assistant message for answer feedback', async () => {
     const runs = new AssistantRunRegistry();
-    const mcp = new AssistantMcpHandler([], {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    } as unknown as FastifyBaseLogger, runs);
+    const mcp = new AssistantMcpHandler(
+      [],
+      {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as FastifyBaseLogger,
+      runs,
+    );
     const telemetry = new PortfolioAssistantRunTelemetryCache();
     const service = buildService(runs, mcp, telemetry);
     const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
@@ -222,11 +238,16 @@ describe('PortfolioAssistantConversationService tool telemetry', () => {
 
 describe('PortfolioAssistantConversationService user memory', () => {
   it('loads memory for the asking user only and passes it into that request context', async () => {
-    const memories: Record<string, { items: Array<{ category: 'venues'; text: string }>; updatedAt: string }> = {
+    const memories: Record<
+      string,
+      { items: Array<{ category: 'venues'; text: string }>; updatedAt: string }
+    > = {
       'user-1': { items: [{ category: 'venues', text: 'Trades on Thalex.' }], updatedAt: 'x' },
       'user-2': { items: [{ category: 'venues', text: 'Trades on Deribit.' }], updatedAt: 'y' },
     };
-    const memory = { loadUserMemoryFacts: vi.fn(async (userId: string) => memories[userId] ?? null) };
+    const memory = {
+      loadUserMemoryFacts: vi.fn(async (userId: string) => memories[userId] ?? null),
+    };
     const contextInputs: unknown[] = [];
     const service = new PortfolioAssistantConversationService(
       {
@@ -315,9 +336,16 @@ describe('PortfolioAssistantConversationService structure search prefetch', () =
     return { prefetchForQuestion: vi.fn(async () => outcome) };
   }
 
-  async function ask(prefetch: ReturnType<typeof prefetchReturning>, maxContextCharacters?: number) {
+  async function ask(
+    prefetch: ReturnType<typeof prefetchReturning>,
+    maxContextCharacters?: number,
+  ) {
     const runs = new AssistantRunRegistry();
-    const mcp = new AssistantMcpHandler([], { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as FastifyBaseLogger, runs);
+    const mcp = new AssistantMcpHandler(
+      [],
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as FastifyBaseLogger,
+      runs,
+    );
     const contextMessages: string[] = [];
     const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
     const service = buildService(runs, mcp, null, {
@@ -331,7 +359,9 @@ describe('PortfolioAssistantConversationService structure search prefetch', () =
       { clientMessageId: 'client-1', message: 'Bearish trade, max loss $2,200', forwardDays: 7 },
       new AbortController().signal,
     ));
-    const line = info.mock.calls.findLast(([, msg]) => msg === 'portfolio assistant structure search prefetched')?.[0];
+    const line = info.mock.calls.findLast(
+      ([, msg]) => msg === 'portfolio assistant structure search prefetched',
+    )?.[0];
     return { contextMessages, line: line as Record<string, unknown> | undefined };
   }
 
@@ -355,13 +385,25 @@ describe('PortfolioAssistantConversationService structure search prefetch', () =
 
   it('sends the plain context when the search fails or would exceed the context budget', async () => {
     const failed = await ask(
-      prefetchReturning({ request: REQUEST, facts: null, outcome: 'timeout', code: 'timeout', durationMs: 15_000 }),
+      prefetchReturning({
+        request: REQUEST,
+        facts: null,
+        outcome: 'timeout',
+        code: 'timeout',
+        durationMs: 15_000,
+      }),
     );
     expect(failed.contextMessages).toEqual(['context']);
     expect(failed.line).toMatchObject({ outcome: 'timeout', included: false });
 
     const tooLarge = await ask(
-      prefetchReturning({ request: REQUEST, facts: { request: REQUEST, result: {} }, outcome: 'ok', code: null, durationMs: 5 }),
+      prefetchReturning({
+        request: REQUEST,
+        facts: { request: REQUEST, result: {} },
+        outcome: 'ok',
+        code: null,
+        durationMs: 5,
+      }),
       500,
     );
     expect(tooLarge.contextMessages).toEqual(['context']);

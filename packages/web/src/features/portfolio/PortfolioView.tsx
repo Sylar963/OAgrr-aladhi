@@ -85,7 +85,8 @@ const messages = defineMessages(
     builderEmpty: 'Add option positions to explore them in Builder V2.',
     builderPickUnderlying: 'Select one underlying above to open its positions in Builder V2.',
     paperSourceLabel: 'paper',
-    emptyReadOnly: 'No open {source} positions yet. They will appear here as the feed reports them.',
+    emptyReadOnly:
+      'No open {source} positions yet. They will appear here as the feed reports them.',
     title: 'Portfolio',
     subtitle: 'Volatility, convexity and carry translated for delta-one traders',
     source: 'Source',
@@ -110,7 +111,8 @@ const messages = defineMessages(
     venueLiveNote: 'Libro de {venue} en vivo vía WS privado',
     venuePendingNote: 'Adaptador {status} — las claves están guardadas pero aún no conectadas',
     builderEmpty: 'Agrega posiciones de opciones para explorarlas en Builder V2.',
-    builderPickUnderlying: 'Selecciona un subyacente arriba para abrir sus posiciones en Builder V2.',
+    builderPickUnderlying:
+      'Selecciona un subyacente arriba para abrir sus posiciones en Builder V2.',
     paperSourceLabel: 'paper',
     emptyReadOnly:
       'Aún no hay posiciones abiertas de {source}. Aparecerán aquí cuando el feed las reporte.',
@@ -124,7 +126,8 @@ const messages = defineMessages(
     state_connecting: 'conectando',
     state_open: 'abierto',
     state_retrying: 'reintentando',
-    paperNoteBefore: 'Mostrando posiciones de paper trading en vivo. Agrega o cierra legs desde la pestaña',
+    paperNoteBefore:
+      'Mostrando posiciones de paper trading en vivo. Agrega o cierra legs desde la pestaña',
     paperNoteAfter: '.',
     venueNoteBefore: 'Mostrando posiciones en vivo de',
     venueNoteAfter:
@@ -195,11 +198,12 @@ export default function PortfolioView() {
     target?.focus({ preventScroll: true });
   };
   const builderLegs = portfolioToBuilderLegs(positions, metrics?.breakEven);
-  const builderDisabledReason = positions.length === 0
-    ? t('builderEmpty')
-    : builderLegs.length === 0
-      ? t('builderPickUnderlying')
-      : undefined;
+  const builderDisabledReason =
+    positions.length === 0
+      ? t('builderEmpty')
+      : builderLegs.length === 0
+        ? t('builderPickUnderlying')
+        : undefined;
   const openInBuilder = () => {
     const first = positions[0];
     if (!first || builderLegs.length === 0) return;
@@ -219,9 +223,7 @@ export default function PortfolioView() {
       : source === 'paper'
         ? t('paperSourceLabel')
         : (VENUES[source as VenueId]?.label ?? source);
-  const emptyMessage = isReadOnly
-    ? t('emptyReadOnly', { source: sourceLabel })
-    : undefined;
+  const emptyMessage = isReadOnly ? t('emptyReadOnly', { source: sourceLabel }) : undefined;
 
   const onSelectSource = (nextSource: PortfolioSource) => {
     setSource(nextSource);
@@ -242,9 +244,7 @@ export default function PortfolioView() {
       <div className={styles.header}>
         <div className={styles.titleBlock}>
           <h2 className={styles.title}>{t('title')}</h2>
-          <span className={styles.subtitle}>
-            {t('subtitle')}
-          </span>
+          <span className={styles.subtitle}>{t('subtitle')}</span>
         </div>
         <div className={styles.statusGroup}>
           <div className={styles.toggleGroup} role="radiogroup" aria-label={t('source')}>
@@ -303,19 +303,19 @@ export default function PortfolioView() {
       <div className={styles.bodyGrid}>
         <div className={styles.mainCol}>
           <div ref={scenarioRef} tabIndex={-1} className={styles.assistantTarget}>
-          <PortfolioPnlCurve
-            curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
-            forwardDays={forwardDays}
-            onOpenBuilder={openInBuilder}
-            builderDisabledReason={builderDisabledReason}
-            mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
-            equityVenue={isEquityHistoryVenue(source) ? source : null}
-            margin={source === 'thalex' ? (venueMargin ?? null) : null}
-            strategies={metrics?.strategies}
-            positions={positions}
-            totals={metrics?.totals ?? null}
-            linearPositions={metrics?.linearPositions ?? []}
-          />
+            <PortfolioPnlCurve
+              curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
+              forwardDays={forwardDays}
+              onOpenBuilder={openInBuilder}
+              builderDisabledReason={builderDisabledReason}
+              mixedExpiries={new Set(positions.map((p) => p.expiry)).size > 1}
+              equityVenue={isEquityHistoryVenue(source) ? source : null}
+              margin={source === 'thalex' ? (venueMargin ?? null) : null}
+              strategies={metrics?.strategies}
+              positions={positions}
+              totals={metrics?.totals ?? null}
+              linearPositions={metrics?.linearPositions ?? []}
+            />
           </div>
           <StrategyGroupsPanel
             groups={metrics?.strategies ?? []}
@@ -337,7 +337,11 @@ export default function PortfolioView() {
             spotUsd={metrics?.pnlCurve.currentSpotUsd ?? null}
             underlying={metrics?.pnlCurve.underlying ?? underlyingFilter}
           />
-          <div ref={positionsRef} tabIndex={-1} className={`${styles.tableWrap} ${styles.assistantTarget}`}>
+          <div
+            ref={positionsRef}
+            tabIndex={-1}
+            className={`${styles.tableWrap} ${styles.assistantTarget}`}
+          >
             <PositionsTable
               highlightedLegIds={highlightedLegIds}
               positions={positions}

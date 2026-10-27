@@ -100,10 +100,19 @@ export class PortfolioAssistantConversationService {
     private readonly gateway: PortfolioAssistantModelGateway,
     private readonly usageLimiter: PortfolioAssistantUsageLimiter,
     private readonly runs: AssistantRunRegistry | null = null,
-    private readonly memory: Pick<PortfolioAssistantMemoryService, 'loadUserMemoryFacts'> | null = null,
+    private readonly memory: Pick<
+      PortfolioAssistantMemoryService,
+      'loadUserMemoryFacts'
+    > | null = null,
     private readonly now: () => number = Date.now,
-    private readonly runTelemetry: Pick<PortfolioAssistantRunTelemetryCache, 'record'> | null = null,
-    private readonly structurePrefetch: Pick<StructureSearchPrefetch, 'prefetchForQuestion'> | null = null,
+    private readonly runTelemetry: Pick<
+      PortfolioAssistantRunTelemetryCache,
+      'record'
+    > | null = null,
+    private readonly structurePrefetch: Pick<
+      StructureSearchPrefetch,
+      'prefetchForQuestion'
+    > | null = null,
   ) {}
 
   async createPortfolioAssistantThread(
@@ -221,26 +230,30 @@ export class PortfolioAssistantConversationService {
           false,
         );
       yield { type: 'progress', stage: 'loading_portfolio' };
-      const context = yield* relayAssistantEvents(async (emit) => this.contextBuilder.buildPortfolioAssistantContext({
-        accountId: user.accountId,
-        source: source.data,
-        underlying: thread.underlying,
-        forwardDays: input.forwardDays,
-        question: input.message,
-        onProgress: (stage) => emit({ type: 'progress', stage }),
-        userMemoryFacts: (await this.memory?.loadUserMemoryFacts(user.id)) ?? null,
-      }));
+      const context = yield* relayAssistantEvents(async (emit) =>
+        this.contextBuilder.buildPortfolioAssistantContext({
+          accountId: user.accountId,
+          source: source.data,
+          underlying: thread.underlying,
+          forwardDays: input.forwardDays,
+          question: input.message,
+          onProgress: (stage) => emit({ type: 'progress', stage }),
+          userMemoryFacts: (await this.memory?.loadUserMemoryFacts(user.id)) ?? null,
+        }),
+      );
       const historyPage = await this.loadPortfolioAssistantMessages(user.id, threadId);
       const evidence = buildAssistantEvidence(context, input.message, historyPage.messages);
       context.reviewComparison = evidence.comparison;
-      const contextMessage = yield* relayAssistantEvents(async (emit) => this.buildContextMessage(
-        context,
-        input.message,
-        historyPage.messages,
-        user.id,
-        threadId,
-        (stage) => emit({ type: 'progress', stage }),
-      ));
+      const contextMessage = yield* relayAssistantEvents(async (emit) =>
+        this.buildContextMessage(
+          context,
+          input.message,
+          historyPage.messages,
+          user.id,
+          threadId,
+          (stage) => emit({ type: 'progress', stage }),
+        ),
+      );
       const exchange = await this.store.beginPortfolioAssistantExchange({
         evidence,
         userId: user.id,
@@ -258,8 +271,9 @@ export class PortfolioAssistantConversationService {
         type: 'message_started',
         assistantMessageId,
         portfolioGeneratedAt: exchange.deduplicated
-          ? exchange.assistantMessage.portfolioGeneratedAt?.getTime() ?? context.generatedAt : context.generatedAt,
-        evidence: exchange.deduplicated ? exchange.assistantMessage.evidence ?? null : evidence,
+          ? (exchange.assistantMessage.portfolioGeneratedAt?.getTime() ?? context.generatedAt)
+          : context.generatedAt,
+        evidence: exchange.deduplicated ? (exchange.assistantMessage.evidence ?? null) : evidence,
       };
       if (exchange.deduplicated) {
         if (exchange.assistantMessage.content)
@@ -309,31 +323,34 @@ export class PortfolioAssistantConversationService {
       yield* relayAssistantEvents(async (emit) => {
         notifyProgress = (stage) => emit({ type: 'progress', stage });
         try {
-      for await (const event of this.gateway.streamPortfolioAnswer(
-        {
-          threadId,
-          systemInstructions: this.promptBuilder.buildPortfolioAssistantSystemInstructions(),
-          contextMessage,
-          conversationMessages,
-        },
-        signal,
-      )) {
-        if (event.type === 'text_delta') {
-          if (event.delta.trim() && firstTokenMs == null) firstTokenMs = Math.max(0, this.now() - startedAt.getTime());
-          accumulated += event.delta;
-          emit({ type: 'text_delta', assistantMessageId: replyId, delta: event.delta });
-          if (this.now() - lastCheckpoint >= 5_000) {
-            await this.store.checkpointPortfolioAssistantMessage(replyId, accumulated);
-            lastCheckpoint = this.now();
+          for await (const event of this.gateway.streamPortfolioAnswer(
+            {
+              threadId,
+              systemInstructions: this.promptBuilder.buildPortfolioAssistantSystemInstructions(),
+              contextMessage,
+              conversationMessages,
+            },
+            signal,
+          )) {
+            if (event.type === 'text_delta') {
+              if (event.delta.trim() && firstTokenMs == null)
+                firstTokenMs = Math.max(0, this.now() - startedAt.getTime());
+              accumulated += event.delta;
+              emit({ type: 'text_delta', assistantMessageId: replyId, delta: event.delta });
+              if (this.now() - lastCheckpoint >= 5_000) {
+                await this.store.checkpointPortfolioAssistantMessage(replyId, accumulated);
+                lastCheckpoint = this.now();
+              }
+            } else {
+              inputTokens = event.inputTokens;
+              cachedInputTokens = event.cachedInputTokens;
+              outputTokens = event.outputTokens;
+              emit({ type: 'usage', inputTokens, cachedInputTokens, outputTokens });
+            }
           }
-        } else {
-          inputTokens = event.inputTokens;
-          cachedInputTokens = event.cachedInputTokens;
-          outputTokens = event.outputTokens;
-          emit({ type: 'usage', inputTokens, cachedInputTokens, outputTokens });
+        } finally {
+          notifyProgress = null;
         }
-      }
-        } finally { notifyProgress = null; }
       });
       await this.complete(
         user.id,
@@ -413,7 +430,10 @@ export class PortfolioAssistantConversationService {
         if (assistantMessageId && toolCalls) {
           this.runTelemetry?.record(assistantMessageId, {
             firstTokenMs,
-            estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
+            estimatedCostUsd: estimateAssistantCost(
+              { inputTokens, cachedInputTokens, outputTokens },
+              this.configuration.tokenRates,
+            ),
             requestId: telemetry.requestId,
             outcome: runOutcome,
             errorCode: runErrorCode,
@@ -441,7 +461,10 @@ export class PortfolioAssistantConversationService {
             cachedInputTokens,
             outputTokens,
             firstTokenMs,
-            estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
+            estimatedCostUsd: estimateAssistantCost(
+              { inputTokens, cachedInputTokens, outputTokens },
+              this.configuration.tokenRates,
+            ),
             durationMs,
             outcome: runOutcome,
             errorCode: runErrorCode,
@@ -477,8 +500,13 @@ export class PortfolioAssistantConversationService {
       .filter((message) => message.role === 'user' && message.status === 'complete')
       .map((message) => message.content)
       .reverse();
-    if (planStructureSearchPrefetch(question, earlierUserMessages, context)) onProgress?.('evaluating_structures');
-    const prefetched = await this.structurePrefetch.prefetchForQuestion(question, earlierUserMessages, context);
+    if (planStructureSearchPrefetch(question, earlierUserMessages, context))
+      onProgress?.('evaluating_structures');
+    const prefetched = await this.structurePrefetch.prefetchForQuestion(
+      question,
+      earlierUserMessages,
+      context,
+    );
     if (prefetched === null) return plain;
     const withFacts =
       prefetched.facts === null
@@ -535,7 +563,10 @@ export class PortfolioAssistantConversationService {
       cachedInputTokens,
       outputTokens,
       firstTokenMs,
-      estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
+      estimatedCostUsd: estimateAssistantCost(
+        { inputTokens, cachedInputTokens, outputTokens },
+        this.configuration.tokenRates,
+      ),
       outcome,
       startedAt,
       completedAt: new Date(this.now()),

@@ -10,11 +10,23 @@ export async function* relayAssistantEvents<T>(
     queue.push(event);
     wake?.();
   });
-  void result.then(() => { settled = true; wake?.(); }, () => { settled = true; wake?.(); });
+  void result.then(
+    () => {
+      settled = true;
+      wake?.();
+    },
+    () => {
+      settled = true;
+      wake?.();
+    },
+  );
   while (!settled || queue.length > 0) {
     const event = queue.shift();
     if (event) yield event;
-    else await new Promise<void>((resolve) => { wake = resolve; });
+    else
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
   }
   return await result;
 }

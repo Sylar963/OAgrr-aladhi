@@ -121,9 +121,15 @@ async function streamLiveRun(
       reply.raw.write(
         frame({
           type: 'error',
-          code: error instanceof PortfolioAssistantServiceError
-            ? PortfolioAssistantStreamErrorCodeSchema.safeParse(error.code).data ?? 'internal_error' : 'internal_error',
-          message: error instanceof PortfolioAssistantServiceError ? error.message : 'Portfolio Assistant stream failed.',
+          code:
+            error instanceof PortfolioAssistantServiceError
+              ? (PortfolioAssistantStreamErrorCodeSchema.safeParse(error.code).data ??
+                'internal_error')
+              : 'internal_error',
+          message:
+            error instanceof PortfolioAssistantServiceError
+              ? error.message
+              : 'Portfolio Assistant stream failed.',
           retryable: error instanceof PortfolioAssistantServiceError ? error.retryable : true,
         }),
       );

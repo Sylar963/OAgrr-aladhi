@@ -824,7 +824,10 @@ liquidation side, and public-versus-private position-effect evidence.
   not wake Neon for automatic label refreshes. Archive-only history needs a local restore before
   it can be reconciled. Multi-leg blocks are matched to ordinary prints by execution IDs (RFQ
   request IDs additionally require the exact timestamp and matching quantity), never counted
-  a second time in interval volume.
+  a second time in interval volume. An RFQ can also be resolved to a unique public block/combo
+  execution within two seconds when its RFQ ID and every leg's direction and quantity match.
+  Multiple matching executions remain unlinked. This handles Deribit's RFQ-versus-print
+  timestamp skew; a common public execution timestamp is then used for the OI bracket.
 - Deribit ticker OI now retains its own exchange timestamp. Mark/index updates carrying old OI
   cannot refresh that timestamp. The recorder saves each OI change plus a five-minute heartbeat
   for subscribed instruments; it does not claim coverage of unsubscribed contracts. Quantities

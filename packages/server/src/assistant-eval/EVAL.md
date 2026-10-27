@@ -105,3 +105,36 @@ covering:
 3. Encode the suggested checks in `expect` (required tools for `no_tool_calls`, number tolerances for
    `wrong_numbers`, a word ceiling for `too_long`, refusal phrases for `refused`).
 4. Regenerate fixtures, run `--dry-run`, then a sampled eval, and record the baseline.
+
+
+## Evidence, selective context and cost measurements
+
+Use identical fixtures and samples for a full/selective comparison:
+
+```bash
+pnpm --filter @oggregator/server eval:assistant --dry-run --context full
+pnpm --filter @oggregator/server eval:assistant --dry-run --context selective
+pnpm --filter @oggregator/server eval:assistant --context full --samples 3
+pnpm --filter @oggregator/server eval:assistant --context selective --samples 3
+```
+
+Dry runs validate fixtures and evidence and report context characters; they do not call Hermes.
+Live runs report first non-whitespace text latency, including prefetch, p50/p95, evidence integrity,
+and estimated cost per successful answer. Success means passing the deterministic fixture checks;
+it is not proof that every prose claim is correct. Evidence checks validate scope, null handling,
+position references, supplied data gaps and comparison arithmetic. Saved reports retain evidence
+and can be regraded. Runs predating evidence capture are marked unverified.
+
+Set all three optional environment variables to the rates for the actual upstream model:
+
+- `HERMES_INPUT_USD_PER_MILLION`
+- `HERMES_CACHED_INPUT_USD_PER_MILLION`
+- `HERMES_OUTPUT_USD_PER_MILLION`
+
+No prices are assumed. Missing rates, missing token counters or an invalid cache count leave the
+estimate unknown. The estimate covers only the tokens reported by the Hermes endpoint; it is not
+an invoice and does not include subscription allocation, separately charged tools, or unreported
+agent/model calls. Cost per successful answer divides **all sampled run costs, including failed
+runs**, by the number of passing answers. It remains unknown if any sampled cost is unknown.
+Reports include the configured rates and the number of priced runs, so partial coverage is visible.
+Production usage rows and completion telemetry also record first-token latency and estimated cost.

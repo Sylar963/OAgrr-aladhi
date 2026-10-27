@@ -54,6 +54,14 @@ describe('portfolio assistant protocol', () => {
   });
 
   it('validates stream event shapes', () => {
+    expect(
+      PortfolioAssistantStreamEventSchema.safeParse({ type: 'progress', stage: 'checking_quotes' })
+        .success,
+    ).toBe(true);
+    expect(
+      PortfolioAssistantStreamEventSchema.safeParse({ type: 'progress', stage: 'placing_orders' })
+        .success,
+    ).toBe(false);
     const assistantMessageId = UUID;
     expect(
       PortfolioAssistantStreamEventSchema.safeParse({

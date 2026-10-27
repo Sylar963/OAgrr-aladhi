@@ -4,13 +4,18 @@ import { relayAssistantEvents } from './portfolio-assistant-progress.js';
 describe('assistant progress', () => {
   it('streams actual progress before the work finishes and propagates the result', async () => {
     let complete: (() => void) | undefined;
-    const waiting = new Promise<void>((resolve) => { complete = resolve; });
+    const waiting = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
     const iterator = relayAssistantEvents(async (emit) => {
       emit({ type: 'progress', stage: 'checking_quotes' });
       await waiting;
       return 42;
     });
-    expect(await iterator.next()).toEqual({ done: false, value: { type: 'progress', stage: 'checking_quotes' } });
+    expect(await iterator.next()).toEqual({
+      done: false,
+      value: { type: 'progress', stage: 'checking_quotes' },
+    });
     complete?.();
     expect(await iterator.next()).toEqual({ done: true, value: 42 });
   });

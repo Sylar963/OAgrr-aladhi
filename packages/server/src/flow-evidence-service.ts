@@ -106,6 +106,7 @@ export class FlowEvidenceService {
     if (!trade) return null;
     let analysis: FlowAnalysis;
     if ('legs' in trade) {
+      trade = await this.resolveBlockExecution(trade);
       analysis = analyzeBlockTrade(trade);
     } else {
       const peers = [...this.options.live(trade.underlying)];
@@ -255,6 +256,82 @@ export class FlowEvidenceService {
       analysis: { ...analysis, legs, positionEffect: flowPositionEffect(legs) },
       evidence: trade.exchangeEvidence ?? null,
       oi,
+    };
+  }
+
+  private async resolveBlockExecution(trade: BlockTradeEvent): Promise<BlockTradeEvent> {
+    if (flowExecutionGroup(trade.exchangeEvidence) || !trade.exchangeEvidence?.rfqId) return trade;
+    const prints = new Map<string, TradeEvent>();
+    const accept = (print: TradeEvent) => {
+      if (
+        print.venue === trade.venue &&
+        print.underlying === trade.underlying &&
+        Math.abs(print.timestamp - trade.timestamp) <= 2_000 &&
+        print.exchangeEvidence?.rfqId === trade.exchangeEvidence?.rfqId &&
+        flowExecutionGroup(print.exchangeEvidence)
+      )
+        prints.set(buildLiveTradeUid(print), print);
+    };
+    for (const print of this.options.live(trade.underlying)) accept(print);
+    if (this.options.trades.enabled) {
+      const rows = await this.options.trades.loadHistory({
+        mode: 'live',
+        venues: [trade.venue],
+        underlying: trade.underlying,
+        startTs: new Date(trade.timestamp - 2_000),
+        endTs: new Date(trade.timestamp + 2_001),
+        limit: GROUP_LIMIT,
+      });
+      if (rows.length === GROUP_LIMIT) return trade;
+      for (const row of rows) {
+        const print = storedFlowTrade(row);
+        if (print) accept(print);
+      }
+    }
+    const expected = analyzeBlockTrade(trade).legs;
+    const groups = new Map<string, TradeEvent[]>();
+    for (const print of prints.values()) {
+      const key = flowExecutionGroup(print.exchangeEvidence)!;
+      groups.set(key, [...(groups.get(key) ?? []), print]);
+    }
+    const matches = [...groups.values()].filter((group) => {
+      const observed = analyzeFlowTrade(group[0]!, group).legs;
+      return (
+        observed.length === expected.length &&
+        expected.every((leg) =>
+          observed.some(
+            (other) =>
+              other.instrument === leg.instrument &&
+              other.side === leg.side &&
+              Math.abs(other.quantity - leg.quantity) <= 1e-8 * leg.quantity,
+          ),
+        )
+      );
+    });
+    if (matches.length !== 1) return trade;
+    const group = matches[0]!;
+    const evidence = group[0]!.exchangeEvidence!;
+    const counts = group.flatMap((print) =>
+      print.exchangeEvidence?.expectedLegCount == null
+        ? []
+        : [print.exchangeEvidence.expectedLegCount],
+    );
+    const expectedLegCount = Math.max(expected.length, ...counts);
+    return {
+      ...trade,
+      timestamp: group.every((print) => print.timestamp === group[0]!.timestamp)
+        ? group[0]!.timestamp
+        : trade.timestamp,
+      exchangeEvidence: {
+        ...trade.exchangeEvidence,
+        ...(evidence.blockTradeId ? { blockTradeId: evidence.blockTradeId } : {}),
+        ...(evidence.comboTradeId ? { comboTradeId: evidence.comboTradeId } : {}),
+        expectedLegCount,
+        groupComplete:
+          expectedLegCount === group.length &&
+          new Set(counts).size <= 1 &&
+          group.every((print) => print.exchangeEvidence?.groupComplete !== false),
+      },
     };
   }
 

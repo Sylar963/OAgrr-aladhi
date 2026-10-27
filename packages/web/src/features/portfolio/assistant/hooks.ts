@@ -154,7 +154,13 @@ export function usePortfolioAssistantConversation(
         current.some((item) => item.messageId === event.assistantMessageId)
           ? current.map((item) =>
               item.messageId === event.assistantMessageId
-                ? { ...item, content: '', status: 'streaming', evidence: event.evidence ?? null, portfolioGeneratedAt: event.portfolioGeneratedAt }
+                ? {
+                    ...item,
+                    content: '',
+                    status: 'streaming',
+                    evidence: event.evidence ?? null,
+                    portfolioGeneratedAt: event.portfolioGeneratedAt,
+                  }
                 : item,
             )
           : [
@@ -207,7 +213,8 @@ export function usePortfolioAssistantConversation(
         await open(controller.signal);
       } catch (caught) {
         const aborted = caught instanceof DOMException && caught.name === 'AbortError';
-        const finished = caught instanceof PortfolioAssistantApiError && caught.code === 'run_not_found';
+        const finished =
+          caught instanceof PortfolioAssistantApiError && caught.code === 'run_not_found';
         if (!aborted && !finished) {
           setError(caught instanceof Error ? caught.message : 'Could not ask Hermes.');
           setErrorCode(
@@ -282,7 +289,16 @@ export function usePortfolioAssistantConversation(
       .catch(() => controllerRef.current?.abort());
   }, [threadId]);
 
-  return { messages, isLoading: query.isLoading, isStreaming, progress, error, errorCode, sendMessage, stop };
+  return {
+    messages,
+    isLoading: query.isLoading,
+    isStreaming,
+    progress,
+    error,
+    errorCode,
+    sendMessage,
+    stop,
+  };
 }
 
 export function usePortfolioAssistantMemory(enabled = true) {
@@ -302,7 +318,9 @@ export function useForgetPortfolioAssistantMemory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (itemId: string | null) =>
-      itemId == null ? forgetPortfolioAssistantMemory() : forgetPortfolioAssistantMemoryItem(itemId),
+      itemId == null
+        ? forgetPortfolioAssistantMemory()
+        : forgetPortfolioAssistantMemoryItem(itemId),
     onSettled: () =>
       queryClient.invalidateQueries({
         queryKey: PORTFOLIO_ASSISTANT_QKEY.memory(session.accountId ?? 'unresolved'),
@@ -314,7 +332,10 @@ export function useForgetPortfolioAssistantMemory() {
 export function usePortfolioAssistantFeedback(threadId: string | null) {
   const session = useAccountSession();
   const query = useQuery({
-    queryKey: PORTFOLIO_ASSISTANT_QKEY.feedback(session.accountId ?? 'unresolved', threadId ?? 'none'),
+    queryKey: PORTFOLIO_ASSISTANT_QKEY.feedback(
+      session.accountId ?? 'unresolved',
+      threadId ?? 'none',
+    ),
     queryFn: () => fetchPortfolioAssistantFeedback(threadId!),
     enabled: threadId != null && session.status === 'ready',
     staleTime: 60_000,

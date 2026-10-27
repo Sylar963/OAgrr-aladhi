@@ -105,7 +105,12 @@ function CloseNowCell({ leg }: { leg: CloseNowLeg | undefined }) {
     .filter((line): line is string => line != null)
     .join('\n');
   return (
-    <td className={styles.closeNow} data-status={leg.status} data-stale={leg.stale || undefined} title={title}>
+    <td
+      className={styles.closeNow}
+      data-status={leg.status}
+      data-stale={leg.stale || undefined}
+      title={title}
+    >
       {priced ? fmtUsd(leg.exitVwapUsd) : '—'}
       <small>
         {legFillStatus(leg, locale)}
@@ -154,14 +159,15 @@ export default function PositionsTable({
     return (
       <div className={styles.cardList}>
         {positions.map((leg) => (
+          <div key={leg.legId} className={highlightedLegIds.includes(leg.legId) ? styles.cardHighlight : undefined}>
           <MobilePositionCard
-            key={leg.legId}
             leg={leg}
             be={breakEvenByLegId.get(leg.legId)}
             readOnly={readOnly}
             onRemove={() => removePosition.mutate(leg.legId)}
             removing={removePosition.isPending}
           />
+          </div>
         ))}
       </div>
     );
@@ -203,7 +209,10 @@ export default function PositionsTable({
           const debitOrCreditTitle =
             leg.size > 0 ? t('longLeg', { v: entryPrice }) : t('shortLeg', { v: entryPrice });
           return (
-            <tr key={leg.legId} data-highlighted={highlightedLegIds.includes(leg.legId) || undefined}>
+            <tr
+              key={leg.legId}
+              data-highlighted={highlightedLegIds.includes(leg.legId) || undefined}
+            >
               <td>{leg.underlying}</td>
               <td>{leg.expiry}</td>
               <td>{leg.strike.toLocaleString()}</td>
@@ -218,11 +227,7 @@ export default function PositionsTable({
               </td>
               <td
                 className={leg.entryIvIsModel === true ? styles.ivModel : undefined}
-                title={
-                  leg.entryIvIsModel === true
-                    ? t('entryIvModel')
-                    : undefined
-                }
+                title={leg.entryIvIsModel === true ? t('entryIvModel') : undefined}
               >
                 {fmtIv(leg.entryIv)}
                 {leg.entryIvIsModel === true ? '*' : ''}
@@ -230,16 +235,11 @@ export default function PositionsTable({
               <td>{fmtUsd(be?.currentMarkUsd)}</td>
               <td
                 className={be?.currentIvIsModel === true ? styles.ivModel : undefined}
-                title={
-                  be?.currentIvIsModel === true ? tl('fairValue') : undefined
-                }
+                title={be?.currentIvIsModel === true ? tl('fairValue') : undefined}
               >
                 {fmtIv(be?.currentIv)}
               </td>
-              <td
-                className={noteLabel != null ? styles.beNote : undefined}
-                title={noteTitle}
-              >
+              <td className={noteLabel != null ? styles.beNote : undefined} title={noteTitle}>
                 {noteLabel ?? fmtIv(be?.breakEvenIv)}
               </td>
               <td className={cushionClass} title={noteTitle}>

@@ -43,10 +43,14 @@ export function PortfolioAssistantTranscript({
   if (isLoading) return <div className={styles.transcriptEmpty}>{t('loading')}</div>;
   if (messages.length === 0) return null;
   return (
-    <div className={styles.transcript} aria-label={t('aria')} onScroll={(event) => {
-      const el = event.currentTarget;
-      following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    }}>
+    <div
+      className={styles.transcript}
+      aria-label={t('aria')}
+      onScroll={(event) => {
+        const el = event.currentTarget;
+        following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      }}
+    >
       {messages.map((message) => (
         <PortfolioAssistantMessageBubble
           key={message.messageId}

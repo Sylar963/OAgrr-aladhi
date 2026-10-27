@@ -9,7 +9,10 @@ import remarkGfm from 'remark-gfm';
 import { defineMessages, useT } from '@lib/i18n';
 
 import { PortfolioAssistantFeedback } from './PortfolioAssistantFeedback';
-import { PortfolioAssistantEvidence, type AssistantActionHandler } from './PortfolioAssistantEvidence';
+import {
+  PortfolioAssistantEvidence,
+  type AssistantActionHandler,
+} from './PortfolioAssistantEvidence';
 import styles from './PortfolioAssistantPanel.module.css';
 
 type CopyState = 'idle' | 'copied' | 'failed';
@@ -101,7 +104,9 @@ export function PortfolioAssistantMessageBubble({
   return (
     <article className={styles.message} data-role={message.role} data-status={message.status}>
       <div className={styles.messageHeader}>
-        <span className={styles.messageRole}>{message.role === 'assistant' ? 'Hermes' : t('you')}</span>
+        <span className={styles.messageRole}>
+          {message.role === 'assistant' ? 'Hermes' : t('you')}
+        </span>
         {copyable && <CopyMarkdownButton markdown={message.content} />}
       </div>
       <div className={styles.messageBody}>
@@ -118,11 +123,19 @@ export function PortfolioAssistantMessageBubble({
           {message.content || (message.status === 'streaming' ? t('thinking') : '')}
         </Markdown>
       </div>
-      {message.status === 'cancelled' && <span className={styles.messageState}>{t('stopped')}</span>}
-      {message.status === 'failed' && <span className={styles.messageState}>{t('incomplete')}</span>}
+      {message.status === 'cancelled' && (
+        <span className={styles.messageState}>{t('stopped')}</span>
+      )}
+      {message.status === 'failed' && (
+        <span className={styles.messageState}>{t('incomplete')}</span>
+      )}
       {message.role === 'assistant' && message.content.length > 0 && (
-        <PortfolioAssistantEvidence evidence={message.evidence} generatedAt={message.portfolioGeneratedAt}
-          onAction={message.status === 'complete' ? onAction : undefined} disabled={actionsDisabled} />
+        <PortfolioAssistantEvidence
+          evidence={message.evidence}
+          generatedAt={message.portfolioGeneratedAt}
+          onAction={message.status === 'complete' ? onAction : undefined}
+          disabled={actionsDisabled}
+        />
       )}
       {feedbackThreadId &&
         message.role === 'assistant' &&

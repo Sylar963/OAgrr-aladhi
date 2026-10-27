@@ -6,10 +6,16 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 
 import { logger } from '@oggregator/core';
-import { PortfolioAssistantEvidenceSchema, type PortfolioAssistantEvidence } from '@oggregator/protocol';
+import {
+  PortfolioAssistantEvidenceSchema,
+  type PortfolioAssistantEvidence,
+} from '@oggregator/protocol';
 import { buildAssistantEvidence } from '../portfolio-assistant-evidence.js';
 import { estimateAssistantCost, type AssistantTokenRates } from '../portfolio-assistant-cost.js';
-import { selectAssistantContextPolicy, shapeAssistantContext } from '../portfolio-assistant-context-policy.js';
+import {
+  selectAssistantContextPolicy,
+  shapeAssistantContext,
+} from '../portfolio-assistant-context-policy.js';
 import { checkAssistantEvidence, summarizeAssistantQuality } from './assistant-eval-quality.js';
 import { z } from 'zod';
 
@@ -48,7 +54,11 @@ import {
   overallPassRate,
   summarizeFixtureSamples,
 } from './assistant-eval-stats.js';
-import { matchEvalToolCalls, registryObservation, toolUsageCell } from './assistant-eval-tool-log.js';
+import {
+  matchEvalToolCalls,
+  registryObservation,
+  toolUsageCell,
+} from './assistant-eval-tool-log.js';
 import {
   AssistantEvalMcp,
   EVAL_MCP_DEFAULT_PORT,
@@ -111,7 +121,11 @@ interface FixtureRun {
   answer: string;
   error: { code: string; message: string } | null;
   durationMs: number;
-  usage: { inputTokens: number | null; cachedInputTokens: number | null; outputTokens: number | null } | null;
+  usage: {
+    inputTokens: number | null;
+    cachedInputTokens: number | null;
+    outputTokens: number | null;
+  } | null;
   promptChars: { system: number; context: number; conversation: number };
   tools: AssistantEvalToolObservation;
   // Exact per-call records from the eval MCP server; null when tools came from the journal.
@@ -128,7 +142,11 @@ function withPrefetch(
   if (prefetched == null) return tools;
   const evidence = `${tools.evidence}; server prefetch of oggregator_structure_search: ${prefetched.outcome} in ${prefetched.durationMs} ms`;
   return prefetched.outcome === 'ok'
-    ? { ...tools, observedTools: [...(tools.observedTools ?? []), 'oggregator_structure_search'], evidence }
+    ? {
+        ...tools,
+        observedTools: [...(tools.observedTools ?? []), 'oggregator_structure_search'],
+        evidence,
+      }
     : { ...tools, evidence };
 }
 
@@ -191,7 +209,8 @@ function loadFixtures(filter: string[]): LoadedFixtures {
   const unknown = filter.filter((id) => !fixtures.some((fixture) => fixture.id === id));
   if (unknown.length > 0) throw new Error(`Unknown fixture id(s): ${unknown.join(', ')}`);
   return {
-    fixtures: filter.length === 0 ? fixtures : fixtures.filter((fixture) => filter.includes(fixture.id)),
+    fixtures:
+      filter.length === 0 ? fixtures : fixtures.filter((fixture) => filter.includes(fixture.id)),
     invalid,
   };
 }
@@ -212,7 +231,10 @@ function buildPrompt(
     request: { threadId, systemInstructions, contextMessage, conversationMessages },
     systemChars: systemInstructions.length,
     contextChars: contextMessage.length,
-    conversationChars: conversationMessages.reduce((sum, message) => sum + message.content.length, 0),
+    conversationChars: conversationMessages.reduce(
+      (sum, message) => sum + message.content.length,
+      0,
+    ),
   };
 }
 
@@ -220,7 +242,9 @@ function evalProfileUrl(env: NodeJS.ProcessEnv, productionUrl: string): string {
   const explicit = env['HERMES_PORTFOLIO_EVAL_API_URL']?.trim();
   if (explicit) return explicit.replace(/\/$/, '');
   if (!productionUrl.includes(PRODUCTION_PROFILE_SEGMENT)) {
-    throw new Error('Set HERMES_PORTFOLIO_EVAL_API_URL to the portfolio-chat-eval profile route (see EVAL.md).');
+    throw new Error(
+      'Set HERMES_PORTFOLIO_EVAL_API_URL to the portfolio-chat-eval profile route (see EVAL.md).',
+    );
   }
   return productionUrl.replace(PRODUCTION_PROFILE_SEGMENT, EVAL_PROFILE_SEGMENT);
 }
@@ -230,14 +254,20 @@ function evalConfiguration(
   args: EvalArgs,
 ): PortfolioAssistantConfiguration {
   // The eval must run while the product flag is off, so the enabled-only checks are applied here.
-  const base = readPortfolioAssistantConfiguration({ ...env, PORTFOLIO_ASSISTANT_ENABLED: 'false' });
+  const base = readPortfolioAssistantConfiguration({
+    ...env,
+    PORTFOLIO_ASSISTANT_ENABLED: 'false',
+  });
   const apiUrl = args.mcp === 'eval' ? evalProfileUrl(env, base.apiUrl) : base.apiUrl;
   if (args.mcp === 'eval' && apiUrl === base.apiUrl) {
-    throw new Error('--mcp eval must not use the production Hermes profile; its MCP server cannot resolve eval refs.');
+    throw new Error(
+      '--mcp eval must not use the production Hermes profile; its MCP server cannot resolve eval refs.',
+    );
   }
   const apiKey =
     (args.mcp === 'eval' ? env['HERMES_PORTFOLIO_EVAL_API_KEY']?.trim() : undefined) || base.apiKey;
-  if (!apiKey) throw new Error('HERMES_PORTFOLIO_API_KEY is not set (checked process env and ../../.env).');
+  if (!apiKey)
+    throw new Error('HERMES_PORTFOLIO_API_KEY is not set (checked process env and ../../.env).');
   try {
     new URL(apiUrl);
   } catch {
@@ -248,7 +278,8 @@ function evalConfiguration(
     enabled: true,
     apiUrl,
     apiKey,
-    model: (args.mcp === 'eval' ? env['HERMES_PORTFOLIO_EVAL_MODEL']?.trim() : undefined) || base.model,
+    model:
+      (args.mcp === 'eval' ? env['HERMES_PORTFOLIO_EVAL_MODEL']?.trim() : undefined) || base.model,
     requestTimeoutMs: args['timeout-ms'] ?? base.requestTimeoutMs,
   };
 }
@@ -307,13 +338,19 @@ interface RunEnvironment {
   mcp: AssistantEvalMcp | null;
 }
 
-async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sample: number): Promise<FixtureRun> {
+async function runFixture(
+  env: RunEnvironment,
+  fixture: AssistantEvalFixture,
+  sample: number,
+): Promise<FixtureRun> {
   const requestStartedAt = Date.now();
   const threadId = `assistant-eval-${env.runId}-${fixture.id}-s${sample}`;
   const requestId = randomUUID();
   const started = env.mcp?.beginRun({ requestId, threadId, context: fixture.context }) ?? null;
   const baseContext = shapeAssistantContext(
-    started == null ? fixtureContext(fixture) : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef },
+    started == null
+      ? fixtureContext(fixture)
+      : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef },
     selectAssistantContextPolicy(env.args.context === 'full' ? undefined : fixture.question),
   );
   const evidence = buildAssistantEvidence(baseContext, fixture.question, fixture.history);
@@ -330,7 +367,9 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
           baseContext,
         );
   const context: PortfolioAssistantContext =
-    prefetched?.facts == null ? baseContext : { ...baseContext, structureSearchFacts: prefetched.facts };
+    prefetched?.facts == null
+      ? baseContext
+      : { ...baseContext, structureSearchFacts: prefetched.facts };
   const prompt = buildPrompt(env.builder, fixture, context, threadId);
   const startedAt = Date.now();
   let answer = '';
@@ -338,12 +377,15 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   let usage: FixtureRun['usage'] = null;
   let error: FixtureRun['error'] = null;
   try {
-    for await (const event of env.gateway.streamPortfolioAnswer(prompt.request, new AbortController().signal)) {
+    for await (const event of env.gateway.streamPortfolioAnswer(
+      prompt.request,
+      new AbortController().signal,
+    )) {
       if (event.type === 'text_delta') {
-        if (event.delta.trim() && firstTokenMs == null) firstTokenMs = Date.now() - requestStartedAt;
+        if (event.delta.trim() && firstTokenMs == null)
+          firstTokenMs = Date.now() - requestStartedAt;
         answer += event.delta;
-      }
-      else
+      } else
         usage = {
           inputTokens: event.inputTokens,
           cachedInputTokens: event.cachedInputTokens,
@@ -354,7 +396,10 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
     error =
       caught instanceof PortfolioAssistantServiceError
         ? { code: caught.code, message: caught.message }
-        : { code: 'unexpected', message: caught instanceof Error ? caught.message : 'unknown error' };
+        : {
+            code: 'unexpected',
+            message: caught instanceof Error ? caught.message : 'unknown error',
+          };
   }
   const finishedAt = Date.now();
   let tools: AssistantEvalToolObservation;
@@ -373,7 +418,10 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   const judged =
     env.judge == null || answer === ''
       ? null
-      : { name: env.judge.name, ...(await env.judge.score({ fixtureId: fixture.id, question: fixture.question, answer })) };
+      : {
+          name: env.judge.name,
+          ...(await env.judge.score({ fixtureId: fixture.id, question: fixture.question, answer })),
+        };
   return {
     fixtureId: fixture.id,
     sample,
@@ -464,7 +512,11 @@ function answerFileName(run: Pick<FixtureRun, 'fixtureId' | 'sample'>, suffix = 
   return `${run.fixtureId}.s${run.sample}${suffix}.md`;
 }
 
-function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['invalid'], mode: EvalArgs['context']): number {
+function dryRun(
+  fixtures: AssistantEvalFixture[],
+  invalid: LoadedFixtures['invalid'],
+  mode: EvalArgs['context'],
+): number {
   const builder = new PortfolioAssistantPromptBuilder();
   const budget = readPortfolioAssistantConfiguration({}).maxContextCharacters;
   const lines = [
@@ -472,7 +524,10 @@ function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['inval
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const fixture of fixtures) {
-    const context = shapeAssistantContext(fixtureContext(fixture), selectAssistantContextPolicy(mode === 'full' ? undefined : fixture.question));
+    const context = shapeAssistantContext(
+      fixtureContext(fixture),
+      selectAssistantContextPolicy(mode === 'full' ? undefined : fixture.question),
+    );
     const evidence = buildAssistantEvidence(context, fixture.question, fixture.history);
     const check = checkAssistantEvidence(evidence, context);
     const prompt = buildPrompt(builder, fixture, context, `assistant-eval-dry-${fixture.id}`);
@@ -482,7 +537,9 @@ function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['inval
       `| ${fixture.id} | ${fixture.scenario} | ${prompt.systemChars} | ${prompt.contextChars} | ${prompt.conversationChars} | ${Math.round(total / 4)} | ${percent(contextJsonChars / budget)} | ${context.contextSelection?.intent} | ${check.status} |`,
     );
   }
-  process.stdout.write(`${lines.join('\n')}\n\n${fixtures.length} valid fixture(s), ${invalid.length} invalid.\n`);
+  process.stdout.write(
+    `${lines.join('\n')}\n\n${fixtures.length} valid fixture(s), ${invalid.length} invalid.\n`,
+  );
   for (const item of invalid) process.stdout.write(`\nINVALID ${item.file}:\n${item.error}\n`);
   return invalid.length === 0 ? 0 : 1;
 }
@@ -513,7 +570,14 @@ function writeReport(outDirectory: string, name: string, meta: ReportMeta): void
   const overall = overallPassRate(meta.runs);
   const majority = fixtures.filter((summary) => summary.majorityPass).length;
   const quality = summarizeAssistantQuality(meta.runs);
-  const report = { ...meta, quality, overall, majority: { passed: majority, fixtures: fixtures.length }, fixtures, checks };
+  const report = {
+    ...meta,
+    quality,
+    overall,
+    majority: { passed: majority, fixtures: fixtures.length },
+    fixtures,
+    checks,
+  };
   writeFileSync(join(outDirectory, `${name}.json`), `${JSON.stringify(report, null, 2)}\n`);
   const markdown = [
     `# Assistant eval ${meta.runId}${name === 'report' ? '' : ` (${name})`}`,
@@ -590,12 +654,19 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
     const tools: AssistantEvalToolObservation = {
       observedTools: run.tools.observedTools,
       evidence: run.tools.evidence,
-      ...(run.tools.unattributedCalls != null ? { unattributedCalls: run.tools.unattributedCalls } : {}),
+      ...(run.tools.unattributedCalls != null
+        ? { unattributedCalls: run.tools.unattributedCalls }
+        : {}),
     };
     const grade = gradeAnswer(fixture.expect, run.answer, tools, heldLegs(fixture));
-    const evidenceCheck = run['evidence'] == null
-      ? { check: 'evidence' as const, status: 'unverified' as const, detail: 'Saved run predates evidence capture.' }
-      : checkAssistantEvidence(run['evidence'], fixtureContext(fixture));
+    const evidenceCheck =
+      run['evidence'] == null
+        ? {
+            check: 'evidence' as const,
+            status: 'unverified' as const,
+            detail: 'Saved run predates evidence capture.',
+          }
+        : checkAssistantEvidence(run['evidence'], fixtureContext(fixture));
     grade.checks.push(evidenceCheck);
     if (evidenceCheck.status === 'fail') grade.pass = false;
     const regraded: FixtureRun = {
@@ -608,7 +679,8 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
       durationMs: typeof run['durationMs'] === 'number' ? run['durationMs'] : 0,
       usage: null,
       firstTokenMs: typeof run['firstTokenMs'] === 'number' ? run['firstTokenMs'] : null,
-      estimatedCostUsd: typeof run['estimatedCostUsd'] === 'number' ? run['estimatedCostUsd'] : null,
+      estimatedCostUsd:
+        typeof run['estimatedCostUsd'] === 'number' ? run['estimatedCostUsd'] : null,
       evidence: PortfolioAssistantEvidenceSchema.safeParse(run['evidence']).data ?? null,
       promptChars: { system: 0, context: 0, conversation: 0 },
       tools,
@@ -616,7 +688,10 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
       grade: run.error == null ? grade : { ...grade, pass: false },
       judge: null,
     };
-    writeFileSync(join(runDirectory, 'answers', answerFileName(regraded, '.regraded')), answerMarkdown(regraded));
+    writeFileSync(
+      join(runDirectory, 'answers', answerFileName(regraded, '.regraded')),
+      answerMarkdown(regraded),
+    );
     runs.push(regraded);
   }
   writeReport(runDirectory, 'report-regraded', {
@@ -644,7 +719,9 @@ function marketKey(market: SyntheticMarket): string {
 }
 
 /** Fixtures grouped by the synthetic market their context came from, so one market serves each group. */
-function marketGroups(fixtures: AssistantEvalFixture[]): Array<{ market: SyntheticMarket; fixtures: AssistantEvalFixture[] }> {
+function marketGroups(
+  fixtures: AssistantEvalFixture[],
+): Array<{ market: SyntheticMarket; fixtures: AssistantEvalFixture[] }> {
   const groups = new Map<string, { market: SyntheticMarket; fixtures: AssistantEvalFixture[] }>();
   for (const fixture of fixtures) {
     const market = syntheticMarketForContext(fixture.context);
@@ -656,7 +733,11 @@ function marketGroups(fixtures: AssistantEvalFixture[]): Array<{ market: Synthet
   return [...groups.values()];
 }
 
-async function runPool<T>(items: T[], concurrency: number, work: (item: T) => Promise<void>): Promise<void> {
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  work: (item: T) => Promise<void>,
+): Promise<void> {
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
@@ -692,18 +773,24 @@ async function main(): Promise<number> {
   const { fixtures, invalid } = loadFixtures(args.fixture);
   if (args['dry-run']) return dryRun(fixtures, invalid, args.context);
   if (invalid.length > 0) {
-    for (const item of invalid) log.error({ file: item.file, error: item.error }, 'invalid assistant eval fixture');
+    for (const item of invalid)
+      log.error({ file: item.file, error: item.error }, 'invalid assistant eval fixture');
     return 1;
   }
   if (args.regrade != null) return regrade(args.regrade, fixtures);
   if (args.mcp === 'live' && args.concurrency > 1 && args['tool-logs'] === 'journal') {
-    throw new Error('--mcp live reads tool calls from the journal by time window; use --concurrency 1.');
+    throw new Error(
+      '--mcp live reads tool calls from the journal by time window; use --concurrency 1.',
+    );
   }
 
   const configuration = evalConfiguration(process.env, args);
   const gateway = new HermesPortfolioAssistantGateway(configuration);
   if ((await gateway.checkPortfolioAssistantModelAvailability()) !== 'available') {
-    log.error({ apiUrl: configuration.apiUrl }, 'Hermes is unreachable; run with --dry-run to validate fixtures only');
+    log.error(
+      { apiUrl: configuration.apiUrl },
+      'Hermes is unreachable; run with --dry-run to validate fixtures only',
+    );
     return 1;
   }
 
@@ -713,7 +800,8 @@ async function main(): Promise<number> {
   const firstGroup = groups[0];
   if (args.mcp === 'eval' && firstGroup != null) {
     const token = evalMcpToken(process.env);
-    const port = args['mcp-port'] ?? Number(process.env[EVAL_MCP_PORT_ENV] ?? EVAL_MCP_DEFAULT_PORT);
+    const port =
+      args['mcp-port'] ?? Number(process.env[EVAL_MCP_PORT_ENV] ?? EVAL_MCP_DEFAULT_PORT);
     library = new OptionsLibrary(
       resolve(REPO_ROOT, process.env['OPTIONS_LIBRARY_PATH'] ?? 'docs/options-library.sqlite'),
     );
@@ -752,7 +840,13 @@ async function main(): Promise<number> {
         const run = await runFixture(environment, fixture, sample);
         writeFileSync(join(outDirectory, 'answers', answerFileName(run)), answerMarkdown(run));
         log.info(
-          { fixture: fixture.id, sample, pass: run.grade.pass, durationMs: run.durationMs, error: run.error?.code },
+          {
+            fixture: fixture.id,
+            sample,
+            pass: run.grade.pass,
+            durationMs: run.durationMs,
+            error: run.error?.code,
+          },
           'assistant eval fixture finished',
         );
         runs.push(run);
@@ -766,7 +860,8 @@ async function main(): Promise<number> {
   const order = new Map(fixtures.map((fixture, index) => [fixture.id, index]));
   runs.sort(
     (left, right) =>
-      (order.get(left.fixtureId) ?? 0) - (order.get(right.fixtureId) ?? 0) || left.sample - right.sample,
+      (order.get(left.fixtureId) ?? 0) - (order.get(right.fixtureId) ?? 0) ||
+      left.sample - right.sample,
   );
   writeReport(outDirectory, 'report', {
     contextMode: args.context,

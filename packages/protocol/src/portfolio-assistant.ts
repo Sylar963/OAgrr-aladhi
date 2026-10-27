@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { PortfolioAssistantEvidenceSchema, PortfolioAssistantProgressSchema } from './portfolio-assistant-evidence.js';
+import {
+  PortfolioAssistantEvidenceSchema,
+  PortfolioAssistantProgressSchema,
+} from './portfolio-assistant-evidence.js';
 export * from './portfolio-assistant-evidence.js';
 
 import { PortfolioSourceSchema } from './portfolio.js';

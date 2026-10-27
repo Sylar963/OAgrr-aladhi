@@ -91,7 +91,10 @@ export function matchExpectedNumbers(
     let best: number | null = null;
     for (const value of parsed) {
       const distance = Math.abs(Math.abs(value) - target);
-      if (distance <= item.tolerance && (best == null || distance < Math.abs(Math.abs(best) - target)))
+      if (
+        distance <= item.tolerance &&
+        (best == null || distance < Math.abs(Math.abs(best) - target))
+      )
         best = value;
     }
     return {
@@ -110,7 +113,8 @@ const ACTION_VERBS = String.raw`buy(?:ing|s)?|bought|sell(?:ing|s)?|sold|add(?:i
 const POSITION_VERBS = String.raw`(?:go(?:es|ing)?|get(?:s|ting)?)\s+(?:long|short)\b|(?:^|[.!?:;]\s+|[-*•]\s+|\d+\.\s+|\|\s*)(?:long|short)\s+the\b`;
 const ACTION_PATTERN = new RegExp(String.raw`\b(?:${ACTION_VERBS})\b|${POSITION_VERBS}`, 'i');
 const RIGHT_PATTERN = /\b(calls?|puts?)\b|\d(?:k|,\d{3})?\s?[CP]\b/i;
-const STRIKE_PATTERN = /(?<![\w.])\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d{2,3}(?:\.\d+)?k\b|(?<![\w.,])\d{4,6}(?![\d-])/i;
+const STRIKE_PATTERN =
+  /(?<![\w.])\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])\d{2,3}(?:\.\d+)?k\b|(?<![\w.,])\d{4,6}(?![\d-])/i;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;
 
 const ACTION_GLOBAL = new RegExp(ACTION_PATTERN.source, 'gi');
@@ -170,7 +174,8 @@ const MONTH = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
 const ISO_DATE = /\b\d{4}-(\d{2})-(\d{2})\b/g;
 const MONTH_DAY = new RegExp(`\\b${MONTH}\\s*(\\d{1,2})\\b`, 'gi');
 const DAY_MONTH = new RegExp(`\\b(\\d{1,2})\\s*${MONTH}`, 'gi');
-const STRIKE_TOKEN = /(?<![\w.,-])\$?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?(?!\d|[,-]\d)|(?<![\w.])(\d{2,3}(?:\.\d+)?)k\b/gi;
+const STRIKE_TOKEN =
+  /(?<![\w.,-])\$?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.\d+)?(?!\d|[,-]\d)|(?<![\w.])(\d{2,3}(?:\.\d+)?)k\b/gi;
 const CALL_PATTERN = /\bcalls?\b|\d(?:k|,\d{3})?\s?C\b/i;
 const PUT_PATTERN = /\bputs?\b|\d(?:k|,\d{3})?\s?P\b/i;
 
@@ -234,7 +239,8 @@ export function detectProposedStructure(
     const headerHasAction = /\b(side|action|trade|buy|sell)\b/i.test(table.header);
     const headerHasRight = RIGHT_PATTERN.test(table.header);
     for (const row of table.rows) {
-      const actionable = ACTION_PATTERN.test(row) || (headerHasAction && /\b(long|short)\b/i.test(row));
+      const actionable =
+        ACTION_PATTERN.test(row) || (headerHasAction && /\b(long|short)\b/i.test(row));
       if (actionable && (RIGHT_PATTERN.test(row) || headerHasRight) && STRIKE_PATTERN.test(row)) {
         proposals.push({ row: row.trim(), header: table.header.trim(), inTable: true });
       }
@@ -248,7 +254,12 @@ export function detectProposedStructure(
   return {
     proposed: shown != null,
     inTable: shown?.inTable ?? false,
-    evidence: shown == null ? null : shown.inTable && !RIGHT_PATTERN.test(shown.row) ? `${shown.header} → ${shown.row}` : shown.row,
+    evidence:
+      shown == null
+        ? null
+        : shown.inTable && !RIGHT_PATTERN.test(shown.row)
+          ? `${shown.header} → ${shown.row}`
+          : shown.row,
     newLeg: fresh != null,
   };
 }
@@ -308,7 +319,11 @@ export function gradeTools(
     };
   }
   return missing.length === 0
-    ? { check: 'tools', status: 'pass', detail: `Observed ${[...observed].join(', ')} (${observation.evidence}).` }
+    ? {
+        check: 'tools',
+        status: 'pass',
+        detail: `Observed ${[...observed].join(', ')} (${observation.evidence}).`,
+      }
     : {
         check: 'tools',
         status: 'fail',
@@ -331,11 +346,19 @@ function gradeStructure(
   }
   const structure = detectProposedStructure(answer, held);
   if (!structure.proposed) {
-    return { check: 'structure', status: 'fail', detail: 'No proposed structure (action + strike + call/put) found.' };
+    return {
+      check: 'structure',
+      status: 'fail',
+      detail: 'No proposed structure (action + strike + call/put) found.',
+    };
   }
   const where = structure.inTable ? 'in table' : 'in text';
   if (!expect.requireNewLeg || structure.newLeg) {
-    return { check: 'structure', status: 'pass', detail: `Proposed ${where}: ${structure.evidence}` };
+    return {
+      check: 'structure',
+      status: 'pass',
+      detail: `Proposed ${where}: ${structure.evidence}`,
+    };
   }
   // A structure_search candidate may legitimately be a buy-back, so it counts without a new leg.
   if ((tools.observedTools ?? []).map(normalizeToolName).includes('oggregator_structure_search')) {
@@ -372,7 +395,10 @@ export function gradeAnswer(
             missedNumbers.length === 0
               ? `All ${numbers.length} required numbers present.`
               : `Missing ${missedNumbers
-                  .map((result) => `${result.label} (${formatNumber(result.expected)} ± ${formatNumber(result.tolerance)})`)
+                  .map(
+                    (result) =>
+                      `${result.label} (${formatNumber(result.expected)} ± ${formatNumber(result.tolerance)})`,
+                  )
                   .join('; ')}.`,
         },
   );

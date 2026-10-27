@@ -49,7 +49,7 @@ describe('FLOW OI context', () => {
         underlying: 'BTC',
         instrument: name,
         tradeId: name,
-        timestamp: time,
+        timestamp: time + 4,
         side: 'buy',
         size: 10,
         price: 0.01,
@@ -57,7 +57,7 @@ describe('FLOW OI context', () => {
         iv: null,
         markPrice: null,
         isBlock: true,
-        exchangeEvidence: { rfqId: '42' },
+        exchangeEvidence: { rfqId: '42', blockTradeId: 'block-42', expectedLegCount: 2 },
       }),
     );
     const store = new SqliteTradeStore(':memory:');
@@ -88,11 +88,35 @@ describe('FLOW OI context', () => {
         timestamp: time,
       });
       expect(result?.analysis.positionEffect).toBe('mixed');
+      expect(result?.evidence?.blockTradeId).toBe('block-42');
       expect(result?.analysis.legs.map((leg) => leg.position?.action)).toEqual([
         'buy_to_open',
         'buy_to_close',
       ]);
       expect(result?.analysis.legs.map((leg) => leg.position?.intervalVolume)).toEqual([10, 10]);
+      trades.push(
+        ...trades.map((print) => ({
+          ...print,
+          tradeId: `${print.tradeId}-second`,
+          timestamp: print.timestamp + 10,
+          exchangeEvidence: { ...print.exchangeEvidence, blockTradeId: 'block-43' },
+        })),
+      );
+      const ambiguous = new FlowEvidenceService({
+        trades: store,
+        live: () => trades,
+        blocks: () => [block],
+        oi: new NoopOiSnapshotStore(),
+      });
+      const unmatched = await ambiguous.get({
+        mode: 'institutional',
+        tradeUid: buildBlockTradeUid(block),
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument,
+        timestamp: time,
+      });
+      expect(unmatched?.evidence?.blockTradeId).toBeUndefined();
     } finally {
       await store.dispose();
     }

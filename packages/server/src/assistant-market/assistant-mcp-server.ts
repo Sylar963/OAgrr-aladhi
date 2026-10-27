@@ -10,7 +10,10 @@ import {
   type AssistantToolCallOutcome,
   hashPortfolioRef,
 } from './assistant-run-registry.js';
-import { EvaluateStructureToolInputSchema, runEvaluateStructureTool } from './evaluate-structure-tool.js';
+import {
+  EvaluateStructureToolInputSchema,
+  runEvaluateStructureTool,
+} from './evaluate-structure-tool.js';
 import type { AssistantMarketDataReader, MarketReadResult } from './market-data-reader.js';
 import type { OptionsLibrary } from './options-library.js';
 import { runStructureSearchTool, StructureSearchToolInputSchema } from './structure-search-tool.js';
@@ -347,7 +350,7 @@ export function buildAssistantMcpTools(
     tool({
       name: 'oggregator_iron_fly_scanner',
       description:
-        'Run the Alpha short iron fly scanner. Each candidate sells the ATM straddle at the bids and buys symmetric wings at the asks (about 1/2/3/5% of the forward), after taker fees on all four legs. It scores today\'s net credit with the full expiry payoff against past windows that start at the same hour of the week and settle at the same hour as the expiry (hourly perp closes, last 26 weeks held out of ranking): profit rate, mean P&L with a 95% CI, worst loss, and sample size. That is credit versus the historical settlement distribution, not a backtest of past option prices. Sizing fits max loss to equity × riskPct. Check the chosen fly against the book with oggregator_evaluate_structure. No orders.',
+        "Run the Alpha short iron fly scanner. Each candidate sells the ATM straddle at the bids and buys symmetric wings at the asks (about 1/2/3/5% of the forward), after taker fees on all four legs. It scores today's net credit with the full expiry payoff against past windows that start at the same hour of the week and settle at the same hour as the expiry (hourly perp closes, last 26 weeks held out of ranking): profit rate, mean P&L with a 95% CI, worst loss, and sample size. That is credit versus the historical settlement distribution, not a backtest of past option prices. Sizing fits max loss to equity × riskPct. Check the chosen fly against the book with oggregator_evaluate_structure. No orders.",
       input: z
         .object({
           underlying,
@@ -374,7 +377,7 @@ export function buildAssistantMcpTools(
     tool({
       name: 'oggregator_structure_search',
       description:
-        "Find trades that fit a risk budget. Use for questions like \"find a bearish trade within $X total risk\", bullish, long-vol, or \"hedge my short calls\". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is unbounded or already over maxTotalRiskUsd, bearish, bullish and long_vol candidates are packages: the best repair of the book (cover, buy-back or close, chosen by book-wide worst loss) plus the view structure, evaluated together with components labelled repair and view. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall, and repairOnly the repair alone. An unknown or expired portfolioRef searches without the book and says so in heldBook. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.",
+        'Find trades that fit a risk budget. Use for questions like "find a bearish trade within $X total risk", bullish, long-vol, or "hedge my short calls". Enumerates long options and debit verticals (bearish/bullish), long straddles and strangles (long_vol), or buy-backs and same-expiry further-OTM covers of each uncovered held short (hedge_held_shorts) across listed expiries in the DTE window. Prices every leg at live executable quotes (buy at ask, sell at bid, venue or conservative default fees), evaluates each against the held book via portfolioRef, keeps candidates whose book-wide worst loss fits maxTotalRiskUsd, and ranks them by P&L at the target move and horizon per dollar of worst loss added. When the held book is unbounded or already over maxTotalRiskUsd, bearish, bullish and long_vol candidates are packages: the best repair of the book (cover, buy-back or close, chosen by book-wide worst loss) plus the view structure, evaluated together with components labelled repair and view. When nothing fits, nearestInfeasible gives the closest candidates and the dollar shortfall, and repairOnly the repair alone. An unknown or expired portfolioRef searches without the book and says so in heldBook. Verify the chosen candidate with oggregator_evaluate_structure before recommending it. No orders.',
       input: StructureSearchToolInputSchema,
       run: async (args) => unwrap(await runStructureSearchTool(reader, portfolio, args, now())),
     }),
@@ -388,7 +391,8 @@ export function buildAssistantMcpTools(
       }),
       run: async (args) => {
         const hits = library.search(args.query, args.limit ?? 5);
-        if (hits == null) throw new ToolInputError('The options library has not been indexed yet.', 'unavailable');
+        if (hits == null)
+          throw new ToolInputError('The options library has not been indexed yet.', 'unavailable');
         return {
           books: library.listBooks(),
           results: hits,
@@ -474,12 +478,16 @@ export class AssistantMcpHandler {
       ? (PortfolioRefArgumentSchema.safeParse(parsed.data.arguments).data?.portfolioRef ?? null)
       : null;
     const attribution = this.runs?.attribute(portfolioRef) ?? NO_ATTRIBUTION;
-    if (parsed.success && this.tools.get(parsed.data.name)?.input.safeParse(parsed.data.arguments ?? {}).success) {
+    if (
+      parsed.success &&
+      this.tools.get(parsed.data.name)?.input.safeParse(parsed.data.arguments ?? {}).success
+    ) {
       this.runs?.notifyToolStart(attribution, parsed.data.name);
     }
     const execution = await this.execute(parsed.success ? parsed.data : null);
     const durationMs = Math.max(0, this.now() - startedAt);
-    const metricTool = execution.registered && execution.tool != null ? execution.tool : UNREGISTERED_TOOL;
+    const metricTool =
+      execution.registered && execution.tool != null ? execution.tool : UNREGISTERED_TOOL;
     this.runs?.recordToolCall(attribution, metricTool, execution.outcome);
     this.onToolCall?.({ tool: metricTool, outcome: execution.outcome, attribution, durationMs });
     recordPortfolioAssistantToolCall({
@@ -498,16 +506,24 @@ export class AssistantMcpHandler {
       ...execution.detail,
     };
     if (execution.outcome === 'ok') this.log.info(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
-    else if (execution.outcome === 'failed') this.log.error(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
+    else if (execution.outcome === 'failed')
+      this.log.error(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
     else this.log.warn(fields, ASSISTANT_MCP_TOOL_CALL_MESSAGE);
     return toolResult(execution);
   }
 
-  private async execute(params: z.infer<typeof ToolCallParamsSchema> | null): Promise<ToolExecution> {
+  private async execute(
+    params: z.infer<typeof ToolCallParamsSchema> | null,
+  ): Promise<ToolExecution> {
     if (params == null) {
-      return rejected(null, false, toolErrorPayload('invalid_params', 'Invalid tool call parameters.'), {
-        rejection: 'invalid_params',
-      });
+      return rejected(
+        null,
+        false,
+        toolErrorPayload('invalid_params', 'Invalid tool call parameters.'),
+        {
+          rejection: 'invalid_params',
+        },
+      );
     }
     const definition = this.tools.get(params.name);
     if (!definition) {
@@ -526,7 +542,9 @@ export class AssistantMcpHandler {
         toolErrorPayload('invalid_arguments', `Invalid arguments: ${z.prettifyError(args.error)}`),
         {
           rejection: 'invalid_arguments',
-          issues: args.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`),
+          issues: args.error.issues.map(
+            (issue) => `${issue.path.join('.') || '(root)'}: ${issue.code}`,
+          ),
         },
       );
     }
@@ -538,7 +556,9 @@ export class AssistantMcpHandler {
         registered: true,
         outcome: 'ok',
         text: JSON.stringify(data),
-        detail: unresolved.success ? { heldBook: 'unresolved', heldBookReason: unresolved.data.heldBook.reason } : {},
+        detail: unresolved.success
+          ? { heldBook: 'unresolved', heldBookReason: unresolved.data.heldBook.reason }
+          : {},
       };
     } catch (error) {
       if (error instanceof ToolTimeoutError) {
@@ -552,10 +572,15 @@ export class AssistantMcpHandler {
         };
       }
       if (error instanceof ToolInputError) {
-        return rejected(definition.name, true, toolErrorPayload(error.code, error.message, error.hint), {
-          rejection: 'input_error',
-          reason: error.message,
-        });
+        return rejected(
+          definition.name,
+          true,
+          toolErrorPayload(error.code, error.message, error.hint),
+          {
+            rejection: 'input_error',
+            reason: error.message,
+          },
+        );
       }
       const payload = toolErrorPayload('internal_error', 'The tool failed unexpectedly.');
       return {

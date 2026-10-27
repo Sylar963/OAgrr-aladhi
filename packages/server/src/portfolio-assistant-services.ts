@@ -74,7 +74,9 @@ export const optionsLibrary = new OptionsLibrary(
 // The MCP listener runs in this process, so the refs minted for chat contexts
 // resolve here without persistence.
 const assistantRuns = new AssistantRunRegistry();
-const portfolioRefStore = new PortfolioRefStore({ isActive: (ref) => assistantRuns.isRefActive(ref) });
+const portfolioRefStore = new PortfolioRefStore({
+  isActive: (ref) => assistantRuns.isRefActive(ref),
+});
 let assistantMcpServer: FastifyInstance | null = null;
 
 async function resolveHeldLegs(scope: PortfolioRefScope) {
@@ -93,7 +95,10 @@ const thalexAccountLedger: PortfolioAssistantAccountLedgerReader = {
   async fetchAccountLedger(accountId, fromMs) {
     const ledger = await thalexPositionStore.fetchAccountLedger(accountId, fromMs);
     if (ledger == null) return null;
-    return { ledger, network: thalexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet' };
+    return {
+      ledger,
+      network: thalexPositionStore.environment(accountId) === 'test' ? 'testnet' : 'mainnet',
+    };
   },
 };
 const contextBuilder = new PortfolioAssistantContextBuilder(
@@ -133,7 +138,10 @@ export const portfolioAssistantConversationService = new PortfolioAssistantConve
   portfolioAssistantMemoryService,
   Date.now,
   runTelemetry,
-  new StructureSearchPrefetch(assistantMarketDataReader, { refs: portfolioRefStore, resolveHeldLegs }),
+  new StructureSearchPrefetch(assistantMarketDataReader, {
+    refs: portfolioRefStore,
+    resolveHeldLegs,
+  }),
 );
 
 const FEEDBACK_FLUSH_INTERVAL_MS = 24 * 60 * 60 * 1_000;

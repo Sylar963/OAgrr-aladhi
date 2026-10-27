@@ -28,17 +28,26 @@ const messages = defineMessages(
     askHermes: 'Ask Hermes',
     beta: 'BETA',
     ready: 'Available',
-    expand: 'Expand chat', collapse: 'Collapse chat', snapshotFresh: 'Snapshot updated', snapshotStale: 'Snapshot over 30s old',
+    expand: 'Expand chat',
+    collapse: 'Collapse chat',
+    snapshotFresh: 'Snapshot updated',
+    snapshotStale: 'Snapshot over 30s old',
     review: 'What changed since my last review?',
-    alternativesPrompt: 'Compare alternatives for my current portfolio. Evaluate costs and book-wide risk. Ask me for any missing risk budget or market view.',
-    loading_portfolio: 'Loading portfolio…', checking_quotes: 'Checking quotes…', loading_history: 'Loading account history…',
-    evaluating_structures: 'Evaluating structures…', searching_books: 'Searching options books…', writing_answer: 'Preparing answer…',
+    alternativesPrompt:
+      'Compare alternatives for my current portfolio. Evaluate costs and book-wide risk. Ask me for any missing risk budget or market view.',
+    loading_portfolio: 'Loading portfolio…',
+    checking_quotes: 'Checking quotes…',
+    loading_history: 'Loading account history…',
+    evaluating_structures: 'Evaluating structures…',
+    searching_books: 'Searching options books…',
+    writing_answer: 'Preparing answer…',
     checking: 'Checking',
     locked: 'Locked',
     all: 'ALL',
     accessError: 'Portfolio Assistant access could not be verified.',
     privateBeta: 'Private beta access',
-    privateBetaBody: 'Use an invite to unlock grounded explanations for the portfolio on this page.',
+    privateBetaBody:
+      'Use an invite to unlock grounded explanations for the portfolio on this page.',
     hermesDown: 'Hermes is temporarily unavailable. Your saved conversation is still available.',
     historyUnavailable: 'Assistant history storage is unavailable, so chat is disabled.',
     assistantUnavailable: 'Portfolio Assistant is temporarily unavailable.',
@@ -55,11 +64,19 @@ const messages = defineMessages(
     askHermes: 'Pregúntale a Hermes',
     beta: 'BETA',
     ready: 'Disponible',
-    expand: 'Ampliar chat', collapse: 'Reducir chat', snapshotFresh: 'Snapshot actualizado', snapshotStale: 'Snapshot de hace más de 30 s',
+    expand: 'Ampliar chat',
+    collapse: 'Reducir chat',
+    snapshotFresh: 'Snapshot actualizado',
+    snapshotStale: 'Snapshot de hace más de 30 s',
     review: '¿Qué cambió desde mi última revisión?',
-    alternativesPrompt: 'Compara alternativas para mi portafolio actual. Evalúa costos y riesgo de todo el libro. Pregúntame por el presupuesto de riesgo o la visión de mercado si faltan.',
-    loading_portfolio: 'Cargando portafolio…', checking_quotes: 'Verificando cotizaciones…', loading_history: 'Cargando historial de cuenta…',
-    evaluating_structures: 'Evaluando estructuras…', searching_books: 'Buscando en libros de opciones…', writing_answer: 'Preparando respuesta…',
+    alternativesPrompt:
+      'Compara alternativas para mi portafolio actual. Evalúa costos y riesgo de todo el libro. Pregúntame por el presupuesto de riesgo o la visión de mercado si faltan.',
+    loading_portfolio: 'Cargando portafolio…',
+    checking_quotes: 'Verificando cotizaciones…',
+    loading_history: 'Cargando historial de cuenta…',
+    evaluating_structures: 'Evaluando estructuras…',
+    searching_books: 'Buscando en libros de opciones…',
+    writing_answer: 'Preparando respuesta…',
     checking: 'Verificando',
     locked: 'Bloqueado',
     all: 'TODOS',
@@ -117,6 +134,7 @@ export function PortfolioAssistantPanel({
   const [now, setNow] = useState(Date.now);
   const panelRef = useRef<HTMLElement>(null);
   const expandRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef(true);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 5_000);
@@ -129,20 +147,33 @@ export function PortfolioAssistantPanel({
     document.body.style.overflow = 'hidden';
     panelRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setExpanded(false); }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setExpanded(false);
+      }
       if (event.key !== 'Tab') return;
-      const focusable = [...(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]') ?? [])];
+      const focusable = [
+        ...(panelRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]',
+        ) ?? []),
+      ];
       const first = focusable[0];
       const last = focusable.at(-1);
       const active = document.activeElement;
-      if (event.shiftKey && (active === first || active === panelRef.current)) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && (active === last || active === panelRef.current)) { event.preventDefault(); first?.focus(); }
+      if (event.shiftKey && (active === first || active === panelRef.current)) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && (active === last || active === panelRef.current)) {
+        event.preventDefault();
+        first?.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKey);
-      requestAnimationFrame(() => expandRef.current?.focus());
+      if (restoreFocusRef.current) requestAnimationFrame(() => expandRef.current?.focus());
+      restoreFocusRef.current = true;
     };
   }, [expanded]);
 
@@ -152,6 +183,7 @@ export function PortfolioAssistantPanel({
       setDraft(t('alternativesPrompt'));
       panelRef.current?.querySelector('textarea')?.focus();
     } else {
+      if (expanded) restoreFocusRef.current = false;
       setExpanded(false);
       requestAnimationFrame(() => onNavigate?.(action, evidence.relevantLegIds));
     }
@@ -185,9 +217,15 @@ export function PortfolioAssistantPanel({
     thread.error == null ? null : assistantErrorFrom(thread.error, 'request_failed', locale);
 
   const panel = (
-    <section ref={panelRef} className={styles.panel} data-expanded={expanded || undefined}
-      role={expanded ? 'dialog' : undefined} aria-modal={expanded || undefined} tabIndex={expanded ? -1 : undefined}
-      aria-labelledby="portfolio-assistant-title">
+    <section
+      ref={panelRef}
+      className={styles.panel}
+      data-expanded={expanded || undefined}
+      role={expanded ? 'dialog' : undefined}
+      aria-modal={expanded || undefined}
+      tabIndex={expanded ? -1 : undefined}
+      aria-labelledby="portfolio-assistant-title"
+    >
       <header className={styles.header}>
         <div>
           <div className={styles.eyebrow}>{t('eyebrow')}</div>
@@ -196,12 +234,20 @@ export function PortfolioAssistantPanel({
           </h3>
         </div>
         <div className={styles.headerActions}>
-        <button ref={expandRef} type="button" className={styles.expandButton} aria-label={expanded ? t('collapse') : t('expand')}
-          aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? '↙' : '↗'}</button>
-        <div className={styles.availability} data-online={enabled || undefined}>
-          <i />
-          {enabled ? t('ready') : access.isLoading ? t('checking') : t('locked')}
-        </div>
+          <button
+            ref={expandRef}
+            type="button"
+            className={styles.expandButton}
+            aria-label={expanded ? t('collapse') : t('expand')}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? '↙' : '↗'}
+          </button>
+          <div className={styles.availability} data-online={enabled || undefined}>
+            <i />
+            {enabled ? t('ready') : access.isLoading ? t('checking') : t('locked')}
+          </div>
         </div>
       </header>
 
@@ -209,7 +255,15 @@ export function PortfolioAssistantPanel({
         <span>{source}</span>
         <span>{underlying ?? t('all')}</span>
         <span>T+{forwardDays}d</span>
-        <span title={generatedAt == null ? t('waiting') : new Date(generatedAt).toLocaleString(locale, { timeZoneName: 'short' })}>{snapshotLabel}</span>
+        <span
+          title={
+            generatedAt == null
+              ? t('waiting')
+              : new Date(generatedAt).toLocaleString(locale, { timeZoneName: 'short' })
+          }
+        >
+          {snapshotLabel}
+        </span>
       </div>
 
       {access.isLoading ? (
@@ -232,9 +286,7 @@ export function PortfolioAssistantPanel({
       ) : !enabled ? (
         providerUnavailable ? (
           <>
-            <div className={styles.noticeCompact}>
-              {t('hermesDown')}
-            </div>
+            <div className={styles.noticeCompact}>{t('hermesDown')}</div>
             <PortfolioAssistantTranscript
               messages={conversation.messages}
               isLoading={conversation.isLoading || thread.isLoading}
@@ -259,7 +311,13 @@ export function PortfolioAssistantPanel({
         <>
           <div className={styles.toolbar}>
             <span>
-              {thread.isLoading ? t('opening') : generatedAt == null ? t('waiting') : now - generatedAt > 30_000 ? t('snapshotStale') : t('snapshotFresh')}
+              {thread.isLoading
+                ? t('opening')
+                : generatedAt == null
+                  ? t('waiting')
+                  : now - generatedAt > 30_000
+                    ? t('snapshotStale')
+                    : t('snapshotFresh')}
             </span>
             <div className={styles.toolbarActions}>
               <button
@@ -287,13 +345,33 @@ export function PortfolioAssistantPanel({
             actionsDisabled={conversation.isStreaming}
           />
           {conversation.messages.length === 0 && !conversation.isLoading && (
-            <PortfolioAssistantBriefing metrics={metrics} positions={positions} forwardDays={forwardDays}
-              disabled={!thread.threadId || thread.isLoading || conversation.isStreaming} onSend={(prompt) => void send(prompt)} />
+            <PortfolioAssistantBriefing
+              metrics={metrics}
+              positions={positions}
+              forwardDays={forwardDays}
+              disabled={!thread.threadId || thread.isLoading || conversation.isStreaming}
+              onSend={(prompt) => void send(prompt)}
+            />
           )}
-          {conversation.messages.some((message) => message.role === 'assistant' && message.status === 'complete' && message.evidence) && (
-            <button type="button" className={styles.reviewButton} disabled={conversation.isStreaming} onClick={() => void send(t('review'))}>{t('review')}</button>
+          {conversation.messages.some(
+            (message) =>
+              message.role === 'assistant' && message.status === 'complete' && message.evidence,
+          ) && (
+            <button
+              type="button"
+              className={styles.reviewButton}
+              disabled={conversation.isStreaming}
+              onClick={() => void send(t('review'))}
+            >
+              {t('review')}
+            </button>
           )}
-          {conversation.isStreaming && <div className={styles.progress} role="status"><i />{conversation.progress ? t(conversation.progress) : t('responding')}</div>}
+          {conversation.isStreaming && (
+            <div className={styles.progress} role="status">
+              <i />
+              {conversation.progress ? t(conversation.progress) : t('responding')}
+            </div>
+          )}
           {(conversation.error || thread.error) && (
             <div className={styles.inlineError} role="alert">
               {conversationError ?? threadError}
@@ -321,5 +399,13 @@ export function PortfolioAssistantPanel({
       <footer>{t('footer')}</footer>
     </section>
   );
-  return expanded ? createPortal(<><div className={styles.backdrop} onClick={() => setExpanded(false)} aria-hidden="true" />{panel}</>, document.body) : panel;
+  return expanded
+    ? createPortal(
+        <>
+          <div className={styles.backdrop} onClick={() => setExpanded(false)} aria-hidden="true" />
+          {panel}
+        </>,
+        document.body,
+      )
+    : panel;
 }

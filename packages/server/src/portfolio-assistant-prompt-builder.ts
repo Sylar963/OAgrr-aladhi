@@ -34,7 +34,7 @@ export class PortfolioAssistantPromptBuilder {
       "- bookVsMarketFacts (single-underlying books): expiryOutlook per risk window gives the options market's ±1 standard deviation expectedRangeUsd to that date, each breakeven's movePct, insideExpectedRange and probabilityAbove, and profitZones with profitProbability (lognormal at ATM IV, no skew: market-implied, not a forecast). gammaLevels (dealer-gamma strikes), priceLevels (support and resistance by hours traded), openInterestLevels (per held expiry) and heldLegOdds (implied and historical odds of each held strike finishing in the money) are descriptive. For a question about a position's outlook, risk or next step, relate its breakevens to the expected range and the nearest levels in one or two lines, e.g. \"the market prices ±6% (**$76k–$86k**) by Oct 30; your $83,363 breakeven is inside that range, profit probability **41%**\". Never call a level proven support or resistance.",
       "- tradeHistoryFacts: the user's own fills, newest first; group fills sharing an orderId as one order. For sums over the listed fills use tradeHistoryFacts.totals (fees, premium bought and sold, realized PnL with its null count, per-instrument breakdown, first and last fill; recentFees for the newest 5, 10 or 20) and state the total; for another subset, add the listed values and give the sum. accountingFacts holds lifetime totals; when tradeHistoryFacts is truncated, never present listed sums as lifetime figures. Null realizedPnlUsd means not reported.",
       "- accountEquityFacts (Thalex): the user's live account equity, cash holdings (per-asset balance, index price, USD value), unrealisedPnlUsd, sessionRealisedPnlUsd, margin, dailyEquity (cash right after each 08:00 UTC settlement, ending with live equity) and transactions (the venue cash ledger, newest first: session settlements, funding, deposits, withdrawals, fees, transfers, rewards, each with amount and balanceAfter). basis says how equityUsd is computed. For an equity change, reconcile it from these numbers: compare dailyEquity points, list the transactions between them, and split the live move into cash, unrealised and session-realised P&L; a close mid-session moves its gain from unrealised to sessionRealisedPnlUsd, and both count in equityUsd until settlement books them to cash. Never say account equity or the cash ledger is unavailable when accountEquityFacts is present; if a needed figure is missing from it, name that figure.",
-      "- userMemoryFacts: durable preferences this user stated in earlier chats (risk budget, preferred structures, experience, explanation style, venues, goals), or null. Use them to personalise: e.g. take the risk budget from it when the question gives none and say you did. The current context and the user's message override it. It belongs to the asking user only. When asked what you remember, list it and say they can view or delete it under \"What Hermes remembers\" in this panel.",
+      '- userMemoryFacts: durable preferences this user stated in earlier chats (risk budget, preferred structures, experience, explanation style, venues, goals), or null. Use them to personalise: e.g. take the risk budget from it when the question gives none and say you did. The current context and the user\'s message override it. It belongs to the asking user only. When asked what you remember, list it and say they can view or delete it under "What Hermes remembers" in this panel.',
       '',
       'TOOLS (investigate before concluding data is unavailable)',
       '- oggregator_structure_search (portfolioRef): candidates for a view within a book-wide risk budget; nearestInfeasible when nothing fits.',
@@ -106,7 +106,9 @@ export class PortfolioAssistantPromptBuilder {
 
 // An unanswered question is dropped with its unfinished reply so the replay stays in complete
 // question/answer pairs; the user's next message is usually a retry of it.
-function selectReplayableMessages(history: PortfolioAssistantMessage[]): PortfolioAssistantMessage[] {
+function selectReplayableMessages(
+  history: PortfolioAssistantMessage[],
+): PortfolioAssistantMessage[] {
   return history.filter((message, index) => {
     if (message.status !== 'complete') return false;
     const next = history[index + 1];
@@ -116,7 +118,10 @@ function selectReplayableMessages(history: PortfolioAssistantMessage[]): Portfol
 
 // The note rides on the latest turn only, so the cached system prompt stays identical across
 // languages and replayed history is never rewritten.
-function withInterfaceLanguage(question: string, locale: PortfolioAssistantLocale | undefined): string {
+function withInterfaceLanguage(
+  question: string,
+  locale: PortfolioAssistantLocale | undefined,
+): string {
   if (locale === undefined) return question;
   return `[Interface language: ${locale === 'es' ? 'Spanish' : 'English'}]\n${question}`;
 }

@@ -1,11 +1,22 @@
 import { z } from 'zod';
 import { PortfolioSourceSchema } from './portfolio.js';
 
-export const PortfolioAssistantIntentSchema = z.enum(['portfolio', 'exposure', 'accounting', 'theory', 'comparison']);
+export const PortfolioAssistantIntentSchema = z.enum([
+  'portfolio',
+  'exposure',
+  'accounting',
+  'theory',
+  'comparison',
+]);
 export type PortfolioAssistantIntent = z.infer<typeof PortfolioAssistantIntentSchema>;
 
 export const PortfolioAssistantProgressSchema = z.enum([
-  'loading_portfolio', 'checking_quotes', 'loading_history', 'evaluating_structures', 'searching_books', 'writing_answer',
+  'loading_portfolio',
+  'checking_quotes',
+  'loading_history',
+  'evaluating_structures',
+  'searching_books',
+  'writing_answer',
 ]);
 export type PortfolioAssistantProgress = z.infer<typeof PortfolioAssistantProgressSchema>;
 
@@ -26,37 +37,57 @@ export const PortfolioAssistantSnapshotSchema = z.object({
   netVegaUsd: z.number().nullable(),
   equityUsd: z.number().nullable(),
   openLegCount: z.number().int().nonnegative(),
-  positions: z.array(z.object({
-    legId: z.string(),
-    underlying: z.string(),
-    expiry: z.string(),
-    strike: z.number(),
-    optionRight: z.enum(['call', 'put']),
-    size: z.number(),
-    entryPriceUsd: z.number().nullable().optional(),
-    markUsd: z.number().nullable(),
-    markUpdatedAt: z.number().int().nonnegative().nullable(),
-  })).max(100),
+  positions: z
+    .array(
+      z.object({
+        legId: z.string(),
+        underlying: z.string(),
+        expiry: z.string(),
+        strike: z.number(),
+        optionRight: z.enum(['call', 'put']),
+        size: z.number(),
+        entryPriceUsd: z.number().nullable().optional(),
+        markUsd: z.number().nullable(),
+        markUpdatedAt: z.number().int().nonnegative().nullable(),
+      }),
+    )
+    .max(100),
   positionsTruncated: z.boolean(),
 });
 export type PortfolioAssistantSnapshot = z.infer<typeof PortfolioAssistantSnapshotSchema>;
 
 export const PortfolioAssistantComparisonSchema = z.object({
   previousGeneratedAt: z.number().int().nonnegative(),
-  changes: z.array(z.object({
-    metric: z.enum(['spotUsd', 'unrealizedPnlUsd', 'netDeltaCoin', 'netThetaUsd', 'netVegaUsd', 'equityUsd']),
-    previous: z.number().nullable(),
-    current: z.number().nullable(),
-    change: z.number().nullable(),
-  })),
-  positionChanges: z.array(z.object({
-    legId: z.string(),
-    instrument: z.string(),
-    previousSize: z.number(),
-    currentSize: z.number(),
-  })).max(200),
+  changes: z.array(
+    z.object({
+      metric: z.enum([
+        'spotUsd',
+        'unrealizedPnlUsd',
+        'netDeltaCoin',
+        'netThetaUsd',
+        'netVegaUsd',
+        'equityUsd',
+      ]),
+      previous: z.number().nullable(),
+      current: z.number().nullable(),
+      change: z.number().nullable(),
+    }),
+  ),
+  positionChanges: z
+    .array(
+      z.object({
+        legId: z.string(),
+        instrument: z.string(),
+        previousSize: z.number(),
+        currentSize: z.number(),
+      }),
+    )
+    .max(200),
   positionsComparable: z.boolean(),
-  markPnlChanges: z.array(z.object({ legId: z.string(), instrument: z.string(), pnlChangeUsd: z.number() })).max(100).optional(),
+  markPnlChanges: z
+    .array(z.object({ legId: z.string(), instrument: z.string(), pnlChangeUsd: z.number() }))
+    .max(100)
+    .optional(),
   unattributedPnlChangeUsd: z.number().nullable().optional(),
 });
 export type PortfolioAssistantComparison = z.infer<typeof PortfolioAssistantComparisonSchema>;
@@ -67,10 +98,16 @@ export const PortfolioAssistantEvidenceSchema = z.object({
   snapshot: PortfolioAssistantSnapshotSchema,
   contextSections: z.array(z.enum(['portfolio', 'scenarios', 'market', 'trades', 'account'])),
   relevantLegIds: z.array(z.string()).max(100),
-  assumptions: z.array(z.enum([
-    'mark_not_execution', 'constant_iv_scenarios', 'expiry_not_margin', 'snapshot_not_quote_time',
-    'changes_not_attribution', 'risk_neutral_not_forecast',
-  ])),
+  assumptions: z.array(
+    z.enum([
+      'mark_not_execution',
+      'constant_iv_scenarios',
+      'expiry_not_margin',
+      'snapshot_not_quote_time',
+      'changes_not_attribution',
+      'risk_neutral_not_forecast',
+    ]),
+  ),
   gaps: z.array(z.string()),
   actions: z.array(PortfolioAssistantActionSchema),
   comparison: PortfolioAssistantComparisonSchema.nullable(),

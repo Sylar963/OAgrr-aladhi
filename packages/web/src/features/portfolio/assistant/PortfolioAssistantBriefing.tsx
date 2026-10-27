@@ -101,7 +101,10 @@ export function PortfolioAssistantBriefing({
             <dd>
               {metrics.totals.netThetaUsd == null
                 ? t('unknown')
-                : metrics.totals.netThetaUsd.toLocaleString(locale, { style: 'currency', currency: 'USD' })}
+                : metrics.totals.netThetaUsd.toLocaleString(locale, {
+                    style: 'currency',
+                    currency: 'USD',
+                  })}
             </dd>
           </div>
           <div>

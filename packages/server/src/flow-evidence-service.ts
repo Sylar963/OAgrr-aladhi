@@ -134,8 +134,20 @@ export class FlowEvidenceService {
     const symbols = instruments.map((instrument) =>
       flowOiSymbol(trade.venue, trade.underlying, instrument),
     );
+    const fastBrackets = new Map(
+      instruments.map((instrument) => [
+        instrument,
+        this.options.fastOi?.bracket(trade.venue, instrument, trade.timestamp),
+      ]),
+    );
+    const hasFastBrackets = instruments.every((instrument) => {
+      const fast = fastBrackets.get(instrument);
+      return (
+        fast?.before && fast.after && fast.after.timestamp - fast.before.timestamp <= 25 * 60_000
+      );
+    });
     let window: OiSnapshotWindow = { rows: [], complete: false };
-    if (this.options.oi.enabled && symbols.some((symbol) => symbol != null)) {
+    if (!hasFastBrackets && this.options.oi.enabled && symbols.some((symbol) => symbol != null)) {
       window = await this.loadOi(
         trade.venue,
         symbols.filter((s): s is string => s != null),
@@ -160,7 +172,7 @@ export class FlowEvidenceService {
         context.status = 'unavailable';
         context.delta = null;
       }
-      const fast = this.options.fastOi?.bracket(trade.venue, context.instrument, trade.timestamp);
+      const fast = fastBrackets.get(context.instrument);
       if (fast?.before && fast.after) {
         const intervalMs = fast.after.timestamp - fast.before.timestamp;
         if (

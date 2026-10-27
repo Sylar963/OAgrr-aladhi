@@ -159,14 +159,17 @@ export default function PositionsTable({
     return (
       <div className={styles.cardList}>
         {positions.map((leg) => (
-          <div key={leg.legId} className={highlightedLegIds.includes(leg.legId) ? styles.cardHighlight : undefined}>
-          <MobilePositionCard
-            leg={leg}
-            be={breakEvenByLegId.get(leg.legId)}
-            readOnly={readOnly}
-            onRemove={() => removePosition.mutate(leg.legId)}
-            removing={removePosition.isPending}
-          />
+          <div
+            key={leg.legId}
+            className={highlightedLegIds.includes(leg.legId) ? styles.cardHighlight : undefined}
+          >
+            <MobilePositionCard
+              leg={leg}
+              be={breakEvenByLegId.get(leg.legId)}
+              readOnly={readOnly}
+              onRemove={() => removePosition.mutate(leg.legId)}
+              removing={removePosition.isPending}
+            />
           </div>
         ))}
       </div>

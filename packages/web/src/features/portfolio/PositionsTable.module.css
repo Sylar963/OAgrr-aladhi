@@ -125,4 +125,8 @@
     inset 0 -1px #50d2c155;
 }
 
-.cardHighlight { outline: 2px solid #50d2c1; outline-offset: 2px; border-radius: 6px; }
+.cardHighlight {
+  outline: 2px solid #50d2c1;
+  outline-offset: 2px;
+  border-radius: 6px;
+}

@@ -8,7 +8,12 @@ import type {
 } from '@oggregator/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), stop: vi.fn(), start: vi.fn(), messages: [] as PortfolioAssistantMessage[] }));
+const mocks = vi.hoisted(() => ({
+  send: vi.fn(),
+  stop: vi.fn(),
+  start: vi.fn(),
+  messages: [] as PortfolioAssistantMessage[],
+}));
 vi.mock('@components/auth/AccountSessionProvider', () => ({
   useAccountSession: () => ({ status: 'ready', accountId: 'account' }),
 }));
@@ -136,15 +141,35 @@ describe('Hermes portfolio briefing', () => {
 
 describe('Hermes evidence and expanded chat', () => {
   it('prepares alternatives without spending a question and navigates out of expanded chat', () => {
-    mocks.messages = [{ messageId: crypto.randomUUID(), role: 'assistant', content: 'Review', status: 'complete',
-      portfolioGeneratedAt: 1, createdAt: 1, evidence: EVIDENCE }];
+    mocks.messages = [
+      {
+        messageId: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Review',
+        status: 'complete',
+        portfolioGeneratedAt: 1,
+        createdAt: 1,
+        evidence: EVIDENCE,
+      },
+    ];
     const navigate = vi.fn(() => screen.getByRole('button', { name: 'Current positions' }).focus());
-    render(<QueryClientProvider client={new QueryClient()}><button type="button">Current positions</button>
-      <PortfolioAssistantPanel source="manual" underlying="BTC" forwardDays={7} generatedAt={1} onNavigate={navigate} />
-    </QueryClientProvider>);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <button type="button">Current positions</button>
+        <PortfolioAssistantPanel
+          source="manual"
+          underlying="BTC"
+          forwardDays={7}
+          generatedAt={1}
+          onNavigate={navigate}
+        />
+      </QueryClientProvider>,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Expand chat' }));
     fireEvent.click(screen.getByRole('button', { name: 'Compare alternatives' }));
-    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain('Compare alternatives for my current portfolio');
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain(
+      'Compare alternatives for my current portfolio',
+    );
     expect(mocks.send).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'View affected positions' }));
     expect(screen.queryByRole('dialog')).toBeNull();

@@ -421,7 +421,9 @@
     background 140ms ease;
 }
 
-.suggestions button span { flex-shrink: 0; }
+.suggestions button span {
+  flex-shrink: 0;
+}
 
 .suggestions button:hover {
   border-color: rgba(80, 210, 193, 0.55);

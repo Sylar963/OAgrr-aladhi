@@ -74,6 +74,21 @@ function initBuffer(runtime: TradeRuntime, underlying: string) {
 }
 
 describe('TradeRuntime — Deribit underlying routing', () => {
+  it('retains exchange grouping, sequence and liquidation evidence', () => {
+    const stream = VENUE_STREAMS.find((item) => item.venue === 'deribit')!;
+    const result = stream.parse!({ method: 'subscription', params: { data: [{
+      instrument_name: 'BTC-30OCT26-80000-C', direction: 'buy', price: 0.01, amount: 50,
+      trade_id: '123', trade_seq: 42, timestamp: 1793000000000,
+      block_trade_id: 'BLOCK-1', block_rfq_id: 12, block_trade_leg_count: 2,
+      combo_id: 'BTC-STRD-30OCT26-80000', combo_trade_id: 'combo-fill-1', liquidation: 'T',
+    }] } }, ['BTC']);
+    expect(result[0]?.exchangeEvidence).toEqual({
+      blockTradeId: 'BLOCK-1', rfqId: '12', expectedLegCount: 2,
+      comboId: 'BTC-STRD-30OCT26-80000', comboTradeId: 'combo-fill-1',
+      tradeSequence: '42', liquidation: 'taker',
+    });
+    expect(result[0]?.side).toBe('buy');
+  });
   it('normalizes request underlyings to their base asset', () => {
     expect(normalizeTradeUnderlying('BTC')).toBe('BTC');
     expect(normalizeTradeUnderlying('AVAX_USDC')).toBe('AVAX');

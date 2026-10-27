@@ -30,6 +30,7 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | [PDF_AuctionPricing](../PDF_AuctionPricing.pdf) | File checked, six pages; first four have no extractable text | Not studied. Needs rendering/OCR before substantive attribution. Title/author not verified. |
 | Intraday channels and gamma (2026-10-26) | [Schwab KeltnerChannels](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/G-L/KeltnerChannels): description and inputs; [TradingView VWAP](https://www.tradingview.com/support/solutions/43000502018-volume-weighted-average-price-vwap/): calculation and anchoring; [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma): long/short gamma; [SpotGamma Delta Pressure](https://support.spotgamma.com/hc/en-us/articles/33608084842643-What-is-the-Delta-Pressure-Heatmap): positive/negative dealer-gamma interpretation | Official documentation read alongside the current repository chart shown in Roberto's screenshot. Mechanics are distinct from predictive evidence; subsequent 130/4 and 60/3 price-only studies are recorded below. |
 | Channel-study data and costs (2026-10-26) | [Deribit chart API](https://docs.deribit.com/api-reference/market-data/public-get_tradingview_chart_data); [Deribit fees](https://support.deribit.com/hc/en-us/articles/25944746248989-Fees), standard perpetual/futures tier | Public five-minute BTC candles and current 3.5 bps/side standard taker fee. Current fees are a scenario, not reconstructed historical charges; 1 bp/side spread/slippage is assumed. Funding is excluded. |
+| Discretionary channel execution venues (2026-10-26, client date) | [Thalex fees](https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge), Delta 1 tiers; [Bybit fee structure](https://www.bybit.com/en/help-center/article/Trading-Fee-Structure), standard perpetual/futures tier | Roberto uses Thalex or Bybit at market. Published entry-tier taker rates are 5 and 5.5 bps/side respectively; account-specific discounts are unverified. Model 12/13 bps round trip including assumed 1 bp/side spread/slippage. No funding or option-premium P&L. |
 
 ## Intraday channel research (2026-10-26)
 
@@ -130,6 +131,39 @@ was negative even before costs. Gamma and trend filters were not tested. The 60/
 followed review of 130/4 results, so the last 60 days are now comparison data, not an
 untouched holdout. Neither continuation profitability nor an inverse-strategy edge follows
 from the rebound losses. Validate further choices on fresh data.
+
+### Live discretionary plot and V/equal-level research
+
+The requested ATR plot is implemented in GEX → Bands, defaulting to 60/3 with editable
+shared EMA/ATR length and multiplier, a 130/4 preset, optional live gamma levels, and the
+old gamma-history mode preserved. The default three-day view uses five-minute candles;
+the note states the interval for each longer view. Boundaries use only the previous close,
+so the current candle cannot redraw its own boundary. Missing intervals reset warmup.
+GEX history is not needed for the ATR chart. Plot/controls tests and the repository gate
+passed; the production frontend was built and the local backend service restarted.
+
+Roberto's discretionary thesis: V-shaped return into the boundary for longs, mirrored
+rejection for shorts, or equal lows/highs around the corresponding outer boundary. The
+[pattern-study method](../../scripts/research/intraday-channel/README.md) fixes numeric
+definitions and reports all 32 variants (60/3 and 130/4, V/equal, long/short, middle/opposite
+targets, 60/240-minute timeouts). Pivot confirmation is causal; entries use next-bar opens;
+stop/target ambiguity charges the stop. No gamma/trend filter was tested.
+
+Select the best three on Apr 29–Aug 26, minimum 30 trades, before fetching Jan 1–Apr 28
+as an unseen earlier-period robustness check. All three were negative after the original
+9 bp scenario there. The earlier period is not chronological forward validation. Recent
+Aug 27–Oct 25 data were already inspected. Intervals are not adjusted for searching 32 variants.
+
+After Roberto specified Thalex/Bybit market execution, apply the official standard-tier
+perpetual fee scenarios of 12/13 bps round trip. No eligible fitting variant is positive.
+Only 130/4 equal-high shorts targeting the frozen opposite boundary with a four-hour limit
+are positive in the recent period under the Thalex scenario: 33 trades, +12.47 bps gross,
+**+0.47 bps after assumed Thalex costs** (-0.53 under Bybit). Its fitting period had 69 trades
+at -10.20/-11.20 bps. The recent Thalex 95% interval is about [-12.13, +13.24] bps. This is
+exploratory, not a demonstrated edge. It was not among the three frozen earlier-period
+candidates. Price paths remain Deribit reference candles, not historical executable
+Thalex/Bybit quotes. Funding, real slippage, sizing and option premiums remain unmodeled.
+No result establishes profitability or disproves the user's full discretionary process.
 
 ## Principles we carry into the product
 
@@ -719,3 +753,41 @@ Test and out-of-sample result:
 Status: reading note | hypothesis | tested finding | invalidated
 Implementation / regression test:
 ```
+
+
+## FLOW execution evidence (2026-10-26)
+
+Engineering rules, not a validated trading edge. Sources reviewed:
+[Deribit public trades](https://docs.deribit.com/api-reference/market-data/public-get_last_trades_by_currency),
+[Bybit public trade stream](https://bybit-exchange.github.io/docs/v5/websocket/public/trade),
+[OIC open-interest accounting](https://www.optionseducation.org/referencelibrary/faq/general-information),
+and [Deribit account transaction logs](https://support.deribit.com/hc/en-us/articles/25944587269021-Transaction-log).
+Reviewed fields: taker direction, execution/group identifiers, leg counts, trade sequences,
+liquidation side, and public-versus-private position-effect evidence.
+
+- Public buy/sell identifies an execution side, not BTO/BTC/STO/STC. The FLOW contract permits
+  only `positionEffect: unknown`; liquidation metadata does not override that invariant.
+- Label observed structures from exchange-linked execution legs and validated dates, strikes,
+  sides and normalized quantities. An RFQ request ID or combo instrument name alone does not
+  prove that separate prints belong to the same fill. Never group on time/size proximity alone.
+- An exchange-reported missing leg, including an unseen futures hedge, makes a group partial.
+  Old records without leg-count evidence retain unknown completeness. The structure describes
+  observed legs, not an account's final holdings or trading motive.
+- A spread's package direction can be a vendor convention or net cash direction. Display its
+  bought and sold legs separately; do not relabel every leg using the package's direction.
+- OI snapshots are observations about a market interval. Opening/opening adds OI,
+  closing/closing removes OI, and opening/closing transfers it without net change.
+  Fifteen-minute samples and possible reporting lag cannot attribute position effect to a print.
+- OI context must use the same venue and settlement-specific instrument, bracket the execution
+  with recorded observations, show both timestamps and the actual interval, and flag missing
+  samples or gaps (>25 minutes). This threshold is a display-quality rule, not a confidence model.
+  Trade coverage remains unverified. Future OI is retrospective context, unavailable at execution;
+  any predictive study must respect its observation time to avoid look-ahead leakage.
+- Additional metadata is recorded prospectively in the existing trade JSON fields. Historical
+  discarded fields stay absent. Pending OI is streamed from disk on demand and merged with the
+  indexed archive; no full in-memory OI-history copy or automatic extra archive flush is needed.
+
+Implementation: `core/flow-analysis.ts`, `server/flow-evidence-service.ts`, and the FLOW evidence
+panel. Regression coverage includes partial groups, duplicate prints, cross-market separation,
+invalid ratios, storage round trips, OI gaps, and an OI increase that must still leave opening
+or closing unknown. These tests validate accounting and labeling, not predictive profitability.

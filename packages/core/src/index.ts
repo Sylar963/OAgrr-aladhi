@@ -334,6 +334,7 @@ export {
 } from './runtime/block-trades/index.js';
 export {
   mergeHeatmapColumns,
+  type VolHeatmapHistory,
   VolHeatmapRuntime,
   type VolHeatmapRuntimeOptions,
 } from './runtime/vol-heatmap/index.js';

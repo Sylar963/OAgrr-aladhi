@@ -65,6 +65,7 @@ export function mapDeribitOtcBlock(legs: DeribitTapeLeg[]): BlockTradeEvent | nu
 
   const indexPrice = optionLegs.find((leg) => leg.index_price != null)?.index_price ?? null;
   const sizing = legSizing(optionLegs.map((leg) => leg.amount));
+  const expectedLegCount = optionLegs.find((leg) => leg.block_trade_leg_count != null)?.block_trade_leg_count;
 
   const block: BlockTradeEvent = {
     venue: 'deribit',
@@ -73,9 +74,9 @@ export function mapDeribitOtcBlock(legs: DeribitTapeLeg[]): BlockTradeEvent | nu
     exchangeEvidence: {
       blockTradeId: first.block_trade_id,
       ...(first.combo_id ? { comboId: first.combo_id } : {}),
-      ...(first.block_trade_leg_count != null ? {
-        expectedLegCount: first.block_trade_leg_count,
-        groupComplete: optionLegs.length === first.block_trade_leg_count,
+      ...(expectedLegCount != null ? {
+        expectedLegCount,
+        groupComplete: optionLegs.length === expectedLegCount,
       } : {}),
     },
     timestamp: first.timestamp,

@@ -11,28 +11,64 @@ export function flowExecutionGroup(evidence?: ExchangeTradeEvidence): string | n
 
 export function analyzeFlowTrade(trade: TradeEvent, peers: TradeEvent[] = [trade]): FlowAnalysis {
   const groupId = flowExecutionGroup(trade.exchangeEvidence);
-  const linked = groupId == null ? [trade] : peers.filter((peer) =>
-    peer.venue === trade.venue && peer.underlying === trade.underlying
-      && flowExecutionGroup(peer.exchangeEvidence) === groupId,
+  const linked =
+    groupId == null
+      ? [trade]
+      : peers.filter(
+          (peer) =>
+            peer.venue === trade.venue &&
+            peer.underlying === trade.underlying &&
+            flowExecutionGroup(peer.exchangeEvidence) === groupId,
+        );
+  const unique = [
+    ...new Map(
+      [trade, ...linked].map((leg) => [
+        `${leg.instrument}:${leg.tradeId ?? `${leg.timestamp}:${leg.side}:${leg.size}:${leg.price}`}`,
+        leg,
+      ]),
+    ).values(),
+  ];
+  const counts = new Set(
+    unique.flatMap((leg) =>
+      leg.exchangeEvidence?.expectedLegCount != null ? [leg.exchangeEvidence.expectedLegCount] : [],
+    ),
   );
-  const unique = [...new Map([trade, ...linked].map((leg) => [
-    `${leg.instrument}:${leg.tradeId ?? `${leg.timestamp}:${leg.side}:${leg.size}:${leg.price}`}`, leg,
-  ])).values()];
-  return analyzeFlowLegs(unique.map((leg) => ({
-    instrument: leg.instrument,
-    side: leg.side,
-    quantity: leg.size * getVenueContractMultiplier(leg.venue, leg.underlying),
-    ...parseTradeInstrument(leg.instrument),
-  })), groupId, trade.exchangeEvidence, trade.venue === 'deribit' || trade.venue === 'bybit' ? 'taker' : 'reported');
+  const evidence = {
+    ...trade.exchangeEvidence,
+    ...(counts.size > 0 ? { expectedLegCount: Math.max(...counts) } : {}),
+    ...(counts.size > 1 ? { groupComplete: false } : {}),
+  };
+  return analyzeFlowLegs(
+    unique.map((leg) => ({
+      instrument: leg.instrument,
+      side: leg.side,
+      quantity: leg.size * getVenueContractMultiplier(leg.venue, leg.underlying),
+      ...parseTradeInstrument(leg.instrument),
+    })),
+    groupId,
+    evidence,
+    trade.venue === 'deribit' || trade.venue === 'bybit' ? 'taker' : 'reported',
+  );
 }
 
 export function analyzeBlockTrade(trade: BlockTradeEvent): FlowAnalysis {
-  return analyzeFlowLegs(trade.legs.map((leg) => ({
-    instrument: leg.instrument,
-    side: leg.direction,
-    quantity: leg.size * leg.ratio * getVenueContractMultiplier(trade.venue, trade.underlying),
-    ...parseTradeInstrument(leg.instrument),
-  })), trade.tradeId, trade.exchangeEvidence, 'legs');
+  const groupId =
+    trade.legs.length > 1 ||
+    trade.exchangeEvidence?.blockTradeId ||
+    trade.exchangeEvidence?.groupComplete === true
+      ? trade.tradeId
+      : null;
+  return analyzeFlowLegs(
+    trade.legs.map((leg) => ({
+      instrument: leg.instrument,
+      side: leg.direction,
+      quantity: leg.size * leg.ratio * getVenueContractMultiplier(trade.venue, trade.underlying),
+      ...parseTradeInstrument(leg.instrument),
+    })),
+    groupId,
+    trade.exchangeEvidence,
+    'legs',
+  );
 }
 
 export function analyzeFlowLegs(
@@ -44,27 +80,43 @@ export function analyzeFlowLegs(
   const issues: string[] = [];
   const valid = input.filter((leg) => Number.isFinite(leg.quantity) && leg.quantity > 0);
   if (valid.length !== input.length) issues.push('invalid_quantity');
-  const legs = [...new Map(valid.map((leg) => [`${leg.instrument}:${leg.side}`, { ...leg, quantity: 0 }])).values()];
+  const legs = [
+    ...new Map(
+      valid.map((leg) => [`${leg.instrument}:${leg.side}`, { ...leg, quantity: 0 }]),
+    ).values(),
+  ];
   for (const leg of valid) {
-    const aggregate = legs.find((item) => item.instrument === leg.instrument && item.side === leg.side)!;
+    const aggregate = legs.find(
+      (item) => item.instrument === leg.instrument && item.side === leg.side,
+    )!;
     if (legs.some((item) => item.instrument === leg.instrument && item.side !== leg.side)) {
       issues.push('opposing_fills_same_instrument');
     }
     aggregate.quantity += leg.quantity;
   }
-  const families = new Set(legs.map((leg) => `${leg.instrument.split('-')[0]}:${leg.instrument.match(/-(USDC|USDT)$/)?.[1] ?? ''}`));
+  const families = new Set(
+    legs.map(
+      (leg) =>
+        `${leg.instrument.split('-')[0]}:${leg.instrument.match(/-(USDC|USDT)$/)?.[1] ?? ''}`,
+    ),
+  );
   if (families.size > 1) issues.push('mixed_instrument_families');
-  const completeness = evidence?.groupComplete === false
-    || (evidence?.expectedLegCount != null && evidence.expectedLegCount !== input.length)
-    ? 'partial'
-    : evidence?.groupComplete === true || evidence?.expectedLegCount === input.length
-      ? 'complete' : 'unknown';
+  const completeness =
+    evidence?.groupComplete === false ||
+    (evidence?.expectedLegCount != null && evidence.expectedLegCount !== input.length)
+      ? 'partial'
+      : evidence?.groupComplete === true || evidence?.expectedLegCount === input.length
+        ? 'complete'
+        : 'unknown';
   if (completeness === 'partial') issues.push('incomplete_group');
   if (legs.some((leg) => leg.expiry == null || leg.strike == null || leg.optionType == null)) {
     issues.push('unsupported_instrument');
   }
   const sides = new Set(legs.map((leg) => leg.side));
-  let structure = legs.length === 1 && issues.length === 0 ? (legs[0]!.optionType?.toUpperCase() ?? 'UNKNOWN') : 'CUSTOM';
+  let structure =
+    legs.length === 1 && issues.length === 0
+      ? (legs[0]!.optionType?.toUpperCase() ?? 'UNKNOWN')
+      : 'CUSTOM';
   if (groupId != null && issues.length === 0) structure = classify(legs);
   if (completeness === 'partial') structure = 'PARTIAL';
   if (groupId == null && legs.length > 1) structure = 'UNLINKED';
@@ -97,8 +149,10 @@ function classify(legs: FlowAnalysisLeg[]): string {
     const [a, b] = ordered as [FlowAnalysisLeg, FlowAnalysisLeg];
     const opposite = a.side !== b.side;
     if (sameType && opposite) {
-      if (sameExpiry && a.strike !== b.strike) return `${prefix}_${sameQuantity ? 'SPREAD' : 'RATIO'}`;
-      if (!sameExpiry && sameQuantity) return `${prefix}_${a.strike === b.strike ? 'CALENDAR_SPREAD' : 'DIAGONAL'}`;
+      if (sameExpiry && a.strike !== b.strike)
+        return `${prefix}_${sameQuantity ? 'SPREAD' : 'RATIO'}`;
+      if (!sameExpiry && sameQuantity)
+        return `${prefix}_${a.strike === b.strike ? 'CALENDAR_SPREAD' : 'DIAGONAL'}`;
     }
     if (!sameType && sameExpiry && sameQuantity) {
       if (!opposite && a.strike === b.strike) return 'STRADDLE';
@@ -109,10 +163,16 @@ function classify(legs: FlowAnalysisLeg[]): string {
   }
   if (legs.length === 3 && sameType && sameExpiry) {
     const [a, b, c] = ordered as [FlowAnalysisLeg, FlowAnalysisLeg, FlowAnalysisLeg];
-    if (a.strike! < b.strike! && b.strike! < c.strike!
-      && a.side === c.side && a.side !== b.side && equal(a.quantity, c.quantity)
-      && equal(b.quantity, 2 * a.quantity)
-      && equal(b.strike! - a.strike!, c.strike! - b.strike!)) return `${prefix}_BUTTERFLY`;
+    if (
+      a.strike! < b.strike! &&
+      b.strike! < c.strike! &&
+      a.side === c.side &&
+      a.side !== b.side &&
+      equal(a.quantity, c.quantity) &&
+      equal(b.quantity, 2 * a.quantity) &&
+      equal(b.strike! - a.strike!, c.strike! - b.strike!)
+    )
+      return `${prefix}_BUTTERFLY`;
   }
   if (legs.length === 4 && sameExpiry && sameQuantity) {
     const puts = ordered.filter((leg) => leg.optionType === 'put');
@@ -120,8 +180,14 @@ function classify(legs: FlowAnalysisLeg[]): string {
     if (puts.length === 2 && calls.length === 2) {
       const [p0, p1] = puts as [FlowAnalysisLeg, FlowAnalysisLeg];
       const [c0, c1] = calls as [FlowAnalysisLeg, FlowAnalysisLeg];
-      if (p0.strike! < p1.strike! && p1.strike! <= c0.strike! && c0.strike! < c1.strike!
-        && p0.side === c1.side && p1.side === c0.side && p0.side !== p1.side) {
+      if (
+        p0.strike! < p1.strike! &&
+        p1.strike! <= c0.strike! &&
+        c0.strike! < c1.strike! &&
+        p0.side === c1.side &&
+        p1.side === c0.side &&
+        p0.side !== p1.side
+      ) {
         return p1.strike === c0.strike ? 'IRON_BUTTERFLY' : 'IRON_CONDOR';
       }
     }

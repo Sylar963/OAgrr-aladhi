@@ -3,6 +3,7 @@ import {
   VOL_HEATMAP_RETENTION_MS,
   type VolHeatmapCell,
   type VolHeatmapColumn,
+  type VolHeatmapHistoryRecord,
   type VolHeatmapMeta,
 } from '@oggregator/protocol';
 import { feedLogger } from '../../utils/logger.js';
@@ -31,34 +32,47 @@ function spawnVolHeatmapWorker(): VolHeatmapWorkerHandle {
 export interface VolHeatmapRuntimeOptions {
   spawn?: () => VolHeatmapWorkerHandle;
   retentionMs?: number;
+  history?: VolHeatmapHistory;
+  now?: () => number;
 }
 
-/**
- * Main-thread side of the DVOL liquidity heatmap. The Deribit book feed and IV inversion run on
- * a dedicated worker; this keeps only the in-memory ring of finished columns (nothing is
- * persisted, so history starts when the process does).
- */
+export interface VolHeatmapHistory {
+  append(row: VolHeatmapHistoryRecord): void;
+  loadSince(since: number): Promise<VolHeatmapHistoryRecord[]>;
+  dispose(): Promise<void>;
+}
+
 export class VolHeatmapRuntime {
   private readonly spawn: () => VolHeatmapWorkerHandle;
   private readonly retentionMs: number;
+  private readonly history: VolHeatmapHistory | undefined;
+  private readonly now: () => number;
   private readonly columns = new Map<string, VolHeatmapColumn[]>();
   private readonly meta = new Map<string, VolHeatmapMeta>();
   private handle: VolHeatmapWorkerHandle | null = null;
   private currencies: string[] = [];
   private respawnTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
+  private startup: Promise<void> | null = null;
 
   constructor(options: VolHeatmapRuntimeOptions = {}) {
     this.spawn = options.spawn ?? spawnVolHeatmapWorker;
     this.retentionMs = options.retentionMs ?? VOL_HEATMAP_RETENTION_MS;
+    this.history = options.history;
+    this.now = options.now ?? Date.now;
   }
 
-  start(currencies: string[]): void {
-    this.currencies = currencies;
-    this.launch();
+  start(currencies: string[]): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.startup == null) {
+      this.currencies = currencies;
+      this.startup = this.restoreAndLaunch();
+    }
+    return this.startup;
   }
 
   getColumns(currency: string, fromMs = 0): VolHeatmapColumn[] {
+    this.prune();
     const list = this.columns.get(currency) ?? [];
     const first = list.findIndex((c) => c.t >= fromMs);
     return first === -1 ? [] : list.slice(first);
@@ -72,11 +86,36 @@ export class VolHeatmapRuntime {
     this.disposed = true;
     if (this.respawnTimer != null) clearTimeout(this.respawnTimer);
     this.respawnTimer = null;
+    await this.startup?.catch(() => {});
     const handle = this.handle;
     this.handle = null;
-    if (handle == null) return;
-    this.send(handle, { t: 'stop' });
-    await handle.terminate();
+    try {
+      if (handle != null) {
+        this.send(handle, { t: 'stop' });
+        await handle.terminate();
+      }
+    } finally {
+      await this.history?.dispose();
+    }
+  }
+
+  private async restoreAndLaunch(): Promise<void> {
+    if (this.history != null) {
+      try {
+        const rows = await this.history.loadSince(this.now() - this.retentionMs);
+        rows.sort((a, b) => a.column.t - b.column.t);
+        for (const row of rows) {
+          if (!this.currencies.includes(row.currency)) continue;
+          this.receive({ t: 'column', currency: row.currency, column: row.column }, false);
+          if (row.meta != null) this.meta.set(row.currency, row.meta);
+        }
+        log.info({ columns: [...this.columns.values()].reduce((sum, list) => sum + list.length, 0) },
+          'vol heatmap history restored');
+      } catch (err: unknown) {
+        log.error({ err: String(err) }, 'vol heatmap history restore failed');
+      }
+    }
+    if (!this.disposed) this.launch();
   }
 
   private launch(): void {
@@ -99,11 +138,15 @@ export class VolHeatmapRuntime {
     handle.port.postMessage(message);
   }
 
-  private receive(event: VolHeatmapWorkerEvent): void {
+  private receive(event: VolHeatmapWorkerEvent, persist = true): void {
+    if (this.disposed) return;
     if (event.t === 'meta') {
       this.meta.set(event.currency, event.meta);
       return;
     }
+    if (event.currency !== 'BTC' && event.currency !== 'ETH') return;
+    const now = this.now();
+    if (event.column.t < now - this.retentionMs || event.column.t > now) return;
     let list = this.columns.get(event.currency);
     if (list == null) {
       list = [];
@@ -111,11 +154,28 @@ export class VolHeatmapRuntime {
     }
     const last = list.at(-1);
     if (last != null && event.column.t <= last.t) return;
+    if (persist && this.history != null) {
+      try {
+        this.history.append({
+          currency: event.currency,
+          column: event.column,
+          meta: this.getMeta(event.currency),
+        });
+      } catch (err: unknown) {
+        log.error({ err: String(err), currency: event.currency }, 'vol heatmap local persistence failed');
+      }
+    }
     list.push(event.column);
-    const cutoff = event.column.t - this.retentionMs;
-    let drop = 0;
-    while (drop < list.length && list[drop]!.t < cutoff) drop++;
-    if (drop > 0) list.splice(0, drop);
+    this.prune();
+  }
+
+  private prune(): void {
+    const cutoff = this.now() - this.retentionMs;
+    for (const list of this.columns.values()) {
+      let drop = 0;
+      while (drop < list.length && list[drop]!.t < cutoff) drop++;
+      if (drop > 0) list.splice(0, drop);
+    }
   }
 }
 

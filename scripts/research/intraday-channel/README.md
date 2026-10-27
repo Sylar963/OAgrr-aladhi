@@ -93,3 +93,66 @@ or rule out other prespecified entry/exit models. New variants need fresh valida
 Machine-readable summaries: [130/4](results-130-4.json), [60/3](results-60-3.json).
 Per-trade records and the final three days of channel values are written to `.cache/`,
 with filenames prefixed by the parameter pair.
+
+## Discretionary plot and pattern follow-up
+
+The GEX Bands view now defaults to an ATR channel with 60/3, editable shared EMA/ATR
+length and multiplier, and a 130/4 preset. Live gamma levels are optional; the previous
+gamma-history plot is available separately. The initial view uses three days of five-minute
+candles. Longer window presets disclose their candle interval. Bands use the previous
+completed candle and reset their warmup across missing intervals. They plot without GEX
+history or a selected options expiry. This is a chart for inspection, not automatic entries.
+
+Roberto specified V-shaped recoveries for longs, mirrored rejections for shorts, and equal
+lows/highs at the outer boundary. The following numeric approximations were fixed before
+running the pattern study; they are our operational definitions, not all of his discretion:
+
+- **V:** a move at least 2 ATR from a preceding high to a low outside the lower band,
+  with each leg spanning at most six candles. A later candle must recover at least half
+  the drop and close inside the channel. Shorts mirror prices and bands.
+- **Equal lows:** two one-bar-confirmed pivot lows, 3–24 bars apart, within 0.35 ATR of
+  each other and at/beyond their lower bands with a 0.25 ATR proximity tolerance. Require
+  at least a 1 ATR bounce between them. Confirm the second low when the following candle
+  closes above its high and inside the channel. Equal-high shorts mirror this rule.
+- Enter at the next open; stop 0.5 ATR beyond the pattern extreme. Reject entries already
+  beyond the stop or target. Keep one position and rearm at the middle as in the baseline.
+- The fixed grid has **32 variants**: two channel pairs × two patterns × two directions ×
+  two targets (frozen middle/opposite boundary) × two timeouts (60/240 minutes). No trend
+  or gamma filter. These are separate strategies; their P&Ls are not combined as a portfolio.
+
+```bash
+node --test scripts/research/intraday-channel/model.test.mjs scripts/research/intraday-channel/patterns.test.mjs
+node scripts/research/intraday-channel/pattern-study.mjs
+```
+
+[Plan](pattern-plan.json), [frozen selection](pattern-selection.json), and
+[all results](pattern-results.json) preserve both positive and negative observations.
+Rank using Apr 29–Aug 26 average after the original 9 bp scenario, requiring at least
+30 trades. Freeze the top three before loading Jan 1–Apr 28 for an unseen earlier-regime
+check. That earlier period is not chronological forward validation. Aug 27–Oct 25 was
+already inspected and is comparison data. The earlier three checks were all negative
+after 9 bps. Confidence intervals are unadjusted for searching 32 variants.
+
+Roberto then specified **Thalex or Bybit market orders**. Official standard perpetual
+rates checked on the user's Oct 26 date are 5 bps/side for
+[Thalex tier 1](https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge)
+and 5.5 bps/side for [Bybit VIP 0](https://www.bybit.com/en/help-center/article/Trading-Fee-Structure).
+Keep the assumed 1 bp/side spread/slippage: total **12/13 bps**. Account tiers, discounts,
+and actual fills are unverified. These costs are applied to Deribit reference price paths;
+this is not a venue-native execution study. Funding remains excluded. Fees for options
+would require a separate premium/strike/expiry model and are not represented here.
+
+None of the 32 variants with at least 30 fitting trades was positive after either standard
+venue cost scenario. The one recent-period positive under Thalex costs was **130/4 equal-high
+shorts, opposite-boundary target, four-hour limit**:
+
+| Period | Trades | Gross bps/trade | After Thalex scenario | After Bybit scenario |
+| --- | ---: | ---: | ---: | ---: |
+| Apr 29–Aug 26 | 69 | +1.80 | -10.20 | -11.20 |
+| Aug 27–Oct 25 | 33 | +12.47 | +0.47 | -0.53 |
+
+The recent Thalex-scenario mean has an approximate 95% interval of [-12.13, +13.24] bps.
+It was identified in previously inspected comparison data and was not one of the frozen
+earlier-period candidates. This isolated, very small positive result does not establish
+a repeatable edge. The study does not establish that Roberto's complete discretionary
+workflow is unprofitable; it tests only the stated numerical approximations and exits.

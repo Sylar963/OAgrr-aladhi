@@ -59,7 +59,7 @@ const messages = defineMessages(
     unavailableDetail:
       'The heatmap API did not respond. The backend may not be running this version yet.',
     collectingDetail:
-      'Deribit serves no historical books, so the heatmap fills from when the server started.',
+      'Waiting for live books. Recorded history is kept for 24 hours; gaps cannot be backfilled.',
     resetZoom: 'Reset zoom',
   },
   {
@@ -86,7 +86,7 @@ const messages = defineMessages(
     unavailableDetail:
       'La API del mapa de calor no respondió. Es posible que el backend aún no ejecute esta versión.',
     collectingDetail:
-      'Deribit no ofrece libros históricos, así que el mapa de calor se llena desde que arrancó el servidor.',
+      'Esperando libros en vivo. El historial se conserva durante 24 horas; los huecos no se pueden recuperar.',
     resetZoom: 'Restablecer zoom',
   },
 );

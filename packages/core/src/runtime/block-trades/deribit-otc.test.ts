@@ -109,6 +109,19 @@ describe('DeribitOtcBlockAssembler', () => {
 
     expect(emit).toHaveBeenCalledTimes(1);
     expect(emit.mock.calls[0]![0][0].legs).toHaveLength(2);
+    expect(emit.mock.calls[0]![0][0].exchangeEvidence).toMatchObject({ expectedLegCount: 3, groupComplete: false });
+  });
+
+  it('waits for sibling legs when the exchange omits the leg count', () => {
+    vi.useFakeTimers();
+    const emit = vi.fn();
+    const assembler = new DeribitOtcBlockAssembler(emit, 1_000);
+    const items = legsOf('BLOCK-303469').map(({ block_trade_leg_count: _count, ...leg }) => leg);
+    expect(assembler.push(items)).toEqual([]);
+    vi.advanceTimersByTime(1_000);
+    expect(emit.mock.calls[0]![0][0].legs).toHaveLength(2);
+    expect(emit.mock.calls[0]![0][0].exchangeEvidence.groupComplete).toBeUndefined();
+    assembler.dispose();
   });
 
   it('drops pending blocks on dispose', () => {

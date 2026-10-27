@@ -75,7 +75,9 @@
   background: var(--bg-hover);
 }
 
-.evidenceLabels { padding: 6px 16px 12px; }
+.evidenceLabels {
+  padding: 6px 16px 12px;
+}
 .trade[data-side="buy"] {
   border-left-color: var(--color-profit);
 }

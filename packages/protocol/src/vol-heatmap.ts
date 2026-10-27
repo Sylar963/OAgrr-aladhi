@@ -72,6 +72,14 @@ export const VolHeatmapMetaSchema = z.object({
   updatedAt: z.number().int(),
 });
 
+export const VolHeatmapHistoryRecordSchema = z.object({
+  currency: z.enum(VOL_HEATMAP_CURRENCIES),
+  column: VolHeatmapColumnSchema,
+  meta: VolHeatmapMetaSchema.nullable(),
+});
+
+export type VolHeatmapHistoryRecord = z.infer<typeof VolHeatmapHistoryRecordSchema>;
+
 export const VolHeatmapResponseSchema = z.object({
   currency: z.enum(VOL_HEATMAP_CURRENCIES),
   asOf: z.number().int(),

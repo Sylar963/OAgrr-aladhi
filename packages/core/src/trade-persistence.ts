@@ -17,9 +17,9 @@ export interface TradeAmounts {
 }
 
 export function parseTradeInstrument(instrument: string): ParsedTradeInstrument {
-  const match = instrument.match(/-(\d+(?:[._]\d+)?)-([CP])(?:-|$)/);
+  const match = instrument.match(/-(\d+(?:[._d]\d+)?)-([CP])(?:-|$)/);
   const optionType = match?.[2] === 'C' ? 'call' : match?.[2] === 'P' ? 'put' : null;
-  const strike = match?.[1] != null ? Number(match[1].replace('_', '.')) : null;
+  const strike = match?.[1] != null ? Number(match[1].replace(/[d_]/, '.')) : null;
 
   const humanDate = instrument.match(/\d{1,2}[A-Z]{3}\d{2}/)?.[0];
   if (humanDate) {

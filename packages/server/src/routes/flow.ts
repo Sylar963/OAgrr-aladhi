@@ -1,15 +1,16 @@
 import {
   buildLiveTradeUid,
   analyzeFlowTrade,
+  flowExecutionGroup,
   computeLiveTradeAmounts,
   normalizeTradeUnderlying,
   type TradeEvent,
 } from '@oggregator/core';
-import type { PersistedTradeRecord, TradeHistoryQuery } from '@oggregator/db';
+import type { TradeHistoryQuery } from '@oggregator/db';
 import type { FlowTrade } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { storedFlowTrade } from '../flow-records.js';
+import { storedFlowTrades } from '../flow-records.js';
 import {
   flowService,
   indexPriceService,
@@ -78,9 +79,9 @@ export async function flowRoute(app: FastifyInstance) {
     const release = await flowService.acquire(underlying);
 
     try {
-      const trades = flowService
-        .getTrades(underlying)
-        .map((trade) => enrichLiveTrade(trade))
+      const rawTrades = flowService.getTrades(underlying);
+      const trades = rawTrades
+        .map((trade) => enrichLiveTrade(trade, rawTrades))
         .filter((trade) => minNotional <= 0 || (trade.notionalUsd ?? 0) >= minNotional);
 
       return {
@@ -115,10 +116,7 @@ export async function flowRoute(app: FastifyInstance) {
     }
 
     const rows = await tradeStore.loadHistory(historyQuery);
-    const trades = rows.flatMap((row) => {
-      const trade = mapStoredLiveTrade(row);
-      return trade ? [trade] : [];
-    });
+    const trades = storedFlowTrades(rows);
 
     return {
       available: true,
@@ -195,10 +193,7 @@ export async function flowRoute(app: FastifyInstance) {
     historyQuery.limit = q.limit ?? 200;
 
     const rows = await tradeStore.loadHistory(historyQuery);
-    const trades = rows.flatMap((row) => {
-      const trade = mapStoredLiveTrade(row);
-      return trade ? [trade] : [];
-    });
+    const trades = storedFlowTrades(rows);
 
     return {
       available: true,
@@ -248,7 +243,7 @@ export async function flowRoute(app: FastifyInstance) {
   });
 }
 
-export function enrichLiveTrade(trade: TradeEvent): EnrichedTradeEvent {
+export function enrichLiveTrade(trade: TradeEvent, peers?: TradeEvent[]): EnrichedTradeEvent {
   const referencePriceUsd =
     trade.indexPrice ??
     getSpotPriceUsd(trade.underlying) ??
@@ -261,12 +256,9 @@ export function enrichLiveTrade(trade: TradeEvent): EnrichedTradeEvent {
     premiumUsd: amounts.premiumUsd,
     notionalUsd: amounts.notionalUsd,
     referencePriceUsd: amounts.referencePriceUsd,
-    analysis: analyzeFlowTrade(trade),
+    analysis: analyzeFlowTrade(trade, peers ?? (flowExecutionGroup(trade.exchangeEvidence)
+      ? flowService.getTrades(trade.underlying) : [trade])),
   };
-}
-
-function mapStoredLiveTrade(row: PersistedTradeRecord): EnrichedTradeEvent | null {
-  return storedFlowTrade(row);
 }
 
 function buildNextCursor(trades: EnrichedTradeEvent[]): TradeHistoryCursor | null {

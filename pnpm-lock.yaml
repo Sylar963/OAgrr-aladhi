@@ -163,6 +163,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@oggregator/protocol':
+        specifier: 'workspace:'
+        version: link:../protocol
       pg:
         specifier: 8.20.0
         version: 8.20.0

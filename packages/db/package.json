@@ -20,6 +20,7 @@
     "seed:sample": "node --env-file-if-exists=../../.env dist/seed-sample.js"
   },
   "dependencies": {
+    "@oggregator/protocol": "workspace:",
     "pg": "8.20.0",
     "zod": "4.3.6"
   },

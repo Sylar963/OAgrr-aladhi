@@ -283,6 +283,20 @@ class FakeShortStraddleSnapshotStore implements ShortStraddleSnapshotStore {
 }
 
 describe('DeferredOiSnapshotStore', () => {
+  it('merges pending and uploaded OI without duplicate samples across a flush', async () => {
+    const cachePath = tempPath('oi-window.ndjson');
+    const delegate = new FakeOiStore();
+    await delegate.writeMany([oiRow]);
+    const store = new DeferredOiSnapshotStore(delegate, { cachePath, flushIntervalMs, maxPendingRows: 100 }, noopLog);
+    await store.writeMany([oiRow, { ...oiRow, openInterest: 120, snapshotTs: new Date(2_000) }]);
+    const query = { venue: oiRow.venue, instruments: [oiRow.instrumentName], from: new Date(0), to: new Date(3_000) };
+    const before = await store.loadWindow(query);
+    expect(before.complete).toBe(true);
+    expect(before.rows).toHaveLength(2);
+    await store.flush();
+    expect((await store.loadWindow(query)).rows).toEqual(before.rows);
+    await store.dispose();
+  });
   it('caches snapshots locally until an explicit flush', async () => {
     const cachePath = tempPath('oi.ndjson');
     const delegate = new FakeOiStore();

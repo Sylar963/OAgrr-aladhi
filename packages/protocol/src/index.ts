@@ -543,6 +543,8 @@ export {
   VolHeatmapCellSchema,
   type VolHeatmapColumn,
   VolHeatmapColumnSchema,
+  type VolHeatmapHistoryRecord,
+  VolHeatmapHistoryRecordSchema,
   type VolHeatmapMeta,
   VolHeatmapMetaSchema,
   type VolHeatmapQuery,

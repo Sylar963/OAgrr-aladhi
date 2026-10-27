@@ -38,6 +38,7 @@ const log = feedLogger('block-trade-runtime');
 const RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
 const DERIBIT_BLOCK_KEEPALIVE_MS = 25_000;
 const BYBIT_BLOCK_KEEPALIVE_MS = 20_000;
+const BlockSideSchema = z.string().transform((side) => side.toLowerCase()).pipe(z.enum(['buy', 'sell']));
 // Both block sockets answer their keepalive, so a few missed replies means the connection is dead.
 const BLOCK_STREAM_IDLE_TIMEOUT_MS = 90_000;
 
@@ -503,7 +504,7 @@ const BybitBlockTradeSchema = z.object({
       z.object({
         category: z.string().optional(),
         symbol: z.string(),
-        side: z.string(),
+        side: BlockSideSchema,
         price: z.string(),
         qty: z.string(),
         markPrice: z.string().optional(),
@@ -529,7 +530,7 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
     exchangeEvidence: { rfqId: trade.rfqId, expectedLegCount: trade.legs.length, groupComplete: true },
     timestamp: Number(trade.updatedAt ?? trade.createdAt),
     underlying,
-    direction: firstLeg.side.toLowerCase() as 'buy' | 'sell',
+    direction: firstLeg.side,
     strategy: trade.strategyType?.trim()
       ? trade.strategyType.toUpperCase()
       : optionLegs.length > 1
@@ -537,7 +538,7 @@ function mapBybitBlockTrade(trade: z.infer<typeof BybitBlockTradeSchema>): Block
         : null,
     legs: optionLegs.map((leg) => ({
       instrument: leg.symbol,
-      direction: leg.side.toLowerCase() as 'buy' | 'sell',
+      direction: leg.side,
       price: Number(leg.price),
       size: Number(leg.qty),
       ratio: 1,
@@ -587,7 +588,7 @@ const OkxBlockTradeSchema = z.object({
   legs: z.array(
     z.object({
       instId: z.string(),
-      side: z.string(),
+      side: BlockSideSchema,
       sz: z.string(),
       px: z.string(),
     }),
@@ -628,12 +629,12 @@ function okxBlockPoller(): BlockVenuePoller {
             exchangeEvidence: { blockTradeId: d.blockTdId, expectedLegCount: d.legs.length, groupComplete: true },
             timestamp: Number(d.cTime),
             underlying,
-            direction: (d.legs[0]?.side.toLowerCase() as 'buy' | 'sell') ?? 'buy',
+            direction: d.legs[0]?.side ?? 'buy',
             strategy:
               d.strategy && d.strategy !== '' ? d.strategy : d.legs.length > 1 ? 'CUSTOM' : null,
             legs: d.legs.map((l) => ({
               instrument: l.instId,
-              direction: l.side.toLowerCase() as 'buy' | 'sell',
+              direction: l.side,
               price: Number(l.px),
               size: Number(l.sz),
               ratio: 1,

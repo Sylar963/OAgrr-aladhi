@@ -1,32 +1,176 @@
-.labels { display: flex; flex-wrap: wrap; gap: 10px 24px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-primary); }
-.labels > span { display: flex; align-items: baseline; gap: 6px; }
-.caption { color: var(--text-tertiary); font-family: var(--font-sans); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
-.labels small { color: var(--text-tertiary); }
-.unknown { color: var(--text-secondary); }
-.panel { grid-column: 1 / -1; padding: 20px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; font-family: var(--font-sans); color: var(--text-secondary); font-size: var(--text-sm); min-width: 0; }
-.provenance { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; font-size: var(--text-xs); }
-.provenance > span { padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: 4px; }
-.provenance [data-partial="true"], .oiStatus[data-gap="true"] { color: var(--color-warning, #d7ae67); }
-.note { margin: 12px 0 0; color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.6; max-width: 95ch; }
-.fields { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 14px 0; }
-.fields dt { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-.fields dd { font-family: var(--font-mono); font-size: var(--text-xs); margin: 3px 0 0; overflow-wrap: anywhere; }
-.scroll { overflow-x: auto; margin-top: 16px; }
-.legTable { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: var(--text-xs); white-space: nowrap; }
-.legTable th { text-align: left; color: var(--text-tertiary); font-weight: 400; }
-.legTable th, .legTable td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border-subtle); }
-.legTable [data-side="buy"] { color: var(--color-profit); }
-.legTable [data-side="sell"] { color: var(--color-loss); }
-.oiHeading { margin: 20px 0 10px; color: var(--text-primary); font-weight: 600; font-size: var(--text-xs); }
-.oiGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
-.oiCard { border: 1px solid var(--border-subtle); border-radius: 4px; padding: 12px; }
-.oiInstrument { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
-.oiStatus { font-size: 11px; color: var(--text-tertiary); margin: 5px 0 12px; }
-.oiDelta { font-size: var(--text-xs); }
-.oiDelta strong { font-family: var(--font-mono); color: var(--text-primary); }
-.oiDelta > span { color: var(--text-tertiary); }
-.oiSamples { margin: 12px 0 0; font-size: 11px; }
-.oiSamples > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; }
-.oiSamples dd { margin: 0; text-align: right; font-family: var(--font-mono); }
-.oiSamples time { display: block; color: var(--text-tertiary); font-size: 10px; margin-top: 2px; }
-@media (max-width: 600px) { .panel { padding: 12px; } .labels { gap: 8px 12px; } .labels > span { flex-wrap: wrap; } }
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+.labels > span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.caption {
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.labels small {
+  color: var(--text-tertiary);
+}
+.unknown {
+  color: var(--text-secondary);
+}
+.panel {
+  order: 10;
+  width: 100%;
+  box-sizing: border-box;
+  grid-column: 1 / -1;
+  padding: 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: var(--text-xs);
+}
+.provenance > span {
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+.provenance [data-partial="true"],
+.oiStatus[data-gap="true"] {
+  color: var(--color-warning, #d7ae67);
+}
+.note {
+  margin: 12px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  max-width: 95ch;
+}
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin: 14px 0;
+}
+.fields dt {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fields dd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.scroll {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+.legTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.legTable th {
+  text-align: left;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.legTable th,
+.legTable td {
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.legTable [data-side="buy"] {
+  color: var(--color-profit);
+}
+.legTable [data-side="sell"] {
+  color: var(--color-loss);
+}
+.oiHeading {
+  margin: 20px 0 10px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--text-xs);
+}
+.oiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
+}
+.oiCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 12px;
+}
+.oiInstrument {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.oiStatus {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 5px 0 12px;
+}
+.oiDelta {
+  font-size: var(--text-xs);
+}
+.oiDelta strong {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.oiDelta > span {
+  color: var(--text-tertiary);
+}
+.oiSamples {
+  margin: 12px 0 0;
+  font-size: 11px;
+}
+.oiSamples > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+.oiSamples dd {
+  margin: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.oiSamples time {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  margin-top: 2px;
+}
+@media (max-width: 600px) {
+  .panel {
+    padding: 12px;
+  }
+  .labels {
+    gap: 8px 12px;
+  }
+  .labels > span {
+    flex-wrap: wrap;
+  }
+}

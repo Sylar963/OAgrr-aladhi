@@ -1,8 +1,10 @@
 import {
   BlockTradeRuntime,
+  logger,
   buildIvSurfaceGrid,
   computeVenueSurfaceRows,
   DvolService,
+  feedLogger,
   getAdapter,
   getAllAdapters,
   IndexPriceRuntime,
@@ -61,6 +63,7 @@ import {
   SqliteTradeStore,
   type TradeHistoryReader,
   type VenueIvHistoryStore,
+  VolHeatmapHistoryStore,
 } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
@@ -100,9 +103,6 @@ import { disposeSettlementJob, startSettlementJob } from './settlement-service.j
 import { ShortStraddleSnapshotService } from './short-straddle-snapshot-service.js';
 
 export const dvolService = new DvolService();
-// VOL_HEATMAP=0 disables the DVOL liquidity heatmap and its dedicated Deribit socket + worker.
-export const volHeatmapRuntime =
-  process.env['VOL_HEATMAP'] === '0' ? null : new VolHeatmapRuntime();
 // ORDER_BOOK=0 disables on-demand Thalex L2 books (/api/liquidity). The worker and its socket only
 // start on the first request.
 export const orderBookRuntime = process.env['ORDER_BOOK'] === '0' ? null : new OrderBookRuntime();
@@ -131,6 +131,13 @@ const marketDataDbFlushIntervalMs = parseNonNegativeMs(
   DAY_MS,
   'MARKET_DATA_DB_FLUSH_INTERVAL_MS',
 );
+export const volHeatmapRuntime = process.env['VOL_HEATMAP'] === '0' ? null : new VolHeatmapRuntime({
+  history: new VolHeatmapHistoryStore({
+    cachePath: process.env['VOL_HEATMAP_CACHE_PATH'] ?? '.cache/vol-heatmap.ndjson',
+    connectionString: databaseUrl,
+    flushIntervalMs: marketDataDbFlushIntervalMs,
+  }, feedLogger('vol-heatmap-store')),
+});
 const dealerBookDbFlushIntervalMs = parseNonNegativeMs(
   process.env['DEALER_BOOK_DB_FLUSH_INTERVAL_MS'],
   marketDataDbFlushIntervalMs,
@@ -292,6 +299,7 @@ export const oiSnapshotStore: OiSnapshotStore = databaseUrl
 
 export const flowEvidenceService = new FlowEvidenceService({
   trades: tradeStore, oi: oiSnapshotStore,
+  log: logger,
   live: (underlying) => flowService.getTrades(underlying),
   blocks: (underlying) => blockFlowService.getTrades(underlying),
 });
@@ -718,7 +726,7 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
     log.warn({ err: String(err) }, 'dealer book service failed');
   }
 
-  volHeatmapRuntime?.start(['BTC', 'ETH']);
+  await volHeatmapRuntime?.start(['BTC', 'ETH']);
 
   // Not awaited: the one-time storage hydrate must not hold up readiness.
   void gexWallHistoryService.start().then(() => log.info('GEX-wall history sampler started'));

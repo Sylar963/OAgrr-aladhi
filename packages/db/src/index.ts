@@ -1,6 +1,7 @@
 export type { DealerBookStore, PersistedDealerPosition } from './dealer-book-store.js';
 export { NoopDealerBookStore, PostgresDealerBookStore } from './dealer-book-store.js';
 export { DeferredTradeStore } from './deferred-trade-store.js';
+export { VolHeatmapHistoryStore } from './vol-heatmap-store.js';
 export type {
   ExchangePortfolioLedgerStore,
   ExchangePortfolioVenue,

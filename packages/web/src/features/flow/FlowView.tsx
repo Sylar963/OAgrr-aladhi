@@ -85,10 +85,10 @@ type FlowMode = 'all' | 'block';
 type FlowScope = 'tape' | 'history' | 'charts';
 
 function parseStrikeAndType(instrument: string): { strike: string; type: string } {
-  const match = instrument.match(/-(\d+(?:\.\d+)?)-([CP])(?:-|$)/);
+  const match = instrument.match(/-(\d+(?:[._d]\d+)?)-([CP])(?:-|$)/);
   if (!match) return { strike: '–', type: '–' };
   return {
-    strike: Number(match[1]).toLocaleString(),
+    strike: Number(match[1]!.replace(/[d_]/, '.')).toLocaleString(),
     type: match[2] === 'C' ? 'CALL' : 'PUT',
   };
 }
@@ -231,13 +231,27 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
       </span>
       <div className={styles.evidenceRow}>
         <FlowLabels analysis={trade.analysis} />
-        <button type="button" className={styles.evidenceButton} aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}>{expanded ? t('closeEvidence') : t('evidence')}</button>
+        <button
+          type="button"
+          className={styles.evidenceButton}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? t('closeEvidence') : t('evidence')}
+        </button>
       </div>
-      {expanded ? <FlowEvidencePanel target={{
-        mode: 'live', tradeUid: trade.tradeUid, venue: trade.venue,
-        underlying: trade.underlying, instrument: trade.instrument, timestamp: trade.timestamp,
-      }} /> : null}
+      {expanded ? (
+        <FlowEvidencePanel
+          target={{
+            mode: 'live',
+            tradeUid: trade.tradeUid,
+            venue: trade.venue,
+            underlying: trade.underlying,
+            instrument: trade.instrument,
+            timestamp: trade.timestamp,
+          }}
+        />
+      ) : null}
     </div>
   );
 });
@@ -389,11 +403,7 @@ export default function FlowView() {
   if (error) {
     return (
       <div className={styles.view}>
-        <EmptyState
-          icon="⚠"
-          title={t('failedFlow')}
-          detail={t('failedFlowDetail')}
-        />
+        <EmptyState icon="⚠" title={t('failedFlow')} detail={t('failedFlowDetail')} />
       </div>
     );
   }
@@ -459,7 +469,10 @@ export default function FlowView() {
               <button
                 className={styles.modeBtn}
                 data-active={mode === 'block'}
-                onClick={() => { setMode('block'); if (scope === 'charts') setScope('tape'); }}
+                onClick={() => {
+                  setMode('block');
+                  if (scope === 'charts') setScope('tape');
+                }}
               >
                 {t('institutions')}
               </button>
@@ -564,9 +577,7 @@ export default function FlowView() {
             onNextPage={handleNextPage}
           />
 
-          {historyTrades.length > 0 ? (
-            <TableHeader />
-          ) : null}
+          {historyTrades.length > 0 ? <TableHeader /> : null}
 
           <div className={styles.list}>
             {isHistoryLoading ? (
@@ -574,10 +585,7 @@ export default function FlowView() {
                 <Spinner size="lg" label={tf('loadingHistory')} />
               </div>
             ) : isHistoryEmpty ? (
-              <EmptyState
-                title={t('noStoredTrades')}
-                detail={t('noStoredTradesDetail')}
-              />
+              <EmptyState title={t('noStoredTrades')} detail={t('noStoredTradesDetail')} />
             ) : (
               historyTrades.map((trade) => (
                 <TradeRow key={trade.tradeUid} trade={trade} isNew={false} />

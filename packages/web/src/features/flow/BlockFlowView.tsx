@@ -106,10 +106,9 @@ function numDateToHuman(raw: string): string {
 
 function parseLegInfo(instrument: string): { expiry: string; strike: string; type: string } {
   const parts = instrument.split('-');
-  const last = parts[parts.length - 1];
-  const type = last === 'C' ? 'CALL' : last === 'P' ? 'PUT' : '–';
-  const strikePart = parts[parts.length - 2];
-  const strike = strikePart && /^\d+$/.test(strikePart) ? Number(strikePart).toLocaleString() : '–';
+  const option = instrument.match(/-(\d+(?:[._d]\d+)?)-([CP])(?:-|$)/);
+  const type = option?.[2] === 'C' ? 'CALL' : option?.[2] === 'P' ? 'PUT' : '–';
+  const strike = option?.[1] ? Number(option[1].replace(/[d_]/, '.')).toLocaleString() : '–';
 
   let expiry = '–';
   for (const part of parts) {
@@ -166,7 +165,11 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
               </span>
               {isMultiLeg ? <span className={styles.legCount}>{trade.legs.length}L</span> : null}
               <span className={styles.side} data-side={executionSide}>
-                {executionSide === 'mixed' ? t('mixed') : executionSide === 'buy' ? tf('buy') : tf('sell')}
+                {executionSide === 'mixed'
+                  ? t('mixed')
+                  : executionSide === 'buy'
+                    ? tf('buy')
+                    : tf('sell')}
               </span>
             </div>
             <div className={styles.tradeBottom}>
@@ -207,11 +210,15 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
             </div>
           </div>
 
-          <span className={styles.chevron} data-expanded={isExpanded} title={t('evidence')}>›</span>
+          <span className={styles.chevron} data-expanded={isExpanded} title={t('evidence')}>
+            ›
+          </span>
         </div>
       </button>
 
-      <div className={styles.evidenceLabels}><FlowLabels analysis={trade.analysis} /></div>
+      <div className={styles.evidenceLabels}>
+        <FlowLabels analysis={trade.analysis} />
+      </div>
 
       {isExpanded && isMultiLeg ? (
         <div className={styles.legs}>
@@ -246,10 +253,18 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
           })}
         </div>
       ) : null}
-      {isExpanded && firstLeg ? <FlowEvidencePanel target={{
-        mode: 'institutional', tradeUid: trade.tradeUid, venue: trade.venue,
-        underlying: trade.underlying, instrument: firstLeg.instrument, timestamp: trade.timestamp,
-      }} /> : null}
+      {isExpanded && firstLeg ? (
+        <FlowEvidencePanel
+          target={{
+            mode: 'institutional',
+            tradeUid: trade.tradeUid,
+            venue: trade.venue,
+            underlying: trade.underlying,
+            instrument: firstLeg.instrument,
+            timestamp: trade.timestamp,
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -344,13 +359,7 @@ export default function BlockFlowView({
   }
 
   if (error) {
-    return (
-      <EmptyState
-        icon="⚠"
-        title={t('failedBlocks')}
-        detail={t('failedBlocksDetail')}
-      />
-    );
+    return <EmptyState icon="⚠" title={t('failedBlocks')} detail={t('failedBlocksDetail')} />;
   }
 
   return (
@@ -382,12 +391,8 @@ export default function BlockFlowView({
         </div>
       ) : trades.length === 0 || isHistoryEmpty ? (
         <EmptyState
-          title={
-            scope === 'history' ? t('noStoredBlocks') : t('noBlocksYet')
-          }
-          detail={
-            scope === 'history' ? t('noStoredBlocksDetail') : t('noBlocksYetDetail')
-          }
+          title={scope === 'history' ? t('noStoredBlocks') : t('noBlocksYet')}
+          detail={scope === 'history' ? t('noStoredBlocksDetail') : t('noBlocksYetDetail')}
         />
       ) : (
         <div className={styles.list}>

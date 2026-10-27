@@ -7,7 +7,7 @@ export const FlowEvidenceQuerySchema = z.object({
   venue: VenueIdSchema,
   underlying: z.string().min(1).max(30),
   instrument: z.string().min(1).max(200),
-  timestamp: z.coerce.number().int().nonnegative().max(8_639_999_999_990_000),
+  timestamp: z.coerce.number().int().nonnegative().max(4_102_444_800_000),
 });
 
 export const ExchangeTradeEvidenceSchema = z.object({

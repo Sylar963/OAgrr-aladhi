@@ -17,6 +17,7 @@ Fastify REST + WebSocket API. Bootstraps venue adapters from `@oggregator/core`,
 | `GET /api/surface?underlying=BTC` | IV surface (expiry × delta heatmap) |
 | `GET /api/stats?underlying=BTC` | Spot, DVOL, IVR, 24h changes |
 | `GET /api/dvol-history?currency=BTC` | Historical DVOL candles + realized vol |
+| `GET /api/vol-heatmap?currency=BTC&hours=24` | Persistent rolling 24h of resting option vega, DVOL, ATM IV, and trade markers |
 | `GET /api/flow?underlying=BTC` | Recent options trades across venues |
 | `GET /api/block-flow?underlying=BTC` | Institutional RFQ / block trades |
 | `WS /ws/chain` | Real-time chain snapshot push |
@@ -65,3 +66,22 @@ expiry. The endpoint scans only and never submits an order.
 | `NODE_ENV` | | Set to `production` to serve static SPA |
 | `DATABASE_URL` | | Optional Postgres source for older trade history and server persistence |
 | `TRADE_SQLITE_PATH` | `.cache/ingest-trades.sqlite` | Read-only local source for pending trade history; must match ingest on shared persistent storage |
+| `VOL_HEATMAP` | enabled | Set `0` to disable the heatmap worker and persistence |
+| `VOL_HEATMAP_CACHE_PATH` | `.cache/vol-heatmap.ndjson` | Local heatmap journal; use an absolute path on persistent storage across deployments |
+| `MARKET_DATA_DB_FLUSH_INTERVAL_MS` | `86400000` | Market-data database sync interval; heatmap sync clamps this to at least 24 hours |
+
+## Heatmap persistence
+
+1. Every completed 15-second BTC/ETH column is appended locally, including raw and skew-adjusted
+   cells, trade markers, DVOL, ATM IV, and selection metadata. Local history works without Postgres.
+2. Startup restores the last 24 hours and merges one Postgres read before live collection resumes.
+   Local records win duplicate timestamps; a database outage does not discard the local history.
+3. Postgres uploads and retention cleanup run on the existing restart-safe daily `FlushSchedule`.
+   Its `.last-flush` marker preserves the schedule across restarts; first/overdue syncs run shortly
+   after startup, and failed syncs retry. Shutdown and chart polling do not trigger database writes.
+4. The API retains a rolling 24-hour window. Local files are compacted at startup and hourly;
+   database cleanup runs with each daily sync. Missing collection periods remain gaps, and an
+   unfinished 15-second column can be lost during a restart.
+
+Apply `pnpm db:migrate` before starting the updated backend to create `vol_heatmap_columns`
+(migration `0040`). Preserve the cache file and its `.last-flush` marker on a persistent volume.

@@ -36,9 +36,13 @@ export interface OiSnapshotWindow {
 }
 
 export const OiSnapshotSchema = z.object({
-  venue: z.string(), underlying: z.string(), instrumentName: z.string(),
-  expiry: z.string().nullable(), strike: z.number().finite(),
-  optionType: z.enum(['call', 'put']), openInterest: z.number().finite().nonnegative(),
+  venue: z.string(),
+  underlying: z.string(),
+  instrumentName: z.string(),
+  expiry: z.string().nullable(),
+  strike: z.number().finite(),
+  optionType: z.enum(['call', 'put']),
+  openInterest: z.number().finite().nonnegative(),
   snapshotTs: z.coerce.date(),
 });
 

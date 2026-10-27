@@ -36,7 +36,7 @@ const messages = defineMessages(
     netUnknown: 'Unknown',
     netNeutral: 'zero γ',
     flipTip:
-      "Spot level where total dealer GEX changes sign, found by re-pricing every contract's gamma across ±20% of spot",
+      'Estimated nearest sign change in total dealer GEX within ±20% of spot, holding IV and inferred positions fixed. It can lie outside the gamma walls or ATR channel; it is not an entry signal.',
     flip: 'Flip',
     callWall: 'Positive Γ above',
     putWall: 'Negative Γ below',
@@ -86,7 +86,7 @@ const messages = defineMessages(
     netUnknown: 'Desconocido',
     netNeutral: 'γ cero',
     flipTip:
-      'Nivel de spot donde el GEX total del dealer cambia de signo, calculado revalorizando el gamma de cada contrato en ±20% del spot',
+      'Cambio de signo estimado más cercano del GEX total dentro de ±20% del spot, manteniendo la IV y las posiciones inferidas constantes. Puede quedar fuera de los muros gamma o del canal ATR; no es una señal de entrada.',
     flip: 'Flip',
     callWall: 'Γ positivo arriba',
     putWall: 'Γ negativo abajo',
@@ -162,7 +162,9 @@ export default function GexView() {
 
   const gex: GexStrike[] = isAll ? (allGex?.gex ?? []) : (chain?.gex ?? []);
   const gexProfile = isAll ? allGex?.gexProfile : chain?.gexProfile;
-  const spotPrice = isAll ? (allGex?.spotPrice ?? null) : (chain?.stats.forwardPriceUsd ?? null);
+  const spotPrice = isAll
+    ? (allGex?.spotPrice ?? null)
+    : (chain?.stats.indexPriceUsd ?? chain?.stats.forwardPriceUsd ?? null);
   const isLoading = isAll ? allLoading : chainLoading;
 
   const walls = useMemo(

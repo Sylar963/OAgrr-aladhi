@@ -4,12 +4,15 @@ import {
   buildBlockTradeUid,
   buildLiveTradeUid,
   flowExecutionGroup,
+  flowPositionEffect,
+  getVenueContractMultiplier,
+  reconcileFlowPosition,
   parseTradeInstrument,
   type BlockTradeEvent,
   type TradeEvent,
 } from '@oggregator/core';
 import type { OiSnapshotStore, OiSnapshotWindow, TradeHistoryReader } from '@oggregator/db';
-import type { FlowAnalysis, FlowEvidenceResponse, FlowOiContext } from '@oggregator/protocol';
+import type { FlowAnalysis, FlowEvidenceResponse, FlowOiContext, FlowOiTick } from '@oggregator/protocol';
 import { storedBlockTrade, storedFlowTrade } from './flow-records.js';
 
 export interface FlowEvidenceQuery {
@@ -22,6 +25,7 @@ export interface FlowEvidenceQuery {
 }
 
 interface Options {
+  fastOi?: { bracket: (venue: string, instrument: string, timestamp: number) => { before: FlowOiTick | null; after: FlowOiTick | null } };
   trades: TradeHistoryReader;
   oi: OiSnapshotStore;
   live: (underlying: string) => TradeEvent[];
@@ -33,6 +37,7 @@ const QUARTER_HOUR = 15 * 60_000;
 const GROUP_LIMIT = 2_000;
 
 export class FlowEvidenceService {
+  private readonly tapes = new Map<string, { expires: number; value: Promise<{ trades: TradeEvent[]; truncated: boolean }> }>();
   private readonly windows = new Map<
     string,
     { expires: number; value: Promise<OiSnapshotWindow> }
@@ -118,13 +123,120 @@ export class FlowEvidenceService {
         return { rows: [], complete: false };
       });
     }
-    return {
-      analysis,
-      evidence: trade.exchangeEvidence ?? null,
-      oi: instruments.map((instrument, index) =>
+    const oi = instruments.map((instrument, index) =>
         oiContext(instrument, symbols[index] ?? null, trade.timestamp, window),
-      ),
+    );
+    const multiplier = getVenueContractMultiplier(trade.venue, trade.underlying);
+    for (const context of oi) {
+      if (context.before) context.before.openInterest *= multiplier;
+      if (context.after) context.after.openInterest *= multiplier;
+      if (context.delta != null) context.delta *= multiplier;
+      if (trade.venue === 'deribit' && !['BTC', 'ETH'].includes(trade.underlying)) {
+        context.status = 'unavailable';
+        context.delta = null;
+      }
+      const fast = this.options.fastOi?.bracket(trade.venue, context.instrument, trade.timestamp);
+      if (fast?.before && fast.after) {
+        const intervalMs = fast.after.timestamp - fast.before.timestamp;
+        if (intervalMs <= 25 * 60_000 && (context.status !== 'bracketed' || intervalMs < (context.intervalMs ?? Infinity))) {
+          Object.assign(context, {
+            before: { timestamp: fast.before.timestamp, openInterest: fast.before.openInterest },
+            after: { timestamp: fast.after.timestamp, openInterest: fast.after.openInterest },
+            delta: fast.after.openInterest - fast.before.openInterest,
+            intervalMs, timing: 'exchange', status: 'bracketed',
+          });
+        }
+      } else if (fast?.before && !context.before && trade.timestamp > Date.now() - 30 * 60_000) {
+        Object.assign(context, { before: { timestamp: fast.before.timestamp, openInterest: fast.before.openInterest }, status: 'pending', timing: 'exchange' });
+      }
+    }
+    const target = trade;
+    const legs = await Promise.all(analysis.legs.map(async (leg) => {
+      const context = oi.find((item) => item.instrument === leg.instrument);
+      if (!context) return leg;
+      let prints: TradeEvent[] = [];
+      let coverage: 'recorded' | 'sequence_contiguous' | 'gap' | 'truncated' | 'unavailable' = 'unavailable';
+      if (context.before && context.after && context.status === 'bracketed') {
+        try {
+          const tape = await this.loadTape(target, leg.instrument, context.before.timestamp, context.after.timestamp);
+          prints = tape.trades;
+          coverage = tape.truncated ? 'truncated' : this.options.trades.enabled ? 'recorded' : 'unavailable';
+          if (coverage === 'recorded' && target.venue === 'deribit' && prints.length > 1) {
+            const sequences = prints.map((print) => Number(print.exchangeEvidence?.tradeSequence));
+            if (sequences.every((sequence) => Number.isSafeInteger(sequence) && sequence > 0)) {
+              sequences.sort((a, b) => a - b);
+              coverage = sequences.every((sequence, index) => index === 0 || sequence === sequences[index - 1]! + 1)
+                ? 'sequence_contiguous' : 'gap';
+            }
+          }
+        } catch (error: unknown) {
+          this.options.log?.warn({ err: String(error), venue: target.venue }, 'flow reconciliation tape unavailable');
+        }
+      }
+      const matches = prints.filter((print) => {
+        if (print.side !== leg.side) return false;
+        if (!('legs' in target) && buildLiveTradeUid(print) === buildLiveTradeUid(target)) return true;
+        const group = flowExecutionGroup(target.exchangeEvidence);
+        if (group && group === flowExecutionGroup(print.exchangeEvidence)) return true;
+        return 'legs' in target && target.exchangeEvidence?.rfqId != null &&
+          target.exchangeEvidence.rfqId === print.exchangeEvidence?.rfqId && print.timestamp === target.timestamp;
+      });
+      const matchedVolume = matches.reduce((sum, print) => sum + print.size * multiplier, 0);
+      context.tradeCoverage = coverage;
+      return {
+        ...leg,
+        position: reconcileFlowPosition(leg, context, {
+          volume: prints.reduce((sum, print) => sum + print.size * multiplier, 0),
+          count: prints.length,
+          targetPresent: Math.abs(matchedVolume - leg.quantity) <= 1e-8 * Math.max(1, leg.quantity),
+          coverage,
+        }),
+      };
+    }));
+    return {
+      analysis: { ...analysis, legs, positionEffect: flowPositionEffect(legs) },
+      evidence: trade.exchangeEvidence ?? null,
+      oi,
     };
+  }
+
+  private loadTape(target: TradeEvent | BlockTradeEvent, instrument: string, from: number, to: number) {
+    const key = JSON.stringify([target.venue, instrument, from, to]);
+    const cached = this.tapes.get(key);
+    if (cached && cached.expires > Date.now()) return cached.value;
+    const value = (async () => {
+      const found = new Map<string, TradeEvent>();
+      let truncated = false;
+      if (this.options.trades.enabled) {
+        let beforeTs: Date | undefined;
+        let beforeUid: string | undefined;
+        for (let page = 0; page < 10; page++) {
+          const rows = await this.options.trades.loadHistory({
+            mode: 'live', venues: [target.venue], instrumentName: instrument,
+            startTs: new Date(from + 1), endTs: new Date(to + 1), limit: GROUP_LIMIT,
+            ...(beforeTs ? { beforeTs } : {}), ...(beforeUid ? { beforeUid } : {}),
+          });
+          for (const row of rows) {
+            const print = storedFlowTrade(row);
+            if (print) found.set(buildLiveTradeUid(print), print);
+          }
+          if (rows.length < GROUP_LIMIT) break;
+          const last = rows.at(-1)!;
+          beforeTs = last.tradeTs;
+          beforeUid = last.tradeUid;
+          if (page === 9) truncated = true;
+        }
+      }
+      for (const print of this.options.live(target.underlying)) {
+        if (print.venue === target.venue && print.instrument === instrument && print.timestamp > from && print.timestamp <= to)
+          found.set(buildLiveTradeUid(print), print);
+      }
+      return { trades: [...found.values()], truncated };
+    })();
+    this.tapes.set(key, { expires: Date.now() + 30_000, value });
+    if (this.tapes.size > 256) this.tapes.delete(this.tapes.keys().next().value!);
+    void value.catch(() => this.tapes.delete(key));
+    return value;
   }
 
   private loadOi(
@@ -185,7 +297,7 @@ export function oiContext(
   const samples = window.rows
     .filter((row) => row.instrumentName === symbol)
     .sort((a, b) => a.snapshotTs.getTime() - b.snapshotTs.getTime());
-  const beforeRow = [...samples].reverse().find((row) => row.snapshotTs.getTime() <= timestamp);
+  const beforeRow = [...samples].reverse().find((row) => row.snapshotTs.getTime() < timestamp);
   const afterRow = samples.find((row) => row.snapshotTs.getTime() > timestamp);
   const before = beforeRow
     ? { timestamp: beforeRow.snapshotTs.getTime(), openInterest: beforeRow.openInterest }

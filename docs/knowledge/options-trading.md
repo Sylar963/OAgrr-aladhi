@@ -1,6 +1,6 @@
 # Shared options-trading knowledge
 
-Last reviewed: 2026-10-26. Purpose: persistent project context for Roberto and future agents.
+Last reviewed: 2026-10-27. Purpose: persistent project context for Roberto and future agents.
 This is a selective, source-linked research notebook, not a claim that all books have been
 read, a trained model, a validated trading system, or personalized investment advice.
 
@@ -31,6 +31,36 @@ Page numbers below are printed pages unless explicitly called PDF pages. Notes a
 | Intraday channels and gamma (2026-10-26) | [Schwab KeltnerChannels](https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/G-L/KeltnerChannels): description and inputs; [TradingView VWAP](https://www.tradingview.com/support/solutions/43000502018-volume-weighted-average-price-vwap/): calculation and anchoring; [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma): long/short gamma; [SpotGamma Delta Pressure](https://support.spotgamma.com/hc/en-us/articles/33608084842643-What-is-the-Delta-Pressure-Heatmap): positive/negative dealer-gamma interpretation | Official documentation read alongside the current repository chart shown in Roberto's screenshot. Mechanics are distinct from predictive evidence; subsequent 130/4 and 60/3 price-only studies are recorded below. |
 | Channel-study data and costs (2026-10-26) | [Deribit chart API](https://docs.deribit.com/api-reference/market-data/public-get_tradingview_chart_data); [Deribit fees](https://support.deribit.com/hc/en-us/articles/25944746248989-Fees), standard perpetual/futures tier | Public five-minute BTC candles and current 3.5 bps/side standard taker fee. Current fees are a scenario, not reconstructed historical charges; 1 bp/side spread/slippage is assumed. Funding is excluded. |
 | Discretionary channel execution venues (2026-10-26, client date) | [Thalex fees](https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge), Delta 1 tiers; [Bybit fee structure](https://www.bybit.com/en/help-center/article/Trading-Fee-Structure), standard perpetual/futures tier | Roberto uses Thalex or Bybit at market. Published entry-tier taker rates are 5 and 5.5 bps/side respectively; account-specific discounts are unverified. Model 12/13 bps round trip including assumed 1 bp/side spread/slippage. No funding or option-premium P&L. |
+| Gamma flip audit (2026-10-27 UTC) | [SpotGamma Gamma Flip](https://support.spotgamma.com/hc/en-us/articles/15413261162387-Gamma-Flip); [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma) | Definitions and conditional hedging mechanics checked against the implementation and public live BTC profiles; no evidence of predictive performance. See the audit below. |
+
+## Gamma flip audit (2026-10-27 UTC)
+
+Sources reviewed: [SpotGamma Gamma Flip](https://support.spotgamma.com/hc/en-us/articles/15413261162387-Gamma-Flip)
+and [OIC Gamma](https://www.optionseducation.org/advancedconcepts/gamma). They describe
+estimated aggregate gamma sign changes and long/short option gamma; neither validates our
+dealer inventory assumptions or a BTC trading edge.
+
+Engineering findings: walls select individual signed-GEX strikes at current spot. FLIP instead
+interpolates the nearest sign reversal of the aggregate repriced profile. There is no invariant
+that it must fall between those strikes, and ATR boundaries are independent of both. A public
+local API check at 2026-10-27 00:43 UTC found the BTC 2026-11-06 profile negative at spot
+(about -$4.01M per 1% move), negative at +19.5% (-$0.0745M), and positive at +20%
+(+$0.3480M). The resulting flip near $95,900 was outside walls near $77,000/$82,000.
+This confirms a model crossing, not actual dealer positioning or an intraday price target.
+
+Corrections: the single-expiry GEX view now uses index price before forward, consistent with
+core enrichment and the all-expiry view. Previously its dollar flip inherited the expiry basis.
+The shared core/browser crossing logic now requires positive and negative observations:
+a same-sign touch of zero or zero tail alone is not a flip. Exact zeros bracketed by opposite
+signs remain eligible. Regression cases also preserve valid crossings outside the walls and
+positive-at-spot profiles whose nearest crossing is above spot. No zero-tail false flip was
+observed in the live BTC snapshot; that defect was reproduced with deterministic fixtures.
+
+Limits remain: inferred inventory, fixed per-strike IV and positions, a 0.5% grid over ±20%,
+and a one-hour minimum time to expiry. The profile may have multiple crossings or none;
+linear interpolation does not establish dollar-level precision. A distant flip is regime
+context under those assumptions, not a requirement for price to visit it. The chart tooltip
+now states that the flip can lie outside gamma walls and the ATR channel.
 
 ## Intraday channel research (2026-10-26)
 

@@ -1,5 +1,6 @@
 import {
   BlockTradeRuntime,
+  FlowOiRecorder,
   logger,
   buildIvSurfaceGrid,
   computeVenueSurfaceRows,
@@ -37,6 +38,7 @@ import {
   type LeadsStore,
   type NewsStore,
   MergedTradeStore,
+  FlowOiStore,
   NoopBreakEvenSnapshotStore,
   NoopDealerBookStore,
   NoopGexWallSnapshotStore,
@@ -297,7 +299,16 @@ export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
 
+const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite');
+export const flowOiRecorder = new FlowOiRecorder((tick) => flowOiStore.append(tick));
+const flowOiPruneTimer = setInterval(() => {
+  try { flowOiStore.prune(Date.now() - 7 * 86_400_000); }
+  catch (err: unknown) { logger.warn({ err: String(err) }, 'flow OI retention failed'); }
+}, 3_600_000);
+flowOiPruneTimer.unref();
+
 export const flowEvidenceService = new FlowEvidenceService({
+  fastOi: flowOiStore,
   trades: tradeStore, oi: oiSnapshotStore,
   log: logger,
   live: (underlying) => flowService.getTrades(underlying),

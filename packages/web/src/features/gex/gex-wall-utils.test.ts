@@ -63,12 +63,44 @@ describe('computeGammaWalls', () => {
 });
 
 describe('computeGammaFlip', () => {
+  it.each<{ pairs: [number, number][] }>([
+    { pairs: [[-0.2, 0], [0, 2], [0.2, 0]] },
+    { pairs: [[-0.2, 0], [0, -2], [0.2, 0]] },
+    { pairs: [[-0.01, 2], [0, 0], [0.01, 3]] },
+    { pairs: [[-0.01, -2], [0, 0], [0.01, -3]] },
+    { pairs: [[-0.01, 0], [0, 0], [0.01, 0]] },
+  ])('ignores zero tails and touches without a sign change: $pairs', ({ pairs }) => {
+    expect(computeGammaFlip(profile(pairs), 100)).toBeNull();
+  });
+
+  it('keeps an exact zero bracketed by opposite signs', () => {
+    expect(computeGammaFlip(profile([[-0.01, -2], [0, 0], [0.01, 3]]), 100)).toBe(100);
+  });
+
+  it('uses the nearest zero in a plateau only when both signs are present', () => {
+    expect(computeGammaFlip(profile([[-0.02, -2], [-0.01, 0], [0, 0], [0.01, 3]]), 100)).toBe(100);
+    expect(computeGammaFlip(profile([[0, -2], [0.01, 0], [0.02, 0], [0.03, 3]]), 100)).toBe(101);
+  });
+
+  it('allows the nearest flip above spot while net gamma at spot is positive', () => {
+    expect(computeGammaFlip(profile([[0, 2], [0.02, -2]]), 100)).toBe(101);
+  });
+
+  it('does not constrain a profile crossing to the selected walls', () => {
+    const walls = computeGammaWalls(SAMPLE, 61_800, profile([[0, -10], [0.2, 2]]));
+    expect(walls.gammaFlip).toBeCloseTo(72_100);
+    expect(walls.gammaFlip!).toBeGreaterThan(walls.callWall!);
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('rejects invalid spot %s', (spot) => {
+    expect(computeGammaFlip(profile([[-0.01, -2], [0.01, 2]]), spot)).toBeNull();
+  });
+
   it('is null when total GEX keeps one sign', () => {
     expect(computeGammaFlip(profile([[-0.01, 3], [0, 5], [0.01, 2]]), 100)).toBeNull();
   });
 
-  it('puts the flip below spot when dealers are long gamma at spot', () => {
-    // The cumulative-by-strike proxy put this flip above spot in a long-gamma regime.
+  it('interpolates a crossing below spot', () => {
     const flip = computeGammaFlip(profile([[-0.04, -50], [-0.02, 20], [0, 130], [0.02, 90]]), 81_746);
     expect(flip).not.toBeNull();
     expect(flip!).toBeLessThan(81_746);

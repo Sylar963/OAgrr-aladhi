@@ -23,6 +23,34 @@ export const ExchangeTradeEvidenceSchema = z.object({
 });
 export type ExchangeTradeEvidence = z.infer<typeof ExchangeTradeEvidenceSchema>;
 
+export const FlowOiTickSchema = z.object({
+  venue: VenueIdSchema,
+  instrument: z.string().min(1),
+  underlying: z.string().min(1),
+  timestamp: z.number().int().nonnegative(),
+  observedAt: z.number().int().nonnegative(),
+  openInterest: z.number().finite().nonnegative(),
+});
+export type FlowOiTick = z.infer<typeof FlowOiTickSchema>;
+
+export const FlowPositionAssessmentSchema = z.object({
+  status: z.enum([
+    'inferred_open', 'inferred_close', 'opening_component', 'closing_component',
+    'offsetting', 'ambiguous', 'pending', 'unavailable', 'inconsistent', 'incomplete',
+  ]),
+  action: z.enum(['buy_to_open', 'sell_to_open', 'buy_to_close', 'sell_to_close']).nullable(),
+  basis: z.literal('oi_reconciliation'),
+  quantity: z.number().finite().positive(),
+  minOpening: z.number().finite().nonnegative().nullable(),
+  minClosing: z.number().finite().nonnegative().nullable(),
+  intervalVolume: z.number().finite().nonnegative().nullable(),
+  otherVolume: z.number().finite().nonnegative().nullable(),
+  tradeCount: z.number().int().nonnegative(),
+  coverage: z.enum(['recorded', 'sequence_contiguous', 'gap', 'truncated', 'unavailable']),
+  reason: z.string(),
+});
+export type FlowPositionAssessment = z.infer<typeof FlowPositionAssessmentSchema>;
+
 export const FlowAnalysisLegSchema = z.object({
   instrument: z.string(),
   side: z.enum(['buy', 'sell']),
@@ -30,6 +58,7 @@ export const FlowAnalysisLegSchema = z.object({
   expiry: z.string().nullable(),
   strike: z.number().nullable(),
   optionType: z.enum(['call', 'put']).nullable(),
+  position: FlowPositionAssessmentSchema.optional(),
 });
 export const FlowAnalysisSchema = z.object({
   structure: z.string(),
@@ -38,7 +67,7 @@ export const FlowAnalysisSchema = z.object({
   groupId: z.string().nullable(),
   executionSide: z.enum(['buy', 'sell', 'mixed']),
   sideBasis: z.enum(['taker', 'reported', 'legs']),
-  positionEffect: z.literal('unknown'),
+  positionEffect: z.enum(['unknown', 'inferred_open', 'inferred_close', 'mixed', 'partial']),
   legs: z.array(FlowAnalysisLegSchema),
   issues: z.array(z.string()),
 });
@@ -52,8 +81,8 @@ export const FlowOiContextSchema = z.object({
   after: z.object({ timestamp: z.number(), openInterest: z.number() }).nullable(),
   delta: z.number().nullable(),
   intervalMs: z.number().nullable(),
-  timing: z.literal('sampled'),
-  tradeCoverage: z.literal('unverified'),
+  timing: z.enum(['sampled', 'exchange']),
+  tradeCoverage: z.enum(['unverified', 'recorded', 'sequence_contiguous', 'gap', 'truncated', 'unavailable']),
 });
 export type FlowOiContext = z.infer<typeof FlowOiContextSchema>;
 

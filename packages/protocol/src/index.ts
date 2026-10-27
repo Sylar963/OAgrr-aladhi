@@ -1,6 +1,10 @@
 export {
   ExchangeTradeEvidenceSchema,
   FlowAnalysisSchema,
+  FlowOiTickSchema,
+  type FlowOiTick,
+  FlowPositionAssessmentSchema,
+  type FlowPositionAssessment,
   FlowEvidenceResponseSchema,
   FlowEvidenceQuerySchema,
   FlowOiContextSchema,

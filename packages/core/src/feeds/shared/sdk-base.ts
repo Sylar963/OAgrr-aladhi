@@ -88,6 +88,7 @@ export interface QuoteRecorderEvent {
   exchangeSymbol: string;
   ts: number;
   markPrice: number;
+  openInterest?: { value: number; timestamp: number; underlying: string };
 }
 
 export type QuoteRecorder = (event: QuoteRecorderEvent) => void;
@@ -111,6 +112,7 @@ export interface LiveQuote {
   volume24h: number | null;
   /** Open interest normalized to contract count. */
   openInterest: number | null;
+  openInterestTimestamp?: number;
   /** USD-denominated open interest notional, either venue-native or derived from contract metadata. */
   openInterestUsd: number | null;
   /** USD-denominated 24h volume when the venue provides it natively (Bybit turnover). */
@@ -595,6 +597,14 @@ export abstract class SdkBaseAdapter extends BaseAdapter {
           ts: update.quote.timestamp,
           markPrice: update.quote.markPrice,
         };
+        const instrument = this.instrumentMap.get(update.exchangeSymbol);
+        if (instrument && update.quote.openInterest != null && update.quote.openInterestTimestamp != null) {
+          event.openInterest = {
+            value: update.quote.openInterest * (instrument.contractSize ?? 1),
+            timestamp: update.quote.openInterestTimestamp,
+            underlying: instrument.base,
+          };
+        }
         for (const recorder of this.quoteRecorders) {
           try {
             recorder(event);

@@ -34,6 +34,7 @@ import {
   volHeatmapRuntime,
   orderBookRuntime,
   flowService,
+  flowOiRecorder,
   gexWallStore,
   breakEvenStore,
   newsArchive,
@@ -300,6 +301,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   }
 
   bootstrap = bootstrapAdapters(app.log, {
+    flowOiRecorder,
     markHistoryBuffer,
     tradeRuntime: flowService,
   }).then(async () => {

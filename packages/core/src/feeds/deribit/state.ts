@@ -157,6 +157,7 @@ export function buildDeribitMarkPriceQuote(
     indexPrice: liveUnderlying ?? previous?.indexPrice ?? null,
     volume24h: previous?.volume24h ?? null,
     openInterest: previous?.openInterest ?? null,
+    ...(previous?.openInterestTimestamp != null ? { openInterestTimestamp: previous.openInterestTimestamp } : {}),
     openInterestUsd: previous?.openInterestUsd ?? null,
     volume24hUsd: previous?.volume24hUsd ?? null,
     greeks: {
@@ -187,6 +188,7 @@ export function buildDeribitTickerQuote(
     indexPrice: safeNum(ticker.index_price),
     volume24h: safeNum(ticker.stats?.volume),
     openInterest: normalizedOpenInterest,
+    ...(ticker.timestamp != null && normalizedOpenInterest != null ? { openInterestTimestamp: ticker.timestamp } : {}),
     openInterestUsd: null,
     volume24hUsd: null,
     greeks: {

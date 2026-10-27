@@ -224,3 +224,4 @@ export {
   type ThesisLoadQuery,
   type ThesisStore,
 } from './thesis-store.js';
+export { FlowOiStore } from './flow-oi-store.js';

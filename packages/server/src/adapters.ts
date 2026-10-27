@@ -14,6 +14,7 @@ import {
   type MarkHistoryBuffer,
   type OptionVenueAdapter,
   type QuoteRecorderEvent,
+  type FlowOiRecorder,
   type TradeRuntime,
 } from '@oggregator/core';
 
@@ -50,6 +51,7 @@ let tradeRuntimeRecorder: (() => void) | null = null;
 const quoteRecorderUnsubs: Array<() => void> = [];
 
 export interface AdapterBootstrapDeps {
+  flowOiRecorder?: FlowOiRecorder;
   markHistoryBuffer?: MarkHistoryBuffer;
   tradeRuntime?: TradeRuntime;
 }
@@ -59,6 +61,10 @@ export async function bootstrapAdapters(
   deps: AdapterBootstrapDeps = {},
 ) {
   log.info({ feedWorker: feedWorker != null }, 'loading markets for all venues');
+  if (deps.flowOiRecorder && deribitAdapter.addQuoteRecorder) {
+    const recorder = deps.flowOiRecorder;
+    quoteRecorderUnsubs.push(deribitAdapter.addQuoteRecorder((event) => recorder.record(event)));
+  }
 
   // Feed the rolling mark buffer from venues whose REST chart sources are
   // either missing or trade-only:

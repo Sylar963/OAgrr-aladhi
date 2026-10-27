@@ -437,7 +437,7 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
         createdAt: input.createdAt,
       });
       const assistantMessage = await this.insertMessage(client, {
-        evidence: input.evidence,
+        ...(input.evidence == null ? {} : { evidence: input.evidence }),
         id: input.assistantMessageId,
         threadId: input.threadId,
         clientMessageId: null,

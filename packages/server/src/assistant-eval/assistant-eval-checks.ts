@@ -10,6 +10,7 @@ export type AssistantEvalCheckName =
   | 'structure'
   | 'banned_phrases'
   | 'length'
+  | 'evidence'
   | 'tools';
 
 export type AssistantEvalCheckStatus = 'pass' | 'fail' | 'not_applicable' | 'unverified';
@@ -431,6 +432,7 @@ export function summarizeChecks(grades: AssistantEvalGrade[]): AssistantEvalChec
     'banned_phrases',
     'length',
     'tools',
+    'evidence',
   ];
   return names.map((check) => {
     const results = grades.flatMap((grade) => grade.checks.filter((item) => item.check === check));

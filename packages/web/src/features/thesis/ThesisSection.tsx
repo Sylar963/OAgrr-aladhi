@@ -86,9 +86,11 @@ export default function ThesisSection({
     <div className={styles.section}>
       <FlipBanner underlying={underlying} />
       <ThesisStrip
+        key={thesis.active?.thesis.id ?? underlying}
         underlying={underlying}
         active={thesis.active}
         reversal={thesis.reversal}
+        recentlyEnded={thesis.recentlyEnded}
         onSetThesis={() => setCreating(true)}
       />
       {creating && thesis.active == null && (

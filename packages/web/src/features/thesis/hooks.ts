@@ -1,5 +1,5 @@
 import { useAccountSession } from '@components/auth/AccountSessionProvider';
-import type { ThesisGateLeg, ThesisView } from '@oggregator/protocol';
+import type { ThesisGateLeg, ThesisRecord, ThesisView } from '@oggregator/protocol';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,6 +24,7 @@ export function useTheses() {
 export interface UnderlyingThesis {
   active: ThesisView | null;
   reversal: ThesisView | null;
+  recentlyEnded?: ThesisRecord | null;
 }
 
 export function useThesisFor(underlying: string): UnderlyingThesis & { ready: boolean } {
@@ -33,6 +34,7 @@ export function useThesisFor(underlying: string): UnderlyingThesis & { ready: bo
       ready: isSuccess,
       active: data?.active.find((view) => view.thesis.underlying === underlying) ?? null,
       reversal: data?.reversalCooldowns.find((view) => view.thesis.underlying === underlying) ?? null,
+      recentlyEnded: data?.recentlyEnded?.find((thesis) => thesis.underlying === underlying) ?? null,
     }),
     [data, isSuccess, underlying],
   );

@@ -442,7 +442,7 @@
 .composer textarea {
   display: block;
   width: 100%;
-  min-height: 76px;
+  min-height: 64px;
   resize: vertical;
   border: 0;
   outline: 0;
@@ -450,12 +450,12 @@
   background: transparent;
   color: #d6e0de;
   font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .composer textarea::placeholder {
-  color: #4e5a57;
+  color: #95aaa2;
 }
 
 .composerActions {
@@ -469,7 +469,7 @@
 
 .composerHint {
   overflow: hidden;
-  color: #4f5b58;
+  color: #95aaa2;
   font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
@@ -505,7 +505,7 @@
 
 .panel footer {
   padding: 0 12px 10px;
-  color: #4d5755;
+  color: #95aaa2;
   font-family: var(--font-mono);
   font-size: 11px;
   text-align: center;

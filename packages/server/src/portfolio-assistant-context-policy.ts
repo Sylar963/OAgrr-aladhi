@@ -1,4 +1,5 @@
 import type { PortfolioAssistantIntent } from '@oggregator/protocol';
+import type { PortfolioAssistantContext } from './portfolio-assistant-context-builder.js';
 
 export interface AssistantContextPolicy {
   intent: PortfolioAssistantIntent;
@@ -27,4 +28,25 @@ export function selectAssistantContextPolicy(question?: string): AssistantContex
     return { intent: 'exposure', market: false, history: false, scenarios: false };
   }
   return full;
+}
+
+export function shapeAssistantContext(context: PortfolioAssistantContext, policy: AssistantContextPolicy): PortfolioAssistantContext {
+  return {
+    ...context,
+    contextSelection: {
+      intent: policy.intent,
+      omittedSections: [
+        ...(!policy.market ? ['marketFacts', 'bookVsMarketFacts'] : []),
+        ...(!policy.history ? ['tradeHistoryFacts', 'accountEquityFacts'] : []),
+        ...(!policy.scenarios ? ['horizonScenarios', 'shockFacts', 'payoffFacts.points'] : []),
+      ],
+    },
+    marketFacts: policy.market ? context.marketFacts : { underlyings: [], unavailable: [] },
+    bookVsMarketFacts: policy.market ? context.bookVsMarketFacts : null,
+    tradeHistoryFacts: policy.history ? context.tradeHistoryFacts : null,
+    accountEquityFacts: policy.history ? context.accountEquityFacts : null,
+    horizonScenarios: policy.scenarios ? context.horizonScenarios : null,
+    shockFacts: policy.scenarios ? context.shockFacts : null,
+    payoffFacts: policy.scenarios ? context.payoffFacts : { ...context.payoffFacts, points: [] },
+  };
 }

@@ -24,7 +24,7 @@ export function reconcileFlowPosition(
     quantity: leg.quantity,
     minOpening: null,
     minClosing: null,
-    intervalVolume: tape.volume,
+    intervalVolume: tape.coverage === 'unavailable' ? null : tape.volume,
     otherVolume: null,
     tradeCount: tape.count,
     coverage: tape.coverage,
@@ -39,7 +39,7 @@ export function reconcileFlowPosition(
     return { ...result, reason: 'expiry_window' };
   const { quantity: q } = leg;
   const delta = oi.delta;
-  const tolerance = 1e-8 * Math.max(1, q, tape.volume);
+  const tolerance = Math.min(q * 1e-6, 1e-8 * Math.max(q, tape.volume));
   if (
     !Number.isFinite(tape.volume) ||
     tape.volume < q - tolerance ||

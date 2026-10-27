@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 
 import { logger } from '@oggregator/core';
+import { PortfolioAssistantEvidenceSchema, type PortfolioAssistantEvidence } from '@oggregator/protocol';
+import { buildAssistantEvidence } from '../portfolio-assistant-evidence.js';
+import { estimateAssistantCost, type AssistantTokenRates } from '../portfolio-assistant-cost.js';
+import { selectAssistantContextPolicy, shapeAssistantContext } from '../portfolio-assistant-context-policy.js';
+import { checkAssistantEvidence, summarizeAssistantQuality } from './assistant-eval-quality.js';
 import { z } from 'zod';
 
 import { MIN_ASSISTANT_MCP_TOKEN_LENGTH } from '../assistant-market/assistant-mcp-server.js';
@@ -95,6 +100,9 @@ interface PromptParts {
 }
 
 interface FixtureRun {
+  firstTokenMs: number | null;
+  estimatedCostUsd: number | null;
+  evidence: PortfolioAssistantEvidence | null;
   fixtureId: string;
   sample: number;
   scenario: AssistantEvalFixture['scenario'];
@@ -288,6 +296,7 @@ async function journalTools(
 }
 
 interface RunEnvironment {
+  tokenRates: AssistantTokenRates | null;
   gateway: HermesPortfolioAssistantGateway;
   builder: PortfolioAssistantPromptBuilder;
   runId: string;
@@ -297,11 +306,16 @@ interface RunEnvironment {
 }
 
 async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sample: number): Promise<FixtureRun> {
+  const requestStartedAt = Date.now();
   const threadId = `assistant-eval-${env.runId}-${fixture.id}-s${sample}`;
   const requestId = randomUUID();
   const started = env.mcp?.beginRun({ requestId, threadId, context: fixture.context }) ?? null;
-  const baseContext: PortfolioAssistantContext =
-    started == null ? fixtureContext(fixture) : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef };
+  const baseContext = shapeAssistantContext(
+    started == null ? fixtureContext(fixture) : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef },
+    selectAssistantContextPolicy(fixture.question),
+  );
+  const evidence = buildAssistantEvidence(baseContext, fixture.question, fixture.history);
+  baseContext.reviewComparison = evidence.comparison;
   const prefetched =
     env.mcp == null || env.args.prefetch === 'off'
       ? null
@@ -318,11 +332,15 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   const prompt = buildPrompt(env.builder, fixture, context, threadId);
   const startedAt = Date.now();
   let answer = '';
+  let firstTokenMs: number | null = null;
   let usage: FixtureRun['usage'] = null;
   let error: FixtureRun['error'] = null;
   try {
     for await (const event of env.gateway.streamPortfolioAnswer(prompt.request, new AbortController().signal)) {
-      if (event.type === 'text_delta') answer += event.delta;
+      if (event.type === 'text_delta') {
+        if (event.delta.trim() && firstTokenMs == null) firstTokenMs = Date.now() - requestStartedAt;
+        answer += event.delta;
+      }
       else
         usage = {
           inputTokens: event.inputTokens,
@@ -347,6 +365,9 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
     tools = await journalTools(env.args, fixture.context.portfolioRef, startedAt, finishedAt);
   }
   const grade = gradeAnswer(fixture.expect, answer, tools, heldLegs(fixture));
+  const evidenceCheck = checkAssistantEvidence(evidence, baseContext);
+  grade.checks.push(evidenceCheck);
+  if (evidenceCheck.status === 'fail') grade.pass = false;
   const judged =
     env.judge == null || answer === ''
       ? null
@@ -358,7 +379,10 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
     question: fixture.question,
     answer,
     error,
-    durationMs: finishedAt - startedAt,
+    durationMs: finishedAt - requestStartedAt,
+    firstTokenMs,
+    estimatedCostUsd: estimateAssistantCost(usage, env.tokenRates),
+    evidence,
     usage,
     promptChars: {
       system: prompt.systemChars,
@@ -481,7 +505,8 @@ function writeReport(outDirectory: string, name: string, meta: ReportMeta): void
   const fixtures = summarizeFixtureSamples(meta.runs);
   const overall = overallPassRate(meta.runs);
   const majority = fixtures.filter((summary) => summary.majorityPass).length;
-  const report = { ...meta, overall, majority: { passed: majority, fixtures: fixtures.length }, fixtures, checks };
+  const quality = summarizeAssistantQuality(meta.runs);
+  const report = { ...meta, quality, overall, majority: { passed: majority, fixtures: fixtures.length }, fixtures, checks };
   writeFileSync(join(outDirectory, `${name}.json`), `${JSON.stringify(report, null, 2)}\n`);
   const markdown = [
     `# Assistant eval ${meta.runId}${name === 'report' ? '' : ` (${name})`}`,
@@ -490,6 +515,9 @@ function writeReport(outDirectory: string, name: string, meta: ReportMeta): void
     '',
     `Samples passed: ${overall.passed}/${overall.total} (${percent(overall.rate)}, Wilson 95% ${intervalText(overall)}). ` +
       `Fixtures passing by majority: ${majority}/${fixtures.length}.`,
+    '',
+    `Time to first answer: p50 ${quality.firstTokenP50Ms ?? 'unknown'} ms; p95 ${quality.firstTokenP95Ms ?? 'unknown'} ms.`,
+    `Estimated cost per successful answer (all sampled spend / passed answers): ${quality.costPerSuccessfulAnswerUsd == null ? 'unknown' : '$' + quality.costPerSuccessfulAnswerUsd.toFixed(6)}. Pricing coverage: ${quality.pricedRuns}/${quality.totalRuns}.`,
     '',
     '## Checks (all samples)',
     '',
@@ -558,6 +586,11 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
       ...(run.tools.unattributedCalls != null ? { unattributedCalls: run.tools.unattributedCalls } : {}),
     };
     const grade = gradeAnswer(fixture.expect, run.answer, tools, heldLegs(fixture));
+    const evidenceCheck = run['evidence'] == null
+      ? { check: 'evidence' as const, status: 'unverified' as const, detail: 'Saved run predates evidence capture.' }
+      : checkAssistantEvidence(run['evidence'], fixtureContext(fixture));
+    grade.checks.push(evidenceCheck);
+    if (evidenceCheck.status === 'fail') grade.pass = false;
     const regraded: FixtureRun = {
       fixtureId: fixture.id,
       sample: run.sample,
@@ -567,6 +600,9 @@ function regrade(runDirectory: string, fixtures: AssistantEvalFixture[]): number
       error: run.error,
       durationMs: typeof run['durationMs'] === 'number' ? run['durationMs'] : 0,
       usage: null,
+      firstTokenMs: typeof run['firstTokenMs'] === 'number' ? run['firstTokenMs'] : null,
+      estimatedCostUsd: typeof run['estimatedCostUsd'] === 'number' ? run['estimatedCostUsd'] : null,
+      evidence: PortfolioAssistantEvidenceSchema.safeParse(run['evidence']).data ?? null,
       promptChars: { system: 0, context: 0, conversation: 0 },
       tools,
       toolCalls: run.toolCalls,
@@ -688,6 +724,7 @@ async function main(): Promise<number> {
   const outDirectory = join(args.out, runId);
   mkdirSync(join(outDirectory, 'answers'), { recursive: true });
   const environment: RunEnvironment = {
+    tokenRates: configuration.tokenRates ?? null,
     gateway,
     builder: new PortfolioAssistantPromptBuilder(),
     runId,

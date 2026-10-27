@@ -15,7 +15,7 @@ import {
   type ThesisGateCheckRequest,
   type ThesisGateLeg,
 } from '@oggregator/protocol';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type ThesisHeldBook, ThesisService } from './thesis-service.js';
 
@@ -42,9 +42,10 @@ beforeEach(() => {
 afterEach(() => {
   for (const service of services.splice(0)) service.dispose();
   rmSync(dir, { recursive: true, force: true });
+  vi.useRealTimers();
 });
 
-function harness(options: { store?: ThesisStore; clock?: { now: number } } = {}): Harness {
+function harness(options: { store?: ThesisStore; clock?: { now: number }; readCandles?: () => Promise<ThesisCandle[]> } = {}): Harness {
   const clock = options.clock ?? { now: Date.parse('2026-10-06T06:00:00Z') };
   const market = { spot: 84_000, candles: [] as ThesisCandle[], atmIv: 0.42 as number | null };
   const books = new Map<PortfolioSource, ThesisHeldBook>();
@@ -59,7 +60,7 @@ function harness(options: { store?: ThesisStore; clock?: { now: number } } = {})
     now: () => clock.now,
     market: {
       spotUsd: () => market.spot,
-      candles: async () => market.candles,
+      candles: options.readCandles ?? (async () => market.candles),
       chainStats: async () => ({ atmIv: market.atmIv, skew25d: -0.02 }),
       dvol: () => 0.44,
       netGexUsdMillions: async () => 10,
@@ -280,6 +281,22 @@ describe('ThesisService', () => {
     expect((await service.list(ACCOUNT)).active).toHaveLength(0);
   });
 
+  it('restores the effective level time from legacy tightening events', async () => {
+    const store = new RecordingStore();
+    const first = harness({ store });
+    const { thesis } = await first.service.create(ACCOUNT, bearishThesis);
+    first.clock.now += 2 * DAY_MS;
+    await first.service.tighten(ACCOUNT, thesis.id, 84_500);
+    await first.service.flush();
+    first.service.dispose();
+    const persisted = store.theses.get(thesis.id)!;
+    const { levelEffectiveAt: _effectiveAt, ...legacy } = persisted.record as Record<string, unknown>;
+    store.theses.set(thesis.id, { ...persisted, record: legacy });
+    const restarted = harness({ store, clock: first.clock });
+    restarted.market.candles = [{ timestamp: thesis.createdAt, close: 84_800 }];
+    expect((await restarted.service.list(ACCOUNT)).active).toHaveLength(1);
+  });
+
   it('runs the reversal cooldown after an early end', async () => {
     const { service, clock } = harness();
     const { thesis } = await service.create(ACCOUNT, bearishThesis);
@@ -352,6 +369,89 @@ describe('ThesisService', () => {
     const result = await service.gateCheck(ACCOUNT, gateRequest());
     expect(result).toMatchObject({ decision: 'pass', reason: 'no_thesis' });
     expect((await service.list(ACCOUNT)).active).toHaveLength(0);
+    expect((await service.list(ACCOUNT)).recentlyEnded?.[0]?.state).toBe('invalidated');
+  });
+
+  it('keeps a thesis active when observed positions close, including after restart', async () => {
+    const { service, books, clock } = harness();
+    books.set('thalex', { live: true, legs: [heldLeg(83_000, 'put', 1, 1_400)] });
+    const created = await service.create(ACCOUNT, bearishThesis);
+    expect(created.books).toContainEqual({ source: 'thalex', state: 'open', openLegCount: 1 });
+    books.set('thalex', { live: true, legs: [] });
+    const [closed] = (await service.list(ACCOUNT)).active;
+    expect(closed?.thesis.state).toBe('active');
+    expect(closed?.books).toContainEqual({ source: 'thalex', state: 'closed', openLegCount: 0 });
+    service.dispose();
+
+    const restarted = harness({ clock });
+    expect((await restarted.service.list(ACCOUNT)).active[0]?.books)
+      .toContainEqual({ source: 'thalex', state: 'closed', openLegCount: 0 });
+    restarted.books.set('thalex', { live: true, legs: [heldLeg(83_000, 'put', 1, 1_400)] });
+    expect((await restarted.service.list(ACCOUNT)).active[0]?.books)
+      .toContainEqual({ source: 'thalex', state: 'open', openLegCount: 1 });
+  });
+
+  it('distinguishes never-held, partially closed, disconnected, and flat books', async () => {
+    const { service, books } = harness();
+    const created = await service.create(ACCOUNT, bearishThesis);
+    expect(created.books).toContainEqual({ source: 'thalex', state: 'empty', openLegCount: 0 });
+    books.set('thalex', { live: true, legs: [heldLeg(83_000, 'put', 1, 1_400), heldLeg(80_000, 'put', 0, 500)] });
+    expect((await service.list(ACCOUNT)).active[0]?.books)
+      .toContainEqual({ source: 'thalex', state: 'open', openLegCount: 1 });
+    books.set('thalex', { live: false, legs: [] });
+    expect((await service.list(ACCOUNT)).active[0]?.books)
+      .toContainEqual({ source: 'thalex', state: 'unavailable', openLegCount: 0 });
+    books.set('thalex', { live: true, legs: [heldLeg(83_000, 'put', 0, 1_400)] });
+    expect((await service.list(ACCOUNT)).active[0]?.books)
+      .toContainEqual({ source: 'thalex', state: 'closed', openLegCount: 0 });
+  });
+
+  it('clears a flip on close and detects a reopened opposite book even within the same millisecond', async () => {
+    const { service, books } = harness();
+    await service.create(ACCOUNT, bearishThesis);
+    const opposite = { live: true, legs: [heldLeg(83_000, 'call', 2, 1_500)] };
+    books.set('thalex', opposite);
+    await service.checkHeldBook(ACCOUNT, 'thalex');
+    expect((await service.list(ACCOUNT)).active[0]?.pendingFlip).not.toBeNull();
+    books.set('thalex', { live: true, legs: [] });
+    const [closed] = (await service.list(ACCOUNT)).active;
+    expect(closed?.pendingFlip).toBeNull();
+    books.set('thalex', opposite);
+    await service.checkHeldBook(ACCOUNT, 'thalex');
+    expect((await service.list(ACCOUNT)).active[0]?.pendingFlip).not.toBeNull();
+  });
+
+  it('does not overwrite a manual end when an older evaluation finishes later', async () => {
+    let read: () => Promise<ThesisCandle[]> = async () => [];
+    const { service, clock } = harness({ readCandles: () => read() });
+    const { thesis } = await service.create(ACCOUNT, bearishThesis);
+    clock.now += 2 * DAY_MS;
+    let release!: (candles: ThesisCandle[]) => void;
+    const pending = new Promise<ThesisCandle[]>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => { started = resolve; });
+    read = () => { started(); return pending; };
+    const listing = service.list(ACCOUNT);
+    await reading;
+    read = async () => [];
+    await service.end(ACCOUNT, thesis.id, 'closed by choice');
+    release([{ timestamp: thesis.createdAt, close: 90_000 }]);
+    expect((await listing).active).toHaveLength(0);
+    expect((await service.list(ACCOUNT)).recentlyEnded?.[0]).toMatchObject({ state: 'ended_early', endNote: 'closed by choice' });
+  });
+
+  it('processes book changes even while updates arrive continuously', async () => {
+    vi.useFakeTimers();
+    const store = new RecordingStore();
+    const { service, books, bookListeners } = harness({ store });
+    books.set('thalex', { live: true, legs: [heldLeg(83_000, 'put', 1, 1_400)] });
+    await service.create(ACCOUNT, bearishThesis);
+    books.set('thalex', { live: true, legs: [] });
+    bookListeners[0]!(ACCOUNT, 'thalex');
+    await vi.advanceTimersByTimeAsync(1_000);
+    bookListeners[0]!(ACCOUNT, 'thalex');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await eventKinds(service, store)).toContain('book_closed');
   });
 
   it('detects a held book that turned against the thesis and clears it when it returns', async () => {

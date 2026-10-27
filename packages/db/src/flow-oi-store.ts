@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -34,6 +34,10 @@ export class FlowOiStore {
         PRIMARY KEY (venue, instrument, timestamp)
       );
       CREATE INDEX IF NOT EXISTS flow_oi_retention ON flow_oi(timestamp);
+      CREATE TABLE IF NOT EXISTS flow_oi_upload (
+        slot INTEGER PRIMARY KEY CHECK (slot = 1), id TEXT NOT NULL, last_rowid INTEGER NOT NULL,
+        start_ts INTEGER NOT NULL, end_ts INTEGER NOT NULL, tick_count INTEGER NOT NULL, payload BLOB NOT NULL
+      );
     `);
     if (
       !this.db
@@ -62,7 +66,10 @@ export class FlowOiStore {
           path,
           Math.max(86_400_000, options.flushIntervalMs ?? 86_400_000),
           // Failed attempts also wait a full day, so retry traffic cannot keep Neon awake.
-          () => this.flush().catch(onError),
+          async () => {
+            writeFileSync(`${path}.last-flush`, `${Date.now()}\n`);
+            await this.flush().catch(onError);
+          },
           onError,
         )
       : null;
@@ -135,29 +142,39 @@ export class FlowOiStore {
     const highWater = this.db.prepare('SELECT MAX(rowid) AS id FROM flow_oi').get()?.['id'];
     if (typeof highWater !== 'number') return;
     while (true) {
-      const rows = this.db
+      let batch = this.db.prepare('SELECT * FROM flow_oi_upload WHERE slot = 1').get();
+      if (!batch) {
+        const rows = this.db
         .prepare(`SELECT rowid AS id, venue, instrument, underlying, timestamp,
         observed_at AS observedAt, open_interest AS openInterest FROM flow_oi
         WHERE archived = 0 AND rowid <= ? ORDER BY rowid LIMIT 5000`)
         .all(highWater);
-      if (rows.length === 0) break;
-      const ticks = rows.map((row) => FlowOiTickSchema.parse(row));
-      const payload = gzipSync(Buffer.from(JSON.stringify(ticks)));
-      const id = createHash('sha256').update(payload).digest('hex');
+        if (rows.length === 0) break;
+        const ticks = rows.map((row) => FlowOiTickSchema.parse(row));
+        const payload = gzipSync(Buffer.from(JSON.stringify(ticks)));
+        const id = createHash('sha256').update(payload).digest('hex');
+        this.db.prepare('INSERT INTO flow_oi_upload VALUES (1, ?, ?, ?, ?, ?, ?)').run(
+          id, rows.at(-1)!['id']!, Math.min(...ticks.map((tick) => tick.timestamp)),
+          Math.max(...ticks.map((tick) => tick.timestamp)), ticks.length, payload,
+        );
+        batch = this.db.prepare('SELECT * FROM flow_oi_upload WHERE slot = 1').get()!;
+      }
       await this.pool.query(
         `INSERT INTO flow_oi_archives (id, start_ts, end_ts, tick_count, payload)
         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
         [
-          id,
-          new Date(Math.min(...ticks.map((tick) => tick.timestamp))),
-          new Date(Math.max(...ticks.map((tick) => tick.timestamp))),
-          ticks.length,
-          payload,
+          batch['id'], new Date(Number(batch['start_ts'])), new Date(Number(batch['end_ts'])),
+          batch['tick_count'], batch['payload'],
         ],
       );
-      this.db
-        .prepare('UPDATE flow_oi SET archived = 1 WHERE archived = 0 AND rowid <= ?')
-        .run(rows.at(-1)!['id']!);
+      this.db.exec('BEGIN');
+      try {
+        this.db.prepare('UPDATE flow_oi SET archived = 1 WHERE archived = 0 AND rowid <= ?').run(batch['last_rowid']!);
+        this.db.exec('DELETE FROM flow_oi_upload WHERE slot = 1; COMMIT;');
+      } catch (error: unknown) {
+        this.db.exec('ROLLBACK');
+        throw error;
+      }
     }
   }
 }

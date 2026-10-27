@@ -1,4 +1,6 @@
 import { logger } from '@oggregator/core';
+import { readFileSync } from 'node:fs';
+import { AssistantEvalFixtureSchema, fixtureContext } from './assistant-eval/assistant-eval-fixture.js';
 import type { PortfolioAssistantStore } from '@oggregator/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +28,11 @@ import { disposeRuntimeMetrics } from './runtime-metrics.js';
 import type { AuthenticatedUser } from './user-service.js';
 
 const REF = 'pref_QUFBQUFBQUFBQUFBQUFBQQ';
+
+function testContext() {
+  const fixture = AssistantEvalFixtureSchema.parse(JSON.parse(readFileSync(new URL('./assistant-eval/fixtures/reference-max-loss.json', import.meta.url), 'utf8')));
+  return { ...fixtureContext(fixture), generatedAt: 1, positions: [], portfolioRef: REF };
+}
 const USER: AuthenticatedUser = {
   id: 'user-1',
   clerkUserId: 'clerk-1',
@@ -100,11 +107,7 @@ function buildService(
       requirePortfolioAssistantEntitlement: async () => undefined,
     } as unknown as PortfolioAssistantAccessService,
     {
-      buildPortfolioAssistantContext: async () => ({
-        generatedAt: 1,
-        positions: [],
-        portfolioRef: REF,
-      }),
+      buildPortfolioAssistantContext: async () => testContext(),
     } as unknown as PortfolioAssistantContextBuilder,
     {
       buildPortfolioAssistantContextMessage: (context: Record<string, unknown>) =>
@@ -252,7 +255,7 @@ describe('PortfolioAssistantConversationService user memory', () => {
       {
         buildPortfolioAssistantContext: async (input: unknown) => {
           contextInputs.push(input);
-          return { generatedAt: 1, positions: [], portfolioRef: REF };
+          return testContext();
         },
       } as unknown as PortfolioAssistantContextBuilder,
       {

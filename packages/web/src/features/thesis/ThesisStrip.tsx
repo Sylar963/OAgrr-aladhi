@@ -13,7 +13,7 @@ interface ThesisStripProps extends UnderlyingThesis {
   onSetThesis: () => void;
 }
 
-export default function ThesisStrip({ underlying, active, reversal, onSetThesis }: ThesisStripProps) {
+export default function ThesisStrip({ underlying, active, reversal, recentlyEnded, onSetThesis }: ThesisStripProps) {
   const t = useT(thesisMessages);
   const locale = useLocale();
   const refresh = useThesisRefresh();
@@ -21,6 +21,12 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function toggleEditor(next: 'tighten' | 'end') {
+    setEditing(editing === next ? null : next);
+    setInput('');
+    setError(null);
+  }
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -47,6 +53,10 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
               direction: classificationLabel(reversal.thesis.direction, locale),
               d: fmtDuration(reversal.cooldown.endsAt - Date.now()),
             })}
+          </span>
+        ) : recentlyEnded != null && recentlyEnded.state !== 'active' ? (
+          <span className={styles.stripText}>
+            {t(`ended_${recentlyEnded.state}`, { underlying })}
           </span>
         ) : (
           <span className={styles.stripText}>{t('noThesis', { underlying })}</span>
@@ -84,6 +94,11 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
           <span className={styles.stripText}>{t('wait', { d: fmtDuration(cooldown.endsAt - Date.now()) })}</span>
         )}
         {nothingToDo && <span className={styles.nothing}>{t('nothingToDo')}</span>}
+        {active.books?.filter((book) => book.state !== 'empty').map((book) => (
+          <span key={book.source} className={styles.stripText}>
+            {t(`book_${book.state}`, { source: book.source, count: book.openLegCount })}
+          </span>
+        ))}
         <span className={styles.stripSpacer} />
         <button
           type="button"
@@ -95,10 +110,10 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
         >
           {thesis.share != null ? t('shared') : t('share')}
         </button>
-        <button type="button" className={styles.stripBtn} onClick={() => setEditing(editing === 'tighten' ? null : 'tighten')}>
+        <button type="button" className={styles.stripBtn} disabled={busy} onClick={() => toggleEditor('tighten')}>
           {t('tighten')}
         </button>
-        <button type="button" className={styles.stripBtn} onClick={() => setEditing(editing === 'end' ? null : 'end')}>
+        <button type="button" className={styles.stripBtn} disabled={busy} onClick={() => toggleEditor('end')}>
           {t('end')}
         </button>
       </div>
@@ -109,6 +124,7 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
           </span>
           <input
             className={styles.inputSmall}
+            aria-label={t('tighten')}
             inputMode="decimal"
             value={input}
             onChange={(event) => setInput(event.target.value.replace(/[^\d.]/g, ''))}
@@ -121,6 +137,7 @@ export default function ThesisStrip({ underlying, active, reversal, onSetThesis 
           >
             {t('save')}
           </button>
+          <span className={styles.stripText}>{t('tightenFutureCloses')}</span>
         </div>
       )}
       {editing === 'end' && (

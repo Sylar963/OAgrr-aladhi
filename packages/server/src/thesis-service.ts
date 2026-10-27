@@ -846,7 +846,7 @@ export class ThesisService {
       withTimeout(this.options.market.chainStats(thesis.underlying, thesis.horizonExpiry), null),
     ]);
     const levelEffectiveAt = thesis.levelEffectiveAt ?? this.lastEvent(thesis.id, 'level_tightened')?.createdAt;
-    return thesisStatus({ ...thesis, levelEffectiveAt }, { candles, spotUsd, atmIv: stats?.atmIv ?? null, nowMs });
+    return thesisStatus({ ...thesis, levelEffectiveAt: levelEffectiveAt ?? thesis.createdAt }, { candles, spotUsd, atmIv: stats?.atmIv ?? null, nowMs });
   }
 
   /** Builds a view and moves an active thesis to invalidated/expired when its rule says so. */
@@ -979,9 +979,9 @@ export class ThesisService {
   }
 
   private observeBook(thesis: ThesisRecord, source: PortfolioSource, book: ThesisHeldBook): NonNullable<ThesisView['books']>[number] {
-    const previous = (this.events.get(thesis.id) ?? []).findLast((event) =>
+    const previous = (this.events.get(thesis.id) ?? []).filter((event) =>
       (event.kind === 'book_opened' || event.kind === 'book_closed') && event.payload['source'] === source,
-    );
+    ).at(-1);
     if (!book.live) return { source, state: 'unavailable', openLegCount: 0 };
     const openLegCount = book.legs.filter(({ leg }) => leg.size !== 0).length;
     const state = openLegCount > 0 ? 'open' : previous != null ? 'closed' : 'empty';
@@ -989,14 +989,14 @@ export class ThesisService {
     if (kind != null && previous?.kind !== kind && this.theses.get(thesis.id) === thesis) {
       this.append(thesis, kind, { source, openLegCount });
     }
-    if (openLegCount === 0 && this.pendingFlip(thesis)?.source === source) {
+    if (openLegCount === 0 && this.theses.get(thesis.id) === thesis && this.pendingFlip(thesis)?.source === source) {
       this.append(thesis, 'flip_cleared', { source, classification: 'neutral', bias: null });
     }
     return { source, state, openLegCount };
   }
 
   private async bookStatuses(thesis: ThesisRecord): Promise<NonNullable<ThesisView['books']>> {
-    return Promise.all(this.options.bookSources.map(async (source) => {
+    const statuses = await Promise.all(this.options.bookSources.map(async (source) => {
       try {
         const book = await this.options.book.heldBook(thesis.accountId, source, thesis.underlying);
         return this.observeBook(thesis, source, book);
@@ -1005,6 +1005,10 @@ export class ThesisService {
         return { source, state: 'unavailable' as const, openLegCount: 0 };
       }
     }));
+    return statuses.filter((book) => book.state !== 'unavailable' ||
+      (this.events.get(thesis.id) ?? []).some((event) =>
+        (event.kind === 'book_opened' || event.kind === 'book_closed') && event.payload['source'] === book.source,
+      ));
   }
 }
 

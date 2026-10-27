@@ -1,0 +1,4760 @@
+{
+  "plan": {
+    "rules": {
+      "vLegBars": 6,
+      "vMinDropAtr": 2,
+      "vRecoveryFraction": 0.5,
+      "pivotMinBars": 3,
+      "pivotMaxBars": 24,
+      "equalToleranceAtr": 0.35,
+      "boundaryToleranceAtr": 0.25,
+      "pivotBounceAtr": 1,
+      "stopAtr": 0.5
+    },
+    "configs": [
+      {
+        "id": "60-3-v-long-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-v-long-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-v-long-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-v-long-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-v-short-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-v-short-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-v-short-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-v-short-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-equal-long-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-equal-long-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-equal-long-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-equal-long-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-equal-short-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-equal-short-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "60-3-equal-short-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "60-3-equal-short-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-v-long-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-v-long-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-v-long-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-v-long-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-v-short-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-v-short-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-v-short-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-v-short-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-equal-long-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-equal-long-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-equal-long-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-equal-long-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-equal-short-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-equal-short-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      {
+        "id": "130-4-equal-short-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      {
+        "id": "130-4-equal-short-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      }
+    ],
+    "selection": "Rank April 29–August 26 mean return after 9 bps friction, minimum 30 trades. Freeze the best three before fetching January 1–April 28 data. Report all 32 variants, including losses.",
+    "validation": "August 27–October 25 is previously inspected comparison data. January 1–April 28 is an unseen earlier-period robustness check, not chronological forward validation. No further tuning after checking it.",
+    "limitations": "OHLC fills, stop first if both exits hit, fixed 9 bps trading friction, funding excluded, no gamma or trend filter, not a complete discretionary trading model."
+  },
+  "data": {
+    "originalSha256": "dba0b53ca53a5a771aa016d27cbdca4ac3124aebc0bb335221e6deeaf668d460",
+    "earlierSha256": "c3539e5789309e7d9e23c66b2acd917bb57ad9d464296b64d23778bff0994e83",
+    "missingBars": 0,
+    "timezone": "UTC"
+  },
+  "results": [
+    {
+      "config": {
+        "id": "60-3-v-long-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 269,
+        "grossMeanBps": 1.6239847621371621,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.6239847621371621
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.376015237862838
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.376015237862838
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.376015237862838
+          }
+        ],
+        "winRateAfter9Bps": 0.39776951672862454,
+        "profitFactorAfter9Bps": 0.48280319707842617,
+        "meanAfter9BpsWeekBootstrap95": [
+          -11.024135854720406,
+          -3.67380617993081
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2061.3526803096,
+        "worstTradeBpsAfter9Bps": -113.36268696885409,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 138,
+          "stop": 47,
+          "stop_gap": 0,
+          "timeout": 84
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 120,
+        "grossMeanBps": -1.2913306093538435,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.2913306093538435
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.291330609353844
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.291330609353844
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.291330609353844
+          }
+        ],
+        "winRateAfter9Bps": 0.35,
+        "profitFactorAfter9Bps": 0.28343195167288326,
+        "meanAfter9BpsWeekBootstrap95": [
+          -12.693738301917985,
+          -7.85012970362537
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1262.1535118993318,
+        "worstTradeBpsAfter9Bps": -79.34699804001954,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 54,
+          "stop": 23,
+          "stop_gap": 0,
+          "timeout": 43
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-long-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 260,
+        "grossMeanBps": 1.372459812061372,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.372459812061372
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.627540187938628
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.627540187938628
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.627540187938628
+          }
+        ],
+        "winRateAfter9Bps": 0.4653846153846154,
+        "profitFactorAfter9Bps": 0.5541292538711658,
+        "meanAfter9BpsWeekBootstrap95": [
+          -12.166618888678283,
+          -3.074029851028986
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2090.916786104585,
+        "worstTradeBpsAfter9Bps": -116.8206853812924,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 169,
+          "stop": 81,
+          "stop_gap": 0,
+          "timeout": 10
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 117,
+        "grossMeanBps": -0.24913856862356526,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.24913856862356526
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.249138568623565
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.249138568623565
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.249138568623565
+          }
+        ],
+        "winRateAfter9Bps": 0.452991452991453,
+        "profitFactorAfter9Bps": 0.453375106581075,
+        "meanAfter9BpsWeekBootstrap95": [
+          -11.460586322444003,
+          -6.584969560176522
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1087.7619836186257,
+        "worstTradeBpsAfter9Bps": -79.34699804001954,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 71,
+          "stop": 38,
+          "stop_gap": 0,
+          "timeout": 8
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-long-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 313,
+        "grossMeanBps": 3.1215250730904778,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 3.1215250730904778
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -3.8784749269095222
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -5.878474926909522
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -10.878474926909522
+          }
+        ],
+        "winRateAfter9Bps": 0.402555910543131,
+        "profitFactorAfter9Bps": 0.6561219158894781,
+        "meanAfter9BpsWeekBootstrap95": [
+          -9.77489132131815,
+          -1.4819277345481139
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2038.9989915497865,
+        "worstTradeBpsAfter9Bps": -143.50550750211622,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 68,
+          "stop": 61,
+          "stop_gap": 0,
+          "timeout": 184
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 134,
+        "grossMeanBps": -0.6109121425523119,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.6109121425523119
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.610912142552312
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.610912142552312
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.610912142552312
+          }
+        ],
+        "winRateAfter9Bps": 0.373134328358209,
+        "profitFactorAfter9Bps": 0.47556254669658365,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.721489737945607,
+          -5.6988580783444
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1345.6242561438678,
+        "worstTradeBpsAfter9Bps": -103.73193471244312,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 21,
+          "stop": 28,
+          "stop_gap": 0,
+          "timeout": 85
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-long-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 278,
+        "grossMeanBps": 4.256062645195768,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 4.256062645195768
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -2.743937354804232
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -4.743937354804232
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -9.743937354804231
+          }
+        ],
+        "winRateAfter9Bps": 0.4568345323741007,
+        "profitFactorAfter9Bps": 0.7958990366113969,
+        "meanAfter9BpsWeekBootstrap95": [
+          -11.046356250334274,
+          1.6909919623871599
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1636.9604077481372,
+        "worstTradeBpsAfter9Bps": -143.50550750211622,
+        "medianHoldingMinutesUpperBound": 85,
+        "exits": {
+          "target": 116,
+          "stop": 112,
+          "stop_gap": 0,
+          "timeout": 50
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 124,
+        "grossMeanBps": 3.737411102929924,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 3.737411102929924
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -3.262588897070076
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -5.262588897070076
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -10.262588897070076
+          }
+        ],
+        "winRateAfter9Bps": 0.5,
+        "profitFactorAfter9Bps": 0.7595916249821363,
+        "meanAfter9BpsWeekBootstrap95": [
+          -10.23202155752819,
+          -0.08702233754473472
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 832.0393545316547,
+        "worstTradeBpsAfter9Bps": -112.0254319121915,
+        "medianHoldingMinutesUpperBound": 90,
+        "exits": {
+          "target": 44,
+          "stop": 48,
+          "stop_gap": 0,
+          "timeout": 32
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-short-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 257,
+        "grossMeanBps": -1.1610671738313256,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.1610671738313256
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.161067173831325
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.161067173831325
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.161067173831325
+          }
+        ],
+        "winRateAfter9Bps": 0.33073929961089493,
+        "profitFactorAfter9Bps": 0.28296547995317467,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.220702281351889,
+          -7.499354144022198
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2611.3942636746497,
+        "worstTradeBpsAfter9Bps": -85.91920653089879,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 117,
+          "stop": 58,
+          "stop_gap": 0,
+          "timeout": 82
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 126,
+        "grossMeanBps": -4.542120284514225,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -4.542120284514225
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -11.542120284514226
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -13.542120284514226
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -18.542120284514226
+          }
+        ],
+        "winRateAfter9Bps": 0.30158730158730157,
+        "profitFactorAfter9Bps": 0.1709638241726583,
+        "meanAfter9BpsWeekBootstrap95": [
+          -17.950081721754383,
+          -8.930295727524848
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1720.874837904889,
+        "worstTradeBpsAfter9Bps": -91.52739580605572,
+        "medianHoldingMinutesUpperBound": 30,
+        "exits": {
+          "target": 64,
+          "stop": 30,
+          "stop_gap": 0,
+          "timeout": 32
+        },
+        "ambiguousStopFirstTrades": 1
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-short-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 247,
+        "grossMeanBps": -1.0447759013656364,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.0447759013656364
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.044775901365636
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.044775901365636
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.044775901365636
+          }
+        ],
+        "winRateAfter9Bps": 0.42105263157894735,
+        "profitFactorAfter9Bps": 0.3978593867585894,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.92130670723651,
+          -5.164230452963939
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2481.0596476373125,
+        "worstTradeBpsAfter9Bps": -152.1353239801636,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 148,
+          "stop": 89,
+          "stop_gap": 0,
+          "timeout": 10
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 123,
+        "grossMeanBps": -3.6733489873351264,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.6733489873351264
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.673348987335126
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.673348987335126
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.673348987335125
+          }
+        ],
+        "winRateAfter9Bps": 0.3902439024390244,
+        "profitFactorAfter9Bps": 0.2540001182984092,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.655871473331395,
+          -7.324114128425532
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1572.118932021837,
+        "worstTradeBpsAfter9Bps": -91.52739580605572,
+        "medianHoldingMinutesUpperBound": 30,
+        "exits": {
+          "target": 76,
+          "stop": 43,
+          "stop_gap": 0,
+          "timeout": 4
+        },
+        "ambiguousStopFirstTrades": 1
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-short-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 306,
+        "grossMeanBps": -1.4237958380656515,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.4237958380656515
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.42379583806565
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.42379583806565
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.42379583806565
+          }
+        ],
+        "winRateAfter9Bps": 0.3366013071895425,
+        "profitFactorAfter9Bps": 0.39611122712179553,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.64441835272592,
+          -6.920459328671937
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 3195.958784337671,
+        "worstTradeBpsAfter9Bps": -137.25755112596093,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 60,
+          "stop": 71,
+          "stop_gap": 0,
+          "timeout": 175
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 130,
+        "grossMeanBps": -1.7338166698360664,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.7338166698360664
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.733816669836067
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.733816669836067
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.733816669836067
+          }
+        ],
+        "winRateAfter9Bps": 0.36923076923076925,
+        "profitFactorAfter9Bps": 0.4621134749297432,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.204843382689058,
+          -5.909382250402568
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1453.707675823087,
+        "worstTradeBpsAfter9Bps": -91.52739580605572,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 31,
+          "stop": 35,
+          "stop_gap": 0,
+          "timeout": 64
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-short-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 267,
+        "grossMeanBps": -1.2552287434120453,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.2552287434120453
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.255228743412045
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.255228743412045
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.255228743412045
+          }
+        ],
+        "winRateAfter9Bps": 0.40074906367041196,
+        "profitFactorAfter9Bps": 0.5462472723190827,
+        "meanAfter9BpsWeekBootstrap95": [
+          -16.335746261398615,
+          -4.656549710217457
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 2744.4233323805984,
+        "worstTradeBpsAfter9Bps": -152.1353239801636,
+        "medianHoldingMinutesUpperBound": 75,
+        "exits": {
+          "target": 99,
+          "stop": 115,
+          "stop_gap": 0,
+          "timeout": 53
+        },
+        "ambiguousStopFirstTrades": 1
+      },
+      "comparison": {
+        "trades": 119,
+        "grossMeanBps": -4.525255263124171,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -4.525255263124171
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -11.525255263124171
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -13.525255263124171
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -18.525255263124173
+          }
+        ],
+        "winRateAfter9Bps": 0.37815126050420167,
+        "profitFactorAfter9Bps": 0.4770397987249573,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.16103362441294,
+          -9.490039138542889
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1667.8100444996212,
+        "worstTradeBpsAfter9Bps": -112.53380691384916,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 40,
+          "stop": 61,
+          "stop_gap": 0,
+          "timeout": 18
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-long-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 94,
+        "grossMeanBps": -1.9911623564224616,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.9911623564224616
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.991162356422462
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.991162356422462
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.991162356422462
+          }
+        ],
+        "winRateAfter9Bps": 0.4148936170212766,
+        "profitFactorAfter9Bps": 0.34187075717864246,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.678517734597014,
+          -6.500083159305676
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1038.8276846862577,
+        "worstTradeBpsAfter9Bps": -108.57127661579746,
+        "medianHoldingMinutesUpperBound": 30,
+        "exits": {
+          "target": 36,
+          "stop": 33,
+          "stop_gap": 0,
+          "timeout": 25
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 41,
+        "grossMeanBps": -3.088457492038892,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.088457492038892
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.088457492038891
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.088457492038891
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.08845749203889
+          }
+        ],
+        "winRateAfter9Bps": 0.43902439024390244,
+        "profitFactorAfter9Bps": 0.277372727511272,
+        "meanAfter9BpsWeekBootstrap95": [
+          -19.71854963445739,
+          -4.063391844043532
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 495.6267571735947,
+        "worstTradeBpsAfter9Bps": -81.05724688774673,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 11,
+          "stop": 14,
+          "stop_gap": 0,
+          "timeout": 16
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-long-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 93,
+        "grossMeanBps": 0.6033629648615237,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.6033629648615237
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.396637035138476
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.396637035138475
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.396637035138475
+          }
+        ],
+        "winRateAfter9Bps": 0.5053763440860215,
+        "profitFactorAfter9Bps": 0.5293093080560567,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.737166647995297,
+          -1.699790728449911
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 821.0622206135804,
+        "worstTradeBpsAfter9Bps": -108.57127661579746,
+        "medianHoldingMinutesUpperBound": 30,
+        "exits": {
+          "target": 52,
+          "stop": 40,
+          "stop_gap": 0,
+          "timeout": 1
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 41,
+        "grossMeanBps": -3.258812664541102,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.258812664541102
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.258812664541102
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.258812664541102
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.258812664541104
+          }
+        ],
+        "winRateAfter9Bps": 0.4634146341463415,
+        "profitFactorAfter9Bps": 0.37357816470384186,
+        "meanAfter9BpsWeekBootstrap95": [
+          -23.581125303541455,
+          -0.4742840132155752
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 502.6113192461852,
+        "worstTradeBpsAfter9Bps": -81.05724688774673,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 20,
+          "stop": 20,
+          "stop_gap": 0,
+          "timeout": 1
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-long-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 97,
+        "grossMeanBps": -3.5565055549849096,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.5565055549849096
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.55650555498491
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.55650555498491
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.55650555498491
+          }
+        ],
+        "winRateAfter9Bps": 0.29896907216494845,
+        "profitFactorAfter9Bps": 0.3911037946727517,
+        "meanAfter9BpsWeekBootstrap95": [
+          -19.702338493258203,
+          -5.39490297275884
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1222.8364296068726,
+        "worstTradeBpsAfter9Bps": -108.57127661579746,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 7,
+          "stop": 42,
+          "stop_gap": 0,
+          "timeout": 48
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 41,
+        "grossMeanBps": -0.8657951697076149,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.8657951697076149
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.865795169707615
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.865795169707615
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.865795169707615
+          }
+        ],
+        "winRateAfter9Bps": 0.4146341463414634,
+        "profitFactorAfter9Bps": 0.43685309875462475,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.011850413079515,
+          -0.5069232371958808
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 409.4396712271994,
+        "worstTradeBpsAfter9Bps": -81.05724688774673,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 3,
+          "stop": 14,
+          "stop_gap": 0,
+          "timeout": 24
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-long-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 95,
+        "grossMeanBps": 0.7707312512457137,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.7707312512457137
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.229268748754286
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.229268748754286
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.229268748754286
+          }
+        ],
+        "winRateAfter9Bps": 0.3263157894736842,
+        "profitFactorAfter9Bps": 0.6883201890346327,
+        "meanAfter9BpsWeekBootstrap95": [
+          -20.934545221320047,
+          5.968688648809411
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 824.2892292380878,
+        "worstTradeBpsAfter9Bps": -108.57127661579746,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 24,
+          "stop": 59,
+          "stop_gap": 0,
+          "timeout": 12
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 40,
+        "grossMeanBps": 8.259544751345688,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 8.259544751345688
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": 1.2595447513456879
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -0.7404552486543121
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -5.740455248654312
+          }
+        ],
+        "winRateAfter9Bps": 0.425,
+        "profitFactorAfter9Bps": 0.9660837099932797,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.586928219684232,
+          19.58357318109875
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 438.03475794457074,
+        "worstTradeBpsAfter9Bps": -81.05724688774673,
+        "medianHoldingMinutesUpperBound": 105,
+        "exits": {
+          "target": 13,
+          "stop": 21,
+          "stop_gap": 0,
+          "timeout": 6
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-short-middle-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 115,
+        "grossMeanBps": 1.261279385670392,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.261279385670392
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.738720614329608
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.738720614329608
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.738720614329608
+          }
+        ],
+        "winRateAfter9Bps": 0.40869565217391307,
+        "profitFactorAfter9Bps": 0.4531715837217987,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.139694416047288,
+          -2.755500327476218
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1055.3579886286743,
+        "worstTradeBpsAfter9Bps": -101.51761523441093,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 48,
+          "stop": 40,
+          "stop_gap": 1,
+          "timeout": 26
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 52,
+        "grossMeanBps": 1.8216397809793823,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.8216397809793823
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.178360219020618
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.178360219020618
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.178360219020618
+          }
+        ],
+        "winRateAfter9Bps": 0.40384615384615385,
+        "profitFactorAfter9Bps": 0.4075280383170484,
+        "meanAfter9BpsWeekBootstrap95": [
+          -10.960708236906145,
+          -2.8312814673996956
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 423.1981101274207,
+        "worstTradeBpsAfter9Bps": -47.03318002580269,
+        "medianHoldingMinutesUpperBound": 30,
+        "exits": {
+          "target": 20,
+          "stop": 16,
+          "stop_gap": 0,
+          "timeout": 16
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-short-middle-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 114,
+        "grossMeanBps": 0.2995859844877449,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.2995859844877449
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.700414015512255
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.700414015512255
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.700414015512255
+          }
+        ],
+        "winRateAfter9Bps": 0.43859649122807015,
+        "profitFactorAfter9Bps": 0.46517787306865144,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.351860907819981,
+          -2.69021033690154
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1210.4322618242886,
+        "worstTradeBpsAfter9Bps": -101.51761523441093,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 60,
+          "stop": 53,
+          "stop_gap": 1,
+          "timeout": 0
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 50,
+        "grossMeanBps": 3.0229189827386307,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 3.0229189827386307
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -3.9770810172613693
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -5.977081017261369
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -10.97708101726137
+          }
+        ],
+        "winRateAfter9Bps": 0.44,
+        "profitFactorAfter9Bps": 0.5689434132021688,
+        "meanAfter9BpsWeekBootstrap95": [
+          -12.150255726132857,
+          -0.3816446584030279
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 416.5142674940623,
+        "worstTradeBpsAfter9Bps": -53.410324623578305,
+        "medianHoldingMinutesUpperBound": 32.5,
+        "exits": {
+          "target": 28,
+          "stop": 22,
+          "stop_gap": 0,
+          "timeout": 0
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-short-opposite-60m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 113,
+        "grossMeanBps": 1.8174127053696778,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.8174127053696778
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.182587294630322
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.182587294630322
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.182587294630322
+          }
+        ],
+        "winRateAfter9Bps": 0.36283185840707965,
+        "profitFactorAfter9Bps": 0.5684196671408412,
+        "meanAfter9BpsWeekBootstrap95": [
+          -12.68215724336511,
+          -2.0197457554519453
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1074.5813772611111,
+        "worstTradeBpsAfter9Bps": -101.51761523441093,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 8,
+          "stop": 46,
+          "stop_gap": 1,
+          "timeout": 58
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 52,
+        "grossMeanBps": 6.02756883892879,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 6.02756883892879
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -0.97243116107121
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -2.97243116107121
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -7.97243116107121
+          }
+        ],
+        "winRateAfter9Bps": 0.4423076923076923,
+        "profitFactorAfter9Bps": 0.7871141855630606,
+        "meanAfter9BpsWeekBootstrap95": [
+          -10.78506887335538,
+          6.0399248389953675
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 320.42084156796227,
+        "worstTradeBpsAfter9Bps": -53.43333766130708,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 7,
+          "stop": 18,
+          "stop_gap": 0,
+          "timeout": 27
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-equal-short-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 109,
+        "grossMeanBps": -1.413795261815918,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.413795261815918
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.413795261815919
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.413795261815919
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.413795261815919
+          }
+        ],
+        "winRateAfter9Bps": 0.27522935779816515,
+        "profitFactorAfter9Bps": 0.5347956942981995,
+        "meanAfter9BpsWeekBootstrap95": [
+          -17.090852265943596,
+          -4.226223209668033
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1389.2518259165108,
+        "worstTradeBpsAfter9Bps": -101.51761523441093,
+        "medianHoldingMinutesUpperBound": 70,
+        "exits": {
+          "target": 23,
+          "stop": 67,
+          "stop_gap": 1,
+          "timeout": 18
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 48,
+        "grossMeanBps": 9.19300796811998,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 9.19300796811998
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": 2.1930079681199803
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": 0.19300796811998033
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -4.80699203188002
+          }
+        ],
+        "winRateAfter9Bps": 0.4166666666666667,
+        "profitFactorAfter9Bps": 1.011145410210698,
+        "meanAfter9BpsWeekBootstrap95": [
+          -10.591242407878713,
+          9.494962258831041
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 316.20312354083796,
+        "worstTradeBpsAfter9Bps": -53.43333766130708,
+        "medianHoldingMinutesUpperBound": 65,
+        "exits": {
+          "target": 15,
+          "stop": 27,
+          "stop_gap": 0,
+          "timeout": 6
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-long-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 152,
+        "grossMeanBps": -2.000381380971444,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -2.000381380971444
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -9.000381380971444
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -11.000381380971444
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -16.000381380971444
+          }
+        ],
+        "winRateAfter9Bps": 0.34868421052631576,
+        "profitFactorAfter9Bps": 0.38813637179560256,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.661303903688738,
+          -6.890780477604428
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1762.9795690302706,
+        "worstTradeBpsAfter9Bps": -123.70534177680514,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 51,
+          "stop": 39,
+          "stop_gap": 0,
+          "timeout": 62
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 70,
+        "grossMeanBps": -3.1732550203631886,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.1732550203631886
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.17325502036319
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.17325502036319
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.17325502036319
+          }
+        ],
+        "winRateAfter9Bps": 0.32857142857142857,
+        "profitFactorAfter9Bps": 0.31844534824117077,
+        "meanAfter9BpsWeekBootstrap95": [
+          -19.038100348419185,
+          -5.788872581705383
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 901.047769232762,
+        "worstTradeBpsAfter9Bps": -95.80567785798065,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 18,
+          "stop": 17,
+          "stop_gap": 0,
+          "timeout": 35
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-long-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 149,
+        "grossMeanBps": -2.323996005067777,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -2.323996005067777
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -9.323996005067777
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -11.323996005067777
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -16.323996005067777
+          }
+        ],
+        "winRateAfter9Bps": 0.37583892617449666,
+        "profitFactorAfter9Bps": 0.49547567664026004,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.725821579979623,
+          -6.603360248968492
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1827.059032470921,
+        "worstTradeBpsAfter9Bps": -107.58896962467223,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 71,
+          "stop": 64,
+          "stop_gap": 0,
+          "timeout": 14
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 68,
+        "grossMeanBps": -0.5452131517986759,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.5452131517986759
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.545213151798676
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.545213151798675
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.545213151798675
+          }
+        ],
+        "winRateAfter9Bps": 0.4411764705882353,
+        "profitFactorAfter9Bps": 0.518161258935715,
+        "meanAfter9BpsWeekBootstrap95": [
+          -17.2936091648457,
+          -2.2863029376091313
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 773.3843973479864,
+        "worstTradeBpsAfter9Bps": -95.80567785798065,
+        "medianHoldingMinutesUpperBound": 62.5,
+        "exits": {
+          "target": 34,
+          "stop": 25,
+          "stop_gap": 0,
+          "timeout": 9
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-long-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 175,
+        "grossMeanBps": 2.946320549518511,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 2.946320549518511
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -4.053679450481489
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -6.053679450481489
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -11.05367945048149
+          }
+        ],
+        "winRateAfter9Bps": 0.4,
+        "profitFactorAfter9Bps": 0.6706806824868861,
+        "meanAfter9BpsWeekBootstrap95": [
+          -10.469633660894454,
+          -1.6787341872045987
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1266.8173740317995,
+        "worstTradeBpsAfter9Bps": -123.70534177680514,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 36,
+          "stop": 44,
+          "stop_gap": 0,
+          "timeout": 95
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 76,
+        "grossMeanBps": -7.549504243209248,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -7.549504243209248
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -14.549504243209249
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -16.54950424320925
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -21.54950424320925
+          }
+        ],
+        "winRateAfter9Bps": 0.3157894736842105,
+        "profitFactorAfter9Bps": 0.2740782929251337,
+        "meanAfter9BpsWeekBootstrap95": [
+          -22.8878985754515,
+          -10.659138878368095
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 1294.5254510177808,
+        "worstTradeBpsAfter9Bps": -115.93455934824958,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 4,
+          "stop": 20,
+          "stop_gap": 0,
+          "timeout": 52
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-long-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 163,
+        "grossMeanBps": 4.9136578133293245,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 4.9136578133293245
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -2.0863421866706755
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -4.0863421866706755
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -9.086342186670676
+          }
+        ],
+        "winRateAfter9Bps": 0.4110429447852761,
+        "profitFactorAfter9Bps": 0.8340570398891909,
+        "meanAfter9BpsWeekBootstrap95": [
+          -11.331470936039276,
+          3.3172673046811703
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 982.4549600630451,
+        "worstTradeBpsAfter9Bps": -107.58896962467223,
+        "medianHoldingMinutesUpperBound": 80,
+        "exits": {
+          "target": 55,
+          "stop": 72,
+          "stop_gap": 1,
+          "timeout": 35
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 67,
+        "grossMeanBps": -0.010290230038979331,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.010290230038979331
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.010290230038979
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.01029023003898
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.01029023003898
+          }
+        ],
+        "winRateAfter9Bps": 0.417910447761194,
+        "profitFactorAfter9Bps": 0.6667216017523919,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.847205505579165,
+          3.347273343679643
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 684.8986650496015,
+        "worstTradeBpsAfter9Bps": -115.93455934824958,
+        "medianHoldingMinutesUpperBound": 135,
+        "exits": {
+          "target": 14,
+          "stop": 32,
+          "stop_gap": 0,
+          "timeout": 21
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-short-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 155,
+        "grossMeanBps": -1.4085706680078869,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.4085706680078869
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.408570668007886
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.408570668007886
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.408570668007886
+          }
+        ],
+        "winRateAfter9Bps": 0.32903225806451614,
+        "profitFactorAfter9Bps": 0.33106022677375735,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.953415714889168,
+          -6.480458004529694
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1613.3284535412217,
+        "worstTradeBpsAfter9Bps": -82.20959807853633,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 44,
+          "stop": 30,
+          "stop_gap": 0,
+          "timeout": 81
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 69,
+        "grossMeanBps": 0.6664192963549833,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.6664192963549833
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.3335807036450165
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.333580703645017
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.333580703645017
+          }
+        ],
+        "winRateAfter9Bps": 0.37681159420289856,
+        "profitFactorAfter9Bps": 0.4656071905755872,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.532663898609988,
+          -2.4855929400977312
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 723.4034098490984,
+        "worstTradeBpsAfter9Bps": -89.66940905545383,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 23,
+          "stop": 9,
+          "stop_gap": 0,
+          "timeout": 37
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-short-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 148,
+        "grossMeanBps": 0.31665924690486996,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.31665924690486996
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.68334075309513
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.68334075309513
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.68334075309513
+          }
+        ],
+        "winRateAfter9Bps": 0.49324324324324326,
+        "profitFactorAfter9Bps": 0.542546979744949,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.288769245657567,
+          -2.2724167025074484
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1285.13443145808,
+        "worstTradeBpsAfter9Bps": -103.83364114614146,
+        "medianHoldingMinutesUpperBound": 65,
+        "exits": {
+          "target": 74,
+          "stop": 57,
+          "stop_gap": 0,
+          "timeout": 17
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 69,
+        "grossMeanBps": 1.708062220386965,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.708062220386965
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.2919377796130345
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.2919377796130345
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.291937779613034
+          }
+        ],
+        "winRateAfter9Bps": 0.5507246376811594,
+        "profitFactorAfter9Bps": 0.6142154809010109,
+        "meanAfter9BpsWeekBootstrap95": [
+          -17.024989584033964,
+          2.022421808042454
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 740.2315722027645,
+        "worstTradeBpsAfter9Bps": -89.66940905545383,
+        "medianHoldingMinutesUpperBound": 70,
+        "exits": {
+          "target": 37,
+          "stop": 26,
+          "stop_gap": 0,
+          "timeout": 6
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-short-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 177,
+        "grossMeanBps": -0.8764488261275317,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.8764488261275317
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.876448826127532
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.876448826127532
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.876448826127532
+          }
+        ],
+        "winRateAfter9Bps": 0.3446327683615819,
+        "profitFactorAfter9Bps": 0.45188376787157003,
+        "meanAfter9BpsWeekBootstrap95": [
+          -16.13663557579468,
+          -4.328093822492795
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1748.1314422245725,
+        "worstTradeBpsAfter9Bps": -157.2437291312233,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 27,
+          "stop": 37,
+          "stop_gap": 0,
+          "timeout": 113
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 75,
+        "grossMeanBps": 1.7143522618717983,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.7143522618717983
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.285647738128201
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.285647738128201
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.285647738128201
+          }
+        ],
+        "winRateAfter9Bps": 0.3333333333333333,
+        "profitFactorAfter9Bps": 0.5582967725319075,
+        "meanAfter9BpsWeekBootstrap95": [
+          -11.737828424787939,
+          -2.327945128808784
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 660.2230038858942,
+        "worstTradeBpsAfter9Bps": -89.66940905545383,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 9,
+          "stop": 9,
+          "stop_gap": 0,
+          "timeout": 57
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-v-short-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 161,
+        "grossMeanBps": 0.2693147724080976,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.2693147724080976
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.730685227591902
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.730685227591902
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.730685227591902
+          }
+        ],
+        "winRateAfter9Bps": 0.4161490683229814,
+        "profitFactorAfter9Bps": 0.6500644843941675,
+        "meanAfter9BpsWeekBootstrap95": [
+          -18.179838010462117,
+          -0.21612859677929538
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1405.640321642296,
+        "worstTradeBpsAfter9Bps": -157.2437291312233,
+        "medianHoldingMinutesUpperBound": 100,
+        "exits": {
+          "target": 42,
+          "stop": 71,
+          "stop_gap": 0,
+          "timeout": 48
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 68,
+        "grossMeanBps": 5.353037434385262,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 5.353037434385262
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -1.6469625656147384
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -3.6469625656147384
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -8.64696256561474
+          }
+        ],
+        "winRateAfter9Bps": 0.4264705882352941,
+        "profitFactorAfter9Bps": 0.8292375452301787,
+        "meanAfter9BpsWeekBootstrap95": [
+          -12.139909892661558,
+          7.114143628225789
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 607.2906672937299,
+        "worstTradeBpsAfter9Bps": -89.66940905545383,
+        "medianHoldingMinutesUpperBound": 130,
+        "exits": {
+          "target": 19,
+          "stop": 28,
+          "stop_gap": 0,
+          "timeout": 21
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-long-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 65,
+        "grossMeanBps": -6.021245566032569,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -6.021245566032569
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -13.021245566032569
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -15.021245566032569
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -20.02124556603257
+          }
+        ],
+        "winRateAfter9Bps": 0.3230769230769231,
+        "profitFactorAfter9Bps": 0.2603648580795903,
+        "meanAfter9BpsWeekBootstrap95": [
+          -22.392652646057613,
+          -7.815642974371722
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 981.2363525654537,
+        "worstTradeBpsAfter9Bps": -68.86173110082649,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 10,
+          "stop": 29,
+          "stop_gap": 0,
+          "timeout": 26
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 31,
+        "grossMeanBps": -7.363771020269509,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -7.363771020269509
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -14.363771020269509
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -16.36377102026951
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -21.36377102026951
+          }
+        ],
+        "winRateAfter9Bps": 0.25806451612903225,
+        "profitFactorAfter9Bps": 0.22836916553465092,
+        "meanAfter9BpsWeekBootstrap95": [
+          -23.624855465749455,
+          -6.915871769495214
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 509.60487429265595,
+        "worstTradeBpsAfter9Bps": -57.61162485015114,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 5,
+          "stop": 17,
+          "stop_gap": 0,
+          "timeout": 9
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-long-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 64,
+        "grossMeanBps": -3.8818371469918542,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -3.8818371469918542
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -10.881837146991854
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -12.881837146991854
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -17.881837146991856
+          }
+        ],
+        "winRateAfter9Bps": 0.34375,
+        "profitFactorAfter9Bps": 0.4605903565766736,
+        "meanAfter9BpsWeekBootstrap95": [
+          -23.816132330614572,
+          -1.558765162929149
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 890.4305063696795,
+        "worstTradeBpsAfter9Bps": -68.86173110082649,
+        "medianHoldingMinutesUpperBound": 47.5,
+        "exits": {
+          "target": 22,
+          "stop": 38,
+          "stop_gap": 0,
+          "timeout": 4
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 31,
+        "grossMeanBps": -1.4643009166737462,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -1.4643009166737462
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -8.464300916673746
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -10.464300916673746
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -15.464300916673746
+          }
+        ],
+        "winRateAfter9Bps": 0.3870967741935484,
+        "profitFactorAfter9Bps": 0.5095301668506994,
+        "meanAfter9BpsWeekBootstrap95": [
+          -21.510897664278517,
+          3.57634558151487
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 324.3933284168862,
+        "worstTradeBpsAfter9Bps": -57.61162485015114,
+        "medianHoldingMinutesUpperBound": 35,
+        "exits": {
+          "target": 12,
+          "stop": 18,
+          "stop_gap": 0,
+          "timeout": 1
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-long-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 67,
+        "grossMeanBps": -7.565939316841878,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -7.565939316841878
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -14.565939316841877
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -16.565939316841877
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -21.565939316841877
+          }
+        ],
+        "winRateAfter9Bps": 0.26865671641791045,
+        "profitFactorAfter9Bps": 0.20686015054934695,
+        "meanAfter9BpsWeekBootstrap95": [
+          -23.630369160388693,
+          -9.516356851396461
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 1115.6002746401632,
+        "worstTradeBpsAfter9Bps": -68.86173110082649,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 2,
+          "stop": 30,
+          "stop_gap": 0,
+          "timeout": 35
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 31,
+        "grossMeanBps": -6.020971320893094,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -6.020971320893094
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -13.020971320893093
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -15.020971320893093
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -20.020971320893093
+          }
+        ],
+        "winRateAfter9Bps": 0.25806451612903225,
+        "profitFactorAfter9Bps": 0.2916886565777722,
+        "meanAfter9BpsWeekBootstrap95": [
+          -22.385900741801027,
+          -6.744138486434168
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 469.7560944373025,
+        "worstTradeBpsAfter9Bps": -57.61162485015114,
+        "medianHoldingMinutesUpperBound": 50,
+        "exits": {
+          "target": 1,
+          "stop": 17,
+          "stop_gap": 0,
+          "timeout": 13
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-long-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 64,
+        "grossMeanBps": -2.6477710237659564,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -2.6477710237659564
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -9.647771023765957
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -11.647771023765957
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -16.647771023765955
+          }
+        ],
+        "winRateAfter9Bps": 0.296875,
+        "profitFactorAfter9Bps": 0.5661103403720147,
+        "meanAfter9BpsWeekBootstrap95": [
+          -24.36606026908271,
+          1.7567060589261532
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 947.707206545133,
+        "worstTradeBpsAfter9Bps": -68.86173110082649,
+        "medianHoldingMinutesUpperBound": 72.5,
+        "exits": {
+          "target": 11,
+          "stop": 42,
+          "stop_gap": 0,
+          "timeout": 11
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 30,
+        "grossMeanBps": 2.602234843070242,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 2.602234843070242
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -4.397765156929758
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -6.397765156929758
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -11.397765156929758
+          }
+        ],
+        "winRateAfter9Bps": 0.3333333333333333,
+        "profitFactorAfter9Bps": 0.7252514215377401,
+        "meanAfter9BpsWeekBootstrap95": [
+          -22.140051545608358,
+          13.481187026108698
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 329.05916796231156,
+        "worstTradeBpsAfter9Bps": -57.61162485015114,
+        "medianHoldingMinutesUpperBound": 45,
+        "exits": {
+          "target": 5,
+          "stop": 19,
+          "stop_gap": 0,
+          "timeout": 6
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-short-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 71,
+        "grossMeanBps": 3.9192833220901604,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 3.9192833220901604
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -3.0807166779098396
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -5.080716677909839
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -10.08071667790984
+          }
+        ],
+        "winRateAfter9Bps": 0.43661971830985913,
+        "profitFactorAfter9Bps": 0.637317270885684,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.316917865779535,
+          2.3296066731709955
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 548.1421441883978,
+        "worstTradeBpsAfter9Bps": -100.27858399934796,
+        "medianHoldingMinutesUpperBound": 50,
+        "exits": {
+          "target": 20,
+          "stop": 21,
+          "stop_gap": 0,
+          "timeout": 30
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 35,
+        "grossMeanBps": 1.1119895753356641,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.1119895753356641
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.888010424664336
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.888010424664336
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.888010424664335
+          }
+        ],
+        "winRateAfter9Bps": 0.37142857142857144,
+        "profitFactorAfter9Bps": 0.4473005954726391,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.760321137625628,
+          -2.927984215843621
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 351.2106507264207,
+        "worstTradeBpsAfter9Bps": -42.212962960376124,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 6,
+          "stop": 10,
+          "stop_gap": 0,
+          "timeout": 19
+        },
+        "ambiguousStopFirstTrades": 1
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-short-middle-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 71,
+        "grossMeanBps": 1.842598547176382,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.842598547176382
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.157401452823618
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.157401452823618
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.157401452823619
+          }
+        ],
+        "winRateAfter9Bps": 0.4507042253521127,
+        "profitFactorAfter9Bps": 0.604828930315403,
+        "meanAfter9BpsWeekBootstrap95": [
+          -16.413743902174772,
+          1.1583208037386492
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 665.8322258950074,
+        "worstTradeBpsAfter9Bps": -100.27858399934796,
+        "medianHoldingMinutesUpperBound": 50,
+        "exits": {
+          "target": 30,
+          "stop": 34,
+          "stop_gap": 0,
+          "timeout": 7
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 35,
+        "grossMeanBps": 10.851619286184373,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 10.851619286184373
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": 3.8516192861843734
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": 1.8516192861843734
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -3.1483807138156266
+          }
+        ],
+        "winRateAfter9Bps": 0.5142857142857142,
+        "profitFactorAfter9Bps": 1.1231306282654459,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.33131587943989,
+          14.674726012885696
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 206.0794746493188,
+        "worstTradeBpsAfter9Bps": -42.35171726959629,
+        "medianHoldingMinutesUpperBound": 65,
+        "exits": {
+          "target": 17,
+          "stop": 17,
+          "stop_gap": 0,
+          "timeout": 1
+        },
+        "ambiguousStopFirstTrades": 1
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-short-opposite-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 12
+      },
+      "fit": {
+        "trades": 70,
+        "grossMeanBps": -0.4385574046048726,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": -0.4385574046048726
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -7.438557404604873
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -9.438557404604872
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -14.438557404604872
+          }
+        ],
+        "winRateAfter9Bps": 0.35714285714285715,
+        "profitFactorAfter9Bps": 0.4497853310140674,
+        "meanAfter9BpsWeekBootstrap95": [
+          -16.170602027129167,
+          -3.5636502545717663
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 718.1287946438845,
+        "worstTradeBpsAfter9Bps": -100.27858399934796,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 1,
+          "stop": 24,
+          "stop_gap": 0,
+          "timeout": 45
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 35,
+        "grossMeanBps": 0.7869786611853145,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 0.7869786611853145
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -6.213021338814686
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -8.213021338814686
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -13.213021338814686
+          }
+        ],
+        "winRateAfter9Bps": 0.34285714285714286,
+        "profitFactorAfter9Bps": 0.45417937769938904,
+        "meanAfter9BpsWeekBootstrap95": [
+          -13.015269795367368,
+          -3.0771330897661584
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 324.4886510940621,
+        "worstTradeBpsAfter9Bps": -42.212962960376124,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 2,
+          "stop": 11,
+          "stop_gap": 0,
+          "timeout": 22
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-short-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "fit": {
+        "trades": 69,
+        "grossMeanBps": 1.7978659596424946,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 1.7978659596424946
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -5.202134040357505
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -7.202134040357505
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -12.202134040357505
+          }
+        ],
+        "winRateAfter9Bps": 0.36231884057971014,
+        "profitFactorAfter9Bps": 0.6648247174862073,
+        "meanAfter9BpsWeekBootstrap95": [
+          -16.074161797167612,
+          0.4511991336158923
+        ],
+        "calendarBlocks": 18,
+        "closedTradeDrawdownBpsAfter9Bps": 751.1921935401052,
+        "worstTradeBpsAfter9Bps": -100.27858399934796,
+        "medianHoldingMinutesUpperBound": 105,
+        "exits": {
+          "target": 9,
+          "stop": 37,
+          "stop_gap": 0,
+          "timeout": 23
+        },
+        "ambiguousStopFirstTrades": 0
+      },
+      "comparison": {
+        "trades": 33,
+        "grossMeanBps": 12.470154824472347,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 12.470154824472347
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": 5.470154824472347
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": 3.4701548244723472
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -1.5298451755276528
+          }
+        ],
+        "winRateAfter9Bps": 0.3939393939393939,
+        "profitFactorAfter9Bps": 1.1888851797237072,
+        "meanAfter9BpsWeekBootstrap95": [
+          -9.127817379801515,
+          16.236418806624528
+        ],
+        "calendarBlocks": 9,
+        "closedTradeDrawdownBpsAfter9Bps": 127.93093566726421,
+        "worstTradeBpsAfter9Bps": -42.35171726959629,
+        "medianHoldingMinutesUpperBound": 90,
+        "exits": {
+          "target": 6,
+          "stop": 17,
+          "stop_gap": 0,
+          "timeout": 10
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    }
+  ],
+  "earlierChecks": [
+    {
+      "config": {
+        "id": "130-4-v-long-opposite-240m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "summary": {
+        "trades": 146,
+        "grossMeanBps": 4.452653093785032,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 4.452653093785032
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -2.547346906214968
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -4.547346906214968
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -9.547346906214969
+          }
+        ],
+        "winRateAfter9Bps": 0.4315068493150685,
+        "profitFactorAfter9Bps": 0.8603417212155531,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.041046122023928,
+          5.401382095096709
+        ],
+        "calendarBlocks": 17,
+        "closedTradeDrawdownBpsAfter9Bps": 1086.6119976604518,
+        "worstTradeBpsAfter9Bps": -156.55514241839074,
+        "medianHoldingMinutesUpperBound": 92.5,
+        "exits": {
+          "target": 38,
+          "stop": 71,
+          "stop_gap": 0,
+          "timeout": 37
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "60-3-v-long-opposite-240m",
+        "length": 60,
+        "multiplier": 3,
+        "kind": "v",
+        "side": 1,
+        "target": "opposite",
+        "holdBars": 48
+      },
+      "summary": {
+        "trades": 273,
+        "grossMeanBps": 3.561218138371784,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 3.561218138371784
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -3.438781861628216
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -5.438781861628216
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -10.438781861628216
+          }
+        ],
+        "winRateAfter9Bps": 0.45054945054945056,
+        "profitFactorAfter9Bps": 0.8184128576426392,
+        "meanAfter9BpsWeekBootstrap95": [
+          -14.428390276182762,
+          4.819800318971931
+        ],
+        "calendarBlocks": 17,
+        "closedTradeDrawdownBpsAfter9Bps": 1709.2191547845564,
+        "worstTradeBpsAfter9Bps": -212.08291385844,
+        "medianHoldingMinutesUpperBound": 75,
+        "exits": {
+          "target": 107,
+          "stop": 124,
+          "stop_gap": 1,
+          "timeout": 41
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    },
+    {
+      "config": {
+        "id": "130-4-equal-short-middle-60m",
+        "length": 130,
+        "multiplier": 4,
+        "kind": "equal",
+        "side": -1,
+        "target": "middle",
+        "holdBars": 12
+      },
+      "summary": {
+        "trades": 65,
+        "grossMeanBps": 2.9242909126605356,
+        "costScenarios": [
+          {
+            "roundTripBps": 0,
+            "meanBps": 2.9242909126605356
+          },
+          {
+            "roundTripBps": 7,
+            "meanBps": -4.075709087339464
+          },
+          {
+            "roundTripBps": 9,
+            "meanBps": -6.075709087339464
+          },
+          {
+            "roundTripBps": 14,
+            "meanBps": -11.075709087339465
+          }
+        ],
+        "winRateAfter9Bps": 0.38461538461538464,
+        "profitFactorAfter9Bps": 0.6665359436100562,
+        "meanAfter9BpsWeekBootstrap95": [
+          -15.707877617132239,
+          6.24366616962486
+        ],
+        "calendarBlocks": 17,
+        "closedTradeDrawdownBpsAfter9Bps": 508.4773948120227,
+        "worstTradeBpsAfter9Bps": -96.11412108617589,
+        "medianHoldingMinutesUpperBound": 60,
+        "exits": {
+          "target": 10,
+          "stop": 22,
+          "stop_gap": 0,
+          "timeout": 33
+        },
+        "ambiguousStopFirstTrades": 0
+      }
+    }
+  ],
+  "venueCosts": {
+    "checkedOnClientDate": "2026-10-26",
+    "scope": "Published standard-tier perpetual taker rates applied to the same Deribit reference candles; not venue-native execution backtests. Account tiers unverified. Funding and size-dependent impact excluded. One bp per side spread/slippage is assumed.",
+    "venues": [
+      {
+        "name": "Thalex tier 1 perpetual market orders",
+        "takerBpsPerSide": 5,
+        "spreadSlippageBpsPerSide": 1,
+        "roundTripBps": 12,
+        "source": "https://support.thalex.com/hc/en-us/articles/7079268315665-What-trading-fees-does-Thalex-charge",
+        "results": [
+          {
+            "id": "60-3-v-long-middle-60m",
+            "fit": {
+              "trades": 269,
+              "meanGrossBps": 1.6239847621371621,
+              "meanAfterCostsBps": -10.376015237862838,
+              "meanAfterCosts95": [
+                -14.024135854720406,
+                -6.673806179930811
+              ]
+            },
+            "comparison": {
+              "trades": 120,
+              "meanGrossBps": -1.2913306093538435,
+              "meanAfterCostsBps": -13.291330609353844,
+              "meanAfterCosts95": [
+                -15.693738301917985,
+                -10.85012970362537
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-middle-240m",
+            "fit": {
+              "trades": 260,
+              "meanGrossBps": 1.372459812061372,
+              "meanAfterCostsBps": -10.627540187938628,
+              "meanAfterCosts95": [
+                -15.166618888678283,
+                -6.074029851028985
+              ]
+            },
+            "comparison": {
+              "trades": 117,
+              "meanGrossBps": -0.24913856862356526,
+              "meanAfterCostsBps": -12.249138568623565,
+              "meanAfterCosts95": [
+                -14.460586322444003,
+                -9.584969560176521
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-60m",
+            "fit": {
+              "trades": 313,
+              "meanGrossBps": 3.1215250730904778,
+              "meanAfterCostsBps": -8.878474926909522,
+              "meanAfterCosts95": [
+                -12.77489132131815,
+                -4.481927734548114
+              ]
+            },
+            "comparison": {
+              "trades": 134,
+              "meanGrossBps": -0.6109121425523119,
+              "meanAfterCostsBps": -12.610912142552312,
+              "meanAfterCosts95": [
+                -16.721489737945607,
+                -8.6988580783444
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-240m",
+            "fit": {
+              "trades": 278,
+              "meanGrossBps": 4.256062645195768,
+              "meanAfterCostsBps": -7.743937354804232,
+              "meanAfterCosts95": [
+                -14.046356250334274,
+                -1.3090080376128395
+              ]
+            },
+            "comparison": {
+              "trades": 124,
+              "meanGrossBps": 3.737411102929924,
+              "meanAfterCostsBps": -8.262588897070076,
+              "meanAfterCosts95": [
+                -13.23202155752819,
+                -3.0870223375447345
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-middle-60m",
+            "fit": {
+              "trades": 257,
+              "meanGrossBps": -1.1610671738313256,
+              "meanAfterCostsBps": -13.161067173831325,
+              "meanAfterCosts95": [
+                -16.22070228135189,
+                -10.499354144022199
+              ]
+            },
+            "comparison": {
+              "trades": 126,
+              "meanGrossBps": -4.542120284514225,
+              "meanAfterCostsBps": -16.542120284514226,
+              "meanAfterCosts95": [
+                -20.950081721754383,
+                -11.930295727524848
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-middle-240m",
+            "fit": {
+              "trades": 247,
+              "meanGrossBps": -1.0447759013656364,
+              "meanAfterCostsBps": -13.044775901365636,
+              "meanAfterCosts95": [
+                -17.92130670723651,
+                -8.164230452963938
+              ]
+            },
+            "comparison": {
+              "trades": 123,
+              "meanGrossBps": -3.6733489873351264,
+              "meanAfterCostsBps": -15.673348987335126,
+              "meanAfterCosts95": [
+                -21.655871473331395,
+                -10.324114128425531
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-opposite-60m",
+            "fit": {
+              "trades": 306,
+              "meanGrossBps": -1.4237958380656515,
+              "meanAfterCostsBps": -13.42379583806565,
+              "meanAfterCosts95": [
+                -17.64441835272592,
+                -9.920459328671937
+              ]
+            },
+            "comparison": {
+              "trades": 130,
+              "meanGrossBps": -1.7338166698360664,
+              "meanAfterCostsBps": -13.733816669836067,
+              "meanAfterCosts95": [
+                -18.204843382689056,
+                -8.909382250402569
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-opposite-240m",
+            "fit": {
+              "trades": 267,
+              "meanGrossBps": -1.2552287434120453,
+              "meanAfterCostsBps": -13.255228743412045,
+              "meanAfterCosts95": [
+                -19.335746261398615,
+                -7.656549710217457
+              ]
+            },
+            "comparison": {
+              "trades": 119,
+              "meanGrossBps": -4.525255263124171,
+              "meanAfterCostsBps": -16.525255263124173,
+              "meanAfterCosts95": [
+                -21.16103362441294,
+                -12.490039138542889
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-middle-60m",
+            "fit": {
+              "trades": 94,
+              "meanGrossBps": -1.9911623564224616,
+              "meanAfterCostsBps": -13.991162356422462,
+              "meanAfterCosts95": [
+                -18.678517734597015,
+                -9.500083159305676
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -3.088457492038892,
+              "meanAfterCostsBps": -15.088457492038891,
+              "meanAfterCosts95": [
+                -22.71854963445739,
+                -7.063391844043532
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-middle-240m",
+            "fit": {
+              "trades": 93,
+              "meanGrossBps": 0.6033629648615237,
+              "meanAfterCostsBps": -11.396637035138475,
+              "meanAfterCosts95": [
+                -18.737166647995295,
+                -4.699790728449911
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -3.258812664541102,
+              "meanAfterCostsBps": -15.258812664541102,
+              "meanAfterCosts95": [
+                -26.581125303541455,
+                -3.4742840132155752
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-opposite-60m",
+            "fit": {
+              "trades": 97,
+              "meanGrossBps": -3.5565055549849096,
+              "meanAfterCostsBps": -15.55650555498491,
+              "meanAfterCosts95": [
+                -22.702338493258203,
+                -8.394902972758839
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -0.8657951697076149,
+              "meanAfterCostsBps": -12.865795169707615,
+              "meanAfterCosts95": [
+                -21.011850413079515,
+                -3.506923237195881
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-opposite-240m",
+            "fit": {
+              "trades": 95,
+              "meanGrossBps": 0.7707312512457137,
+              "meanAfterCostsBps": -11.229268748754286,
+              "meanAfterCosts95": [
+                -23.934545221320047,
+                2.9686886488094117
+              ]
+            },
+            "comparison": {
+              "trades": 40,
+              "meanGrossBps": 8.259544751345688,
+              "meanAfterCostsBps": -3.740455248654312,
+              "meanAfterCosts95": [
+                -21.586928219684232,
+                16.58357318109875
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-middle-60m",
+            "fit": {
+              "trades": 115,
+              "meanGrossBps": 1.261279385670392,
+              "meanAfterCostsBps": -10.738720614329608,
+              "meanAfterCosts95": [
+                -16.139694416047288,
+                -5.755500327476218
+              ]
+            },
+            "comparison": {
+              "trades": 52,
+              "meanGrossBps": 1.8216397809793823,
+              "meanAfterCostsBps": -10.178360219020618,
+              "meanAfterCosts95": [
+                -13.960708236906145,
+                -5.8312814673996956
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-middle-240m",
+            "fit": {
+              "trades": 114,
+              "meanGrossBps": 0.2995859844877449,
+              "meanAfterCostsBps": -11.700414015512255,
+              "meanAfterCosts95": [
+                -18.351860907819983,
+                -5.69021033690154
+              ]
+            },
+            "comparison": {
+              "trades": 50,
+              "meanGrossBps": 3.0229189827386307,
+              "meanAfterCostsBps": -8.97708101726137,
+              "meanAfterCosts95": [
+                -15.150255726132857,
+                -3.3816446584030277
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-opposite-60m",
+            "fit": {
+              "trades": 113,
+              "meanGrossBps": 1.8174127053696778,
+              "meanAfterCostsBps": -10.182587294630322,
+              "meanAfterCosts95": [
+                -15.68215724336511,
+                -5.019745755451945
+              ]
+            },
+            "comparison": {
+              "trades": 52,
+              "meanGrossBps": 6.02756883892879,
+              "meanAfterCostsBps": -5.97243116107121,
+              "meanAfterCosts95": [
+                -13.78506887335538,
+                3.0399248389953684
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-opposite-240m",
+            "fit": {
+              "trades": 109,
+              "meanGrossBps": -1.413795261815918,
+              "meanAfterCostsBps": -13.413795261815919,
+              "meanAfterCosts95": [
+                -20.090852265943596,
+                -7.226223209668033
+              ]
+            },
+            "comparison": {
+              "trades": 48,
+              "meanGrossBps": 9.19300796811998,
+              "meanAfterCostsBps": -2.8069920318800197,
+              "meanAfterCosts95": [
+                -13.591242407878713,
+                6.494962258831041
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-middle-60m",
+            "fit": {
+              "trades": 152,
+              "meanGrossBps": -2.000381380971444,
+              "meanAfterCostsBps": -14.000381380971444,
+              "meanAfterCosts95": [
+                -17.66130390368874,
+                -9.890780477604428
+              ]
+            },
+            "comparison": {
+              "trades": 70,
+              "meanGrossBps": -3.1732550203631886,
+              "meanAfterCostsBps": -15.17325502036319,
+              "meanAfterCosts95": [
+                -22.038100348419185,
+                -8.788872581705384
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-middle-240m",
+            "fit": {
+              "trades": 149,
+              "meanGrossBps": -2.323996005067777,
+              "meanAfterCostsBps": -14.323996005067777,
+              "meanAfterCosts95": [
+                -18.725821579979623,
+                -9.603360248968492
+              ]
+            },
+            "comparison": {
+              "trades": 68,
+              "meanGrossBps": -0.5452131517986759,
+              "meanAfterCostsBps": -12.545213151798675,
+              "meanAfterCosts95": [
+                -20.2936091648457,
+                -5.286302937609131
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-opposite-60m",
+            "fit": {
+              "trades": 175,
+              "meanGrossBps": 2.946320549518511,
+              "meanAfterCostsBps": -9.05367945048149,
+              "meanAfterCosts95": [
+                -13.469633660894454,
+                -4.678734187204599
+              ]
+            },
+            "comparison": {
+              "trades": 76,
+              "meanGrossBps": -7.549504243209248,
+              "meanAfterCostsBps": -19.54950424320925,
+              "meanAfterCosts95": [
+                -25.8878985754515,
+                -13.659138878368095
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-opposite-240m",
+            "fit": {
+              "trades": 163,
+              "meanGrossBps": 4.9136578133293245,
+              "meanAfterCostsBps": -7.0863421866706755,
+              "meanAfterCosts95": [
+                -14.331470936039276,
+                0.31726730468117026
+              ]
+            },
+            "comparison": {
+              "trades": 67,
+              "meanGrossBps": -0.010290230038979331,
+              "meanAfterCostsBps": -12.01029023003898,
+              "meanAfterCosts95": [
+                -21.847205505579165,
+                0.34727334367964247
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-middle-60m",
+            "fit": {
+              "trades": 155,
+              "meanGrossBps": -1.4085706680078869,
+              "meanAfterCostsBps": -13.408570668007886,
+              "meanAfterCosts95": [
+                -17.953415714889168,
+                -9.480458004529694
+              ]
+            },
+            "comparison": {
+              "trades": 69,
+              "meanGrossBps": 0.6664192963549833,
+              "meanAfterCostsBps": -11.333580703645017,
+              "meanAfterCosts95": [
+                -16.53266389860999,
+                -5.485592940097732
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-middle-240m",
+            "fit": {
+              "trades": 148,
+              "meanGrossBps": 0.31665924690486996,
+              "meanAfterCostsBps": -11.68334075309513,
+              "meanAfterCosts95": [
+                -18.28876924565757,
+                -5.272416702507448
+              ]
+            },
+            "comparison": {
+              "trades": 69,
+              "meanGrossBps": 1.708062220386965,
+              "meanAfterCostsBps": -10.291937779613034,
+              "meanAfterCosts95": [
+                -20.024989584033964,
+                -0.9775781919575461
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-opposite-60m",
+            "fit": {
+              "trades": 177,
+              "meanGrossBps": -0.8764488261275317,
+              "meanAfterCostsBps": -12.876448826127532,
+              "meanAfterCosts95": [
+                -19.13663557579468,
+                -7.328093822492795
+              ]
+            },
+            "comparison": {
+              "trades": 75,
+              "meanGrossBps": 1.7143522618717983,
+              "meanAfterCostsBps": -10.285647738128201,
+              "meanAfterCosts95": [
+                -14.737828424787939,
+                -5.327945128808784
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-opposite-240m",
+            "fit": {
+              "trades": 161,
+              "meanGrossBps": 0.2693147724080976,
+              "meanAfterCostsBps": -11.730685227591902,
+              "meanAfterCosts95": [
+                -21.179838010462117,
+                -3.2161285967792956
+              ]
+            },
+            "comparison": {
+              "trades": 68,
+              "meanGrossBps": 5.353037434385262,
+              "meanAfterCostsBps": -6.646962565614738,
+              "meanAfterCosts95": [
+                -15.139909892661558,
+                4.11414362822579
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-middle-60m",
+            "fit": {
+              "trades": 65,
+              "meanGrossBps": -6.021245566032569,
+              "meanAfterCostsBps": -18.02124556603257,
+              "meanAfterCosts95": [
+                -25.392652646057613,
+                -10.815642974371723
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -7.363771020269509,
+              "meanAfterCostsBps": -19.36377102026951,
+              "meanAfterCosts95": [
+                -26.624855465749455,
+                -9.915871769495215
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-middle-240m",
+            "fit": {
+              "trades": 64,
+              "meanGrossBps": -3.8818371469918542,
+              "meanAfterCostsBps": -15.881837146991854,
+              "meanAfterCosts95": [
+                -26.816132330614572,
+                -4.558765162929149
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -1.4643009166737462,
+              "meanAfterCostsBps": -13.464300916673746,
+              "meanAfterCosts95": [
+                -24.510897664278517,
+                0.5763455815148699
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-opposite-60m",
+            "fit": {
+              "trades": 67,
+              "meanGrossBps": -7.565939316841878,
+              "meanAfterCostsBps": -19.565939316841877,
+              "meanAfterCosts95": [
+                -26.630369160388693,
+                -12.516356851396461
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -6.020971320893094,
+              "meanAfterCostsBps": -18.020971320893093,
+              "meanAfterCosts95": [
+                -25.385900741801027,
+                -9.744138486434167
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-opposite-240m",
+            "fit": {
+              "trades": 64,
+              "meanGrossBps": -2.6477710237659564,
+              "meanAfterCostsBps": -14.647771023765957,
+              "meanAfterCosts95": [
+                -27.36606026908271,
+                -1.2432939410738477
+              ]
+            },
+            "comparison": {
+              "trades": 30,
+              "meanGrossBps": 2.602234843070242,
+              "meanAfterCostsBps": -9.397765156929758,
+              "meanAfterCosts95": [
+                -25.140051545608358,
+                10.4811870261087
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-60m",
+            "fit": {
+              "trades": 71,
+              "meanGrossBps": 3.9192833220901604,
+              "meanAfterCostsBps": -8.08071667790984,
+              "meanAfterCosts95": [
+                -16.316917865779537,
+                -0.6703933268290037
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 1.1119895753356641,
+              "meanAfterCostsBps": -10.888010424664335,
+              "meanAfterCosts95": [
+                -16.760321137625628,
+                -5.927984215843621
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-240m",
+            "fit": {
+              "trades": 71,
+              "meanGrossBps": 1.842598547176382,
+              "meanAfterCostsBps": -10.157401452823619,
+              "meanAfterCosts95": [
+                -19.413743902174772,
+                -1.8416791962613512
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 10.851619286184373,
+              "meanAfterCostsBps": -1.1483807138156266,
+              "meanAfterCosts95": [
+                -16.33131587943989,
+                11.674726012885696
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-opposite-60m",
+            "fit": {
+              "trades": 70,
+              "meanGrossBps": -0.4385574046048726,
+              "meanAfterCostsBps": -12.438557404604872,
+              "meanAfterCosts95": [
+                -19.170602027129167,
+                -6.563650254571766
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 0.7869786611853145,
+              "meanAfterCostsBps": -11.213021338814686,
+              "meanAfterCosts95": [
+                -16.015269795367367,
+                -6.077133089766159
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-opposite-240m",
+            "fit": {
+              "trades": 69,
+              "meanGrossBps": 1.7978659596424946,
+              "meanAfterCostsBps": -10.202134040357505,
+              "meanAfterCosts95": [
+                -19.074161797167612,
+                -2.5488008663841075
+              ]
+            },
+            "comparison": {
+              "trades": 33,
+              "meanGrossBps": 12.470154824472347,
+              "meanAfterCostsBps": 0.47015482447234724,
+              "meanAfterCosts95": [
+                -12.127817379801515,
+                13.236418806624528
+              ]
+            }
+          }
+        ],
+        "earlierChecks": [
+          {
+            "id": "130-4-v-long-opposite-240m",
+            "summary": {
+              "trades": 146,
+              "meanGrossBps": 4.452653093785032,
+              "meanAfterCostsBps": -7.547346906214968,
+              "meanAfterCosts95": [
+                -17.04104612202393,
+                2.401382095096709
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-240m",
+            "summary": {
+              "trades": 273,
+              "meanGrossBps": 3.561218138371784,
+              "meanAfterCostsBps": -8.438781861628216,
+              "meanAfterCosts95": [
+                -17.42839027618276,
+                1.8198003189719323
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-60m",
+            "summary": {
+              "trades": 65,
+              "meanGrossBps": 2.9242909126605356,
+              "meanAfterCostsBps": -9.075709087339465,
+              "meanAfterCosts95": [
+                -18.70787761713224,
+                3.243666169624859
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Bybit VIP 0 perpetual market orders",
+        "takerBpsPerSide": 5.5,
+        "spreadSlippageBpsPerSide": 1,
+        "roundTripBps": 13,
+        "source": "https://www.bybit.com/en/help-center/article/Trading-Fee-Structure",
+        "results": [
+          {
+            "id": "60-3-v-long-middle-60m",
+            "fit": {
+              "trades": 269,
+              "meanGrossBps": 1.6239847621371621,
+              "meanAfterCostsBps": -11.376015237862838,
+              "meanAfterCosts95": [
+                -15.024135854720406,
+                -7.673806179930811
+              ]
+            },
+            "comparison": {
+              "trades": 120,
+              "meanGrossBps": -1.2913306093538435,
+              "meanAfterCostsBps": -14.291330609353844,
+              "meanAfterCosts95": [
+                -16.693738301917985,
+                -11.85012970362537
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-middle-240m",
+            "fit": {
+              "trades": 260,
+              "meanGrossBps": 1.372459812061372,
+              "meanAfterCostsBps": -11.627540187938628,
+              "meanAfterCosts95": [
+                -16.166618888678283,
+                -7.074029851028985
+              ]
+            },
+            "comparison": {
+              "trades": 117,
+              "meanGrossBps": -0.24913856862356526,
+              "meanAfterCostsBps": -13.249138568623565,
+              "meanAfterCosts95": [
+                -15.460586322444003,
+                -10.584969560176521
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-60m",
+            "fit": {
+              "trades": 313,
+              "meanGrossBps": 3.1215250730904778,
+              "meanAfterCostsBps": -9.878474926909522,
+              "meanAfterCosts95": [
+                -13.77489132131815,
+                -5.481927734548114
+              ]
+            },
+            "comparison": {
+              "trades": 134,
+              "meanGrossBps": -0.6109121425523119,
+              "meanAfterCostsBps": -13.610912142552312,
+              "meanAfterCosts95": [
+                -17.721489737945607,
+                -9.6988580783444
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-240m",
+            "fit": {
+              "trades": 278,
+              "meanGrossBps": 4.256062645195768,
+              "meanAfterCostsBps": -8.743937354804231,
+              "meanAfterCosts95": [
+                -15.046356250334274,
+                -2.3090080376128395
+              ]
+            },
+            "comparison": {
+              "trades": 124,
+              "meanGrossBps": 3.737411102929924,
+              "meanAfterCostsBps": -9.262588897070076,
+              "meanAfterCosts95": [
+                -14.23202155752819,
+                -4.0870223375447345
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-middle-60m",
+            "fit": {
+              "trades": 257,
+              "meanGrossBps": -1.1610671738313256,
+              "meanAfterCostsBps": -14.161067173831325,
+              "meanAfterCosts95": [
+                -17.22070228135189,
+                -11.499354144022199
+              ]
+            },
+            "comparison": {
+              "trades": 126,
+              "meanGrossBps": -4.542120284514225,
+              "meanAfterCostsBps": -17.542120284514226,
+              "meanAfterCosts95": [
+                -21.950081721754383,
+                -12.930295727524848
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-middle-240m",
+            "fit": {
+              "trades": 247,
+              "meanGrossBps": -1.0447759013656364,
+              "meanAfterCostsBps": -14.044775901365636,
+              "meanAfterCosts95": [
+                -18.92130670723651,
+                -9.164230452963938
+              ]
+            },
+            "comparison": {
+              "trades": 123,
+              "meanGrossBps": -3.6733489873351264,
+              "meanAfterCostsBps": -16.673348987335125,
+              "meanAfterCosts95": [
+                -22.655871473331395,
+                -11.324114128425531
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-opposite-60m",
+            "fit": {
+              "trades": 306,
+              "meanGrossBps": -1.4237958380656515,
+              "meanAfterCostsBps": -14.42379583806565,
+              "meanAfterCosts95": [
+                -18.64441835272592,
+                -10.920459328671937
+              ]
+            },
+            "comparison": {
+              "trades": 130,
+              "meanGrossBps": -1.7338166698360664,
+              "meanAfterCostsBps": -14.733816669836067,
+              "meanAfterCosts95": [
+                -19.204843382689056,
+                -9.909382250402569
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-short-opposite-240m",
+            "fit": {
+              "trades": 267,
+              "meanGrossBps": -1.2552287434120453,
+              "meanAfterCostsBps": -14.255228743412045,
+              "meanAfterCosts95": [
+                -20.335746261398615,
+                -8.656549710217458
+              ]
+            },
+            "comparison": {
+              "trades": 119,
+              "meanGrossBps": -4.525255263124171,
+              "meanAfterCostsBps": -17.525255263124173,
+              "meanAfterCosts95": [
+                -22.16103362441294,
+                -13.490039138542889
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-middle-60m",
+            "fit": {
+              "trades": 94,
+              "meanGrossBps": -1.9911623564224616,
+              "meanAfterCostsBps": -14.991162356422462,
+              "meanAfterCosts95": [
+                -19.678517734597015,
+                -10.500083159305676
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -3.088457492038892,
+              "meanAfterCostsBps": -16.08845749203889,
+              "meanAfterCosts95": [
+                -23.71854963445739,
+                -8.063391844043533
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-middle-240m",
+            "fit": {
+              "trades": 93,
+              "meanGrossBps": 0.6033629648615237,
+              "meanAfterCostsBps": -12.396637035138475,
+              "meanAfterCosts95": [
+                -19.737166647995295,
+                -5.699790728449911
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -3.258812664541102,
+              "meanAfterCostsBps": -16.258812664541104,
+              "meanAfterCosts95": [
+                -27.581125303541455,
+                -4.474284013215575
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-opposite-60m",
+            "fit": {
+              "trades": 97,
+              "meanGrossBps": -3.5565055549849096,
+              "meanAfterCostsBps": -16.55650555498491,
+              "meanAfterCosts95": [
+                -23.702338493258203,
+                -9.394902972758839
+              ]
+            },
+            "comparison": {
+              "trades": 41,
+              "meanGrossBps": -0.8657951697076149,
+              "meanAfterCostsBps": -13.865795169707615,
+              "meanAfterCosts95": [
+                -22.011850413079515,
+                -4.506923237195881
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-long-opposite-240m",
+            "fit": {
+              "trades": 95,
+              "meanGrossBps": 0.7707312512457137,
+              "meanAfterCostsBps": -12.229268748754286,
+              "meanAfterCosts95": [
+                -24.934545221320047,
+                1.9686886488094117
+              ]
+            },
+            "comparison": {
+              "trades": 40,
+              "meanGrossBps": 8.259544751345688,
+              "meanAfterCostsBps": -4.740455248654312,
+              "meanAfterCosts95": [
+                -22.586928219684232,
+                15.58357318109875
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-middle-60m",
+            "fit": {
+              "trades": 115,
+              "meanGrossBps": 1.261279385670392,
+              "meanAfterCostsBps": -11.738720614329608,
+              "meanAfterCosts95": [
+                -17.139694416047288,
+                -6.755500327476218
+              ]
+            },
+            "comparison": {
+              "trades": 52,
+              "meanGrossBps": 1.8216397809793823,
+              "meanAfterCostsBps": -11.178360219020618,
+              "meanAfterCosts95": [
+                -14.960708236906145,
+                -6.8312814673996956
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-middle-240m",
+            "fit": {
+              "trades": 114,
+              "meanGrossBps": 0.2995859844877449,
+              "meanAfterCostsBps": -12.700414015512255,
+              "meanAfterCosts95": [
+                -19.351860907819983,
+                -6.69021033690154
+              ]
+            },
+            "comparison": {
+              "trades": 50,
+              "meanGrossBps": 3.0229189827386307,
+              "meanAfterCostsBps": -9.97708101726137,
+              "meanAfterCosts95": [
+                -16.150255726132855,
+                -4.381644658403028
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-opposite-60m",
+            "fit": {
+              "trades": 113,
+              "meanGrossBps": 1.8174127053696778,
+              "meanAfterCostsBps": -11.182587294630322,
+              "meanAfterCosts95": [
+                -16.68215724336511,
+                -6.019745755451945
+              ]
+            },
+            "comparison": {
+              "trades": 52,
+              "meanGrossBps": 6.02756883892879,
+              "meanAfterCostsBps": -6.97243116107121,
+              "meanAfterCosts95": [
+                -14.78506887335538,
+                2.0399248389953684
+              ]
+            }
+          },
+          {
+            "id": "60-3-equal-short-opposite-240m",
+            "fit": {
+              "trades": 109,
+              "meanGrossBps": -1.413795261815918,
+              "meanAfterCostsBps": -14.413795261815919,
+              "meanAfterCosts95": [
+                -21.090852265943596,
+                -8.226223209668033
+              ]
+            },
+            "comparison": {
+              "trades": 48,
+              "meanGrossBps": 9.19300796811998,
+              "meanAfterCostsBps": -3.8069920318800197,
+              "meanAfterCosts95": [
+                -14.591242407878713,
+                5.494962258831041
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-middle-60m",
+            "fit": {
+              "trades": 152,
+              "meanGrossBps": -2.000381380971444,
+              "meanAfterCostsBps": -15.000381380971444,
+              "meanAfterCosts95": [
+                -18.66130390368874,
+                -10.890780477604428
+              ]
+            },
+            "comparison": {
+              "trades": 70,
+              "meanGrossBps": -3.1732550203631886,
+              "meanAfterCostsBps": -16.17325502036319,
+              "meanAfterCosts95": [
+                -23.038100348419185,
+                -9.788872581705384
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-middle-240m",
+            "fit": {
+              "trades": 149,
+              "meanGrossBps": -2.323996005067777,
+              "meanAfterCostsBps": -15.323996005067777,
+              "meanAfterCosts95": [
+                -19.725821579979623,
+                -10.603360248968492
+              ]
+            },
+            "comparison": {
+              "trades": 68,
+              "meanGrossBps": -0.5452131517986759,
+              "meanAfterCostsBps": -13.545213151798675,
+              "meanAfterCosts95": [
+                -21.2936091648457,
+                -6.286302937609131
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-opposite-60m",
+            "fit": {
+              "trades": 175,
+              "meanGrossBps": 2.946320549518511,
+              "meanAfterCostsBps": -10.05367945048149,
+              "meanAfterCosts95": [
+                -14.469633660894454,
+                -5.678734187204599
+              ]
+            },
+            "comparison": {
+              "trades": 76,
+              "meanGrossBps": -7.549504243209248,
+              "meanAfterCostsBps": -20.54950424320925,
+              "meanAfterCosts95": [
+                -26.8878985754515,
+                -14.659138878368095
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-long-opposite-240m",
+            "fit": {
+              "trades": 163,
+              "meanGrossBps": 4.9136578133293245,
+              "meanAfterCostsBps": -8.086342186670676,
+              "meanAfterCosts95": [
+                -15.331470936039276,
+                -0.6827326953188297
+              ]
+            },
+            "comparison": {
+              "trades": 67,
+              "meanGrossBps": -0.010290230038979331,
+              "meanAfterCostsBps": -13.01029023003898,
+              "meanAfterCosts95": [
+                -22.847205505579165,
+                -0.6527266563203575
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-middle-60m",
+            "fit": {
+              "trades": 155,
+              "meanGrossBps": -1.4085706680078869,
+              "meanAfterCostsBps": -14.408570668007886,
+              "meanAfterCosts95": [
+                -18.953415714889168,
+                -10.480458004529694
+              ]
+            },
+            "comparison": {
+              "trades": 69,
+              "meanGrossBps": 0.6664192963549833,
+              "meanAfterCostsBps": -12.333580703645017,
+              "meanAfterCosts95": [
+                -17.53266389860999,
+                -6.485592940097732
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-middle-240m",
+            "fit": {
+              "trades": 148,
+              "meanGrossBps": 0.31665924690486996,
+              "meanAfterCostsBps": -12.68334075309513,
+              "meanAfterCosts95": [
+                -19.28876924565757,
+                -6.272416702507448
+              ]
+            },
+            "comparison": {
+              "trades": 69,
+              "meanGrossBps": 1.708062220386965,
+              "meanAfterCostsBps": -11.291937779613034,
+              "meanAfterCosts95": [
+                -21.024989584033964,
+                -1.9775781919575461
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-opposite-60m",
+            "fit": {
+              "trades": 177,
+              "meanGrossBps": -0.8764488261275317,
+              "meanAfterCostsBps": -13.876448826127532,
+              "meanAfterCosts95": [
+                -20.13663557579468,
+                -8.328093822492795
+              ]
+            },
+            "comparison": {
+              "trades": 75,
+              "meanGrossBps": 1.7143522618717983,
+              "meanAfterCostsBps": -11.285647738128201,
+              "meanAfterCosts95": [
+                -15.737828424787939,
+                -6.327945128808784
+              ]
+            }
+          },
+          {
+            "id": "130-4-v-short-opposite-240m",
+            "fit": {
+              "trades": 161,
+              "meanGrossBps": 0.2693147724080976,
+              "meanAfterCostsBps": -12.730685227591902,
+              "meanAfterCosts95": [
+                -22.179838010462117,
+                -4.216128596779296
+              ]
+            },
+            "comparison": {
+              "trades": 68,
+              "meanGrossBps": 5.353037434385262,
+              "meanAfterCostsBps": -7.646962565614738,
+              "meanAfterCosts95": [
+                -16.139909892661557,
+                3.11414362822579
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-middle-60m",
+            "fit": {
+              "trades": 65,
+              "meanGrossBps": -6.021245566032569,
+              "meanAfterCostsBps": -19.02124556603257,
+              "meanAfterCosts95": [
+                -26.392652646057613,
+                -11.815642974371723
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -7.363771020269509,
+              "meanAfterCostsBps": -20.36377102026951,
+              "meanAfterCosts95": [
+                -27.624855465749455,
+                -10.915871769495215
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-middle-240m",
+            "fit": {
+              "trades": 64,
+              "meanGrossBps": -3.8818371469918542,
+              "meanAfterCostsBps": -16.881837146991856,
+              "meanAfterCosts95": [
+                -27.816132330614572,
+                -5.558765162929149
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -1.4643009166737462,
+              "meanAfterCostsBps": -14.464300916673746,
+              "meanAfterCosts95": [
+                -25.510897664278517,
+                -0.4236544184851301
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-opposite-60m",
+            "fit": {
+              "trades": 67,
+              "meanGrossBps": -7.565939316841878,
+              "meanAfterCostsBps": -20.565939316841877,
+              "meanAfterCosts95": [
+                -27.630369160388693,
+                -13.516356851396461
+              ]
+            },
+            "comparison": {
+              "trades": 31,
+              "meanGrossBps": -6.020971320893094,
+              "meanAfterCostsBps": -19.020971320893093,
+              "meanAfterCosts95": [
+                -26.385900741801027,
+                -10.744138486434167
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-long-opposite-240m",
+            "fit": {
+              "trades": 64,
+              "meanGrossBps": -2.6477710237659564,
+              "meanAfterCostsBps": -15.647771023765957,
+              "meanAfterCosts95": [
+                -28.36606026908271,
+                -2.2432939410738477
+              ]
+            },
+            "comparison": {
+              "trades": 30,
+              "meanGrossBps": 2.602234843070242,
+              "meanAfterCostsBps": -10.397765156929758,
+              "meanAfterCosts95": [
+                -26.140051545608358,
+                9.4811870261087
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-60m",
+            "fit": {
+              "trades": 71,
+              "meanGrossBps": 3.9192833220901604,
+              "meanAfterCostsBps": -9.08071667790984,
+              "meanAfterCosts95": [
+                -17.316917865779537,
+                -1.6703933268290037
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 1.1119895753356641,
+              "meanAfterCostsBps": -11.888010424664335,
+              "meanAfterCosts95": [
+                -17.760321137625628,
+                -6.927984215843621
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-240m",
+            "fit": {
+              "trades": 71,
+              "meanGrossBps": 1.842598547176382,
+              "meanAfterCostsBps": -11.157401452823619,
+              "meanAfterCosts95": [
+                -20.413743902174772,
+                -2.8416791962613512
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 10.851619286184373,
+              "meanAfterCostsBps": -2.1483807138156266,
+              "meanAfterCosts95": [
+                -17.33131587943989,
+                10.674726012885696
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-opposite-60m",
+            "fit": {
+              "trades": 70,
+              "meanGrossBps": -0.4385574046048726,
+              "meanAfterCostsBps": -13.438557404604872,
+              "meanAfterCosts95": [
+                -20.170602027129167,
+                -7.563650254571766
+              ]
+            },
+            "comparison": {
+              "trades": 35,
+              "meanGrossBps": 0.7869786611853145,
+              "meanAfterCostsBps": -12.213021338814686,
+              "meanAfterCosts95": [
+                -17.015269795367367,
+                -7.077133089766159
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-opposite-240m",
+            "fit": {
+              "trades": 69,
+              "meanGrossBps": 1.7978659596424946,
+              "meanAfterCostsBps": -11.202134040357505,
+              "meanAfterCosts95": [
+                -20.074161797167612,
+                -3.5488008663841075
+              ]
+            },
+            "comparison": {
+              "trades": 33,
+              "meanGrossBps": 12.470154824472347,
+              "meanAfterCostsBps": -0.5298451755276528,
+              "meanAfterCosts95": [
+                -13.127817379801515,
+                12.236418806624528
+              ]
+            }
+          }
+        ],
+        "earlierChecks": [
+          {
+            "id": "130-4-v-long-opposite-240m",
+            "summary": {
+              "trades": 146,
+              "meanGrossBps": 4.452653093785032,
+              "meanAfterCostsBps": -8.547346906214969,
+              "meanAfterCosts95": [
+                -18.04104612202393,
+                1.401382095096709
+              ]
+            }
+          },
+          {
+            "id": "60-3-v-long-opposite-240m",
+            "summary": {
+              "trades": 273,
+              "meanGrossBps": 3.561218138371784,
+              "meanAfterCostsBps": -9.438781861628216,
+              "meanAfterCosts95": [
+                -18.42839027618276,
+                0.8198003189719323
+              ]
+            }
+          },
+          {
+            "id": "130-4-equal-short-middle-60m",
+            "summary": {
+              "trades": 65,
+              "meanGrossBps": 2.9242909126605356,
+              "meanAfterCostsBps": -10.075709087339465,
+              "meanAfterCosts95": [
+                -19.70787761713224,
+                2.243666169624859
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

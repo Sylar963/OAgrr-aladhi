@@ -1,5 +1,6 @@
 import {
   buildLiveTradeUid,
+  analyzeFlowTrade,
   computeLiveTradeAmounts,
   normalizeTradeUnderlying,
   type TradeEvent,
@@ -8,6 +9,7 @@ import type { PersistedTradeRecord, TradeHistoryQuery } from '@oggregator/db';
 import type { FlowTrade } from '@oggregator/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { storedFlowTrade } from '../flow-records.js';
 import {
   flowService,
   indexPriceService,
@@ -259,32 +261,12 @@ export function enrichLiveTrade(trade: TradeEvent): EnrichedTradeEvent {
     premiumUsd: amounts.premiumUsd,
     notionalUsd: amounts.notionalUsd,
     referencePriceUsd: amounts.referencePriceUsd,
+    analysis: analyzeFlowTrade(trade),
   };
 }
 
 function mapStoredLiveTrade(row: PersistedTradeRecord): EnrichedTradeEvent | null {
-  const venue = toVenueId(row.venue);
-  if (!venue) return null;
-
-  return {
-    venue,
-    tradeUid: row.tradeUid,
-    tradeId:
-      getOptionalString(row.raw, 'tradeId') ?? extractTradeIdFromUid(row.tradeUid, row.venue),
-    instrument: row.instrumentName,
-    underlying: row.underlying,
-    side: row.direction,
-    price: row.price ?? 0,
-    size: getOptionalNumber(row.raw, 'size') ?? row.contracts,
-    iv: row.iv,
-    markPrice: row.markPrice,
-    indexPrice: getOptionalNumber(row.raw, 'indexPrice'),
-    premiumUsd: row.premiumUsd,
-    notionalUsd: row.notionalUsd,
-    referencePriceUsd: row.referencePriceUsd,
-    isBlock: row.isBlock,
-    timestamp: row.tradeTs.getTime(),
-  };
+  return storedFlowTrade(row);
 }
 
 function buildNextCursor(trades: EnrichedTradeEvent[]): TradeHistoryCursor | null {
@@ -383,16 +365,6 @@ function getSpotPriceUsd(underlying: string): number | null {
   return snapshot?.lastPrice ?? null;
 }
 
-function getOptionalString(raw: Record<string, unknown>, key: string): string | null {
-  const value = raw[key];
-  return typeof value === 'string' ? value : null;
-}
-
-function getOptionalNumber(raw: Record<string, unknown>, key: string): number | null {
-  const value = raw[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
 function toVenueId(value: string): TradeEvent['venue'] | null {
   if (
     value === 'deribit' ||
@@ -410,11 +382,3 @@ function toVenueId(value: string): TradeEvent['venue'] | null {
   return null;
 }
 
-function extractTradeIdFromUid(tradeUid: string, venue: string): string | null {
-  const prefix = `${venue}:`;
-  if (!tradeUid.startsWith(prefix)) return null;
-
-  const value = tradeUid.slice(prefix.length);
-  const parts = value.split(':');
-  return parts[parts.length - 1] ?? null;
-}

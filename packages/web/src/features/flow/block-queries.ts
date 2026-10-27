@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { ExchangeTradeEvidence, FlowAnalysis } from '@oggregator/protocol';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchJson } from '@lib/http';
@@ -13,6 +14,8 @@ export interface BlockTradeLeg {
 }
 
 export interface BlockTradeEvent {
+  exchangeEvidence?: ExchangeTradeEvidence;
+  analysis?: FlowAnalysis;
   venue: string;
   /** `otc`: negotiated off-venue (Paradigm or bilateral), seen only on the venue's public tape. */
   source?: 'rfq' | 'otc';

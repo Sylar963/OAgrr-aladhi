@@ -1,4 +1,5 @@
 import type { VenueId } from '../../types/common.js';
+import type { ExchangeTradeEvidence } from '@oggregator/protocol';
 
 export interface BlockTradeLeg {
   instrument: string;
@@ -26,6 +27,7 @@ export interface BlockTradeEvent {
   totalSize: number;
   notionalUsd: number;
   indexPrice: number | null;
+  exchangeEvidence?: ExchangeTradeEvidence | undefined;
 }
 
 export interface BlockTradeRuntimeHealth {

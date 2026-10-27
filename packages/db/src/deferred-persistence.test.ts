@@ -145,6 +145,7 @@ const shortStraddleSnapshot: PersistedShortStraddleSnapshot = {
 
 class FakeOiStore implements OiSnapshotStore {
   readonly enabled = true;
+  async loadWindow() { return { rows: this.writes.flat(), complete: true }; }
   readonly writes: PersistedOiSnapshot[][] = [];
   readonly prunes: Date[] = [];
   disposed = false;
@@ -398,6 +399,7 @@ describe('DeferredOiSnapshotStore', () => {
     const delegate = new FakeOiStore();
     const failing: OiSnapshotStore = {
       enabled: true,
+      loadWindow: async () => ({ rows: [], complete: true }),
       writeMany: () =>
         new Promise<void>((_, reject) => {
           release = () => reject(new Error('db down'));

@@ -1,14 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import {
   buildBlockTradeUid,
+  analyzeBlockTrade,
   computeBlockTradeAmounts,
   normalizeTradeUnderlying,
   type BlockTradeEvent,
 } from '@oggregator/core';
 import type { PersistedTradeRecord, TradeHistoryQuery } from '@oggregator/db';
 import { blockFlowService, isBlockFlowReady, spotService, tradeStore } from '../services.js';
+import { storedBlockTrade } from '../flow-records.js';
+import type { FlowAnalysis } from '@oggregator/protocol';
 
 interface EnrichedBlockTradeEvent extends BlockTradeEvent {
+  analysis: FlowAnalysis;
   tradeUid: string;
   premiumUsd: number | null;
   referencePriceUsd: number | null;
@@ -141,35 +145,12 @@ function enrichLiveBlockTrade(trade: BlockTradeEvent): EnrichedBlockTradeEvent {
     premiumUsd: amounts.premiumUsd,
     notionalUsd: amounts.notionalUsd ?? 0,
     referencePriceUsd: amounts.referencePriceUsd,
+    analysis: analyzeBlockTrade(trade),
   };
 }
 
 function mapStoredBlockTrade(row: PersistedTradeRecord): EnrichedBlockTradeEvent | null {
-  const venue = toVenueId(row.venue);
-  if (!venue) return null;
-
-  const totalSize = getOptionalNumber(row.raw, 'totalSize') ?? row.contracts;
-
-  return {
-    venue,
-    // Rows stored before OTC ingestion carry no source; they all came from venue RFQ feeds.
-    source: getOptionalString(row.raw, 'source') === 'otc' ? 'otc' : 'rfq',
-    tradeUid: row.tradeUid,
-    tradeId:
-      getOptionalString(row.raw, 'tradeId') ??
-      extractTradeIdFromUid(row.tradeUid, row.venue) ??
-      row.tradeUid,
-    timestamp: row.tradeTs.getTime(),
-    underlying: row.underlying,
-    direction: row.direction,
-    strategy: row.strategyLabel,
-    legs: row.legs ?? [],
-    totalSize,
-    premiumUsd: row.premiumUsd,
-    notionalUsd: row.notionalUsd ?? 0,
-    referencePriceUsd: row.referencePriceUsd,
-    indexPrice: getOptionalNumber(row.raw, 'indexPrice'),
-  };
+  return storedBlockTrade(row);
 }
 
 function buildNextCursor(trades: EnrichedBlockTradeEvent[]): TradeHistoryCursor | null {
@@ -268,16 +249,6 @@ function getSpotPriceUsd(underlying: string): number | null {
   return snapshot?.lastPrice ?? null;
 }
 
-function getOptionalString(raw: Record<string, unknown>, key: string): string | null {
-  const value = raw[key];
-  return typeof value === 'string' ? value : null;
-}
-
-function getOptionalNumber(raw: Record<string, unknown>, key: string): number | null {
-  const value = raw[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
 function toVenueId(value: string): BlockTradeEvent['venue'] | null {
   if (
     value === 'deribit' ||
@@ -291,7 +262,3 @@ function toVenueId(value: string): BlockTradeEvent['venue'] | null {
   return null;
 }
 
-function extractTradeIdFromUid(tradeUid: string, venue: string): string | null {
-  const prefix = `${venue}:`;
-  return tradeUid.startsWith(prefix) ? tradeUid.slice(prefix.length) : null;
-}

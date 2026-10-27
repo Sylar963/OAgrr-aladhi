@@ -49,6 +49,9 @@ const messages = defineMessages(
     combo: 'Combo',
     custom: 'Custom',
     single: 'Single',
+    partial: 'Partial group',
+    unknown: 'Unknown structure',
+    unlinked: 'Unlinked prints',
   },
   {
     call: 'Call',
@@ -67,6 +70,9 @@ const messages = defineMessages(
     combo: 'Combo',
     custom: 'Personalizada',
     single: 'Simple',
+    partial: 'Grupo parcial',
+    unknown: 'Estructura desconocida',
+    unlinked: 'Prints sin vínculo',
   },
 );
 
@@ -94,6 +100,9 @@ const STRATEGY_LABELS: Record<string, StrategyLabelKey> = {
   RISK_REVERSAL: 'riskReversal',
   COMBO: 'combo',
   CUSTOM: 'custom',
+  PARTIAL: 'partial',
+  UNKNOWN: 'unknown',
+  UNLINKED: 'unlinked',
 };
 
 export function getStrategyLabel(

@@ -1,0 +1,32 @@
+{
+  "selection": "Rank April 29–August 26 mean return after 9 bps friction, minimum 30 trades. Freeze the best three before fetching January 1–April 28 data. Report all 32 variants, including losses.",
+  "selected": [
+    {
+      "id": "130-4-v-long-opposite-240m",
+      "length": 130,
+      "multiplier": 4,
+      "kind": "v",
+      "side": 1,
+      "target": "opposite",
+      "holdBars": 48
+    },
+    {
+      "id": "60-3-v-long-opposite-240m",
+      "length": 60,
+      "multiplier": 3,
+      "kind": "v",
+      "side": 1,
+      "target": "opposite",
+      "holdBars": 48
+    },
+    {
+      "id": "130-4-equal-short-middle-60m",
+      "length": 130,
+      "multiplier": 4,
+      "kind": "equal",
+      "side": -1,
+      "target": "middle",
+      "holdBars": 12
+    }
+  ]
+}

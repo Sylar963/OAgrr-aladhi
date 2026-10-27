@@ -3,6 +3,7 @@ export type { VenueId, OptionRight, DataSource } from './types/common.js';
 export { VENUE_IDS } from './types/common.js';
 
 export { logger, feedLogger } from './utils/logger.js';
+export { analyzeFlowTrade, analyzeBlockTrade, analyzeFlowLegs, flowExecutionGroup } from './core/flow-analysis.js';
 
 // core — canonical types, aggregator, registry, symbol utils
 export type {

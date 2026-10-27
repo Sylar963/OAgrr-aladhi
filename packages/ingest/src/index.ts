@@ -633,6 +633,7 @@ function mapLiveTrade(
       tradeId: trade.tradeId,
       size: trade.size,
       indexPrice: trade.indexPrice,
+      ...(trade.exchangeEvidence ? { exchangeEvidence: trade.exchangeEvidence } : {}),
     },
   };
 }
@@ -683,6 +684,7 @@ function mapInstitutionalTrade(
       source: trade.source,
       totalSize: trade.totalSize,
       indexPrice: trade.indexPrice,
+      ...(trade.exchangeEvidence ? { exchangeEvidence: trade.exchangeEvidence } : {}),
     },
   };
 }

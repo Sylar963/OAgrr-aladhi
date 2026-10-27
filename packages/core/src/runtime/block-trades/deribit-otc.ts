@@ -70,6 +70,14 @@ export function mapDeribitOtcBlock(legs: DeribitTapeLeg[]): BlockTradeEvent | nu
     venue: 'deribit',
     source: 'otc',
     tradeId: first.block_trade_id,
+    exchangeEvidence: {
+      blockTradeId: first.block_trade_id,
+      ...(first.combo_id ? { comboId: first.combo_id } : {}),
+      ...(first.block_trade_leg_count != null ? {
+        expectedLegCount: first.block_trade_leg_count,
+        groupComplete: optionLegs.length === first.block_trade_leg_count,
+      } : {}),
+    },
     timestamp: first.timestamp,
     underlying: extractUnderlying(first.instrument_name),
     direction: netPremiumDirection(optionLegs),
@@ -116,7 +124,7 @@ export class DeribitOtcBlockAssembler {
       if (entry.legs.some((existing) => existing.trade_id === leg.trade_id)) continue;
       entry.legs.push(leg);
 
-      if (entry.legs.length >= (leg.block_trade_leg_count ?? 1)) {
+      if (leg.block_trade_leg_count != null && entry.legs.length >= leg.block_trade_leg_count) {
         clearTimeout(entry.timer);
         this.pending.delete(blockId);
         const block = mapDeribitOtcBlock(entry.legs);

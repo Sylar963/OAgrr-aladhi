@@ -13,6 +13,7 @@ import { HistoryControls, type HistoryPreset } from './HistoryControls';
 import StrategyIcon, { getStrategyLabel } from './StrategyIcon';
 import { flowMessages } from './i18n';
 import styles from './BlockFlowView.module.css';
+import { FlowEvidencePanel, FlowLabels } from './FlowEvidence';
 
 const messages = defineMessages(
   {
@@ -20,6 +21,8 @@ const messages = defineMessages(
     legRatio: ' · ratio {ratio}',
     perContract: '{price} per contract',
     otc: 'OTC',
+    mixed: 'MIXED LEGS',
+    evidence: 'Evidence & OI',
     otcTitle: 'Negotiated off-exchange (Paradigm or bilateral) and printed on the venue tape',
     loadingBlocks: 'Loading block trades…',
     failedBlocks: 'Failed to load institutional trades',
@@ -37,6 +40,8 @@ const messages = defineMessages(
     legRatio: ' · ratio {ratio}',
     perContract: '{price} por contrato',
     otc: 'OTC',
+    mixed: 'PATAS MIXTAS',
+    evidence: 'Evidencia y OI',
     otcTitle: 'Negociado fuera del exchange (Paradigm o bilateral) e impreso en la cinta del venue',
     loadingBlocks: 'Cargando block trades…',
     failedBlocks: 'No se pudieron cargar los trades institucionales',
@@ -138,26 +143,30 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
   const premiumUsd = trade.premiumUsd;
   const notionalUsd = trade.notionalUsd > 0 ? trade.notionalUsd : null;
   const isWhale = (notionalUsd ?? premiumUsd ?? 0) >= 100_000;
+  const executionSide = trade.analysis?.executionSide ?? trade.direction;
+  const structure = trade.analysis?.structure ?? trade.strategy;
 
   return (
     <div className={styles.tradeWrap}>
       <button
         className={styles.trade}
-        data-side={trade.direction}
+        data-side={executionSide}
+        type="button"
+        aria-expanded={isExpanded}
         data-whale={isWhale || undefined}
         onClick={onToggle}
       >
         <div className={styles.tradeMain}>
-          <StrategyIcon strategy={trade.strategy ?? legInfo?.type ?? null} size={18} />
+          <StrategyIcon strategy={structure ?? legInfo?.type ?? null} size={18} />
 
           <div className={styles.tradeInfo}>
             <div className={styles.tradeTop}>
               <span className={styles.strategy}>
-                {getStrategyLabel(trade.strategy, legInfo?.type, locale)}
+                {getStrategyLabel(structure, legInfo?.type, locale)}
               </span>
               {isMultiLeg ? <span className={styles.legCount}>{trade.legs.length}L</span> : null}
-              <span className={styles.side} data-side={trade.direction}>
-                {trade.direction === 'buy' ? tf('buy') : tf('sell')}
+              <span className={styles.side} data-side={executionSide}>
+                {executionSide === 'mixed' ? t('mixed') : executionSide === 'buy' ? tf('buy') : tf('sell')}
               </span>
             </div>
             <div className={styles.tradeBottom}>
@@ -198,13 +207,11 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
             </div>
           </div>
 
-          {isMultiLeg ? (
-            <span className={styles.chevron} data-expanded={isExpanded}>
-              ›
-            </span>
-          ) : null}
+          <span className={styles.chevron} data-expanded={isExpanded} title={t('evidence')}>›</span>
         </div>
       </button>
+
+      <div className={styles.evidenceLabels}><FlowLabels analysis={trade.analysis} /></div>
 
       {isExpanded && isMultiLeg ? (
         <div className={styles.legs}>
@@ -239,6 +246,10 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
           })}
         </div>
       ) : null}
+      {isExpanded && firstLeg ? <FlowEvidencePanel target={{
+        mode: 'institutional', tradeUid: trade.tradeUid, venue: trade.venue,
+        underlying: trade.underlying, instrument: firstLeg.instrument, timestamp: trade.timestamp,
+      }} /> : null}
     </div>
   );
 }

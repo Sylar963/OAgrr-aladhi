@@ -14,6 +14,7 @@ import { getCustomRangeFromBounds } from './DateRangePicker';
 import { HistoryControls, getPresetRange, type HistoryPreset } from './HistoryControls';
 import { flowMessages } from './i18n';
 import styles from './FlowView.module.css';
+import { FlowEvidencePanel, FlowLabels } from './FlowEvidence';
 
 const messages = defineMessages(
   {
@@ -26,6 +27,8 @@ const messages = defineMessages(
     allTrades: 'All Trades',
     institutions: '🏛 Institutions',
     charts: 'Charts',
+    evidence: 'Evidence & OI',
+    closeEvidence: 'Close details',
     muteSounds: 'Mute trade sounds',
     enableSounds: 'Enable trade sounds',
     subtitleTape: '{trades} live trades · {venues} venues · auto-refreshing',
@@ -53,6 +56,8 @@ const messages = defineMessages(
     allTrades: 'Todos los trades',
     institutions: '🏛 Institucionales',
     charts: 'Gráficos',
+    evidence: 'Evidencia y OI',
+    closeEvidence: 'Cerrar detalles',
     muteSounds: 'Silenciar sonidos de trades',
     enableSounds: 'Activar sonidos de trades',
     subtitleTape: '{trades} trades en vivo · {venues} exchanges · actualización automática',
@@ -168,6 +173,8 @@ interface TradeRowProps {
 
 const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
   const tf = useT(flowMessages);
+  const t = useT(messages);
+  const [expanded, setExpanded] = useState(false);
   const meta = VENUES[trade.venue];
   const { strike, type } = parseStrikeAndType(trade.instrument);
   const expiry = parseExpiry(trade.instrument);
@@ -222,6 +229,15 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
           {getTradeBadge(tier)}
         </span>
       </span>
+      <div className={styles.evidenceRow}>
+        <FlowLabels analysis={trade.analysis} />
+        <button type="button" className={styles.evidenceButton} aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}>{expanded ? t('closeEvidence') : t('evidence')}</button>
+      </div>
+      {expanded ? <FlowEvidencePanel target={{
+        mode: 'live', tradeUid: trade.tradeUid, venue: trade.venue,
+        underlying: trade.underlying, instrument: trade.instrument, timestamp: trade.timestamp,
+      }} /> : null}
     </div>
   );
 });

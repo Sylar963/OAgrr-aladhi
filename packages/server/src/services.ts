@@ -65,6 +65,7 @@ import {
 import type { FastifyBaseLogger } from 'fastify';
 import { registerBookLookup } from './dealer-book-lookup.js';
 import { DealerBookService } from './dealer-book-service.js';
+import { FlowEvidenceService } from './flow-evidence-service.js';
 import {
   DealerFlowTape,
   type IntervalFlow,
@@ -288,6 +289,12 @@ export const leadsStore: LeadsStore = databaseUrl
 export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
+
+export const flowEvidenceService = new FlowEvidenceService({
+  trades: tradeStore, oi: oiSnapshotStore,
+  live: (underlying) => flowService.getTrades(underlying),
+  blocks: (underlying) => blockFlowService.getTrades(underlying),
+});
 
 export const dealerBookStore: DealerBookStore = databaseUrl
   ? createDealerBookStore(databaseUrl)

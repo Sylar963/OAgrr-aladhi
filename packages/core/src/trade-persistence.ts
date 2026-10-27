@@ -17,9 +17,9 @@ export interface TradeAmounts {
 }
 
 export function parseTradeInstrument(instrument: string): ParsedTradeInstrument {
-  const match = instrument.match(/-(\d+(?:\.\d+)?)-([CP])(?:-|$)/);
+  const match = instrument.match(/-(\d+(?:[._]\d+)?)-([CP])(?:-|$)/);
   const optionType = match?.[2] === 'C' ? 'call' : match?.[2] === 'P' ? 'put' : null;
-  const strike = match?.[1] != null ? Number(match[1]) : null;
+  const strike = match?.[1] != null ? Number(match[1].replace('_', '.')) : null;
 
   const humanDate = instrument.match(/\d{1,2}[A-Z]{3}\d{2}/)?.[0];
   if (humanDate) {
@@ -174,17 +174,22 @@ function parseHumanExpiry(value: string): string | null {
   const month = MONTH_INDEX[rawMonth];
   if (!month) return null;
 
-  return `20${rawYear}-${month}-${rawDay.padStart(2, '0')}`;
+  return validDate(`20${rawYear}-${month}-${rawDay.padStart(2, '0')}`);
 }
 
 function parseNumericExpiry(value: string): string | null {
   if (value.length === 6) {
-    return `20${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}`;
+    return validDate(`20${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}`);
   }
   if (value.length === 8) {
-    return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+    return validDate(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`);
   }
   return null;
+}
+
+function validDate(value: string): string | null {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
 }
 
 const MONTH_INDEX: Record<string, string> = {

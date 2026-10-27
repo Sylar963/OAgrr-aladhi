@@ -1,4 +1,14 @@
 import { z } from 'zod';
+import { VenueIdSchema } from './ws.js';
+
+export const FlowEvidenceQuerySchema = z.object({
+  mode: z.enum(['live', 'institutional']),
+  tradeUid: z.string().min(1).max(300),
+  venue: VenueIdSchema,
+  underlying: z.string().min(1).max(30),
+  instrument: z.string().min(1).max(200),
+  timestamp: z.coerce.number().int().nonnegative().max(8_639_999_999_990_000),
+});
 
 export const ExchangeTradeEvidenceSchema = z.object({
   blockTradeId: z.string().min(1).optional(),

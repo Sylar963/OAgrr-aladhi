@@ -2,6 +2,7 @@ export {
   ExchangeTradeEvidenceSchema,
   FlowAnalysisSchema,
   FlowEvidenceResponseSchema,
+  FlowEvidenceQuerySchema,
   FlowOiContextSchema,
   type ExchangeTradeEvidence,
   type FlowAnalysis,

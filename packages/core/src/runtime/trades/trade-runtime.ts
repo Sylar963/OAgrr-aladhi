@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { z } from 'zod';
+import { ExchangeTradeEvidenceSchema } from '@oggregator/protocol';
 import {
   BINANCE_OPTIONS_WS_URL,
   BYBIT_RECENT_TRADE,
@@ -706,6 +707,11 @@ const DeribitTradeSchema = z.object({
   mark_price: z.number().optional(),
   index_price: z.number().optional(),
   block_trade_id: z.string().optional(),
+  block_rfq_id: z.union([z.string(), z.number()]).optional(),
+  block_trade_leg_count: z.number().int().positive().optional(),
+  combo_id: z.string().nullable().optional(),
+  combo_trade_id: z.string().nullable().optional(),
+  liquidation: z.enum(['M', 'T', 'MT']).optional(),
   trade_id: z
     .union([z.string(), z.number()])
     .optional()
@@ -740,6 +746,7 @@ const BybitTradeSchema = z.object({
   iP: optNum,
   i: z.string().optional(),
   BT: z.boolean().optional(),
+  seq: z.union([z.string(), z.number()]).optional(),
   T: z.number(),
 });
 
@@ -1090,7 +1097,17 @@ function deribitTradeToEvent(
     iv: raw.iv != null ? raw.iv / 100 : null,
     markPrice: raw.mark_price ?? null,
     indexPrice: raw.index_price ?? null,
-    isBlock: raw.block_trade_id != null,
+    isBlock: raw.block_trade_id != null || raw.block_rfq_id != null,
+    exchangeEvidence: ExchangeTradeEvidenceSchema.parse({
+      blockTradeId: raw.block_trade_id,
+      rfqId: raw.block_rfq_id != null ? String(raw.block_rfq_id) : undefined,
+      comboId: raw.combo_id ?? undefined,
+      comboTradeId: raw.combo_trade_id ?? undefined,
+      expectedLegCount: raw.block_trade_leg_count,
+      tradeSequence: raw.trade_seq ?? undefined,
+      liquidation: raw.liquidation === 'M' ? 'maker' : raw.liquidation === 'T' ? 'taker'
+        : raw.liquidation === 'MT' ? 'both' : undefined,
+    }),
     timestamp: raw.timestamp,
   };
 }
@@ -1380,6 +1397,9 @@ export const VENUE_STREAMS: VenueStream[] = [
           markPrice: parsed.data.mP,
           indexPrice: parsed.data.iP,
           isBlock: parsed.data.BT === true,
+          exchangeEvidence: {
+            ...(parsed.data.seq != null ? { tradeSequence: String(parsed.data.seq) } : {}),
+          },
           timestamp: parsed.data.T,
         });
       }
@@ -1555,6 +1575,7 @@ export const VENUE_STREAMS: VenueStream[] = [
           markPrice: parsed.data.mark_price,
           indexPrice: parsed.data.index_price,
           isBlock: parsed.data.rfq_id != null && parsed.data.rfq_id !== '',
+          exchangeEvidence: parsed.data.rfq_id ? { rfqId: parsed.data.rfq_id } : {},
           timestamp: parsed.data.timestamp,
         });
       }
@@ -1616,6 +1637,7 @@ export const VENUE_STREAMS: VenueStream[] = [
               markPrice: parsed.data.mark_price,
               indexPrice: parsed.data.index_price,
               isBlock: parsed.data.rfq_id != null && parsed.data.rfq_id !== '',
+              exchangeEvidence: parsed.data.rfq_id ? { rfqId: parsed.data.rfq_id } : {},
               timestamp: parsed.data.timestamp,
             });
           }
@@ -1777,9 +1799,10 @@ export const VENUE_STREAMS: VenueStream[] = [
       for (const item of notification) {
         const parsed = ThalexTradeTupleSchema.safeParse(item);
         if (!parsed.success) continue;
-        const [price, size, side, tsSeconds, instrument] = parsed.data;
+        const [price, size, side, tsSeconds, instrument, impliedTaker] = parsed.data;
         trades.push({
           venue: 'thalex',
+          exchangeEvidence: { impliedTaker },
           // Thalex trade tuples have no stable id — synthesize from symbol+ts.
           tradeId: `${instrument}:${tsSeconds}`,
           instrument,

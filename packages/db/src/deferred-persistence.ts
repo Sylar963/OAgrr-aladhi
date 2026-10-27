@@ -36,6 +36,8 @@ import type {
   ShortStraddleSnapshotStore,
 } from './index.js';
 import { z } from 'zod';
+import type { OiSnapshotQuery, OiSnapshotWindow } from './oi-snapshot-store.js';
+import { readOiWindow } from './oi-window.js';
 
 interface DeferredPersistenceOptions {
   flushIntervalMs: number;
@@ -560,9 +562,7 @@ function matchesRegimeObservationQuery(
   return allowed.has(row.underlying.toUpperCase()) && row.ts >= query.since;
 }
 
-// Write-only outbox: nothing reads pending OI rows back, so they live only in the ndjson
-// file. Holding the ~5M capped rows as objects cost ~1.5 GB of heap, and rewriting the
-// whole file on every over-cap write blocked the event loop for ~25 s each dealer tick.
+// Keep the outbox on disk: materializing its ~5M rows costs ~1.5 GB of heap.
 export class DeferredOiSnapshotStore implements OiSnapshotStore {
   readonly enabled: boolean;
   private pendingRows: number;
@@ -596,6 +596,14 @@ export class DeferredOiSnapshotStore implements OiSnapshotStore {
 
   get pendingCount(): number {
     return this.pendingRows + this.flushingRows;
+  }
+
+  async loadWindow(query: OiSnapshotQuery): Promise<OiSnapshotWindow> {
+    const local = await readOiWindow([this.options.cachePath, this.flushingPath], query);
+    const remote = await this.delegate.loadWindow(query);
+    const merged = new Map(remote.rows.map((row) => [`${row.instrumentName}:${row.snapshotTs.getTime()}`, row]));
+    for (const row of local.rows) merged.set(`${row.instrumentName}:${row.snapshotTs.getTime()}`, row);
+    return { rows: [...merged.values()], complete: local.complete && remote.complete };
   }
 
   async writeMany(rows: PersistedOiSnapshot[]): Promise<void> {

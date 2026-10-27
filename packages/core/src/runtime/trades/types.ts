@@ -1,4 +1,5 @@
 import type WebSocket from 'ws';
+import type { ExchangeTradeEvidence } from '@oggregator/protocol';
 import type { VenueId } from '../../types/common.js';
 
 export interface TradeEvent {
@@ -14,6 +15,7 @@ export interface TradeEvent {
   indexPrice: number | null;
   isBlock: boolean;
   timestamp: number;
+  exchangeEvidence?: ExchangeTradeEvidence | undefined;
 }
 
 export interface TradeRuntimeHealth {

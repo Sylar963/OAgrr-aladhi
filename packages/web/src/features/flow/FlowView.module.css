@@ -209,6 +209,11 @@
   background: var(--bg-hover);
 }
 
+.evidenceRow { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 6px; }
+.evidenceButton { border: 1px solid var(--border-subtle); border-radius: 4px; background: transparent; color: var(--text-secondary); padding: 4px 8px; font-size: var(--text-xs); cursor: pointer; }
+.evidenceButton:hover { background: var(--bg-hover); color: var(--text-primary); }
+.evidenceButton:focus-visible { outline: 2px solid var(--color-profit); outline-offset: 2px; }
+
 /* ── Side indicator — left border accent ─────────────── */
 
 .row[data-side="buy"] {

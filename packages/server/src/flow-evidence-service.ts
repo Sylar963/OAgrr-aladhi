@@ -9,7 +9,7 @@ import {
   type TradeEvent,
 } from '@oggregator/core';
 import type { OiSnapshotStore, OiSnapshotWindow, TradeHistoryReader } from '@oggregator/db';
-import type { FlowEvidenceResponse, FlowOiContext } from '@oggregator/protocol';
+import type { FlowAnalysis, FlowEvidenceResponse, FlowOiContext } from '@oggregator/protocol';
 import { storedBlockTrade, storedFlowTrade } from './flow-records.js';
 
 export interface FlowEvidenceQuery {
@@ -75,7 +75,7 @@ export class FlowEvidenceService {
         trade = (query.mode === 'live' ? storedFlowTrade(row) : storedBlockTrade(row)) ?? undefined;
     }
     if (!trade) return null;
-    let analysis;
+    let analysis: FlowAnalysis;
     if ('legs' in trade) {
       analysis = analyzeBlockTrade(trade);
     } else {
@@ -150,6 +150,14 @@ export class FlowEvidenceService {
 }
 
 export function flowOiSymbol(venue: string, underlying: string, instrument: string): string | null {
+  const prefix = instrument.split('-')[0]?.split(/[_/]/)[0] ?? '';
+  const base =
+    venue === 'coincall'
+      ? prefix.replace(/USD[TC]?$/, '')
+      : venue === 'gateio' && prefix === 'CL'
+        ? 'XTI'
+        : prefix;
+  if (base !== underlying) return null;
   const parts = parseTradeInstrument(instrument);
   if (parts.expiry == null || parts.strike == null || parts.optionType == null) return null;
   const settlements: Record<string, string> = {

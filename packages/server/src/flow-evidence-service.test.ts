@@ -46,6 +46,7 @@ describe('FLOW OI context', () => {
     expect(oiContext(instrument, symbol, time, { complete: false, rows }).delta).toBeNull();
   });
   it('keeps settlement families distinct', () => {
+    expect(flowOiSymbol('deribit', 'BTC', 'ETH-30OCT26-80000-C')).toBeNull();
     expect(flowOiSymbol('deribit', 'BTC', instrument)).toBe(symbol);
     expect(flowOiSymbol('deribit', 'BTC', 'BTC_USDC-30OCT26-80000-C')).toBe(
       'BTC/USD:USDC-261030-80000-C',

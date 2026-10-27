@@ -474,6 +474,9 @@ export class AssistantMcpHandler {
       ? (PortfolioRefArgumentSchema.safeParse(parsed.data.arguments).data?.portfolioRef ?? null)
       : null;
     const attribution = this.runs?.attribute(portfolioRef) ?? NO_ATTRIBUTION;
+    if (parsed.success && this.tools.get(parsed.data.name)?.input.safeParse(parsed.data.arguments ?? {}).success) {
+      this.runs?.notifyToolStart(attribution, parsed.data.name);
+    }
     const execution = await this.execute(parsed.success ? parsed.data : null);
     const durationMs = Math.max(0, this.now() - startedAt);
     const metricTool = execution.registered && execution.tool != null ? execution.tool : UNREGISTERED_TOOL;

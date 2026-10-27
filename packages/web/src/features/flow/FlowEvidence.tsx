@@ -55,7 +55,7 @@ const messages = defineMessages(
     incomplete: 'Group completeness unknown',
     custom: 'Custom legs',
     loading: 'Loading execution evidence and OI…',
-    failed: 'Evidence unavailable. Try reopening this trade.',
+    failed: 'Evidence unavailable in local capture.',
     detail: 'Trade evidence',
     note: 'Opening / closing is inferred by reconciling this execution with OI and all recorded trades in the interval. Legs are assessed separately.',
     instrument: 'Instrument',
@@ -128,7 +128,7 @@ const messages = defineMessages(
     incomplete: 'Integridad del grupo desconocida',
     custom: 'Patas personalizadas',
     loading: 'Cargando evidencia de ejecución y OI…',
-    failed: 'Evidencia no disponible. Vuelve a abrir este trade.',
+    failed: 'Evidencia no disponible en la captura local.',
     detail: 'Evidencia del trade',
     note: 'La apertura / cierre se infiere conciliando esta ejecución con el OI y todos los trades registrados en el intervalo. Cada pata se evalúa por separado.',
     instrument: 'Instrumento',
@@ -188,11 +188,18 @@ export function FlowLabels({ analysis }: { analysis?: FlowAnalysis | undefined }
       </span>
       <span className={styles.unknown}>
         <span className={styles.caption}>{t('position')}</span>
-        {analysis?.legs.length === 1 ? <PositionVerdict position={analysis.legs[0]?.position} />
-          : analysis?.positionEffect === 'inferred_open' || analysis?.positionEffect === 'inferred_close' ? t(analysis.positionEffect)
-          : analysis?.positionEffect === 'mixed' ? t('mixedEffect')
-          : analysis?.positionEffect === 'partial' ? t('partialEffect')
-          : <PositionVerdict position={analysis?.legs[0]?.position} />}
+        {analysis?.legs.length === 1 ? (
+          <PositionVerdict position={analysis.legs[0]?.position} />
+        ) : analysis?.positionEffect === 'inferred_open' ||
+          analysis?.positionEffect === 'inferred_close' ? (
+          t(analysis.positionEffect)
+        ) : analysis?.positionEffect === 'mixed' ? (
+          t('mixedEffect')
+        ) : analysis?.positionEffect === 'partial' ? (
+          t('partialEffect')
+        ) : (
+          <PositionVerdict position={analysis?.legs[0]?.position} />
+        )}
       </span>
     </div>
   );
@@ -211,42 +218,68 @@ function useFlowEvidence(target: FlowEvidenceTarget, enabled = true) {
   const params = new URLSearchParams({ ...target, timestamp: String(target.timestamp) });
   return useQuery({
     queryKey: ['flow-evidence', target.mode, target.venue, target.tradeUid, target.timestamp],
-    queryFn: async () => FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
+    queryFn: async () =>
+      FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
     enabled,
     staleTime: 30_000,
-    refetchInterval: () => enabled && target.timestamp > Date.now() - 30 * 60_000 ? 30_000 : false,
+    refetchInterval: () =>
+      enabled && target.timestamp > Date.now() - 30 * 60_000 ? 30_000 : false,
     retry: 1,
   });
 }
 
-export function FlowRowLabels({ target, analysis }: { target: FlowEvidenceTarget; analysis?: FlowAnalysis | undefined }) {
+export function FlowRowLabels({
+  target,
+  analysis,
+}: {
+  target: FlowEvidenceTarget;
+  analysis?: FlowAnalysis | undefined;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const t = useT(messages);
   useEffect(() => {
     if (!ref.current || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? false));
+    const observer = new IntersectionObserver(([entry]) =>
+      setVisible(entry?.isIntersecting ?? false),
+    );
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
   const { data, isFetching, error } = useFlowEvidence(target, visible);
-  return <div ref={ref}>
-    <FlowLabels analysis={data?.analysis ?? analysis} />
-    {!data && isFetching ? <small>{t('reconciling')}</small> : error ? <small>{t('failed')}</small> : null}
-  </div>;
+  return (
+    <div ref={ref}>
+      <FlowLabels analysis={data?.analysis ?? analysis} />
+      {!data && isFetching ? (
+        <small>{t('reconciling')}</small>
+      ) : error ? (
+        <small>{t('failed')}</small>
+      ) : null}
+    </div>
+  );
 }
 
 function PositionVerdict({ position }: { position?: FlowPositionAssessment | undefined }) {
   const t = useT(messages);
   if (!position) return <span>{t('unknown')}</span>;
   const { status, action } = position;
-  return <span className={styles.verdict} data-effect={status}>
-    {action ? <>{t(action)} <small>· {t('inferred')}</small></>
-      : status === 'opening_component' ? t(status, { value: formatNumber(position.minOpening ?? 0) })
-      : status === 'closing_component' ? t(status, { value: formatNumber(position.minClosing ?? 0) })
-      : status === 'incomplete' ? t('incompleteTape')
-      : t(status)}
-  </span>;
+  return (
+    <span className={styles.verdict} data-effect={status}>
+      {action ? (
+        <>
+          {t(action)} <small>· {t('inferred')}</small>
+        </>
+      ) : status === 'opening_component' ? (
+        t(status, { value: formatNumber(position.minOpening ?? 0) })
+      ) : status === 'closing_component' ? (
+        t(status, { value: formatNumber(position.minClosing ?? 0) })
+      ) : status === 'incomplete' ? (
+        t('incompleteTape')
+      ) : (
+        t(status)
+      )}
+    </span>
+  );
 }
 
 export function FlowEvidencePanel({
@@ -309,10 +342,18 @@ export function FlowEvidencePanel({
                   <td>{formatNumber(leg.quantity)}</td>
                   <td>
                     <PositionVerdict position={leg.position} />
-                    {leg.position?.intervalVolume != null ? <div className={styles.calculation}>
-                      {t('intervalVolume')}: {formatNumber(leg.position.intervalVolume)} · {t('prints', { value: leg.position.tradeCount })}
-                      {leg.position.otherVolume != null ? <> · {t('otherVolume')}: {formatNumber(leg.position.otherVolume)}</> : null}
-                    </div> : null}
+                    {leg.position?.intervalVolume != null ? (
+                      <div className={styles.calculation}>
+                        {t('intervalVolume')}: {formatNumber(leg.position.intervalVolume)} ·{' '}
+                        {t('prints', { value: leg.position.tradeCount })}
+                        {leg.position.otherVolume != null ? (
+                          <>
+                            {' '}
+                            · {t('otherVolume')}: {formatNumber(leg.position.otherVolume)}
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -373,9 +414,16 @@ function OiCard({ context }: { context: FlowOiContext }) {
       </div>
       <div className={styles.calculation}>
         {t(context.timing === 'exchange' ? 'exchangeOi' : 'sampledOi')}
-        {' · '}{t(context.tradeCoverage === 'sequence_contiguous' ? 'sequence_contiguous'
-          : context.tradeCoverage === 'gap' ? 'tapeGap'
-          : context.tradeCoverage === 'truncated' ? 'truncated' : 'recorded')}
+        {' · '}
+        {t(
+          context.tradeCoverage === 'sequence_contiguous'
+            ? 'sequence_contiguous'
+            : context.tradeCoverage === 'gap'
+              ? 'tapeGap'
+              : context.tradeCoverage === 'truncated'
+                ? 'truncated'
+                : 'recorded',
+        )}
       </div>
       <div className={styles.oiDelta}>
         {t('delta')}:{' '}

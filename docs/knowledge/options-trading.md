@@ -795,8 +795,8 @@ and [Deribit account transaction logs](https://support.deribit.com/hc/en-us/arti
 Reviewed fields: taker direction, execution/group identifiers, leg counts, trade sequences,
 liquidation side, and public-versus-private position-effect evidence.
 
-- Public buy/sell identifies an execution side, not BTO/BTC/STO/STC. The FLOW contract permits
-  only `positionEffect: unknown`; liquidation metadata does not override that invariant.
+- Public buy/sell identifies an execution side. FLOW reconstructs opening/closing from OI
+  and the recorded tape, with an explicit `inferred` label; it does not claim account confirmation.
 - Label observed structures from exchange-linked execution legs and validated dates, strikes,
   sides and normalized quantities. An RFQ request ID or combo instrument name alone does not
   prove that separate prints belong to the same fill. Never group on time/size proximity alone.
@@ -807,17 +807,40 @@ liquidation side, and public-versus-private position-effect evidence.
   bought and sold legs separately; do not relabel every leg using the package's direction.
 - OI snapshots are observations about a market interval. Opening/opening adds OI,
   closing/closing removes OI, and opening/closing transfers it without net change.
-  Fifteen-minute samples and possible reporting lag cannot attribute position effect to a print.
+  With interval volume V, OI change D and target quantity q, other trades can account for at
+  most R = V − q of either direction. The target's minimum opening quantity is max(0, D − R);
+  minimum closing is max(0, −D − R). These are conditional bounds, assuming complete tape,
+  consistent units and timely OI. D = V supports all opening; D = −V supports all closing.
+  D = 0 cannot distinguish a transfer from offsetting opening/closing portions.
 - OI context must use the same venue and settlement-specific instrument, bracket the execution
   with recorded observations, show both timestamps and the actual interval, and flag missing
   samples or gaps (>25 minutes). This threshold is a display-quality rule, not a confidence model.
-  Trade coverage remains unverified. Future OI is retrospective context, unavailable at execution;
+  Known sequence gaps, truncated queries, a missing target, |D| > V, and expiry settlement
+  windows block attribution. Continuous internal sequences do not prove interval-edge coverage.
+  Future OI is retrospective context, unavailable at execution;
   any predictive study must respect its observation time to avoid look-ahead leakage.
 - Additional metadata is recorded prospectively in the existing trade JSON fields. Historical
-  discarded fields stay absent. Pending OI is streamed from disk on demand and merged with the
-  indexed archive; no full in-memory OI-history copy or automatic extra archive flush is needed.
+  discarded fields stay absent. FLOW reconciliation reads the local tape and OI files; it does
+  not wake Neon for automatic label refreshes. Archive-only history needs a local restore before
+  it can be reconciled. Multi-leg blocks are matched to ordinary prints by execution IDs (RFQ
+  request IDs additionally require the exact timestamp and matching quantity), never counted
+  a second time in interval volume.
+- Deribit ticker OI now retains its own exchange timestamp. Mark/index updates carrying old OI
+  cannot refresh that timestamp. The recorder saves each OI change plus a five-minute heartbeat
+  for subscribed instruments; it does not claim coverage of unsubscribed contracts. Quantities
+  are converted from contract counts to base units. Coarse Deribit altcoin snapshots lack stored
+  contract sizes and therefore cannot be attributed; fresh ticker records carry normalized units.
+- Fast OI persists in `FLOW_OI_SQLITE_PATH` (default `.cache/flow-oi.sqlite`). It is independent
+  of Neon availability. Seven days remain locally after archival; unarchived rows are retained
+  through outages. Daily uploads use gzip-compressed JSON arrays of `FlowOiTick` in
+  `flow_oi_archives.payload`, with a SHA-256 payload key for idempotency. There are no online
+  archive reads or shutdown uploads. `MARKET_DATA_DB_FLUSH_INTERVAL_MS` is clamped to ≥24h,
+  including failure retries, and the adjacent `.last-flush` file persists the last attempt across
+  restarts. Keep that marker with the SQLite file. Apply migration `0041_create_flow_oi_archives.sql`.
 
 Implementation: `core/flow-analysis.ts`, `server/flow-evidence-service.ts`, and the FLOW evidence
 panel. Regression coverage includes partial groups, duplicate prints, cross-market separation,
-invalid ratios, storage round trips, OI gaps, and an OI increase that must still leave opening
-or closing unknown. These tests validate accounting and labeling, not predictive profitability.
+invalid ratios, storage round trips, OI gaps, all four inferred actions, exhaustive small-volume
+accounting mixtures, other trades explaining a positive OI change, stale OI timestamps, and
+24h sync throttling through failures/restarts. These tests validate accounting and labeling,
+not predictive profitability.

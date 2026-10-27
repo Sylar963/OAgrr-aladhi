@@ -42,6 +42,7 @@ import {
   type ThesisPendingFlip,
   type ThesisRecord,
   ThesisRecordSchema,
+  ThesisTightenRequestSchema,
   type ThesisShare,
   type ThesisStatusDetail,
   type ThesisStructureClass,
@@ -220,7 +221,13 @@ export class ThesisService {
     for (const thesis of this.reversalCandidates(accountId)) {
       reversalCooldowns.push(await this.view(thesis, false));
     }
-    return { active, reversalCooldowns };
+    const latestEnded = new Map<string, ThesisRecord>();
+    for (const thesis of this.accountTheses(accountId)) {
+      if (thesis.state === 'active' || thesis.endedAt == null || thesis.endedAt < this.now() - LOAD_ENDED_WINDOW_MS) continue;
+      const previous = latestEnded.get(thesis.underlying);
+      if (previous == null || thesis.endedAt >= (previous.endedAt ?? 0)) latestEnded.set(thesis.underlying, thesis);
+    }
+    return { active, reversalCooldowns, recentlyEnded: [...latestEnded.values()] };
   }
 
   /** Shared theses, newest first; active ones are re-evaluated so their status is current. */
@@ -501,7 +508,10 @@ export class ThesisService {
 
   async tighten(accountId: string, id: string, level: number): Promise<ThesisView> {
     await this.ready();
+    ThesisTightenRequestSchema.parse({ level });
+    const before = await this.view(this.ownedActive(accountId, id), false);
     const thesis = this.ownedActive(accountId, id);
+    if (thesis !== before.thesis) return this.tighten(accountId, id, level);
     const tighter = thesis.direction === 'bearish' ? level < thesis.level : level > thesis.level;
     if (!tighter) {
       throw new ThesisError(
@@ -510,7 +520,16 @@ export class ThesisService {
         'The level can only move toward spot; end the thesis and write a new one to widen it',
       );
     }
-    const updated = { ...thesis, level };
+    const spotUsd = before.status.spotUsd;
+    if (spotUsd == null) {
+      throw new ThesisError(409, 'spot_unavailable', 'Wait for a current spot price before tightening the level');
+    }
+    if (thesis.direction === 'bearish' ? level <= spotUsd : level >= spotUsd) {
+      throw new ThesisError(400, 'level_wrong_side', thesis.direction === 'bearish'
+        ? 'A bearish invalidation level must be above spot'
+        : 'A bullish invalidation level must be below spot');
+    }
+    const updated = { ...thesis, level, levelEffectiveAt: this.now() };
     this.putThesis(updated);
     this.append(updated, 'level_tightened', { from: thesis.level, to: level });
     return this.view(updated, true);
@@ -768,14 +787,16 @@ export class ThesisService {
   private pendingFlip(thesis: ThesisRecord): ThesisPendingFlip | null {
     const detected = this.lastEvent(thesis.id, 'flip_detected');
     if (detected == null) return null;
-    if (this.hasEventAfter(thesis.id, 'flip_cleared', detected.createdAt)) return null;
+    const events = this.events.get(thesis.id) ?? [];
+    const after = events.slice(events.indexOf(detected) + 1);
+    if (after.some((event) => event.kind === 'flip_cleared')) return null;
     const source = String(detected.payload['source']) as PortfolioSource;
     const classification = String(detected.payload['classification']) as ThesisClassification;
     return {
       detectedAt: detected.createdAt,
       source,
       classification,
-      backToThesis: this.hasEventAfter(thesis.id, 'back_to_thesis', detected.createdAt),
+      backToThesis: after.some((event) => event.kind === 'back_to_thesis'),
     };
   }
 
@@ -824,12 +845,15 @@ export class ThesisService {
       this.spot(thesis.underlying),
       withTimeout(this.options.market.chainStats(thesis.underlying, thesis.horizonExpiry), null),
     ]);
-    return thesisStatus(thesis, { candles, spotUsd, atmIv: stats?.atmIv ?? null, nowMs });
+    const levelEffectiveAt = thesis.levelEffectiveAt ?? this.lastEvent(thesis.id, 'level_tightened')?.createdAt;
+    return thesisStatus({ ...thesis, levelEffectiveAt }, { candles, spotUsd, atmIv: stats?.atmIv ?? null, nowMs });
   }
 
   /** Builds a view and moves an active thesis to invalidated/expired when its rule says so. */
   private async view(thesis: ThesisRecord, withDiff: boolean): Promise<ThesisView> {
     const status = await this.status(thesis);
+    const latest = this.theses.get(thesis.id);
+    if (latest != null && latest !== thesis) return this.view(latest, withDiff);
     let current = thesis;
     if (thesis.state === 'active' && (status.status === 'INVALIDATED' || status.status === 'EXPIRED')) {
       current = {
@@ -851,6 +875,9 @@ export class ThesisService {
           status.status,
         )
       : null;
+    const books = withDiff && current.state === 'active' ? await this.bookStatuses(current) : undefined;
+    const afterReads = this.theses.get(thesis.id);
+    if (afterReads != null && afterReads !== current) return this.view(afterReads, withDiff);
     let cooldown: ThesisCooldown | null = null;
     if (current.state === 'active') cooldown = this.waitCooldown(current, nowMs);
     else if (current.state === 'ended_early' && current.endedAt != null && this.isInReversalCooldown(current, nowMs)) {
@@ -868,6 +895,7 @@ export class ThesisService {
       cooldown,
       pendingFlip: current.state === 'active' ? this.pendingFlip(current) : null,
       waitCompleted: current.state === 'active' && this.waitCooldown(current, nowMs)?.completed === true,
+      books,
     };
   }
 
@@ -892,7 +920,7 @@ export class ThesisService {
     if (!this.options.bookSources.includes(source)) return;
     const key = `${accountId}|${source}`;
     const existing = this.bookTimers.get(key);
-    if (existing != null) clearTimeout(existing);
+    if (existing != null) return;
     const timer = setTimeout(() => {
       this.bookTimers.delete(key);
       void this.checkHeldBook(accountId, source).catch((err: unknown) => {
@@ -909,21 +937,25 @@ export class ThesisService {
   /** Detects a held book that turned against an intact thesis, and clears it once it no longer does. */
   async checkHeldBook(accountId: string, source: PortfolioSource): Promise<void> {
     await this.ready();
+    if (!this.options.bookSources.includes(source)) return;
     const nowMs = this.now();
     for (const thesis of this.accountTheses(accountId)) {
       if (thesis.state !== 'active') continue;
       const book = await this.options.book.heldBook(accountId, source, thesis.underlying);
+      if (this.theses.get(thesis.id) !== thesis) continue;
+      this.observeBook(thesis, source, book);
       if (!book.live) continue;
       const pending = this.pendingFlip(thesis);
       let classification: ThesisClassification = 'neutral';
       let bias: number | null = null;
-      if (book.legs.length > 0) {
+      const openLegs = book.legs.filter(({ leg }) => leg.size !== 0);
+      if (openLegs.length > 0) {
         const [spotUsd, stats] = await Promise.all([
           this.spot(thesis.underlying),
           withTimeout(this.options.market.chainStats(thesis.underlying, thesis.horizonExpiry), null),
         ]);
         const result = classifyBook({
-          legs: rebaseToMark(book.legs),
+          legs: rebaseToMark(openLegs),
           spotUsd,
           horizonMs: expiryInstantMs(thesis.horizonExpiry),
           nowMs,
@@ -933,15 +965,46 @@ export class ThesisService {
         bias = result.bias;
       }
       if (classification === 'unknown') continue;
+      if (this.theses.get(thesis.id) !== thesis) continue;
       const opposite = classification === oppositeDirection(thesis.direction);
       if (opposite && pending == null) {
         const status = await this.status(thesis);
+        if (this.theses.get(thesis.id) !== thesis || this.pendingFlip(thesis) != null) continue;
         if (status.status !== 'INTACT' && status.status !== 'AT_RISK') continue;
         this.append(thesis, 'flip_detected', { source, classification, bias, spotUsd: status.spotUsd });
       } else if (!opposite && pending != null && pending.source === source) {
         this.append(thesis, 'flip_cleared', { source, classification, bias });
       }
     }
+  }
+
+  private observeBook(thesis: ThesisRecord, source: PortfolioSource, book: ThesisHeldBook): NonNullable<ThesisView['books']>[number] {
+    const previous = (this.events.get(thesis.id) ?? []).findLast((event) =>
+      (event.kind === 'book_opened' || event.kind === 'book_closed') && event.payload['source'] === source,
+    );
+    if (!book.live) return { source, state: 'unavailable', openLegCount: 0 };
+    const openLegCount = book.legs.filter(({ leg }) => leg.size !== 0).length;
+    const state = openLegCount > 0 ? 'open' : previous != null ? 'closed' : 'empty';
+    const kind = state === 'open' ? 'book_opened' : state === 'closed' ? 'book_closed' : null;
+    if (kind != null && previous?.kind !== kind && this.theses.get(thesis.id) === thesis) {
+      this.append(thesis, kind, { source, openLegCount });
+    }
+    if (openLegCount === 0 && this.pendingFlip(thesis)?.source === source) {
+      this.append(thesis, 'flip_cleared', { source, classification: 'neutral', bias: null });
+    }
+    return { source, state, openLegCount };
+  }
+
+  private async bookStatuses(thesis: ThesisRecord): Promise<NonNullable<ThesisView['books']>> {
+    return Promise.all(this.options.bookSources.map(async (source) => {
+      try {
+        const book = await this.options.book.heldBook(thesis.accountId, source, thesis.underlying);
+        return this.observeBook(thesis, source, book);
+      } catch (err: unknown) {
+        this.options.log.warn({ err, source, thesisId: thesis.id }, 'thesis book status unavailable');
+        return { source, state: 'unavailable' as const, openLegCount: 0 };
+      }
+    }));
   }
 }
 

@@ -19,6 +19,7 @@ export interface ThesisRule {
   level: number;
   confirmSec: ThesisConfirmSec;
   createdAt: number;
+  levelEffectiveAt?: number;
   horizonExpiry: string;
 }
 
@@ -40,13 +41,15 @@ export function atRiskBandUsd(spotUsd: number, atmIv: number | null): number {
   return Math.max(floor, THESIS_AT_RISK_MOVE_FRACTION * spotUsd * atmIv * Math.sqrt(1 / 365));
 }
 
-/** First confirmation candle that closed beyond the level after the thesis was written. */
+/** A changed level applies only to future closes, within the original thesis horizon. */
 export function firedCandle(rule: ThesisRule, candles: ThesisCandle[], nowMs: number): ThesisCandle | null {
   const spanMs = rule.confirmSec * 1000;
+  const effectiveAt = Math.max(rule.createdAt, rule.levelEffectiveAt ?? rule.createdAt);
+  const lastCloseMs = Math.min(nowMs, expiryInstantMs(rule.horizonExpiry));
   let fired: ThesisCandle | null = null;
   for (const candle of candles) {
     const closeMs = candle.timestamp + spanMs;
-    if (closeMs <= rule.createdAt || closeMs > nowMs) continue;
+    if (closeMs <= effectiveAt || closeMs > lastCloseMs) continue;
     if (!isBeyondLevel(rule.direction, rule.level, candle.close)) continue;
     if (fired == null || candle.timestamp < fired.timestamp) fired = candle;
   }

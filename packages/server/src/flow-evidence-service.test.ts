@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NoopOiSnapshotStore, NoopTradeStore, type PersistedOiSnapshot } from '@oggregator/db';
 import { FlowEvidenceService, flowOiSymbol, oiContext } from './flow-evidence-service.js';
-import type { TradeEvent } from '@oggregator/core';
+import { buildBlockTradeUid, type BlockTradeEvent, type TradeEvent } from '@oggregator/core';
 import { SqliteTradeStore, type PersistedTradeRecord } from '@oggregator/db';
 
 const instrument = 'BTC-30OCT26-80000-C';
@@ -21,44 +21,226 @@ function snapshot(timestamp: string, oi: number): PersistedOiSnapshot {
 }
 
 describe('FLOW OI context', () => {
+  it('reconciles institutional legs separately without adding the RFQ to tape volume twice', async () => {
+    const put = instrument.replace(/C$/, 'P');
+    const block: BlockTradeEvent = {
+      venue: 'deribit',
+      underlying: 'BTC',
+      source: 'rfq',
+      tradeId: 'RFQ-42',
+      timestamp: time,
+      direction: 'buy',
+      totalSize: 20,
+      notionalUsd: 1600000,
+      indexPrice: 80000,
+      strategy: 'STRADDLE',
+      exchangeEvidence: { rfqId: '42', expectedLegCount: 2, groupComplete: true },
+      legs: [instrument, put].map((name) => ({
+        instrument: name,
+        direction: 'buy',
+        size: 10,
+        price: 0.01,
+        ratio: 1,
+      })),
+    };
+    const trades = [instrument, put].map(
+      (name): TradeEvent => ({
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument: name,
+        tradeId: name,
+        timestamp: time,
+        side: 'buy',
+        size: 10,
+        price: 0.01,
+        indexPrice: 80000,
+        iv: null,
+        markPrice: null,
+        isBlock: true,
+        exchangeEvidence: { rfqId: '42' },
+      }),
+    );
+    const store = new SqliteTradeStore(':memory:');
+    const service = new FlowEvidenceService({
+      trades: store,
+      live: () => trades,
+      blocks: () => [block],
+      oi: {
+        enabled: true,
+        loadWindow: async () => ({
+          complete: true,
+          rows: [
+            snapshot('2026-10-26T12:00:00Z', 100),
+            snapshot('2026-10-26T12:15:00Z', 110),
+            { ...snapshot('2026-10-26T12:00:00Z', 100), instrumentName: symbol.replace(/C$/, 'P') },
+            { ...snapshot('2026-10-26T12:15:00Z', 90), instrumentName: symbol.replace(/C$/, 'P') },
+          ],
+        }),
+      },
+    });
+    try {
+      const result = await service.get({
+        mode: 'institutional',
+        tradeUid: buildBlockTradeUid(block),
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument,
+        timestamp: time,
+      });
+      expect(result?.analysis.positionEffect).toBe('mixed');
+      expect(result?.analysis.legs.map((leg) => leg.position?.action)).toEqual([
+        'buy_to_open',
+        'buy_to_close',
+      ]);
+      expect(result?.analysis.legs.map((leg) => leg.position?.intervalVolume)).toEqual([10, 10]);
+    } finally {
+      await store.dispose();
+    }
+  });
   it('reconciles a persisted print with all interval volume and deduplicates its live copy', async () => {
     const store = new SqliteTradeStore(':memory:');
     const row: PersistedTradeRecord = {
-      tradeUid: `deribit:${instrument}:1`, mode: 'live', venue: 'deribit', underlying: 'BTC',
-      instrumentName: instrument, tradeTs: new Date(time), ingestedAt: new Date(time),
-      direction: 'sell', contracts: 0.2, price: 0.01, premiumUsd: 160,
-      notionalUsd: 16000, referencePriceUsd: 80000, expiry: '2026-10-30', strike: 80000,
-      optionType: 'call', iv: null, markPrice: null, isBlock: false, strategyLabel: null,
-      legs: null, raw: { tradeId: '1', size: 0.2, exchangeEvidence: { tradeSequence: '1367' } },
+      tradeUid: `deribit:${instrument}:1`,
+      mode: 'live',
+      venue: 'deribit',
+      underlying: 'BTC',
+      instrumentName: instrument,
+      tradeTs: new Date(time),
+      ingestedAt: new Date(time),
+      direction: 'sell',
+      contracts: 0.2,
+      price: 0.01,
+      premiumUsd: 160,
+      notionalUsd: 16000,
+      referencePriceUsd: 80000,
+      expiry: '2026-10-30',
+      strike: 80000,
+      optionType: 'call',
+      iv: null,
+      markPrice: null,
+      isBlock: false,
+      strategyLabel: null,
+      legs: null,
+      raw: { tradeId: '1', size: 0.2, exchangeEvidence: { tradeSequence: '1367' } },
     };
     store.writeMany([row]);
-    const trade: TradeEvent = { venue: 'deribit', underlying: 'BTC', instrument, tradeId: '1', timestamp: time, side: 'sell', size: 0.2, price: 0.01, iv: null, indexPrice: null, markPrice: null, isBlock: false, exchangeEvidence: { tradeSequence: '1367' } };
+    const trade: TradeEvent = {
+      venue: 'deribit',
+      underlying: 'BTC',
+      instrument,
+      tradeId: '1',
+      timestamp: time,
+      side: 'sell',
+      size: 0.2,
+      price: 0.01,
+      iv: null,
+      indexPrice: null,
+      markPrice: null,
+      isBlock: false,
+      exchangeEvidence: { tradeSequence: '1367' },
+    };
     const service = new FlowEvidenceService({
-      trades: store, live: () => [trade], blocks: () => [],
-      oi: { enabled: true, loadWindow: async () => ({ complete: true, rows: [snapshot('2026-10-26T12:00:00Z', 1196.8), snapshot('2026-10-26T12:15:00Z', 1197)] }) },
+      trades: store,
+      live: () => [trade],
+      blocks: () => [],
+      oi: {
+        enabled: true,
+        loadWindow: async () => ({
+          complete: true,
+          rows: [snapshot('2026-10-26T12:00:00Z', 1196.8), snapshot('2026-10-26T12:15:00Z', 1197)],
+        }),
+      },
     });
     try {
-      const result = await service.get({ mode: 'live', tradeUid: row.tradeUid, venue: 'deribit', underlying: 'BTC', instrument, timestamp: time });
+      const result = await service.get({
+        mode: 'live',
+        tradeUid: row.tradeUid,
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument,
+        timestamp: time,
+      });
       expect(result?.analysis.positionEffect).toBe('inferred_open');
-      expect(result?.analysis.legs[0]?.position).toMatchObject({ action: 'sell_to_open', intervalVolume: 0.2, otherVolume: 0, tradeCount: 1, coverage: 'recorded' });
-    } finally { await store.dispose(); }
+      expect(result?.analysis.legs[0]?.position).toMatchObject({
+        action: 'sell_to_open',
+        intervalVolume: 0.2,
+        otherVolume: 0,
+        tradeCount: 1,
+        coverage: 'recorded',
+      });
+    } finally {
+      await store.dispose();
+    }
   });
   it('prefers a tighter exchange-timestamped bracket and blocks known sequence gaps', async () => {
-    const trades = [1, 3].map((id): TradeEvent => ({ venue: 'deribit', underlying: 'BTC', instrument, tradeId: String(id), timestamp: time + id, side: 'buy', size: 1, price: 0.01, iv: null, indexPrice: null, markPrice: null, isBlock: false, exchangeEvidence: { tradeSequence: String(id) } }));
+    const trades = [1, 3].map(
+      (id): TradeEvent => ({
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument,
+        tradeId: String(id),
+        timestamp: time + id,
+        side: 'buy',
+        size: 1,
+        price: 0.01,
+        iv: null,
+        indexPrice: null,
+        markPrice: null,
+        isBlock: false,
+        exchangeEvidence: { tradeSequence: String(id) },
+      }),
+    );
     const store = new SqliteTradeStore(':memory:');
     const service = new FlowEvidenceService({
-      trades: store, live: () => trades, blocks: () => [],
-      oi: { enabled: true, loadWindow: async () => ({ complete: true, rows: [snapshot('2026-10-26T12:00:00Z', 100), snapshot('2026-10-26T12:15:00Z', 120)] }) },
-      fastOi: { bracket: () => ({
-        before: { venue: 'deribit', instrument, underlying: 'BTC', timestamp: time - 1000, observedAt: time - 999, openInterest: 100 },
-        after: { venue: 'deribit', instrument, underlying: 'BTC', timestamp: time + 1000, observedAt: time + 1001, openInterest: 102 },
-      }) },
+      trades: store,
+      live: () => trades,
+      blocks: () => [],
+      oi: {
+        enabled: true,
+        loadWindow: async () => ({
+          complete: true,
+          rows: [snapshot('2026-10-26T12:00:00Z', 100), snapshot('2026-10-26T12:15:00Z', 120)],
+        }),
+      },
+      fastOi: {
+        bracket: () => ({
+          before: {
+            venue: 'deribit',
+            instrument,
+            underlying: 'BTC',
+            timestamp: time - 1000,
+            observedAt: time - 999,
+            openInterest: 100,
+          },
+          after: {
+            venue: 'deribit',
+            instrument,
+            underlying: 'BTC',
+            timestamp: time + 1000,
+            observedAt: time + 1001,
+            openInterest: 102,
+          },
+        }),
+      },
     });
     try {
-      const result = await service.get({ mode: 'live', tradeUid: `deribit:${instrument}:1`, venue: 'deribit', underlying: 'BTC', instrument, timestamp: time + 1 });
+      const result = await service.get({
+        mode: 'live',
+        tradeUid: `deribit:${instrument}:1`,
+        venue: 'deribit',
+        underlying: 'BTC',
+        instrument,
+        timestamp: time + 1,
+      });
       expect(result?.oi[0]).toMatchObject({ timing: 'exchange', delta: 2, intervalMs: 2000 });
-      expect(result?.analysis.legs[0]?.position).toMatchObject({ action: null, status: 'incomplete', coverage: 'gap' });
-    } finally { await store.dispose(); }
+      expect(result?.analysis.legs[0]?.position).toMatchObject({
+        action: null,
+        status: 'incomplete',
+        coverage: 'gap',
+      });
+    } finally {
+      await store.dispose();
+    }
   });
   it('uses the samples surrounding execution and exposes the observed interval', () => {
     const result = oiContext(instrument, symbol, time, {

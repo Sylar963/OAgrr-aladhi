@@ -230,7 +230,17 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
         </span>
       </span>
       <div className={styles.evidenceRow}>
-        <FlowRowLabels analysis={trade.analysis} target={{ mode: 'live', tradeUid: trade.tradeUid, venue: trade.venue, underlying: trade.underlying, instrument: trade.instrument, timestamp: trade.timestamp }} />
+        <FlowRowLabels
+          analysis={trade.analysis}
+          target={{
+            mode: 'live',
+            tradeUid: trade.tradeUid,
+            venue: trade.venue,
+            underlying: trade.underlying,
+            instrument: trade.instrument,
+            timestamp: trade.timestamp,
+          }}
+        />
         <button
           type="button"
           className={styles.evidenceButton}

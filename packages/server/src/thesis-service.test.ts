@@ -239,6 +239,47 @@ describe('ThesisService', () => {
     expect((await service.tighten(ACCOUNT, thesis.id, 84_800)).thesis.level).toBe(84_800);
   });
 
+  it.each([
+    { direction: 'bearish' as const, level: 85_105, tightened: 84_500, pastClose: 84_800 },
+    { direction: 'bullish' as const, level: 80_000, tightened: 83_000, pastClose: 82_000 },
+  ])('does not retroactively invalidate a tightened $direction thesis, including after restart', async (rule) => {
+    const { service, clock, market } = harness();
+    const { thesis } = await service.create(ACCOUNT, { ...bearishThesis, ...rule });
+    clock.now += 2 * DAY_MS;
+    market.candles = [{ timestamp: thesis.createdAt, close: rule.pastClose }];
+    const updated = await service.tighten(ACCOUNT, thesis.id, rule.tightened);
+    expect(updated.thesis.state).toBe('active');
+    expect(updated.thesis.createdAt).toBe(thesis.createdAt);
+    expect(updated.status.firedCandleTs).toBeNull();
+    service.dispose();
+
+    const restarted = harness({ clock });
+    restarted.market.candles = market.candles;
+    expect((await restarted.service.list(ACCOUNT)).active).toHaveLength(1);
+    restarted.market.candles.push({ timestamp: clock.now, close: rule.pastClose });
+    clock.now += DAY_MS;
+    expect((await restarted.service.list(ACCOUNT)).active).toHaveLength(0);
+  });
+
+  it.each([
+    { direction: 'bearish' as const, level: 85_105, tightened: 83_000 },
+    { direction: 'bullish' as const, level: 80_000, tightened: 85_000 },
+  ])('rejects tightening a $direction level through spot without changing the thesis', async (rule) => {
+    const { service } = harness();
+    const { thesis } = await service.create(ACCOUNT, { ...bearishThesis, ...rule });
+    await expect(service.tighten(ACCOUNT, thesis.id, rule.tightened)).rejects.toMatchObject({ code: 'level_wrong_side' });
+    expect((await service.list(ACCOUNT)).active[0]?.thesis.level).toBe(rule.level);
+  });
+
+  it('cannot erase an existing invalidation by tightening', async () => {
+    const { service, clock, market } = harness();
+    const { thesis } = await service.create(ACCOUNT, bearishThesis);
+    clock.now += 2 * DAY_MS;
+    market.candles = [{ timestamp: thesis.createdAt, close: 86_000 }];
+    await expect(service.tighten(ACCOUNT, thesis.id, 84_500)).rejects.toMatchObject({ code: 'not_active' });
+    expect((await service.list(ACCOUNT)).active).toHaveLength(0);
+  });
+
   it('runs the reversal cooldown after an early end', async () => {
     const { service, clock } = harness();
     const { thesis } = await service.create(ACCOUNT, bearishThesis);

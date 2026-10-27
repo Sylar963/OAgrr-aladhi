@@ -290,7 +290,13 @@ export class PortfolioAssistantConversationService {
         historyMessageCount: conversationMessages.length - 1,
         startedAtMs: this.now(),
       };
+      let notifyProgress: ((stage: PortfolioAssistantProgress) => void) | null = null;
       this.runs?.begin({
+        onToolStart: (tool) => {
+          if (/structure|scanner/.test(tool)) notifyProgress?.('evaluating_structures');
+          else if (tool === 'search_options_library') notifyProgress?.('searching_books');
+          else if (/chain|surface|overview/.test(tool)) notifyProgress?.('checking_quotes');
+        },
         requestId: telemetry.requestId,
         userIdHash: telemetry.userIdHash,
         threadId,
@@ -299,6 +305,10 @@ export class PortfolioAssistantConversationService {
       releaseRuntimeMetrics = beginPortfolioAssistantRuntimeRequest();
       yield { type: 'progress', stage: 'writing_answer' };
       let lastCheckpoint = this.now();
+      const replyId = assistantMessageId;
+      yield* relayAssistantEvents(async (emit) => {
+        notifyProgress = (stage) => emit({ type: 'progress', stage });
+        try {
       for await (const event of this.gateway.streamPortfolioAnswer(
         {
           threadId,
@@ -311,18 +321,20 @@ export class PortfolioAssistantConversationService {
         if (event.type === 'text_delta') {
           if (event.delta.trim() && firstTokenMs == null) firstTokenMs = Math.max(0, this.now() - startedAt.getTime());
           accumulated += event.delta;
-          yield { type: 'text_delta', assistantMessageId, delta: event.delta };
+          emit({ type: 'text_delta', assistantMessageId: replyId, delta: event.delta });
           if (this.now() - lastCheckpoint >= 5_000) {
-            await this.store.checkpointPortfolioAssistantMessage(assistantMessageId, accumulated);
+            await this.store.checkpointPortfolioAssistantMessage(replyId, accumulated);
             lastCheckpoint = this.now();
           }
         } else {
           inputTokens = event.inputTokens;
           cachedInputTokens = event.cachedInputTokens;
           outputTokens = event.outputTokens;
-          yield { type: 'usage', inputTokens, cachedInputTokens, outputTokens };
+          emit({ type: 'usage', inputTokens, cachedInputTokens, outputTokens });
         }
       }
+        } finally { notifyProgress = null; }
+      });
       await this.complete(
         user.id,
         threadId,

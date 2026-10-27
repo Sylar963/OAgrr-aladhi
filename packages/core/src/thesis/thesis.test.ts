@@ -153,6 +153,29 @@ describe('thesis status', () => {
     expect(status.msToHorizon).toBe(0);
   });
 
+  it('applies a tightened level only to closes after the change', () => {
+    const rule = {
+      ...caseThesis,
+      level: 83_000,
+      levelEffectiveAt: utc('2026-10-08T12:00:00Z'),
+    };
+    const input = { candles: dailyCandles, spotUsd: 82_000, atmIv: 0.42 };
+    expect(thesisStatus(rule, { ...input, nowMs: rule.levelEffectiveAt }).firedCandleTs).toBeNull();
+    expect(thesisStatus(rule, { ...input, nowMs: utc('2026-10-13T12:00:00Z') }).firedCandleTs)
+      .toBe(utc('2026-10-11T00:00:00Z'));
+  });
+
+  it('does not invalidate on a candle closing after the horizon', () => {
+    const status = thesisStatus(caseThesis, {
+      candles: [{ timestamp: utc('2026-10-23T00:00:00Z'), close: 90_000 }],
+      spotUsd: 90_000,
+      atmIv: 0.42,
+      nowMs: utc('2026-10-24T00:00:00Z'),
+    });
+    expect(status.status).toBe('EXPIRED');
+    expect(status.firedCandleTs).toBeNull();
+  });
+
   it('reports room to the level on the right side for each direction', () => {
     const bearish = thesisStatus(caseThesis, {
       candles: [],

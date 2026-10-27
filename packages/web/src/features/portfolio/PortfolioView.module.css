@@ -275,3 +275,6 @@
     border-radius: 0;
   }
 }
+
+.assistantTarget { scroll-margin-top: 80px; min-width: 0; }
+.assistantTarget:focus { outline: 2px solid #50d2c1; outline-offset: 5px; border-radius: 6px; }

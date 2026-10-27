@@ -6,7 +6,14 @@ import type { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowOiStore } from './flow-oi-store.js';
 
-const tick = { venue: 'deribit' as const, instrument: 'BTC-30OCT26-83000-C', underlying: 'BTC', timestamp: 1000, observedAt: 1001, openInterest: 1196.8 };
+const tick = {
+  venue: 'deribit' as const,
+  instrument: 'BTC-30OCT26-83000-C',
+  underlying: 'BTC',
+  timestamp: 1000,
+  observedAt: 1001,
+  openInterest: 1196.8,
+};
 const dirs: string[] = [];
 const stores: FlowOiStore[] = [];
 afterEach(async () => {
@@ -17,7 +24,10 @@ afterEach(async () => {
 function setup(fail = false) {
   const dir = mkdtempSync(join(tmpdir(), 'flow-oi-'));
   dirs.push(dir);
-  const query = vi.fn(async () => { if (fail) throw new Error('offline'); return { rows: [] }; });
+  const query = vi.fn(async () => {
+    if (fail) throw new Error('offline');
+    return { rows: [] };
+  });
   const pool = { query, end: vi.fn(async () => {}) } as unknown as Pool;
   const store = new FlowOiStore(join(dir, 'oi.sqlite'), { pool, flushIntervalMs: 1 });
   stores.push(store);
@@ -30,7 +40,10 @@ describe('local FLOW OI journal and daily archive', () => {
     store.append(tick);
     store.append(tick);
     store.append({ ...tick, timestamp: 2000, openInterest: 1197 });
-    expect(store.bracket('deribit', tick.instrument, 1500)).toMatchObject({ before: { openInterest: 1196.8 }, after: { openInterest: 1197 } });
+    expect(store.bracket('deribit', tick.instrument, 1500)).toMatchObject({
+      before: { openInterest: 1196.8 },
+      after: { openInterest: 1197 },
+    });
     expect(store.bracket('bybit', tick.instrument, 1500).before).toBeNull();
     expect(query).not.toHaveBeenCalled();
   });

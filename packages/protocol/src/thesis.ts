@@ -74,6 +74,7 @@ export const ThesisRecordSchema = z.object({
   linkedSnapshotId: z.string().max(100).nullable(),
   state: ThesisStateSchema,
   createdAt: z.number(),
+  levelEffectiveAt: z.number().optional(),
   endedAt: NullableNumber,
   endNote: z.string().max(THESIS_MAX_TEXT_CHARS).nullable(),
   share: ThesisShareSchema.nullable().default(null),
@@ -96,6 +97,8 @@ export const ThesisEventKindSchema = z.enum([
   'invalidated',
   'expired',
   'level_tightened',
+  'book_opened',
+  'book_closed',
   'shared',
   'unshared',
 ]);
@@ -197,6 +200,11 @@ export const ThesisViewSchema = z.object({
   pendingFlip: ThesisPendingFlipSchema.nullable(),
   /** True once a wait finished, so a flip no longer needs the typed confirmation. */
   waitCompleted: z.boolean(),
+  books: z.array(z.object({
+    source: PortfolioSourceSchema,
+    state: z.enum(['open', 'closed', 'empty', 'unavailable']),
+    openLegCount: z.number().int().nonnegative(),
+  })).optional(),
 });
 export type ThesisView = z.infer<typeof ThesisViewSchema>;
 
@@ -204,6 +212,7 @@ export const ThesisListResponseSchema = z.object({
   active: z.array(ThesisViewSchema),
   /** Theses ended early whose reversal cooldown is still running. */
   reversalCooldowns: z.array(ThesisViewSchema),
+  recentlyEnded: z.array(ThesisRecordSchema).optional(),
 });
 export type ThesisListResponse = z.infer<typeof ThesisListResponseSchema>;
 

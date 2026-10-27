@@ -9,6 +9,7 @@ export type AssistantToolAttribution =
   | { mode: 'none' };
 
 export interface AssistantRunStart {
+  onToolStart?: (tool: string) => void;
   requestId: string;
   userIdHash: string;
   threadId: string;
@@ -109,6 +110,10 @@ export class AssistantRunRegistry {
     else if (outcome === 'timeout') tools.timedOut += 1;
     else if (outcome === 'rejected_input') tools.rejected += 1;
     if (attribution.mode === 'exact') tools.exactAttributed += 1;
+  }
+
+  notifyToolStart(attribution: AssistantToolAttribution, tool: string): void {
+    if (attribution.mode === 'exact') this.runs.get(attribution.requestId)?.onToolStart?.(tool);
   }
 
   /** True while a run that carries this ref is in flight and younger than the run TTL. */

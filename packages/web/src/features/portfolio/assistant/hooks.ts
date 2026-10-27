@@ -4,6 +4,7 @@ import type {
   PortfolioAssistantFeedback,
   PortfolioAssistantFeedbackList,
   PortfolioAssistantMessage,
+  PortfolioAssistantProgress,
   PortfolioAssistantStreamEvent,
   PortfolioSource,
   SubmitPortfolioAssistantFeedbackRequest,
@@ -100,6 +101,7 @@ export function usePortfolioAssistantThread(
 }
 
 export interface PortfolioAssistantConversationState {
+  progress: PortfolioAssistantProgress | null;
   messages: PortfolioAssistantMessage[];
   isLoading: boolean;
   isStreaming: boolean;
@@ -126,6 +128,7 @@ export function usePortfolioAssistantConversation(
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [progress, setProgress] = useState<PortfolioAssistantProgress | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const attachedMessageRef = useRef<string | null>(null);
 
@@ -143,13 +146,15 @@ export function usePortfolioAssistantConversation(
   );
 
   const onEvent = useCallback((event: PortfolioAssistantStreamEvent) => {
-    if (event.type === 'message_started') {
+    if (event.type === 'progress') {
+      setProgress(event.stage);
+    } else if (event.type === 'message_started') {
       // A reattach replays the reply from its first delta, so drop the checkpointed text.
       setMessages((current) =>
         current.some((item) => item.messageId === event.assistantMessageId)
           ? current.map((item) =>
               item.messageId === event.assistantMessageId
-                ? { ...item, content: '', status: 'streaming' }
+                ? { ...item, content: '', status: 'streaming', evidence: event.evidence ?? null, portfolioGeneratedAt: event.portfolioGeneratedAt }
                 : item,
             )
           : [
@@ -161,6 +166,7 @@ export function usePortfolioAssistantConversation(
                 status: 'streaming',
                 portfolioGeneratedAt: event.portfolioGeneratedAt,
                 createdAt: Date.now(),
+                evidence: event.evidence ?? null,
               },
             ],
       );
@@ -194,6 +200,7 @@ export function usePortfolioAssistantConversation(
       setError(null);
       setErrorCode(null);
       setIsStreaming(true);
+      setProgress(null);
       const controller = new AbortController();
       controllerRef.current = controller;
       try {
@@ -215,6 +222,7 @@ export function usePortfolioAssistantConversation(
         if (controllerRef.current === controller) {
           controllerRef.current = null;
           setIsStreaming(false);
+          setProgress(null);
         }
         await queryClient.invalidateQueries({ queryKey: key });
       }
@@ -274,7 +282,7 @@ export function usePortfolioAssistantConversation(
       .catch(() => controllerRef.current?.abort());
   }, [threadId]);
 
-  return { messages, isLoading: query.isLoading, isStreaming, error, errorCode, sendMessage, stop };
+  return { messages, isLoading: query.isLoading, isStreaming, progress, error, errorCode, sendMessage, stop };
 }
 
 export function usePortfolioAssistantMemory(enabled = true) {

@@ -35,8 +35,16 @@ export type FlowOiTick = z.infer<typeof FlowOiTickSchema>;
 
 export const FlowPositionAssessmentSchema = z.object({
   status: z.enum([
-    'inferred_open', 'inferred_close', 'opening_component', 'closing_component',
-    'offsetting', 'ambiguous', 'pending', 'unavailable', 'inconsistent', 'incomplete',
+    'inferred_open',
+    'inferred_close',
+    'opening_component',
+    'closing_component',
+    'offsetting',
+    'ambiguous',
+    'pending',
+    'unavailable',
+    'inconsistent',
+    'incomplete',
   ]),
   action: z.enum(['buy_to_open', 'sell_to_open', 'buy_to_close', 'sell_to_close']).nullable(),
   basis: z.literal('oi_reconciliation'),
@@ -82,7 +90,14 @@ export const FlowOiContextSchema = z.object({
   delta: z.number().nullable(),
   intervalMs: z.number().nullable(),
   timing: z.enum(['sampled', 'exchange']),
-  tradeCoverage: z.enum(['unverified', 'recorded', 'sequence_contiguous', 'gap', 'truncated', 'unavailable']),
+  tradeCoverage: z.enum([
+    'unverified',
+    'recorded',
+    'sequence_contiguous',
+    'gap',
+    'truncated',
+    'unavailable',
+  ]),
 });
 export type FlowOiContext = z.infer<typeof FlowOiContextSchema>;
 

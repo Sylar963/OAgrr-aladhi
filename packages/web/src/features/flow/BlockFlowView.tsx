@@ -217,7 +217,21 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
       </button>
 
       <div className={styles.evidenceLabels}>
-        {firstLeg ? <FlowRowLabels analysis={trade.analysis} target={{ mode: 'institutional', tradeUid: trade.tradeUid, venue: trade.venue, underlying: trade.underlying, instrument: firstLeg.instrument, timestamp: trade.timestamp }} /> : <FlowLabels analysis={trade.analysis} />}
+        {firstLeg ? (
+          <FlowRowLabels
+            analysis={trade.analysis}
+            target={{
+              mode: 'institutional',
+              tradeUid: trade.tradeUid,
+              venue: trade.venue,
+              underlying: trade.underlying,
+              instrument: firstLeg.instrument,
+              timestamp: trade.timestamp,
+            }}
+          />
+        ) : (
+          <FlowLabels analysis={trade.analysis} />
+        )}
       </div>
 
       {isExpanded && isMultiLeg ? (

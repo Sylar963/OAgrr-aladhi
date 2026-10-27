@@ -59,6 +59,7 @@ const messages = defineMessages(
 );
 
 interface Props {
+  highlightedLegIds?: string[];
   positions: PositionLeg[];
   breakEven: BreakEvenIvRow[];
   closeNow?: CloseNowLeg[];
@@ -129,6 +130,7 @@ function beNoteTitle(note: BreakEvenIvRow['beNote'], t: LegT): string | undefine
 }
 
 export default function PositionsTable({
+  highlightedLegIds = [],
   positions,
   breakEven,
   closeNow,
@@ -201,7 +203,7 @@ export default function PositionsTable({
           const debitOrCreditTitle =
             leg.size > 0 ? t('longLeg', { v: entryPrice }) : t('shortLeg', { v: entryPrice });
           return (
-            <tr key={leg.legId}>
+            <tr key={leg.legId} data-highlighted={highlightedLegIds.includes(leg.legId) || undefined}>
               <td>{leg.underlying}</td>
               <td>{leg.expiry}</td>
               <td>{leg.strike.toLocaleString()}</td>

@@ -1,5 +1,6 @@
 import type { PortfolioAssistantMessage } from '@oggregator/protocol';
 import { useEffect, useRef } from 'react';
+import type { AssistantActionHandler } from './PortfolioAssistantEvidence';
 
 import { defineMessages, useT } from '@lib/i18n';
 
@@ -22,28 +23,38 @@ export function PortfolioAssistantTranscript({
   messages,
   isLoading,
   feedbackThreadId = null,
+  onAction,
+  actionsDisabled,
 }: {
   messages: PortfolioAssistantMessage[];
   isLoading: boolean;
   feedbackThreadId?: string | null;
+  onAction?: AssistantActionHandler;
+  actionsDisabled?: boolean;
 }) {
   const t = useT(transcriptMessages);
   const endRef = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
   const feedback = usePortfolioAssistantFeedback(feedbackThreadId);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'nearest' });
+    if (following.current) endRef.current?.scrollIntoView({ block: 'nearest' });
   }, [messages]);
 
   if (isLoading) return <div className={styles.transcriptEmpty}>{t('loading')}</div>;
   if (messages.length === 0) return null;
   return (
-    <div className={styles.transcript} aria-label={t('aria')}>
+    <div className={styles.transcript} aria-label={t('aria')} onScroll={(event) => {
+      const el = event.currentTarget;
+      following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    }}>
       {messages.map((message) => (
         <PortfolioAssistantMessageBubble
           key={message.messageId}
           message={message}
           feedbackThreadId={feedbackThreadId}
           feedback={feedback.get(message.messageId)}
+          onAction={onAction}
+          actionsDisabled={actionsDisabled}
         />
       ))}
       <div ref={endRef} />

@@ -87,13 +87,32 @@ describe('FLOW evidence presentation', () => {
     client.clear();
   });
   it('shows an actionable inferred closing label with the trade-side direction', () => {
-    render(<FlowLabels analysis={{ ...analysis, positionEffect: 'inferred_close', legs: [{
-      ...analysis.legs[0]!, position: {
-        status: 'inferred_close', action: 'buy_to_close', basis: 'oi_reconciliation',
-        quantity: 9, minOpening: 0, minClosing: 9, intervalVolume: 9, otherVolume: 0,
-        tradeCount: 1, coverage: 'recorded', reason: 'all_volume_closing',
-      },
-    }] }} />);
+    render(
+      <FlowLabels
+        analysis={{
+          ...analysis,
+          positionEffect: 'inferred_close',
+          legs: [
+            {
+              ...analysis.legs[0]!,
+              position: {
+                status: 'inferred_close',
+                action: 'buy_to_close',
+                basis: 'oi_reconciliation',
+                quantity: 9,
+                minOpening: 0,
+                minClosing: 9,
+                intervalVolume: 9,
+                otherVolume: 0,
+                tradeCount: 1,
+                coverage: 'recorded',
+                reason: 'all_volume_closing',
+              },
+            },
+          ],
+        }}
+      />,
+    );
     expect(screen.getByText('Buy to close')).toBeTruthy();
     expect(screen.getByText(/inferred/)).toBeTruthy();
     expect(screen.queryByText('Reconcile OI')).toBeNull();

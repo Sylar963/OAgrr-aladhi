@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import {
   PRIVATE_ADAPTER_SPECS,
@@ -185,6 +185,15 @@ export default function PortfolioView() {
 
   const positions = positionsData?.positions ?? metricsData?.positions ?? [];
   const metrics = metricsData?.metrics ?? null;
+  const positionsRef = useRef<HTMLDivElement>(null);
+  const scenarioRef = useRef<HTMLDivElement>(null);
+  const [highlightedLegIds, setHighlightedLegIds] = useState<string[]>([]);
+  const navigateAssistantResult = (action: 'positions' | 'scenario', legIds: string[]) => {
+    setHighlightedLegIds(action === 'positions' ? legIds : []);
+    const target = action === 'positions' ? positionsRef.current : scenarioRef.current;
+    target?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    target?.focus({ preventScroll: true });
+  };
   const builderLegs = portfolioToBuilderLegs(positions, metrics?.breakEven);
   const builderDisabledReason = positions.length === 0
     ? t('builderEmpty')
@@ -293,6 +302,7 @@ export default function PortfolioView() {
 
       <div className={styles.bodyGrid}>
         <div className={styles.mainCol}>
+          <div ref={scenarioRef} tabIndex={-1} className={styles.assistantTarget}>
           <PortfolioPnlCurve
             curve={metrics?.pnlCurve ?? EMPTY_PNL_CURVE}
             forwardDays={forwardDays}
@@ -306,6 +316,7 @@ export default function PortfolioView() {
             totals={metrics?.totals ?? null}
             linearPositions={metrics?.linearPositions ?? []}
           />
+          </div>
           <StrategyGroupsPanel
             groups={metrics?.strategies ?? []}
             closeNow={metrics?.closeNow ?? null}
@@ -326,8 +337,9 @@ export default function PortfolioView() {
             spotUsd={metrics?.pnlCurve.currentSpotUsd ?? null}
             underlying={metrics?.pnlCurve.underlying ?? underlyingFilter}
           />
-          <div className={styles.tableWrap}>
+          <div ref={positionsRef} tabIndex={-1} className={`${styles.tableWrap} ${styles.assistantTarget}`}>
             <PositionsTable
+              highlightedLegIds={highlightedLegIds}
               positions={positions}
               breakEven={metrics?.breakEven ?? []}
               {...(metrics?.closeNow != null && { closeNow: metrics.closeNow.legs })}
@@ -342,6 +354,9 @@ export default function PortfolioView() {
             underlying={underlyingParam ?? null}
             forwardDays={forwardDays}
             generatedAt={metrics?.generatedAt ?? null}
+            metrics={metrics}
+            positions={positions}
+            onNavigate={navigateAssistantResult}
           />
         </div>
         <div className={styles.sidebar}>

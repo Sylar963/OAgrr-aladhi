@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import {
   FlowEvidenceResponseSchema,
   type ExchangeTradeEvidence,
   type FlowAnalysis,
   type FlowOiContext,
+  type FlowPositionAssessment,
 } from '@oggregator/protocol';
 import { fetchJson } from '@lib/http';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
@@ -15,7 +17,32 @@ const messages = defineMessages(
     structure: 'Structure',
     side: 'Execution',
     position: 'Position effect',
-    unknown: 'Open / close unknown',
+    unknown: 'Reconcile OI',
+    inferred_open: 'Opening · inferred',
+    inferred_close: 'Closing · inferred',
+    partialEffect: 'Opening / closing components',
+    mixedEffect: 'Opening + closing legs · inferred',
+    inferred: 'inferred',
+    buy_to_open: 'Buy to open',
+    sell_to_open: 'Sell to open',
+    buy_to_close: 'Buy to close',
+    sell_to_close: 'Sell to close',
+    opening_component: 'Opening ≥ {value}',
+    closing_component: 'Closing ≥ {value}',
+    offsetting: 'No net OI change',
+    ambiguous: 'Other trades can explain OI',
+    inconsistent: 'OI / tape mismatch',
+    incompleteTape: 'Incomplete tape match',
+    reconciling: 'Reconciling OI…',
+    intervalVolume: 'Interval volume',
+    otherVolume: 'Other volume',
+    prints: '{value} prints',
+    recorded: 'Recorded tape · completeness unverified',
+    sequence_contiguous: 'Recorded sequences continuous · interval edges unverified',
+    tapeGap: 'Trade sequence gap',
+    truncated: 'Tape query limit reached',
+    exchangeOi: 'Exchange-timestamped OI',
+    sampledOi: 'Periodic OI snapshots',
     buy: 'Bought',
     sell: 'Sold',
     mixed: 'Bought + sold legs',
@@ -30,13 +57,13 @@ const messages = defineMessages(
     loading: 'Loading execution evidence and OI…',
     failed: 'Evidence unavailable. Try reopening this trade.',
     detail: 'Trade evidence',
-    note: 'A purchase can open a long or close a short. These public prints do not establish opening or closing.',
+    note: 'Opening / closing is inferred by reconciling this execution with OI and all recorded trades in the interval. Legs are assessed separately.',
     instrument: 'Instrument',
     quantity: 'Quantity ({unit})',
     action: 'Action',
     oi: 'Open-interest context',
     oiNote:
-      'OI is sampled, usually every 15 minutes. Exchange reporting may lag. Full trade coverage is unverified; an interval change cannot identify this trade’s position effect.',
+      'Inferred results and minimum quantities assume complete tape coverage and current exchange OI. Reporting lag or missing prints can change the result. This is retrospective evidence, not account-level confirmation.',
     unavailable: 'No usable OI bracket',
     pending: 'Waiting for the next OI sample',
     gap: 'Gap between samples',
@@ -63,7 +90,32 @@ const messages = defineMessages(
     structure: 'Estructura',
     side: 'Ejecución',
     position: 'Efecto en posición',
-    unknown: 'Apertura / cierre desconocido',
+    unknown: 'Conciliar OI',
+    inferred_open: 'Apertura · inferida',
+    inferred_close: 'Cierre · inferido',
+    partialEffect: 'Componentes de apertura / cierre',
+    mixedEffect: 'Patas de apertura + cierre · inferidas',
+    inferred: 'inferido',
+    buy_to_open: 'Compra para abrir',
+    sell_to_open: 'Venta para abrir',
+    buy_to_close: 'Compra para cerrar',
+    sell_to_close: 'Venta para cerrar',
+    opening_component: 'Apertura ≥ {value}',
+    closing_component: 'Cierre ≥ {value}',
+    offsetting: 'Sin cambio neto de OI',
+    ambiguous: 'Otros trades pueden explicar el OI',
+    inconsistent: 'OI y tape no coinciden',
+    incompleteTape: 'Tape incompleto para conciliar',
+    reconciling: 'Conciliando OI…',
+    intervalVolume: 'Volumen del intervalo',
+    otherVolume: 'Otro volumen',
+    prints: '{value} prints',
+    recorded: 'Tape registrado · integridad no verificada',
+    sequence_contiguous: 'Secuencias continuas · extremos del intervalo no verificados',
+    tapeGap: 'Hueco en la secuencia de trades',
+    truncated: 'Límite de consulta alcanzado',
+    exchangeOi: 'OI con hora del exchange',
+    sampledOi: 'Muestras periódicas de OI',
     buy: 'Compra',
     sell: 'Venta',
     mixed: 'Patas compradas + vendidas',
@@ -78,13 +130,13 @@ const messages = defineMessages(
     loading: 'Cargando evidencia de ejecución y OI…',
     failed: 'Evidencia no disponible. Vuelve a abrir este trade.',
     detail: 'Evidencia del trade',
-    note: 'Una compra puede abrir un largo o cerrar un corto. Estos prints públicos no establecen apertura o cierre.',
+    note: 'La apertura / cierre se infiere conciliando esta ejecución con el OI y todos los trades registrados en el intervalo. Cada pata se evalúa por separado.',
     instrument: 'Instrumento',
     quantity: 'Cantidad ({unit})',
     action: 'Acción',
     oi: 'Contexto de interés abierto',
     oiNote:
-      'El OI se muestrea normalmente cada 15 minutos. El exchange puede reportarlo con demora. La cobertura total de trades no está verificada; el cambio del intervalo no identifica el efecto de este trade.',
+      'Los resultados inferidos y cantidades mínimas suponen un tape completo y OI actualizado. Las demoras o prints faltantes pueden cambiar el resultado. Es evidencia retrospectiva, no confirmación de una cuenta.',
     unavailable: 'Sin muestras de OI suficientes',
     pending: 'Esperando la siguiente muestra de OI',
     gap: 'Hueco entre muestras',
@@ -136,7 +188,11 @@ export function FlowLabels({ analysis }: { analysis?: FlowAnalysis | undefined }
       </span>
       <span className={styles.unknown}>
         <span className={styles.caption}>{t('position')}</span>
-        {t('unknown')}
+        {analysis?.legs.length === 1 ? <PositionVerdict position={analysis.legs[0]?.position} />
+          : analysis?.positionEffect === 'inferred_open' || analysis?.positionEffect === 'inferred_close' ? t(analysis.positionEffect)
+          : analysis?.positionEffect === 'mixed' ? t('mixedEffect')
+          : analysis?.positionEffect === 'partial' ? t('partialEffect')
+          : <PositionVerdict position={analysis?.legs[0]?.position} />}
       </span>
     </div>
   );
@@ -151,6 +207,48 @@ export interface FlowEvidenceTarget {
   timestamp: number;
 }
 
+function useFlowEvidence(target: FlowEvidenceTarget, enabled = true) {
+  const params = new URLSearchParams({ ...target, timestamp: String(target.timestamp) });
+  return useQuery({
+    queryKey: ['flow-evidence', target.mode, target.venue, target.tradeUid, target.timestamp],
+    queryFn: async () => FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: () => enabled && target.timestamp > Date.now() - 30 * 60_000 ? 30_000 : false,
+    retry: 1,
+  });
+}
+
+export function FlowRowLabels({ target, analysis }: { target: FlowEvidenceTarget; analysis?: FlowAnalysis | undefined }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const t = useT(messages);
+  useEffect(() => {
+    if (!ref.current || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? false));
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+  const { data, isFetching, error } = useFlowEvidence(target, visible);
+  return <div ref={ref}>
+    <FlowLabels analysis={data?.analysis ?? analysis} />
+    {!data && isFetching ? <small>{t('reconciling')}</small> : error ? <small>{t('failed')}</small> : null}
+  </div>;
+}
+
+function PositionVerdict({ position }: { position?: FlowPositionAssessment | undefined }) {
+  const t = useT(messages);
+  if (!position) return <span>{t('unknown')}</span>;
+  const { status, action } = position;
+  return <span className={styles.verdict} data-effect={status}>
+    {action ? <>{t(action)} <small>· {t('inferred')}</small></>
+      : status === 'opening_component' ? t(status, { value: formatNumber(position.minOpening ?? 0) })
+      : status === 'closing_component' ? t(status, { value: formatNumber(position.minClosing ?? 0) })
+      : status === 'incomplete' ? t('incompleteTape')
+      : t(status)}
+  </span>;
+}
+
 export function FlowEvidencePanel({
   target,
   showLegs = true,
@@ -159,16 +257,7 @@ export function FlowEvidencePanel({
   showLegs?: boolean;
 }) {
   const t = useT(messages);
-  const params = new URLSearchParams({ ...target, timestamp: String(target.timestamp) });
-  const { data, isPending, error } = useQuery({
-    queryKey: ['flow-evidence', target.mode, target.venue, target.tradeUid, target.timestamp],
-    queryFn: async () =>
-      FlowEvidenceResponseSchema.parse(await fetchJson<unknown>(`/flow/evidence?${params}`)),
-    staleTime: 30_000,
-    refetchInterval: (query) =>
-      query.state.data?.oi.some((item) => item.status === 'pending') ? 30_000 : false,
-    retry: 1,
-  });
+  const { data, isPending, error } = useFlowEvidence(target);
   if (isPending)
     return (
       <div className={styles.panel} role="status">
@@ -218,7 +307,13 @@ export function FlowEvidencePanel({
                   <td data-side={leg.side}>{t(leg.side)}</td>
                   <td>{leg.instrument}</td>
                   <td>{formatNumber(leg.quantity)}</td>
-                  <td className={styles.unknown}>{t('unknown')}</td>
+                  <td>
+                    <PositionVerdict position={leg.position} />
+                    {leg.position?.intervalVolume != null ? <div className={styles.calculation}>
+                      {t('intervalVolume')}: {formatNumber(leg.position.intervalVolume)} · {t('prints', { value: leg.position.tradeCount })}
+                      {leg.position.otherVolume != null ? <> · {t('otherVolume')}: {formatNumber(leg.position.otherVolume)}</> : null}
+                    </div> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -275,6 +370,12 @@ function OiCard({ context }: { context: FlowOiContext }) {
       <div className={styles.oiInstrument}>{context.instrument}</div>
       <div className={styles.oiStatus} data-gap={context.status !== 'bracketed'}>
         {t(context.status)}
+      </div>
+      <div className={styles.calculation}>
+        {t(context.timing === 'exchange' ? 'exchangeOi' : 'sampledOi')}
+        {' · '}{t(context.tradeCoverage === 'sequence_contiguous' ? 'sequence_contiguous'
+          : context.tradeCoverage === 'gap' ? 'tapeGap'
+          : context.tradeCoverage === 'truncated' ? 'truncated' : 'recorded')}
       </div>
       <div className={styles.oiDelta}>
         {t('delta')}:{' '}

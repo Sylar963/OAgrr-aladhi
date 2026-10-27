@@ -27,7 +27,7 @@ export interface FlowEvidenceQuery {
 interface Options {
   fastOi?: { bracket: (venue: string, instrument: string, timestamp: number) => { before: FlowOiTick | null; after: FlowOiTick | null } };
   trades: TradeHistoryReader;
-  oi: OiSnapshotStore;
+  oi: Pick<OiSnapshotStore, 'enabled' | 'loadWindow'> & Partial<OiSnapshotStore>;
   live: (underlying: string) => TradeEvent[];
   blocks: (underlying: string) => BlockTradeEvent[];
   log?: { warn: (fields: object, message: string) => void };
@@ -37,6 +37,10 @@ const QUARTER_HOUR = 15 * 60_000;
 const GROUP_LIMIT = 2_000;
 
 export class FlowEvidenceService {
+  private readonly oiBatches = new Map<string, {
+    instruments: Set<string>;
+    requests: Array<{ resolve: (window: OiSnapshotWindow) => void; reject: (error: unknown) => void }>;
+  }>();
   private readonly tapes = new Map<string, { expires: number; value: Promise<{ trades: TradeEvent[]; truncated: boolean }> }>();
   private readonly windows = new Map<
     string,
@@ -248,11 +252,26 @@ export class FlowEvidenceService {
     const key = JSON.stringify([venue, [...instruments].sort(), bucket]);
     const cached = this.windows.get(key);
     if (cached && cached.expires > Date.now()) return cached.value;
-    const value = this.options.oi.loadWindow({
-      venue,
-      instruments,
-      from: new Date(bucket - 3 * QUARTER_HOUR),
-      to: new Date(bucket + 4 * QUARTER_HOUR),
+    const batchKey = `${venue}:${bucket}`;
+    const value = new Promise<OiSnapshotWindow>((resolve, reject) => {
+      const pending = this.oiBatches.get(batchKey);
+      if (pending) {
+        for (const instrument of instruments) pending.instruments.add(instrument);
+        pending.requests.push({ resolve, reject });
+        return;
+      }
+      const batch = { instruments: new Set(instruments), requests: [{ resolve, reject }] };
+      this.oiBatches.set(batchKey, batch);
+      setTimeout(() => {
+        this.oiBatches.delete(batchKey);
+        void this.options.oi.loadWindow({
+          venue, instruments: [...batch.instruments],
+          from: new Date(bucket - 3 * QUARTER_HOUR), to: new Date(bucket + 4 * QUARTER_HOUR),
+        }).then(
+          (window) => { for (const request of batch.requests) request.resolve(window); },
+          (error: unknown) => { for (const request of batch.requests) request.reject(error); },
+        );
+      }, 25);
     });
     this.windows.set(key, { expires: Date.now() + 60_000, value });
     if (this.windows.size > 128) this.windows.delete(this.windows.keys().next().value!);

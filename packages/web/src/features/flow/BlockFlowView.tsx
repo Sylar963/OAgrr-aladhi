@@ -13,7 +13,7 @@ import { HistoryControls, type HistoryPreset } from './HistoryControls';
 import StrategyIcon, { getStrategyLabel } from './StrategyIcon';
 import { flowMessages } from './i18n';
 import styles from './BlockFlowView.module.css';
-import { FlowEvidencePanel, FlowLabels } from './FlowEvidence';
+import { FlowEvidencePanel, FlowLabels, FlowRowLabels } from './FlowEvidence';
 
 const messages = defineMessages(
   {
@@ -217,7 +217,7 @@ function BlockTradeRow({ trade, isExpanded, onToggle }: BlockTradeRowProps) {
       </button>
 
       <div className={styles.evidenceLabels}>
-        <FlowLabels analysis={trade.analysis} />
+        {firstLeg ? <FlowRowLabels analysis={trade.analysis} target={{ mode: 'institutional', tradeUid: trade.tradeUid, venue: trade.venue, underlying: trade.underlying, instrument: firstLeg.instrument, timestamp: trade.timestamp }} /> : <FlowLabels analysis={trade.analysis} />}
       </div>
 
       {isExpanded && isMultiLeg ? (

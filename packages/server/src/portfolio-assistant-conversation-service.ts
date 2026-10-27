@@ -12,6 +12,7 @@ import {
   type PortfolioAssistantMessagePage,
   type PortfolioAssistantStreamEvent,
   type PortfolioAssistantThread,
+  type PortfolioAssistantProgress,
   PortfolioSourceSchema,
   type SendPortfolioAssistantMessageRequest,
 } from '@oggregator/protocol';
@@ -21,6 +22,10 @@ import {
   emptyAssistantRunToolSummary,
 } from './assistant-market/assistant-run-registry.js';
 import type { StructureSearchPrefetch } from './assistant-market/structure-search-prefetch.js';
+import { planStructureSearchPrefetch } from './assistant-market/structure-search-prefetch.js';
+import { buildAssistantEvidence } from './portfolio-assistant-evidence.js';
+import { estimateAssistantCost } from './portfolio-assistant-cost.js';
+import { relayAssistantEvents } from './portfolio-assistant-progress.js';
 import type { PortfolioAssistantAccessService } from './portfolio-assistant-access-service.js';
 import type { PortfolioAssistantConfiguration } from './portfolio-assistant-configuration.js';
 import type {
@@ -63,6 +68,7 @@ function mapThread(row: {
 
 function mapMessage(row: PortfolioAssistantMessageRow): PortfolioAssistantMessage {
   return {
+    evidence: row.evidence ?? null,
     messageId: row.id,
     role: row.role,
     content: row.content,
@@ -192,6 +198,7 @@ export class PortfolioAssistantConversationService {
     let inputTokens: number | null = null;
     let cachedInputTokens: number | null = null;
     let outputTokens: number | null = null;
+    let firstTokenMs: number | null = null;
     let telemetry: PortfolioAssistantRunTelemetry | null = null;
     let releaseRuntimeMetrics: (() => void) | null = null;
     let runOutcome: PortfolioAssistantUsageOutcome | null = null;
@@ -213,22 +220,29 @@ export class PortfolioAssistantConversationService {
           409,
           false,
         );
-      const context = await this.contextBuilder.buildPortfolioAssistantContext({
+      yield { type: 'progress', stage: 'loading_portfolio' };
+      const context = yield* relayAssistantEvents(async (emit) => this.contextBuilder.buildPortfolioAssistantContext({
         accountId: user.accountId,
         source: source.data,
         underlying: thread.underlying,
         forwardDays: input.forwardDays,
+        question: input.message,
+        onProgress: (stage) => emit({ type: 'progress', stage }),
         userMemoryFacts: (await this.memory?.loadUserMemoryFacts(user.id)) ?? null,
-      });
+      }));
       const historyPage = await this.loadPortfolioAssistantMessages(user.id, threadId);
-      const contextMessage = await this.buildContextMessage(
+      const evidence = buildAssistantEvidence(context, input.message, historyPage.messages);
+      context.reviewComparison = evidence.comparison;
+      const contextMessage = yield* relayAssistantEvents(async (emit) => this.buildContextMessage(
         context,
         input.message,
         historyPage.messages,
         user.id,
         threadId,
-      );
+        (stage) => emit({ type: 'progress', stage }),
+      ));
       const exchange = await this.store.beginPortfolioAssistantExchange({
+        evidence,
         userId: user.id,
         threadId,
         clientMessageId: input.clientMessageId,
@@ -243,7 +257,9 @@ export class PortfolioAssistantConversationService {
       yield {
         type: 'message_started',
         assistantMessageId,
-        portfolioGeneratedAt: context.generatedAt,
+        portfolioGeneratedAt: exchange.deduplicated
+          ? exchange.assistantMessage.portfolioGeneratedAt?.getTime() ?? context.generatedAt : context.generatedAt,
+        evidence: exchange.deduplicated ? exchange.assistantMessage.evidence ?? null : evidence,
       };
       if (exchange.deduplicated) {
         if (exchange.assistantMessage.content)
@@ -281,6 +297,7 @@ export class PortfolioAssistantConversationService {
         portfolioRef: context.portfolioRef,
       });
       releaseRuntimeMetrics = beginPortfolioAssistantRuntimeRequest();
+      yield { type: 'progress', stage: 'writing_answer' };
       let lastCheckpoint = this.now();
       for await (const event of this.gateway.streamPortfolioAnswer(
         {
@@ -292,6 +309,7 @@ export class PortfolioAssistantConversationService {
         signal,
       )) {
         if (event.type === 'text_delta') {
+          if (event.delta.trim() && firstTokenMs == null) firstTokenMs = Math.max(0, this.now() - startedAt.getTime());
           accumulated += event.delta;
           yield { type: 'text_delta', assistantMessageId, delta: event.delta };
           if (this.now() - lastCheckpoint >= 5_000) {
@@ -316,6 +334,7 @@ export class PortfolioAssistantConversationService {
         inputTokens,
         cachedInputTokens,
         outputTokens,
+        firstTokenMs,
       );
       runOutcome = 'complete';
       yield { type: 'message_completed', assistantMessageId };
@@ -349,6 +368,7 @@ export class PortfolioAssistantConversationService {
         inputTokens,
         cachedInputTokens,
         outputTokens,
+        firstTokenMs,
       );
       yield cancelled
         ? { type: 'message_cancelled', assistantMessageId }
@@ -406,6 +426,8 @@ export class PortfolioAssistantConversationService {
             inputTokens,
             cachedInputTokens,
             outputTokens,
+            firstTokenMs,
+            estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
             durationMs,
             outcome: runOutcome,
             errorCode: runErrorCode,
@@ -424,6 +446,7 @@ export class PortfolioAssistantConversationService {
     history: PortfolioAssistantMessage[],
     userId: string,
     threadId: string,
+    onProgress?: (stage: PortfolioAssistantProgress) => void,
   ): Promise<string> {
     const limit = this.configuration.maxContextCharacters + 1_000;
     const plain = this.promptBuilder.buildPortfolioAssistantContextMessage(context);
@@ -440,6 +463,7 @@ export class PortfolioAssistantConversationService {
       .filter((message) => message.role === 'user' && message.status === 'complete')
       .map((message) => message.content)
       .reverse();
+    if (planStructureSearchPrefetch(question, earlierUserMessages, context)) onProgress?.('evaluating_structures');
     const prefetched = await this.structurePrefetch.prefetchForQuestion(question, earlierUserMessages, context);
     if (prefetched === null) return plain;
     const withFacts =
@@ -483,6 +507,7 @@ export class PortfolioAssistantConversationService {
     inputTokens: number | null,
     cachedInputTokens: number | null,
     outputTokens: number | null,
+    firstTokenMs: number | null,
   ): Promise<void> {
     await this.store.completePortfolioAssistantExchange({
       userId,
@@ -495,6 +520,8 @@ export class PortfolioAssistantConversationService {
       inputTokens,
       cachedInputTokens,
       outputTokens,
+      firstTokenMs,
+      estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
       outcome,
       startedAt,
       completedAt: new Date(this.now()),

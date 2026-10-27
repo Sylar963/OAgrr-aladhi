@@ -39,6 +39,7 @@ import {
   type NewsStore,
   MergedTradeStore,
   FlowOiStore,
+  readOiWindow,
   NoopBreakEvenSnapshotStore,
   NoopDealerBookStore,
   NoopGexWallSnapshotStore,
@@ -299,7 +300,11 @@ export const oiSnapshotStore: OiSnapshotStore = databaseUrl
   ? createOiSnapshotStore(databaseUrl)
   : new NoopOiSnapshotStore();
 
-const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite');
+const flowOiStore = new FlowOiStore(process.env['FLOW_OI_SQLITE_PATH'] ?? '.cache/flow-oi.sqlite', {
+  connectionString: databaseUrl,
+  flushIntervalMs: Math.max(86_400_000, Number(process.env['MARKET_DATA_DB_FLUSH_INTERVAL_MS']) || 86_400_000),
+  log: logger,
+});
 export const flowOiRecorder = new FlowOiRecorder((tick) => flowOiStore.append(tick));
 const flowOiPruneTimer = setInterval(() => {
   try { flowOiStore.prune(Date.now() - 7 * 86_400_000); }
@@ -309,7 +314,14 @@ flowOiPruneTimer.unref();
 
 export const flowEvidenceService = new FlowEvidenceService({
   fastOi: flowOiStore,
-  trades: tradeStore, oi: oiSnapshotStore,
+  trades: localTradeStore,
+  oi: {
+    enabled: true,
+    loadWindow: (query) => {
+      const path = process.env['DEALER_BOOK_OI_CACHE_PATH'] ?? '.cache/dealer-book-oi-snapshots.ndjson';
+      return readOiWindow([path, `${path}.flushing`], query);
+    },
+  },
   log: logger,
   live: (underlying) => flowService.getTrades(underlying),
   blocks: (underlying) => blockFlowService.getTrades(underlying),
@@ -763,6 +775,8 @@ export async function bootstrapServices(log: FastifyBaseLogger) {
 }
 
 export function disposeServiceStores(): void {
+  clearInterval(flowOiPruneTimer);
+  void flowOiStore.dispose().catch((err: unknown) => logger.warn({ err: String(err) }, 'flow OI store shutdown failed'));
   if (tradeStreamPollTimer) {
     clearInterval(tradeStreamPollTimer);
     tradeStreamPollTimer = null;

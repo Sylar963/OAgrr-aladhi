@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { PortfolioAssistantEvidenceSchema, PortfolioAssistantProgressSchema } from './portfolio-assistant-evidence.js';
+export * from './portfolio-assistant-evidence.js';
 
 import { PortfolioSourceSchema } from './portfolio.js';
 
@@ -65,6 +67,7 @@ export const PortfolioAssistantMessageSchema = z.object({
   status: PortfolioAssistantMessageStatusSchema,
   portfolioGeneratedAt: z.number().int().nonnegative().nullable(),
   createdAt: z.number().int().nonnegative(),
+  evidence: PortfolioAssistantEvidenceSchema.nullable().optional(),
 });
 export type PortfolioAssistantMessage = z.infer<typeof PortfolioAssistantMessageSchema>;
 
@@ -106,10 +109,12 @@ export type PortfolioAssistantStreamErrorCode = z.infer<
 >;
 
 export const PortfolioAssistantStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('progress'), stage: PortfolioAssistantProgressSchema }),
   z.object({
     type: z.literal('message_started'),
     assistantMessageId: z.string().uuid(),
     portfolioGeneratedAt: z.number().int().nonnegative(),
+    evidence: PortfolioAssistantEvidenceSchema.nullable().optional(),
   }),
   z.object({
     type: z.literal('text_delta'),

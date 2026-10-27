@@ -44,7 +44,7 @@ describe('FLOW evidence presentation', () => {
     render(<FlowLabels analysis={analysis} />);
     expect(screen.getByText('Put Spread')).toBeTruthy();
     expect(screen.getByText('Bought + sold legs')).toBeTruthy();
-    expect(screen.getByText('Open / close unknown')).toBeTruthy();
+    expect(screen.getByText('Reconcile OI')).toBeTruthy();
   });
   it('shows interval timing and unverified coverage next to increasing OI', async () => {
     const response: FlowEvidenceResponse = {
@@ -81,9 +81,21 @@ describe('FLOW evidence presentation', () => {
     );
     expect(await screen.findByText('Samples bracket this trade')).toBeTruthy();
     expect(screen.getByText('+9')).toBeTruthy();
-    expect(screen.getByText(/Full trade coverage is unverified/)).toBeTruthy();
+    expect(screen.getByText(/assume complete tape coverage/)).toBeTruthy();
     expect(screen.queryByText(/confirmed buy to open/i)).toBeNull();
     expect(fetchJson).toHaveBeenCalledWith(expect.stringContaining('mode=institutional'));
     client.clear();
+  });
+  it('shows an actionable inferred closing label with the trade-side direction', () => {
+    render(<FlowLabels analysis={{ ...analysis, positionEffect: 'inferred_close', legs: [{
+      ...analysis.legs[0]!, position: {
+        status: 'inferred_close', action: 'buy_to_close', basis: 'oi_reconciliation',
+        quantity: 9, minOpening: 0, minClosing: 9, intervalVolume: 9, otherVolume: 0,
+        tradeCount: 1, coverage: 'recorded', reason: 'all_volume_closing',
+      },
+    }] }} />);
+    expect(screen.getByText('Buy to close')).toBeTruthy();
+    expect(screen.getByText(/inferred/)).toBeTruthy();
+    expect(screen.queryByText('Reconcile OI')).toBeNull();
   });
 });

@@ -1,4 +1,7 @@
+import { readAssistantTokenRates, type AssistantTokenRates } from './portfolio-assistant-cost.js';
+
 export interface PortfolioAssistantConfiguration {
+  tokenRates?: AssistantTokenRates | null;
   enabled: boolean;
   apiUrl: string;
   apiKey: string | null;
@@ -44,6 +47,7 @@ export function readPortfolioAssistantConfiguration(
     }
   }
   return {
+    tokenRates: readAssistantTokenRates(env),
     enabled,
     apiUrl: apiUrl.replace(/\/$/, ''),
     apiKey,

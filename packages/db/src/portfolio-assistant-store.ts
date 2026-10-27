@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { PortfolioAssistantEvidenceSchema, type PortfolioAssistantEvidence } from '@oggregator/protocol';
 import { createPgPool } from './pg-pool.js';
 
 export type UserEntitlementStatus = 'enabled' | 'revoked';
@@ -30,6 +31,7 @@ export interface PortfolioAssistantThreadRow {
 }
 
 export interface PortfolioAssistantMessageRow {
+  evidence?: PortfolioAssistantEvidence | null;
   id: string;
   threadId: string;
   clientMessageId: string | null;
@@ -67,6 +69,7 @@ export interface ListPortfolioAssistantMessagesInput {
 }
 
 export interface BeginPortfolioAssistantExchangeInput {
+  evidence?: PortfolioAssistantEvidence;
   userId: string;
   threadId: string;
   clientMessageId: string;
@@ -85,6 +88,8 @@ export interface BeginPortfolioAssistantExchangeResult {
 }
 
 export interface CompletePortfolioAssistantExchangeInput {
+  firstTokenMs?: number | null;
+  estimatedCostUsd?: number | null;
   userId: string;
   threadId: string;
   assistantMessageId: string;
@@ -151,6 +156,7 @@ interface ThreadDb {
   updated_at: Date;
 }
 interface MessageDb {
+  evidence: unknown;
   id: string;
   thread_id: string;
   client_message_id: string | null;
@@ -188,6 +194,7 @@ function mapThread(row: ThreadDb): PortfolioAssistantThreadRow {
 
 function mapMessage(row: MessageDb): PortfolioAssistantMessageRow {
   return {
+    evidence: PortfolioAssistantEvidenceSchema.safeParse(row.evidence).data ?? null,
     id: row.id,
     threadId: row.thread_id,
     clientMessageId: row.client_message_id,
@@ -203,7 +210,7 @@ function mapMessage(row: MessageDb): PortfolioAssistantMessageRow {
 
 const THREAD_COLUMNS = 'id, user_id, account_id, source, underlying, title, created_at, updated_at';
 const MESSAGE_COLUMNS =
-  'id, thread_id, client_message_id, role, content, status, portfolio_generated_at, context_digest, created_at, completed_at';
+  'id, thread_id, client_message_id, role, content, status, portfolio_generated_at, context_digest, created_at, completed_at, evidence';
 
 export class NoopPortfolioAssistantStore implements PortfolioAssistantStore {
   readonly enabled = false;
@@ -430,6 +437,7 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
         createdAt: input.createdAt,
       });
       const assistantMessage = await this.insertMessage(client, {
+        evidence: input.evidence,
         id: input.assistantMessageId,
         threadId: input.threadId,
         clientMessageId: null,
@@ -457,6 +465,7 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
   private async insertMessage(
     client: PoolClient,
     input: {
+      evidence?: PortfolioAssistantEvidence;
       id: string;
       threadId: string;
       clientMessageId: string | null;
@@ -470,8 +479,8 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
   ): Promise<PortfolioAssistantMessageRow> {
     const result = await client.query<MessageDb>(
       `INSERT INTO portfolio_assistant_messages
-       (id, thread_id, client_message_id, role, content, status, portfolio_generated_at, context_digest, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${MESSAGE_COLUMNS}`,
+       (id, thread_id, client_message_id, role, content, status, portfolio_generated_at, context_digest, created_at, evidence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING ${MESSAGE_COLUMNS}`,
       [
         input.id,
         input.threadId,
@@ -482,6 +491,7 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
         input.portfolioGeneratedAt,
         input.contextDigest,
         input.createdAt,
+        input.evidence == null ? null : JSON.stringify(PortfolioAssistantEvidenceSchema.parse(input.evidence)),
       ],
     );
     return mapMessage(result.rows[0]!);
@@ -510,8 +520,8 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
       );
       await client.query(
         `INSERT INTO portfolio_assistant_usage
-         (id, user_id, thread_id, assistant_message_id, provider, model, input_tokens, cached_input_tokens, output_tokens, outcome, started_at, completed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         (id, user_id, thread_id, assistant_message_id, provider, model, input_tokens, cached_input_tokens, output_tokens, outcome, started_at, completed_at, first_token_ms, estimated_cost_usd)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           crypto.randomUUID(),
           input.userId,
@@ -525,6 +535,8 @@ export class PostgresPortfolioAssistantStore implements PortfolioAssistantStore 
           input.outcome,
           input.startedAt,
           input.completedAt,
+          input.firstTokenMs ?? null,
+          input.estimatedCostUsd ?? null,
         ],
       );
       await client.query('UPDATE portfolio_assistant_threads SET updated_at = $2 WHERE id = $1', [

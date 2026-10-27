@@ -24,6 +24,21 @@
 .unknown {
   color: var(--text-secondary);
 }
+.verdict[data-effect="inferred_open"],
+.verdict[data-effect="opening_component"] {
+  color: var(--color-profit);
+}
+.verdict[data-effect="inferred_close"],
+.verdict[data-effect="closing_component"] {
+  color: var(--color-warning, #d7ae67);
+}
+.calculation {
+  margin: 6px 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  white-space: normal;
+}
 .panel {
   order: 10;
   width: 100%;

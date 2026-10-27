@@ -17,6 +17,9 @@ import type {
   PersistedExchangeTrade,
 } from '@oggregator/db';
 import type {
+  PortfolioAssistantIntent,
+  PortfolioAssistantProgress,
+  PortfolioAssistantComparison,
   BreakEvenIvRow,
   ExpiryBucketRow,
   ExpiryRiskWindow,
@@ -30,6 +33,7 @@ import type {
   StrategyGroup,
   VegaByStrikeRow,
 } from '@oggregator/protocol';
+import { selectAssistantContextPolicy, type AssistantContextPolicy } from './portfolio-assistant-context-policy.js';
 import type { CompactChain, CompactSurface } from './assistant-market/market-data-compaction.js';
 import type { AssistantMarketDataReader } from './assistant-market/market-data-reader.js';
 import { PortfolioRefStore } from './assistant-market/portfolio-ref.js';
@@ -197,6 +201,10 @@ export interface PortfolioAssistantAccountLedgerReader {
 }
 
 export interface PortfolioAssistantContext {
+  reviewComparison?: PortfolioAssistantComparison | null;
+  network?: 'mainnet' | 'testnet' | null;
+  markTimestamps?: Record<string, number>;
+  contextSelection?: { intent: PortfolioAssistantIntent; omittedSections: string[] };
   headline: PortfolioAssistantHeadline;
   schemaVersion: 1;
   source: PortfolioSource;
@@ -245,6 +253,8 @@ export interface BuildPortfolioAssistantContextInput {
   underlying: string | null;
   forwardDays: number;
   userMemoryFacts?: PortfolioAssistantUserMemoryFacts | null;
+  question?: string;
+  onProgress?: (stage: PortfolioAssistantProgress) => void;
 }
 
 const STALE_AFTER_MS = 30_000;
@@ -686,6 +696,7 @@ export function compactPortfolioAssistantContext(
 }
 
 export interface AssemblePortfolioAssistantContextInput {
+  policy?: AssistantContextPolicy;
   source: PortfolioSource;
   underlying: string | null;
   forwardDays: number;
@@ -750,9 +761,9 @@ export function assemblePortfolioAssistantContext(
       `${metrics.byExpiry.length - 40} expiry row(s) were omitted after expiry sorting.`,
     );
   const horizonScenarios = compactHorizonScenarios(input.horizonScenarios);
-  if (horizonScenarios == null) {
+  if (horizonScenarios == null && input.policy?.scenarios !== false) {
     limitations.push('Multi-horizon scenarios could not be computed.');
-  } else if (horizonScenarios.status !== 'ok') {
+  } else if (horizonScenarios != null && horizonScenarios.status !== 'ok') {
     limitations.push(`Multi-horizon scenario status is ${horizonScenarios.status}.`);
   }
   limitations.push(...input.limitations);
@@ -763,6 +774,18 @@ export function assemblePortfolioAssistantContext(
     input.legsWithMarks == null ? null : findUncoveredShorts(input.legsWithMarks, metrics.generatedAt);
 
   const context: PortfolioAssistantContext = {
+    ...(input.policy ? { contextSelection: {
+      intent: input.policy.intent,
+      omittedSections: [
+        ...(!input.policy.market ? ['marketFacts', 'bookVsMarketFacts'] : []),
+        ...(!input.policy.history ? ['tradeHistoryFacts', 'accountEquityFacts'] : []),
+        ...(!input.policy.scenarios ? ['horizonScenarios', 'shockFacts', 'payoffFacts.points'] : []),
+      ],
+    } } : {}),
+    markTimestamps: Object.fromEntries(positions.flatMap((leg) => {
+      const mark = riskFacts.positions.find((fact) => fact.legId === leg.legId)?.currentMarkUsd;
+      return leg.venueMarkTs != null && leg.venueMarkPriceUsd === mark ? [[leg.legId, leg.venueMarkTs]] : [];
+    })),
     headline: {
       asOf: new Date(metrics.generatedAt).toISOString(),
       underlying: pnlCurve.underlying ?? input.underlying,
@@ -798,15 +821,17 @@ export function assemblePortfolioAssistantContext(
     strikeFacts: metrics.byStrike.slice(0, 120),
     strategyFacts: metrics.strategies.slice(0, 50),
     breakEvenFacts: metrics.breakEven.slice(0, 100),
-    payoffFacts: trimPayoffFacts(pnlCurve, input.forwardDays),
+    payoffFacts: input.policy?.scenarios === false
+      ? { ...trimPayoffFacts(pnlCurve, input.forwardDays), points: [] }
+      : trimPayoffFacts(pnlCurve, input.forwardDays),
     horizonScenarios,
     marketFacts: input.marketFacts,
-    shockFacts: toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
+    shockFacts: input.policy?.scenarios === false ? null : toShockFacts(metrics.shockGrid, metrics.shockGridMeta),
     accountingFacts: metrics.accounting,
     tradeHistoryFacts: input.tradeHistoryFacts,
     accountEquityFacts: input.accountEquityFacts ?? null,
     userMemoryFacts: input.userMemoryFacts ?? null,
-    bookVsMarketFacts: bookVsMarket(input, positions, pnlCurve),
+    bookVsMarketFacts: input.policy?.market === false ? null : bookVsMarket(input, positions, pnlCurve),
     topContributors: {
       delta: rankPortfolioRiskContributors(riskFacts, 'delta').slice(0, 10),
       gamma: rankPortfolioRiskContributors(riskFacts, 'gamma').slice(0, 10),
@@ -995,6 +1020,8 @@ export class PortfolioAssistantContextBuilder {
   async buildPortfolioAssistantContext(
     input: BuildPortfolioAssistantContextInput,
   ): Promise<PortfolioAssistantContext> {
+    const policy = selectAssistantContextPolicy(input.question);
+    input.onProgress?.('loading_portfolio');
     const underlying = input.underlying ?? undefined;
     await bootstrapPortfolioForAccount(input.accountId, input.source, underlying);
     const runtime = getOrCreatePortfolioRuntime(input.accountId, input.source, underlying);
@@ -1007,22 +1034,22 @@ export class PortfolioAssistantContextBuilder {
         true,
       );
     }
-    const horizonScenarios = runtime.computeHorizonScenarios(
+    const horizonScenarios = policy.scenarios ? runtime.computeHorizonScenarios(
       [...SCENARIO_HORIZONS_DAYS, input.forwardDays],
       SCENARIO_SPOT_MOVES_PCT,
-    );
-    const marketFacts = await this.buildMarketFacts(
-      snapshot.positions,
-      input.underlying,
-      snapshot.metrics.pnlCurve.currentSpotUsd,
-    );
+    ) : null;
     const limitations: string[] = [];
-    const [tradeHistoryFacts, levelInputs, accountEquityFacts] = await Promise.all([
-      this.buildTradeHistory(input, limitations),
-      this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions),
-      this.buildAccountEquity(input, limitations),
+    if (policy.history) input.onProgress?.('loading_history');
+    if (policy.market) input.onProgress?.('checking_quotes');
+    const [tradeHistoryFacts, levelInputs, accountEquityFacts, marketFacts] = await Promise.all([
+      policy.history ? this.buildTradeHistory(input, limitations) : null,
+      policy.market ? this.buildLevelInputs(snapshot.metrics.pnlCurve.underlying, snapshot.positions) : null,
+      policy.history ? this.buildAccountEquity(input, limitations) : null,
+      policy.market ? this.buildMarketFacts(snapshot.positions, input.underlying, snapshot.metrics.pnlCurve.currentSpotUsd)
+        : { underlyings: [], unavailable: [] },
     ]);
-    return assemblePortfolioAssistantContext({
+    const context = assemblePortfolioAssistantContext({
+      policy,
       source: input.source,
       underlying: input.underlying,
       forwardDays: input.forwardDays,
@@ -1044,5 +1071,8 @@ export class PortfolioAssistantContextBuilder {
       limitations,
       maxContextCharacters: this.configuration.maxContextCharacters,
     });
+    context.network = accountEquityFacts?.network ?? (isLedgerVenue(input.source)
+      ? this.ledgerMatchesSession(input.accountId, input.source) ? 'mainnet' : 'testnet' : null);
+    return context;
   }
 }

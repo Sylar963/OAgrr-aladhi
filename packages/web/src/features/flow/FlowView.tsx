@@ -14,7 +14,7 @@ import { getCustomRangeFromBounds } from './DateRangePicker';
 import { HistoryControls, getPresetRange, type HistoryPreset } from './HistoryControls';
 import { flowMessages } from './i18n';
 import styles from './FlowView.module.css';
-import { FlowEvidencePanel, FlowLabels } from './FlowEvidence';
+import { FlowEvidencePanel, FlowRowLabels } from './FlowEvidence';
 
 const messages = defineMessages(
   {
@@ -230,7 +230,7 @@ const TradeRow = memo(function TradeRow({ trade, isNew }: TradeRowProps) {
         </span>
       </span>
       <div className={styles.evidenceRow}>
-        <FlowLabels analysis={trade.analysis} />
+        <FlowRowLabels analysis={trade.analysis} target={{ mode: 'live', tradeUid: trade.tradeUid, venue: trade.venue, underlying: trade.underlying, instrument: trade.instrument, timestamp: trade.timestamp }} />
         <button
           type="button"
           className={styles.evidenceButton}

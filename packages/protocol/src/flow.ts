@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { VenueIdSchema } from './ws.js';
+import { ExchangeTradeEvidenceSchema, FlowAnalysisSchema } from './flow-evidence.js';
 
 export const FlowTradeSchema = z.object({
   venue: VenueIdSchema,
@@ -19,6 +20,8 @@ export const FlowTradeSchema = z.object({
   referencePriceUsd: z.number().nullable(),
   isBlock: z.boolean(),
   timestamp: z.number(),
+  exchangeEvidence: ExchangeTradeEvidenceSchema.optional(),
+  analysis: FlowAnalysisSchema.optional(),
 });
 
 export type FlowTrade = z.infer<typeof FlowTradeSchema>;

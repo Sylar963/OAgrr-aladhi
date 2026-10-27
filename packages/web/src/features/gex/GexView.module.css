@@ -487,6 +487,35 @@
   color: var(--text-tertiary);
 }
 
+.bandsField {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.bandsField input[type="number"] {
+  width: 66px;
+  padding: 5px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.bandsField input:focus-visible,
+.bandsTab:focus-visible {
+  outline: 2px solid #50d2c1;
+  outline-offset: 2px;
+}
+
+.bandsField input[type="checkbox"] {
+  accent-color: #50d2c1;
+}
+
 .bandsToggle {
   display: flex;
   border: 1px solid var(--border-subtle);

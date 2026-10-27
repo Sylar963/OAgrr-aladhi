@@ -1,4 +1,15 @@
 export {
+  ExchangeTradeEvidenceSchema,
+  FlowAnalysisSchema,
+  FlowEvidenceResponseSchema,
+  FlowOiContextSchema,
+  type ExchangeTradeEvidence,
+  type FlowAnalysis,
+  type FlowAnalysisLeg,
+  type FlowEvidenceResponse,
+  type FlowOiContext,
+} from './flow-evidence.js';
+export {
   type AlphaExpectedMove,
   AlphaExpectedMoveSchema,
   type AlphaMarketContextQuery,

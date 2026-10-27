@@ -146,7 +146,7 @@ export default function GexView() {
   const isMobile = useIsMobile();
   const [showExplain, setShowExplain] = useState(false);
 
-  const [version, setVersion] = useState<Version>('bars');
+  const [version, setVersion] = useState<Version>('bands');
   const bandsAvailable = isBandsCurrency(underlying);
   const effectiveVersion: Version = version === 'bands' && bandsAvailable ? 'bands' : 'bars';
 
@@ -205,7 +205,7 @@ export default function GexView() {
     hasCenteredBarsRef.current = true;
   }, [activeVenueKey, effectiveVersion, mode, nonzero.length, spotStrike, underlying]);
 
-  if (isLoading && gex.length === 0) {
+  if (isLoading && gex.length === 0 && effectiveVersion !== 'bands') {
     return (
       <div className={styles.view}>
         <Spinner size="lg" label={t('loading')} />
@@ -278,7 +278,7 @@ export default function GexView() {
         })}
       </div>
 
-      {nonzero.length === 0 ? (
+      {nonzero.length === 0 && effectiveVersion !== 'bands' ? (
         <EmptyState
           icon="◈"
           title={isAll ? t('noDataAll') : t('noDataExpiry')}

@@ -3,6 +3,7 @@ import type { LiveQuote } from '../shared/sdk-base.js';
 import {
   applyDeribitBookSummary,
   buildDeribitTickerQuote,
+  buildDeribitMarkPriceQuote,
   deribitStaleReconnectCooldownMs,
   shouldForceDeribitStaleReconnect,
   summarizeDeribitSubscribedTickerStaleness,
@@ -37,6 +38,18 @@ function createQuote(timestamp: number): LiveQuote {
 }
 
 describe('Deribit staleness summary', () => {
+  it('preserves the OI timestamp when a newer mark reuses earlier OI', () => {
+    const previous = { ...createQuote(1000), openInterestTimestamp: 900 };
+    const quote = buildDeribitMarkPriceQuote(
+      { instrument_name: 'BTC-30OCT26-83000-C', mark_price: 0.01, iv: 0.3, timestamp: 2000 },
+      previous,
+      80000,
+      true,
+      (value) => (typeof value === 'number' ? value : null),
+    );
+    expect(quote.timestamp).toBe(2000);
+    expect(quote.openInterestTimestamp).toBe(900);
+  });
   it('returns null when there are no subscribed tickers', () => {
     expect(
       summarizeDeribitSubscribedTickerStaleness(new Set(), new Map(), Date.now(), 60_000, 5),
@@ -45,11 +58,7 @@ describe('Deribit staleness summary', () => {
 
   it('counts stale and missing subscribed quotes', () => {
     const now = 1_000_000;
-    const subscribedTickers = new Set([
-      'BTC-1JAN26-100-C',
-      'BTC-1JAN26-100-P',
-      'BTC-1JAN26-110-C',
-    ]);
+    const subscribedTickers = new Set(['BTC-1JAN26-100-C', 'BTC-1JAN26-100-P', 'BTC-1JAN26-110-C']);
     const quoteStore = new Map<string, LiveQuote>([
       ['BTC-1JAN26-100-C', createQuote(now - 10_000)],
       ['BTC-1JAN26-100-P', createQuote(now - 90_000)],

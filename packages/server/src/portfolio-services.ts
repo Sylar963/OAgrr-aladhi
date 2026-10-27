@@ -642,9 +642,9 @@ export async function getChainStats(
 
 /** Whether `listPositions` reflects the account's real book for this source right now. */
 export function isPositionSourceLive(accountId: string, source: PortfolioSource): boolean {
-  if (source === 'thalex') return thalexPositionStore.isConnected(accountId);
-  if (source === 'derive') return derivePositionStore.isConnected(accountId);
-  if (source === 'paradex') return paradexPositionStore.isConnected(accountId);
+  if (source === 'thalex') return thalexPositionStore.hasPositionSnapshot(accountId);
+  if (source === 'derive') return derivePositionStore.hasPositionSnapshot(accountId);
+  if (source === 'paradex') return paradexPositionStore.hasPositionSnapshot(accountId);
   return true;
 }
 

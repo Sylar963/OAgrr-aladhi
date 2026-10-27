@@ -1,6 +1,8 @@
 import type { AssistantRunToolSummary } from './assistant-market/assistant-run-registry.js';
 
 export interface PortfolioAssistantRunTelemetrySummary {
+  firstTokenMs?: number | null;
+  estimatedCostUsd?: number | null;
   requestId: string;
   outcome: string;
   errorCode: string | null;

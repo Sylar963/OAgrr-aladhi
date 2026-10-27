@@ -65,6 +65,18 @@ describe('local FLOW OI journal and daily archive', () => {
     store.prune(3000);
     expect(store.bracket('deribit', tick.instrument, 1500).before).toEqual(tick);
   });
+  it('retries the exact durable batch even when more ticks arrive after a failure', async () => {
+    const { store, query } = setup();
+    query.mockRejectedValueOnce(new Error('lost acknowledgement'));
+    store.append(tick);
+    await expect(store.flush()).rejects.toThrow('lost acknowledgement');
+    store.append({ ...tick, timestamp: 2000 });
+    await store.flush();
+    expect(query).toHaveBeenCalledTimes(3);
+    const calls = query.mock.calls as unknown as Array<[string, unknown[]]>;
+    expect(calls[0]![1][0]).toBe(calls[1]![1][0]);
+    expect(calls[2]![1][0]).not.toBe(calls[1]![1][0]);
+  });
   it('clamps a short configured interval to 24h, including failures and restarts', async () => {
     vi.useFakeTimers();
     const { store, query, dir, pool } = setup(true);

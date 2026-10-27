@@ -288,7 +288,7 @@ export class PortfolioAssistantConversationService {
         positionCount: context.positions.length,
         contextCharacterCount: contextMessage.length,
         historyMessageCount: conversationMessages.length - 1,
-        startedAtMs: this.now(),
+        startedAtMs: startedAt.getTime(),
       };
       let notifyProgress: ((stage: PortfolioAssistantProgress) => void) | null = null;
       this.runs?.begin({
@@ -412,6 +412,8 @@ export class PortfolioAssistantConversationService {
         });
         if (assistantMessageId && toolCalls) {
           this.runTelemetry?.record(assistantMessageId, {
+            firstTokenMs,
+            estimatedCostUsd: estimateAssistantCost({ inputTokens, cachedInputTokens, outputTokens }, this.configuration.tokenRates),
             requestId: telemetry.requestId,
             outcome: runOutcome,
             errorCode: runErrorCode,

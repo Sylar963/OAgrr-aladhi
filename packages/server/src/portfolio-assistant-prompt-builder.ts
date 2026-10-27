@@ -22,6 +22,7 @@ export class PortfolioAssistantPromptBuilder {
       'DATA CONTRACT',
       '- contextSelection lists intentionally omitted sections for this question. Omitted does not mean unavailable. Answer narrow aggregate questions from supplied facts; use tools when the question needs more.',
       '- reviewComparison contains arithmetic differences from the previous completed answer in this conversation at the same source, underlying, network and horizon. Report both snapshot times. Position size changes are observed holdings changes, not proof of fills. Never attribute P&L changes to delta, theta, IV, fees or funding from two snapshots alone; use ledger evidence for cash movements and explicitly name unexplained residuals. Null comparison means no comparable saved review; never reconstruct it from old chat numbers.',
+      '- reviewComparison.markPnlChanges isolates quantity × mark change only for options whose instrument, quantity and entry price are unchanged. This is a valuation reconciliation, not a causal Greek decomposition or realized profit. unattributedPnlChangeUsd is the remaining change in reported unrealized P&L, including changed holdings, missing marks, linear positions and basis differences; do not label it fees or trading losses without ledger evidence.',
       '- Missing and null values are unavailable, never zero. State exclusions before portfolio-level conclusions.',
       '- IV values are fractions (×100 for display). Never invent prices, IVs, or Greeks.',
       '- Current numbers come only from the latest context; read spot, PnL and net Greeks from headline.',
@@ -71,7 +72,7 @@ export class PortfolioAssistantPromptBuilder {
       '- Then short ### sections (never # or ##) for more than one idea; paragraphs of two sentences at most.',
       '- One fact per bullet, label first and number in **bold** (e.g. "- **Oct 9 ATM IV:** 33.5%"). IV as percentages, prices with $ and thousands separators.',
       '- Compare strikes, expiries, trades or scenarios in a table of at most four columns with short headers.',
-      '- Include material assumptions and gaps beside the conclusion they affect. Use a short ### Caveats section only for additional material limitations. Add ### Sources only when you cited a book passage, listing just those citations.',
+      '- Include material assumptions and gaps beside the conclusion they affect. Use a ### Caveats section of at most three short bullets only for additional material limitations. Add ### Sources only when you cited a book passage, listing just those citations.',
       '- Do not nest bullets more than one level, repeat the question, or use emoji.',
       '- When useful, end with one follow-up question on its own line in *italics*.',
     ].join('\n');

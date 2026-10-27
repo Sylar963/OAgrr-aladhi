@@ -54,11 +54,15 @@ const { ledgerMock, clients, FakeThalexClient } = vi.hoisted(() => {
 vi.mock('@oggregator/core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@oggregator/core')>()),
   ThalexPrivateClient: FakeThalexClient,
+  DerivePrivateClient: FakeThalexClient,
+  ParadexPrivateClient: FakeThalexClient,
 }));
 vi.mock('./trading-services.js', () => ({ exchangePortfolioLedgerStore: ledgerMock }));
 vi.mock('./portfolio-fill-prices.js', () => ({ portfolioFillPriceAt: async () => null }));
 
 import { ledgerMatchesSession, ThalexPositionStore, thalexPositionStore } from './thalex-position-store.js';
+import { DerivePositionStore } from './derive-position-store.js';
+import { ParadexPositionStore } from './paradex-position-store.js';
 
 function leg(legId: string, size: number): PositionLeg {
   return { legId, size, entryPriceUsd: 100, underlying: 'BTC' } as PositionLeg;
@@ -91,6 +95,43 @@ describe('ThalexPositionStore environments', () => {
     expect(ledgerMock.loadPositions).not.toHaveBeenCalled();
     expect(ledgerMock.replacePositions).not.toHaveBeenCalled();
     expect(ledgerMock.upsertTrades).not.toHaveBeenCalled();
+  });
+
+  it('requires a position snapshot from the current session before its book is live', async () => {
+    const creds = { accountId: 'a1', kid: 'k', privateKeyPem: 'p', env: 'test' as const };
+    await store.connect(creds);
+    expect(store.hasPositionSnapshot('a1')).toBe(false);
+    clients[0]!.positions!([]);
+    expect(store.hasPositionSnapshot('a1')).toBe(true);
+    await store.connect(creds);
+    expect(store.hasPositionSnapshot('a1')).toBe(false);
+    clients[0]!.positions!([]);
+    expect(store.hasPositionSnapshot('a1')).toBe(false);
+    clients[1]!.positions!([]);
+    expect(store.hasPositionSnapshot('a1')).toBe(true);
+    await store.disconnect('a1');
+    expect(store.hasPositionSnapshot('a1')).toBe(false);
+  });
+
+  it.each(['derive', 'paradex'] as const)('requires a current snapshot for %s as well', async (source) => {
+    const venueStore = source === 'derive' ? new DerivePositionStore() : new ParadexPositionStore();
+    const creds = { accountId: 'a1', walletAddress: 'w', signerPrivateKey: 'p', subaccountId: 1, readonlyToken: 'token' };
+    try {
+      await venueStore.connect(creds);
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(false);
+      clients[0]!.positions!([]);
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(true);
+      await venueStore.connect(creds);
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(false);
+      clients[0]!.positions!([]);
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(false);
+      clients[1]!.positions!([]);
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(true);
+      await venueStore.disconnect('a1');
+      expect(venueStore.hasPositionSnapshot('a1')).toBe(false);
+    } finally {
+      await venueStore.dispose();
+    }
   });
 
   it('keeps perps beside the option legs and broadcasts when they change', async () => {

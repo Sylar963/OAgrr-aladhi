@@ -84,6 +84,7 @@ const ArgsSchema = z.object({
   concurrency: z.coerce.number().int().min(1).max(MAX_CONCURRENCY).default(1),
   regrade: z.string().min(1).optional(),
   prefetch: z.enum(['on', 'off']).default('on'),
+  context: z.enum(['full', 'selective']).default('selective'),
 });
 type EvalArgs = z.infer<typeof ArgsSchema>;
 
@@ -154,6 +155,7 @@ function readArgs(argv: string[]): EvalArgs {
       concurrency: { type: 'string' },
       regrade: { type: 'string' },
       prefetch: { type: 'string' },
+      context: { type: 'string' },
     },
     allowPositionals: false,
     strict: true,
@@ -312,7 +314,7 @@ async function runFixture(env: RunEnvironment, fixture: AssistantEvalFixture, sa
   const started = env.mcp?.beginRun({ requestId, threadId, context: fixture.context }) ?? null;
   const baseContext = shapeAssistantContext(
     started == null ? fixtureContext(fixture) : { ...fixtureContext(fixture), portfolioRef: started.portfolioRef },
-    selectAssistantContextPolicy(fixture.question),
+    selectAssistantContextPolicy(env.args.context === 'full' ? undefined : fixture.question),
   );
   const evidence = buildAssistantEvidence(baseContext, fixture.question, fixture.history);
   baseContext.reviewComparison = evidence.comparison;
@@ -462,19 +464,22 @@ function answerFileName(run: Pick<FixtureRun, 'fixtureId' | 'sample'>, suffix = 
   return `${run.fixtureId}.s${run.sample}${suffix}.md`;
 }
 
-function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['invalid']): number {
+function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['invalid'], mode: EvalArgs['context']): number {
   const builder = new PortfolioAssistantPromptBuilder();
   const budget = readPortfolioAssistantConfiguration({}).maxContextCharacters;
   const lines = [
-    '| Fixture | Scenario | System | Context | Conversation | ~Tokens | Context budget |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| Fixture | Scenario | System | Context | Conversation | ~Tokens | Context budget | Selection | Evidence |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const fixture of fixtures) {
-    const prompt = buildPrompt(builder, fixture, fixtureContext(fixture), `assistant-eval-dry-${fixture.id}`);
+    const context = shapeAssistantContext(fixtureContext(fixture), selectAssistantContextPolicy(mode === 'full' ? undefined : fixture.question));
+    const evidence = buildAssistantEvidence(context, fixture.question, fixture.history);
+    const check = checkAssistantEvidence(evidence, context);
+    const prompt = buildPrompt(builder, fixture, context, `assistant-eval-dry-${fixture.id}`);
     const total = prompt.systemChars + prompt.contextChars + prompt.conversationChars;
-    const contextJsonChars = JSON.stringify(fixture.context).length;
+    const contextJsonChars = JSON.stringify(context).length;
     lines.push(
-      `| ${fixture.id} | ${fixture.scenario} | ${prompt.systemChars} | ${prompt.contextChars} | ${prompt.conversationChars} | ${Math.round(total / 4)} | ${percent(contextJsonChars / budget)} |`,
+      `| ${fixture.id} | ${fixture.scenario} | ${prompt.systemChars} | ${prompt.contextChars} | ${prompt.conversationChars} | ${Math.round(total / 4)} | ${percent(contextJsonChars / budget)} | ${context.contextSelection?.intent} | ${check.status} |`,
     );
   }
   process.stdout.write(`${lines.join('\n')}\n\n${fixtures.length} valid fixture(s), ${invalid.length} invalid.\n`);
@@ -483,6 +488,8 @@ function dryRun(fixtures: AssistantEvalFixture[], invalid: LoadedFixtures['inval
 }
 
 interface ReportMeta {
+  contextMode?: 'full' | 'selective';
+  tokenRates?: AssistantTokenRates | null;
   runId: string;
   model: string;
   mcp: 'eval' | 'live';
@@ -511,7 +518,7 @@ function writeReport(outDirectory: string, name: string, meta: ReportMeta): void
   const markdown = [
     `# Assistant eval ${meta.runId}${name === 'report' ? '' : ` (${name})`}`,
     '',
-    `Model: ${meta.model}. MCP: ${meta.mcp}. Structure search prefetch: ${meta.prefetch}. Samples per fixture: ${meta.samples}.`,
+    `Model: ${meta.model}. MCP: ${meta.mcp}. Structure search prefetch: ${meta.prefetch}. Context: ${meta.contextMode ?? 'unknown'}. Samples per fixture: ${meta.samples}.`,
     '',
     `Samples passed: ${overall.passed}/${overall.total} (${percent(overall.rate)}, Wilson 95% ${intervalText(overall)}). ` +
       `Fixtures passing by majority: ${majority}/${fixtures.length}.`,
@@ -683,7 +690,7 @@ function liveReader(args: EvalArgs, env: NodeJS.ProcessEnv): AssistantMarketData
 async function main(): Promise<number> {
   const args = readArgs(process.argv.slice(2));
   const { fixtures, invalid } = loadFixtures(args.fixture);
-  if (args['dry-run']) return dryRun(fixtures, invalid);
+  if (args['dry-run']) return dryRun(fixtures, invalid, args.context);
   if (invalid.length > 0) {
     for (const item of invalid) log.error({ file: item.file, error: item.error }, 'invalid assistant eval fixture');
     return 1;
@@ -762,6 +769,8 @@ async function main(): Promise<number> {
       (order.get(left.fixtureId) ?? 0) - (order.get(right.fixtureId) ?? 0) || left.sample - right.sample,
   );
   writeReport(outDirectory, 'report', {
+    contextMode: args.context,
+    tokenRates: configuration.tokenRates ?? null,
     runId,
     model: configuration.model,
     mcp: args.mcp,

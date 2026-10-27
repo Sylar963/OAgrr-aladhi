@@ -15,6 +15,7 @@ const messages = defineMessages({
   previous: 'Previous review', metric: 'Metric', before: 'Before', now: 'Now', change: 'Change',
   spotUsd: 'Spot ($)', unrealizedPnlUsd: 'Unrealized P&L ($)', netDeltaCoin: 'Delta (coin)', netThetaUsd: 'Theta ($/day)', netVegaUsd: 'Vega ($/vol pt)', equityUsd: 'Equity ($)',
   holdings: 'Observed size changes', unchanged: 'No size changes in the captured option positions.',
+  markChanges: 'Mark P&L change · unchanged holdings', residual: 'Unattributed P&L change', valuation: 'Quantity × mark change for unchanged instruments, sizes and entry prices. This does not isolate delta, theta or IV effects.',
   viewPositions: 'View affected positions', scenario: 'Open scenario', alternatives: 'Compare alternatives',
   portfolio: 'Portfolio', scenarios: 'Scenarios', market: 'Market', trades: 'Fills', account: 'Account ledger',
   fresh: 'Snapshot current at capture', partial: 'Partial inputs', stale: 'Snapshot stale at capture',
@@ -32,6 +33,7 @@ const messages = defineMessages({
   previous: 'Revisión anterior', metric: 'Métrica', before: 'Antes', now: 'Ahora', change: 'Cambio',
   spotUsd: 'Spot ($)', unrealizedPnlUsd: 'P&L no realizado ($)', netDeltaCoin: 'Delta (coin)', netThetaUsd: 'Theta ($/día)', netVegaUsd: 'Vega ($/punto vol)', equityUsd: 'Equity ($)',
   holdings: 'Cambios de tamaño observados', unchanged: 'Sin cambios de tamaño en las posiciones de opciones capturadas.',
+  markChanges: 'Cambio de P&L por mark · posiciones sin cambios', residual: 'Cambio de P&L sin atribuir', valuation: 'Cantidad × cambio de mark para instrumentos, tamaños y precios de entrada sin cambios. No separa los efectos de delta, theta o IV.',
   viewPositions: 'Ver posiciones afectadas', scenario: 'Abrir escenario', alternatives: 'Comparar alternativas',
   portfolio: 'Portafolio', scenarios: 'Escenarios', market: 'Mercado', trades: 'Fills', account: 'Ledger de cuenta',
   fresh: 'Snapshot actual al capturarse', partial: 'Datos parciales', stale: 'Snapshot desactualizado al capturarse',
@@ -74,6 +76,9 @@ export function PortfolioAssistantEvidence({ evidence, generatedAt, onAction, di
               <thead><tr><th>{t('metric')}</th><th>{t('before')}</th><th>{t('now')}</th><th>{t('change')}</th></tr></thead>
               <tbody>{evidence.comparison.changes.map((row) => <tr key={row.metric}><th>{t(row.metric)}</th><td>{number(row.previous)}</td><td>{number(row.current)}</td><td>{number(row.change)}</td></tr>)}</tbody>
             </table></div>
+            {(evidence.comparison.markPnlChanges?.length ?? 0) > 0 && <><strong>{t('markChanges')}</strong>
+              <ul>{evidence.comparison.markPnlChanges?.map((leg) => <li key={leg.legId}>{leg.instrument}: ${number(leg.pnlChangeUsd)}</li>)}</ul><p>{t('valuation')}</p></>}
+            <p>{t('residual')}: {evidence.comparison.unattributedPnlChangeUsd == null ? t('unknown') : `$${number(evidence.comparison.unattributedPnlChangeUsd)}`}</p>
             <strong>{t('holdings')}</strong>
             {!evidence.comparison.positionsComparable ? <p>{t('truncated')}</p> : evidence.comparison.positionChanges.length === 0 ? <p>{t('unchanged')}</p>
               : <ul>{evidence.comparison.positionChanges.map((leg) => <li key={leg.legId}>{leg.instrument}: {number(leg.previousSize)} → {number(leg.currentSize)}</li>)}</ul>}

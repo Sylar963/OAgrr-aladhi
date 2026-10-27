@@ -145,31 +145,42 @@ export class FlowOiStore {
       let batch = this.db.prepare('SELECT * FROM flow_oi_upload WHERE slot = 1').get();
       if (!batch) {
         const rows = this.db
-        .prepare(`SELECT rowid AS id, venue, instrument, underlying, timestamp,
+          .prepare(`SELECT rowid AS id, venue, instrument, underlying, timestamp,
         observed_at AS observedAt, open_interest AS openInterest FROM flow_oi
         WHERE archived = 0 AND rowid <= ? ORDER BY rowid LIMIT 5000`)
-        .all(highWater);
+          .all(highWater);
         if (rows.length === 0) break;
         const ticks = rows.map((row) => FlowOiTickSchema.parse(row));
         const payload = gzipSync(Buffer.from(JSON.stringify(ticks)));
         const id = createHash('sha256').update(payload).digest('hex');
-        this.db.prepare('INSERT INTO flow_oi_upload VALUES (1, ?, ?, ?, ?, ?, ?)').run(
-          id, rows.at(-1)!['id']!, Math.min(...ticks.map((tick) => tick.timestamp)),
-          Math.max(...ticks.map((tick) => tick.timestamp)), ticks.length, payload,
-        );
+        this.db
+          .prepare('INSERT INTO flow_oi_upload VALUES (1, ?, ?, ?, ?, ?, ?)')
+          .run(
+            id,
+            rows.at(-1)!['id']!,
+            Math.min(...ticks.map((tick) => tick.timestamp)),
+            Math.max(...ticks.map((tick) => tick.timestamp)),
+            ticks.length,
+            payload,
+          );
         batch = this.db.prepare('SELECT * FROM flow_oi_upload WHERE slot = 1').get()!;
       }
       await this.pool.query(
         `INSERT INTO flow_oi_archives (id, start_ts, end_ts, tick_count, payload)
         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
         [
-          batch['id'], new Date(Number(batch['start_ts'])), new Date(Number(batch['end_ts'])),
-          batch['tick_count'], batch['payload'],
+          batch['id'],
+          new Date(Number(batch['start_ts'])),
+          new Date(Number(batch['end_ts'])),
+          batch['tick_count'],
+          batch['payload'],
         ],
       );
       this.db.exec('BEGIN');
       try {
-        this.db.prepare('UPDATE flow_oi SET archived = 1 WHERE archived = 0 AND rowid <= ?').run(batch['last_rowid']!);
+        this.db
+          .prepare('UPDATE flow_oi SET archived = 1 WHERE archived = 0 AND rowid <= ?')
+          .run(batch['last_rowid']!);
         this.db.exec('DELETE FROM flow_oi_upload WHERE slot = 1; COMMIT;');
       } catch (error: unknown) {
         this.db.exec('ROLLBACK');

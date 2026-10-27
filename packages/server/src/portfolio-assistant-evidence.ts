@@ -21,15 +21,22 @@ export function compareAssistantSnapshots(
   const before = new Map(previous.positions.map((leg) => [leg.legId, leg]));
   const after = new Map(current.positions.map((leg) => [leg.legId, leg]));
   const positionChanges: PortfolioAssistantComparison['positionChanges'] = [];
+  const markPnlChanges: NonNullable<PortfolioAssistantComparison['markPnlChanges']> = [];
   if (positionsComparable) {
     for (const id of new Set([...before.keys(), ...after.keys()])) {
       const old = before.get(id);
       const next = after.get(id);
       const leg = next ?? old;
-      if (!leg || old?.size === next?.size) continue;
+      if (!leg) continue;
+      const instrument = `${leg.underlying} ${leg.expiry} ${leg.strike} ${leg.optionRight}`;
+      const sameInstrument = old && next && old.underlying === next.underlying && old.expiry === next.expiry && old.strike === next.strike && old.optionRight === next.optionRight;
+      if (sameInstrument && old.size === next.size && old.entryPriceUsd != null && old.entryPriceUsd === next.entryPriceUsd && old.markUsd != null && next.markUsd != null) {
+        markPnlChanges.push({ legId: id, instrument, pnlChangeUsd: old.size * (next.markUsd - old.markUsd) });
+      }
+      if (sameInstrument && old.size === next.size) continue;
       positionChanges.push({
         legId: id,
-        instrument: `${leg.underlying} ${leg.expiry} ${leg.strike} ${leg.optionRight}`,
+        instrument,
         previousSize: old?.size ?? 0,
         currentSize: next?.size ?? 0,
       });
@@ -45,6 +52,9 @@ export function compareAssistantSnapshots(
     })),
     positionChanges,
     positionsComparable,
+    markPnlChanges,
+    unattributedPnlChangeUsd: !positionsComparable || previous.unrealizedPnlUsd == null || current.unrealizedPnlUsd == null
+      ? null : current.unrealizedPnlUsd - previous.unrealizedPnlUsd - markPnlChanges.reduce((sum, leg) => sum + leg.pnlChangeUsd, 0),
   };
 }
 
@@ -70,6 +80,7 @@ export function buildAssistantEvidence(
     positions: context.positions.slice(0, 100).map((leg) => ({
       legId: leg.legId, underlying: leg.underlying, expiry: leg.expiry, strike: leg.strike,
       optionRight: leg.optionRight, size: leg.size, markUsd: leg.currentMarkUsd,
+      entryPriceUsd: leg.entryPriceUsd,
       markUpdatedAt: context.markTimestamps?.[leg.legId] ?? null,
     })),
     positionsTruncated: context.headline.openLegCount > context.positions.length,

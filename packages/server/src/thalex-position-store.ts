@@ -32,6 +32,7 @@ export class ThalexPositionStore implements PositionStore {
   private readonly linearCache = new Map<string, LinearPosition[]>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, ThalexPrivateClient>();
+  private readonly positionSnapshots = new WeakSet<ThalexPrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
   private readonly tradeUnsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -231,6 +232,7 @@ export class ThalexPositionStore implements PositionStore {
     const isCurrent = () => this.clients.get(accountId) === client;
     const unsubscribe = client.subscribe((incoming, linear) => {
       if (!isCurrent()) return;
+      this.positionSnapshots.add(client);
       this.applyLinear(accountId, linear);
       const legs = carryEntryIvs(this.cache.get(accountId), incoming);
       this.applyLegs(accountId, legs);
@@ -381,6 +383,11 @@ export class ThalexPositionStore implements PositionStore {
 
   isConnected(accountId: string): boolean {
     return this.clients.has(accountId);
+  }
+
+  hasPositionSnapshot(accountId: string): boolean {
+    const client = this.clients.get(accountId);
+    return client != null && this.positionSnapshots.has(client);
   }
 
   getMargin(accountId: string): ThalexAccountMargin | null | undefined {

@@ -245,8 +245,7 @@ export class FlowEvidenceService {
           position: reconcileFlowPosition(leg, context, {
             volume: prints.reduce((sum, print) => sum + print.size * multiplier, 0),
             count: prints.length,
-            targetPresent:
-              Math.abs(matchedVolume - leg.quantity) <= 1e-8 * leg.quantity,
+            targetPresent: Math.abs(matchedVolume - leg.quantity) <= 1e-8 * leg.quantity,
             coverage,
           }),
         };

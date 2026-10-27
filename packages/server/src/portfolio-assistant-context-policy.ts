@@ -16,7 +16,7 @@ export function selectAssistantContextPolicy(question?: string): AssistantContex
     return { ...full, intent: 'comparison' };
   }
   const complex = /\b(hedge|trade|buy|sell|roll|scenario|stress|recommend|alternative|strategy|strategies|compare|risk|outlook|price|iv|volatility|cobertura|comprar|vender|escenario|riesgo|alternativas|estrategia|precio|volatilidad)\b/;
-  if (/\b(equity|cash|ledger|fees|funding|deposit|withdrawal|balance|saldo|comisiones|retiro|deposito|patrimonio)\b/.test(text) && !complex.test(text)) {
+  if (/\b(equity|cash|ledger|fees|funding|deposit|withdrawal|balance|saldo|comisiones|retiro|deposito|patrimonio)\b/.test(text) && !complex.test(text) && !/\b(delta|gamma|theta|vega|vanna|volga)\b/.test(text)) {
     return { intent: 'accounting', market: false, history: true, scenarios: false };
   }
   if (/^(?:what (?:is|are)|define|explain|que es|que son|define|explica)\s+(?:the |el |la )?(?:delta|gamma|theta|vega|vanna|volga)(?:\s+(?:in (?:simple|plain) (?:terms|english)|en palabras simples))?[?.!\s]*$/.test(text)) {
@@ -33,6 +33,7 @@ export function selectAssistantContextPolicy(question?: string): AssistantContex
 export function shapeAssistantContext(context: PortfolioAssistantContext, policy: AssistantContextPolicy): PortfolioAssistantContext {
   return {
     ...context,
+    network: context.network ?? context.accountEquityFacts?.network ?? null,
     contextSelection: {
       intent: policy.intent,
       omittedSections: [

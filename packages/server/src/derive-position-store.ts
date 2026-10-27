@@ -26,6 +26,7 @@ export class DerivePositionStore implements PositionStore {
   private readonly cache = new Map<string, Map<string, PositionLeg>>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, DerivePrivateClient>();
+  private readonly positionSnapshots = new WeakSet<DerivePrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
   private readonly tradeUnsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -163,6 +164,8 @@ export class DerivePositionStore implements PositionStore {
 
     const client = new DerivePrivateClient(creds);
     const unsubscribe = client.subscribe((incoming) => {
+      if (this.clients.get(creds.accountId) !== client) return;
+      this.positionSnapshots.add(client);
       const legs = carryEntryIvs(this.cache.get(creds.accountId), incoming);
       this.applyLegs(creds.accountId, legs);
       void this.persistence.persistPositions(creds.accountId, legs).catch((error) => {
@@ -270,6 +273,11 @@ export class DerivePositionStore implements PositionStore {
 
   isConnected(accountId: string): boolean {
     return this.clients.has(accountId);
+  }
+
+  hasPositionSnapshot(accountId: string): boolean {
+    const client = this.clients.get(accountId);
+    return client != null && this.positionSnapshots.has(client);
   }
 
   async dispose(): Promise<void> {

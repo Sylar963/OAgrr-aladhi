@@ -21,6 +21,7 @@ export class ParadexPositionStore implements PositionStore {
   private readonly cache = new Map<string, Map<string, PositionLeg>>();
   private readonly listeners = new Set<PositionStoreListener>();
   private readonly clients = new Map<string, ParadexPrivateClient>();
+  private readonly positionSnapshots = new WeakSet<ParadexPrivateClient>();
   private readonly unsubscribes = new Map<string, () => void>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly retainCounts = new Map<string, number>();
@@ -69,6 +70,8 @@ export class ParadexPositionStore implements PositionStore {
     await this.disconnect(creds.accountId);
     const client = this.createClient({ readonlyToken: creds.readonlyToken });
     const unsubscribe = client.subscribe((incoming) => {
+      if (this.clients.get(creds.accountId) !== client) return;
+      this.positionSnapshots.add(client);
       this.applyLegs(creds.accountId, carryEntryIvs(this.cache.get(creds.accountId), incoming));
     });
     this.clients.set(creds.accountId, client);
@@ -132,6 +135,11 @@ export class ParadexPositionStore implements PositionStore {
 
   isConnected(accountId: string): boolean {
     return this.clients.has(accountId);
+  }
+
+  hasPositionSnapshot(accountId: string): boolean {
+    const client = this.clients.get(accountId);
+    return client != null && this.positionSnapshots.has(client);
   }
 
   async dispose(): Promise<void> {

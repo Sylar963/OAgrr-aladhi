@@ -689,7 +689,7 @@ export class ThesisService {
       thesisId: thesis.id,
       accountId: thesis.accountId,
       kind,
-      payload: JSON.parse(JSON.stringify(payload)) as Record<string, unknown>,
+      payload: JSON.parse(JSON.stringify({ ...payload, sequence: (this.events.get(thesis.id)?.length ?? 0) + 1 })) as Record<string, unknown>,
       createdAt: this.now(),
     };
     this.indexEvent(event);
@@ -701,7 +701,9 @@ export class ThesisService {
   private indexEvent(event: ThesisEvent): void {
     const list = this.events.get(event.thesisId) ?? [];
     list.push(event);
-    list.sort((a, b) => a.createdAt - b.createdAt);
+    // Postgres does not preserve insertion order for events with the same timestamp.
+    list.sort((a, b) => a.createdAt - b.createdAt ||
+      (Number(a.payload['sequence']) || 0) - (Number(b.payload['sequence']) || 0));
     this.events.set(event.thesisId, list);
   }
 

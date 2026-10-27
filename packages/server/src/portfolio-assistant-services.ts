@@ -104,6 +104,12 @@ const contextBuilder = new PortfolioAssistantContextBuilder(
   portfolioRefStore,
   ledgerMatchesSession,
   thalexAccountLedger,
+  (accountId, source) => {
+    if (source === 'derive') return 'mainnet';
+    if (source !== 'thalex') return null;
+    const environment = thalexPositionStore.environment(accountId);
+    return environment == null ? null : environment === 'test' ? 'testnet' : 'mainnet';
+  },
 );
 const promptBuilder = new PortfolioAssistantPromptBuilder();
 const usageLimiter = new PortfolioAssistantUsageLimiter(store, configuration);

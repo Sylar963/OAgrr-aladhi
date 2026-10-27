@@ -872,6 +872,7 @@ export class PortfolioAssistantContextBuilder {
     private readonly ledgerMatchesSession: (accountId: string, venue: string) => boolean = () =>
       true,
     private readonly accountLedger: PortfolioAssistantAccountLedgerReader | null = null,
+    private readonly sessionNetwork: (accountId: string, source: PortfolioSource) => 'mainnet' | 'testnet' | null = () => null,
   ) {}
 
   private async buildAccountEquity(
@@ -1071,8 +1072,7 @@ export class PortfolioAssistantContextBuilder {
       limitations,
       maxContextCharacters: this.configuration.maxContextCharacters,
     });
-    context.network = accountEquityFacts?.network ?? (isLedgerVenue(input.source)
-      ? this.ledgerMatchesSession(input.accountId, input.source) ? 'mainnet' : 'testnet' : null);
+    context.network = accountEquityFacts?.network ?? this.sessionNetwork(input.accountId, input.source);
     return context;
   }
 }

@@ -70,7 +70,9 @@ describe('OI and tape position reconciliation', () => {
     });
   });
   it('does not let numerical tolerance classify tiny unchanged-OI prints as opening', () => {
-    expect(reconcileFlowPosition({ ...leg, quantity: 1e-10 }, context(0), { ...tape, volume: 1e-10 })).toMatchObject({ status: 'offsetting', action: null });
+    expect(
+      reconcileFlowPosition({ ...leg, quantity: 1e-10 }, context(0), { ...tape, volume: 1e-10 }),
+    ).toMatchObject({ status: 'offsetting', action: null });
   });
   it('rejects mismatched units, missing target executions, gaps and truncated tape', () => {
     expect(reconcileFlowPosition(leg, context(2), tape).status).toBe('inconsistent');

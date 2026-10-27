@@ -407,7 +407,8 @@ describe('ThesisService', () => {
   });
 
   it('clears a flip on close and detects a reopened opposite book even within the same millisecond', async () => {
-    const { service, books } = harness();
+    const store = new RecordingStore();
+    const { service, books, clock } = harness({ store });
     await service.create(ACCOUNT, bearishThesis);
     const opposite = { live: true, legs: [heldLeg(83_000, 'call', 2, 1_500)] };
     books.set('thalex', opposite);
@@ -419,6 +420,12 @@ describe('ThesisService', () => {
     books.set('thalex', opposite);
     await service.checkHeldBook(ACCOUNT, 'thalex');
     expect((await service.list(ACCOUNT)).active[0]?.pendingFlip).not.toBeNull();
+    await service.flush();
+    service.dispose();
+    store.events.reverse();
+    const restarted = harness({ store, clock });
+    restarted.books.set('thalex', opposite);
+    expect((await restarted.service.list(ACCOUNT)).active[0]?.pendingFlip).not.toBeNull();
   });
 
   it('does not overwrite a manual end when an older evaluation finishes later', async () => {

@@ -33,6 +33,7 @@ export const PortfolioAssistantSnapshotSchema = z.object({
     strike: z.number(),
     optionRight: z.enum(['call', 'put']),
     size: z.number(),
+    entryPriceUsd: z.number().nullable().optional(),
     markUsd: z.number().nullable(),
     markUpdatedAt: z.number().int().nonnegative().nullable(),
   })).max(100),
@@ -55,6 +56,8 @@ export const PortfolioAssistantComparisonSchema = z.object({
     currentSize: z.number(),
   })).max(200),
   positionsComparable: z.boolean(),
+  markPnlChanges: z.array(z.object({ legId: z.string(), instrument: z.string(), pnlChangeUsd: z.number() })).max(100).optional(),
+  unattributedPnlChangeUsd: z.number().nullable().optional(),
 });
 export type PortfolioAssistantComparison = z.infer<typeof PortfolioAssistantComparisonSchema>;
 

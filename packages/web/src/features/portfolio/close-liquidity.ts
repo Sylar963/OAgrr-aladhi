@@ -53,6 +53,8 @@ export type CloseEstimate =
       status: 'ok';
       /** Cash to cross every leg now, after taker fees; negative means you pay. */
       cashUsd: number;
+      pnlUsd: number;
+      feesUsd: number;
       /** Same legs at the venue mark (mid when there is no mark); null if any leg lacks both. */
       markCashUsd: number | null;
       /** What crossing costs over the mark; positive is paid to the market maker. */
@@ -93,7 +95,11 @@ export function estimateClose(
     if (quote.status === 'unsupported_venue') {
       return { status: 'unavailable', reason: t('heldOn', { venue: quote.venue ?? t('anotherVenue') }) };
     }
-    legs.push({ legId: leg.legId, label: legLabel(leg), side: quote.side, size: quote.size, quote });
+    const size = Math.abs(leg.size);
+    if (size > quote.size + 1e-9 || quote.side !== (leg.size > 0 ? 'sell' : 'buy')) {
+      return { status: 'loading' };
+    }
+    legs.push({ legId: leg.legId, label: legLabel(leg), side: quote.side, size, quote });
   }
 
   const missing = legs.filter((l) => l.quote.status === 'book_unavailable');
@@ -105,6 +111,7 @@ export function estimateClose(
 
   const problems: string[] = [];
   let cashUsd = 0;
+  let feesUsd = 0;
   let markCashUsd: number | null = 0;
   for (const leg of legs) {
     const { quote } = leg;
@@ -115,10 +122,14 @@ export function estimateClose(
           : t(quote.side === 'buy' ? 'noAskOn' : 'noBidOn', { leg: leg.label }),
       );
     }
-    cashUsd += quote.exitCashUsd ?? 0;
+    if (quote.status === 'ok' && quote.exitCashUsd == null) return { status: 'loading' };
+    // A position can be split across several detected strategies; allocate its full-close VWAP.
+    const share = leg.size / quote.size;
+    cashUsd += (quote.exitCashUsd ?? 0) * share;
+    feesUsd += quote.feesUsd * share;
     const mark = markPrice(quote);
     const sign = quote.side === 'sell' ? 1 : -1;
-    markCashUsd = markCashUsd == null || mark == null ? null : markCashUsd + sign * mark * quote.size;
+    markCashUsd = markCashUsd == null || mark == null ? null : markCashUsd + sign * mark * leg.size;
   }
   if (problems.length > 0) return { status: 'no_market', problems, markCashUsd, legs };
 
@@ -130,6 +141,8 @@ export function estimateClose(
   return {
     status: 'ok',
     cashUsd,
+    pnlUsd: cashUsd - group.netEntryPremiumUsd,
+    feesUsd,
     markCashUsd,
     slippageUsd,
     slippagePct,

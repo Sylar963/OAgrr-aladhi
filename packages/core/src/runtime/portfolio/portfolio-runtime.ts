@@ -215,7 +215,9 @@ export class PortfolioRuntime {
 
     this.emitSnapshot();
     this.pushTimer = setInterval(() => {
-      if (this.disposed || !this.dirty) return;
+      const closeNowDue = this.exitBooks != null &&
+        this.now() - (this.closeNow?.at ?? 0) >= this.closeNowIntervalMs;
+      if (this.disposed || (!this.dirty && !closeNowDue)) return;
       this.dirty = false;
       this.emitDelta();
     }, PUSH_INTERVAL_MS);

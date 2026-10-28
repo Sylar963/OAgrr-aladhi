@@ -104,6 +104,7 @@ describe('estimateClose', () => {
     if (estimate.status !== 'ok') return;
     // Sell 85P at 3115, buy 88P at 6300: pay (6300 - 3115) * 0.03.
     expect(estimate.cashUsd).toBeCloseTo(-95.55, 6);
+    expect(estimate.pnlUsd).toBeCloseTo(-8.70, 6);
     expect(estimate.markCashUsd).toBeCloseTo(-85.8264, 6);
     expect(estimate.slippageUsd).toBeCloseTo(9.7236, 6);
     expect(estimate.slippagePct).toBeCloseTo(11.33, 2);
@@ -121,6 +122,40 @@ describe('estimateClose', () => {
     expect(estimate).toMatchObject({ status: 'ok' });
     if (estimate.status !== 'ok') return;
     expect(estimate.cashUsd).toBeCloseTo(-96.55, 6);
+    expect(estimate.pnlUsd).toBeCloseTo(-9.70, 6);
+  });
+
+  it('allocates shared positions by strategy size without double-counting cash or fees', () => {
+    const full = group();
+    const half: StrategyGroup = {
+      ...full,
+      legs: full.legs.map((leg) => ({ ...leg, size: leg.size / 2 })),
+      netEntryPremiumUsd: full.netEntryPremiumUsd / 2,
+    };
+    const books = closeNow(
+      quote(LONG_85, 'sell', { filled: 0.03, vwap: 3115 }, 3263.47, { feesUsd: 0.5, exitCashUsd: 92.95 }),
+      quote(SHORT_88, 'buy', { filled: 0.03, vwap: 6300 }, 6124.35, { feesUsd: 0.5, exitCashUsd: -189.5 }),
+    );
+    const estimate = estimateClose(half, books);
+    expect(estimate.status).toBe('ok');
+    if (estimate.status !== 'ok') return;
+    expect(estimate.cashUsd).toBeCloseTo(-48.275);
+    expect(estimate.pnlUsd).toBeCloseTo(-4.85);
+    expect(estimate.feesUsd).toBe(0.5);
+    expect(estimate.markCashUsd).toBeCloseTo(-85.8264 / 2);
+    expect(estimate.legs.map((leg) => leg.size)).toEqual([0.015, 0.015]);
+  });
+
+  it('waits for an updated quote when the position changes side or grows', () => {
+    const books = closeNow(
+      quote(LONG_85, 'sell', { filled: 0.03, vwap: 3115 }, 3263.47),
+      quote(SHORT_88, 'buy', { filled: 0.03, vwap: 6300 }, 6124.35),
+    );
+    for (const size of [-0.03, 0.04]) {
+      const changed = group();
+      changed.legs[0]!.size = size;
+      expect(estimateClose(changed, books)).toEqual({ status: 'loading' });
+    }
   });
 
   it("flags a leg with nothing on the book as can't cross", () => {

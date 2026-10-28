@@ -1,4 +1,5 @@
 import type { PortfolioCloseNow, StrategyGroup } from '@oggregator/protocol';
+import { useEffect, useState } from 'react';
 
 import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
 
@@ -9,7 +10,7 @@ import {
   estimateClose,
   markPrice,
 } from './close-liquidity';
-import { closeNowMessages, giveBackLevel } from './close-now';
+import { closeNowMessages } from './close-now';
 import { fmtUsdSigned } from './format';
 import { legSummary, strategyLabel, strategyLabelMessages } from './strategy-label';
 import styles from './StrategyGroups.module.css';
@@ -39,15 +40,24 @@ const messages = defineMessages(
     rfqOnThalex: 'or RFQ on Thalex',
     slip: 'slip {v}',
     vsMark: ' vs mark',
-    givesBack: ' · gives back {pct}%',
-    staleBook: 'stale book',
+    staleBook: 'Stale · last estimate',
     slipVsMark: 'slip {v} vs mark',
     excluded: 'excl. {n} not crossable',
     title: 'Strategies & premium',
     subtitle_one:
-      '{n} structure detected · entry premium · to close = crossing the Thalex book now, after fees',
+      '{n} structure detected · open options',
     subtitle_other:
-      '{n} structures detected · entry premium · to close = crossing the Thalex book now, after fees',
+      '{n} structures detected · open options',
+    unrealizedPnl: 'Unrealized P&L',
+    bidAsk: 'Bid / ask',
+    pnlSummary: 'Open options · unrealized P&L at bid/ask',
+    pnlMethod: 'Longs sell at bids · shorts buy at asks · estimated exit fees included',
+    pnlTooltip:
+      'Estimated close cash minus signed entry premium. Uses available Thalex book depth for the full position, including estimated taker exit fees. Entry fees are excluded. Shared legs use their share of the full-position close. No mark-price fallback.',
+    exitFees: 'exit fees {v}',
+    incomplete: '{n} of {total} groups unpriced',
+    awaitingQuotes: 'Waiting for bid/ask',
+    updated: 'Updated {time}',
     tableAria: 'Detected strategies and premium',
     structure: 'Structure',
     legs: 'Legs',
@@ -81,15 +91,24 @@ const messages = defineMessages(
     rfqOnThalex: 'o RFQ en Thalex',
     slip: 'slippage {v}',
     vsMark: ' vs mark',
-    givesBack: ' · devuelve {pct}%',
-    staleBook: 'libro desactualizado',
+    staleBook: 'Desactualizado · última estimación',
     slipVsMark: 'slippage {v} vs mark',
     excluded: 'excl. {n} no cruzables',
     title: 'Estrategias y prima',
     subtitle_one:
-      '{n} estructura detectada · prima de entrada · para cerrar = cruzar el libro de Thalex ahora, después de comisiones',
+      '{n} estructura detectada · opciones abiertas',
     subtitle_other:
-      '{n} estructuras detectadas · prima de entrada · para cerrar = cruzar el libro de Thalex ahora, después de comisiones',
+      '{n} estructuras detectadas · opciones abiertas',
+    unrealizedPnl: 'P&L no realizado',
+    bidAsk: 'Bid / ask',
+    pnlSummary: 'Opciones abiertas · P&L no realizado a bid/ask',
+    pnlMethod: 'Longs venden al bid · shorts compran al ask · incluye comisiones estimadas de salida',
+    pnlTooltip:
+      'Efectivo estimado del cierre menos prima de entrada con signo. Usa la profundidad disponible de Thalex para toda la posición e incluye comisiones taker estimadas de salida. Excluye comisiones de entrada. Los legs compartidos usan su proporción del cierre completo. Sin sustituir por mark.',
+    exitFees: 'comisiones de salida {v}',
+    incomplete: '{n} de {total} grupos sin precio',
+    awaitingQuotes: 'Esperando bid/ask',
+    updated: 'Actualizado {time}',
     tableAria: 'Estrategias detectadas y prima',
     structure: 'Estructura',
     legs: 'Legs',
@@ -117,6 +136,14 @@ function fmtAmount(abs: number): string {
 function fmtCashFlow(value: number): string {
   if (Math.abs(value) < 0.005) return '$0';
   return `${value > 0 ? '+' : '-'}${fmtAmount(Math.abs(value))}`;
+}
+
+function fmtPnl(value: number): string {
+  const sign = value <= -0.005 ? '-' : value >= 0.005 ? '+' : '';
+  return `${sign}$${Math.abs(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function fmtUsd(value: number | null): string {
@@ -212,8 +239,6 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
     case 'ok': {
       const slip = estimate.slippageUsd;
       const pct = estimate.slippagePct;
-      const strategy = estimate.strategy;
-      const level = giveBackLevel(strategy?.giveBackPct);
       return (
         <span
           role="cell"
@@ -230,17 +255,43 @@ function CloseCell({ estimate }: { estimate: CloseEstimate }) {
               {t('vsMark')}
             </small>
           )}
-          {strategy?.closeNowPnlUsd != null && (
-            <small data-giveback={level ?? undefined}>
-              P&amp;L {fmtCashFlow(strategy.closeNowPnlUsd)}
-              {strategy.giveBackPct != null ? t('givesBack', { pct: strategy.giveBackPct.toFixed(0) }) : ''}
-            </small>
-          )}
           {estimate.stale && <small data-hint>{t('staleBook')}</small>}
         </span>
       );
     }
   }
+}
+
+function PnlCell({ estimates, cell = true }: { estimates: CloseEstimate[]; cell?: boolean }) {
+  const t = useT(messages);
+  const priced = estimates.filter((estimate) => estimate.status === 'ok');
+  const complete = priced.length === estimates.length;
+  const pnl = complete ? priced.reduce((sum, estimate) => sum + estimate.pnlUsd, 0) : null;
+  const fees = priced.reduce((sum, estimate) => sum + estimate.feesUsd, 0);
+  const stale = priced.some((estimate) => estimate.stale);
+  const missing = estimates.find((estimate) => estimate.status !== 'ok');
+  const note = complete
+    ? t('exitFees', { v: fmtAmount(fees) })
+    : estimates.length > 1
+      ? t('incomplete', { n: estimates.length - priced.length, total: estimates.length })
+      : missing?.status === 'unavailable'
+        ? missing.reason
+        : missing?.status === 'no_market'
+          ? missing.problems.join(' · ')
+          : t('awaitingQuotes');
+  return (
+    <span
+      role={cell ? 'cell' : undefined}
+      className={styles.pnlCell}
+      data-side={pnl == null ? undefined : netSide(pnl)}
+      data-stale={stale || undefined}
+      title={t('pnlTooltip')}
+    >
+      <strong className={styles.pnlValue}>{pnl == null ? '—' : fmtPnl(pnl)}</strong>
+      <small>{note}</small>
+      {stale && <small data-warning>{t('staleBook')}</small>}
+    </span>
+  );
 }
 
 function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
@@ -266,12 +317,13 @@ function TotalCloseCell({ estimates }: { estimates: CloseEstimate[] }) {
     : null;
   const excluded = estimates.length - ok.length;
   return (
-    <span role="cell" className={styles.close} data-side={netSide(cash)}>
+    <span role="cell" className={styles.close} data-side={netSide(cash)} data-stale={ok.some((e) => e.stale) || undefined}>
       {fmtCashFlow(cash)}
       {slip != null && <small>{t('slipVsMark', { v: fmtAmount(Math.abs(slip)) })}</small>}
       {excluded > 0 && (
         <small data-slip="high">{t('excluded', { n: excluded })}</small>
       )}
+      {ok.some((e) => e.stale) && <small>{t('staleBook')}</small>}
     </span>
   );
 }
@@ -281,6 +333,11 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
   const tc = useT(closeNowMessages);
   const tl = useT(strategyLabelMessages);
   const locale = useLocale();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, []);
   if (groups.length === 0) return null;
 
   const ordered = [
@@ -291,7 +348,14 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
   const totalReceived = groups.reduce((acc, g) => acc + g.grossCreditUsd, 0);
   const totalNet = totalReceived - totalPaid;
   const structureCount = groups.length - groups.filter((g) => g.kind === 'naked').length;
-  const closeEstimates = new Map(groups.map((g) => [g.groupId, estimateClose(g, closeNow, locale)]));
+  const feedStale = closeNow != null && now - closeNow.computedAt > 5_000;
+  const closeEstimates = new Map(groups.map((g) => {
+    const estimate = estimateClose(g, closeNow, locale);
+    return [g.groupId, estimate.status === 'ok'
+      ? { ...estimate, stale: estimate.stale || feedStale }
+      : estimate];
+  }));
+  const estimates = [...closeEstimates.values()];
 
   return (
     <div className={styles.wrap}>
@@ -300,6 +364,18 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
         <span className={styles.subtitle}>
           {t(structureCount === 1 ? 'subtitle_one' : 'subtitle_other', { n: structureCount })}
         </span>
+      </div>
+      <div className={styles.pnlSummary}>
+        <div className={styles.pnlCopy}>
+          <span className={styles.pnlLabel}>{t('pnlSummary')}</span>
+          <span className={styles.pnlMethod}>{t('pnlMethod')}</span>
+          {closeNow != null && (
+            <span className={styles.updated}>
+              {t('updated', { time: new Date(closeNow.computedAt).toLocaleTimeString() })}
+            </span>
+          )}
+        </div>
+        <PnlCell estimates={estimates} cell={false} />
       </div>
       <div className={styles.tableScroll}>
         <div className={styles.table} role="table" aria-label={t('tableAria')}>
@@ -313,6 +389,9 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             <span role="columnheader">{t('beSpot')}</span>
             <span role="columnheader" title={tc('tooltip')}>
               {t('toClose')}
+            </span>
+            <span role="columnheader" title={t('pnlTooltip')}>
+              {t('unrealizedPnl')}{' '}<small>{t('bidAsk')}</small>
             </span>
           </div>
           {ordered.map((group) => {
@@ -347,6 +426,7 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
                   {fmtSpot(group.breakEvenSpotsUsd)}
                 </span>
                 <CloseCell estimate={close} />
+                <PnlCell estimates={[close]} />
               </div>
             );
           })}
@@ -365,7 +445,8 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             </span>
             <span role="cell" />
             <span role="cell" />
-            <TotalCloseCell estimates={[...closeEstimates.values()]} />
+            <TotalCloseCell estimates={estimates} />
+            <PnlCell estimates={estimates} />
           </div>
         </div>
       </div>

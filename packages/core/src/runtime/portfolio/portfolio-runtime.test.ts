@@ -317,6 +317,50 @@ describe('PortfolioRuntime close-now', () => {
     };
   }
 
+  it('streams book-only price changes every second without a chain tick', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const store = new InMemoryPositionStore();
+    store.upsert(ACCOUNT, makeLeg(70_000, 1));
+    let bid = 1_200;
+    const books = exitBooks();
+    books.lookup.mockImplementation(() => ({
+      kind: 'book',
+      book: {
+        venue: 'thalex', instrument: 'BTC-12AUG26-70000-C',
+        priceUnit: 'usd', quantityUnit: 'base',
+        bids: [{ price: bid, amount: 2, outrightAmount: 2 }],
+        asks: [{ price: 1_500, amount: 2, outrightAmount: 2 }],
+        totalBidAmount: 2, totalAskAmount: 2,
+        exchangeTs: Date.now(), receivedAt: Date.now(), generation: 1,
+        state: 'synced', crossed: false, mark: null,
+      },
+    }));
+    const runtime = new PortfolioRuntime({ accountId: ACCOUNT, store, markProvider, exitBooks: books });
+    try {
+      const events: PortfolioRuntimeEvent[] = [];
+      runtime.subscribe({ onEvent: (event) => events.push(event) });
+      runtime.start();
+      const initial = events[0];
+      expect(initial?.type).toBe('snapshot');
+      bid = 1_400;
+      vi.advanceTimersByTime(800);
+      expect(events).toHaveLength(1);
+      vi.advanceTimersByTime(200);
+      const next = events[1];
+      expect(next?.type).toBe('delta');
+      if (initial?.type !== 'snapshot' || next?.type !== 'delta') return;
+      expect(next.metrics.closeNow?.computedAt).toBe(NOW + 1_000);
+      expect(next.metrics.closeNow?.legs[0]?.exitVwapUsd).toBe(1_400);
+      expect(next.metrics.closeNow!.portfolio.closeNowPnlUsd! - initial.metrics.closeNow!.portfolio.closeNowPnlUsd!).toBeCloseTo(200);
+      expect(next.metrics.totals).toEqual(initial.metrics.totals);
+      expect(books.lookup).toHaveBeenCalledTimes(2);
+    } finally {
+      runtime.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves closeNow null without an exit-book source', () => {
     const store = new InMemoryPositionStore();
     store.upsert(ACCOUNT, makeLeg(70_000, 1));

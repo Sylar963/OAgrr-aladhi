@@ -2,6 +2,7 @@ import type { PortfolioCloseNow, StrategyGroup } from '@oggregator/protocol';
 import { useEffect, useState } from 'react';
 
 import { defineMessages, useLocale, useT, type Translate } from '@lib/i18n';
+import { formatExpiry, timeToExpiry } from '@lib/format';
 
 import {
   type CloseEstimate,
@@ -60,6 +61,12 @@ const messages = defineMessages(
     updated: 'Updated {time}',
     tableAria: 'Detected strategies and premium',
     structure: 'Structure',
+    expires: 'Expires {date}',
+    daysLeft: '{days}d {hours}h left',
+    hoursLeft: '{hours}h {minutes}m left',
+    minutesLeft: '{minutes}m left',
+    lessThanMinute: '<1m left',
+    expired: 'Expired',
     legs: 'Legs',
     paid: 'Paid',
     received: 'Received',
@@ -111,6 +118,12 @@ const messages = defineMessages(
     updated: 'Actualizado {time}',
     tableAria: 'Estrategias detectadas y prima',
     structure: 'Estructura',
+    expires: 'Vence {date}',
+    daysLeft: 'Quedan {days}d {hours}h',
+    hoursLeft: 'Quedan {hours}h {minutes}m',
+    minutesLeft: 'Quedan {minutes}m',
+    lessThanMinute: 'Queda <1m',
+    expired: 'Vencido',
     legs: 'Legs',
     paid: 'Pagado',
     received: 'Recibido',
@@ -398,12 +411,28 @@ export default function StrategyGroupsPanel({ groups, closeNow }: Props) {
             const net = -group.netEntryPremiumUsd;
             const side = netSide(net);
             const close = closeEstimates.get(group.groupId) ?? { status: 'loading' };
+            const expiryDate = `${formatExpiry(group.expiry, locale)} ${group.expiry.slice(0, 4)}`;
+            const remaining = timeToExpiry(group.expiry);
+            const countdown = remaining.expired
+              ? t('expired')
+              : remaining.days > 0
+                ? t('daysLeft', { days: remaining.days, hours: remaining.hours })
+                : remaining.hours > 0
+                  ? t('hoursLeft', { hours: remaining.hours, minutes: remaining.minutes })
+                  : remaining.minutes > 0
+                    ? t('minutesLeft', { minutes: remaining.minutes })
+                    : t('lessThanMinute');
             return (
               <div key={group.groupId} className={styles.row} role="row">
                 <span role="rowheader" className={styles.kind} data-kind={group.kind}>
                   {strategyLabel(group, tl)}
-                  <small>
-                    {group.underlying} · {group.expiry}
+                  <small className={styles.expiry}>
+                    <time dateTime={`${group.expiry}T08:00:00Z`} title={`${expiryDate} · 08:00 UTC`}>
+                      {t('expires', { date: expiryDate })}
+                    </time>
+                  </small>
+                  <small className={styles.countdown} data-soon={remaining.days === 0 || undefined}>
+                    {group.underlying} · {countdown}
                   </small>
                 </span>
                 <span role="cell" className={styles.detail}>

@@ -87,6 +87,23 @@
   letter-spacing: 0.02em;
 }
 
+.kind small.expiry {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.kind small.countdown {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.kind small.countdown[data-soon] {
+  color: #fbbf24;
+}
+
 .kind[data-kind='put_spread'],
 .kind[data-kind='call_spread'] {
   color: #60a5fa;

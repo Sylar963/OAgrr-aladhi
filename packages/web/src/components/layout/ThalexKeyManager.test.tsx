@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const portfolio = vi.hoisted(() => ({
   slots: [] as unknown[],
   slotsError: false,
-  trading: { kind: 'off' } as unknown,
   refetch: vi.fn(),
   activateThalexEnvironment: vi.fn(async () => ({})),
 }));
@@ -18,7 +17,6 @@ vi.mock('@features/portfolio', () => ({
     portfolio.slotsError
       ? { data: undefined, isError: true, refetch: portfolio.refetch }
       : { data: { venue: 'thalex', slots: portfolio.slots }, isError: false, refetch: portfolio.refetch },
-  useLiveTradingAvailability: () => ({ data: portfolio.trading }),
   activateThalexEnvironment: portfolio.activateThalexEnvironment,
 }));
 vi.mock('@lib/venue-connections-api', () => connections);
@@ -49,7 +47,6 @@ function row(name: 'Mainnet' | 'Testnet') {
 describe('ThalexKeyManager', () => {
   beforeEach(() => {
     portfolio.slots = [mainnetInUse, emptyTestnet];
-    portfolio.trading = { kind: 'off' };
     portfolio.slotsError = false;
     portfolio.refetch.mockResolvedValue({ data: { slots: portfolio.slots } });
   });
@@ -59,13 +56,12 @@ describe('ThalexKeyManager', () => {
     vi.clearAllMocks();
   });
 
-  it('shows which network and access level each stored key covers', () => {
+  it('shows which network each stored read-only key covers', () => {
     render(<ThalexKeyManager onChanged={vi.fn()} onError={vi.fn()} />);
 
     expect(within(row('Mainnet')).getByText('in use')).toBeTruthy();
     expect(within(row('Mainnet')).getByText('…9f3c')).toBeTruthy();
     expect(within(row('Testnet')).getAllByText('none')).toHaveLength(1);
-    expect(within(row('Testnet')).getByText('off')).toBeTruthy();
   });
 
   it('saves a testnet read-only key only after the read-only confirmation', async () => {
@@ -91,13 +87,16 @@ describe('ThalexKeyManager', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(true));
   });
 
-  it('never offers a field for a trading key', () => {
+  it('never offers a field for a trading key and sends the user to the vault', () => {
     render(<ThalexKeyManager onChanged={vi.fn()} onError={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('radio', { name: 'Trading' }));
 
     expect(screen.queryByPlaceholderText(/BEGIN RSA PRIVATE KEY/)).toBeNull();
-    expect(screen.getByText(/never go through the browser/)).toBeTruthy();
+    expect(screen.getByText(/never come to oggregator/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Open the vault/ });
+    expect(link.getAttribute('href')).toBe('https://trade.oggregator.xyz');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('switches the portfolio to a saved network', async () => {
@@ -118,17 +117,6 @@ describe('ThalexKeyManager', () => {
 
     await waitFor(() => expect(connections.disconnectVenue).toHaveBeenCalledWith('thalex', 'prod'));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(false));
-  });
-
-  it('shows trading keys the daemon holds, per network', () => {
-    portfolio.trading = {
-      kind: 'ready',
-      status: { tradingKeys: [{ environment: 'test', kidHint: 'a1b2', venueAccount: 'A1' }] },
-    };
-    render(<ThalexKeyManager onChanged={vi.fn()} onError={vi.fn()} />);
-
-    expect(within(row('Testnet')).getByText('on daemon')).toBeTruthy();
-    expect(within(row('Mainnet')).getAllByText('none')).toHaveLength(1);
   });
 
   it('says key status is unknown rather than showing none when it cannot be loaded', () => {

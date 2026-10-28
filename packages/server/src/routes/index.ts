@@ -32,6 +32,7 @@ import { socialRoutes, socialWsRoute } from './social/index.js';
 import { ExecutionClient } from '../execution-client.js';
 import { portfolioAssistantStore } from '../portfolio-assistant-services.js';
 import { authenticateRequest } from '../user-service.js';
+import { cspReportRoute } from './csp-report.js';
 import { liveRoutes } from './live/index.js';
 import { liquidityRoute } from './liquidity.js';
 import { orderBookRuntime } from '../services.js';
@@ -55,6 +56,7 @@ export function shouldBlockApiRequestWhileBootstrapping(url: string): boolean {
   if (url.startsWith('/api/paper/auth/')) return false;
   // The kill switch must work while market data is still loading.
   if (url.startsWith('/api/live/')) return false;
+  if (url.startsWith('/api/csp-report')) return false;
   if (
     url === '/api/portfolio/venue-credentials' ||
     url.startsWith('/api/portfolio/venue-credentials/')
@@ -74,6 +76,7 @@ export function registerRoutes(app: FastifyInstance) {
   });
 
   app.register(healthRoute, { prefix: '/api' });
+  app.register(cspReportRoute, { prefix: '/api' });
   app.register(venuesRoute, { prefix: '/api' });
   app.register(volRichnessRoute, { prefix: '/api' });
   app.register(alphaMarketContextRoute, { prefix: '/api' });

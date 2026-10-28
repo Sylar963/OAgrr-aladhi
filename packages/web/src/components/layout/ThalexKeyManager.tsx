@@ -1,9 +1,4 @@
-import {
-  activateThalexEnvironment,
-  type LiveTradingAvailability,
-  useLiveTradingAvailability,
-  useThalexKeySlots,
-} from '@features/portfolio';
+import { activateThalexEnvironment, useThalexKeySlots } from '@features/portfolio';
 import { defineMessages, useT } from '@lib/i18n';
 import { connectVenue, disconnectVenue } from '@lib/venue-connections-api';
 import type { ThalexKeySlot, VenueEnvironment } from '@oggregator/protocol';
@@ -15,6 +10,8 @@ type Access = 'read_only' | 'trading';
 
 const ENVIRONMENTS: readonly VenueEnvironment[] = ['prod', 'test'];
 const NETWORK_LABEL: Record<VenueEnvironment, string> = { prod: 'Mainnet', test: 'Testnet' };
+/** The trading vault: its own origin, so nothing on this site can reach the keys it holds. */
+const VAULT_URL = import.meta.env.VITE_VAULT_URL ?? 'https://trade.oggregator.xyz';
 
 const messages = defineMessages(
   {
@@ -29,9 +26,9 @@ const messages = defineMessages(
     trading: 'Trading',
     network: 'Network',
     access: 'Access',
-    tradingNotice1:
-      'Trading keys never go through the browser or this server. The operator installs them on the execution daemon host with',
-    tradingNotice2: ', where they stay encrypted and only the daemon can use them. See',
+    tradingNotice:
+      'Trading keys never come to oggregator or to this page. Add them in your vault: a separate site that keeps them encrypted on this device, out of reach of this site, and only sends an order after you confirm it there.',
+    openVault: 'Open the vault ↗',
     kid: 'Key ID (kid) *',
     kidPlaceholder: 'from thalex dashboard',
     pem: 'RSA private key (PEM) *',
@@ -49,12 +46,6 @@ const messages = defineMessages(
     use: 'use',
     removeKeyAria: 'remove key',
     removeKey: 'Remove this key',
-    offTitle: 'Live trading is disabled on this deployment',
-    off: 'off',
-    notEntitled: 'This account is not enabled for live trading',
-    daemonUnreachable: 'The execution daemon is not reachable',
-    daemonDown: 'daemon down',
-    onDaemon: 'on daemon',
   },
   {
     failed: '{label} falló',
@@ -69,9 +60,9 @@ const messages = defineMessages(
     trading: 'Trading',
     network: 'Red',
     access: 'Acceso',
-    tradingNotice1:
-      'Las claves de trading nunca pasan por el navegador ni por este servidor. El operador las instala en el host del daemon de ejecución con',
-    tradingNotice2: ', donde quedan cifradas y solo el daemon puede usarlas. Consulta',
+    tradingNotice:
+      'Las claves de trading nunca llegan a oggregator ni a esta página. Agrégalas en tu bóveda: un sitio aparte que las guarda cifradas en este dispositivo, fuera del alcance de este sitio, y solo envía una orden después de que la confirmes allí.',
+    openVault: 'Abrir la bóveda ↗',
     kid: 'Key ID (kid) *',
     kidPlaceholder: 'desde el panel de thalex',
     pem: 'Clave privada RSA (PEM) *',
@@ -89,12 +80,6 @@ const messages = defineMessages(
     use: 'usar',
     removeKeyAria: 'quitar clave',
     removeKey: 'Quitar esta clave',
-    offTitle: 'El trading en vivo está desactivado en este despliegue',
-    off: 'apagado',
-    notEntitled: 'Esta cuenta no está habilitada para trading en vivo',
-    daemonUnreachable: 'No se puede contactar al daemon de ejecución',
-    daemonDown: 'daemon caído',
-    onDaemon: 'en daemon',
   },
 );
 
@@ -105,14 +90,12 @@ interface ThalexKeyManagerProps {
 }
 
 /**
- * Thalex keys per network and access level. Read-only keys are saved here for the portfolio;
- * trading keys only ever live on the execution daemon, so this shows their status and never
- * accepts one.
+ * Thalex keys per network. Read-only keys are saved here for the portfolio. Trading keys live only
+ * in the user's vault (charter D11), which this site cannot see, so this never accepts one.
  */
 export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManagerProps) {
   const t = useT(messages);
   const slotsQuery = useThalexKeySlots();
-  const tradingQuery = useLiveTradingAvailability();
   const slots = slotsQuery.data?.slots ?? [];
   const activeEnvironment = slots.find((slot) => slot.active)?.environment;
 
@@ -180,7 +163,6 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
           <tr>
             <th />
             <th>{t('readOnly')}</th>
-            <th>{t('trading')}</th>
           </tr>
         </thead>
         <tbody>
@@ -203,9 +185,6 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
                     void run(t('removing'), () => disconnectVenue('thalex', environment))
                   }
                 />
-              </td>
-              <td>
-                <TradingCell environment={environment} availability={tradingQuery.data} />
               </td>
             </tr>
           ))}
@@ -235,8 +214,10 @@ export default function ThalexKeyManager({ onChanged, onError }: ThalexKeyManage
 
       {access === 'trading' ? (
         <div className={styles.notice}>
-          {t('tradingNotice1')} <code>keys-import</code>
-          {t('tradingNotice2')} <code>packages/execution/deploy/README.md</code>.
+          <p>{t('tradingNotice')}</p>
+          <a href={VAULT_URL} target="_blank" rel="noopener noreferrer" className={styles.vaultLink}>
+            {t('openVault')}
+          </a>
         </div>
       ) : (
         <>
@@ -335,48 +316,6 @@ function ReadOnlyCell({
       >
         ×
       </button>
-    </span>
-  );
-}
-
-function TradingCell({
-  environment,
-  availability,
-}: {
-  environment: VenueEnvironment;
-  availability: LiveTradingAvailability | undefined;
-}) {
-  const t = useT(messages);
-  if (availability == null) return <span className={styles.none}>…</span>;
-  if (availability.kind === 'off') {
-    return (
-      <span className={styles.none} title={t('offTitle')}>
-        {t('off')}
-      </span>
-    );
-  }
-  if (availability.kind === 'not_entitled') {
-    return (
-      <span className={styles.none} title={t('notEntitled')}>
-        —
-      </span>
-    );
-  }
-  if (availability.kind === 'daemon_unavailable') {
-    return (
-      <span className={styles.warn} title={t('daemonUnreachable')}>
-        {t('daemonDown')}
-      </span>
-    );
-  }
-  const key = availability.status.tradingKeys.find((k) => k.environment === environment);
-  if (key == null) return <span className={styles.none}>{t('none')}</span>;
-  return (
-    <span className={styles.cell}>
-      <span className={styles.state} data-state="daemon">
-        {t('onDaemon')}
-      </span>
-      <span className={styles.kid}>…{key.kidHint}</span>
     </span>
   );
 }

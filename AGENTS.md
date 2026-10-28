@@ -24,7 +24,8 @@ packages/web/       React dashboard, trading UI, portfolio UI (see its CLAUDE.md
 packages/trading/   Paper trading domain services and persistence ports
 packages/db/        Optional Postgres trade store + migrations
 packages/ingest/    Optional persistence worker that records live + institutional trades
-packages/execution/ Live-trading daemon: holds venue trading keys, kill switch, journal (see its CLAUDE.md)
+apps/trade/         Trading vault at trade.oggregator.xyz: users' trading keys stay on their device; isolated origin (see its CLAUDE.md)
+packages/execution/ Parked execution daemon (charter D11); pure order/risk code moving client-side (see its CLAUDE.md)
 references/         Official API docs per venue
 ```
 

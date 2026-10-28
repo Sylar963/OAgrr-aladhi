@@ -234,3 +234,11 @@ tr[data-network='test'] .networkCell {
   line-height: 1.4;
   color: #f87171;
 }
+
+.notice p {
+  margin: 0 0 6px;
+}
+
+.vaultLink {
+  color: #50d2c1;
+}

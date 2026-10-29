@@ -52,7 +52,7 @@ import {
   removeSnapshot,
   type GhostSnapshot,
 } from './snapshots-store';
-import { repriceLeg } from './reprice';
+import { openingCost, repriceLeg } from './reprice';
 import { withPortfolioEntryPrice } from './portfolio-import';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
 import PayoffChart from './PayoffChart';
@@ -131,6 +131,12 @@ const messages = defineMessages(
     maxProfit: 'Max Profit',
     maxLoss: 'Max Loss',
     breakeven: 'Breakeven',
+    openingCost: 'Opening cost · {venue}',
+    openAtMarket: 'At bid/ask',
+    openAtMid: 'At mid',
+    spreadCost: 'Spread cost',
+    openMidFallback: '{n} leg(s) had no crossing quote and are priced at mid.',
+    openUnquoted: '{n} leg(s) have no quote on this route and are left out.',
     greeks: 'Greeks',
     legsReporting: '{n}/{total} legs reporting',
     scenarios: 'Scenarios',
@@ -201,6 +207,12 @@ const messages = defineMessages(
     maxProfit: 'Ganancia máx.',
     maxLoss: 'Pérdida máx.',
     breakeven: 'Breakeven',
+    openingCost: 'Costo de apertura · {venue}',
+    openAtMarket: 'A bid/ask',
+    openAtMid: 'A mid',
+    spreadCost: 'Costo del spread',
+    openMidFallback: '{n} pata(s) sin cotización cruzable, valoradas a mid.',
+    openUnquoted: '{n} pata(s) sin cotización en esta ruta, excluidas.',
     greeks: 'Greeks',
     legsReporting: '{n}/{total} patas reportando',
     scenarios: 'Escenarios',
@@ -244,6 +256,24 @@ interface LegRowProps {
 }
 
 const BEST_ROUTE_VALUE = '__best-route__';
+
+function OpenPremiumCard({ label, premium, t }: { label: string; premium: number; t: T }) {
+  const side = premium < 0 ? t('debit') : premium > 0 ? t('credit') : t('net');
+  return (
+    <div className={styles.metricCard}>
+      <span className={styles.metricCardLabel}>
+        {label} · {side}
+      </span>
+      <span
+        className={styles.metricCardVal}
+        data-positive={premium > 0 ? 'true' : undefined}
+        data-negative={premium < 0 ? 'true' : undefined}
+      >
+        {fmtUsd(Math.abs(premium))}
+      </span>
+    </div>
+  );
+}
 const TRADFI_VENUES = ['tastytrade'];
 
 function tradfiCandleWindow(resolutionSec: number, buckets: number): {
@@ -847,6 +877,12 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     () => (hasPosition ? computeMetrics(analyticsLegs, spotPrice, hedges) : null),
     [analyticsLegs, spotPrice, hedges, hasPosition],
   );
+  const openCost = useMemo(
+    () => (analyticsLegs.length > 0 ? openingCost(analyticsLegs, chainFor, pricingVenues) : null),
+    [analyticsLegs, chainFor, pricingVenues],
+  );
+  const routeLabel =
+    routeVenue === BEST_ROUTE_VALUE ? t('bestRoute') : (VENUES[routeVenue]?.label ?? routeVenue);
   const strategyName = useMemo(() => {
     if (pricedLegs.length === 0) return t('perpOnly');
     const name = detectStrategy(pricedLegs);
@@ -1072,7 +1108,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   const liveGhostPaths = useMemo(
     () =>
       computeGhostPaths(
-        legs,
+        analyticsLegs,
         spotPrice,
         nearestExpiryMs,
         lastBarMs,
@@ -1718,6 +1754,40 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   </span>
                 </div>
               </div>
+              {openCost && (
+                <>
+                  <span className={styles.metricsSubTitle}>
+                    {t('openingCost', { venue: routeLabel })}
+                  </span>
+                  <div className={styles.metricsGrid}>
+                    <OpenPremiumCard
+                      label={t('openAtMarket')}
+                      premium={openCost.netPremiumAtMarket}
+                      t={t}
+                    />
+                    <OpenPremiumCard label={t('openAtMid')} premium={openCost.netPremiumAtMid} t={t} />
+                    <div className={`${styles.metricCard} ${styles.metricCardWide}`}>
+                      <span className={styles.metricCardLabel}>{t('spreadCost')}</span>
+                      <span
+                        className={styles.metricCardVal}
+                        data-negative={openCost.spreadCost > 0 ? 'true' : undefined}
+                      >
+                        {fmtUsd(openCost.spreadCost)}
+                      </span>
+                    </div>
+                  </div>
+                  {openCost.midFallbackLegs > 0 && (
+                    <span className={styles.greeksPartial}>
+                      {t('openMidFallback', { n: openCost.midFallbackLegs })}
+                    </span>
+                  )}
+                  {openCost.unquotedLegs > 0 && (
+                    <span className={styles.greeksPartial}>
+                      {t('openUnquoted', { n: openCost.unquotedLegs })}
+                    </span>
+                  )}
+                </>
+              )}
             </div>
 
             <div

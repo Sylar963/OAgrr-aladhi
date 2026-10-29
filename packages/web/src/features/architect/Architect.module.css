@@ -877,6 +877,20 @@
   color: var(--color-loss);
 }
 
+.metricCardWide {
+  grid-column: 1 / -1;
+}
+
+.metricsSubTitle {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .greeksGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

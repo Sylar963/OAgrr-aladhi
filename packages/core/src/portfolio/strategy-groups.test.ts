@@ -275,6 +275,48 @@ describe('detectStrategyGroups', () => {
       expect(groups[1]?.legs.map((l) => Math.abs(l.size))).toEqual([1, 1]);
     });
 
+    // Bull call 79.5/80.5 + bear put 80.5/81.5: both debit, puts above calls.
+    // Same tent as a short 79.5/80.5/81.5 iron fly, shifted up by the 2,000 box.
+    const itmFly = [
+      leg({ legId: 'c79', strike: 79_500, size: 0.05, entryPriceUsd: 1_045 }),
+      leg({ legId: 'c80', strike: 80_500, size: -0.05, entryPriceUsd: 390 }),
+      leg({ legId: 'p80', optionRight: put, strike: 80_500, size: -0.05, entryPriceUsd: 760 }),
+      leg({ legId: 'p81', optionRight: put, strike: 81_500, size: 0.05, entryPriceUsd: 1_670 }),
+    ];
+
+    it('merges a debit call spread under a debit put spread into an iron butterfly', () => {
+      const groups = detectStrategyGroups(itmFly);
+      expect(groups).toHaveLength(1);
+      const g = groups[0]!;
+      expect(g.kind).toBe('iron_butterfly');
+      expect(g.debitOrCredit).toBe('debit');
+      expect(g.netEntryPremiumUsd).toBeCloseTo(78.25, 6);
+      expect(g.maxProfitUsd).toBeCloseTo(21.75, 6);
+      expect(g.maxLossUsd).toBeCloseTo(28.25, 6);
+      expect(g.breakEvenSpotsUsd[0]).toBeCloseTo(80_065, 6);
+      expect(g.breakEvenSpotsUsd[1]).toBeCloseTo(80_935, 6);
+    });
+
+    it('treats the mirrored ITM structure as a long iron fly', () => {
+      const [g] = detectStrategyGroups(itmFly.map((l) => ({ ...l, size: -l.size })));
+      expect(g?.kind).toBe('iron_butterfly');
+      expect(g?.debitOrCredit).toBe('credit');
+    });
+
+    it('calls separated ITM verticals an iron condor', () => {
+      const legs = itmFly.map((l) =>
+        l.optionRight === 'put' ? { ...l, strike: l.strike + 1_000 } : l,
+      );
+      expect(detectStrategyGroups(legs).map((g) => g.kind)).toEqual(['iron_condor']);
+    });
+
+    it('does not merge two verticals that ramp the same way', () => {
+      const legs = itmFly.map((l) =>
+        l.optionRight === 'put' ? { ...l, size: -l.size } : l,
+      );
+      expect(detectStrategyGroups(legs).map((g) => g.kind).sort()).toEqual(['call_spread', 'put_spread']);
+    });
+
     it('does not merge a credit put spread with a debit call spread', () => {
       const legs = condor.map((l) =>
         l.optionRight === 'call' ? { ...l, size: -l.size } : l,

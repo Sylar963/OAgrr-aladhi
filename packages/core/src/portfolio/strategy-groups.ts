@@ -307,22 +307,31 @@ function resized(trial: PairTrial, qty: number): PairTrial {
   return { kind: trial.kind, legs: trial.legs.map((l) => withQty(l, qty)) };
 }
 
-// Body = the inner strike of a vertical: higher put, lower call.
-function bodyAndWing(trial: PairTrial): { body: PositionLeg; wing: PositionLeg } {
+// A vertical's expiry payoff is a ramp between its strikes; bull spreads
+// (long the lower strike) ramp up, bear spreads ramp down.
+function ramp(trial: PairTrial): { bull: boolean; low: number; high: number } {
   const [a, b] = trial.legs as [PositionLeg, PositionLeg];
-  const aIsBody = trial.kind === 'put_spread' ? a.strike > b.strike : a.strike < b.strike;
-  return aIsBody ? { body: a, wing: b } : { body: b, wing: a };
+  const lower = a.strike < b.strike ? a : b;
+  return { bull: lower.size > 0, low: Math.min(a.strike, b.strike), high: Math.max(a.strike, b.strike) };
 }
 
-// A put spread and call spread whose bodies share a sign (both short = iron,
-// both long = reverse iron). Bodies may cross, as long as each wing stays
-// outside the opposite body.
+// One bull and one bear vertical whose ramps form a tent (short iron) or a
+// trough (long iron). Judged on payoff rather than strike layout, so a bull
+// call spread under a bear put spread (an iron fly built from ITM verticals)
+// counts like the textbook bull put + bear call. Ramps may overlap.
 function ironKind(put: PairTrial, call: PairTrial): StrategyKind | null {
-  const p = bodyAndWing(put);
-  const c = bodyAndWing(call);
-  if (Math.sign(p.body.size) !== Math.sign(c.body.size)) return null;
-  if (p.wing.strike >= c.body.strike || c.wing.strike <= p.body.strike) return null;
-  return p.body.strike === c.body.strike ? 'iron_butterfly' : 'iron_condor';
+  const p = ramp(put);
+  const c = ramp(call);
+  if (p.bull === c.bull) return null;
+  const [up, down] = p.bull ? [p, c] : [c, p];
+  const [first, second] =
+    up.low < down.low && up.high < down.high
+      ? [up, down]
+      : down.low < up.low && down.high < up.high
+        ? [down, up]
+        : [null, null];
+  if (first == null || second == null) return null;
+  return first.high === second.low ? 'iron_butterfly' : 'iron_condor';
 }
 
 function mergeIronStructures(trials: PairTrial[]): PairTrial[] {

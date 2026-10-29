@@ -85,6 +85,13 @@ describe('strategyBias', () => {
     ];
     expect(strategyBias(group('iron_condor', condor))).toBe('short_vol');
     expect(strategyBias(group('iron_condor', condor.map((l) => ({ ...l, size: -l.size }))))).toBe('long_vol');
+    const itmFly = [
+      leg('a', 79_500, 'call', 1),
+      leg('b', 80_500, 'call', -1),
+      leg('c', 80_500, 'put', -1),
+      leg('d', 81_500, 'put', 1),
+    ];
+    expect(strategyBias(group('iron_butterfly', itmFly))).toBe('short_vol');
   });
 });
 

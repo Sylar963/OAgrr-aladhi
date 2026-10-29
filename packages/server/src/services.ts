@@ -593,7 +593,7 @@ export function isRegimeReady(): boolean {
   return serviceHealth.regime;
 }
 export function isNewsReady(): boolean {
-  return serviceHealth.news;
+  return serviceHealth.news && (newsService?.isClassifying() ?? false);
 }
 
 // Two years of daily closes so the 60D/90D vol cone has several independent windows.

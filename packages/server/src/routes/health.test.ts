@@ -42,6 +42,7 @@ vi.mock('../services.js', () => ({
   isIvHistoryReady: vi.fn(() => true),
   isNewsReady: vi.fn(() => true),
   isSpotReady: vi.fn(() => true),
+  newsService: null,
   spotService: { getHealth: () => spotHealth },
   flowService: {
     getHealth: () =>

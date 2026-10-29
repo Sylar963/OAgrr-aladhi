@@ -14,6 +14,7 @@ import {
   isIvHistoryReady,
   isNewsReady,
   isSpotReady,
+  newsService,
   spotService,
 } from '../services.js';
 import { getSystemAnnouncement } from '../system-status.js';
@@ -31,6 +32,7 @@ export async function healthRoute(app: FastifyInstance) {
         blockFlow: isBlockFlowReady(),
         ivHistory: isIvHistoryReady(),
         news: isNewsReady(),
+        newsUnclassifiedSince: newsService?.getUnclassifiedSince() ?? null,
         ivHistoryStorage,
       },
       runtime: getRuntimeMetricsSnapshot(),

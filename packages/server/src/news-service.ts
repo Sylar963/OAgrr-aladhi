@@ -106,6 +106,7 @@ export class NewsRuntime {
   private backoffMs = 0;
   errors = 0;
   private lastSuccessAt: number | null = null;
+  private unclassifiedSince: number | null = null;
 
   constructor(opts: NewsRuntimeOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
@@ -134,6 +135,16 @@ export class NewsRuntime {
 
   isReady(): boolean {
     return this.lastSuccessAt !== null;
+  }
+
+  // Upstream keeps serving tweets when its classifier is down (e.g. provider quota hit), just
+  // without `classification`, so a successful poll can still mean nothing will ever be shown.
+  isClassifying(): boolean {
+    return this.unclassifiedSince === null;
+  }
+
+  getUnclassifiedSince(): number | null {
+    return this.unclassifiedSince;
   }
 
   getItems({ limit, since }: { limit?: number; since?: number } = {}): NewsItem[] {
@@ -171,6 +182,8 @@ export class NewsRuntime {
       if (!parsed) {
         throw new Error('bad payload shape');
       }
+
+      this.trackClassification(parsed.tweets);
 
       const fresh: NewsItem[] = [];
       for (const t of parsed.tweets) {
@@ -212,6 +225,28 @@ export class NewsRuntime {
       this.errors++;
       this.backoffMs = this.backoffMs === 0 ? this.pollIntervalMs : Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
       this.log?.warn?.({ err: String(err) }, 'news feed poll failed');
+    }
+  }
+
+  private trackClassification(tweets: RawTweet[]): void {
+    if (tweets.length === 0) return;
+    const classified = tweets.some((t) => t.classification !== undefined);
+    if (classified) {
+      if (this.unclassifiedSince !== null) {
+        this.log?.info?.(
+          { unclassifiedForMs: Date.now() - this.unclassifiedSince },
+          'news feed classification recovered',
+        );
+        this.unclassifiedSince = null;
+      }
+      return;
+    }
+    if (this.unclassifiedSince === null) {
+      this.unclassifiedSince = Date.now();
+      this.log?.warn?.(
+        { tweets: tweets.length },
+        'news feed returning unclassified tweets; upstream classifier down, nothing will be shown',
+      );
     }
   }
 }

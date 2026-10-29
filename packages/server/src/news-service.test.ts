@@ -158,4 +158,50 @@ describe('NewsRuntime', () => {
 
     expect(runtime.getItems({ since: 1_700_000_050_000 }).map((i) => i.id)).toEqual(['new']);
   });
+
+  it('flags the feed when upstream serves tweets without classification', async () => {
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call++;
+      const tweets =
+        call === 2
+          ? [makeTweet({ id: 'g2', timestamp: 1_700_000_200_000 })]
+          : [makeTweet({ id: `u${call}`, classification: undefined })];
+      return new Response(JSON.stringify({ count: tweets.length, tweets }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    runtime = new NewsRuntime({
+      baseUrl: 'https://news.example.com',
+      secret: 'SECRET',
+      fetchImpl,
+      pollIntervalMs: 60_000,
+    });
+    await runtime.start();
+
+    expect(runtime.isReady()).toBe(true);
+    expect(runtime.isClassifying()).toBe(false);
+    expect(runtime.getUnclassifiedSince()).not.toBeNull();
+    expect(runtime.getItems()).toEqual([]);
+
+    await (runtime as unknown as { poll: () => Promise<void> }).poll();
+    runtime.dispose();
+
+    expect(runtime.isClassifying()).toBe(true);
+    expect(runtime.getUnclassifiedSince()).toBeNull();
+    expect(runtime.getItems().map((i) => i.id)).toEqual(['g2']);
+  });
+
+  it('treats an empty poll as no signal for classification', async () => {
+    const fetchImpl = mockFetch({ count: 0, tweets: [] });
+    runtime = new NewsRuntime({
+      baseUrl: 'https://news.example.com',
+      secret: 'SECRET',
+      fetchImpl,
+      pollIntervalMs: 60_000,
+    });
+    await runtime.start();
+    runtime.dispose();
+
+    expect(runtime.isClassifying()).toBe(true);
+  });
 });

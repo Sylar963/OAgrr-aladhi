@@ -52,6 +52,7 @@ import {
   removeSnapshot,
   type GhostSnapshot,
 } from './snapshots-store';
+import { debitSplit, spreadImpact } from './cost-impact';
 import { openingCost, repriceLeg } from './reprice';
 import { withPortfolioEntryPrice } from './portfolio-import';
 import { STRATEGY_PARAM_KEYS, buildShareUrl, decodeStrategy } from './share';
@@ -137,6 +138,14 @@ const messages = defineMessages(
     spreadCost: 'Spread cost',
     openMidFallback: '{n} leg(s) had no crossing quote and are priced at mid.',
     openUnquoted: '{n} leg(s) have no quote on this route and are left out.',
+    debitSplit: '{back} of the {debit} debit comes back at expiry wherever {underlying} settles. At risk: {risk}.',
+    spreadWarn:
+      'Crossing the spread costs {cost}, {pct}% of the {mid} this makes at mid. Max profit after the spread: {after}. Closing before expiry costs about as much again.',
+    spreadCantProfit:
+      'Crossing the spread costs {cost}, all of the {mid} this makes at mid. At bid/ask it cannot make money.',
+    spreadBestRoute: 'Best route spread: {cost}.',
+    spreadWorkMid: 'Work the order near mid or use an RFQ.',
+    closeSpread: 'Closing before expiry at bid/ask on this route costs {cost} in spread.',
     greeks: 'Greeks',
     legsReporting: '{n}/{total} legs reporting',
     scenarios: 'Scenarios',
@@ -213,6 +222,14 @@ const messages = defineMessages(
     spreadCost: 'Costo del spread',
     openMidFallback: '{n} pata(s) sin cotización cruzable, valoradas a mid.',
     openUnquoted: '{n} pata(s) sin cotización en esta ruta, excluidas.',
+    debitSplit: '{back} del débito de {debit} vuelve al vencimiento, donde sea que cierre {underlying}. En riesgo: {risk}.',
+    spreadWarn:
+      'Cruzar el spread cuesta {cost}, el {pct}% de los {mid} que gana a mid. Ganancia máx. tras el spread: {after}. Cerrar antes del vencimiento cuesta otro tanto.',
+    spreadCantProfit:
+      'Cruzar el spread cuesta {cost}, todo lo que gana a mid ({mid}). A bid/ask no puede ganar.',
+    spreadBestRoute: 'Spread con mejor ruta: {cost}.',
+    spreadWorkMid: 'Trabaja la orden cerca de mid o usa un RFQ.',
+    closeSpread: 'Cerrar antes del vencimiento a bid/ask en esta ruta cuesta {cost} de spread.',
     greeks: 'Greeks',
     legsReporting: '{n}/{total} patas reportando',
     scenarios: 'Escenarios',
@@ -883,6 +900,33 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
   );
   const routeLabel =
     routeVenue === BEST_ROUTE_VALUE ? t('bestRoute') : (VENUES[routeVenue]?.label ?? routeVenue);
+  // Held legs already paid their opening spread; what's left is the spread to close early.
+  const heldBook = analyticsLegs.length > 0 && analyticsLegs.every((l) => l.portfolioEntryPrice != null);
+  const tradeBeingBuilt = analyticsLegs.length > 0 && analyticsLegs.every((l) => l.portfolioEntryPrice == null);
+  const spreadRisk = useMemo(
+    () =>
+      tradeBeingBuilt && openCost && metrics && openCost.unquotedLegs === 0
+        ? spreadImpact(metrics.maxProfit, openCost.spreadCost)
+        : null,
+    [tradeBeingBuilt, openCost, metrics],
+  );
+  const bestRouteSpread = useMemo(() => {
+    if (!spreadRisk || spreadRisk.severity === 'ok' || routeVenue === BEST_ROUTE_VALUE) return null;
+    const best = openingCost(analyticsLegs, chainFor, activeVenues);
+    return best.unquotedLegs === 0 && best.spreadCost < spreadRisk.spreadCost - 0.005
+      ? best.spreadCost
+      : null;
+  }, [spreadRisk, routeVenue, analyticsLegs, chainFor, activeVenues]);
+  const closeSpreadCost = useMemo(() => {
+    if (!heldBook) return null;
+    const closing = analyticsLegs.map((l) => ({
+      ...l,
+      direction: l.direction === 'buy' ? ('sell' as const) : ('buy' as const),
+    }));
+    const cost = openingCost(closing, chainFor, pricingVenues);
+    return cost.unquotedLegs === 0 && cost.spreadCost > 0 ? cost.spreadCost : null;
+  }, [heldBook, analyticsLegs, chainFor, pricingVenues]);
+  const debitBreakdown = metrics ? debitSplit(metrics.netDebit, metrics.maxLoss) : null;
   const strategyName = useMemo(() => {
     if (pricedLegs.length === 0) return t('perpOnly');
     const name = detectStrategy(pricedLegs);
@@ -1754,6 +1798,16 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   </span>
                 </div>
               </div>
+              {debitBreakdown && (
+                <span className={styles.greeksPartial}>
+                  {t('debitSplit', {
+                    back: fmtUsd(debitBreakdown.guaranteedBack),
+                    debit: fmtUsd(debitBreakdown.debit),
+                    underlying,
+                    risk: fmtUsd(debitBreakdown.atRisk),
+                  })}
+                </span>
+              )}
               {openCost && (
                 <>
                   <span className={styles.metricsSubTitle}>
@@ -1784,6 +1838,29 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
                   {openCost.unquotedLegs > 0 && (
                     <span className={styles.greeksPartial}>
                       {t('openUnquoted', { n: openCost.unquotedLegs })}
+                    </span>
+                  )}
+                  {spreadRisk && spreadRisk.severity !== 'ok' && (
+                    <div className={styles.spreadWarning} data-severity={spreadRisk.severity}>
+                      {spreadRisk.maxProfitAfterSpread <= 0
+                        ? t('spreadCantProfit', {
+                            cost: fmtUsd(spreadRisk.spreadCost),
+                            mid: fmtUsd(spreadRisk.maxProfitAtMid),
+                          })
+                        : t('spreadWarn', {
+                            cost: fmtUsd(spreadRisk.spreadCost),
+                            pct: Math.round(spreadRisk.share * 100),
+                            mid: fmtUsd(spreadRisk.maxProfitAtMid),
+                            after: fmtUsd(spreadRisk.maxProfitAfterSpread),
+                          })}{' '}
+                      {bestRouteSpread != null
+                        ? t('spreadBestRoute', { cost: fmtUsd(bestRouteSpread) })
+                        : t('spreadWorkMid')}
+                    </div>
+                  )}
+                  {closeSpreadCost != null && (
+                    <span className={styles.greeksPartial}>
+                      {t('closeSpread', { cost: fmtUsd(closeSpreadCost) })}
                     </span>
                   )}
                 </>

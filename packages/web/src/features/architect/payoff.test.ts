@@ -25,6 +25,19 @@ function leg(overrides: Partial<Leg> & Pick<Leg, 'type' | 'direction' | 'strike'
 }
 
 describe('computeMetrics', () => {
+  it('reads a butterfly peak at the body strike, not the nearest grid point', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 81_500, entryPrice: 1_670, quantity: 0.05 }),
+      leg({ type: 'put', direction: 'sell', strike: 80_500, entryPrice: 760, quantity: 0.05 }),
+      leg({ type: 'call', direction: 'buy', strike: 79_500, entryPrice: 1_045, quantity: 0.05 }),
+      leg({ type: 'call', direction: 'sell', strike: 80_500, entryPrice: 390, quantity: 0.05 }),
+    ];
+    const m = computeMetrics(legs, 80_250);
+
+    expect(m.maxProfit).toBeCloseTo(21.75, 6);
+    expect(m.maxLoss).toBeCloseTo(-28.25, 6);
+  });
+
   it('bull call spread has finite max profit and max loss', () => {
     const legs: Leg[] = [
       leg({ type: 'call', direction: 'buy', strike: 78_000, entryPrice: 4_005 }),
@@ -263,6 +276,56 @@ describe('detectStrategy', () => {
       leg({ type: 'call', direction: 'buy', strike: 86_000, entryPrice: 200 }),
     ];
     expect(detectStrategy(legs)).toBe('Iron Butterfly');
+  });
+
+  it('classifies an iron fly built from ITM wings (bull call under bear put) as Iron Butterfly', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 81_500, entryPrice: 1_670, quantity: 0.05 }),
+      leg({ type: 'put', direction: 'sell', strike: 80_500, entryPrice: 760, quantity: 0.05 }),
+      leg({ type: 'call', direction: 'buy', strike: 79_500, entryPrice: 1_045, quantity: 0.05 }),
+      leg({ type: 'call', direction: 'sell', strike: 80_500, entryPrice: 390, quantity: 0.05 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Iron Butterfly');
+  });
+
+  it('classifies an iron condor built from ITM verticals', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 78_000, entryPrice: 2_500 }),
+      leg({ type: 'call', direction: 'sell', strike: 79_000, entryPrice: 1_700 }),
+      leg({ type: 'put', direction: 'sell', strike: 81_000, entryPrice: 1_400 }),
+      leg({ type: 'put', direction: 'buy', strike: 82_000, entryPrice: 2_200 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Iron Condor');
+  });
+
+  it('classifies a reverse iron fly built from ITM verticals', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'sell', strike: 81_500, entryPrice: 1_670 }),
+      leg({ type: 'put', direction: 'buy', strike: 80_500, entryPrice: 760 }),
+      leg({ type: 'call', direction: 'sell', strike: 79_500, entryPrice: 1_045 }),
+      leg({ type: 'call', direction: 'buy', strike: 80_500, entryPrice: 390 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Reverse Iron Butterfly');
+  });
+
+  it('does not name an iron fly when the leg sizes differ', () => {
+    const legs: Leg[] = [
+      leg({ type: 'put', direction: 'buy', strike: 70_000, entryPrice: 200 }),
+      leg({ type: 'put', direction: 'sell', strike: 78_000, entryPrice: 800, quantity: 2 }),
+      leg({ type: 'call', direction: 'sell', strike: 78_000, entryPrice: 800 }),
+      leg({ type: 'call', direction: 'buy', strike: 86_000, entryPrice: 200 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Custom (4 legs)');
+  });
+
+  it('does not name overlapping verticals an iron structure', () => {
+    const legs: Leg[] = [
+      leg({ type: 'call', direction: 'buy', strike: 79_000, entryPrice: 1_200 }),
+      leg({ type: 'call', direction: 'sell', strike: 81_000, entryPrice: 400 }),
+      leg({ type: 'put', direction: 'sell', strike: 80_000, entryPrice: 800 }),
+      leg({ type: 'put', direction: 'buy', strike: 82_000, entryPrice: 2_100 }),
+    ];
+    expect(detectStrategy(legs)).toBe('Custom (4 legs)');
   });
 
   it('classifies a reverse iron condor (longs in middle, shorts as wings)', () => {

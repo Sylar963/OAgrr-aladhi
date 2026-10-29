@@ -193,8 +193,15 @@ export function computeMetrics(
   const payoff = computePayoff(legs, spotPrice, 500, hedges);
 
   const pnls = payoff.map((p) => p.pnl);
-  const maxPnl = Math.max(...pnls);
-  const minPnl = Math.min(...pnls);
+  // Expiry P&L is piecewise linear with kinks at the strikes, so the extremes sit
+  // on a strike the grid usually steps over (a fly's peak read ~10% low).
+  const low = payoff[0]?.underlyingPrice ?? 0;
+  const high = payoff.at(-1)?.underlyingPrice ?? 0;
+  const kinkPnls = priceAnchors(legs, hedges)
+    .filter((price) => price >= low && price <= high)
+    .map((price) => pnlAtPrice(legs, price, hedges));
+  const maxPnl = Math.max(...pnls, ...kinkPnls);
+  const minPnl = Math.min(...pnls, ...kinkPnls);
 
   // Detect unbounded P&L by slope at the range edges: if the curve is still
   // changing at the boundary, extrapolating further keeps growing / falling.
@@ -333,6 +340,37 @@ export function computeScenarioPayoff(
 }
 
 /** Detect common strategy names from leg configuration. */
+interface Ramp {
+  bull: boolean;
+  low: number;
+  high: number;
+}
+
+/** A vertical's expiry payoff ramps between its strikes, up when the lower strike is long (calls and puts alike). */
+function rampOf(longStrike: number, shortStrike: number): Ramp | null {
+  if (longStrike === shortStrike) return null;
+  return {
+    bull: longStrike < shortStrike,
+    low: Math.min(longStrike, shortStrike),
+    high: Math.max(longStrike, shortStrike),
+  };
+}
+
+/**
+ * A bull and a bear vertical that don't overlap form a tent (short iron: profit
+ * in the middle) or a trough (reverse iron). Judged on payoff, not strike layout,
+ * so a bull call spread under a bear put spread (an iron fly with ITM wings,
+ * paid as a debit) is named like the textbook credit version. Mirrors
+ * `ironKind` in core's portfolio/strategy-groups.ts.
+ */
+function ironStructure(put: Ramp | null, call: Ramp | null): string | null {
+  if (!put || !call || put.bull === call.bull) return null;
+  const [first, second] = put.high <= call.low ? [put, call] : call.high <= put.low ? [call, put] : [];
+  if (!first || !second) return null;
+  const shape = first.high === second.low ? 'Iron Butterfly' : 'Iron Condor';
+  return first.bull ? shape : `Reverse ${shape}`;
+}
+
 export function detectStrategy(legs: Leg[]): string {
   if (legs.length === 0) return 'Empty';
   if (legs.length === 1) {
@@ -408,19 +446,9 @@ export function detectStrategy(legs: Leg[]): string {
         const sc = sellCalls[0]!.strike;
         const bc = buyCalls[0]!.strike;
 
-        // Iron Condor: shorts in middle, longs as wings, no strike overlap.
-        // Layout: long put < short put < short call < long call.
-        if (bp < sp && sp < sc && sc < bc) return 'Iron Condor';
-
-        // Iron Butterfly: short straddle at the body, long strangle wings.
-        // Layout: long put < short put == short call < long call.
-        if (bp < sp && sp === sc && sc < bc) return 'Iron Butterfly';
-
-        // Reverse Iron Condor: longs in middle, shorts as wings.
-        if (sp < bp && bp < bc && bc < sc) return 'Reverse Iron Condor';
-
-        // Reverse Iron Butterfly: long straddle body, short strangle wings.
-        if (sp < bp && bp === bc && bc < sc) return 'Reverse Iron Butterfly';
+        const sameSize = sorted.every((l) => l.quantity === sorted[0]!.quantity);
+        const iron = sameSize ? ironStructure(rampOf(bp, sp), rampOf(bc, sc)) : null;
+        if (iron) return iron;
 
         // Straddle Spread: long straddle at one strike, short straddle at the
         // other. Two unique strikes, both options at each strike share a

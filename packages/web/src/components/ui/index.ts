@@ -15,5 +15,6 @@ export { default as VenueCard } from './VenueCard';
 export type { VenueCardDetail } from './VenueCard';
 export { default as VenueDot } from './VenueDot';
 export { default as VenueIndicator } from './VenueIndicator';
+export { default as OverlayPortal } from './OverlayPortal';
 export { default as VenuePickerButton } from './VenuePickerButton';
 export { default as Tabs } from './Tabs';

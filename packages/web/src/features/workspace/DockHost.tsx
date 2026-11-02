@@ -18,6 +18,7 @@ import styles from './DockHost.module.css';
 import WidgetFrame from './WidgetFrame';
 
 const LAYOUT_SAVE_DELAY_MS = 300;
+const GROUP_CONSTRAINTS = { minimumWidth: 320, minimumHeight: 200 };
 const NO_KINDS: WidgetKind[] = [];
 
 const messages = defineMessages(
@@ -107,11 +108,14 @@ export default function DockHost({ tabId }: { tabId: string }) {
         if (!same) setCustomTabKinds(tabId, next);
       }, 0);
     };
+    for (const group of api.groups) group.api.setConstraints(GROUP_CONSTRAINTS);
+    const groupAdded = api.onDidAddGroup((group) => group.api.setConstraints(GROUP_CONSTRAINTS));
     const added = api.onDidAddPanel(syncKinds);
     const removed = api.onDidRemovePanel(syncKinds);
 
     return () => {
       layoutChange.dispose();
+      groupAdded.dispose();
       added.dispose();
       removed.dispose();
       if (syncTimer) clearTimeout(syncTimer);

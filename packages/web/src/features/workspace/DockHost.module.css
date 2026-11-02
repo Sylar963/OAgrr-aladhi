@@ -11,6 +11,7 @@
   min-width: 0;
   overflow: hidden;
   background: var(--bg-base);
+  container: widget / inline-size;
 }
 
 .empty {

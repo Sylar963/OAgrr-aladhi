@@ -476,3 +476,25 @@
     display: none;
   }
 }
+
+@container (max-width: 795px) {
+  .table {
+    width: max(100%, 540px);
+  }
+
+  .header,
+  .row {
+    grid-template-columns: 1fr 56px 84px 84px 92px 84px 84px 56px 1fr;
+  }
+
+  .header > :nth-child(4),
+  .header > :nth-child(7),
+  .header > :nth-child(13),
+  .header > :nth-child(16),
+  .row > :nth-child(4),
+  .row > :nth-child(7),
+  .row > :nth-child(13),
+  .row > :nth-child(16) {
+    display: none;
+  }
+}

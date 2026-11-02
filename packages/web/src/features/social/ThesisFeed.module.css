@@ -353,7 +353,7 @@
   color: var(--color-loss);
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .header,
   .list {
     padding-left: var(--space-4);

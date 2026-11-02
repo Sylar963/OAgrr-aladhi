@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppStore, useMarket } from '@stores/app-store';
 import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './queries';
 import { useOpenPalette } from '@components/layout/palette-context';
-import { Spinner, EmptyState } from '@components/ui';
+import { EmptyState, OverlayPortal, Spinner, VenuePickerButton } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { useVolRichness } from '@hooks/useVolRichness';
 import { fmtIv, fmtUsdCompact } from '@lib/format';
@@ -204,11 +204,13 @@ export default function ChainView() {
 
   return (
     <div className={styles.view}>
-      <VenueSidebar
-        activeVenues={activeVenues}
-        onToggle={toggleVenue}
-        failedVenues={failedVenues}
-      />
+      <div className={styles.sidebarSlot}>
+        <VenueSidebar
+          activeVenues={activeVenues}
+          onToggle={toggleVenue}
+          failedVenues={failedVenues}
+        />
+      </div>
 
       <div className={styles.main}>
         <ExpiryBar
@@ -237,6 +239,9 @@ export default function ChainView() {
         )}
 
         <div className={styles.tableControls}>
+          <span className={styles.narrowVenues}>
+            <VenuePickerButton />
+          </span>
           {!easyMode && <MyIvInput />}
           <button
             type="button"
@@ -298,12 +303,14 @@ export default function ChainView() {
         ⌥
       </button>
       {calcOpen && (
-        <OptionCalculator
-          defaultUnderlying={underlying}
-          defaultExpiry={expiry}
-          defaultSpot={displayChain?.stats.indexPriceUsd}
-          onClose={() => setCalcOpen(false)}
-        />
+        <OverlayPortal>
+          <OptionCalculator
+            defaultUnderlying={underlying}
+            defaultExpiry={expiry}
+            defaultSpot={displayChain?.stats.indexPriceUsd}
+            onClose={() => setCalcOpen(false)}
+          />
+        </OverlayPortal>
       )}
     </div>
   );

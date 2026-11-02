@@ -38,7 +38,7 @@
   border-left: 1px solid var(--border-subtle);
 }
 
-@media (max-width: 900px) {
+@container widget (max-width: 900px) {
   .body {
     flex-direction: column;
     overflow-y: auto;

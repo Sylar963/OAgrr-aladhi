@@ -230,7 +230,7 @@
   padding: var(--space-4) 0;
 }
 
-@media (max-width: 1100px) {
+@container widget (max-width: 1100px) {
   .kpiStrip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

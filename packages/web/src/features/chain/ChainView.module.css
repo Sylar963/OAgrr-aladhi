@@ -1,7 +1,26 @@
 .view {
+  position: relative;
   flex: 1;
   display: flex;
   overflow: hidden;
+}
+
+.sidebarSlot {
+  display: contents;
+}
+
+.narrowVenues {
+  display: none;
+}
+
+@container widget (max-width: 820px) {
+  .sidebarSlot {
+    display: none;
+  }
+
+  .narrowVenues {
+    display: inline-flex;
+  }
 }
 
 .main {
@@ -83,7 +102,7 @@
 }
 
 .calcFab {
-  position: fixed;
+  position: absolute;
   right: 24px;
   bottom: 24px;
   width: 48px;

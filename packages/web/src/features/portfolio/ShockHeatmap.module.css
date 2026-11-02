@@ -330,7 +330,7 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
-@media (max-width: 900px) {
+@container widget (max-width: 900px) {
   .header {
     align-items: stretch;
     flex-direction: column;

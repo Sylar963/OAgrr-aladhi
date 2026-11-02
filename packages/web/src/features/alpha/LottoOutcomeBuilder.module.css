@@ -513,7 +513,7 @@
   line-height: 1.5;
 }
 
-@media (max-width: 1100px) {
+@container widget (max-width: 1100px) {
   .thesis {
     grid-template-columns: 1fr;
   }
@@ -575,7 +575,7 @@
   }
 }
 
-@media (max-width: 520px) {
+@container widget (max-width: 520px) {
   .thesisInputs {
     grid-template-columns: 1fr;
   }

@@ -169,7 +169,7 @@
   color: var(--color-loss) !important;
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .header {
     padding: var(--space-3) var(--space-4);
   }

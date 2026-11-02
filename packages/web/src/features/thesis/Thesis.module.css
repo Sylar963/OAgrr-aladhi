@@ -450,7 +450,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container widget (max-width: 640px) {
   .gate {
     padding: var(--space-3);
   }

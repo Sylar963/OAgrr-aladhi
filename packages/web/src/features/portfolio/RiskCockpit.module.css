@@ -498,7 +498,7 @@
   font-size: 8px;
 }
 
-@media (max-width: 1100px) {
+@container widget (max-width: 1100px) {
   .posture {
     grid-template-columns: 1fr;
     gap: 14px;
@@ -565,7 +565,7 @@
   }
 }
 
-@media (max-width: 460px) {
+@container widget (max-width: 460px) {
   .headlineMetrics,
   .exposureGrid,
   .stressGrid {

@@ -178,7 +178,7 @@
   font-size: 10px;
   margin-top: 2px;
 }
-@media (max-width: 600px) {
+@container widget (max-width: 600px) {
   .panel {
     padding: 12px;
   }

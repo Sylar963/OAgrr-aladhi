@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 
 import { useAppStore, useMarket } from '@stores/app-store';
-import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
+import { AssetPickerButton, DropdownPicker, OverlayPortal, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
 import {
   useTradfiChain,
@@ -2032,7 +2032,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
       </div>
 
       {showVenues && (
-        <>
+        <OverlayPortal>
           <div className={styles.backdrop} onClick={() => setShowVenues(false)} />
           <VenueSlideover
             legs={analyticsLegs}
@@ -2045,7 +2045,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
               : {})}
             isSending={createTrade.isPending}
           />
-        </>
+        </OverlayPortal>
       )}
     </div>
   );

@@ -1,0 +1,23 @@
+.host {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}

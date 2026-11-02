@@ -1,6 +1,15 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { selectActiveMarket, useAppStore, useMarket } from './app-store';
+import { MAX_CUSTOM_TABS, MAX_WIDGETS_PER_TAB, readCustomTabs, writeLayout } from '@lib/custom-tabs';
+import { TABS } from '@lib/tabs';
+import {
+  MAIN_MARKET_ID,
+  selectActiveCustomTab,
+  selectActiveMarket,
+  selectIsWidgetOpen,
+  useAppStore,
+  useMarket,
+} from './app-store';
 import { setTestMarket } from '@/test/market-state';
 
 describe('app-store', () => {
@@ -207,5 +216,158 @@ describe('useMarket', () => {
     act(() => useAppStore.getState().setUnderlying('ETH'));
     expect(result.current).toBe('ETH');
     expect(renders).toBe(before + 1);
+  });
+});
+
+describe('custom tabs', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setTestMarket({ underlying: 'BTC', expiry: '2026-03-21' });
+    useAppStore.setState({ activeTab: 'chain', customTabs: [], widgetFocusRequest: null });
+  });
+
+  function openNewTab(name = 'Desk'): string {
+    useAppStore.getState().createCustomTab(name);
+    return useAppStore.getState().activeMarketId;
+  }
+
+  it('opens a new tab holding a copy of the current market', () => {
+    const id = openNewTab();
+
+    const state = useAppStore.getState();
+    expect(selectActiveCustomTab(state)?.name).toBe('Desk');
+    expect(selectActiveMarket(state).underlying).toBe('BTC');
+    expect(state.markets[id]).not.toBe(state.markets[MAIN_MARKET_ID]);
+  });
+
+  it('keeps ticker changes inside the custom tab', () => {
+    openNewTab();
+    useAppStore.getState().setUnderlying('ETH');
+
+    const state = useAppStore.getState();
+    expect(selectActiveMarket(state).underlying).toBe('ETH');
+    expect(state.markets[MAIN_MARKET_ID].underlying).toBe('BTC');
+  });
+
+  it('carries the main ticker between fixed tabs', () => {
+    useAppStore.getState().setUnderlying('SOL');
+    useAppStore.getState().setActiveTab('gex');
+    expect(selectActiveMarket(useAppStore.getState()).underlying).toBe('SOL');
+  });
+
+  it('returns to the main market when a fixed tab is chosen', () => {
+    openNewTab();
+    useAppStore.getState().setUnderlying('ETH');
+    useAppStore.getState().setActiveTab('flow');
+
+    const state = useAppStore.getState();
+    expect(state.activeMarketId).toBe(MAIN_MARKET_ID);
+    expect(selectActiveMarket(state).underlying).toBe('BTC');
+  });
+
+  it('adds each widget kind once, up to the limit', () => {
+    openNewTab();
+    const { addWidget } = useAppStore.getState();
+    addWidget('chain');
+    addWidget('chain');
+    expect(selectActiveCustomTab(useAppStore.getState())?.kinds).toEqual(['chain']);
+
+    for (const kind of TABS.map((tab) => tab.id)) addWidget(kind);
+    expect(selectActiveCustomTab(useAppStore.getState())?.kinds).toHaveLength(MAX_WIDGETS_PER_TAB);
+  });
+
+  it('stops creating tabs at the limit', () => {
+    for (let i = 0; i < MAX_CUSTOM_TABS + 3; i += 1) openNewTab(`Tab ${i}`);
+    expect(useAppStore.getState().customTabs).toHaveLength(MAX_CUSTOM_TABS);
+  });
+
+  it('removes the market and saved layout when a tab closes', () => {
+    const id = openNewTab();
+    writeLayout(id, { grid: {}, panels: {} });
+
+    useAppStore.getState().closeCustomTab(id);
+
+    const state = useAppStore.getState();
+    expect(state.customTabs).toEqual([]);
+    expect(state.markets[id]).toBeUndefined();
+    expect(state.activeMarketId).toBe(MAIN_MARKET_ID);
+    expect(localStorage.getItem(`ogg.customTabLayout.v1.${id}`)).toBeNull();
+  });
+
+  it('saves tabs with their ticker and venues but not their expiry', () => {
+    const id = openNewTab();
+    useAppStore.getState().setUnderlying('ETH');
+    useAppStore.getState().setExpiry('2026-06-26');
+
+    expect(readCustomTabs()).toEqual([
+      expect.objectContaining({ id, name: 'Desk', underlying: 'ETH' }),
+    ]);
+    expect(localStorage.getItem('ogg.customTabs.v1')).not.toContain('2026-06-26');
+  });
+
+  describe('navigateToWidget from a custom tab', () => {
+    it('focuses a widget already in the tab and stays there', () => {
+      const id = openNewTab();
+      useAppStore.getState().addWidget('architect');
+
+      useAppStore.getState().navigateToWidget('architect', { expiry: '2026-09-25' });
+
+      const state = useAppStore.getState();
+      expect(state.activeMarketId).toBe(id);
+      expect(state.widgetFocusRequest?.kind).toBe('architect');
+      expect(selectActiveMarket(state).expiry).toBe('2026-09-25');
+      expect(state.markets[MAIN_MARKET_ID].expiry).toBe('2026-03-21');
+    });
+
+    it('asks for focus again on a repeat jump', () => {
+      openNewTab();
+      useAppStore.getState().addWidget('architect');
+
+      useAppStore.getState().navigateToWidget('architect');
+      const first = useAppStore.getState().widgetFocusRequest?.nonce;
+      useAppStore.getState().navigateToWidget('architect');
+
+      expect(useAppStore.getState().widgetFocusRequest?.nonce).toBe((first ?? 0) + 1);
+    });
+
+    it('goes to the fixed tab carrying the custom market when the widget is absent', () => {
+      openNewTab();
+      useAppStore.getState().setUnderlying('ETH');
+      useAppStore.getState().setExpiry('2026-06-26');
+
+      useAppStore.getState().navigateToWidget('architect');
+
+      const state = useAppStore.getState();
+      expect(state.activeMarketId).toBe(MAIN_MARKET_ID);
+      expect(state.activeTab).toBe('architect');
+      expect(state.markets[MAIN_MARKET_ID].underlying).toBe('ETH');
+      expect(state.markets[MAIN_MARKET_ID].expiry).toBe('2026-06-26');
+    });
+  });
+
+  describe('selectIsWidgetOpen', () => {
+    it('follows the fixed tab, then the custom tab contents', () => {
+      useAppStore.setState({ activeTab: 'architect' });
+      expect(selectIsWidgetOpen(useAppStore.getState(), 'architect')).toBe(true);
+
+      openNewTab();
+      expect(selectIsWidgetOpen(useAppStore.getState(), 'architect')).toBe(false);
+
+      useAppStore.getState().addWidget('architect');
+      expect(selectIsWidgetOpen(useAppStore.getState(), 'architect')).toBe(true);
+    });
+  });
+
+  describe('claimMainFeed', () => {
+    it('counts claims and releases them', () => {
+      useAppStore.setState({ mainFeedClaims: 0 });
+      const releaseFirst = useAppStore.getState().claimMainFeed();
+      const releaseSecond = useAppStore.getState().claimMainFeed();
+      expect(useAppStore.getState().mainFeedClaims).toBe(2);
+
+      releaseFirst();
+      releaseSecond();
+      expect(useAppStore.getState().mainFeedClaims).toBe(0);
+    });
   });
 });

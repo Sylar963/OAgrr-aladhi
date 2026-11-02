@@ -100,7 +100,7 @@ export function useServerVersion() {
   const currentNoticeKind = useAppStore((s) => s.sessionNotice?.kind);
   const setAnnouncement = useAppStore((s) => s.setAnnouncement);
   const setFeedStatus = useAppStore((s) => s.setFeedStatus);
-  const activeTab = useAppStore((s) => s.activeTab);
+  const mainFeedOpen = useAppStore((s) => s.mainFeedClaims > 0);
   const initialBootRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export function useServerVersion() {
 
         setAnnouncement(parseAnnouncement(body.announcement));
         const feedHealth = mapFeedHealth(body);
-        if (feedHealth != null && activeTab !== 'chain') {
+        if (feedHealth != null && !mainFeedOpen) {
           setFeedStatus({
             connectionState: feedHealth.connectionState,
             failedVenueCount: feedHealth.failedVenues.length,
@@ -164,5 +164,5 @@ export function useServerVersion() {
       cancelled = true;
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [setSessionNotice, currentNoticeKind, setAnnouncement, setFeedStatus, activeTab]);
+  }, [setSessionNotice, currentNoticeKind, setAnnouncement, setFeedStatus, mainFeedOpen]);
 }

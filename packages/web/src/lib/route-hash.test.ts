@@ -1,4 +1,4 @@
-import { DEFAULT_TAB } from '@lib/tabs';
+import { DEFAULT_TAB, TABS } from '@lib/tabs';
 import { describe, expect, it } from 'vitest';
 import { buildHash, parseHash, type RouteState } from './route-hash';
 
@@ -103,5 +103,26 @@ describe('round-trip', () => {
     const canonical = buildHash(parseHash('#chain/btc'));
     expect(canonical).toBe('#chain/BTC');
     expect(buildHash(parseHash(canonical))).toBe(canonical);
+  });
+});
+
+describe('custom tab routes', () => {
+  it('parses a custom tab with and without a ticker', () => {
+    expect(parseHash('#w/abc123/eth')).toEqual({ mode: 'custom', id: 'abc123', ticker: 'ETH' });
+    expect(parseHash('#w/abc123')).toEqual({ mode: 'custom', id: 'abc123', ticker: null });
+  });
+
+  it('round-trips through buildHash', () => {
+    const route: RouteState = { mode: 'custom', id: 'abc123', ticker: 'BTC' };
+    expect(buildHash(route)).toBe('#w/abc123/BTC');
+    expect(parseHash(buildHash(route))).toEqual(route);
+  });
+
+  it('treats a bare prefix as the default tab', () => {
+    expect(parseHash('#w')).toEqual({ mode: 'crypto', tab: DEFAULT_TAB, ticker: null });
+  });
+
+  it('does not collide with a fixed tab slug', () => {
+    expect(TABS.some((tab) => tab.slug === 'w')).toBe(false);
   });
 });

@@ -415,3 +415,19 @@
     height: 28px;
   }
 }
+
+.newTab {
+  background: transparent;
+  cursor: pointer;
+}
+
+.newTab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (--mobile) {
+  .newTab {
+    display: none;
+  }
+}

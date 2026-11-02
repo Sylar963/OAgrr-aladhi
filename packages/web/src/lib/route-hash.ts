@@ -2,6 +2,7 @@ import { DEFAULT_TAB, slugFromTabId, tabIdFromSlug, type TabId } from '@lib/tabs
 import type { TradfiPage } from '@stores/app-store';
 
 const TRADFI_PREFIX = 'tradfi';
+const CUSTOM_TAB_PREFIX = 'w';
 // Listing every TradfiPage as a Record key forces exhaustiveness: adding a
 // page to the union without adding it here becomes a compile error instead of
 // a silent parse failure.
@@ -18,6 +19,7 @@ const TRADFI_PAGES: Record<TradfiPage, true> = {
 // ticker is encoded (e.g. a legacy `#chain` link or TradFi before selection).
 export type RouteState =
   | { mode: 'crypto'; tab: TabId; ticker: string | null }
+  | { mode: 'custom'; id: string; ticker: string | null }
   | { mode: 'tradfi'; page: TradfiPage; ticker: string | null };
 
 function isTradfiPage(value: string): value is TradfiPage {
@@ -48,6 +50,10 @@ export function parseHash(rawHash: string): RouteState {
     return { mode: 'tradfi', page: 'chain', ticker: normalizeTicker(maybePage) };
   }
 
+  if (segments[0] === CUSTOM_TAB_PREFIX && segments[1]) {
+    return { mode: 'custom', id: segments[1], ticker: normalizeTicker(segments[2]) };
+  }
+
   const tab = tabIdFromSlug(segments[0] ?? '') ?? DEFAULT_TAB;
   return { mode: 'crypto', tab, ticker: normalizeTicker(segments[1]) };
 }
@@ -56,6 +62,10 @@ export function parseHash(rawHash: string): RouteState {
 export function buildHash(state: RouteState): string {
   const ticker = normalizeTicker(state.ticker);
   const base =
-    state.mode === 'tradfi' ? `${TRADFI_PREFIX}/${state.page}` : slugFromTabId(state.tab);
+    state.mode === 'tradfi'
+      ? `${TRADFI_PREFIX}/${state.page}`
+      : state.mode === 'custom'
+        ? `${CUSTOM_TAB_PREFIX}/${state.id}`
+        : slugFromTabId(state.tab);
   return `#${ticker ? `${base}/${ticker}` : base}`;
 }

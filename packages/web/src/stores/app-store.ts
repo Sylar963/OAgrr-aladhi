@@ -1,4 +1,12 @@
-import type { TabId } from '@lib/tabs';
+import {
+  type CustomTab,
+  MAX_CUSTOM_TABS,
+  MAX_WIDGETS_PER_TAB,
+  readCustomTabs,
+  removeLayout,
+  writeCustomTabs,
+} from '@lib/custom-tabs';
+import type { TabId, WidgetKind } from '@lib/tabs';
 import { VENUE_IDS } from '@lib/venue-meta';
 import type {
   SystemAnnouncement,
@@ -97,8 +105,13 @@ export interface MarketTarget {
 
 interface AppState {
   markets: { [MAIN_MARKET_ID]: MarketContext; [id: string]: MarketContext };
+  /** Either MAIN_MARKET_ID, on a fixed tab, or the id of the open custom tab. */
   activeMarketId: string;
   activeTab: TabId;
+  customTabs: CustomTab[];
+  /** Visible widgets holding the main chain socket open. */
+  mainFeedClaims: number;
+  widgetFocusRequest: { kind: WidgetKind; nonce: number } | null;
   assetMode: 'crypto' | 'tradfi';
   tradfiUnderlying: string;
   tradfiExpiry: string;
@@ -124,6 +137,13 @@ interface AppState {
   setActiveTab: (t: TabId) => void;
   /** Jump to a widget from inside a feature, carrying any market change along with the jump. */
   navigateToWidget: (kind: TabId, target?: MarketTarget) => void;
+  claimMainFeed: () => () => void;
+  createCustomTab: (name: string) => void;
+  openCustomTab: (id: string) => void;
+  renameCustomTab: (id: string, name: string) => void;
+  closeCustomTab: (id: string) => void;
+  addWidget: (kind: WidgetKind) => void;
+  setCustomTabKinds: (id: string, kinds: WidgetKind[]) => void;
   setAssetMode: (m: 'crypto' | 'tradfi') => void;
   setTradfiUnderlying: (u: string) => void;
   setTradfiExpiry: (e: string) => void;
@@ -169,12 +189,37 @@ function marketPatchFromTarget(target: MarketTarget): Partial<MarketContext> {
   return target.expiry != null ? { expiry: target.expiry } : {};
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export function selectActiveCustomTab(
+  s: Pick<AppState, 'customTabs' | 'activeMarketId'>,
+): CustomTab | null {
+  return s.customTabs.find((tab) => tab.id === s.activeMarketId) ?? null;
+}
+
+export function selectIsWidgetOpen(
+  s: Pick<AppState, 'customTabs' | 'activeMarketId' | 'activeTab'>,
+  kind: WidgetKind,
+): boolean {
+  const tab = selectActiveCustomTab(s);
+  return tab ? tab.kinds.includes(kind) : s.activeTab === kind;
+}
+
+const restoredTabs = readCustomTabs();
+
+export const useAppStore = create<AppState>((set, get) => ({
   markets: {
     [MAIN_MARKET_ID]: { underlying: 'BTC', expiry: '', activeVenues: [...VENUE_IDS], myIv: '' },
+    ...Object.fromEntries(
+      restoredTabs.map(({ id, underlying, activeVenues }) => [
+        id,
+        { underlying, expiry: '', activeVenues, myIv: '' },
+      ]),
+    ),
   },
   activeMarketId: MAIN_MARKET_ID,
   activeTab: 'chain',
+  customTabs: restoredTabs.map(({ id, name, kinds }) => ({ id, name, kinds })),
+  mainFeedClaims: 0,
+  widgetFocusRequest: null,
   assetMode: 'crypto',
   tradfiUnderlying: '',
   tradfiExpiry: '',
@@ -204,11 +249,76 @@ export const useAppStore = create<AppState>((set) => ({
 
   setUnderlying: (underlying) => set((s) => patchActiveMarket(s, { underlying, expiry: '' })),
   setExpiry: (expiry) => set((s) => patchActiveMarket(s, { expiry })),
-  setActiveTab: (activeTab) => set({ activeTab }),
+  setActiveTab: (activeTab) => set({ activeTab, activeMarketId: MAIN_MARKET_ID }),
   navigateToWidget: (kind, target) =>
+    set((s) => {
+      const patch = target ? marketPatchFromTarget(target) : {};
+      const tab = selectActiveCustomTab(s);
+      if (tab?.kinds.includes(kind)) {
+        return {
+          ...patchActiveMarket(s, patch),
+          widgetFocusRequest: { kind, nonce: (s.widgetFocusRequest?.nonce ?? 0) + 1 },
+        };
+      }
+      // Whatever sent the user here was looking at the custom tab's market, so it comes along.
+      const source = tab ? selectActiveMarket(s) : null;
+      const carried = source ? { underlying: source.underlying, expiry: source.expiry } : {};
+      return {
+        activeTab: kind,
+        activeMarketId: MAIN_MARKET_ID,
+        markets: {
+          ...s.markets,
+          [MAIN_MARKET_ID]: { ...s.markets[MAIN_MARKET_ID], ...carried, ...patch },
+        },
+      };
+    }),
+  claimMainFeed: () => {
+    set((s) => ({ mainFeedClaims: s.mainFeedClaims + 1 }));
+    return () => set((s) => ({ mainFeedClaims: s.mainFeedClaims - 1 }));
+  },
+  createCustomTab: (name) =>
+    set((s) => {
+      if (s.customTabs.length >= MAX_CUSTOM_TABS) return {};
+      const id = Math.random().toString(36).slice(2, 10);
+      return {
+        customTabs: [...s.customTabs, { id, name, kinds: [] }],
+        markets: { ...s.markets, [id]: { ...selectActiveMarket(s), myIv: '' } },
+        activeMarketId: id,
+      };
+    }),
+  openCustomTab: (id) => {
+    if (get().customTabs.some((tab) => tab.id === id)) set({ activeMarketId: id });
+  },
+  renameCustomTab: (id, name) =>
     set((s) => ({
-      activeTab: kind,
-      ...(target ? patchActiveMarket(s, marketPatchFromTarget(target)) : {}),
+      customTabs: s.customTabs.map((tab) => (tab.id === id ? { ...tab, name } : tab)),
+    })),
+  closeCustomTab: (id) => {
+    removeLayout(id);
+    set((s) => {
+      const { [id]: _closed, ...markets } = s.markets;
+      return {
+        customTabs: s.customTabs.filter((tab) => tab.id !== id),
+        markets: markets as AppState['markets'],
+        activeMarketId: s.activeMarketId === id ? MAIN_MARKET_ID : s.activeMarketId,
+      };
+    });
+  },
+  addWidget: (kind) =>
+    set((s) => {
+      const active = selectActiveCustomTab(s);
+      if (!active || active.kinds.includes(kind) || active.kinds.length >= MAX_WIDGETS_PER_TAB) {
+        return {};
+      }
+      return {
+        customTabs: s.customTabs.map((tab) =>
+          tab.id === active.id ? { ...tab, kinds: [...tab.kinds, kind] } : tab,
+        ),
+      };
+    }),
+  setCustomTabKinds: (id, kinds) =>
+    set((s) => ({
+      customTabs: s.customTabs.map((tab) => (tab.id === id ? { ...tab, kinds } : tab)),
     })),
   setAssetMode: (assetMode) => set({ assetMode }),
   setTradfiUnderlying: (tradfiUnderlying) => set({ tradfiUnderlying, tradfiExpiry: '' }),
@@ -285,6 +395,16 @@ export const useAppStore = create<AppState>((set) => ({
     set({ soundEnabled: enabled });
   },
 }));
+
+useAppStore.subscribe((s, prev) => {
+  if (s.customTabs === prev.customTabs && s.markets === prev.markets) return;
+  writeCustomTabs(
+    s.customTabs.map((tab) => {
+      const market = s.markets[tab.id] ?? s.markets[MAIN_MARKET_ID];
+      return { ...tab, underlying: market.underlying, activeVenues: market.activeVenues };
+    }),
+  );
+});
 
 /** Subscribes to one field of the active market, so unrelated market edits don't re-render. */
 export function useMarket<T>(selector: (market: MarketContext) => T): T {

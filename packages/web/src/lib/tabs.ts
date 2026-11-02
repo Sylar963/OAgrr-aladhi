@@ -47,6 +47,12 @@ export const WIDGET_TRAITS: Record<TabId, WidgetTraits> = {
   sectors: { chainFeed: false, requiresAccount: false, mobileToolbar: false },
 };
 
+export type WidgetKind = TabId;
+
+export function isWidgetKind(value: string): value is WidgetKind {
+  return Object.hasOwn(WIDGET_TRAITS, value);
+}
+
 export const TAB_GROUPS: readonly TabGroup[] = ['market', 'trade', 'research'];
 
 export const TABS: readonly TabDef[] = [

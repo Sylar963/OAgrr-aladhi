@@ -1,0 +1,21 @@
+/* Dockview's panels render its own global classes, so its theme can't live in a CSS Module. */
+.dockview-theme-dark {
+  --dv-tabs-and-actions-container-font-size: var(--text-xs);
+  --dv-tabs-and-actions-container-height: 30px;
+  --dv-group-view-background-color: var(--bg-base);
+  --dv-tabs-and-actions-container-background-color: var(--bg-surface);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-elevated);
+  --dv-activegroup-visiblepanel-tab-color: var(--text-primary);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-surface);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-tertiary);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-surface);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-surface);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-tab-divider-color: var(--border-subtle);
+  --dv-separator-border: var(--border-default);
+  --dv-paneview-header-border-color: var(--border-subtle);
+  --dv-drag-over-background-color: var(--accent-primary-dim);
+  --dv-active-sash-color: var(--accent-primary);
+  font-family: var(--font-mono);
+}

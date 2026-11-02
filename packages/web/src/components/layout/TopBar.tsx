@@ -1,7 +1,8 @@
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
 import { defineMessages, useT } from '@lib/i18n';
+import { MAX_CUSTOM_TABS } from '@lib/custom-tabs';
 import { TAB_GROUPS, type TabDef, type TabGroup } from '@lib/tabs';
-import { useAppStore, useMarket } from '@stores/app-store';
+import { MAIN_MARKET_ID, useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AccountChip from './AccountChip';
@@ -19,6 +20,8 @@ const messages = defineMessages(
     switchUnderlying: 'Switch underlying (⌘K)',
     live: 'Live',
     new: 'New',
+    newTab: 'New custom tab',
+    defaultTabName: 'Tab {n}',
   },
   {
     more: 'Más',
@@ -26,6 +29,8 @@ const messages = defineMessages(
     switchUnderlying: 'Cambiar subyacente (⌘K)',
     live: 'En vivo',
     new: 'Nuevo',
+    newTab: 'Nueva pestaña personalizada',
+    defaultTabName: 'Pestaña {n}',
   },
 );
 
@@ -44,8 +49,12 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const underlying = useMarket((m) => m.underlying);
+  const onFixedTab = useAppStore((s) => s.activeMarketId === MAIN_MARKET_ID);
+  const customTabCount = useAppStore((s) => s.customTabs.length);
+  const createCustomTab = useAppStore((s) => s.createCustomTab);
   const seenTabs = useSeenTabs(activeTab);
   const t = useT(messages);
+  const selectedTab = onFixedTab ? activeTab : null;
 
   // Show the TradFi entry only when its backend is reachable: always in dev
   // (the /tradfi-api proxy), and in prod only once VITE_TRADFI_API_BASE is set.
@@ -81,8 +90,8 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
       key={tab.id}
       className={styles.pill}
       role="tab"
-      aria-selected={tab.id === activeTab}
-      data-active={tab.id === activeTab}
+      aria-selected={tab.id === selectedTab}
+      data-active={tab.id === selectedTab}
       onClick={() => setActiveTab(tab.id)}
     >
       {tab.label}
@@ -114,7 +123,7 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
           <MoreMenu
             groups={foldedGroups}
             showDivider={inlineGroups.length > 0}
-            activeTab={activeTab}
+            activeTab={selectedTab}
             seenTabs={seenTabs}
             onSelect={setActiveTab}
           />
@@ -139,6 +148,16 @@ export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarP
       </div>
 
       <div className={styles.right} ref={rightRef}>
+        <button
+          type="button"
+          className={`${styles.iconBtn} ${styles.newTab}`}
+          disabled={customTabCount >= MAX_CUSTOM_TABS}
+          title={t('newTab')}
+          aria-label={t('newTab')}
+          onClick={() => createCustomTab(t('defaultTabName', { n: customTabCount + 1 }))}
+        >
+          +
+        </button>
         <ExpiryCountdown />
         <VenueHealth />
         {aggrUrl && (
@@ -193,7 +212,7 @@ function MoreTriggerGhost({ label, active }: { label: string; active?: boolean }
 interface MoreMenuProps {
   groups: readonly TabGroupEntry[];
   showDivider: boolean;
-  activeTab: TabDef['id'];
+  activeTab: TabDef['id'] | null;
   seenTabs: ReadonlySet<string>;
   onSelect: (id: TabDef['id']) => void;
 }

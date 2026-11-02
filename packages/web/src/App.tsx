@@ -2,13 +2,14 @@ import { AppShell } from '@components/layout';
 import { TradfiApp } from '@features/tradfi';
 import { SessionNotice } from '@components/ui';
 import { ChartPanelLayer, useUnderlyings } from '@features/chain';
-import { WidgetFrame } from '@features/workspace';
+import { CustomTabView, WidgetFrame } from '@features/workspace';
 import { useGlobalFeedStatus } from '@hooks/useGlobalFeedStatus';
+import { useIsMobile } from '@hooks/useIsMobile';
 import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
-import { useTabs, WIDGET_TRAITS } from '@lib/tabs';
-import { useAppStore, useMarket } from '@stores/app-store';
+import { useTabs } from '@lib/tabs';
+import { MAIN_MARKET_ID, useAppStore, useMarket } from '@stores/app-store';
 import { useEffect } from 'react';
 
 import styles from './App.module.css';
@@ -21,7 +22,9 @@ export default function App() {
   const { data: underlyingsData } = useUnderlyings();
   const underlyings = underlyingsData?.underlyings ?? [];
   const activeTab = useAppStore((s) => s.activeTab);
-  useGlobalFeedStatus(WIDGET_TRAITS[activeTab].chainFeed);
+  const activeMarketId = useAppStore((s) => s.activeMarketId);
+  const isMobile = useIsMobile();
+  useGlobalFeedStatus(useAppStore((s) => s.mainFeedClaims > 0));
 
   const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
@@ -44,6 +47,11 @@ export default function App() {
     }
   }, [setActiveTab]);
 
+  const customTabOpen = activeMarketId !== MAIN_MARKET_ID;
+  useEffect(() => {
+    if (isMobile && customTabOpen) setActiveTab(activeTab);
+  }, [isMobile, customTabOpen, activeTab, setActiveTab]);
+
   const assetMode = useAppStore((s) => s.assetMode);
   const tabs = useTabs();
 
@@ -52,7 +60,11 @@ export default function App() {
   return (
     <AppShell underlyings={underlyings} tabs={tabs}>
       <div className={styles.panel}>
-        <WidgetFrame key={activeTab} kind={activeTab} />
+        {customTabOpen && !isMobile ? (
+          <CustomTabView key={activeMarketId} tabId={activeMarketId} />
+        ) : (
+          <WidgetFrame key={activeTab} kind={activeTab} />
+        )}
       </div>
       <SessionNotice />
       <ChartPanelLayer />

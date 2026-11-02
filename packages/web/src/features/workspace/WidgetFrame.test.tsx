@@ -1,4 +1,5 @@
 import { TABS, type TabId, WIDGET_TRAITS } from '@lib/tabs';
+import { useAppStore } from '@stores/app-store';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,5 +62,19 @@ describe('WIDGET_TRAITS', () => {
       'gex',
       'surface',
     ]);
+  });
+});
+
+describe('main feed claim', () => {
+  afterEach(cleanup);
+
+  it.each(TABS.map((tab) => tab.id))('claims the socket only for feed widgets: %s', async (kind) => {
+    useAppStore.setState({ mainFeedClaims: 0 });
+    const { unmount } = render(<WidgetFrame kind={kind} />);
+    await screen.findByText(`view:${kind}`);
+    expect(useAppStore.getState().mainFeedClaims).toBe(WIDGET_TRAITS[kind].chainFeed ? 1 : 0);
+
+    unmount();
+    expect(useAppStore.getState().mainFeedClaims).toBe(0);
   });
 });

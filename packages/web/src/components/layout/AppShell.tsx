@@ -1,6 +1,7 @@
 import { SystemNotifications } from '@components/notifications';
 import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
+import { WorkspaceBar } from '@features/workspace';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
 import { useAppStore, useMarket } from '@stores/app-store';
@@ -114,6 +115,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setHelpOpen(true)}
         />
+        {!isMobile && <WorkspaceBar />}
         <SystemNotifications />
         <Onboarding />
         {showToolbar && <MobileToolbar />}

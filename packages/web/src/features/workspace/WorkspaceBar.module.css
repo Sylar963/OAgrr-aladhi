@@ -1,0 +1,77 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-6);
+  background: var(--bg-surface);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  flex-shrink: 0;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: calc(var(--radius-lg) - 2px);
+}
+
+.tab[data-active="true"] {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-subtle) 80%, transparent);
+}
+
+.name,
+.close {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.name {
+  padding: 4px 2px 4px var(--space-2);
+  white-space: nowrap;
+}
+
+.tab[data-active="true"] .name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.close {
+  padding: 4px var(--space-2) 4px 6px;
+  color: var(--text-dim);
+}
+
+.name:hover {
+  color: var(--text-secondary);
+}
+
+.close:hover {
+  color: var(--color-loss);
+}
+
+.nameInput {
+  width: 16ch;
+  margin: 2px 0 2px 4px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+}

@@ -15,7 +15,6 @@ import { z } from 'zod';
 
 import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fetchJson } from '@lib/http';
-import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import { defineMessages, useT } from '@lib/i18n';
 import type {
   SpotCandleCurrency,
@@ -74,11 +73,11 @@ function useGexSpotCandles(
   buckets: number,
 ) {
   return useQuery({
-    queryKey: spotChartCandlesKey(currency, resolution, buckets),
+    queryKey: ['spot-candles', currency, resolution, buckets],
     queryFn: async () =>
-      CandleResponseSchema.parse(
-        await fetchJson<unknown>(spotChartCandlesPath(currency, resolution, buckets)),
-      ),
+      CandleResponseSchema.parse(await fetchJson<unknown>(
+        `/spot-candles?currency=${currency}&resolution=${resolution}&buckets=${buckets}`,
+      )),
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev) => prev,

@@ -178,12 +178,8 @@ export {
   type AggregatedSpotCandles,
   type AggregatedSpotListener,
   type AggregatedSpotRuntimeOptions,
-  type SpotLeg,
-  type SpotStreamEvent,
   type SpotStreamTransport,
-  type SpotVenue,
-  spotLegs,
-} from './runtime/spot-aggregate/index.js';
+} from './runtime/spot/index.js';
 
 export {
   IndexPriceRuntime,

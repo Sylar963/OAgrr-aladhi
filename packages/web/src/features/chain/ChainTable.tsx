@@ -1,7 +1,7 @@
 import { EmptyState, IvChip, SpreadPill } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { venueColor } from '@lib/colors';
-import { fmtDelta, fmtUsd } from '@lib/format';
+import { fmtDelta, fmtStrike, fmtUsd } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
@@ -347,7 +347,7 @@ const StrikeRowItem = memo(function StrikeRowItem({
           data-atm={isAtm}
           data-moneyness={isAtm ? 'atm' : callItm ? 'itm-call' : putItm ? 'itm-put' : 'otm'}
         >
-          <span className={styles.strikeNum}>{strike.strike.toLocaleString('en-US')}</span>
+          <span className={styles.strikeNum}>{fmtStrike(strike.strike)}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
 

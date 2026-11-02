@@ -36,10 +36,12 @@ type StatusSnapshot = UseChainWsResult;
 // Servers that predate per-venue lag omit the field; a shared empty object keeps the store stable.
 const NO_VENUE_LAG: Record<string, number> = {};
 
-// The chain pushes every 500ms and the index moves constantly, so this much silence on a visible
-// page means a dead connection that never reported a close.
+// The server sends nothing while no quote changes, so silence alone can't tell a quiet chain from a
+// dead connection that never reported a close. After this long, a re-subscribe asks the server to
+// answer, and only no answer replaces the socket.
 const SILENT_SOCKET_MS = 30_000;
 const SILENCE_CHECK_MS = 10_000;
+const PROBE_TIMEOUT_MS = 10_000;
 
 // Phones render every strike in the list, and the server pushes twice a second. Batching to one
 // render a second halves that work; a one-second-old quote isn't noticeable on a phone-sized list.
@@ -266,6 +268,7 @@ export function useChainWs({
   const activeSubIdRef = useRef<string | null>(null);
   const lastSubscribeRequestKeyRef = useRef<string | null>(null);
   const lastMessageAtRef = useRef(0);
+  const probeSentAtRef = useRef(0);
   const verifiedDiffSubIdRef = useRef<string | null>(null);
 
   const storeRef = useRef<ReturnType<typeof createStatusStore> | null>(null);
@@ -595,14 +598,23 @@ export function useChainWs({
     if (!enabled || !underlying || !expiry) return;
     const stopResume = onConnectionResume(replaceSocket);
     const silenceTimer = setInterval(() => {
-      if (document.hidden || wsRef.current?.readyState !== WebSocket.OPEN) return;
-      if (Date.now() - lastMessageAtRef.current >= SILENT_SOCKET_MS) replaceSocket();
+      const ws = wsRef.current;
+      if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const now = Date.now();
+      if (now - lastMessageAtRef.current < SILENT_SOCKET_MS) return;
+      if (probeSentAtRef.current <= lastMessageAtRef.current) {
+        probeSentAtRef.current = now;
+        lastSubscribeRequestKeyRef.current = null;
+        sendSubscribe(ws);
+      } else if (now - probeSentAtRef.current >= PROBE_TIMEOUT_MS) {
+        replaceSocket();
+      }
     }, SILENCE_CHECK_MS);
     return () => {
       stopResume();
       clearInterval(silenceTimer);
     };
-  }, [enabled, underlying, expiry, replaceSocket]);
+  }, [enabled, underlying, expiry, replaceSocket, sendSubscribe]);
 
   // Resubscribe on param change over an existing connection. When the socket
   // is still CONNECTING, the onopen handler will sendSubscribe using

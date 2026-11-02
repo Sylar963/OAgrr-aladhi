@@ -6,7 +6,7 @@ import { VENUES } from '@lib/venue-meta';
 import { defineMessages, useT } from '@lib/i18n';
 import type { ChartPanel } from './chart-panels-store.js';
 import { instrumentCandlesKey, useInstrumentCandles, useLiveMidFromChain } from './use-instrument-candles.js';
-import { useCandleCountdown } from './candle-countdown.js';
+import { useCandleCountdown } from '@lib/candle-countdown';
 import { useInstrumentAttribution } from './use-instrument-attribution.js';
 import InstrumentChart from './InstrumentChart.js';
 import { useInstrumentEntries } from './use-instrument-entries.js';

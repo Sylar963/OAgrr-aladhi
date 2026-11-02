@@ -19,8 +19,8 @@ export function formatCountdown(ms: number): string {
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const mmss = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return h > 0 ? `${String(h).padStart(2, '0')}:${mmss}` : mmss;
 }
 
 export function useCandleCountdown(interval: InstrumentCandleInterval): string {

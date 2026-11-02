@@ -85,7 +85,7 @@ export function isAggregatedSpotUnderlying(value: string): value is AggregatedSp
   return (AGGREGATED_SPOT_UNDERLYINGS as readonly string[]).includes(value);
 }
 
-export const AggregatedSpotCandleSchema = z.object({
+const AggregatedSpotCandleSchema = z.object({
   timestamp: z.number(),
   open: z.number(),
   high: z.number(),
@@ -97,15 +97,6 @@ export const AggregatedSpotCandleSchema = z.object({
   venues: z.number(),
 });
 export type AggregatedSpotCandle = z.infer<typeof AggregatedSpotCandleSchema>;
-
-export const AggregatedSpotCandlesResponseSchema = z.object({
-  currency: z.string(),
-  resolution: z.number(),
-  count: z.number(),
-  candles: z.array(AggregatedSpotCandleSchema),
-  sources: z.array(z.string()),
-});
-export type AggregatedSpotCandlesResponse = z.infer<typeof AggregatedSpotCandlesResponseSchema>;
 
 export const SpotCandleWsMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bar'), candle: AggregatedSpotCandleSchema }),

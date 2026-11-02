@@ -19,3 +19,11 @@ export {
   type PerpCandleRuntimeOptions,
   type PerpCandleSnapshot,
 } from './perp-candles.js';
+export {
+  AggregatedSpotRuntime,
+  type AggregatedBar,
+  type AggregatedSpotCandles,
+  type AggregatedSpotListener,
+  type AggregatedSpotRuntimeOptions,
+  type SpotStreamTransport,
+} from './spot-aggregate.js';

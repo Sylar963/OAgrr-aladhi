@@ -37,9 +37,7 @@ import { liveRoutes } from './live/index.js';
 import { liquidityRoute } from './liquidity.js';
 import { orderBookRuntime } from '../services.js';
 import { sectorsRoute } from './sectors.js';
-import { spotCandlesRoute } from './spot-candles.js';
-import { aggregatedSpotCandlesRoute } from './spot-aggregate-candles.js';
-import { wsSpotCandlesRoute } from './ws-spot-candles.js';
+import { spotCandlesRoute, wsSpotCandlesRoute } from './spot-candles.js';
 import { spotsRoute } from './spots.js';
 import { statsRoute } from './stats.js';
 import { surfaceRoute } from './surface.js';
@@ -106,7 +104,6 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(volHeatmapRoute, { prefix: '/api' });
   app.register(liquidityRoute, { prefix: '/api', runtime: orderBookRuntime });
   app.register(spotCandlesRoute, { prefix: '/api' });
-  app.register(aggregatedSpotCandlesRoute, { prefix: '/api' });
   app.register(instrumentCandlesRoute, { prefix: '/api' });
   app.register(ivHistoryRoute, { prefix: '/api' });
   app.register(regimeRoute, { prefix: '/api' });

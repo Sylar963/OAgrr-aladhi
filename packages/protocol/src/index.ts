@@ -537,12 +537,9 @@ export {
   SPOT_CANDLE_UNDERLYINGS,
   type SpotCandleUnderlying,
   AGGREGATED_SPOT_UNDERLYINGS,
-  AggregatedSpotCandleSchema,
-  AggregatedSpotCandlesResponseSchema,
   isAggregatedSpotUnderlying,
   SpotCandleWsMessageSchema,
   type AggregatedSpotCandle,
-  type AggregatedSpotCandlesResponse,
   type AggregatedSpotUnderlying,
   type SpotCandleWsMessage,
 } from './spot-candles.js';

@@ -3,7 +3,6 @@ import { isSpotCandleUnderlying, type SpotCandleUnderlying } from '@oggregator/p
 
 import { chainKeys } from '@features/chain/queries';
 import { fetchJson } from '@lib/http';
-import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import type { EnrichedChainResponse } from '@shared/enriched';
 
 export interface SpotCandle {
@@ -73,9 +72,11 @@ export function useSpotCandles(
   refetchIntervalMs: number,
 ) {
   return useQuery({
-    queryKey: spotChartCandlesKey(currency, resolutionSec, buckets),
+    queryKey: ['spot-candles', currency, resolutionSec, buckets],
     queryFn: () =>
-      fetchJson<SpotCandlesResponse>(spotChartCandlesPath(currency, resolutionSec, buckets)),
+      fetchJson<SpotCandlesResponse>(
+        `/spot-candles?currency=${currency}&resolution=${resolutionSec}&buckets=${buckets}`,
+      ),
     enabled: isSpotCandleCurrency(currency),
     refetchInterval: refetchIntervalMs,
     staleTime: refetchIntervalMs,

@@ -2,7 +2,6 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchJson } from '@lib/http';
-import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import type {
   BlockStrikeBucketsResponse,
   SpotCandleCurrency,
@@ -16,9 +15,11 @@ export function useSpotCandles(
   buckets: number,
 ) {
   return useQuery({
-    queryKey: spotChartCandlesKey(currency, resolution, buckets),
+    queryKey: ['spot-candles', currency, resolution, buckets],
     queryFn: () =>
-      fetchJson<SpotCandlesResponse>(spotChartCandlesPath(currency, resolution, buckets)),
+      fetchJson<SpotCandlesResponse>(
+        `/spot-candles?currency=${currency}&resolution=${resolution}&buckets=${buckets}`,
+      ),
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: (prev: SpotCandlesResponse | undefined) => prev,

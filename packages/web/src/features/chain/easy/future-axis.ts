@@ -35,6 +35,10 @@ export function easyCandleSpec(timeframe: EasyTimeframe, legs: Leg[]): EasyCandl
   };
 }
 
+// A live bar can only land on a time point that exists, so the next few stay on the bar grid until
+// the following refetch rebuilds the axis.
+const LIVE_BARS_ON_GRID = 4;
+
 /**
  * Empty time points from the last candle to the deadline, so the chart's time
  * axis reaches expiry. Long tenors at fine resolution are thinned to
@@ -48,9 +52,12 @@ export function futureTimes(
 ): number[] {
   if (!(deadlineSec > lastSec) || resolutionSec <= 0) return [];
   const bars = Math.ceil((deadlineSec - lastSec) / resolutionSec);
-  const step = resolutionSec * Math.max(1, Math.ceil(bars / maxPoints));
+  const step = resolutionSec * Math.max(1, Math.ceil(bars / (maxPoints - LIVE_BARS_ON_GRID)));
   const out: number[] = [];
-  for (let t = lastSec + step; t < deadlineSec; t += step) out.push(t);
+  let t = lastSec + resolutionSec;
+  for (let i = 0; i < LIVE_BARS_ON_GRID && t < deadlineSec; i++, t += resolutionSec) out.push(t);
+  if (step > resolutionSec) t = lastSec + resolutionSec * LIVE_BARS_ON_GRID + step;
+  for (; t < deadlineSec; t += step) out.push(t);
   out.push(deadlineSec);
   return out;
 }

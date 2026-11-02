@@ -60,6 +60,7 @@ export interface SpotCandle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 const ChartDataSchema = z.object({
@@ -69,6 +70,7 @@ const ChartDataSchema = z.object({
   high: z.array(z.number()),
   low: z.array(z.number()),
   close: z.array(z.number()),
+  volume: z.array(z.number()).optional(),
 });
 
 const ResponseSchema = z.object({
@@ -151,17 +153,90 @@ export function downsampleCandles(candles: SpotCandle[], bucketMs: number): Spot
       bar.high = Math.max(bar.high, c.high);
       bar.low = Math.min(bar.low, c.low);
       bar.close = c.close;
+      if (c.volume != null) bar.volume = (bar.volume ?? 0) + c.volume;
     } else {
-      byBucket.set(bucketTs, {
-        timestamp: bucketTs,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      });
+      byBucket.set(bucketTs, { ...c, timestamp: bucketTs });
     }
   }
   return [...byBucket.values()];
+}
+
+/**
+ * One page of Deribit klines. Bounded retry so a transient blip (timeout, network
+ * error, 5xx, or 429) doesn't reach the route as a 502 when the cache is cold.
+ * Per-attempt timeout is short (4s vs the old single-shot 10s) to keep the total
+ * bounded — ~12.75s worst case across 3 attempts. A deterministic 4xx (except 429)
+ * fails fast rather than burning the budget.
+ */
+export async function fetchDeribitCandles(
+  instrument: string,
+  resolution: string,
+  start: number,
+  end: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SpotCandle[]> {
+  const params = new URLSearchParams({
+    instrument_name: instrument,
+    start_timestamp: String(start),
+    end_timestamp: String(end),
+    resolution,
+  });
+  const url = `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`;
+  const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt < backoffsMs.length + 1; attempt++) {
+    let res: Response | null = null;
+    try {
+      res = await fetchImpl(url, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(4_000),
+      });
+    } catch (err) {
+      // AbortError (timeout) and network errors are retryable.
+      lastErr = err;
+    }
+
+    if (res) {
+      if (res.ok) {
+        const parsed = ResponseSchema.safeParse(await res.json());
+        if (!parsed.success) {
+          log.warn({ instrument, resolution, issue: parsed.error.message }, 'klines parse failed');
+          return [];
+        }
+        const { ticks, open, high, low, close, volume } = parsed.data.result;
+        const len = Math.min(ticks.length, open.length, high.length, low.length, close.length);
+        const candles: SpotCandle[] = [];
+        for (let i = 0; i < len; i++) {
+          const barVolume = volume?.[i];
+          candles.push({
+            timestamp: ticks[i]!,
+            open: open[i]!,
+            high: high[i]!,
+            low: low[i]!,
+            close: close[i]!,
+            ...(barVolume == null ? {} : { volume: barVolume }),
+          });
+        }
+        return candles;
+      }
+      if (res.status < 500 && res.status !== 429) {
+        throw new Error(`Deribit klines ${res.status}`);
+      }
+      lastErr = new Error(`Deribit klines ${res.status}`);
+    }
+
+    if (attempt < backoffsMs.length) {
+      const delay = backoffsMs[attempt]! + Math.random() * 100; // jitter
+      log.warn(
+        { instrument, resolution, attempt: attempt + 1, err: String(lastErr) },
+        'deribit klines attempt failed, retrying',
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastErr;
 }
 
 /**
@@ -310,84 +385,13 @@ export class SpotCandleService {
 
     const end = range?.end ?? Date.now();
     const start = range?.start ?? end - resolutionSec * 1000 * buckets;
-    const params = new URLSearchParams({
-      instrument_name: instrument,
-      start_timestamp: String(start),
-      end_timestamp: String(end),
-      resolution: RESOLUTION_TO_DERIBIT[fetchResolutionSec],
-    });
-
-    const url = `${DERIBIT_REST_BASE_URL}/api/v2/public/get_tradingview_chart_data?${params}`;
-    const res = await this.fetchDeribitWithRetry(url, currency, resolutionSec);
-
-    const json: unknown = await res.json();
-    const parsed = ResponseSchema.safeParse(json);
-    if (!parsed.success) {
-      log.warn({ currency, resolutionSec, issue: parsed.error.message }, 'klines parse failed');
-      return [];
-    }
-
-    const { ticks, open, high, low, close } = parsed.data.result;
-    const len = Math.min(ticks.length, open.length, high.length, low.length, close.length);
-    const candles: SpotCandle[] = [];
-    for (let i = 0; i < len; i++) {
-      candles.push({
-        timestamp: ticks[i]!,
-        open: open[i]!,
-        high: high[i]!,
-        low: low[i]!,
-        close: close[i]!,
-      });
-    }
+    const candles = await fetchDeribitCandles(
+      instrument,
+      RESOLUTION_TO_DERIBIT[fetchResolutionSec],
+      start,
+      end,
+    );
     return aggregate4h ? downsampleCandles(candles, FOUR_HOUR_MS) : candles;
-  }
-
-  /**
-   * Bounded retry around the Deribit fetch so a transient blip (timeout,
-   * network error, 5xx, or 429) doesn't reach the route as a 502 when the
-   * cache is cold. Per-attempt timeout is short (4s vs the old single-shot
-   * 10s) to keep the total bounded — ~12.75s worst case across 3 attempts.
-   * A deterministic 4xx (except 429) fails fast rather than burning the budget.
-   */
-  private async fetchDeribitWithRetry(
-    url: string,
-    currency: SpotCandleUnderlying,
-    resolutionSec: SpotCandleResolutionSec,
-  ): Promise<Response> {
-    const backoffsMs = [250, 500]; // gaps after attempts 1 and 2 → 3 attempts total
-    let lastErr: unknown;
-
-    for (let attempt = 0; attempt < backoffsMs.length + 1; attempt++) {
-      let res: Response | null = null;
-      try {
-        res = await fetch(url, {
-          headers: { accept: 'application/json' },
-          signal: AbortSignal.timeout(4_000),
-        });
-      } catch (err) {
-        // AbortError (timeout) and network errors are retryable.
-        lastErr = err;
-      }
-
-      if (res) {
-        if (res.ok) return res;
-        if (res.status < 500 && res.status !== 429) {
-          throw new Error(`Deribit klines ${res.status}`);
-        }
-        lastErr = new Error(`Deribit klines ${res.status}`);
-      }
-
-      if (attempt < backoffsMs.length) {
-        const delay = backoffsMs[attempt]! + Math.random() * 100; // jitter
-        log.warn(
-          { currency, resolutionSec, attempt: attempt + 1, err: String(lastErr) },
-          'deribit klines attempt failed, retrying',
-        );
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-
-    throw lastErr;
   }
 
   private async fetchFromHyperliquid(

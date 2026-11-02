@@ -268,18 +268,44 @@ describe('useChainWs', () => {
     expect(bestIv()).toBe(0.5);
   });
 
-  it('replaces a socket that stays OPEN but silent on a visible page', async () => {
+  it('replaces a silent socket that does not answer the probe', async () => {
     renderHook(() => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }), {
       wrapper,
     });
     await act(() => vi.advanceTimersByTimeAsync(50));
     const first = getLastWs();
 
-    await act(() => vi.advanceTimersByTimeAsync(40_000));
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
 
     expect(first.readyState).toBe(MockWebSocket.CLOSED);
     expect(getLastWs()).not.toBe(first);
     expect(getLastWs().sent).toHaveLength(1);
+  });
+
+  it('keeps a quiet chain whose server answers the probe', async () => {
+    renderHook(() => useChainWs({ underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] }), {
+      wrapper,
+    });
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const ws = getLastWs();
+    expect(ws.sent).toHaveLength(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(31_000));
+    expect(ws.sent).toHaveLength(2);
+
+    const { subscriptionId } = JSON.parse(ws.sent[1] as string) as { subscriptionId: string };
+    act(() => {
+      ws.pushMessage({
+        type: 'subscribed',
+        subscriptionId,
+        request: { underlying: 'BTC', expiry: '2026-03-27', venues: ['deribit'] },
+        serverTime: Date.now(),
+      });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(ws.readyState).toBe(MockWebSocket.OPEN);
+    expect(getLastWs()).toBe(ws);
   });
 
   it('opens a fresh socket when the network comes back', async () => {

@@ -1,5 +1,5 @@
 import { IvChip, SpreadPill } from '@components/ui';
-import { fmtDelta, fmtUsd } from '@lib/format';
+import { fmtDelta, fmtStrike, fmtUsd } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import type { EnrichedSide, EnrichedStrike } from '@shared/enriched';
@@ -173,7 +173,7 @@ function MobileStrikeCard({
     <div className={styles.card} data-atm={isAtm} data-expanded={isExpanded}>
       <button className={styles.cardHeader} onClick={onToggle}>
         <div className={styles.strikeInfo}>
-          <span className={styles.strikeNum}>{strike.strike.toLocaleString('en-US')}</span>
+          <span className={styles.strikeNum}>{fmtStrike(strike.strike)}</span>
           {distLabel && <span className={styles.strikeDist}>{distLabel}</span>}
         </div>
         <span className={styles.chevron} data-expanded={isExpanded}>

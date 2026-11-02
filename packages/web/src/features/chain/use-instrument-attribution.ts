@@ -144,11 +144,11 @@ export function useInstrumentAttribution(
     gcTime: 5 * 60_000,
   });
 
-  // Forward proxy via existing /api/spot-candles (Deribit perpetual).
+  // Forward proxy: the perp, whose bars share Deribit option marks' timestamps, including 08:00 UTC dailies.
   const forwardQuery = useQuery<SpotCandlesResponse>({
-    queryKey: ['spot-candles', underlying, intervalToResolutionSec(interval), rangeToBuckets(range, interval)],
+    queryKey: ['spot-candles', 'perp', underlying, intervalToResolutionSec(interval), rangeToBuckets(range, interval)],
     queryFn: () => fetchJson<SpotCandlesResponse>(
-      `/spot-candles?currency=${underlying}&resolution=${intervalToResolutionSec(interval)}&buckets=${rangeToBuckets(range, interval)}`,
+      `/spot-candles?currency=${underlying}&resolution=${intervalToResolutionSec(interval)}&buckets=${rangeToBuckets(range, interval)}&source=perp`,
     ),
     enabled: enabled && !unsupportedUnderlying,
     staleTime: 60_000,

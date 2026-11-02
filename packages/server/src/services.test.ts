@@ -124,7 +124,8 @@ describe('bootstrapServices — readiness transitions', () => {
     expect(isSpotReady()).toBe(true);
     expect(isFlowReady()).toBe(true);
     expect(isIvHistoryReady()).toBe(true);
-  });
+    // The first test pays for the cold import of services.js, about 6s on a loaded machine.
+  }, 15_000);
 
   it('all services are not ready before bootstrapServices is called', async () => {
     const { isDvolReady, isSpotReady, isFlowReady, isIvHistoryReady } = await import(

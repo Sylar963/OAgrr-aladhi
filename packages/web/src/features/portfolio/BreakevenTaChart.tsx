@@ -22,7 +22,6 @@ import type { PositionLeg, StrategyGroup } from '@oggregator/protocol';
 import { chainKeys } from '@features/chain';
 import { useLiveSpotOverlay } from '@hooks/useLiveSpotOverlay';
 import { fetchJson } from '@lib/http';
-import { spotChartCandlesKey, spotChartCandlesPath } from '@lib/spot-chart-candles';
 import { formatExpiry } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import type { SpotCandleResolutionSec, SpotCandlesResponse } from '@shared/common';
@@ -286,9 +285,11 @@ function usePreloadedCandles(timeframe: Timeframe) {
   const tf = TIMEFRAMES[timeframe];
   return useQueries({
     queries: TA_UNDERLYINGS.map((underlying) => ({
-      queryKey: spotChartCandlesKey(underlying, tf.resolution, tf.buckets),
+      queryKey: ['spot-candles', underlying, tf.resolution, tf.buckets],
       queryFn: () =>
-        fetchJson<SpotCandlesResponse>(spotChartCandlesPath(underlying, tf.resolution, tf.buckets)),
+        fetchJson<SpotCandlesResponse>(
+          `/spot-candles?currency=${underlying}&resolution=${tf.resolution}&buckets=${tf.buckets}`,
+        ),
       staleTime: 30_000,
       refetchInterval: 60_000,
       // Placeholder is per underlying (fixed query index), so a timeframe switch may

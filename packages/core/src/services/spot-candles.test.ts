@@ -311,3 +311,10 @@ describe('SpotCandleService — source routing', () => {
     expect(url).toContain('instrument_name=BTC-PERPETUAL');
   });
 });
+
+describe('downsampleCandles volume', () => {
+  it('sums volume across the bucket when bars carry it', () => {
+    const bar = (timestamp: number, volume: number) => ({ timestamp, open: 1, high: 1, low: 1, close: 1, volume });
+    expect(downsampleCandles([bar(0, 2), bar(3_600_000, 3)], 14_400_000)[0]?.volume).toBe(5);
+  });
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
-import { formatBarCountdown, LiveSpotOverlay, secondsToBarClose } from './live-spot-overlay';
+import { formatCountdown, nextBucketCloseMs } from '@lib/candle-countdown';
+import { LiveSpotOverlay } from './useLiveSpotOverlay';
 
 function build(futureWhitespace = false) {
   const volume = { setData: vi.fn(), update: vi.fn() };
@@ -32,26 +33,24 @@ const candle = (timestamp: number, close = 100, volume?: number) => ({
   ...(volume == null ? {} : { volume }),
 });
 
-describe('secondsToBarClose', () => {
+describe('candle countdown', () => {
   it('counts down to the next bucket boundary', () => {
-    expect(secondsToBarClose(60, 60_000)).toBe(60);
-    expect(secondsToBarClose(60, 90_000)).toBe(30);
-    expect(secondsToBarClose(60, 119_500)).toBe(0);
+    expect(nextBucketCloseMs(60_000, 90_000)).toBe(120_000);
+    expect(nextBucketCloseMs(60_000, 60_000)).toBe(120_000);
   });
 
   it('closes daily bars at UTC midnight', () => {
-    expect(secondsToBarClose(86_400, Date.UTC(2026, 10, 2, 23, 0, 0))).toBe(3600);
+    const now = Date.UTC(2026, 10, 2, 23, 0, 0);
+    expect(nextBucketCloseMs(86_400_000, now)).toBe(Date.UTC(2026, 10, 3));
   });
-});
 
-describe('formatBarCountdown', () => {
   it('shows minutes and seconds under an hour', () => {
-    expect(formatBarCountdown(0)).toBe('00:00');
-    expect(formatBarCountdown(65)).toBe('01:05');
+    expect(formatCountdown(0)).toBe('00:00');
+    expect(formatCountdown(65_000)).toBe('01:05');
   });
 
   it('keeps seconds ticking on long bars', () => {
-    expect(formatBarCountdown(3 * 3600 + 7 * 60 + 12)).toBe('03:07:12');
+    expect(formatCountdown((3 * 3600 + 7 * 60 + 12) * 1000)).toBe('03:07:12');
   });
 });
 

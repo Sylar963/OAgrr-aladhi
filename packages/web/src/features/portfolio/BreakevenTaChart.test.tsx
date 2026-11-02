@@ -31,7 +31,7 @@ const fetchJson = vi.fn(async (path: string) => {
   const coin = (url.searchParams.get('currency') ?? url.searchParams.get('underlying')) as keyof typeof SPOT;
   const spot = SPOT[coin];
   if (url.pathname === '/expiries') return { expiries: ['2026-10-23', '2026-11-06'] };
-  if (url.pathname === '/spot-aggregate-candles') {
+  if (url.pathname === '/spot-candles') {
     return { currency: coin, resolution: 3600, count: 1, candles: [{ timestamp: 1, open: spot, high: spot, low: spot, close: spot }] };
   }
   const quote = (mid: number) => ({ venues: { deribit: { mid } }, bestIv: null, bestVenue: null });

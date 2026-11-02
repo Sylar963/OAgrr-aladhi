@@ -6,7 +6,7 @@ import { useIsMobile } from '@hooks/useIsMobile';
 import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
 import { useAppStore, useMarket } from '@stores/app-store';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import styles from './AppShell.module.css';
 import MobileNav from './MobileNav';
 import MobileToolbar from './MobileToolbar';
@@ -47,6 +47,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
+  const hasCustomTabs = useAppStore((s) => s.customTabs.length > 0);
 
   const showToolbar = isMobile && WIDGET_TRAITS[activeTab].mobileToolbar;
 
@@ -115,7 +116,11 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenShortcuts={() => setHelpOpen(true)}
         />
-        {!isMobile && <WorkspaceBar />}
+        {!isMobile && hasCustomTabs && (
+          <Suspense fallback={null}>
+            <WorkspaceBar />
+          </Suspense>
+        )}
         <SystemNotifications />
         <Onboarding />
         {showToolbar && <MobileToolbar />}

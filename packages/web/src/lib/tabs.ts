@@ -32,7 +32,40 @@ export interface WidgetTraits {
   mobileToolbar: boolean;
 }
 
-export const WIDGET_TRAITS: Record<TabId, WidgetTraits> = {
+export const CARD_KINDS = [
+  'oi-summary',
+  'venue-share',
+  'top-positions',
+  'expiry-calendar',
+  'vol-curves',
+  'break-even',
+  'time-at-price',
+  'oi-by-strike',
+  'dvol-chart',
+  'dvol-heatmap',
+  'vol-smile',
+  'atm-term',
+  'realized-vs-implied',
+  'surface-3d',
+  'iv-rank',
+  'skew-history',
+] as const;
+
+/** Single cards from Analytics and Volatility, which only exist as widgets inside custom tabs. */
+export type CardKind = (typeof CARD_KINDS)[number];
+export type WidgetKind = TabId | CardKind;
+
+const CARD_TRAITS: WidgetTraits = {
+  chainFeed: false,
+  requiresAccount: false,
+  mobileToolbar: false,
+};
+
+export const WIDGET_TRAITS: Record<WidgetKind, WidgetTraits> = {
+  ...(Object.fromEntries(CARD_KINDS.map((kind) => [kind, CARD_TRAITS])) as Record<
+    CardKind,
+    WidgetTraits
+  >),
   chain: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
   alpha: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
   architect: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
@@ -47,10 +80,12 @@ export const WIDGET_TRAITS: Record<TabId, WidgetTraits> = {
   sectors: { chainFeed: false, requiresAccount: false, mobileToolbar: false },
 };
 
-export type WidgetKind = TabId;
-
 export function isWidgetKind(value: string): value is WidgetKind {
   return Object.hasOwn(WIDGET_TRAITS, value);
+}
+
+export function isCardKind(kind: WidgetKind): kind is CardKind {
+  return (CARD_KINDS as readonly string[]).includes(kind);
 }
 
 export const TAB_GROUPS: readonly TabGroup[] = ['market', 'trade', 'research'];

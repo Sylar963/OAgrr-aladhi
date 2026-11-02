@@ -1,4 +1,4 @@
-import { TABS, type TabId, WIDGET_TRAITS } from '@lib/tabs';
+import { TABS, type TabId, WIDGET_TRAITS, type WidgetKind } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,10 +16,30 @@ vi.mock('@features/architect', () => ({ ArchitectView: () => <div>view:architect
 vi.mock('@features/trading', () => ({ TradingView: () => <div>view:trading</div> }));
 vi.mock('@features/portfolio', () => ({ PortfolioView: () => <div>view:portfolio</div> }));
 vi.mock('@features/social', () => ({ SocialView: () => <div>view:social</div> }));
-vi.mock('@features/surface', () => ({ SurfaceView: () => <div>view:surface</div> }));
+vi.mock('@features/surface', () => ({
+  SurfaceView: () => <div>view:surface</div>,
+  VolSmileWidget: () => <div>card:vol-smile</div>,
+  AtmTermWidget: () => <div>card:atm-term</div>,
+  RealizedVsImpliedWidget: () => <div>card:realized-vs-implied</div>,
+  Surface3DWidget: () => <div>card:surface-3d</div>,
+  IvRankWidget: () => <div>card:iv-rank</div>,
+  SkewHistoryWidget: () => <div>card:skew-history</div>,
+}));
 vi.mock('@features/flow', () => ({ FlowView: () => <div>view:flow</div> }));
 vi.mock('@features/sectors', () => ({ SectorsView: () => <div>view:sectors</div> }));
-vi.mock('@features/analytics', () => ({ AnalyticsView: () => <div>view:analytics</div> }));
+vi.mock('@features/analytics', () => ({
+  AnalyticsView: () => <div>view:analytics</div>,
+  OiSummaryWidget: () => <div>card:oi-summary</div>,
+  VenueShareWidget: () => <div>card:venue-share</div>,
+  TopPositionsWidget: () => <div>card:top-positions</div>,
+  ExpiryCalendarWidget: () => <div>card:expiry-calendar</div>,
+  VolCurvesWidget: () => <div>card:vol-curves</div>,
+  BreakEvenWidget: () => <div>card:break-even</div>,
+  TimeAtPriceWidget: () => <div>card:time-at-price</div>,
+  OiByStrikeWidget: () => <div>card:oi-by-strike</div>,
+  DvolChartWidget: () => <div>card:dvol-chart</div>,
+  DvolHeatmapWidget: () => <div>card:dvol-heatmap</div>,
+}));
 vi.mock('@features/gex', () => ({ GexView: () => <div>view:gex</div> }));
 vi.mock('@features/news', () => ({ NewsView: () => <div>view:news</div> }));
 
@@ -75,6 +95,26 @@ describe('main feed claim', () => {
     expect(useAppStore.getState().mainFeedClaims).toBe(WIDGET_TRAITS[kind].chainFeed ? 1 : 0);
 
     unmount();
+    expect(useAppStore.getState().mainFeedClaims).toBe(0);
+  });
+});
+
+describe('card widgets', () => {
+  afterEach(cleanup);
+
+  const cardKinds = (Object.keys(WIDGET_TRAITS) as WidgetKind[]).filter(
+    (kind) => !TABS.some((tab) => tab.id === kind),
+  );
+
+  it('lists sixteen cards', () => {
+    expect(cardKinds).toHaveLength(16);
+  });
+
+  it.each(cardKinds)('renders the %s card without holding a feed or needing an account', async (kind) => {
+    useAppStore.setState({ mainFeedClaims: 0 });
+    render(<WidgetFrame kind={kind} />);
+    expect(await screen.findByText(`card:${kind}`)).toBeDefined();
+    expect(screen.queryByTestId('account-boundary')).toBeNull();
     expect(useAppStore.getState().mainFeedClaims).toBe(0);
   });
 });

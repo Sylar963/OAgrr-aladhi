@@ -19,23 +19,21 @@ describe('OverlayPortal', () => {
   });
 
   it('stays inside the TradFi root for its theme tokens', () => {
+    render(<div data-mode="tradfi" data-testid="tradfi-root" />);
     render(
-      <div data-mode="tradfi" data-testid="tradfi-root">
-        <OverlayPortal>
-          <div>overlay</div>
-        </OverlayPortal>
-      </div>,
+      <OverlayPortal>
+        <div>overlay</div>
+      </OverlayPortal>,
     );
     expect(screen.getByText('overlay').parentElement).toBe(screen.getByTestId('tradfi-root'));
   });
 
   it('ignores other elements that use data-mode', () => {
+    render(<div data-mode="long_vol" />);
     render(
-      <div data-mode="long_vol">
-        <OverlayPortal>
-          <div>overlay</div>
-        </OverlayPortal>
-      </div>,
+      <OverlayPortal>
+        <div>overlay</div>
+      </OverlayPortal>,
     );
     expect(screen.getByText('overlay').parentElement).toBe(document.body);
   });

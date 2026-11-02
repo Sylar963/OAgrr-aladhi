@@ -10,11 +10,12 @@ import 'dockview-react/dist/styles/dockview.css';
 import './dockview-theme.css';
 import { readLayout, removeLayout, writeLayout } from '@lib/custom-tabs';
 import { defineMessages, useT } from '@lib/i18n';
-import { isWidgetKind, useTabs, type WidgetKind } from '@lib/tabs';
+import { isWidgetKind, type WidgetKind } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import { useCallback, useEffect, useState } from 'react';
 
 import styles from './DockHost.module.css';
+import { useWidgetCatalog } from './widget-catalog';
 import WidgetFrame from './WidgetFrame';
 
 const LAYOUT_SAVE_DELAY_MS = 300;
@@ -29,6 +30,7 @@ const messages = defineMessages(
 // Dockview's default renderer only detaches a hidden panel's DOM and leaves its React tree mounted,
 // which would keep the widget's sockets and timers running. Rendering nothing unmounts them.
 export function WidgetPanel({ api, params }: IDockviewPanelProps<{ kind: WidgetKind }>) {
+  const catalog = useWidgetCatalog();
   const [visible, setVisible] = useState(api.isVisible);
 
   useEffect(() => {
@@ -40,7 +42,10 @@ export function WidgetPanel({ api, params }: IDockviewPanelProps<{ kind: WidgetK
   if (!visible) return null;
   return (
     <div className={styles.panel}>
-      <WidgetFrame kind={params.kind} />
+      <WidgetFrame
+        kind={params.kind}
+        label={catalog.find((widget) => widget.kind === params.kind)?.label}
+      />
     </div>
   );
 }
@@ -62,7 +67,7 @@ export default function DockHost({ tabId }: { tabId: string }) {
   );
   const focusRequest = useAppStore((s) => s.widgetFocusRequest);
   const setCustomTabKinds = useAppStore((s) => s.setCustomTabKinds);
-  const tabs = useTabs();
+  const catalog = useWidgetCatalog();
   const [api, setApi] = useState<DockviewApi | null>(null);
 
   const onReady = useCallback(
@@ -132,7 +137,7 @@ export default function DockHost({ tabId }: { tabId: string }) {
       if (!kinds.includes(panel.id as WidgetKind)) panel.api.close();
     }
     for (const kind of kinds) {
-      const title = tabs.find((tab) => tab.id === kind)?.label ?? kind;
+      const title = catalog.find((widget) => widget.kind === kind)?.label ?? kind;
       const existing = api.getPanel(kind);
       if (existing) {
         if (existing.title !== title) existing.api.setTitle(title);
@@ -140,7 +145,7 @@ export default function DockHost({ tabId }: { tabId: string }) {
       }
       api.addPanel({ id: kind, component: 'widget', title, params: { kind } });
     }
-  }, [api, kinds, tabs]);
+  }, [api, kinds, catalog]);
 
   useEffect(() => {
     if (api == null || focusRequest == null) return;

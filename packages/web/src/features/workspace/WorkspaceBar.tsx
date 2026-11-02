@@ -1,10 +1,11 @@
 import DropdownPicker from '@components/ui/DropdownPicker';
 import { MAX_TAB_NAME_LENGTH, MAX_WIDGETS_PER_TAB } from '@lib/custom-tabs';
 import { defineMessages, useT } from '@lib/i18n';
-import { isWidgetKind, useTabs } from '@lib/tabs';
+import { isWidgetKind } from '@lib/tabs';
 import { selectActiveCustomTab, useAppStore } from '@stores/app-store';
 import { useState } from 'react';
 
+import { useWidgetCatalog } from './widget-catalog';
 import styles from './WorkspaceBar.module.css';
 
 const messages = defineMessages(
@@ -30,13 +31,11 @@ export default function WorkspaceBar() {
   const renameCustomTab = useAppStore((s) => s.renameCustomTab);
   const closeCustomTab = useAppStore((s) => s.closeCustomTab);
   const addWidget = useAppStore((s) => s.addWidget);
-  const widgetLabels = useTabs();
+  const catalog = useWidgetCatalog();
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  if (customTabs.length === 0) return null;
-
   const available = activeTab
-    ? widgetLabels.filter((widget) => !activeTab.kinds.includes(widget.id))
+    ? catalog.filter((widget) => !activeTab.kinds.includes(widget.kind))
     : [];
   const canAdd =
     activeTab != null && activeTab.kinds.length < MAX_WIDGETS_PER_TAB && available.length > 0;
@@ -97,7 +96,7 @@ export default function WorkspaceBar() {
         <DropdownPicker
           size="sm"
           value={t('addWidget')}
-          options={available.map((widget) => ({ value: widget.id, label: widget.label }))}
+          options={available.map((widget) => ({ value: widget.kind, label: widget.label }))}
           onChange={(kind) => {
             if (isWidgetKind(kind)) addWidget(kind);
           }}

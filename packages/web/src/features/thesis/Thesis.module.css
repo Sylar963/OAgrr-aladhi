@@ -428,6 +428,28 @@
   font-size: var(--text-2xs);
 }
 
+.actions .error {
+  flex-basis: 100%;
+}
+
+/* The builder's chart panel is fixed-height and clips overflow, so a tall gate or
+   form has to scroll in place with its buttons pinned in view. The page itself
+   scrolls below this width. */
+@media (min-width: 769px) {
+  .section {
+    flex-shrink: 0;
+    max-height: 60%;
+    overflow-y: auto;
+  }
+
+  .section .actions {
+    position: sticky;
+    bottom: 0;
+    padding-block: var(--space-1);
+    background: inherit;
+  }
+}
+
 @media (max-width: 640px) {
   .gate {
     padding: var(--space-3);

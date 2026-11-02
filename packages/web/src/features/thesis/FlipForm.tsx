@@ -95,6 +95,7 @@ export default function FlipForm({
         <textarea
           className={styles.textarea}
           rows={2}
+          autoFocus
           value={reason}
           placeholder={t('whatChangedPlaceholder')}
           onChange={(event) => setReason(event.target.value)}
@@ -118,8 +119,8 @@ export default function FlipForm({
           />
         </label>
       )}
-      {error && <div className={styles.error}>{error}</div>}
       <div className={styles.actions}>
+        {error && <div className={styles.error}>{error}</div>}
         <button type="button" className={styles.dangerBtn} onClick={() => void submit()} disabled={busy}>
           {busy ? t('flipping') : late ? t('logTheFlip') : t('flip')}
         </button>

@@ -157,8 +157,6 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
         </div>
       )}
 
-      {error && <div className={styles.error}>{error}</div>}
-
       {mode === 'flip' ? (
         <FlipForm
           thesis={thesis}
@@ -171,6 +169,7 @@ export default function ThesisGatePanel({ gate, underlying, expiryOptions, flipL
         />
       ) : (
         <div className={styles.actions}>
+          {error && <div className={styles.error}>{error}</div>}
           <button
             type="button"
             className={styles.primaryBtn}

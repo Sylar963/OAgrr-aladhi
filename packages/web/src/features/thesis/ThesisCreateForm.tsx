@@ -65,8 +65,8 @@ export default function ThesisCreateForm({
         <input type="checkbox" checked={share} onChange={(event) => setShare(event.target.checked)} />
         <span>{t('shareOnSocial')}</span>
       </label>
-      {error && <div className={styles.error}>{error}</div>}
       <div className={styles.actions}>
+        {error && <div className={styles.error}>{error}</div>}
         <button type="button" className={styles.primaryBtn} onClick={() => void submit()} disabled={busy}>
           {busy ? t('saving') : t('saveThesis')}
         </button>

@@ -25,6 +25,28 @@ export interface TabDef {
   badge?: 'NEW' | 'LIVE';
 }
 
+export interface WidgetTraits {
+  /** Holds the app's main chain socket open while visible. */
+  chainFeed: boolean;
+  requiresAccount: boolean;
+  mobileToolbar: boolean;
+}
+
+export const WIDGET_TRAITS: Record<TabId, WidgetTraits> = {
+  chain: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
+  alpha: { chainFeed: true, requiresAccount: false, mobileToolbar: true },
+  architect: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
+  surface: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
+  flow: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
+  gex: { chainFeed: false, requiresAccount: false, mobileToolbar: true },
+  trading: { chainFeed: false, requiresAccount: true, mobileToolbar: false },
+  portfolio: { chainFeed: false, requiresAccount: true, mobileToolbar: false },
+  social: { chainFeed: false, requiresAccount: true, mobileToolbar: false },
+  analytics: { chainFeed: false, requiresAccount: false, mobileToolbar: false },
+  news: { chainFeed: false, requiresAccount: false, mobileToolbar: false },
+  sectors: { chainFeed: false, requiresAccount: false, mobileToolbar: false },
+};
+
 export const TAB_GROUPS: readonly TabGroup[] = ['market', 'trade', 'research'];
 
 export const TABS: readonly TabDef[] = [

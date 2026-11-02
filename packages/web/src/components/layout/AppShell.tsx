@@ -2,7 +2,7 @@ import { SystemNotifications } from '@components/notifications';
 import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
-import type { TabDef, TabId } from '@lib/tabs';
+import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
 import { useAppStore } from '@stores/app-store';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -47,15 +47,7 @@ export default function AppShell({ children, underlyings, tabs }: AppShellProps)
   const activeTab = useAppStore((s) => s.activeTab);
   const isMobile = useIsMobile();
 
-  const TABS_WITHOUT_TOOLBAR: ReadonlySet<TabId> = new Set([
-    'trading',
-    'portfolio',
-    'social',
-    'analytics',
-    'news',
-    'sectors',
-  ]);
-  const showToolbar = isMobile && !TABS_WITHOUT_TOOLBAR.has(activeTab);
+  const showToolbar = isMobile && WIDGET_TRAITS[activeTab].mobileToolbar;
 
   const pendingGotoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

@@ -13,7 +13,7 @@ import {
 } from 'lightweight-charts';
 import type { VolHeatmapColumn } from '@oggregator/protocol';
 
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { EmptyState, Spinner } from '@components/ui';
 import { defineMessages, useT } from '@lib/i18n';
 import {
@@ -136,7 +136,7 @@ function toBar(column: VolHeatmapColumn, bucketPct: number, view: HeatView): Hea
 
 export default function DvolHeatmap() {
   const t = useT(messages);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const [currency, setCurrency] = useState<string>(
     CURRENCIES.includes(underlying as (typeof CURRENCIES)[number]) ? underlying : 'BTC',
   );

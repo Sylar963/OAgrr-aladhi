@@ -1,4 +1,4 @@
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { defineMessages, useT } from '@lib/i18n';
 import { AssetPickerButton, Spinner, VenuePickerButton } from '@components/ui';
 import { DvolChart, DvolHeatmap } from '@features/dvol';
@@ -28,8 +28,8 @@ const messages = defineMessages(
 
 export default function AnalyticsView() {
   const t = useT(messages);
-  const underlying = useAppStore((s) => s.underlying);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const underlying = useMarket((m) => m.underlying);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const { data: chains, isLoading } = useAllExpiriesChain(underlying, activeVenues);
 
   if (isLoading || !chains) {

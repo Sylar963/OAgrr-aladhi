@@ -80,17 +80,30 @@ export interface ToastInput {
   id?: string;
 }
 
-interface AppState {
+export interface MarketContext {
   underlying: string;
   expiry: string;
+  activeVenues: string[];
+  myIv: string;
+}
+
+/** Fixed tabs share this context so the ticker carries between them. */
+export const MAIN_MARKET_ID = 'main';
+
+export interface MarketTarget {
+  underlying?: string;
+  expiry?: string;
+}
+
+interface AppState {
+  markets: { [MAIN_MARKET_ID]: MarketContext; [id: string]: MarketContext };
+  activeMarketId: string;
   activeTab: TabId;
   assetMode: 'crypto' | 'tradfi';
   tradfiUnderlying: string;
   tradfiExpiry: string;
   tradfiPage: TradfiPage;
   builderVariant: BuilderVariant;
-  activeVenues: string[];
-  myIv: string;
   feedStatus: FeedStatus;
   accountId: string | null;
   activeContext: ActiveContext;
@@ -109,6 +122,8 @@ interface AppState {
   setUnderlying: (u: string) => void;
   setExpiry: (e: string) => void;
   setActiveTab: (t: TabId) => void;
+  /** Jump to a widget from inside a feature, carrying any market change along with the jump. */
+  navigateToWidget: (kind: TabId, target?: MarketTarget) => void;
   setAssetMode: (m: 'crypto' | 'tradfi') => void;
   setTradfiUnderlying: (u: string) => void;
   setTradfiExpiry: (e: string) => void;
@@ -136,17 +151,35 @@ interface AppState {
   prevStep: () => void;
 }
 
+export function selectActiveMarket(s: Pick<AppState, 'markets' | 'activeMarketId'>): MarketContext {
+  return s.markets[s.activeMarketId] ?? s.markets[MAIN_MARKET_ID];
+}
+
+function patchActiveMarket(
+  s: Pick<AppState, 'markets' | 'activeMarketId'>,
+  patch: Partial<MarketContext>,
+): Pick<AppState, 'markets'> {
+  return { markets: { ...s.markets, [s.activeMarketId]: { ...selectActiveMarket(s), ...patch } } };
+}
+
+function marketPatchFromTarget(target: MarketTarget): Partial<MarketContext> {
+  if (target.underlying != null) {
+    return { underlying: target.underlying, expiry: target.expiry ?? '' };
+  }
+  return target.expiry != null ? { expiry: target.expiry } : {};
+}
+
 export const useAppStore = create<AppState>((set) => ({
-  underlying: 'BTC',
-  expiry: '',
+  markets: {
+    [MAIN_MARKET_ID]: { underlying: 'BTC', expiry: '', activeVenues: [...VENUE_IDS], myIv: '' },
+  },
+  activeMarketId: MAIN_MARKET_ID,
   activeTab: 'chain',
   assetMode: 'crypto',
   tradfiUnderlying: '',
   tradfiExpiry: '',
   tradfiPage: 'chain',
   builderVariant: 'v1',
-  activeVenues: [...VENUE_IDS],
-  myIv: '',
   feedStatus: {
     connectionState: 'closed',
     failedVenueCount: 0,
@@ -169,9 +202,14 @@ export const useAppStore = create<AppState>((set) => ({
   tourActive: false,
   tourStep: 0,
 
-  setUnderlying: (underlying) => set({ underlying, expiry: '' }),
-  setExpiry: (expiry) => set({ expiry }),
+  setUnderlying: (underlying) => set((s) => patchActiveMarket(s, { underlying, expiry: '' })),
+  setExpiry: (expiry) => set((s) => patchActiveMarket(s, { expiry })),
   setActiveTab: (activeTab) => set({ activeTab }),
+  navigateToWidget: (kind, target) =>
+    set((s) => ({
+      activeTab: kind,
+      ...(target ? patchActiveMarket(s, marketPatchFromTarget(target)) : {}),
+    })),
   setAssetMode: (assetMode) => set({ assetMode }),
   setTradfiUnderlying: (tradfiUnderlying) => set({ tradfiUnderlying, tradfiExpiry: '' }),
   setTradfiExpiry: (tradfiExpiry) => set({ tradfiExpiry }),
@@ -179,14 +217,17 @@ export const useAppStore = create<AppState>((set) => ({
   setBuilderVariant: (builderVariant) => set({ builderVariant }),
   toggleVenue: (venueId) =>
     set((s) => {
-      const active = s.activeVenues.includes(venueId)
-        ? s.activeVenues.filter((v) => v !== venueId)
-        : [...s.activeVenues, venueId];
-      return { activeVenues: active.length > 0 ? active : s.activeVenues };
+      const { activeVenues } = selectActiveMarket(s);
+      const active = activeVenues.includes(venueId)
+        ? activeVenues.filter((v) => v !== venueId)
+        : [...activeVenues, venueId];
+      return active.length > 0 ? patchActiveMarket(s, { activeVenues: active }) : {};
     }),
   setActiveVenues: (venues) =>
-    set({ activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
-  setMyIv: (myIv) => set({ myIv }),
+    set((s) =>
+      patchActiveMarket(s, { activeVenues: venues.length > 0 ? venues : VENUE_IDS.slice() }),
+    ),
+  setMyIv: (myIv) => set((s) => patchActiveMarket(s, { myIv })),
   setFeedStatus: (s) => set((prev) => ({ feedStatus: { ...prev.feedStatus, ...s } })),
   activateAccountSession: (accountId, configuredVenueIds) => {
     set({ accountId, configuredVenueIds });
@@ -244,3 +285,8 @@ export const useAppStore = create<AppState>((set) => ({
     set({ soundEnabled: enabled });
   },
 }));
+
+/** Subscribes to one field of the active market, so unrelated market edits don't re-render. */
+export function useMarket<T>(selector: (market: MarketContext) => T): T {
+  return useAppStore((s) => selector(selectActiveMarket(s)));
+}

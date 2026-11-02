@@ -8,7 +8,7 @@ import { useServerVersion } from '@hooks/useServerVersion';
 import { useSessionTimeout } from '@hooks/useSessionTimeout';
 import { useTabUrlSync } from '@hooks/useTabUrlSync';
 import { useTabs, WIDGET_TRAITS } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useEffect } from 'react';
 
 import styles from './App.module.css';
@@ -23,7 +23,7 @@ export default function App() {
   const activeTab = useAppStore((s) => s.activeTab);
   useGlobalFeedStatus(WIDGET_TRAITS[activeTab].chainFeed);
 
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   useEffect(() => {

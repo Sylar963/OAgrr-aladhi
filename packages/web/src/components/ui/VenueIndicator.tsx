@@ -1,4 +1,4 @@
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUES } from '@lib/venue-meta';
 import styles from './VenueIndicator.module.css';
@@ -10,7 +10,7 @@ const messages = defineMessages(
 
 export default function VenueIndicator() {
   const t = useT(messages);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const allActive = activeVenues.length >= 5;
 
   return (

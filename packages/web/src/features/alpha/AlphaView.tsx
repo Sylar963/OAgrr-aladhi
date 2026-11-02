@@ -263,9 +263,8 @@ export default function AlphaView({ market = 'crypto' }: { market?: AlphaMarket 
   function openInBuilder() {
     if (!builderLegs) return;
     replaceLegs(builderLegs, underlying);
-    setExpiry(expiry);
     setBuilderVariant('v2');
-    showBuilder();
+    showBuilder(expiry);
   }
 
   const atmStrike = chain?.stats.atmStrike ?? null;

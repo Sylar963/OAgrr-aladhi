@@ -9,7 +9,7 @@ import {
   type VenueId,
 } from '@oggregator/protocol';
 
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import {
   portfolioToBuilderHedges,
   portfolioToBuilderLegs,
@@ -168,7 +168,7 @@ function venueSourceOptions(t: T): SourceOption[] {
 
 export default function PortfolioView() {
   const t = useT(messages);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const forwardDays = FORWARD_DAYS;
   const [source, setSource] = useState<PortfolioSource>(loadStoredSource);
   const [underlyingFilter, setUnderlyingFilter] = useState<UnderlyingOption>(loadStoredUnderlying);
@@ -211,10 +211,11 @@ export default function PortfolioView() {
     useStrategyStore.getState().replaceLegs(builderLegs, first.underlying, hedges);
     const app = useAppStore.getState();
     app.setAssetMode('crypto');
-    app.setUnderlying(first.underlying);
-    app.setExpiry([...builderLegs].sort((a, b) => a.expiry.localeCompare(b.expiry))[0]!.expiry);
     app.setBuilderVariant('v2');
-    app.setActiveTab('architect');
+    app.navigateToWidget('architect', {
+      underlying: first.underlying,
+      expiry: [...builderLegs].sort((a, b) => a.expiry.localeCompare(b.expiry))[0]!.expiry,
+    });
   };
   const isReadOnly = source !== 'manual';
   const sourceLabel =

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlphaView from './AlphaView';
 import type { CrossVenueCandidate } from './cross-venue-scanner';
 import type { SpreadCandidate } from './spread-scanner';
+import { setTestMarket } from '@/test/market-state';
 
 const mocks = vi.hoisted(() => ({
   chain: vi.fn(),
@@ -93,11 +94,7 @@ const candidate: SpreadCandidate = {
 beforeEach(() => {
   localStorage.clear();
   mocks.expiries.mockReturnValue({ data: { expiries: ['2026-09-25'] } });
-  useAppStore.setState({
-    underlying: 'BTC',
-    expiry: '2026-09-25',
-    activeVenues: ['thalex', 'okx'],
-  });
+  setTestMarket({ underlying: 'BTC', expiry: '2026-09-25', activeVenues: ['thalex', 'okx'] });
   mocks.chain.mockReturnValue({
     data: {
       underlying: 'BTC',
@@ -233,10 +230,7 @@ describe('surgical Alpha enhancements', () => {
     expect(screen.getByText('Portfolio exposure: okx')).toBeTruthy();
   });
   it('sizes alts from the venue minimum and only scans venues that list the asset', () => {
-    useAppStore.setState({
-      underlying: 'SOL',
-      activeVenues: ['thalex', 'okx', 'bybit', 'deribit'],
-    });
+    setTestMarket({ underlying: 'SOL', activeVenues: ['thalex', 'okx', 'bybit', 'deribit'] });
     localStorage.setItem(
       'alpha-sizing-v1',
       JSON.stringify({ equity: '5000', quantity: '0.1', riskPct: '1', reserve: '0.25' }),
@@ -290,7 +284,7 @@ describe('surgical Alpha enhancements', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Auto-size per venue' }));
     expect(userScans().at(-1)).toEqual(expect.objectContaining({ venues: ['bybit'], quantity: 3 }));
 
-    act(() => useAppStore.setState({ underlying: 'BTC' }));
+    act(() => setTestMarket({ underlying: 'BTC' }));
     expect(screen.getByLabelText<HTMLInputElement>(/Quantity · BTC per leg/).value).toBe('0.1');
   });
 

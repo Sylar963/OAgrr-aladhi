@@ -1,7 +1,7 @@
 import ExpiryCountdown from '@components/ui/ExpiryCountdown';
 import { defineMessages, useT } from '@lib/i18n';
 import { TAB_GROUPS, type TabDef, type TabGroup } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AccountChip from './AccountChip';
@@ -43,7 +43,7 @@ interface TabGroupEntry {
 export default function TopBar({ tabs, onOpenPalette, onOpenShortcuts }: TopBarProps) {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const seenTabs = useSeenTabs(activeTab);
   const t = useT(messages);
 

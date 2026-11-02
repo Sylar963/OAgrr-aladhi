@@ -2,7 +2,7 @@ import { AssetPickerButton, EmptyState, Spinner } from '@components/ui';
 import { fmtIv } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import { VENUE_IDS, VENUES } from '@lib/venue-meta';
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import {
   ColorType,
   createChart,
@@ -127,8 +127,8 @@ export default function FlowChartsView({
 }: FlowChartsViewProps) {
   const t = useT(messages);
   const tf = useT(flowMessages);
-  const underlying = useAppStore((s) => s.underlying);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const underlying = useMarket((m) => m.underlying);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const [selectedVenue, setSelectedVenue] = useState<string>(() => activeVenues[0] ?? 'deribit');
   const [selectedInstrument, setSelectedInstrument] = useState<string | null>(null);
 

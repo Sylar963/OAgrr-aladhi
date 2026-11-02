@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { MobileDrawer } from '@components/ui';
 import { defineMessages, useLocale, useT } from '@lib/i18n';
 import { getTokenLogo } from '@lib/token-meta';
@@ -35,10 +35,10 @@ const messages = defineMessages(
 export default function MobileToolbar() {
   const t = useT(messages);
   const locale = useLocale();
-  const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
+  const underlying = useMarket((m) => m.underlying);
+  const expiry = useMarket((m) => m.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const toggleVenue = useAppStore((s) => s.toggleVenue);
   const feedStatus = useAppStore((s) => s.feedStatus);
   const openPalette = useOpenPalette();

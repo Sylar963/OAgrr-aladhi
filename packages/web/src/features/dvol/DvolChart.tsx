@@ -8,7 +8,7 @@ import {
   ColorType,
 } from 'lightweight-charts';
 
-import { useAppStore } from '@stores/app-store';
+import { useMarket } from '@stores/app-store';
 import { Spinner, EmptyState } from '@components/ui';
 import { useStats } from '@features/chain/queries';
 import { defineMessages, useT } from '@lib/i18n';
@@ -44,7 +44,7 @@ const messages = defineMessages(
 
 export default function DvolChart() {
   const t = useT(messages);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const currency = CURRENCIES.includes(underlying as (typeof CURRENCIES)[number])
     ? underlying
     : 'BTC';

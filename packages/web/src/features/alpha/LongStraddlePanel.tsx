@@ -83,9 +83,8 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
   const [riskInput, setRiskInput] = useState('1');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
-  const setActiveTab = useAppStore((state) => state.setActiveTab);
+  const navigateToWidget = useAppStore((state) => state.navigateToWidget);
   const setBuilderVariant = useAppStore((state) => state.setBuilderVariant);
-  const setExpiry = useAppStore((state) => state.setExpiry);
   const equity = parseInput(equityInput, 100_000_000);
   const riskPct = parseInput(riskInput, 100);
   const sizingValid = equity != null && riskPct != null;
@@ -116,9 +115,8 @@ export default function LongStraddlePanel({ underlying, venues }: LongStraddlePa
 
   function openInBuilder(candidate: AlphaLongStraddleCandidate): void {
     replaceLegs(longStraddleToBuilderLegs(candidate), candidate.underlying);
-    setExpiry(candidate.expiry);
     setBuilderVariant('v2');
-    setActiveTab('architect');
+    navigateToWidget('architect', { expiry: candidate.expiry });
   }
 
   return (

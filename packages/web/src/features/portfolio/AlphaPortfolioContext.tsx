@@ -56,7 +56,7 @@ export default function AlphaPortfolioContext({
   underlying: string;
 }) {
   const t = useT(messages);
-  const navigate = useAppStore((s) => s.setActiveTab);
+  const navigate = useAppStore((s) => s.navigateToWidget);
   const supported = PRIVATE_ADAPTER_SPECS[venue].status === 'available';
   const status = useQuery({
     queryKey: ['alpha-portfolio-status', venue],

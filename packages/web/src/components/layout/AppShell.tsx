@@ -3,7 +3,7 @@ import { Onboarding } from '@components/onboarding';
 import { CommandPalette, ShortcutHelp } from '@components/ui';
 import { useIsMobile } from '@hooks/useIsMobile';
 import { type TabDef, type TabId, WIDGET_TRAITS } from '@lib/tabs';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import styles from './AppShell.module.css';
@@ -41,7 +41,7 @@ interface AppShellProps {
 export default function AppShell({ children, underlyings, tabs }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const setUnderlying = useAppStore((s) => s.setUnderlying);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);

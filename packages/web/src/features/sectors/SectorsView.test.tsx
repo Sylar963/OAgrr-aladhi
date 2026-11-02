@@ -3,7 +3,7 @@ import type {
   CryptoSectorQuote,
   CryptoSectorsResponse,
 } from '@oggregator/protocol';
-import { useAppStore } from '@stores/app-store';
+import { selectActiveMarket, useAppStore } from '@stores/app-store';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,10 +79,12 @@ vi.mock('./queries', () => ({
 }));
 
 import SectorsView, { collapsedMembers, formatMove, formatPrice } from './SectorsView';
+import { setTestMarket } from '@/test/market-state';
 
 afterEach(() => {
   cleanup();
-  useAppStore.setState({ underlying: 'BTC', activeTab: 'sectors' });
+  setTestMarket({ underlying: 'BTC' });
+  useAppStore.setState({ activeTab: 'sectors' });
 });
 
 describe('SectorsView', () => {
@@ -117,7 +119,7 @@ describe('SectorsView', () => {
     expect(screen.queryByRole('button', { name: 'MSTR' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'XAU' }));
-    expect(useAppStore.getState().underlying).toBe('XAU');
+    expect(selectActiveMarket(useAppStore.getState()).underlying).toBe('XAU');
     expect(useAppStore.getState().activeTab).toBe('chain');
   });
 

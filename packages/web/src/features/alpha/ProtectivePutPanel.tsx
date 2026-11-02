@@ -811,9 +811,8 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
   const [buyingPowerInput, setBuyingPowerInput] = useState('2400');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
-  const setActiveTab = useAppStore((state) => state.setActiveTab);
+  const navigateToWidget = useAppStore((state) => state.navigateToWidget);
   const setBuilderVariant = useAppStore((state) => state.setBuilderVariant);
-  const setExpiry = useAppStore((state) => state.setExpiry);
 
   const buyingPower = Number(buyingPowerInput);
   const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
@@ -850,9 +849,8 @@ export default function ProtectivePutPanel({ underlying, venues }: ProtectivePut
 
   function openInBuilderV2(candidate: AlphaPutCandidate): void {
     replaceLegs([putCandidateToBuilderLeg(candidate)], candidate.underlying);
-    setExpiry(candidate.expiry);
     setBuilderVariant('v2');
-    setActiveTab('architect');
+    navigateToWidget('architect', { expiry: candidate.expiry });
   }
 
   return (

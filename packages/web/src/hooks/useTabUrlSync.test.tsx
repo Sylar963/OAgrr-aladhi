@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
-import { useAppStore } from '@stores/app-store';
+import { selectActiveMarket, useAppStore } from '@stores/app-store';
 import { act, renderHook } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTabUrlSync } from './useTabUrlSync';
+import { setTestMarket } from '@/test/market-state';
 
 function resetStore(): void {
+  setTestMarket({ underlying: 'BTC', expiry: '' });
   useAppStore.setState({
-    underlying: 'BTC',
-    expiry: '',
     activeTab: 'chain',
     assetMode: 'crypto',
     tradfiUnderlying: '',
@@ -51,7 +51,7 @@ describe('useTabUrlSync', () => {
     const s = useAppStore.getState();
     expect(s.assetMode).toBe('crypto');
     expect(s.activeTab).toBe('surface');
-    expect(s.underlying).toBe('ETH');
+    expect(selectActiveMarket(s).underlying).toBe('ETH');
     expect(window.location.hash).toBe('#volatility/ETH');
   });
 

@@ -34,7 +34,7 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
   const updateLeg = useStrategyStore((s) => s.updateLeg);
   const removeLeg = useStrategyStore((s) => s.removeLeg);
   const clearLegs = useStrategyStore((s) => s.clearLegs);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const navigateToWidget = useAppStore((s) => s.navigateToWidget);
 
   const [upCollapsed, setUpCollapsed] = useState(false);
   const [downCollapsed, setDownCollapsed] = useState(false);
@@ -196,7 +196,7 @@ export default function EasyChainView({ chain, underlying, activeVenues }: EasyC
           onFlip={handleFlip}
           onRemove={(leg) => removeLeg(leg.id)}
           onClear={clearLegs}
-          onOpenBuilder={() => setActiveTab('architect')}
+          onOpenBuilder={() => navigateToWidget('architect')}
         />
       </div>
 

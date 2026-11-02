@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useExpiries, type ExpiryTimestamp } from '@features/chain/queries';
 import { dteDays, formatExpiry, timeToExpiry } from '@lib/format';
 import { defineMessages, type Translate, useLocale, useT } from '@lib/i18n';
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 
 import styles from './ExpiryCountdown.module.css';
 
@@ -40,8 +40,8 @@ function fmtMenuRow(
 export default function ExpiryCountdown() {
   const t = useT(messages);
   const locale = useLocale();
-  const underlying = useAppStore((s) => s.underlying);
-  const selectedExpiry = useAppStore((s) => s.expiry);
+  const underlying = useMarket((m) => m.underlying);
+  const selectedExpiry = useMarket((m) => m.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
 
   const { data } = useExpiries(underlying);

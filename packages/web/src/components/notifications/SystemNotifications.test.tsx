@@ -6,16 +6,17 @@ import { useAppStore } from '@stores/app-store';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SystemNotifications } from './index';
+import { setTestMarket } from '@/test/market-state';
 
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  setTestMarket({ activeVenues: ['deribit'] });
   useAppStore.setState((s) => ({
     announcement: null,
     feedDegraded: false,
     toasts: [],
     feedStatus: { ...s.feedStatus, connectionState: 'live', failedVenueIds: [] },
-    activeVenues: ['deribit'],
   }));
 });
 

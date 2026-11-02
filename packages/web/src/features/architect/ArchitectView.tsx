@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { AssetPickerButton, DropdownPicker, VenuePickerButton } from '@components/ui';
 import { useChainQuery, useExpiries } from '@features/chain/queries';
 import {
@@ -549,9 +549,9 @@ interface ArchitectViewProps {
 export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps) {
   const t = useT(messages);
   const locale = useLocale();
-  const cryptoUnderlying = useAppStore((s) => s.underlying);
-  const cryptoExpiry = useAppStore((s) => s.expiry);
-  const cryptoVenues = useAppStore((s) => s.activeVenues);
+  const cryptoUnderlying = useMarket((m) => m.underlying);
+  const cryptoExpiry = useMarket((m) => m.expiry);
+  const cryptoVenues = useMarket((m) => m.activeVenues);
   const tradfiUnderlying = useAppStore((s) => s.tradfiUnderlying);
   const tradfiExpiry = useAppStore((s) => s.tradfiExpiry);
   const setTradfiUnderlying = useAppStore((s) => s.setTradfiUnderlying);
@@ -636,7 +636,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
     dataUpdatedAt: number;
   } | null>(null);
 
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const navigateToWidget = useAppStore((s) => s.navigateToWidget);
   const createTrade = useCreateTrade();
 
   useEffect(() => {
@@ -747,7 +747,7 @@ export default function ArchitectView({ market = 'crypto' }: ArchitectViewProps)
           : t('nVenues', { n: filledVenues.length });
       setPaperStatus(t('filledOn', { venue: fillSummary ?? '' }));
       setShowVenues(false);
-      setTimeout(() => setActiveTab('trading'), 400);
+      setTimeout(() => navigateToWidget('trading'), 400);
     } catch (err) {
       setPaperStatus(err instanceof Error ? err.message : t('paperFailed'));
     }

@@ -1,5 +1,5 @@
 import { buildHash, parseHash, type RouteState } from '@lib/route-hash';
-import { useAppStore } from '@stores/app-store';
+import { selectActiveMarket, useAppStore, useMarket } from '@stores/app-store';
 import { useEffect, useRef } from 'react';
 
 // The "view key" is everything in the hash EXCEPT the ticker. It decides
@@ -19,7 +19,7 @@ function viewKey(state: RouteState): string {
 export function useTabUrlSync(): void {
   const activeTab = useAppStore((s) => s.activeTab);
   const assetMode = useAppStore((s) => s.assetMode);
-  const underlying = useAppStore((s) => s.underlying);
+  const underlying = useMarket((m) => m.underlying);
   const tradfiUnderlying = useAppStore((s) => s.tradfiUnderlying);
   const tradfiPage = useAppStore((s) => s.tradfiPage);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -46,7 +46,7 @@ export function useTabUrlSync(): void {
       }
       if (s.assetMode !== 'crypto') setAssetMode('crypto');
       if (route.tab !== s.activeTab) setActiveTab(route.tab);
-      if (route.ticker && route.ticker !== s.underlying) {
+      if (route.ticker && route.ticker !== selectActiveMarket(s).underlying) {
         setUnderlying(route.ticker);
       }
     };
@@ -65,7 +65,7 @@ export function useTabUrlSync(): void {
     const route: RouteState =
       s.assetMode === 'tradfi'
         ? { mode: 'tradfi', page: s.tradfiPage, ticker: s.tradfiUnderlying || null }
-        : { mode: 'crypto', tab: s.activeTab, ticker: s.underlying || null };
+        : { mode: 'crypto', tab: s.activeTab, ticker: selectActiveMarket(s).underlying || null };
     const desired = buildHash(route);
     const key = viewKey(route);
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { useChainQuery, useExpiries, useStats, usePrefetchChain } from './queries';
 import { useOpenPalette } from '@components/layout/palette-context';
 import { Spinner, EmptyState } from '@components/ui';
@@ -61,13 +61,13 @@ function readEasyMode(): boolean {
 
 export default function ChainView() {
   const t = useT(messages);
-  const underlying = useAppStore((s) => s.underlying);
-  const expiry = useAppStore((s) => s.expiry);
+  const underlying = useMarket((m) => m.underlying);
+  const expiry = useMarket((m) => m.expiry);
   const setExpiry = useAppStore((s) => s.setExpiry);
-  const activeVenues = useAppStore((s) => s.activeVenues);
+  const activeVenues = useMarket((m) => m.activeVenues);
   const toggleVenue = useAppStore((s) => s.toggleVenue);
   const setActiveVenues = useAppStore((s) => s.setActiveVenues);
-  const myIv = useAppStore((s) => s.myIv);
+  const myIv = useMarket((m) => m.myIv);
   const connectionState = useAppStore((s) => s.feedStatus.connectionState);
   const failedVenues = useAppStore((s) => s.feedStatus.failedVenues);
   const expiryPositions = useExpiryPositions(underlying, activeVenues);

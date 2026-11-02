@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
-import { useAppStore } from '@stores/app-store';
+import { selectActiveMarket, useAppStore } from '@stores/app-store';
+import { setTestMarket } from '@/test/market-state';
 
 const useChainWsMock = vi.fn();
 const useExpiriesMock = vi.fn();
@@ -33,10 +34,8 @@ function createWrapper() {
 
 describe('useGlobalFeedStatus', () => {
   beforeEach(() => {
+    setTestMarket({ underlying: 'BTC', expiry: '', activeVenues: ['deribit'] });
     useAppStore.setState({
-      underlying: 'BTC',
-      expiry: '',
-      activeVenues: ['deribit'],
       feedStatus: {
         connectionState: 'closed',
         failedVenueCount: 0,
@@ -67,7 +66,7 @@ describe('useGlobalFeedStatus', () => {
   it('seeds the first expiry when the store has none', () => {
     renderHook(() => useGlobalFeedStatus(), { wrapper: createWrapper() });
 
-    expect(useAppStore.getState().expiry).toBe('2026-03-27');
+    expect(selectActiveMarket(useAppStore.getState()).expiry).toBe('2026-03-27');
   });
 
   it('writes live feed status into the app store', () => {

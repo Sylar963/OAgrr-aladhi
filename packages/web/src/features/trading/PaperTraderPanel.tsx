@@ -4,7 +4,7 @@ import { dteDays, fmtIv, fmtNum, fmtUsd } from '@lib/format';
 import { defineMessages, useT } from '@lib/i18n';
 import type { TabId } from '@lib/tabs';
 import type { PaperFillDto, PaperTradeDetailDto, PaperTradeLegDto } from '@oggregator/protocol';
-import { useAppStore } from '@stores/app-store';
+import { type MarketTarget, useAppStore } from '@stores/app-store';
 import { useEffect, useState } from 'react';
 import {
   useActivity,
@@ -150,8 +150,7 @@ export default function PaperTraderPanel({
   const closeTrade = useCloseTrade();
   const reduceTrade = useReduceTrade();
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
-  const setActiveTab = useAppStore((state) => state.setActiveTab);
-  const setUnderlying = useAppStore((state) => state.setUnderlying);
+  const navigateToWidget = useAppStore((state) => state.navigateToWidget);
 
   useEffect(() => {
     const candidate = openTrades[0]?.id ?? closedTrades[0]?.id ?? null;
@@ -264,7 +263,7 @@ export default function PaperTraderPanel({
                     className={styles.secondaryButton}
                     disabled={liveTrade.status !== 'open'}
                     onClick={() =>
-                      rollTradeInBuilder(liveTrade, replaceLegs, setUnderlying, setActiveTab)
+                      rollTradeInBuilder(liveTrade, replaceLegs, navigateToWidget)
                     }
                   >
                     {t('rollInBuilder')}
@@ -566,8 +565,7 @@ function executionEdge(fill: PaperFillDto): number | null {
 function rollTradeInBuilder(
   trade: PaperTradeDetailDto,
   replaceLegs: (legs: StrategyLeg[], underlying: string) => void,
-  setUnderlying: (underlying: string) => void,
-  setActiveTab: (tab: TabId) => void,
+  navigateToWidget: (kind: TabId, target: MarketTarget) => void,
 ) {
   const legs = trade.legs
     .filter((leg) => leg.netQuantity !== 0)
@@ -590,8 +588,7 @@ function rollTradeInBuilder(
     );
   if (legs.length === 0) return;
   replaceLegs(legs, trade.underlying);
-  setUnderlying(trade.underlying);
-  setActiveTab('architect');
+  navigateToWidget('architect', { underlying: trade.underlying });
 }
 
 function formatLegSymbol(leg: PaperTradeLegDto): string {

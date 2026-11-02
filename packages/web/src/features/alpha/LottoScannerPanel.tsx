@@ -455,9 +455,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
   const [outcomeExpiry, setOutcomeExpiry] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const replaceLegs = useStrategyStore((state) => state.replaceLegs);
-  const setActiveTab = useAppStore((state) => state.setActiveTab);
+  const navigateToWidget = useAppStore((state) => state.navigateToWidget);
   const setBuilderVariant = useAppStore((state) => state.setBuilderVariant);
-  const setExpiry = useAppStore((state) => state.setExpiry);
   const buyingPower = Number(buyingPowerInput);
   const buyingPowerIsValid = Number.isFinite(buyingPower) && buyingPower > 0 && buyingPower <= 10_000_000;
   const validBuyingPower = buyingPowerIsValid ? buyingPower : 2_400;
@@ -491,9 +490,8 @@ export default function LottoScannerPanel({ underlying, venues }: LottoScannerPa
 
   function openInBuilderV2(candidate: AlphaLottoCandidate): void {
     replaceLegs([candidateToBuilderLeg(candidate)], candidate.underlying);
-    setExpiry(candidate.expiry);
     setBuilderVariant('v2');
-    setActiveTab('architect');
+    navigateToWidget('architect', { expiry: candidate.expiry });
   }
 
   return (

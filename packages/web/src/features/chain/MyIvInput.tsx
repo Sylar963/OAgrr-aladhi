@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useAppStore } from '@stores/app-store';
+import { useAppStore, useMarket } from '@stores/app-store';
 import { defineMessages, useT } from '@lib/i18n';
 import styles from './MyIvInput.module.css';
 
@@ -25,7 +25,7 @@ const messages = defineMessages(
 
 export default function MyIvInput() {
   const t = useT(messages);
-  const storeIv = useAppStore((s) => s.myIv);
+  const storeIv = useMarket((m) => m.myIv);
   const setMyIv = useAppStore((s) => s.setMyIv);
 
   const [local, setLocal] = useState(storeIv);
